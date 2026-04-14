@@ -1,0 +1,69 @@
+[workspace]
+resolver = "2"
+members = [
+  "bins/api",
+  "bins/worker",
+  "crates/analytics",
+  "crates/app",
+  "crates/auth",
+  "crates/admin",
+  "crates/billing",
+  "crates/cache-redis",
+  "crates/chatmemory",
+  "crates/common",
+  "crates/guardrails",
+  "crates/ingestion",
+  "crates/llm",
+  "crates/rag-core",
+  "crates/search",
+  "crates/share",
+  "crates/storage-pg",
+  "crates/storage-qdrant",
+  "crates/telemetry",
+  "crates/transport-http",
+  "crates/usage-limit",
+  "crates/test-kit",
+  "tests/rag_quality",
+]
+
+[profile.release]
+opt-level = 'z'     # 优化代码体积
+lto = true          # 链接时优化
+codegen-units = 1   # 牺牲编译时间换取更小的二进制
+panic = 'abort'     # 减少 panic 时的代码体积
+strip = true        # 剥离符号表
+
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+rust-version = "1.93"
+version = "0.1.0"
+
+[workspace.dependencies]
+async-trait = "0.1.89"
+anyhow = "1.0.100"
+async-stream = "0.3.6"
+axum = { version = "0.8.6", features = ["json", "macros"] }
+chrono = { version = "0.4.42", features = ["serde"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+thiserror = "2.0.17"
+tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+tower = "0.5.2"
+tower-http = { version = "0.6.6", features = ["cors", "trace"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
+uuid = { version = "1.18.1", features = ["serde", "v4"] }
+reqwest = { version = "0.12", features = ["json"] }
+regex = "1.11"
+lazy_static = "1.5"
+once_cell = "1.20"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+redis = { version = "0.32", features = ["tokio-comp"] }
+tiktoken-rs = "0.9.1"
+text-splitter = { version = "0.29.3", features = ["markdown", "code", "tiktoken-rs"] }
+common = { path = "crates/common" }
+graph-flow = "0.4.0"

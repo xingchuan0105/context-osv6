@@ -1,0 +1,226 @@
+@layer base {
+  :root {
+    /* Core semantic colors (HSL tuples for tailwind hsl(var(--x))) */
+    --background: 0 0% 100%;
+    --foreground: 230 28% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 230 28% 11%;
+    --surface-muted: 220 20% 97%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 230 28% 11%;
+    --primary: 230 39% 9%;
+    --primary-foreground: 0 0% 100%;
+    --success: 160 43% 36%;
+    --warning: 37 84% 52%;
+    --info: 197 77% 42%;
+    --secondary: 230 18% 95%;
+    --secondary-foreground: 230 28% 11%;
+    --muted: 230 16% 93%;
+    --muted-foreground: 230 9% 46%;
+    --accent: 230 16% 92%;
+    --accent-foreground: 230 28% 11%;
+    --destructive: 347 84% 46%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
+    --input-background: 220 20% 97%;
+    --switch-background: 220 13% 82%;
+    --ring: 230 39% 9%;
+    --chart-1: 12 76% 60%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --sidebar: 220 20% 98%;
+    --sidebar-foreground: 230 28% 11%;
+    --sidebar-primary: 230 39% 9%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 16% 95%;
+    --sidebar-accent-foreground: 230 28% 11%;
+    --sidebar-border: 220 15% 88%;
+    --sidebar-ring: 230 39% 9%;
+
+    /* Workspace surface tokens */
+    --workspace-shell: 220 22% 98%;
+    --workspace-foreground: 230 28% 11%;
+    --workspace-panel: 0 0% 100%;
+    --workspace-panel-muted: 220 20% 97%;
+    --workspace-rail: 220 18% 97%;
+    --workspace-rail-strong: 220 16% 95%;
+    --workspace-border: 220 15% 88%;
+    --workspace-primary: 230 39% 9%;
+    --workspace-primary-foreground: 0 0% 100%;
+    --workspace-secondary: 220 16% 96%;
+    --workspace-secondary-foreground: 230 28% 11%;
+    --workspace-muted: 220 16% 94%;
+    --workspace-muted-foreground: 230 9% 46%;
+    --workspace-accent: 220 14% 92%;
+    --workspace-accent-foreground: 230 28% 11%;
+    --workspace-surface: 0 0% 100%;
+    --workspace-surface-muted: 220 20% 97%;
+    --workspace-pill: 220 16% 92%;
+    --workspace-input: 220 20% 97%;
+    --workspace-input-border: 220 15% 88%;
+    --workspace-menu: 0 0% 100%;
+    --workspace-menu-hover: 220 20% 96%;
+    --workspace-shadow: 223 26% 15%;
+
+    /* Radii */
+    --radius: 0.875rem;
+    --radius-card: 0.875rem;
+    --radius-control: 0.75rem;
+    --radius-pill: 999px;
+
+    /* Spacing */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+
+    /* Typography */
+    --font-size-caption: 0.75rem;
+    --font-size-label: 0.875rem;
+    --font-size-body: 0.9375rem;
+    --font-size-title: 1.875rem;
+    --line-height-caption: 1.4;
+    --line-height-label: 1.45;
+    --line-height-body: 1.6;
+    --line-height-title: 1.2;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --letter-spacing-normal: 0;
+    --letter-spacing-tight: -0.01em;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --background: 220 22% 9%;
+      --foreground: 0 0% 98%;
+      --card: 220 18% 12%;
+      --card-foreground: 0 0% 98%;
+      --surface-muted: 220 15% 14%;
+      --popover: 220 18% 12%;
+      --popover-foreground: 0 0% 98%;
+      --primary: 0 0% 98%;
+      --primary-foreground: 230 28% 11%;
+      --success: 160 46% 46%;
+      --warning: 38 72% 56%;
+      --info: 190 62% 55%;
+      --secondary: 220 14% 18%;
+      --secondary-foreground: 0 0% 98%;
+      --muted: 220 14% 18%;
+      --muted-foreground: 220 10% 70%;
+      --accent: 220 14% 18%;
+      --accent-foreground: 0 0% 98%;
+      --destructive: 0 62.8% 30.6%;
+      --destructive-foreground: 0 0% 98%;
+      --border: 220 14% 22%;
+      --input: 220 14% 22%;
+      --input-background: 220 15% 16%;
+      --switch-background: 220 12% 32%;
+      --ring: 0 0% 98%;
+      --chart-1: 12 76% 60%;
+      --chart-2: 173 58% 39%;
+      --chart-3: 197 37% 24%;
+      --chart-4: 43 74% 66%;
+      --chart-5: 27 87% 67%;
+      --sidebar: 220 22% 10%;
+      --sidebar-foreground: 0 0% 98%;
+      --sidebar-primary: 0 0% 98%;
+      --sidebar-primary-foreground: 230 28% 11%;
+      --sidebar-accent: 220 14% 18%;
+      --sidebar-accent-foreground: 0 0% 98%;
+      --sidebar-border: 220 14% 22%;
+      --sidebar-ring: 0 0% 98%;
+      --workspace-shell: 220 22% 9%;
+      --workspace-foreground: 0 0% 98%;
+      --workspace-panel: 220 18% 12%;
+      --workspace-panel-muted: 220 15% 14%;
+      --workspace-rail: 220 20% 11%;
+      --workspace-rail-strong: 220 18% 13%;
+      --workspace-border: 220 14% 22%;
+      --workspace-primary: 0 0% 98%;
+      --workspace-primary-foreground: 230 28% 11%;
+      --workspace-secondary: 220 14% 18%;
+      --workspace-secondary-foreground: 0 0% 98%;
+      --workspace-muted: 220 14% 18%;
+      --workspace-muted-foreground: 220 10% 70%;
+      --workspace-accent: 220 14% 18%;
+      --workspace-accent-foreground: 0 0% 98%;
+      --workspace-surface: 220 18% 12%;
+      --workspace-surface-muted: 220 15% 14%;
+      --workspace-pill: 220 14% 22%;
+      --workspace-input: 220 15% 16%;
+      --workspace-input-border: 220 14% 22%;
+      --workspace-menu: 220 18% 12%;
+      --workspace-menu-hover: 220 14% 18%;
+      --workspace-shadow: 220 28% 6%;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --background: 220 22% 9%;
+    --foreground: 0 0% 98%;
+    --card: 220 18% 12%;
+    --card-foreground: 0 0% 98%;
+    --surface-muted: 220 15% 14%;
+    --popover: 220 18% 12%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 230 28% 11%;
+    --success: 160 46% 46%;
+    --warning: 38 72% 56%;
+    --info: 190 62% 55%;
+    --secondary: 220 14% 18%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 220 14% 18%;
+    --muted-foreground: 220 10% 70%;
+    --accent: 220 14% 18%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 14% 22%;
+    --input: 220 14% 22%;
+    --input-background: 220 15% 16%;
+    --switch-background: 220 12% 32%;
+    --ring: 0 0% 98%;
+    --chart-1: 12 76% 60%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --sidebar: 220 22% 10%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 0 0% 98%;
+    --sidebar-primary-foreground: 230 28% 11%;
+    --sidebar-accent: 220 14% 18%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 220 14% 22%;
+    --sidebar-ring: 0 0% 98%;
+    --workspace-shell: 220 22% 9%;
+    --workspace-foreground: 0 0% 98%;
+    --workspace-panel: 220 18% 12%;
+    --workspace-panel-muted: 220 15% 14%;
+    --workspace-rail: 220 20% 11%;
+    --workspace-rail-strong: 220 18% 13%;
+    --workspace-border: 220 14% 22%;
+    --workspace-primary: 0 0% 98%;
+    --workspace-primary-foreground: 230 28% 11%;
+    --workspace-secondary: 220 14% 18%;
+    --workspace-secondary-foreground: 0 0% 98%;
+    --workspace-muted: 220 14% 18%;
+    --workspace-muted-foreground: 220 10% 70%;
+    --workspace-accent: 220 14% 18%;
+    --workspace-accent-foreground: 0 0% 98%;
+    --workspace-surface: 220 18% 12%;
+    --workspace-surface-muted: 220 15% 14%;
+    --workspace-pill: 220 14% 22%;
+    --workspace-input: 220 15% 16%;
+    --workspace-input-border: 220 14% 22%;
+    --workspace-menu: 220 18% 12%;
+    --workspace-menu-hover: 220 14% 18%;
+    --workspace-shadow: 220 28% 6%;
+  }
+}

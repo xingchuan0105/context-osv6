@@ -1,0 +1,944 @@
+# 产品需求文档(PRD_RUST)：类 NotebookLM 智能文档研究助手（AVRAG Rust 版）
+
+## 0. 项目开发基本规?- 对于逻辑之外的知识、事实与最佳实践，不盲目自信；涉及最新技术选型、供应商能力、合规要求与第三方限制时，必须结合外部权威资料复核?- 本文档是 AVRAG Rust 版的产品与工程真相源；若代码、AI 规则文件、接口文档与本文冲突，以最新经确认?PRD 为准?- 本项目优先保证：多租户隔离、证据可追溯、显式降级、可观测性与可回滚性?
+---
+
+## 1. 产品概述与目?本产品是一款基于检索增强生成（RAG）的智能文档阅读与研究助手，对标 Google NotebookLM?
+核心目标?- 允许用户上传私有资料（PDF、Office、网页、图片、代码等）?- 基于严格受限的检索上下文生成低幻觉、带精准引用的回答?- 在同一平台内同时支持：私域知识库问答、通用聊天、联网搜紃69?- ?SaaS 方式提供多租户隔离、计费、分享协作与开?API 能力?
+Rust 重构目标?- ?Rust 替代?Go 实现口径，但不改变核心产品协议与检索语义?- 保留单层 Retrieval Items、Qdrant + PostgreSQL、统一引用协议、SSE 与显式降级模型?- 将工程实现统一?Rust Workspace + Modular Monolith，增强性能、内存安全与并发可控性?
+---
+
+## 2. 核心架构设计
+整个系统由三个高内聚、低耦合的层级构成：文档摄取层、检索层、条件生成层?
+### 2.1 第一层：文档摄取层（Document Ingestion Layer?该层负责把用户选择的内容源解析为统一的可检索工件。Rust 版摄取层的标准不是先切文本再说，而是明确区分四个阶段：解析路由、统一图文表示、摘要与元数据生成、索引写入?
+核心要求?- 所有文档必须先经过解析路由，不允许按扩展名直接草率入库?- 所有解析结果必须统一归一?Text ?ImageWithContext 两类单元?- 每个文档必须同时产出三类结果：正?chunk、全景摘要、结构化检索元数据?- 图像资产必须镜像回系统对象存储或受控路径后再参与多模态检紃69?- 摄取层可以使?Worker Runtime 执行；在?RAG 检索与回答主链必须交由 GraphFlow 编排，不得混入离线摄?Worker 逻辑?
+#### 2.1.1 文档解析路由标准
+标准路由如下?- 纯文本、Markdown、配置文件、代码文件：走本地解析，工具?TextParser ?CodeParser?- 简?HTML：走本地解析，工具为 HtmlParser，要求提取正文与 img 元数据?- 简?PDF：走本地解析，工具为 PdfParser，是否简单由?1 ?3 页探针判定?- 简?Office：走本地解析，工具为 OfficeParser?- 纯图片、PPT、PPTX、扫?PDF、复杂版?PDF：走 MinerU Precise Parse API?
+PDF 探针至少输出：mime_type、extension、extracted_text_chars、page_count、image_hint_count、table_hint_count、likely_scanned、likely_presentation?
+路由原则?- 本地解析优先，MinerU 只用于复杂版面兜底?- 被判定为 MineruPrecise 的文档，如果 MinerU 不可用或失败，必须返回显式失败，不允许把二进制内容直接降级成垃圾文本继续入库?- MinerU 图片外链必须下载并镜像到对象存储，再决定是否生成对外可访?URL?
+#### 2.1.2 统一图文中间模型
+所?parser 的输出必须归一到统一中间模型：Text ?ImageWithContext?
+标准字段：unit_id、page、kind、text、image_path、caption、context、parser_backend、metadata?
+约束?- Text 用于正文、标题、列表、代码、表格文本等?- ImageWithContext 用于图片、图表、截图、PPT 页面、扫描页等视觉单元?- 对图文单元，text 必须?caption ?context 的标准化可检索文本?- 本地 HTML 路径至少要把 img src ?alt 抽取成图文单元；本地 PDF ?Office 路径后续可逐步增强图片抽取，但数据结构不得锁死成纯文本?
+#### 2.1.3 摘要与检索元数据工件
+每个文档必须生成一份摘要工件，其中包含两部分：
+- summary_text：用?Answer 阶段的全景摘要?- summary_metadata：用?Planner 阶段的检索辅助元数据?
+summary_metadata 标准字段：doc_id、filename、docname、language、domain、genre、era?
+字段语义?- filename：物理文件名，优先服务于 lexical ?BM25 查询?- docname：内容源展示标题，优先服务于用户自然语言指向?- language：文档主语言，第一优先级必须先落地?- domain：领域标签，例如 policy、finance、medical、computer_science、legal?- genre：文体标签，例如 regulation、report、research_paper、slides、manual、news?- era：时代标签，例如 classical、modern、contemporary?
+约束?- summary_text ?summary_metadata 必须?doc_id 一一绑定?- summary_metadata 必须是结构化枚举标签，不允许只产出自由散文描述?- summary_metadata 生成后必须在 query 进入 Planner 前按 doc_scope 聚合注入?
+#### 2.1.4 存储与索引标?PostgreSQL：documents、chunks、document_assets、document_multimodal_chunks、audit_log、sessions、subscriptions、usage_events?Qdrant：chunks_text、chunks_multimodal?
+索引标准?- 文本侧：text-splitter、BM25、文?Dense Embedding，标准模型为 Qwen/Qwen3-Embedding-8B?- 图文侧：多模?Dense Embedding，标准模型为 qwen3-vl-embedding?- 最终统一排序：多模?Rerank，标准模型为 qwen3-vl-rerank?- 文本 Rerank：Qwen/Qwen3-Reranker-8B 只作为多模态排序不可用时的降级路径，不是标准主路径?
+#### 2.1.5 一致性与重建
+- PostgreSQL 是业务真源，Qdrant 是可重建索引层?- 同一 doc_id 的更新必须串行化，依?Redis 文档锁?- 文档资产、图?chunk、文?chunk、摘要、元数据必须共享同一版本语义?- Dense 或多模?Dense 写入失败必须显式失败或进入补偿队列，不得伪装为成功?- 所有解析、摘要生成、元数据生成、索引写入动作必须写 audit_log?
+### 2.2 第二层：检索层（Retrieval Layer?该层?AVRAG 的核心证据编排系统。Rust 版检索层采用?Planner、固定执行策略、GraphFlow 编排的标准?
+核心变化?- Planner 只负责要查什么，不负责怎么查?- 每个 item 只有三种并列核心载荷之一：query、bm25_terms、summary?- summary 不是检索模式，而是 Answer 阶段的摘要注入策略?- 文本 Dense 与多模?Dense 固定同时执行，不再由 planner 条件决定?- 文本侧先?BM25 ?Text Dense ?RRF，再?Multimodal Dense 合并，最后统一 qwen3-vl-rerank?- 在线 RAG 主链必须运行?GraphFlow 上，不得?HTTP handler ?service 中散落检索分支逻辑?
+#### 2.2.1 实现原则（终版）
+- ?2.2 章是 rag 模式检索机制的唯一真相源?- Planner 只输出平?items，不输出通道开关、TopK、预算、视觉标志或执行模式?- 每个 item 只能携带一种核心载荷：query、bm25_terms、summary?- summary 只允许两个值：all ?related?- 文档?metadata 不是 planner item，而是 planner 输入上下文?- 旧设计必须清理：item_type、retrieval_mode、purpose、summary_signal、synonyms、meta_filter、include_visual、needs_visual_evidence、visual_queries、text_queries、summary_only、metadata_only?- 在线 RAG 主链必须?GraphFlow，至少包含这些节点：rag_load_session_context、rag_prepare_planner_input、rag_call_planner、rag_normalize_plan、rag_retrieve_text_dense、rag_retrieve_bm25、rag_retrieve_multimodal_dense、rag_merge_text_rrf、rag_apply_summary_policy、rag_multimodal_rerank、rag_cut_final_candidates、rag_build_answer_context、rag_answer_synthesize、rag_validate_citations、chat_output_guard、chat_persist?
+#### 2.2.2 RAG Planner 输出契约（精简版）
+Planner 输出一成RAGRetrievalPlan。标准结构为?- plan_version
+- plan_confidence
+- clarify_needed
+- clarify_message
+- items
+
+每个 item 包含?- priority? ?1 之间的权重?- query ?bm25_terms ?summary，三选一
+
+summary 只能?all ?related?Planner 不得输出预算、TopK、检索通道、视觉开关或解释性字段?
+#### 2.2.3 Planner 输入：DocScope Metadata Index
+Planner 的输入不只是 session context ?user query，还必须包含当前 doc_scope 的聚合元数据索引?
+注入结构至少包含?- docscope_profile：languages、domains、genres、eras
+- documents：doc_id、filename、docname、language、domain、genre、era
+
+Planner 使用规则?- filename：用于精?lexical ?BM25 词项、编号、缩写、版本号?- docname：用于用户自然语言标题引用?- language：决?query rewrite ?bm25 terms 的语言?- domain、genre、era：决定术语风格、修辞方式与 subquery 组织方式?- 如果 doc_scope 未选择，Planner 不得默认为全库检索，应优先要求用户明确检索范围?
+#### 2.2.4 固定执行策略（标准，不由 Planner 决定?Runtime 固定解释 item?- query item：固定执?Text Dense ?Multimodal Dense?- bm25_terms item：固定执?BM25 Sparse?- summary item：不执行正文召回，只决定摘要注入策略，all 表示?doc_scope 内全部文档摘要注?Answer，related 表示将最终命中文档对应的摘要注入 Answer?
+说明?- 旧的 summary_only、metadata_only、include_visual 机制全部移除?- metadata 不再作为 planner item。文档元数据通过 DocScope Metadata Index 进入 planner，而不是作为正文检索模式存在?
+#### 2.2.5 候选预算分配机制（标准?- 系统维护唯一全局候选预算：RAG_TOTAL_CANDIDATE_BUDGET 等于 100?- priority ?0 ?1 的权重，不是整数排序号?- Runtime 对所有有?item ?priority 做归一化?- 每个 item 的候选预算为 max(1, round(归一化权重乘?100))?
+执行细则?- query item 可以在内部对 Text Dense ?Multimodal Dense 过采样，但该 item 在进入全局池前的保留候选数不得超过?item 的候选预算?- bm25_terms item 进入全局文本池前的保留候选数不得超过?item 的候选预算?- summary item 不消耗正文召回候选预算，但消耗最终上下文预算?
+#### 2.2.6 固定召回链路（标准）
+标准流程如下?1. 对所?query item：执?Text Dense，标准模型为 Qwen/Qwen3-Embedding-8B；执?Multimodal Dense，标准模型为 qwen3-vl-embedding?2. 对所?bm25_terms item：执?PostgreSQL BM25 Sparse?3. 文本候选池：汇总全?BM25 候选与 Text Dense 候选，做一?RRF，得?text_pool?4. 图文候选池：汇总全?Multimodal Dense 候选，去重，得?multimodal_pool?5. 最终统一精排：将 text_pool ?multimodal_pool 合并，统一使用 qwen3-vl-rerank?6. 结果裁剪：先?qwen3-vl-rerank 分数排序。分数大于等?0.7 的候选全部保留；若达到该阈值的候选不?30 个，则补足到 30 个。因此最终保留数等于 max(达到阈值的数量, 30)?
+#### 2.2.7 摘要注入机制（替代旧 summary 逻辑?摘要不是检索模式，而是 Answer Context 注入策略?
+规则?- 只有?planner 显式产出 summary item 时，Runtime 才注入文档摘要?- summary 等于 related：先完成正文召回与最?rerank，再根据最终保?chunk 对应?doc_id 注入相关摘要?- summary 等于 all：直接按 doc_scope 注入全部文档摘要?- 如果 planner 没有产出 summary item，不得默认注入摘要?
+这条规则取代旧实现中?summary_only、summary_signal ?runtime 默认 related summary 注入?
+#### 2.2.8 检索流水线（GraphFlow 标准?第一步：加载会话上下文。GraphFlow 节点：rag_load_session_context?第二步：准备 Planner 输入，注?session_context、user_query、docscope_metadata_index。GraphFlow 节点：rag_prepare_planner_input?第三步：调用 Planner。若 clarify_needed ?true，直接返回，不进入检紃69GraphFlow 节点：rag_call_planner?第四步：归一?Plan，校?item 三选一载荷约束并归一?priority。GraphFlow 节点：rag_normalize_plan?第五步：执行召回。query item 进入 rag_retrieve_text_dense ?rag_retrieve_multimodal_dense；bm25_terms item 进入 rag_retrieve_bm25；summary item 只记录摘要策略?第六步：构建文本池，汇?BM25 ?Text Dense，做 RRF。GraphFlow 节点：rag_merge_text_rrf?第七步：构建摘要策略。GraphFlow 节点：rag_apply_summary_policy?第八步：统一多模态重排。GraphFlow 节点：rag_multimodal_rerank?第九步：双阈值裁剪。GraphFlow 节点：rag_cut_final_candidates?第十步：组装 Answer Context。GraphFlow 节点：rag_build_answer_context?第十一步：回答、引用校验与持久化。节点包?rag_answer_synthesize、rag_validate_citations、chat_output_guard、chat_persist?
+#### 2.2.9 统一数据契约（精简版）
+RagRetrievalPlan 只包含：plan_version、plan_confidence、clarify_needed、clarify_message、items?RetrievalPlanItem 只包含：priority、query、bm25_terms、summary?三种载荷字段中必须有且仅有一个非空?
+#### 2.2.10 故障降级矩阵
+- Planner 失败：回退为单?query item，priority 等于 1.0?- BM25 失败：保?text dense ?multimodal dense?- Text Dense 失败：保?BM25 ?multimodal dense?- Multimodal Dense 失败：保留文本池?- Summary 注入失败：跳过摘要注入?- Multimodal Rerank 失败：回退到文?rerank ?pre-rerank ordering?- 无有效证据：返回证据不足，不生成伪正常答案?
+### 2.3 第三层：条件生成层（Conditional Generation Layer)该层负责把已提纯的证据包转化为用户可读、带引用的最终回答?
+要求?- 上下文组装：?TopK chunk、摘要、元数据与来源信息按预算拼接进系统上下文?- 受限生成：模型必须且只能基于检索证据回答?- 精准引用：每一处事实断言必须能映射到 chunk ?web source?- 回答后校验：无证据句子必须重写、删除或标记降级?
+---
+
+## 3. 关键产品特性与用户价?1. 极低幻觉率：回答锚定用户文档与检索证据?2. 单层 Retrieval Items：覆盖主问、关键词补强、改写、拆解、摘要与元数据，同时保持简单可调?3. item 内部混合召回：BM25 + Dense + RRF + Cross-Encoder 提升召回与排序质量?4. 结构化衍生内容生成：在同一检索内核上生成学习指南、FAQ、时间线等?5. 多模式统一：`rag | general | search` 共用统一聊天协议与引用体验?
+---
+
+## 4. 成功指标（Success Metrics)- `Recall@15 >= 0.85`
+- `nDCG@15 >= 0.78`
+- `Hallucination Rate <= 2%`
+- `Citation Accuracy >= 95%`
+- `Planner Clarify Rate <= 8%`
+- `Dense Ready Coverage >= 98%`
+- 检索层 P95 延迟 `<= 2.5s`
+- 端到端回答P95 `<= 8s`
+- 单问平均成本 `<= $0.03`
+- 95 分位单问成本 `<= $0.08`
+
+---
+
+## 5. 附录：RAG 精简 Planner（冻结）
+
+### 5.1 Planner Prompt（Freeze v2, Active?Role：你?Context OS ?RAG 检索规划器。你的任务不是决定检索通道、视觉开关、预算、TopK ?rerank 模型；这些全部由 Runtime 固定执行。你的任务只是在已选择?doc_scope 内，生成最小数量的检索载?item?
+Runtime Facts?- query item 固定进入 Text Dense ?Multimodal Dense?- bm25_terms item 固定进入 BM25 Sparse?- summary item 只表示摘要注入策略?- 文本池固定执?BM25 ?Text Dense ?RRF?- 最终固定执?Text Pool ?Multimodal Pool ?qwen3-vl-rerank?- 规划器不得输?retrieval_mode、视觉标志、预算、TopK 或解释性字段?
+Input?- Session context
+- User query
+- Docscope metadata index，其中包?doc_id、filename、docname、language、domain、genre、era?
+Output JSON?- plan_version
+- plan_confidence
+- clarify_needed
+- clarify_message
+- items
+
+每个 item 只能是以下三种载荷之一?- query
+- bm25_terms
+- summary，且 summary 只能?all ?related
+
+硬规则：
+- priority 是权重，不是排序号，范围必须?0 ?1?- query 用于改写后的子问题、分解后的子问题或跨语言 query?- bm25_terms 用于文件名、标题、编号、专有名词、术语、缩写等字面词项?- 只有在问题需要全局理解、阶段脉络、规则边界、跨文档框架时，才输?summary item?- 如果 docscope 中的文档语言与用?query 语言不一致，可以生成对应语言?query ?bm25_terms?- 如果未明确选择内容源，优先输出 clarify_needed 等于 true，不要默认全库检紃69?- 不要输出 markdown、解释、注释或 schema 之外的字段?
+### 5.2 Runtime 责任分割（冻结）
+- Planner 负责：生?query、bm25_terms、summary 载荷；设?priority；必要时要求澄清?- Runtime 负责：候选预算分配、文本池 RRF、多模?Dense、统一多模?Rerank、双阈值裁剪、摘要注入执行?- GraphFlow 负责：在?RAG 全链路节点编排，以及 Planner、Retrieval、Summary Inject、Rerank、Synthesis、Guard、Persist 的显式节点管理?
+## 6. API 与前端契?### 6.1 回答接口响应（标?JSON?基础 envelope?- `answer`
+- `session_id`
+- `agent_type`
+- `sources`
+- `citations`
+- `trace`
+
+推荐完整结构n```json
+{
+  "answer": "string",
+  "session_id": "string",
+  "agent_type": "rag|general|search",
+  "sources": [],
+  "citations": [],
+  "trace": {"mode": "rag|general|search"},
+  "degrade_trace": [],
+  "planner_output": {},
+  "mode_debug": {}
+}
+```
+
+规则?- `degrade_trace` 推荐独立返回?- `planner_output` 为模式感知字段?- `mode_debug.rag.*` 仅在 `agent_type=rag` 时出现?- `general/search` 不返?`rag` 专属调试字段?
+### 6.2 Planner 需要澄清时的响应```json
+{
+  "answer": "请明确你最关心的是性能、成本还是开发体验。,
+  "session_id": "string",
+  "agent_type": "rag",
+  "planner_output": {
+    "mode": "rag",
+    "rag_plan": {
+      "plan_version": "rag-item-v1",
+      "plan_confidence": 0.23,
+      "clarify_needed": true,
+      "clarify_message": "请明确你最关心的是性能、成本还是开发体验。,
+      "items": []
+    }
+  },
+  "citations": [],
+  "sources": [],
+  "degrade_trace": []
+}
+```
+
+### 6.3 前端展示层级
+主界面必显：
+- `answer`
+- `sources`
+- `citations`
+- `degrade_trace`（若非空）
+调试-Ops 面板可显_- `planner_output`
+- `mode_debug.rag.item_trace`
+- `mode_debug.rag.retrieval_trace`
+- `mode_debug.rag.summary_injection_trace`
+
+---
+
+## 7. 并发执行与队列架构### 7.1 设计原则
+- 在线 RAG 主链必须运行?GraphFlow 上，禁止?HTTP handler、中?service ?ad-hoc async 分支中直接拼?Planner、Retrieval、Rerank、Answer 逻辑?- Tokio runtime、worker pool、channel 只作?GraphFlow 节点的执行基础设施，不作为在线 RAG 主链编排替代品?- 离线摄取、重建、补偿同步可以继续使?Worker Runtime；但在线 rag 模式必须?GraphFlow?- 所有阶段必须支持取消、超时、显式降级与优雅退出?
+### 7.2 在线链路：GraphFlow + 分阶段独立池
+在线 RAG 标准节点：rag_load_session_context、rag_prepare_planner_input、rag_call_planner、rag_normalize_plan、rag_retrieve_text_dense、rag_retrieve_bm25、rag_retrieve_multimodal_dense、rag_merge_text_rrf、rag_apply_summary_policy、rag_multimodal_rerank、rag_cut_final_candidates、rag_build_answer_context、rag_answer_synthesize、rag_validate_citations、chat_output_guard、chat_persist?
+推荐执行池：Planner 池、BM25 检索池、Dense 与多模?Dense 检索池、多模?Rerank 池、LLM 生成池?
+约束?- 慢阶段不得复用快阶段 worker?- 所有节点的状态流转、失败回退?trace 必须通过 GraphFlow 显式表达?- 任何为了方便而绕?GraphFlow 直接?service 里串逻辑的实现均视为违背标准?
+### 7.3 优先级调度优先级：
+- `P1` 实时对话
+- `P2` 普通检后- `P3` 批量后台
+
+规则?- 有效 item 默认全部执行，不裁剪?- item 过多时，缩放预算而不是直接丢?item?
+### 7.4 LLM 双限流（RPM + TPM?- 请求速率桶（RPM?- Token 速率桶（TPM?- `429 / 503` 重试：指数退?+ 抖动 + 动态降?
+### 7.5 背压与拒绝策e- 队列满载时立即返?`ErrQueueFull`?- HTTP 层返?`503 Service Unavailable + Retry-After`?- 优先保留在线请求，降级后台任务?
+### 7.6 持久化任务边?仅用于：
+- 批量 embedding
+- 文档重分块/ 重索?- 摘要重建
+- 漂移检测触发的重建任务
+- Qdrant 补偿同步任务
+- 计费补报与异步通知
+
+### 7.7 优雅关闭与一致?- 先关闭入队，再等?in-flight 完成?- 所有任务必须具备幂等键?- summary / vector upsert 失败必须允许安全重试?
+### 7.8 可观测性与告警
+必埋指标`- `queue_depth{stage}`
+- `processed_total{stage}`
+- `failed_total{stage}`
+- `dropped_total{stage}`
+- `latency_ms_bucket{stage}`
+- `rate_limit_hit_total{provider}`
+
+### 7.9 参数基线（初始）
+| Pool 类型 | Workers | Buffer | Timeout | 说明 |
+|---|---:|---:|---:|---|
+| RAG Planner | 20~50 | 200 | 3s | 小模型，高并发|
+| BM25 检索| 30~80 | 500 | 2s | CPU/IO 混合 |
+| Dense 检索| 20~50 | 300 | 5s | 受Qdrant 连接池限?|
+| Cross-Encoder 重排 | 4~10 | 100 | 8s | 高成本，严格控并发|
+| LLM 生成 | 3~10 | 50 | 60s | 严格受限流约||
+| Embedding（离线） | 5~20 | 200 | 30s | 建议批处理|
+
+---
+
+## 8. 文档摄取管道（Ingestion Pipeline?### 8.1 目标与原?- 稳定可解析?- 可重复执行?- 可回滚重建?- 摄取任务必须幂等?
+### 8.2 多格式解析与路由标准
+- 纯文本、Markdown、配置、代码：?Local，工具为 TextParser ?CodeParser，输?Text 单元?- HTML：走 Local，工具为 HtmlParser，输出正?Text ?img 抽取出的 ImageWithContext?- 简?PDF：走 Local，工具为 PdfParser，输出分?Text?- 简?Office：走 Local，工具为 OfficeParser，输?Text?- 纯图片、PPT、PPTX、扫?PDF、复杂版?PDF：走 MineruPrecise，工具为 MinerU Precise Parse API，输出图文单元与图片资产?
+补充要求?- MinerU 图片结果必须镜像回对象存储?- 解析完成后必须生?summary_text ?summary_metadata?- summary_metadata 至少包含 filename、docname、language、domain、genre、era?
+### 8.3 幂等与去重规5- `doc_fingerprint = sha256(normalized_content + parser_version + chunk_policy_version)`
+- `chunk_fingerprint = sha256(chunk_text + chunk_index + doc_version)`
+
+执行规则?- ?`doc_fingerprint` 未变化：跳过重切块与重向量化?- 解析器版本变化：允许强制重建，并记录 `reindex_reason`?- PostgreSQL 先写权威数据，Qdrant 后写索引，失败进入补偿队列?
+### 8.4 摄取状态机
+- `uploaded -> parsed -> chunked -> embedded -> indexed -> active`
+- 失败态：`failed_parse / failed_embed / failed_index`
+- 每次状态变更必须写 `audit_log`?
+### 8.5 质量闸门
+- 解析文本长度比例 `< 30%` 标记异常?- OCR 文档平均置信?`< 0.75` 标记低可信?- 低质量文档允许入库，但默认降低检索权重并前端提示?
+---
+
+## 9. 多层缓存架构
+### 9.1 缓存分层
+- L1 语义查询缓存（planner digest?- L2 检索结果缓存（chunk id 列表?- L3 Embedding 缓存
+- L4 生成结果缓存（可选）
+
+### 9.2 失效策略
+- 文档版本变更：失?L2 / L4?- 权限变更：失效租户相关缓存?- 模型升级：按 embedding / generation 维度失效对应层?
+### 9.3 缓存安全边界
+- 缓存命中不能绕过 PostgreSQL 权限裁决。- `org_id` 必须作为缓存 key 的强制组成部分?
+---
+
+## 10. 上下文组装与 Token 预算管理
+### 10.1 预算模型
+总上下文预算等于 model_max_tokens 减去 reserved_system、reserved_history、reserved_output?
+约束?- reserved_output 必须独立保留?- 不允许再把上下文静态切成固?summary_budget 加固?retrieval_budget?- 摘要与正?chunk 共用同一动态上下文预算池?
+### 10.2 组装策略
+组装顺序?1. 最终保留候?chunk?2. summary item 指定的摘要集合，可能?related ?all?3. 会话摘要与最近消息?
+规则?- 只有 planner 显式产出 summary item 时，才注入文档摘要?- summary 等于 related：注入最终保?chunk 对应文档的摘要?- summary 等于 all：注?doc_scope 内全部文档摘要?- 不再允许 runtime 默认无条件注?related summary?- 若上下文总预算不足，按整体优先级动态裁剪，不对摘要?chunk 单独设硬上限?
+### 10.3 引用一致?- 进入上下文的每个片段必须?doc_id、chunk_id、page?- 图文证据必须?asset_id、image_path、caption?- 生成后引用校验失败的句子必须重写或删除?
+## 11. 对话历史与会话管理### 11.1 会话模型
+核心字段`- `session_id`
+- `user_id`
+- `org_id`
+- `history[]`
+- `created_at`
+- `updated_at`
+
+### 11.2 历史压缩
+触发条件?- 轮次超过阈值（默认 10 轮）
+- 历史 token 超预算（默认 20K）
+策略-- 保留最m4 轮原文计- 更旧轮次压缩为可追溯摘要?- 摘要必须?`summary_source_turns`?
+### 11.3 与检索协?- 查询改写可参考近期会话摘要?- 会话中的临时约束必须转为 `DocScope` 显式传递?- 不得越权跨文档范围检紃69?
+---
+
+## 12. 流式输出协议
+### 12.1 传输方式
+- 默认协议：SSE
+- 可选协议：WebSocket
+
+### 12.2 SSE 事件规范
+- `start`
+- `token`
+- `citations`
+- `trace`
+- `done`
+- `error`
+
+约束-- 每次请求必须d`done` ?`error` 结束?- 中断时写?`degrade_trace` ?`error_code`?
+### 12.3 用户体验约束
+- 首token SLA：`P95 <= 1.5s`
+- 生成中断可重试；重试需复用 `request_id`，避免重复计费?
+---
+
+## 13. 评估管道（Evaluation Pipeline，### 13.1 评估分层
+- 离线评估：检紃69生成、端到端?- 在线评估：用户反馈、引用点击率、失败率、降级率、延迟与成本?
+### 13.2 黄金集与回归门禁
+- 黄金集规模：`100~500` 条`{query, expected_answer, source_chunks}`。- 发布门禁?  - `Recall@15` 不下降超?`3%`
+  - `Citation Accuracy >= 95%`
+  - `Hallucination Rate <= 2%`
+
+### 13.3 周期性评，- 每周运行全量回归并输出版本漂移报告?- 指标连续两周下降时，强制触发索引重建与提示词复核?
+---
+
+## 14. Guardrails 与安全合规### 14.1 输入护栏
+- Prompt Injection 检?- 越权检?- 范围外问题检?
+### 14.2 输出护栏
+- 引用可证性校?- PII 脱敏
+- 有害内容过滤
+
+### 14.3 执行顺序
+`Input Guards -> Retrieval -> Generation -> Output Guards`
+
+### 14.4 合规与审r- 护栏触发必须l`audit_log`?- 审计字段至少包含：`guard_type / risk_level / action / trace_id / operator`?
+---
+
+## 15. 全链路可观测契### 15.1 Trace 契约
+每个请求分配 `trace_id`，贯穿：
+- planner
+- retrieval
+- rerank
+- generation
+- guardrails
+- cache
+- billing
+
+### 15.2 指标体系
+- 质量：`recall / citation_accuracy / hallucination_rate`
+- 性能：`p50/p95 latency / first_token_latency / qps`
+- 成本：`cost_per_query / embedding_cost / generation_cost`
+- 稳定性：`retry_rate / timeout_rate / degrade_rate`
+- 一致性：`permission_desync_count / version_switch_fail_rate`
+
+### 15.3 运维动作
+- P1：全链路不可用或权限错放风险，触发安全降级?- P2：检索质量明显退化，触发索引重建或模型回退?- P3：成本异常上升，触发缓存增强与并发限流?
+---
+
+## 16. 前端技术架?### 16.1 推荐技术栈
+- Next.js（App Router） React
+- Tailwind CSS + ShadCN/UI
+- Zustand ?Jotai
+- TanStack Query
+- SSE 客户端（可选AI SDK 封装）
+约束-- 前端只负责交互与渲染，不承载检索决策逻辑?- 所有权限判断以后端为准?
+### 16.2 前端分层
+- App Shell
+- Notebook Workspace
+- Chat Runtime
+- Source Viewer
+- Ops Panel
+
+---
+
+## 17. 核心 UI 交互范式
+### 17.1 三栏工作?- 左栏：Notebook 与文档管?- 中栏：对话区
+- 右栏：来源面?
+### 17.2 文档管理面板
+必须支持：- 上传
+- 状态展?- 删除
+- 重索?- 文档范围选择
+
+### 17.3 多Notebook 管理
+- Notebook 是一级隔离单元 - 切换 Notebook 必须重置当前 `DocScope` 与会话上下文?
+---
+
+## 18. 前后端接口补?### 18.1 Notebook 与文档接?- `POST /api/v1/notebooks`
+- `GET /api/v1/notebooks`
+- `POST /api/v1/notebooks/{id}/documents`
+- `GET /api/v1/documents/{doc_id}/status`
+- `DELETE /api/v1/documents/{doc_id}`
+- `POST /api/v1/documents/{doc_id}/reindex`
+
+### 18.2 聊天接口
+`POST /api/v1/chat`
+
+入参（- 必填：`query`, `notebook_id`, `agent_type`, `stream`
+- 可选：`session_id`, `doc_scope[]`, `messages[]`, `source_type`, `source_token`
+
+幂等要求?- 支持 `request_id` 透传或由服务端自动生成?- 重试必须复用同一 `request_id`?
+### 18.3 SSE 事件数据约定
+通用事件?- `start`
+- `token`
+- `citations`
+- `trace`
+- `done`
+- `error`
+
+模式扩展事件a- `rag`：`planner_complete`, `rag_trace`, `rag_sources`
+- `search`：`search_start`, `search_results`
+
+---
+
+## 19. 引用标注交互规范
+### 19.1 引用渲染
+回答文本中的 `[1] [2] ...` 必须可点击。
+悬浮态显示：
+- 文档/- 页码 / 段落
+- 片段预览
+
+### 19.2 跳转行为
+点击引用后：
+1. 打开来源面板`2. 定位 `doc_id + page + chunk_id`?3. 高亮命中片段并滚动?
+### 19.3 一致性校?- 回答中的引用索引?`citations[]` 不一致时，前端标记“引用异常”?- 禁止显示“高可信”徽标?
+---
+
+## 20. 前端状态管理与实时反馈
+### 20.1 聊天状态机
+`idle -> submitting -> streaming -> done|error`
+
+### 20.2 文档处理状态反?- 上传后立即进?optimistic `processing`?- `status != ready` 时每 2 秒轮诃69?- ?`ready / failed` 后停止轮诃69?
+### 20.3 降级可见?- `degrade_trace` 非空时，必须展示降级提示条?- 提示条最少包含：降级阶段、原因、可信度影响说明?
+---
+
+## 21. 前端验收指标
+- Workspace Ready：`P95 <= 2.0s`
+- 首token 可见：`P95 <= 1.5s`
+- 引用定位完成：`P95 <= 800ms`
+- 引用跳转正确率：`>= 95%`
+- 文档状态展示一致率：`>= 99%`
+- 会话切换上下文污染率：`<= 0.5%`
+- 流式会话异常中断率：`<= 1%`
+- 可重试错误恢复成功率：`>= 90%`
+
+---
+
+## 22. 平台级SaaS 架构
+### 22.1 全平台分层- 边缘层：CDN / WAF / Edge
+- 接入层：API Gateway + Auth
+- 应用层：前端工作?+ Rust 后端服务
+- 数据与任务层：PostgreSQL / Qdrant / Redis / Object Storage / Worker
+- 平台能力层：计费 / 通知 / 可观测?/ DevOps
+
+### 22.2 服务边界
+- RAG 核心路径与计费、通知等外围能力解耦?- 外部依赖故障不得阻断核心问答?
+---
+
+## 23. 身份认证与多租户隔离
+### 23.1 租户层级模型
+`Organization(org_id) -> User -> Notebook -> Document -> Chunk`
+
+### 23.2 PostgreSQL 隔离（强?RLS?- 所有核心表启用 `RLS + FORCE RLS`?- 统一策略：`org_id = current_setting('app.current_org')::uuid`?- Rust 访问规范?  - 必须通过统一事务包装器注?`set_config('app.current_org', $1, true)`?  - 禁止业务层绕过包装器直连查询?
+### 23.3 Qdrant 隔离（强制过滤注入）
+- 所有向量检索必须通过安全包装器注入`org_id` 过滤条件。- 缺失 `org_id` 直接拒绝，fail-closed?
+### 23.4 其他存储隔离
+- 对象存储路径前缀强制包含 `org_id`?- Redis key 前缀强制包含 `org_id`?- 日志与导出默认按 `org_id` 分区?
+### 23.5 跨租户防御测?- `orgA` 写入，`orgB` 读取必须为空?`404`?- 直接 ID 猜测不得读到跨租户资源?- 分享链接不得突破租户边界?
+### 23.6 管理员越权访。- 仅专用后台角色可配置 `BYPASSRLS`?- 普通应用账号与普通管理员账号禁止 `BYPASSRLS`?
+---
+
+## 24. 计费与订阅系?### 24.1 定价模型
+- Free
+- Pro
+- Enterprise
+
+计量维度`- `pages_processed`
+- `embedding_tokens`
+- `llm_input_tokens`
+- `llm_output_tokens`
+- `storage_gb`
+- `queries_count`
+
+### 24.2 Stripe 对象映射
+- `Customer -> org_id`
+- `Product/Price -> 套餐与计量项`
+- `Subscription -> 当前订阅状态`
+- `Meter Events -> 用量上报`
+- `Webhook -> 支付状态同步`
+
+### 24.3 关键流程
+- 组织创建时创?Stripe Customer?- 用量上报异步批处理?- Webhook 处理必须验签?
+### 24.4 配额前置检查与优雅降级
+- 每次上传 / 查询前做配额检查?- 达到硬上限时返回明确升级提示?- 计费链路异常时允许短时容错并待补报?
+---
+
+## 25. 文件存储与上传链路### 25.1 上传模式
+- 后端签发预签?URL?- 客户端直传对象存储?- 对象存储事件触发摄取任务?
+### 25.2 路径规范
+`bucket/{org_id}/{notebook_id}/{doc_id}/{filename}`
+
+### 25.3 安全与一致性- 文件类型白名?- 大小限制
+- 可选恶意文件扫失- 存在对象但摄取失败时标记 `orphan_object`
+
+---
+
+## 26. API Gateway、限流与通知
+### 26.1 限流模型
+限流粒度`- `user_id + endpoint`
+- `org_id + endpoint`
+- `api_key + endpoint`
+
+限流维度?- RPM
+- 每日请求总量
+- 每日 token 预算
+
+超限返回`- `429 + Retry-After`
+- 明确套餐与升级提?
+### 26.2 通知系统
+触发事件文- 文档处理完成 / 失败
+- 订阅变更 / 支付失败
+- 配额临近上限
+- 系统级降级影响
+---
+
+## 27. DevOps 与基础设施即代码### 27.1 CI 门禁
+- Rust 单测
+- 多租户隔离测试- RAG 回归评估
+- 前端关键 E2E
+- 安全扫描
+- 配置检求
+### 27.2 CD 流程
+- 镜像构建与推 - IaC 审查后执回- 滚动发布 + smoke test + 自动回滚
+
+### 27.3 IaC 资源范围
+- 计算
+- 数据
+- 网络
+- 观测
+
+---
+
+## 28. 合规与安全补?### 28.1 数据与密钥安?- 全链?TLS
+- 静态数据加?- API 密钥与第三方凭据必须进入 Secrets Manager
+
+### 28.2 数据主体请求
+- 支持删除 - 级联删除 PostgreSQL、Qdrant、对象存储、缓存与索引残留
+- 备份删除走延迟擦除并可审计追踪
+### 28.3 安全测试
+- 漏洞扫描
+- 鉴权 / 越权回归
+- 公开链接滥用与速率攻击演练
+
+---
+
+## 29. 后台管理系统（Admin Panel，### 29.1 管理角色?RBAC
+- `super_admin`
+- `ops_admin`
+- `finance_admin`
+
+### 29.2 核心模块
+- 租户管理
+- 用户支持
+- 财务管理
+- 系统健康
+- 功能开?
+### 29.3 审计日志
+- 后台所有写操作必须写insert-only 审计日志?
+### 29.4 路由建议
+- `/admin`
+- `/admin/tenants`
+- `/admin/users`
+- `/admin/billing`
+- `/admin/rag-health`
+- `/admin/feature-flags`
+- `/admin/audit-logs`
+- `/admin/system/workers`
+- `/admin/system/degradation`
+
+---
+
+## 30. 分享与协作权限模型### 30.1 分享模式
+- 私有
+- 链接分享
+- 公开访问（可选）
+
+### 30.2 数据模型
+- `notebooks.access_level`
+- `notebook_members`
+- `share_tokens`
+- `share_access_logs`
+
+### 30.3 链接令牌规则
+- 高熵随机?- 支持过期与撤销
+- 公开链接必须受速率限制与滥用检测保护
+### 30.4 邀请协作规t- 支持邮箱与已注册用户邀?- 角色：`owner > editor > viewer`
+
+### 30.5 统一访问检?`CheckAccess` 顺序?1. owner
+2. member role
+3. share token role
+4. public fallback
+
+未授权返?`404`?
+---
+
+## 31. Notebook 对外可编程接入### 31.1 API Key 体系
+- 每个 Notebook 可生成多?API Key?- 仅保?`key_hash` 与前缀，不保存明文?- 可配置权限、过期时间与速率上限?
+### 31.2 对外协议
+- REST API
+- OpenAI Compatible API
+- MCP Server
+
+### 31.3 前端接入面板
+提供-- REST 示例
+- OpenAI 兼容示例
+- MCP 配置片段
+- API Key 创建 / 撤销入口
+
+### 31.4 安全与计费联?- 外部 API 请求必须绑定 `org_id/notebook_id` 上下文?- 外部 API 用量纳入统一计费与配额体系?
+---
+
+## 32. 工程开发纪律与交付治理
+### 32.1 架构纪律：先边界，后功能
+早期默认采用 Rust Modular Monolith，避免过早微服务化?
+推荐目录边界?- `bins/api`
+- `bins/worker`
+- `crates/transport-http`
+- `crates/rag-core`
+- `crates/ingestion`
+- `crates/storage-pg`
+- `crates/storage-qdrant`
+- `crates/cache-redis`
+- `crates/auth`
+- `crates/billing`
+- `crates/share`
+- `crates/admin`
+- `crates/telemetry`
+- `crates/common`
+
+依赖规则?- `rag-core` 禁止依赖 `billing/admin`?- 依赖方向必须通过 CI 强制校验?
+### 32.2 测试金字塔与质量门禁
+- Unit：算法与纯函/- Integration：PostgreSQL / Qdrant / Redis / Object Storage 联调
+- E2E：上传-> 索引 -> 查询 -> 引用
+- RAG Quality：黄金集回归
+
+最低门禁：
+- 单元覆盖率`>= 80%`
+- 多租户隔离测试全通过
+- RAG 黄金集回归通过率`>= 95%`
+- API 契约测试通过
+
+### 32.3 错误处理统一模型
+统一业务错误结构：- `code`
+- `message`
+- `http_status`
+- `detail/cause`
+
+统一错误中间件负责日志、脱敏与 trace 关联?
+### 32.4 数据库迁移纪?- 所?Schema 变更必须迁移即代码?- 必须?down 脚本?- CI 必测：`up -> down -> up`?
+### 32.5 CI/CD 质量闸门
+CI 必含?- fmt / lint
+- 单测与覆盖率
+- 集成测试
+- RAG 回归
+- 隔离测试
+- 迁移可回滚测试- API 契约测试
+
+CD-- 金丝雀 / 灰度发布
+- 自动化健康检查- 触发阈值回?
+### 32.6 可观测性先行（ODD）新模块上线前必须具备?- metrics
+- trace
+- structured log
+
+### 32.7 工程运行纪律
+| 纪律 | 强制要求 |
+|---|---|
+| 无测试不合并 | 每个 PR 必须附对应测试|
+| 无文档不上线 | 新API 必须更新 OpenAPI/接口文档 |
+| 密钥不入代码 | 统一密Secrets Manager |
+| 变更可回滚| 功能开关、迁移回滚、发布回滚齐备|
+| 告警有Runbook | 每条告警规则绑定排障手册 |
+| 定期演练 | 每月执行故障 / 降级演练 |
+| On-Call 轮值| 研发轮值值班 |
+
+### 32.8 三条工程哲学
+- 假设依赖会失?- 让错误尽早暴?- 可观测性先于功?
+### 32.9 AI 可读性上下文工件
+- `AGENTS.md`
+- `CLAUDE.md`
+- `.claude/rules/*`
+- `.notes/project_overview.md`
+- `.notes/decisions.md`
+- `.notes/task_list.md`
+
+---
+
+## 33. API 管理与网关分层治理### 33.1 双层职责模型
+- 基础设施网关层：TLS、WAF、DDoS、防刷、全局限流、CDN
+- 应用：API 管理层（Rust）：认证授权、业务配额、版本管理、OpenAPI、统一错误模型
+
+### 33.2 Rust 应用?API 管理?推荐组合?- `axum`
+- `tower`
+- `tower-http`
+- `serde`
+- `sqlx`
+- 自定eOpenAPI 生成或兼容框?
+目标?- API 定义即文?- 输入输出契约强校?- 错误响应统一
+
+### 33.3 API 版本治理
+- 稳定版：`/api/v1/*`
+- 破坏性变更：`/api/v2/*`
+- 必须提供 `Deprecation / Sunset` 策略?
+### 33.4 认证与权限中间件e推荐顺序r1. `request_id / recover / logger`
+2. CORS
+3. JWT / API Key 验证
+4. Notebook 访问检?5. 配额检?6. 业务处理
+
+### 33.5 分层限流策略
+- 边缘层：/IP / ASN / 国家做粗粒度防护
+- 应用层：r`org_id / user_id / api_key / endpoint` 做细粒度控制
+
+### 33.6 操作注册与契约要?每个 API 必须声明?- `operation_id`
+- `summary`
+- `tags`
+- `security`
+- `errors`
+
+### 33.7 基础设施网关选型建议
+- Cloudflare
+- Kong
+- APISIX
+- Traefik
+
+---
+
+## 34. 基于历史对话的通用聊天连续性### 34.1 高频失效模式
+- 遗忘
+- 指代消解失败
+- 意图漂移
+
+### 34.2 分层记忆架构
+- Layer 1：最?N 条原始消?- Layer 2：会话摘?- Layer 3：用户画?
+注入顺序 1. base system
+2. user profile
+3. session summary
+4. working memory
+5. current user input
+
+### 34.3 历史压缩与Token 管理
+- 超预算时压缩最旧一半消息?- 摘要必须保留目标、约束、已达成结论、未完成事项与偏好?
+### 34.4 查询改写（Intent Refiner?- 仅在需要改写时触发?- 只做指代补全与语义补全，不改变问题方向?- 改写失败必须回退原始 query?
+### 34.5 用户画像（被动推断）
+最小字段：
+- `expertise_level`
+- `preferred_style`
+- `name_and_context`
+- `topics_of_interest`
+
+### 34.6 意图状态机
+- `primary_goal`
+- `sub_goals`
+- `constraints`
+- `completed`
+
+### 34.7 运行时调用流水线
+1. 加载记忆
+2. 按需查询改写
+3. 组装上下L4. 调用 LLM 流式生成
+5. 异步写回工作记忆、摘要、画像、状态机
+
+---
+
+## 35. 多模段Planner / Synthesizer 编排
+### 35.1 模式定义
+- `rag`
+- `general`
+- `search`
+
+### 35.2 总体原则
+- 保持模式隔离?- `rag` 服从单层 Retrieval Items?- `search` 服从 query_type + sub_queries?- `general` 不走私域检紃69?
+### 35.3 Prompt 模板化与配置?建议模板?- `planner_system.tmpl`
+- `synthesizer_system.tmpl`
+- `citation_rules.tmpl`
+- `query_type_overrides/*.tmpl`
+
+### 35.4 可观测性与评估指标
+- `planner_latency_ms`
+- `synthesizer_latency_ms`
+- `citation_coverage_rate`
+- `unsupported_claim_rate`
+- `answer_groundedness_score`
+- `query_refine_fallback_rate`
+
+### 35.5 验收标准
+- 句级引用覆盖率达下- `rag` 模式 100% 服从 Retrieval Items 契约
+- Planner 或Synthesizer 异常时可降级且可观测
+
+---
+
+## 36. 网络搜索助手检索方?### 36.1 目标与适用范围
+ `agent_type=search` 下提供实时互联网检索与证据化回答能力。
+### 36.2 Search 专属总体架构
+- Stage A：Search Planner
+- Stage B：Search Retriever
+- Stage C：Search Synthesizer
+
+### 36.3 查询类型自适应
+- `academic_research`
+- `recent_news`
+- `weather`
+- `people`
+- `coding`
+- `cooking_recipe`
+- `translation`
+- `creative_writing`
+- `science_math`
+- `url_lookup`
+
+### 36.4 Search 检索流水线
+1. 接收 `agent_type=search`
+2. Planner 产出 `query_type` 并`sub_queries[]`
+3. 并行执行搜索
+4. 必要时做网页正文抽取
+5. 去重与打w6. 构建 `web_evidence_pack`
+7. Synthesizer 生成答案与句级引用8. 输出统一 SSE 与最?envelope
+
+### 36.5 Search 上下文组?顺序?1. `search_system_rules`
+2. `personalization_block`
+3. Planner 摘要
+4. `web_evidence_pack`
+5. 多轮记忆
+6. 当前问题
+
+### 36.6 输出格式与引用规?- 开头先给结?- 对比类问题优先表?- 使用网页证据的句子必须句级标注来?- 空结果时进入无证据降级路?
+### 36.7 Search 检索结果标准化契约
+字段-- `source_id`
+- `title`
+- `url`
+- `snippet`
+- `published_at`
+- `domain`
+- `search_score`
+- `extract_score`
+- `freshness_score`
+- `source_type="web"`
+
+### 36.8 Search 模式流式事件
+- `search_start`
+- `search_results`
+- `token`
+- `done`
+- `error`
+
+### 36.9 配置与开?- `SEARCH_MODE`
+- `SEARCH_MAX_RESULTS`
+- `SEARCH_TIMEOUT_MS`
+- `SEARCH_EXTRACT_ENABLED`
+- `SEARCH_QUERY_TYPE_ENABLED`
+- `SEARCH_PLANNER_ENABLED`
+
+### 36.10 与现有架构冲突点与解决方?- 保持 `rag` ?`search` 模式隔离?- 不暴露完?CoT?- Search 来源继续复用统一引用协议?- SSE 事件只做向后兼容扩展?
+---
+
+## 37. Rust 技术选型
+### 37.1 选型原则
+- Rust 重构替换实现，不改变产品协议与检索规则?- HTTP/SSE 只负责传输?- PostgreSQL 继续作为权限、版本、审计与正文真源?- Qdrant 继续只承?Dense 召回?- 检索主流程必须支持显式图编排、节点级 trace、超时、取消与降级?
+### 37.2 默认推荐?| 能力?| 推荐 crate | 用?|
+|---|---|---|
+| Async Runtime | `tokio` | 异步运行时、超时、取消、通道通信 |
+| HTTP / SSE | `axum` + `tower` + `tower-http` | REST API、SSE、中间件 |
+| PostgreSQL | `sqlx` | 数据访问、事务、连接池、迁?|
+| Redis | `deadpool-redis` | 缓存、限流、锁、幂等元数据 |
+| Qdrant | `qdrant-client` | Dense 向量召回 |
+| BM25 / Sparse | `tantivy` | 全文索引?BM25 |
+| Telemetry | `tracing` + `opentelemetry` | 指标、trace、结构化日志 |
+| JSON / 契约 | `serde` + `serde_json` | API 与数据模型序列化 |
+| 错误处理 | `thiserror` + `anyhow` | 统一业务错误与内部错误包?|
+| 配置管理 | `config` + `.env` | 分层配置加载 |
+
+### 37.3 可替换策?crate 可替换，但必须满足：
+- 不改变回?envelope ?SSE 协议?- 不改变检索层数据契约?- 不削弱租户隔离与 fail-closed 策略?- 不破?`degrade_trace / planner_output / mode_debug` 的可观测性?
+### 37.4 禁止事项
+- 禁止?HTTP 框架直接写成检索核心状态机?- 禁止绕过 PostgreSQL 权威查询层?- 禁止?Qdrant 当作权限真源或正文真源?- 禁止在同一 rerank 请求中混入多?item 的候?chunk?
+---
+
+## 38. Rust 项目目录与模块边?### 38.1 目录原则
+- 采用 Rust Workspace + Modular Monolith?- `bin` 只负责启动入口，`crates` 负责业务边界?- `rag-core` 为核心模块，不得依赖 `billing`、`admin` 等外围模块?
+### 38.2 推荐目录
+```text
+avrag-rs/
+├─ Cargo.toml
+├─ rust-toolchain.toml
+├─ migrations/
+├─ docs/
+? ├─ adr/
+? ├─ api/
+? └─ runbooks/
+├─ bins/
+? ├─ api/
+? ? └─ src/main.rs
+? └─ worker/
+?    └─ src/main.rs
+├─ crates/
+? ├─ app/
+? ├─ transport-http/
+? ├─ rag-core/
+? ├─ ingestion/
+  ├─ storage-pg/
+? ├─ storage-qdrant/
+? ├─ cache-redis/
+? ├─ llm/
+? ├─ auth/
+? ├─ billing/
+? ├─ share/
+? ├─ admin/
+? ├─ telemetry/
+? ├─ common/
+? └─ test-kit/
+└─ tests/
+   ├─ integration/
+   ├─ e2e/
+   └─ rag_quality/
+```
+
+### 38.3 模块职责
+- `bins/api`：启?HTTP 服务，组?Router ?AppState?- `bins/worker`：启动异步任务执行器?- `transport-http`：REST、SSE、中间件、错误映射?- `rag-core`：Planner、Runtime、retrievers、rerank、merge、context assembly?- `ingestion`：解析、分块、摘要、embedding、索引写入编排?- `storage-pg`：事务、RLS、回表、审计?- `storage-qdrant`：向量写入、payload filter、Dense 检紃69?- `cache-redis`：缓存、限流、锁、幂等键?- `llm`：Planner、生成、重排模型适配?- `telemetry`：metrics、trace、structured log?- `test-kit`：fixture、容器、黄金集?
+### 38.4 依赖规则
+- `transport-http -> app -> rag-core / ingestion / auth / billing ...`
+- `rag-core -> storage-pg / storage-qdrant / llm / cache-redis / telemetry / common`
+- `ingestion -> storage-pg / storage-qdrant / llm / cache-redis / telemetry / common`
+- 外围模块不得反向依赖 `transport-http`?
+---
+
+## 39. Rust RAG 图节点与数据契约
+### 39.1 图编排目?Rust 版检索主链路必须采用显式图编排运行时，支持：
+- 节点级输入输?- 条件?- 并行 fan-out
+- trace_id 贯穿
+- 节点级超时、取消、重试与降级
+- 会话态可恢复执行
+
+### 39.2 标准节点
+- `LoadSessionContext`
+- `RewriteEffectiveQuery`
+- `PlanRetrievalItems`
+- `NormalizeItems`
+- `AllocateBudgets`
+- `RunPrimaryRewriteDecompose`
+- `RunKeywordSparse`
+- `LoadSummaryChunks`
+- `RunMetadataQuery`
+- `ItemRRF`
+- `FetchChunkBodies`
+- `ItemCrossEncoderRerank`
+- `AssembleSummaryMetadata`
+- `GlobalWeightedMerge`
+- `CutTopK`
+- `AssembleLLMContext`
+- `GenerateAnswer`
+- `ValidateCitations`
+- `BuildResponseEnvelope`
+- `ReturnClarify`
+- `ReturnInsufficientEvidence`
+
+### 39.3 节点执行约束
+- `PlanRetrievalItems` 输出必须兼容 `RAGRetrievalPlan`?- `NormalizeItems` 只去空、去重、限量，不改?Planner 业务意图?- `AllocateBudgets` 只分?recall/rerank 配额?- `RunKeywordSparse` 只处?keyword 且只?BM25?- `LoadSummaryChunks` 不走文本召回?- `RunMetadataQuery` 只查 PostgreSQL 权威字段?- `GlobalWeightedMerge` 不做?item rerank?- `CutTopK` 固定截断?`TopK=15`?- `ReturnInsufficientEvidence` 是显式失败态?
+### 39.4 ChatResponse 对齐
+Rust 重构不得改变?- SSE 事件?- 引用跳转协议
+- 前端主界面显示层`- `planner_output / item_trace / retrieval_trace` 的可观测性语?
+---
+
+## 40. 发布与迁移策?### 40.1 迁移目标
+- 在不破坏现有产品协议的前提下完成 Go -> Rust 迁移?- 保持前端、外?API 与计费体系尽量无感?
+### 40.2 迁移阶段
+1. 契约冻结：先冻结 API、SSE、引用协议、RAG 契约?2. 双栈实现：Go ?Rust 并行跑集成测试?3. 影子流量：Rust 只接收镜像请求，不影响用户?4. 小流量灰度：按租户或流量比例切换?5. 全量切换：保留回滚窗口?6. 下线旧栈：完成历史审计与运维收尾?
+### 40.3 回滚原则
+- 任一质量门禁、隔离测试、成本指标、稳定性指标失守时，立即回滚?- 回滚优先恢复用户主链路可用性，再排查细节问题?
+### 40.4 验收清单
+- 多租户隔离测试通过
+- RAG 黄金集回归达?- SSE ?API 契约兼容
+- 计费与审计链路完?- 关键告警?Runbook 就绪
+- 生产灰度稳定运行满一个观察周?
+---
+
+## 附录 A：术语表
+- `org_id`：租户组织标识?- `Notebook`：文档集合与会话隔离单元?- `Chunk`：检索最小正文片段?- `Summary Chunk`：单文档全景摘要片段?- `RAG Plan`：单?Retrieval Items 规划结果?- `Item Ref`：chunk 被哪?item 命中的追踪信息?- `Degrade Trace`：显式降级路径记录?
+## 附录 B：非目标
+- 不在首版内做端侧本地向量索引?- 不在首版内做多区域强一致写入?- 不在首版内做全文搜索引擎与向量库的一体化替换?- 不在首版内把模块化单体拆为微服务?

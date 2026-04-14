@@ -1,0 +1,5 @@
+The quick brown fox jumps over the lazy dog.
+The capital of France is Paris.
+Water boils at 100 degrees Celsius at sea level.
+The year 2026 is when this test was written.
+Playwright is an end-to-end testing framework.

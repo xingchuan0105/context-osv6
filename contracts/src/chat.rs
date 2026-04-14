@@ -1,0 +1,427 @@
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatRequest {
+    pub query: String,
+    #[serde(default)]
+    pub notebook_id: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default = "default_rag_agent")]
+    pub agent_type: String,
+    #[serde(default)]
+    pub source_type: Option<String>,
+    #[serde(default)]
+    pub source_token: Option<String>,
+    #[serde(default)]
+    pub doc_scope: Vec<String>,
+    #[serde(default)]
+    pub messages: Vec<ChatTurnInput>,
+    #[serde(default)]
+    pub stream: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatTurnInput {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub id: i64,
+    pub session_id: String,
+    pub role: String,
+    pub content: String,
+    #[serde(default)]
+    pub answer_blocks: Vec<AnswerBlock>,
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    #[serde(default)]
+    pub agent_name: Option<String>,
+    #[serde(default)]
+    pub agent_icon: Option<String>,
+    #[serde(default)]
+    pub citations: Vec<Citation>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessageListResponse {
+    pub messages: Vec<ChatMessage>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Citation {
+    pub citation_id: i64,
+    pub doc_id: String,
+    #[serde(default)]
+    pub chunk_id: Option<String>,
+    #[serde(default)]
+    pub page: Option<usize>,
+    pub doc_name: String,
+    #[serde(default)]
+    pub preview: Option<String>,
+    #[serde(default)]
+    pub content: Option<String>,
+    pub score: f32,
+    #[serde(default)]
+    pub layer: Option<String>,
+    #[serde(default)]
+    pub chunk_type: Option<String>,
+    #[serde(default)]
+    pub asset_id: Option<String>,
+    #[serde(default)]
+    pub caption: Option<String>,
+    #[serde(default)]
+    pub image_url: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum AnswerBlock {
+    Text {
+        text: String,
+        #[serde(default)]
+        citations: Vec<String>,
+    },
+    Image {
+        chunk_id: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceRef {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub snippet: Option<String>,
+    #[serde(default)]
+    pub doc_id: Option<String>,
+    #[serde(default)]
+    pub page: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraceInfo {
+    pub mode: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DegradeTraceItem {
+    pub stage: String,
+    pub reason: String,
+    pub impact: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RiskLevel {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+impl std::fmt::Display for RiskLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RiskLevel::Low => write!(f, "low"),
+            RiskLevel::Medium => write!(f, "medium"),
+            RiskLevel::High => write!(f, "high"),
+            RiskLevel::Critical => write!(f, "critical"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GuardAction {
+    Allow,
+    Block,
+    Truncate,
+    Redact,
+    Flag,
+}
+
+impl std::fmt::Display for GuardAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GuardAction::Allow => write!(f, "allow"),
+            GuardAction::Block => write!(f, "block"),
+            GuardAction::Truncate => write!(f, "truncate"),
+            GuardAction::Redact => write!(f, "redact"),
+            GuardAction::Flag => write!(f, "flag"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuardResult {
+    pub passed: bool,
+    pub guard_type: String,
+    pub risk_level: RiskLevel,
+    pub action: GuardAction,
+    pub reason: String,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+    #[serde(default)]
+    pub operator: Option<String>,
+    #[serde(default)]
+    pub details: Option<serde_json::Value>,
+}
+
+impl GuardResult {
+    pub fn pass(guard_type: &str) -> Self {
+        Self {
+            passed: true,
+            guard_type: guard_type.to_string(),
+            risk_level: RiskLevel::Low,
+            action: GuardAction::Allow,
+            reason: String::new(),
+            trace_id: None,
+            operator: None,
+            details: None,
+        }
+    }
+
+    pub fn block(
+        guard_type: &str,
+        risk_level: RiskLevel,
+        reason: impl Into<String>,
+        trace_id: Option<String>,
+        operator: Option<String>,
+    ) -> Self {
+        Self {
+            passed: false,
+            guard_type: guard_type.to_string(),
+            risk_level,
+            action: GuardAction::Block,
+            reason: reason.into(),
+            trace_id,
+            operator,
+            details: None,
+        }
+    }
+
+    pub fn redact(guard_type: &str, reason: impl Into<String>, details: serde_json::Value) -> Self {
+        Self {
+            passed: true,
+            guard_type: guard_type.to_string(),
+            risk_level: RiskLevel::Medium,
+            action: GuardAction::Redact,
+            reason: reason.into(),
+            trace_id: None,
+            operator: None,
+            details: Some(details),
+        }
+    }
+
+    pub fn flag(guard_type: &str, risk_level: RiskLevel, reason: impl Into<String>) -> Self {
+        Self {
+            passed: true,
+            guard_type: guard_type.to_string(),
+            risk_level,
+            action: GuardAction::Flag,
+            reason: reason.into(),
+            trace_id: None,
+            operator: None,
+            details: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GuardReport {
+    #[serde(default)]
+    pub input_results: Vec<GuardResult>,
+    #[serde(default)]
+    pub output_results: Vec<GuardResult>,
+    pub blocked: bool,
+    #[serde(default)]
+    pub degrade_trace: Vec<DegradeTraceItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RagPlan {
+    #[serde(default = "default_rag_plan_version")]
+    pub plan_version: String,
+    #[serde(default = "default_rag_plan_confidence")]
+    pub plan_confidence: f32,
+    #[serde(default)]
+    pub clarify_needed: bool,
+    #[serde(default)]
+    pub clarify_message: String,
+    #[serde(default)]
+    pub items: Vec<RagPlanItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RagPlanItem {
+    pub priority: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bm25_terms: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlannerOutput {
+    pub mode: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rag_plan: Option<RagPlan>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_plan: Option<SearchPlan>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub general_plan: Option<GeneralPlan>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchPlan {
+    pub query_type: String,
+    pub sub_queries: Vec<String>,
+    pub source_requirements: String,
+    pub output_format: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeneralPlan {
+    pub context_trimming_plan: String,
+    pub style_constraints: String,
+    pub output_format: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RagTraceSummary {
+    pub item_count: usize,
+    pub total_candidate_budget: usize,
+    pub max_rerank_docs: usize,
+    pub max_final_chunks: usize,
+    pub top_k_returned: usize,
+    pub summary_mode: String,
+    pub items: Vec<RagTraceItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RagTraceItem {
+    pub priority: f32,
+    pub payload_kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+    #[serde(default)]
+    pub bm25_terms: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    pub recall_budget: usize,
+    pub bm25_k: usize,
+    pub dense_k: usize,
+    pub rerank_budget: usize,
+    pub source_count: usize,
+    #[serde(default)]
+    pub source_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModeDebug {
+    #[serde(default)]
+    pub rag: Option<RagModeDebug>,
+    #[serde(default)]
+    pub search: Option<BTreeMap<String, serde_json::Value>>,
+    #[serde(default)]
+    pub general: Option<BTreeMap<String, serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RagModeDebug {
+    pub item_trace: Vec<RagTraceItem>,
+    pub retrieval_trace: RagTraceSummary,
+    pub summary_injection_trace: SummaryInjectionTrace,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SummaryInjectionTrace {
+    pub mode: String,
+    pub injected_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatResponse {
+    pub answer: String,
+    #[serde(default)]
+    pub answer_blocks: Vec<AnswerBlock>,
+    pub session_id: String,
+    pub agent_type: String,
+    pub sources: Vec<SourceRef>,
+    pub citations: Vec<Citation>,
+    pub trace: TraceInfo,
+    pub degrade_trace: Vec<DegradeTraceItem>,
+    #[serde(default)]
+    pub planner_output: Option<PlannerOutput>,
+    #[serde(default)]
+    pub mode_debug: Option<ModeDebug>,
+    #[serde(default)]
+    pub message_id: Option<i64>,
+    #[serde(default)]
+    pub guard_report: Option<GuardReport>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatDonePayload {
+    pub request_id: String,
+    pub session_id: String,
+    pub message_id: i64,
+    pub response: ChatResponse,
+}
+
+/// Chat event JSON contract for the converged chat protocol.
+///
+/// SSE framing stays a transport concern handled by the HTTP layer.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "event", rename_all = "snake_case")]
+pub enum ChatEvent {
+    Start {
+        request_id: String,
+        session_id: String,
+    },
+    Trace {
+        request_id: String,
+        stage: String,
+        status: String,
+        #[serde(default)]
+        detail: Option<serde_json::Value>,
+    },
+    Token {
+        request_id: String,
+        message_id: i64,
+        content: String,
+    },
+    Citations {
+        request_id: String,
+        message_id: i64,
+        citations: Vec<serde_json::Value>,
+    },
+    Done {
+        request_id: String,
+        session_id: String,
+        message_id: i64,
+        payload: serde_json::Value,
+    },
+    Error {
+        request_id: String,
+        code: String,
+        message: String,
+    },
+}
+
+fn default_rag_agent() -> String {
+    "rag".to_string()
+}
+
+fn default_rag_plan_version() -> String {
+    "rag-item-v2".to_string()
+}
+
+fn default_rag_plan_confidence() -> f32 {
+    0.5
+}

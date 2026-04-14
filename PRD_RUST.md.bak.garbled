@@ -1,0 +1,944 @@
+# 浜у搧闇€姹傛枃妗?(PRD_RUST)锛氱被 NotebookLM 鏅鸿兘鏂囨。鐮旂┒鍔╂墜锛圓VRAG Rust 鐗堬級
+
+## 0. 椤圭洰寮€鍙戝熀鏈鍒?- 瀵逛簬閫昏緫涔嬪鐨勭煡璇嗐€佷簨瀹炰笌鏈€浣冲疄璺碉紝涓嶇洸鐩嚜淇★紱娑夊強鏈€鏂版妧鏈€夊瀷銆佷緵搴斿晢鑳藉姏銆佸悎瑙勮姹備笌绗笁鏂归檺鍒舵椂锛屽繀椤荤粨鍚堝閮ㄦ潈濞佽祫鏂欏鏍搞€?- 鏈枃妗ｆ槸 AVRAG Rust 鐗堢殑浜у搧涓庡伐绋嬬湡鐩告簮锛涜嫢浠ｇ爜銆丄I 瑙勫垯鏂囦欢銆佹帴鍙ｆ枃妗ｄ笌鏈枃鍐茬獊锛屼互鏈€鏂扮粡纭鐨?PRD 涓哄噯銆?- 鏈」鐩紭鍏堜繚璇侊細澶氱鎴烽殧绂汇€佽瘉鎹彲杩芥函銆佹樉寮忛檷绾с€佸彲瑙傛祴鎬т笌鍙洖婊氭€с€?
+---
+
+## 1. 浜у搧姒傝堪涓庣洰鏍?鏈骇鍝佹槸涓€娆惧熀浜庢绱㈠寮虹敓鎴愶紙RAG锛夌殑鏅鸿兘鏂囨。闃呰涓庣爺绌跺姪鎵嬶紝瀵规爣 Google NotebookLM銆?
+鏍稿績鐩爣锛?- 鍏佽鐢ㄦ埛涓婁紶绉佹湁璧勬枡锛圥DF銆丱ffice銆佺綉椤点€佸浘鐗囥€佷唬鐮佺瓑锛夈€?- 鍩轰簬涓ユ牸鍙楅檺鐨勬绱笂涓嬫枃鐢熸垚浣庡够瑙夈€佸甫绮惧噯寮曠敤鐨勫洖绛斻€?- 鍦ㄥ悓涓€骞冲彴鍐呭悓鏃舵敮鎸侊細绉佸煙鐭ヨ瘑搴撻棶绛斻€侀€氱敤鑱婂ぉ銆佽仈缃戞悳绱€?- 浠?SaaS 鏂瑰紡鎻愪緵澶氱鎴烽殧绂汇€佽璐广€佸垎浜崗浣滀笌寮€鏀?API 鑳藉姏銆?
+Rust 閲嶆瀯鐩爣锛?- 鐢?Rust 鏇夸唬鍘?Go 瀹炵幇鍙ｅ緞锛屼絾涓嶆敼鍙樻牳蹇冧骇鍝佸崗璁笌妫€绱㈣涔夈€?- 淇濈暀鍗曞眰 Retrieval Items銆丵drant + PostgreSQL銆佺粺涓€寮曠敤鍗忚銆丼SE 涓庢樉寮忛檷绾фā鍨嬨€?- 灏嗗伐绋嬪疄鐜扮粺涓€涓?Rust Workspace + Modular Monolith锛屽寮烘€ц兘銆佸唴瀛樺畨鍏ㄤ笌骞跺彂鍙帶鎬с€?
+---
+
+## 2. 鏍稿績鏋舵瀯璁捐
+鏁翠釜绯荤粺鐢变笁涓珮鍐呰仛銆佷綆鑰﹀悎鐨勫眰绾ф瀯鎴愶細鏂囨。鎽勫彇灞傘€佹绱㈠眰銆佹潯浠剁敓鎴愬眰銆?
+### 2.1 绗竴灞傦細鏂囨。鎽勫彇灞傦紙Document Ingestion Layer锛?璇ュ眰璐熻矗鎶婄敤鎴烽€夋嫨鐨勫唴瀹规簮瑙ｆ瀽涓虹粺涓€鐨勫彲妫€绱㈠伐浠躲€俁ust 鐗堟憚鍙栧眰鐨勬爣鍑嗕笉鏄厛鍒囨枃鏈啀璇达紝鑰屾槸鏄庣‘鍖哄垎鍥涗釜闃舵锛氳В鏋愯矾鐢便€佺粺涓€鍥炬枃琛ㄧず銆佹憳瑕佷笌鍏冩暟鎹敓鎴愩€佺储寮曞啓鍏ャ€?
+鏍稿績瑕佹眰锛?- 鎵€鏈夋枃妗ｅ繀椤诲厛缁忚繃瑙ｆ瀽璺敱锛屼笉鍏佽鎸夋墿灞曞悕鐩存帴鑽夌巼鍏ュ簱銆?- 鎵€鏈夎В鏋愮粨鏋滃繀椤荤粺涓€褰掍竴涓?Text 涓?ImageWithContext 涓ょ被鍗曞厓銆?- 姣忎釜鏂囨。蹇呴』鍚屾椂浜у嚭涓夌被缁撴灉锛氭鏂?chunk銆佸叏鏅憳瑕併€佺粨鏋勫寲妫€绱㈠厓鏁版嵁銆?- 鍥惧儚璧勪骇蹇呴』闀滃儚鍥炵郴缁熷璞″瓨鍌ㄦ垨鍙楁帶璺緞鍚庡啀鍙備笌澶氭ā鎬佹绱€?- 鎽勫彇灞傚彲浠ヤ娇鐢?Worker Runtime 鎵ц锛涘湪绾?RAG 妫€绱笌鍥炵瓟涓婚摼蹇呴』浜ょ敱 GraphFlow 缂栨帓锛屼笉寰楁贩鍏ョ绾挎憚鍙?Worker 閫昏緫銆?
+#### 2.1.1 鏂囨。瑙ｆ瀽璺敱鏍囧噯
+鏍囧噯璺敱濡備笅锛?- 绾枃鏈€丮arkdown銆侀厤缃枃浠躲€佷唬鐮佹枃浠讹細璧版湰鍦拌В鏋愶紝宸ュ叿涓?TextParser 涓?CodeParser銆?- 绠€鍗?HTML锛氳蛋鏈湴瑙ｆ瀽锛屽伐鍏蜂负 HtmlParser锛岃姹傛彁鍙栨鏂囦笌 img 鍏冩暟鎹€?- 绠€鍗?PDF锛氳蛋鏈湴瑙ｆ瀽锛屽伐鍏蜂负 PdfParser锛屾槸鍚︾畝鍗曠敱鍓?1 鍒?3 椤垫帰閽堝垽瀹氥€?- 绠€鍗?Office锛氳蛋鏈湴瑙ｆ瀽锛屽伐鍏蜂负 OfficeParser銆?- 绾浘鐗囥€丳PT銆丳PTX銆佹壂鎻?PDF銆佸鏉傜増闈?PDF锛氳蛋 MinerU Precise Parse API銆?
+PDF 鎺㈤拡鑷冲皯杈撳嚭锛歮ime_type銆乪xtension銆乪xtracted_text_chars銆乸age_count銆乮mage_hint_count銆乼able_hint_count銆乴ikely_scanned銆乴ikely_presentation銆?
+璺敱鍘熷垯锛?- 鏈湴瑙ｆ瀽浼樺厛锛孧inerU 鍙敤浜庡鏉傜増闈㈠厹搴曘€?- 琚垽瀹氫负 MineruPrecise 鐨勬枃妗ｏ紝濡傛灉 MinerU 涓嶅彲鐢ㄦ垨澶辫触锛屽繀椤昏繑鍥炴樉寮忓け璐ワ紝涓嶅厑璁告妸浜岃繘鍒跺唴瀹圭洿鎺ラ檷绾ф垚鍨冨溇鏂囨湰缁х画鍏ュ簱銆?- MinerU 鍥剧墖澶栭摼蹇呴』涓嬭浇骞堕暅鍍忓埌瀵硅薄瀛樺偍锛屽啀鍐冲畾鏄惁鐢熸垚瀵瑰鍙闂?URL銆?
+#### 2.1.2 缁熶竴鍥炬枃涓棿妯″瀷
+鎵€鏈?parser 鐨勮緭鍑哄繀椤诲綊涓€鍒扮粺涓€涓棿妯″瀷锛歍ext 涓?ImageWithContext銆?
+鏍囧噯瀛楁锛歶nit_id銆乸age銆乲ind銆乼ext銆乮mage_path銆乧aption銆乧ontext銆乸arser_backend銆乵etadata銆?
+绾︽潫锛?- Text 鐢ㄤ簬姝ｆ枃銆佹爣棰樸€佸垪琛ㄣ€佷唬鐮併€佽〃鏍兼枃鏈瓑銆?- ImageWithContext 鐢ㄤ簬鍥剧墖銆佸浘琛ㄣ€佹埅鍥俱€丳PT 椤甸潰銆佹壂鎻忛〉绛夎瑙夊崟鍏冦€?- 瀵瑰浘鏂囧崟鍏冿紝text 蹇呴』鏄?caption 鍔?context 鐨勬爣鍑嗗寲鍙绱㈡枃鏈€?- 鏈湴 HTML 璺緞鑷冲皯瑕佹妸 img src 鍜?alt 鎶藉彇鎴愬浘鏂囧崟鍏冿紱鏈湴 PDF 鍜?Office 璺緞鍚庣画鍙€愭澧炲己鍥剧墖鎶藉彇锛屼絾鏁版嵁缁撴瀯涓嶅緱閿佹鎴愮函鏂囨湰銆?
+#### 2.1.3 鎽樿涓庢绱㈠厓鏁版嵁宸ヤ欢
+姣忎釜鏂囨。蹇呴』鐢熸垚涓€浠芥憳瑕佸伐浠讹紝鍏朵腑鍖呭惈涓ら儴鍒嗭細
+- summary_text锛氱敤浜?Answer 闃舵鐨勫叏鏅憳瑕併€?- summary_metadata锛氱敤浜?Planner 闃舵鐨勬绱㈣緟鍔╁厓鏁版嵁銆?
+summary_metadata 鏍囧噯瀛楁锛歞oc_id銆乫ilename銆乨ocname銆乴anguage銆乨omain銆乬enre銆乪ra銆?
+瀛楁璇箟锛?- filename锛氱墿鐞嗘枃浠跺悕锛屼紭鍏堟湇鍔′簬 lexical 鍜?BM25 鏌ヨ銆?- docname锛氬唴瀹规簮灞曠ず鏍囬锛屼紭鍏堟湇鍔′簬鐢ㄦ埛鑷劧璇█鎸囧悜銆?- language锛氭枃妗ｄ富璇█锛岀涓€浼樺厛绾у繀椤诲厛钀藉湴銆?- domain锛氶鍩熸爣绛撅紝渚嬪 policy銆乫inance銆乵edical銆乧omputer_science銆乴egal銆?- genre锛氭枃浣撴爣绛撅紝渚嬪 regulation銆乺eport銆乺esearch_paper銆乻lides銆乵anual銆乶ews銆?- era锛氭椂浠ｆ爣绛撅紝渚嬪 classical銆乵odern銆乧ontemporary銆?
+绾︽潫锛?- summary_text 涓?summary_metadata 蹇呴』鍜?doc_id 涓€涓€缁戝畾銆?- summary_metadata 蹇呴』鏄粨鏋勫寲鏋氫妇鏍囩锛屼笉鍏佽鍙骇鍑鸿嚜鐢辨暎鏂囨弿杩般€?- summary_metadata 鐢熸垚鍚庡繀椤诲湪 query 杩涘叆 Planner 鍓嶆寜 doc_scope 鑱氬悎娉ㄥ叆銆?
+#### 2.1.4 瀛樺偍涓庣储寮曟爣鍑?PostgreSQL锛歞ocuments銆乧hunks銆乨ocument_assets銆乨ocument_multimodal_chunks銆乤udit_log銆乻essions銆乻ubscriptions銆乽sage_events銆?Qdrant锛歝hunks_text銆乧hunks_multimodal銆?
+绱㈠紩鏍囧噯锛?- 鏂囨湰渚э細text-splitter銆丅M25銆佹枃鏈?Dense Embedding锛屾爣鍑嗘ā鍨嬩负 Qwen/Qwen3-Embedding-8B銆?- 鍥炬枃渚э細澶氭ā鎬?Dense Embedding锛屾爣鍑嗘ā鍨嬩负 qwen3-vl-embedding銆?- 鏈€缁堢粺涓€鎺掑簭锛氬妯℃€?Rerank锛屾爣鍑嗘ā鍨嬩负 qwen3-vl-rerank銆?- 鏂囨湰 Rerank锛歈wen/Qwen3-Reranker-8B 鍙綔涓哄妯℃€佹帓搴忎笉鍙敤鏃剁殑闄嶇骇璺緞锛屼笉鏄爣鍑嗕富璺緞銆?
+#### 2.1.5 涓€鑷存€т笌閲嶅缓
+- PostgreSQL 鏄笟鍔＄湡婧愶紝Qdrant 鏄彲閲嶅缓绱㈠紩灞傘€?- 鍚屼竴 doc_id 鐨勬洿鏂板繀椤讳覆琛屽寲锛屼緷璧?Redis 鏂囨。閿併€?- 鏂囨。璧勪骇銆佸浘鏂?chunk銆佹枃鏈?chunk銆佹憳瑕併€佸厓鏁版嵁蹇呴』鍏变韩鍚屼竴鐗堟湰璇箟銆?- Dense 鎴栧妯℃€?Dense 鍐欏叆澶辫触蹇呴』鏄惧紡澶辫触鎴栬繘鍏ヨˉ鍋块槦鍒楋紝涓嶅緱浼涓烘垚鍔熴€?- 鎵€鏈夎В鏋愩€佹憳瑕佺敓鎴愩€佸厓鏁版嵁鐢熸垚銆佺储寮曞啓鍏ュ姩浣滃繀椤诲啓 audit_log銆?
+### 2.2 绗簩灞傦細妫€绱㈠眰锛圧etrieval Layer锛?璇ュ眰鏄?AVRAG 鐨勬牳蹇冭瘉鎹紪鎺掔郴缁熴€俁ust 鐗堟绱㈠眰閲囩敤杞?Planner銆佸浐瀹氭墽琛岀瓥鐣ャ€丟raphFlow 缂栨帓鐨勬爣鍑嗐€?
+鏍稿績鍙樺寲锛?- Planner 鍙礋璐ｈ鏌ヤ粈涔堬紝涓嶈礋璐ｆ€庝箞鏌ャ€?- 姣忎釜 item 鍙湁涓夌骞跺垪鏍稿績杞借嵎涔嬩竴锛歲uery銆乥m25_terms銆乻ummary銆?- summary 涓嶆槸妫€绱㈡ā寮忥紝鑰屾槸 Answer 闃舵鐨勬憳瑕佹敞鍏ョ瓥鐣ャ€?- 鏂囨湰 Dense 涓庡妯℃€?Dense 鍥哄畾鍚屾椂鎵ц锛屼笉鍐嶇敱 planner 鏉′欢鍐冲畾銆?- 鏂囨湰渚у厛鍋?BM25 鍔?Text Dense 鐨?RRF锛屽啀涓?Multimodal Dense 鍚堝苟锛屾渶鍚庣粺涓€ qwen3-vl-rerank銆?- 鍦ㄧ嚎 RAG 涓婚摼蹇呴』杩愯鍦?GraphFlow 涓婏紝涓嶅緱鍦?HTTP handler 鎴?service 涓暎钀芥绱㈠垎鏀€昏緫銆?
+#### 2.2.1 瀹炵幇鍘熷垯锛堢粓鐗堬級
+- 绗?2.2 绔犳槸 rag 妯″紡妫€绱㈡満鍒剁殑鍞竴鐪熺浉婧愩€?- Planner 鍙緭鍑哄钩绾?items锛屼笉杈撳嚭閫氶亾寮€鍏炽€乀opK銆侀绠椼€佽瑙夋爣蹇楁垨鎵ц妯″紡銆?- 姣忎釜 item 鍙兘鎼哄甫涓€绉嶆牳蹇冭浇鑽凤細query銆乥m25_terms銆乻ummary銆?- summary 鍙厑璁镐袱涓€硷細all 鎴?related銆?- 鏂囨。绾?metadata 涓嶆槸 planner item锛岃€屾槸 planner 杈撳叆涓婁笅鏂囥€?- 鏃ц璁″繀椤绘竻鐞嗭細item_type銆乺etrieval_mode銆乸urpose銆乻ummary_signal銆乻ynonyms銆乵eta_filter銆乮nclude_visual銆乶eeds_visual_evidence銆乿isual_queries銆乼ext_queries銆乻ummary_only銆乵etadata_only銆?- 鍦ㄧ嚎 RAG 涓婚摼蹇呴』璧?GraphFlow锛岃嚦灏戝寘鍚繖浜涜妭鐐癸細rag_load_session_context銆乺ag_prepare_planner_input銆乺ag_call_planner銆乺ag_normalize_plan銆乺ag_retrieve_text_dense銆乺ag_retrieve_bm25銆乺ag_retrieve_multimodal_dense銆乺ag_merge_text_rrf銆乺ag_apply_summary_policy銆乺ag_multimodal_rerank銆乺ag_cut_final_candidates銆乺ag_build_answer_context銆乺ag_answer_synthesize銆乺ag_validate_citations銆乧hat_output_guard銆乧hat_persist銆?
+#### 2.2.2 RAG Planner 杈撳嚭濂戠害锛堢簿绠€鐗堬級
+Planner 杈撳嚭涓€涓?RAGRetrievalPlan銆傛爣鍑嗙粨鏋勪负锛?- plan_version
+- plan_confidence
+- clarify_needed
+- clarify_message
+- items
+
+姣忎釜 item 鍖呭惈锛?- priority锛? 鍒?1 涔嬮棿鐨勬潈閲嶅€?- query 鎴?bm25_terms 鎴?summary锛屼笁閫変竴
+
+summary 鍙兘鍙?all 鎴?related銆?Planner 涓嶅緱杈撳嚭棰勭畻銆乀opK銆佹绱㈤€氶亾銆佽瑙夊紑鍏虫垨瑙ｉ噴鎬у瓧娈点€?
+#### 2.2.3 Planner 杈撳叆锛欴ocScope Metadata Index
+Planner 鐨勮緭鍏ヤ笉鍙槸 session context 鍜?user query锛岃繕蹇呴』鍖呭惈褰撳墠 doc_scope 鐨勮仛鍚堝厓鏁版嵁绱㈠紩銆?
+娉ㄥ叆缁撴瀯鑷冲皯鍖呭惈锛?- docscope_profile锛歭anguages銆乨omains銆乬enres銆乪ras
+- documents锛歞oc_id銆乫ilename銆乨ocname銆乴anguage銆乨omain銆乬enre銆乪ra
+
+Planner 浣跨敤瑙勫垯锛?- filename锛氱敤浜庣簿纭?lexical 涓?BM25 璇嶉」銆佺紪鍙枫€佺缉鍐欍€佺増鏈彿銆?- docname锛氱敤浜庣敤鎴疯嚜鐒惰瑷€鏍囬寮曠敤銆?- language锛氬喅瀹?query rewrite 涓?bm25 terms 鐨勮瑷€銆?- domain銆乬enre銆乪ra锛氬喅瀹氭湳璇鏍笺€佷慨杈炴柟寮忎笌 subquery 缁勭粐鏂瑰紡銆?- 濡傛灉 doc_scope 鏈€夋嫨锛孭lanner 涓嶅緱榛樿涓哄叏搴撴绱紝搴斾紭鍏堣姹傜敤鎴锋槑纭绱㈣寖鍥淬€?
+#### 2.2.4 鍥哄畾鎵ц绛栫暐锛堟爣鍑嗭紝涓嶇敱 Planner 鍐冲畾锛?Runtime 鍥哄畾瑙ｉ噴 item锛?- query item锛氬浐瀹氭墽琛?Text Dense 涓?Multimodal Dense銆?- bm25_terms item锛氬浐瀹氭墽琛?BM25 Sparse銆?- summary item锛氫笉鎵ц姝ｆ枃鍙洖锛屽彧鍐冲畾鎽樿娉ㄥ叆绛栫暐锛宎ll 琛ㄧず灏?doc_scope 鍐呭叏閮ㄦ枃妗ｆ憳瑕佹敞鍏?Answer锛宺elated 琛ㄧず灏嗘渶缁堝懡涓枃妗ｅ搴旂殑鎽樿娉ㄥ叆 Answer銆?
+璇存槑锛?- 鏃х殑 summary_only銆乵etadata_only銆乮nclude_visual 鏈哄埗鍏ㄩ儴绉婚櫎銆?- metadata 涓嶅啀浣滀负 planner item銆傛枃妗ｅ厓鏁版嵁閫氳繃 DocScope Metadata Index 杩涘叆 planner锛岃€屼笉鏄綔涓烘鏂囨绱㈡ā寮忓瓨鍦ㄣ€?
+#### 2.2.5 鍊欓€夐绠楀垎閰嶆満鍒讹紙鏍囧噯锛?- 绯荤粺缁存姢鍞竴鍏ㄥ眬鍊欓€夐绠楋細RAG_TOTAL_CANDIDATE_BUDGET 绛変簬 100銆?- priority 鏄?0 鍒?1 鐨勬潈閲嶏紝涓嶆槸鏁存暟鎺掑簭鍙枫€?- Runtime 瀵规墍鏈夋湁鏁?item 鐨?priority 鍋氬綊涓€鍖栥€?- 姣忎釜 item 鐨勫€欓€夐绠椾负 max(1, round(褰掍竴鍖栨潈閲嶄箻浠?100))銆?
+鎵ц缁嗗垯锛?- query item 鍙互鍦ㄥ唴閮ㄥ Text Dense 涓?Multimodal Dense 杩囬噰鏍凤紝浣嗚 item 鍦ㄨ繘鍏ュ叏灞€姹犲墠鐨勪繚鐣欏€欓€夋暟涓嶅緱瓒呰繃鏈?item 鐨勫€欓€夐绠椼€?- bm25_terms item 杩涘叆鍏ㄥ眬鏂囨湰姹犲墠鐨勪繚鐣欏€欓€夋暟涓嶅緱瓒呰繃鏈?item 鐨勫€欓€夐绠椼€?- summary item 涓嶆秷鑰楁鏂囧彫鍥炲€欓€夐绠楋紝浣嗘秷鑰楁渶缁堜笂涓嬫枃棰勭畻銆?
+#### 2.2.6 鍥哄畾鍙洖閾捐矾锛堟爣鍑嗭級
+鏍囧噯娴佺▼濡備笅锛?1. 瀵规墍鏈?query item锛氭墽琛?Text Dense锛屾爣鍑嗘ā鍨嬩负 Qwen/Qwen3-Embedding-8B锛涙墽琛?Multimodal Dense锛屾爣鍑嗘ā鍨嬩负 qwen3-vl-embedding銆?2. 瀵规墍鏈?bm25_terms item锛氭墽琛?PostgreSQL BM25 Sparse銆?3. 鏂囨湰鍊欓€夋睜锛氭眹鎬诲叏閮?BM25 鍊欓€変笌 Text Dense 鍊欓€夛紝鍋氫竴娆?RRF锛屽緱鍒?text_pool銆?4. 鍥炬枃鍊欓€夋睜锛氭眹鎬诲叏閮?Multimodal Dense 鍊欓€夛紝鍘婚噸锛屽緱鍒?multimodal_pool銆?5. 鏈€缁堢粺涓€绮炬帓锛氬皢 text_pool 涓?multimodal_pool 鍚堝苟锛岀粺涓€浣跨敤 qwen3-vl-rerank銆?6. 缁撴灉瑁佸壀锛氬厛鎸?qwen3-vl-rerank 鍒嗘暟鎺掑簭銆傚垎鏁板ぇ浜庣瓑浜?0.7 鐨勫€欓€夊叏閮ㄤ繚鐣欙紱鑻ヨ揪鍒拌闃堝€肩殑鍊欓€変笉瓒?30 涓紝鍒欒ˉ瓒冲埌 30 涓€傚洜姝ゆ渶缁堜繚鐣欐暟绛変簬 max(杈惧埌闃堝€肩殑鏁伴噺, 30)銆?
+#### 2.2.7 鎽樿娉ㄥ叆鏈哄埗锛堟浛浠ｆ棫 summary 閫昏緫锛?鎽樿涓嶆槸妫€绱㈡ā寮忥紝鑰屾槸 Answer Context 娉ㄥ叆绛栫暐銆?
+瑙勫垯锛?- 鍙湁褰?planner 鏄惧紡浜у嚭 summary item 鏃讹紝Runtime 鎵嶆敞鍏ユ枃妗ｆ憳瑕併€?- summary 绛変簬 related锛氬厛瀹屾垚姝ｆ枃鍙洖涓庢渶缁?rerank锛屽啀鏍规嵁鏈€缁堜繚鐣?chunk 瀵瑰簲鐨?doc_id 娉ㄥ叆鐩稿叧鎽樿銆?- summary 绛変簬 all锛氱洿鎺ユ寜 doc_scope 娉ㄥ叆鍏ㄩ儴鏂囨。鎽樿銆?- 濡傛灉 planner 娌℃湁浜у嚭 summary item锛屼笉寰楅粯璁ゆ敞鍏ユ憳瑕併€?
+杩欐潯瑙勫垯鍙栦唬鏃у疄鐜颁腑鐨?summary_only銆乻ummary_signal 涓?runtime 榛樿 related summary 娉ㄥ叆銆?
+#### 2.2.8 妫€绱㈡祦姘寸嚎锛圙raphFlow 鏍囧噯锛?绗竴姝ワ細鍔犺浇浼氳瘽涓婁笅鏂囥€侴raphFlow 鑺傜偣锛歳ag_load_session_context銆?绗簩姝ワ細鍑嗗 Planner 杈撳叆锛屾敞鍏?session_context銆乽ser_query銆乨ocscope_metadata_index銆侴raphFlow 鑺傜偣锛歳ag_prepare_planner_input銆?绗笁姝ワ細璋冪敤 Planner銆傝嫢 clarify_needed 涓?true锛岀洿鎺ヨ繑鍥烇紝涓嶈繘鍏ユ绱€侴raphFlow 鑺傜偣锛歳ag_call_planner銆?绗洓姝ワ細褰掍竴鍖?Plan锛屾牎楠?item 涓夐€変竴杞借嵎绾︽潫骞跺綊涓€鍖?priority銆侴raphFlow 鑺傜偣锛歳ag_normalize_plan銆?绗簲姝ワ細鎵ц鍙洖銆俼uery item 杩涘叆 rag_retrieve_text_dense 涓?rag_retrieve_multimodal_dense锛沚m25_terms item 杩涘叆 rag_retrieve_bm25锛泂ummary item 鍙褰曟憳瑕佺瓥鐣ャ€?绗叚姝ワ細鏋勫缓鏂囨湰姹狅紝姹囨€?BM25 涓?Text Dense锛屽仛 RRF銆侴raphFlow 鑺傜偣锛歳ag_merge_text_rrf銆?绗竷姝ワ細鏋勫缓鎽樿绛栫暐銆侴raphFlow 鑺傜偣锛歳ag_apply_summary_policy銆?绗叓姝ワ細缁熶竴澶氭ā鎬侀噸鎺掋€侴raphFlow 鑺傜偣锛歳ag_multimodal_rerank銆?绗節姝ワ細鍙岄槇鍊艰鍓€侴raphFlow 鑺傜偣锛歳ag_cut_final_candidates銆?绗崄姝ワ細缁勮 Answer Context銆侴raphFlow 鑺傜偣锛歳ag_build_answer_context銆?绗崄涓€姝ワ細鍥炵瓟銆佸紩鐢ㄦ牎楠屼笌鎸佷箙鍖栥€傝妭鐐瑰寘鎷?rag_answer_synthesize銆乺ag_validate_citations銆乧hat_output_guard銆乧hat_persist銆?
+#### 2.2.9 缁熶竴鏁版嵁濂戠害锛堢簿绠€鐗堬級
+RagRetrievalPlan 鍙寘鍚細plan_version銆乸lan_confidence銆乧larify_needed銆乧larify_message銆乮tems銆?RetrievalPlanItem 鍙寘鍚細priority銆乹uery銆乥m25_terms銆乻ummary銆?涓夌杞借嵎瀛楁涓繀椤绘湁涓斾粎鏈変竴涓潪绌恒€?
+#### 2.2.10 鏁呴殰闄嶇骇鐭╅樀
+- Planner 澶辫触锛氬洖閫€涓哄崟涓?query item锛宲riority 绛変簬 1.0銆?- BM25 澶辫触锛氫繚鐣?text dense 涓?multimodal dense銆?- Text Dense 澶辫触锛氫繚鐣?BM25 涓?multimodal dense銆?- Multimodal Dense 澶辫触锛氫繚鐣欐枃鏈睜銆?- Summary 娉ㄥ叆澶辫触锛氳烦杩囨憳瑕佹敞鍏ャ€?- Multimodal Rerank 澶辫触锛氬洖閫€鍒版枃鏈?rerank 鎴?pre-rerank ordering銆?- 鏃犳湁鏁堣瘉鎹細杩斿洖璇佹嵁涓嶈冻锛屼笉鐢熸垚浼甯哥瓟妗堛€?
+### 2.3 绗笁灞傦細鏉′欢鐢熸垚灞傦紙Conditional Generation Layer锛?璇ュ眰璐熻矗鎶婂凡鎻愮函鐨勮瘉鎹寘杞寲涓虹敤鎴峰彲璇汇€佸甫寮曠敤鐨勬渶缁堝洖绛斻€?
+瑕佹眰锛?- 涓婁笅鏂囩粍瑁咃細灏?TopK chunk銆佹憳瑕併€佸厓鏁版嵁涓庢潵婧愪俊鎭寜棰勭畻鎷兼帴杩涚郴缁熶笂涓嬫枃銆?- 鍙楅檺鐢熸垚锛氭ā鍨嬪繀椤讳笖鍙兘鍩轰簬妫€绱㈣瘉鎹洖绛斻€?- 绮惧噯寮曠敤锛氭瘡涓€澶勪簨瀹炴柇瑷€蹇呴』鑳芥槧灏勫埌 chunk 鎴?web source銆?- 鍥炵瓟鍚庢牎楠岋細鏃犺瘉鎹彞瀛愬繀椤婚噸鍐欍€佸垹闄ゆ垨鏍囪闄嶇骇銆?
+---
+
+## 3. 鍏抽敭浜у搧鐗规€т笌鐢ㄦ埛浠峰€?1. 鏋佷綆骞昏鐜囷細鍥炵瓟閿氬畾鐢ㄦ埛鏂囨。涓庢绱㈣瘉鎹€?2. 鍗曞眰 Retrieval Items锛氳鐩栦富闂€佸叧閿瘝琛ュ己銆佹敼鍐欍€佹媶瑙ｃ€佹憳瑕佷笌鍏冩暟鎹紝鍚屾椂淇濇寔绠€鍗曞彲璋冦€?3. item 鍐呴儴娣峰悎鍙洖锛欱M25 + Dense + RRF + Cross-Encoder 鎻愬崌鍙洖涓庢帓搴忚川閲忋€?4. 缁撴瀯鍖栬鐢熷唴瀹圭敓鎴愶細鍦ㄥ悓涓€妫€绱㈠唴鏍镐笂鐢熸垚瀛︿範鎸囧崡銆丗AQ銆佹椂闂寸嚎绛夈€?5. 澶氭ā寮忕粺涓€锛歚rag | general | search` 鍏辩敤缁熶竴鑱婂ぉ鍗忚涓庡紩鐢ㄤ綋楠屻€?
+---
+
+## 4. 鎴愬姛鎸囨爣锛圫uccess Metrics锛?- `Recall@15 >= 0.85`
+- `nDCG@15 >= 0.78`
+- `Hallucination Rate <= 2%`
+- `Citation Accuracy >= 95%`
+- `Planner Clarify Rate <= 8%`
+- `Dense Ready Coverage >= 98%`
+- 妫€绱㈠眰 P95 寤惰繜 `<= 2.5s`
+- 绔埌绔洖绛?P95 `<= 8s`
+- 鍗曢棶骞冲潎鎴愭湰 `<= $0.03`
+- 95 鍒嗕綅鍗曢棶鎴愭湰 `<= $0.08`
+
+---
+
+## 5. 闄勫綍锛歊AG 绮剧畝 Planner锛堝喕缁擄級
+
+### 5.1 Planner Prompt锛團reeze v2, Active锛?Role锛氫綘鏄?Context OS 鐨?RAG 妫€绱㈣鍒掑櫒銆備綘鐨勪换鍔′笉鏄喅瀹氭绱㈤€氶亾銆佽瑙夊紑鍏炽€侀绠椼€乀opK 鎴?rerank 妯″瀷锛涜繖浜涘叏閮ㄧ敱 Runtime 鍥哄畾鎵ц銆備綘鐨勪换鍔″彧鏄湪宸查€夋嫨鐨?doc_scope 鍐咃紝鐢熸垚鏈€灏忔暟閲忕殑妫€绱㈣浇鑽?item銆?
+Runtime Facts锛?- query item 鍥哄畾杩涘叆 Text Dense 涓?Multimodal Dense銆?- bm25_terms item 鍥哄畾杩涘叆 BM25 Sparse銆?- summary item 鍙〃绀烘憳瑕佹敞鍏ョ瓥鐣ャ€?- 鏂囨湰姹犲浐瀹氭墽琛?BM25 涓?Text Dense 鐨?RRF銆?- 鏈€缁堝浐瀹氭墽琛?Text Pool 涓?Multimodal Pool 鐨?qwen3-vl-rerank銆?- 瑙勫垝鍣ㄤ笉寰楄緭鍑?retrieval_mode銆佽瑙夋爣蹇椼€侀绠椼€乀opK 鎴栬В閲婃€у瓧娈点€?
+Input锛?- Session context
+- User query
+- Docscope metadata index锛屽叾涓寘鍚?doc_id銆乫ilename銆乨ocname銆乴anguage銆乨omain銆乬enre銆乪ra銆?
+Output JSON锛?- plan_version
+- plan_confidence
+- clarify_needed
+- clarify_message
+- items
+
+姣忎釜 item 鍙兘鏄互涓嬩笁绉嶈浇鑽蜂箣涓€锛?- query
+- bm25_terms
+- summary锛屼笖 summary 鍙兘鏄?all 鎴?related
+
+纭鍒欙細
+- priority 鏄潈閲嶏紝涓嶆槸鎺掑簭鍙凤紝鑼冨洿蹇呴』鍦?0 鍒?1銆?- query 鐢ㄤ簬鏀瑰啓鍚庣殑瀛愰棶棰樸€佸垎瑙ｅ悗鐨勫瓙闂鎴栬法璇█ query銆?- bm25_terms 鐢ㄤ簬鏂囦欢鍚嶃€佹爣棰樸€佺紪鍙枫€佷笓鏈夊悕璇嶃€佹湳璇€佺缉鍐欑瓑瀛楅潰璇嶉」銆?- 鍙湁鍦ㄩ棶棰橀渶瑕佸叏灞€鐞嗚В銆侀樁娈佃剦缁溿€佽鍒欒竟鐣屻€佽法鏂囨。妗嗘灦鏃讹紝鎵嶈緭鍑?summary item銆?- 濡傛灉 docscope 涓殑鏂囨。璇█涓庣敤鎴?query 璇█涓嶄竴鑷达紝鍙互鐢熸垚瀵瑰簲璇█鐨?query 鎴?bm25_terms銆?- 濡傛灉鏈槑纭€夋嫨鍐呭婧愶紝浼樺厛杈撳嚭 clarify_needed 绛変簬 true锛屼笉瑕侀粯璁ゅ叏搴撴绱€?- 涓嶈杈撳嚭 markdown銆佽В閲娿€佹敞閲婃垨 schema 涔嬪鐨勫瓧娈点€?
+### 5.2 Runtime 璐ｄ换鍒嗗壊锛堝喕缁擄級
+- Planner 璐熻矗锛氱敓鎴?query銆乥m25_terms銆乻ummary 杞借嵎锛涜瀹?priority锛涘繀瑕佹椂瑕佹眰婢勬竻銆?- Runtime 璐熻矗锛氬€欓€夐绠楀垎閰嶃€佹枃鏈睜 RRF銆佸妯℃€?Dense銆佺粺涓€澶氭ā鎬?Rerank銆佸弻闃堝€艰鍓€佹憳瑕佹敞鍏ユ墽琛屻€?- GraphFlow 璐熻矗锛氬湪绾?RAG 鍏ㄩ摼璺妭鐐圭紪鎺掞紝浠ュ強 Planner銆丷etrieval銆丼ummary Inject銆丷erank銆丼ynthesis銆丟uard銆丳ersist 鐨勬樉寮忚妭鐐圭鐞嗐€?
+## 6. API 涓庡墠绔绾?### 6.1 鍥炵瓟鎺ュ彛鍝嶅簲锛堟爣鍑?JSON锛?鍩虹 envelope锛?- `answer`
+- `session_id`
+- `agent_type`
+- `sources`
+- `citations`
+- `trace`
+
+鎺ㄨ崘瀹屾暣缁撴瀯锛?```json
+{
+  "answer": "string",
+  "session_id": "string",
+  "agent_type": "rag|general|search",
+  "sources": [],
+  "citations": [],
+  "trace": {"mode": "rag|general|search"},
+  "degrade_trace": [],
+  "planner_output": {},
+  "mode_debug": {}
+}
+```
+
+瑙勫垯锛?- `degrade_trace` 鎺ㄨ崘鐙珛杩斿洖銆?- `planner_output` 涓烘ā寮忔劅鐭ュ瓧娈点€?- `mode_debug.rag.*` 浠呭湪 `agent_type=rag` 鏃跺嚭鐜般€?- `general/search` 涓嶈繑鍥?`rag` 涓撳睘璋冭瘯瀛楁銆?
+### 6.2 Planner 闇€瑕佹緞娓呮椂鐨勫搷搴?```json
+{
+  "answer": "璇锋槑纭綘鏈€鍏冲績鐨勬槸鎬ц兘銆佹垚鏈繕鏄紑鍙戜綋楠屻€?,
+  "session_id": "string",
+  "agent_type": "rag",
+  "planner_output": {
+    "mode": "rag",
+    "rag_plan": {
+      "plan_version": "rag-item-v1",
+      "plan_confidence": 0.23,
+      "clarify_needed": true,
+      "clarify_message": "璇锋槑纭綘鏈€鍏冲績鐨勬槸鎬ц兘銆佹垚鏈繕鏄紑鍙戜綋楠屻€?,
+      "items": []
+    }
+  },
+  "citations": [],
+  "sources": [],
+  "degrade_trace": []
+}
+```
+
+### 6.3 鍓嶇灞曠ず灞傜骇
+涓荤晫闈㈠繀鏄撅細
+- `answer`
+- `sources`
+- `citations`
+- `degrade_trace`锛堣嫢闈炵┖锛?
+璋冭瘯涓?Ops 闈㈡澘鍙樉锛?- `planner_output`
+- `mode_debug.rag.item_trace`
+- `mode_debug.rag.retrieval_trace`
+- `mode_debug.rag.summary_injection_trace`
+
+---
+
+## 7. 骞跺彂鎵ц涓庨槦鍒楁灦鏋?### 7.1 璁捐鍘熷垯
+- 鍦ㄧ嚎 RAG 涓婚摼蹇呴』杩愯鍦?GraphFlow 涓婏紝绂佹鍦?HTTP handler銆佷腑闂?service 鎴?ad-hoc async 鍒嗘敮涓洿鎺ユ嫾瑁?Planner銆丷etrieval銆丷erank銆丄nswer 閫昏緫銆?- Tokio runtime銆亀orker pool銆乧hannel 鍙綔涓?GraphFlow 鑺傜偣鐨勬墽琛屽熀纭€璁炬柦锛屼笉浣滀负鍦ㄧ嚎 RAG 涓婚摼缂栨帓鏇夸唬鍝併€?- 绂荤嚎鎽勫彇銆侀噸寤恒€佽ˉ鍋垮悓姝ュ彲浠ョ户缁娇鐢?Worker Runtime锛涗絾鍦ㄧ嚎 rag 妯″紡蹇呴』璧?GraphFlow銆?- 鎵€鏈夐樁娈靛繀椤绘敮鎸佸彇娑堛€佽秴鏃躲€佹樉寮忛檷绾т笌浼橀泤閫€鍑恒€?
+### 7.2 鍦ㄧ嚎閾捐矾锛欸raphFlow + 鍒嗛樁娈电嫭绔嬫睜
+鍦ㄧ嚎 RAG 鏍囧噯鑺傜偣锛歳ag_load_session_context銆乺ag_prepare_planner_input銆乺ag_call_planner銆乺ag_normalize_plan銆乺ag_retrieve_text_dense銆乺ag_retrieve_bm25銆乺ag_retrieve_multimodal_dense銆乺ag_merge_text_rrf銆乺ag_apply_summary_policy銆乺ag_multimodal_rerank銆乺ag_cut_final_candidates銆乺ag_build_answer_context銆乺ag_answer_synthesize銆乺ag_validate_citations銆乧hat_output_guard銆乧hat_persist銆?
+鎺ㄨ崘鎵ц姹狅細Planner 姹犮€丅M25 妫€绱㈡睜銆丏ense 涓庡妯℃€?Dense 妫€绱㈡睜銆佸妯℃€?Rerank 姹犮€丩LM 鐢熸垚姹犮€?
+绾︽潫锛?- 鎱㈤樁娈典笉寰楀鐢ㄥ揩闃舵 worker銆?- 鎵€鏈夎妭鐐圭殑鐘舵€佹祦杞€佸け璐ュ洖閫€涓?trace 蹇呴』閫氳繃 GraphFlow 鏄惧紡琛ㄨ揪銆?- 浠讳綍涓轰簡鏂逛究鑰岀粫杩?GraphFlow 鐩存帴鍦?service 閲屼覆閫昏緫鐨勫疄鐜板潎瑙嗕负杩濊儗鏍囧噯銆?
+### 7.3 浼樺厛绾ц皟搴?浼樺厛绾э細
+- `P1` 瀹炴椂瀵硅瘽
+- `P2` 鏅€氭绱?- `P3` 鎵归噺鍚庡彴
+
+瑙勫垯锛?- 鏈夋晥 item 榛樿鍏ㄩ儴鎵ц锛屼笉瑁佸壀銆?- item 杩囧鏃讹紝缂╂斁棰勭畻鑰屼笉鏄洿鎺ヤ涪寮?item銆?
+### 7.4 LLM 鍙岄檺娴侊紙RPM + TPM锛?- 璇锋眰閫熺巼妗讹紙RPM锛?- Token 閫熺巼妗讹紙TPM锛?- `429 / 503` 閲嶈瘯锛氭寚鏁伴€€閬?+ 鎶栧姩 + 鍔ㄦ€侀檷閫?
+### 7.5 鑳屽帇涓庢嫆缁濈瓥鐣?- 闃熷垪婊¤浇鏃剁珛鍗宠繑鍥?`ErrQueueFull`銆?- HTTP 灞傝繑鍥?`503 Service Unavailable + Retry-After`銆?- 浼樺厛淇濈暀鍦ㄧ嚎璇锋眰锛岄檷绾у悗鍙颁换鍔°€?
+### 7.6 鎸佷箙鍖栦换鍔¤竟鐣?浠呯敤浜庯細
+- 鎵归噺 embedding
+- 鏂囨。閲嶅垎鍧?/ 閲嶇储寮?- 鎽樿閲嶅缓
+- 婕傜Щ妫€娴嬭Е鍙戠殑閲嶅缓浠诲姟
+- Qdrant 琛ュ伩鍚屾浠诲姟
+- 璁¤垂琛ユ姤涓庡紓姝ラ€氱煡
+
+### 7.7 浼橀泤鍏抽棴涓庝竴鑷存€?- 鍏堝叧闂叆闃燂紝鍐嶇瓑寰?in-flight 瀹屾垚銆?- 鎵€鏈変换鍔″繀椤诲叿澶囧箓绛夐敭銆?- summary / vector upsert 澶辫触蹇呴』鍏佽瀹夊叏閲嶈瘯銆?
+### 7.8 鍙娴嬫€т笌鍛婅
+蹇呭煁鎸囨爣锛?- `queue_depth{stage}`
+- `processed_total{stage}`
+- `failed_total{stage}`
+- `dropped_total{stage}`
+- `latency_ms_bucket{stage}`
+- `rate_limit_hit_total{provider}`
+
+### 7.9 鍙傛暟鍩虹嚎锛堝垵濮嬶級
+| Pool 绫诲瀷 | Workers | Buffer | Timeout | 璇存槑 |
+|---|---:|---:|---:|---|
+| RAG Planner | 20~50 | 200 | 3s | 灏忔ā鍨嬶紝楂樺苟鍙?|
+| BM25 妫€绱?| 30~80 | 500 | 2s | CPU/IO 娣峰悎 |
+| Dense 妫€绱?| 20~50 | 300 | 5s | 鍙?Qdrant 杩炴帴姹犻檺鍒?|
+| Cross-Encoder 閲嶆帓 | 4~10 | 100 | 8s | 楂樻垚鏈紝涓ユ牸鎺у苟鍙?|
+| LLM 鐢熸垚 | 3~10 | 50 | 60s | 涓ユ牸鍙楅檺娴佺害鏉?|
+| Embedding锛堢绾匡級 | 5~20 | 200 | 30s | 寤鸿鎵瑰鐞?|
+
+---
+
+## 8. 鏂囨。鎽勫彇绠￠亾锛圛ngestion Pipeline锛?### 8.1 鐩爣涓庡師鍒?- 绋冲畾鍙В鏋愩€?- 鍙噸澶嶆墽琛屻€?- 鍙洖婊氶噸寤恒€?- 鎽勫彇浠诲姟蹇呴』骞傜瓑銆?
+### 8.2 澶氭牸寮忚В鏋愪笌璺敱鏍囧噯
+- 绾枃鏈€丮arkdown銆侀厤缃€佷唬鐮侊細璧?Local锛屽伐鍏蜂负 TextParser 涓?CodeParser锛岃緭鍑?Text 鍗曞厓銆?- HTML锛氳蛋 Local锛屽伐鍏蜂负 HtmlParser锛岃緭鍑烘鏂?Text 涓?img 鎶藉彇鍑虹殑 ImageWithContext銆?- 绠€鍗?PDF锛氳蛋 Local锛屽伐鍏蜂负 PdfParser锛岃緭鍑哄垎椤?Text銆?- 绠€鍗?Office锛氳蛋 Local锛屽伐鍏蜂负 OfficeParser锛岃緭鍑?Text銆?- 绾浘鐗囥€丳PT銆丳PTX銆佹壂鎻?PDF銆佸鏉傜増闈?PDF锛氳蛋 MineruPrecise锛屽伐鍏蜂负 MinerU Precise Parse API锛岃緭鍑哄浘鏂囧崟鍏冧笌鍥剧墖璧勪骇銆?
+琛ュ厖瑕佹眰锛?- MinerU 鍥剧墖缁撴灉蹇呴』闀滃儚鍥炲璞″瓨鍌ㄣ€?- 瑙ｆ瀽瀹屾垚鍚庡繀椤荤敓鎴?summary_text 涓?summary_metadata銆?- summary_metadata 鑷冲皯鍖呭惈 filename銆乨ocname銆乴anguage銆乨omain銆乬enre銆乪ra銆?
+### 8.3 骞傜瓑涓庡幓閲嶈鑼?- `doc_fingerprint = sha256(normalized_content + parser_version + chunk_policy_version)`
+- `chunk_fingerprint = sha256(chunk_text + chunk_index + doc_version)`
+
+鎵ц瑙勫垯锛?- 鑻?`doc_fingerprint` 鏈彉鍖栵細璺宠繃閲嶅垏鍧椾笌閲嶅悜閲忓寲銆?- 瑙ｆ瀽鍣ㄧ増鏈彉鍖栵細鍏佽寮哄埗閲嶅缓锛屽苟璁板綍 `reindex_reason`銆?- PostgreSQL 鍏堝啓鏉冨▉鏁版嵁锛孮drant 鍚庡啓绱㈠紩锛屽け璐ヨ繘鍏ヨˉ鍋块槦鍒椼€?
+### 8.4 鎽勫彇鐘舵€佹満
+- `uploaded -> parsed -> chunked -> embedded -> indexed -> active`
+- 澶辫触鎬侊細`failed_parse / failed_embed / failed_index`
+- 姣忔鐘舵€佸彉鏇村繀椤诲啓 `audit_log`銆?
+### 8.5 璐ㄩ噺闂搁棬
+- 瑙ｆ瀽鏂囨湰闀垮害姣斾緥 `< 30%` 鏍囪寮傚父銆?- OCR 鏂囨。骞冲潎缃俊搴?`< 0.75` 鏍囪浣庡彲淇°€?- 浣庤川閲忔枃妗ｅ厑璁稿叆搴擄紝浣嗛粯璁ら檷浣庢绱㈡潈閲嶅苟鍓嶇鎻愮ず銆?
+---
+
+## 9. 澶氬眰缂撳瓨鏋舵瀯
+### 9.1 缂撳瓨鍒嗗眰
+- L1 璇箟鏌ヨ缂撳瓨锛坧lanner digest锛?- L2 妫€绱㈢粨鏋滅紦瀛橈紙chunk id 鍒楄〃锛?- L3 Embedding 缂撳瓨
+- L4 鐢熸垚缁撴灉缂撳瓨锛堝彲閫夛級
+
+### 9.2 澶辨晥绛栫暐
+- 鏂囨。鐗堟湰鍙樻洿锛氬け鏁?L2 / L4銆?- 鏉冮檺鍙樻洿锛氬け鏁堢鎴风浉鍏崇紦瀛樸€?- 妯″瀷鍗囩骇锛氭寜 embedding / generation 缁村害澶辨晥瀵瑰簲灞傘€?
+### 9.3 缂撳瓨瀹夊叏杈圭晫
+- 缂撳瓨鍛戒腑涓嶈兘缁曡繃 PostgreSQL 鏉冮檺瑁佸喅銆?- `org_id` 蹇呴』浣滀负缂撳瓨 key 鐨勫己鍒剁粍鎴愰儴鍒嗐€?
+---
+
+## 10. 涓婁笅鏂囩粍瑁呬笌 Token 棰勭畻绠＄悊
+### 10.1 棰勭畻妯″瀷
+鎬讳笂涓嬫枃棰勭畻绛変簬 model_max_tokens 鍑忓幓 reserved_system銆乺eserved_history銆乺eserved_output銆?
+绾︽潫锛?- reserved_output 蹇呴』鐙珛淇濈暀銆?- 涓嶅厑璁稿啀鎶婁笂涓嬫枃闈欐€佸垏鎴愬浐瀹?summary_budget 鍔犲浐瀹?retrieval_budget銆?- 鎽樿涓庢鏂?chunk 鍏辩敤鍚屼竴鍔ㄦ€佷笂涓嬫枃棰勭畻姹犮€?
+### 10.2 缁勮绛栫暐
+缁勮椤哄簭锛?1. 鏈€缁堜繚鐣欏€欓€?chunk銆?2. summary item 鎸囧畾鐨勬憳瑕侀泦鍚堬紝鍙兘鏄?related 鎴?all銆?3. 浼氳瘽鎽樿涓庢渶杩戞秷鎭€?
+瑙勫垯锛?- 鍙湁 planner 鏄惧紡浜у嚭 summary item 鏃讹紝鎵嶆敞鍏ユ枃妗ｆ憳瑕併€?- summary 绛変簬 related锛氭敞鍏ユ渶缁堜繚鐣?chunk 瀵瑰簲鏂囨。鐨勬憳瑕併€?- summary 绛変簬 all锛氭敞鍏?doc_scope 鍐呭叏閮ㄦ枃妗ｆ憳瑕併€?- 涓嶅啀鍏佽 runtime 榛樿鏃犳潯浠舵敞鍏?related summary銆?- 鑻ヤ笂涓嬫枃鎬婚绠椾笉瓒筹紝鎸夋暣浣撲紭鍏堢骇鍔ㄦ€佽鍓紝涓嶅鎽樿鎴?chunk 鍗曠嫭璁剧‖涓婇檺銆?
+### 10.3 寮曠敤涓€鑷存€?- 杩涘叆涓婁笅鏂囩殑姣忎釜鐗囨蹇呴』甯?doc_id銆乧hunk_id銆乸age銆?- 鍥炬枃璇佹嵁蹇呴』甯?asset_id銆乮mage_path銆乧aption銆?- 鐢熸垚鍚庡紩鐢ㄦ牎楠屽け璐ョ殑鍙ュ瓙蹇呴』閲嶅啓鎴栧垹闄ゃ€?
+## 11. 瀵硅瘽鍘嗗彶涓庝細璇濈鐞?### 11.1 浼氳瘽妯″瀷
+鏍稿績瀛楁锛?- `session_id`
+- `user_id`
+- `org_id`
+- `history[]`
+- `created_at`
+- `updated_at`
+
+### 11.2 鍘嗗彶鍘嬬缉
+瑙﹀彂鏉′欢锛?- 杞瓒呰繃闃堝€硷紙榛樿 10 杞級
+- 鍘嗗彶 token 瓒呴绠楋紙榛樿 20K锛?
+绛栫暐锛?- 淇濈暀鏈€杩?4 杞師鏂囥€?- 鏇存棫杞鍘嬬缉涓哄彲杩芥函鎽樿銆?- 鎽樿蹇呴』闄?`summary_source_turns`銆?
+### 11.3 涓庢绱㈠崗鍚?- 鏌ヨ鏀瑰啓鍙弬鑰冭繎鏈熶細璇濇憳瑕併€?- 浼氳瘽涓殑涓存椂绾︽潫蹇呴』杞负 `DocScope` 鏄惧紡浼犻€掋€?- 涓嶅緱瓒婃潈璺ㄦ枃妗ｈ寖鍥存绱€?
+---
+
+## 12. 娴佸紡杈撳嚭鍗忚
+### 12.1 浼犺緭鏂瑰紡
+- 榛樿鍗忚锛歋SE
+- 鍙€夊崗璁細WebSocket
+
+### 12.2 SSE 浜嬩欢瑙勮寖
+- `start`
+- `token`
+- `citations`
+- `trace`
+- `done`
+- `error`
+
+绾︽潫锛?- 姣忔璇锋眰蹇呴』浠?`done` 鎴?`error` 缁撴潫銆?- 涓柇鏃跺啓鍏?`degrade_trace` 涓?`error_code`銆?
+### 12.3 鐢ㄦ埛浣撻獙绾︽潫
+- 棣?token SLA锛歚P95 <= 1.5s`
+- 鐢熸垚涓柇鍙噸璇曪紱閲嶈瘯闇€澶嶇敤 `request_id`锛岄伩鍏嶉噸澶嶈璐广€?
+---
+
+## 13. 璇勪及绠￠亾锛圗valuation Pipeline锛?### 13.1 璇勪及鍒嗗眰
+- 绂荤嚎璇勪及锛氭绱€佺敓鎴愩€佺鍒扮銆?- 鍦ㄧ嚎璇勪及锛氱敤鎴峰弽棣堛€佸紩鐢ㄧ偣鍑荤巼銆佸け璐ョ巼銆侀檷绾х巼銆佸欢杩熶笌鎴愭湰銆?
+### 13.2 榛勯噾闆嗕笌鍥炲綊闂ㄧ
+- 榛勯噾闆嗚妯★細`100~500` 鏉?`{query, expected_answer, source_chunks}`銆?- 鍙戝竷闂ㄧ锛?  - `Recall@15` 涓嶄笅闄嶈秴杩?`3%`
+  - `Citation Accuracy >= 95%`
+  - `Hallucination Rate <= 2%`
+
+### 13.3 鍛ㄦ湡鎬ц瘎娴?- 姣忓懆杩愯鍏ㄩ噺鍥炲綊骞惰緭鍑虹増鏈紓绉绘姤鍛娿€?- 鎸囨爣杩炵画涓ゅ懆涓嬮檷鏃讹紝寮哄埗瑙﹀彂绱㈠紩閲嶅缓涓庢彁绀鸿瘝澶嶆牳銆?
+---
+
+## 14. Guardrails 涓庡畨鍏ㄥ悎瑙?### 14.1 杈撳叆鎶ゆ爮
+- Prompt Injection 妫€娴?- 瓒婃潈妫€娴?- 鑼冨洿澶栭棶棰樻娴?
+### 14.2 杈撳嚭鎶ゆ爮
+- 寮曠敤鍙瘉鎬ф牎楠?- PII 鑴辨晱
+- 鏈夊鍐呭杩囨护
+
+### 14.3 鎵ц椤哄簭
+`Input Guards -> Retrieval -> Generation -> Output Guards`
+
+### 14.4 鍚堣涓庡璁?- 鎶ゆ爮瑙﹀彂蹇呴』鍐?`audit_log`銆?- 瀹¤瀛楁鑷冲皯鍖呭惈锛歚guard_type / risk_level / action / trace_id / operator`銆?
+---
+
+## 15. 鍏ㄩ摼璺彲瑙傛祴鎬?### 15.1 Trace 濂戠害
+姣忎釜璇锋眰鍒嗛厤 `trace_id`锛岃疮绌匡細
+- planner
+- retrieval
+- rerank
+- generation
+- guardrails
+- cache
+- billing
+
+### 15.2 鎸囨爣浣撶郴
+- 璐ㄩ噺锛歚recall / citation_accuracy / hallucination_rate`
+- 鎬ц兘锛歚p50/p95 latency / first_token_latency / qps`
+- 鎴愭湰锛歚cost_per_query / embedding_cost / generation_cost`
+- 绋冲畾鎬э細`retry_rate / timeout_rate / degrade_rate`
+- 涓€鑷存€э細`permission_desync_count / version_switch_fail_rate`
+
+### 15.3 杩愮淮鍔ㄤ綔
+- P1锛氬叏閾捐矾涓嶅彲鐢ㄦ垨鏉冮檺閿欐斁椋庨櫓锛岃Е鍙戝畨鍏ㄩ檷绾с€?- P2锛氭绱㈣川閲忔槑鏄鹃€€鍖栵紝瑙﹀彂绱㈠紩閲嶅缓鎴栨ā鍨嬪洖閫€銆?- P3锛氭垚鏈紓甯镐笂鍗囷紝瑙﹀彂缂撳瓨澧炲己涓庡苟鍙戦檺娴併€?
+---
+
+## 16. 鍓嶇鎶€鏈灦鏋?### 16.1 鎺ㄨ崘鎶€鏈爤
+- Next.js锛圓pp Router锛? React
+- Tailwind CSS + ShadCN/UI
+- Zustand 鎴?Jotai
+- TanStack Query
+- SSE 瀹㈡埛绔紙鍙€?AI SDK 灏佽锛?
+绾︽潫锛?- 鍓嶇鍙礋璐ｄ氦浜掍笌娓叉煋锛屼笉鎵胯浇妫€绱㈠喅绛栭€昏緫銆?- 鎵€鏈夋潈闄愬垽鏂互鍚庣涓哄噯銆?
+### 16.2 鍓嶇鍒嗗眰
+- App Shell
+- Notebook Workspace
+- Chat Runtime
+- Source Viewer
+- Ops Panel
+
+---
+
+## 17. 鏍稿績 UI 浜や簰鑼冨紡
+### 17.1 涓夋爮宸ヤ綔鍖?- 宸︽爮锛歂otebook 涓庢枃妗ｇ鐞?- 涓爮锛氬璇濆尯
+- 鍙虫爮锛氭潵婧愰潰鏉?
+### 17.2 鏂囨。绠＄悊闈㈡澘
+蹇呴』鏀寔锛?- 涓婁紶
+- 鐘舵€佸睍绀?- 鍒犻櫎
+- 閲嶇储寮?- 鏂囨。鑼冨洿閫夋嫨
+
+### 17.3 澶?Notebook 绠＄悊
+- Notebook 鏄竴绾ч殧绂诲崟鍏冦€?- 鍒囨崲 Notebook 蹇呴』閲嶇疆褰撳墠 `DocScope` 涓庝細璇濅笂涓嬫枃銆?
+---
+
+## 18. 鍓嶅悗绔帴鍙ｈˉ鍏?### 18.1 Notebook 涓庢枃妗ｆ帴鍙?- `POST /api/v1/notebooks`
+- `GET /api/v1/notebooks`
+- `POST /api/v1/notebooks/{id}/documents`
+- `GET /api/v1/documents/{doc_id}/status`
+- `DELETE /api/v1/documents/{doc_id}`
+- `POST /api/v1/documents/{doc_id}/reindex`
+
+### 18.2 鑱婂ぉ鎺ュ彛
+`POST /api/v1/chat`
+
+鍏ュ弬锛?- 蹇呭～锛歚query`, `notebook_id`, `agent_type`, `stream`
+- 鍙€夛細`session_id`, `doc_scope[]`, `messages[]`, `source_type`, `source_token`
+
+骞傜瓑瑕佹眰锛?- 鏀寔 `request_id` 閫忎紶鎴栫敱鏈嶅姟绔嚜鍔ㄧ敓鎴愩€?- 閲嶈瘯蹇呴』澶嶇敤鍚屼竴 `request_id`銆?
+### 18.3 SSE 浜嬩欢鏁版嵁绾﹀畾
+閫氱敤浜嬩欢锛?- `start`
+- `token`
+- `citations`
+- `trace`
+- `done`
+- `error`
+
+妯″紡鎵╁睍浜嬩欢锛?- `rag`锛歚planner_complete`, `rag_trace`, `rag_sources`
+- `search`锛歚search_start`, `search_results`
+
+---
+
+## 19. 寮曠敤鏍囨敞浜や簰瑙勮寖
+### 19.1 寮曠敤娓叉煋
+鍥炵瓟鏂囨湰涓殑 `[1] [2] ...` 蹇呴』鍙偣鍑汇€?
+鎮诞鎬佹樉绀猴細
+- 鏂囨。鍚?- 椤电爜 / 娈佃惤
+- 鐗囨棰勮
+
+### 19.2 璺宠浆琛屼负
+鐐瑰嚮寮曠敤鍚庯細
+1. 鎵撳紑鏉ユ簮闈㈡澘銆?2. 瀹氫綅 `doc_id + page + chunk_id`銆?3. 楂樹寒鍛戒腑鐗囨骞舵粴鍔ㄣ€?
+### 19.3 涓€鑷存€ф牎楠?- 鍥炵瓟涓殑寮曠敤绱㈠紩涓?`citations[]` 涓嶄竴鑷存椂锛屽墠绔爣璁扳€滃紩鐢ㄥ紓甯糕€濄€?- 绂佹鏄剧ず鈥滈珮鍙俊鈥濆窘鏍囥€?
+---
+
+## 20. 鍓嶇鐘舵€佺鐞嗕笌瀹炴椂鍙嶉
+### 20.1 鑱婂ぉ鐘舵€佹満
+`idle -> submitting -> streaming -> done|error`
+
+### 20.2 鏂囨。澶勭悊鐘舵€佸弽棣?- 涓婁紶鍚庣珛鍗宠繘鍏?optimistic `processing`銆?- `status != ready` 鏃舵瘡 2 绉掕疆璇€?- 鍒?`ready / failed` 鍚庡仠姝㈣疆璇€?
+### 20.3 闄嶇骇鍙鎬?- `degrade_trace` 闈炵┖鏃讹紝蹇呴』灞曠ず闄嶇骇鎻愮ず鏉°€?- 鎻愮ず鏉℃渶灏戝寘鍚細闄嶇骇闃舵銆佸師鍥犮€佸彲淇″害褰卞搷璇存槑銆?
+---
+
+## 21. 鍓嶇楠屾敹鎸囨爣
+- Workspace Ready锛歚P95 <= 2.0s`
+- 棣?token 鍙锛歚P95 <= 1.5s`
+- 寮曠敤瀹氫綅瀹屾垚锛歚P95 <= 800ms`
+- 寮曠敤璺宠浆姝ｇ‘鐜囷細`>= 95%`
+- 鏂囨。鐘舵€佸睍绀轰竴鑷寸巼锛歚>= 99%`
+- 浼氳瘽鍒囨崲涓婁笅鏂囨薄鏌撶巼锛歚<= 0.5%`
+- 娴佸紡浼氳瘽寮傚父涓柇鐜囷細`<= 1%`
+- 鍙噸璇曢敊璇仮澶嶆垚鍔熺巼锛歚>= 90%`
+
+---
+
+## 22. 骞冲彴绾?SaaS 鏋舵瀯
+### 22.1 鍏ㄥ钩鍙板垎灞?- 杈圭紭灞傦細CDN / WAF / Edge
+- 鎺ュ叆灞傦細API Gateway + Auth
+- 搴旂敤灞傦細鍓嶇宸ヤ綔鍙?+ Rust 鍚庣鏈嶅姟
+- 鏁版嵁涓庝换鍔″眰锛歅ostgreSQL / Qdrant / Redis / Object Storage / Worker
+- 骞冲彴鑳藉姏灞傦細璁¤垂 / 閫氱煡 / 鍙娴嬫€?/ DevOps
+
+### 22.2 鏈嶅姟杈圭晫
+- RAG 鏍稿績璺緞涓庤璐广€侀€氱煡绛夊鍥磋兘鍔涜В鑰︺€?- 澶栭儴渚濊禆鏁呴殰涓嶅緱闃绘柇鏍稿績闂瓟銆?
+---
+
+## 23. 韬唤璁よ瘉涓庡绉熸埛闅旂
+### 23.1 绉熸埛灞傜骇妯″瀷
+`Organization(org_id) -> User -> Notebook -> Document -> Chunk`
+
+### 23.2 PostgreSQL 闅旂锛堝己鍒?RLS锛?- 鎵€鏈夋牳蹇冭〃鍚敤 `RLS + FORCE RLS`銆?- 缁熶竴绛栫暐锛歚org_id = current_setting('app.current_org')::uuid`銆?- Rust 璁块棶瑙勮寖锛?  - 蹇呴』閫氳繃缁熶竴浜嬪姟鍖呰鍣ㄦ敞鍏?`set_config('app.current_org', $1, true)`銆?  - 绂佹涓氬姟灞傜粫杩囧寘瑁呭櫒鐩磋繛鏌ヨ銆?
+### 23.3 Qdrant 闅旂锛堝己鍒惰繃婊ゆ敞鍏ワ級
+- 鎵€鏈夊悜閲忔绱㈠繀椤婚€氳繃瀹夊叏鍖呰鍣ㄦ敞鍏?`org_id` 杩囨护鏉′欢銆?- 缂哄け `org_id` 鐩存帴鎷掔粷锛宖ail-closed銆?
+### 23.4 鍏朵粬瀛樺偍闅旂
+- 瀵硅薄瀛樺偍璺緞鍓嶇紑寮哄埗鍖呭惈 `org_id`銆?- Redis key 鍓嶇紑寮哄埗鍖呭惈 `org_id`銆?- 鏃ュ織涓庡鍑洪粯璁ゆ寜 `org_id` 鍒嗗尯銆?
+### 23.5 璺ㄧ鎴烽槻寰℃祴璇?- `orgA` 鍐欏叆锛宍orgB` 璇诲彇蹇呴』涓虹┖鎴?`404`銆?- 鐩存帴 ID 鐚滄祴涓嶅緱璇诲埌璺ㄧ鎴疯祫婧愩€?- 鍒嗕韩閾炬帴涓嶅緱绐佺牬绉熸埛杈圭晫銆?
+### 23.6 绠＄悊鍛樿秺鏉冭闂?- 浠呬笓鐢ㄥ悗鍙拌鑹插彲閰嶇疆 `BYPASSRLS`銆?- 鏅€氬簲鐢ㄨ处鍙蜂笌鏅€氱鐞嗗憳璐﹀彿绂佹 `BYPASSRLS`銆?
+---
+
+## 24. 璁¤垂涓庤闃呯郴缁?### 24.1 瀹氫环妯″瀷
+- Free
+- Pro
+- Enterprise
+
+璁￠噺缁村害锛?- `pages_processed`
+- `embedding_tokens`
+- `llm_input_tokens`
+- `llm_output_tokens`
+- `storage_gb`
+- `queries_count`
+
+### 24.2 Stripe 瀵硅薄鏄犲皠
+- `Customer -> org_id`
+- `Product/Price -> 濂楅涓庤閲忛」`
+- `Subscription -> 褰撳墠璁㈤槄鐘舵€乣
+- `Meter Events -> 鐢ㄩ噺涓婃姤`
+- `Webhook -> 鏀粯鐘舵€佸悓姝
+
+### 24.3 鍏抽敭娴佺▼
+- 缁勭粐鍒涘缓鏃跺垱寤?Stripe Customer銆?- 鐢ㄩ噺涓婃姤寮傛鎵瑰鐞嗐€?- Webhook 澶勭悊蹇呴』楠岀銆?
+### 24.4 閰嶉鍓嶇疆妫€鏌ヤ笌浼橀泤闄嶇骇
+- 姣忔涓婁紶 / 鏌ヨ鍓嶅仛閰嶉妫€鏌ャ€?- 杈惧埌纭笂闄愭椂杩斿洖鏄庣‘鍗囩骇鎻愮ず銆?- 璁¤垂閾捐矾寮傚父鏃跺厑璁哥煭鏃跺閿欏苟寰呰ˉ鎶ャ€?
+---
+
+## 25. 鏂囦欢瀛樺偍涓庝笂浼犻摼璺?### 25.1 涓婁紶妯″紡
+- 鍚庣绛惧彂棰勭鍚?URL銆?- 瀹㈡埛绔洿浼犲璞″瓨鍌ㄣ€?- 瀵硅薄瀛樺偍浜嬩欢瑙﹀彂鎽勫彇浠诲姟銆?
+### 25.2 璺緞瑙勮寖
+`bucket/{org_id}/{notebook_id}/{doc_id}/{filename}`
+
+### 25.3 瀹夊叏涓庝竴鑷存€?- 鏂囦欢绫诲瀷鐧藉悕鍗?- 澶у皬闄愬埗
+- 鍙€夋伓鎰忔枃浠舵壂鎻?- 瀛樺湪瀵硅薄浣嗘憚鍙栧け璐ユ椂鏍囪 `orphan_object`
+
+---
+
+## 26. API Gateway銆侀檺娴佷笌閫氱煡
+### 26.1 闄愭祦妯″瀷
+闄愭祦绮掑害锛?- `user_id + endpoint`
+- `org_id + endpoint`
+- `api_key + endpoint`
+
+闄愭祦缁村害锛?- RPM
+- 姣忔棩璇锋眰鎬婚噺
+- 姣忔棩 token 棰勭畻
+
+瓒呴檺杩斿洖锛?- `429 + Retry-After`
+- 鏄庣‘濂楅涓庡崌绾ф彁绀?
+### 26.2 閫氱煡绯荤粺
+瑙﹀彂浜嬩欢锛?- 鏂囨。澶勭悊瀹屾垚 / 澶辫触
+- 璁㈤槄鍙樻洿 / 鏀粯澶辫触
+- 閰嶉涓磋繎涓婇檺
+- 绯荤粺绾ч檷绾у奖鍝?
+---
+
+## 27. DevOps 涓庡熀纭€璁炬柦鍗充唬鐮?### 27.1 CI 闂ㄧ
+- Rust 鍗曟祴
+- 澶氱鎴烽殧绂绘祴璇?- RAG 鍥炲綊璇勪及
+- 鍓嶇鍏抽敭 E2E
+- 瀹夊叏鎵弿
+- 閰嶇疆妫€鏌?
+### 27.2 CD 娴佺▼
+- 闀滃儚鏋勫缓涓庢帹閫?- IaC 瀹℃煡鍚庢墽琛?- 婊氬姩鍙戝竷 + smoke test + 鑷姩鍥炴粴
+
+### 27.3 IaC 璧勬簮鑼冨洿
+- 璁＄畻
+- 鏁版嵁
+- 缃戠粶
+- 瑙傛祴
+
+---
+
+## 28. 鍚堣涓庡畨鍏ㄨˉ鍏?### 28.1 鏁版嵁涓庡瘑閽ュ畨鍏?- 鍏ㄩ摼璺?TLS
+- 闈欐€佹暟鎹姞瀵?- API 瀵嗛挜涓庣涓夋柟鍑嵁蹇呴』杩涘叆 Secrets Manager
+
+### 28.2 鏁版嵁涓讳綋璇锋眰
+- 鏀寔鍒犻櫎鏉?- 绾ц仈鍒犻櫎 PostgreSQL銆丵drant銆佸璞″瓨鍌ㄣ€佺紦瀛樹笌绱㈠紩娈嬬暀
+- 澶囦唤鍒犻櫎璧板欢杩熸摝闄ゅ苟鍙璁¤拷韪?
+### 28.3 瀹夊叏娴嬭瘯
+- 婕忔礊鎵弿
+- 閴存潈 / 瓒婃潈鍥炲綊
+- 鍏紑閾炬帴婊ョ敤涓庨€熺巼鏀诲嚮婕旂粌
+
+---
+
+## 29. 鍚庡彴绠＄悊绯荤粺锛圓dmin Panel锛?### 29.1 绠＄悊瑙掕壊涓?RBAC
+- `super_admin`
+- `ops_admin`
+- `finance_admin`
+
+### 29.2 鏍稿績妯″潡
+- 绉熸埛绠＄悊
+- 鐢ㄦ埛鏀寔
+- 璐㈠姟绠＄悊
+- 绯荤粺鍋ュ悍
+- 鍔熻兘寮€鍏?
+### 29.3 瀹¤鏃ュ織
+- 鍚庡彴鎵€鏈夊啓鎿嶄綔蹇呴』鍐?insert-only 瀹¤鏃ュ織銆?
+### 29.4 璺敱寤鸿
+- `/admin`
+- `/admin/tenants`
+- `/admin/users`
+- `/admin/billing`
+- `/admin/rag-health`
+- `/admin/feature-flags`
+- `/admin/audit-logs`
+- `/admin/system/workers`
+- `/admin/system/degradation`
+
+---
+
+## 30. 鍒嗕韩涓庡崗浣滄潈闄愭ā鍨?### 30.1 鍒嗕韩妯″紡
+- 绉佹湁
+- 閾炬帴鍒嗕韩
+- 鍏紑璁块棶锛堝彲閫夛級
+
+### 30.2 鏁版嵁妯″瀷
+- `notebooks.access_level`
+- `notebook_members`
+- `share_tokens`
+- `share_access_logs`
+
+### 30.3 閾炬帴浠ょ墝瑙勫垯
+- 楂樼喌闅忔満鍊?- 鏀寔杩囨湡涓庢挙閿€
+- 鍏紑閾炬帴蹇呴』鍙楅€熺巼闄愬埗涓庢互鐢ㄦ娴嬩繚鎶?
+### 30.4 閭€璇峰崗浣滆鍒?- 鏀寔閭涓庡凡娉ㄥ唽鐢ㄦ埛閭€璇?- 瑙掕壊锛歚owner > editor > viewer`
+
+### 30.5 缁熶竴璁块棶妫€鏌?`CheckAccess` 椤哄簭锛?1. owner
+2. member role
+3. share token role
+4. public fallback
+
+鏈巿鏉冭繑鍥?`404`銆?
+---
+
+## 31. Notebook 瀵瑰鍙紪绋嬫帴鍏?### 31.1 API Key 浣撶郴
+- 姣忎釜 Notebook 鍙敓鎴愬鎶?API Key銆?- 浠呬繚瀛?`key_hash` 涓庡墠缂€锛屼笉淇濆瓨鏄庢枃銆?- 鍙厤缃潈闄愩€佽繃鏈熸椂闂翠笌閫熺巼涓婇檺銆?
+### 31.2 瀵瑰鍗忚
+- REST API
+- OpenAI Compatible API
+- MCP Server
+
+### 31.3 鍓嶇鎺ュ叆闈㈡澘
+鎻愪緵锛?- REST 绀轰緥
+- OpenAI 鍏煎绀轰緥
+- MCP 閰嶇疆鐗囨
+- API Key 鍒涘缓 / 鎾ら攢鍏ュ彛
+
+### 31.4 瀹夊叏涓庤璐硅仈鍔?- 澶栭儴 API 璇锋眰蹇呴』缁戝畾 `org_id/notebook_id` 涓婁笅鏂囥€?- 澶栭儴 API 鐢ㄩ噺绾冲叆缁熶竴璁¤垂涓庨厤棰濅綋绯汇€?
+---
+
+## 32. 宸ョ▼寮€鍙戠邯寰嬩笌浜や粯娌荤悊
+### 32.1 鏋舵瀯绾緥锛氬厛杈圭晫锛屽悗鍔熻兘
+鏃╂湡榛樿閲囩敤 Rust Modular Monolith锛岄伩鍏嶈繃鏃╁井鏈嶅姟鍖栥€?
+鎺ㄨ崘鐩綍杈圭晫锛?- `bins/api`
+- `bins/worker`
+- `crates/transport-http`
+- `crates/rag-core`
+- `crates/ingestion`
+- `crates/storage-pg`
+- `crates/storage-qdrant`
+- `crates/cache-redis`
+- `crates/auth`
+- `crates/billing`
+- `crates/share`
+- `crates/admin`
+- `crates/telemetry`
+- `crates/common`
+
+渚濊禆瑙勫垯锛?- `rag-core` 绂佹渚濊禆 `billing/admin`銆?- 渚濊禆鏂瑰悜蹇呴』閫氳繃 CI 寮哄埗鏍￠獙銆?
+### 32.2 娴嬭瘯閲戝瓧濉斾笌璐ㄩ噺闂ㄧ
+- Unit锛氱畻娉曚笌绾嚱鏁?- Integration锛歅ostgreSQL / Qdrant / Redis / Object Storage 鑱旇皟
+- E2E锛氫笂浼?-> 绱㈠紩 -> 鏌ヨ -> 寮曠敤
+- RAG Quality锛氶粍閲戦泦鍥炲綊
+
+鏈€浣庨棬绂侊細
+- 鍗曞厓瑕嗙洊鐜?`>= 80%`
+- 澶氱鎴烽殧绂绘祴璇曞叏閫氳繃
+- RAG 榛勯噾闆嗗洖褰掗€氳繃鐜?`>= 95%`
+- API 濂戠害娴嬭瘯閫氳繃
+
+### 32.3 閿欒澶勭悊缁熶竴妯″瀷
+缁熶竴涓氬姟閿欒缁撴瀯锛?- `code`
+- `message`
+- `http_status`
+- `detail/cause`
+
+缁熶竴閿欒涓棿浠惰礋璐ｆ棩蹇椼€佽劚鏁忎笌 trace 鍏宠仈銆?
+### 32.4 鏁版嵁搴撹縼绉荤邯寰?- 鎵€鏈?Schema 鍙樻洿蹇呴』杩佺Щ鍗充唬鐮併€?- 蹇呴』甯?down 鑴氭湰銆?- CI 蹇呮祴锛歚up -> down -> up`銆?
+### 32.5 CI/CD 璐ㄩ噺闂搁棬
+CI 蹇呭惈锛?- fmt / lint
+- 鍗曟祴涓庤鐩栫巼
+- 闆嗘垚娴嬭瘯
+- RAG 鍥炲綊
+- 闅旂娴嬭瘯
+- 杩佺Щ鍙洖婊氭祴璇?- API 濂戠害娴嬭瘯
+
+CD锛?- 閲戜笣闆€ / 鐏板害鍙戝竷
+- 鑷姩鍖栧仴搴锋鏌?- 瑙﹀彂闃堝€煎洖婊?
+### 32.6 鍙娴嬫€у厛琛岋紙ODD锛?鏂版ā鍧椾笂绾垮墠蹇呴』鍏峰锛?- metrics
+- trace
+- structured log
+
+### 32.7 宸ョ▼杩愯绾緥
+| 绾緥 | 寮哄埗瑕佹眰 |
+|---|---|
+| 鏃犳祴璇曚笉鍚堝苟 | 姣忎釜 PR 蹇呴』闄勫搴旀祴璇?|
+| 鏃犳枃妗ｄ笉涓婄嚎 | 鏂?API 蹇呴』鏇存柊 OpenAPI/鎺ュ彛鏂囨。 |
+| 瀵嗛挜涓嶅叆浠ｇ爜 | 缁熶竴璧?Secrets Manager |
+| 鍙樻洿鍙洖婊?| 鍔熻兘寮€鍏炽€佽縼绉诲洖婊氥€佸彂甯冨洖婊氶綈澶?|
+| 鍛婅鏈?Runbook | 姣忔潯鍛婅瑙勫垯缁戝畾鎺掗殰鎵嬪唽 |
+| 瀹氭湡婕旂粌 | 姣忔湀鎵ц鏁呴殰 / 闄嶇骇婕旂粌 |
+| On-Call 杞€?| 鐮斿彂杞€煎€肩彮 |
+
+### 32.8 涓夋潯宸ョ▼鍝插
+- 鍋囪渚濊禆浼氬け璐?- 璁╅敊璇敖鏃╂毚闇?- 鍙娴嬫€у厛浜庡姛鑳?
+### 32.9 AI 鍙鎬т笂涓嬫枃宸ヤ欢
+- `AGENTS.md`
+- `CLAUDE.md`
+- `.claude/rules/*`
+- `.notes/project_overview.md`
+- `.notes/decisions.md`
+- `.notes/task_list.md`
+
+---
+
+## 33. API 绠＄悊涓庣綉鍏冲垎灞傛不鐞?### 33.1 鍙屽眰鑱岃矗妯″瀷
+- 鍩虹璁炬柦缃戝叧灞傦細TLS銆乄AF銆丏DoS銆侀槻鍒枫€佸叏灞€闄愭祦銆丆DN
+- 搴旂敤鍐?API 绠＄悊灞傦紙Rust锛夛細璁よ瘉鎺堟潈銆佷笟鍔￠厤棰濄€佺増鏈鐞嗐€丱penAPI銆佺粺涓€閿欒妯″瀷
+
+### 33.2 Rust 搴旂敤鍐?API 绠＄悊鏍?鎺ㄨ崘缁勫悎锛?- `axum`
+- `tower`
+- `tower-http`
+- `serde`
+- `sqlx`
+- 鑷畾涔?OpenAPI 鐢熸垚鎴栧吋瀹规鏋?
+鐩爣锛?- API 瀹氫箟鍗虫枃妗?- 杈撳叆杈撳嚭濂戠害寮烘牎楠?- 閿欒鍝嶅簲缁熶竴
+
+### 33.3 API 鐗堟湰娌荤悊
+- 绋冲畾鐗堬細`/api/v1/*`
+- 鐮村潖鎬у彉鏇达細`/api/v2/*`
+- 蹇呴』鎻愪緵 `Deprecation / Sunset` 绛栫暐銆?
+### 33.4 璁よ瘉涓庢潈闄愪腑闂翠欢閾?鎺ㄨ崘椤哄簭锛?1. `request_id / recover / logger`
+2. CORS
+3. JWT / API Key 楠岃瘉
+4. Notebook 璁块棶妫€鏌?5. 閰嶉妫€鏌?6. 涓氬姟澶勭悊
+
+### 33.5 鍒嗗眰闄愭祦绛栫暐
+- 杈圭紭灞傦細鎸?IP / ASN / 鍥藉鍋氱矖绮掑害闃叉姢
+- 搴旂敤灞傦細鎸?`org_id / user_id / api_key / endpoint` 鍋氱粏绮掑害鎺у埗
+
+### 33.6 鎿嶄綔娉ㄥ唽涓庡绾﹁姹?姣忎釜 API 蹇呴』澹版槑锛?- `operation_id`
+- `summary`
+- `tags`
+- `security`
+- `errors`
+
+### 33.7 鍩虹璁炬柦缃戝叧閫夊瀷寤鸿
+- Cloudflare
+- Kong
+- APISIX
+- Traefik
+
+---
+
+## 34. 鍩轰簬鍘嗗彶瀵硅瘽鐨勯€氱敤鑱婂ぉ杩炵画鎬?### 34.1 楂橀澶辨晥妯″紡
+- 閬楀繕
+- 鎸囦唬娑堣В澶辫触
+- 鎰忓浘婕傜Щ
+
+### 34.2 鍒嗗眰璁板繂鏋舵瀯
+- Layer 1锛氭渶杩?N 鏉″師濮嬫秷鎭?- Layer 2锛氫細璇濇憳瑕?- Layer 3锛氱敤鎴风敾鍍?
+娉ㄥ叆椤哄簭锛?1. base system
+2. user profile
+3. session summary
+4. working memory
+5. current user input
+
+### 34.3 鍘嗗彶鍘嬬缉涓?Token 绠＄悊
+- 瓒呴绠楁椂鍘嬬缉鏈€鏃т竴鍗婃秷鎭€?- 鎽樿蹇呴』淇濈暀鐩爣銆佺害鏉熴€佸凡杈炬垚缁撹銆佹湭瀹屾垚浜嬮」涓庡亸濂姐€?
+### 34.4 鏌ヨ鏀瑰啓锛圛ntent Refiner锛?- 浠呭湪闇€瑕佹敼鍐欐椂瑙﹀彂銆?- 鍙仛鎸囦唬琛ュ叏涓庤涔夎ˉ鍏紝涓嶆敼鍙橀棶棰樻柟鍚戙€?- 鏀瑰啓澶辫触蹇呴』鍥為€€鍘熷 query銆?
+### 34.5 鐢ㄦ埛鐢诲儚锛堣鍔ㄦ帹鏂級
+鏈€灏忓瓧娈碉細
+- `expertise_level`
+- `preferred_style`
+- `name_and_context`
+- `topics_of_interest`
+
+### 34.6 鎰忓浘鐘舵€佹満
+- `primary_goal`
+- `sub_goals`
+- `constraints`
+- `completed`
+
+### 34.7 杩愯鏃惰皟鐢ㄦ祦姘寸嚎
+1. 鍔犺浇璁板繂
+2. 鎸夐渶鏌ヨ鏀瑰啓
+3. 缁勮涓婁笅鏂?4. 璋冪敤 LLM 娴佸紡鐢熸垚
+5. 寮傛鍐欏洖宸ヤ綔璁板繂銆佹憳瑕併€佺敾鍍忋€佺姸鎬佹満
+
+---
+
+## 35. 澶氭ā寮?Planner / Synthesizer 缂栨帓
+### 35.1 妯″紡瀹氫箟
+- `rag`
+- `general`
+- `search`
+
+### 35.2 鎬讳綋鍘熷垯
+- 淇濇寔妯″紡闅旂銆?- `rag` 鏈嶄粠鍗曞眰 Retrieval Items銆?- `search` 鏈嶄粠 query_type + sub_queries銆?- `general` 涓嶈蛋绉佸煙妫€绱€?
+### 35.3 Prompt 妯℃澘鍖栦笌閰嶇疆鍖?寤鸿妯℃澘锛?- `planner_system.tmpl`
+- `synthesizer_system.tmpl`
+- `citation_rules.tmpl`
+- `query_type_overrides/*.tmpl`
+
+### 35.4 鍙娴嬫€т笌璇勪及鎸囨爣
+- `planner_latency_ms`
+- `synthesizer_latency_ms`
+- `citation_coverage_rate`
+- `unsupported_claim_rate`
+- `answer_groundedness_score`
+- `query_refine_fallback_rate`
+
+### 35.5 楠屾敹鏍囧噯
+- 鍙ョ骇寮曠敤瑕嗙洊鐜囪揪鏍?- `rag` 妯″紡 100% 鏈嶄粠 Retrieval Items 濂戠害
+- Planner 鎴?Synthesizer 寮傚父鏃跺彲闄嶇骇涓斿彲瑙傛祴
+
+---
+
+## 36. 缃戠粶鎼滅储鍔╂墜妫€绱㈡柟妗?### 36.1 鐩爣涓庨€傜敤鑼冨洿
+鍦?`agent_type=search` 涓嬫彁渚涘疄鏃朵簰鑱旂綉妫€绱笌璇佹嵁鍖栧洖绛旇兘鍔涖€?
+### 36.2 Search 涓撳睘鎬讳綋鏋舵瀯
+- Stage A锛歋earch Planner
+- Stage B锛歋earch Retriever
+- Stage C锛歋earch Synthesizer
+
+### 36.3 鏌ヨ绫诲瀷鑷€傚簲
+- `academic_research`
+- `recent_news`
+- `weather`
+- `people`
+- `coding`
+- `cooking_recipe`
+- `translation`
+- `creative_writing`
+- `science_math`
+- `url_lookup`
+
+### 36.4 Search 妫€绱㈡祦姘寸嚎
+1. 鎺ユ敹 `agent_type=search`
+2. Planner 浜у嚭 `query_type` 涓?`sub_queries[]`
+3. 骞惰鎵ц鎼滅储
+4. 蹇呰鏃跺仛缃戦〉姝ｆ枃鎶藉彇
+5. 鍘婚噸涓庢墦鍒?6. 鏋勫缓 `web_evidence_pack`
+7. Synthesizer 鐢熸垚绛旀涓庡彞绾у紩鐢?8. 杈撳嚭缁熶竴 SSE 涓庢渶缁?envelope
+
+### 36.5 Search 涓婁笅鏂囩粍瑁?椤哄簭锛?1. `search_system_rules`
+2. `personalization_block`
+3. Planner 鎽樿
+4. `web_evidence_pack`
+5. 澶氳疆璁板繂
+6. 褰撳墠闂
+
+### 36.6 杈撳嚭鏍煎紡涓庡紩鐢ㄨ鍒?- 寮€澶村厛缁欑粨璁?- 瀵规瘮绫婚棶棰樹紭鍏堣〃鏍?- 浣跨敤缃戦〉璇佹嵁鐨勫彞瀛愬繀椤诲彞绾ф爣娉ㄦ潵婧?- 绌虹粨鏋滄椂杩涘叆鏃犺瘉鎹檷绾ц矾寰?
+### 36.7 Search 妫€绱㈢粨鏋滄爣鍑嗗寲濂戠害
+瀛楁锛?- `source_id`
+- `title`
+- `url`
+- `snippet`
+- `published_at`
+- `domain`
+- `search_score`
+- `extract_score`
+- `freshness_score`
+- `source_type="web"`
+
+### 36.8 Search 妯″紡娴佸紡浜嬩欢
+- `search_start`
+- `search_results`
+- `token`
+- `done`
+- `error`
+
+### 36.9 閰嶇疆涓庡紑鍏?- `SEARCH_MODE`
+- `SEARCH_MAX_RESULTS`
+- `SEARCH_TIMEOUT_MS`
+- `SEARCH_EXTRACT_ENABLED`
+- `SEARCH_QUERY_TYPE_ENABLED`
+- `SEARCH_PLANNER_ENABLED`
+
+### 36.10 涓庣幇鏈夋灦鏋勫啿绐佺偣涓庤В鍐虫柟妗?- 淇濇寔 `rag` 涓?`search` 妯″紡闅旂銆?- 涓嶆毚闇插畬鏁?CoT銆?- Search 鏉ユ簮缁х画澶嶇敤缁熶竴寮曠敤鍗忚銆?- SSE 浜嬩欢鍙仛鍚戝悗鍏煎鎵╁睍銆?
+---
+
+## 37. Rust 鎶€鏈€夊瀷
+### 37.1 閫夊瀷鍘熷垯
+- Rust 閲嶆瀯鏇挎崲瀹炵幇锛屼笉鏀瑰彉浜у搧鍗忚涓庢绱㈣鍒欍€?- HTTP/SSE 鍙礋璐ｄ紶杈撱€?- PostgreSQL 缁х画浣滀负鏉冮檺銆佺増鏈€佸璁′笌姝ｆ枃鐪熸簮銆?- Qdrant 缁х画鍙壙鎷?Dense 鍙洖銆?- 妫€绱富娴佺▼蹇呴』鏀寔鏄惧紡鍥剧紪鎺掋€佽妭鐐圭骇 trace銆佽秴鏃躲€佸彇娑堜笌闄嶇骇銆?
+### 37.2 榛樿鎺ㄨ崘鏍?| 鑳藉姏鍩?| 鎺ㄨ崘 crate | 鐢ㄩ€?|
+|---|---|---|
+| Async Runtime | `tokio` | 寮傛杩愯鏃躲€佽秴鏃躲€佸彇娑堛€侀€氶亾閫氫俊 |
+| HTTP / SSE | `axum` + `tower` + `tower-http` | REST API銆丼SE銆佷腑闂翠欢 |
+| PostgreSQL | `sqlx` | 鏁版嵁璁块棶銆佷簨鍔°€佽繛鎺ユ睜銆佽縼绉?|
+| Redis | `deadpool-redis` | 缂撳瓨銆侀檺娴併€侀攣銆佸箓绛夊厓鏁版嵁 |
+| Qdrant | `qdrant-client` | Dense 鍚戦噺鍙洖 |
+| BM25 / Sparse | `tantivy` | 鍏ㄦ枃绱㈠紩涓?BM25 |
+| Telemetry | `tracing` + `opentelemetry` | 鎸囨爣銆乼race銆佺粨鏋勫寲鏃ュ織 |
+| JSON / 濂戠害 | `serde` + `serde_json` | API 涓庢暟鎹ā鍨嬪簭鍒楀寲 |
+| 閿欒澶勭悊 | `thiserror` + `anyhow` | 缁熶竴涓氬姟閿欒涓庡唴閮ㄩ敊璇寘瑁?|
+| 閰嶇疆绠＄悊 | `config` + `.env` | 鍒嗗眰閰嶇疆鍔犺浇 |
+
+### 37.3 鍙浛鎹㈢瓥鐣?crate 鍙浛鎹紝浣嗗繀椤绘弧瓒筹細
+- 涓嶆敼鍙樺洖绛?envelope 涓?SSE 鍗忚銆?- 涓嶆敼鍙樻绱㈠眰鏁版嵁濂戠害銆?- 涓嶅墛寮辩鎴烽殧绂讳笌 fail-closed 绛栫暐銆?- 涓嶇牬鍧?`degrade_trace / planner_output / mode_debug` 鐨勫彲瑙傛祴鎬с€?
+### 37.4 绂佹浜嬮」
+- 绂佹鎶?HTTP 妗嗘灦鐩存帴鍐欐垚妫€绱㈡牳蹇冪姸鎬佹満銆?- 绂佹缁曡繃 PostgreSQL 鏉冨▉鏌ヨ灞傘€?- 绂佹鎶?Qdrant 褰撲綔鏉冮檺鐪熸簮鎴栨鏂囩湡婧愩€?- 绂佹鍦ㄥ悓涓€ rerank 璇锋眰涓贩鍏ュ涓?item 鐨勫€欓€?chunk銆?
+---
+
+## 38. Rust 椤圭洰鐩綍涓庢ā鍧楄竟鐣?### 38.1 鐩綍鍘熷垯
+- 閲囩敤 Rust Workspace + Modular Monolith銆?- `bin` 鍙礋璐ｅ惎鍔ㄥ叆鍙ｏ紝`crates` 璐熻矗涓氬姟杈圭晫銆?- `rag-core` 涓烘牳蹇冩ā鍧楋紝涓嶅緱渚濊禆 `billing`銆乣admin` 绛夊鍥存ā鍧椼€?
+### 38.2 鎺ㄨ崘鐩綍
+```text
+avrag-rs/
+鈹溾攢 Cargo.toml
+鈹溾攢 rust-toolchain.toml
+鈹溾攢 migrations/
+鈹溾攢 docs/
+鈹? 鈹溾攢 adr/
+鈹? 鈹溾攢 api/
+鈹? 鈹斺攢 runbooks/
+鈹溾攢 bins/
+鈹? 鈹溾攢 api/
+鈹? 鈹? 鈹斺攢 src/main.rs
+鈹? 鈹斺攢 worker/
+鈹?    鈹斺攢 src/main.rs
+鈹溾攢 crates/
+鈹? 鈹溾攢 app/
+鈹? 鈹溾攢 transport-http/
+鈹? 鈹溾攢 rag-core/
+鈹? 鈹溾攢 ingestion/
+鈹? 鈹溾攢 storage-pg/
+鈹? 鈹溾攢 storage-qdrant/
+鈹? 鈹溾攢 cache-redis/
+鈹? 鈹溾攢 llm/
+鈹? 鈹溾攢 auth/
+鈹? 鈹溾攢 billing/
+鈹? 鈹溾攢 share/
+鈹? 鈹溾攢 admin/
+鈹? 鈹溾攢 telemetry/
+鈹? 鈹溾攢 common/
+鈹? 鈹斺攢 test-kit/
+鈹斺攢 tests/
+   鈹溾攢 integration/
+   鈹溾攢 e2e/
+   鈹斺攢 rag_quality/
+```
+
+### 38.3 妯″潡鑱岃矗
+- `bins/api`锛氬惎鍔?HTTP 鏈嶅姟锛岀粍瑁?Router 涓?AppState銆?- `bins/worker`锛氬惎鍔ㄥ紓姝ヤ换鍔℃墽琛屽櫒銆?- `transport-http`锛歊EST銆丼SE銆佷腑闂翠欢銆侀敊璇槧灏勩€?- `rag-core`锛歅lanner銆丷untime銆乺etrievers銆乺erank銆乵erge銆乧ontext assembly銆?- `ingestion`锛氳В鏋愩€佸垎鍧椼€佹憳瑕併€乪mbedding銆佺储寮曞啓鍏ョ紪鎺掋€?- `storage-pg`锛氫簨鍔°€丷LS銆佸洖琛ㄣ€佸璁°€?- `storage-qdrant`锛氬悜閲忓啓鍏ャ€乸ayload filter銆丏ense 妫€绱€?- `cache-redis`锛氱紦瀛樸€侀檺娴併€侀攣銆佸箓绛夐敭銆?- `llm`锛歅lanner銆佺敓鎴愩€侀噸鎺掓ā鍨嬮€傞厤銆?- `telemetry`锛歮etrics銆乼race銆乻tructured log銆?- `test-kit`锛歠ixture銆佸鍣ㄣ€侀粍閲戦泦銆?
+### 38.4 渚濊禆瑙勫垯
+- `transport-http -> app -> rag-core / ingestion / auth / billing ...`
+- `rag-core -> storage-pg / storage-qdrant / llm / cache-redis / telemetry / common`
+- `ingestion -> storage-pg / storage-qdrant / llm / cache-redis / telemetry / common`
+- 澶栧洿妯″潡涓嶅緱鍙嶅悜渚濊禆 `transport-http`銆?
+---
+
+## 39. Rust RAG 鍥捐妭鐐逛笌鏁版嵁濂戠害
+### 39.1 鍥剧紪鎺掔洰鏍?Rust 鐗堟绱富閾捐矾蹇呴』閲囩敤鏄惧紡鍥剧紪鎺掕繍琛屾椂锛屾敮鎸侊細
+- 鑺傜偣绾ц緭鍏ヨ緭鍑?- 鏉′欢杈?- 骞惰 fan-out
+- trace_id 璐┛
+- 鑺傜偣绾ц秴鏃躲€佸彇娑堛€侀噸璇曚笌闄嶇骇
+- 浼氳瘽鎬佸彲鎭㈠鎵ц
+
+### 39.2 鏍囧噯鑺傜偣
+- `LoadSessionContext`
+- `RewriteEffectiveQuery`
+- `PlanRetrievalItems`
+- `NormalizeItems`
+- `AllocateBudgets`
+- `RunPrimaryRewriteDecompose`
+- `RunKeywordSparse`
+- `LoadSummaryChunks`
+- `RunMetadataQuery`
+- `ItemRRF`
+- `FetchChunkBodies`
+- `ItemCrossEncoderRerank`
+- `AssembleSummaryMetadata`
+- `GlobalWeightedMerge`
+- `CutTopK`
+- `AssembleLLMContext`
+- `GenerateAnswer`
+- `ValidateCitations`
+- `BuildResponseEnvelope`
+- `ReturnClarify`
+- `ReturnInsufficientEvidence`
+
+### 39.3 鑺傜偣鎵ц绾︽潫
+- `PlanRetrievalItems` 杈撳嚭蹇呴』鍏煎 `RAGRetrievalPlan`銆?- `NormalizeItems` 鍙幓绌恒€佸幓閲嶃€侀檺閲忥紝涓嶆敼鍐?Planner 涓氬姟鎰忓浘銆?- `AllocateBudgets` 鍙垎閰?recall/rerank 閰嶉銆?- `RunKeywordSparse` 鍙鐞?keyword 涓斿彧璺?BM25銆?- `LoadSummaryChunks` 涓嶈蛋鏂囨湰鍙洖銆?- `RunMetadataQuery` 鍙煡 PostgreSQL 鏉冨▉瀛楁銆?- `GlobalWeightedMerge` 涓嶅仛璺?item rerank銆?- `CutTopK` 鍥哄畾鎴柇鍒?`TopK=15`銆?- `ReturnInsufficientEvidence` 鏄樉寮忓け璐ユ€併€?
+### 39.4 ChatResponse 瀵归綈
+Rust 閲嶆瀯涓嶅緱鏀瑰彉锛?- SSE 浜嬩欢鍚?- 寮曠敤璺宠浆鍗忚
+- 鍓嶇涓荤晫闈㈡樉绀哄眰绾?- `planner_output / item_trace / retrieval_trace` 鐨勫彲瑙傛祴鎬ц涔?
+---
+
+## 40. 鍙戝竷涓庤縼绉荤瓥鐣?### 40.1 杩佺Щ鐩爣
+- 鍦ㄤ笉鐮村潖鐜版湁浜у搧鍗忚鐨勫墠鎻愪笅瀹屾垚 Go -> Rust 杩佺Щ銆?- 淇濇寔鍓嶇銆佸閮?API 涓庤璐逛綋绯诲敖閲忔棤鎰熴€?
+### 40.2 杩佺Щ闃舵
+1. 濂戠害鍐荤粨锛氬厛鍐荤粨 API銆丼SE銆佸紩鐢ㄥ崗璁€丷AG 濂戠害銆?2. 鍙屾爤瀹炵幇锛欸o 涓?Rust 骞惰璺戦泦鎴愭祴璇曘€?3. 褰卞瓙娴侀噺锛歊ust 鍙帴鏀堕暅鍍忚姹傦紝涓嶅奖鍝嶇敤鎴枫€?4. 灏忔祦閲忕伆搴︼細鎸夌鎴锋垨娴侀噺姣斾緥鍒囨崲銆?5. 鍏ㄩ噺鍒囨崲锛氫繚鐣欏洖婊氱獥鍙ｃ€?6. 涓嬬嚎鏃ф爤锛氬畬鎴愬巻鍙插璁′笌杩愮淮鏀跺熬銆?
+### 40.3 鍥炴粴鍘熷垯
+- 浠讳竴璐ㄩ噺闂ㄧ銆侀殧绂绘祴璇曘€佹垚鏈寚鏍囥€佺ǔ瀹氭€ф寚鏍囧け瀹堟椂锛岀珛鍗冲洖婊氥€?- 鍥炴粴浼樺厛鎭㈠鐢ㄦ埛涓婚摼璺彲鐢ㄦ€э紝鍐嶆帓鏌ョ粏鑺傞棶棰樸€?
+### 40.4 楠屾敹娓呭崟
+- 澶氱鎴烽殧绂绘祴璇曢€氳繃
+- RAG 榛勯噾闆嗗洖褰掕揪鏍?- SSE 涓?API 濂戠害鍏煎
+- 璁¤垂涓庡璁￠摼璺畬鏁?- 鍏抽敭鍛婅涓?Runbook 灏辩华
+- 鐢熶骇鐏板害绋冲畾杩愯婊′竴涓瀵熷懆鏈?
+---
+
+## 闄勫綍 A锛氭湳璇〃
+- `org_id`锛氱鎴风粍缁囨爣璇嗐€?- `Notebook`锛氭枃妗ｉ泦鍚堜笌浼氳瘽闅旂鍗曞厓銆?- `Chunk`锛氭绱㈡渶灏忔鏂囩墖娈点€?- `Summary Chunk`锛氬崟鏂囨。鍏ㄦ櫙鎽樿鐗囨銆?- `RAG Plan`锛氬崟灞?Retrieval Items 瑙勫垝缁撴灉銆?- `Item Ref`锛歝hunk 琚摢浜?item 鍛戒腑鐨勮拷韪俊鎭€?- `Degrade Trace`锛氭樉寮忛檷绾ц矾寰勮褰曘€?
+## 闄勫綍 B锛氶潪鐩爣
+- 涓嶅湪棣栫増鍐呭仛绔晶鏈湴鍚戦噺绱㈠紩銆?- 涓嶅湪棣栫増鍐呭仛澶氬尯鍩熷己涓€鑷村啓鍏ャ€?- 涓嶅湪棣栫増鍐呭仛鍏ㄦ枃鎼滅储寮曟搸涓庡悜閲忓簱鐨勪竴浣撳寲鏇挎崲銆?- 涓嶅湪棣栫増鍐呮妸妯″潡鍖栧崟浣撴媶涓哄井鏈嶅姟銆?

@@ -1,0 +1,21 @@
+[package]
+name = "avrag-rag-core"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tiktoken-rs.workspace = true
+uuid.workspace = true
+tracing = "0.1"
+# Internal
+common = { path = "../common" }
+avrag-auth = { path = "../auth" }
+avrag-storage-pg = { path = "../storage-pg" }
+avrag-storage-qdrant = { path = "../storage-qdrant" }
+avrag-llm = { path = "../llm" }

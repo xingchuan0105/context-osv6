@@ -1,0 +1,17 @@
+[package]
+name = "avrag-api"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+any_spawner = { version = "0.3", features = ["tokio"] }
+app = { path = "../../crates/app" }
+axum.workspace = true
+dotenvy = "0.15"
+telemetry = { path = "../../crates/telemetry" }
+tokio.workspace = true
+tracing.workspace = true
+transport-http = { path = "../../crates/transport-http" }

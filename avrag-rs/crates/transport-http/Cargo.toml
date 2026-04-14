@@ -1,0 +1,43 @@
+[package]
+name = "transport-http"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+analytics = { path = "../analytics" }
+avrag-auth = { path = "../auth" }
+avrag-billing = { path = "../billing" }
+avrag-admin = { path = "../admin" }
+avrag-share = { path = "../share" }
+avrag-storage-pg = { path = "../storage-pg" }
+avrag-usage-limit = { path = "../usage-limit" }
+app = { path = "../app" }
+telemetry = { path = "../telemetry" }
+async-stream.workspace = true
+axum.workspace = true
+bcrypt = "0.15"
+chrono.workspace = true
+common = { path = "../common" }
+contracts = { path = "../../../contracts" }
+leptos = { version = "0.8", features = ["ssr"] }
+leptos_axum = "0.8"
+hex.workspace = true
+jsonwebtoken = "9"
+redis.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "uuid", "chrono", "json"] }
+tokio.workspace = true
+tower = { workspace = true, features = ["util"] }
+tower-http = { workspace = true, features = ["fs"] }
+tracing.workspace = true
+uuid.workspace = true
+web-ui = { package = "frontend-web-ui", path = "../../../frontend_rust/crates/web-ui", default-features = false, features = ["ssr"] }
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-native-tls"] }
+
+[dev-dependencies]
+http-body-util = "0.1"

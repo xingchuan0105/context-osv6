@@ -1,0 +1,39 @@
+{
+  "figmaFileKey": "b4Umj3ZtgO8VReZfa6tBCh",
+  "viewport": {
+    "width": 1440,
+    "height": 1024
+  },
+  "pages": [
+    {
+      "name": "login",
+      "previewRoute": "/preview/login",
+      "figmaNodeId": "8:4"
+    },
+    {
+      "name": "dashboard",
+      "previewRoute": "/preview/dashboard",
+      "figmaNodeId": "8:22"
+    },
+    {
+      "name": "workspace",
+      "previewRoute": "/preview/workspace",
+      "figmaNodeId": "58:2"
+    },
+    {
+      "name": "account",
+      "previewRoute": "/preview/account",
+      "figmaNodeId": "56:107"
+    },
+    {
+      "name": "settings",
+      "previewRoute": "/preview/settings",
+      "figmaNodeId": "56:197"
+    },
+    {
+      "name": "help",
+      "previewRoute": "/preview/help",
+      "figmaNodeId": "56:291"
+    }
+  ]
+}

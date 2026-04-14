@@ -1,0 +1,16 @@
+# Build artifacts
+/target/
+/pkg/
+*.wasm
+/node_modules/
+**/*.rs.bk
+Cargo.lock
+package-lock.json
+*.pdb
+
+# Secrets
+.env
+!.env.example
+
+# OS
+.DS_Store

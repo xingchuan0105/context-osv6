@@ -1,0 +1,73 @@
+# =====================
+# Build artifacts
+# =====================
+target/
+pkg/
+node_modules/
+*.wasm
+.DS_Store
+
+# =====================
+# IDE / Editor
+# =====================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# =====================
+# Secrets (never commit)
+# =====================
+.env
+!.env.example
+
+# =====================
+# Logs
+# =====================
+*.log
+api.log
+
+# =====================
+# Python cache
+# =====================
+__pycache__/
+*.pyc
+
+# =====================
+# Playwright
+# =====================
+.playwright-cli/
+test-results/
+playwright-report/
+
+# =====================
+# Claude Code / AI worktrees
+# =====================
+.claude/
+
+# =====================
+# Non-canonical / legacy directories
+# =====================
+# frontend/ is the old Next.js frontend — not part of this delivery
+/frontend/
+# docs/, memory/, output/, ~/ are workspace artifacts not part of the delivery
+/docs/
+/memory/
+/output/
+~/
+
+# Root-level planning / generated documents (not source)
+/*_2026-03-*.md
+/PRD_RUST.md
+/SINGLE_USER_USAGE_LIMIT_PRD.md
+/CHAT_GRAPHFLOW_MIGRATION_PLAN_*.md
+/E2E_ACCEPTANCE_REPORT_*.md
+/E2E_TEST_REPORT_*.md
+/E2E_USER_LIFECYCLE_CHECKLIST_*.md
+/FULLSTACK_PRD_DEV_PLAN_*.md
+/LONG_HORIZON_DELIVERY_PLAN_*.md
+/OPTIMIZATION_E2E_EXECUTION_PLAN_*.md
+
+# Playwright working directory
+/.playwright-cli/

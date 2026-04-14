@@ -1,0 +1,74 @@
+{
+  "generated_at": "2026-04-13T21:53:22",
+  "threshold": 0.0,
+  "total": 6,
+  "failed": 0,
+  "results": [
+    {
+      "name": "account",
+      "expected": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/figma_tmp_test/account.png",
+      "actual": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/playwright/account.png",
+      "diff": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/analysis_tmp/diff/account-diff.png",
+      "changed_pixels": 0,
+      "total_pixels": 1474560,
+      "ratio": 0.0,
+      "size_note": null,
+      "status": "pass"
+    },
+    {
+      "name": "dashboard",
+      "expected": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/figma_tmp_test/dashboard.png",
+      "actual": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/playwright/dashboard.png",
+      "diff": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/analysis_tmp/diff/dashboard-diff.png",
+      "changed_pixels": 0,
+      "total_pixels": 1474560,
+      "ratio": 0.0,
+      "size_note": null,
+      "status": "pass"
+    },
+    {
+      "name": "help",
+      "expected": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/figma_tmp_test/help.png",
+      "actual": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/playwright/help.png",
+      "diff": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/analysis_tmp/diff/help-diff.png",
+      "changed_pixels": 0,
+      "total_pixels": 1474560,
+      "ratio": 0.0,
+      "size_note": null,
+      "status": "pass"
+    },
+    {
+      "name": "login",
+      "expected": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/figma_tmp_test/login.png",
+      "actual": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/playwright/login.png",
+      "diff": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/analysis_tmp/diff/login-diff.png",
+      "changed_pixels": 0,
+      "total_pixels": 1474560,
+      "ratio": 0.0,
+      "size_note": null,
+      "status": "pass"
+    },
+    {
+      "name": "settings",
+      "expected": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/figma_tmp_test/settings.png",
+      "actual": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/playwright/settings.png",
+      "diff": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/analysis_tmp/diff/settings-diff.png",
+      "changed_pixels": 0,
+      "total_pixels": 1474560,
+      "ratio": 0.0,
+      "size_note": null,
+      "status": "pass"
+    },
+    {
+      "name": "workspace",
+      "expected": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/figma_tmp_test/workspace.png",
+      "actual": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/playwright/workspace.png",
+      "diff": "//wsl.localhost/Ubuntu/home/chuan/context-osv6/frontend_rust/.run/visual_compare/analysis_tmp/diff/workspace-diff.png",
+      "changed_pixels": 0,
+      "total_pixels": 1474560,
+      "ratio": 0.0,
+      "size_note": null,
+      "status": "pass"
+    }
+  ]
+}

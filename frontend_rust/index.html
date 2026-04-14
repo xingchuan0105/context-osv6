@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Context-OS Frontend Preview</title>
+  </head>
+  <body>
+    <script type="module">
+      const knownMarkers = [
+        '/preview/live',
+        '/preview',
+        '/dashboard',
+        '/settings',
+        '/help',
+        '/login',
+        '/register',
+        '/reset-password',
+        '/shared/kb',
+        '/invite',
+        '/admin'
+      ];
+      const pathname = window.location.pathname || '/';
+      let pathPrefix = '';
+      for (const marker of knownMarkers) {
+        const idx = pathname.indexOf(marker);
+        if (idx > 0) {
+          pathPrefix = pathname.slice(0, idx).replace(/\/+$/, '');
+          break;
+        }
+        if (idx === 0) {
+          pathPrefix = '';
+          break;
+        }
+      }
+      const withPrefix = (assetPath) => `${pathPrefix}${assetPath}`;
+
+      if (pathname.endsWith('/') && pathname !== '/') {
+        const trimmed = pathname.replace(/\/+$/, '');
+        if (trimmed === '/preview/live' || trimmed.startsWith('/preview/live/')) {
+          window.history.replaceState(
+            {},
+            '',
+            `${trimmed}${window.location.search}${window.location.hash}`
+          );
+        }
+      }
+
+      const cssLink = document.createElement('link');
+      cssLink.rel = 'stylesheet';
+      cssLink.href = withPrefix('/pkg/index.css');
+      document.head.appendChild(cssLink);
+
+      try {
+        const { default: init, mount } = await import(withPrefix('/pkg/web_ui.js'));
+        await init({ module_or_path: withPrefix('/pkg/web_ui_bg.wasm') });
+        mount();
+      } catch (err) {
+        console.error('frontend preview bootstrap failed', err);
+        const pre = document.createElement('pre');
+        pre.style.padding = '16px';
+        pre.textContent = String(err);
+        document.body.appendChild(pre);
+      }
+    </script>
+  </body>
+</html>

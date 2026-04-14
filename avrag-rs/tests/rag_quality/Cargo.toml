@@ -1,0 +1,29 @@
+[package]
+name = "rag_quality"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Core RAG dependencies (for integration testing against real runtime)
+avrag-rag-core = { path = "../../crates/rag-core" }
+common = { path = "../../crates/common" }
+avrag-llm = { path = "../../crates/llm" }
+
+# Evaluation / metrics
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true
+once_cell.workspace = true
+tracing.workspace = true
+
+# Async
+tokio.workspace = true
+
+# For golden set management
+thiserror.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+avrag-storage-pg = { path = "../../crates/storage-pg" }

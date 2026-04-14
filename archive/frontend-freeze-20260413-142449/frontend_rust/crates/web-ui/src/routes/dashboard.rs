@@ -1,0 +1,13 @@
+include!("dashboard/imports_and_helpers.rs");
+include!("dashboard/notebook_card_sections.rs");
+include!("dashboard/notebook_list_sections.rs");
+include!("dashboard/workspace_document_pane.rs");
+include!("dashboard/workspace_history_pane.rs");
+include!("dashboard/workspace_notes_pane.rs");
+include!("dashboard/workspace_sources_pane.rs");
+include!("dashboard/workspace_setup.rs");
+include!("dashboard/workspace_top_bar.rs");
+include!("dashboard/workspace_upload_modal.rs");
+include!("dashboard/dashboard_list_page.rs");
+include!("dashboard/workspace_page.rs");
+include!("dashboard/export.rs");

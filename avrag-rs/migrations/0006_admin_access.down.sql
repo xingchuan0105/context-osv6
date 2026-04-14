@@ -1,0 +1,11 @@
+DROP POLICY IF EXISTS admin_access_share_tokens ON share_tokens;
+DROP POLICY IF EXISTS admin_access_notebook_members ON notebook_members;
+DROP POLICY IF EXISTS admin_access_usage_events ON usage_events;
+DROP POLICY IF EXISTS admin_access_audit_log ON audit_log;
+DROP POLICY IF EXISTS admin_access_chat_messages ON chat_messages;
+DROP POLICY IF EXISTS admin_access_chat_sessions ON chat_sessions;
+DROP POLICY IF EXISTS admin_access_chunks ON chunks;
+DROP POLICY IF EXISTS admin_access_documents ON documents;
+DROP POLICY IF EXISTS admin_access_notebooks ON notebooks;
+DROP POLICY IF EXISTS admin_access_users ON users;
+DROP POLICY IF EXISTS admin_access_organizations ON organizations;

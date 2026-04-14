@@ -1,0 +1,39 @@
+[package]
+name = "app"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+analytics = { path = "../analytics" }
+contracts = { path = "../../../contracts" }
+serde.workspace = true
+graph-flow.workspace = true
+avrag-auth = { path = "../auth" }
+avrag-billing = { path = "../billing" }
+avrag-storage-pg = { path = "../storage-pg" }
+avrag-storage-qdrant = { path = "../storage-qdrant" }
+avrag-search = { path = "../search" }
+avrag-chatmemory = { path = "../chatmemory" }
+avrag-llm = { path = "../llm" }
+avrag-rag-core = { path = "../rag-core" }
+avrag-guardrails = { path = "../guardrails" }
+telemetry = { path = "../telemetry" }
+common = { path = "../common" }
+avrag-usage-limit = { path = "../usage-limit" }
+chrono.workspace = true
+hex.workspace = true
+hmac.workspace = true
+ingestion = { path = "../ingestion" }
+serde_json.workspace = true
+sha2.workspace = true
+reqwest.workspace = true
+redis.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]

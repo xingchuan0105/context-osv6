@@ -1,0 +1,16 @@
+[package]
+name = "avrag-admin"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+avrag-storage-pg = { path = "../storage-pg" }
+avrag-auth = { path = "../auth" }
+common = { path = "../common" }
+chrono = { workspace = true }
+sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "uuid", "chrono"] }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }

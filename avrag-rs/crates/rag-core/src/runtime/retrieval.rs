@@ -1,0 +1,433 @@
+use std::{collections::HashMap, collections::HashSet};
+
+use anyhow::{anyhow, Result};
+use avrag_auth::AuthContext;
+use avrag_llm::{MultiModalEmbeddingInput, MultiModalRerankDocument};
+use common::{ChatRequest, DegradeTraceItem, RagPlan};
+
+use crate::merge::{cut_top_k, dual_threshold_cut, global_rrf_merge};
+use crate::retrieval::{self, ScoredChunk};
+
+use super::planner::{
+    build_item_trace, item_payload_kind, effective_item_query, request_doc_ids,
+};
+use super::{
+    RagRuntime, FINAL_MIN_CHUNKS, FINAL_RERANK_BUDGET, FINAL_SCORE_THRESHOLD, GLOBAL_RRF_K,
+    TOTAL_CANDIDATE_BUDGET,
+};
+
+pub(super) fn build_final_candidate_pool(
+    text_pool: Vec<ScoredChunk>,
+    multimodal_pool: Vec<ScoredChunk>,
+    max_candidates: usize,
+) -> Vec<ScoredChunk> {
+    if max_candidates == 0 {
+        return Vec::new();
+    }
+
+    let mut merged = Vec::with_capacity(max_candidates);
+    let mut seen = HashSet::new();
+    let mut text_iter = text_pool.into_iter();
+    let mut multimodal_iter = multimodal_pool.into_iter();
+
+    loop {
+        let mut progressed = false;
+
+        if let Some(chunk) = text_iter.next() {
+            progressed = true;
+            if seen.insert(chunk.chunk_id) {
+                merged.push(chunk);
+                if merged.len() >= max_candidates {
+                    break;
+                }
+            }
+        }
+
+        if let Some(chunk) = multimodal_iter.next() {
+            progressed = true;
+            if seen.insert(chunk.chunk_id) {
+                merged.push(chunk);
+                if merged.len() >= max_candidates {
+                    break;
+                }
+            }
+        }
+
+        if !progressed {
+            break;
+        }
+    }
+
+    merged
+}
+
+pub(super) fn build_multimodal_rerank_documents(
+    chunks: &[ScoredChunk],
+) -> Vec<MultiModalRerankDocument> {
+    chunks
+        .iter()
+        .map(|chunk| match chunk.image_path.clone() {
+            Some(path) if !path.trim().is_empty() => MultiModalRerankDocument::Image(path),
+            _ => MultiModalRerankDocument::Text(chunk.content.clone()),
+        })
+        .collect()
+}
+
+fn is_missing_qdrant_collection_error(error: &anyhow::Error) -> bool {
+    let message = error.to_string();
+    message.contains("Collection `") && message.contains("doesn't exist")
+}
+
+impl RagRuntime {
+    pub async fn retrieve_text_dense_stage(
+        &self,
+        request: &ChatRequest,
+        auth: &AuthContext,
+        rag_plan: &RagPlan,
+    ) -> Result<(Vec<super::WeightedChunkList>, Vec<DegradeTraceItem>)> {
+        let pg_repo = self
+            .config
+            .pg_repo
+            .as_ref()
+            .ok_or_else(|| anyhow!("rag postgres repository is not configured"))?;
+        let doc_ids = request_doc_ids(request);
+        let item_trace = build_item_trace(request, rag_plan);
+        let mut lists = Vec::new();
+        let mut degrade_trace = Vec::new();
+
+        for (item, trace_item) in rag_plan.items.iter().zip(item_trace.iter()) {
+            if item_payload_kind(item) != "query" || trace_item.recall_budget == 0 {
+                continue;
+            }
+
+            let effective_query = effective_item_query(item, &request.query);
+            let query_vector = match self
+                .config
+                .embedding_client
+                .embed(&[&effective_query])
+                .await
+            {
+                Ok(vectors) => vectors.into_iter().next(),
+                Err(error) => {
+                    degrade_trace.push(DegradeTraceItem {
+                        stage: "text_dense".to_string(),
+                        reason: format!("Text dense embedding failed: {}", error),
+                        impact: "Skipping text dense retrieval for one query item".to_string(),
+                    });
+                    None
+                }
+            };
+
+            let Some(vector) = query_vector else {
+                continue;
+            };
+
+            match retrieval::run_dense_retrieval(
+                &self.config.qdrant,
+                pg_repo,
+                auth,
+                &self.config.qdrant_collection,
+                vector,
+                doc_ids.as_deref(),
+                trace_item.recall_budget,
+            )
+            .await
+            {
+                Ok(chunks) => lists.push(super::WeightedChunkList {
+                    weight: item.priority,
+                    chunks: cut_top_k(chunks, trace_item.recall_budget),
+                }),
+                Err(error) => degrade_trace.push(DegradeTraceItem {
+                    stage: "text_dense".to_string(),
+                    reason: format!("Text dense retrieval failed: {}", error),
+                    impact: "Skipping text dense retrieval for one query item".to_string(),
+                }),
+            }
+        }
+
+        Ok((lists, degrade_trace))
+    }
+
+    pub async fn retrieve_bm25_stage(
+        &self,
+        request: &ChatRequest,
+        auth: &AuthContext,
+        rag_plan: &RagPlan,
+    ) -> Result<(Vec<super::WeightedChunkList>, Vec<DegradeTraceItem>)> {
+        let pg_repo = self
+            .config
+            .pg_repo
+            .as_ref()
+            .ok_or_else(|| anyhow!("rag postgres repository is not configured"))?;
+        let doc_ids = request_doc_ids(request);
+        let item_trace = build_item_trace(request, rag_plan);
+        let mut lists = Vec::new();
+        let mut degrade_trace = Vec::new();
+
+        for (item, trace_item) in rag_plan.items.iter().zip(item_trace.iter()) {
+            if item_payload_kind(item) != "bm25_terms" || trace_item.recall_budget == 0 {
+                continue;
+            }
+
+            let effective_query = effective_item_query(item, &request.query);
+            match retrieval::run_sparse_retrieval(
+                pg_repo,
+                auth,
+                &effective_query,
+                doc_ids.as_deref(),
+                trace_item.recall_budget,
+            )
+            .await
+            {
+                Ok(chunks) => lists.push(super::WeightedChunkList {
+                    weight: item.priority,
+                    chunks: cut_top_k(chunks, trace_item.recall_budget),
+                }),
+                Err(error) => degrade_trace.push(DegradeTraceItem {
+                    stage: "bm25".to_string(),
+                    reason: format!("BM25 retrieval failed: {}", error),
+                    impact: "Skipping sparse retrieval for one lexical item".to_string(),
+                }),
+            }
+        }
+
+        Ok((lists, degrade_trace))
+    }
+
+    pub async fn retrieve_multimodal_dense_stage(
+        &self,
+        request: &ChatRequest,
+        auth: &AuthContext,
+        rag_plan: &RagPlan,
+    ) -> Result<(Vec<ScoredChunk>, Vec<DegradeTraceItem>)> {
+        let pg_repo = self
+            .config
+            .pg_repo
+            .as_ref()
+            .ok_or_else(|| anyhow!("rag postgres repository is not configured"))?;
+        let doc_ids = request_doc_ids(request);
+        let item_trace = build_item_trace(request, rag_plan);
+        let mut chunks = Vec::new();
+        let mut degrade_trace = Vec::new();
+        let query_item_count = rag_plan
+            .items
+            .iter()
+            .filter(|item| item_payload_kind(item) == "query")
+            .count();
+
+        let Some(mm_client) = self.config.mm_embedding_client.as_ref() else {
+            if query_item_count > 0 {
+                degrade_trace.push(DegradeTraceItem {
+                    stage: "multimodal_dense".to_string(),
+                    reason: "multimodal embedding client not configured".to_string(),
+                    impact: "Skipping multimodal dense retrieval".to_string(),
+                });
+            }
+            return Ok((chunks, degrade_trace));
+        };
+
+        for (item, trace_item) in rag_plan.items.iter().zip(item_trace.iter()) {
+            if item_payload_kind(item) != "query" || trace_item.recall_budget == 0 {
+                continue;
+            }
+
+            let effective_query = effective_item_query(item, &request.query);
+            let vector = match mm_client
+                .embed_multimodal_fused(&MultiModalEmbeddingInput::text(effective_query), None)
+                .await
+            {
+                Ok(vector) => vector,
+                Err(error) => {
+                    degrade_trace.push(DegradeTraceItem {
+                        stage: "multimodal_dense".to_string(),
+                        reason: format!("Multimodal embedding failed: {}", error),
+                        impact: "Skipping multimodal dense retrieval for one query item"
+                            .to_string(),
+                    });
+                    continue;
+                }
+            };
+
+            let multimodal_collection = format!("{}_multimodal", self.config.qdrant_collection);
+            match retrieval::run_multimodal_retrieval(
+                &self.config.qdrant,
+                pg_repo,
+                auth,
+                &multimodal_collection,
+                vector,
+                doc_ids.as_deref(),
+                trace_item.recall_budget,
+            )
+            .await
+            {
+                Ok(results) => chunks.extend(results.into_iter().map(|chunk| ScoredChunk {
+                    chunk_id: chunk.chunk_id,
+                    doc_id: chunk.doc_id,
+                    content: chunk.context_text,
+                    score: chunk.score,
+                    source: chunk.source,
+                    page: chunk.page,
+                    chunk_type: "image_with_context".to_string(),
+                    asset_id: Some(chunk.asset_id),
+                    caption: chunk.caption,
+                    image_path: chunk.image_path,
+                    parser_backend: Some(chunk.parser_backend),
+                })),
+                Err(error) => {
+                    if is_missing_qdrant_collection_error(&error) {
+                        continue;
+                    }
+                    degrade_trace.push(DegradeTraceItem {
+                        stage: "multimodal_dense".to_string(),
+                        reason: format!("Multimodal dense retrieval failed: {}", error),
+                        impact: "Skipping multimodal dense retrieval for one query item"
+                            .to_string(),
+                    });
+                }
+            }
+        }
+
+        Ok((cut_top_k(chunks, TOTAL_CANDIDATE_BUDGET), degrade_trace))
+    }
+
+    pub fn merge_text_stage(
+        &self,
+        text_dense_lists: Vec<super::WeightedChunkList>,
+        sparse_lists: Vec<super::WeightedChunkList>,
+    ) -> Vec<ScoredChunk> {
+        let mut rrf_inputs = Vec::new();
+        for list in text_dense_lists {
+            rrf_inputs.push((list.chunks, list.weight));
+        }
+        for list in sparse_lists {
+            rrf_inputs.push((list.chunks, list.weight));
+        }
+        cut_top_k(
+            global_rrf_merge(rrf_inputs, GLOBAL_RRF_K),
+            TOTAL_CANDIDATE_BUDGET,
+        )
+    }
+
+    pub async fn multimodal_rerank_stage(
+        &self,
+        query: &str,
+        text_pool: Vec<ScoredChunk>,
+        multimodal_pool: Vec<ScoredChunk>,
+    ) -> Result<(Vec<ScoredChunk>, Vec<DegradeTraceItem>)> {
+        let final_candidates =
+            build_final_candidate_pool(text_pool, multimodal_pool, TOTAL_CANDIDATE_BUDGET);
+        if final_candidates.is_empty() {
+            return Ok((
+                Vec::new(),
+                vec![DegradeTraceItem {
+                    stage: "retrieval".to_string(),
+                    reason: "no_valid_retrieval_results".to_string(),
+                    impact: "Passing zero-recall context to answer synthesis".to_string(),
+                }],
+            ));
+        }
+
+        let mut degrade_trace = Vec::new();
+        let reranked = self
+            .rerank_item_chunks(
+                query,
+                final_candidates,
+                FINAL_RERANK_BUDGET,
+                &mut degrade_trace,
+            )
+            .await;
+        Ok((reranked, degrade_trace))
+    }
+
+    pub fn cut_final_candidates_stage(&self, reranked: Vec<ScoredChunk>) -> Vec<ScoredChunk> {
+        dual_threshold_cut(reranked, FINAL_MIN_CHUNKS, FINAL_SCORE_THRESHOLD)
+    }
+}
+
+impl RagRuntime {
+    async fn rerank_item_chunks(
+        &self,
+        query: &str,
+        chunks: Vec<ScoredChunk>,
+        rerank_budget: usize,
+        degrade_trace: &mut Vec<DegradeTraceItem>,
+    ) -> Vec<ScoredChunk> {
+        if chunks.is_empty() {
+            return chunks;
+        }
+
+        if let Some(mm_reranker) = &self.config.mm_reranker {
+            let documents = build_multimodal_rerank_documents(&chunks);
+            match mm_reranker
+                .rerank_multimodal_text_query(query, &documents, rerank_budget.min(documents.len()))
+                .await
+            {
+                Ok(results) => {
+                    let mut ranked = chunks;
+                    let original_index_by_chunk = ranked
+                        .iter()
+                        .enumerate()
+                        .map(|(index, chunk)| (chunk.chunk_id, index))
+                        .collect::<HashMap<_, _>>();
+                    let mut score_by_index = HashMap::new();
+                    for result in results {
+                        score_by_index.insert(result.index, result.score);
+                    }
+                    ranked.sort_by(|left, right| {
+                        let left_score = original_index_by_chunk
+                            .get(&left.chunk_id)
+                            .and_then(|index| score_by_index.get(index).copied())
+                            .unwrap_or(left.score);
+                        let right_score = original_index_by_chunk
+                            .get(&right.chunk_id)
+                            .and_then(|index| score_by_index.get(index).copied())
+                            .unwrap_or(right.score);
+                        right_score
+                            .partial_cmp(&left_score)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                    return cut_top_k(ranked, rerank_budget);
+                }
+                Err(error) => {
+                    degrade_trace.push(DegradeTraceItem {
+                        stage: "mm_reranker".to_string(),
+                        reason: format!("Multimodal reranker call failed: {}", error),
+                        impact: "Falling back to text rerank or pre-rerank ordering".to_string(),
+                    });
+                }
+            }
+        }
+
+        if let Some(reranker) = &self.config.reranker {
+            let doc_texts = chunks.iter().map(|item| item.content.clone()).collect::<Vec<_>>();
+            match reranker.rerank(query, &doc_texts).await {
+                Ok(results) => {
+                    let mut ranked = chunks;
+                    let mut score_by_chunk = HashMap::new();
+                    for result in results {
+                        if result.index < ranked.len() {
+                            score_by_chunk.insert(ranked[result.index].chunk_id, result.score);
+                        }
+                    }
+                    ranked.sort_by(|left, right| {
+                        let left_score = score_by_chunk.get(&left.chunk_id).copied().unwrap_or(0.0);
+                        let right_score =
+                            score_by_chunk.get(&right.chunk_id).copied().unwrap_or(0.0);
+                        right_score
+                            .partial_cmp(&left_score)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                    return cut_top_k(ranked, rerank_budget);
+                }
+                Err(error) => {
+                    degrade_trace.push(DegradeTraceItem {
+                        stage: "reranker".to_string(),
+                        reason: format!("Reranker call failed: {}", error),
+                        impact: "Using pre-rerank ordering".to_string(),
+                    });
+                }
+            }
+        }
+        cut_top_k(chunks, rerank_budget)
+    }
+}

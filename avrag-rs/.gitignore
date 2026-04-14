@@ -1,0 +1,20 @@
+# Git worktrees
+.worktrees/
+
+# Secrets
+.env
+!.env.example
+
+# Build artifacts
+/target/
+/pkg/
+*.wasm
+Cargo.lock
+
+# Storage / runtime state
+.qdrant-initialized
+/storage/
+
+# Legacy frontend (Leptos 0.7 skeleton) — superseded by frontend_rust/
+/crates/web-ui/
+/crates/web-sdk/

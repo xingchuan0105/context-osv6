@@ -1,0 +1,30 @@
+[package]
+name = "avrag-worker"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+async-trait = "0.1"
+anyhow.workspace = true
+analytics = { path = "../../crates/analytics" }
+app = { path = "../../crates/app" }
+avrag-auth = { path = "../../crates/auth" }
+avrag-cache-redis = { path = "../../crates/cache-redis" }
+avrag-llm = { path = "../../crates/llm" }
+avrag-storage-pg = { path = "../../crates/storage-pg" }
+avrag-storage-qdrant = { path = "../../crates/storage-qdrant" }
+chrono.workspace = true
+common = { path = "../../crates/common" }
+dotenvy = "0.15"
+ingestion = { path = "../../crates/ingestion" }
+reqwest.workspace = true
+serde_json.workspace = true
+sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "uuid", "chrono", "json"] }
+text-splitter.workspace = true
+tokio.workspace = true
+telemetry = { path = "../../crates/telemetry" }
+tracing.workspace = true
+uuid.workspace = true
+avrag-usage-limit = { path = "../../crates/usage-limit" }

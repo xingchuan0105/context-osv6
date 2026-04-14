@@ -1,0 +1,10 @@
+This is a plain text document for testing the ingestion pipeline.
+
+It contains multiple paragraphs to test text chunking functionality.
+
+The parser should route this to the local parser since it's a simple text file.
+
+Key testing points:
+1. Text extraction works correctly
+2. Chunks are created properly
+3. No multimodal processing is triggered

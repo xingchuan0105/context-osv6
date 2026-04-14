@@ -1,0 +1,15 @@
+[package]
+name = "common"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+avrag-auth = { path = "../auth" }
+contracts = { path = "../../../contracts" }
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
