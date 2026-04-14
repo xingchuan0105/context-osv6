@@ -45,6 +45,7 @@ playwright-report/
 # Claude Code / AI worktrees
 # =====================
 .claude/
+.worktrees/
 
 # =====================
 # Non-canonical / legacy directories
