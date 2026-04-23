@@ -1,13 +1,11 @@
 mod config;
 mod executor;
-mod planner;
 mod provider;
-mod synthesis;
 mod types;
 
 pub use config::SearchConfig;
 pub use executor::SearchExecutor;
-pub use types::{SearchResponse, SearchResult};
+pub use types::{SearchResponse, SearchResult, SearchStreamUpdate};
 
 #[cfg(test)]
 mod tests_impl;

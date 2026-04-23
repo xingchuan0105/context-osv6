@@ -72,13 +72,19 @@ pub fn SettingsPage() -> impl IntoView {
     let navigate_for_logout = navigate.clone();
     let is_preview_route_for_logout = is_preview_route.clone();
     let handle_logout = move |_| {
-        auth_for_logout.logout();
+        let token = auth_for_logout.token.get_untracked();
+        let auth = auth_for_logout.clone();
+        let navigate = navigate_for_logout.clone();
         let logout_path = if is_preview_route_for_logout.get_untracked() {
             "/preview/live/login"
         } else {
             "/login"
         };
-        navigate_for_logout(logout_path, NavigateOptions::default());
+        spawn(async move {
+            logout_current_session(token).await;
+            auth.logout();
+            navigate(logout_path, NavigateOptions::default());
+        });
     };
 
     view! {

@@ -1,6 +1,7 @@
 //! Routes module - defines all application routes using leptos_router
 
 pub mod admin;
+pub mod analyze;
 pub mod api_access;
 pub mod auth;
 pub mod dashboard;
@@ -17,6 +18,7 @@ pub use admin::{
     AdminShell, AuditLogsPage, BillingPage, DegradationPage, FeatureFlagsPage, HealthPage,
     OrgDetailPage, OrganizationsPage, RagHealthPage, UsagePage, UsersPage, WorkerStatusPage,
 };
+pub use analyze::WorkspaceAnalyzePage;
 pub use api_access::ApiAccessPage;
 pub use auth::{ConfirmResetPage, LoginPage, RegisterPage, ResetPasswordPage, VerifyResetPage};
 pub use dashboard::{DashboardListPage, WorkspacePage};

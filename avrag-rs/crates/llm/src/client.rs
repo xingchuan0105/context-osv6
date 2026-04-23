@@ -1,6 +1,202 @@
 use crate::ModelProviderConfig;
 use anyhow::Context;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+
+fn build_chat_completion_request_body(
+    config: &ModelProviderConfig,
+    messages: &[ChatMessage],
+    temperature: Option<f32>,
+    stream: bool,
+) -> serde_json::Value {
+    let mut request_body = serde_json::json!({
+        "model": config.model,
+        "messages": messages
+            .iter()
+            .map(|m| serde_json::json!({
+                "role": m.role,
+                "content": m.content
+            }))
+            .collect::<Vec<_>>(),
+    });
+
+    if let Some(temp) = temperature {
+        request_body["temperature"] = serde_json::json!(temp);
+    }
+    if let Some(enable_thinking) = config.enable_thinking {
+        request_body["enable_thinking"] = serde_json::json!(enable_thinking);
+    }
+    if stream {
+        request_body["stream"] = serde_json::json!(true);
+        request_body["stream_options"] = serde_json::json!({
+            "include_usage": true,
+        });
+    }
+
+    request_body
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamChoiceDelta {
+    #[serde(default)]
+    content: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamChoice {
+    #[serde(default)]
+    delta: Option<StreamChoiceDelta>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamUsage {
+    prompt_tokens: u32,
+    completion_tokens: u32,
+    total_tokens: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamChunk {
+    #[serde(default)]
+    choices: Vec<StreamChoice>,
+    #[serde(default)]
+    usage: Option<StreamUsage>,
+    #[serde(default)]
+    model: Option<String>,
+}
+
+#[derive(Debug)]
+struct ChatCompletionStreamParser {
+    buffer: Vec<u8>,
+    data_lines: Vec<String>,
+    accumulated_content: String,
+    usage: Option<LlmUsage>,
+    model: String,
+    provider: String,
+}
+
+impl ChatCompletionStreamParser {
+    fn new(provider: String, configured_model: String) -> Self {
+        Self {
+            buffer: Vec::new(),
+            data_lines: Vec::new(),
+            accumulated_content: String::new(),
+            usage: None,
+            model: configured_model,
+            provider,
+        }
+    }
+
+    fn feed_chunk(&mut self, chunk: &[u8], on_delta: &mut impl FnMut(&str)) -> anyhow::Result<()> {
+        self.buffer.extend_from_slice(chunk);
+
+        while let Some(line) = self.take_line()? {
+            if line.is_empty() {
+                self.flush_event(on_delta)?;
+                continue;
+            }
+
+            if line.starts_with(':') {
+                continue;
+            }
+
+            if let Some(value) = line.strip_prefix("data:") {
+                self.data_lines.push(value.trim_start().to_string());
+            }
+        }
+
+        Ok(())
+    }
+
+    fn finish(mut self, on_delta: &mut impl FnMut(&str)) -> anyhow::Result<LlmResponse> {
+        if !self.buffer.is_empty() {
+            let line = String::from_utf8(std::mem::take(&mut self.buffer))
+                .context("Failed to decode trailing chat completion stream line")?;
+            let normalized = line.trim_end_matches('\r');
+            if let Some(value) = normalized.strip_prefix("data:") {
+                self.data_lines.push(value.trim_start().to_string());
+            }
+        }
+
+        self.flush_event(on_delta)?;
+
+        Ok(LlmResponse {
+            content: self.accumulated_content,
+            usage: self.usage.unwrap_or_else(|| LlmUsage {
+                prompt_tokens: 0,
+                completion_tokens: 0,
+                total_tokens: 0,
+                provider: self.provider,
+                model: self.model.clone(),
+            }),
+            model: self.model,
+        })
+    }
+
+    fn take_line(&mut self) -> anyhow::Result<Option<String>> {
+        let Some(index) = self.buffer.iter().position(|byte| *byte == b'\n') else {
+            return Ok(None);
+        };
+
+        let mut raw_line = self.buffer.drain(..=index).collect::<Vec<_>>();
+        raw_line.pop();
+        if raw_line.last() == Some(&b'\r') {
+            raw_line.pop();
+        }
+
+        let line =
+            String::from_utf8(raw_line).context("Failed to decode chat completion stream line")?;
+        Ok(Some(line))
+    }
+
+    fn flush_event(&mut self, on_delta: &mut impl FnMut(&str)) -> anyhow::Result<()> {
+        if self.data_lines.is_empty() {
+            return Ok(());
+        }
+
+        let payload = self.data_lines.join("\n");
+        self.data_lines.clear();
+
+        if payload.trim() == "[DONE]" {
+            return Ok(());
+        }
+
+        let chunk: StreamChunk = serde_json::from_str(&payload).with_context(|| {
+            format!("Failed to parse chat completion stream payload: {payload}")
+        })?;
+
+        if let Some(model) = chunk.model {
+            self.model = model;
+        }
+
+        if let Some(usage) = chunk.usage {
+            self.usage = Some(LlmUsage {
+                prompt_tokens: usage.prompt_tokens,
+                completion_tokens: usage.completion_tokens,
+                total_tokens: usage.total_tokens,
+                provider: self.provider.clone(),
+                model: self.model.clone(),
+            });
+        }
+
+        for choice in chunk.choices {
+            let Some(delta) = choice.delta else {
+                continue;
+            };
+            let Some(content) = delta.content else {
+                continue;
+            };
+
+            if content.is_empty() {
+                continue;
+            }
+
+            self.accumulated_content.push_str(&content);
+            on_delta(&content);
+        }
+
+        Ok(())
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct LlmClient {
@@ -37,23 +233,8 @@ impl LlmClient {
             anyhow::bail!("LLM not configured");
         }
 
-        let mut request_body = serde_json::json!({
-            "model": self.config.model,
-            "messages": messages
-                .iter()
-                .map(|m| serde_json::json!({
-                    "role": m.role,
-                    "content": m.content
-                }))
-                .collect::<Vec<_>>(),
-        });
-
-        if let Some(temp) = temperature {
-            request_body["temperature"] = serde_json::json!(temp);
-        }
-        if let Some(enable_thinking) = self.config.enable_thinking {
-            request_body["enable_thinking"] = serde_json::json!(enable_thinking);
-        }
+        let request_body =
+            build_chat_completion_request_body(&self.config, messages, temperature, false);
 
         let response = self
             .client
@@ -159,6 +340,95 @@ impl LlmClient {
             model: resp.model,
         })
     }
+
+    pub async fn complete_stream(
+        &self,
+        messages: &[ChatMessage],
+        temperature: Option<f32>,
+        mut on_delta: impl FnMut(&str),
+    ) -> anyhow::Result<LlmResponse> {
+        let started_at = std::time::Instant::now();
+        let provider = self.config.provider_name();
+        let configured_model = self.config.model.clone();
+        if !self.config.is_configured() {
+            telemetry::prometheus::observe_llm_call(
+                "generic",
+                &provider,
+                &configured_model,
+                "failure",
+                started_at.elapsed().as_secs_f64() * 1000.0,
+            );
+            anyhow::bail!("LLM not configured");
+        }
+
+        let request_body =
+            build_chat_completion_request_body(&self.config, messages, temperature, true);
+
+        let response = self
+            .client
+            .post(format!("{}/chat/completions", self.config.base_url))
+            .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .header("Content-Type", "application/json")
+            .header("Accept", "text/event-stream")
+            .json(&request_body)
+            .send()
+            .await;
+        let mut response = match response {
+            Ok(response) => response,
+            Err(error) => {
+                telemetry::prometheus::record_dependency_failure(&provider);
+                telemetry::prometheus::observe_llm_call(
+                    "generic",
+                    &provider,
+                    &configured_model,
+                    "failure",
+                    started_at.elapsed().as_secs_f64() * 1000.0,
+                );
+                return Err(error).context("Failed to send chat completion stream request");
+            }
+        };
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            telemetry::prometheus::record_dependency_failure(&provider);
+            telemetry::prometheus::observe_llm_call(
+                "generic",
+                &provider,
+                &configured_model,
+                "failure",
+                started_at.elapsed().as_secs_f64() * 1000.0,
+            );
+            anyhow::bail!("Chat completion stream API error {}: {}", status, body);
+        }
+
+        let mut parser =
+            ChatCompletionStreamParser::new(provider.clone(), configured_model.clone());
+
+        loop {
+            let next_chunk = response
+                .chunk()
+                .await
+                .context("Failed to read chat completion stream chunk")?;
+            let Some(chunk) = next_chunk else {
+                break;
+            };
+
+            parser.feed_chunk(&chunk, &mut on_delta)?;
+        }
+
+        let parsed = parser.finish(&mut on_delta)?;
+
+        telemetry::prometheus::observe_llm_call(
+            "generic",
+            &provider,
+            &parsed.model,
+            "success",
+            started_at.elapsed().as_secs_f64() * 1000.0,
+        );
+
+        Ok(parsed)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -234,7 +504,7 @@ impl LlmUsage {
 
 #[cfg(test)]
 mod tests {
-    use super::LlmUsage;
+    use super::{ChatCompletionStreamParser, LlmUsage};
 
     #[test]
     fn llm_usage_accumulate_preserves_provider_and_model() {
@@ -250,5 +520,75 @@ mod tests {
         assert_eq!(total.total_tokens, 30);
         assert_eq!(total.provider, "dmxapi");
         assert_eq!(total.model, "gemini-test");
+    }
+
+    #[test]
+    fn chat_completion_stream_parser_accumulates_delta_content_and_usage() {
+        let mut parser =
+            ChatCompletionStreamParser::new("openai".to_string(), "gpt-test".to_string());
+        let mut observed = String::new();
+
+        parser
+            .feed_chunk(
+                br#"data: {"id":"chatcmpl-1","model":"gpt-stream","choices":[{"delta":{"content":"Hel"}}]}
+
+"#,
+                &mut |delta| observed.push_str(delta),
+            )
+            .unwrap();
+        parser
+            .feed_chunk(
+                br#"data: {"choices":[{"delta":{"content":"lo"}}]}
+
+data: {"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":3,"total_tokens":15}}
+
+data: [DONE]
+
+"#,
+                &mut |delta| observed.push_str(delta),
+            )
+            .unwrap();
+
+        let response = parser
+            .finish(&mut |delta| observed.push_str(delta))
+            .unwrap();
+
+        assert_eq!(observed, "Hello");
+        assert_eq!(response.content, "Hello");
+        assert_eq!(response.model, "gpt-stream");
+        assert_eq!(response.usage.prompt_tokens, 12);
+        assert_eq!(response.usage.completion_tokens, 3);
+        assert_eq!(response.usage.total_tokens, 15);
+        assert_eq!(response.usage.provider, "openai");
+    }
+
+    #[test]
+    fn chat_completion_stream_parser_handles_chunked_lines() {
+        let mut parser =
+            ChatCompletionStreamParser::new("openai".to_string(), "gpt-test".to_string());
+        let mut observed = String::new();
+
+        parser
+            .feed_chunk(
+                br#"data: {"choices":[{"delta":{"content":"A"#,
+                &mut |delta| observed.push_str(delta),
+            )
+            .unwrap();
+        parser
+            .feed_chunk(
+                br#"B"}}]}
+
+data: [DONE]
+
+"#,
+                &mut |delta| observed.push_str(delta),
+            )
+            .unwrap();
+
+        let response = parser
+            .finish(&mut |delta| observed.push_str(delta))
+            .unwrap();
+        assert_eq!(observed, "AB");
+        assert_eq!(response.content, "AB");
     }
 }

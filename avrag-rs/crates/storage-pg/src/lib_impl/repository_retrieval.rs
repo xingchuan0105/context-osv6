@@ -7,7 +7,7 @@ impl PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, document_id, page, content
+            select id, document_id, page, content, metadata
             from chunks
             where id = $1 and chunk_type = 'body'
             "#,
@@ -34,6 +34,7 @@ impl PgAppRepository {
               c.document_id,
               c.page,
               c.content,
+              c.metadata,
               ts_rank_cd(c.search_vector, plainto_tsquery('simple', $2)) as rank
             from chunks c
             join documents d on d.id = c.document_id
@@ -75,6 +76,7 @@ impl PgAppRepository {
                   c.document_id,
                   c.page,
                   c.content,
+                  c.metadata,
                   ts_rank(to_tsvector('simple', c.content), plainto_tsquery('simple', $1)) as rank
                 from chunks c
                 where c.document_id = any($2::uuid[])
@@ -97,6 +99,7 @@ impl PgAppRepository {
                   c.document_id,
                   c.page,
                   c.content,
+                  c.metadata,
                   ts_rank(to_tsvector('simple', c.content), plainto_tsquery('simple', $1)) as rank
                 from chunks c
                 where c.chunk_type = 'body'

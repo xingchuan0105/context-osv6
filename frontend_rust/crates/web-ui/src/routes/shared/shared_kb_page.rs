@@ -6,8 +6,8 @@ pub fn SharedKbPage() -> impl IntoView {
 
     if !ui_capabilities().shared_kb {
         return view! {
-            <div class="app-page-shell">
-                <div class="mx-auto max-w-4xl">
+            <div class=shared_page_style::page_shell>
+                <div class=shared_page_style::page_inner>
                     <UnavailableFeatureCard
                         title={t(locale.get_untracked(), MessageKey::SharedKbUnavailableTitle).to_string()}
                         description={t(locale.get_untracked(), MessageKey::SharedKbUnavailableDesc).to_string()}
@@ -209,19 +209,20 @@ pub fn SharedKbPage() -> impl IntoView {
     };
 
     view! {
-        <div class="app-page-shell">
-            <div class="mx-auto max-w-4xl space-y-6">
-                <div class="app-page-heading mb-0">
-                    <A href="/" attr:class="app-link inline-flex items-center gap-1">
-                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class=shared_page_style::page_shell>
+            <div class=shared_page_style::page_inner>
+                <div class=shared_page_style::page_stack>
+                <div class=shared_page_style::page_heading>
+                    <A href="/" attr:class=shared_page_style::back_link>
+                        <svg class=shared_page_style::back_icon fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
                         </svg>
                         {move || t(locale.get(), MessageKey::SharedKbHome)}
                     </A>
-                    <h1 class="app-page-title">
+                    <h1 class=shared_page_style::page_title>
                         {notebook_name.get()}
                     </h1>
-                    <p class="app-page-subtitle">
+                    <p class=shared_page_style::page_subtitle>
                         {move || t(locale.get(), MessageKey::SharedKbSubtitle)}
                     </p>
                 </div>
@@ -231,36 +232,36 @@ pub fn SharedKbPage() -> impl IntoView {
                 </Show>
 
                 <Show when=move || loading.get()>
-                    <div class="app-empty-state">
+                    <div class=shared_page_style::loading_state>
                         {move || t(locale.get(), MessageKey::SharedKbLoading)}
                     </div>
                 </Show>
 
                 <Show when=move || !loading.get() && error.get().is_empty()>
-                    <div class="space-y-4">
+                    <div class=shared_page_style::panel_stack>
                         <SharedKbOverview locale=locale shared_payload=shared_payload />
 
-                        <div class="app-surface-card">
-                            <div class="mb-6">
-                                <h2 class="mb-2 text-lg font-medium text-card-foreground">
+                        <div class={format!("{} {}", shared_page_style::card, shared_page_style::card_pad)}>
+                            <div class=shared_page_style::section_intro>
+                                <h2 class=shared_page_style::section_title>
                                     {move || t(locale.get(), MessageKey::SharedKbChatTitle)}
                                 </h2>
-                                <p class="text-sm text-muted-foreground">
+                                <p class=shared_page_style::section_desc>
                                     {move || t(locale.get(), MessageKey::SharedKbChatDesc)}
                                 </p>
                             </div>
 
-                            <div class="mb-6 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+                            <div class=shared_page_style::info_banner>
                                 {move || t(locale.get(), MessageKey::SharedKbSuggestionHint)}
                             </div>
 
-                            <div class="mb-6 flex flex-wrap gap-2">
+                            <div class=shared_page_style::suggestion_row>
                                 {prompt_suggestions().into_iter().map(|suggestion| {
                                     let suggestion_value = suggestion.clone();
                                     view! {
                                         <button
                                             type="button"
-                                            class="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-foreground hover:border-primary/40 hover:text-primary"
+                                            class=shared_page_style::suggestion_chip
                                             on:click=move |_| set_query.set(suggestion_value.clone())
                                         >
                                             {suggestion}
@@ -270,11 +271,11 @@ pub fn SharedKbPage() -> impl IntoView {
                             </div>
 
                         {/* Query form */}
-                        <form on:submit=handle_query class="mb-6">
-                            <div class="flex gap-2">
+                        <form on:submit=handle_query class=shared_page_style::query_form>
+                            <div class=shared_page_style::query_row>
                                 <input
                                     type="text"
-                                    class="app-input flex-1"
+                                    class=shared_page_style::query_input
                                     placeholder={move || t(locale.get(), MessageKey::SharedKbInputPlaceholder)}
                                     value=query.get()
                                     on:input=move |ev| set_query.set(event_target_value(&ev))
@@ -282,7 +283,7 @@ pub fn SharedKbPage() -> impl IntoView {
                                 />
                                 <button
                                     type="submit"
-                                    class="app-button-primary"
+                                    class=shared_page_style::primary_button
                                     disabled=answering.get()
                                 >
                                     {move || if answering.get() {
@@ -296,22 +297,22 @@ pub fn SharedKbPage() -> impl IntoView {
 
                         {/* Answer */}
                         <Show when=move || !degrade_reasons.get().is_empty()>
-                            <div class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                                <div class="font-medium">{move || t(locale.get(), MessageKey::SharedKbDegraded)}</div>
-                                <div class="mt-1">{degrade_reasons.get().join(" | ")}</div>
+                            <div class=shared_page_style::warning_banner>
+                                <div class=shared_page_style::warning_title>{move || t(locale.get(), MessageKey::SharedKbDegraded)}</div>
+                                <div class=shared_page_style::warning_copy>{degrade_reasons.get().join(" | ")}</div>
                             </div>
                         </Show>
 
                         <Show when=move || !shared_virtual_items.get().is_empty()>
-                            <div class="border-t border-border pt-4">
-                                <div class="mb-2 flex items-center justify-between">
-                                    <h3 class="text-sm font-medium text-foreground">
+                            <div class=shared_page_style::answer_section>
+                                <div class=shared_page_style::answer_header>
+                                    <h3 class=shared_page_style::answer_header_title>
                                         {move || t(locale.get(), MessageKey::SharedKbAnswerBlockTitle)}
                                     </h3>
-                                    <span class="text-xs text-muted-foreground">{shared_virtual_items.get().len()}</span>
+                                    <span class=shared_page_style::answer_header_count>{shared_virtual_items.get().len()}</span>
                                 </div>
                                 <div
-                                    class="max-h-[70vh] overflow-y-auto pr-1"
+                                    class=shared_page_style::answer_scroller
                                     node_ref=result_scroller
                                     data-test-shared-scroll
                                     on:scroll=move |_ev| {
@@ -329,7 +330,7 @@ pub fn SharedKbPage() -> impl IntoView {
                                         scroll_top_px=Signal::derive(move || result_scroll_top_px.get())
                                         overscan=SHARED_LIST_OVERSCAN
                                     >
-                                        <div class="space-y-4">
+                                        <div class=shared_page_style::answer_stack>
                                             {move || {
                                                 let visible_ids = visible_shared_ids.get();
                                                 let mut items = Vec::new();
@@ -339,16 +340,16 @@ pub fn SharedKbPage() -> impl IntoView {
                                                         shared_answer_item_text(&streaming_answer.get(), &answer.get());
                                                     items.push(
                                                         view! {
-                                                            <div class="rounded-xl border border-border bg-card px-3 py-3">
-                                                                <div class="mb-2 flex items-center justify-between">
-                                                                    <h4 class="text-sm font-medium text-foreground">
+                                                            <div class=shared_page_style::block_card>
+                                                                <div class=shared_page_style::block_header>
+                                                                    <h4 class=shared_page_style::block_title>
                                                                         {move || t(locale.get(), MessageKey::SharedKbAnswerLabel)}
                                                                     </h4>
-                                                                    <span class="text-xs text-muted-foreground">
+                                                                    <span class=shared_page_style::block_meta>
                                                                         {move || t(locale.get(), MessageKey::SharedKbLive)}
                                                                     </span>
                                                                 </div>
-                                                                <div class="prose prose-sm max-w-none whitespace-pre-wrap text-foreground">
+                                                                <div class=shared_page_style::answer_copy>
                                                                     {answer_text}
                                                                 </div>
                                                             </div>
@@ -360,14 +361,14 @@ pub fn SharedKbPage() -> impl IntoView {
                                                 if visible_ids.contains("shared-citations") {
                                                     items.push(
                                                         view! {
-                                                            <div class="rounded-xl border border-border bg-card px-3 py-3">
-                                                                <div class="mb-2 flex items-center justify-between">
-                                                                    <h4 class="text-sm font-medium text-foreground">
+                                                            <div class=shared_page_style::block_card>
+                                                                <div class=shared_page_style::block_header>
+                                                                    <h4 class=shared_page_style::block_title>
                                                                         {move || t(locale.get(), MessageKey::SharedKbCitations)}
                                                                     </h4>
-                                                                    <span class="text-xs text-muted-foreground">{citations.get().len()}</span>
+                                                                    <span class=shared_page_style::block_meta>{citations.get().len()}</span>
                                                                 </div>
-                                                                <div class="space-y-2">
+                                                                <div class=shared_page_style::nested_stack>
                                                                     {citations.get().into_iter().map(|citation| {
                                                                         let preview_text = shared_source_preview_text(
                                                                             citation.preview.as_deref(),
@@ -376,23 +377,23 @@ pub fn SharedKbPage() -> impl IntoView {
                                                                         let preview_visible = !preview_text.is_empty();
                                                                         let layer = citation.layer.clone();
                                                                         view! {
-                                                                            <div class="rounded-xl border border-border bg-card px-3 py-3">
-                                                                                <div class="text-sm font-medium text-card-foreground">{citation.doc_name}</div>
-                                                                                <div class="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                                                            <div class=shared_page_style::source_row>
+                                                                                <div class=shared_page_style::item_title>{citation.doc_name}</div>
+                                                                                <div class=shared_page_style::item_meta_row>
                                                                                     {if let Some(page) = citation.page {
-                                                                                        view! { <span class="rounded-full bg-muted px-2 py-1">{format!("{} {}", t(locale.get(), MessageKey::SearchPage), page)}</span> }.into_any()
+                                                                                        view! { <span class=shared_page_style::meta_pill>{format!("{} {}", t(locale.get(), MessageKey::SearchPage), page)}</span> }.into_any()
                                                                                     } else {
                                                                                         view! { <></> }.into_any()
                                                                                     }}
                                                                                     {if let Some(value) = layer.as_ref() {
-                                                                                        view! { <span class="rounded-full bg-muted px-2 py-1">{value.clone()}</span> }.into_any()
+                                                                                        view! { <span class=shared_page_style::meta_pill>{value.clone()}</span> }.into_any()
                                                                                     } else {
                                                                                         view! { <></> }.into_any()
                                                                                     }}
-                                                                                    <span class="rounded-full bg-muted px-2 py-1">{format!("{} {:.2}", t(locale.get(), MessageKey::SharedKbScore), citation.score)}</span>
+                                                                                    <span class=shared_page_style::meta_pill>{format!("{} {:.2}", t(locale.get(), MessageKey::SharedKbScore), citation.score)}</span>
                                                                                 </div>
                                                                                 <Show when=move || preview_visible>
-                                                                                    <div class="mt-1 text-xs text-muted-foreground">{preview_text.clone()}</div>
+                                                                                    <div class=shared_page_style::item_preview>{preview_text.clone()}</div>
                                                                                 </Show>
                                                                             </div>
                                                                         }
@@ -407,30 +408,30 @@ pub fn SharedKbPage() -> impl IntoView {
                                                 if visible_ids.contains("shared-sources") {
                                                     items.push(
                                                         view! {
-                                                            <div class="rounded-xl border border-border bg-card px-3 py-3">
-                                                                <div class="mb-2 flex items-center justify-between">
-                                                                    <h4 class="text-sm font-medium text-foreground">
+                                                            <div class=shared_page_style::block_card>
+                                                                <div class=shared_page_style::block_header>
+                                                                    <h4 class=shared_page_style::block_title>
                                                                         {move || t(locale.get(), MessageKey::SharedKbRetrievedSources)}
                                                                     </h4>
-                                                                    <span class="text-xs text-muted-foreground">{chat_sources.get().len()}</span>
+                                                                    <span class=shared_page_style::block_meta>{chat_sources.get().len()}</span>
                                                                 </div>
-                                                                <div class="space-y-2">
+                                                                <div class=shared_page_style::nested_stack>
                                                                     {chat_sources.get().into_iter().map(|source| {
                                                                         let preview_text =
                                                                             shared_source_preview_text(source.snippet.as_deref(), None);
                                                                         let preview_visible = !preview_text.is_empty();
                                                                         view! {
-                                                                            <div class="rounded-xl border border-border bg-card px-3 py-3">
-                                                                                <div class="text-sm font-medium text-card-foreground">{source.title}</div>
-                                                                                <div class="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                                                            <div class=shared_page_style::source_row>
+                                                                                <div class=shared_page_style::item_title>{source.title}</div>
+                                                                                <div class=shared_page_style::item_meta_row>
                                                                                     {if let Some(page) = source.page {
-                                                                                        view! { <span class="rounded-full bg-muted px-2 py-1">{format!("{} {}", t(locale.get(), MessageKey::SearchPage), page)}</span> }.into_any()
+                                                                                        view! { <span class=shared_page_style::meta_pill>{format!("{} {}", t(locale.get(), MessageKey::SearchPage), page)}</span> }.into_any()
                                                                                     } else {
                                                                                         view! { <></> }.into_any()
                                                                                     }}
                                                                                 </div>
                                                                                 <Show when=move || preview_visible>
-                                                                                    <div class="mt-1 text-xs text-muted-foreground">{preview_text.clone()}</div>
+                                                                                    <div class=shared_page_style::item_preview>{preview_text.clone()}</div>
                                                                                 </Show>
                                                                             </div>
                                                                         }
@@ -452,6 +453,7 @@ pub fn SharedKbPage() -> impl IntoView {
                         </div>
                     </div>
                 </Show>
+                </div>
             </div>
         </div>
     }

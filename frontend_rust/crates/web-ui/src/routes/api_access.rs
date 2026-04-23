@@ -7,7 +7,7 @@ use leptos::task::spawn;
 #[cfg(target_arch = "wasm32")]
 use leptos::task::spawn_local as spawn;
 use leptos_router::components::A;
-use leptos_router::hooks::use_params_map;
+use leptos_router::hooks::{use_location, use_params_map};
 use web_sdk::ApiClient;
 use web_sdk::dtos::{ApiKeyRow, CreateApiKeyRequest};
 
@@ -40,6 +40,22 @@ pub fn ApiAccessPage() -> impl IntoView {
     let locale = use_ui_prefs_state().locale;
     let params = use_params_map();
     let notebook_id = move || params.get().get("notebook_id").unwrap_or_default();
+    let location = use_location();
+    let is_preview_route = Memo::new(move |_| location.pathname.get().starts_with("/preview/live"));
+    let workspace_href = Memo::new(move |_| {
+        let nid = notebook_id();
+        if nid.is_empty() {
+            if is_preview_route.get() {
+                "/preview/live/dashboard".to_string()
+            } else {
+                "/dashboard".to_string()
+            }
+        } else if is_preview_route.get() {
+            format!("/preview/live/workspace/{nid}")
+        } else {
+            format!("/dashboard/{nid}")
+        }
+    });
 
     let (keys, set_keys) = signal(Vec::<ApiKeyRow>::new());
     let (loaded_key, set_loaded_key) = signal(String::new());
@@ -146,13 +162,13 @@ pub fn ApiAccessPage() -> impl IntoView {
                             {move || {
                                 choose(
                                     locale.get(),
-                                    "管理这个知识库的 API 密钥，用于工作区资料管理和 RAG 查询。聊天与全局搜索暂不对外开放。",
-                                    "Manage notebook API keys for workspace and source management. Chat and search are not exposed via API.",
+                                    "管理这个 Workspace 的 API 密钥，用于工作区资料管理和 RAG 查询。聊天与全局搜索暂不对外开放。",
+                                    "Manage workspace API keys for source management and RAG queries. Chat and search are not exposed via API.",
                                 )
                             }}
                         </p>
                     </div>
-                    <A href={format!("/dashboard/{}", notebook_id())} attr:class="app-link">
+                    <A href=move || workspace_href.get() attr:class="app-link">
                         {move || choose(locale.get(), "返回工作台", "Back to Workspace")}
                     </A>
                 </div>
@@ -232,8 +248,8 @@ pub fn ApiAccessPage() -> impl IntoView {
                                 {move || {
                                     choose(
                                         locale.get(),
-                                        "知识库 API 密钥支持工作区资料管理和 RAG 查询；聊天与搜索代理不通过 API 暴露。",
-                                        "Notebook API keys support workspace and RAG query. Chat and search agents are disabled for API access.",
+                                        "Workspace API 密钥支持工作区资料管理和 RAG 查询；聊天与搜索代理不通过 API 暴露。",
+                                        "Workspace API keys support source management and RAG queries. Chat and search agents are disabled for API access.",
                                     )
                                 }}
                             </div>

@@ -41,14 +41,14 @@ fn WorkspaceHistoryPane(
     });
 
     view! {
-        <div class="app-pane workspace-history-pane flex-1">
+        <div class={format!("app-pane {}", workspace_ui_style::history_pane)}>
             <div class="app-pane-header">
                 <div>
                     <h2 class="app-pane-title">
                         {move || choose(locale.get(), "线程", "Threads")}
                     </h2>
                     <p class="app-pane-meta">
-                        {move || choose(locale.get(), "这个知识库中的所有研究线程", "Research threads inside this notebook")}
+                        {move || choose(locale.get(), "当前 Workspace 中的所有研究线程", "Research threads inside this workspace")}
                     </p>
                 </div>
                 {move || view! {
@@ -59,17 +59,17 @@ fn WorkspaceHistoryPane(
                 }}
             </div>
 
-            <div class="app-pane-body flex flex-col gap-3 p-3">
+            <div class={format!("app-pane-body {}", workspace_ui_style::history_body)}>
                 <input
                     type="search"
-                    class="app-input workspace-history-search"
+                    class={format!("app-input {}", workspace_ui_style::history_search)}
                     placeholder={move || choose(locale.get(), "搜索线程", "Search Threads")}
                     prop:value=move || search_query.get()
                     on:input=move |ev| set_search_query.set(event_target_value(&ev))
                 />
 
                 <button
-                    class="app-button-primary w-full workspace-history-new-thread"
+                    class=workspace_ui_style::history_new_thread
                     on:click=move |_| on_create_session.with_value(|cb| cb())
                     disabled=move || creating_session.get()
                 >
@@ -82,19 +82,19 @@ fn WorkspaceHistoryPane(
                     }}
                 </button>
 
-                <p class="workspace-history-label">
+                <p class=workspace_ui_style::history_label>
                     {move || choose(locale.get(), "Threads", "Threads")}
                 </p>
 
-                <div class="min-h-0 flex-1 overflow-y-auto workspace-history-list">
+                <div class=workspace_ui_style::history_scroll>
                     <Show when=move || sessions_loading.get()>
-                        <div class="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                        <div class=workspace_ui_style::history_empty>
                             {move || choose(locale.get(), "正在加载线程...", "Loading threads...")}
                         </div>
                     </Show>
 
                     <Show when=move || !sessions_loading.get() && session_views.get().is_empty()>
-                        <div class="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                        <div class=workspace_ui_style::history_empty>
                             {move || {
                                 if search_query.get().trim().is_empty() {
                                     choose(locale.get(), "还没有线程", "No threads yet")
@@ -105,7 +105,7 @@ fn WorkspaceHistoryPane(
                         </div>
                     </Show>
 
-                    <div class="space-y-1.5">
+                    <div class=workspace_ui_style::history_stack>
                         {move || {
                             session_views
                                 .get()
@@ -148,10 +148,10 @@ fn WorkspaceHistoryPane(
                                                 active_chat_for_row_state.session_id.get().as_deref() == Some(active_session_id.as_str())
                                             })
                                         >
-                                            <div class="flex items-start gap-2">
+                                            <div class=workspace_ui_style::history_row>
                                                 <button
                                                     type="button"
-                                                    class="min-w-0 flex-1 text-left"
+                                                    class=workspace_ui_style::history_open_button
                                                     on:click=move |_| {
                                                         let Some(token) = auth_for_open.token.get() else {
                                                             return;
@@ -183,12 +183,12 @@ fn WorkspaceHistoryPane(
                                                         });
                                                     }
                                                 >
-                                                    <div class="flex items-center gap-2">
+                                                    <div class=workspace_ui_style::history_title_row>
                                                         <span class="workspace-list-item-title">
                                                             {display_title_for_label.clone()}
                                                         </span>
                                                         <Show when=move || pinned>
-                                                            <span class="workspace-chip workspace-chip-muted text-[10px] uppercase tracking-[0.08em]">
+                                                            <span class=workspace_ui_style::history_pin_badge>
                                                                 {move || choose(locale.get(), "置顶", "Pinned")}
                                                             </span>
                                                         </Show>
@@ -198,10 +198,10 @@ fn WorkspaceHistoryPane(
                                                     </div>
                                                 </button>
 
-                                                <div class="relative">
+                                                <div class=workspace_ui_style::history_menu_anchor>
                                                     <button
                                                         type="button"
-                                                        class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted"
+                                                        class=workspace_ui_style::history_menu_button
                                                         on:click=move |_| {
                                                             let menu_id = session_id_for_menu_toggle.clone();
                                                             set_open_menu_id.update(|current| {
@@ -213,13 +213,13 @@ fn WorkspaceHistoryPane(
                                                             });
                                                         }
                                                     >
-                                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <svg class=workspace_ui_style::history_menu_icon fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6h.01M12 12h.01M12 18h.01"/>
                                                         </svg>
                                                     </button>
 
                                                     <Show when=move || open_menu_id.get().as_deref() == Some(session_id_for_menu_visibility.as_str())>
-                                                        <div class="workspace-menu absolute right-0 top-9 z-20 w-36">
+                                                        <div class={format!("workspace-menu {}", workspace_ui_style::history_menu)}>
                                                             <button
                                                                 type="button"
                                                                 class="workspace-menu-item"

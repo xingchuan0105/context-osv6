@@ -39,6 +39,7 @@ pub struct QdrantPoint {
 pub struct QdrantPointUpsert {
     pub chunk_id: Uuid,
     pub doc_id: Uuid,
+    pub parse_run_id: Uuid,
     pub org_id: OrgId,
     pub page: Option<i64>,
     pub vector: Vec<f32>,
@@ -50,6 +51,7 @@ pub struct MultimodalQdrantPointUpsert {
     pub chunk_id: Uuid,
     pub doc_id: Uuid,
     pub asset_id: Uuid,
+    pub parse_run_id: Uuid,
     pub org_id: OrgId,
     pub page: Option<i64>,
     pub vector: Vec<f32>,

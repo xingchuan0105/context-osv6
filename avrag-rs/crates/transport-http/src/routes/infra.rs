@@ -16,6 +16,12 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/dev-upload/{document_id}", put(crate::dev_upload_handler))
         .route("/uploads/{document_id}", put(crate::signed_upload_handler))
         .route("/webhooks/stripe", post(crate::billing_webhook_handler))
-        .route("/api/v1/share/validate/{token}", get(handlers::validate_share_token_handler))
-        .route("/api/shared/kb/{token}", get(crate::shared_notebook_handler))
+        .route(
+            "/api/v1/share/validate/{token}",
+            get(handlers::validate_share_token_handler),
+        )
+        .route(
+            "/api/shared/kb/{token}",
+            get(crate::shared_notebook_handler),
+        )
 }

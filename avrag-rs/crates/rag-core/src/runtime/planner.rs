@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use crate::context::SessionContext;
 
-use super::RagRuntime;
 use super::FINAL_RERANK_BUDGET;
+use super::RagRuntime;
 use super::TOTAL_CANDIDATE_BUDGET;
 
 fn default_rag_plan(query: &str) -> RagPlan {
@@ -123,7 +123,11 @@ pub(super) fn item_payload_kind(item: &RagPlanItem) -> &'static str {
 }
 
 pub(super) fn effective_item_query(item: &RagPlanItem, default_query: &str) -> String {
-    if let Some(query) = item.query.as_deref().filter(|value| !value.trim().is_empty()) {
+    if let Some(query) = item
+        .query
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
         return query.trim().to_string();
     }
     if let Some(terms) = item.bm25_terms.as_ref().filter(|terms| !terms.is_empty()) {

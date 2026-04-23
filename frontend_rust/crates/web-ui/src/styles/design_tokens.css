@@ -65,6 +65,25 @@
     --workspace-menu-hover: 220 20% 96%;
     --workspace-shadow: 223 26% 15%;
 
+    /* Dashboard surface tokens */
+    --dashboard-shell: 0 0% 100%;
+    --dashboard-foreground: 230 28% 11%;
+    --dashboard-brand-foreground: 220 39% 11%;
+    --dashboard-header-border: 220 18% 95%;
+    --dashboard-border: 220 14% 91%;
+    --dashboard-border-strong: 220 11% 89%;
+    --dashboard-surface: 0 0% 100%;
+    --dashboard-surface-muted: 220 16% 98%;
+    --dashboard-surface-soft: 220 16% 96%;
+    --dashboard-muted-foreground: 230 7% 36%;
+    --dashboard-subtle-foreground: 225 7% 65%;
+    --dashboard-primary: 230 14% 4%;
+    --dashboard-primary-hover: 230 11% 18%;
+    --dashboard-primary-foreground: 0 0% 100%;
+    --dashboard-danger: 0 72% 51%;
+    --dashboard-shadow: 230 14% 10%;
+    --dashboard-overlay: 230 14% 10%;
+
     /* Radii */
     --radius: 0.875rem;
     --radius-card: 0.875rem;
@@ -157,6 +176,23 @@
       --workspace-menu: 220 18% 12%;
       --workspace-menu-hover: 220 14% 18%;
       --workspace-shadow: 220 28% 6%;
+      --dashboard-shell: 220 22% 9%;
+      --dashboard-foreground: 0 0% 98%;
+      --dashboard-brand-foreground: 0 0% 98%;
+      --dashboard-header-border: 220 14% 18%;
+      --dashboard-border: 220 14% 22%;
+      --dashboard-border-strong: 220 14% 24%;
+      --dashboard-surface: 220 18% 12%;
+      --dashboard-surface-muted: 220 15% 14%;
+      --dashboard-surface-soft: 220 14% 18%;
+      --dashboard-muted-foreground: 220 10% 70%;
+      --dashboard-subtle-foreground: 220 9% 64%;
+      --dashboard-primary: 0 0% 98%;
+      --dashboard-primary-hover: 220 10% 84%;
+      --dashboard-primary-foreground: 230 28% 11%;
+      --dashboard-danger: 0 70% 62%;
+      --dashboard-shadow: 220 28% 6%;
+      --dashboard-overlay: 220 28% 6%;
     }
   }
 
@@ -222,5 +258,22 @@
     --workspace-menu: 220 18% 12%;
     --workspace-menu-hover: 220 14% 18%;
     --workspace-shadow: 220 28% 6%;
+    --dashboard-shell: 220 22% 9%;
+    --dashboard-foreground: 0 0% 98%;
+    --dashboard-brand-foreground: 0 0% 98%;
+    --dashboard-header-border: 220 14% 18%;
+    --dashboard-border: 220 14% 22%;
+    --dashboard-border-strong: 220 14% 24%;
+    --dashboard-surface: 220 18% 12%;
+    --dashboard-surface-muted: 220 15% 14%;
+    --dashboard-surface-soft: 220 14% 18%;
+    --dashboard-muted-foreground: 220 10% 70%;
+    --dashboard-subtle-foreground: 220 9% 64%;
+    --dashboard-primary: 0 0% 98%;
+    --dashboard-primary-hover: 220 10% 84%;
+    --dashboard-primary-foreground: 230 28% 11%;
+    --dashboard-danger: 0 70% 62%;
+    --dashboard-shadow: 220 28% 6%;
+    --dashboard-overlay: 220 28% 6%;
   }
 }

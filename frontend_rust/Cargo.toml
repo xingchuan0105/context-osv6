@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/web-sdk", "crates/web-ui"]
+members = ["crates/web-dev-server", "crates/web-sdk", "crates/web-ui"]
 
 [workspace.package]
 edition = "2024"
@@ -34,3 +34,34 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
 # Async streaming for SSE
 async-stream = "0.3.6"
 futures-util = "0.3"
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.wasm-dev]
+inherits = "dev"
+opt-level = 1
+debug = 0
+codegen-units = 16
+
+[[workspace.metadata.leptos]]
+name = "frontend-rust"
+output-name = "web_ui"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+site-addr = "127.0.0.1:3000"
+reload-port = 3001
+bin-package = "frontend-web-dev-server"
+lib-package = "frontend-web-ui"
+lib-features = ["hydrate"]
+lib-default-features = false
+lib-profile-dev = "wasm-dev"
+watch-additional-files = [
+  "crates/web-ui/src/index.css",
+  "crates/web-ui/src/styles/design_tokens.css",
+  "tailwind.config.js",
+]

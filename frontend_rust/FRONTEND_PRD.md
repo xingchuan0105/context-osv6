@@ -1,7 +1,7 @@
 # Frontend Rust PRD
 
 > Project: `context-osv6/frontend_rust`
-> Updated: 2026-04-13
+> Updated: 2026-04-15
 > Status: active draft
 > Scope: Rust frontend product definition + completion plan
 > Source inputs:
@@ -11,6 +11,7 @@
 > - current `frontend_rust/crates/web-ui` implementation
 > - 2026-03-29 frontend review findings
 > - 2026-03-30 remediation planning and PRD update
+> - 2026-04-15 confirmed dashboard/workspace product decisions
 > - Figma Make dashboard reference:
 >   `https://www.figma.com/make/zBrhQ0r7sRibkeZMZuARQ3/NotebookLM-Style-Dashboard?t=BNzfhxmILnLsWz4L-1`
 
@@ -39,6 +40,14 @@ It is not a Rust rewrite of the old Next.js pages for its own sake. It is a prod
 - upgrade the workspace into a session-first, evidence-aware research UI
 - make sharing, admin, settings, and API access first-class pages
 - provide a stronger visual system than the current page-by-page Tailwind styling
+
+### 2.1 Product Terminology Freeze (2026-04-15)
+
+User-facing product language now uses `Workspace` as the single canonical term.
+
+- `Workspace` is the product term used in titles, tabs, buttons, empty states, menus, and PRD language
+- `Notebook` remains an internal compatibility term in routes, DTO names, backend handlers, and legacy code until transport-layer renaming is scheduled separately
+- whenever the code and UX copy disagree, the UX copy should prefer `Workspace`
 
 ## 3. Current Reality Snapshot
 
@@ -76,18 +85,18 @@ It is not a Rust rewrite of the old Next.js pages for its own sake. It is a prod
 
 An authenticated user can:
 
-1. create or open a notebook
+1. create or open a workspace
 2. upload or connect sources
 3. wait for ingestion with clear status feedback
 4. run RAG, search, or general chat
 5. inspect evidence and jump to source context
 6. keep synced research notes while working
-7. share the notebook safely
+7. share the workspace safely
 
 ### 4.2 Secondary user goals
 
-- invited collaborators can accept or decline notebook access cleanly
-- notebook owners can manage API access and share settings without leaving the product
+- invited collaborators can accept or decline workspace access cleanly
+- workspace owners can manage API access and share settings without leaving the product
 - org admins can inspect organization, usage, health, and policy surfaces without dead links or fake summaries
 
 ### 4.3 Non-goals for this milestone
@@ -109,26 +118,31 @@ An authenticated user can:
 - Degraded output must be visible: degraded or guarded responses cannot look the same as normal answers.
 - Contract discipline is mandatory: frontend transport types and chat event semantics come from the shared `contracts` crate through `web-sdk`, not from frontend-local DTO mirrors.
 
-### 5.1 UI Drift Prevention Baseline (2026-04-13)
+### 5.1 UI Drift Prevention Baseline (2026-04-15)
 
 To keep implementation aligned with Figma and prevent style drift, frontend execution follows this layered baseline:
 
 1. **Design token source of truth**
    - canonical file: `crates/web-ui/src/styles/design_tokens.css`
-   - generated token section in: `crates/web-ui/src/index.css`
+   - runtime token carrier: `crates/web-ui/src/index.css`
    - sync command: `python scripts/sync_design_tokens.py`
-2. **Scoped styling discipline**
-   - prefer semantic classes and token variables over route-level hardcoded visual values
-   - isolate pixel-mapped prototype pages under `/preview` from production style policy
-3. **Layout vs state boundary**
-   - layout/container components must remain signal-free
+2. **Official styling stack**
+   - official stack: Plain CSS + Stylance CSS Modules
+   - component and route shell visuals belong in `.module.css` files colocated with Rust components
+   - shared resets, tokens, typography, and legacy compatibility stay in `index.css`
+3. **Legacy Tailwind policy**
+   - existing Tailwind utilities are migration debt, not the target architecture
+   - new UI work must not introduce fresh Tailwind utility usage
+   - Tailwind stays only as a temporary compatibility layer until legacy routes are migrated
+4. **Layout vs state boundary**
+   - layout/container components should remain signal-free wherever practical
    - reactive state belongs in route logic and leaf components
-4. **Guardrails as executable checks**
+5. **Guardrails as executable checks**
    - `python scripts/ui_drift_guard.py` (report mode)
    - `python scripts/ui_drift_guard.py --strict` (enforcement mode)
-5. **Agent conventions**
+6. **Agent conventions**
    - project rules are documented in `frontend_rust/AGENTS.md`
-   - all AI-generated UI code must comply with token and component boundary constraints
+   - all AI-generated UI code must comply with token, CSS module, and component boundary constraints
 
 ## 6. Information Architecture
 
@@ -142,19 +156,19 @@ To keep implementation aligned with Figma and prevent style drift, frontend exec
 - `/reset-password/verify`
 - `/reset-password/confirm`
 - `/dashboard`
-  - notebook home
-- `/dashboard/search`
-  - global search surface
-- `/dashboard/:notebook_id`
+  - workspace home
+- `/dashboard/:workspace_id`
   - main workspace
-- `/dashboard/:notebook_id/share`
+- `/dashboard/:workspace_id/analyze`
+  - workspace share analytics page
+- `/dashboard/:workspace_id/share`
   - share center
-- `/dashboard/:notebook_id/share/analytics`
-- `/dashboard/:notebook_id/share/access-logs`
-- `/dashboard/:notebook_id/api-access`
+- `/dashboard/:workspace_id/share/analytics`
+- `/dashboard/:workspace_id/share/access-logs`
+- `/dashboard/:workspace_id/api-access`
 - `/shared/kb/:token`
   - public share page
-- `/invite/:notebook_id/:member_id`
+- `/invite/:workspace_id/:member_id`
 - `/settings`
 
 ### 6.2 Admin routes
@@ -195,7 +209,7 @@ Acceptance:
 
 ### 7.2 Dashboard home
 
-The dashboard is not just a list. It is the notebook landing page.
+The dashboard is the workspace home. It is not a launcher-only list and it is not a separate search page.
 
 Dashboard reference baseline (2026-04-13):
 
@@ -207,39 +221,109 @@ Dashboard reference baseline (2026-04-13):
 
 Requirements:
 
-- show "My Notebooks"
-- show "Shared / Favorited Notebooks"
+- show workspace scope tabs:
+  - `全部`
+  - `我的 Workspace`
+  - `我的收藏`
 - support card and list view
-- each notebook card should surface:
+- each workspace card/row should surface:
   - title
   - description
   - last active or updated time
-  - document count
+  - source count
   - quick status summary
 - provide strong empty states
-- preserve fast create-notebook flow
+- preserve fast create-workspace flow
+
+Header requirements:
+
+- the left brand is the unified `Context-OS` logo, not `NotebookLM`
+- the dashboard logo is brand-only and must not navigate anywhere when clicked
+- the right side contains:
+  - lightweight settings entry
+  - lightweight account/avatar entry
+
+Toolbar requirements:
+
+- left side:
+  - scope tabs for `全部 / 我的 Workspace / 我的收藏`
+- right side:
+  - search trigger
+  - grid/list toggle
+  - sort control
+  - primary create workspace action
+
+Search requirements:
+
+- dashboard search must not navigate to `/dashboard/search`
+- dashboard search opens a minimal global search modal/overlay
+- first milestone search scope:
+  - workspace title
+  - workspace description
+- first milestone search output:
+  - compact result list
+  - click result to enter the target workspace
+- non-goals for this search surface:
+  - no extra filter chips
+  - no analytics controls
+  - no AI summary
+  - no full-page search center
+
+Favorite requirements:
+
+- `我的收藏` is a first-class tab, not a secondary badge
+- add/remove favorite remains a row/card contextual-menu action
+- favorite state should stay discoverable without requiring a separate page
 
 Interaction requirements aligned to the Figma sample:
 
 - top control bar should include:
-  - left side: notebook scope tabs (e.g. all/my or equivalent account scope)
+  - left side: workspace scope tabs
   - right side: search trigger, grid/list toggle, sort control, primary create notebook action
 - grid/list must use the same underlying dataset and sorting state
 - grid mode should support:
-  - first-slot "new notebook" quick-create card with a clear affordance
-  - notebook cards with concise metadata and contextual menu actions
+  - first-slot "new workspace" quick-create card with a clear affordance
+  - workspace cards with concise metadata and contextual menu actions
 - list mode should support compact table-like rows with at least:
   - title
   - source count
   - date
   - role/ownership indicator
   - row-level contextual menu trigger
-- destructive/secondary notebook actions should be hidden by default and surfaced by contextual menu (not persistent inline button clusters)
+- destructive/secondary workspace actions should be hidden by default and surfaced by contextual menu (not persistent inline button clusters)
+
+Button/function requirements:
+
+- `新建`
+  - opens create workspace modal
+- row/card click
+  - enters the selected workspace
+- row/card contextual menu
+  - favorite / unfavorite
+  - rename
+  - delete
+- empty-state CTA
+  - label: `创建第一个 Workspace`
+  - behavior: same create-workspace flow as the primary `新建` button
+
+Empty-state requirements:
+
+- if the active scope contains zero workspaces, show a strong empty state with:
+  - a short explanation
+  - one primary CTA: `创建第一个 Workspace`
+- the empty-state CTA is not a separate feature; it is a duplicate entry to the same create action
+
+Copy requirements:
+
+- all dashboard product copy must use `Workspace`
+- user-facing `Notebook` wording should be removed from dashboard copy
 
 Acceptance:
 
-- users can understand notebook state before opening one
-- shared/favorited notebooks are discoverable without search
+- users can understand workspace state before opening one
+- favorited workspaces are discoverable without search
+- dashboard search opens in-place and closes back into the same dashboard context
+- the empty-state CTA and the primary create CTA are behaviorally identical
 - dashboard interactions remain visually and behaviorally consistent with the Figma reference baseline
 
 ### 7.3 Workspace shell
@@ -263,12 +347,97 @@ Explicit layout requirements:
 - sources and notes must stay visible without tab-switching away from sessions
 - right rail supports independent scrolling areas for sources and notes
 - sources and notes support resize handle or at least adjustable split
-- workspace title uses real notebook title
+- workspace title uses the real workspace title
 - mobile view collapses side rails into drawers/sheets
+
+Top-bar requirements:
+
+- left side:
+  - `Context-OS` logo
+  - current workspace title
+- right side action cluster:
+  - `New Workspace`
+  - `Analyze`
+  - `Share`
+  - `API`
+  - gear menu
+  - avatar menu
+
+Top-bar behavior requirements:
+
+- `Share`
+  - enters `/dashboard/:workspace_id/share`
+  - it is not a copy-link-only quick action
+- `Analyze`
+  - enters `/dashboard/:workspace_id/analyze`
+  - this page is a simple share analytics surface only
+  - it does not open search and does not show token analytics
+- gear menu
+  - second-level menu with:
+    - `主题配色`
+    - `语言设置`
+- avatar menu
+  - second-level menu with:
+    - account information
+    - user tier badge (`Free` / `VIP`)
+    - sign out
+
+Workspace title/default naming requirements:
+
+- every newly created workspace must get a deterministic default title if the user does not enter one manually
+- default naming must be localized:
+  - `zh-CN`: `未命名 Workspace YYYY-MM-DD`
+  - `en`: `Untitled Workspace YYYY-MM-DD`
+- if the same-day default title already exists for that user, append a stable suffix such as `·2`, `·3`
+- once the user manually renames the workspace, the default naming mechanism must stop applying
+
+Analyze page requirements:
+
+- analyze is a workspace-local share analytics page, not a global search or cost page
+- required sections:
+  - share status
+  - total views
+  - total unique visitors
+  - views by day
+  - recent access logs
+- if sharing has not been enabled yet:
+  - show an empty state
+  - primary CTA: `前往 Share`
+  - CTA enters the share center for the same workspace
+
+Input/composer requirements:
+
+- the main input must support:
+  - `Enter` to send
+  - `Shift + Enter` to insert a newline
+- the send button and keyboard shortcut must follow the same submission rules
+- the default conversation mode is `RAG`
+- if the user switches mode manually, future turns should keep the last chosen mode until changed again
+- mode memory is per-user UI behavior and should persist across reloads without requiring backend telemetry changes
+
+Session rail requirements:
+
+- left rail remains the thread navigator
+- primary action label becomes `New Thread`
+- search box filters the thread list in place
+- row-level contextual menu continues to own:
+  - pin / unpin
+  - rename
+  - delete
+
+Global preference requirements inside workspace:
+
+- the workspace shell must respect the global language setting (`zh-CN` / `en`)
+- the workspace shell must respect the global theme setting (`light` / `dark`)
+- language and theme must be switchable from the gear menu, not only from the full settings page
 
 Acceptance:
 
 - workspace feels like a single operating surface instead of three unrelated panes
+- workspace top-bar actions have clear destinations and do not overload one control with multiple meanings
+- analyze remains intentionally narrow: share analytics only
+- composer keyboard behavior matches mainstream chat expectations
+- the workspace title is never blank after creation
 
 2026-04-10 freeze decision:
 
@@ -395,14 +564,20 @@ Acceptance:
 
 Requirements:
 
-- keep a dedicated search page
-- allow notebook-scoped search choice when relevant
-- show answer + retrieved sources + navigable notebook/session results
-- upgrade from plain form/result page to a more productized search experience
+- the primary dashboard search surface is an in-place quick-open overlay, not a dedicated product page
+- first milestone scope is keyword search over workspaces only
+- result rows must be directly navigable into the selected workspace
+- search should stay minimal and operational:
+  - one input
+  - one result list
+  - no extra function buttons
+  - no AI answer block
+- if a deeper search page is kept internally for debugging or future expansion, it must not become the default dashboard search flow
 
 Acceptance:
 
 - search feels like a product surface, not a backend debug tool
+- dashboard search never forces the user out of the dashboard context just to locate a workspace
 
 ### 7.9 Share center
 
@@ -424,7 +599,7 @@ Acceptance:
 
 Requirements:
 
-- show notebook title, description, permission, expiration, and source summary
+- show workspace title, description, permission, expiration, and source summary
 - distinguish `partial` vs `full` share behavior in the UI
 - show clearer invalid/expired states
 - support share-scoped chat if backend permits
@@ -440,7 +615,7 @@ Requirements:
 
 - clear accept/decline path
 - reflect actual backend state
-- show notebook context and final outcome clearly
+- show workspace context and final outcome clearly
 
 Acceptance:
 
@@ -457,7 +632,7 @@ Requirements:
 
 Acceptance:
 
-- notebook owners can self-serve API usage safely
+- workspace owners can self-serve API usage safely
 
 ### 7.13 Settings, billing, notifications
 
@@ -606,6 +781,15 @@ The frontend should adopt a product-grade visual system with:
   - panel expand/collapse
   - list stagger
   - optimistic state feedback
+- bilingual UI support
+  - Chinese-first default
+  - English fallback and full-route coverage for core user pages
+- theme switching
+  - light
+  - dark
+  - system support where already implemented
+- unified brand asset
+  - one global `Context-OS` SVG logo used across dashboard, workspace, settings, and public shell entries
 
 ### 8.3 Visual direction
 
@@ -615,12 +799,25 @@ Desired tone:
 - calm, high-signal, dense but not noisy
 - more editorial and product-grade than generic admin dashboard
 - confident on desktop, adaptive on mobile
+- bilingual by design rather than translated as an afterthought
 
 Avoid:
 
 - template-like gray-white flatness
 - random mixes of tokenized surfaces and hard-coded legacy colors
 - decorative motion without information value
+- inconsistent brand marks between dashboard and workspace
+
+Brand asset requirements:
+
+- `Context-OS` uses one shared SVG logo
+- visual form:
+  - black background
+  - white line work
+  - concept: `second brain + AI`
+- the logo should feel like a compact product mark, not an illustration
+- dashboard uses the logo as a static brand marker
+- workspace uses the same logo family for product continuity
 
 ### 8.4 Color and typography guardrail (2026-04-10)
 
@@ -644,6 +841,7 @@ Typography constraints:
   - compact but breathable spacing
   - clear title/body/metadata hierarchy
 - no oversized decorative heading scale inside operational panes
+- dashboard and workspace action labels must remain visually compact enough to avoid toolbar sprawl
 
 ### 8.5 Sidebar reference pattern (Perplexity-aligned)
 
@@ -663,6 +861,27 @@ Non-goals for sidebar:
 - rich card-style rows with heavy badges and dense metadata
 - inline multi-action button groups in each row
 - visual competition with center chat panel
+
+### 8.6 Dashboard and Workspace Visual Freeze (2026-04-15)
+
+Dashboard:
+
+- reference tone remains NotebookLM-style dashboard density, but branded as `Context-OS`
+- primary composition:
+  - quiet header
+  - centered main content width
+  - strong whitespace around the list/grid surface
+- toolbar controls should feel compact, rounded, and grayscale-first
+- search uses a minimal overlay with no extra chrome
+
+Workspace:
+
+- reference tone remains Perplexity-style three-column workspace
+- center chat stage should stretch to fill the viewport vertically
+- the main composer sits at the visual bottom of the center pane
+- left rail remains compact and utility-like
+- right rail remains dense but readable, with sources above notes
+- top bar should read as a lightweight command row rather than a marketing header
 
 ## 9. Engineering and State Model
 
@@ -701,7 +920,7 @@ Goal:
 Tasks:
 
 - adopt this document as the active frontend spec
-- define semantic tokens in CSS/Tailwind
+- define semantic tokens in `design_tokens.css` and consume them through Plain CSS + Stylance CSS Modules
 - define i18n foundations:
   - locale state
   - translation dictionary shape
@@ -774,17 +993,20 @@ Goal:
 Tasks:
 
 - dashboard:
-  - add shared/favorited area
+  - add favorites-first scope tab and empty-state CTA
   - enrich notebook cards
   - align dashboard controls and view-switch interactions with the Figma Make reference baseline
+  - replace full-page search with minimal in-place workspace search overlay
 - localization:
   - move core user-facing copy into dictionaries
   - deliver `zh-CN` coverage for main routes
   - keep `en` as supported secondary locale
 - search:
-  - improve information architecture and results presentation
+  - treat dashboard search as quick-open, not as a separate product page
 - share center:
   - improve permission explanation and token state UX
+- workspace analyze:
+  - ship simple share-analytics page only
 - public share:
   - add permission-aware presentation
 - settings:
@@ -852,7 +1074,7 @@ Priority 1:
 - source viewer deep-link reliability
 - Chinese-first UI localization for core routes
 - settings completion
-- dashboard notebook home upgrade
+- dashboard workspace home upgrade
 
 Priority 2:
 
@@ -871,15 +1093,25 @@ The frontend is not ready until the following are true:
 
 - real redirect from `/`
 - login/register/reset-password all work
-- dashboard notebook home works
-- notebook create works
+- dashboard workspace home works
+- workspace create works
 - workspace opens without contract errors
 - upload and URL-source flows work
 - source polling and reindex feedback work
 - new chat session and existing session flows work
 - session rail follows compact Perplexity-aligned interaction pattern
 - session rows have no title/action overlap under long-title and narrow-width scenarios
+- dashboard has `全部 / 我的 Workspace / 我的收藏` tabs
+- dashboard in-place search modal opens, filters, and navigates correctly
+- dashboard empty-state CTA creates a workspace through the same flow as the primary create action
 - RAG citations can be opened and source-focused
+- workspace top-bar `Share` enters share center
+- workspace top-bar `Analyze` enters share analytics page or its empty state
+- workspace gear menu can switch theme and language
+- workspace avatar menu exposes profile, tier badge, and logout
+- workspace composer supports `Enter` send and `Shift + Enter` newline
+- workspace conversation mode defaults to `RAG` and persists the user's last manual choice
+- newly created workspaces receive a localized default title if the user does not name them
 - share link create/disable works
 - share analytics/access logs load
 - API key create/revoke works

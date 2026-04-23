@@ -1,4 +1,4 @@
-// Dashboard routes - Notebook list and workspace pages
+// Dashboard routes - Workspace list and workspace pages
 
 use gloo_timers::future::TimeoutFuture;
 use leptos::ev::SubmitEvent;
@@ -10,21 +10,23 @@ use leptos::task::spawn_local as spawn;
 use leptos::task::spawn_local;
 use leptos_router::components::A;
 use leptos_router::hooks::{use_location, use_navigate, use_params_map, use_query_map};
-use leptos_router::NavigateOptions;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use web_sdk::ApiClient;
+#[cfg(test)]
+use web_sdk::dtos::WorkspaceDraftPreference;
 use web_sdk::dtos::{
     ChatSession, CreateChatSessionRequest, CreateNotebookNoteRequest, CreateNotebookRequest,
     DashboardPreferences, Notebook, NotebookNote, NotebookWorkspacePreference, SourceRow,
     UpdateChatSessionRequest, UpdateNotebookNoteRequest, UpdateNotebookRequest,
-    WorkspaceDraftPreference,
 };
 
 use crate::api::api_base_url;
+use crate::auth_support::logout_current_session;
 use crate::components::chat::{ChatPanel, EvidencePanel};
 use crate::components::document::{DocumentDetail, DocumentListItem, DocumentUpload};
-use crate::components::{LocaleToggle, NoticeBanner, NoticeTone, StatusBadge};
+use crate::components::{ContextOsMark, NoticeBanner, NoticeTone, StatusBadge};
 use crate::i18n::choose;
 use crate::load::run_once_after_hydration;
 use crate::platform::ui_capabilities;
@@ -32,6 +34,20 @@ use crate::state::auth::use_auth_state;
 use crate::state::chat::{ChatStatus, provide_chat_state};
 use crate::state::ui_prefs::use_ui_prefs_state;
 use crate::state::workspace::provide_workspace_state;
+
+stylance::import_crate_style!(
+    dashboard_style,
+    "src/routes/dashboard/dashboard_shell.module.css"
+);
+stylance::import_crate_style!(
+    workspace_style,
+    "src/routes/dashboard/workspace_shell.module.css"
+);
+stylance::import_crate_style!(
+    #[allow(dead_code)]
+    workspace_ui_style,
+    "src/routes/dashboard/workspace_ui.module.css"
+);
 
 fn source_status_terminal(status: &str) -> bool {
     matches!(status, "completed" | "failed" | "ready" | "error")
@@ -61,6 +77,14 @@ fn is_mobile() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct DashboardPrefs {
     favorite_notebook_ids: Vec<String>,
+}
+
+#[cfg(target_arch = "wasm32")]
+const WORKSPACE_CREATE_COUNTERS_KEY: &str = "avrag.workspace-create-counters.v1";
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct WorkspaceCreateCounters {
+    counts: HashMap<String, u32>,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -108,6 +132,95 @@ fn write_favorite_notebook_ids(favorite_notebook_ids: &[String]) {
     write_dashboard_prefs(&prefs);
 }
 
+#[cfg(target_arch = "wasm32")]
+fn read_workspace_create_counters() -> WorkspaceCreateCounters {
+    let Some(window) = web_sys::window() else {
+        return WorkspaceCreateCounters::default();
+    };
+    let Ok(Some(storage)) = window.local_storage() else {
+        return WorkspaceCreateCounters::default();
+    };
+    let Ok(Some(raw)) = storage.get(WORKSPACE_CREATE_COUNTERS_KEY) else {
+        return WorkspaceCreateCounters::default();
+    };
+    serde_json::from_str(&raw).unwrap_or_default()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn read_workspace_create_counters() -> WorkspaceCreateCounters {
+    WorkspaceCreateCounters::default()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn write_workspace_create_counters(counters: &WorkspaceCreateCounters) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Ok(Some(storage)) = window.local_storage() else {
+        return;
+    };
+    if let Ok(raw) = serde_json::to_string(counters) {
+        let _ = storage.set(WORKSPACE_CREATE_COUNTERS_KEY, &raw);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn write_workspace_create_counters(_counters: &WorkspaceCreateCounters) {}
+
+#[cfg(target_arch = "wasm32")]
+fn workspace_today_date_string() -> String {
+    let date = js_sys::Date::new_0();
+    format!(
+        "{:04}-{:02}-{:02}",
+        date.get_full_year(),
+        date.get_month() + 1,
+        date.get_date()
+    )
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn workspace_today_date_string() -> String {
+    chrono::Local::now().format("%Y-%m-%d").to_string()
+}
+
+fn workspace_locale_key(locale: crate::i18n::Locale) -> &'static str {
+    match locale {
+        crate::i18n::Locale::ZhCn => "zh-CN",
+        crate::i18n::Locale::En => "en",
+    }
+}
+
+fn workspace_create_counter_key(locale: crate::i18n::Locale, date: &str) -> String {
+    format!("{}:{}", workspace_locale_key(locale), date)
+}
+
+fn workspace_default_title(locale: crate::i18n::Locale, date: &str, count: u32) -> String {
+    let base = choose(locale, "未命名 Workspace", "Untitled Workspace");
+    if count == 0 {
+        format!("{base} {date}")
+    } else {
+        format!("{base} {date}·{}", count + 1)
+    }
+}
+
+fn workspace_default_title_for_now(locale: crate::i18n::Locale) -> (String, String) {
+    let date = workspace_today_date_string();
+    let key = workspace_create_counter_key(locale, &date);
+    let count = read_workspace_create_counters()
+        .counts
+        .get(&key)
+        .copied()
+        .unwrap_or_default();
+    (workspace_default_title(locale, &date, count), key)
+}
+
+fn bump_workspace_default_title_counter(key: &str) {
+    let mut counters = read_workspace_create_counters();
+    let entry = counters.counts.entry(key.to_string()).or_default();
+    *entry = entry.saturating_add(1);
+    write_workspace_create_counters(&counters);
+}
+
 fn toggle_favorite_notebook_id(favorite_notebook_ids: &mut Vec<String>, notebook_id: &str) {
     if let Some(index) = favorite_notebook_ids
         .iter()
@@ -140,6 +253,7 @@ pub(crate) enum DraftSyncState {
     Error,
 }
 
+#[cfg(test)]
 fn workspace_draft_notes(preferences: &DashboardPreferences, notebook_id: &str) -> String {
     preferences
         .workspace_drafts
@@ -149,6 +263,7 @@ fn workspace_draft_notes(preferences: &DashboardPreferences, notebook_id: &str) 
         .unwrap_or_default()
 }
 
+#[cfg(test)]
 fn upsert_workspace_draft(
     drafts: &mut Vec<WorkspaceDraftPreference>,
     notebook_id: &str,
@@ -177,7 +292,10 @@ fn upsert_workspace_draft(
     });
 }
 
-fn workspace_pinned_source_ids(preferences: &DashboardPreferences, notebook_id: &str) -> Vec<String> {
+fn workspace_pinned_source_ids(
+    preferences: &DashboardPreferences,
+    notebook_id: &str,
+) -> Vec<String> {
     preferences
         .workspace_preferences
         .iter()
@@ -226,6 +344,88 @@ fn sort_workspace_notes(notes: &[NotebookNote]) -> Vec<NotebookNote> {
             .then_with(|| left.title.cmp(&right.title))
     });
     items
+}
+
+fn dashboard_workspace_display_title(notebook: &Notebook) -> String {
+    if notebook.title.trim().is_empty() {
+        notebook.name.clone()
+    } else {
+        notebook.title.clone()
+    }
+}
+
+fn dashboard_notebook_description_label(
+    locale: crate::i18n::Locale,
+    notebook: &Notebook,
+) -> String {
+    let description = notebook.description.trim();
+    if description.is_empty() {
+        choose(locale, "暂无描述", "No description").to_string()
+    } else {
+        description.to_string()
+    }
+}
+
+fn dashboard_notebook_date_label(locale: crate::i18n::Locale, iso_string: &str) -> String {
+    let date = iso_string.split('T').next().unwrap_or(iso_string);
+    let mut parts = date.split('-');
+    let (Some(year), Some(month), Some(day)) = (parts.next(), parts.next(), parts.next()) else {
+        return iso_string.to_string();
+    };
+
+    if locale == crate::i18n::Locale::ZhCn {
+        let month = month.trim_start_matches('0');
+        let day = day.trim_start_matches('0');
+        format!(
+            "{year}年{}月{}日",
+            if month.is_empty() { "0" } else { month },
+            if day.is_empty() { "0" } else { day }
+        )
+    } else {
+        format!("{year}-{month}-{day}")
+    }
+}
+
+fn dashboard_notebook_status_summary(
+    locale: crate::i18n::Locale,
+    notebook: &Notebook,
+) -> String {
+    let status_total = |statuses: &[&str]| -> i64 {
+        statuses
+            .iter()
+            .filter_map(|status| notebook.status_summary.get(*status))
+            .copied()
+            .sum()
+    };
+
+    let ready = status_total(&["ready", "completed"]);
+    let processing = status_total(&["pending", "enqueueing", "queued", "processing", "indexing"]);
+    let failed = status_total(&["failed", "error"]);
+    let mut parts = Vec::new();
+
+    if ready > 0 {
+        parts.push(format!("{} {}", ready, choose(locale, "就绪", "ready")));
+    }
+    if processing > 0 {
+        parts.push(format!(
+            "{} {}",
+            processing,
+            choose(locale, "处理中", "processing")
+        ));
+    }
+    if failed > 0 {
+        parts.push(format!("{} {}", failed, choose(locale, "异常", "failed")));
+    }
+
+    parts.join(" · ")
+}
+
+fn dashboard_notebook_role_label(locale: crate::i18n::Locale, is_owner: bool) -> &'static str {
+    if is_owner {
+        choose(locale, "所有者", "Owner")
+    } else {
+        choose(locale, "成员", "Member")
+    }
 }
 
 fn sanitize_markdown_filename(title: &str) -> String {
@@ -279,17 +479,6 @@ fn upsert_workspace_note(notes: &mut Vec<NotebookNote>, note: NotebookNote) {
     notes.clear();
     notes.extend(sorted);
 }
-
-#[cfg(target_arch = "wasm32")]
-fn copy_text_to_clipboard(text: &str) {
-    if let Some(window) = web_sys::window() {
-        let clipboard = window.navigator().clipboard();
-        let _ = clipboard.write_text(text);
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn copy_text_to_clipboard(_text: &str) {}
 
 #[cfg(target_arch = "wasm32")]
 fn prompt_session_title(current: &str) -> Option<String> {
@@ -371,7 +560,7 @@ fn sync_favorite_notebooks_remote(
 }
 
 // ----------------------------------------------------------------------------
-// DashboardListPage - Displays notebooks and allows creating new ones
+// DashboardListPage - Displays workspaces and allows creating new ones
 // ----------------------------------------------------------------------------
 
 #[derive(Clone, Copy, PartialEq)]
@@ -384,6 +573,7 @@ enum ViewMode {
 enum DashboardTab {
     All,
     Mine,
+    Favorites,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -392,53 +582,34 @@ enum DashboardSort {
     Title,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum DashboardCollectionFilter {
-    All,
-    Favorited,
-    Shared,
-}
-
 #[cfg(target_arch = "wasm32")]
-fn prompt_notebook_title(current: &str) -> Option<String> {
+fn prompt_workspace_title(current: &str) -> Option<String> {
     let window = web_sys::window()?;
     window
-        .prompt_with_message_and_default("重命名知识库 / Rename notebook", current)
+        .prompt_with_message_and_default("重命名 Workspace / Rename Workspace", current)
         .ok()
         .flatten()
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn prompt_notebook_title(_current: &str) -> Option<String> {
+fn prompt_workspace_title(_current: &str) -> Option<String> {
     None
 }
 
 #[cfg(target_arch = "wasm32")]
-fn confirm_notebook_delete(title: &str) -> bool {
+fn confirm_workspace_delete(title: &str) -> bool {
     let Some(window) = web_sys::window() else {
         return false;
     };
     window
         .confirm_with_message(&format!(
-            "确认删除知识库「{}」吗？该操作不可恢复。\n\nDelete notebook \"{}\"? This cannot be undone.",
+            "确认删除 Workspace「{}」吗？该操作不可恢复。\n\nDelete workspace \"{}\"? This cannot be undone.",
             title, title
         ))
         .unwrap_or(false)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn confirm_notebook_delete(_title: &str) -> bool {
+fn confirm_workspace_delete(_title: &str) -> bool {
     false
-}
-
-#[cfg(target_arch = "wasm32")]
-fn encode_query_param(value: &str) -> String {
-    js_sys::encode_uri_component(value)
-        .as_string()
-        .unwrap_or_else(|| value.to_string())
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn encode_query_param(value: &str) -> String {
-    value.to_string()
 }

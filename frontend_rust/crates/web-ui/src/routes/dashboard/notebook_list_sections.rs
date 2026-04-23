@@ -10,36 +10,27 @@ fn notebook_list_sections(
 ) -> impl IntoView {
     let (open_menu_id, set_open_menu_id) = signal(Option::<String>::None);
 
-    let format_date = |iso_string: &str| -> String {
-        if iso_string.len() >= 10 {
-            iso_string[..10].to_string()
-        } else {
-            iso_string.to_string()
-        }
-    };
-
     let rows = notebooks
         .into_iter()
         .map(|notebook| {
+            let current_locale = locale.get();
             let notebook_id = notebook.id.clone();
             let notebook_id_for_favorite = StoredValue::new(notebook_id.clone());
             let notebook_id_for_rename = StoredValue::new(notebook_id.clone());
             let notebook_id_for_delete = StoredValue::new(notebook_id.clone());
             let notebook_id_for_menu_toggle = notebook_id.clone();
             let notebook_id_for_menu_visibility = notebook_id.clone();
-            let notebook_title = if notebook.title.trim().is_empty() {
-                notebook.name.clone()
-            } else {
-                notebook.title.clone()
-            };
+            let notebook_title = dashboard_workspace_display_title(&notebook);
             let notebook_description_for_rename = StoredValue::new(notebook.description.clone());
             let notebook_title_for_rename = StoredValue::new(notebook_title.clone());
-            let notebook_date = format_date(&notebook.created_at);
-            let role_label = if notebook.owner_id == current_user_id {
-                choose(locale.get(), "所有者", "Owner").to_string()
-            } else {
-                choose(locale.get(), "成员", "Member").to_string()
-            };
+            let notebook_description =
+                dashboard_notebook_description_label(current_locale, &notebook);
+            let notebook_status_summary =
+                dashboard_notebook_status_summary(current_locale, &notebook);
+            let notebook_status_summary_for_show = notebook_status_summary.clone();
+            let notebook_date = dashboard_notebook_date_label(current_locale, &notebook.updated_at);
+            let role_label =
+                dashboard_notebook_role_label(current_locale, notebook.owner_id == current_user_id);
             let source_count = notebook.document_count;
             let is_shared = notebook.shared;
             let is_favorite = favorite_notebook_ids.iter().any(|item| item == &notebook.id);
@@ -47,50 +38,51 @@ fn notebook_list_sections(
             view! {
                 <A
                     href={format!("{}/{}", workspace_href_base, notebook.id)}
-                    attr:class="group grid grid-cols-12 items-center gap-4 border-b border-border px-5 py-4 transition-colors hover:bg-muted/40"
+                    attr:class=dashboard_style::row
                 >
-                    <div class="col-span-6 flex min-w-0 items-center gap-3 pr-2">
-                        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                            <svg class="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 3h7l5 5v13H7z"/>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 3v5h5"/>
-                            </svg>
-                        </div>
-                        <div class="min-w-0">
-                            <div class="truncate text-[18px] font-medium text-foreground">
+                    <div class=dashboard_style::row_title_column>
+                        <div class=dashboard_style::row_title_wrap>
+                            <div class=dashboard_style::row_title>
                                 {notebook_title}
                             </div>
-                            <Show when=move || is_favorite || is_shared>
-                                <div class="mt-1 text-[12px] text-muted-foreground">
-                                    {move || {
-                                        if is_favorite && is_shared {
-                                            choose(locale.get(), "收藏 · 共享", "Favorite · Shared")
-                                        } else if is_favorite {
-                                            choose(locale.get(), "收藏", "Favorite")
-                                        } else {
-                                            choose(locale.get(), "共享", "Shared")
-                                        }
-                                    }}
-                                </div>
-                            </Show>
+                            <div class=dashboard_style::row_subtitle>
+                                {notebook_description}
+                            </div>
+                            <div class=dashboard_style::row_badge_row>
+                                <Show when=move || is_favorite>
+                                    <span class=dashboard_style::row_chip>
+                                        {move || choose(locale.get(), "收藏", "Favorite")}
+                                    </span>
+                                </Show>
+                                <Show when=move || is_shared>
+                                    <span class=dashboard_style::row_chip>
+                                        {move || choose(locale.get(), "已分享", "Shared")}
+                                    </span>
+                                </Show>
+                                <Show when=move || !notebook_status_summary_for_show.is_empty()>
+                                    <span class=dashboard_style::row_chip>
+                                        {notebook_status_summary.clone()}
+                                    </span>
+                                </Show>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="col-span-2 text-[16px] text-muted-foreground">
+                    <div class=dashboard_style::row_meta>
                         {format!("{} {}", source_count, choose(locale.get(), "个来源", "sources"))}
                     </div>
 
-                    <div class="col-span-2 text-[16px] text-muted-foreground">
+                    <div class=dashboard_style::row_meta>
                         {notebook_date}
                     </div>
 
-                    <div class="col-span-2 flex items-center justify-between gap-2">
-                        <span class="text-[16px] text-muted-foreground">{role_label}</span>
+                    <div class=dashboard_style::row_actions>
+                        <span class=dashboard_style::row_meta>{role_label}</span>
 
-                        <div class="relative">
+                        <div class=dashboard_style::menu_anchor>
                             <button
                                 type="button"
-                                class="rounded-full p-2 text-muted-foreground opacity-0 transition-colors duration-150 hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                                class=dashboard_style::row_menu_button
                                 on:click=move |ev| {
                                     ev.prevent_default();
                                     ev.stop_propagation();
@@ -104,16 +96,16 @@ fn notebook_list_sections(
                                     });
                                 }
                             >
-                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class=dashboard_style::row_menu_icon fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6h.01M12 12h.01M12 18h.01"/>
                                 </svg>
                             </button>
 
                             <Show when=move || open_menu_id.get().as_deref() == Some(notebook_id_for_menu_visibility.as_str())>
-                                <div class="absolute right-0 top-10 z-20 w-44 rounded-2xl border border-border bg-card p-1.5 shadow-lg">
+                                <div class=format!("{} {}", dashboard_style::menu, dashboard_style::row_menu)>
                                     <button
                                         type="button"
-                                        class="block w-full rounded-xl px-3 py-2 text-left text-[14px] text-foreground hover:bg-muted"
+                                        class=dashboard_style::menu_item
                                         on:click=move |ev| {
                                             ev.prevent_default();
                                             ev.stop_propagation();
@@ -134,7 +126,7 @@ fn notebook_list_sections(
                                     </button>
                                     <button
                                         type="button"
-                                        class="block w-full rounded-xl px-3 py-2 text-left text-[14px] text-foreground hover:bg-muted"
+                                        class=dashboard_style::menu_item
                                         on:click=move |ev| {
                                             ev.prevent_default();
                                             ev.stop_propagation();
@@ -156,7 +148,7 @@ fn notebook_list_sections(
                                     </button>
                                     <button
                                         type="button"
-                                        class="block w-full rounded-xl px-3 py-2 text-left text-[14px] text-destructive hover:bg-destructive/10"
+                                        class=format!("{} {}", dashboard_style::menu_item, dashboard_style::menu_item_danger)
                                         on:click=move |ev| {
                                             ev.prevent_default();
                                             ev.stop_propagation();
@@ -181,7 +173,7 @@ fn notebook_list_sections(
         <Show when=move || open_menu_id.get().is_some()>
             <button
                 type="button"
-                class="fixed inset-0 z-10 bg-transparent"
+                class=dashboard_style::backdrop
                 aria-label={move || choose(locale.get(), "关闭菜单", "Close menu")}
                 on:click=move |_| set_open_menu_id.set(None)
             />

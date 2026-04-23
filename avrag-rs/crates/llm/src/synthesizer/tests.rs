@@ -116,9 +116,7 @@ fn test_build_synthesis_request_includes_sections() {
     assert!(request.contains(
         "Context Chunks (JSON array of objects with fields: chunk_id, doc_id, chunk_type, page, text, caption, image_url):"
     ));
-    assert!(request.contains(
-        "chunk_id, doc_id, chunk_type, page, text, caption, image_url"
-    ));
+    assert!(request.contains("chunk_id, doc_id, chunk_type, page, text, caption, image_url"));
 }
 
 #[test]

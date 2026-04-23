@@ -2,10 +2,8 @@ use async_trait::async_trait;
 use serde_json::json;
 use tracing::info;
 
-use crate::model::{
-    AuditAction, AuditRecord, DocumentStateMachine, IngestionTask, Transition,
-};
-use crate::{model, IngestionError};
+use crate::model::{AuditAction, AuditRecord, DocumentStateMachine, IngestionTask, Transition};
+use crate::{IngestionError, model};
 
 #[async_trait]
 pub trait TaskSource {

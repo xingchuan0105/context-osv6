@@ -17,6 +17,12 @@ use crate::state::chat::{ChatMessage, ChatRole, RightTab};
 use crate::state::ui_prefs::use_ui_prefs_state;
 use crate::state::workspace::WorkspaceState;
 
+stylance::import_style!(
+    #[allow(dead_code)]
+    workspace_chat_bubble_style,
+    "chat_workspace.module.css"
+);
+
 #[derive(Debug, Clone)]
 enum InlineSegment {
     Text(String),
@@ -187,56 +193,29 @@ pub fn ChatBubble(
 
     view! {
         <div
-            class="flex mb-8 animate-fade-in"
+            class=workspace_chat_bubble_style::message_row
+            class=(workspace_chat_bubble_style::message_row_user, is_user)
             attr:data-virtual-item-id={message.id.clone()}
             attr:data-virtual-role={message.role.as_str()}
         >
-            <div class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mr-4 shadow-sm"
-                class=("bg-primary/10", is_user)
-                class=("bg-card border border-border", !is_user)
+            <div
+                class=workspace_chat_bubble_style::message_column
+                class=(workspace_chat_bubble_style::message_column_user, is_user)
+                class=(workspace_chat_bubble_style::message_column_assistant, !is_user)
             >
-                {if is_user {
-                    view! {
-                        <svg class="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                        </svg>
-                    }
-                } else {
-                    view! {
-                        <svg class="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                        </svg>
-                    }
-                }}
-            </div>
-
-            <div class="flex-1 min-w-0">
-                <div class="text-xs font-medium mb-1 tracking-wide uppercase"
-                    class=("text-primary", is_user)
-                    class=("text-muted-foreground", !is_user)
+                <div
+                    class=workspace_chat_bubble_style::bubble
+                    class=(workspace_chat_bubble_style::bubble_user, is_user)
+                    class=(workspace_chat_bubble_style::bubble_assistant, !is_user)
                 >
-                    {move || {
-                        if is_user {
-                            choose(locale.get(), "你", "You")
-                        } else {
-                            choose(locale.get(), "助手", "Assistant")
-                        }
-                    }}
-                </div>
-
-                <div class="prose prose-sm max-w-none text-foreground leading-relaxed"
-                    class=("text-foreground/90", is_user)
-                    class=("font-medium", is_user)
-                    class=("text-foreground", !is_user)
-                >
-                    <div class="space-y-4">
+                    <div class=workspace_chat_bubble_style::body_stack>
                         {if !answer_blocks.is_empty() {
                             answer_blocks.into_iter().map(|block| {
                                 match block {
                                     AnswerBlock::Text { text, citations: block_citations } => {
                                         let select_citation = select_citation.clone();
                                         view! {
-                                            <p class="text-gray-800 whitespace-pre-wrap break-words leading-7">
+                                            <p class=workspace_chat_bubble_style::text_block>
                                                 <span>{text}</span>
                                                 {block_citations.into_iter().map(|chunk_id| {
                                                     let mapped = citation_by_chunk_id(&citations, &chunk_id);
@@ -247,7 +226,7 @@ pub fn ChatBubble(
                                                         .unwrap_or_default();
                                                     if let Some((_, citation)) = mapped {
                                                         view! {
-                                                            <button class="inline-flex items-center justify-center rounded border border-border bg-card/50 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200 mx-0.5 align-text-top shadow-sm transform hover:-translate-y-0.5"
+                                                            <button class=workspace_chat_bubble_style::inline_citation
                                                                 on:click=move |_| {
                                                                     select_citation(citation.clone());
                                                                 }
@@ -271,7 +250,7 @@ pub fn ChatBubble(
                                                 let select_citation = select_citation.clone();
                                                 return view! {
                                                     <button
-                                                        class="block w-full rounded-xl border border-gray-200 bg-white p-2 text-left hover:bg-gray-50 transition-colors"
+                                                        class=workspace_chat_bubble_style::image_card
                                                         on:click=move |_| {
                                                             select_citation(citation_for_click.clone());
                                                         }
@@ -279,13 +258,13 @@ pub fn ChatBubble(
                                                         <img
                                                             src=image_url
                                                             alt=caption.clone().unwrap_or_else(|| doc_name.clone())
-                                                            class="max-h-96 w-auto max-w-full rounded-lg object-contain"
+                                                            class=workspace_chat_bubble_style::image_asset
                                                         />
-                                                        <div class="mt-2 flex items-center justify-between gap-2">
-                                                            <div class="text-sm text-gray-700 whitespace-pre-wrap">
+                                                        <div class=workspace_chat_bubble_style::image_meta_row>
+                                                            <div class=workspace_chat_bubble_style::image_caption>
                                                                 {caption.unwrap_or(doc_name)}
                                                             </div>
-                                                            <span class="inline-flex items-center justify-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                                                            <span class=workspace_chat_bubble_style::image_badge>
                                                                 {format!("[{}]", display_id)}
                                                             </span>
                                                         </div>
@@ -294,7 +273,7 @@ pub fn ChatBubble(
                                             }
                                         }
                                         view! {
-                                            <span class="text-xs text-gray-400">{format!("[image:{}]", chunk_id)}</span>
+                                            <span class=workspace_chat_bubble_style::image_fallback>{format!("[image:{}]", chunk_id)}</span>
                                         }.into_any()
                                     }
                                 }
@@ -303,7 +282,7 @@ pub fn ChatBubble(
                             lines.into_iter().enumerate().map(|(_line_idx, line)| {
                                 let trimmed = line.trim().to_string();
                                 if trimmed.is_empty() {
-                                    return view! { <div class="h-2"></div> }.into_any();
+                                    return view! { <div class=workspace_chat_bubble_style::blank_line></div> }.into_any();
                                 }
 
                                 if let Some(raw_id) = trimmed
@@ -320,7 +299,7 @@ pub fn ChatBubble(
                                                 let select_citation = select_citation.clone();
                                                 return view! {
                                                     <button
-                                                        class="block w-full rounded-xl border border-gray-200 bg-white p-2 text-left hover:bg-gray-50 transition-colors"
+                                                        class=workspace_chat_bubble_style::image_card
                                                         on:click=move |_| {
                                                             select_citation(citation_for_click.clone());
                                                         }
@@ -328,13 +307,13 @@ pub fn ChatBubble(
                                                         <img
                                                             src=image_url
                                                             alt=caption.clone().unwrap_or_else(|| doc_name.clone())
-                                                            class="max-h-96 w-auto max-w-full rounded-lg object-contain"
+                                                            class=workspace_chat_bubble_style::image_asset
                                                         />
-                                                        <div class="mt-2 flex items-center justify-between gap-2">
-                                                            <div class="text-sm text-gray-700 whitespace-pre-wrap">
+                                                        <div class=workspace_chat_bubble_style::image_meta_row>
+                                                            <div class=workspace_chat_bubble_style::image_caption>
                                                                 {caption.unwrap_or(doc_name)}
                                                             </div>
-                                                            <span class="inline-flex items-center justify-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                                                            <span class=workspace_chat_bubble_style::image_badge>
                                                                 {format!("[{}]", display_id)}
                                                             </span>
                                                         </div>
@@ -347,7 +326,7 @@ pub fn ChatBubble(
 
                                 let segments = parse_inline_segments(&line);
                                 view! {
-                                    <p class="text-gray-800 whitespace-pre-wrap break-words leading-7">
+                                    <p class=workspace_chat_bubble_style::text_block>
                                         {segments.into_iter().enumerate().map(|(_seg_idx, segment)| {
                                             match segment {
                                                 InlineSegment::Text(text) => {
@@ -357,7 +336,7 @@ pub fn ChatBubble(
                                                     let citation = citation_by_display_id(&citations, display_id);
                                                     let select_citation = select_citation.clone();
                                                     view! {
-                                                        <button class="inline-flex items-center justify-center rounded border border-border bg-card/50 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200 mx-0.5 align-text-top shadow-sm transform hover:-translate-y-0.5"
+                                                        <button class=workspace_chat_bubble_style::inline_citation
                                                             on:click=move |_| {
                                                                 if let Some(citation) = citation.clone() {
                                                                     select_citation(citation);
@@ -370,7 +349,7 @@ pub fn ChatBubble(
                                                 }
                                                 InlineSegment::Image(display_id) => {
                                                     view! {
-                                                        <span class="text-xs text-gray-400">{format!("[image:{}]", display_id)}</span>
+                                                        <span class=workspace_chat_bubble_style::image_fallback>{format!("[image:{}]", display_id)}</span>
                                                     }.into_any()
                                                 }
                                             }
@@ -383,7 +362,10 @@ pub fn ChatBubble(
                 </div>
 
                 <Show when={move || !citations_for_toggle.is_empty()}>
-                    <div class="mt-4 flex flex-wrap gap-2 pt-2 border-t border-border">
+                    <div class=workspace_chat_bubble_style::citations_row>
+                        <span class=workspace_chat_bubble_style::sources_label>
+                            {move || choose(locale.get(), "来源:", "Sources:")}
+                        </span>
                         {citations_for_show.iter().enumerate().map(|(idx, citation)| {
                             let citation = citation.clone();
                             let select_citation = select_citation.clone();
@@ -394,23 +376,22 @@ pub fn ChatBubble(
                             };
                             view! {
                                 <button
-                                    class="inline-flex items-center px-2.5 py-1 rounded-md bg-card border border-border text-muted-foreground text-xs font-medium hover:bg-muted hover:text-foreground hover:border-primary/50 transition-all duration-200 shadow-sm"
+                                    class=workspace_chat_bubble_style::citation_pill
                                     on:click=move |_| {
                                         select_citation(citation.clone());
                                     }
                                 >
-                                    <span class="text-primary mr-1.5">{display_id}</span>
-                                    <span class="truncate max-w-40">{citation.doc_name.clone()}</span>
+                                    {display_id}
                                 </button>
                             }
                         }).collect_view()}
                     </div>
                 </Show>
 
-                <div class="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <div class=workspace_chat_bubble_style::actions_row>
                     <button
                         type="button"
-                        class="rounded-lg px-2 py-1 hover:bg-muted hover:text-foreground"
+                        class=workspace_chat_bubble_style::action_button
                         on:click=move |_| {
                             message_content_for_copy
                                 .with_value(|content| copy_message_to_clipboard(content))
@@ -421,7 +402,7 @@ pub fn ChatBubble(
                     <Show when=move || is_user>
                         <button
                             type="button"
-                            class="rounded-lg px-2 py-1 hover:bg-muted hover:text-foreground"
+                            class=workspace_chat_bubble_style::action_button
                             on:click=move |_| {
                                 let content =
                                     message_content_for_edit.with_value(|content| content.clone());
@@ -434,7 +415,7 @@ pub fn ChatBubble(
                     <Show when=move || !is_user>
                         <button
                             type="button"
-                            class="rounded-lg px-2 py-1 hover:bg-muted hover:text-foreground"
+                            class=workspace_chat_bubble_style::action_button
                             on:click=move |_| {
                                 let content =
                                     message_content_for_note.with_value(|content| content.clone());
@@ -445,7 +426,7 @@ pub fn ChatBubble(
                         </button>
                         <button
                             type="button"
-                            class="rounded-lg px-2 py-1 hover:bg-muted hover:text-foreground"
+                            class=workspace_chat_bubble_style::action_button
                             on:click=move |_| {
                                 let message_id =
                                     message_id_for_regenerate.with_value(|id| id.clone());

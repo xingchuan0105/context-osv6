@@ -55,29 +55,29 @@ fn subscription_snapshot_uses_metadata_and_price_mapping() {
     };
 
     let payload = serde_json::json!({
-            "id": "evt_1",
-            "type": "customer.subscription.updated",
-            "data": {
-                "object": {
-                    "id": "sub_123",
-                    "customer": {"id": "cus_123"},
-                    "metadata": {
-                        "org_id": "11111111-1111-1111-1111-111111111111"
-                    },
-                    "status": "active",
-                    "current_period_start": 1_700_000_000_i64,
-                    "current_period_end": 1_700_086_400_i64,
-                    "cancel_at_period_end": false,
-                    "items": {
-                        "data": [
-                            {
-                                "price": {"id": "price_pro"}
-                            }
-                        ]
-                    }
+        "id": "evt_1",
+        "type": "customer.subscription.updated",
+        "data": {
+            "object": {
+                "id": "sub_123",
+                "customer": {"id": "cus_123"},
+                "metadata": {
+                    "org_id": "11111111-1111-1111-1111-111111111111"
+                },
+                "status": "active",
+                "current_period_start": 1_700_000_000_i64,
+                "current_period_end": 1_700_086_400_i64,
+                "cancel_at_period_end": false,
+                "items": {
+                    "data": [
+                        {
+                            "price": {"id": "price_pro"}
+                        }
+                    ]
                 }
             }
-        });
+        }
+    });
 
     let snapshot = subscription_snapshot_from_event(&payload, &config).unwrap();
 

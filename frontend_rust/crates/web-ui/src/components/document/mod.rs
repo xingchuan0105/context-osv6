@@ -21,16 +21,11 @@ use crate::state::chat::use_chat_state;
 use crate::state::ui_prefs::use_ui_prefs_state;
 use crate::state::workspace::{CitationFocus, use_workspace_state};
 
-/// Returns the CSS color class for a document status
-fn status_color(status: &str) -> &'static str {
-    match status {
-        "completed" | "ready" => "bg-green-100 text-green-800",
-        "pending" | "enqueueing" | "queued" => "bg-slate-100 text-slate-800",
-        "processing" => "bg-yellow-100 text-yellow-800",
-        "failed" | "error" => "bg-red-100 text-red-800",
-        _ => "bg-gray-100 text-gray-800",
-    }
-}
+stylance::import_style!(
+    #[allow(dead_code)]
+    workspace_document_style,
+    "document_workspace.module.css"
+);
 
 fn status_label(locale: Locale, status: &str) -> String {
     match status {
@@ -39,6 +34,16 @@ fn status_label(locale: Locale, status: &str) -> String {
         "processing" => choose(locale, "处理中", "Processing").to_string(),
         "failed" | "error" => choose(locale, "失败", "Failed").to_string(),
         _ => status.to_string(),
+    }
+}
+
+fn detail_status_class(status: &str) -> &'static str {
+    match status {
+        "completed" | "ready" => workspace_document_style::status_ready,
+        "pending" | "enqueueing" | "queued" => workspace_document_style::status_queued,
+        "processing" => workspace_document_style::status_processing,
+        "failed" | "error" => workspace_document_style::status_error,
+        _ => workspace_document_style::status_queued,
     }
 }
 
@@ -337,13 +342,13 @@ pub fn DocumentUpload(
     };
 
     view! {
-        <div class="app-surface-card">
-            <h3 class="mb-4 text-lg font-semibold text-card-foreground">
+        <div class={format!("app-surface-card {}", workspace_document_style::upload_card)}>
+            <h3 class=workspace_document_style::upload_title>
                 {move || choose(locale.get(), "上传文档", "Upload Document")}
             </h3>
 
-            <div class="mb-4">
-                <label class="app-form-label mb-2">
+            <div class=workspace_document_style::upload_field>
+                <label class=workspace_document_style::upload_label>
                     {move || choose(locale.get(), "选择文件", "Select File")}
                 </label>
                 <input
@@ -351,14 +356,9 @@ pub fn DocumentUpload(
                     type="file"
                     accept=".pdf,.txt,.md,.doc,.docx"
                     on:change=handle_change
-                    class="block w-full text-sm text-muted-foreground
-                           file:mr-4 file:py-2 file:px-4
-                           file:rounded file:border-0
-                           file:text-sm file:font-semibold
-                           file:bg-primary/10 file:text-primary
-                           hover:file:bg-primary/15"
+                    class=workspace_document_style::file_input
                 />
-                <p class="mt-1 text-xs text-muted-foreground">
+                <p class=workspace_document_style::upload_hint>
                     {move || {
                         choose(
                             locale.get(),
@@ -370,7 +370,7 @@ pub fn DocumentUpload(
             </div>
 
             <Show when=move || !selected_filename.get().is_empty()>
-                <div class="mb-4 rounded-xl border border-border bg-muted/60 px-3 py-2 text-sm text-foreground">
+                <div class=workspace_document_style::selected_file>
                     {selected_filename.get()}
                 </div>
             </Show>
@@ -380,7 +380,7 @@ pub fn DocumentUpload(
             </Show>
 
             {/* Actions */}
-            <div class="flex justify-end gap-3">
+            <div class=workspace_document_style::upload_actions>
                 <button
                     type="button"
                     class="app-button-ghost"
@@ -535,41 +535,42 @@ pub fn DocumentDetail(
     });
 
     view! {
-        <div class="app-pane h-full">
+        <div class={format!("app-pane {}", workspace_document_style::detail_pane)}>
             {/* Header */}
             <div class="app-pane-header">
-                <div class="flex-1 min-w-0">
-                    <h3 class="truncate text-lg font-semibold text-card-foreground">
+                <div class=workspace_document_style::detail_header_main>
+                    <h3 class=workspace_document_style::detail_title>
                         {source.file_name.clone()}
                     </h3>
-                    <div class="flex items-center gap-2 mt-1">
+                    <div class=workspace_document_style::detail_meta_row>
                         <span
                             class={format!(
-                                "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {}",
-                                status_color(&source.status)
+                                "{} {}",
+                                workspace_document_style::status_badge,
+                                detail_status_class(&source.status)
                             )}
                         >
                             {status_label(locale.get(), &source.status)}
                         </span>
-                        <span class="text-xs text-muted-foreground">{source.title.clone()}</span>
+                        <span class=workspace_document_style::detail_subtitle>{source.title.clone()}</span>
                     </div>
                 </div>
                 <button
                     on:click=move |_| on_close()
-                    class="app-button-ghost ml-4 !p-1 text-muted-foreground"
+                    class={format!("app-button-ghost {}", workspace_document_style::close_button)}
                     title={move || choose(locale.get(), "关闭文档详情", "Close document detail")}
                 >
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class=workspace_document_style::close_icon fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
                 </button>
             </div>
 
             {/* Content area */}
-            <div class="flex-1 overflow-y-auto p-4">
+            <div class=workspace_document_style::detail_body>
                 <Show when=move || loading_content.get()>
-                    <div class="flex items-center justify-center py-8">
-                        <div class="text-muted-foreground">
+                    <div class=workspace_document_style::loading_wrap>
+                        <div class=workspace_document_style::loading_text>
                             {move || choose(locale.get(), "正在加载内容...", "Loading content...")}
                         </div>
                     </div>
@@ -580,11 +581,11 @@ pub fn DocumentDetail(
                 </Show>
 
                 <Show when=move || !loading_content.get() && content_error.get().is_empty() && parsed_preview.get().is_empty()>
-                    <pre class="whitespace-pre-wrap text-sm font-mono text-foreground">{content.get()}</pre>
+                    <pre class=workspace_document_style::raw_content>{content.get()}</pre>
                 </Show>
 
                 <Show when=move || !loading_content.get() && content_error.get().is_empty() && !parsed_preview.get().is_empty()>
-                    <div class="space-y-3">
+                    <div class=workspace_document_style::preview_stack>
                         {parsed_preview.get().into_iter().map(|item| {
                             let item_id = preview_item_dom_id(&source.id, &item);
                             let active_focus = workspace
@@ -601,26 +602,23 @@ pub fn DocumentDetail(
                                 <div
                                     id={item_id}
                                     tabindex="-1"
-                                    class="scroll-mt-4 rounded-xl border p-3 outline-none transition-colors"
-                                    class=("border-primary/40", is_active_citation)
-                                    class=("bg-primary/5", is_active_citation)
-                                    class=("border-border", !is_active_citation)
-                                    class=("bg-card", !is_active_citation)
+                                    class=workspace_document_style::preview_item
+                                    class=(workspace_document_style::preview_item_active, is_active_citation)
                                 >
-                                    <div class="mb-1 text-xs text-muted-foreground">
+                                    <div class=workspace_document_style::preview_item_meta>
                                         {move || choose(locale.get(), "页码 ", "Page ")}
                                         {item.page}
                                         {" · "}
                                         {move || choose(locale.get(), "游标 ", "Cursor ")}
                                         {item.cursor}
                                     </div>
-                                    <div class="whitespace-pre-wrap text-sm text-foreground">{item.text}</div>
+                                    <div class=workspace_document_style::preview_item_text>{item.text}</div>
                                 </div>
                             }
                         }).collect_view()}
 
                         <Show when=move || preview_has_more.get() || loading_more_preview.get()>
-                            <div class="flex justify-center pt-2">
+                            <div class=workspace_document_style::load_more_row>
                                 <button
                                     type="button"
                                     class="app-button-secondary"
@@ -658,7 +656,7 @@ pub fn DocumentDetail(
             </div>
 
             {/* Actions */}
-            <div class="flex items-center justify-end gap-2 border-t border-border bg-muted/40 px-4 py-3">
+            <div class=workspace_document_style::detail_footer>
                 <button
                     on:click=move |_| on_reindex(source_id_for_reindex.clone())
                     class="app-button-secondary"
@@ -693,20 +691,15 @@ pub fn DocumentListItem(
     let pin_source_id = source.id.clone();
     view! {
         <div
-            class="cursor-pointer rounded-xl border px-3 py-2 text-sm transition-colors"
-            class=("bg-primary/5", move || is_selected)
-            class=("border-l-2", move || is_selected)
-            class=("border-primary", move || is_selected)
-            class=("border-border", move || !is_selected)
-            class=("bg-card", move || !is_selected)
-            class=("hover:bg-muted/60", move || !is_selected)
+            class=workspace_document_style::row
+            class=(workspace_document_style::row_selected, move || is_selected)
             on:click=move |_| on_click(source.clone())
         >
-            <div class="flex items-center justify-between">
-                <div class="flex items-start gap-2 flex-1 min-w-0">
+            <div class=workspace_document_style::row_content>
+                <div class=workspace_document_style::left>
                     <input
                         type="checkbox"
-                        class="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+                        class=workspace_document_style::checkbox
                         prop:checked=move || is_checked
                         disabled=move || checkbox_disabled
                         on:click=move |ev| ev.stop_propagation()
@@ -714,15 +707,17 @@ pub fn DocumentListItem(
                             on_toggle_checked(source_id.clone(), event_target_checked(&ev));
                         }
                     />
-                    <div class="flex-1 min-w-0">
-                        <p class="truncate font-medium text-foreground">{source.file_name.clone()}</p>
-                        <p class="mt-0.5 text-xs text-muted-foreground">{source.title.clone()}</p>
+                    <div class=workspace_document_style::meta>
+                        <p class=workspace_document_style::title>{source.file_name.clone()}</p>
+                        <p class=workspace_document_style::status>
+                            {status_label(locale.get(), &source.status)}
+                        </p>
                     </div>
                 </div>
-                <div class="ml-2 flex shrink-0 items-center gap-2">
+                <div class=workspace_document_style::actions>
                     <button
                         type="button"
-                        class="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        class=workspace_document_style::pin_button
                         on:click=move |ev| {
                             ev.stop_propagation();
                             on_toggle_pinned(pin_source_id.clone());
@@ -734,19 +729,11 @@ pub fn DocumentListItem(
                                 choose(locale.get(), "固定到顶部", "Pin to top")
                             }
                         }}
-                    >
-                        <svg class="h-4 w-4" fill={if is_pinned { "currentColor" } else { "none" }} stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M16 7l-1.5 6 3.5 3.5-1.5 1.5-3.5-3.5L7 16l4-9 5-0zM8 21l4-4"/>
-                        </svg>
-                    </button>
-                    <span
-                        class={format!(
-                            "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {}",
-                            status_color(&source.status)
-                        )}
-                    >
-                        {status_label(locale.get(), &source.status)}
-                    </span>
+                        >
+                            <svg class=workspace_document_style::pin_icon fill={if is_pinned { "currentColor" } else { "none" }} stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M16 7l-1.5 6 3.5 3.5-1.5 1.5-3.5-3.5L7 16l4-9 5-0zM8 21l4-4"/>
+                            </svg>
+                        </button>
                 </div>
             </div>
         </div>

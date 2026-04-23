@@ -1,7 +1,7 @@
+use crate::types::{BillingConfig, HmacSha256};
 use anyhow::{Result, anyhow, bail};
 use common::OrgId;
 use hmac::Mac;
-use crate::types::{BillingConfig, HmacSha256};
 
 pub struct StripeClient {
     config: BillingConfig,

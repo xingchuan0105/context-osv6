@@ -1,8 +1,9 @@
 mod config;
+mod execute;
 mod planner;
-mod retrieval;
 mod response;
 mod response_utils;
+mod retrieval;
 
 #[cfg(test)]
 mod tests;

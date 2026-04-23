@@ -4,6 +4,7 @@
 
 pub mod api;
 pub mod app;
+pub(crate) mod auth_support;
 pub mod components;
 pub mod i18n;
 pub mod load;
@@ -34,5 +35,5 @@ pub use routes::{
     OrgDetailPage, OrganizationsPage, PreviewAccountPage, PreviewDashboardPage, PreviewEntryPage,
     PreviewHelpPage, PreviewLoginPage, PreviewSettingsPage, PreviewWorkspacePage, RagHealthPage,
     RegisterPage, ResetPasswordPage, SearchPage, SettingsPage, ShareCenterPage, SharedKbPage,
-    UsagePage, UsersPage, VerifyResetPage, WorkerStatusPage, WorkspacePage,
+    UsagePage, UsersPage, VerifyResetPage, WorkerStatusPage, WorkspaceAnalyzePage, WorkspacePage,
 };

@@ -17,7 +17,8 @@ struct EmbeddedImageMeta {
 #[async_trait]
 impl DocumentParser for HtmlParser {
     async fn parse(&self, bytes: &[u8], filename: &str) -> anyhow::Result<ParsedDocument> {
-        let html_str = String::from_utf8_lossy(bytes);
+        let html_str = String::from_utf8(bytes.to_vec())
+            .map_err(|error| anyhow::anyhow!("HTML parser requires valid UTF-8: {error}"))?;
         let document = Html::parse_document(&html_str);
 
         let title = extract_title(&document).unwrap_or_else(|| filename.to_string());
@@ -117,5 +118,14 @@ mod tests {
         let embedded = doc.metadata.get("embedded_images_json").unwrap();
         assert!(embedded.contains("https://example.com/a.png"));
         assert!(embedded.contains("diagram"));
+    }
+
+    #[tokio::test]
+    async fn html_parser_rejects_invalid_utf8() {
+        let error = HtmlParser
+            .parse(&[0xff, 0xfe], "broken.html")
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("valid UTF-8"));
     }
 }

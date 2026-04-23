@@ -7,8 +7,6 @@ pub mod service;
 mod tests;
 
 pub use anomaly::detect_request_burst;
-pub use events::{
-    CostEvent, CostEventName, ProductEvent, ProductEventName, ResultTag, Surface,
-};
+pub use events::{CostEvent, CostEventName, ProductEvent, ProductEventName, ResultTag, Surface};
 pub use rollups::{ActivationInputs, is_activated};
 pub use service::AnalyticsService;

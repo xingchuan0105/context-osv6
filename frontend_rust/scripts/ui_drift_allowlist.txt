@@ -2,7 +2,6 @@
 # format: <rule>:<relative-path-from-frontend_rust>
 
 inline-style-disallowed:crates/web-ui/src/components/billing/mod.rs
-inline-style-disallowed:crates/web-ui/src/components/share/mod.rs
 inline-style-disallowed:crates/web-ui/src/components/usage_limit_card.rs
 inline-style-disallowed:crates/web-ui/src/components/virtual_text_list.rs
 inline-style-disallowed:crates/web-ui/src/routes/dashboard/workspace/page.rs

@@ -19,7 +19,9 @@ impl PgDocumentQueries {
         auth: &AuthContext,
         notebook_id: Uuid,
     ) -> Result<Vec<Document>, crate::PgStorageError> {
-        self.repo.list_documents(auth, Some(notebook_id), None).await
+        self.repo
+            .list_documents(auth, Some(notebook_id), None)
+            .await
     }
 }
 

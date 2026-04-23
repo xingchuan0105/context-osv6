@@ -4,9 +4,11 @@
   "description": "`frontend_rust/` 是 `context-osv6` 当前正式前端实现。",
   "main": "tailwind.config.js",
   "scripts": {
+    "dev:ui": "bash scripts/dev-ui.sh",
     "build:pretext-assets": "node scripts/build-pretext-assets.mjs",
     "test:pretext-assets": "node --test tests/text_layout_assets.smoke.mjs",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:styles": "bash scripts/build-stylance-css.sh"
   },
   "keywords": [],
   "author": "",

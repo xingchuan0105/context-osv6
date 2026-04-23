@@ -69,10 +69,33 @@ impl Task for ModeSelectTask {
                 NextAction::GoTo(TASK_MEMORY_COMPAT.to_string()),
             ));
         }
-        Ok(TaskResult::new(
-            None,
-            NextAction::GoTo(go_to_mode(&request.agent_type).to_string()),
-        ))
+        let session = flow.session().await?;
+        match crate::main_agent::MainAgent::decide(&request) {
+            crate::main_agent::MainAgentDecision::Clarify { message } => {
+                let execution = self
+                    .state
+                    .execute_clarify_mode_core(&request, &session, &message)
+                    .await
+                    .map_err(graph_app_error)?;
+                flow.set_execution(&execution).await;
+                Ok(TaskResult::new(
+                    None,
+                    NextAction::GoTo(TASK_OUTPUT_GUARD.to_string()),
+                ))
+            }
+            crate::main_agent::MainAgentDecision::DirectChat => Ok(TaskResult::new(
+                None,
+                NextAction::GoTo(TASK_GENERAL.to_string()),
+            )),
+            crate::main_agent::MainAgentDecision::ExternalSearch => Ok(TaskResult::new(
+                None,
+                NextAction::GoTo(TASK_SEARCH.to_string()),
+            )),
+            crate::main_agent::MainAgentDecision::ExecutePlan => Ok(TaskResult::new(
+                None,
+                NextAction::GoTo(TASK_RAG_PREPARE_PLANNER_INPUT.to_string()),
+            )),
+        }
     }
 }
 

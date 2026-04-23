@@ -77,7 +77,8 @@ pub fn InvitePage() -> impl IntoView {
                     }
                     Err(_) => {
                         set_notebook_name.set(
-                            choose(current_locale, "未知知识库", "Unknown notebook").to_string(),
+                            choose(current_locale, "未知 Workspace", "Unknown workspace")
+                                .to_string(),
                         );
                     }
                 }
@@ -236,8 +237,8 @@ pub fn InvitePage() -> impl IntoView {
                             {move || choose(locale.get(), "你现在可以访问：", "You now have access to ")}
                             {notebook_name.get()}
                         </p>
-                        <A href="/dashboard" attr:class="block w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-center">
-                            {move || choose(locale.get(), "前往控制台", "Go to Dashboard")}
+                        <A href=move || format!("/dashboard/{}", notebook_id()) attr:class="block w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-center">
+                            {move || choose(locale.get(), "打开 Workspace", "Open Workspace")}
                         </A>
                     </div>
                 </Show>
@@ -272,16 +273,16 @@ pub fn InvitePage() -> impl IntoView {
                             </svg>
                         </div>
                         <h2 class="text-xl font-semibold text-gray-900 mb-2">
-                            {move || choose(locale.get(), "你收到了一条协作邀请", "You've been invited!")}
+                            {move || choose(locale.get(), "你收到了 Workspace 协作邀请", "You've been invited to a workspace")}
                         </h2>
                         <p class="text-gray-600 mb-6">
-                            {move || choose(locale.get(), "有人邀请你协作这个知识库：", "You have been invited to collaborate on:")}
+                            {move || choose(locale.get(), "有人邀请你协作这个 Workspace：", "You have been invited to collaborate on this workspace:")}
                         </p>
                         <div class="bg-gray-50 rounded-lg p-4 mb-6">
                             <p class="font-medium text-gray-900">{notebook_name.get()}</p>
                         </div>
                         <p class="text-sm text-gray-500 mb-6">
-                            {move || choose(locale.get(), "知识库 ID：", "Notebook ID: ")}
+                            {move || choose(locale.get(), "Workspace ID：", "Workspace ID: ")}
                             {notebook_id()}
                         </p>
 

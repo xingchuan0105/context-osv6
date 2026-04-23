@@ -5,8 +5,8 @@ use common::{AppError, ShareTokenResponse};
 use std::sync::Arc;
 
 use crate::{
-    AccessLevel, NotebookMember, PublicShareChatContext, ShareAccessLog, ShareAnalytics, ShareService,
-    ShareSettings, SharedNotebookPayload,
+    AccessLevel, NotebookMember, PublicShareChatContext, ShareAccessLog, ShareAnalytics,
+    ShareService, ShareSettings, SharedNotebookPayload,
 };
 
 pub async fn handle_create_share_link(

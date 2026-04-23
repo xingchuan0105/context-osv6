@@ -2,6 +2,7 @@ use avrag_auth::AuthContext;
 use avrag_storage_pg::PgAppRepository;
 use avrag_storage_qdrant::HttpQdrantBackend;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -34,6 +35,7 @@ pub struct ScoredChunk {
     pub caption: Option<String>,
     pub image_path: Option<String>,
     pub parser_backend: Option<String>,
+    pub source_locator: Option<Value>,
 }
 
 impl ScoredChunk {
@@ -57,7 +59,20 @@ impl ScoredChunk {
             caption: None,
             image_path: None,
             parser_backend: None,
+            source_locator: None,
         }
+    }
+
+    fn with_metadata(
+        mut self,
+        chunk_type: String,
+        parser_backend: Option<String>,
+        source_locator: Option<Value>,
+    ) -> Self {
+        self.chunk_type = chunk_type;
+        self.parser_backend = parser_backend;
+        self.source_locator = source_locator;
+        self
     }
 }
 
@@ -110,14 +125,22 @@ pub async fn run_dense_retrieval(
     let mut scored_chunks = Vec::with_capacity(hits.len());
     for hit in hits {
         if let Some(chunk) = chunk_map.get(&hit.chunk_id) {
-            scored_chunks.push(ScoredChunk::new_text(
-                hit.chunk_id,
-                hit.doc_id,
-                chunk.content.clone(),
-                hit.score,
-                "dense".to_string(),
-                hit.page.map(|p| p as i64),
-            ));
+            scored_chunks.push(
+                ScoredChunk::new_text(
+                    hit.chunk_id,
+                    hit.doc_id,
+                    chunk.content.clone(),
+                    hit.score,
+                    "dense".to_string(),
+                    hit.page.map(|p| p as i64),
+                )
+                .with_metadata(
+                    chunk_metadata_string(&chunk.metadata, "block_type")
+                        .unwrap_or_else(|| "text".to_string()),
+                    chunk_metadata_string(&chunk.metadata, "parser_backend"),
+                    chunk_metadata_value(&chunk.metadata, "source_locator"),
+                ),
+            );
         }
     }
 
@@ -142,11 +165,13 @@ pub async fn run_sparse_retrieval(
             score: chunk.score.unwrap_or(0.0),
             source: "sparse".to_string(),
             page: chunk.page,
-            chunk_type: "text".to_string(),
+            chunk_type: chunk_metadata_string(&chunk.metadata, "block_type")
+                .unwrap_or_else(|| "text".to_string()),
             asset_id: None,
             caption: None,
             image_path: None,
-            parser_backend: None,
+            parser_backend: chunk_metadata_string(&chunk.metadata, "parser_backend"),
+            source_locator: chunk_metadata_value(&chunk.metadata, "source_locator"),
         })
         .collect())
 }
@@ -174,7 +199,9 @@ pub struct MultimodalScoredChunk {
     pub score: f32,
     pub page: Option<i64>,
     pub image_path: Option<String>,
+    pub chunk_type: String,
     pub parser_backend: String,
+    pub source_locator: Option<Value>,
     pub source: String,
 }
 
@@ -232,10 +259,24 @@ pub async fn run_multimodal_retrieval(
             score: hit.score,
             page: chunk.page.map(i64::from).or(hit.page.map(|p| p as i64)),
             image_path: asset.storage_path.clone(),
+            chunk_type: chunk_metadata_string(&chunk.metadata, "block_type")
+                .unwrap_or_else(|| "image_with_context".to_string()),
             parser_backend: chunk.parser_backend.clone(),
+            source_locator: chunk_metadata_value(&chunk.metadata, "source_locator"),
             source: "multimodal_dense".to_string(),
         });
     }
 
     Ok(scored_chunks)
+}
+
+fn chunk_metadata_string(metadata: &Value, key: &str) -> Option<String> {
+    metadata
+        .get(key)
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+}
+
+fn chunk_metadata_value(metadata: &Value, key: &str) -> Option<Value> {
+    metadata.get(key).cloned().filter(|value| !value.is_null())
 }

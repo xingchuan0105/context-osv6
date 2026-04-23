@@ -2,7 +2,10 @@
 pub fn LoginPage() -> impl IntoView {
     let auth = use_auth_state();
     let navigate = use_navigate();
+    let location = use_location();
+    let location_for_submit = location.clone();
     let locale = use_ui_prefs_state().locale;
+    let password_reset_enabled = use_password_reset_enabled();
 
     let (email, set_email) = signal(String::new());
     let (password, set_password) = signal(String::new());
@@ -32,6 +35,8 @@ pub fn LoginPage() -> impl IntoView {
             };
             let auth_for_async = auth.clone();
             let navigate_for_async = navigate.clone();
+            let dashboard_path =
+                scoped_auth_path(&location_for_submit.pathname.get_untracked(), "/dashboard");
 
             spawn(async move {
                 match client.login(&req).await {
@@ -39,7 +44,7 @@ pub fn LoginPage() -> impl IntoView {
                         if resp.success {
                             if let Some(data) = resp.data {
                                 auth_for_async.set_auth(data.token, data.user);
-                                navigate_for_async("/dashboard", NavigateOptions::default());
+                                navigate_for_async(&dashboard_path, NavigateOptions::default());
                             } else {
                                 set_error.set(resp.error.unwrap_or_else(|| {
                                     t(locale_now, MessageKey::LoginFailed).to_string()
@@ -50,9 +55,13 @@ pub fn LoginPage() -> impl IntoView {
                                 t(locale_now, MessageKey::LoginFailed).to_string()
                             }));
                         }
-                    }
-                    Err(e) => {
-                        set_error.set(format!("{}: {}", t(locale_now, MessageKey::LoginFailed), e));
+                }
+                Err(e) => {
+                        set_error.set(describe_auth_error(
+                            locale_now,
+                            &t(locale_now, MessageKey::LoginFailed).to_string(),
+                            &e,
+                        ));
                     }
                 }
                 set_loading.set(false);
@@ -63,13 +72,7 @@ pub fn LoginPage() -> impl IntoView {
         <div class="app-auth-shell">
             <div class="mx-auto flex w-full max-w-[640px] flex-col items-center justify-center">
                 <div class="mb-8 flex flex-col items-center text-center">
-                    <div class="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-foreground text-background shadow-[0_8px_20px_rgba(0,0,0,0.18)]">
-                        <svg class="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 5v14M16 5v14M5 8h14M5 16h14"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 8a3 3 0 013-3h2a3 3 0 013 3v0a3 3 0 01-3 3h-2a3 3 0 01-3-3z"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 16a3 3 0 003 3h2a3 3 0 003-3v0a3 3 0 00-3-3h-2a3 3 0 00-3 3z"/>
-                        </svg>
-                    </div>
+                    <ContextOsMark class="mb-5 h-14 w-14 shadow-[0_8px_20px_rgba(0,0,0,0.18)]" />
 
                     <h1 class="text-[46px] font-semibold leading-[1.08] tracking-[-0.02em] text-foreground">
                         {move || {
@@ -83,9 +86,9 @@ pub fn LoginPage() -> impl IntoView {
                     <p class="mt-2 text-[20px] leading-[1.35] text-muted-foreground">
                         {move || {
                             if locale.get() == crate::i18n::Locale::ZhCn {
-                                "登录以继续探索您的知识库"
+                                "登录以继续进入您的 Workspace"
                             } else {
-                                "Sign in to continue with your knowledge base"
+                                "Sign in to continue with your workspace"
                             }
                         }}
                     </p>
@@ -122,8 +125,11 @@ pub fn LoginPage() -> impl IntoView {
                                 <label class="app-form-label mb-0" for="login-password">
                                     {move || t(locale.get(), MessageKey::PasswordLabel)}
                                 </label>
-                                <Show when=move || ui_capabilities().password_reset>
-                                    <A href="/reset-password" attr:class="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+                                <Show when=move || password_reset_enabled.get()>
+                                    <A
+                                        href=move || scoped_auth_path(&location.pathname.get(), "/reset-password")
+                                        attr:class="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                                    >
                                         {move || t(locale.get(), MessageKey::ForgotPassword)}
                                     </A>
                                 </Show>
@@ -191,7 +197,10 @@ pub fn LoginPage() -> impl IntoView {
                 <p class="mt-8 text-center text-[18px] text-muted-foreground">
                     <span>{move || t(locale.get(), MessageKey::NoAccountQuestion)}</span>
                     " "
-                    <A href="/register" attr:class="font-semibold text-foreground transition-colors hover:opacity-80">
+                    <A
+                        href=move || scoped_auth_path(&location.pathname.get(), "/register")
+                        attr:class="font-semibold text-foreground transition-colors hover:opacity-80"
+                    >
                         {move || t(locale.get(), MessageKey::SignUpAction)}
                     </A>
                 </p>

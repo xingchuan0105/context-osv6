@@ -30,8 +30,7 @@ pub(crate) fn router() -> Router<AppState> {
         )
         .route(
             "/notebooks/{id}/notes",
-            get(handlers::list_notebook_notes_handler)
-                .post(handlers::create_notebook_note_handler),
+            get(handlers::list_notebook_notes_handler).post(handlers::create_notebook_note_handler),
         )
         .route(
             "/notebooks/{id}/notes/{note_id}",
@@ -49,8 +48,7 @@ pub(crate) fn router() -> Router<AppState> {
         )
         .route(
             "/notebooks/{id}/share/settings",
-            get(handlers::get_share_settings_handler)
-                .put(handlers::update_share_settings_handler),
+            get(handlers::get_share_settings_handler).put(handlers::update_share_settings_handler),
         )
         .route(
             "/notebooks/{id}/share/analytics",

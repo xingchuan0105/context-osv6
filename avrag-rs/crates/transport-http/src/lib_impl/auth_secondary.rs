@@ -103,6 +103,10 @@ fn password_reset_user(email: String, user_id: Uuid) -> AuthUserDto {
     }
 }
 
+fn password_reset_enabled(config: &PasswordResetConfig) -> bool {
+    cfg!(test) || config.smtp_ready()
+}
+
 async fn begin_auth_admin_tx<'a>(
     pool: &'a sqlx::PgPool,
 ) -> Result<sqlx::Transaction<'a, sqlx::Postgres>, sqlx::Error> {
@@ -147,13 +151,93 @@ async fn send_reset_email(
     Ok(())
 }
 
-async fn auth_logout_handler(State(_state): State<AppState>) -> Response {
-    // Stateless JWT — logout is a client-side operation.
+async fn auth_runtime_capabilities_handler() -> Response {
+    let config = PasswordResetConfig::from_env();
     (
         StatusCode::OK,
-        Json(json!({"success": true, "message": "Logged out"})),
+        Json(contracts::AuthRuntimeCapabilitiesResponse {
+            password_reset_enabled: password_reset_enabled(&config),
+        }),
     )
         .into_response()
+}
+
+async fn auth_logout_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+) -> Response {
+    let Some(user_id) = state.auth().actor_id() else {
+        return handlers::error_response(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Not authenticated",
+        );
+    };
+    let Some(pg) = state.pg() else {
+        return handlers::error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "service_unavailable",
+            "Database not available",
+        );
+    };
+    let pool = pg.raw();
+    let mut tx = match begin_auth_admin_tx(pool).await {
+        Ok(tx) => tx,
+        Err(error) => {
+            warn!(error = %error, "failed to start logout transaction");
+            return handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Logout failed",
+            );
+        }
+    };
+
+    match sqlx::query(
+        r#"
+        update users
+        set auth_version = auth_version + 1
+        where id = $1
+        "#,
+    )
+    .bind(user_id.into_uuid())
+    .execute(tx.as_mut())
+    .await
+    {
+        Ok(result) => {
+            if result.rows_affected() == 0 {
+                return handlers::error_response(
+                    StatusCode::UNAUTHORIZED,
+                    "unauthorized",
+                    "Not authenticated",
+                );
+            }
+            if let Err(error) = tx.commit().await {
+                warn!(error = %error, "failed to commit logout transaction");
+                return handlers::error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal_error",
+                    "Logout failed",
+                );
+            }
+            (
+                StatusCode::OK,
+                Json(AuthEnvelope {
+                    success: true,
+                    data: None,
+                    error: None,
+                }),
+            )
+                .into_response()
+        }
+        Err(error) => {
+            warn!(error = %error, "failed to invalidate session on logout");
+            handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Logout failed",
+            )
+        }
+    }
 }
 
 async fn auth_me_handler(
@@ -472,11 +556,22 @@ async fn auth_change_password_handler(
 
     let user_uuid = user_id.into_uuid();
     let pool = pg.raw();
+    let mut tx = match begin_auth_admin_tx(pool).await {
+        Ok(tx) => tx,
+        Err(error) => {
+            warn!(error = %error, "failed to start password change transaction");
+            return handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Password update failed",
+            );
+        }
+    };
     let row = match sqlx::query_as::<_, (String, )>(
         "SELECT password_hash FROM users WHERE id = $1",
     )
     .bind(user_uuid)
-    .fetch_optional(pool)
+    .fetch_optional(tx.as_mut())
     .await
     {
         Ok(Some(row)) => row,
@@ -524,24 +619,35 @@ async fn auth_change_password_handler(
         r#"
         update users
         set password_hash = $2,
-            password_updated_at = now()
+            password_updated_at = now(),
+            auth_version = auth_version + 1
         where id = $1
         "#,
     )
     .bind(user_uuid)
     .bind(new_hash)
-    .execute(pool)
+    .execute(tx.as_mut())
     .await
     {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(AuthEnvelope {
-                success: true,
-                data: None,
-                error: None,
-            }),
-        )
-            .into_response(),
+        Ok(_) => {
+            if let Err(error) = tx.commit().await {
+                warn!(error = %error, "failed to commit password change transaction");
+                return handlers::error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal_error",
+                    "Password update failed",
+                );
+            }
+            (
+                StatusCode::OK,
+                Json(AuthEnvelope {
+                    success: true,
+                    data: None,
+                    error: None,
+                }),
+            )
+                .into_response()
+        }
         Err(error) => {
             warn!(error = %error, "failed to update password");
             handlers::error_response(
@@ -584,7 +690,18 @@ async fn auth_verify_reset_token_handler(
         PASSWORD_RESET_PURPOSE,
         req.token.trim(),
     );
-    match sqlx::query(
+    let mut tx = match begin_auth_admin_tx(pg.raw()).await {
+        Ok(tx) => tx,
+        Err(error) => {
+            warn!(error = %error, "failed to start reset token verification transaction");
+            return handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Failed to verify reset session",
+            );
+        }
+    };
+    let result = sqlx::query(
         r#"
         select 1
         from password_reset_tickets
@@ -595,9 +712,10 @@ async fn auth_verify_reset_token_handler(
         "#,
     )
     .bind(ticket_hash)
-    .fetch_optional(pg.raw())
-    .await
-    {
+    .fetch_optional(tx.as_mut())
+    .await;
+    let _ = tx.commit().await;
+    match result {
         Ok(Some(_)) => (
             StatusCode::OK,
             Json(AuthEnvelope {
@@ -662,7 +780,28 @@ async fn auth_send_reset_code_handler(
             "Database not available",
         );
     };
+    let pool = pg.raw();
     let config = PasswordResetConfig::from_env();
+
+    if !password_reset_enabled(&config) {
+        return handlers::error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "password_reset_unavailable",
+            "Password reset is not available in this environment",
+        );
+    }
+
+    let mut tx = match begin_auth_admin_tx(pool).await {
+        Ok(tx) => tx,
+        Err(error) => {
+            warn!(error = %error, "failed to start password reset request transaction");
+            return handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Failed to initiate password reset",
+            );
+        }
+    };
 
     let user_row = match sqlx::query_as::<_, (Uuid, Uuid, String)>(
         r#"
@@ -674,7 +813,7 @@ async fn auth_send_reset_code_handler(
         "#,
     )
     .bind(&email)
-    .fetch_optional(pg.raw())
+    .fetch_optional(tx.as_mut())
     .await
     {
         Ok(row) => row,
@@ -699,14 +838,6 @@ async fn auth_send_reset_code_handler(
         )
             .into_response();
     };
-
-    if !config.smtp_ready() && !cfg!(test) {
-        return handlers::error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "service_unavailable",
-            "Password reset email delivery is not configured",
-        );
-    }
 
     let code = generate_reset_code();
     let reset_ticket = generate_reset_ticket();
@@ -738,10 +869,19 @@ async fn auth_send_reset_code_handler(
     .bind(code_hash)
     .bind(ticket_expires_at)
     .bind(code_expires_at)
-    .execute(pg.raw())
+    .execute(tx.as_mut())
     .await
     {
         warn!(error = %error, "failed to persist password reset ticket");
+        return handlers::error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_error",
+            "Failed to initiate password reset",
+        );
+    }
+
+    if let Err(error) = tx.commit().await {
+        warn!(error = %error, "failed to commit password reset request");
         return handlers::error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal_error",
@@ -820,7 +960,7 @@ async fn auth_verify_reset_code_handler(
             .into_response();
     }
 
-    let mut tx = match pg.raw().begin().await {
+    let mut tx = match begin_auth_admin_tx(pg.raw()).await {
         Ok(tx) => tx,
         Err(error) => {
             warn!(error = %error, "failed to start password reset verification transaction");
@@ -866,7 +1006,7 @@ async fn auth_verify_reset_code_handler(
             Json(AuthEnvelope {
                 success: false,
                 data: None,
-                error: Some("Reset code not found".to_string()),
+                error: Some("Reset code is invalid or expired".to_string()),
             }),
         )
             .into_response();
@@ -878,7 +1018,7 @@ async fn auth_verify_reset_code_handler(
             Json(AuthEnvelope {
                 success: false,
                 data: None,
-                error: Some("Reset code attempts exceeded".to_string()),
+                error: Some("Reset code is invalid or expired".to_string()),
             }),
         )
             .into_response();
@@ -890,7 +1030,7 @@ async fn auth_verify_reset_code_handler(
             Json(AuthEnvelope {
                 success: false,
                 data: None,
-                error: Some("Reset code expired".to_string()),
+                error: Some("Reset code is invalid or expired".to_string()),
             }),
         )
             .into_response();
@@ -914,7 +1054,7 @@ async fn auth_verify_reset_code_handler(
             Json(AuthEnvelope {
                 success: false,
                 data: None,
-                error: Some("Invalid reset code".to_string()),
+                error: Some("Reset code is invalid or expired".to_string()),
             }),
         )
             .into_response();
@@ -1018,7 +1158,7 @@ async fn auth_confirm_reset_password_handler(
         }
     };
 
-    let mut tx = match pg.raw().begin().await {
+    let mut tx = match begin_auth_admin_tx(pg.raw()).await {
         Ok(tx) => tx,
         Err(error) => {
             warn!(error = %error, "failed to start password reset confirmation transaction");
@@ -1070,7 +1210,8 @@ async fn auth_confirm_reset_password_handler(
         r#"
         update users
         set password_hash = $2,
-            password_updated_at = now()
+            password_updated_at = now(),
+            auth_version = auth_version + 1
         where id = $1
         "#,
     )

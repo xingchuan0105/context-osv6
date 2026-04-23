@@ -3,18 +3,18 @@ use std::collections::BTreeMap;
 use chrono::Utc;
 use uuid::Uuid;
 
-use super::{execute_graphflow_chat, ChatGraphExecution, ChatPreflight};
+use super::{ChatGraphExecution, ChatPreflight, execute_graphflow_chat};
 use crate::{
-    agent_icon, agent_name, build_answer, build_citations, build_degrade_trace,
-    build_mode_debug, build_planner_output, build_sources, derive_profile_domains,
-    derive_profile_topics, detect_preferred_style, estimate_token_count,
-    extract_gathered_facts, extract_pending_questions, infer_current_topic,
-    map_pg_error, next_message_id, parse_uuid_or_app_error, AppState, RetrievedContext,
+    AppState, RetrievedContext, agent_icon, agent_name, build_answer, build_citations,
+    build_degrade_trace, build_mode_debug, build_planner_output, build_sources,
+    derive_profile_domains, derive_profile_topics, detect_preferred_style, estimate_token_count,
+    extract_gathered_facts, extract_pending_questions, infer_current_topic, map_pg_error,
+    next_message_id, parse_uuid_or_app_error,
 };
 use avrag_storage_pg::PgAppRepository;
 use common::{
-    now_rfc3339, AppError, ChatMessage, ChatRequest, ChatResponse, ChatSession, Citation,
-    CreateChatSessionRequest, DegradeTraceItem, ModeDebug, SourceRef, TraceInfo,
+    AppError, ChatMessage, ChatRequest, ChatResponse, ChatSession, Citation,
+    CreateChatSessionRequest, DegradeTraceItem, ModeDebug, SourceRef, TraceInfo, now_rfc3339,
 };
 use ingestion::{AuditAction, AuditRecord};
 use tracing::info;
@@ -47,6 +47,11 @@ impl AppState {
         req: &ChatRequest,
     ) -> Result<ChatPreflight, AppError> {
         let effective_notebook_id = chat_notebook_id_for_request(self, req);
+        if req.source_type.as_deref() == Some("share") && self.auth.actor_id().is_none() {
+            return Err(AppError::unauthorized(
+                "Viewing shared content does not require sign-in, but asking questions does.",
+            ));
+        }
         let estimated_input_tokens = estimate_token_count(
             &std::iter::once(req.query.as_str())
                 .chain(req.messages.iter().map(|item| item.content.as_str()))
@@ -112,11 +117,9 @@ impl AppState {
         let notebook_uuid = effective_notebook_id;
         if req.source_type.as_deref() == Some("share")
             && req.notebook_id.as_ref().is_some()
-            && req
-                .notebook_id
-                .as_ref()
-                .and_then(|id| parse_uuid_or_app_error(id, "invalid_notebook", "invalid notebook id").ok())
-                != self.auth.notebook_id()
+            && req.notebook_id.as_ref().and_then(|id| {
+                parse_uuid_or_app_error(id, "invalid_notebook", "invalid notebook id").ok()
+            }) != self.auth.notebook_id()
         {
             return Err(AppError::validation(
                 "invalid_share_scope",
@@ -195,8 +198,8 @@ impl AppState {
             let notebook_id = chat_notebook_id_for_request(self, req)
                 .map(|value| value.to_string())
                 .ok_or_else(|| {
-                AppError::validation("notebook_required", "notebook_id is required")
-            })?;
+                    AppError::validation("notebook_required", "notebook_id is required")
+                })?;
             let session_id = req
                 .session_id
                 .clone()
@@ -223,9 +226,7 @@ impl AppState {
 
         let notebook_id = chat_notebook_id_for_request(self, req)
             .map(|value| value.to_string())
-            .ok_or_else(|| {
-            AppError::validation("notebook_required", "notebook_id is required")
-        })?;
+            .ok_or_else(|| AppError::validation("notebook_required", "notebook_id is required"))?;
         if req.source_type.as_deref() == Some("share") {
             let now = now_rfc3339();
             return Ok(ChatSession {

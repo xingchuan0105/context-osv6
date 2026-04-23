@@ -1,8 +1,11 @@
+use std::collections::BTreeMap;
+
 use common::ParsedPreviewItem;
 use text_splitter::{ChunkConfig, CodeSplitter, MarkdownSplitter, TextSplitter};
 use tiktoken_rs::{CoreBPE, cl100k_base};
 use uuid::Uuid;
 
+use crate::ir::{BlockType, DocumentIr, ParseBackend, SourceLocator};
 use crate::parser::{NormalizedDocument, Page, ParsedDocument, ParsedUnitKind};
 
 const TARGET_CHUNK_TOKENS: usize = 512;
@@ -367,5 +370,238 @@ pub fn build_chunk_plan(
     ChunkPlan {
         text_chunks,
         multimodal_chunks,
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IrTextChunkItem {
+    pub text: String,
+    pub page: Option<u32>,
+    pub cursor: usize,
+    pub block_id: String,
+    pub block_type: BlockType,
+    pub parser_backend: ParseBackend,
+    pub source_locator: SourceLocator,
+    pub section_path: Vec<String>,
+    pub metadata: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct IrMultimodalChunkItem {
+    pub chunk_id: String,
+    pub block_id: String,
+    pub asset_ref: String,
+    pub image_path: String,
+    pub caption: Option<String>,
+    pub summary_text: String,
+    pub context_text: String,
+    pub page: Option<u32>,
+    pub block_type: BlockType,
+    pub parser_backend: ParseBackend,
+    pub source_locator: SourceLocator,
+    pub metadata: BTreeMap<String, String>,
+}
+
+pub struct IrChunkPlan {
+    pub text_chunks: Vec<IrTextChunkItem>,
+    pub multimodal_chunks: Vec<IrMultimodalChunkItem>,
+}
+
+pub fn build_ir_chunk_plan(doc: &DocumentIr, filename: &str, policy: &ChunkPolicy) -> IrChunkPlan {
+    let mut text_chunks: Vec<IrTextChunkItem> = Vec::new();
+    let mut multimodal_chunks: Vec<IrMultimodalChunkItem> = Vec::new();
+    let mut cursor = 0usize;
+    let mode = split_mode_for_file(filename);
+
+    for block in &doc.blocks {
+        if block.block_type.supports_text_chunking() {
+            let segments = split_text_segments(&block.text, mode);
+            for segment in segments {
+                let char_count = segment.chars().count();
+                if char_count < policy.min_chars && !text_chunks.is_empty() {
+                    if let Some(last) = text_chunks.last_mut() {
+                        last.text.push_str("\n\n");
+                        last.text.push_str(&segment);
+                    }
+                    continue;
+                }
+
+                text_chunks.push(IrTextChunkItem {
+                    text: segment,
+                    page: block.page.or(block.source_locator.page),
+                    cursor,
+                    block_id: block.block_id.clone(),
+                    block_type: block.block_type.clone(),
+                    parser_backend: block.parser_backend.clone(),
+                    source_locator: block.source_locator.clone(),
+                    section_path: block.section_path.clone(),
+                    metadata: block.metadata.clone(),
+                });
+                cursor += 1;
+            }
+        }
+
+        if block.block_type.supports_multimodal_chunking() {
+            let Some(asset_ref) = block.asset_refs.first() else {
+                continue;
+            };
+            let Some(asset) = doc.assets.iter().find(|asset| asset.asset_id == *asset_ref) else {
+                continue;
+            };
+
+            let summary_text = build_multimodal_summary_text(block);
+            let context_text = block
+                .summary_text
+                .clone()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| summary_text.clone());
+
+            multimodal_chunks.push(IrMultimodalChunkItem {
+                chunk_id: Uuid::new_v4().to_string(),
+                block_id: block.block_id.clone(),
+                asset_ref: asset.asset_id.clone(),
+                image_path: asset.storage_path.clone(),
+                caption: block.caption.clone(),
+                summary_text,
+                context_text,
+                page: block.page.or(block.source_locator.page).or(asset.page),
+                block_type: block.block_type.clone(),
+                parser_backend: block.parser_backend.clone(),
+                source_locator: block.source_locator.clone(),
+                metadata: block.metadata.clone(),
+            });
+        }
+    }
+
+    IrChunkPlan {
+        text_chunks,
+        multimodal_chunks,
+    }
+}
+
+fn split_text_segments(text: &str, mode: SplitMode) -> Vec<String> {
+    let config = token_chunk_config();
+    match mode {
+        SplitMode::Markdown => MarkdownSplitter::new(config)
+            .chunks(text)
+            .map(str::trim)
+            .filter(|segment| !segment.is_empty())
+            .map(ToOwned::to_owned)
+            .collect(),
+        SplitMode::Code(language) => match code_splitter(language, config) {
+            Some(splitter) => splitter
+                .chunks(text)
+                .map(str::trim)
+                .filter(|segment| !segment.is_empty())
+                .map(ToOwned::to_owned)
+                .collect(),
+            None => TextSplitter::new(token_chunk_config())
+                .chunks(text)
+                .map(str::trim)
+                .filter(|segment| !segment.is_empty())
+                .map(ToOwned::to_owned)
+                .collect(),
+        },
+        SplitMode::Text => TextSplitter::new(config)
+            .chunks(text)
+            .map(str::trim)
+            .filter(|segment| !segment.is_empty())
+            .map(ToOwned::to_owned)
+            .collect(),
+    }
+}
+
+fn build_multimodal_summary_text(block: &crate::ir::BlockIr) -> String {
+    [
+        block.caption.clone().unwrap_or_default(),
+        block.section_path.last().cloned().unwrap_or_default(),
+        block
+            .summary_text
+            .clone()
+            .unwrap_or_else(|| block.text.clone()),
+    ]
+    .into_iter()
+    .filter(|value| !value.trim().is_empty())
+    .collect::<Vec<_>>()
+    .join("\n\n")
+}
+
+#[cfg(test)]
+mod ir_chunk_plan_tests {
+    use super::*;
+    use crate::ir::{
+        AssetIr, AssetKind, BlockIr, BlockModality, BlockType, DocumentIr, DocumentType,
+        ParseBackend, SourceLocator,
+    };
+
+    #[test]
+    fn build_ir_chunk_plan_splits_text_and_multimodal_routes() {
+        let document = DocumentIr {
+            document_id: "doc-1".to_string(),
+            title: "deck".to_string(),
+            doc_type: DocumentType::Pptx,
+            primary_backend: ParseBackend::PoiPptx,
+            backend_version: None,
+            language: None,
+            metadata: BTreeMap::new(),
+            pages: Vec::new(),
+            blocks: vec![
+                BlockIr {
+                    block_id: "slide-1-text".to_string(),
+                    page: Some(1),
+                    block_type: BlockType::SlideText,
+                    modality: BlockModality::TextOnly,
+                    text: "Agenda".to_string(),
+                    summary_text: None,
+                    asset_refs: Vec::new(),
+                    caption: None,
+                    section_path: vec!["Agenda".to_string()],
+                    source_locator: SourceLocator {
+                        page: Some(1),
+                        slide_index: Some(1),
+                        ..SourceLocator::default()
+                    },
+                    parser_backend: ParseBackend::PoiPptx,
+                    metadata: BTreeMap::new(),
+                },
+                BlockIr {
+                    block_id: "slide-1-image".to_string(),
+                    page: Some(1),
+                    block_type: BlockType::SlideImage,
+                    modality: BlockModality::ImageWithContext,
+                    text: "Revenue chart".to_string(),
+                    summary_text: Some("Q1 revenue chart".to_string()),
+                    asset_refs: vec!["asset-1".to_string()],
+                    caption: Some("Revenue chart".to_string()),
+                    section_path: vec!["Agenda".to_string()],
+                    source_locator: SourceLocator {
+                        page: Some(1),
+                        slide_index: Some(1),
+                        ..SourceLocator::default()
+                    },
+                    parser_backend: ParseBackend::PoiPptx,
+                    metadata: BTreeMap::new(),
+                },
+            ],
+            assets: vec![AssetIr {
+                asset_id: "asset-1".to_string(),
+                page: Some(1),
+                asset_kind: AssetKind::SlideRender,
+                storage_path: "temporary://slide-1.png".to_string(),
+                mime_type: Some("image/png".to_string()),
+                width: Some(1280),
+                height: Some(720),
+                parser_backend: ParseBackend::PoiPptx,
+                metadata: BTreeMap::new(),
+            }],
+            warnings: Vec::new(),
+        };
+
+        let plan = build_ir_chunk_plan(&document, "deck.pptx", &ChunkPolicy::default());
+        assert_eq!(plan.text_chunks.len(), 1);
+        assert_eq!(plan.multimodal_chunks.len(), 1);
+        assert_eq!(plan.text_chunks[0].block_type, BlockType::SlideText);
+        assert_eq!(plan.multimodal_chunks[0].block_type, BlockType::SlideImage);
+        assert_eq!(plan.multimodal_chunks[0].asset_ref, "asset-1");
     }
 }

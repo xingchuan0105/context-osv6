@@ -1,6 +1,6 @@
 use std::{collections::HashMap, collections::HashSet};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use avrag_auth::AuthContext;
 use avrag_llm::{MultiModalEmbeddingInput, MultiModalRerankDocument};
 use common::{ChatRequest, DegradeTraceItem, RagPlan};
@@ -8,11 +8,9 @@ use common::{ChatRequest, DegradeTraceItem, RagPlan};
 use crate::merge::{cut_top_k, dual_threshold_cut, global_rrf_merge};
 use crate::retrieval::{self, ScoredChunk};
 
-use super::planner::{
-    build_item_trace, item_payload_kind, effective_item_query, request_doc_ids,
-};
+use super::planner::{build_item_trace, effective_item_query, item_payload_kind, request_doc_ids};
 use super::{
-    RagRuntime, FINAL_MIN_CHUNKS, FINAL_RERANK_BUDGET, FINAL_SCORE_THRESHOLD, GLOBAL_RRF_K,
+    FINAL_MIN_CHUNKS, FINAL_RERANK_BUDGET, FINAL_SCORE_THRESHOLD, GLOBAL_RRF_K, RagRuntime,
     TOTAL_CANDIDATE_BUDGET,
 };
 
@@ -248,12 +246,11 @@ impl RagRuntime {
                 }
             };
 
-            let multimodal_collection = format!("{}_multimodal", self.config.qdrant_collection);
             match retrieval::run_multimodal_retrieval(
                 &self.config.qdrant,
                 pg_repo,
                 auth,
-                &multimodal_collection,
+                &self.config.multimodal_collection,
                 vector,
                 doc_ids.as_deref(),
                 trace_item.recall_budget,
@@ -267,11 +264,12 @@ impl RagRuntime {
                     score: chunk.score,
                     source: chunk.source,
                     page: chunk.page,
-                    chunk_type: "image_with_context".to_string(),
+                    chunk_type: chunk.chunk_type,
                     asset_id: Some(chunk.asset_id),
                     caption: chunk.caption,
                     image_path: chunk.image_path,
                     parser_backend: Some(chunk.parser_backend),
+                    source_locator: chunk.source_locator,
                 })),
                 Err(error) => {
                     if is_missing_qdrant_collection_error(&error) {
@@ -399,7 +397,10 @@ impl RagRuntime {
         }
 
         if let Some(reranker) = &self.config.reranker {
-            let doc_texts = chunks.iter().map(|item| item.content.clone()).collect::<Vec<_>>();
+            let doc_texts = chunks
+                .iter()
+                .map(|item| item.content.clone())
+                .collect::<Vec<_>>();
             match reranker.rerank(query, &doc_texts).await {
                 Ok(results) => {
                     let mut ranked = chunks;

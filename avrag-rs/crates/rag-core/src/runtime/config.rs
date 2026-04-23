@@ -12,6 +12,7 @@ pub struct RagConfig {
     pub embedding_client: Arc<EmbeddingClient>,
     pub mm_embedding_client: Option<Arc<EmbeddingClient>>,
     pub qdrant_collection: String,
+    pub multimodal_collection: String,
     /// Qdrant backend for dense retrieval
     pub qdrant: Arc<HttpQdrantBackend>,
     /// PostgreSQL repository for sparse retrieval and content fetching.
@@ -36,6 +37,7 @@ impl RagConfig {
             embedding_client,
             mm_embedding_client: None,
             qdrant_collection: "chunks".to_string(),
+            multimodal_collection: "chunks_multimodal".to_string(),
             qdrant,
             pg_repo,
             answer_synthesizer: None,
@@ -79,4 +81,3 @@ pub struct WeightedChunkList {
     pub weight: f32,
     pub chunks: Vec<ScoredChunk>,
 }
-

@@ -23,6 +23,13 @@ impl ApiClient {
         self.get("/api/auth/me").await
     }
 
+    /// GET /api/auth/capabilities
+    pub async fn auth_runtime_capabilities(
+        &self,
+    ) -> anyhow::Result<AuthRuntimeCapabilitiesResponse> {
+        self.get("/api/auth/capabilities").await
+    }
+
     /// PUT /api/auth/profile
     pub async fn update_profile(&self, full_name: Option<String>) -> anyhow::Result<AuthEnvelope> {
         #[derive(serde::Serialize)]

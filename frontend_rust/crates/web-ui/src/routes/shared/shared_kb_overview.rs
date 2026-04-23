@@ -30,9 +30,9 @@ fn SharedKbOverview(
 
     view! {
         <Show when=move || shared_payload.get().is_some()>
-            <div class="app-surface-card">
-                <div class="mb-3">
-                    <h2 class="text-lg font-semibold text-card-foreground">
+            <div class={format!("{} {}", shared_page_style::card, shared_page_style::card_pad)}>
+                <div class=shared_page_style::section_intro>
+                    <h2 class=shared_page_style::section_title>
                         {shared_payload
                             .get()
                             .as_ref()
@@ -46,16 +46,16 @@ fn SharedKbOverview(
                             .and_then(|payload| payload.knowledge_base.description.clone())
                             .is_some()
                     }>
-                        <p class="mt-1 text-sm text-muted-foreground">
+                        <p class=shared_page_style::section_desc>
                             {shared_payload
                                 .get()
                                 .as_ref()
                                 .and_then(|payload| payload.knowledge_base.description.clone())
-                                .unwrap_or_default()}
+                            .unwrap_or_default()}
                         </p>
                     </Show>
                 </div>
-                <div class="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                <div class=shared_page_style::overview_meta>
                     <span>
                         {move || choose(locale.get(), "权限：", "Permission: ")}
                         {shared_payload
@@ -109,28 +109,28 @@ fn SharedKbOverview(
                             .unwrap_or_else(|| choose(locale.get(), "完整访问", "Full access"))}
                     </span>
                 </div>
-                <div class="mt-4 grid gap-3 md:grid-cols-3">
-                    <div class="app-metric-card">
-                        <div class="text-xs text-muted-foreground">
+                <div class=shared_page_style::metric_grid>
+                    <div class=shared_page_style::metric_card>
+                        <div class=shared_page_style::metric_label>
                             {move || choose(locale.get(), "可用资料", "Ready sources")}
                         </div>
-                        <div class="mt-2 text-xl font-semibold text-card-foreground">
+                        <div class=shared_page_style::metric_value>
                             {move || ready_source_count().to_string()}
                         </div>
                     </div>
-                    <div class="app-metric-card">
-                        <div class="text-xs text-muted-foreground">
+                    <div class=shared_page_style::metric_card>
+                        <div class=shared_page_style::metric_label>
                             {move || choose(locale.get(), "待处理资料", "Pending sources")}
                         </div>
-                        <div class="mt-2 text-xl font-semibold text-card-foreground">
+                        <div class=shared_page_style::metric_value>
                             {move || pending_source_count().to_string()}
                         </div>
                     </div>
-                    <div class="app-metric-card">
-                        <div class="text-xs text-muted-foreground">
+                    <div class=shared_page_style::metric_card>
+                        <div class=shared_page_style::metric_label>
                             {move || choose(locale.get(), "下载策略", "Download policy")}
                         </div>
-                        <div class="mt-2 text-sm font-semibold text-card-foreground">
+                        <div class=shared_page_style::metric_value_compact>
                             {shared_payload
                                 .get()
                                 .as_ref()
@@ -155,11 +155,11 @@ fn SharedKbOverview(
                 .map(|payload| !payload.sources.is_empty())
                 .unwrap_or(false)
         }>
-            <div class="app-surface-card">
-                <h2 class="mb-3 text-lg font-semibold text-card-foreground">
+            <div class={format!("{} {}", shared_page_style::card, shared_page_style::card_pad)}>
+                <h2 class=shared_page_style::section_title>
                     {move || choose(locale.get(), "共享资料", "Shared Sources")}
                 </h2>
-                <div class="space-y-2">
+                <div class=shared_page_style::source_list>
                     {shared_payload
                         .get()
                         .as_ref()
@@ -170,11 +170,11 @@ fn SharedKbOverview(
                                 .cloned()
                                 .map(|source| {
                                     view! {
-                                        <div class="rounded-xl border border-border bg-card px-3 py-2">
-                                            <div class="text-sm font-medium text-card-foreground">
+                                        <div class=shared_page_style::source_row>
+                                            <div class=shared_page_style::item_title>
                                                 {source.file_name}
                                             </div>
-                                            <div class="mt-1 text-xs text-muted-foreground">
+                                            <div class=shared_page_style::source_status>
                                                 {source_status_label(locale.get(), &source.status)}
                                             </div>
                                         </div>

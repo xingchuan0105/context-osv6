@@ -6,9 +6,37 @@ pub fn ShareCenterPage() -> impl IntoView {
 
     let auth = use_auth_state();
     let locale = use_ui_prefs_state().locale;
+    let location = use_location();
+    let navigate = use_navigate();
+    let location_for_preview = location.clone();
+    let is_preview_route =
+        Memo::new(move |_| location_for_preview.pathname.get().starts_with("/preview/live"));
+    let workspace_href = Memo::new(move |_| {
+        let nid = notebook_id();
+        if nid.is_empty() {
+            if is_preview_route.get() {
+                "/preview/live/dashboard".to_string()
+            } else {
+                "/dashboard".to_string()
+            }
+        } else if is_preview_route.get() {
+            format!("/preview/live/workspace/{nid}")
+        } else {
+            format!("/dashboard/{nid}")
+        }
+    });
+    let location_for_share_base = location.clone();
+    let share_base_href = Memo::new(move |_| {
+        let nid = notebook_id();
+        if nid.is_empty() {
+            String::new()
+        } else {
+            share_base_href_from_path(&location_for_share_base.pathname.get(), &nid)
+        }
+    });
 
     // Tab state
-    let (active_tab, set_active_tab) = signal(ShareTab::Settings);
+    let (active_tab, set_active_tab) = signal(share_tab_from_path(&location.pathname.get_untracked()));
 
     // Data state
     let (settings, set_settings) = signal(Option::<ShareSettings>::None);
@@ -23,6 +51,8 @@ pub fn ShareCenterPage() -> impl IntoView {
     let (inviting, set_inviting) = signal(false);
     let (pending_remove_member_id, set_pending_remove_member_id) = signal(Option::<String>::None);
     let (processing_remove_member_id, set_processing_remove_member_id) = signal(String::new());
+    let (loaded_analytics_key, set_loaded_analytics_key) = signal(String::new());
+    let (loaded_logs_key, set_loaded_logs_key) = signal(String::new());
 
     // Fetch share settings on mount
     let fetch_settings = move || {
@@ -80,6 +110,7 @@ pub fn ShareCenterPage() -> impl IntoView {
             match client.get_share_analytics(&nid_clone).await {
                 Ok(resp) => {
                     set_analytics.set(Some(resp));
+                    set_loaded_analytics_key.set(nid_clone.clone());
                     set_error.set(String::new());
                 }
                 Err(error) => {
@@ -88,6 +119,7 @@ pub fn ShareCenterPage() -> impl IntoView {
                         total_unique_visitors: 0,
                         views_by_day: Default::default(),
                     }));
+                    set_loaded_analytics_key.set(nid_clone.clone());
                     set_error.set(format!(
                         "{}: {}",
                         choose(
@@ -153,10 +185,12 @@ pub fn ShareCenterPage() -> impl IntoView {
             match client.get_access_logs(&nid_clone).await {
                 Ok(resp) => {
                     set_logs.set(Some(resp));
+                    set_loaded_logs_key.set(nid_clone.clone());
                     set_error.set(String::new());
                 }
                 Err(error) => {
                     set_logs.set(Some(AccessLogsResponse { logs: Vec::new() }));
+                    set_loaded_logs_key.set(nid_clone.clone());
                     set_error.set(format!(
                         "{}: {}",
                         choose(
@@ -191,46 +225,78 @@ pub fn ShareCenterPage() -> impl IntoView {
         },
     );
 
-    // Fetch other data when tab changes
-    let handle_tab_change = move |tab: ShareTab| {
-        set_active_tab.set(tab);
-        match tab {
-            ShareTab::Analytics => fetch_analytics(),
-            ShareTab::AccessLogs => fetch_logs(),
-            ShareTab::Settings => {}
-        }
-    };
-
-    let settings_callback: Arc<dyn Fn(ShareSettings) + Send + Sync> = Arc::new(move |new_settings: ShareSettings| {
+    let auth_for_tab_sync = auth.clone();
+    let location_for_tab_sync = location.clone();
+    Effect::new(move |_| {
         let nid = notebook_id();
-        if nid.is_empty() {
-            return;
-        }
-        let token = auth.token.get();
-        if token.is_none() {
+        let current_tab = share_tab_from_path(&location_for_tab_sync.pathname.get());
+        let has_token = auth_for_tab_sync.token.get().is_some();
+        set_active_tab.set(current_tab);
+
+        if !has_token || nid.is_empty() {
             return;
         }
 
-        let client = ApiClient::new(api_base_url()).with_auth(token.unwrap());
-        let draft = new_settings.clone();
-
-        spawn(async move {
-            match client.update_share_settings(&nid, &draft).await {
-                Ok(resp) => set_settings.set(Some(resp)),
-                Err(e) => {
-                    set_error.set(format!(
-                        "{}: {}",
-                        choose(
-                            locale.get_untracked(),
-                            "更新分享设置失败",
-                            "Failed to update settings"
-                        ),
-                        e
-                    ));
+        match current_tab {
+            ShareTab::Analytics => {
+                if loaded_analytics_key.get() != nid {
+                    fetch_analytics();
                 }
             }
-        });
+            ShareTab::AccessLogs => {
+                if loaded_logs_key.get() != nid {
+                    fetch_logs();
+                }
+            }
+            ShareTab::Settings => {}
+        }
     });
+
+    let navigate_for_tabs = navigate.clone();
+    let location_for_tab_click = location.clone();
+    let handle_tab_change = move |tab: ShareTab| {
+        set_active_tab.set(tab);
+        let target_path = share_tab_href(&share_base_href.get_untracked(), tab);
+        if target_path.is_empty()
+            || location_for_tab_click.pathname.get_untracked() == target_path
+        {
+            return;
+        }
+        navigate_for_tabs(&target_path, NavigateOptions::default());
+    };
+    let handle_tab_change = StoredValue::new(handle_tab_change);
+
+    let settings_callback: Arc<dyn Fn(ShareSettings) + Send + Sync> =
+        Arc::new(move |new_settings: ShareSettings| {
+            let nid = notebook_id();
+            if nid.is_empty() {
+                return;
+            }
+            let token = auth.token.get();
+            if token.is_none() {
+                return;
+            }
+
+            let client = ApiClient::new(api_base_url()).with_auth(token.unwrap());
+            let draft = new_settings.clone();
+
+            spawn(async move {
+                match client.update_share_settings(&nid, &draft).await {
+                    Ok(resp) => set_settings.set(Some(resp)),
+                    Err(e) => {
+                        set_error.set(format!(
+                            "{}: {}",
+                            choose(
+                                locale.get_untracked(),
+                                "更新分享设置失败",
+                                "Failed to update settings"
+                            ),
+                            e
+                        ));
+                    }
+                }
+            });
+        });
 
     let invite_callback: Arc<dyn Fn() + Send + Sync> = {
         let auth = auth.clone();
@@ -305,84 +371,97 @@ pub fn ShareCenterPage() -> impl IntoView {
     });
 
     // Handle enable/disable toggle
-    let toggle_callback: Arc<dyn Fn(ShareSettings) + Send + Sync> = Arc::new(move |draft: ShareSettings| {
-        let nid = notebook_id();
-        if nid.is_empty() {
-            return;
-        }
-        let token = auth.token.get();
-        if token.is_none() {
-            return;
-        }
+    let toggle_callback: Arc<dyn Fn(ShareSettings) + Send + Sync> =
+        Arc::new(move |draft: ShareSettings| {
+            let nid = notebook_id();
+            if nid.is_empty() {
+                return;
+            }
+            let token = auth.token.get();
+            if token.is_none() {
+                return;
+            }
 
-        let client = ApiClient::new(api_base_url()).with_auth(token.unwrap());
+            let client = ApiClient::new(api_base_url()).with_auth(token.unwrap());
 
-        spawn(async move {
-            if draft.share_token.is_empty() {
-                // Create share
-                match client
-                    .create_share_with_options(
-                        &nid,
-                        if draft.access_level == "private" {
-                            "viewer"
-                        } else {
-                            &draft.access_level
-                        },
-                        draft.expires_at.clone(),
-                    )
-                    .await
-                {
-                    Ok(resp) => {
-                        let new_settings = ShareSettings {
-                            share_token: resp.share_token,
-                            access_level: if draft.access_level == "private" {
-                                "link".to_string()
-                            } else {
-                                draft.access_level.clone()
-                            },
-                            expires_at: draft.expires_at.clone(),
-                            allow_download: draft.allow_download,
-                        };
-                        match client.update_share_settings(&nid, &new_settings).await {
-                            Ok(updated) => set_settings.set(Some(updated)),
-                            Err(error) => set_error.set(format!(
-                                "{}: {}",
-                                choose(
-                                    locale.get_untracked(),
-                                    "更新分享设置失败",
-                                    "Failed to update settings"
-                                ),
-                                error
-                            )),
-                        }
-                    }
-                    Err(e) => {
-                        set_error.set(format!(
-                            "{}: {}",
-                            choose(
-                                locale.get_untracked(),
-                                "启用分享失败",
-                                "Failed to enable sharing"
-                            ),
-                            e
-                        ));
-                    }
-                }
-            } else {
-                match client.revoke_share(&nid, &draft.share_token).await {
-                    Ok(_) => match client
-                        .update_share_settings(
+            spawn(async move {
+                if draft.share_token.is_empty() {
+                    // Create share
+                    match client
+                        .create_share_with_options(
                             &nid,
-                            &ShareSettings {
-                                share_token: String::new(),
-                                access_level: "private".to_string(),
-                                expires_at: None,
-                                allow_download: draft.allow_download,
+                            if draft.access_level == "private" {
+                                "viewer"
+                            } else {
+                                &draft.access_level
                             },
+                            draft.expires_at.clone(),
                         )
                         .await
                     {
-                        Ok(updated) => set_settings.set(Some(updated)),
+                        Ok(resp) => {
+                            let new_settings = ShareSettings {
+                                share_token: resp.share_token,
+                                access_level: if draft.access_level == "private" {
+                                    "link".to_string()
+                                } else {
+                                    draft.access_level.clone()
+                                },
+                                expires_at: draft.expires_at.clone(),
+                                allow_download: draft.allow_download,
+                            };
+                            match client.update_share_settings(&nid, &new_settings).await {
+                                Ok(updated) => set_settings.set(Some(updated)),
+                                Err(error) => set_error.set(format!(
+                                    "{}: {}",
+                                    choose(
+                                        locale.get_untracked(),
+                                        "更新分享设置失败",
+                                        "Failed to update settings"
+                                    ),
+                                    error
+                                )),
+                            }
+                        }
+                        Err(e) => {
+                            set_error.set(format!(
+                                "{}: {}",
+                                choose(
+                                    locale.get_untracked(),
+                                    "启用分享失败",
+                                    "Failed to enable sharing"
+                                ),
+                                e
+                            ));
+                        }
+                    }
+                } else {
+                    match client.revoke_share(&nid, &draft.share_token).await {
+                        Ok(_) => match client
+                            .update_share_settings(
+                                &nid,
+                                &ShareSettings {
+                                    share_token: String::new(),
+                                    access_level: "private".to_string(),
+                                    expires_at: None,
+                                    allow_download: draft.allow_download,
+                                },
+                            )
+                            .await
+                        {
+                            Ok(updated) => set_settings.set(Some(updated)),
+                            Err(e) => {
+                                set_error.set(format!(
+                                    "{}: {}",
+                                    choose(
+                                        locale.get_untracked(),
+                                        "关闭分享失败",
+                                        "Failed to disable sharing"
+                                    ),
+                                    e
+                                ));
+                            }
+                        },
                         Err(e) => {
                             set_error.set(format!(
                                 "{}: {}",
@@ -394,38 +473,27 @@ pub fn ShareCenterPage() -> impl IntoView {
                                 e
                             ));
                         }
-                    },
-                    Err(e) => {
-                        set_error.set(format!(
-                            "{}: {}",
-                            choose(
-                                locale.get_untracked(),
-                                "关闭分享失败",
-                                "Failed to disable sharing"
-                            ),
-                            e
-                        ));
                     }
                 }
-            }
+            });
         });
-    });
 
     view! {
-        <div class="app-page-shell">
-            <div class="mx-auto max-w-4xl space-y-6">
-                <div class="flex items-start justify-between gap-4">
-                    <div class="app-page-heading mb-0">
-                        <A href="/dashboard" attr:class="app-link inline-flex items-center gap-1">
-                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class=shared_page_style::page_shell>
+            <div class=shared_page_style::page_inner>
+                <div class=shared_page_style::page_stack>
+                <div class=shared_page_style::page_heading_row>
+                    <div class=shared_page_style::page_heading>
+                        <A href=move || workspace_href.get() attr:class=shared_page_style::back_link>
+                            <svg class=shared_page_style::back_icon fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
                             </svg>
                             {move || choose(locale.get(), "返回", "Back")}
                         </A>
-                        <h1 class="app-page-title">
+                        <h1 class=shared_page_style::page_title>
                             {move || choose(locale.get(), "分享设置", "Share Settings")}
                         </h1>
-                        <p class="app-page-subtitle">
+                        <p class=shared_page_style::page_subtitle>
                             {move || choose(locale.get(), "管理公开访问、成员协作和外部访问反馈。", "Manage external access, collaborators, and share activity from one place.")}
                         </p>
                     </div>
@@ -436,31 +504,31 @@ pub fn ShareCenterPage() -> impl IntoView {
                 </Show>
 
                 <Show when=move || loading.get()>
-                    <div class="app-empty-state">
+                    <div class=shared_page_style::loading_state>
                         {move || choose(locale.get(), "加载中...", "Loading...")}
                     </div>
                 </Show>
 
                 <Show when=move || !loading.get()>
-                    <div class="app-tab-bar">
+                    <div class=shared_page_style::tab_bar>
                         <button
-                            class="app-tab-button"
-                            class=("app-tab-button-active", move || active_tab.get() == ShareTab::Settings)
-                            on:click=move |_| handle_tab_change(ShareTab::Settings)
+                            class=shared_page_style::tab_button
+                            class=(shared_page_style::tab_button_active, move || active_tab.get() == ShareTab::Settings)
+                            on:click=move |_| handle_tab_change.with_value(|callback| callback(ShareTab::Settings))
                         >
                             {move || choose(locale.get(), "设置", "Settings")}
                         </button>
                         <button
-                            class="app-tab-button"
-                            class=("app-tab-button-active", move || active_tab.get() == ShareTab::Analytics)
-                            on:click=move |_| handle_tab_change(ShareTab::Analytics)
+                            class=shared_page_style::tab_button
+                            class=(shared_page_style::tab_button_active, move || active_tab.get() == ShareTab::Analytics)
+                            on:click=move |_| handle_tab_change.with_value(|callback| callback(ShareTab::Analytics))
                         >
                             {move || choose(locale.get(), "分析", "Analytics")}
                         </button>
                         <button
-                            class="app-tab-button"
-                            class=("app-tab-button-active", move || active_tab.get() == ShareTab::AccessLogs)
-                            on:click=move |_| handle_tab_change(ShareTab::AccessLogs)
+                            class=shared_page_style::tab_button
+                            class=(shared_page_style::tab_button_active, move || active_tab.get() == ShareTab::AccessLogs)
+                            on:click=move |_| handle_tab_change.with_value(|callback| callback(ShareTab::AccessLogs))
                         >
                             {move || choose(locale.get(), "访问日志", "Access Logs")}
                         </button>
@@ -484,6 +552,7 @@ pub fn ShareCenterPage() -> impl IntoView {
                         set_remove_member_id=set_pending_remove_member_id
                     />
                 </Show>
+                </div>
             </div>
         </div>
     }

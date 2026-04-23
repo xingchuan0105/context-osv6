@@ -28,8 +28,8 @@ fn ShareCenterPanels(
         <Show when=move || active_tab.get() == ShareTab::Settings>
             <Show
                 when=move || settings_for_panel.get().is_some()
-                fallback=view! {
-                    <div class="app-empty-state">
+                fallback=move || view! {
+                    <div class=shared_page_style::loading_state>
                         {move || choose(locale.get(), "正在加载设置...", "Loading settings...")}
                     </div>
                 }
@@ -57,8 +57,8 @@ fn ShareCenterPanels(
         <Show when=move || active_tab.get() == ShareTab::Analytics>
             <Show
                 when=move || analytics_for_panel.get().is_some()
-                fallback=view! {
-                    <div class="app-empty-state">
+                fallback=move || view! {
+                    <div class=shared_page_style::loading_state>
                         {move || choose(locale.get(), "正在加载分析...", "Loading analytics...")}
                     </div>
                 }
@@ -72,8 +72,8 @@ fn ShareCenterPanels(
         <Show when=move || active_tab.get() == ShareTab::AccessLogs>
             <Show
                 when=move || logs_for_panel.get().is_some()
-                fallback=view! {
-                    <div class="app-empty-state">
+                fallback=move || view! {
+                    <div class=shared_page_style::loading_state>
                         {move || choose(locale.get(), "正在加载访问日志...", "Loading access logs...")}
                     </div>
                 }

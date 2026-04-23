@@ -24,8 +24,65 @@ use crate::state::ui_prefs::use_ui_prefs_state;
 use crate::state::virtual_list::{HeightState, compute_window};
 use crate::state::workspace::use_workspace_state;
 
+stylance::import_style!(
+    #[allow(dead_code)]
+    workspace_chat_style,
+    "chat_workspace.module.css"
+);
+
 const CHAT_LIST_OVERSCAN: usize = 4;
 const CHAT_VIEWPORT_FALLBACK_PX: f64 = 720.0;
+
+#[cfg(target_arch = "wasm32")]
+const CHAT_AGENT_MODE_KEY_PREFIX: &str = "avrag.workspace-chat-agent-mode.v2";
+#[cfg(target_arch = "wasm32")]
+const CHAT_AGENT_MODE_LEGACY_KEY: &str = "avrag.workspace-chat-agent-mode.v1";
+
+#[cfg(target_arch = "wasm32")]
+fn read_saved_agent_mode(notebook_id: &str) -> Option<AgentMode> {
+    let window = web_sys::window()?;
+    let storage = window.local_storage().ok().flatten()?;
+    let storage_key = if notebook_id.trim().is_empty() {
+        CHAT_AGENT_MODE_LEGACY_KEY.to_string()
+    } else {
+        format!("{CHAT_AGENT_MODE_KEY_PREFIX}:{notebook_id}")
+    };
+    let raw = storage
+        .get(&storage_key)
+        .ok()
+        .flatten()
+        .or_else(|| storage.get(CHAT_AGENT_MODE_LEGACY_KEY).ok().flatten())?;
+    match raw.as_str() {
+        "rag" => Some(AgentMode::Rag),
+        "search" => Some(AgentMode::Search),
+        "general" => Some(AgentMode::General),
+        _ => None,
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn read_saved_agent_mode(_notebook_id: &str) -> Option<AgentMode> {
+    None
+}
+
+#[cfg(target_arch = "wasm32")]
+fn write_saved_agent_mode(notebook_id: &str, mode: AgentMode) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Ok(Some(storage)) = window.local_storage() else {
+        return;
+    };
+    let storage_key = if notebook_id.trim().is_empty() {
+        CHAT_AGENT_MODE_LEGACY_KEY.to_string()
+    } else {
+        format!("{CHAT_AGENT_MODE_KEY_PREFIX}:{notebook_id}")
+    };
+    let _ = storage.set(&storage_key, mode.as_str());
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn write_saved_agent_mode(_notebook_id: &str, _mode: AgentMode) {}
 
 fn next_request_id() -> String {
     next_client_id("chat")
@@ -105,10 +162,15 @@ pub fn ChatPanel(
     let auth = use_auth_state();
     let locale = use_ui_prefs_state().locale;
     let workspace = use_workspace_state();
+    let notebook_id_for_submit = notebook_id.clone();
+    let notebook_id_for_bootstrap = StoredValue::new(notebook_id.clone());
+    let notebook_id_for_mode_write = StoredValue::new(notebook_id.clone());
 
     let (input_text, set_input_text) = signal(String::new());
     let (is_submitting, set_is_submitting) = signal(false);
     let (show_mode_menu, set_show_mode_menu) = signal(false);
+    let (agent_mode_bootstrapped_for_workspace, set_agent_mode_bootstrapped_for_workspace) =
+        signal(String::new());
     let (scroll_top_px, _set_scroll_top_px) = signal(0.0);
     #[allow(unused_variables)]
     let (viewport_height_px, set_viewport_height_px) = signal(CHAT_VIEWPORT_FALLBACK_PX);
@@ -123,6 +185,19 @@ pub fn ChatPanel(
                 set_viewport_height_px.set(height);
             }
         }
+    });
+
+    Effect::new(move |_| {
+        let current_workspace_id = notebook_id_for_bootstrap.with_value(|value| value.clone());
+        if agent_mode_bootstrapped_for_workspace.get() == current_workspace_id {
+            return;
+        }
+        if let Some(saved_mode) = read_saved_agent_mode(&current_workspace_id)
+            && saved_mode != chat.agent_mode.get_untracked()
+        {
+            chat.set_agent_mode.set(saved_mode);
+        }
+        set_agent_mode_bootstrapped_for_workspace.set(current_workspace_id);
     });
 
     let virtual_items = Signal::derive(move || {
@@ -226,7 +301,7 @@ pub fn ChatPanel(
             chat.start_submit(query.clone());
 
             let client = ChatSseClient::new(api_base_url()).with_auth(token);
-            let notebook_id_clone = notebook_id.clone();
+            let notebook_id_clone = notebook_id_for_submit.clone();
             let agent_mode = chat.agent_mode.get();
             let chat_for_async = chat.clone();
             let active_session_id = chat.session_id.get();
@@ -311,6 +386,8 @@ pub fn ChatPanel(
                                         chat_for_async.set_rag_trace(trace_json);
                                     }
                                 }
+                                SseEvent::Activity { .. } => {}
+                                SseEvent::AnswerStart { .. } => {}
                                 SseEvent::Token { content, .. } => {
                                     current_content.push_str(&content);
                                     chat_for_async.append_token(content);
@@ -418,18 +495,18 @@ pub fn ChatPanel(
     }) as Arc<dyn Fn(String) + Send + Sync>);
 
     view! {
-        <div class="relative flex h-full flex-col">
-            <div class="hidden">
-                <h2 class="text-lg font-semibold text-card-foreground">
+        <div class=workspace_chat_style::shell>
+            <div class=workspace_chat_style::hidden_status>
+                <h2 class=workspace_chat_style::hidden_title>
                     {move || choose(locale.get(), "对话", "Chat")}
                 </h2>
-                <div class="text-xs text-muted-foreground">
+                <div class=workspace_chat_style::hidden_subtitle>
                     {move || status_label(locale.get(), chat.status.get())}
                 </div>
             </div>
 
             <div
-                class="relative flex-1 overflow-y-auto bg-card px-8 pt-6 pb-36"
+                class=workspace_chat_style::scroll
                 data-test-chat-scroll
                 on:scroll=move |_ev| {
                     #[cfg(target_arch = "wasm32")]
@@ -441,22 +518,22 @@ pub fn ChatPanel(
                 }
             >
                 <Show when=move || !chat.degrade_reasons.get().is_empty()>
-                    <div class="mb-4 rounded-lg border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-foreground">
-                        <div class="font-medium">
+                    <div class={format!("{} {}", workspace_chat_style::alert, workspace_chat_style::degrade_alert)}>
+                        <div class=workspace_chat_style::alert_title>
                             {move || choose(locale.get(), "降级回答", "Degraded response")}
                         </div>
-                        <div class="mt-1">{move || chat.degrade_reasons.get().join(" | ")}</div>
+                        <div class=workspace_chat_style::alert_body>{move || chat.degrade_reasons.get().join(" | ")}</div>
                     </div>
                 </Show>
 
                 <Show when=move || chat.messages.get().is_empty()>
-                    <div class="flex h-full items-center justify-center">
-                        <div class="text-center text-muted-foreground">
-                            <svg class="mx-auto mb-2 h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class=workspace_chat_style::empty_state_wrap>
+                        <div class=workspace_chat_style::empty_state>
+                            <svg class=workspace_chat_style::empty_icon fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
                             </svg>
                             <p>{move || choose(locale.get(), "开始一个研究线程", "Start a conversation")}</p>
-                            <p class="mt-1 text-sm">
+                            <p class=workspace_chat_style::empty_hint>
                                 {move || choose(locale.get(), "围绕当前资料提问、追问，并把结论整理进笔记。", "Ask questions about your sources and capture conclusions into notes.")}
                             </p>
                         </div>
@@ -468,7 +545,7 @@ pub fn ChatPanel(
                         let messages = chat.messages.get();
                         if messages.len() <= 24 {
                             view! {
-                                <div class="space-y-5">
+                                <div class=workspace_chat_style::message_stack>
                                     {messages
                                         .into_iter()
                                         .map(|msg| {
@@ -487,13 +564,14 @@ pub fn ChatPanel(
                                 .into_any()
                         } else {
                             view! {
+                                <div class=workspace_chat_style::message_stack>
                                 <VirtualTextList
                                     row_heights=Signal::derive(move || row_heights.get())
                                     viewport_height_px=Signal::derive(move || viewport_height_px.get())
                                     scroll_top_px=Signal::derive(move || scroll_top_px.get())
                                     overscan=CHAT_LIST_OVERSCAN
                                 >
-                                    <div class="space-y-4">
+                                    <div class=workspace_chat_style::virtual_stack>
                                         {move || {
                                             let visible_ids = visible_ids.get();
                                             chat.messages
@@ -514,6 +592,7 @@ pub fn ChatPanel(
                                         }}
                                     </div>
                                 </VirtualTextList>
+                                </div>
                             }
                                 .into_any()
                         }
@@ -521,47 +600,62 @@ pub fn ChatPanel(
                 </Show>
 
                 <Show when=move || chat.status.get() == ChatStatus::Error>
-                    <div class="mt-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-destructive">
-                        <p class="font-medium">{move || choose(locale.get(), "错误", "Error")}</p>
-                        <p class="mt-1 text-sm">{move || chat.error_message.get().unwrap_or_default()}</p>
+                    <div class={format!("{} {}", workspace_chat_style::alert, workspace_chat_style::error_alert)}>
+                        <p class=workspace_chat_style::alert_title>{move || choose(locale.get(), "错误", "Error")}</p>
+                        <p class=workspace_chat_style::alert_body>{move || chat.error_message.get().unwrap_or_default()}</p>
                     </div>
                 </Show>
             </div>
 
-            <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-background via-background to-transparent px-8 pb-6 pt-12">
-                <div class="workspace-compose relative mx-auto max-w-5xl">
+            <div class=workspace_chat_style::compose_shell>
+                <div class=workspace_chat_style::compose_card>
                     <form
-                        on:submit=move |ev| {
+                        on:submit={
+                            let submit_query = submit_query.clone();
+                            move |ev| {
                             ev.prevent_default();
                             submit_query(input_text.get());
                         }
-                        class="flex flex-col gap-2"
+                        }
+                        class=workspace_chat_style::compose_form
                     >
                         <textarea
-                            class="workspace-compose-input text-[18px]"
-                            rows="2"
+                            class=workspace_chat_style::compose_input
+                            rows="1"
                             prop:value=move || input_text.get()
                             placeholder={move || choose(locale.get(), "输入问题，围绕当前资料继续研究...", "Ask a question about your sources...")}
                             on:input=move |ev| set_input_text.set(event_target_value(&ev))
+                            on:keydown={
+                                let submit_query = submit_query.clone();
+                                move |ev| {
+                                    if ev.key() == "Enter" && !ev.shift_key() {
+                                        ev.prevent_default();
+                                        submit_query(input_text.get());
+                                    }
+                                }
+                            }
                             disabled=move || is_submitting.get()
                         ></textarea>
-                        <div class="workspace-compose-toolbar">
-                            <div class="relative flex items-center gap-2 text-xs text-muted-foreground">
+                        <div class=workspace_chat_style::compose_toolbar>
+                            <div class=workspace_chat_style::mode_anchor>
                                 <button
                                     type="button"
-                                    class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:bg-muted"
+                                    class=workspace_chat_style::mode_trigger
                                     on:click=move |_| set_show_mode_menu.update(|open| *open = !*open)
                                 >
-                                    <span class="text-[18px] leading-none">{"+"}</span>
+                                    <span class=workspace_chat_style::mode_trigger_icon>{"+"}</span>
                                 </button>
-                                <span class="text-muted-foreground">{move || status_label(locale.get(), chat.status.get())}</span>
+                                <span>{move || agent_mode_label(locale.get(), chat.agent_mode.get())}</span>
                                 <Show when=move || show_mode_menu.get()>
-                                    <div class="workspace-menu absolute bottom-11 left-0 z-20 w-36">
+                                    <div class={format!("workspace-menu {}", workspace_chat_style::mode_menu)}>
                                         <button
                                             type="button"
                                             class="workspace-menu-item"
                                             on:click=move |_| {
                                                 chat.set_agent_mode.set(AgentMode::Rag);
+                                                notebook_id_for_mode_write.with_value(|notebook_id| {
+                                                    write_saved_agent_mode(notebook_id, AgentMode::Rag)
+                                                });
                                                 set_show_mode_menu.set(false);
                                             }
                                         >
@@ -572,6 +666,9 @@ pub fn ChatPanel(
                                             class="workspace-menu-item"
                                             on:click=move |_| {
                                                 chat.set_agent_mode.set(AgentMode::General);
+                                                notebook_id_for_mode_write.with_value(|notebook_id| {
+                                                    write_saved_agent_mode(notebook_id, AgentMode::General)
+                                                });
                                                 set_show_mode_menu.set(false);
                                             }
                                         >
@@ -582,6 +679,9 @@ pub fn ChatPanel(
                                             class="workspace-menu-item"
                                             on:click=move |_| {
                                                 chat.set_agent_mode.set(AgentMode::Search);
+                                                notebook_id_for_mode_write.with_value(|notebook_id| {
+                                                    write_saved_agent_mode(notebook_id, AgentMode::Search)
+                                                });
                                                 set_show_mode_menu.set(false);
                                             }
                                         >
@@ -593,17 +693,18 @@ pub fn ChatPanel(
 
                             <button
                                 type="submit"
-                                class="workspace-send-button disabled:cursor-not-allowed disabled:opacity-50"
+                                class=workspace_chat_style::send_button
                                 disabled=move || input_text.get().trim().is_empty() || is_submitting.get()
+                                title={move || choose(locale.get(), "Enter 发送，Shift+Enter 换行", "Enter sends, Shift+Enter adds a newline")}
                             >
                                 <Show when=move || is_submitting.get()>
-                                    <svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <svg class=workspace_chat_style::send_spinner fill="none" viewBox="0 0 24 24">
                                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                     </svg>
                                 </Show>
                                 <Show when=move || !is_submitting.get()>
-                                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg class=workspace_chat_style::send_icon fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
                                     </svg>
                                 </Show>

@@ -8,13 +8,16 @@ use leptos::task::spawn;
 use leptos::task::spawn_local as spawn;
 use leptos_router::NavigateOptions;
 use leptos_router::components::A;
-use leptos_router::hooks::use_navigate;
+use leptos_router::hooks::{use_location, use_navigate};
 use web_sdk::ApiClient;
 use web_sdk::dtos::{
     ChangePasswordRequest, NotificationPreferences, NotificationRow, UserPreferences,
 };
 
 use crate::api::api_base_url;
+use crate::auth_support::{
+    describe_auth_error, logout_current_session, use_password_reset_enabled,
+};
 use crate::components::billing::BillingPanel;
 use crate::components::common::{EmptyMessage, ErrorBanner, LoadingMessage};
 use crate::components::{UnavailableFeatureCard, UsageLimitCard};
@@ -112,5 +115,13 @@ fn current_device_info(locale: Locale) -> CurrentDeviceInfo {
         )
         .to_string(),
         timezone: "UTC".to_string(),
+    }
+}
+
+fn scoped_settings_auth_path(current_path: &str, route: &str) -> String {
+    if current_path.starts_with("/preview/live") {
+        format!("/preview/live{route}")
+    } else {
+        route.to_string()
     }
 }

@@ -156,6 +156,8 @@ fn chat_response_roundtrips_shared_nested_types() {
             asset_id: None,
             caption: None,
             image_url: None,
+            parser_backend: None,
+            source_locator: None,
         }],
         trace: TraceInfo {
             mode: "rag".to_string(),

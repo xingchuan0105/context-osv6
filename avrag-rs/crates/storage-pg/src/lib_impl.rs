@@ -8,5 +8,7 @@ include!("lib_impl/errors_and_mappers.rs");
 include!("lib_impl/tests.rs");
 include!("lib_impl/utility.rs");
 include!("lib_impl/asset_types.rs");
+include!("lib_impl/document_ir_types.rs");
 include!("lib_impl/repository_assets.rs");
+include!("lib_impl/repository_document_ir.rs");
 include!("lib_impl/asset_mappers.rs");

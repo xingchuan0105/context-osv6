@@ -58,6 +58,7 @@ pub struct IndexedChunk {
     pub page: Option<i64>,
     pub content: String,
     pub score: Option<f32>,
+    pub metadata: serde_json::Value,
 }
 
 fn map_notebook(row: PgRow) -> Result<Notebook, PgStorageError> {
@@ -279,12 +280,14 @@ fn map_indexed_chunk(row: PgRow) -> Result<IndexedChunk, PgStorageError> {
         .map(i64::from);
     let content: String = row.try_get("content")?;
     let score = row.try_get::<Option<f32>, _>("rank").ok().flatten();
+    let metadata = row.try_get("metadata").unwrap_or_else(|_| json!({}));
     Ok(IndexedChunk {
         chunk_id: chunk_id.to_string(),
         doc_id: doc_id.to_string(),
         page,
         content,
         score,
+        metadata,
     })
 }
 
@@ -358,4 +361,3 @@ fn build_summary(content: &str) -> String {
     let compact = content.split_whitespace().collect::<Vec<_>>().join(" ");
     compact.chars().take(180).collect()
 }
-

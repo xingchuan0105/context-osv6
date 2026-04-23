@@ -1,10 +1,13 @@
-use super::*;
 use super::planner;
-use super::retrieval;
 use super::response;
-use crate::retrieval::ScoredChunk;
+use super::retrieval;
+use super::*;
 use crate::context::SessionContext;
-use common::{ChatMessage, ChatRequest, Citation, RagPlan, RagPlanItem};
+use crate::retrieval::ScoredChunk;
+use common::{
+    BackendTrace, ChatMessage, ChatRequest, Citation, Coverage, ExecutePlanResponse, RagPlan,
+    RagPlanItem, RetrievalBundle, RetrievedChunk,
+};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -86,6 +89,7 @@ fn make_scored_chunk(seed: u128, source: &str) -> ScoredChunk {
         caption: None,
         image_path: None,
         parser_backend: None,
+        source_locator: None,
     }
 }
 
@@ -365,7 +369,10 @@ fn build_answer_context_chunks_puts_retrieval_before_summary_chunks() {
     assert!(context_chunks.len() >= 3);
     assert_ne!(context_chunks[0].chunk_type, "summary");
     assert_ne!(context_chunks[1].chunk_type, "summary");
-    assert_eq!(context_chunks.last().map(|item| item.chunk_type.as_str()), Some("summary"));
+    assert_eq!(
+        context_chunks.last().map(|item| item.chunk_type.as_str()),
+        Some("summary")
+    );
 }
 
 #[test]
@@ -427,6 +434,8 @@ fn materialize_answer_markup_converts_chunk_placeholders_to_citation_tokens() {
             asset_id: None,
             caption: None,
             image_url: None,
+            parser_backend: None,
+            source_locator: None,
         },
         Citation {
             citation_id: 2,
@@ -442,11 +451,15 @@ fn materialize_answer_markup_converts_chunk_placeholders_to_citation_tokens() {
             asset_id: Some("asset-1".to_string()),
             caption: Some("figure".to_string()),
             image_url: Some("https://example.com/figure.png".to_string()),
+            parser_backend: None,
+            source_locator: None,
         },
     ];
 
-    let rendered =
-        response::materialize_answer_markup("结论 [[cite:chunk-a]]\n[[image:chunk-img]]", &citations);
+    let rendered = response::materialize_answer_markup(
+        "结论 [[cite:chunk-a]]\n[[image:chunk-img]]",
+        &citations,
+    );
 
     assert_eq!(rendered, "结论 [[1]]\n[[image:2]]");
 }
@@ -476,9 +489,106 @@ fn ensure_inline_image_placeholder_appends_first_image_when_missing() {
         asset_id: Some("asset-1".to_string()),
         caption: Some("figure".to_string()),
         image_url: Some("https://example.com/figure.png".to_string()),
+        parser_backend: None,
+        source_locator: None,
     }];
 
     let answer = response::ensure_inline_image_placeholder("正文回答 [[cite:chunk-a]]", &citations);
 
     assert!(answer.ends_with("[[image:chunk-img]]"));
+}
+
+#[tokio::test]
+async fn build_rag_chat_response_from_bundle_reuses_bundle_citations() {
+    let runtime = RagRuntime::new(test_config());
+    let request = make_request("Summarize the finding", "rag");
+    let rag_plan = RagPlan {
+        plan_version: "rag-item-v2".to_string(),
+        plan_confidence: 1.0,
+        clarify_needed: false,
+        clarify_message: String::new(),
+        items: vec![RagPlanItem {
+            priority: 1.0,
+            query: Some("Summarize the finding".to_string()),
+            bm25_terms: None,
+            summary: None,
+        }],
+    };
+    let execute_response = ExecutePlanResponse {
+        bundle: RetrievalBundle {
+            chunks: vec![RetrievedChunk {
+                chunk_id: "chunk-a".to_string(),
+                doc_id: "doc-1".to_string(),
+                chunk_type: "text".to_string(),
+                page: Some(1),
+                text: "Atlas rollback checklist".to_string(),
+                score: 0.9,
+                retrieval_channel: "dense".to_string(),
+                asset_id: None,
+                caption: None,
+                image_url: None,
+                parser_backend: None,
+                source_locator: None,
+            }],
+            citations: vec![Citation {
+                citation_id: 1,
+                doc_id: "doc-1".to_string(),
+                chunk_id: Some("chunk-a".to_string()),
+                page: Some(1),
+                doc_name: "Atlas".to_string(),
+                preview: Some("Atlas rollback checklist".to_string()),
+                content: Some("Atlas rollback checklist".to_string()),
+                score: 0.9,
+                layer: Some("dense".to_string()),
+                chunk_type: Some("text".to_string()),
+                asset_id: None,
+                caption: None,
+                image_url: None,
+                parser_backend: None,
+                source_locator: None,
+            }],
+            summary_chunks: Vec::new(),
+        },
+        coverage: Coverage {
+            requested_doc_count: 1,
+            matched_doc_count: 1,
+            retrieved_chunk_count: 1,
+            summary_chunk_count: 0,
+        },
+        degrade_trace: Vec::new(),
+        backend_trace: BackendTrace {
+            trace: None,
+            item_trace: Vec::new(),
+            retrieval_trace: common::RagTraceSummary {
+                item_count: 0,
+                total_candidate_budget: TOTAL_CANDIDATE_BUDGET,
+                max_rerank_docs: FINAL_RERANK_BUDGET,
+                max_final_chunks: FINAL_MIN_CHUNKS,
+                top_k_returned: 1,
+                summary_mode: "none".to_string(),
+                items: Vec::new(),
+            },
+        },
+    };
+
+    let response = runtime
+        .build_rag_chat_response_from_bundle(
+            &request,
+            Some("session-1"),
+            &rag_plan,
+            &execute_response,
+            avrag_llm::SynthesisOutput {
+                answer_text: "结论 [[cite:chunk-a]]".to_string(),
+                answer_blocks: Vec::new(),
+                cited_chunk_ids: vec!["chunk-a".to_string()],
+                llm_usage: None,
+            },
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.citations.len(), 1);
+    assert_eq!(response.citations[0].doc_name, "Atlas");
+    assert_eq!(response.answer, "结论 [[1]]");
 }

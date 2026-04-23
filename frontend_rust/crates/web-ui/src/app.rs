@@ -155,6 +155,11 @@ pub fn Shell() -> impl IntoView {
                         cssLink.href = withPrefix('/pkg/index.css');
                         document.head.appendChild(cssLink);
 
+                        const stylanceLink = document.createElement('link');
+                        stylanceLink.rel = 'stylesheet';
+                        stylanceLink.href = withPrefix('/pkg/stylance.css');
+                        document.head.appendChild(stylanceLink);
+
                         const { default: init, hydrate } = await import(withPrefix('/pkg/web_ui.js'));
                         await init({ module_or_path: withPrefix('/pkg/web_ui_bg.wasm') });
                         hydrate();
@@ -204,12 +209,25 @@ pub fn App() -> impl IntoView {
                 <Route path={path!("/preview/help")} view={crate::PreviewHelpPage} />
                 <Route path={path!("/preview/live")} view=|| view! { <Redirect path="/preview/live/dashboard" /> } />
                 <Route path={path!("/preview/live/login")} view={crate::LoginPage} />
+                <Route path={path!("/preview/live/reset-password")} view={ResetPasswordPage} />
+                <Route
+                    path={path!("/preview/live/reset-password/verify")}
+                    view={VerifyResetPage}
+                />
+                <Route
+                    path={path!("/preview/live/reset-password/confirm")}
+                    view={ConfirmResetPage}
+                />
                 <Route path={path!("/preview/live/dashboard")} view={crate::DashboardListPage} />
                 <Route path={path!("/preview/live/help")} view={crate::HelpPage} />
                 <Route path={path!("/preview/live/settings")} view={crate::SettingsPage} />
                 <Route
                     path={path!("/preview/live/workspace/:notebook_id")}
                     view={crate::WorkspacePage}
+                />
+                <Route
+                    path={path!("/preview/live/workspace/:notebook_id/analyze")}
+                    view={crate::WorkspaceAnalyzePage}
                 />
                 <Route
                     path={path!("/preview/live/workspace/:notebook_id/api-access")}
@@ -219,12 +237,24 @@ pub fn App() -> impl IntoView {
                     path={path!("/preview/live/workspace/:notebook_id/share")}
                     view={crate::ShareCenterPage}
                 />
+                <Route
+                    path={path!("/preview/live/workspace/:notebook_id/share/analytics")}
+                    view={crate::ShareCenterPage}
+                />
+                <Route
+                    path={path!("/preview/live/workspace/:notebook_id/share/access-logs")}
+                    view={crate::ShareCenterPage}
+                />
 
                 <Route path={path!("/dashboard")} view={crate::DashboardListPage} />
-                <Route path={path!("/dashboard/search")} view={crate::SearchPage} />
+                <Route path={path!("/dashboard/search")} view=|| view! { <Redirect path="/dashboard" /> } />
                 <Route
                     path={path!("/dashboard/:notebook_id")}
                     view={crate::WorkspacePage}
+                />
+                <Route
+                    path={path!("/dashboard/:notebook_id/analyze")}
+                    view={crate::WorkspaceAnalyzePage}
                 />
                 <Route
                     path={path!("/dashboard/:notebook_id/api-access")}

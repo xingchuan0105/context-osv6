@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use avrag_auth::AuthContext;
 use chrono::{DateTime, Utc};
 use sqlx::Row;
@@ -378,5 +378,4 @@ impl ShareService {
         tx.commit().await?;
         Ok(())
     }
-
 }

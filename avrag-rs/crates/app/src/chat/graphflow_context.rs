@@ -59,6 +59,14 @@ impl ChatFlowContext {
         self.get(KEY_RAG_PLAN).await
     }
 
+    async fn set_rag_execute_response(&self, response: &common::ExecutePlanResponse) {
+        self.0.set(KEY_RAG_EXECUTE_RESPONSE, response).await;
+    }
+
+    async fn rag_execute_response(&self) -> graph_flow::Result<common::ExecutePlanResponse> {
+        self.get(KEY_RAG_EXECUTE_RESPONSE).await
+    }
+
     async fn set_docscope_metadata(&self, metadata: &common::DocScopeMetadata) {
         self.0.set(KEY_DOCSCOPE_METADATA, metadata).await;
     }

@@ -1,0 +1,20 @@
+[package]
+name = "frontend-web-dev-server"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+any_spawner = { version = "0.3", features = ["tokio"] }
+axum.workspace = true
+futures-util.workspace = true
+leptos = { workspace = true, features = ["ssr", "nightly"] }
+leptos_axum.workspace = true
+reqwest = { version = "0.12", features = ["stream"] }
+tokio.workspace = true
+tower-http = { workspace = true, features = ["trace"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+web_ui = { package = "frontend-web-ui", path = "../web-ui", default-features = false, features = ["ssr"] }

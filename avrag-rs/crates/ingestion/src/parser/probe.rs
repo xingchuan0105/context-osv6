@@ -1,8 +1,18 @@
 use anyhow::Result;
 use lopdf::Document;
+use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PdfPageProbeResult {
+    pub page_number: u32,
+    pub extracted_text_chars: usize,
+    pub image_hint_count: usize,
+    pub table_hint_count: usize,
+    pub likely_scanned: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParseProbeResult {
     pub mime_type: String,
     pub extension: String,
@@ -12,6 +22,7 @@ pub struct ParseProbeResult {
     pub table_hint_count: usize,
     pub likely_scanned: bool,
     pub likely_presentation: bool,
+    pub pdf_page_probes: Vec<PdfPageProbeResult>,
 }
 
 impl ParseProbeResult {
@@ -25,6 +36,7 @@ impl ParseProbeResult {
             table_hint_count: 0,
             likely_scanned: false,
             likely_presentation: false,
+            pdf_page_probes: Vec::new(),
         }
     }
 }
@@ -69,30 +81,46 @@ impl ParseProbe {
         let mut total_text_chars = 0;
         let mut image_hint_count = 0;
         let mut table_hint_count = 0;
+        let mut page_probes = Vec::with_capacity(pages.len());
 
         for (page_num, (page_id, _)) in pages.iter().enumerate() {
-            if page_num >= 3 {
-                break;
+            let page_number = page_num as u32 + 1;
+            let (page_text_chars, page_image_hints, page_table_hints) =
+                if let Ok(content) = doc.extract_text(&[*page_id]) {
+                    let lower_content = content.to_lowercase();
+                    (
+                        content.len(),
+                        lower_content.matches("figure").count()
+                            + lower_content.matches("image").count()
+                            + lower_content.matches("chart").count()
+                            + lower_content.matches("diagram").count(),
+                        lower_content.matches("table").count()
+                            + lower_content.matches("|").count()
+                            + lower_content.matches("─────").count(),
+                    )
+                } else {
+                    (0, 0, 0)
+                };
+
+            if page_num < 3 {
+                total_text_chars += page_text_chars;
+                image_hint_count += page_image_hints;
+                table_hint_count += page_table_hints;
             }
 
-            if let Ok(content) = doc.extract_text(&[*page_id]) {
-                total_text_chars += content.len();
-
-                let lower_content = content.to_lowercase();
-                image_hint_count += lower_content.matches("figure").count()
-                    + lower_content.matches("image").count()
-                    + lower_content.matches("chart").count()
-                    + lower_content.matches("diagram").count();
-
-                table_hint_count += lower_content.matches("table").count()
-                    + lower_content.matches("|").count()
-                    + lower_content.matches("─────").count();
-            }
+            page_probes.push(PdfPageProbeResult {
+                page_number,
+                extracted_text_chars: page_text_chars,
+                image_hint_count: page_image_hints,
+                table_hint_count: page_table_hints,
+                likely_scanned: page_text_chars < 100,
+            });
         }
 
         result.extracted_text_chars = total_text_chars;
         result.image_hint_count = image_hint_count;
         result.table_hint_count = table_hint_count;
+        result.pdf_page_probes = page_probes;
 
         let inspected_pages = pages.len().min(3);
         let avg_text_per_page = if inspected_pages > 0 {
@@ -158,6 +186,7 @@ mod tests {
         assert_eq!(result.extension, "txt");
         assert_eq!(result.extracted_text_chars, 0);
         assert!(!result.likely_scanned);
+        assert!(result.pdf_page_probes.is_empty());
     }
 
     #[test]

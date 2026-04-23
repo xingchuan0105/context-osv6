@@ -33,7 +33,14 @@ async fn post_chat_with_stream_flag_only_returns_sse() {
 
     assert_sse_response(response, |events| {
         assert!(matches!(events.first(), Some(ChatEvent::Start { request_id: rid, session_id }) if rid == request_id && !session_id.is_empty()));
-        assert!(matches!(events.get(1), Some(ChatEvent::Token { request_id: rid, message_id, content }) if rid == request_id && *message_id >= 0 && !content.is_empty()));
+        assert!(events.iter().any(|event| matches!(event, ChatEvent::AnswerStart { request_id: rid, session_id, .. } if rid == request_id && !session_id.is_empty())));
+        assert!(
+            events
+                .iter()
+                .filter(|event| matches!(event, ChatEvent::Token { request_id: rid, message_id, content } if rid == request_id && *message_id >= 0 && !content.is_empty()))
+                .count()
+                >= 2
+        );
         assert!(matches!(events.last(), Some(ChatEvent::Done { request_id: rid, session_id, message_id, payload }) if rid == request_id && !session_id.is_empty() && *message_id >= 0 && payload.get("answer").and_then(|value| value.as_str()).is_some()));
     })
     .await;
@@ -60,6 +67,7 @@ async fn post_chat_with_accept_sse_only_returns_sse() {
 
     assert_sse_response(response, |events| {
         assert!(events.iter().any(|event| matches!(event, ChatEvent::Start { request_id: rid, .. } if rid == request_id)));
+        assert!(events.iter().any(|event| matches!(event, ChatEvent::AnswerStart { request_id: rid, .. } if rid == request_id)));
         assert!(events.iter().any(|event| matches!(event, ChatEvent::Token { request_id: rid, .. } if rid == request_id)));
         assert!(events.iter().any(|event| matches!(event, ChatEvent::Done { request_id: rid, .. } if rid == request_id)));
     })
@@ -193,6 +201,20 @@ async fn assert_sse_response(
             .map(|value| value.starts_with("text/event-stream"))
             .unwrap_or(false)
     );
+    assert_eq!(
+        response
+            .headers()
+            .get(header::CACHE_CONTROL)
+            .and_then(|value| value.to_str().ok()),
+        Some("no-cache")
+    );
+    assert_eq!(
+        response
+            .headers()
+            .get("x-accel-buffering")
+            .and_then(|value| value.to_str().ok()),
+        Some("no")
+    );
 
     let events = collect_sse_events(response.into_body()).await;
     assert!(!events.is_empty());
@@ -225,8 +247,8 @@ async fn collect_sse_events(body: Body) -> Vec<ChatEvent> {
             } else if let Some(value) = line.strip_prefix("data:") {
                 data_lines.push(value.trim().to_string());
             } else if line.is_empty() && !data_lines.is_empty() {
-                let event =
-                    serde_json::from_str::<ChatEvent>(&data_lines.join("\n")).unwrap_or_else(|_| {
+                let event = serde_json::from_str::<ChatEvent>(&data_lines.join("\n"))
+                    .unwrap_or_else(|_| {
                         panic!(
                             "failed to decode SSE data for event {event_name}: {}",
                             data_lines.join("\n")
@@ -252,6 +274,8 @@ async fn collect_sse_events(body: Body) -> Vec<ChatEvent> {
 fn sse_event_name(event: &ChatEvent) -> &'static str {
     match event {
         ChatEvent::Start { .. } => "start",
+        ChatEvent::Activity { .. } => "activity",
+        ChatEvent::AnswerStart { .. } => "answer_start",
         ChatEvent::Trace { .. } => "trace",
         ChatEvent::Token { .. } => "token",
         ChatEvent::Citations { .. } => "citations",

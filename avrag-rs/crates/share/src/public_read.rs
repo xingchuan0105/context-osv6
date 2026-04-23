@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use avrag_auth::AuthContext;
 use chrono::{DateTime, Utc};
 use sqlx::Row;
@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 use crate::db::{set_current_org, set_current_role, set_public_share_token};
 use crate::{
-    AccessLevel, PublicShareChatContext, ShareAccessLog, ShareAnalytics, ShareService, SharedKnowledgeBase,
-    SharedNotebookPayload, SharedShareInfo, SharedSource,
+    AccessLevel, PublicShareChatContext, ShareAccessLog, ShareAnalytics, ShareService,
+    SharedKnowledgeBase, SharedNotebookPayload, SharedShareInfo, SharedSource,
 };
 
 impl ShareService {

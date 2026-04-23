@@ -4,6 +4,14 @@ use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use uuid::Uuid;
 
+pub mod v1;
+
+pub use v1::{
+    LongTermMemoryStore, MemoryObject, NoopMemvidStore, WorkspaceLongTermMemory,
+    WorkspaceMemoryTurn, WorkspaceShortTermMemoryWindow, build_short_term_memory_window,
+    dedupe_adjacent_assistant_messages, should_refresh_long_term_memory,
+};
+
 /// Layer 1: Raw messages (last N messages)
 pub struct Layer1Messages {
     pub messages: Vec<common::ChatMessage>,

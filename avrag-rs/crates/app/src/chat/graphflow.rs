@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -19,6 +21,7 @@ const KEY_EXECUTION: &str = "chat.execution";
 const KEY_RESPONSE: &str = "chat.response";
 const KEY_RAG_SESSION_CONTEXT: &str = "chat.rag_session_context";
 const KEY_RAG_PLAN: &str = "chat.rag_plan";
+const KEY_RAG_EXECUTE_RESPONSE: &str = "chat.rag_execute_response";
 const KEY_DOCSCOPE_METADATA: &str = "chat.docscope_metadata";
 const KEY_TEXT_DENSE_LISTS: &str = "chat.text_dense_lists";
 const KEY_BM25_LISTS: &str = "chat.bm25_lists";
@@ -41,6 +44,7 @@ const TASK_RAG_LOAD_SESSION_CONTEXT: &str = "rag_load_session_context";
 const TASK_RAG_PREPARE_PLANNER_INPUT: &str = "rag_prepare_planner_input";
 const TASK_RAG_CALL_PLANNER: &str = "rag_call_planner";
 const TASK_RAG_NORMALIZE_PLAN: &str = "rag_normalize_plan";
+const TASK_RAG_EXECUTE_PLAN: &str = "rag_execute_plan";
 const TASK_RAG_RETRIEVE_TEXT_DENSE: &str = "rag_retrieve_text_dense";
 const TASK_RAG_RETRIEVE_BM25: &str = "rag_retrieve_bm25";
 const TASK_RAG_RETRIEVE_MULTIMODAL_DENSE: &str = "rag_retrieve_multimodal_dense";
@@ -103,9 +107,6 @@ fn build_chat_graph(state: AppState) -> graph_flow::Graph {
         .add_task(Arc::new(SearchModeTask {
             state: state.clone(),
         }))
-        .add_task(Arc::new(RagLoadSessionContextTask {
-            state: state.clone(),
-        }))
         .add_task(Arc::new(RagPreparePlannerInputTask {
             state: state.clone(),
         }))
@@ -115,28 +116,7 @@ fn build_chat_graph(state: AppState) -> graph_flow::Graph {
         .add_task(Arc::new(RagNormalizePlanTask {
             state: state.clone(),
         }))
-        .add_task(Arc::new(RagRetrieveTextDenseTask {
-            state: state.clone(),
-        }))
-        .add_task(Arc::new(RagRetrieveBm25Task {
-            state: state.clone(),
-        }))
-        .add_task(Arc::new(RagRetrieveMultimodalDenseTask {
-            state: state.clone(),
-        }))
-        .add_task(Arc::new(RagMergeTextRrfTask {
-            state: state.clone(),
-        }))
-        .add_task(Arc::new(RagMultimodalRerankTask {
-            state: state.clone(),
-        }))
-        .add_task(Arc::new(RagCutFinalCandidatesTask {
-            state: state.clone(),
-        }))
-        .add_task(Arc::new(RagApplySummaryPolicyTask {
-            state: state.clone(),
-        }))
-        .add_task(Arc::new(RagBuildAnswerContextTask {
+        .add_task(Arc::new(RagExecutePlanTask {
             state: state.clone(),
         }))
         .add_task(Arc::new(RagAnswerSynthesizeTask {
@@ -163,23 +143,12 @@ fn build_chat_graph(state: AppState) -> graph_flow::Graph {
         .add_edge(TASK_MODE_SELECT, TASK_MEMORY_COMPAT)
         .add_edge(TASK_MODE_SELECT, TASK_GENERAL)
         .add_edge(TASK_MODE_SELECT, TASK_SEARCH)
-        .add_edge(TASK_MODE_SELECT, TASK_RAG_LOAD_SESSION_CONTEXT)
+        .add_edge(TASK_MODE_SELECT, TASK_RAG_PREPARE_PLANNER_INPUT)
         .add_edge(TASK_MEMORY_COMPAT, TASK_OUTPUT_GUARD)
-        .add_edge(
-            TASK_RAG_LOAD_SESSION_CONTEXT,
-            TASK_RAG_PREPARE_PLANNER_INPUT,
-        )
         .add_edge(TASK_RAG_PREPARE_PLANNER_INPUT, TASK_RAG_CALL_PLANNER)
         .add_edge(TASK_RAG_CALL_PLANNER, TASK_RAG_NORMALIZE_PLAN)
-        .add_edge(TASK_RAG_NORMALIZE_PLAN, TASK_RAG_RETRIEVE_TEXT_DENSE)
-        .add_edge(TASK_RAG_RETRIEVE_TEXT_DENSE, TASK_RAG_RETRIEVE_BM25)
-        .add_edge(TASK_RAG_RETRIEVE_BM25, TASK_RAG_RETRIEVE_MULTIMODAL_DENSE)
-        .add_edge(TASK_RAG_RETRIEVE_MULTIMODAL_DENSE, TASK_RAG_MERGE_TEXT_RRF)
-        .add_edge(TASK_RAG_MERGE_TEXT_RRF, TASK_RAG_MULTIMODAL_RERANK)
-        .add_edge(TASK_RAG_MULTIMODAL_RERANK, TASK_RAG_CUT_FINAL_CANDIDATES)
-        .add_edge(TASK_RAG_CUT_FINAL_CANDIDATES, TASK_RAG_APPLY_SUMMARY_POLICY)
-        .add_edge(TASK_RAG_APPLY_SUMMARY_POLICY, TASK_RAG_BUILD_ANSWER_CONTEXT)
-        .add_edge(TASK_RAG_BUILD_ANSWER_CONTEXT, TASK_RAG_ANSWER_SYNTHESIZE)
+        .add_edge(TASK_RAG_NORMALIZE_PLAN, TASK_RAG_EXECUTE_PLAN)
+        .add_edge(TASK_RAG_EXECUTE_PLAN, TASK_RAG_ANSWER_SYNTHESIZE)
         .add_edge(TASK_RAG_ANSWER_SYNTHESIZE, TASK_RAG_VALIDATE_CITATIONS)
         .add_edge(TASK_GENERAL, TASK_OUTPUT_GUARD)
         .add_edge(TASK_SEARCH, TASK_OUTPUT_GUARD)
@@ -228,14 +197,6 @@ async fn append_degrade_trace(flow: &ChatFlowContext, mut trace: Vec<common::Deg
     let mut existing = flow.degrade_trace().await.unwrap_or_default();
     existing.append(&mut trace);
     flow.set_degrade_trace(&existing).await;
-}
-
-fn go_to_mode(agent_type: &str) -> &'static str {
-    match agent_type {
-        "general" => TASK_GENERAL,
-        "search" => TASK_SEARCH,
-        _ => TASK_RAG_LOAD_SESSION_CONTEXT,
-    }
 }
 
 include!("graphflow_tasks.rs");

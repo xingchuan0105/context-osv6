@@ -44,13 +44,27 @@ async function expectVisualSnapshot(page: Page, snapshotName: string): Promise<v
 }
 
 test.describe("Visual UI Regression", () => {
-  test("V01: login page shell", async ({ page }) => {
+  test("V00: preview dashboard shell", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 810 });
+    await gotoAndWaitForHydration(page, "/preview/dashboard");
+    await expect(page.getByText("NotebookLM")).toBeVisible();
+    await expectVisualSnapshot(page, "preview-dashboard-shell.png");
+  });
+
+  test("V01: preview workspace shell", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 810 });
+    await gotoAndWaitForHydration(page, "/preview/workspace");
+    await expect(page.getByText("Research Project Alpha")).toBeVisible();
+    await expectVisualSnapshot(page, "preview-workspace-shell.png");
+  });
+
+  test("V02: login page shell", async ({ page }) => {
     await gotoAndWaitForHydration(page, "/login");
     await expect(page.locator("form").first()).toBeVisible();
     await expectVisualSnapshot(page, "login-shell.png");
   });
 
-  test("V02: settings appearance shell", async ({ page, request }) => {
+  test("V03: settings appearance shell", async ({ page, request }) => {
     const auth = await registerTestUser(request);
     await seedBrowserAuth(page, request, auth.token);
 
@@ -64,7 +78,7 @@ test.describe("Visual UI Regression", () => {
     await expectVisualSnapshot(page, "settings-appearance-shell.png");
   });
 
-  test("V03: workspace shell", async ({ page, request }) => {
+  test("V04: workspace shell", async ({ page, request }) => {
     const auth = await registerTestUser(request);
     const notebookId = await createNotebookViaAPI(
       request,

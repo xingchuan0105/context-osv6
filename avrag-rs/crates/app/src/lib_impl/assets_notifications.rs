@@ -63,6 +63,12 @@ impl AppState {
                         asset_id: multimodal.asset_id.map(|value| value.to_string()),
                         caption,
                         image_url,
+                        parser_backend: Some(multimodal.parser_backend.clone()),
+                        source_locator: multimodal
+                            .metadata
+                            .get("source_locator")
+                            .cloned()
+                            .filter(|value| !value.is_null()),
                     });
                 }
 
@@ -77,10 +83,25 @@ impl AppState {
                         doc_id: Some(citation.doc_id),
                         chunk_id: Some(chunk_uuid.to_string()),
                         page: chunk.page.map(|value| value as usize),
-                        chunk_type: Some("text".to_string()),
+                        chunk_type: chunk
+                            .metadata
+                            .get("block_type")
+                            .and_then(serde_json::Value::as_str)
+                            .map(ToOwned::to_owned)
+                            .or(Some("text".to_string())),
                         asset_id: None,
                         caption: None,
                         image_url: None,
+                        parser_backend: chunk
+                            .metadata
+                            .get("parser_backend")
+                            .and_then(serde_json::Value::as_str)
+                            .map(ToOwned::to_owned),
+                        source_locator: chunk
+                            .metadata
+                            .get("source_locator")
+                            .cloned()
+                            .filter(|value| !value.is_null()),
                     });
                 }
             }
@@ -95,6 +116,8 @@ impl AppState {
                 asset_id: citation.asset_id,
                 caption: citation.caption,
                 image_url: citation.image_url,
+                parser_backend: citation.parser_backend,
+                source_locator: citation.source_locator,
             });
         }
 
@@ -136,6 +159,8 @@ impl AppState {
             asset_id: citation.asset_id.clone(),
             caption: citation.caption.clone(),
             image_url: citation.image_url.clone(),
+            parser_backend: citation.parser_backend.clone(),
+            source_locator: citation.source_locator.clone(),
         })
     }
 

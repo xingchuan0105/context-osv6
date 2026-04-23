@@ -9,20 +9,8 @@ impl AppState {
             make_llm_client(&config.summary_llm).or_else(|| make_llm_client(&config.answer_llm));
         let chatmemory = None;
         let search_executor = Some(Arc::new(SearchExecutor::new(avrag_search::SearchConfig {
-            mode: config.search.mode.clone(),
             provider: config.search.provider.clone(),
-            base_url: config.search.base_url.clone(),
-            api_key: config.search.api_key.clone(),
-            max_results: config.search.max_results,
-            max_sub_queries: config.search.max_sub_queries,
-            citation_required: config.search.citation_required,
-            planner_enabled: config.search.planner_enabled,
-            query_type_enabled: config.search.query_type_enabled,
-            extract_enabled: config.search.extract_enabled,
-            planner_llm: make_llm_client(&config.search_llm).map(Arc::new),
-            synthesizer: make_synthesizer(&config.answer_llm),
             perplexity_api_key: config.search.perplexity_api_key.clone(),
-            perplexity_model: config.search.perplexity_model.clone(),
         })));
 
         // RAG components not available in memory mode
@@ -62,20 +50,8 @@ impl AppState {
             make_llm_client(&config.summary_llm).or_else(|| make_llm_client(&config.answer_llm));
         let chatmemory = pg.as_ref().map(|p| Arc::new(ChatMemory::new(p.clone())));
         let search_executor = Some(Arc::new(SearchExecutor::new(avrag_search::SearchConfig {
-            mode: config.search.mode.clone(),
             provider: config.search.provider.clone(),
-            base_url: config.search.base_url.clone(),
-            api_key: config.search.api_key.clone(),
-            max_results: config.search.max_results,
-            max_sub_queries: config.search.max_sub_queries,
-            citation_required: config.search.citation_required,
-            planner_enabled: config.search.planner_enabled,
-            query_type_enabled: config.search.query_type_enabled,
-            extract_enabled: config.search.extract_enabled,
-            planner_llm: make_llm_client(&config.search_llm).map(Arc::new),
-            synthesizer: make_synthesizer(&config.answer_llm),
             perplexity_api_key: config.search.perplexity_api_key.clone(),
-            perplexity_model: config.search.perplexity_model.clone(),
         })));
 
         // Create RAG components if pg and embedding are available
@@ -107,6 +83,7 @@ impl AppState {
                     Some(pg_repo.clone()),
                 );
                 rag_config.qdrant_collection = config.qdrant.collection.clone();
+                rag_config.multimodal_collection = config.qdrant.multimodal_collection.clone();
                 if let Some(p) = planner {
                     rag_config = rag_config.with_planner(p);
                 }

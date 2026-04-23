@@ -4,7 +4,20 @@ fn SecuritySettings() -> impl IntoView {
     let ui_prefs = use_ui_prefs_state();
     let locale = ui_prefs.locale;
     let theme = ui_prefs.theme;
+    let password_reset_enabled = use_password_reset_enabled();
     let navigate = use_navigate();
+    let location = use_location();
+    let location_for_login = location.clone();
+    let login_path =
+        Memo::new(move |_| scoped_settings_auth_path(&location_for_login.pathname.get(), "/login"));
+    let location_for_reset = location.clone();
+    let reset_password_path =
+        Memo::new(move |_| {
+            scoped_settings_auth_path(&location_for_reset.pathname.get(), "/reset-password")
+        });
+    let auth_for_password_change = auth.clone();
+    let navigate_for_password_change = navigate.clone();
+    let login_path_for_password_change = login_path.clone();
     let (current_password, set_current_password) = signal(String::new());
     let (new_password, set_new_password) = signal(String::new());
     let (confirm_password, set_confirm_password) = signal(String::new());
@@ -40,6 +53,9 @@ fn SecuritySettings() -> impl IntoView {
             old_password: current_password.get(),
             new_password: new_password.get(),
         };
+        let auth_for_async = auth_for_password_change.clone();
+        let navigate_for_async = navigate_for_password_change.clone();
+        let login_path_for_async = login_path_for_password_change.get_untracked();
 
         spawn(async move {
             let client = ApiClient::new(api_base_url()).with_auth(token);
@@ -48,10 +64,8 @@ fn SecuritySettings() -> impl IntoView {
                     set_current_password.set(String::new());
                     set_new_password.set(String::new());
                     set_confirm_password.set(String::new());
-                    set_message.set(
-                        choose(locale.get_untracked(), "密码已更新", "Password updated")
-                            .to_string(),
-                    );
+                    auth_for_async.logout();
+                    navigate_for_async(&login_path_for_async, NavigateOptions::default());
                 }
                 Ok(resp) => {
                     set_error.set(resp.error.unwrap_or_else(|| {
@@ -64,14 +78,15 @@ fn SecuritySettings() -> impl IntoView {
                     }));
                 }
                 Err(error) => {
-                    set_error.set(format!(
-                        "{}: {}",
-                        choose(
+                    set_error.set(describe_auth_error(
+                        locale.get_untracked(),
+                        &choose(
                             locale.get_untracked(),
                             "修改密码失败",
-                            "Failed to change password"
-                        ),
-                        error
+                            "Failed to change password",
+                        )
+                        .to_string(),
+                        &error,
                     ));
                 }
             }
@@ -80,9 +95,17 @@ fn SecuritySettings() -> impl IntoView {
     };
 
     let auth_for_logout = auth.clone();
+    let navigate_for_logout = navigate.clone();
     let handle_logout = move |_| {
-        auth_for_logout.logout();
-        navigate("/login", NavigateOptions::default());
+        let token = auth_for_logout.token.get_untracked();
+        let auth = auth_for_logout.clone();
+        let navigate = navigate_for_logout.clone();
+        let logout_path = login_path.get_untracked();
+        spawn(async move {
+            logout_current_session(token).await;
+            auth.logout();
+            navigate(&logout_path, NavigateOptions::default());
+        });
     };
 
     view! {
@@ -131,7 +154,7 @@ fn SecuritySettings() -> impl IntoView {
                 </form>
             </div>
 
-            <Show when=move || ui_capabilities().password_reset>
+            <Show when=move || password_reset_enabled.get()>
                 <div class="mt-6 rounded-xl border border-border bg-card px-4 py-4">
                     <div class="flex items-center justify-between">
                         <div>
@@ -140,11 +163,11 @@ fn SecuritySettings() -> impl IntoView {
                             </h3>
                             <p class="mt-1 text-xs text-muted-foreground">
                                 {move || choose(locale.get(),
-                                    "通过邮箱验证链接重置密码",
-                                    "Reset your password via email verification link")}
+                                    "通过邮箱验证码重置密码",
+                                    "Reset your password with an email verification code")}
                             </p>
                         </div>
-                        <A href="/reset-password" attr:class="app-button-secondary">
+                        <A href=move || reset_password_path.get() attr:class="app-button-secondary">
                             {move || choose(locale.get(), "重置密码", "Reset Password")}
                         </A>
                     </div>

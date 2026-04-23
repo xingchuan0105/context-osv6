@@ -345,6 +345,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn create_document_upload_rejects_unsupported_file_type() {
+        let state = test_app_state();
+        let notebook = state
+            .create_notebook(CreateNotebookRequest {
+                name: "Unsupported Upload Test".to_string(),
+                description: String::new(),
+            })
+            .await
+            .expect("notebook should create");
+        let org_id = "00000000-0000-0000-0000-000000000001";
+        let user_id = "00000000-0000-0000-0000-000000000002";
+
+        let app = build_router(state);
+        let req = Request::builder()
+            .uri(format!("/api/v1/notebooks/{}/documents", notebook.id))
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .header(middleware::HEADER_ORG_ID, org_id)
+            .header(middleware::HEADER_USER_ID, user_id)
+            .body(Body::from(
+                r#"{"filename":"archive","file_size":12,"mime_type":"application/octet-stream"}"#,
+            ))
+            .unwrap();
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            payload.get("error").and_then(|value| value.as_str()),
+            Some("unsupported_file_type")
+        );
+    }
+
+    #[tokio::test]
     async fn dev_upload_handler_completes_upload_flow() {
         let state = test_app_state();
         let notebook = state
@@ -520,6 +555,15 @@ mod tests {
         let change_resp = app.clone().oneshot(change_req).await.unwrap();
         assert_eq!(change_resp.status(), StatusCode::OK);
 
+        let stale_token_req = Request::builder()
+            .uri("/api/auth/me")
+            .method("GET")
+            .header("Authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap();
+        let stale_token_resp = app.clone().oneshot(stale_token_req).await.unwrap();
+        assert_eq!(stale_token_resp.status(), StatusCode::UNAUTHORIZED);
+
         let login_req = Request::builder()
             .uri("/api/auth/login")
             .method("POST")
@@ -530,6 +574,104 @@ mod tests {
             .unwrap();
         let login_resp = app.oneshot(login_req).await.unwrap();
         assert_eq!(login_resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn login_returns_distinct_codes_for_missing_account_and_wrong_password() {
+        let Some(state) = pg_test_app_state().await else {
+            return;
+        };
+        let app = build_router(state);
+        let missing_email = format!("missing-{}@example.test", Uuid::new_v4());
+        let missing_login_req = Request::builder()
+            .uri("/api/auth/login")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(format!(
+                r#"{{"email":"{missing_email}","password":"password123"}}"#
+            )))
+            .unwrap();
+        let missing_login_resp = app.clone().oneshot(missing_login_req).await.unwrap();
+        assert_eq!(missing_login_resp.status(), StatusCode::UNAUTHORIZED);
+        let missing_login_body = to_bytes(missing_login_resp.into_body(), usize::MAX).await.unwrap();
+        let missing_login_payload: serde_json::Value =
+            serde_json::from_slice(&missing_login_body).unwrap();
+        assert_eq!(
+            missing_login_payload["error"].as_str(),
+            Some("account_not_registered")
+        );
+
+        let email = format!("wrong-password-{}@example.test", Uuid::new_v4());
+        let register_req = Request::builder()
+            .uri("/api/auth/register")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(format!(
+                r#"{{"email":"{email}","password":"password123","full_name":"Password User"}}"#
+            )))
+            .unwrap();
+        let register_resp = app.clone().oneshot(register_req).await.unwrap();
+        assert_eq!(register_resp.status(), StatusCode::CREATED);
+
+        let wrong_password_req = Request::builder()
+            .uri("/api/auth/login")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(format!(
+                r#"{{"email":"{email}","password":"wrong-password"}}"#
+            )))
+            .unwrap();
+        let wrong_password_resp = app.oneshot(wrong_password_req).await.unwrap();
+        assert_eq!(wrong_password_resp.status(), StatusCode::UNAUTHORIZED);
+        let wrong_password_body =
+            to_bytes(wrong_password_resp.into_body(), usize::MAX).await.unwrap();
+        let wrong_password_payload: serde_json::Value =
+            serde_json::from_slice(&wrong_password_body).unwrap();
+        assert_eq!(
+            wrong_password_payload["error"].as_str(),
+            Some("invalid_password")
+        );
+    }
+
+    #[tokio::test]
+    async fn logout_invalidates_existing_token_when_database_available() {
+        let Some(state) = pg_test_app_state().await else {
+            return;
+        };
+        let app = build_router(state);
+        let email = format!("logout-{}@example.test", Uuid::new_v4());
+        let register_req = Request::builder()
+            .uri("/api/auth/register")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(format!(
+                r#"{{"email":"{email}","password":"password123","full_name":"Logout User"}}"#
+            )))
+            .unwrap();
+        let register_resp = app.clone().oneshot(register_req).await.unwrap();
+        assert_eq!(register_resp.status(), StatusCode::CREATED);
+        let register_body = to_bytes(register_resp.into_body(), usize::MAX).await.unwrap();
+        let register_payload: serde_json::Value = serde_json::from_slice(&register_body).unwrap();
+        let token = register_payload["data"]["token"].as_str().unwrap().to_string();
+
+        let logout_req = Request::builder()
+            .uri("/api/auth/logout")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {token}"))
+            .body(Body::from(r#"{}"#))
+            .unwrap();
+        let logout_resp = app.clone().oneshot(logout_req).await.unwrap();
+        assert_eq!(logout_resp.status(), StatusCode::OK);
+
+        let me_req = Request::builder()
+            .uri("/api/auth/me")
+            .method("GET")
+            .header("Authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap();
+        let me_resp = app.oneshot(me_req).await.unwrap();
+        assert_eq!(me_resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]

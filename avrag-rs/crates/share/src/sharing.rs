@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use avrag_auth::AuthContext;
 use chrono::{DateTime, Utc};
 use sqlx::Row;
@@ -6,9 +6,7 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::db::{set_current_org, set_current_role, set_public_share_token};
-use crate::{
-    AccessLevel, ShareService, ShareSettings, ShareTokenInfo,
-};
+use crate::{AccessLevel, ShareService, ShareSettings, ShareTokenInfo};
 
 impl ShareService {
     async fn record_share_event(
@@ -287,5 +285,4 @@ impl ShareService {
         .await;
         Ok(())
     }
-
 }

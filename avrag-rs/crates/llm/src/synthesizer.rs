@@ -105,6 +105,18 @@ General output rules:
 - Do not emit control tokens or placeholder markers like `[INSUFFICIENT_EVIDENCE]`.
 "#;
 
+const SYNTHESIZER_STREAM_SYSTEM_PROMPT: &str = r#"You are a grounded answer agent.
+
+Answer the user's latest question using only the provided retrieval evidence.
+Do not mention internal planning, tool calls, or hidden reasoning.
+Do not output JSON.
+Do not output markdown code fences.
+Do not include inline citation markers, chunk ids, or source ids.
+Reply in the same language as the user's question unless the conversation strongly indicates another language.
+If the evidence is partial, answer only the grounded portion and clearly note what remains uncertain.
+If the evidence is insufficient, say so plainly and suggest how the user can refine the request.
+"#;
+
 #[derive(Debug, Clone)]
 pub struct SynthesisOutput {
     pub answer_text: String,
@@ -251,7 +263,7 @@ fn build_context_section(context_chunks: &[common::AnswerContextChunk]) -> Strin
 
 fn build_synthesis_request(query: &str, index_section: &str, context_section: &str) -> String {
     format!(
-        "User Question:\n{}\n\nRetrieval Index (JSON):\n{}\n\nContext Chunks (JSON array of objects with fields: chunk_id, doc_id, chunk_type, page, text, caption, image_url):\n{}",
+        "User Question:\n{}\n\nRetrieval Index (JSON):\n{}\n\nContext Chunks (JSON array of objects with fields: chunk_id, doc_id, chunk_type, page, text, asset_id, caption, image_url, parser_backend, source_locator):\n{}",
         query, index_section, context_section
     )
 }
@@ -462,6 +474,36 @@ impl AnswerSynthesizer {
         let mut output = parse_synthesis_output(&response.content);
         output.llm_usage = Some(response.usage);
         Ok(output)
+    }
+
+    pub async fn synthesize_stream_text(
+        &self,
+        query: &str,
+        context_chunks: &[common::AnswerContextChunk],
+        rag_plan: &Option<common::RagPlan>,
+        item_traces: &[common::RagTraceItem],
+        history: Option<&[ChatMessage]>,
+        on_delta: impl FnMut(&str),
+    ) -> anyhow::Result<crate::LlmResponse> {
+        let mut messages = vec![ChatMessage::system(SYNTHESIZER_STREAM_SYSTEM_PROMPT)];
+
+        if let Some(hist) = history {
+            messages.extend(hist.iter().cloned());
+        }
+
+        let index_section =
+            build_retrieval_index(query, rag_plan, item_traces, context_chunks.len());
+        let context_section = build_context_section(context_chunks);
+        messages.push(ChatMessage::user(build_synthesis_request(
+            query,
+            &index_section,
+            &context_section,
+        )));
+
+        self.llm
+            .complete_stream(&messages, Some(0.7), on_delta)
+            .await
+            .context("Failed to stream synthesizer response")
     }
 }
 

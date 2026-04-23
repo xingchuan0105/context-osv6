@@ -46,6 +46,7 @@ playwright-report/
 # =====================
 .claude/
 .worktrees/
+**/.cargo/local-machine.toml
 
 # =====================
 # Non-canonical / legacy directories

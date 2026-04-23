@@ -6,14 +6,8 @@ use uuid::Uuid;
 
 use crate::usage_units::compute_usage_units_with_rates;
 use crate::{
-    MeteringContext,
-    QuotaCheckResult,
-    UsageSource,
-    UsageLimitPolicy,
-    UsageLimitResponse,
-    UsageScope,
-    UsageWindow,
-    UsageWindows,
+    MeteringContext, QuotaCheckResult, UsageLimitPolicy, UsageLimitResponse, UsageScope,
+    UsageSource, UsageWindow, UsageWindows,
 };
 
 pub struct UsageLimitService {
@@ -37,8 +31,12 @@ impl UsageLimitService {
         usage_source: UsageSource,
     ) -> Result<i64> {
         let (input_rate, output_rate) = self.load_model_rates(provider, model).await?;
-        let usage_units =
-            compute_usage_units_with_rates(prompt_tokens, completion_tokens, input_rate, output_rate);
+        let usage_units = compute_usage_units_with_rates(
+            prompt_tokens,
+            completion_tokens,
+            input_rate,
+            output_rate,
+        );
 
         sqlx::query(
             r#"
@@ -72,11 +70,7 @@ impl UsageLimitService {
     }
 
     /// Get current usage for a user.
-    pub async fn get_user_usage(
-        &self,
-        org_id: Uuid,
-        user_id: Uuid,
-    ) -> Result<UsageLimitResponse> {
+    pub async fn get_user_usage(&self, org_id: Uuid, user_id: Uuid) -> Result<UsageLimitResponse> {
         let policy = self.load_effective_policy(org_id, user_id).await?;
         let windows = self.compute_windows(user_id, &policy).await?;
         let breakdown = self.load_breakdown(user_id).await?;
@@ -104,22 +98,20 @@ impl UsageLimitService {
             limit_5h: windows.rolling_5h.limit_units,
             used_7d: windows.rolling_7d.used_units,
             limit_7d: windows.rolling_7d.limit_units,
-            blocked_until_5h: windows
-                .rolling_5h
-                .blocked_until
-                .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
-            blocked_until_7d: windows
-                .rolling_7d
-                .blocked_until
-                .and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.with_timezone(&Utc))),
+            blocked_until_5h: windows.rolling_5h.blocked_until.and_then(|s| {
+                DateTime::parse_from_rfc3339(&s)
+                    .ok()
+                    .map(|dt| dt.with_timezone(&Utc))
+            }),
+            blocked_until_7d: windows.rolling_7d.blocked_until.and_then(|s| {
+                DateTime::parse_from_rfc3339(&s)
+                    .ok()
+                    .map(|dt| dt.with_timezone(&Utc))
+            }),
         })
     }
 
-    async fn load_effective_policy(
-        &self,
-        org_id: Uuid,
-        user_id: Uuid,
-    ) -> Result<UsageLimitPolicy> {
+    async fn load_effective_policy(&self, org_id: Uuid, user_id: Uuid) -> Result<UsageLimitPolicy> {
         // 1. Check user override
         let override_row = sqlx::query(
             r#"
@@ -386,12 +378,10 @@ impl UsageLimitService {
     }
 
     async fn determine_scope(&self, user_id: Uuid) -> Result<UsageScope> {
-        let row = sqlx::query(
-            "SELECT user_id FROM usage_limit_user_overrides WHERE user_id = $1",
-        )
-        .bind(user_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let row = sqlx::query("SELECT user_id FROM usage_limit_user_overrides WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_optional(&self.pool)
+            .await?;
 
         if row.is_some() {
             Ok(UsageScope::UserOverride)

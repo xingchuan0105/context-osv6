@@ -1,18 +1,9 @@
 #[component]
 pub fn ResetPasswordPage() -> impl IntoView {
     let locale = use_ui_prefs_state().locale;
-
-    if !ui_capabilities().password_reset {
-        return view! {
-            <AuthFrame>
-                <UnavailableFeatureCard
-                    title={t(locale.get_untracked(), MessageKey::ResetPasswordTitle).to_string()}
-                    description={t(locale.get_untracked(), MessageKey::ResetPasswordIntro).to_string()}
-                />
-            </AuthFrame>
-        }
-        .into_any();
-    }
+    let location = use_location();
+    let location_for_submit = location.clone();
+    let password_reset_enabled = use_password_reset_enabled();
 
     let navigate = use_navigate();
 
@@ -34,6 +25,7 @@ pub fn ResetPasswordPage() -> impl IntoView {
         set_loading.set(true);
         set_error.set(String::new());
         set_success.set(false);
+        clear_reset_flow_state();
 
         let client = api_client();
         let req = SendResetCodeRequest {
@@ -41,96 +33,118 @@ pub fn ResetPasswordPage() -> impl IntoView {
             lang: Some(locale_now.as_str().to_string()),
         };
         let navigate_for_async = navigate.clone();
+        let verify_path = scoped_auth_path(
+            &location_for_submit.pathname.get_untracked(),
+            "/reset-password/verify",
+        );
 
         spawn(async move {
             match client.send_reset_code(&req).await {
                 Ok(_) => {
+                    store_reset_email(&email_val);
                     set_success.set(true);
-                    let encoded_email = urlencoding::encode(&email_val);
-                    navigate_for_async(
-                        &format!("/reset-password/verify?email={}", encoded_email),
-                        NavigateOptions::default(),
-                    );
+                    navigate_for_async(&verify_path, NavigateOptions::default());
                 }
                 Err(e) => {
-                    set_error.set(format!(
-                        "{}: {}",
-                        t(locale_now, MessageKey::SendResetCodeFailed),
-                        e
+                    set_error.set(describe_auth_error(
+                        locale_now,
+                        &t(locale_now, MessageKey::SendResetCodeFailed).to_string(),
+                        &e,
                     ));
                 }
             }
             set_loading.set(false);
         });
     };
+    let handle_submit = StoredValue::new(handle_submit);
 
     view! {
-        <AuthFrame>
-            <div class="space-y-6">
-                <div class="space-y-2 text-center">
-                    <h1 class="app-page-title">
-                        {move || t(locale.get(), MessageKey::ResetPasswordTitle)}
-                    </h1>
-                    <p class="app-page-subtitle">
-                        {move || t(locale.get(), MessageKey::ResetPasswordIntro)}
-                    </p>
-                </div>
+        {move || {
+            if password_reset_enabled.get() {
+                view! {
+                    <AuthFrame>
+                        <div class="space-y-6">
+                            <div class="space-y-2 text-center">
+                                <h1 class="app-page-title">
+                                    {move || t(locale.get(), MessageKey::ResetPasswordTitle)}
+                                </h1>
+                                <p class="app-page-subtitle">
+                                    {move || t(locale.get(), MessageKey::ResetPasswordIntro)}
+                                </p>
+                            </div>
 
-                <form on:submit=handle_submit class="space-y-4">
-                    <div>
-                        <label class="app-form-label" for="reset-email">
-                            {move || t(locale.get(), MessageKey::EmailLabel)}
-                        </label>
-                        <input
-                            id="reset-email"
-                            type="email"
-                            autocomplete="email"
-                            class="app-input"
-                            value=move || email.get()
-                            on:input=move |ev| set_email.set(event_target_value(&ev))
-                            required
+                            <form
+                                on:submit=move |ev| handle_submit.with_value(|submit| submit(ev))
+                                class="space-y-4"
+                            >
+                                <div>
+                                    <label class="app-form-label" for="reset-email">
+                                        {move || t(locale.get(), MessageKey::EmailLabel)}
+                                    </label>
+                                    <input
+                                        id="reset-email"
+                                        type="email"
+                                        autocomplete="email"
+                                        class="app-input"
+                                        value=move || email.get()
+                                        on:input=move |ev| set_email.set(event_target_value(&ev))
+                                        required
+                                    />
+                                </div>
+
+                                {move || {
+                                    (!error.get().is_empty()).then(|| {
+                                        view! { <NoticeBanner message=error.get() tone=NoticeTone::Danger /> }
+                                    })
+                                }}
+
+                                {move || {
+                                    success.get().then(|| {
+                                        view! {
+                                            <NoticeBanner
+                                                message=t(locale.get(), MessageKey::ResetCodeSentRedirecting).to_string()
+                                                tone=NoticeTone::Success
+                                            />
+                                        }
+                                    })
+                                }}
+
+                                <button
+                                    type="submit"
+                                    class="app-button-primary w-full"
+                                    disabled=move || loading.get()
+                                >
+                                    {move || {
+                                        if loading.get() {
+                                            t(locale.get(), MessageKey::SendingAction)
+                                        } else {
+                                            t(locale.get(), MessageKey::SendResetCodeAction)
+                                        }
+                                    }}
+                                </button>
+                            </form>
+
+                            <div class="text-center">
+                                <A href=move || scoped_auth_path(&location.pathname.get(), "/login") attr:class="app-link">
+                                    {move || t(locale.get(), MessageKey::BackToSignIn)}
+                                </A>
+                            </div>
+                        </div>
+                    </AuthFrame>
+                }
+                .into_any()
+            } else {
+                view! {
+                    <AuthFrame>
+                        <UnavailableFeatureCard
+                            title={t(locale.get(), MessageKey::ResetPasswordTitle).to_string()}
+                            description={t(locale.get(), MessageKey::ResetPasswordIntro).to_string()}
                         />
-                    </div>
-
-                    {move || {
-                        (!error.get().is_empty()).then(|| {
-                            view! { <NoticeBanner message=error.get() tone=NoticeTone::Danger /> }
-                        })
-                    }}
-
-                    {move || {
-                        success.get().then(|| {
-                            view! {
-                                <NoticeBanner
-                                    message=t(locale.get(), MessageKey::ResetCodeSentRedirecting).to_string()
-                                    tone=NoticeTone::Success
-                                />
-                            }
-                        })
-                    }}
-
-                    <button
-                        type="submit"
-                        class="app-button-primary w-full"
-                        disabled=move || loading.get()
-                    >
-                        {move || {
-                            if loading.get() {
-                                t(locale.get(), MessageKey::SendingAction)
-                            } else {
-                                t(locale.get(), MessageKey::SendResetCodeAction)
-                            }
-                        }}
-                    </button>
-                </form>
-
-                <div class="text-center">
-                    <A href="/login" attr:class="app-link">
-                        {move || t(locale.get(), MessageKey::BackToSignIn)}
-                    </A>
-                </div>
-            </div>
-        </AuthFrame>
+                    </AuthFrame>
+                }
+                .into_any()
+            }
+        }}
     }
     .into_any()
 }

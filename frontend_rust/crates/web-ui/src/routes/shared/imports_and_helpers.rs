@@ -9,8 +9,9 @@ use leptos::prelude::*;
 use leptos::task::spawn;
 #[cfg(target_arch = "wasm32")]
 use leptos::task::spawn_local as spawn;
+use leptos_router::NavigateOptions;
 use leptos_router::components::A;
-use leptos_router::hooks::use_params_map;
+use leptos_router::hooks::{use_location, use_navigate, use_params_map};
 use std::sync::Arc;
 use web_sdk::ApiClient;
 use web_sdk::dtos::{
@@ -20,8 +21,8 @@ use web_sdk::dtos::{
 use web_sdk::sse::{ChatSseClient, SseEvent};
 
 use crate::api::api_base_url;
-use crate::components::VirtualTextList;
 use crate::components::UnavailableFeatureCard;
+use crate::components::VirtualTextList;
 use crate::components::share::{MembersPanel, ShareAccessLogs, ShareAnalytics, ShareSettingsPanel};
 use crate::components::{NoticeBanner, NoticeTone};
 use crate::i18n::{MessageKey, choose, t};
@@ -30,6 +31,12 @@ use crate::platform::{next_client_id, ui_capabilities};
 use crate::state::auth::use_auth_state;
 use crate::state::ui_prefs::use_ui_prefs_state;
 use crate::state::virtual_list::{HeightState, compute_window};
+
+stylance::import_crate_style!(
+    #[allow(dead_code)]
+    shared_page_style,
+    "src/routes/shared/shared_pages.module.css"
+);
 
 const SHARED_LIST_OVERSCAN: usize = 3;
 const SHARED_VIEWPORT_FALLBACK_PX: f64 = 720.0;
@@ -97,7 +104,10 @@ pub fn shared_chat_sources_from_citations(citations: &[Citation]) -> Vec<SourceR
             Some(SourceRef {
                 id: source_id,
                 title: citation.doc_name.clone(),
-                snippet: citation.preview.clone().or_else(|| citation.content.clone()),
+                snippet: citation
+                    .preview
+                    .clone()
+                    .or_else(|| citation.content.clone()),
                 doc_id: Some(citation.doc_id.clone()),
                 page: citation.page,
             })
@@ -135,6 +145,34 @@ enum ShareTab {
     Settings,
     Analytics,
     AccessLogs,
+}
+
+fn share_tab_from_path(pathname: &str) -> ShareTab {
+    if pathname.ends_with("/share/analytics") {
+        ShareTab::Analytics
+    } else if pathname.ends_with("/share/access-logs") {
+        ShareTab::AccessLogs
+    } else {
+        ShareTab::Settings
+    }
+}
+
+fn share_base_href_from_path(pathname: &str, notebook_id: &str) -> String {
+    if pathname.starts_with("/preview/live/workspace/") {
+        format!("/preview/live/workspace/{notebook_id}/share")
+    } else if pathname.starts_with("/notebooks/") {
+        format!("/notebooks/{notebook_id}/share")
+    } else {
+        format!("/dashboard/{notebook_id}/share")
+    }
+}
+
+fn share_tab_href(base_href: &str, tab: ShareTab) -> String {
+    match tab {
+        ShareTab::Settings => base_href.to_string(),
+        ShareTab::Analytics => format!("{base_href}/analytics"),
+        ShareTab::AccessLogs => format!("{base_href}/access-logs"),
+    }
 }
 
 // ----------------------------------------------------------------------------

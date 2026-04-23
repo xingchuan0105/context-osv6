@@ -6,6 +6,10 @@ use axum::{
 
 pub(crate) fn public_router() -> Router<AppState> {
     Router::new()
+        .route(
+            "/capabilities",
+            get(crate::auth_runtime_capabilities_handler),
+        )
         .route("/register", post(crate::auth_register_handler))
         .route("/login", post(crate::auth_login_handler))
         .route("/reset-request", post(crate::auth_reset_request_handler))
@@ -14,7 +18,10 @@ pub(crate) fn public_router() -> Router<AppState> {
             post(crate::auth_verify_reset_token_handler),
         )
         .route("/reset-password", post(crate::auth_reset_password_handler))
-        .route("/reset/send-code", post(crate::auth_send_reset_code_handler))
+        .route(
+            "/reset/send-code",
+            post(crate::auth_send_reset_code_handler),
+        )
         .route(
             "/reset/verify-code",
             post(crate::auth_verify_reset_code_handler),

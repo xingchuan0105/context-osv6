@@ -1,20 +1,24 @@
 //! Route handler implementations for the transport-http crate.
 
+use app::AppState;
 use axum::{
-    extract::{Extension, Path, Query, State},
-    http::{HeaderMap, StatusCode, header},
-    response::{sse::Event, IntoResponse, Response, Sse},
     Json,
+    extract::{Extension, Path, Query, State},
+    http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header},
+    response::{
+        IntoResponse, Response, Sse,
+        sse::{Event, KeepAlive},
+    },
 };
 use common::{
     AddUrlSourceRequest, AppError, ChatRequest, CitationLookupRequest, CreateChatSessionRequest,
-    CreateDocumentRequest, CreateNotebookNoteRequest, CreateNotebookRequest,
+    CreateDocumentRequest, CreateNotebookNoteRequest, CreateNotebookRequest, ExecutePlanRequest,
     UpdateChatSessionRequest, UpdateDocumentRequest, UpdateNotebookNoteRequest,
     UpdateNotebookRequest,
 };
 use contracts::chat::ChatEvent;
-use app::AppState;
-use std::convert::Infallible;
+use std::{convert::Infallible, time::Duration};
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use uuid::Uuid;
 
 use crate::RequestState;
@@ -25,8 +29,7 @@ use crate::RequestState;
 
 /// Convert an [`AppError`] into an HTTP response with a typed JSON body.
 pub(crate) fn app_error_response(e: AppError) -> Response {
-    let status =
-        StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    let status = StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let mut body = serde_json::json!({
         "error": e.code(),
         "message": e.message(),
@@ -290,11 +293,7 @@ pub(crate) async fn list_notebook_notes_handler(
     Path(notebook_id): Path<String>,
 ) -> Response {
     if state.get_notebook(&notebook_id).await.is_none() {
-        return error_response(
-            StatusCode::NOT_FOUND,
-            "not_found",
-            "Notebook not found",
-        );
+        return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
 
     match load_notebook_notes(&state, &notebook_id).await {
@@ -312,16 +311,14 @@ pub(crate) async fn get_notebook_note_handler(
     Path((notebook_id, note_id)): Path<(String, String)>,
 ) -> Response {
     if state.get_notebook(&notebook_id).await.is_none() {
-        return error_response(
-            StatusCode::NOT_FOUND,
-            "not_found",
-            "Notebook not found",
-        );
+        return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
 
     match load_notebook_notes(&state, &notebook_id).await {
         Ok(notes) => match notes.into_iter().find(|note| note.id == note_id) {
-            Some(note) => (StatusCode::OK, Json(common::NotebookNoteResponse { note })).into_response(),
+            Some(note) => {
+                (StatusCode::OK, Json(common::NotebookNoteResponse { note })).into_response()
+            }
             None => error_response(StatusCode::NOT_FOUND, "not_found", "Note not found"),
         },
         Err(error) => app_error_response(error),
@@ -334,11 +331,7 @@ pub(crate) async fn create_notebook_note_handler(
     Json(req): Json<CreateNotebookNoteRequest>,
 ) -> Response {
     if state.get_notebook(&notebook_id).await.is_none() {
-        return error_response(
-            StatusCode::NOT_FOUND,
-            "not_found",
-            "Notebook not found",
-        );
+        return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
 
     let mut preferences = match state.current_user_preferences().await {
@@ -376,11 +369,7 @@ pub(crate) async fn update_notebook_note_handler(
     Json(req): Json<UpdateNotebookNoteRequest>,
 ) -> Response {
     if state.get_notebook(&notebook_id).await.is_none() {
-        return error_response(
-            StatusCode::NOT_FOUND,
-            "not_found",
-            "Notebook not found",
-        );
+        return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
 
     let mut preferences = match state.current_user_preferences().await {
@@ -424,11 +413,7 @@ pub(crate) async fn delete_notebook_note_handler(
     Path((notebook_id, note_id)): Path<(String, String)>,
 ) -> Response {
     if state.get_notebook(&notebook_id).await.is_none() {
-        return error_response(
-            StatusCode::NOT_FOUND,
-            "not_found",
-            "Notebook not found",
-        );
+        return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
 
     let mut preferences = match state.current_user_preferences().await {
@@ -455,11 +440,7 @@ pub(crate) async fn promote_notebook_note_handler(
     Path((notebook_id, note_id)): Path<(String, String)>,
 ) -> Response {
     if state.get_notebook(&notebook_id).await.is_none() {
-        return error_response(
-            StatusCode::NOT_FOUND,
-            "not_found",
-            "Notebook not found",
-        );
+        return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
 
     let mut preferences = match state.current_user_preferences().await {
@@ -538,11 +519,7 @@ pub(crate) async fn get_notebook_analysis_handler(
     Path(notebook_id): Path<String>,
 ) -> Response {
     let Some(notebook) = state.get_notebook(&notebook_id).await else {
-        return error_response(
-            StatusCode::NOT_FOUND,
-            "not_found",
-            "Notebook not found",
-        );
+        return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     };
 
     let sources = state.list_documents(Some(&notebook_id), None).await;
@@ -566,7 +543,9 @@ pub(crate) async fn get_notebook_analysis_handler(
         .count() as i64;
     let processing_sources = sources.len() as i64 - ready_sources - failed_sources;
     let pinned_sources = pinned_source_count(&preferences, &notebook_id);
-    let latest_session = sessions.iter().max_by(|left, right| left.updated_at.cmp(&right.updated_at));
+    let latest_session = sessions
+        .iter()
+        .max_by(|left, right| left.updated_at.cmp(&right.updated_at));
     let promoted_notes = notes
         .iter()
         .filter(|note| note.promoted_document_id.is_some())
@@ -585,7 +564,10 @@ pub(crate) async fn get_notebook_analysis_handler(
         avrag_share::handle_get_share_settings(state.auth().clone(), notebook_id.clone(), pg)
             .await
             .map(|settings| {
-                !settings.share_token.trim().is_empty()
+                settings
+                    .share_tokens
+                    .iter()
+                    .any(|token| token.revoked_at.is_none() && !token.token.trim().is_empty())
                     && !settings.access_level.eq_ignore_ascii_case("private")
             })
             .unwrap_or(false)
@@ -624,7 +606,8 @@ pub(crate) async fn get_notebook_analysis_handler(
         alerts.push(common::NotebookAnalysisAlert {
             level: "info".to_string(),
             code: "notes_not_promoted".to_string(),
-            message: "Notes exist, but none have been promoted into shared sources yet.".to_string(),
+            message: "Notes exist, but none have been promoted into shared sources yet."
+                .to_string(),
         });
     }
 
@@ -670,6 +653,16 @@ pub(crate) async fn get_notebook_analysis_handler(
 // ---------------------------------------------------------------------------
 // Chat handler
 // ---------------------------------------------------------------------------
+
+pub(crate) async fn rag_execute_plan_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Json(req): Json<ExecutePlanRequest>,
+) -> Response {
+    match state.execute_rag_execute_plan(req).await {
+        Ok(response) => (StatusCode::OK, Json(response)).into_response(),
+        Err(error) => app_error_response(error),
+    }
+}
 
 pub(crate) async fn chat_post_handler(
     Extension(RequestState(state)): Extension<RequestState>,
@@ -723,37 +716,22 @@ pub(crate) async fn chat_post_handler(
         )
         .await;
 
+    if should_stream {
+        return chat_live_stream_response(
+            state,
+            req,
+            request_id,
+            surface,
+            notebook_id,
+            agent_type,
+            query_len,
+        );
+    }
+
     match state.execute_chat(req).await {
-        Ok(response) if should_stream => chat_stream_response(response, request_id, surface_label(surface)),
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
-        Err(e) if should_stream => {
-            let event_name = if agent_type == "search" {
-                analytics::ProductEventName::SearchFailed
-            } else {
-                analytics::ProductEventName::ChatFailed
-            };
-            state
-                .record_product_event_if_available(
-                    event_name,
-                    surface,
-                    analytics::ResultTag::Failure,
-                    None,
-                    notebook_id,
-                    serde_json::json!({
-                        "agent_type": agent_type,
-                        "error_code": e.code(),
-                        "query_length": query_len,
-                    }),
-                )
-                .await;
-            chat_stream_error_response(&e, request_id, surface_label(surface))
-        }
         Err(e) => {
-            let event_name = if agent_type == "search" {
-                analytics::ProductEventName::SearchFailed
-            } else {
-                analytics::ProductEventName::ChatFailed
-            };
+            let event_name = chat_failure_event_name(&agent_type);
             state
                 .record_product_event_if_available(
                     event_name,
@@ -777,130 +755,118 @@ fn accepts_sse(headers: &HeaderMap) -> bool {
     headers
         .get(header::ACCEPT)
         .and_then(|value| value.to_str().ok())
-        .map(|value| value.split(',').any(|item| item.trim() == "text/event-stream"))
+        .map(|value| {
+            value
+                .split(',')
+                .any(|item| item.trim() == "text/event-stream")
+        })
         .unwrap_or(false)
 }
 
-fn chat_stream_response(
-    response: common::ChatResponse,
+fn chat_live_stream_response(
+    state: AppState,
+    req: ChatRequest,
     request_id: String,
+    surface: analytics::Surface,
+    notebook_id: Option<Uuid>,
+    agent_type: String,
+    query_len: usize,
+) -> Response {
+    let (sender, receiver) = unbounded_channel();
+    let request_id_for_task = request_id.clone();
+    let agent_type_for_task = agent_type.clone();
+
+    tokio::spawn(async move {
+        let error_sender = sender.clone();
+        if let Err(error) = state
+            .execute_chat_stream(req, request_id_for_task.clone(), sender)
+            .await
+        {
+            state
+                .record_product_event_if_available(
+                    chat_failure_event_name(&agent_type_for_task),
+                    surface,
+                    analytics::ResultTag::Failure,
+                    None,
+                    notebook_id,
+                    serde_json::json!({
+                        "agent_type": agent_type_for_task,
+                        "error_code": error.code(),
+                        "query_length": query_len,
+                    }),
+                )
+                .await;
+            let _ = error_sender.send(ChatEvent::Error {
+                request_id: request_id_for_task,
+                code: error.code().to_string(),
+                message: error.message().to_string(),
+            });
+        }
+    });
+
+    sse_response_from_receiver(receiver, surface_label(surface))
+}
+
+fn sse_response_from_receiver(
+    mut receiver: UnboundedReceiver<ChatEvent>,
     surface: &'static str,
 ) -> Response {
-    let message_id = response.message_id.unwrap_or_default();
-    let mut events = vec![
-        (
-            "start",
-            sse_event(
-                "start",
-                &ChatEvent::Start {
-                    request_id: request_id.clone(),
-                    session_id: response.session_id.clone(),
-                },
-            ),
-        ),
-        (
-            "trace",
-            sse_event(
-                "trace",
-                &ChatEvent::Trace {
-                    request_id: request_id.clone(),
-                    stage: "chat_response".to_string(),
-                    status: "ok".to_string(),
-                    detail: Some(serde_json::json!({
-                        "mode": response.trace.mode,
-                        "degrade_count": response.degrade_trace.len(),
-                    })),
-                },
-            ),
-        ),
-        (
-            "token",
-            sse_event(
-                "token",
-                &ChatEvent::Token {
-                    request_id: request_id.clone(),
-                    message_id,
-                    content: response.answer.clone(),
-                },
-            ),
-        ),
-    ];
-
-    if !response.citations.is_empty() {
-        events.push((
-            "citations",
-            sse_event(
-                "citations",
-                &ChatEvent::Citations {
-                    request_id: request_id.clone(),
-                    message_id,
-                    citations: response
-                        .citations
-                        .iter()
-                        .filter_map(|citation| serde_json::to_value(citation).ok())
-                        .collect(),
-                },
-            ),
-        ));
-    }
-
-    events.push((
-        "done",
-        sse_event(
-            "done",
-            &ChatEvent::Done {
-                request_id: request_id.clone(),
-                session_id: response.session_id.clone(),
-                message_id,
-                payload: serde_json::json!({
-                    "session_id": response.session_id,
-                    "message_id": response.message_id,
-                    "answer": response.answer,
-                    "answer_blocks": response.answer_blocks,
-                    "citations": response.citations,
-                    "degrade_trace": response.degrade_trace,
-                }),
-            },
-        ),
-    ));
-
     let stream = async_stream::stream! {
         let _guard = SseStreamGuard(surface);
         telemetry::prometheus::inc_sse_streams(surface);
-        for (event_name, event) in events {
+
+        while let Some(event) = receiver.recv().await {
+            let event_name = sse_event_name(&event);
             telemetry::prometheus::observe_sse_event(surface, event_name);
-            yield Ok::<_, Infallible>(event);
+            yield Ok::<_, Infallible>(sse_event(event_name, &event));
         }
     };
 
-    Sse::new(stream).into_response()
-}
-
-fn chat_stream_error_response(error: &AppError, request_id: String, surface: &'static str) -> Response {
-    let error_event = (
-        "error",
-        sse_event(
-            "error",
-            &ChatEvent::Error {
-                request_id,
-                code: error.code().to_string(),
-                message: error.message().to_string(),
-            },
-        ),
-    );
-    let stream = async_stream::stream! {
-        let _guard = SseStreamGuard(surface);
-        telemetry::prometheus::inc_sse_streams(surface);
-        telemetry::prometheus::observe_sse_event(surface, error_event.0);
-        yield Ok::<_, Infallible>(error_event.1);
-    };
-    Sse::new(stream).into_response()
+    let mut response = Sse::new(stream)
+        .keep_alive(
+            KeepAlive::new()
+                .interval(Duration::from_secs(15))
+                .text("keep-alive"),
+        )
+        .into_response();
+    add_sse_headers(&mut response);
+    response
 }
 
 fn sse_event(event_name: &str, payload: &ChatEvent) -> Event {
     Event::default()
         .event(event_name)
         .data(serde_json::to_string(payload).unwrap_or_default())
+}
+
+fn sse_event_name(event: &ChatEvent) -> &'static str {
+    match event {
+        ChatEvent::Start { .. } => "start",
+        ChatEvent::Activity { .. } => "activity",
+        ChatEvent::AnswerStart { .. } => "answer_start",
+        ChatEvent::Trace { .. } => "trace",
+        ChatEvent::Token { .. } => "token",
+        ChatEvent::Citations { .. } => "citations",
+        ChatEvent::Done { .. } => "done",
+        ChatEvent::Error { .. } => "error",
+    }
+}
+
+fn chat_failure_event_name(agent_type: &str) -> analytics::ProductEventName {
+    if agent_type == "search" {
+        analytics::ProductEventName::SearchFailed
+    } else {
+        analytics::ProductEventName::ChatFailed
+    }
+}
+
+fn add_sse_headers(response: &mut Response) {
+    let headers = response.headers_mut();
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    headers.insert(
+        HeaderName::from_static("x-accel-buffering"),
+        HeaderValue::from_static("no"),
+    );
 }
 
 fn surface_label(surface: analytics::Surface) -> &'static str {
@@ -955,7 +921,11 @@ pub(crate) async fn list_chat_sessions_handler(
     Query(params): Query<ChatSessionsQuery>,
 ) -> Response {
     let sessions = state.list_sessions(params.notebook_id.as_deref()).await;
-    (StatusCode::OK, Json(common::ChatSessionListResponse { sessions })).into_response()
+    (
+        StatusCode::OK,
+        Json(common::ChatSessionListResponse { sessions }),
+    )
+        .into_response()
 }
 
 pub(crate) async fn list_documents_handler(
@@ -1098,7 +1068,11 @@ pub(crate) async fn reindex_document_handler(
     Path(document_id): Path<String>,
 ) -> Response {
     match state.reindex_document(&document_id).await {
-        Ok(_) => (StatusCode::ACCEPTED, Json(contracts::auth::EmptyResponse {})).into_response(),
+        Ok(_) => (
+            StatusCode::ACCEPTED,
+            Json(contracts::auth::EmptyResponse {}),
+        )
+            .into_response(),
         Err(error) => app_error_response(error),
     }
 }
@@ -1163,7 +1137,11 @@ pub(crate) async fn get_chat_messages_handler(
     Path(session_id): Path<String>,
 ) -> Response {
     match state.list_messages(&session_id).await {
-        Ok(messages) => (StatusCode::OK, Json(common::ChatMessageListResponse { messages })).into_response(),
+        Ok(messages) => (
+            StatusCode::OK,
+            Json(common::ChatMessageListResponse { messages }),
+        )
+            .into_response(),
         Err(error) => app_error_response(error),
     }
 }
@@ -1215,12 +1193,9 @@ pub(crate) async fn citation_asset_handler(
     Path(asset_id): Path<String>,
 ) -> Response {
     match state.get_citation_asset(&asset_id).await {
-        Ok((bytes, mime_type)) => (
-            StatusCode::OK,
-            [(header::CONTENT_TYPE, mime_type)],
-            bytes,
-        )
-            .into_response(),
+        Ok((bytes, mime_type)) => {
+            (StatusCode::OK, [(header::CONTENT_TYPE, mime_type)], bytes).into_response()
+        }
         Err(error) => app_error_response(error),
     }
 }
@@ -1420,13 +1395,8 @@ pub(crate) async fn get_share_access_logs_handler(
             "Database not available",
         );
     };
-    match avrag_share::handle_get_share_access_logs(
-        state.auth().clone(),
-        notebook_id,
-        None,
-        pg,
-    )
-    .await
+    match avrag_share::handle_get_share_access_logs(state.auth().clone(), notebook_id, None, pg)
+        .await
     {
         Ok(data) => (
             StatusCode::OK,
@@ -1554,7 +1524,11 @@ pub(crate) async fn list_members_handler(
                     invited_at: member.invited_at.to_string(),
                 })
                 .collect();
-            (StatusCode::OK, Json(contracts::share::MembersResponse { members })).into_response()
+            (
+                StatusCode::OK,
+                Json(contracts::share::MembersResponse { members }),
+            )
+                .into_response()
         }
         Err(error) => app_error_response(error),
     }

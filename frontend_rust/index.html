@@ -51,6 +51,11 @@
       cssLink.href = withPrefix('/pkg/index.css');
       document.head.appendChild(cssLink);
 
+      const stylanceLink = document.createElement('link');
+      stylanceLink.rel = 'stylesheet';
+      stylanceLink.href = withPrefix('/pkg/stylance.css');
+      document.head.appendChild(stylanceLink);
+
       try {
         const { default: init, mount } = await import(withPrefix('/pkg/web_ui.js'));
         await init({ module_or_path: withPrefix('/pkg/web_ui_bg.wasm') });

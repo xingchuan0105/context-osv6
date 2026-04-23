@@ -11,6 +11,12 @@ use web_sdk::dtos::{AccessLogEntry, MemberRow, ShareAnalyticsResponse, ShareSett
 use crate::i18n::{Locale, choose};
 use crate::state::ui_prefs::use_ui_prefs_state;
 
+stylance::import_style!(
+    #[allow(dead_code)]
+    share_panel_style,
+    "share_panels.module.css"
+);
+
 fn access_level_label(locale: Locale, access_level: &str) -> String {
     match access_level {
         "private" => choose(locale, "私有", "Private").to_string(),
@@ -44,37 +50,45 @@ pub fn ShareAnalytics(analytics: ShareAnalyticsResponse) -> impl IntoView {
     let max_views = analytics.views_by_day.values().max().unwrap_or(&1).max(&1);
 
     view! {
-        <div class="app-surface-card">
-            <h3 class="mb-4 text-lg font-semibold text-card-foreground">
+        <div class=share_panel_style::panel>
+            <h3 class=share_panel_style::panel_title>
                 {move || choose(locale.get(), "分析", "Analytics")}
             </h3>
 
-            <div class="grid grid-cols-2 gap-4 mb-6">
-                <div class="app-metric-card">
-                    <div class="text-2xl font-bold text-card-foreground">{analytics.total_views}</div>
-                    <div class="text-sm text-muted-foreground">{move || choose(locale.get(), "总访问量", "Total Views")}</div>
+            <div class=share_panel_style::metric_grid>
+                <div class=share_panel_style::metric_card>
+                    <div class=share_panel_style::metric_value>{analytics.total_views}</div>
+                    <div class=share_panel_style::metric_label>{move || choose(locale.get(), "总访问量", "Total Views")}</div>
                 </div>
-                <div class="app-metric-card">
-                    <div class="text-2xl font-bold text-card-foreground">{analytics.total_unique_visitors}</div>
-                    <div class="text-sm text-muted-foreground">{move || choose(locale.get(), "独立访客", "Unique Visitors")}</div>
+                <div class=share_panel_style::metric_card>
+                    <div class=share_panel_style::metric_value>{analytics.total_unique_visitors}</div>
+                    <div class=share_panel_style::metric_label>{move || choose(locale.get(), "独立访客", "Unique Visitors")}</div>
                 </div>
             </div>
 
-            <div class="space-y-2">
-                <h4 class="text-sm font-medium text-foreground">
+            <div class=share_panel_style::chart_stack>
+                <h4 class=share_panel_style::chart_title>
                     {move || choose(locale.get(), "按天访问量", "Views by Day")}
                 </h4>
-                <div class="flex items-end gap-1 h-32">
+                <div class=share_panel_style::chart>
                     {analytics.views_by_day.iter().map(|(day, views)| {
-                        let height_pct = (*views as f64 / *max_views as f64 * 100.0).max(5.0) as u32;
+                        let bar_height = ((*views as f64 / *max_views as f64) * 112.0).max(8.0);
+                        let bar_y = 128.0 - bar_height;
                         view! {
-                            <div class="flex-1 flex flex-col items-center gap-1">
-                                <div
-                                    class="w-full rounded-t bg-primary"
-                                    style={format!("height: {}px", height_pct)}
-                                    title={format!("{}: {} views", day, views)}
-                                ></div>
-                                <div class="w-full truncate text-center text-xs text-muted-foreground">
+                            <div class=share_panel_style::chart_item title={format!("{}: {} views", day, views)}>
+                                <svg class=share_panel_style::chart_svg viewBox="0 0 36 128" preserveAspectRatio="none" aria-hidden="true">
+                                    <rect class=share_panel_style::chart_track x="6" y="0" width="24" height="128" rx="8" ry="8"></rect>
+                                    <rect
+                                        class=share_panel_style::chart_fill
+                                        x="6"
+                                        y={format!("{bar_y:.2}")}
+                                        width="24"
+                                        height={format!("{bar_height:.2}")}
+                                        rx="8"
+                                        ry="8"
+                                    ></rect>
+                                </svg>
+                                <div class=share_panel_style::chart_label>
                                     {day.chars().skip(5).take(2).collect::<String>()}
                                 </div>
                             </div>
@@ -93,35 +107,35 @@ pub fn ShareAccessLogs(logs: Vec<AccessLogEntry>) -> impl IntoView {
     let is_empty = logs.is_empty();
 
     view! {
-        <div class="app-surface-card">
-            <h3 class="mb-4 text-lg font-semibold text-card-foreground">
+        <div class=share_panel_style::panel>
+            <h3 class=share_panel_style::panel_title>
                 {move || choose(locale.get(), "访问日志", "Access Logs")}
             </h3>
 
             <Show when=move || is_empty>
-                <div class="app-empty-state">
+                <div class=share_panel_style::empty_state>
                     {move || choose(locale.get(), "暂时没有访问日志", "No access logs yet")}
                 </div>
             </Show>
 
             <Show when=move || !is_empty>
-                <div class="app-table-shell overflow-x-auto">
-                    <table class="w-full text-sm">
+                <div class=share_panel_style::table_shell>
+                    <table class=share_panel_style::table>
                         <thead>
-                            <tr class="border-b border-border bg-muted/30">
-                                <th class="px-3 py-2 text-left font-medium text-muted-foreground">{move || choose(locale.get(), "访客 ID", "Visitor ID")}</th>
-                                <th class="px-3 py-2 text-left font-medium text-muted-foreground">{move || choose(locale.get(), "访问时间", "Accessed At")}</th>
-                                <th class="px-3 py-2 text-left font-medium text-muted-foreground">{move || choose(locale.get(), "动作", "Action")}</th>
+                            <tr class=share_panel_style::thead_row>
+                                <th class=share_panel_style::thead_cell>{move || choose(locale.get(), "访客 ID", "Visitor ID")}</th>
+                                <th class=share_panel_style::thead_cell>{move || choose(locale.get(), "访问时间", "Accessed At")}</th>
+                                <th class=share_panel_style::thead_cell>{move || choose(locale.get(), "动作", "Action")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {logs.iter().map(|log| {
                                 view! {
-                                    <tr class="border-b border-border/60 hover:bg-muted/30">
-                                        <td class="py-2 px-3 font-mono text-xs">{log.visitor_id.clone()}</td>
-                                        <td class="px-3 py-2 text-muted-foreground">{log.accessed_at.clone()}</td>
-                                        <td class="py-2 px-3">
-                                            <span class="app-status-badge bg-muted text-muted-foreground">
+                                    <tr class=share_panel_style::table_row>
+                                        <td class={format!("{} {}", share_panel_style::table_cell, share_panel_style::mono_text)}>{log.visitor_id.clone()}</td>
+                                        <td class={format!("{} {}", share_panel_style::table_cell, share_panel_style::muted_text)}>{log.accessed_at.clone()}</td>
+                                        <td class=share_panel_style::table_cell>
+                                            <span class=share_panel_style::status_badge>
                                                 {log.action.clone()}
                                             </span>
                                         </td>
@@ -185,41 +199,41 @@ pub fn ShareSettingsPanel(
     };
 
     view! {
-        <div class="app-surface-card">
-            <h3 class="mb-4 text-lg font-semibold text-card-foreground">
+        <div class=share_panel_style::panel>
+            <h3 class=share_panel_style::panel_title>
                 {move || choose(locale.get(), "分享设置", "Share Settings")}
             </h3>
 
-            <div class="mb-4">
-                <label class="app-form-label">
+            <div class=share_panel_style::field>
+                <label class=share_panel_style::label>
                     {move || choose(locale.get(), "分享令牌", "Share Token")}
                 </label>
-                <div class="flex gap-2">
+                <div class=share_panel_style::input_row>
                     <input
                         type="text"
                         readonly
-                        class="app-input flex-1 bg-muted/40 font-mono text-sm text-muted-foreground"
+                        class={format!("{} {}", share_panel_style::input, share_panel_style::mono_input)}
                         value=share_token.get()
                     />
                 </div>
-                <p class="mt-1 text-xs text-muted-foreground">
+                <p class=share_panel_style::helper_text>
                     {move || choose(locale.get(), "复制这个令牌以分享当前知识库", "Copy this token to share your notebook")}
                 </p>
             </div>
 
-            <div class="mb-4">
-                <label class="app-form-label">
+            <div class=share_panel_style::field>
+                <label class=share_panel_style::label>
                     {move || choose(locale.get(), "访问级别", "Access Level")}
                 </label>
                 <select
-                    class="app-input"
+                    class=share_panel_style::select
                     on:change=move |ev| set_access_level.set(event_target_value(&ev))
                 >
                     <option value="private" selected={access_level.get() == "private"}>{move || access_level_label(locale.get(), "private")}</option>
                     <option value="link" selected={access_level.get() == "link"}>{move || access_level_label(locale.get(), "link")}</option>
                     <option value="public" selected={access_level.get() == "public"}>{move || access_level_label(locale.get(), "public")}</option>
                 </select>
-                <p class="mt-1 text-xs text-muted-foreground">
+                <p class=share_panel_style::helper_text>
                     {move || match access_level.get().as_str() {
                         "private" => choose(locale.get(), "仅自己可访问", "Only you can access"),
                         "link" => choose(locale.get(), "持有链接的任何人可查看", "Anyone with the link can view"),
@@ -229,28 +243,28 @@ pub fn ShareSettingsPanel(
                 </p>
             </div>
 
-            <div class="mb-4">
-                <label class="app-form-label">
+            <div class=share_panel_style::field>
+                <label class=share_panel_style::label>
                     {move || choose(locale.get(), "链接过期时间", "Link Expiration")}
                 </label>
                 <input
                     type="text"
-                    class="app-input"
+                    class=share_panel_style::input
                     placeholder={move || choose(locale.get(), "RFC3339，可选", "RFC3339, optional")}
                     value=move || expires_at.get()
                     on:input=move |ev| set_expires_at.set(event_target_value(&ev))
                 />
-                <p class="mt-1 text-xs text-muted-foreground">
+                <p class=share_panel_style::helper_text>
                     {move || choose(locale.get(), "示例：2026-03-31T18:00:00Z", "Example: 2026-03-31T18:00:00Z")}
                 </p>
             </div>
 
-            <label class="app-toggle-row mb-4">
+            <label class=share_panel_style::toggle_row>
                 <div>
-                    <div class="font-medium text-foreground">
+                    <div class=share_panel_style::toggle_title>
                         {move || choose(locale.get(), "允许下载原始资料", "Allow source downloads")}
                     </div>
-                    <div class="mt-1 text-xs text-muted-foreground">
+                    <div class=share_panel_style::toggle_help>
                         {move || choose(locale.get(), "公开页会据此显示下载能力。", "The public share page will expose downloads based on this switch.")}
                     </div>
                 </div>
@@ -261,9 +275,9 @@ pub fn ShareSettingsPanel(
                 />
             </label>
 
-            <div class="flex gap-3 pt-2">
+            <div class=share_panel_style::actions>
                 <button
-                    class="app-button-secondary"
+                    class=share_panel_style::secondary_button
                     on:click=handle_enable_toggle
                 >
                     {move || if share_token.get().is_empty() {
@@ -273,7 +287,7 @@ pub fn ShareSettingsPanel(
                     }}
                 </button>
                 <button
-                    class="app-button-primary"
+                    class=share_panel_style::primary_button
                     disabled=saving.get()
                     on:click=handle_save
                 >
@@ -304,28 +318,28 @@ pub fn MembersPanel(
     let members_for_empty = members.clone();
     let members_for_non_empty = members.clone();
     view! {
-        <div class="app-surface-card">
-            <h3 class="mb-4 text-lg font-semibold text-card-foreground">
+        <div class=share_panel_style::panel>
+            <h3 class=share_panel_style::panel_title>
                 {move || choose(locale.get(), "成员", "Members")}
             </h3>
 
-            <div class="grid gap-3 md:grid-cols-[1fr_160px_auto] mb-4">
+            <div class=share_panel_style::member_grid>
                 <input
                     type="email"
-                    class="app-input"
+                    class=share_panel_style::input
                     placeholder={move || choose(locale.get(), "member@example.com", "member@example.com")}
                     value=move || invite_email.get()
                     on:input=move |ev| set_invite_email.set(event_target_value(&ev))
                 />
                 <select
-                    class="app-input"
+                    class=share_panel_style::select
                     on:change=move |ev| set_invite_role.set(event_target_value(&ev))
                 >
                     <option value="viewer" selected={move || invite_role.get() == "viewer"}>{move || member_role_label(locale.get(), "viewer")}</option>
                     <option value="editor" selected={move || invite_role.get() == "editor"}>{move || member_role_label(locale.get(), "editor")}</option>
                 </select>
                 <button
-                    class="app-button-primary"
+                    class=share_panel_style::primary_button
                     disabled=move || inviting.get()
                     on:click=move |_| on_invite()
                 >
@@ -338,11 +352,11 @@ pub fn MembersPanel(
             </div>
 
             <Show when=move || members_for_empty.is_empty()>
-                <div class="app-empty-state">{move || choose(locale.get(), "暂时没有成员", "No members yet")}</div>
+                <div class=share_panel_style::empty_state>{move || choose(locale.get(), "暂时没有成员", "No members yet")}</div>
             </Show>
 
             <Show when=move || !members_for_non_empty.is_empty()>
-                <div class="space-y-2">
+                <div class=share_panel_style::member_list>
                     {members_for_view.clone().into_iter().map(|member| {
                         let member_id = StoredValue::new(member.member_id.clone());
                         let label = if !member.email.is_empty() {
@@ -351,17 +365,17 @@ pub fn MembersPanel(
                             member.user_id.clone()
                         };
                         view! {
-                            <div class="flex items-center justify-between rounded-xl border border-border bg-card px-3 py-2">
-                                <div class="min-w-0">
-                                    <div class="truncate text-sm font-medium text-card-foreground">{label}</div>
-                                    <div class="text-xs text-muted-foreground">
+                            <div class=share_panel_style::member_row>
+                                <div class=share_panel_style::member_identity>
+                                    <div class=share_panel_style::member_label>{label}</div>
+                                    <div class=share_panel_style::member_meta>
                                         {member_role_label(locale.get(), &member.role)}
                                         {" · "}
                                         {member_status_label(locale.get(), &member.status)}
                                     </div>
                                 </div>
                                 <button
-                                    class="app-button-danger px-3 py-1.5 text-xs"
+                                    class=share_panel_style::danger_button
                                     on:click=move |_| set_remove_member_id.set(Some(member_id.get_value()))
                                 >
                                     {move || choose(locale.get(), "移除", "Remove")}

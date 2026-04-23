@@ -71,7 +71,7 @@ pub fn HelpPage() -> impl IntoView {
                         {move || choose(locale.get(), "2. Workspace 与会话", "2. Workspace & Sessions")}
                     </h2>
                     <ul class="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
-                        <li>{move || choose(locale.get(), "每个 Notebook 对应一个 Workspace。左侧为会话历史，中间为对话，右侧为资料与笔记。", "Each notebook maps to one workspace: left thread history, center chat, right sources and notes.")}</li>
+                        <li>{move || choose(locale.get(), "每个 Workspace 都包含左侧会话历史、中间对话区，以及右侧资料与笔记。", "Each workspace includes left thread history, center chat, and right-side sources plus notes.")}</li>
                         <li>{move || choose(locale.get(), "历史列表支持关键词过滤；点击会话可恢复该 session 消息。", "Thread history supports keyword filtering; selecting a thread restores that session messages.")}</li>
                         <li>{move || choose(locale.get(), "Workspace 顶栏支持快速分享弹层、快捷设置弹层、API 页面跳转、用户页面跳转。", "Workspace top bar supports share popover, settings popover, API page jump, and user page jump.")}</li>
                     </ul>
@@ -94,7 +94,7 @@ pub fn HelpPage() -> impl IntoView {
                     </h2>
                     <ul class="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
                         <li>{move || choose(locale.get(), "Share Center 支持分享开关、访问级别、成员邀请与日志追踪。", "Share Center supports access mode, permission scope, member invite/remove, and access logs.")}</li>
-                        <li>{move || choose(locale.get(), "公开分享链接支持只读知识库页面与引用追踪。", "Public shared links support read-only knowledge base page and citation traces.")}</li>
+                        <li>{move || choose(locale.get(), "公开分享链接支持只读 Workspace 页面与引用追踪。", "Public shared links support a read-only workspace page with citation tracing.")}</li>
                         <li>{move || choose(locale.get(), "Workspace 顶栏分享按钮默认走轻量弹层，不强制跳转新页面。", "Workspace Share button uses a lightweight popover by default, without forced route transition.")}</li>
                     </ul>
                 </div>
@@ -104,7 +104,7 @@ pub fn HelpPage() -> impl IntoView {
                         {move || choose(locale.get(), "5. API 接入", "5. API Access")}
                     </h2>
                     <ul class="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
-                        <li>{move || choose(locale.get(), "每个 Notebook 可独立创建 API Key，支持权限与频率控制。", "Each notebook can create scoped API keys with permission and rate controls.")}</li>
+                        <li>{move || choose(locale.get(), "每个 Workspace 可独立创建 API Key，支持权限与频率控制。", "Each workspace can create scoped API keys with permission and rate controls.")}</li>
                         <li>{move || choose(locale.get(), "支持资料上传、URL 导入、RAG 查询等能力。", "Supports source upload, URL ingestion, and RAG query workflows.")}</li>
                         <li>{move || choose(locale.get(), "如需撤销访问，可在 API 页面执行密钥撤销。", "To revoke access, use key revocation in API Access page.")}</li>
                     </ul>

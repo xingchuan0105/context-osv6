@@ -118,7 +118,7 @@ async fn auth_register_handler(
         );
     }
 
-    let token = issue_jwt(&user_id, &org_id);
+    let token = issue_jwt_for_auth_version(&user_id, &org_id, 1);
     let full_name = req.full_name.unwrap_or_default();
     record_api_product_event_if_available(
         &state,
@@ -174,8 +174,8 @@ async fn auth_login_handler(
         }
     };
 
-    let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, String, Option<String>)>(
-        "SELECT id, org_id, email, full_name, role, password_hash FROM users WHERE email = $1",
+    let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, String, Option<String>, i32)>(
+        "SELECT id, org_id, email, full_name, role, password_hash, auth_version FROM users WHERE email = $1",
     )
     .bind(req.email.trim())
     .fetch_optional(tx.as_mut())
@@ -186,8 +186,8 @@ async fn auth_login_handler(
         Ok(None) => {
             return handlers::error_response(
                 StatusCode::UNAUTHORIZED,
-                "invalid_credentials",
-                "Invalid email or password",
+                "account_not_registered",
+                "This account is not registered",
             );
         }
         Err(e) => {
@@ -200,7 +200,7 @@ async fn auth_login_handler(
         }
     };
 
-    let (user_id, org_id, email, full_name, _role, password_hash) = row;
+    let (user_id, org_id, email, full_name, _role, password_hash, auth_version) = row;
     let _ = tx.commit().await;
 
     // Verify password
@@ -209,8 +209,8 @@ async fn auth_login_handler(
         None => {
             return handlers::error_response(
                 StatusCode::UNAUTHORIZED,
-                "invalid_credentials",
-                "Invalid email or password",
+                "invalid_password",
+                "Incorrect password",
             );
         }
     };
@@ -220,13 +220,13 @@ async fn auth_login_handler(
         _ => {
             return handlers::error_response(
                 StatusCode::UNAUTHORIZED,
-                "invalid_credentials",
-                "Invalid email or password",
+                "invalid_password",
+                "Incorrect password",
             );
         }
     }
 
-    let token = issue_jwt(&user_id, &org_id);
+    let token = issue_jwt_for_auth_version(&user_id, &org_id, auth_version);
     record_api_product_event_if_available(
         &state,
         user_id,

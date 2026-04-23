@@ -98,9 +98,10 @@ impl MetricsState {
     fn new() -> Self {
         let mut registry = Registry::default();
         let http_requests_total = Family::<HttpLabels, Counter>::default();
-        let http_request_duration_ms = Family::<RouteMethodLabels, Histogram>::new_with_constructor(
-            || Histogram::new(exponential_buckets(1.0, 2.0, 16)),
-        );
+        let http_request_duration_ms =
+            Family::<RouteMethodLabels, Histogram>::new_with_constructor(|| {
+                Histogram::new(exponential_buckets(1.0, 2.0, 16))
+            });
         let http_inflight_requests = Family::<SingleLabel, Gauge>::default();
         let sse_streams_open = Family::<SingleLabel, Gauge>::default();
         let sse_events_sent_total = Family::<SurfaceEventLabels, Counter>::default();

@@ -116,3 +116,16 @@ cargo run -p avrag-worker
 cargo test --manifest-path crates/ingestion/Cargo.toml
 cargo check -p avrag-worker
 ```
+
+## 服务器部署提醒（2026-04-23）
+
+1. MinerU 已升级为 `v4` 协议接入，生产环境需配置：
+   - `MINERU_BASE_URL=https://mineru.net/api/v4`
+   - `MINERU_API_KEY=<有效 key>`
+2. MinerU `v4` 只接受可访问的 `http(s)` 文件 URL。
+   - `file://`、本机路径、MinerU 无法访问的内网地址都会导致解析失败。
+   - 部署时需确保对象存储对 MinerU 可达（通常是可访问的 presigned URL）。
+3. Office 解析走本地 HTTP 服务 `office-parser-jvm`，需确保服务常驻并配置：
+   - `OFFICE_PARSER_BASE_URL=http://127.0.0.1:9090`（或你的实际地址）
+   - 启动脚本：`./scripts/office-parser-up.sh`
+   - 停止脚本：`./scripts/office-parser-down.sh`

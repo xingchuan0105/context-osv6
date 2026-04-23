@@ -61,6 +61,11 @@ pub struct ConfirmResetPasswordRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthRuntimeCapabilitiesResponse {
+    pub password_reset_enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmptyResponse {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

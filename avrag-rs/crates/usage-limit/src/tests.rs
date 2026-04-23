@@ -18,7 +18,10 @@ fn compute_usage_units_default_rates() {
 
 #[test]
 fn billable_feature_serialization() {
-    assert_eq!(serde_json::to_string(&BillableFeature::Answer).unwrap(), r#""answer""#);
+    assert_eq!(
+        serde_json::to_string(&BillableFeature::Answer).unwrap(),
+        r#""answer""#
+    );
     assert_eq!(
         serde_json::to_string(&BillableFeature::Summary).unwrap(),
         r#""summary""#

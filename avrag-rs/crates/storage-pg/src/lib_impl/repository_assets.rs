@@ -7,15 +7,16 @@ impl PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            INSERT INTO document_assets (asset_id, org_id, notebook_id, document_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-            RETURNING asset_id, org_id, notebook_id, document_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend, created_at
+            INSERT INTO document_assets (asset_id, org_id, notebook_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            RETURNING asset_id, org_id, notebook_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend, created_at
             "#,
         )
         .bind(params.asset_id)
         .bind(context.org_id().into_uuid())
         .bind(params.notebook_id)
         .bind(params.document_id)
+        .bind(params.parse_run_id)
         .bind(params.page)
         .bind(params.asset_kind)
         .bind(params.storage_path)
@@ -38,15 +39,16 @@ impl PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            INSERT INTO document_multimodal_chunks (chunk_id, org_id, notebook_id, document_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-            RETURNING chunk_id, org_id, notebook_id, document_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata, created_at
+            INSERT INTO document_multimodal_chunks (chunk_id, org_id, notebook_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING chunk_id, org_id, notebook_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata, created_at
             "#,
         )
         .bind(params.chunk_id)
         .bind(context.org_id().into_uuid())
         .bind(params.notebook_id)
         .bind(params.document_id)
+        .bind(params.parse_run_id)
         .bind(params.asset_id)
         .bind(params.page)
         .bind(params.context_text)
@@ -68,7 +70,7 @@ impl PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            SELECT asset_id, org_id, notebook_id, document_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend, created_at
+            SELECT asset_id, org_id, notebook_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend, created_at
             FROM document_assets
             WHERE asset_id = $1
             "#,
@@ -88,7 +90,7 @@ impl PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            SELECT chunk_id, org_id, notebook_id, document_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata, created_at
+            SELECT chunk_id, org_id, notebook_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata, created_at
             FROM document_multimodal_chunks
             WHERE chunk_id = $1
             "#,
@@ -111,7 +113,7 @@ impl PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select id, document_id, page, content
+            select id, document_id, page, content, metadata
             from chunks
             where id = any($1) and chunk_type = 'body'
             "#,
@@ -142,7 +144,7 @@ impl PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            SELECT chunk_id, org_id, notebook_id, document_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata, created_at
+            SELECT chunk_id, org_id, notebook_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata, created_at
             FROM document_multimodal_chunks
             WHERE chunk_id = any($1)
             "#,
@@ -171,7 +173,7 @@ impl PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            SELECT asset_id, org_id, notebook_id, document_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend, created_at
+            SELECT asset_id, org_id, notebook_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend, created_at
             FROM document_assets
             WHERE asset_id = any($1)
             ORDER BY created_at

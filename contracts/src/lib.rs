@@ -15,7 +15,7 @@ pub use admin::{
     OrgListResponse, OrgResponse, OrgRow, RagHealthStatus, ReadyResponse, UserListResponse,
     UserRow, WorkerStatusResponse,
 };
-pub use auth::{AuthEnvelope, AuthPayload, AuthUserDto};
+pub use auth::{AuthEnvelope, AuthPayload, AuthRuntimeCapabilitiesResponse, AuthUserDto};
 pub use auth::{
     ChangePasswordRequest, ConfirmResetPasswordRequest, EmptyResponse, LoginRequest,
     NotificationRow, NotificationsResponse, RegisterRequest, SendResetCodeRequest,

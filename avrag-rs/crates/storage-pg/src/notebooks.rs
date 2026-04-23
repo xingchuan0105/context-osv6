@@ -13,10 +13,7 @@ impl PgNotebookQueries {
         Self { repo }
     }
 
-    pub async fn list(
-        &self,
-        auth: &AuthContext,
-    ) -> Result<Vec<Notebook>, crate::PgStorageError> {
+    pub async fn list(&self, auth: &AuthContext) -> Result<Vec<Notebook>, crate::PgStorageError> {
         self.repo.list_notebooks(auth).await
     }
 }

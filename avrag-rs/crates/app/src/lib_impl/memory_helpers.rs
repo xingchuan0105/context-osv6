@@ -174,6 +174,8 @@ fn build_citations(context_document: Option<&RetrievedContext>) -> Vec<Citation>
         asset_id: None,
         caption: None,
         image_url: None,
+        parser_backend: None,
+        source_locator: None,
     }]
 }
 
@@ -314,4 +316,3 @@ fn agent_icon(agent_type: &str) -> &'static str {
         _ => "📚",
     }
 }
-

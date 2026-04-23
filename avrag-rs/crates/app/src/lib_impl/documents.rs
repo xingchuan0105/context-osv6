@@ -40,6 +40,11 @@ impl AppState {
                 "filename is required",
             ));
         }
+        ingestion::parser::ParseRouter::ensure_supported_file_type(
+            req.filename.trim(),
+            &req.mime_type,
+        )
+        .map_err(|error| AppError::validation(error.code(), error.to_string()))?;
 
         if let Some(pg) = &self.pg {
             self.ensure_metric_quota("storage_bytes", req.file_size as i64)

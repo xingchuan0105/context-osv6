@@ -35,13 +35,6 @@ mod tests {
     }
 
     #[test]
-    fn go_to_mode_routes_agent_types_to_expected_tasks() {
-        assert_eq!(go_to_mode("general"), TASK_GENERAL);
-        assert_eq!(go_to_mode("search"), TASK_SEARCH);
-        assert_eq!(go_to_mode("rag"), TASK_RAG_LOAD_SESSION_CONTEXT);
-    }
-
-    #[test]
     fn app_error_roundtrip_preserves_code_and_status() {
         let error = AppError::not_found("missing_thing", "thing not found");
         let graph_error = graph_app_error(error.clone());
@@ -82,6 +75,8 @@ mod tests {
                 asset_id: None,
                 caption: None,
                 image_url: None,
+                parser_backend: None,
+                source_locator: None,
             }],
             trace: TraceInfo {
                 mode: "rag".to_string(),
@@ -123,18 +118,10 @@ mod tests {
         assert!(graph.get_task(TASK_MODE_SELECT).is_some());
         assert!(graph.get_task(TASK_GENERAL).is_some());
         assert!(graph.get_task(TASK_SEARCH).is_some());
-        assert!(graph.get_task(TASK_RAG_LOAD_SESSION_CONTEXT).is_some());
         assert!(graph.get_task(TASK_RAG_PREPARE_PLANNER_INPUT).is_some());
         assert!(graph.get_task(TASK_RAG_CALL_PLANNER).is_some());
         assert!(graph.get_task(TASK_RAG_NORMALIZE_PLAN).is_some());
-        assert!(graph.get_task(TASK_RAG_RETRIEVE_TEXT_DENSE).is_some());
-        assert!(graph.get_task(TASK_RAG_RETRIEVE_BM25).is_some());
-        assert!(graph.get_task(TASK_RAG_RETRIEVE_MULTIMODAL_DENSE).is_some());
-        assert!(graph.get_task(TASK_RAG_MERGE_TEXT_RRF).is_some());
-        assert!(graph.get_task(TASK_RAG_MULTIMODAL_RERANK).is_some());
-        assert!(graph.get_task(TASK_RAG_CUT_FINAL_CANDIDATES).is_some());
-        assert!(graph.get_task(TASK_RAG_APPLY_SUMMARY_POLICY).is_some());
-        assert!(graph.get_task(TASK_RAG_BUILD_ANSWER_CONTEXT).is_some());
+        assert!(graph.get_task(TASK_RAG_EXECUTE_PLAN).is_some());
         assert!(graph.get_task(TASK_RAG_ANSWER_SYNTHESIZE).is_some());
         assert!(graph.get_task(TASK_RAG_VALIDATE_CITATIONS).is_some());
         assert!(graph.get_task(TASK_OUTPUT_GUARD).is_some());

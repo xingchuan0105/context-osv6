@@ -168,16 +168,17 @@ impl PgAppRepository {
         content: &str,
     ) -> Result<Vec<IndexedChunk>, PgStorageError> {
         let body_items = build_preview_items(content);
-        self.store_document_body_items(context, document_id, content, &body_items)
+        self.store_document_body_items(context, document_id, None, content, &body_items)
             .await
     }
 
-    pub async fn store_document_body_items(
+    pub async fn store_document_body_chunks(
         &self,
         context: &AuthContext,
         document_id: Uuid,
+        parse_run_id: Option<Uuid>,
         content: &str,
-        body_items: &[ParsedPreviewItem],
+        body_chunks: &[StoreDocumentChunkParams],
     ) -> Result<Vec<IndexedChunk>, PgStorageError> {
         let summary = build_summary(content);
         let mut indexed_chunks = Vec::new();
@@ -187,13 +188,13 @@ impl PgAppRepository {
         let result = sqlx::query(
             r#"
             update documents
-            set file_size = $2, chunk_count = $3, status = 'queued', updated_at = now()
+            set file_size = $2, chunk_count = $3, updated_at = now()
             where id = $1
             "#,
         )
         .bind(document_id)
         .bind(i64::try_from(content.len()).unwrap_or(i64::MAX))
-        .bind(i32::try_from(body_items.len()).unwrap_or(i32::MAX))
+        .bind(i32::try_from(body_chunks.len()).unwrap_or(i32::MAX))
         .execute(tx.inner())
         .await?;
 
@@ -207,25 +208,23 @@ impl PgAppRepository {
             .execute(tx.inner())
             .await?;
 
-        for item in body_items {
+        for chunk in body_chunks {
             let row = sqlx::query(
                 r#"
-                insert into chunks (org_id, document_id, chunk_type, page, content, metadata)
-                values ($1, $2, 'body', $3, $4, $5)
-                returning id, document_id, page, content
+                insert into chunks (org_id, document_id, parse_run_id, chunk_type, page, content, metadata)
+                values ($1, $2, $3, 'body', $4, $5, $6)
+                returning id, document_id, page, content, metadata
                 "#,
             )
             .bind(context.org_id().into_uuid())
             .bind(document_id)
-            .bind(i32::try_from(item.page).unwrap_or(1))
-            .bind(&item.text)
-            .bind(json!({
-                "kind": item.kind,
-                "cursor": item.cursor,
-                "page": item.page,
-            }))
+            .bind(chunk.parse_run_id)
+            .bind(chunk.page)
+            .bind(&chunk.content)
+            .bind(&chunk.metadata)
             .fetch_one(tx.inner())
             .await?;
+
             indexed_chunks.push(IndexedChunk {
                 chunk_id: row
                     .try_get::<Uuid, _>("id")
@@ -242,23 +241,51 @@ impl PgAppRepository {
                     .map(i64::from),
                 content: row.try_get("content").unwrap_or_default(),
                 score: None,
+                metadata: row.try_get("metadata").unwrap_or_else(|_| json!({})),
             });
         }
 
         sqlx::query(
             r#"
-            insert into chunks (org_id, document_id, chunk_type, page, content, metadata)
-            values ($1, $2, 'summary', 1, $3, '{}'::jsonb)
+            insert into chunks (org_id, document_id, parse_run_id, chunk_type, page, content, metadata)
+            values ($1, $2, $3, 'summary', 1, $4, '{}'::jsonb)
             "#,
         )
         .bind(context.org_id().into_uuid())
         .bind(document_id)
+        .bind(parse_run_id)
         .bind(summary)
         .execute(tx.inner())
         .await?;
 
         tx.commit().await?;
         Ok(indexed_chunks)
+    }
+
+    pub async fn store_document_body_items(
+        &self,
+        context: &AuthContext,
+        document_id: Uuid,
+        parse_run_id: Option<Uuid>,
+        content: &str,
+        body_items: &[ParsedPreviewItem],
+    ) -> Result<Vec<IndexedChunk>, PgStorageError> {
+        let body_chunks = body_items
+            .iter()
+            .map(|item| StoreDocumentChunkParams {
+                parse_run_id,
+                page: Some(i32::try_from(item.page).unwrap_or(1)),
+                content: item.text.clone(),
+                metadata: json!({
+                    "kind": item.kind,
+                    "cursor": item.cursor,
+                    "page": item.page,
+                }),
+            })
+            .collect::<Vec<_>>();
+
+        self.store_document_body_chunks(context, document_id, parse_run_id, content, &body_chunks)
+            .await
     }
 
 

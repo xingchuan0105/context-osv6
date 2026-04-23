@@ -7,9 +7,23 @@ use super::{DocumentParser, Page, ParsedDocument};
 
 pub struct PdfParser;
 
-#[async_trait]
-impl DocumentParser for PdfParser {
-    async fn parse(&self, bytes: &[u8], filename: &str) -> anyhow::Result<ParsedDocument> {
+impl PdfParser {
+    pub async fn parse_pages(
+        &self,
+        bytes: &[u8],
+        filename: &str,
+        page_numbers: &[u32],
+    ) -> anyhow::Result<ParsedDocument> {
+        self.parse_with_page_filter(bytes, filename, Some(page_numbers))
+            .await
+    }
+
+    async fn parse_with_page_filter(
+        &self,
+        bytes: &[u8],
+        filename: &str,
+        page_numbers: Option<&[u32]>,
+    ) -> anyhow::Result<ParsedDocument> {
         let doc =
             Document::load_mem(bytes).map_err(|e| anyhow::anyhow!("Failed to load PDF: {}", e))?;
 
@@ -28,28 +42,33 @@ impl DocumentParser for PdfParser {
             .map(|s| String::from_utf8_lossy(s).to_string())
             .unwrap_or_else(|| filename.to_string());
 
-        let page_count = doc.get_pages().len() as u32;
+        let doc_pages = doc.get_pages();
+        let page_count = doc_pages.len() as u32;
 
-        let mut pages = Vec::new();
-        for (page_num, (page_id, _)) in doc.get_pages().iter().enumerate() {
-            let page_num = page_num as u32 + 1;
-
-            if let Ok(content) = doc.extract_text(&[*page_id]) {
-                if !content.trim().is_empty() {
-                    pages.push(Page {
-                        number: page_num,
-                        content,
-                        cursor: format!("page-{}", page_num),
-                    });
-                }
+        let selected_pages = if let Some(page_numbers) = page_numbers {
+            if page_numbers.is_empty() {
+                anyhow::bail!("PDF page filter must not be empty");
             }
-        }
 
-        if pages.is_empty() {
+            let mut selected = Vec::with_capacity(page_numbers.len());
+            for page_number in page_numbers {
+                doc_pages.get(page_number).ok_or_else(|| {
+                    anyhow::anyhow!("Requested PDF page {} is missing", page_number)
+                })?;
+                selected.push(*page_number);
+            }
+            selected
+        } else {
+            doc_pages.keys().copied().collect::<Vec<_>>()
+        };
+
+        let mut pages = Vec::with_capacity(selected_pages.len());
+        for page_number in selected_pages {
+            let content = doc.extract_text(&[page_number]).unwrap_or_default();
             pages.push(Page {
-                number: 1,
-                content: String::new(),
-                cursor: "page-1".to_string(),
+                number: page_number,
+                content,
+                cursor: format!("page-{}", page_number),
             });
         }
 
@@ -62,5 +81,29 @@ impl DocumentParser for PdfParser {
             pages,
             metadata,
         })
+    }
+}
+
+#[async_trait]
+impl DocumentParser for PdfParser {
+    async fn parse(&self, bytes: &[u8], filename: &str) -> anyhow::Result<ParsedDocument> {
+        self.parse_with_page_filter(bytes, filename, None).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn parse_pages_rejects_missing_page_numbers() {
+        let error = PdfParser
+            .parse_pages(b"%PDF-1.4", "broken.pdf", &[2])
+            .await
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("Failed to load PDF")
+                || error.to_string().contains("missing")
+        );
     }
 }

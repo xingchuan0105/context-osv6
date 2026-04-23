@@ -19,9 +19,10 @@ use common::{
     ModeDebug, Notebook, NotificationRow, ParsedPreviewItem, ParsedPreviewResponse, PlannerOutput,
     RagModeDebug, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary, ShareTokenResponse,
     SourceRef, SourceRow, StatusOnlyResponse, SummaryInjectionTrace, UpdateChatSessionRequest,
-    UpdateDocumentRequest, UpdateNotebookRequest, UserPreferences, default_org_id,
-    default_user_id, new_id, now_rfc3339,
+    UpdateDocumentRequest, UpdateNotebookRequest, default_org_id, default_user_id, new_id,
+    now_rfc3339,
 };
+use contracts::UserPreferences;
 use hmac::{Hmac, Mac};
 use ingestion::parser::{DocumentParser, HtmlParser};
 use ingestion::{
@@ -89,6 +90,7 @@ pub struct QdrantConfig {
     pub port: u16,
     pub api_key: String,
     pub collection: String,
+    pub multimodal_collection: String,
     pub vector_name: String,
     pub multi_vector: bool,
     pub use_tls: bool,
@@ -163,6 +165,7 @@ impl Default for AppConfig {
                 port: 6333,
                 api_key: String::new(),
                 collection: "rag_chunks".to_string(),
+                multimodal_collection: "rag_chunks_multimodal".to_string(),
                 vector_name: "dense".to_string(),
                 multi_vector: true,
                 use_tls: false,
@@ -312,6 +315,11 @@ impl AppConfig {
         config.qdrant.port = env_u16("QDRANT_PORT", config.qdrant.port);
         config.qdrant.api_key = env_string("QDRANT_API_KEY", &config.qdrant.api_key);
         config.qdrant.collection = env_string("QDRANT_COLLECTION", &config.qdrant.collection);
+        let default_multimodal_collection = format!("{}_multimodal", config.qdrant.collection);
+        config.qdrant.multimodal_collection = env_string(
+            "QDRANT_MULTIMODAL_COLLECTION",
+            &default_multimodal_collection,
+        );
         config.qdrant.vector_name = env_string("QDRANT_VECTOR_NAME", &config.qdrant.vector_name);
         config.qdrant.multi_vector = env_bool("QDRANT_MULTI_VECTOR", config.qdrant.multi_vector);
         config.qdrant.use_tls = env_bool("QDRANT_USE_TLS", config.qdrant.use_tls);

@@ -45,9 +45,15 @@ pub struct AnswerContextChunk {
     pub page: Option<i64>,
     pub text: String,
     #[serde(default)]
+    pub asset_id: Option<String>,
+    #[serde(default)]
     pub caption: Option<String>,
     #[serde(default)]
     pub image_url: Option<String>,
+    #[serde(default)]
+    pub parser_backend: Option<String>,
+    #[serde(default)]
+    pub source_locator: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

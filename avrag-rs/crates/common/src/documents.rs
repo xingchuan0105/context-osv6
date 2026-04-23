@@ -11,6 +11,19 @@ pub enum DocumentStatus {
     Failed,
 }
 
+impl DocumentStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Enqueueing => "enqueueing",
+            Self::Queued => "queued",
+            Self::Processing => "processing",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
     pub id: String,

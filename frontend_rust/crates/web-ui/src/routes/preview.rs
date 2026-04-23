@@ -41,12 +41,64 @@ fn AvatarButton(href: &'static str) -> impl IntoView {
 }
 
 #[component]
-fn NotebookCard(left: i32, top: i32, title: &'static str) -> impl IntoView {
+fn PreviewDashboardRow(
+    title: &'static str,
+    sources: &'static str,
+    date: &'static str,
+    active: bool,
+) -> impl IntoView {
     view! {
-        <div class="absolute h-[186px] w-[420px] rounded-[20px] border border-[#e3ebf2] bg-[#f9f9fb] shadow-[0px_8px_20px_0px_rgba(13,20,31,0.05)]" style={format!("left:{left}px;top:{top}px;")}>
-            <div class="absolute left-[22px] top-[22px] h-[46px] w-[46px] rounded-[23px] border border-[#e3ebf2] bg-[#f2f5fa]"></div>
-            <p class="absolute left-[22px] top-[82px] text-[17px] font-semibold leading-[1.3] text-[#1f2638]">{title}</p>
-            <p class="absolute left-[22px] top-[152px] text-[14px] font-medium leading-[1.3] text-[#738094]">{"Updated Apr 13, 2026"}</p>
+        <div
+            class="grid grid-cols-12 items-center gap-4 border-b border-[#f3f4f6] px-4 py-3.5 transition-colors"
+            class=("bg-[#fafafa]", active)
+        >
+            <div class="col-span-6 truncate pr-4 text-[14.5px] font-medium text-[#27272a]">
+                {title}
+            </div>
+            <div class="col-span-2 text-[14px] text-[#71717a]">{sources}</div>
+            <div class="col-span-2 text-[14px] text-[#71717a]">{date}</div>
+            <div class="col-span-2 flex items-center justify-between">
+                <span class="text-[14px] text-[#71717a]">{"Owner"}</span>
+                <span class="text-[18px] leading-none text-[#a1a1aa]">{"⋮"}</span>
+            </div>
+        </div>
+    }
+}
+
+#[component]
+fn PreviewWorkspaceThreadRow(title: &'static str, active: bool) -> impl IntoView {
+    view! {
+        <button
+            type="button"
+            class="flex w-full items-center rounded-[10px] px-3 py-2 text-left text-[14px] font-medium text-[#334155] transition-colors"
+            class=("bg-[#e8edf6] text-[#22324d]", active)
+            class=("hover:bg-[#eef2f7]", !active)
+        >
+            <span class="truncate">{title}</span>
+        </button>
+    }
+}
+
+#[component]
+fn PreviewWorkspaceSourceRow(title: &'static str, checked: bool) -> impl IntoView {
+    view! {
+        <div class="flex items-center gap-3 rounded-[10px] border border-[#e7ebf2] bg-white px-3 py-2.5">
+            <span
+                class="inline-flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-[3px] border border-[#6b7a90] bg-white text-[11px] font-semibold leading-none text-[#334155]"
+            >
+                {if checked { "✓" } else { "" }}
+            </span>
+            <span class="truncate text-[14px] font-medium text-[#314154]">{title}</span>
+        </div>
+    }
+}
+
+#[component]
+fn PreviewWorkspaceNoteCard(title: &'static str, preview: &'static str) -> impl IntoView {
+    view! {
+        <div class="rounded-[12px] border border-[#e7ebf2] bg-white px-3.5 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
+            <div class="text-[13px] font-semibold leading-[1.35] text-[#1f2d3d]">{title}</div>
+            <p class="mt-2 line-clamp-2 text-[12px] leading-[1.45] text-[#7a8796]">{preview}</p>
         </div>
     }
 }
@@ -172,45 +224,335 @@ pub fn PreviewLoginPage() -> impl IntoView {
 #[component]
 pub fn PreviewDashboardPage() -> impl IntoView {
     view! {
-        <CanvasFrame>
-            <div class="absolute left-[-2px] top-[-2px] h-[1024px] w-[1440px] border border-[#e3ebf2] bg-[#fdfdfe]"></div>
-            <div class="absolute left-[-2px] top-[-2px] h-[76px] w-[1440px] border border-[#e3ebf2] bg-white"></div>
+        <div class="min-h-screen overflow-hidden bg-white text-[#18181b] antialiased" style="font-family:'Inter','SF Pro Display','PingFang SC','Noto Sans SC','Segoe UI',sans-serif;">
+            <header class="border-b border-[#f0f1f3] bg-white">
+                <div class="mx-auto flex h-[72px] w-full max-w-[1280px] items-center justify-between px-7">
+                    <A href="/preview/dashboard" attr:class="inline-flex items-center gap-2.5 text-[#111827]">
+                        <svg viewBox="0 0 24 24" class="h-7 w-7" fill="none" stroke="currentColor">
+                            <path d="M4 6.5A1.5 1.5 0 015.5 5h13A1.5 1.5 0 0120 6.5v11A1.5 1.5 0 0118.5 19h-13A1.5 1.5 0 014 17.5z" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M8 9h8M8 13h5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span class="text-[30px] font-semibold tracking-[-0.03em]">{"NotebookLM"}</span>
+                    </A>
 
-            <A href="/preview/dashboard" attr:class="absolute left-[22px] top-[24px] block size-[32px]">
-                <BrainLogo size="h-[32px] w-[32px]" />
-            </A>
-            <A href="/preview/dashboard" attr:class="absolute left-[70px] top-[23px] text-[27px] font-semibold tracking-[-0.01em] text-[#12141c]">
-                {"Context-OS"}
-            </A>
+                    <div class="flex items-center gap-4">
+                        <A href="/preview/settings" attr:class="inline-flex h-[34px] items-center gap-1.5 rounded-full border border-[#e5e7eb] bg-white px-3 text-[14px] font-medium text-[#71717a] shadow-[0_1px_2px_rgba(24,24,27,0.04)]">
+                            <svg class="h-[15px] w-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15a3 3 0 100-6 3 3 0 000 6z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33h.01A1.65 1.65 0 009 3.09V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51h.01a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v.01a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+                            </svg>
+                            <span>{"设置"}</span>
+                        </A>
+                        <A href="/preview/account" attr:class="inline-flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#f4f4f5] text-[#71717a]">
+                            <svg class="h-[18px] w-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 12a4 4 0 100-8 4 4 0 000 8z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 20a8 8 0 0116 0"/>
+                            </svg>
+                        </A>
+                    </div>
+                </div>
+            </header>
 
-            <button class="absolute left-[938px] top-[17px] h-[38px] w-[96px] rounded-[19px] border border-[#e3ebf2] bg-white text-[15px] font-medium text-[#4d596b]">
-                {"Sort"}
-            </button>
-            <A href="/preview/workspace" attr:class="absolute left-[1050px] top-[15px] inline-flex h-[42px] w-[114px] items-center justify-center rounded-[21px] border border-[#e3ebf2] bg-[#0a1f47] text-[15px] font-semibold text-white">
-                {"New"}
-            </A>
-            <AvatarButton href="/preview/account" />
+            <main class="mx-auto w-full max-w-[1280px] px-7 py-8">
+                <div class="mb-8 flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-2">
+                        <button class="rounded-full px-5 py-2 text-[14px] font-medium text-[#71717a] hover:bg-[#fafafa]">{"全部"}</button>
+                        <button class="rounded-full bg-[#f4f4f5] px-5 py-2 text-[14px] font-medium text-[#18181b]">{"我的笔记本"}</button>
+                    </div>
 
-            <p class="absolute left-[70px] top-[118px] text-[34px] font-semibold leading-[1.15] text-[#141a24]">{"My Notebooks"}</p>
+                    <div class="flex items-center gap-3">
+                        <button class="inline-flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[#e5e7eb] text-[#71717a] shadow-[0_1px_2px_rgba(24,24,27,0.05)]">
+                            <svg class="h-[18px] w-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.25" d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                        </button>
+                        <div class="flex items-center gap-[2px] rounded-full border border-[#e4e4e7] bg-[#f4f4f5]/80 p-1 shadow-[0_1px_2px_rgba(24,24,27,0.04)]">
+                            <button class="inline-flex h-[30px] w-[30px] items-center justify-center rounded-full text-[#9ca3af]">
+                                <svg class="h-[15px] w-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 5h6v6H4V5zm10 0h6v6h-6V5zM4 13h6v6H4v-6zm10 0h6v6h-6v-6z"/>
+                                </svg>
+                            </button>
+                            <button class="inline-flex h-[30px] w-[30px] items-center justify-center rounded-full bg-white text-[#18181b] shadow-[0_1px_2px_rgba(24,24,27,0.08)]">
+                                <svg class="h-[16px] w-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M5 7h14M5 12h14M5 17h14"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <button class="inline-flex h-[38px] items-center gap-2 rounded-full border border-[#e5e7eb] px-5 text-[14px] font-medium text-[#52525b] shadow-[0_1px_2px_rgba(24,24,27,0.05)]">
+                            <span>{"最近"}</span>
+                            <svg class="h-[14px] w-[14px] text-[#9ca3af]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <A href="/preview/workspace" attr:class="inline-flex h-[38px] items-center gap-2 rounded-full bg-black px-6 text-[14px] font-medium text-white shadow-[0_1px_2px_rgba(24,24,27,0.08)]">
+                            <svg class="h-[15px] w-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4" d="M12 4v16m8-8H4"/>
+                            </svg>
+                            <span>{"新建"}</span>
+                        </A>
+                    </div>
+                </div>
 
-            <A href="/preview/workspace" attr:class="contents">
-                <NotebookCard left=70 top=188 title="Notebook 1" />
-            </A>
-            <NotebookCard left=514 top=188 title="Notebook 2" />
-            <NotebookCard left=958 top=188 title="Notebook 3" />
-            <NotebookCard left=70 top=402 title="Notebook 4" />
-            <NotebookCard left=514 top=402 title="Notebook 5" />
-            <NotebookCard left=958 top=402 title="Notebook 6" />
-            <NotebookCard left=70 top=616 title="Notebook 7" />
-            <NotebookCard left=514 top=616 title="Notebook 8" />
-            <NotebookCard left=958 top=616 title="Notebook 9" />
-        </CanvasFrame>
+                <h1 class="mb-6 px-1 text-[38px] font-medium tracking-[-0.03em] text-[#18181b]">
+                    {"我的笔记本"}
+                </h1>
+
+                <div class="grid grid-cols-12 gap-4 border-b border-[#eceef1] px-4 pb-3 text-[13px] font-medium text-[#a1a1aa]">
+                    <div class="col-span-6">{"标题"}</div>
+                    <div class="col-span-2">{"来源"}</div>
+                    <div class="col-span-2">{"创建日期"}</div>
+                    <div class="col-span-2">{"角色"}</div>
+                </div>
+
+                <div class="pb-10">
+                    <A href="/preview/workspace" attr:class="contents">
+                        <PreviewDashboardRow
+                            title="中核集团市场开发现状分析与战略调研模板"
+                            sources="71 个来源"
+                            date="2026年3月30日"
+                            active=false
+                        />
+                    </A>
+                    <PreviewDashboardRow
+                        title="The Expert Interview Guide: Insight-Driven Research and Best Practices"
+                        sources="20 个来源"
+                        date="2026年3月20日"
+                        active=false
+                    />
+                    <PreviewDashboardRow
+                        title="China 2030 Power Market Outlook: Demand, Structure, and Costs"
+                        sources="1 个来源"
+                        date="2026年3月17日"
+                        active=false
+                    />
+                    <PreviewDashboardRow
+                        title="CNNC Power Trading Operational Framework and Execution Flow"
+                        sources="29 个来源"
+                        date="2026年3月16日"
+                        active=true
+                    />
+                    <PreviewDashboardRow
+                        title="CNNP Electricity Sales and Value-Added Services Management Standards"
+                        sources="25 个来源"
+                        date="2026年3月13日"
+                        active=false
+                    />
+                    <PreviewDashboardRow
+                        title="The Dual Nature of Power: Commodity and System Logistics"
+                        sources="3 个来源"
+                        date="2026年3月13日"
+                        active=false
+                    />
+                    <PreviewDashboardRow
+                        title="China National Nuclear Power Market Development Strategy 2026-2030"
+                        sources="2 个来源"
+                        date="2026年3月13日"
+                        active=false
+                    />
+                    <PreviewDashboardRow
+                        title="Strategic Framework for Prospectus and S-1 Analysis"
+                        sources="3 个来源"
+                        date="2026年3月10日"
+                        active=false
+                    />
+                    <PreviewDashboardRow
+                        title="China's Unified Power Market and Energy Storage Evolution"
+                        sources="46 个来源"
+                        date="2026年3月9日"
+                        active=false
+                    />
+                    <PreviewDashboardRow
+                        title="Beyond Naive RAG: Hybrid Search and Collaborative AI Tutoring"
+                        sources="21 个来源"
+                        date="2026年3月6日"
+                        active=false
+                    />
+                </div>
+            </main>
+        </div>
     }
 }
 
 #[component]
 pub fn PreviewWorkspacePage() -> impl IntoView {
-    view! { <WorkspaceChrome /> }
+    view! {
+        <div class="flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden bg-[#fafaf9] text-[#1f2937] antialiased" style="font-family:'Inter','SF Pro Text','PingFang SC','Noto Sans SC','Segoe UI',sans-serif;">
+            <div class="flex h-[44px] items-center border-b border-[#eceff4] bg-[#fbfbfa] px-3.5">
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <span class="inline-flex h-6 w-6 items-center justify-center rounded-[7px] bg-[#0f172a] text-[11px] font-semibold text-white">
+                            {"⟠"}
+                        </span>
+                        <span class="text-[14px] font-semibold text-[#101828]">{"Context-OS"}</span>
+                    </div>
+                    <span class="h-6 w-px bg-[#dbe2ea]"></span>
+                    <span class="text-[14px] font-medium text-[#39507a]">{"Research Project Alpha"}</span>
+                </div>
+                <div class="ml-auto flex items-center gap-5 text-[14px] font-medium text-[#40506a]">
+                    <button class="inline-flex items-center gap-1.5 hover:text-[#111827]">
+                        <span class="text-[18px] leading-none">{"+"}</span>
+                        <span>{"New Notebook"}</span>
+                    </button>
+                    <button class="inline-flex items-center gap-1.5 hover:text-[#111827]">
+                        <span>{"∿"}</span>
+                        <span>{"Analyze"}</span>
+                    </button>
+                    <button class="hover:text-[#111827]">{"Share"}</button>
+                    <button class="hover:text-[#111827]">{"API"}</button>
+                    <button class="hover:text-[#111827]">{"⚙"}</button>
+                    <button class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#bcc7d3] text-[12px] text-[#425466]">
+                        {"◔"}
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex h-[calc(100dvh-44px)] min-h-0">
+                <aside class="flex w-[210px] shrink-0 flex-col border-r border-[#eceff4] bg-[#fbfbfa] px-3 py-3">
+                    <button class="inline-flex h-[31px] items-center justify-center gap-2 rounded-full bg-[#152544] text-[13.5px] font-semibold text-white">
+                        <span class="text-[16px] leading-none">{"+"}</span>
+                        <span>{"New Thread"}</span>
+                    </button>
+
+                    <div class="mt-12">
+                        <div class="flex h-[30px] items-center rounded-full border border-[#dde3ea] bg-white px-3 text-[12.5px] text-[#94a3b8]">
+                            <span class="mr-2">{"⌕"}</span>
+                            <span>{"Search threads"}</span>
+                        </div>
+                    </div>
+
+                    <div class="mt-5 text-[12px] font-semibold uppercase tracking-[0.04em] text-[#718096]">
+                        {"Threads"}
+                    </div>
+
+                    <div class="mt-2 space-y-1.5">
+                        <PreviewWorkspaceThreadRow title="Generative AI trends 2024" active=true />
+                        <PreviewWorkspaceThreadRow title="React Performance Opti..." active=false />
+                        <PreviewWorkspaceThreadRow title="Vite build configurations" active=false />
+                        <PreviewWorkspaceThreadRow title="Kubernetes vs Docker Sw..." active=false />
+                        <PreviewWorkspaceThreadRow title="Figma to Code plugin fea..." active=false />
+                        <PreviewWorkspaceThreadRow title="Tailwind grid system layo..." active=false />
+                    </div>
+                </aside>
+
+                <main class="flex min-w-0 flex-1 flex-col bg-white">
+                    <div class="mx-auto grid h-full w-full max-w-[744px] grid-rows-[1fr_auto] px-7 pt-5">
+                        <div class="min-h-0">
+                            <div class="flex justify-center">
+                                <div class="w-[456px] rounded-[14px] bg-[#f3f5f8] px-5 py-4 text-[15px] leading-[1.42] text-[#314154] shadow-[inset_0_0_0_1px_rgba(226,232,240,0.55)]">
+                                    {"Can you summarize the main findings from the uploaded Project Scope document?"}
+                                </div>
+                            </div>
+
+                            <div class="mt-2 flex justify-end gap-4 pr-5 text-[12px] text-[#94a3b8]">
+                                <span>{"Copy"}</span>
+                                <span>{"Edit"}</span>
+                            </div>
+
+                            <div class="mt-7 max-w-[612px] text-[15px] leading-[1.55] text-[#314154]">
+                                <p>{"Based on the Project Scope document, the main findings are:"}</p>
+                                <p class="mt-5">
+                                    {"1. *Core Objective*: The primary goal is to launch a unified dashboard by Q4 that integrates marketing and sales data."}
+                                </p>
+                                <p class="mt-2">
+                                    {"2. *Budget & Timeline*: The allocated budget is $250,000, with a strict deadline of November 15th for the beta release."}
+                                </p>
+                                <p class="mt-2">
+                                    {"3. *Key Dependencies*: The project heavily relies on the new API endpoints being delivered by the backend team by early September."}
+                                </p>
+                                <p class="mt-7">
+                                    {"Would you like me to elaborate on the risks outlined in section 4?"}
+                                </p>
+                            </div>
+
+                            <div class="mt-5 flex items-center gap-2 text-[12px] text-[#8b98aa]">
+                                <span>{"Sources:"}</span>
+                                <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-[#e1e6ee] bg-[#f8fafc] px-1.5 text-[11px] font-semibold text-[#607086]">
+                                    {"1"}
+                                </span>
+                                <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-[#e1e6ee] bg-[#f8fafc] px-1.5 text-[11px] font-semibold text-[#607086]">
+                                    {"2"}
+                                </span>
+                            </div>
+
+                            <div class="mt-3 flex items-center gap-5 text-[12px] text-[#94a3b8]">
+                                <span>{"Copy"}</span>
+                                <span>{"Add to note"}</span>
+                                <span>{"Regenerate"}</span>
+                            </div>
+                        </div>
+
+                        <div class="pb-6 pt-8">
+                            <div class="mx-auto max-w-[612px] rounded-[16px] border border-[#dde3ea] bg-white px-4 py-3 shadow-[0_10px_30px_-18px_rgba(15,23,42,0.25)]">
+                                <div class="text-[14px] text-[#a0aec0]">
+                                    {"Ask a question about your sources..."}
+                                </div>
+                                <div class="mt-6 flex items-center justify-between">
+                                    <button class="inline-flex h-7 w-7 items-center justify-center rounded-full text-[20px] leading-none text-[#64748b]">
+                                        {"+"}
+                                    </button>
+                                    <button class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#152544] text-[13px] text-white">
+                                        {"↑"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+
+                <aside class="flex w-[304px] shrink-0 flex-col border-l border-[#eceff4] bg-[#fbfbfa]">
+                    <div class="border-b border-[#eceff4] px-4 py-4">
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-[16px] font-semibold text-[#1f2d3d]">{"Sources"}</h2>
+                            <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#eef2f7] px-1.5 text-[11px] font-semibold text-[#66768d]">
+                                {"4"}
+                            </span>
+                        </div>
+
+                        <button class="mt-5 flex h-[36px] w-full items-center justify-center gap-2 rounded-full border border-[#dde3ea] bg-white text-[14px] font-semibold text-[#22324d]">
+                            <span class="text-[18px] leading-none">{"+"}</span>
+                            <span>{"New Source"}</span>
+                        </button>
+
+                        <div class="mt-4 flex items-center justify-between text-[13px] text-[#617287]">
+                            <span>{"Select all"}</span>
+                            <span class="inline-flex h-[15px] w-[15px] rounded-[3px] border border-[#9ba7b6] bg-white"></span>
+                        </div>
+
+                        <div class="mt-4 space-y-2">
+                            <PreviewWorkspaceSourceRow title="Q3_Financial_Report.pdf" checked=true />
+                            <PreviewWorkspaceSourceRow title="Project_Scope_v2.docx" checked=true />
+                            <PreviewWorkspaceSourceRow title="Competitor Analysis - Wikipedia" checked=false />
+                            <PreviewWorkspaceSourceRow title="User_Research_Interviews.pdf" checked=true />
+                        </div>
+                    </div>
+
+                    <div class="flex-1 px-4 py-4">
+                        <h2 class="text-[16px] font-semibold text-[#1f2d3d]">{"Notes"}</h2>
+
+                        <button class="mt-6 flex h-[36px] w-full items-center justify-center gap-2 rounded-full bg-[#152544] text-[14px] font-semibold text-white">
+                            <span class="text-[18px] leading-none">{"+"}</span>
+                            <span>{"New Note"}</span>
+                        </button>
+
+                        <div class="mt-4 text-[12px] font-semibold uppercase tracking-[0.04em] text-[#718096]">
+                            {"Saved Notes"}
+                        </div>
+
+                        <div class="mt-3 space-y-3">
+                            <PreviewWorkspaceNoteCard
+                                title="Summary of Q3 Goals"
+                                preview="The main goal for Q3 is to increase user retention by 15% through..."
+                            />
+                            <PreviewWorkspaceNoteCard
+                                title="Key Risks Identified"
+                                preview="Technical debt in the legacy payment system poses a significant risk to..."
+                            />
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    }
 }
 
 #[component]

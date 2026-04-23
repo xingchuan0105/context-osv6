@@ -316,7 +316,7 @@ pub fn OrgDetailPanel(org: OrgRow) -> impl IntoView {
                     </h3>
                     <Show
                         when=move || !org_state.get().blocked
-                        fallback=view! {
+                        fallback=move || view! {
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                                 {move || org_status_label(locale.get(), true)}
                             </span>
@@ -504,7 +504,7 @@ pub fn UsageChart(usage: Option<AdminUsageResponse>) -> impl IntoView {
             {/* Usage details */}
             <Show
                 when=move || has_usage
-                fallback=view! {
+                fallback=move || view! {
                     <div class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                         <div class="text-center text-gray-500">{move || choose(locale.get(), "正在加载使用数据...", "Loading usage data...")}</div>
                     </div>
@@ -583,7 +583,7 @@ pub fn HealthStatus(health: Option<HealthResponse>) -> impl IntoView {
                         </h3>
                         <Show
                             when=move || has_health
-                            fallback=view! {
+                            fallback=move || view! {
                                 <p class="text-gray-500 mt-1">{move || choose(locale.get(), "加载中...", "Loading...")}</p>
                             }
                         >
@@ -595,13 +595,13 @@ pub fn HealthStatus(health: Option<HealthResponse>) -> impl IntoView {
                     <div class="flex items-center gap-3">
                         <Show
                             when=move || has_health
-                            fallback=view! {
+                            fallback=move || view! {
                                 <div class="w-4 h-4 bg-gray-400 rounded-full"></div>
                             }
                         >
                             <Show
                                 when=move || is_healthy
-                                fallback=view! {
+                                fallback=move || view! {
                                     <div class="w-4 h-4 bg-red-500 rounded-full"></div>
                                 }
                             >
@@ -615,7 +615,7 @@ pub fn HealthStatus(health: Option<HealthResponse>) -> impl IntoView {
             {/* Health details */}
             <Show
                 when=move || has_health
-                fallback=view! {
+                fallback=move || view! {
                     <div class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                         <div class="text-center text-gray-500">{move || choose(locale.get(), "正在加载健康数据...", "Loading health data...")}</div>
                     </div>

@@ -10,7 +10,10 @@ pub struct MemoryChatSessionStore;
 impl ChatSessionStore for MemoryChatSessionStore {
     async fn resolve(&self, req: &ChatRequest) -> Result<ChatSession, AppError> {
         Ok(ChatSession {
-            id: req.session_id.clone().unwrap_or_else(|| "session-1".to_string()),
+            id: req
+                .session_id
+                .clone()
+                .unwrap_or_else(|| "session-1".to_string()),
             notebook_id: req
                 .notebook_id
                 .clone()

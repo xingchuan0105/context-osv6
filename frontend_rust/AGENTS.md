@@ -12,7 +12,8 @@
 
 ### 2) Styling Boundaries
 - Avoid hard-coded hex colors in Rust UI files.
-- Prefer semantic classes and token-driven variables from `index.css`.
+- Official styling stack: `design_tokens.css` + Plain CSS + Stylance CSS Modules.
+- Prefer token-driven CSS modules over route-level utility strings and global ad-hoc classes.
 - Do not use inline `style=` in Rust components.
 - Temporary exception: `crates/web-ui/src/routes/preview.rs` is allowed to use inline style and hex for pixel-mapped design review pages.
 
@@ -29,8 +30,9 @@
   - `scripts/ui_drift_allowlist.txt` (existing debt baseline only; no new entries without explicit review)
 
 ### 5) Component Strategy
-- Existing Tailwind + semantic component classes remain the primary styling system.
+- Plain CSS + Stylance CSS Modules are the primary styling system.
 - New UI work should:
   - map values to design tokens first,
-  - add or reuse semantic utility classes second,
+  - place route/component visuals in `.module.css` files second,
   - keep route-level JSX free of ad-hoc visual constants.
+- Tailwind utility classes are legacy migration debt and must not be introduced in new code.

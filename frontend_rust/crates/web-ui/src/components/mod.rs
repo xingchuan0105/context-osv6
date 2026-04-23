@@ -2,6 +2,7 @@
 
 pub mod admin;
 pub mod billing;
+pub mod brand;
 pub mod chat;
 pub mod common;
 pub mod document;
@@ -13,6 +14,7 @@ pub use admin::{HealthStatus, OrgDetailPanel, OrgListTable, UsageChart, UserList
 pub use billing::{
     BillingPanel, CurrentPlanSection, PlanCard, PlansSection, SettingsTab, UsageSection,
 };
+pub use brand::ContextOsMark;
 pub use chat::{ChatBubble, ChatPanel, ChatTracePanel, EvidencePanel, SessionPanel};
 pub use common::{
     EmptyMessage, ErrorBanner, ErrorText, FieldLabel, LoadingMessage, LocaleToggle, NoticeBanner,

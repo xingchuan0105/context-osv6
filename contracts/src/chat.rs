@@ -76,6 +76,10 @@ pub struct Citation {
     pub caption: Option<String>,
     #[serde(default)]
     pub image_url: Option<String>,
+    #[serde(default)]
+    pub parser_backend: Option<String>,
+    #[serde(default)]
+    pub source_locator: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -374,6 +378,14 @@ pub struct ChatDonePayload {
     pub response: ChatResponse,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatActivitySourcePreview {
+    pub id: String,
+    pub label: String,
+    #[serde(default)]
+    pub href: Option<String>,
+}
+
 /// Chat event JSON contract for the converged chat protocol.
 ///
 /// SSE framing stays a transport concern handled by the HTTP layer.
@@ -383,6 +395,25 @@ pub enum ChatEvent {
     Start {
         request_id: String,
         session_id: String,
+    },
+    Activity {
+        request_id: String,
+        phase: String,
+        title: String,
+        #[serde(default)]
+        detail: Option<String>,
+        #[serde(default)]
+        counts: BTreeMap<String, usize>,
+        #[serde(default)]
+        sources_preview: Vec<ChatActivitySourcePreview>,
+        #[serde(default)]
+        timestamp: Option<String>,
+    },
+    AnswerStart {
+        request_id: String,
+        session_id: String,
+        message_id: i64,
+        agent_type: String,
     },
     Trace {
         request_id: String,

@@ -1,4 +1,41 @@
 impl AppState {
+    pub(crate) async fn execute_clarify_mode_core(
+        &self,
+        req: &ChatRequest,
+        session: &ChatSession,
+        message: &str,
+    ) -> Result<ChatGraphExecution, AppError> {
+        let answer = message.trim().to_string();
+        let answer_blocks = common::plain_text_answer_blocks(&answer);
+
+        Ok(ChatGraphExecution {
+            mode: req.agent_type.clone(),
+            input_usage_text: req.query.trim().to_string(),
+            apply_output_guard: false,
+            response: ChatResponse {
+                answer,
+                answer_blocks,
+                session_id: session.id.clone(),
+                agent_type: req.agent_type.clone(),
+                sources: Vec::new(),
+                citations: Vec::new(),
+                trace: TraceInfo {
+                    mode: session.agent_type.clone(),
+                },
+                degrade_trace: Vec::new(),
+                planner_output: None,
+                mode_debug: Some(ModeDebug {
+                    rag: None,
+                    search: None,
+                    general: None,
+                }),
+                message_id: None,
+                guard_report: None,
+            },
+            llm_usage: None,
+        })
+    }
+
     pub(crate) async fn execute_memory_chat_compat(
         &self,
         req: &ChatRequest,
@@ -264,7 +301,7 @@ impl AppState {
         session: &ChatSession,
     ) -> Result<ChatGraphExecution, AppError> {
         let mut degrade_trace = Vec::new();
-        let (answer, search_results, query_type, sub_queries) =
+        let (answer, search_results, query_type, sub_queries, llm_usage) =
             if let Some(ref executor) = self.search_executor {
                 match executor.execute(req, &self.auth).await {
                     Ok(search_resp) => (
@@ -272,6 +309,7 @@ impl AppState {
                         search_resp.results,
                         search_resp.query_type,
                         search_resp.sub_queries,
+                        search_resp.llm_usage,
                     ),
                     Err(error) => {
                         degrade_trace.push(DegradeTraceItem {
@@ -284,6 +322,7 @@ impl AppState {
                             Vec::new(),
                             "unavailable".to_string(),
                             vec![req.query.trim().to_string()],
+                            None,
                         )
                     }
                 }
@@ -299,6 +338,7 @@ impl AppState {
                     Vec::new(),
                     "unavailable".to_string(),
                     vec![req.query.trim().to_string()],
+                    None,
                 )
             };
 
@@ -319,6 +359,8 @@ impl AppState {
                 asset_id: None,
                 caption: None,
                 image_url: None,
+                parser_backend: None,
+                source_locator: None,
             })
             .collect();
 
@@ -374,7 +416,7 @@ impl AppState {
                 message_id: None,
                 guard_report: None,
             },
-            llm_usage: None,
+            llm_usage,
         })
     }
 }

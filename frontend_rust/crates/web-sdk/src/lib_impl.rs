@@ -1,9 +1,61 @@
-
+use anyhow::anyhow;
+use contracts::ErrorEnvelope;
 #[cfg(not(target_arch = "wasm32"))]
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
+use std::{error::Error, fmt};
+
+#[derive(Debug, Clone)]
+pub struct ApiError {
+    status: u16,
+    code: Option<String>,
+    message: String,
+}
+
+impl ApiError {
+    pub fn status(&self) -> u16 {
+        self.status
+    }
+
+    pub fn code(&self) -> Option<&str> {
+        self.code.as_deref()
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+impl fmt::Display for ApiError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl Error for ApiError {}
+
+fn decode_api_error(status: u16, body: &[u8]) -> ApiError {
+    if let Ok(error) = serde_json::from_slice::<ErrorEnvelope>(body) {
+        return ApiError {
+            status,
+            code: Some(error.error),
+            message: error.message,
+        };
+    }
+
+    let message = String::from_utf8_lossy(body).trim().to_string();
+    ApiError {
+        status,
+        code: None,
+        message: if message.is_empty() {
+            format!("Request failed with status {status}")
+        } else {
+            message
+        },
+    }
+}
 
 /// Base URL for the API (e.g. "http://localhost:8080")
 #[derive(Clone)]
@@ -57,10 +109,11 @@ impl ApiClient {
                 req = req.header("Authorization", format!("Bearer {}", token));
             }
             let resp = req.send().await?;
-            if !resp.status().is_success() {
-                anyhow::bail!("API error: {}", resp.status());
-            }
+            let status = resp.status();
             let body = resp.bytes().await?;
+            if !status.is_success() {
+                return Err(anyhow!(decode_api_error(status.as_u16(), &body)));
+            }
             Ok(serde_json::from_slice(&body)?)
         }
     }
@@ -83,10 +136,11 @@ impl ApiClient {
                 req = req.header("Authorization", format!("Bearer {}", token));
             }
             let resp = req.send().await?;
-            if !resp.status().is_success() {
-                anyhow::bail!("API error: {}", resp.status());
-            }
+            let status = resp.status();
             let body = resp.bytes().await?;
+            if !status.is_success() {
+                return Err(anyhow!(decode_api_error(status.as_u16(), &body)));
+            }
             Ok(serde_json::from_slice(&body)?)
         }
     }
@@ -109,10 +163,11 @@ impl ApiClient {
                 req = req.header("Authorization", format!("Bearer {}", token));
             }
             let resp = req.send().await?;
-            if !resp.status().is_success() {
-                anyhow::bail!("API error: {}", resp.status());
-            }
+            let status = resp.status();
             let body = resp.bytes().await?;
+            if !status.is_success() {
+                return Err(anyhow!(decode_api_error(status.as_u16(), &body)));
+            }
             Ok(serde_json::from_slice(&body)?)
         }
     }
@@ -133,10 +188,11 @@ impl ApiClient {
                 req = req.header("Authorization", format!("Bearer {}", token));
             }
             let resp = req.send().await?;
-            if !resp.status().is_success() {
-                anyhow::bail!("API error: {}", resp.status());
-            }
+            let status = resp.status();
             let body = resp.bytes().await?;
+            if !status.is_success() {
+                return Err(anyhow!(decode_api_error(status.as_u16(), &body)));
+            }
             Ok(serde_json::from_slice(&body)?)
         }
     }
@@ -171,7 +227,9 @@ impl ApiClient {
             request.send().await?
         };
         if !response.ok() {
-            anyhow::bail!("API error: {}", response.status());
+            let status = response.status();
+            let body = response.binary().await?;
+            return Err(anyhow!(decode_api_error(status, &body)));
         }
         Ok(response.binary().await?)
     }
@@ -189,9 +247,10 @@ pub mod dtos {
         UserRow, WorkerStatusResponse,
     };
     pub use contracts::auth::{
-        AuthEnvelope, AuthPayload, AuthUserDto, ChangePasswordRequest, ConfirmResetPasswordRequest,
-        EmptyResponse, LoginRequest, NotificationRow, NotificationsResponse, RegisterRequest,
-        SendResetCodeRequest, VerifyResetCodeRequest,
+        AuthEnvelope, AuthPayload, AuthRuntimeCapabilitiesResponse, AuthUserDto,
+        ChangePasswordRequest, ConfirmResetPasswordRequest, EmptyResponse, LoginRequest,
+        NotificationRow, NotificationsResponse, RegisterRequest, SendResetCodeRequest,
+        VerifyResetCodeRequest,
     };
     pub use contracts::chat::{
         AnswerBlock, ChatDonePayload, ChatMessage, ChatMessageListResponse, ChatRequest,

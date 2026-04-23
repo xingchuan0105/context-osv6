@@ -19,6 +19,9 @@ The planner will receive:
 Use session history only to resolve references, omissions, and conversational dependencies in the latest user request.
 Use docscope and document metadata to determine retrieval scope, identify likely target documents or entities, and generate high-value subqueries and exact lexical terms.
 Do not treat session history as a retrieval target unless the latest user request explicitly asks about prior conversation content.
+Do not use session history as evidence that the current request requires clarification.
+If session history contains prior retrieval failures, missing-document claims, failed clarifications, or assistant mistakes, ignore those signals for clarify decisions.
+Use session history only to rewrite the latest user request into a standalone form.
 
 Return a raw JSON object only, with this exact top-level structure:
 {
@@ -138,17 +141,21 @@ History resolution rules:
 - Use session history to resolve pronouns, omitted entities, omitted documents, omitted time ranges, and references such as "this", "that", "the above", "the previous one", or similar conversational shortcuts.
 - Use only the history that is relevant to the latest request.
 - If the latest request can be made standalone through history resolution, generate items from the resolved form, not the ambiguous surface form.
+- Do not use session history to infer that retrieval is impossible, unavailable, previously failed, or still unresolved.
+- Do not use prior assistant statements from session history as ground truth for clarify decisions.
 
 Docscope grounding rules:
 - Always use docscope and document metadata to infer the valid retrieval scope before generating items.
 - Prefer document-grounded rewrites over generic rewrites.
 - When metadata reveals likely target documents, titles, IDs, versions, owners, modules, or domains, use that information to improve `query` and `bm25_terms`.
 - Do not generate items that clearly fall outside the provided docscope unless the user explicitly asks for broader retrieval.
+- If session history conflicts with docscope or document metadata about whether a target exists or is in scope, trust docscope and document metadata.
 
 Clarification rules:
-- Set `clarify_needed` to true if the target cannot be identified confidently from the latest request plus relevant session history plus docscope and metadata.
-- Set `clarify_needed` to true if multiple plausible targets remain and retrieval would likely waste budget.
-- Set `clarify_needed` to true if a required scope, entity, document, version, or time range is missing and cannot be recovered from history or metadata.
+- Set `clarify_needed` to true only if the target cannot be identified confidently from the latest request plus docscope and metadata after using session history only for reference resolution.
+- Set `clarify_needed` to true only if multiple plausible targets remain and retrieval would likely waste budget after reference resolution.
+- Set `clarify_needed` to true only if a required scope, entity, document, version, or time range is missing and cannot be recovered from docscope, metadata, or reference resolution.
+- Never set `clarify_needed` only because session history says retrieval previously failed or a document was previously unavailable.
 - When `clarify_needed` is true, ask only the single most useful clarification question and return no items.
 
 Output requirements:
@@ -286,6 +293,8 @@ mod tests {
         assert!(prompt.contains("\"summary\": \"all\""));
         assert!(prompt.contains("Do not spread priority evenly across all items."));
         assert!(prompt.contains("Do not output markdown, code fences, comments, or explanations."));
+        assert!(prompt.contains("Do not use session history as evidence that the current request requires clarification."));
+        assert!(prompt.contains("Never set `clarify_needed` only because session history says retrieval previously failed"));
         assert!(prompt.contains("No trailing text."));
     }
 

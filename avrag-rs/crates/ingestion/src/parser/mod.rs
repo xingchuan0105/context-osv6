@@ -1,7 +1,7 @@
 mod code;
 mod html;
 mod mineru;
-mod office;
+mod office_service;
 mod pdf;
 mod probe;
 mod router;
@@ -16,10 +16,18 @@ use uuid::Uuid;
 pub use code::CodeParser;
 pub use html::HtmlParser;
 pub use mineru::{MineruClient, MineruConfig};
-pub use office::OfficeParser;
+pub use office_service::{
+    OfficeParserCapabilities, OfficeParserErrorBody, OfficeParserFormat, OfficeParserHealthz,
+    OfficeParserParseResponse, OfficeParserParseStats, OfficeParserServiceClient,
+    OfficeParserServiceConfig,
+};
 pub use pdf::PdfParser;
-pub use probe::{ParseProbe, ParseProbeResult};
-pub use router::{ParseRoute, ParseRouteDecision, ParseRouter, RouteReason};
+pub use probe::{ParseProbe, ParseProbeResult, PdfPageProbeResult};
+pub use router::{
+    ExternalParseKind, ExternalParsePlan, LocalParseKind, LocalParsePlan, OfficeDocType,
+    OfficeParsePlan, ParsePlan, ParseRoute, ParseRouteDecision, ParseRouteError, ParseRouter,
+    PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteReason,
+};
 pub use text::TextParser;
 
 #[derive(Debug, Clone)]
@@ -117,12 +125,10 @@ impl ParserFactory {
         let extension = filename.rsplit('.').next()?.to_lowercase();
         match extension.as_str() {
             "pdf" => Some(Box::new(PdfParser)),
-            "xlsx" | "xls" => Some(Box::new(OfficeParser)),
-            "docx" | "doc" => Some(Box::new(OfficeParser)),
             "html" | "htm" => Some(Box::new(HtmlParser)),
             "txt" | "md" | "rst" => Some(Box::new(TextParser)),
             _ if Self::is_code_file(&extension) => Some(Box::new(CodeParser)),
-            _ => Some(Box::new(TextParser)),
+            _ => None,
         }
     }
 

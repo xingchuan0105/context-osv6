@@ -45,8 +45,14 @@ struct JwtClaims {
     org_id: String,
     permissions: Vec<String>,
     jti: String,
+    #[serde(default = "default_auth_version")]
+    auth_version: i32,
     exp: usize,
     iat: usize,
+}
+
+fn default_auth_version() -> i32 {
+    1
 }
 
 // ---------------------------------------------------------------------------
@@ -54,7 +60,11 @@ struct JwtClaims {
 // ---------------------------------------------------------------------------
 
 fn jwt_secret() -> String {
-    std::env::var("JWT_SECRET").unwrap_or_else(|_| JWT_DEFAULT_SECRET.to_string())
+    match std::env::var("JWT_SECRET") {
+        Ok(secret) if !secret.trim().is_empty() => secret,
+        _ if cfg!(any(debug_assertions, test)) => JWT_DEFAULT_SECRET.to_string(),
+        _ => panic!("JWT_SECRET must be set outside debug/test builds"),
+    }
 }
 
 async fn record_api_product_event_if_available(
@@ -87,13 +97,23 @@ async fn record_api_product_event_if_available(
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn issue_jwt(user_id: &Uuid, org_id: &Uuid) -> String {
+    issue_jwt_for_auth_version(user_id, org_id, default_auth_version())
+}
+
+pub(crate) fn issue_jwt_for_auth_version(
+    user_id: &Uuid,
+    org_id: &Uuid,
+    auth_version: i32,
+) -> String {
     let now = chrono::Utc::now();
     let claims = JwtClaims {
         sub: user_id.to_string(),
         org_id: org_id.to_string(),
         permissions: vec!["read".to_string(), "write".to_string()],
         jti: Uuid::new_v4().to_string(),
+        auth_version,
         exp: (now + chrono::Duration::hours(24)).timestamp() as usize,
         iat: now.timestamp() as usize,
     };
@@ -130,7 +150,10 @@ pub(crate) fn extract_bearer(headers: &HeaderMap) -> Option<&str> {
 
 fn build_cors_layer() -> CorsLayer {
     let allowed_origins = std::env::var("CORS_ALLOWED_ORIGINS")
-        .unwrap_or_else(|_| "http://localhost:8080,http://127.0.0.1:8080".to_string());
+        .unwrap_or_else(|_| {
+            "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,http://127.0.0.1:8080"
+                .to_string()
+        });
     let origins: Vec<_> = allowed_origins
         .split(',')
         .filter_map(|s| s.trim().parse::<HeaderValue>().ok())
@@ -153,6 +176,7 @@ fn build_cors_layer() -> CorsLayer {
 pub fn build_router(state: AppState) -> Router {
     let protected_api_v1 = routes::notebooks::router()
         .merge(routes::chat::router())
+        .merge(routes::rag::router())
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             middleware::request_context_middleware,

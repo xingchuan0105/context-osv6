@@ -17,5 +17,12 @@ pub struct SearchResponse {
     pub results: Vec<SearchResult>,
     pub synthesized_answer: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub planner_usage: Option<avrag_llm::LlmUsage>,
+    pub llm_usage: Option<avrag_llm::LlmUsage>,
+}
+
+#[derive(Debug, Clone)]
+pub enum SearchStreamUpdate {
+    Searching { queries: Vec<String> },
+    SourcesCollected { results: Vec<SearchResult> },
+    TextDelta { delta: String },
 }

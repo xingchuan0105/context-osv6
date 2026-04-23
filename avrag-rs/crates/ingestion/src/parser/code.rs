@@ -24,7 +24,8 @@ const DEFAULT_LINES_PER_CHUNK: usize = 100;
 #[async_trait]
 impl DocumentParser for CodeParser {
     async fn parse(&self, bytes: &[u8], filename: &str) -> anyhow::Result<ParsedDocument> {
-        let content = String::from_utf8_lossy(bytes).to_string();
+        let content = String::from_utf8(bytes.to_vec())
+            .map_err(|error| anyhow::anyhow!("Code parser requires valid UTF-8: {error}"))?;
         let extension = filename.rsplit('.').next().unwrap_or("");
 
         let chunks = split_code_into_chunks(&content);
@@ -98,4 +99,15 @@ fn split_code_into_chunks(content: &str) -> Vec<String> {
     }
 
     chunks
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn code_parser_rejects_invalid_utf8() {
+        let error = CodeParser.parse(&[0xff, 0xfe], "lib.rs").await.unwrap_err();
+        assert!(error.to_string().contains("valid UTF-8"));
+    }
 }

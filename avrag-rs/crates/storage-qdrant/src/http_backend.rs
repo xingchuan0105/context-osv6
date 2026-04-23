@@ -55,6 +55,7 @@ impl HttpQdrantBackend {
                     "chunk_id": point.chunk_id.to_string(),
                     "doc_id": point.doc_id.to_string(),
                     "asset_id": point.asset_id.to_string(),
+                    "parse_run_id": point.parse_run_id.to_string(),
                     "page": point.page,
                     "parser_backend": point.parser_backend,
                     "doc_version": point.doc_version,
@@ -234,6 +235,7 @@ impl VectorSearchBackend for HttpQdrantBackend {
                         "org_id": point.org_id.to_string(),
                         "chunk_id": point.chunk_id.to_string(),
                         "doc_id": point.doc_id.to_string(),
+                        "parse_run_id": point.parse_run_id.to_string(),
                         "page": point.page,
                         "doc_version": point.doc_version,
                     }

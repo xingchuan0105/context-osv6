@@ -27,40 +27,45 @@ fn WorkspaceNotesPane(
     });
 
     view! {
-        <div class="app-pane min-h-0 flex-[0.9] overflow-hidden">
+        <div class={format!("app-pane {}", workspace_ui_style::notes_pane)}>
             <div class="app-pane-header">
-                <div>
+                <div class=workspace_ui_style::pane_header_row>
                     <h2 class="app-pane-title">
                         {move || choose(locale.get(), "笔记", "Notes")}
                     </h2>
-                    <p class="app-pane-meta">
-                        {move || choose(locale.get(), "个人工作笔记，仅对你可见", "Private workspace notes visible only to you")}
-                    </p>
+                    <span class="workspace-count-pill">
+                        {move || notes.get().len()}
+                    </span>
                 </div>
-                <button
-                    type="button"
-                    class="app-button-primary workspace-notes-new"
-                    on:click=move |_| handle_create_note.with_value(|callback| callback(String::new()))
-                >
-                    {move || choose(locale.get(), "新建笔记", "New Note")}
-                </button>
             </div>
 
-            <div class="app-pane-body flex min-h-0 flex-col gap-4 p-4">
+            <div class={format!("app-pane-body {}", workspace_ui_style::pane_body_notes)}>
                 <Show when=move || notes_loading.get()>
-                    <div class="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                    <div class="workspace-empty-state">
                         {move || choose(locale.get(), "正在加载笔记...", "Loading notes...")}
                     </div>
                 </Show>
 
                 <Show when=move || active_note.get().is_none() && !notes_loading.get()>
-                    <div class="space-y-3 overflow-y-auto pr-1">
+                    <div class=workspace_ui_style::notes_list_scroll>
+                        <button
+                            type="button"
+                            class=workspace_ui_style::primary_action_button
+                            on:click=move |_| handle_create_note.with_value(|callback| callback(String::new()))
+                        >
+                            <span class=workspace_ui_style::primary_label_icon>{"+"}</span>
+                            <span>{move || choose(locale.get(), "新建笔记", "New Note")}</span>
+                        </button>
+
                         <Show when=move || !notes.get().is_empty() fallback=move || view! {
-                            <div class="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                            <div class="workspace-empty-state">
                                 {move || choose(locale.get(), "还没有保存的笔记，先记下一条想法吧。", "No saved notes yet. Capture your first idea to get started.")}
                             </div>
                         }>
-                            <div class="space-y-3">
+                            <div class=workspace_ui_style::saved_notes_group>
+                                <div class=workspace_ui_style::section_label>
+                                    {move || choose(locale.get(), "已保存笔记", "Saved Notes")}
+                                </div>
                                 {move || {
                                     sort_workspace_notes(&notes.get())
                                         .into_iter()
@@ -68,17 +73,17 @@ fn WorkspaceNotesPane(
                                             let open_note_id = note.id.clone();
                                             let delete_note_id = note.id.clone();
                                             view! {
-                                                <div class="rounded-2xl border border-border bg-card/70 px-4 py-3 transition-colors hover:bg-muted/50">
-                                                    <div class="flex items-start gap-3">
+                                                <div class="workspace-note-card">
+                                                    <div class=workspace_ui_style::note_row>
                                                         <button
                                                             type="button"
-                                                            class="min-w-0 flex-1 text-left"
+                                                            class=workspace_ui_style::note_open_button
                                                             on:click=move |_| set_active_note_id.set(Some(open_note_id.clone()))
                                                         >
-                                                            <div class="truncate text-sm font-semibold text-foreground">
+                                                            <div class=workspace_ui_style::note_item_title>
                                                                 {note.title.clone()}
                                                             </div>
-                                                            <div class="mt-1 line-clamp-3 text-xs leading-5 text-muted-foreground">
+                                                            <div class=workspace_ui_style::note_item_preview>
                                                                 {if note.preview.is_empty() {
                                                                     choose(locale.get(), "空白笔记", "Empty note").to_string()
                                                                 } else {
@@ -88,7 +93,7 @@ fn WorkspaceNotesPane(
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            class="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                                                            class="workspace-note-delete"
                                                             on:click=move |_| {
                                                                 handle_delete_note.with_value(|callback| callback(delete_note_id.clone()));
                                                             }
@@ -96,7 +101,7 @@ fn WorkspaceNotesPane(
                                                             {move || choose(locale.get(), "删除", "Delete")}
                                                         </button>
                                                     </div>
-                                                    <div class="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+                                                    <div class=workspace_ui_style::note_item_meta>
                                                         <span>{move || choose(locale.get(), "已保存", "Saved")}</span>
                                                         <span>{"·"}</span>
                                                         <span>{note.updated_at.clone()}</span>
@@ -121,10 +126,10 @@ fn WorkspaceNotesPane(
                         let note_id_for_delete = StoredValue::new(note.id.clone());
                         let note_updated_for_export = StoredValue::new(note.updated_at.clone());
                         view! {
-                        <div class="flex items-center justify-between gap-3">
+                        <div class=workspace_ui_style::note_detail_header>
                             <button
                                 type="button"
-                                class="app-button-ghost text-xs"
+                                class={format!("app-button-ghost {}", workspace_ui_style::compact_action)}
                                 on:click=move |_| set_active_note_id.set(None)
                             >
                                 {move || choose(locale.get(), "返回笔记列表", "Back to notes")}
@@ -146,10 +151,10 @@ fn WorkspaceNotesPane(
                         </div>
 
                         <Show when=move || show_actions>
-                            <div class="flex items-center gap-2">
+                            <div class=workspace_ui_style::note_actions>
                                 <button
                                     type="button"
-                                    class="app-button-secondary text-xs"
+                                    class={format!("app-button-secondary {}", workspace_ui_style::compact_action)}
                                     on:click=move |_| {
                                         let note_id = note_id_for_promote.with_value(|id| id.clone());
                                         handle_promote_note
@@ -160,7 +165,7 @@ fn WorkspaceNotesPane(
                                 </button>
                                 <button
                                     type="button"
-                                    class="app-button-secondary text-xs"
+                                    class={format!("app-button-secondary {}", workspace_ui_style::compact_action)}
                                     on:click=move |_| {
                                         let title = note_title.get_untracked();
                                         let content = note_content.get_untracked();
@@ -190,7 +195,7 @@ fn WorkspaceNotesPane(
                                 </button>
                                 <button
                                     type="button"
-                                    class="app-button-danger text-xs"
+                                    class={format!("app-button-danger {}", workspace_ui_style::compact_action)}
                                     on:click=move |_| {
                                         let note_id = note_id_for_delete.with_value(|id| id.clone());
                                         handle_delete_note.with_value(|callback| callback(note_id));
@@ -216,9 +221,9 @@ fn WorkspaceNotesPane(
                             }
                         />
 
-                        <div class="min-h-0 flex-1">
+                        <div class=workspace_ui_style::note_editor_wrap>
                             <textarea
-                                class="app-input h-full min-h-[220px] resize-none"
+                                class={format!("app-input {}", workspace_ui_style::note_textarea)}
                                 placeholder={move || choose(locale.get(), "记录结论、引用、待办和灵感...", "Capture findings, citations, next steps, and ideas...")}
                                 prop:value=move || note_content.get()
                                 on:input=move |ev| {

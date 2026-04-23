@@ -262,7 +262,7 @@ pub fn OrgDetailPage() -> impl IntoView {
                                     <div class="mb-3 text-sm font-medium text-foreground">
                                         {move || choose(locale.get(), "最近加入成员", "Recent Members")}
                                     </div>
-                                    <Show when=move || !recent_members().is_empty() fallback=view! {
+                                    <Show when=move || !recent_members().is_empty() fallback=move || view! {
                                         <div class="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
                                             {move || choose(locale.get(), "暂时没有成员明细。", "No member details yet.")}
                                         </div>

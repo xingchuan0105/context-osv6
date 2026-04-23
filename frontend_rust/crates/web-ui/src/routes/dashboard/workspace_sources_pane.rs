@@ -18,6 +18,12 @@ fn WorkspaceSourcesPane(
     handle_toggle_source_pin: StoredValue<Arc<dyn Fn(String) + Send + Sync>>,
     set_docscope_initialized: WriteSignal<bool>,
 ) -> impl IntoView {
+    let _ = (
+        url_source,
+        set_url_source,
+        adding_url_source,
+        handle_add_url_source,
+    );
     let ready_source_ids = Signal::derive(move || {
         sources
             .get()
@@ -26,138 +32,83 @@ fn WorkspaceSourcesPane(
             .map(|source| source.id)
             .collect::<Vec<_>>()
     });
+    let all_selected = Signal::derive(move || {
+        let ready = ready_source_ids.get();
+        !ready.is_empty() && selected_source_ids.get().len() == ready.len()
+    });
 
     view! {
-        <div class="app-pane min-h-0 flex-[1.15]">
+        <div class={format!("app-pane {}", workspace_ui_style::sources_pane)}>
             <div class="app-pane-header">
-                <div>
+                <div class=workspace_ui_style::pane_header_row>
                     <h2 class="app-pane-title">
                         {move || choose(locale.get(), "资料", "Sources")}
                     </h2>
-                    <p class="app-pane-meta">
-                        {move || choose(locale.get(), "选择当前对话可用的知识范围", "Select the source scope for the current thread")}
-                    </p>
+                    <span class="workspace-count-pill">
+                        {move || sources.get().len()}
+                    </span>
                 </div>
-                <Show when=move || ui_capabilities().document_upload>
-                    <button
-                        class="app-button-secondary"
-                        on:click=move |_| set_show_upload_modal.set(true)
-                    >
-                        {move || choose(locale.get(), "新建资料", "New Source")}
-                    </button>
-                </Show>
             </div>
 
-            <div class="app-pane-body flex min-h-0 flex-col">
-                <div class="space-y-3 border-b border-border px-4 py-4">
-                    <div class="flex gap-2">
-                        <input
-                            type="url"
-                            class="app-input flex-1"
-                            placeholder={move || choose(locale.get(), "添加网页链接作为资料...", "Add a web URL as a source...")}
-                            value=move || url_source.get()
-                            on:input=move |ev| set_url_source.set(event_target_value(&ev))
-                        />
+            <div class={format!("app-pane-body {}", workspace_ui_style::pane_body_sources)}>
+                <div class=workspace_ui_style::sources_toolbar>
+                    <Show when=move || ui_capabilities().document_upload>
                         <button
-                            class="app-button-secondary shrink-0"
-                            disabled=move || adding_url_source.get()
-                            on:click=move |_| handle_add_url_source.with_value(|callback| callback())
+                            class=workspace_ui_style::primary_action_button
+                            on:click=move |_| set_show_upload_modal.set(true)
                         >
-                            {move || {
-                                if adding_url_source.get() {
-                                    choose(locale.get(), "添加中...", "Adding...")
-                                } else {
-                                    choose(locale.get(), "添加 URL", "Add URL")
-                                }
-                            }}
+                            <span class=workspace_ui_style::primary_label_icon>{"+"}</span>
+                            <span>{move || choose(locale.get(), "新建资料", "New Source")}</span>
                         </button>
-                    </div>
+                    </Show>
 
-                    <div class="flex flex-wrap items-center gap-2">
-                        {move || view! {
-                            <StatusBadge
-                                label=format!(
-                                    "{} {}",
-                                    selected_source_ids.get().len(),
-                                    choose(locale.get(), "已选", "selected")
-                                )
-                                tone=NoticeTone::Info
-                            />
-                        }}
-                        {move || view! {
-                            <StatusBadge
-                                label=format!(
-                                    "{} {}",
-                                    sources.get().len(),
-                                    choose(locale.get(), "总数", "total")
-                                )
-                                tone=NoticeTone::Neutral
-                            />
-                        }}
-                        {move || view! {
-                            <StatusBadge
-                                label=format!(
-                                    "{} {}",
-                                    pinned_source_ids.get().len(),
-                                    choose(locale.get(), "固定", "pinned")
-                                )
-                                tone=NoticeTone::Neutral
-                            />
-                        }}
-                        <Show when=move || status_polling.get()>
-                            {move || view! {
-                                <StatusBadge
-                                    label=choose(locale.get(), "索引更新中", "Indexing").to_string()
-                                    tone=NoticeTone::Warning
-                                />
-                            }}
-                        </Show>
-                        <Show when=move || !ready_source_ids.get().is_empty()>
-                            <button
-                                type="button"
-                                class="app-button-ghost text-xs"
-                                on:click=move |_| {
+                    <Show when=move || !ready_source_ids.get().is_empty()>
+                        <label class={format!("workspace-select-row {}", workspace_ui_style::select_row)}>
+                            <span>{move || choose(locale.get(), "全选", "Select all")}</span>
+                            <input
+                                type="checkbox"
+                                class=workspace_ui_style::select_checkbox
+                                prop:checked=move || all_selected.get()
+                                on:change=move |_| {
                                     let ready = ready_source_ids.get_untracked();
-                                    if selected_source_ids.get_untracked().len() == ready.len() {
+                                    if all_selected.get_untracked() {
                                         set_selected_source_ids.set(Vec::new());
                                     } else {
                                         set_selected_source_ids.set(ready);
                                     }
                                     set_docscope_initialized.set(true);
                                 }
-                            >
-                                {move || {
-                                    if selected_source_ids.get().len() == ready_source_ids.get().len() {
-                                        choose(locale.get(), "取消全选", "Clear all")
-                                    } else {
-                                        choose(locale.get(), "全选", "Select all")
-                                    }
-                                }}
-                            </button>
-                        </Show>
-                    </div>
+                            />
+                        </label>
+                    </Show>
+
+                    <Show when=move || status_polling.get()>
+                        <div class="workspace-inline-status">
+                            {move || choose(locale.get(), "索引更新中", "Indexing")}
+                        </div>
+                    </Show>
                 </div>
 
-                <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-                    <Show when=move || !chat.citations.get().is_empty()>
-                        <div class="mb-4 rounded-2xl border border-border bg-muted/40 p-3">
+                <div class=workspace_ui_style::sources_scroll>
+                    <Show when=move || chat.active_citation.get().is_some()>
+                        <div class=workspace_ui_style::evidence_shell>
                             <EvidencePanel />
                         </div>
                     </Show>
 
                     <Show when=move || sources_loading.get()>
-                        <div class="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                        <div class="workspace-empty-state">
                             {move || choose(locale.get(), "正在加载资料...", "Loading sources...")}
                         </div>
                     </Show>
 
                     <Show when=move || !sources_loading.get() && sources.get().is_empty()>
-                        <div class="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                        <div class="workspace-empty-state">
                             {move || choose(locale.get(), "还没有资料，先上传文件或添加链接。", "No sources yet. Upload a file or add a URL to begin.")}
                         </div>
                     </Show>
 
-                    <div class="space-y-2">
+                    <div class=workspace_ui_style::stack_compact>
                         <For
                             each=move || sort_workspace_sources(&sources.get(), &pinned_source_ids.get())
                             key=|source| source.id.clone()

@@ -2,12 +2,12 @@ use app::AppState;
 use app::adapters::redis_rate_limiter::RedisFixedWindowRateLimiter;
 use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
 use axum::{
-    body::{Body, to_bytes},
     Json,
+    body::{Body, to_bytes},
     extract::{Request, State},
     http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode},
-    response::{IntoResponse, Response},
     middleware::Next,
+    response::{IntoResponse, Response},
 };
 use serde_json::json;
 use std::{
@@ -72,23 +72,30 @@ pub(crate) async fn request_context_middleware(
 
     let headers = req.headers().clone();
 
-    let auth = if let Some(auth) = auth_from_bearer(&headers).or_else(|| auth_from_proxy_headers(&headers)) {
-        Some(auth)
+    let share_chat_notebook_scope = share_chat_notebook_scope_from_request(&state, &mut req).await;
+    let auth = if let Some(auth) = auth_from_bearer(&state, &headers).await {
+        Some(if let Some(notebook_scope) = share_chat_notebook_scope {
+            auth.with_notebook_scope(notebook_scope)
+        } else {
+            auth
+        })
+    } else if let Some(auth) = auth_from_proxy_headers(&headers) {
+        Some(if let Some(notebook_scope) = share_chat_notebook_scope {
+            auth.with_notebook_scope(notebook_scope)
+        } else {
+            auth
+        })
     } else {
-        auth_from_public_share_chat_request(&state, &mut req).await
+        None
     };
 
     let Some(auth) = auth else {
         return (
-            if path == "/api/v1/chat" {
-                StatusCode::BAD_REQUEST
-            } else {
-                StatusCode::UNAUTHORIZED
-            },
+            StatusCode::UNAUTHORIZED,
             Json(json!({
-                "error": if path == "/api/v1/chat" { "invalid_share_chat" } else { "unauthorized" },
+                "error": if path == "/api/v1/chat" { "login_required" } else { "unauthorized" },
                 "message": if path == "/api/v1/chat" {
-                    "Authentication required. Public chat requires a valid share token."
+                    "Viewing shared content does not require sign-in, but asking questions does."
                 } else {
                     "Authentication required. Provide a Bearer token or x-org-id header."
                 },
@@ -105,12 +112,8 @@ pub(crate) async fn request_context_middleware(
             .unwrap_or(Uuid::nil())
     );
     let limit_rpm = DEFAULT_RATE_LIMIT_RPM;
-    let (allowed, remaining, limit) = check_rate_limit_with_fallback(
-        &state.config().redis.url,
-        &rate_key,
-        limit_rpm,
-    )
-    .await;
+    let (allowed, remaining, limit) =
+        check_rate_limit_with_fallback(&state.config().redis.url, &rate_key, limit_rpm).await;
 
     let auth = if let Some(request_id) = headers
         .get(HEADER_REQUEST_ID)
@@ -130,7 +133,10 @@ pub(crate) async fn request_context_middleware(
         return (
             StatusCode::TOO_MANY_REQUESTS,
             [
-                (HeaderName::from_static(HEADER_RATE_LIMIT_LIMIT), limit.to_string()),
+                (
+                    HeaderName::from_static(HEADER_RATE_LIMIT_LIMIT),
+                    limit.to_string(),
+                ),
                 (
                     HeaderName::from_static(HEADER_RATE_LIMIT_REMAINING),
                     "0".to_string(),
@@ -157,22 +163,16 @@ pub(crate) async fn request_context_middleware(
     response
 }
 
-async fn auth_from_public_share_chat_request(
+async fn share_chat_notebook_scope_from_request(
     state: &AppState,
     req: &mut Request,
-) -> Option<AuthContext> {
+) -> Option<Uuid> {
     if req.method() != Method::POST || req.uri().path() != "/api/v1/chat" {
         return None;
     }
     let Some(pg) = state.pg() else {
         return None;
     };
-
-    let request_id = req
-        .headers()
-        .get(HEADER_REQUEST_ID)
-        .and_then(|value| value.to_str().ok())
-        .map(str::to_string);
 
     let (parts, body) = std::mem::replace(req, Request::new(Body::empty())).into_parts();
     let body_bytes = match to_bytes(body, usize::MAX).await {
@@ -190,23 +190,17 @@ async fn auth_from_public_share_chat_request(
         return None;
     }
     let token = chat_request.source_token.as_deref()?;
-    let context = avrag_share::handle_resolve_public_share_chat_context(token, pg)
+    let notebook_id = avrag_share::handle_validate_token(token, pg)
         .await
-        .ok()
-        .flatten()?;
+        .ok()??;
+    let notebook_scope = Uuid::parse_str(&notebook_id).ok()?;
     if let Some(notebook_id) = chat_request.notebook_id.as_deref()
-        && uuid::Uuid::parse_str(notebook_id).ok()? != context.notebook_id
+        && uuid::Uuid::parse_str(notebook_id).ok()? != notebook_scope
     {
         return None;
     }
 
-    let mut auth = AuthContext::new(OrgId::from(context.org_id), SubjectKind::User)
-        .with_actor_id(ActorId::new(context.owner_user_id))
-        .with_notebook_scope(context.notebook_id);
-    if let Some(request_id) = request_id {
-        auth = auth.with_request_id(request_id);
-    }
-    Some(auth)
+    Some(notebook_scope)
 }
 
 pub(crate) async fn observability_middleware(req: Request, next: Next) -> Response {
@@ -231,7 +225,8 @@ async fn check_rate_limit_with_fallback(
     limit_rpm: u32,
 ) -> (bool, u32, u32) {
     if !redis_url.trim().is_empty() {
-        if let Ok(limiter) = RedisFixedWindowRateLimiter::new(redis_url.to_string(), limit_rpm).await
+        if let Ok(limiter) =
+            RedisFixedWindowRateLimiter::new(redis_url.to_string(), limit_rpm).await
         {
             if let Ok(decision) = limiter.check(key).await {
                 return (decision.allowed, decision.remaining, decision.limit);
@@ -242,16 +237,32 @@ async fn check_rate_limit_with_fallback(
     check_rate_limit(key, limit_rpm)
 }
 
-fn auth_from_bearer(headers: &HeaderMap) -> Option<AuthContext> {
+async fn auth_from_bearer(state: &AppState, headers: &HeaderMap) -> Option<AuthContext> {
     let token = crate::extract_bearer(headers)?;
     let claims = crate::verify_jwt(token)?;
     let org_uuid = Uuid::parse_str(&claims.org_id).ok()?;
     let user_uuid = Uuid::parse_str(&claims.sub).ok()?;
 
-    let mut ctx =
-        AuthContext::new(OrgId::from(org_uuid), SubjectKind::User).with_actor_id(ActorId::new(
-            user_uuid,
-        ));
+    if let Some(pg) = state.pg() {
+        let mut tx = crate::begin_auth_admin_tx(pg.raw()).await.ok()?;
+        let auth_version = sqlx::query_scalar::<_, i32>(
+            "select auth_version from users where id = $1 and org_id = $2",
+        )
+        .bind(user_uuid)
+        .bind(org_uuid)
+        .fetch_optional(tx.as_mut())
+        .await
+        .ok()
+        .flatten()?;
+        let _ = tx.commit().await;
+
+        if auth_version != claims.auth_version {
+            return None;
+        }
+    }
+
+    let mut ctx = AuthContext::new(OrgId::from(org_uuid), SubjectKind::User)
+        .with_actor_id(ActorId::new(user_uuid));
     for perm in &claims.permissions {
         ctx = ctx.grant(perm);
     }
@@ -293,7 +304,9 @@ fn normalize_route(path: &str) -> &'static str {
         "/api/v1/chat" => "/api/v1/chat",
         "/api/v1/chat/sessions" => "/api/v1/chat/sessions",
         "/api/v1/chat/citations/lookup" => "/api/v1/chat/citations/lookup",
-        _ if path.starts_with("/api/v1/chat/citations/assets/") => "/api/v1/chat/citations/assets/:id",
+        _ if path.starts_with("/api/v1/chat/citations/assets/") => {
+            "/api/v1/chat/citations/assets/:id"
+        }
         "/api/v1/search" => "/api/v1/search",
         _ if path.starts_with("/api/v1/chat/sessions/") && path.ends_with("/messages") => {
             "/api/v1/chat/sessions/:id/messages"

@@ -139,7 +139,7 @@ pub fn CurrentPlanSection(
 
             <Show
                 when=has_subscription
-                fallback=view! {
+                fallback=move || view! {
                     <div class="text-muted-foreground">{move || choose(locale.get(), "当前没有有效订阅", "No active subscription")}</div>
                 }
             >
@@ -214,7 +214,7 @@ pub fn UsageSection(usage: Option<UsageResponse>) -> impl IntoView {
                 {move || choose(locale.get(), "用量", "Usage")}
             </h3>
 
-            <Show when=has_usage fallback=view! {
+            <Show when=has_usage fallback=move || view! {
                 <div class="text-muted-foreground">{move || choose(locale.get(), "正在加载用量...", "Loading usage...")}</div>
             }>
                 <div class="space-y-6">
@@ -302,7 +302,7 @@ pub fn PlanCard(plan: PlanRow, is_current_plan: bool) -> impl IntoView {
                 </ul>
             </div>
             <div class="mt-6">
-                <Show when=has_current_plan fallback=view! {
+                <Show when=has_current_plan fallback=move || view! {
                     <a href="/settings" class="block w-full rounded-xl bg-primary px-4 py-2 text-center text-sm font-medium text-primary-foreground hover:bg-primary/90">
                         {move || choose(locale.get(), "升级方案", "Upgrade Plan")}
                     </a>
@@ -367,7 +367,7 @@ pub fn PlansSection(
                 {move || choose(locale.get(), "可用方案", "Available Plans")}
             </h3>
 
-            <Show when=is_loading fallback=view! { <div></div> }>
+            <Show when=is_loading fallback=move || view! { <div></div> }>
                 <div class="app-empty-state">
                     <div class="text-muted-foreground">
                         {move || choose(locale.get(), "正在加载方案...", "Loading plans...")}
@@ -375,7 +375,7 @@ pub fn PlansSection(
                 </div>
             </Show>
 
-            <Show when=no_plans fallback=view! { <div></div> }>
+            <Show when=no_plans fallback=move || view! { <div></div> }>
                 <div class="app-empty-state">
                     <div class="text-muted-foreground">
                         {move || choose(locale.get(), "暂无可用方案", "No plans available")}
@@ -383,7 +383,7 @@ pub fn PlansSection(
                 </div>
             </Show>
 
-            <Show when=has_plans fallback=view! { <div></div> }>
+            <Show when=has_plans fallback=move || view! { <div></div> }>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {plan_views()}
                 </div>
