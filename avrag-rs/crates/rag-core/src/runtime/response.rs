@@ -472,6 +472,9 @@ impl RagRuntime {
                 image_url: chunk.image_path.clone(),
                 parser_backend: chunk.parser_backend.clone(),
                 source_locator: chunk.source_locator.clone(),
+                parse_run_id: chunk
+                    .parse_run_id
+                    .map(|parse_run_id| parse_run_id.to_string()),
             })
             .collect::<Vec<_>>();
 

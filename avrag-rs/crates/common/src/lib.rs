@@ -50,9 +50,10 @@ pub use health::{HealthResponse, ReadyCheck, ReadyResponse};
 pub use identity::{OrgId, UserId, default_org_id, default_rag_agent, default_user_id};
 pub use notebook_requests::{CreateNotebookRequest, UpdateNotebookRequest};
 pub use rag_execute::{
-    BackendTrace, Coverage, ExecutePlanBudget, ExecutePlanItem, ExecutePlanRequest,
-    ExecutePlanResponse, ExecutePlanSummaryMode, ExecutePlanTrace, ExecutePlanValidationError,
-    RetrievalBundle, RetrievedChunk,
+    BackendTrace, ChannelBudget, ChannelCoverage, ChannelTraceItem, Coverage, ExecutePlanBudget,
+    ExecutePlanItem, ExecutePlanRequest, ExecutePlanResponse, ExecutePlanSummaryMode,
+    ExecutePlanTrace, ExecutePlanValidationError, GraphHint, QueryEntity, RelationPath,
+    RetrievalBundle, RetrievedChunk, ScoreBreakdown,
 };
 pub use util::{
     estimate_token_count, infer_image_extension, infer_mime_type, is_remote_url, new_id,

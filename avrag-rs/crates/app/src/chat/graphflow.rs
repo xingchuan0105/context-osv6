@@ -23,15 +23,6 @@ const KEY_RAG_PLAN: &str = "chat.rag_plan";
 const KEY_RAG_EXECUTE_REQUEST: &str = "chat.rag_execute_request";
 const KEY_RAG_EXECUTE_RESPONSE: &str = "chat.rag_execute_response";
 const KEY_DOCSCOPE_METADATA: &str = "chat.docscope_metadata";
-const KEY_TEXT_DENSE_LISTS: &str = "chat.text_dense_lists";
-const KEY_BM25_LISTS: &str = "chat.bm25_lists";
-const KEY_MULTIMODAL_POOL: &str = "chat.multimodal_pool";
-const KEY_TEXT_POOL: &str = "chat.text_pool";
-const KEY_RERANKED_CHUNKS: &str = "chat.reranked_chunks";
-const KEY_SUMMARY_CHUNKS: &str = "chat.summary_chunks";
-const KEY_ANSWER_CONTEXT: &str = "chat.answer_context";
-const KEY_RETRIEVED_CHUNKS: &str = "chat.retrieved_chunks";
-const KEY_ITEM_TRACE: &str = "chat.item_trace";
 const KEY_DEGRADE_TRACE: &str = "chat.degrade_trace";
 
 const TASK_PREFLIGHT: &str = "chat_preflight";
@@ -44,14 +35,6 @@ const TASK_RAG_PREPARE_PLANNER_INPUT: &str = "rag_prepare_planner_input";
 const TASK_RAG_CALL_PLANNER: &str = "rag_call_planner";
 const TASK_RAG_NORMALIZE_PLAN: &str = "rag_normalize_plan";
 const TASK_RAG_EXECUTE_PLAN: &str = "rag_execute_plan";
-const TASK_RAG_RETRIEVE_TEXT_DENSE: &str = "rag_retrieve_text_dense";
-const TASK_RAG_RETRIEVE_BM25: &str = "rag_retrieve_bm25";
-const TASK_RAG_RETRIEVE_MULTIMODAL_DENSE: &str = "rag_retrieve_multimodal_dense";
-const TASK_RAG_MERGE_TEXT_RRF: &str = "rag_merge_text_rrf";
-const TASK_RAG_MULTIMODAL_RERANK: &str = "rag_multimodal_rerank";
-const TASK_RAG_CUT_FINAL_CANDIDATES: &str = "rag_cut_final_candidates";
-const TASK_RAG_APPLY_SUMMARY_POLICY: &str = "rag_apply_summary_policy";
-const TASK_RAG_BUILD_ANSWER_CONTEXT: &str = "rag_build_answer_context";
 const TASK_RAG_ANSWER_SYNTHESIZE: &str = "rag_answer_synthesize";
 const TASK_RAG_VALIDATE_CITATIONS: &str = "rag_validate_citations";
 const TASK_OUTPUT_GUARD: &str = "chat_output_guard";
@@ -186,16 +169,6 @@ fn require_rag_runtime(state: &AppState) -> graph_flow::Result<Arc<RagRuntime>> 
             "RAG mode requires rag_runtime to be configured.",
         ))
     })
-}
-
-async fn append_degrade_trace(flow: &ChatFlowContext, mut trace: Vec<common::DegradeTraceItem>) {
-    if trace.is_empty() {
-        return;
-    }
-
-    let mut existing = flow.degrade_trace().await.unwrap_or_default();
-    existing.append(&mut trace);
-    flow.set_degrade_trace(&existing).await;
 }
 
 include!("graphflow_tasks.rs");

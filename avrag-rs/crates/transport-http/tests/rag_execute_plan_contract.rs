@@ -66,6 +66,13 @@ async fn post_rag_execute_plan_returns_bundle_and_trace() {
         payload.bundle.chunks[0].doc_id,
         payload.bundle.citations[0].doc_id
     );
+    assert!(payload.bundle.chunks[0].parse_run_id.is_none());
+    assert!(payload.bundle.chunks[0].score_breakdown.is_empty());
+    assert!(payload.bundle.graph_supported_chunks.is_empty());
+    assert!(payload.bundle.relation_paths.is_empty());
+    assert!(payload.bundle.citations[0].parse_run_id.is_none());
+    assert_eq!(payload.coverage.channel_coverage.graph, 0);
+    assert!(payload.backend_trace.channel_trace.is_empty());
 }
 
 #[tokio::test]

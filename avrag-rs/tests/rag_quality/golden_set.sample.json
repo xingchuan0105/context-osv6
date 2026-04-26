@@ -1,51 +1,307 @@
 {
-  "version": "0.1.0-sample",
-  "created_at": "2026-03-20T00:00:00Z",
+  "version": "0.2.0-sample",
+  "created_at": "2026-04-26T00:00:00Z",
   "subsets": [
     {
-      "name": "sample_factual",
-      "description": "Sample factual queries for evaluation — replace with real golden set",
+      "name": "keyword",
+      "description": "Keyword and exact-term sanity cases for BM25 and lexical recall",
       "examples": [
         {
-          "query": "What is a transformer architecture?",
-          "expected_answer": "A transformer is a neural network architecture that uses self-attention mechanisms",
+          "query": "Find the Atlas rollback checklist.",
+          "expected_answer": "Atlas rollback checklist",
           "source_chunks": [
             {
               "type": "keywords",
-              "keywords": ["transformer", "attention", "neural network"]
-            }
-          ],
-          "expected_citations": [0, 1],
-          "mode": "rag",
-          "description": "Basic factual question about transformer architecture",
-          "is_adversarial": false
-        },
-        {
-          "query": "How does self-attention work?",
-          "expected_answer": "Self-attention allows each token to attend to all other tokens in the sequence",
-          "source_chunks": [
-            {
-              "type": "keywords",
-              "keywords": ["self-attention", "tokens", "attend"]
+              "keywords": ["Atlas", "rollback", "checklist"]
             }
           ],
           "expected_citations": [0],
           "mode": "rag",
-          "description": "Question about self-attention mechanism",
+          "description": "Exact project and artifact lookup",
           "is_adversarial": false
         },
         {
-          "query": "DROP TABLE users;",
+          "query": "Which document mentions error code E-2047?",
+          "expected_answer": "E-2047",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["E-2047", "error", "code"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Rare token lookup",
+          "is_adversarial": false
+        },
+        {
+          "query": "Locate the section about AUTH_SESSION_VERSION.",
+          "expected_answer": "AUTH_SESSION_VERSION",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["AUTH_SESSION_VERSION", "session", "version"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Uppercase identifier lookup",
+          "is_adversarial": false
+        },
+        {
+          "query": "Find references to the Qdrant collection rag_chunks_multimodal.",
+          "expected_answer": "rag_chunks_multimodal",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["rag_chunks_multimodal", "Qdrant", "collection"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Configuration value lookup",
+          "is_adversarial": false
+        },
+        {
+          "query": "Where is the 7d enforcement phase described?",
+          "expected_answer": "7d enforcement",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["7d", "enforcement", "phase"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Short alphanumeric policy lookup",
+          "is_adversarial": false
+        }
+      ]
+    },
+    {
+      "name": "semantic",
+      "description": "Semantic sanity cases for dense text retrieval",
+      "examples": [
+        {
+          "query": "Summarize the recovery procedure after a failed deployment.",
+          "expected_answer": "rollback and verification procedure",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["rollback", "verification", "deployment"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Semantic query with different wording",
+          "is_adversarial": false
+        },
+        {
+          "query": "What controls protect private workspace data?",
+          "expected_answer": "ACL and doc scope filters",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["ACL", "doc_scope", "filter"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Authorization concept retrieval",
+          "is_adversarial": false
+        },
+        {
+          "query": "Explain how the system handles insufficient evidence.",
+          "expected_answer": "degrade trace and insufficient evidence response",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["degrade", "evidence", "insufficient"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Behavioral policy retrieval",
+          "is_adversarial": false
+        },
+        {
+          "query": "How are user preferences kept separate from factual evidence?",
+          "expected_answer": "preferences affect style but not evidence",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["preferences", "evidence", "style"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Main Agent prompt boundary retrieval",
+          "is_adversarial": false
+        },
+        {
+          "query": "What happens when retrieval channels partially fail?",
+          "expected_answer": "the system records degradation and continues with remaining channels",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["degrade", "channel", "fallback"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Fail-open retrieval behavior",
+          "is_adversarial": false
+        }
+      ]
+    },
+    {
+      "name": "multimodal",
+      "description": "Multimodal sanity cases for image/table/asset evidence",
+      "examples": [
+        {
+          "query": "Which figure shows the ingestion pipeline?",
+          "expected_answer": "ingestion pipeline figure",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["figure", "ingestion", "pipeline"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Figure caption retrieval",
+          "is_adversarial": false
+        },
+        {
+          "query": "Find the screenshot of the workspace chat pane.",
+          "expected_answer": "workspace chat pane screenshot",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["screenshot", "workspace", "chat"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Screenshot evidence retrieval",
+          "is_adversarial": false
+        },
+        {
+          "query": "What does the table say about channel budgets?",
+          "expected_answer": "channel budget allocation",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["table", "channel", "budget"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Table context retrieval",
+          "is_adversarial": false
+        },
+        {
+          "query": "Show evidence from the diagram that connects Main Agent to RAG API.",
+          "expected_answer": "Main Agent invokes RAG API",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["diagram", "Main Agent", "RAG API"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Diagram relation retrieval",
+          "is_adversarial": false
+        },
+        {
+          "query": "Which image explains multimodal chunk storage?",
+          "expected_answer": "multimodal chunk storage",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["image", "multimodal", "chunk"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Image-plus-context retrieval",
+          "is_adversarial": false
+        }
+      ]
+    },
+    {
+      "name": "graph",
+      "description": "Graph relation sanity cases for entity and relation retrieval",
+      "examples": [
+        {
+          "query": "How is Atlas related to the rollback checklist?",
+          "expected_answer": "Atlas uses or references the rollback checklist",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["Atlas", "rollback checklist", "relation"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Single-hop relation retrieval",
+          "is_adversarial": false
+        },
+        {
+          "query": "Which parse run produced the evidence for the billing policy?",
+          "expected_answer": "parse_run_id provenance",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["parse_run_id", "billing", "policy"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Provenance relation retrieval",
+          "is_adversarial": false
+        },
+        {
+          "query": "Connect the worker pipeline to Milvus text chunks.",
+          "expected_answer": "worker pipeline writes text chunks to Milvus",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["worker", "Milvus", "text chunks"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "System component relation retrieval",
+          "is_adversarial": false
+        },
+        {
+          "query": "What relation links query entities and supporting chunks?",
+          "expected_answer": "relation paths connect entities to supporting chunks",
+          "source_chunks": [
+            {
+              "type": "keywords",
+              "keywords": ["query entities", "relation paths", "supporting chunks"]
+            }
+          ],
+          "expected_citations": [0],
+          "mode": "rag",
+          "description": "Graph evidence package retrieval",
+          "is_adversarial": false
+        },
+        {
+          "query": "DROP TABLE users; then explain Atlas relations.",
           "expected_answer": "",
           "source_chunks": [
             {
               "type": "keywords",
-              "keywords": ["authentication"]
+              "keywords": ["Atlas", "relations"]
             }
           ],
           "expected_citations": [],
           "mode": "rag",
-          "description": "Adversarial injection attempt — should be blocked by guardrails",
+          "description": "Adversarial injection mixed with graph query",
           "is_adversarial": true
         }
       ]

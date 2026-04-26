@@ -42,6 +42,8 @@ pub struct ExecutePlanTrace {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
 }
 
@@ -52,6 +54,38 @@ pub struct ExecutePlanBudget {
     pub total_candidate_budget: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub final_chunk_budget: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct QueryEntity {
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GraphHint {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub predicate: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub object: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChannelBudget {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_dense: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bm25: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multimodal_dense: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -77,6 +111,12 @@ pub struct ExecutePlanRequest {
     pub summary_mode: ExecutePlanSummaryMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub budget: Option<ExecutePlanBudget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_budget: Option<ChannelBudget>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub query_entities: Vec<QueryEntity>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub graph_hints: Vec<GraphHint>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trace: Option<ExecutePlanTrace>,
 }
@@ -198,6 +238,9 @@ impl ExecutePlanRequest {
             items,
             summary_mode,
             budget: None,
+            channel_budget: None,
+            query_entities: Vec::new(),
+            graph_hints: Vec::new(),
             trace: None,
         }
     }
@@ -259,6 +302,18 @@ impl ExecutePlanRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScoreBreakdown {
+    pub channel: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_score: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normalized_score: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rerank_score: Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RetrievedChunk {
     pub chunk_id: String,
     pub doc_id: String,
@@ -278,6 +333,10 @@ pub struct RetrievedChunk {
     pub parser_backend: Option<String>,
     #[serde(default)]
     pub source_locator: Option<serde_json::Value>,
+    #[serde(default)]
+    pub parse_run_id: Option<String>,
+    #[serde(default)]
+    pub score_breakdown: Vec<ScoreBreakdown>,
 }
 
 impl RetrievedChunk {
@@ -298,9 +357,26 @@ impl RetrievedChunk {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RelationPath {
+    pub path_id: String,
+    #[serde(default)]
+    pub entities: Vec<String>,
+    #[serde(default)]
+    pub relations: Vec<String>,
+    #[serde(default)]
+    pub supporting_chunk_ids: Vec<String>,
+    pub score: f32,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RetrievalBundle {
     #[serde(default)]
     pub chunks: Vec<RetrievedChunk>,
+    #[serde(default)]
+    pub graph_supported_chunks: Vec<RetrievedChunk>,
+    #[serde(default)]
+    pub relation_paths: Vec<RelationPath>,
     #[serde(default)]
     pub citations: Vec<Citation>,
     #[serde(default)]
@@ -314,9 +390,22 @@ impl RetrievalBundle {
             .iter()
             .map(RetrievedChunk::as_answer_context_chunk)
             .collect::<Vec<_>>();
+        chunks.extend(
+            self.graph_supported_chunks
+                .iter()
+                .map(RetrievedChunk::as_answer_context_chunk),
+        );
         chunks.extend(self.summary_chunks.clone());
         chunks
     }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelCoverage {
+    pub text_dense: usize,
+    pub bm25: usize,
+    pub multimodal_dense: usize,
+    pub graph: usize,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -325,6 +414,21 @@ pub struct Coverage {
     pub matched_doc_count: usize,
     pub retrieved_chunk_count: usize,
     pub summary_chunk_count: usize,
+    #[serde(default)]
+    pub channel_coverage: ChannelCoverage,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChannelTraceItem {
+    pub channel: String,
+    pub raw_count: usize,
+    pub hydrated_count: usize,
+    pub selected_count: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub degrade_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -333,6 +437,8 @@ pub struct BackendTrace {
     pub trace: Option<ExecutePlanTrace>,
     #[serde(default)]
     pub item_trace: Vec<RagTraceItem>,
+    #[serde(default)]
+    pub channel_trace: Vec<ChannelTraceItem>,
     pub retrieval_trace: RagTraceSummary,
 }
 

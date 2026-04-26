@@ -4,18 +4,16 @@ use avrag_llm::{AnswerSynthesizer, EmbeddingClient, RerankerClient, RetrievalPla
 use avrag_search::TantivyLexicalIndex;
 use avrag_storage_pg::PgAppRepository;
 use avrag_storage_qdrant::HttpQdrantBackend;
-use serde::{Deserialize, Serialize};
-
-use crate::retrieval::ScoredChunk;
 
 /// Configuration for the RAG runtime
+#[derive(Clone)]
 pub struct RagConfig {
     pub embedding_client: Arc<EmbeddingClient>,
     pub mm_embedding_client: Option<Arc<EmbeddingClient>>,
     pub qdrant_collection: String,
     pub multimodal_collection: String,
     /// Qdrant backend for dense retrieval
-    pub qdrant: Arc<HttpQdrantBackend>,
+    pub qdrant: Option<Arc<HttpQdrantBackend>>,
     /// PostgreSQL repository for sparse retrieval and content fetching.
     pub pg_repo: Option<Arc<PgAppRepository>>,
     /// Optional Tantivy lexical backend for sparse/BM25-style retrieval.
@@ -43,7 +41,27 @@ impl RagConfig {
             mm_embedding_client: None,
             qdrant_collection: "chunks".to_string(),
             multimodal_collection: "chunks_multimodal".to_string(),
-            qdrant,
+            qdrant: Some(qdrant),
+            pg_repo,
+            lexical_index: None,
+            lexical_index_dir: None,
+            answer_synthesizer: None,
+            planner: None,
+            reranker: None,
+            mm_reranker: None,
+        }
+    }
+
+    pub fn new_for_data_plane(
+        embedding_client: Arc<EmbeddingClient>,
+        pg_repo: Option<Arc<PgAppRepository>>,
+    ) -> Self {
+        Self {
+            embedding_client,
+            mm_embedding_client: None,
+            qdrant_collection: "chunks".to_string(),
+            multimodal_collection: "chunks_multimodal".to_string(),
+            qdrant: None,
             pg_repo,
             lexical_index: None,
             lexical_index_dir: None,
@@ -91,10 +109,4 @@ impl RagConfig {
         self.mm_reranker = Some(reranker);
         self
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WeightedChunkList {
-    pub weight: f32,
-    pub chunks: Vec<ScoredChunk>,
 }

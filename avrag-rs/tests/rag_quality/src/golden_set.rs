@@ -143,4 +143,30 @@ mod tests {
         assert!(sub_match.matches("The transformer architecture revolutionized NLP."));
         assert!(sub_match.matches("The TRANSFORMER architecture is powerful.")); // case-insensitive
     }
+
+    #[test]
+    fn sample_sanity_set_has_required_phase6_coverage() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("golden_set.sample.json");
+        let dataset = GoldenDataset::load(path).unwrap();
+
+        assert_eq!(dataset.len(), 20);
+        for subset_name in ["keyword", "semantic", "multimodal", "graph"] {
+            let subset = dataset
+                .subsets
+                .iter()
+                .find(|subset| subset.name == subset_name)
+                .unwrap_or_else(|| panic!("missing subset {subset_name}"));
+            assert!(
+                subset.examples.len() >= 4,
+                "subset {subset_name} must include at least 4 examples"
+            );
+            assert!(
+                subset
+                    .examples
+                    .iter()
+                    .all(|example| !example.source_chunks.is_empty()),
+                "subset {subset_name} examples must declare expected evidence"
+            );
+        }
+    }
 }

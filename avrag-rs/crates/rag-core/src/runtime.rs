@@ -8,8 +8,10 @@ mod retrieval;
 #[cfg(test)]
 mod tests;
 
+use std::sync::Arc;
+
 pub use self::config::RagConfig;
-pub use self::config::WeightedChunkList;
+pub use avrag_retrieval_data_plane::{RetrievalDataPlane, WeightedChunkList};
 
 /// RAG runtime used by GraphFlow.
 ///
@@ -17,11 +19,17 @@ pub use self::config::WeightedChunkList;
 /// stage-level retrieval, synthesis, and response-building helpers for RAG.
 pub struct RagRuntime {
     config: RagConfig,
+    data_plane: Arc<dyn RetrievalDataPlane>,
 }
 
 impl RagRuntime {
     pub fn new(config: RagConfig) -> Self {
-        Self { config }
+        let data_plane = Arc::new(retrieval::LegacyRetrievalDataPlane::new(config.clone()));
+        Self::with_data_plane(config, data_plane)
+    }
+
+    pub fn with_data_plane(config: RagConfig, data_plane: Arc<dyn RetrievalDataPlane>) -> Self {
+        Self { config, data_plane }
     }
 }
 

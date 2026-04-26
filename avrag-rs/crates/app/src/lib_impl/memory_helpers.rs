@@ -230,6 +230,7 @@ fn build_citations(context_document: Option<&RetrievedContext>) -> Vec<Citation>
         image_url: None,
         parser_backend: None,
         source_locator: None,
+        parse_run_id: None,
     }]
 }
 

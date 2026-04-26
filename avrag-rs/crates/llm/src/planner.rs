@@ -166,6 +166,16 @@ Output requirements:
 - No trailing text.
 "#;
 
+const QUERY_ENTITY_SYSTEM_PROMPT: &str = r#"Extract graph retrieval entity names from the latest user request.
+Return raw JSON only, with this exact shape:
+{"entities":["entity name"]}
+
+Rules:
+- Include only concrete people, organizations, projects, systems, document artifacts, product names, or named concepts.
+- Do not include generic words.
+- Return an empty array when no useful entity exists.
+"#;
+
 pub struct RetrievalPlanner {
     llm: LlmClient,
 }
@@ -257,6 +267,43 @@ impl RetrievalPlanner {
 
         Ok((plan, response.usage))
     }
+
+    pub async fn extract_query_entities(&self, query: &str) -> anyhow::Result<Vec<String>> {
+        let messages = vec![
+            ChatMessage::system(QUERY_ENTITY_SYSTEM_PROMPT),
+            ChatMessage::user(query.trim().to_string()),
+        ];
+        let response = self
+            .llm
+            .complete(&messages, Some(0.1))
+            .await
+            .context("Failed to extract query entities")?;
+        parse_query_entity_response(&response.content)
+    }
+}
+
+fn parse_query_entity_response(content: &str) -> anyhow::Result<Vec<String>> {
+    let value: serde_json::Value =
+        serde_json::from_str(content).context("Failed to parse query entity JSON")?;
+    let entities = value
+        .get("entities")
+        .and_then(serde_json::Value::as_array)
+        .context("query entity response missing entities array")?;
+    let mut seen = std::collections::HashSet::new();
+    Ok(entities
+        .iter()
+        .filter_map(|entity| {
+            entity
+                .as_str()
+                .or_else(|| entity.get("text").and_then(serde_json::Value::as_str))
+        })
+        .map(str::trim)
+        .filter(|entity| !entity.is_empty())
+        .filter_map(|entity| {
+            let key = entity.to_lowercase();
+            seen.insert(key).then(|| entity.to_string())
+        })
+        .collect())
 }
 
 #[cfg(test)]
@@ -328,5 +375,14 @@ mod tests {
 
         assert!(!prompt.contains("Session conversation history:"));
         assert_eq!(prompt, "Latest user request:\nhow to roll back?");
+    }
+
+    #[test]
+    fn parse_query_entity_response_trims_and_dedupes_entities() {
+        let entities =
+            parse_query_entity_response(r#"{"entities":[" Atlas ",{"text":"atlas"},"Acme"]}"#)
+                .unwrap();
+
+        assert_eq!(entities, vec!["Atlas".to_string(), "Acme".to_string()]);
     }
 }

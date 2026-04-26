@@ -7,6 +7,7 @@ version.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+async-trait.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -15,6 +16,7 @@ uuid.workspace = true
 tracing = "0.1"
 # Internal
 common = { path = "../common" }
+avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
 avrag-auth = { path = "../auth" }
 avrag-storage-pg = { path = "../storage-pg" }
 avrag-storage-qdrant = { path = "../storage-qdrant" }

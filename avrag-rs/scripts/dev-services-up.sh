@@ -59,9 +59,10 @@ done
 curl -fsS "http://${MINIO_API_ADDR}/minio/health/live" >/dev/null
 
 echo
-echo "Dev services are ready:"
+echo "Core dev services are ready:"
 echo "  PostgreSQL : postgres://avrag:avrag@127.0.0.1:5432/avrag_rs"
 echo "  Redis      : redis://127.0.0.1:6379"
 echo "  Qdrant     : ${QDRANT_URI}"
 echo "  MinIO API  : http://${MINIO_API_ADDR}"
 echo "  MinIO UI   : http://${MINIO_CONSOLE_ADDR}"
+echo "  Milvus     : start separately for RETRIEVAL_BACKEND=milvus, or set RETRIEVAL_BACKEND=legacy"

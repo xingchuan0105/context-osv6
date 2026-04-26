@@ -2,7 +2,7 @@
 
 ## 范围
 
-当前 worker 处于 Wave 0 skeleton 阶段，目标不是完成真实 ingestion，而是先固定：
+当前 worker 已接入 PostgreSQL 任务、解析、分块、embedding、Milvus indexing 与 legacy rollback indexing。本文固定：
 
 - 文档 ingestion / reindex 任务契约
 - worker poll / heartbeat 生命周期
@@ -30,6 +30,11 @@
   - 默认 `30`
 - `AVRAG_WORKER_POLL_SECS`
   - 默认 `5`
+- `RETRIEVAL_BACKEND`
+  - 默认 `milvus`
+  - 设为 `legacy` 时才写 Qdrant/Tantivy rollback index
+- `MILVUS_URL`
+  - 默认 `http://127.0.0.1:19530`
 
 ## 运行
 
@@ -103,12 +108,7 @@ cargo run -p avrag-worker
   - 写 summary chunk
   - 写 body chunks
 
-仍未接入：
-
-- parser
-- advanced chunker
-- embedding producer
-- sparse / dense index writer
+默认 Milvus 模式下，worker 写 Postgres 控制面和 Milvus retrieval data plane。Qdrant/Tantivy 只在 `RETRIEVAL_BACKEND=legacy` 时作为 rollback adapter 写入。
 
 ## 本地验证
 

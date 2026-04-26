@@ -58,68 +58,106 @@ impl AppState {
         let rag_runtime = if let Some(ref pg_repo) = pg {
             let embedding = make_embedding_client(&config.embedding);
             let mm_embedding = make_embedding_client(&config.mm_embedding);
-            let lexical_index = config
-                .tantivy_index_dir
-                .as_deref()
-                .and_then(|dir| match TantivyLexicalIndex::open_reader(dir) {
-                    Ok(index) => Some(Arc::new(index)),
-                    Err(error) => {
-                        info!(
-                            tantivy_index_dir = dir,
-                            error = %error,
-                            "failed to open Tantivy lexical index; PostgreSQL BM25 fallback remains active"
-                        );
-                        None
-                    }
-                });
+            let lexical_index =
+                if config.retrieval_backend == "legacy" {
+                    config
+                        .tantivy_index_dir
+                        .as_deref()
+                        .and_then(|dir| match TantivyLexicalIndex::open_reader(dir) {
+                            Ok(index) => Some(Arc::new(index)),
+                            Err(error) => {
+                                info!(
+                                    tantivy_index_dir = dir,
+                                    error = %error,
+                                    "failed to open Tantivy lexical index; PostgreSQL BM25 fallback remains active"
+                                );
+                                None
+                            }
+                        })
+                } else {
+                    None
+                };
             let planner = make_planner(&config.intent_llm);
             let synthesizer = make_synthesizer(&config.answer_llm);
             let reranker = make_reranker(&config.rerank);
             let mm_reranker = make_reranker(&config.mm_rerank);
 
-            if !config.qdrant.url.trim().is_empty() {
-                let qdrant = HttpQdrantBackend::new(config.qdrant.url.clone());
-                let fallback_embedding =
-                    Arc::new(EmbeddingClient::new(avrag_llm::ModelProviderConfig {
-                        base_url: "https://api.siliconflow.cn/v1".to_string(),
-                        api_key: String::new(),
-                        model: "Qwen/Qwen3-Embedding-8B".to_string(),
-                        timeout_ms: 15000,
-                        api_style: None,
-                        dimensions: None,
-                        enable_thinking: None,
-                    }));
-                let embedding_for_config = embedding.unwrap_or(fallback_embedding);
-                let mut rag_config = RagConfig::new(
-                    embedding_for_config,
-                    Arc::new(qdrant),
-                    Some(pg_repo.clone()),
-                )
-                .with_lexical_index_dir(config.tantivy_index_dir.clone());
+            let fallback_embedding = Arc::new(EmbeddingClient::new(avrag_llm::ModelProviderConfig {
+                base_url: "https://api.siliconflow.cn/v1".to_string(),
+                api_key: String::new(),
+                model: "Qwen/Qwen3-Embedding-8B".to_string(),
+                timeout_ms: 15000,
+                api_style: None,
+                dimensions: None,
+                enable_thinking: None,
+            }));
+            let embedding_for_config = embedding.unwrap_or(fallback_embedding);
+            let attach_rag_components = |mut rag_config: RagConfig| {
                 rag_config.qdrant_collection = config.qdrant.collection.clone();
                 rag_config.multimodal_collection = config.qdrant.multimodal_collection.clone();
-                if let Some(p) = planner {
+                if let Some(p) = planner.clone() {
                     rag_config = rag_config.with_planner(p);
                 }
-                if let Some(s) = synthesizer {
+                if let Some(s) = synthesizer.clone() {
                     rag_config = rag_config.with_synthesizer(s);
                 }
-                if let Some(mm) = mm_embedding {
+                if let Some(mm) = mm_embedding.clone() {
                     rag_config = rag_config.with_mm_embedding(mm);
                 }
-                if let Some(index) = lexical_index {
+                if let Some(index) = lexical_index.clone() {
                     rag_config = rag_config.with_lexical_index(index);
                 }
-                if let Some(r) = reranker {
+                if let Some(r) = reranker.clone() {
                     rag_config = rag_config.with_reranker(r);
                 }
-                if let Some(mm_r) = mm_reranker {
+                if let Some(mm_r) = mm_reranker.clone() {
                     rag_config = rag_config.with_mm_reranker(mm_r);
                 }
-                Some(Arc::new(RagRuntime::new(rag_config)))
-            } else {
-                None
-            }
+                rag_config
+            };
+
+            let rag_runtime = match config.retrieval_backend.as_str() {
+                "legacy" if config.qdrant.url.trim().is_empty() => None,
+                "legacy" => {
+                    let qdrant = HttpQdrantBackend::new(config.qdrant.url.clone());
+                    let rag_config = attach_rag_components(
+                        RagConfig::new(
+                            embedding_for_config,
+                            Arc::new(qdrant),
+                            Some(pg_repo.clone()),
+                        )
+                        .with_lexical_index_dir(config.tantivy_index_dir.clone()),
+                    );
+                    Some(Arc::new(RagRuntime::new(rag_config)))
+                }
+                "milvus" => {
+                    let rag_config = attach_rag_components(RagConfig::new_for_data_plane(
+                        embedding_for_config,
+                        Some(pg_repo.clone()),
+                    ));
+                    let milvus_config = StorageMilvusConfig {
+                        url: config.milvus.url.clone(),
+                        token: Some(config.milvus.token.clone())
+                            .filter(|token| !token.trim().is_empty()),
+                        database: Some(config.milvus.database.clone())
+                            .filter(|database| !database.trim().is_empty()),
+                        collection_prefix: config.milvus.collection_prefix.clone(),
+                        text_vector_dim: config.milvus.text_vector_dim,
+                        multimodal_vector_dim: config.milvus.multimodal_vector_dim,
+                        metric_type: config.milvus.metric_type.clone(),
+                    };
+                    let data_plane: Arc<dyn RetrievalDataPlane> =
+                        Arc::new(MilvusDataPlane::new(milvus_config));
+                    data_plane.ensure_schema().await?;
+                    Some(Arc::new(RagRuntime::with_data_plane(
+                        rag_config, data_plane,
+                    )))
+                }
+                other => {
+                    return Err(anyhow::anyhow!("unsupported RETRIEVAL_BACKEND: {other}"));
+                }
+            };
+            rag_runtime
         } else {
             None
         };

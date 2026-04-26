@@ -111,6 +111,7 @@ mod tests {
                 image_url: None,
                 parser_backend: None,
                 source_locator: None,
+                parse_run_id: None,
             },
             common::Citation {
                 citation_id: 2,
@@ -128,6 +129,7 @@ mod tests {
                 image_url: None,
                 parser_backend: None,
                 source_locator: None,
+                parse_run_id: None,
             },
         ];
         // Citation indices in the response are 0-based, corresponding to chunk array positions

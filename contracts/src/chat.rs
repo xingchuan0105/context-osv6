@@ -80,6 +80,8 @@ pub struct Citation {
     pub parser_backend: Option<String>,
     #[serde(default)]
     pub source_locator: Option<serde_json::Value>,
+    #[serde(default)]
+    pub parse_run_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

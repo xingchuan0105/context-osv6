@@ -1,8 +1,8 @@
 use avrag_auth::AuthContext;
+pub use avrag_retrieval_data_plane::ScoredChunk;
 use avrag_search::TantivyLexicalIndex;
 use avrag_storage_pg::PgAppRepository;
 use avrag_storage_qdrant::HttpQdrantBackend;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -21,60 +21,6 @@ pub struct SparseSearchHit {
     pub content: String,
     pub score: f32,
     pub page: Option<i64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScoredChunk {
-    pub chunk_id: Uuid,
-    pub doc_id: Uuid,
-    pub content: String,
-    pub score: f32,
-    pub source: String,
-    pub page: Option<i64>,
-    pub chunk_type: String,
-    pub asset_id: Option<Uuid>,
-    pub caption: Option<String>,
-    pub image_path: Option<String>,
-    pub parser_backend: Option<String>,
-    pub source_locator: Option<Value>,
-}
-
-impl ScoredChunk {
-    pub fn new_text(
-        chunk_id: Uuid,
-        doc_id: Uuid,
-        content: String,
-        score: f32,
-        source: String,
-        page: Option<i64>,
-    ) -> Self {
-        Self {
-            chunk_id,
-            doc_id,
-            content,
-            score,
-            source,
-            page,
-            chunk_type: "text".to_string(),
-            asset_id: None,
-            caption: None,
-            image_path: None,
-            parser_backend: None,
-            source_locator: None,
-        }
-    }
-
-    fn with_metadata(
-        mut self,
-        chunk_type: String,
-        parser_backend: Option<String>,
-        source_locator: Option<Value>,
-    ) -> Self {
-        self.chunk_type = chunk_type;
-        self.parser_backend = parser_backend;
-        self.source_locator = source_locator;
-        self
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -289,6 +235,7 @@ async fn run_postgres_sparse_retrieval(
             image_path: None,
             parser_backend: chunk_metadata_string(&chunk.metadata, "parser_backend"),
             source_locator: chunk_metadata_value(&chunk.metadata, "source_locator"),
+            parse_run_id: None,
         })
         .collect())
 }
@@ -319,6 +266,7 @@ pub struct MultimodalScoredChunk {
     pub chunk_type: String,
     pub parser_backend: String,
     pub source_locator: Option<Value>,
+    pub parse_run_id: Option<Uuid>,
     pub source: String,
 }
 
@@ -380,6 +328,7 @@ pub async fn run_multimodal_retrieval(
                 .unwrap_or_else(|| "image_with_context".to_string()),
             parser_backend: chunk.parser_backend.clone(),
             source_locator: chunk_metadata_value(&chunk.metadata, "source_locator"),
+            parse_run_id: chunk.parse_run_id,
             source: "multimodal_dense".to_string(),
         });
     }

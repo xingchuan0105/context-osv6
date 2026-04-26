@@ -1,14 +1,24 @@
+use super::execute::{
+    ChannelCandidateBudgets, default_channel_candidate_budgets, graph_final_context_budget,
+};
 use super::planner;
 use super::response;
 use super::retrieval;
 use super::*;
 use crate::context::SessionContext;
 use crate::retrieval::ScoredChunk;
+use async_trait::async_trait;
+use avrag_auth::{AuthContext, OrgId, SubjectKind};
+use avrag_retrieval_data_plane::{
+    Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, GraphSearchOutput, GraphSearchRequest,
+    MultimodalSearchRequest, RelationPathCandidate, TextDenseSearchRequest,
+};
 use common::{
     BackendTrace, ChatMessage, ChatRequest, Citation, Coverage, ExecutePlanResponse, RagPlan,
     RagPlanItem, RetrievalBundle, RetrievedChunk,
 };
 use std::sync::Arc;
+use tokio::sync::Barrier;
 use uuid::Uuid;
 
 fn make_request(query: &str, agent_type: &str) -> ChatRequest {
@@ -90,7 +100,296 @@ fn make_scored_chunk(seed: u128, source: &str) -> ScoredChunk {
         image_path: None,
         parser_backend: None,
         source_locator: None,
+        parse_run_id: None,
     }
+}
+
+struct StubRetrievalDataPlane;
+
+#[async_trait]
+impl RetrievalDataPlane for StubRetrievalDataPlane {
+    async fn search_text_dense(
+        &self,
+        _request: TextDenseSearchRequest,
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
+        Ok(Vec::new())
+    }
+
+    async fn search_bm25(&self, request: Bm25SearchRequest) -> anyhow::Result<Bm25SearchOutput> {
+        assert_eq!(request.query, "exact term");
+        Ok(Bm25SearchOutput {
+            chunks: vec![make_scored_chunk(42, "stub_bm25")],
+            trace: Bm25SearchTrace {
+                backend: "stub".to_string(),
+                raw_hit_count: 1,
+                hydrated_hit_count: 1,
+                fallback_reason: None,
+            },
+        })
+    }
+
+    async fn search_multimodal(
+        &self,
+        _request: MultimodalSearchRequest,
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
+        Ok(Vec::new())
+    }
+}
+
+struct GraphStubRetrievalDataPlane;
+
+#[async_trait]
+impl RetrievalDataPlane for GraphStubRetrievalDataPlane {
+    async fn search_text_dense(
+        &self,
+        _request: TextDenseSearchRequest,
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
+        Ok(Vec::new())
+    }
+
+    async fn search_bm25(&self, request: Bm25SearchRequest) -> anyhow::Result<Bm25SearchOutput> {
+        assert_eq!(request.query, "exact term");
+        Ok(Bm25SearchOutput {
+            chunks: vec![make_scored_chunk(42, "stub_bm25")],
+            trace: Bm25SearchTrace {
+                backend: "stub".to_string(),
+                raw_hit_count: 1,
+                hydrated_hit_count: 1,
+                fallback_reason: None,
+            },
+        })
+    }
+
+    async fn search_multimodal(
+        &self,
+        _request: MultimodalSearchRequest,
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
+        Ok(Vec::new())
+    }
+
+    async fn search_graph(&self, request: GraphSearchRequest) -> anyhow::Result<GraphSearchOutput> {
+        assert_eq!(request.entity_names, vec!["Atlas".to_string()]);
+        assert_eq!(request.relation_limit, 2);
+        Ok(GraphSearchOutput {
+            relation_paths: vec![RelationPathCandidate {
+                subject: "Atlas".to_string(),
+                predicate: "uses".to_string(),
+                object: "rollback checklist".to_string(),
+                score: 0.91,
+                supporting_chunk_ids: vec![Uuid::from_u128(90)],
+            }],
+            supporting_chunks: vec![ScoredChunk {
+                chunk_id: Uuid::from_u128(90),
+                doc_id: Uuid::from_u128(10_090),
+                content: "Atlas uses the rollback checklist".to_string(),
+                score: 0.91,
+                source: "stub_graph".to_string(),
+                page: Some(3),
+                chunk_type: "graph_relation".to_string(),
+                asset_id: None,
+                caption: None,
+                image_path: None,
+                parser_backend: None,
+                source_locator: None,
+                parse_run_id: Some(Uuid::from_u128(91)),
+            }],
+        })
+    }
+}
+
+struct BarrierGraphBm25DataPlane {
+    barrier: Arc<Barrier>,
+}
+
+#[async_trait]
+impl RetrievalDataPlane for BarrierGraphBm25DataPlane {
+    async fn search_text_dense(
+        &self,
+        _request: TextDenseSearchRequest,
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
+        Ok(Vec::new())
+    }
+
+    async fn search_bm25(&self, _request: Bm25SearchRequest) -> anyhow::Result<Bm25SearchOutput> {
+        self.barrier.wait().await;
+        Ok(Bm25SearchOutput {
+            chunks: vec![make_scored_chunk(12, "stub_bm25")],
+            trace: Bm25SearchTrace {
+                backend: "stub".to_string(),
+                raw_hit_count: 1,
+                hydrated_hit_count: 1,
+                fallback_reason: None,
+            },
+        })
+    }
+
+    async fn search_multimodal(
+        &self,
+        _request: MultimodalSearchRequest,
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
+        Ok(Vec::new())
+    }
+
+    async fn search_graph(
+        &self,
+        _request: GraphSearchRequest,
+    ) -> anyhow::Result<GraphSearchOutput> {
+        self.barrier.wait().await;
+        Ok(GraphSearchOutput {
+            relation_paths: vec![RelationPathCandidate {
+                subject: "Atlas".to_string(),
+                predicate: "uses".to_string(),
+                object: "checklist".to_string(),
+                score: 0.9,
+                supporting_chunk_ids: vec![Uuid::from_u128(22)],
+            }],
+            supporting_chunks: vec![make_scored_chunk(22, "stub_graph")],
+        })
+    }
+}
+
+#[tokio::test]
+async fn runtime_bm25_stage_uses_injected_data_plane() {
+    let runtime = RagRuntime::with_data_plane(test_config(), Arc::new(StubRetrievalDataPlane));
+    let request = make_request("fallback query", "rag");
+    let auth = AuthContext::new(OrgId::new(Uuid::from_u128(9)), SubjectKind::System);
+    let plan = RagPlan {
+        plan_version: "rag-item-v2".to_string(),
+        plan_confidence: 0.8,
+        clarify_needed: false,
+        clarify_message: String::new(),
+        items: vec![RagPlanItem {
+            priority: 1.0,
+            query: None,
+            bm25_terms: Some(vec!["exact".to_string(), "term".to_string()]),
+            summary: None,
+        }],
+    };
+
+    let (lists, degrade_trace) = runtime
+        .retrieve_bm25_stage_with_budget(&request, &auth, &plan, 5)
+        .await
+        .unwrap();
+
+    assert!(degrade_trace.is_empty());
+    assert_eq!(lists.len(), 1);
+    assert_eq!(lists[0].chunks[0].source, "stub_bm25");
+}
+
+#[test]
+fn default_channel_candidate_budgets_follow_expected_weights() {
+    assert_eq!(
+        default_channel_candidate_budgets(100),
+        ChannelCandidateBudgets {
+            text_dense: 35,
+            bm25: 25,
+            multimodal_dense: 15,
+            graph: 25,
+        }
+    );
+}
+
+#[test]
+fn graph_final_context_budget_reserves_twenty_percent_when_available() {
+    assert_eq!(graph_final_context_budget(30, 20), 6);
+    assert_eq!(graph_final_context_budget(4, 10), 1);
+    assert_eq!(graph_final_context_budget(30, 2), 2);
+}
+
+#[tokio::test]
+async fn execute_plan_includes_graph_relation_paths_and_supporting_chunks() {
+    let runtime = RagRuntime::with_data_plane(test_config(), Arc::new(GraphStubRetrievalDataPlane));
+    let auth = AuthContext::new(OrgId::new(Uuid::from_u128(9)), SubjectKind::System);
+    let request = common::ExecutePlanRequest {
+        plan_version: "rag-execute-v1".to_string(),
+        doc_scope: vec![Uuid::from_u128(10_090).to_string()],
+        items: vec![common::ExecutePlanItem {
+            priority: 1.0,
+            query: None,
+            bm25_terms: Some(vec!["exact".to_string(), "term".to_string()]),
+        }],
+        summary_mode: common::ExecutePlanSummaryMode::None,
+        budget: Some(common::ExecutePlanBudget {
+            total_candidate_budget: Some(8),
+            final_chunk_budget: Some(4),
+        }),
+        channel_budget: None,
+        query_entities: vec![common::QueryEntity {
+            text: "Atlas".to_string(),
+            kind: Some("project".to_string()),
+        }],
+        graph_hints: Vec::new(),
+        trace: None,
+    };
+
+    let response = runtime.execute_plan(&request, &auth).await.unwrap();
+
+    assert_eq!(response.bundle.relation_paths.len(), 1);
+    assert_eq!(response.bundle.relation_paths[0].relations, vec!["uses"]);
+    assert_eq!(response.bundle.graph_supported_chunks.len(), 1);
+    assert_eq!(
+        response.bundle.graph_supported_chunks[0]
+            .parse_run_id
+            .as_deref(),
+        Some("00000000-0000-0000-0000-00000000005b")
+    );
+    assert_eq!(response.coverage.channel_coverage.graph, 1);
+    assert!(
+        response
+            .backend_trace
+            .channel_trace
+            .iter()
+            .any(|trace| trace.channel == "graph" && trace.selected_count == 1)
+    );
+    assert_eq!(response.bundle.citations.len(), 2);
+}
+
+#[tokio::test]
+async fn execute_plan_starts_bm25_and_graph_channels_in_parallel() {
+    let runtime = RagRuntime::with_data_plane(
+        test_config(),
+        Arc::new(BarrierGraphBm25DataPlane {
+            barrier: Arc::new(Barrier::new(2)),
+        }),
+    );
+    let auth = AuthContext::new(OrgId::new(Uuid::from_u128(9)), SubjectKind::System);
+    let request = common::ExecutePlanRequest {
+        plan_version: "rag-execute-v1".to_string(),
+        doc_scope: vec![Uuid::from_u128(10_022).to_string()],
+        items: vec![common::ExecutePlanItem {
+            priority: 1.0,
+            query: None,
+            bm25_terms: Some(vec!["exact".to_string(), "term".to_string()]),
+        }],
+        summary_mode: common::ExecutePlanSummaryMode::None,
+        budget: Some(common::ExecutePlanBudget {
+            total_candidate_budget: Some(20),
+            final_chunk_budget: Some(5),
+        }),
+        channel_budget: Some(common::ChannelBudget {
+            text_dense: Some(0),
+            bm25: Some(5),
+            multimodal_dense: Some(0),
+            graph: Some(5),
+        }),
+        query_entities: vec![common::QueryEntity {
+            text: "Atlas".to_string(),
+            kind: None,
+        }],
+        graph_hints: Vec::new(),
+        trace: None,
+    };
+
+    let response = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        runtime.execute_plan(&request, &auth),
+    )
+    .await
+    .expect("bm25 and graph channels should rendezvous concurrently")
+    .unwrap();
+
+    assert_eq!(response.bundle.chunks.len(), 1);
+    assert_eq!(response.bundle.graph_supported_chunks.len(), 1);
 }
 
 #[tokio::test]
@@ -436,6 +735,7 @@ fn materialize_answer_markup_converts_chunk_placeholders_to_citation_tokens() {
             image_url: None,
             parser_backend: None,
             source_locator: None,
+            parse_run_id: None,
         },
         Citation {
             citation_id: 2,
@@ -453,6 +753,7 @@ fn materialize_answer_markup_converts_chunk_placeholders_to_citation_tokens() {
             image_url: Some("https://example.com/figure.png".to_string()),
             parser_backend: None,
             source_locator: None,
+            parse_run_id: None,
         },
     ];
 
@@ -491,6 +792,7 @@ fn ensure_inline_image_placeholder_appends_first_image_when_missing() {
         image_url: Some("https://example.com/figure.png".to_string()),
         parser_backend: None,
         source_locator: None,
+        parse_run_id: None,
     }];
 
     let answer = response::ensure_inline_image_placeholder("正文回答 [[cite:chunk-a]]", &citations);
@@ -529,7 +831,11 @@ async fn build_rag_chat_response_from_bundle_reuses_bundle_citations() {
                 image_url: None,
                 parser_backend: None,
                 source_locator: None,
+                parse_run_id: None,
+                score_breakdown: Vec::new(),
             }],
+            graph_supported_chunks: Vec::new(),
+            relation_paths: Vec::new(),
             citations: vec![Citation {
                 citation_id: 1,
                 doc_id: "doc-1".to_string(),
@@ -546,6 +852,7 @@ async fn build_rag_chat_response_from_bundle_reuses_bundle_citations() {
                 image_url: None,
                 parser_backend: None,
                 source_locator: None,
+                parse_run_id: None,
             }],
             summary_chunks: Vec::new(),
         },
@@ -554,11 +861,13 @@ async fn build_rag_chat_response_from_bundle_reuses_bundle_citations() {
             matched_doc_count: 1,
             retrieved_chunk_count: 1,
             summary_chunk_count: 0,
+            channel_coverage: Default::default(),
         },
         degrade_trace: Vec::new(),
         backend_trace: BackendTrace {
             trace: None,
             item_trace: Vec::new(),
+            channel_trace: Vec::new(),
             retrieval_trace: common::RagTraceSummary {
                 item_count: 0,
                 total_candidate_budget: TOTAL_CANDIDATE_BUDGET,

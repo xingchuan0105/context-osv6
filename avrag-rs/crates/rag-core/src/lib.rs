@@ -6,4 +6,4 @@ pub mod runtime;
 pub use retrieval::{
     DenseSearchHit, ScoredChunk, SparseSearchHit, run_dense_retrieval, run_sparse_retrieval,
 };
-pub use runtime::{RagConfig, RagRuntime};
+pub use runtime::{RagConfig, RagRuntime, RetrievalDataPlane};

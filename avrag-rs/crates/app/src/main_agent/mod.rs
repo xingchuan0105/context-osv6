@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use avrag_llm::{ChatMessage as LlmChatMessage, LlmClient, LlmUsage};
 use common::{
     AnswerContextChunk, ChatRequest, ChatResponse, DegradeTraceItem, ExecutePlanItem,
-    ExecutePlanRequest, ExecutePlanResponse, ExecutePlanSummaryMode, ModeDebug, PlannerOutput,
-    RagModeDebug, SourceRef, SummaryInjectionTrace, TraceInfo,
+    ExecutePlanRequest, ExecutePlanResponse, ExecutePlanSummaryMode, GraphHint, ModeDebug,
+    PlannerOutput, QueryEntity, RagModeDebug, SourceRef, SummaryInjectionTrace, TraceInfo,
 };
 use uuid::Uuid;
 
@@ -27,7 +27,9 @@ When retrieval can proceed, return an ExecutePlanRequest:
   "items": [
     { "priority": 1.0, "query": "semantic retrieval query" }
   ],
-  "summary_mode": "none" | "related" | "all"
+  "summary_mode": "none" | "related" | "all",
+  "query_entities": [{ "text": "named entity", "kind": "optional kind" }],
+  "graph_hints": [{ "subject": "optional", "predicate": "optional", "object": "optional" }]
 }
 
 When the target cannot be identified from the current task, doc_scope, document metadata, and reference context, return:
@@ -43,6 +45,8 @@ Rules:
 - Use 1 to 4 retrieval items.
 - Each item must contain exactly one of query or bm25_terms.
 - Prefer one high-priority semantic query; add bm25_terms only for filenames, exact names, codes, or rare terms.
+- Add query_entities only for concrete named people, organizations, projects, systems, artifacts, or concepts in the user request.
+- Add graph_hints only when the user asks about a relationship between entities.
 - Use summary_mode "related" when document summaries may help answer the question; otherwise use "none".
 - Ask for clarification only when multiple plausible targets remain or a required scope/entity/time range is missing.
 - Never ask for clarification only because a previous assistant message said retrieval failed.
@@ -579,6 +583,9 @@ fn fallback_execute_plan_request(
             ExecutePlanSummaryMode::None
         },
         budget: None,
+        channel_budget: None,
+        query_entities: Vec::new(),
+        graph_hints: Vec::new(),
         trace: None,
     }
 }
@@ -745,6 +752,8 @@ fn normalize_execute_plan_request(
         .filter_map(normalize_execute_plan_item)
         .take(4)
         .collect();
+    plan.query_entities = normalize_query_entities(plan.query_entities);
+    plan.graph_hints = normalize_graph_hints(plan.graph_hints);
     plan.validate().ok()?;
     Some(plan)
 }
@@ -781,6 +790,63 @@ fn normalize_execute_plan_item(item: ExecutePlanItem) -> Option<ExecutePlanItem>
     } else {
         None
     }
+}
+
+fn normalize_query_entities(entities: Vec<QueryEntity>) -> Vec<QueryEntity> {
+    let mut seen = HashSet::new();
+    entities
+        .into_iter()
+        .filter_map(|entity| {
+            let text = entity.text.trim().to_string();
+            if text.is_empty() {
+                return None;
+            }
+            let key = text.to_lowercase();
+            if !seen.insert(key) {
+                return None;
+            }
+            Some(QueryEntity {
+                text,
+                kind: entity
+                    .kind
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|kind| !kind.is_empty())
+                    .map(ToOwned::to_owned),
+            })
+        })
+        .collect()
+}
+
+fn normalize_graph_hints(hints: Vec<GraphHint>) -> Vec<GraphHint> {
+    hints
+        .into_iter()
+        .filter_map(|hint| {
+            let subject = hint
+                .subject
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned);
+            let predicate = hint
+                .predicate
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned);
+            let object = hint
+                .object
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned);
+            (subject.is_some() || predicate.is_some() || object.is_some()).then_some(GraphHint {
+                subject,
+                predicate,
+                object,
+            })
+        })
+        .collect()
 }
 
 fn extract_referenced_chunk_ids(answer_text: &str) -> HashSet<String> {
@@ -918,7 +984,11 @@ mod tests {
                     image_url: None,
                     parser_backend: None,
                     source_locator: None,
+                    parse_run_id: None,
+                    score_breakdown: Vec::new(),
                 }],
+                graph_supported_chunks: Vec::new(),
+                relation_paths: Vec::new(),
                 citations: vec![common::Citation {
                     citation_id: 1,
                     doc_id: "doc-1".to_string(),
@@ -935,6 +1005,7 @@ mod tests {
                     image_url: None,
                     parser_backend: None,
                     source_locator: None,
+                    parse_run_id: None,
                 }],
                 summary_chunks: Vec::new(),
             },
@@ -943,6 +1014,7 @@ mod tests {
                 matched_doc_count: 1,
                 retrieved_chunk_count: 1,
                 summary_chunk_count: 0,
+                channel_coverage: Default::default(),
             },
             degrade_trace: Vec::new(),
             backend_trace: common::BackendTrace {
@@ -960,6 +1032,7 @@ mod tests {
                     source_count: 1,
                     source_ids: vec!["chunk-1".to_string()],
                 }],
+                channel_trace: Vec::new(),
                 retrieval_trace: common::RagTraceSummary {
                     item_count: 1,
                     total_candidate_budget: 100,
@@ -1021,7 +1094,26 @@ mod tests {
                     image_url: None,
                     parser_backend: None,
                     source_locator: None,
+                    parse_run_id: None,
+                    score_breakdown: Vec::new(),
                 }],
+                graph_supported_chunks: vec![common::RetrievedChunk {
+                    chunk_id: "graph-chunk-1".to_string(),
+                    doc_id: "doc-1".to_string(),
+                    chunk_type: "text".to_string(),
+                    page: Some(2),
+                    text: "graph supported".to_string(),
+                    score: 0.8,
+                    retrieval_channel: "graph".to_string(),
+                    asset_id: None,
+                    caption: None,
+                    image_url: None,
+                    parser_backend: None,
+                    source_locator: None,
+                    parse_run_id: None,
+                    score_breakdown: Vec::new(),
+                }],
+                relation_paths: Vec::new(),
                 citations: Vec::new(),
                 summary_chunks: vec![common::AnswerContextChunk {
                     chunk_id: "summary-doc-1".to_string(),
@@ -1041,11 +1133,13 @@ mod tests {
                 matched_doc_count: 1,
                 retrieved_chunk_count: 1,
                 summary_chunk_count: 1,
+                channel_coverage: Default::default(),
             },
             degrade_trace: Vec::new(),
             backend_trace: common::BackendTrace {
                 trace: None,
                 item_trace: Vec::new(),
+                channel_trace: Vec::new(),
                 retrieval_trace: common::RagTraceSummary {
                     item_count: 0,
                     total_candidate_budget: 0,
@@ -1059,9 +1153,10 @@ mod tests {
         };
 
         let answer_context = MainAgent::answer_context(&response);
-        assert_eq!(answer_context.len(), 2);
+        assert_eq!(answer_context.len(), 3);
         assert_eq!(answer_context[0].chunk_type, "text");
-        assert_eq!(answer_context[1].chunk_type, "summary");
+        assert_eq!(answer_context[1].chunk_id, "graph-chunk-1");
+        assert_eq!(answer_context[2].chunk_type, "summary");
     }
 
     #[tokio::test]
@@ -1082,6 +1177,50 @@ mod tests {
         assert!(encoded.get("session_id").is_none());
         assert!(encoded.get("messages").is_none());
         assert_eq!(degrade_trace[0].stage, "main_agent.rag_plan");
+    }
+
+    #[test]
+    fn normalize_execute_plan_request_preserves_graph_hints() {
+        let request = request("rag", "how does Atlas use the checklist?", &["doc-1"]);
+        let plan = ExecutePlanRequest {
+            plan_version: "rag-execute-v1".to_string(),
+            doc_scope: vec!["ignored-doc".to_string()],
+            items: vec![ExecutePlanItem {
+                priority: 1.0,
+                query: Some("Atlas checklist".to_string()),
+                bm25_terms: None,
+            }],
+            summary_mode: ExecutePlanSummaryMode::None,
+            budget: None,
+            channel_budget: None,
+            query_entities: vec![
+                QueryEntity {
+                    text: " Atlas ".to_string(),
+                    kind: Some(" project ".to_string()),
+                },
+                QueryEntity {
+                    text: "atlas".to_string(),
+                    kind: None,
+                },
+            ],
+            graph_hints: vec![GraphHint {
+                subject: Some(" Atlas ".to_string()),
+                predicate: Some(" uses ".to_string()),
+                object: Some(" rollback checklist ".to_string()),
+            }],
+            trace: None,
+        };
+
+        let normalized = normalize_execute_plan_request(plan, &request).unwrap();
+
+        assert_eq!(normalized.doc_scope, vec!["doc-1".to_string()]);
+        assert_eq!(normalized.query_entities.len(), 1);
+        assert_eq!(normalized.query_entities[0].text, "Atlas");
+        assert_eq!(
+            normalized.query_entities[0].kind.as_deref(),
+            Some("project")
+        );
+        assert_eq!(normalized.graph_hints[0].predicate.as_deref(), Some("uses"));
     }
 
     #[tokio::test]

@@ -4,11 +4,14 @@ use avrag_billing as billing;
 use avrag_chatmemory::ChatMemory;
 use avrag_guardrails::GuardPipeline;
 use avrag_llm::{AnswerSynthesizer, EmbeddingClient, LlmClient, RerankerClient, RetrievalPlanner};
-use avrag_rag_core::{RagConfig, RagRuntime, context::SessionContext as RagSessionContext};
+use avrag_rag_core::{
+    RagConfig, RagRuntime, RetrievalDataPlane, context::SessionContext as RagSessionContext,
+};
 use avrag_search::{SearchExecutor, TantivyLexicalIndex};
+use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
 use avrag_storage_pg::{
-    DocumentAssetRow, DocumentScopeState, DocumentTaskSeed, NotificationCreateParams, ObjectStoreHandle,
-    PgAppRepository, PgStorageError, S3ObjectStore,
+    DocumentAssetRow, DocumentScopeState, DocumentTaskSeed, NotificationCreateParams,
+    ObjectStoreHandle, PgAppRepository, PgStorageError, S3ObjectStore,
 };
 use avrag_storage_qdrant::HttpQdrantBackend;
 use common::{
@@ -44,7 +47,6 @@ use tokio::{
 use tracing::info;
 use uuid::Uuid;
 
-
 type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Debug, Clone)]
@@ -56,7 +58,9 @@ pub struct AppConfig {
     pub auto_migrate: bool,
     pub object_root: String,
     pub tantivy_index_dir: Option<String>,
+    pub retrieval_backend: String,
     pub qdrant: QdrantConfig,
+    pub milvus: MilvusConfig,
     pub embedding: ModelProviderConfig,
     pub mm_embedding: ModelProviderConfig,
     pub mm_rerank: ModelProviderConfig,
@@ -95,6 +99,17 @@ pub struct QdrantConfig {
     pub vector_name: String,
     pub multi_vector: bool,
     pub use_tls: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct MilvusConfig {
+    pub url: String,
+    pub token: String,
+    pub database: String,
+    pub collection_prefix: String,
+    pub text_vector_dim: usize,
+    pub multimodal_vector_dim: usize,
+    pub metric_type: String,
 }
 
 #[derive(Debug, Clone)]
@@ -161,6 +176,7 @@ impl Default for AppConfig {
             auto_migrate: true,
             object_root: default_object_root(),
             tantivy_index_dir: None,
+            retrieval_backend: "milvus".to_string(),
             qdrant: QdrantConfig {
                 url: "http://127.0.0.1:6333".to_string(),
                 host: "127.0.0.1".to_string(),
@@ -171,6 +187,15 @@ impl Default for AppConfig {
                 vector_name: "dense".to_string(),
                 multi_vector: true,
                 use_tls: false,
+            },
+            milvus: MilvusConfig {
+                url: "http://127.0.0.1:19530".to_string(),
+                token: String::new(),
+                database: "default".to_string(),
+                collection_prefix: "avrag".to_string(),
+                text_vector_dim: 1024,
+                multimodal_vector_dim: 1024,
+                metric_type: "COSINE".to_string(),
             },
             embedding: ModelProviderConfig {
                 base_url: "https://api.siliconflow.cn/v1".to_string(),
@@ -313,6 +338,9 @@ impl AppConfig {
         config.auto_migrate = env_bool("AVRAG_RUN_MIGRATIONS", config.auto_migrate);
         config.object_root = env_string("AVRAG_OBJECT_ROOT", &config.object_root);
         config.tantivy_index_dir = env_optional_string("TANTIVY_INDEX_DIR");
+        config.retrieval_backend = env_string("RETRIEVAL_BACKEND", &config.retrieval_backend)
+            .trim()
+            .to_ascii_lowercase();
 
         config.qdrant.host = env_string("QDRANT_HOST", &config.qdrant.host);
         config.qdrant.port = env_u16("QDRANT_PORT", config.qdrant.port);
@@ -344,6 +372,13 @@ impl AppConfig {
             ),
         );
 
+        config.milvus.url = env_string("MILVUS_URL", &config.milvus.url);
+        config.milvus.token = env_string("MILVUS_TOKEN", &config.milvus.token);
+        config.milvus.database = env_string("MILVUS_DATABASE", &config.milvus.database);
+        config.milvus.collection_prefix =
+            env_string("MILVUS_COLLECTION_PREFIX", &config.milvus.collection_prefix);
+        config.milvus.metric_type = env_string("MILVUS_METRIC_TYPE", &config.milvus.metric_type);
+
         config.embedding = model_config_from_env(
             "EMBEDDING",
             &config.embedding,
@@ -365,6 +400,20 @@ impl AppConfig {
             "RERANK",
             &config.rerank,
             env_optional_string("SILICONFLOW_API_KEY"),
+        );
+        config.milvus.text_vector_dim = env_usize(
+            "MILVUS_TEXT_VECTOR_DIM",
+            config
+                .embedding
+                .dimensions
+                .unwrap_or(config.milvus.text_vector_dim),
+        );
+        config.milvus.multimodal_vector_dim = env_usize(
+            "MILVUS_MULTIMODAL_VECTOR_DIM",
+            config
+                .mm_embedding
+                .dimensions
+                .unwrap_or(config.milvus.multimodal_vector_dim),
         );
         config.intent_llm = model_config_from_env("INTENT_LLM", &config.intent_llm, None);
         config.answer_llm = model_config_from_env("ANSWER_LLM", &config.answer_llm, None);

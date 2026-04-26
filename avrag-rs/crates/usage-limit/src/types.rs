@@ -11,6 +11,7 @@ pub enum BillableFeature {
     Answer,
     Search,
     Chat,
+    GraphExtraction,
 }
 
 impl BillableFeature {
@@ -21,6 +22,7 @@ impl BillableFeature {
             Self::Answer => "answer",
             Self::Search => "search",
             Self::Chat => "chat",
+            Self::GraphExtraction => "graph_extraction",
         }
     }
 }

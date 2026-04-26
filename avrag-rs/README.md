@@ -3,8 +3,8 @@
 `avrag-rs` 是 `context-osv6` 的 Rust 工作区，实现 M1（Workspace 基础设施）+ M2（RAG 知识库问答）核心功能。
 
 正式前端：
-- `frontend_rust/` 是当前正式前端实现，负责承接 Rust API、SSE、citation lookup、正文内联 citation 与图片块渲染。
-- `frontend/` 保留为 legacy/reference Next.js 前端，不再作为默认开发入口。
+- `../frontend_next/` 是当前正式前端实现，负责承接 Rust API、SSE、citation lookup、正文内联 citation 与图片块渲染。
+- `../frontend_rust/` 仅作为 legacy/dev-only fallback，不再作为默认开发入口。
 
 ## 当前产品架构目标（2026-04-26）
 
@@ -21,10 +21,10 @@
 
 | 模块 | 路径 | 说明 |
 |------|------|------|
-| **RAG Runtime** | `crates/rag-core/` | 当前实现为 Per-item retrieval、Dense(Qdrant) + Sparse(PG BM25) RRF merge、Reranker、Synthesizer；目标架构迁移到 Milvus BM25 + text dense + multimodal dense + graph retrieval |
+| **RAG Runtime** | `crates/rag-core/` | Execute-plan 检索内核，默认通过 Milvus data plane 执行 BM25 sparse、text dense、multimodal dense 与 graph relation retrieval；`RETRIEVAL_BACKEND=legacy` 可回退到 Qdrant/Tantivy/PostgreSQL BM25 adapter |
 | **LLM** | `crates/llm/` | EmbeddingClient、RetrievalPlanner、AnswerSynthesizer、RerankerClient（OpenAI 兼容协议） |
 | **Storage PG** | `crates/storage-pg/` | PostgreSQL 全量操作：documents/chunks/sessions/chat_memory/notifications/audit_log |
-| **Storage Qdrant** | `crates/storage-qdrant/` | 当前 dense retrieval 适配层；目标架构中由 Milvus retrieval adapter 取代 |
+| **Storage Qdrant** | `crates/storage-qdrant/` | deprecated legacy rollback adapter；默认路径由 Milvus retrieval adapter 承担 |
 | **Cache Redis** | `crates/cache-redis/` | DocumentLock 分布式锁、TTL 支持 |
 | **Ingestion** | `crates/ingestion/` | ParserFactory（PDF/Office/代码）、Chunker、Summary extraction、Worker skeleton |
 | **Search** | `crates/search/` | Exa API 集成、Web search planning + synthesis |
@@ -64,7 +64,7 @@ crates/
   search/    — Exa web search executor
   share/     — Token-based sharing
   storage-pg/ — PostgreSQL 全量操作
-  storage-qdrant/ — 当前 Qdrant dense retrieval 适配层，目标由 Milvus retrieval adapter 取代
+  storage-qdrant/ — deprecated legacy rollback adapter
   telemetry/ — Tracing/logging 初始化
   test-kit/  — 测试工具
   transport-http/ — Router、handlers、SSE、rate limit、metrics
@@ -80,14 +80,30 @@ cargo run -p avrag-api
 cargo run -p avrag-worker
 ```
 
-前端默认使用 `../frontend_rust`：
+前端默认使用 `../frontend_next`：
 
 ```bash
-cd ../frontend_rust
-cargo check -p web-ui
+cd ../frontend_next
+pnpm install
+pnpm typecheck
 ```
 
+`../frontend_rust` 仅保留为 legacy/dev-only fallback。
+
 环境变量参考 `.env.example`。
+
+RAG 检索默认使用 Milvus：
+
+```bash
+RETRIEVAL_BACKEND=milvus
+MILVUS_URL=http://127.0.0.1:19530
+```
+
+需要回滚旧检索路径时显式设置：
+
+```bash
+RETRIEVAL_BACKEND=legacy
+```
 
 密码重置邮件默认兼容 163 SMTP：
 

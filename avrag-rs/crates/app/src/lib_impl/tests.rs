@@ -53,6 +53,29 @@ mod tests {
     }
 
     #[test]
+    fn app_config_defaults_to_milvus_with_legacy_override() {
+        assert_eq!(AppConfig::default().retrieval_backend, "milvus");
+
+        let previous = std::env::var("RETRIEVAL_BACKEND").ok();
+        unsafe {
+            std::env::set_var("RETRIEVAL_BACKEND", "legacy");
+        }
+
+        let config = AppConfig::from_env();
+
+        match previous {
+            Some(value) => unsafe {
+                std::env::set_var("RETRIEVAL_BACKEND", value);
+            },
+            None => unsafe {
+                std::env::remove_var("RETRIEVAL_BACKEND");
+            },
+        }
+
+        assert_eq!(config.retrieval_backend, "legacy");
+    }
+
+    #[test]
     fn build_rag_session_context_drops_blank_summary_and_empty_payload() {
         assert!(AppState::build_rag_session_context(Vec::new(), Some("   ".to_string())).is_none());
 
@@ -192,6 +215,9 @@ mod tests {
                     total_candidate_budget: Some(4),
                     final_chunk_budget: Some(1),
                 }),
+                channel_budget: None,
+                query_entities: Vec::new(),
+                graph_hints: Vec::new(),
                 trace: None,
             })
             .await

@@ -77,6 +77,7 @@ mod tests {
                 image_url: None,
                 parser_backend: None,
                 source_locator: None,
+                parse_run_id: None,
             }],
             trace: TraceInfo {
                 mode: "rag".to_string(),

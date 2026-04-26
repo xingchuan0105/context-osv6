@@ -36,6 +36,7 @@ export type Citation = {
   caption?: string | null;
   image_url?: string | null;
   source_locator?: CitationSourceLocator | null;
+  parse_run_id?: string | null;
 };
 
 export type SourceRef = {

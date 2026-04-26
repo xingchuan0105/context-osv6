@@ -1,0 +1,18 @@
+[package]
+name = "avrag-storage-milvus"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+avrag-auth = { path = "../auth" }
+avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+uuid.workspace = true

@@ -305,6 +305,7 @@ impl AppState {
                     "url": result.url.clone(),
                     "citation_index": result.citation_index.unwrap_or(index + 1),
                 })),
+                parse_run_id: None,
             })
             .collect();
 

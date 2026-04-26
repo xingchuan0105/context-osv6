@@ -1,0 +1,14 @@
+[package]
+name = "avrag-retrieval-data-plane"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+avrag-auth = { path = "../auth" }
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true

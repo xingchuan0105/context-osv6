@@ -145,6 +145,8 @@ impl AppState {
                 image_url: None,
                 parser_backend: None,
                 source_locator: None,
+                parse_run_id: None,
+                score_breakdown: Vec::new(),
             })
             .collect::<Vec<_>>();
 
@@ -171,6 +173,7 @@ impl AppState {
                 image_url: None,
                 parser_backend: None,
                 source_locator: None,
+                parse_run_id: None,
             })
             .collect::<Vec<_>>();
 
@@ -219,6 +222,8 @@ impl AppState {
         Ok(common::ExecutePlanResponse {
             bundle: common::RetrievalBundle {
                 chunks: chunks.clone(),
+                graph_supported_chunks: Vec::new(),
+                relation_paths: Vec::new(),
                 citations,
                 summary_chunks: summary_chunks.clone(),
             },
@@ -227,6 +232,7 @@ impl AppState {
                 matched_doc_count,
                 retrieved_chunk_count: chunks.len(),
                 summary_chunk_count: summary_chunks.len(),
+                channel_coverage: Default::default(),
             },
             degrade_trace: vec![common::DegradeTraceItem {
                 stage: "rag_execute_plan".to_string(),
@@ -237,6 +243,7 @@ impl AppState {
             backend_trace: common::BackendTrace {
                 trace: req.trace.clone(),
                 item_trace: Vec::new(),
+                channel_trace: Vec::new(),
                 retrieval_trace: common::RagTraceSummary {
                     item_count: req.items.len(),
                     total_candidate_budget,

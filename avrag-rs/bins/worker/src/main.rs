@@ -5,8 +5,13 @@ use anyhow::Result;
 use app::{AppConfig, AppState};
 use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
 use avrag_cache_redis::DocumentLock;
-use avrag_llm::{MultiModalEmbeddingInput, SummaryGenerator};
+use avrag_llm::{ChatMessage, MultiModalEmbeddingInput, SummaryGenerator};
+use avrag_retrieval_data_plane::{
+    DocumentIndexBatch, EntityIndexRecord, GraphPassageIndexRecord, MultimodalChunkIndexRecord,
+    RelationIndexRecord, RetrievalDataPlane, TextChunkIndexRecord,
+};
 use avrag_search::{LexicalChunkDocument, TantivyLexicalIndex};
+use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
 use avrag_storage_pg::{
     NotificationCreateParams, ObjectStoreHandle, PgAppRepository, S3ObjectStore,
 };
@@ -201,6 +206,7 @@ struct PgTaskProcessor {
     repo: PgAppRepository,
     object_store: ObjectStoreHandle,
     qdrant: Option<HttpQdrantBackend>,
+    retrieval_data_plane: Option<Arc<dyn RetrievalDataPlane>>,
     lexical_index: Option<Arc<TantivyLexicalIndex>>,
     qdrant_collection: String,
     qdrant_multimodal_collection: String,
@@ -211,6 +217,7 @@ struct PgTaskProcessor {
     asset_url_ttl_secs: u64,
     redis_lock: Option<DocumentLock>,
     summary_generator: Option<avrag_llm::SummaryGenerator>,
+    triplet_llm: Option<Arc<avrag_llm::LlmClient>>,
     analytics: Option<analytics::AnalyticsService>,
     usage_limit: Option<avrag_usage_limit::UsageLimitService>,
     mineru_client: Option<MineruClient>,
@@ -506,13 +513,17 @@ async fn main() -> Result<()> {
         if state.config().auto_migrate {
             repo.migrate().await?;
         }
-        let lexical_index = state
-            .config()
-            .tantivy_index_dir
-            .as_deref()
-            .map(TantivyLexicalIndex::open_writer)
-            .transpose()?
-            .map(Arc::new);
+        let lexical_index = if state.config().retrieval_backend == "legacy" {
+            state
+                .config()
+                .tantivy_index_dir
+                .as_deref()
+                .map(TantivyLexicalIndex::open_writer)
+                .transpose()?
+                .map(Arc::new)
+        } else {
+            None
+        };
         let analytics_pool = repo.raw().clone();
         let mut analytics_job_runner =
             analytics_jobs::AnalyticsJobRunner::from_env(analytics_pool.clone());
@@ -531,8 +542,8 @@ async fn main() -> Result<()> {
             PgTaskProcessor {
                 repo,
                 object_store: build_worker_object_store(state.config()).await?,
-                qdrant: Some(HttpQdrantBackend::new(state.config().qdrant.url.clone()))
-                    .filter(|_| !state.config().qdrant.url.trim().is_empty()),
+                qdrant: build_worker_qdrant(state.config()),
+                retrieval_data_plane: build_worker_retrieval_data_plane(state.config()).await?,
                 lexical_index,
                 qdrant_collection: state.config().qdrant.collection.clone(),
                 qdrant_multimodal_collection: state.config().qdrant.multimodal_collection.clone(),
@@ -574,6 +585,7 @@ async fn main() -> Result<()> {
                         None
                     }
                 },
+                triplet_llm: build_worker_triplet_llm(state.config()),
                 analytics: Some(analytics::AnalyticsService::new(analytics_pool)),
                 usage_limit: Some(avrag_usage_limit::UsageLimitService::new(usage_limit_pool)),
                 mineru_client: MineruConfig::from_env().map(MineruClient::new),
@@ -685,6 +697,50 @@ async fn build_worker_object_store(config: &AppConfig) -> Result<ObjectStoreHand
     )))
 }
 
+async fn build_worker_retrieval_data_plane(
+    config: &AppConfig,
+) -> Result<Option<Arc<dyn RetrievalDataPlane>>> {
+    match config.retrieval_backend.as_str() {
+        "legacy" => Ok(None),
+        "milvus" => {
+            let milvus_config = StorageMilvusConfig {
+                url: config.milvus.url.clone(),
+                token: Some(config.milvus.token.clone()).filter(|token| !token.trim().is_empty()),
+                database: Some(config.milvus.database.clone())
+                    .filter(|database| !database.trim().is_empty()),
+                collection_prefix: config.milvus.collection_prefix.clone(),
+                text_vector_dim: config.milvus.text_vector_dim,
+                multimodal_vector_dim: config.milvus.multimodal_vector_dim,
+                metric_type: config.milvus.metric_type.clone(),
+            };
+            let data_plane: Arc<dyn RetrievalDataPlane> =
+                Arc::new(MilvusDataPlane::new(milvus_config));
+            data_plane.ensure_schema().await?;
+            Ok(Some(data_plane))
+        }
+        other => anyhow::bail!("unsupported RETRIEVAL_BACKEND: {other}"),
+    }
+}
+
+fn build_worker_qdrant(config: &AppConfig) -> Option<HttpQdrantBackend> {
+    if config.retrieval_backend == "legacy" && !config.qdrant.url.trim().is_empty() {
+        return Some(HttpQdrantBackend::new(config.qdrant.url.clone()));
+    }
+    None
+}
+
+fn build_worker_triplet_llm(config: &AppConfig) -> Option<Arc<avrag_llm::LlmClient>> {
+    if config.retrieval_backend != "milvus" {
+        return None;
+    }
+    config
+        .summary_llm
+        .to_llm_config()
+        .or_else(|| config.answer_llm.to_llm_config())
+        .map(avrag_llm::LlmClient::new)
+        .map(Arc::new)
+}
+
 fn estimate_token_count(text: &str) -> i64 {
     common::estimate_token_count(text)
 }
@@ -720,7 +776,36 @@ struct StoredMultimodalChunk {
     caption: Option<String>,
     context_text: String,
     page: Option<i64>,
+    chunk_type: String,
     parser_backend: String,
+    source_locator: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+struct ExtractedTriplet {
+    subject: String,
+    predicate: String,
+    object: String,
+    supporting_chunk_ids: Vec<Uuid>,
+}
+
+#[derive(Debug, Clone)]
+struct TripletExtractionBatch {
+    chunk_ids: Vec<Uuid>,
+    payload: serde_json::Value,
+}
+
+#[derive(Debug, Default)]
+struct TripletExtractionOutput {
+    triplets: Vec<ExtractedTriplet>,
+    total_tokens: u32,
+}
+
+#[derive(Debug, Default)]
+struct GraphIndexRecords {
+    entities: Vec<EntityIndexRecord>,
+    relations: Vec<RelationIndexRecord>,
+    passages: Vec<GraphPassageIndexRecord>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -732,6 +817,11 @@ struct ParseRunOutputs {
     mirrored_asset_count: usize,
     text_vector_count: usize,
     multimodal_vector_count: usize,
+    entity_count: usize,
+    relation_count: usize,
+    graph_passage_count: usize,
+    graph_degrade_count: usize,
+    graph_degrade_reasons: Vec<String>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -984,7 +1074,9 @@ async fn run_document_pipeline(
             caption: multimodal_chunk.caption.clone(),
             context_text: multimodal_chunk.summary_text.clone(),
             page: multimodal_chunk.page.map(i64::from),
+            chunk_type: multimodal_chunk.block_type.as_str().to_string(),
             parser_backend: multimodal_chunk.parser_backend.as_str().to_string(),
+            source_locator: Some(serde_json::json!(multimodal_chunk.source_locator)),
         });
     }
 
@@ -1111,6 +1203,28 @@ async fn run_document_pipeline(
         }
     }
 
+    let needs_text_vector_index =
+        processor.qdrant.is_some() || processor.retrieval_data_plane.is_some();
+    let text_index_records = if needs_text_vector_index {
+        build_text_index_records(processor, &chunks).await?
+    } else {
+        Vec::new()
+    };
+    if !text_index_records.is_empty() {
+        parse_run_state.outputs.text_vector_count = text_index_records.len();
+    }
+
+    let needs_multimodal_vector_index =
+        processor.qdrant.is_some() || processor.retrieval_data_plane.is_some();
+    let multimodal_index_records = if needs_multimodal_vector_index {
+        build_multimodal_index_records(processor, &stored_multimodal_chunks).await?
+    } else {
+        Vec::new()
+    };
+    if !multimodal_index_records.is_empty() {
+        parse_run_state.outputs.multimodal_vector_count = multimodal_index_records.len();
+    }
+
     if let Some(qdrant) = &processor.qdrant {
         let collection = QdrantCollectionConfig {
             name: processor.qdrant_collection.clone(),
@@ -1128,33 +1242,18 @@ async fn run_document_pipeline(
             .await
             .map_err(|error| IngestionError::StateSink(error.to_string()))?;
 
-        let texts: Vec<&str> = chunks.iter().map(|chunk| chunk.content.as_str()).collect();
-        let embeddings = if let Some(ref client) = processor.embedding_client {
-            client
-                .embed(&texts)
-                .await
-                .map_err(|error| IngestionError::StateSink(format!("embedding failed: {error}")))?
-        } else {
-            vec![vec![0f32; processor.embedding_dim]; texts.len()]
-        };
-
-        let mut points = Vec::with_capacity(chunks.len());
-        for (chunk, vector) in chunks.into_iter().zip(embeddings) {
-            let chunk_id = Uuid::parse_str(&chunk.chunk_id)
-                .map_err(|error| IngestionError::StateSink(format!("invalid chunk id: {error}")))?;
-            let doc_id = Uuid::parse_str(&chunk.doc_id)
-                .map_err(|error| IngestionError::StateSink(format!("invalid doc id: {error}")))?;
-            points.push(QdrantPointUpsert {
-                chunk_id,
-                doc_id,
+        let points = text_index_records
+            .iter()
+            .map(|chunk| QdrantPointUpsert {
+                chunk_id: chunk.chunk_id,
+                doc_id: document_id,
                 parse_run_id,
                 org_id: context.org_id(),
                 page: chunk.page,
-                vector,
+                vector: chunk.vector.clone(),
                 doc_version: 1,
-            });
-        }
-        parse_run_state.outputs.text_vector_count = points.len();
+            })
+            .collect::<Vec<_>>();
 
         qdrant
             .upsert_points(&processor.qdrant_collection, &points)
@@ -1162,116 +1261,112 @@ async fn run_document_pipeline(
             .map_err(|error| IngestionError::StateSink(error.to_string()))?;
 
         if !stored_multimodal_chunks.is_empty() {
-            if let Some(ref client) = processor.mm_embedding_client {
-                let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(4));
-                let client = client.clone();
-                let mut handles: Vec<tokio::task::JoinHandle<anyhow::Result<(usize, Vec<f32>)>>> =
-                    Vec::with_capacity(stored_multimodal_chunks.len());
+            if !multimodal_index_records.is_empty() {
+                let multimodal_vector_size = processor.mm_embedding_dim.ok_or_else(|| {
+                    IngestionError::StateSink(
+                        "MM_EMBEDDING_DIMENSIONS must be configured when multimodal indexing is enabled"
+                            .to_string(),
+                    )
+                })?;
+                let multimodal_collection = QdrantCollectionConfig {
+                    name: processor.qdrant_multimodal_collection.clone(),
+                    vector_size: multimodal_vector_size as u64,
+                    distance: QdrantDistance::Cosine,
+                };
+                qdrant
+                    .ensure_collection(&multimodal_collection)
+                    .await
+                    .map_err(|error| IngestionError::StateSink(error.to_string()))?;
 
-                for (idx, chunk) in stored_multimodal_chunks.iter().enumerate() {
-                    let input = if is_remote_media_reference(&chunk.image_path) {
-                        MultiModalEmbeddingInput::text_image(
-                            chunk.context_text.clone(),
-                            chunk.image_path.clone(),
-                        )
-                    } else {
-                        MultiModalEmbeddingInput::text(chunk.context_text.clone())
-                    };
-                    let sem = semaphore.clone();
-                    let c = client.clone();
-                    handles.push(tokio::spawn(async move {
-                        let _permit = sem.acquire().await.map_err(|e| anyhow::anyhow!("{e}"))?;
-                        let vector = c.embed_multimodal_fused(&input, None).await?;
-                        Ok((idx, vector))
-                    }));
-                }
-
-                let mut indexed_embeddings = Vec::with_capacity(handles.len());
-                for handle in handles {
-                    let (idx, vector) = handle
-                        .await
-                        .map_err(|error| IngestionError::StateSink(format!("task join: {error}")))?
-                        .map_err(|error| {
-                            IngestionError::StateSink(format!("multimodal embedding: {error}"))
-                        })?;
-                    indexed_embeddings.push((idx, vector));
-                }
-                indexed_embeddings.sort_by_key(|(idx, _)| *idx);
-                let multimodal_embeddings: Vec<Vec<f32>> = indexed_embeddings
-                    .into_iter()
-                    .map(|(_, vector)| vector)
-                    .collect();
-
-                if !multimodal_embeddings.is_empty() {
-                    let multimodal_vector_size = processor.mm_embedding_dim.ok_or_else(|| {
-                        IngestionError::StateSink(
-                            "MM_EMBEDDING_DIMENSIONS must be configured when multimodal indexing is enabled"
-                                .to_string(),
-                        )
-                    })?;
-                    let multimodal_collection = QdrantCollectionConfig {
-                        name: processor.qdrant_multimodal_collection.clone(),
-                        vector_size: multimodal_vector_size as u64,
-                        distance: QdrantDistance::Cosine,
-                    };
-                    qdrant
-                        .ensure_collection(&multimodal_collection)
-                        .await
+                let multimodal_filter =
+                    SecureQdrantFilterBuilder::with_doc_filter(context, document_id)
                         .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+                qdrant
+                    .delete_points_by_filter(
+                        &processor.qdrant_multimodal_collection,
+                        &multimodal_filter,
+                    )
+                    .await
+                    .map_err(|error| IngestionError::StateSink(error.to_string()))?;
 
-                    let multimodal_filter =
-                        SecureQdrantFilterBuilder::with_doc_filter(context, document_id)
-                            .map_err(|error| IngestionError::StateSink(error.to_string()))?;
-                    qdrant
-                        .delete_points_by_filter(
-                            &processor.qdrant_multimodal_collection,
-                            &multimodal_filter,
-                        )
-                        .await
-                        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+                let multimodal_points = multimodal_index_records
+                    .iter()
+                    .map(|chunk| avrag_storage_qdrant::MultimodalQdrantPointUpsert {
+                        chunk_id: chunk.chunk_id,
+                        doc_id: document_id,
+                        asset_id: chunk.asset_id,
+                        parse_run_id,
+                        org_id: context.org_id(),
+                        page: chunk.page,
+                        vector: chunk.vector.clone(),
+                        caption: chunk.caption.clone(),
+                        parser_backend: chunk.parser_backend.clone().unwrap_or_default(),
+                        doc_version: 1,
+                    })
+                    .collect::<Vec<_>>();
 
-                    let multimodal_points = stored_multimodal_chunks
-                        .iter()
-                        .zip(multimodal_embeddings)
-                        .map(
-                            |(chunk, vector)| avrag_storage_qdrant::MultimodalQdrantPointUpsert {
-                                chunk_id: chunk.chunk_id,
-                                doc_id: document_id,
-                                asset_id: chunk.asset_id,
-                                parse_run_id,
-                                org_id: context.org_id(),
-                                page: chunk.page,
-                                vector,
-                                caption: chunk.caption.clone(),
-                                parser_backend: chunk.parser_backend.clone(),
-                                doc_version: 1,
-                            },
-                        )
-                        .collect::<Vec<_>>();
-                    parse_run_state.outputs.multimodal_vector_count = multimodal_points.len();
+                qdrant
+                    .upsert_multimodal_points(
+                        &processor.qdrant_multimodal_collection,
+                        &multimodal_points,
+                    )
+                    .await
+                    .map_err(|error| IngestionError::StateSink(error.to_string()))?;
 
-                    qdrant
-                        .upsert_multimodal_points(
-                            &processor.qdrant_multimodal_collection,
-                            &multimodal_points,
-                        )
-                        .await
-                        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
-
-                    info!(
-                        document_id = %document_id,
-                        multimodal_chunks = stored_multimodal_chunks.len(),
-                        "Stored multimodal chunks"
-                    );
-                }
-            } else {
                 info!(
                     document_id = %document_id,
-                    multimodal_chunks = stored_multimodal_chunks.len(),
-                    "MM embedding not configured; skipping multimodal vector indexing"
+                    multimodal_chunks = multimodal_index_records.len(),
+                    "Stored multimodal chunks"
                 );
             }
         }
+    }
+
+    let graph_records = if processor.retrieval_data_plane.is_some() {
+        let extraction = extract_triplets_for_index(
+            processor,
+            document_id,
+            &text_index_records,
+            parse_run_state,
+        )
+        .await;
+        if extraction.total_tokens > 0 {
+            let _ = processor
+                .repo
+                .record_usage_event(
+                    context,
+                    "triplet_extraction_tokens",
+                    i64::from(extraction.total_tokens),
+                    "worker_ingestion",
+                )
+                .await;
+        }
+        build_graph_index_records(processor, extraction.triplets, parse_run_state).await
+    } else {
+        GraphIndexRecords::default()
+    };
+
+    if let Some(data_plane) = &processor.retrieval_data_plane {
+        let batch = build_document_index_batch(
+            context,
+            Some(notebook_id),
+            document_id,
+            parse_run_id,
+            text_index_records,
+            multimodal_index_records,
+            graph_records,
+        );
+        let report = data_plane
+            .replace_document_index(batch)
+            .await
+            .map_err(|error| {
+                IngestionError::StateSink(format!("retrieval data plane indexing failed: {error}"))
+            })?;
+        parse_run_state.outputs.text_vector_count = report.text_chunk_count;
+        parse_run_state.outputs.multimodal_vector_count = report.multimodal_chunk_count;
+        parse_run_state.outputs.entity_count = report.entity_count;
+        parse_run_state.outputs.relation_count = report.relation_count;
+        parse_run_state.outputs.graph_passage_count = report.graph_passage_count;
     }
 
     Ok(IngestionPipelineMetrics {
@@ -1702,6 +1797,11 @@ fn build_parse_backend_summary(
             "mirrored_asset_count": outputs.mirrored_asset_count,
             "text_vector_count": outputs.text_vector_count,
             "multimodal_vector_count": outputs.multimodal_vector_count,
+            "entity_count": outputs.entity_count,
+            "relation_count": outputs.relation_count,
+            "graph_passage_count": outputs.graph_passage_count,
+            "graph_degrade_count": outputs.graph_degrade_count,
+            "graph_degrade_reasons": outputs.graph_degrade_reasons,
         },
     })
 }
@@ -1805,6 +1905,446 @@ fn collect_document_text(chunk_plan: &ingestion::chunker::IrChunkPlan) -> String
         .map(|chunk| chunk.text.as_str())
         .collect::<Vec<_>>()
         .join("\n\n")
+}
+
+async fn build_text_index_records(
+    processor: &PgTaskProcessor,
+    chunks: &[avrag_storage_pg::IndexedChunk],
+) -> Result<Vec<TextChunkIndexRecord>, IngestionError> {
+    let texts = chunks
+        .iter()
+        .map(|chunk| chunk.content.as_str())
+        .collect::<Vec<_>>();
+    let vectors = embed_text_vectors(processor, &texts).await?;
+
+    chunks
+        .iter()
+        .zip(vectors)
+        .map(|(chunk, vector)| {
+            let chunk_id = Uuid::parse_str(&chunk.chunk_id)
+                .map_err(|error| IngestionError::StateSink(format!("invalid chunk id: {error}")))?;
+            Ok(TextChunkIndexRecord {
+                chunk_id,
+                content: chunk.content.clone(),
+                vector,
+                page: chunk.page,
+                chunk_type: metadata_string(&chunk.metadata, "block_type")
+                    .or_else(|| metadata_string(&chunk.metadata, "kind"))
+                    .unwrap_or_else(|| "body".to_string()),
+                parser_backend: metadata_string(&chunk.metadata, "parser_backend"),
+                source_locator: metadata_value(&chunk.metadata, "source_locator"),
+            })
+        })
+        .collect()
+}
+
+async fn build_multimodal_index_records(
+    processor: &PgTaskProcessor,
+    chunks: &[StoredMultimodalChunk],
+) -> Result<Vec<MultimodalChunkIndexRecord>, IngestionError> {
+    if chunks.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let Some(client) = processor.mm_embedding_client.as_ref() else {
+        info!(
+            multimodal_chunks = chunks.len(),
+            "MM embedding not configured; skipping multimodal vector indexing"
+        );
+        return Ok(Vec::new());
+    };
+
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(4));
+    let client = client.clone();
+    let mut handles: Vec<tokio::task::JoinHandle<anyhow::Result<(usize, Vec<f32>)>>> =
+        Vec::with_capacity(chunks.len());
+
+    for (idx, chunk) in chunks.iter().enumerate() {
+        let input = if is_remote_media_reference(&chunk.image_path) {
+            MultiModalEmbeddingInput::text_image(
+                chunk.context_text.clone(),
+                chunk.image_path.clone(),
+            )
+        } else {
+            MultiModalEmbeddingInput::text(chunk.context_text.clone())
+        };
+        let sem = semaphore.clone();
+        let c = client.clone();
+        handles.push(tokio::spawn(async move {
+            let _permit = sem
+                .acquire_owned()
+                .await
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            let vector = c.embed_multimodal_fused(&input, None).await?;
+            Ok((idx, vector))
+        }));
+    }
+
+    let mut indexed_embeddings = Vec::with_capacity(handles.len());
+    for handle in handles {
+        let (idx, vector) = handle
+            .await
+            .map_err(|error| IngestionError::StateSink(format!("task join: {error}")))?
+            .map_err(|error| IngestionError::StateSink(format!("multimodal embedding: {error}")))?;
+        indexed_embeddings.push((idx, vector));
+    }
+    indexed_embeddings.sort_by_key(|(idx, _)| *idx);
+
+    Ok(chunks
+        .iter()
+        .zip(indexed_embeddings.into_iter().map(|(_, vector)| vector))
+        .map(|(chunk, vector)| MultimodalChunkIndexRecord {
+            chunk_id: chunk.chunk_id,
+            asset_id: chunk.asset_id,
+            context_text: chunk.context_text.clone(),
+            caption: chunk.caption.clone(),
+            image_path: Some(chunk.image_path.clone()),
+            vector,
+            page: chunk.page,
+            chunk_type: chunk.chunk_type.clone(),
+            parser_backend: Some(chunk.parser_backend.clone()),
+            source_locator: chunk.source_locator.clone(),
+        })
+        .collect())
+}
+
+async fn embed_text_vectors(
+    processor: &PgTaskProcessor,
+    texts: &[&str],
+) -> Result<Vec<Vec<f32>>, IngestionError> {
+    if texts.is_empty() {
+        return Ok(Vec::new());
+    }
+    if let Some(ref client) = processor.embedding_client {
+        client
+            .embed(texts)
+            .await
+            .map_err(|error| IngestionError::StateSink(format!("embedding failed: {error}")))
+    } else {
+        Ok(vec![vec![0f32; processor.embedding_dim]; texts.len()])
+    }
+}
+
+async fn extract_triplets_for_index(
+    processor: &PgTaskProcessor,
+    document_id: Uuid,
+    text_chunks: &[TextChunkIndexRecord],
+    parse_run_state: &mut ParseRunState,
+) -> TripletExtractionOutput {
+    let Some(llm) = processor.triplet_llm.clone() else {
+        return TripletExtractionOutput::default();
+    };
+
+    let batches = build_triplet_extraction_batches(text_chunks);
+    if batches.is_empty() {
+        return TripletExtractionOutput::default();
+    }
+
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(4));
+    let mut handles = Vec::with_capacity(batches.len());
+    for batch in batches {
+        let llm = llm.clone();
+        let sem = semaphore.clone();
+        handles.push(tokio::spawn(async move {
+            let _permit = sem
+                .acquire_owned()
+                .await
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            let messages = build_triplet_extraction_messages(&batch);
+            let response = llm.complete(&messages, Some(0.1)).await?;
+            let raw_triplets = parse_triplet_response(&response.content)?;
+            let triplets = raw_triplets
+                .into_iter()
+                .map(|(subject, predicate, object)| ExtractedTriplet {
+                    subject,
+                    predicate,
+                    object,
+                    supporting_chunk_ids: batch.chunk_ids.clone(),
+                })
+                .collect::<Vec<_>>();
+            Ok::<_, anyhow::Error>((triplets, response.usage.total_tokens))
+        }));
+    }
+
+    let mut output = TripletExtractionOutput::default();
+    let mut seen = std::collections::HashSet::new();
+    for handle in handles {
+        match handle.await {
+            Ok(Ok((triplets, total_tokens))) => {
+                output.total_tokens = output.total_tokens.saturating_add(total_tokens);
+                for triplet in triplets {
+                    let key = (
+                        triplet.subject.to_lowercase(),
+                        triplet.predicate.to_lowercase(),
+                        triplet.object.to_lowercase(),
+                    );
+                    if seen.insert(key) {
+                        output.triplets.push(triplet);
+                    }
+                }
+            }
+            Ok(Err(error)) => {
+                let reason = format!("triplet extraction failed: {error}");
+                record_graph_degrade(&mut parse_run_state.outputs, reason.clone());
+                info!(document_id = %document_id, error = %reason, "triplet extraction degraded");
+            }
+            Err(error) => {
+                let reason = format!("triplet extraction task join failed: {error}");
+                record_graph_degrade(&mut parse_run_state.outputs, reason.clone());
+                info!(document_id = %document_id, error = %reason, "triplet extraction degraded");
+            }
+        }
+    }
+
+    output
+}
+
+fn build_triplet_extraction_batches(
+    text_chunks: &[TextChunkIndexRecord],
+) -> Vec<TripletExtractionBatch> {
+    const TOKEN_BUDGET: i64 = 3_000;
+
+    let mut batches = Vec::new();
+    let mut current_ids = Vec::new();
+    let mut current_chunks = Vec::new();
+    let mut current_tokens = 0i64;
+
+    for chunk in text_chunks {
+        let chunk_tokens = estimate_token_count(&chunk.content).max(1);
+        if !current_chunks.is_empty() && current_tokens + chunk_tokens > TOKEN_BUDGET {
+            batches.push(TripletExtractionBatch {
+                chunk_ids: std::mem::take(&mut current_ids),
+                payload: serde_json::json!({ "chunks": std::mem::take(&mut current_chunks) }),
+            });
+            current_tokens = 0;
+        }
+
+        current_ids.push(chunk.chunk_id);
+        current_chunks.push(serde_json::json!({
+            "chunk_id": chunk.chunk_id.to_string(),
+            "text": &chunk.content,
+        }));
+        current_tokens += chunk_tokens;
+    }
+
+    if !current_chunks.is_empty() {
+        batches.push(TripletExtractionBatch {
+            chunk_ids: current_ids,
+            payload: serde_json::json!({ "chunks": current_chunks }),
+        });
+    }
+
+    batches
+}
+
+fn build_triplet_extraction_messages(batch: &TripletExtractionBatch) -> Vec<ChatMessage> {
+    vec![
+        ChatMessage::system(
+            "Extract factual subject-predicate-object triplets. Return only strict JSON.",
+        ),
+        ChatMessage::user(format!(
+            "Return exactly this shape: {{\"triplets\":[[\"subject\",\"predicate\",\"object\"]]}}.\nChunks:\n{}",
+            batch.payload
+        )),
+    ]
+}
+
+fn parse_triplet_response(content: &str) -> Result<Vec<(String, String, String)>> {
+    let value: serde_json::Value = serde_json::from_str(content)?;
+    let triplets = value
+        .get("triplets")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("triplet response missing triplets array"))?;
+
+    let mut parsed = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for item in triplets {
+        let values = item
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("triplet item must be an array"))?;
+        if values.len() != 3 {
+            anyhow::bail!("triplet item must have exactly three strings");
+        }
+        let subject = normalize_triplet_component(&values[0])?;
+        let predicate = normalize_triplet_component(&values[1])?;
+        let object = normalize_triplet_component(&values[2])?;
+        if subject.is_empty() || predicate.is_empty() || object.is_empty() {
+            continue;
+        }
+        let key = (
+            subject.to_lowercase(),
+            predicate.to_lowercase(),
+            object.to_lowercase(),
+        );
+        if seen.insert(key) {
+            parsed.push((subject, predicate, object));
+        }
+    }
+    Ok(parsed)
+}
+
+fn normalize_triplet_component(value: &serde_json::Value) -> Result<String> {
+    let Some(text) = value.as_str() else {
+        anyhow::bail!("triplet component must be a string");
+    };
+    Ok(text.trim().to_string())
+}
+
+async fn build_graph_index_records(
+    processor: &PgTaskProcessor,
+    triplets: Vec<ExtractedTriplet>,
+    parse_run_state: &mut ParseRunState,
+) -> GraphIndexRecords {
+    if triplets.is_empty() {
+        return GraphIndexRecords::default();
+    }
+
+    let mut entity_map: std::collections::BTreeMap<String, (String, Vec<Uuid>)> =
+        std::collections::BTreeMap::new();
+    for triplet in &triplets {
+        for name in [&triplet.subject, &triplet.object] {
+            let normalized = name.to_lowercase();
+            let entry = entity_map
+                .entry(normalized)
+                .or_insert_with(|| (name.clone(), Vec::new()));
+            for chunk_id in &triplet.supporting_chunk_ids {
+                if !entry.1.contains(chunk_id) {
+                    entry.1.push(*chunk_id);
+                }
+            }
+        }
+    }
+
+    let entity_entries = entity_map.into_iter().collect::<Vec<_>>();
+    let entity_texts = entity_entries
+        .iter()
+        .map(|(_, (name, _))| name.as_str())
+        .collect::<Vec<_>>();
+    let entity_vectors = match embed_text_vectors(processor, &entity_texts).await {
+        Ok(vectors) => vectors,
+        Err(error) => {
+            record_graph_degrade(
+                &mut parse_run_state.outputs,
+                format!("graph entity embedding failed: {error}"),
+            );
+            return GraphIndexRecords::default();
+        }
+    };
+
+    let relation_texts = triplets
+        .iter()
+        .map(|triplet| {
+            format!(
+                "{} {} {}",
+                triplet.subject, triplet.predicate, triplet.object
+            )
+        })
+        .collect::<Vec<_>>();
+    let relation_text_refs = relation_texts
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let relation_vectors = match embed_text_vectors(processor, &relation_text_refs).await {
+        Ok(vectors) => vectors,
+        Err(error) => {
+            record_graph_degrade(
+                &mut parse_run_state.outputs,
+                format!("graph relation embedding failed: {error}"),
+            );
+            return GraphIndexRecords::default();
+        }
+    };
+
+    let entities = entity_entries
+        .into_iter()
+        .zip(entity_vectors)
+        .map(
+            |((normalized_name, (name, supporting_chunk_ids)), vector)| EntityIndexRecord {
+                entity_id: Uuid::new_v4(),
+                name,
+                normalized_name,
+                entity_type: None,
+                vector,
+                supporting_chunk_ids,
+                metadata: Some(serde_json::json!({ "source": "worker_triplet_extraction" })),
+            },
+        )
+        .collect::<Vec<_>>();
+
+    let mut relations = Vec::with_capacity(triplets.len());
+    let mut passages = Vec::with_capacity(triplets.len());
+    for ((triplet, relation_text), vector) in triplets
+        .into_iter()
+        .zip(relation_texts)
+        .zip(relation_vectors)
+    {
+        let relation_id = Uuid::new_v4();
+        relations.push(RelationIndexRecord {
+            relation_id,
+            subject: triplet.subject.clone(),
+            predicate: triplet.predicate.clone(),
+            object: triplet.object.clone(),
+            relation_text: relation_text.clone(),
+            vector: vector.clone(),
+            supporting_chunk_ids: triplet.supporting_chunk_ids.clone(),
+            metadata: Some(serde_json::json!({ "source": "worker_triplet_extraction" })),
+        });
+        passages.push(GraphPassageIndexRecord {
+            passage_id: Uuid::new_v4(),
+            chunk_id: triplet.supporting_chunk_ids.first().copied(),
+            text: relation_text,
+            vector,
+            relation_ids: vec![relation_id],
+            metadata: Some(serde_json::json!({ "source": "worker_triplet_extraction" })),
+        });
+    }
+
+    GraphIndexRecords {
+        entities,
+        relations,
+        passages,
+    }
+}
+
+fn build_document_index_batch(
+    context: &AuthContext,
+    workspace_id: Option<Uuid>,
+    document_id: Uuid,
+    parse_run_id: Uuid,
+    text_chunks: Vec<TextChunkIndexRecord>,
+    multimodal_chunks: Vec<MultimodalChunkIndexRecord>,
+    graph_records: GraphIndexRecords,
+) -> DocumentIndexBatch {
+    DocumentIndexBatch {
+        org_id: context.org_id(),
+        workspace_id,
+        document_id,
+        parse_run_id,
+        doc_version: 1,
+        text_chunks,
+        multimodal_chunks,
+        entities: graph_records.entities,
+        relations: graph_records.relations,
+        graph_passages: graph_records.passages,
+    }
+}
+
+fn metadata_string(metadata: &serde_json::Value, key: &str) -> Option<String> {
+    metadata
+        .get(key)
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn metadata_value(metadata: &serde_json::Value, key: &str) -> Option<serde_json::Value> {
+    metadata.get(key).cloned().filter(|value| !value.is_null())
+}
+
+fn record_graph_degrade(outputs: &mut ParseRunOutputs, reason: String) {
+    outputs.graph_degrade_count += 1;
+    outputs.graph_degrade_reasons.push(reason);
 }
 
 trait DocumentIrPdfExt {
@@ -2002,6 +2542,11 @@ mod tests {
                 mirrored_asset_count: 1,
                 text_vector_count: 2,
                 multimodal_vector_count: 1,
+                entity_count: 1,
+                relation_count: 1,
+                graph_passage_count: 1,
+                graph_degrade_count: 1,
+                graph_degrade_reasons: vec!["provider error".to_string()],
             },
         );
 
@@ -2011,5 +2556,104 @@ mod tests {
         assert!(summary.get("probe_result").is_some());
         assert_eq!(summary["page_backends"][0]["page"], 2);
         assert_eq!(summary["outputs"]["text_vector_count"], 2);
+        assert_eq!(summary["outputs"]["entity_count"], 1);
+        assert_eq!(summary["outputs"]["graph_degrade_count"], 1);
+    }
+
+    #[test]
+    fn parse_triplet_response_accepts_strict_json() {
+        let triplets = parse_triplet_response(
+            r#"{"triplets":[[" Alice ","founded","Acme"],["Alice","founded","Acme"]]}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            triplets,
+            vec![(
+                "Alice".to_string(),
+                "founded".to_string(),
+                "Acme".to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn parse_triplet_response_rejects_malformed_json() {
+        let error = parse_triplet_response(r#"{"triplets":[{"subject":"Alice"}]}"#)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("triplet item must be an array"));
+    }
+
+    #[test]
+    fn graph_degrade_reasons_are_counted() {
+        let mut outputs = ParseRunOutputs::default();
+
+        record_graph_degrade(&mut outputs, "malformed JSON".to_string());
+
+        assert_eq!(outputs.graph_degrade_count, 1);
+        assert_eq!(outputs.graph_degrade_reasons, vec!["malformed JSON"]);
+    }
+
+    #[test]
+    fn build_document_index_batch_carries_parse_run_id() {
+        let auth = AuthContext::new(OrgId::new(Uuid::from_u128(1)), SubjectKind::System);
+        let document_id = Uuid::from_u128(2);
+        let parse_run_id = Uuid::from_u128(3);
+        let chunk_id = Uuid::from_u128(4);
+        let relation_id = Uuid::from_u128(5);
+        let batch = build_document_index_batch(
+            &auth,
+            Some(Uuid::from_u128(6)),
+            document_id,
+            parse_run_id,
+            vec![TextChunkIndexRecord {
+                chunk_id,
+                content: "Alice founded Acme".to_string(),
+                vector: vec![0.1, 0.2],
+                page: Some(1),
+                chunk_type: "paragraph".to_string(),
+                parser_backend: Some("text_local".to_string()),
+                source_locator: None,
+            }],
+            Vec::new(),
+            GraphIndexRecords {
+                entities: vec![EntityIndexRecord {
+                    entity_id: Uuid::from_u128(7),
+                    name: "Alice".to_string(),
+                    normalized_name: "alice".to_string(),
+                    entity_type: None,
+                    vector: vec![0.1, 0.2],
+                    supporting_chunk_ids: vec![chunk_id],
+                    metadata: None,
+                }],
+                relations: vec![RelationIndexRecord {
+                    relation_id,
+                    subject: "Alice".to_string(),
+                    predicate: "founded".to_string(),
+                    object: "Acme".to_string(),
+                    relation_text: "Alice founded Acme".to_string(),
+                    vector: vec![0.1, 0.2],
+                    supporting_chunk_ids: vec![chunk_id],
+                    metadata: None,
+                }],
+                passages: vec![GraphPassageIndexRecord {
+                    passage_id: Uuid::from_u128(8),
+                    chunk_id: Some(chunk_id),
+                    text: "Alice founded Acme".to_string(),
+                    vector: vec![0.1, 0.2],
+                    relation_ids: vec![relation_id],
+                    metadata: None,
+                }],
+            },
+        );
+
+        assert_eq!(batch.document_id, document_id);
+        assert_eq!(batch.parse_run_id, parse_run_id);
+        assert_eq!(batch.text_chunks.len(), 1);
+        assert_eq!(batch.entities.len(), 1);
+        assert_eq!(batch.relations.len(), 1);
+        assert_eq!(batch.graph_passages.len(), 1);
     }
 }
