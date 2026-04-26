@@ -112,6 +112,9 @@ pub struct DialogueStateRow {
     pub user_id: Option<Uuid>,
     pub state_type: String,
     pub current_topic: Option<String>,
+    pub last_document: Option<String>,
+    pub last_entity: Option<String>,
+    pub unresolved_question: Option<String>,
     pub pending_questions: Vec<String>,
     pub gathered_facts: Vec<String>,
     pub confidence_score: f32,
@@ -123,4 +126,3 @@ pub struct DialogueStateRow {
 pub struct PgAppRepository {
     pool: TenantPgPool,
 }
-

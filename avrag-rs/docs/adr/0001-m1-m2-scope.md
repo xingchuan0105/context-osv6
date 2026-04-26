@@ -1,5 +1,7 @@
 # ADR 0001: M1 + M2 先以可运行骨架落地
 
+> Historical ADR. Qdrant references describe the early M1/M2 scope and are superseded as target architecture by [2026-04-26 Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md).
+
 ## 背景
 
 PRD_RUST 覆盖的是完整平台重构，而当前 `context-osv6` 只有前端代码。若直接从真实 PostgreSQL/Qdrant/Rust RAG runtime 全量起步，交付路径会过长，且前端无法尽早联调。

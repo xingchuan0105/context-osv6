@@ -1,6 +1,7 @@
 # Main Agent 与 RAG 工具后端改造实施方案
 
 > **状态**: Draft for Review
+> **2026-04-26 更新**: 本计划的边界仍有效，但最新目标架构增加 Milvus 统一检索数据面与 vector graph rag graph retrieval。见 [2026-04-26 Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md)。
 > **关联设计**: [2026-04-23-main-agent-and-rag-tool-backend-design.md](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-23-main-agent-and-rag-tool-backend-design.md)
 > **来源纪要**: [2026-04-23-rag-tool-backend-and-agent-control-discussion.md](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-23-rag-tool-backend-and-agent-control-discussion.md)
 
@@ -16,12 +17,14 @@
 2. `RAG API` 负责：
    - execute plan
    - return retrieval bundle
+   - run bounded retrieval subroutines such as query entity extraction, relation/path rerank, and chunk rerank
 
 本计划默认：
 
 - 先收口架构边界
 - 再落 memory v1
 - `plan skill` 细化放到最后单独做，不在本次主改造里展开
+- memory v1 收口为用户偏好记忆、每日增量 consolidation、session working state、recent turns 与 docscope metadata 装配，不接入 `memvid`
 
 ---
 
@@ -39,7 +42,7 @@
 
 - `RAG API` 的输入输出能通过类型和测试稳定约束。
 - 旧链路在迁移期间可兼容，但新能力不再建立在 `clarify_needed` 上。
-- memory v1 不引入复杂状态机，只实现短期 / 长期两层。
+- memory v1 不引入复杂状态机，不接入隐式长期记忆底座。
 - 所有阶段都以可验证的边界推进，不一次性大重写。
 
 ---
@@ -80,7 +83,7 @@
 
 ## 5. Phase 1: 冻结 RAG API 工具契约
 
-**目标:** 先把 `RAG API` 的输入输出固定成纯工具语义，避免后续边做边改边界。
+**目标:** 先把 `RAG API` 的输入输出固定成检索工具语义，避免后续边做边改边界。
 
 ### 5.1 任务
 
@@ -226,54 +229,78 @@
 
 ## 8. Phase 4: 落地 memory v1
 
-**目标:** 用最小 memory 设计解决连续性和指代消解，不再依赖后端 planner 吃 session 污染上下文。
+**目标:** 用最小上下文控制设计解决连续性和指代消解，不再依赖后端 planner 吃 session 污染上下文。
 
 ### 8.1 任务
 
-1. 落地 workspace 短期记忆
-2. 落地 workspace 长期记忆
-3. 确立 `docscope + metadata` 作为主指代消解器
-4. 接入 `memvid` 作为长期记忆底座
+1. 落地用户偏好记忆
+2. 落地每日增量 preference consolidation
+3. 落地 session working state
+4. 落地 recent turns 装配规则
+5. 确立 `docscope + metadata` 作为主指代消解器
 
 ### 8.2 实现范围
 
-#### 短期记忆
+#### session working state
 
-- 最近 `3-4` 轮原始问答
-- 进入 planning 前做相邻 assistant 回复去重
-- 相似度阈值先用简单规则，例如 `80%`
+- 当前 topic
+- 上一个明确文档
+- 上一个明确实体
+- 当前 unresolved question
 
-#### 长期记忆
+#### recent turns
 
-- `narrative + objects`
-- 每 `6-8` 轮触发一次更新
-- 或在阶段性会话结束时更新一次
+- 最近 `3-4` 轮相关对话
+- `RAG planning` 前过滤重复失败 assistant 回复
+- 只用于指代消解和连续性，不作为事实证据
+
+#### 用户偏好记忆
+
+- 语言偏好
+- 回答长短偏好
+- 格式偏好
+- 技术深度偏好
+- 常用环境约束
+- 用户明确要求“记住”或在设置页保存时可立即写入
+- 默会偏好通过每日增量 consolidation 生成
+
+#### 每日增量 consolidation
+
+- 固定时间运行一次
+- 只读取上次运行后的新增跨 workspace 会话
+- 载入既有 `user-preferences.md` 做对比
+- 有新增偏好才追加；无新增偏好则无输出
+- 只抽象交互偏好，不抽取项目事实、文档事实或工具失败状态
+- `Active Preferences` 可重写以保持运行时 prompt 干净
+- `Daily Consolidation Log` append-only，用于审计
 
 #### 指代消解顺序
 
-1. `docscope`
-2. `doc metadata`
-3. 当前问题显式实体
-4. 短期记忆
-5. 长期记忆
+1. 当前用户最新问题
+2. `docscope`
+3. `doc metadata`
+4. 当前问题显式实体、文件名、时间范围
+5. session working state
+6. recent turns
+7. 用户偏好记忆
 
-### 8.3 memvid 接入原则
+### 8.3 非目标
 
-`memvid` 仅用于：
+memory v1 不做：
 
-- 用户级长期记忆
 - workspace 长期记忆
-
-不用于：
-
-- 高频短期窗口
-- planning 执行态缓存
+- `memvid` 接入
+- assistant 回答入长期记忆
+- 检索失败结论入记忆
+- 全量历史反复扫描
+- 每轮对话结束实时偏好抽取
 
 ### 8.4 验收
 
 - 在已勾选 `docscope` 的 workspace 内，绝大多数“这份/上一个/刚才那份”问题无需额外靠 summary 才能解释
 - 重复失败模板不会连续污染 planning
-- 长期记忆能够稳定记录 narrative + objects
+- 用户偏好只影响表达风格，不影响检索范围、事实判断或 citation
+- 每日 consolidation 只对新增会话做增量处理，并能在无新增偏好时保持文件不变
 
 ---
 
@@ -331,3 +358,32 @@
 
 - 先改 `plan skill`，会继续绑死在旧边界上
 - 先收边界，后续 skill 才能真正独立迭代
+
+---
+
+## 12. 2026-04-26 实现状态快照
+
+### 已实现
+
+- `ExecutePlanRequest` 已成为新 RAG 工具入口，校验包含空 items、超 4 items、payload 二义性、priority 和 budget zero。
+- `/api/v1/rag/execute-plan` 在执行前校验 `doc_scope` UUID、可访问性和文档 ready 状态；非法、越权或未 ready 统一映射为 `invalid_doc_scope`。
+- `ExecutePlanBudget.total_candidate_budget` 驱动召回候选预算，`final_chunk_budget` 驱动最终 bundle chunk 上限，并写入 `backend_trace.retrieval_trace`。
+- 产品 chat 主链路通过 `MainAgentRagPlanDecision::{Execute, Clarify}` 分流；clarify 不调用 RAG API，直接走自然语言回复。
+- RAG planning 和 general chat 已使用 `MainAgentContext` envelope，区分 Authoritative Context、Reference Context 和 User Preference Memory。
+- `AgentPreferenceMemory` 存放在 `user_profiles.custom_preferences.agent_memory`，并暴露 `GET/PUT/DELETE /api/auth/agent-preferences`。
+- 显式偏好写入只处理“记住 / 以后都 / remember that”等明确表达；working memory 不再从 assistant answer 写入 `gathered_facts`。
+- worker 已接入每日 agent preference consolidation job；该 job 只读取会话摘要和既有偏好，只抽明确交互偏好，无新增偏好时不写库。
+- 未挂图的 `rag_load_session_context` 任务已移除。
+
+### 兼容保留
+
+- `RagPlan` 只作为 legacy display/compat 类型保留，用于 `planner_output` 和旧测试展示。
+- `clarify_needed`、`clarify_message` 只属于 legacy `RagPlan` 展示兼容，不属于 `ExecutePlanRequest`，也不进入 `/api/v1/rag/execute-plan` JSON。
+- `RagRuntime::plan` 与旧 `synthesize_answer_text*` 已标记为 legacy compatibility；产品 chat 主链不再依赖它们作为默认 planner/answer 路径。
+
+### 延后
+
+- 不接入 `memvid` 或 workspace 长期记忆。
+- 不新增本地 `.run/.env.runtime` 配置处理。
+- 不做完整前端偏好管理 UI；当前只保证后端 API 可消费。
+- `plan skill` 的 golden set、rewrite/subquery 策略和 answer skill 风格细化继续作为后续专项。

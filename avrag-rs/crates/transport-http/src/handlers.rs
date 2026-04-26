@@ -656,8 +656,17 @@ pub(crate) async fn get_notebook_analysis_handler(
 
 pub(crate) async fn rag_execute_plan_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Json(req): Json<ExecutePlanRequest>,
+    payload: Result<Json<ExecutePlanRequest>, axum::extract::rejection::JsonRejection>,
 ) -> Response {
+    let Json(req) = match payload {
+        Ok(payload) => payload,
+        Err(error) => {
+            return app_error_response(AppError::validation(
+                "invalid_execute_plan",
+                format!("invalid execute-plan JSON: {error}"),
+            ));
+        }
+    };
     match state.execute_rag_execute_plan(req).await {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(error) => app_error_response(error),

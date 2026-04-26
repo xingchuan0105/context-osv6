@@ -35,6 +35,7 @@ fn execute_plan_request_drops_legacy_clarify_fields_when_mapped_from_rag_plan() 
     assert!(encoded.get("clarify_needed").is_none());
     assert!(encoded.get("clarify_message").is_none());
     assert!(encoded.get("session_id").is_none());
+    assert!(encoded.get("history").is_none());
     assert!(encoded.get("messages").is_none());
 }
 
@@ -57,6 +58,65 @@ fn execute_plan_request_validation_rejects_ambiguous_items() {
     assert_eq!(
         error,
         ExecutePlanValidationError::InvalidPayloadCount { index: 0 }
+    );
+}
+
+#[test]
+fn execute_plan_request_validation_rejects_empty_doc_scope() {
+    let request = ExecutePlanRequest {
+        plan_version: "rag-execute-v1".to_string(),
+        doc_scope: Vec::new(),
+        items: vec![common::ExecutePlanItem {
+            priority: 1.0,
+            query: Some("alpha".to_string()),
+            bm25_terms: None,
+        }],
+        summary_mode: ExecutePlanSummaryMode::None,
+        budget: None,
+        trace: None,
+    };
+
+    assert_eq!(
+        request.validate().unwrap_err(),
+        ExecutePlanValidationError::EmptyDocScope
+    );
+}
+
+#[test]
+fn execute_plan_request_deserialization_rejects_legacy_session_fields() {
+    let error = serde_json::from_value::<ExecutePlanRequest>(serde_json::json!({
+        "plan_version": "rag-execute-v1",
+        "doc_scope": ["doc-1"],
+        "items": [{ "priority": 1.0, "query": "alpha" }],
+        "session_id": "session-1",
+        "history": [],
+        "clarify_needed": false
+    }))
+    .unwrap_err();
+
+    assert!(error.to_string().contains("unknown field"));
+}
+
+#[test]
+fn execute_plan_request_validation_rejects_more_than_four_items() {
+    let request = ExecutePlanRequest {
+        plan_version: "rag-execute-v1".to_string(),
+        doc_scope: vec!["doc-1".to_string()],
+        items: (0..5)
+            .map(|index| common::ExecutePlanItem {
+                priority: 0.5,
+                query: Some(format!("query {index}")),
+                bm25_terms: None,
+            })
+            .collect(),
+        summary_mode: ExecutePlanSummaryMode::None,
+        budget: None,
+        trace: None,
+    };
+
+    assert_eq!(
+        request.validate().unwrap_err(),
+        ExecutePlanValidationError::TooManyItems { max: 4 }
     );
 }
 
@@ -93,7 +153,10 @@ fn execute_plan_request_compat_roundtrip_preserves_summary_mode() {
 
     assert_eq!(compat_plan.items.len(), 3);
     assert_eq!(
-        compat_plan.items.last().and_then(|item| item.summary.as_deref()),
+        compat_plan
+            .items
+            .last()
+            .and_then(|item| item.summary.as_deref()),
         Some("all")
     );
 

@@ -37,6 +37,7 @@ impl ExecutePlanSummaryMode {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ExecutePlanTrace {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
@@ -45,6 +46,7 @@ pub struct ExecutePlanTrace {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ExecutePlanBudget {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub total_candidate_budget: Option<usize>,
@@ -53,6 +55,7 @@ pub struct ExecutePlanBudget {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ExecutePlanItem {
     pub priority: f32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -62,6 +65,7 @@ pub struct ExecutePlanItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ExecutePlanRequest {
     #[serde(default = "default_execute_plan_version")]
     pub plan_version: String,
@@ -79,12 +83,18 @@ pub struct ExecutePlanRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ExecutePlanValidationError {
+    #[error("doc_scope must not be empty")]
+    EmptyDocScope,
     #[error("items must not be empty")]
     EmptyItems,
+    #[error("items must not contain more than {max} entries")]
+    TooManyItems { max: usize },
     #[error("item {index} must contain exactly one payload")]
     InvalidPayloadCount { index: usize },
     #[error("item {index} priority must be between 0.0 and 1.0")]
     InvalidPriority { index: usize },
+    #[error("invalid doc_scope: {reason}")]
+    InvalidDocScope { reason: String },
     #[error("budget.total_candidate_budget must be greater than zero")]
     InvalidTotalCandidateBudget,
     #[error("budget.final_chunk_budget must be greater than zero")]
@@ -92,9 +102,19 @@ pub enum ExecutePlanValidationError {
 }
 
 impl ExecutePlanRequest {
+    pub const MAX_ITEMS: usize = 4;
+
     pub fn validate(&self) -> Result<(), ExecutePlanValidationError> {
+        if self.doc_scope.is_empty() {
+            return Err(ExecutePlanValidationError::EmptyDocScope);
+        }
         if self.items.is_empty() {
             return Err(ExecutePlanValidationError::EmptyItems);
+        }
+        if self.items.len() > Self::MAX_ITEMS {
+            return Err(ExecutePlanValidationError::TooManyItems {
+                max: Self::MAX_ITEMS,
+            });
         }
 
         for (index, item) in self.items.iter().enumerate() {

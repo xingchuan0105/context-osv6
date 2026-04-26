@@ -97,20 +97,8 @@ impl HttpQdrantBackend {
             return Err(QdrantStorageError::EmptyVector);
         }
 
-        let mut filter = QdrantFilter {
-            must: vec![FieldMatch {
-                key: "org_id".to_owned(),
-                value: org_id.to_string(),
-            }],
-        };
-
-        if let Some(ids) = doc_ids {
-            for doc_id in ids {
-                filter.must.push(FieldMatch {
-                    key: "doc_id".to_owned(),
-                    value: doc_id.to_string(),
-                });
-            }
+        if doc_ids.is_some_and(|ids| ids.is_empty()) {
+            return Ok(Vec::new());
         }
 
         let response = self
@@ -120,7 +108,7 @@ impl HttpQdrantBackend {
                 "vector": query_vector,
                 "limit": limit,
                 "with_payload": true,
-                "filter": filter_to_json(&filter),
+                "filter": dense_search_filter_to_json(&org_id, doc_ids),
             }))
             .send()
             .await?;
@@ -433,6 +421,22 @@ fn filter_to_json(filter: &QdrantFilter) -> Value {
             })
         })
         .collect::<Vec<_>>();
+
+    json!({ "must": must })
+}
+
+fn dense_search_filter_to_json(org_id: &OrgId, doc_ids: Option<&[Uuid]>) -> Value {
+    let mut must = vec![json!({
+        "key": "org_id",
+        "match": { "value": org_id.to_string() }
+    })];
+
+    if let Some(ids) = doc_ids {
+        must.push(json!({
+            "key": "doc_id",
+            "match": { "any": ids.iter().map(Uuid::to_string).collect::<Vec<_>>() }
+        }));
+    }
 
     json!({ "must": must })
 }

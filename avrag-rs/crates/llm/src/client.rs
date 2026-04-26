@@ -23,7 +23,13 @@ fn build_chat_completion_request_body(
         request_body["temperature"] = serde_json::json!(temp);
     }
     if let Some(enable_thinking) = config.enable_thinking {
-        request_body["enable_thinking"] = serde_json::json!(enable_thinking);
+        if config.base_url.to_ascii_lowercase().contains("deepseek") {
+            request_body["thinking"] = serde_json::json!({
+                "type": if enable_thinking { "enabled" } else { "disabled" },
+            });
+        } else {
+            request_body["enable_thinking"] = serde_json::json!(enable_thinking);
+        }
     }
     if stream {
         request_body["stream"] = serde_json::json!(true);
@@ -118,6 +124,10 @@ impl ChatCompletionStreamParser {
         }
 
         self.flush_event(on_delta)?;
+
+        if self.accumulated_content.is_empty() {
+            anyhow::bail!("Chat completion stream finished without content");
+        }
 
         Ok(LlmResponse {
             content: self.accumulated_content,
@@ -504,7 +514,22 @@ impl LlmUsage {
 
 #[cfg(test)]
 mod tests {
-    use super::{ChatCompletionStreamParser, LlmUsage};
+    use super::{
+        ChatCompletionStreamParser, ChatMessage, LlmUsage, build_chat_completion_request_body,
+    };
+    use crate::ModelProviderConfig;
+
+    fn test_config(base_url: &str, enable_thinking: Option<bool>) -> ModelProviderConfig {
+        ModelProviderConfig {
+            base_url: base_url.to_string(),
+            api_key: "test-key".to_string(),
+            model: "test-model".to_string(),
+            timeout_ms: 1000,
+            api_style: None,
+            dimensions: None,
+            enable_thinking,
+        }
+    }
 
     #[test]
     fn llm_usage_accumulate_preserves_provider_and_model() {
@@ -520,6 +545,37 @@ mod tests {
         assert_eq!(total.total_tokens, 30);
         assert_eq!(total.provider, "dmxapi");
         assert_eq!(total.model, "gemini-test");
+    }
+
+    #[test]
+    fn deepseek_request_maps_enable_thinking_to_thinking_object() {
+        let config = test_config("https://api.deepseek.com", Some(false));
+        let body = build_chat_completion_request_body(
+            &config,
+            &[ChatMessage::user("hello")],
+            Some(0.3),
+            false,
+        );
+
+        assert_eq!(body["thinking"]["type"], "disabled");
+        assert!(body.get("enable_thinking").is_none());
+    }
+
+    #[test]
+    fn non_deepseek_request_keeps_enable_thinking_field() {
+        let config = test_config(
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            Some(false),
+        );
+        let body = build_chat_completion_request_body(
+            &config,
+            &[ChatMessage::user("hello")],
+            Some(0.3),
+            false,
+        );
+
+        assert_eq!(body["enable_thinking"], false);
+        assert!(body.get("thinking").is_none());
     }
 
     #[test]
@@ -590,5 +646,30 @@ data: [DONE]
             .unwrap();
         assert_eq!(observed, "AB");
         assert_eq!(response.content, "AB");
+    }
+
+    #[test]
+    fn chat_completion_stream_parser_rejects_empty_content_stream() {
+        let mut parser =
+            ChatCompletionStreamParser::new("openai".to_string(), "gpt-test".to_string());
+
+        parser
+            .feed_chunk(
+                br#"data: {"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":0,"total_tokens":12}}
+
+data: [DONE]
+
+"#,
+                &mut |_delta| {},
+            )
+            .unwrap();
+
+        let error = parser.finish(&mut |_delta| {}).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("Chat completion stream finished without content")
+        );
     }
 }

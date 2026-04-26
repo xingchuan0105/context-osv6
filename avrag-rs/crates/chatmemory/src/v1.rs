@@ -32,13 +32,11 @@ pub fn dedupe_adjacent_assistant_messages(
 
     for message in messages {
         let should_skip = message.role == "assistant"
-            && deduped
-                .last()
-                .is_some_and(|previous: &ChatMessage| {
-                    previous.role == "assistant"
-                        && assistant_similarity(&previous.content, &message.content)
-                            >= similarity_threshold
-                });
+            && deduped.last().is_some_and(|previous: &ChatMessage| {
+                previous.role == "assistant"
+                    && assistant_similarity(&previous.content, &message.content)
+                        >= similarity_threshold
+            });
         if !should_skip {
             deduped.push(message.clone());
         }
@@ -115,11 +113,7 @@ pub fn should_refresh_long_term_memory(turn_count: usize, every_n_turns: usize) 
 
 pub trait LongTermMemoryStore: Send + Sync {
     fn load(&self, workspace_id: &str) -> anyhow::Result<Option<WorkspaceLongTermMemory>>;
-    fn store(
-        &self,
-        workspace_id: &str,
-        memory: &WorkspaceLongTermMemory,
-    ) -> anyhow::Result<()>;
+    fn store(&self, workspace_id: &str, memory: &WorkspaceLongTermMemory) -> anyhow::Result<()>;
 }
 
 #[derive(Debug, Default)]
@@ -130,11 +124,7 @@ impl LongTermMemoryStore for NoopMemvidStore {
         Ok(None)
     }
 
-    fn store(
-        &self,
-        _workspace_id: &str,
-        _memory: &WorkspaceLongTermMemory,
-    ) -> anyhow::Result<()> {
+    fn store(&self, _workspace_id: &str, _memory: &WorkspaceLongTermMemory) -> anyhow::Result<()> {
         Ok(())
     }
 }
@@ -162,8 +152,16 @@ mod tests {
     fn dedupe_adjacent_assistant_messages_removes_similar_retries() {
         let messages = vec![
             chat_message(1, "user", "What changed?"),
-            chat_message(2, "assistant", "The rollout failed because config A was missing."),
-            chat_message(3, "assistant", "The rollout failed because config A was missing."),
+            chat_message(
+                2,
+                "assistant",
+                "The rollout failed because config A was missing.",
+            ),
+            chat_message(
+                3,
+                "assistant",
+                "The rollout failed because config A was missing.",
+            ),
             chat_message(4, "user", "What should we do next?"),
         ];
 

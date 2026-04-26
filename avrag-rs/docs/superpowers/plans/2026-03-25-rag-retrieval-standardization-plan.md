@@ -1,6 +1,7 @@
 # RAG 检索标准化改造计划
 
 > 状态: Draft for Review
+> 2026-04-26 文档状态: Historical plan. The simplified item schema remains useful; storage/retrieval targets are superseded by [Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md), which adds Milvus BM25/text dense/multimodal dense/graph retrieval.
 > 关联文档: /home/chuan/context-osv6/PRD_RUST.md
 > 执行原则: 先审阅计划，再按阶段实施；当前仅更新文档，不执行代码改造。
 

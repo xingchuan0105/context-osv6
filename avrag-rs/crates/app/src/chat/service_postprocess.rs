@@ -101,32 +101,67 @@ impl AppState {
         execution.response.message_id = Some(assistant_message_id);
 
         let summary_updated = self.maybe_update_session_summary(pg, session).await;
+        let _ = self
+            .remember_explicit_agent_preference(req.query.trim())
+            .await;
 
         if execution.mode == "general"
             && let Some(ref cm) = self.chatmemory
             && let Ok(messages) = pg.list_messages(&self.auth, session_uuid).await
         {
+            let raw_custom_preferences =
+                if let Some(user_id) = self.auth.actor_id().map(|value| value.into_uuid()) {
+                    pg.get_user_profile(&self.auth, user_id)
+                        .await
+                        .ok()
+                        .flatten()
+                        .map(|profile| profile.custom_preferences)
+                        .unwrap_or_else(|| serde_json::json!({}))
+                } else {
+                    serde_json::json!({})
+                };
+            let agent_memory = self
+                .current_user_preferences()
+                .await
+                .ok()
+                .map(|preferences| preferences.agent_memory)
+                .unwrap_or_default();
+            let custom_preferences = merge_general_profile_custom_preferences(
+                raw_custom_preferences,
+                agent_memory,
+                req.query.trim(),
+                &execution.input_usage_text,
+            );
             let _ = cm
                 .update_user_profile(
                     &self.auth,
                     derive_profile_domains(&messages, req.query.trim()),
                     detect_preferred_style(req.query.trim()),
                     derive_profile_topics(&messages, req.query.trim()),
-                    serde_json::json!({
-                        "last_general_query": req.query.trim(),
-                        "refined_query": execution.input_usage_text,
-                    }),
+                    custom_preferences,
                     "general-v1",
                 )
                 .await;
+        }
+
+        if let Some(ref cm) = self.chatmemory {
+            let pending_questions = extract_pending_questions(req.query.trim());
+            let unresolved_question = pending_questions
+                .iter()
+                .rev()
+                .find(|question| !question.trim().is_empty())
+                .cloned();
             let _ = cm
                 .update_working_memory(
                     &self.auth,
                     session_uuid,
                     "working_memory",
                     infer_current_topic(req.query.trim()),
-                    extract_pending_questions(req.query.trim()),
-                    extract_gathered_facts(&execution.response.answer),
+                    infer_last_document(&execution.response),
+                    infer_last_entity(req.query.trim()),
+                    unresolved_question,
+                    pending_questions,
+                    Vec::new(),
                     if execution.response.degrade_trace.is_empty() {
                         0.82
                     } else {
@@ -135,7 +170,9 @@ impl AppState {
                     vec![req.query.trim().to_string()],
                 )
                 .await;
+        }
 
+        if execution.mode == "general" {
             if summary_updated
                 && let Some(mode_debug) = execution.response.mode_debug.as_mut()
                 && let Some(general) = mode_debug.general.as_mut()
@@ -156,6 +193,22 @@ impl AppState {
         } else {
             analytics::ResultTag::Degraded
         };
+        let mut metadata = serde_json::json!({
+            "agent_type": req.agent_type,
+            "mode": execution.mode,
+            "message_id": execution.response.message_id,
+            "citation_count": execution.response.citations.len(),
+            "degrade_count": execution.response.degrade_trace.len(),
+        });
+        if let Some(debug_metadata) = execution.debug_metadata.as_ref()
+            && let (Some(metadata), Some(debug_metadata)) =
+                (metadata.as_object_mut(), debug_metadata.as_object())
+        {
+            for (key, value) in debug_metadata {
+                metadata.insert(key.clone(), value.clone());
+            }
+        }
+
         self.record_product_event_if_available(
             event_name,
             if req.source_type.as_deref() == Some("share") {
@@ -166,13 +219,7 @@ impl AppState {
             result,
             Uuid::parse_str(&session.id).ok(),
             Uuid::parse_str(&session.notebook_id).ok(),
-            serde_json::json!({
-                "agent_type": req.agent_type,
-                "mode": execution.mode,
-                "message_id": execution.response.message_id,
-                "citation_count": execution.response.citations.len(),
-                "degrade_count": execution.response.degrade_trace.len(),
-            }),
+            metadata,
         )
         .await;
 

@@ -58,8 +58,21 @@ impl AppState {
         let rag_runtime = if let Some(ref pg_repo) = pg {
             let embedding = make_embedding_client(&config.embedding);
             let mm_embedding = make_embedding_client(&config.mm_embedding);
-            let planner =
-                make_planner(&config.intent_llm).or_else(|| make_planner(&config.answer_llm));
+            let lexical_index = config
+                .tantivy_index_dir
+                .as_deref()
+                .and_then(|dir| match TantivyLexicalIndex::open_reader(dir) {
+                    Ok(index) => Some(Arc::new(index)),
+                    Err(error) => {
+                        info!(
+                            tantivy_index_dir = dir,
+                            error = %error,
+                            "failed to open Tantivy lexical index; PostgreSQL BM25 fallback remains active"
+                        );
+                        None
+                    }
+                });
+            let planner = make_planner(&config.intent_llm);
             let synthesizer = make_synthesizer(&config.answer_llm);
             let reranker = make_reranker(&config.rerank);
             let mm_reranker = make_reranker(&config.mm_rerank);
@@ -81,7 +94,8 @@ impl AppState {
                     embedding_for_config,
                     Arc::new(qdrant),
                     Some(pg_repo.clone()),
-                );
+                )
+                .with_lexical_index_dir(config.tantivy_index_dir.clone());
                 rag_config.qdrant_collection = config.qdrant.collection.clone();
                 rag_config.multimodal_collection = config.qdrant.multimodal_collection.clone();
                 if let Some(p) = planner {
@@ -92,6 +106,9 @@ impl AppState {
                 }
                 if let Some(mm) = mm_embedding {
                     rag_config = rag_config.with_mm_embedding(mm);
+                }
+                if let Some(index) = lexical_index {
+                    rag_config = rag_config.with_lexical_index(index);
                 }
                 if let Some(r) = reranker {
                     rag_config = rag_config.with_reranker(r);

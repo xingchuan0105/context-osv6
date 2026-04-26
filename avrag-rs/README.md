@@ -6,14 +6,25 @@
 - `frontend_rust/` 是当前正式前端实现，负责承接 Rust API、SSE、citation lookup、正文内联 citation 与图片块渲染。
 - `frontend/` 保留为 legacy/reference Next.js 前端，不再作为默认开发入口。
 
+## 当前产品架构目标（2026-04-26）
+
+最新目标架构见：[Current Product Architecture: Main Agent + RAG API + Milvus Retrieval Plane](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md)。
+
+核心方向：
+- `Main Agent` 是唯一用户级 agent，负责 mode routing、记忆、指代消解、RAG tool planning 与最终回答。
+- `RAG API` 是检索服务，不是自主 agent；它可以使用模型做三元组抽取、query entity extraction、relation/path rerank、chunk rerank 等检索子任务。
+- Postgres 保留产品控制面：用户、组织、workspace、权限、会话、任务、审计、用量、计费。
+- Milvus 作为统一检索数据面：BM25 sparse、文本向量、多模态向量、KG entities、KG relations、graph passages。
+- 旧文档中以 Qdrant/Tantivy/PostgreSQL BM25 为最终目标的描述均视为历史实现或过渡状态。
+
 ## 已实现模块
 
 | 模块 | 路径 | 说明 |
 |------|------|------|
-| **RAG Runtime** | `crates/rag-core/` | Per-item retrieval、Dense(Qdrant) + Sparse(PG BM25) RRF merge、Reranker、Synthesizer |
+| **RAG Runtime** | `crates/rag-core/` | 当前实现为 Per-item retrieval、Dense(Qdrant) + Sparse(PG BM25) RRF merge、Reranker、Synthesizer；目标架构迁移到 Milvus BM25 + text dense + multimodal dense + graph retrieval |
 | **LLM** | `crates/llm/` | EmbeddingClient、RetrievalPlanner、AnswerSynthesizer、RerankerClient（OpenAI 兼容协议） |
 | **Storage PG** | `crates/storage-pg/` | PostgreSQL 全量操作：documents/chunks/sessions/chat_memory/notifications/audit_log |
-| **Storage Qdrant** | `crates/storage-qdrant/` | Qdrant dense retrieval、collection management |
+| **Storage Qdrant** | `crates/storage-qdrant/` | 当前 dense retrieval 适配层；目标架构中由 Milvus retrieval adapter 取代 |
 | **Cache Redis** | `crates/cache-redis/` | DocumentLock 分布式锁、TTL 支持 |
 | **Ingestion** | `crates/ingestion/` | ParserFactory（PDF/Office/代码）、Chunker、Summary extraction、Worker skeleton |
 | **Search** | `crates/search/` | Exa API 集成、Web search planning + synthesis |
@@ -49,11 +60,11 @@ crates/
   ingestion/ — ParserFactory、Chunker、WorkerRuntime skeleton
   llm/       — LLM client、Embedding、Planner、Synthesizer、Reranker
   analytics/ — Product/cost events、daily rollups、anomaly detection helpers
-  rag-core/  — RAG runtime（RAG/general/search 三模式）
+  rag-core/  — RAG runtime（RAG/general/search 三模式；目标收缩为 RAG API 检索执行内核）
   search/    — Exa web search executor
   share/     — Token-based sharing
   storage-pg/ — PostgreSQL 全量操作
-  storage-qdrant/ — Qdrant dense retrieval
+  storage-qdrant/ — 当前 Qdrant dense retrieval 适配层，目标由 Milvus retrieval adapter 取代
   telemetry/ — Tracing/logging 初始化
   test-kit/  — 测试工具
   transport-http/ — Router、handlers、SSE、rate limit、metrics

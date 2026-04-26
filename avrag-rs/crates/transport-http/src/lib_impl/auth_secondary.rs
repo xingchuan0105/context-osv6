@@ -498,6 +498,98 @@ async fn auth_update_preferences_handler(
     (StatusCode::OK, Json(req)).into_response()
 }
 
+async fn auth_get_agent_preferences_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+) -> Response {
+    if state.auth().actor_id().is_none() {
+        return handlers::error_response(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Not authenticated",
+        );
+    }
+
+    match state.current_user_preferences().await {
+        Ok(preferences) => (StatusCode::OK, Json(preferences.agent_memory)).into_response(),
+        Err(error) => {
+            warn!(error = %error, "failed to load agent preferences");
+            handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Failed to load agent preferences",
+            )
+        }
+    }
+}
+
+async fn auth_update_agent_preferences_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Json(agent_memory): Json<common::AgentPreferenceMemory>,
+) -> Response {
+    if state.auth().actor_id().is_none() {
+        return handlers::error_response(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Not authenticated",
+        );
+    }
+
+    let mut preferences = match state.current_user_preferences().await {
+        Ok(preferences) => preferences,
+        Err(error) => {
+            warn!(error = %error, "failed to load agent preferences before update");
+            return handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Failed to save agent preferences",
+            );
+        }
+    };
+    preferences.agent_memory = agent_memory;
+
+    match state.save_current_user_preferences(&preferences).await {
+        Ok(saved) => (StatusCode::OK, Json(saved.agent_memory)).into_response(),
+        Err(error) => {
+            warn!(error = %error, "failed to save agent preferences");
+            handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Failed to save agent preferences",
+            )
+        }
+    }
+}
+
+async fn auth_delete_agent_preference_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Path(preference_id): Path<String>,
+) -> Response {
+    if state.auth().actor_id().is_none() {
+        return handlers::error_response(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Not authenticated",
+        );
+    }
+
+    match state.delete_current_agent_preference(&preference_id).await {
+        Ok(Some(agent_memory)) => (StatusCode::OK, Json(agent_memory)).into_response(),
+        Ok(None) => handlers::error_response(
+            StatusCode::NOT_FOUND,
+            "preference_not_found",
+            "Agent preference not found",
+        ),
+        Err(error) => {
+            warn!(error = %error, "failed to delete agent preference");
+            handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Failed to delete agent preference",
+            )
+        }
+    }
+}
+
 fn changed_workspace_drafts(
     previous: &UserPreferencesPayload,
     next: &UserPreferencesPayload,

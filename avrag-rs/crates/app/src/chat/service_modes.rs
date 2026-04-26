@@ -33,6 +33,7 @@ impl AppState {
                 guard_report: None,
             },
             llm_usage: None,
+            debug_metadata: None,
         })
     }
 
@@ -130,6 +131,7 @@ impl AppState {
                 guard_report: None,
             },
             llm_usage: None,
+            debug_metadata: None,
         })
     }
 
@@ -137,7 +139,7 @@ impl AppState {
         &self,
         req: &ChatRequest,
         session: &ChatSession,
-        pg: &PgAppRepository,
+        _pg: &PgAppRepository,
     ) -> Result<ChatGraphExecution, AppError> {
         let session_uuid =
             parse_uuid_or_app_error(&session.id, "session_not_found", "session not found")?;
@@ -149,92 +151,27 @@ impl AppState {
         let refined_query = self
             .refine_general_query(req.query.trim(), memory_context.as_ref())
             .await;
-        let mut messages = vec![avrag_llm::ChatMessage::system(
-            "You are the general assistant for Context OS. Maintain continuity across turns, use conversation memory when relevant, and answer directly without inventing facts.",
-        )];
-
-        if let Some(ref memory) = memory_context {
-            if let Some(ref layer2) = memory.layer2 {
-                messages.push(avrag_llm::ChatMessage::system(format!(
-                    "Conversation summary:\n{}",
-                    layer2.summary
-                )));
-            }
-            if let Some(ref layer3) = memory.layer3 {
-                messages.push(avrag_llm::ChatMessage::system(format!(
-                    "User profile:\nDomains: {}\nPreferred answer style: {}\nFrequently asked topics: {}",
-                    layer3.expertise_domains.join(", "),
-                    layer3
-                        .preferred_answer_style
-                        .clone()
-                        .unwrap_or_else(|| "default".to_string()),
-                    layer3.frequently_asked_topics.join(", ")
-                )));
-            }
-            if let Some(ref working_memory) = memory.working_memory {
-                messages.push(avrag_llm::ChatMessage::system(format!(
-                    "Working memory:\nCurrent topic: {}\nPending questions: {}\nKnown facts: {}",
-                    working_memory
-                        .current_topic
-                        .clone()
-                        .unwrap_or_else(|| "none".to_string()),
-                    working_memory.pending_questions.join(" | "),
-                    working_memory.gathered_facts.join(" | ")
-                )));
-            }
-        }
-
-        if let Ok(db_messages) = pg.list_messages(&self.auth, session_uuid).await {
-            for msg in db_messages
-                .into_iter()
-                .rev()
-                .take(12)
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-            {
-                messages.push(avrag_llm::ChatMessage {
-                    role: if msg.role == "user" {
-                        "user".to_string()
-                    } else {
-                        "assistant".to_string()
-                    },
-                    content: msg.content,
-                });
-            }
-        }
-        messages.push(avrag_llm::ChatMessage::user(refined_query.clone()));
+        let reference_context = self.build_main_agent_reference_context(Some(session)).await;
+        let messages = crate::main_agent::MainAgent::build_general_messages(
+            &refined_query,
+            reference_context.as_ref(),
+        );
 
         let mut degrade_trace = Vec::new();
-        let mut general_llm_usage: Option<avrag_llm::LlmUsage> = None;
-        let mut answer_model: Option<String> = None;
-        let answer = if let Some(ref llm) = self.llm_client {
-            match llm
-                .complete(&messages, self.config.answer_llm.temperature)
-                .await
-            {
-                Ok(resp) => {
-                    answer_model = Some(self.config.answer_llm.model.clone());
-                    general_llm_usage = Some(resp.usage.clone());
-                    resp.content
-                }
-                Err(error) => {
-                    degrade_trace.push(DegradeTraceItem {
-                        stage: "general.answer".to_string(),
-                        reason: format!("llm_error: {error}"),
-                        impact: "Returned retry hint to user".to_string(),
-                    });
-                    "Network is unstable. Please try again later.".to_string()
-                }
-            }
-        } else {
-            degrade_trace.push(DegradeTraceItem {
-                stage: "general.answer".to_string(),
-                reason: "answer_llm_not_configured".to_string(),
-                impact: "Returned retry hint to user".to_string(),
-            });
-            "Network is unstable. Please try again later.".to_string()
-        };
+        let answer_result = crate::main_agent::MainAgent::answer_general(
+            self.llm_client.as_ref(),
+            &messages,
+            self.config.answer_llm.temperature,
+            &mut degrade_trace,
+        )
+        .await;
+        let answer_model = answer_result
+            .llm_usage
+            .as_ref()
+            .map(|usage| usage.model.clone())
+            .filter(|model| !model.trim().is_empty());
+        let general_llm_usage = answer_result.llm_usage.clone();
+        let answer = answer_result.answer_text;
 
         let mut general_debug = BTreeMap::new();
         general_debug.insert(
@@ -292,6 +229,7 @@ impl AppState {
                 guard_report: None,
             },
             llm_usage: general_llm_usage,
+            debug_metadata: None,
         })
     }
 
@@ -346,9 +284,12 @@ impl AppState {
             .iter()
             .enumerate()
             .map(|(index, result)| Citation {
-                citation_id: (index + 1) as i64,
+                citation_id: result.citation_index.unwrap_or(index + 1) as i64,
                 doc_id: result.url.clone(),
-                chunk_id: None,
+                chunk_id: Some(format!(
+                    "search:{}",
+                    result.citation_index.unwrap_or(index + 1)
+                )),
                 page: None,
                 doc_name: result.title.clone(),
                 preview: Some(result.snippet.clone()),
@@ -360,7 +301,10 @@ impl AppState {
                 caption: None,
                 image_url: None,
                 parser_backend: None,
-                source_locator: None,
+                source_locator: Some(serde_json::json!({
+                    "url": result.url.clone(),
+                    "citation_index": result.citation_index.unwrap_or(index + 1),
+                })),
             })
             .collect();
 
@@ -417,6 +361,7 @@ impl AppState {
                 guard_report: None,
             },
             llm_usage,
+            debug_metadata: None,
         })
     }
 }

@@ -19,3 +19,4 @@ avrag-auth = { path = "../auth" }
 avrag-storage-pg = { path = "../storage-pg" }
 avrag-storage-qdrant = { path = "../storage-qdrant" }
 avrag-llm = { path = "../llm" }
+avrag-search = { path = "../search" }

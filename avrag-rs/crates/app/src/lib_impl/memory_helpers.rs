@@ -75,14 +75,68 @@ fn extract_pending_questions(query: &str) -> Vec<String> {
     }
 }
 
-fn extract_gathered_facts(answer: &str) -> Vec<String> {
-    answer
-        .split_terminator(['?', '.', '!', '?', '?', '?'])
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .take(5)
+fn infer_last_document(response: &ChatResponse) -> Option<String> {
+    response
+        .citations
+        .iter()
+        .map(|citation| citation.doc_name.trim())
+        .find(|value| !value.is_empty())
+        .or_else(|| {
+            response
+                .sources
+                .iter()
+                .map(|source| source.title.trim())
+                .find(|value| !value.is_empty())
+        })
         .map(ToOwned::to_owned)
-        .collect()
+}
+
+fn infer_last_entity(query: &str) -> Option<String> {
+    let trimmed = query.trim();
+    for (open, close) in [
+        ("`", "`"),
+        ("\"", "\""),
+        ("'", "'"),
+        ("“", "”"),
+        ("《", "》"),
+    ] {
+        if let Some(start) = trimmed.find(open) {
+            let rest = &trimmed[start + open.len()..];
+            if let Some(end) = rest.find(close) {
+                let entity = rest[..end].trim();
+                if !entity.is_empty() {
+                    return Some(entity.chars().take(80).collect());
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn merge_general_profile_custom_preferences(
+    mut custom_preferences: serde_json::Value,
+    agent_memory: common::AgentPreferenceMemory,
+    query: &str,
+    refined_query: &str,
+) -> serde_json::Value {
+    if !custom_preferences.is_object() {
+        custom_preferences = serde_json::json!({});
+    }
+    if let Some(object) = custom_preferences.as_object_mut() {
+        object.entry("agent_memory".to_string()).or_insert_with(|| {
+            serde_json::to_value(agent_memory).unwrap_or_else(|_| serde_json::json!({}))
+        });
+        object.insert(
+            "last_general_query".to_string(),
+            serde_json::json!(query.trim()),
+        );
+        object.insert(
+            "refined_query".to_string(),
+            serde_json::json!(refined_query.trim()),
+        );
+    }
+    custom_preferences
 }
 
 fn build_degrade_trace(agent_type: &str, has_context: bool) -> Vec<DegradeTraceItem> {

@@ -52,6 +52,12 @@ pub struct DocumentTaskSeed {
 }
 
 #[derive(Debug, Clone)]
+pub struct DocumentScopeState {
+    pub document_id: Uuid,
+    pub status: DocumentStatus,
+}
+
+#[derive(Debug, Clone)]
 pub struct IndexedChunk {
     pub chunk_id: String,
     pub doc_id: String,
@@ -70,9 +76,11 @@ fn map_notebook(row: PgRow) -> Result<Notebook, PgStorageError> {
     let created_at: DateTime<Utc> = row.try_get("created_at")?;
     let updated_at: DateTime<Utc> = row.try_get("updated_at")?;
     let document_count: i64 = row.try_get("document_count").unwrap_or(0);
-    let status_summary_json: serde_json::Value =
-        row.try_get("status_summary").unwrap_or_else(|_| serde_json::json!({}));
-    let status_summary: std::collections::HashMap<String, i64> = serde_json::from_value(status_summary_json).unwrap_or_default();
+    let status_summary_json: serde_json::Value = row
+        .try_get("status_summary")
+        .unwrap_or_else(|_| serde_json::json!({}));
+    let status_summary: std::collections::HashMap<String, i64> =
+        serde_json::from_value(status_summary_json).unwrap_or_default();
     let shared: bool = row.try_get("shared").unwrap_or(false);
     Ok(Notebook {
         id: id.to_string(),
@@ -260,6 +268,9 @@ fn map_dialogue_state(row: PgRow) -> Result<DialogueStateRow, PgStorageError> {
         user_id,
         state_type: row.try_get("state_type")?,
         current_topic: row.try_get("current_topic").ok(),
+        last_document: row.try_get("last_document").ok().flatten(),
+        last_entity: row.try_get("last_entity").ok().flatten(),
+        unresolved_question: row.try_get("unresolved_question").ok().flatten(),
         pending_questions: json_string_vec(row.try_get("pending_questions")?),
         gathered_facts: json_string_vec(row.try_get("gathered_facts")?),
         confidence_score: row

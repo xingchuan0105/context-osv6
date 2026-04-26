@@ -1,35 +1,4 @@
 #[derive(Clone)]
-struct RagLoadSessionContextTask {
-    state: AppState,
-}
-
-#[async_trait]
-impl Task for RagLoadSessionContextTask {
-    fn id(&self) -> &str {
-        TASK_RAG_LOAD_SESSION_CONTEXT
-    }
-
-    async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
-        info!(
-            node = TASK_RAG_LOAD_SESSION_CONTEXT,
-            "graphflow chat node start"
-        );
-        let flow = ChatFlowContext::from(context);
-        let session = flow.session().await?;
-        let session_context = self
-            .state
-            .build_session_context(&session)
-            .await
-            .map_err(graph_app_error)?;
-        if let Some(session_context) = session_context {
-            flow.set_rag_session_context(&session_context).await;
-        }
-
-        Ok(TaskResult::move_to_next())
-    }
-}
-
-#[derive(Clone)]
 struct RagPreparePlannerInputTask {
     state: AppState,
 }
@@ -95,48 +64,58 @@ impl Task for RagCallPlannerTask {
         info!(node = TASK_RAG_CALL_PLANNER, "graphflow chat node start");
         let flow = ChatFlowContext::from(context);
         let request = flow.request().await?;
-        let rag_runtime = require_rag_runtime(&self.state)?;
+        let session = flow.session().await?;
         let mut degrade_trace = flow.degrade_trace().await.unwrap_or_default();
-
-        let (rag_plan, planner_usage) = rag_runtime
-            .plan(
+        let docscope_metadata = flow.docscope_metadata().await;
+        let plan_result = self
+            .state
+            .plan_rag_with_main_agent(
                 &request,
-                None,
-                flow.docscope_metadata().await.as_ref(),
+                Some(&session),
+                docscope_metadata.as_ref(),
                 &mut degrade_trace,
             )
-            .await
-            .map_err(|error| graph_app_error(crate::map_anyhow_error(error)))?;
-        if let Some(usage) = planner_usage.as_ref() {
+            .await;
+        if let Some(usage) = plan_result.llm_usage.as_ref() {
             self.state
                 .record_llm_usage_if_available(
-                    avrag_usage_limit::BillableFeature::Planner,
-                    "rag_planner",
+                    avrag_usage_limit::BillableFeature::Chat,
+                    "main_agent_rag_plan",
                     usage,
                     "graphflow",
                 )
                 .await;
         }
 
-        let mut rag_plan = rag_plan;
-        if rag_plan.clarify_needed {
-            degrade_trace.push(common::DegradeTraceItem {
-                stage: TASK_RAG_CALL_PLANNER.to_string(),
-                reason: "planner clarify output ignored by main-agent controlled rag flow"
-                    .to_string(),
-                impact: "Continuing with normalized execute-plan retrieval.".to_string(),
-            });
-            rag_plan.clarify_needed = false;
-            rag_plan.clarify_message.clear();
-        }
+        let execute_request = match plan_result.decision {
+            crate::main_agent::MainAgentRagPlanDecision::Execute(execute_request) => {
+                execute_request
+            }
+            crate::main_agent::MainAgentRagPlanDecision::Clarify(message) => {
+                let execution = self
+                    .state
+                    .execute_clarify_mode_core(&request, &session, &message)
+                    .await
+                    .map_err(graph_app_error)?;
+                flow.set_execution(&execution).await;
+                flow.set_degrade_trace(&degrade_trace).await;
+                return Ok(TaskResult::new(
+                    None,
+                    NextAction::GoTo(TASK_OUTPUT_GUARD.to_string()),
+                ));
+            }
+        };
+
+        let rag_plan = execute_request.to_rag_plan_compat();
 
         info!(
             node = TASK_RAG_CALL_PLANNER,
-            summary_mode = %rag_plan_summary_mode(&rag_plan),
+            summary_mode = %execute_request.summary_mode.as_str(),
             items = ?rag_plan_items_for_log(&rag_plan),
-            "rag planner output ready"
+            "main agent rag execute-plan request ready"
         );
         flow.set_rag_plan(&rag_plan).await;
+        flow.set_rag_execute_request(&execute_request).await;
         flow.set_degrade_trace(&degrade_trace).await;
 
         Ok(TaskResult::move_to_next())
@@ -157,18 +136,15 @@ impl Task for RagNormalizePlanTask {
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         info!(node = TASK_RAG_NORMALIZE_PLAN, "graphflow chat node start");
         let flow = ChatFlowContext::from(context);
-        let request = flow.request().await?;
-        let mut rag_plan = flow.rag_plan().await?;
-        let rag_runtime = require_rag_runtime(&self.state)?;
-        let item_trace = rag_runtime.normalize_plan(&request, &mut rag_plan);
+        let execute_request = flow.rag_execute_request().await?;
+        let rag_plan = execute_request.to_rag_plan_compat();
         info!(
             node = TASK_RAG_NORMALIZE_PLAN,
             summary_mode = %rag_plan_summary_mode(&rag_plan),
-            item_trace = ?item_trace_for_log(&item_trace),
-            "rag plan normalized"
+            "main agent rag execute-plan request validated"
         );
         flow.set_rag_plan(&rag_plan).await;
-        flow.set_item_trace(&item_trace).await;
+        let _ = &self.state;
         Ok(TaskResult::move_to_next())
     }
 }
@@ -187,9 +163,7 @@ impl Task for RagExecutePlanTask {
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         info!(node = TASK_RAG_EXECUTE_PLAN, "graphflow chat node start");
         let flow = ChatFlowContext::from(context);
-        let request = flow.request().await?;
-        let rag_plan = flow.rag_plan().await?;
-        let execute_request = common::ExecutePlanRequest::from_rag_plan(&rag_plan, &request.doc_scope);
+        let execute_request = flow.rag_execute_request().await?;
         let execute_response = self
             .state
             .execute_rag_execute_plan(execute_request)
@@ -419,12 +393,7 @@ impl Task for RagApplySummaryPolicyTask {
         let rag_runtime = require_rag_runtime(&self.state)?;
         let retrieved_chunks = flow.retrieved_chunks().await.unwrap_or_default();
         let summaries = rag_runtime
-            .apply_summary_policy(
-                &request,
-                &self.state.auth,
-                &rag_plan,
-                &retrieved_chunks,
-            )
+            .apply_summary_policy(&request, &self.state.auth, &rag_plan, &retrieved_chunks)
             .await
             .map_err(|error| graph_app_error(crate::map_anyhow_error(error)))?;
         info!(
@@ -503,7 +472,11 @@ fn rag_plan_items_for_log(plan: &common::RagPlan) -> Vec<String> {
     plan.items
         .iter()
         .map(|item| {
-            if let Some(query) = item.query.as_deref().filter(|value| !value.trim().is_empty()) {
+            if let Some(query) = item
+                .query
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+            {
                 format!("query:{:.2}:{}", item.priority, query)
             } else if let Some(terms) = item.bm25_terms.as_ref().filter(|terms| !terms.is_empty()) {
                 format!("bm25:{:.2}:{}", item.priority, terms.join("|"))
@@ -567,36 +540,30 @@ impl Task for RagAnswerSynthesizeTask {
         );
         let flow = ChatFlowContext::from(context);
         let request = flow.request().await?;
-        let rag_plan = flow.rag_plan().await?;
+        let execute_request = flow.rag_execute_request().await?;
         let execute_response = flow.rag_execute_response().await?;
-        let item_trace = execute_response.backend_trace.item_trace.clone();
         let mut degrade_trace = flow.degrade_trace().await.unwrap_or_default();
-        let rag_runtime = require_rag_runtime(&self.state)?;
-        let answer_context = crate::main_agent::MainAgent::answer_context(&execute_response);
-        let synthesis_output = rag_runtime
-            .synthesize_answer_text(
+        let session = flow.session().await?;
+        let answer_output = self
+            .state
+            .answer_rag_with_main_agent(
                 &request,
-                None,
-                &rag_plan,
-                &item_trace,
-                &answer_context,
+                Some(&session),
+                &execute_request,
+                &execute_response,
                 &mut degrade_trace,
             )
             .await;
 
-        let rag_llm_usage = synthesis_output.llm_usage.clone();
-        let session = flow.session().await?;
-        let response = rag_runtime
-            .build_rag_chat_response_from_bundle(
-                &request,
-                Some(&session.id),
-                &rag_plan,
-                &execute_response,
-                synthesis_output,
-                degrade_trace,
-            )
-            .await
-            .map_err(|error| graph_app_error(crate::map_anyhow_error(error)))?;
+        let rag_llm_usage = answer_output.llm_usage.clone();
+        let response = crate::main_agent::MainAgent::build_rag_chat_response(
+            &request,
+            Some(&session.id),
+            &execute_request,
+            &execute_response,
+            answer_output,
+            degrade_trace,
+        );
 
         flow.set_execution(&ChatGraphExecution {
             mode: "rag".to_string(),
@@ -604,6 +571,13 @@ impl Task for RagAnswerSynthesizeTask {
             apply_output_guard: true,
             response,
             llm_usage: rag_llm_usage,
+            debug_metadata: Some(serde_json::json!({
+                "rag_tool": {
+                    "execute_plan_request": &execute_request,
+                    "execute_plan_coverage": &execute_response.coverage,
+                    "execute_plan_backend_trace": &execute_response.backend_trace,
+                }
+            })),
         })
         .await;
         Ok(TaskResult::move_to_next())

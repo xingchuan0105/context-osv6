@@ -13,6 +13,7 @@ app = { path = "../../crates/app" }
 avrag-auth = { path = "../../crates/auth" }
 avrag-cache-redis = { path = "../../crates/cache-redis" }
 avrag-llm = { path = "../../crates/llm" }
+avrag-search = { path = "../../crates/search" }
 avrag-storage-pg = { path = "../../crates/storage-pg" }
 avrag-storage-qdrant = { path = "../../crates/storage-qdrant" }
 chrono.workspace = true

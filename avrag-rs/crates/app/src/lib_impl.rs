@@ -8,6 +8,7 @@ include!("lib_impl/sessions.rs");
 include!("lib_impl/assets_notifications.rs");
 include!("lib_impl/preferences.rs");
 include!("lib_impl/chat_private.rs");
+include!("lib_impl/main_agent.rs");
 include!("lib_impl/rag_execute.rs");
 include!("lib_impl/chat_streaming.rs");
 include!("lib_impl/memory_helpers.rs");

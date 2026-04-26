@@ -3,6 +3,8 @@ use anyhow::Context;
 use serde::Deserialize;
 use serde_json::json;
 
+const TEXT_EMBEDDING_BATCH_SIZE: usize = 10;
+
 #[derive(Debug, Clone, Default)]
 pub struct MultiModalEmbeddingInput {
     pub text: Option<String>,
@@ -61,7 +63,11 @@ impl EmbeddingClient {
             return Ok(vectors);
         }
 
-        self.embed_openai_compatible_text(texts).await
+        let mut vectors = Vec::with_capacity(texts.len());
+        for batch in texts.chunks(TEXT_EMBEDDING_BATCH_SIZE) {
+            vectors.extend(self.embed_openai_compatible_text(batch).await?);
+        }
+        Ok(vectors)
     }
 
     pub async fn embed_multimodal_fused(

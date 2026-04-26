@@ -4,7 +4,7 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
-use common::{ChatResponse, CreateNotebookRequest};
+use common::{ChatResponse, CreateDocumentRequest, CreateNotebookRequest, DocumentStatus};
 use contracts::chat::ChatEvent;
 use http_body_util::BodyExt;
 use std::time::Duration;
@@ -70,6 +70,116 @@ async fn post_chat_with_accept_sse_only_returns_sse() {
         assert!(events.iter().any(|event| matches!(event, ChatEvent::AnswerStart { request_id: rid, .. } if rid == request_id)));
         assert!(events.iter().any(|event| matches!(event, ChatEvent::Token { request_id: rid, .. } if rid == request_id)));
         assert!(events.iter().any(|event| matches!(event, ChatEvent::Done { request_id: rid, .. } if rid == request_id)));
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn post_rag_chat_stream_emits_timestamped_progress_before_answer() {
+    let (app, notebook_id, document_id, org_id) = test_app_with_ready_document().await;
+    let request_id = "req-rag-progress";
+    let response = app
+        .oneshot(chat_post_request(
+            org_id,
+            serde_json::json!({
+                "query": "Summarize available context.",
+                "notebook_id": notebook_id,
+                "agent_type": "rag",
+                "doc_scope": [document_id],
+                "stream": true
+            }),
+            Some("text/event-stream"),
+            Some(request_id),
+        ))
+        .await
+        .unwrap();
+
+    assert_sse_response(response, |events| {
+        let activity_phases = events
+            .iter()
+            .filter_map(|event| match event {
+                ChatEvent::Activity {
+                    request_id: rid,
+                    phase,
+                    timestamp,
+                    ..
+                } if rid == request_id => {
+                    assert!(
+                        timestamp
+                            .as_ref()
+                            .map(|value| !value.is_empty())
+                            .unwrap_or(false)
+                    );
+                    Some(phase.as_str())
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            activity_phases,
+            vec![
+                "planning",
+                "retrieving",
+                "reading_sources",
+                "drafting_answer"
+            ]
+        );
+
+        let answer_start_index = events
+            .iter()
+            .position(|event| {
+                matches!(event, ChatEvent::AnswerStart { request_id: rid, .. } if rid == request_id)
+            })
+            .expect("missing answer_start event");
+        let drafting_index = events
+            .iter()
+            .position(|event| {
+                matches!(
+                    event,
+                    ChatEvent::Activity { request_id: rid, phase, .. }
+                        if rid == request_id && phase == "drafting_answer"
+                )
+            })
+            .expect("missing drafting_answer activity");
+
+        assert!(drafting_index < answer_start_index);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn post_rag_chat_with_empty_doc_scope_clarifies_without_retrieval() {
+    let (app, notebook_id, org_id) = test_app().await;
+    let request_id = "req-rag-empty-scope";
+    let response = app
+        .oneshot(chat_post_request(
+            org_id,
+            serde_json::json!({
+                "query": "Summarize available context.",
+                "notebook_id": notebook_id,
+                "agent_type": "rag",
+                "stream": true
+            }),
+            Some("text/event-stream"),
+            Some(request_id),
+        ))
+        .await
+        .unwrap();
+
+    assert_sse_response(response, |events| {
+        assert!(!events.iter().any(|event| matches!(
+            event,
+            ChatEvent::Activity { phase, .. } if phase == "retrieving"
+        )));
+        let streamed_answer = events
+            .iter()
+            .filter_map(|event| match event {
+                ChatEvent::Token { content, .. } => Some(content.as_str()),
+                _ => None,
+            })
+            .collect::<String>();
+        assert!(streamed_answer.contains("选择"));
     })
     .await;
 }
@@ -164,6 +274,40 @@ async fn test_app() -> (axum::Router, String, Uuid) {
         .unwrap();
 
     (build_router(state), notebook.id, org_id)
+}
+
+async fn test_app_with_ready_document() -> (axum::Router, String, String, Uuid) {
+    let state = AppState::new(AppConfig::default());
+    let org_id = Uuid::new_v4();
+    let scoped = state.with_auth(AuthContext::new(OrgId::from(org_id), SubjectKind::User));
+    let notebook = scoped
+        .create_notebook(CreateNotebookRequest {
+            name: "stream-contract-rag".to_string(),
+            description: "chat stream RAG contract test".to_string(),
+        })
+        .await
+        .unwrap();
+    let upload = scoped
+        .create_document_upload(
+            &notebook.id,
+            CreateDocumentRequest {
+                filename: "atlas.txt".to_string(),
+                file_size: 32,
+                mime_type: "text/plain".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+    scoped
+        .put_uploaded_document(&upload.document_id, b"atlas rollback checklist".to_vec())
+        .await
+        .unwrap();
+    scoped
+        .transition_document_status(&upload.document_id, DocumentStatus::Completed)
+        .await
+        .unwrap();
+
+    (build_router(state), notebook.id, upload.document_id, org_id)
 }
 
 fn chat_post_request(

@@ -8,7 +8,9 @@ use common::{ChatRequest, DegradeTraceItem, RagPlan};
 use crate::merge::{cut_top_k, dual_threshold_cut, global_rrf_merge};
 use crate::retrieval::{self, ScoredChunk};
 
-use super::planner::{build_item_trace, effective_item_query, item_payload_kind, request_doc_ids};
+use super::planner::{
+    build_item_trace_with_total, effective_item_query, item_payload_kind, request_doc_ids,
+};
 use super::{
     FINAL_MIN_CHUNKS, FINAL_RERANK_BUDGET, FINAL_SCORE_THRESHOLD, GLOBAL_RRF_K, RagRuntime,
     TOTAL_CANDIDATE_BUDGET,
@@ -83,13 +85,24 @@ impl RagRuntime {
         auth: &AuthContext,
         rag_plan: &RagPlan,
     ) -> Result<(Vec<super::WeightedChunkList>, Vec<DegradeTraceItem>)> {
+        self.retrieve_text_dense_stage_with_budget(request, auth, rag_plan, TOTAL_CANDIDATE_BUDGET)
+            .await
+    }
+
+    pub async fn retrieve_text_dense_stage_with_budget(
+        &self,
+        request: &ChatRequest,
+        auth: &AuthContext,
+        rag_plan: &RagPlan,
+        total_candidate_budget: usize,
+    ) -> Result<(Vec<super::WeightedChunkList>, Vec<DegradeTraceItem>)> {
         let pg_repo = self
             .config
             .pg_repo
             .as_ref()
             .ok_or_else(|| anyhow!("rag postgres repository is not configured"))?;
         let doc_ids = request_doc_ids(request);
-        let item_trace = build_item_trace(request, rag_plan);
+        let item_trace = build_item_trace_with_total(request, rag_plan, total_candidate_budget);
         let mut lists = Vec::new();
         let mut degrade_trace = Vec::new();
 
@@ -152,15 +165,39 @@ impl RagRuntime {
         auth: &AuthContext,
         rag_plan: &RagPlan,
     ) -> Result<(Vec<super::WeightedChunkList>, Vec<DegradeTraceItem>)> {
+        self.retrieve_bm25_stage_with_budget(request, auth, rag_plan, TOTAL_CANDIDATE_BUDGET)
+            .await
+    }
+
+    pub async fn retrieve_bm25_stage_with_budget(
+        &self,
+        request: &ChatRequest,
+        auth: &AuthContext,
+        rag_plan: &RagPlan,
+        total_candidate_budget: usize,
+    ) -> Result<(Vec<super::WeightedChunkList>, Vec<DegradeTraceItem>)> {
         let pg_repo = self
             .config
             .pg_repo
             .as_ref()
             .ok_or_else(|| anyhow!("rag postgres repository is not configured"))?;
         let doc_ids = request_doc_ids(request);
-        let item_trace = build_item_trace(request, rag_plan);
+        let item_trace = build_item_trace_with_total(request, rag_plan, total_candidate_budget);
         let mut lists = Vec::new();
         let mut degrade_trace = Vec::new();
+        let transient_lexical_index = if self.config.lexical_index.is_none() {
+            self.config
+                .lexical_index_dir
+                .as_deref()
+                .and_then(|dir| avrag_search::TantivyLexicalIndex::open_reader(dir).ok())
+        } else {
+            None
+        };
+        let lexical_index = self
+            .config
+            .lexical_index
+            .as_deref()
+            .or(transient_lexical_index.as_ref());
 
         for (item, trace_item) in rag_plan.items.iter().zip(item_trace.iter()) {
             if item_payload_kind(item) != "bm25_terms" || trace_item.recall_budget == 0 {
@@ -168,7 +205,8 @@ impl RagRuntime {
             }
 
             let effective_query = effective_item_query(item, &request.query);
-            match retrieval::run_sparse_retrieval(
+            match retrieval::run_sparse_retrieval_with_lexical(
+                lexical_index,
                 pg_repo,
                 auth,
                 &effective_query,
@@ -177,10 +215,26 @@ impl RagRuntime {
             )
             .await
             {
-                Ok(chunks) => lists.push(super::WeightedChunkList {
-                    weight: item.priority,
-                    chunks: cut_top_k(chunks, trace_item.recall_budget),
-                }),
+                Ok(output) => {
+                    if let Some(reason) = output.trace.fallback_reason.as_ref() {
+                        degrade_trace.push(DegradeTraceItem {
+                            stage: "bm25".to_string(),
+                            reason: format!("Tantivy lexical retrieval failed: {}", reason),
+                            impact: "Fell back to PostgreSQL sparse retrieval for one lexical item"
+                                .to_string(),
+                        });
+                    }
+                    tracing::info!(
+                        lexical_backend = %output.trace.backend,
+                        raw_hit_count = output.trace.raw_hit_count,
+                        hydrated_hit_count = output.trace.hydrated_hit_count,
+                        "bm25_terms retrieval item completed"
+                    );
+                    lists.push(super::WeightedChunkList {
+                        weight: item.priority,
+                        chunks: cut_top_k(output.chunks, trace_item.recall_budget),
+                    });
+                }
                 Err(error) => degrade_trace.push(DegradeTraceItem {
                     stage: "bm25".to_string(),
                     reason: format!("BM25 retrieval failed: {}", error),
@@ -198,13 +252,29 @@ impl RagRuntime {
         auth: &AuthContext,
         rag_plan: &RagPlan,
     ) -> Result<(Vec<ScoredChunk>, Vec<DegradeTraceItem>)> {
+        self.retrieve_multimodal_dense_stage_with_budget(
+            request,
+            auth,
+            rag_plan,
+            TOTAL_CANDIDATE_BUDGET,
+        )
+        .await
+    }
+
+    pub async fn retrieve_multimodal_dense_stage_with_budget(
+        &self,
+        request: &ChatRequest,
+        auth: &AuthContext,
+        rag_plan: &RagPlan,
+        total_candidate_budget: usize,
+    ) -> Result<(Vec<ScoredChunk>, Vec<DegradeTraceItem>)> {
         let pg_repo = self
             .config
             .pg_repo
             .as_ref()
             .ok_or_else(|| anyhow!("rag postgres repository is not configured"))?;
         let doc_ids = request_doc_ids(request);
-        let item_trace = build_item_trace(request, rag_plan);
+        let item_trace = build_item_trace_with_total(request, rag_plan, total_candidate_budget);
         let mut chunks = Vec::new();
         let mut degrade_trace = Vec::new();
         let query_item_count = rag_plan
@@ -285,13 +355,22 @@ impl RagRuntime {
             }
         }
 
-        Ok((cut_top_k(chunks, TOTAL_CANDIDATE_BUDGET), degrade_trace))
+        Ok((cut_top_k(chunks, total_candidate_budget), degrade_trace))
     }
 
     pub fn merge_text_stage(
         &self,
         text_dense_lists: Vec<super::WeightedChunkList>,
         sparse_lists: Vec<super::WeightedChunkList>,
+    ) -> Vec<ScoredChunk> {
+        self.merge_text_stage_with_budget(text_dense_lists, sparse_lists, TOTAL_CANDIDATE_BUDGET)
+    }
+
+    pub fn merge_text_stage_with_budget(
+        &self,
+        text_dense_lists: Vec<super::WeightedChunkList>,
+        sparse_lists: Vec<super::WeightedChunkList>,
+        total_candidate_budget: usize,
     ) -> Vec<ScoredChunk> {
         let mut rrf_inputs = Vec::new();
         for list in text_dense_lists {
@@ -302,7 +381,7 @@ impl RagRuntime {
         }
         cut_top_k(
             global_rrf_merge(rrf_inputs, GLOBAL_RRF_K),
-            TOTAL_CANDIDATE_BUDGET,
+            total_candidate_budget,
         )
     }
 
@@ -312,8 +391,26 @@ impl RagRuntime {
         text_pool: Vec<ScoredChunk>,
         multimodal_pool: Vec<ScoredChunk>,
     ) -> Result<(Vec<ScoredChunk>, Vec<DegradeTraceItem>)> {
+        self.multimodal_rerank_stage_with_budget(
+            query,
+            text_pool,
+            multimodal_pool,
+            TOTAL_CANDIDATE_BUDGET,
+            FINAL_RERANK_BUDGET,
+        )
+        .await
+    }
+
+    pub async fn multimodal_rerank_stage_with_budget(
+        &self,
+        query: &str,
+        text_pool: Vec<ScoredChunk>,
+        multimodal_pool: Vec<ScoredChunk>,
+        total_candidate_budget: usize,
+        rerank_budget: usize,
+    ) -> Result<(Vec<ScoredChunk>, Vec<DegradeTraceItem>)> {
         let final_candidates =
-            build_final_candidate_pool(text_pool, multimodal_pool, TOTAL_CANDIDATE_BUDGET);
+            build_final_candidate_pool(text_pool, multimodal_pool, total_candidate_budget);
         if final_candidates.is_empty() {
             return Ok((
                 Vec::new(),
@@ -327,18 +424,24 @@ impl RagRuntime {
 
         let mut degrade_trace = Vec::new();
         let reranked = self
-            .rerank_item_chunks(
-                query,
-                final_candidates,
-                FINAL_RERANK_BUDGET,
-                &mut degrade_trace,
-            )
+            .rerank_item_chunks(query, final_candidates, rerank_budget, &mut degrade_trace)
             .await;
         Ok((reranked, degrade_trace))
     }
 
     pub fn cut_final_candidates_stage(&self, reranked: Vec<ScoredChunk>) -> Vec<ScoredChunk> {
         dual_threshold_cut(reranked, FINAL_MIN_CHUNKS, FINAL_SCORE_THRESHOLD)
+    }
+
+    pub fn cut_final_candidates_stage_with_budget(
+        &self,
+        reranked: Vec<ScoredChunk>,
+        final_chunk_budget: usize,
+    ) -> Vec<ScoredChunk> {
+        dual_threshold_cut(reranked, final_chunk_budget, FINAL_SCORE_THRESHOLD)
+            .into_iter()
+            .take(final_chunk_budget)
+            .collect()
     }
 }
 

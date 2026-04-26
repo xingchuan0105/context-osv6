@@ -200,6 +200,10 @@ impl RagRuntime {
         context_chunks
     }
 
+    /// Legacy compatibility synthesizer for old `RagPlan` + session context callers.
+    ///
+    /// Product chat now answers through the Main Agent with the execute-plan
+    /// retrieval bundle as the only factual evidence.
     pub async fn synthesize_answer_text(
         &self,
         request: &ChatRequest,
@@ -306,6 +310,7 @@ impl RagRuntime {
         }
     }
 
+    /// Legacy compatibility streaming synthesizer for old `RagPlan` callers.
     pub async fn synthesize_answer_text_stream(
         &self,
         request: &ChatRequest,
@@ -546,7 +551,8 @@ impl RagRuntime {
         synthesis_output: avrag_llm::SynthesisOutput,
         degrade_trace: Vec<DegradeTraceItem>,
     ) -> Result<ChatResponse> {
-        if execute_response.bundle.chunks.is_empty() && execute_response.bundle.summary_chunks.is_empty()
+        if execute_response.bundle.chunks.is_empty()
+            && execute_response.bundle.summary_chunks.is_empty()
         {
             return Ok(no_chunks_response(
                 request,
@@ -596,10 +602,13 @@ impl RagRuntime {
             .iter()
             .enumerate()
             .filter_map(|(index, chunk)| {
-                citation_by_chunk_id.get(&chunk.chunk_id).cloned().map(|mut citation| {
-                    citation.citation_id = (index + 1) as i64;
-                    citation
-                })
+                citation_by_chunk_id
+                    .get(&chunk.chunk_id)
+                    .cloned()
+                    .map(|mut citation| {
+                        citation.citation_id = (index + 1) as i64;
+                        citation
+                    })
             })
             .collect::<Vec<_>>();
 

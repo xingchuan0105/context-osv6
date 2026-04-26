@@ -1,6 +1,7 @@
 # 文件解析路由与检索召回优化实施计划
 
 > **状态**: Draft for Review
+> **2026-04-26 文档状态**: Historical plan. Parser routing and text/multimodal evidence ideas remain useful; Qdrant/Tantivy/PG BM25 storage targets are superseded by [Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md).
 > **关联 ADR**: `docs/adr/0002-ingestion-routing-and-retrieval.md`
 > **执行原则**: 先审阅计划，再按 Phase 顺序实施；在未批准前，不进入代码落地。
 

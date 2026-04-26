@@ -1,7 +1,10 @@
 # Main Agent 与 RAG 工具后端架构设计
 
-> **状态**: Draft for Review
+> **状态**: Draft for Review; 2026-04-26 backend v1 boundary implemented for `Main Agent -> ExecutePlanRequest -> RAG API`.
+> `clarify_needed` is legacy `RagPlan` display compatibility only and is not part of the execute-plan contract.
+> **最新架构收口**: [2026-04-26 Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md)
 > **来源**: [2026-04-23-rag-tool-backend-and-agent-control-discussion.md](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-23-rag-tool-backend-and-agent-control-discussion.md)
+> **记忆层方案**: [2026-04-25-main-agent-memory-and-context-design.md](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-25-main-agent-memory-and-context-design.md)
 
 ## 1. 目标
 
@@ -20,7 +23,7 @@
 目标不是继续优化当前 graphflow 的 prompt，而是把系统边界改成：
 
 - `Main Agent` 决定“问还是查”
-- `RAG API` 只负责“按计划执行检索”
+- `RAG API` 只负责“按计划执行检索”；它可以调用模型完成三元组抽取、query entity extraction、relation/path rerank、chunk rerank 等检索子任务，但这些是 bounded retrieval operators，不是用户级 agent 行为。
 
 这样可以同时支持：
 
@@ -50,7 +53,7 @@
    - 检索计划生成
 2. `planner` 会吃到 session summary 和 recent messages，一旦历史失败状态进入上下文，就会被持续放大。
 3. `clarify_needed=true` 会直接短路检索，导致错误判断扩散到整条链路。
-4. 这种链路适合“后端自带 agent”，不适合“RAG 作为纯工具后端”。
+4. 这种链路适合“后端自带 agent”，不适合“RAG 作为可复用检索工具后端”。
 
 因此，当前问题不是局部 prompt 不够好，而是职责边界过宽。
 
@@ -60,12 +63,12 @@
 
 本设计固定以下原则：
 
-1. `RAG API` 不是 agent，只是工具 backend。
+1. `RAG API` 不是用户级 agent，只是工具 backend；它可以包含模型辅助检索算子。
 2. `clarify` 是 `Main Agent` 的自然语言回合，不是 RAG 契约的一部分。
 3. `Main Agent` 自身承担 orchestration，不再单独引入一个“传话式 orchestrator”组件。
 4. 内部前端 agent 与外部 assistant agent，统一向 `RAG API` 发送 `plan schema`。
-5. workspace 内的指代消解，优先依赖 `docscope + doc metadata`，memory 只做补充。
-6. memory 不能把历史失败状态当作事实条件带回 planning。
+5. workspace 内的指代消解，优先依赖 `docscope + doc metadata`，session working state 只做补充。
+6. 用户偏好记忆只影响表达风格，不能把历史失败状态当作事实条件带回 planning。
 
 ---
 
@@ -79,7 +82,7 @@
 
 - 接收用户输入
 - 加载对应 mode 的 skill
-- 读取用户级 / workspace 级 memory
+- 读取用户偏好、session working state、recent turns、docscope metadata
 - 决定：
   - 直接 clarify
   - 直接普通 chat
@@ -92,7 +95,8 @@
 负责：
 
 - 接收 `plan schema`
-- 执行 dense / BM25 / rerank / summary injection / citation packaging
+- 执行 BM25 / text dense / multimodal dense / graph relation retrieval
+- 执行必要的 query entity extraction、relation/path rerank、chunk rerank、summary injection 与 citation packaging
 - 返回 retrieval bundle
 
 不负责：
@@ -158,13 +162,15 @@ frontend user
 - `plan_version`
 - `doc_scope`
 - `items`
+- `bm25_keywords`
+- `query_entities`
+- `graph_hints`
 - `summary_mode`
 - 可选预算
 - ACL / trace metadata
 
 它不应再接受：
 
-- 用户原始问题
 - session history
 - session summary
 - `clarify_needed`
@@ -176,7 +182,10 @@ frontend user
 
 - `chunks`
 - `citations`
+- `relation_paths`
+- `graph_supported_chunks`
 - `summary_chunks`
+- `score_breakdown`
 - `coverage`
 - `degrade_trace`
 - `backend_trace`
@@ -194,6 +203,7 @@ frontend user
 1. `RAG API` 可被任意 agent 复用，而不强绑当前产品的对话策略。
 2. 检索后端能保持确定性和可测性。
 3. planning / answer 的升级不会反复侵入 retrieval backend。
+4. vector graph rag 所需的模型调用被限定为检索算子，避免把第二个 agent 放回后端。
 
 ---
 
@@ -207,7 +217,7 @@ frontend user
 
 它是用户在产品内的统一入口，持有：
 
-- 用户级长期记忆
+- 极简用户偏好记忆
 - 当前 session 的短期对话上下文
 - 当前 workspace 的局部上下文
 - 当前 mode 对应的 skill profile
@@ -237,85 +247,117 @@ frontend user
 
 ---
 
-## 8. Memory 架构
+## 8. Memory 与上下文控制
 
-本设计不采用复杂状态机式 memory 分层，而采用：
+本设计不再引入 workspace 长期记忆或 `memvid` 作为 v1 主链依赖。
 
-1. 全局长期记忆
-2. workspace 短期记忆
-3. workspace 长期记忆
+原因是产品侧已经提供显式、可管理的记忆能力：
+
+- session 历史
+- 聊天记录
+- 内容源
+- 笔记管理
+- dashboard
+- workspace 内搜索
+- 全局搜索
+- RAG 文档索引
+
+因此，`Main Agent` 的记忆层只承担三个职责：
+
+1. 保存少量用户偏好，用于改善表达风格和交互体验。
+2. 组织当前会话上下文，用于多轮指代消解。
+3. 每日增量 consolidation，把跨 workspace 的交互信号沉淀成少量长期偏好。
+
+详细方案见：[Main Agent 记忆层与业务场景适配方案](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-25-main-agent-memory-and-context-design.md)。
 
 ### 8.1 指代消解优先级
 
 workspace 内的解释优先顺序固定为：
 
-1. 当前前端选中的 `docscope`
-2. `docscope` 对应的 `doc metadata`
-3. 当前用户问题中的显式实体或文件名
-4. workspace 短期记忆
-5. workspace 长期记忆
+1. 当前用户最新问题
+2. 当前前端选中的 `docscope`
+3. `docscope` 对应的 `document metadata`
+4. 当前问题中的显式实体、文件名、时间范围
+5. session working state
+6. 最近 `3-4` 轮相关对话
+7. 用户偏好记忆
 
 这意味着：
 
-- `docscope + metadata` 是主指代消解器
-- memory 只是补充信号
+- `docscope + metadata` 是主指代消解器。
+- session working state 和 recent turns 只是补充信号。
+- 用户偏好记忆不能参与事实判断。
 
-### 8.2 workspace 短期记忆
+### 8.2 用户偏好记忆
 
-短期记忆只保留：
+用户偏好记忆只保存稳定偏好，例如：
 
-- 最近 `3-4` 轮原始问答
+- 语言偏好
+- 回答长短偏好
+- 格式偏好
+- 技术深度偏好
+- 常用环境约束
 
-不做摘要，但在进入 planning 前做轻量去重：
+写入规则：
 
-- 若相邻 assistant 回复字符相似度超过 `80%`
-- 则只保留最新一条
+- 用户明确要求“记住”或在设置页保存偏好时，可立即写入 active preferences。
+- 默会偏好不按轮实时抽取，而是通过每日增量 consolidation 生成。
+- consolidation 只读取上次运行后的新增跨 workspace 会话和现有偏好文件。
+- consolidation 有新增偏好才追加；没有新增偏好则无输出。
+- 不自动把文档事实、RAG evidence、assistant 回答或失败结论写入记忆。
 
-设计目标是压掉重复失败模板，避免这些模板污染 planning。
+长期偏好以文本文件保存，例如 `user-preferences.md`：
 
-### 8.3 workspace 长期记忆
+- `Active Preferences` 用于运行时注入，可重写以保持干净。
+- `Daily Consolidation Log` 用于审计，append-only。
+- 用户删除或禁用的偏好进入 blocked list，后续 consolidation 不得重新生成同义偏好。
 
-workspace 长期记忆采用：
+### 8.3 session working state
 
-- `narrative + objects`
+session working state 是当前会话的轻量状态，不是长期记忆。
 
-示意结构：
+它可保存：
 
-```json
-{
-  "narrative": "用户持续围绕中国核电 MD 项目纪要提问，重点关注主要内容、行动项和项目边界。",
-  "objects": [
-    {
-      "type": "document",
-      "id": "941a2035-6d3f-46e8-86f3-fdc6e51ff8a6",
-      "name": "中国核电MD项目交流会议纪要0408.docx"
-    },
-    {
-      "type": "topic",
-      "name": "行动项"
-    }
-  ]
-}
-```
+- 当前 topic
+- 上一个明确文档
+- 上一个明确实体
+- 当前 unresolved question
 
-更新机制采用轮次触发：
+它不保存：
 
-- 每 `6-8` 轮更新一次
-- 或在阶段性会话结束时更新一次
+- 旧失败结论
+- 完整 assistant 回答
+- RAG 文档事实
+- 可由产品显式搜索或内容源系统管理的信息
 
-### 8.4 memvid 的角色
+### 8.4 mode-specific context
 
-`memvid` 仅承担：
+`RAG planning` 输入：
 
-- 用户级长期记忆
-- workspace 长期记忆
+- 当前用户问题
+- `docscope`
+- `document metadata`
+- session working state
+- 最近相关用户消息
+- `plan skill`
 
-不承担：
+`RAG answer` 输入：
 
-- planning 执行态临时状态
-- 高频短期对话窗口
+- 当前用户问题
+- planning 阶段解析后的独立问题
+- retrieval bundle
+- `answer skill`
+- 少量用户表达偏好
 
-这类高频状态仍由业务层轻状态持有。
+`Chat` 输入：
+
+- 当前用户问题
+- 用户偏好
+- session working state
+- 最近 `3-4` 轮对话
+- `chat skill`
+
+`Authoritative Context` 与 `Reference Context` 必须分区拼接。历史和记忆不能混入 RAG evidence。
 
 ---
 
@@ -347,6 +389,7 @@ workspace 长期记忆采用：
 2. 外部 provider agent 的内部能力设计
 3. 前端 UI 的 mode 交互细节
 4. WebSearch provider 的供应商选型
+5. `memvid` 或其他隐式长期记忆底座接入
 
 这些都放到后续专项设计中单独处理。
 
@@ -364,4 +407,5 @@ workspace 长期记忆采用：
 2. 前端产品中的 `RAG` 模式与 `Chat` 模式均经过同一个 `Main Agent`。
 3. `clarify` 已完全由 `Main Agent` 用自然语言处理。
 4. workspace 内的主要指代消解已优先依赖 `docscope + metadata`。
-5. `memvid` 已只承担长期记忆，不承担短期 planning 污染源。
+5. 用户偏好记忆只影响表达风格，不影响检索范围、事实判断或 citation。
+6. `memvid` 不作为 v1 主链依赖。

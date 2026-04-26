@@ -2,6 +2,7 @@
 
 > Date: 2026-03-30
 > Status: Committed, acceptance verified, usage-limit feature wired
+> Historical handoff. Backend stack notes reflect the March 2026 acceptance environment. Current retrieval architecture target is Milvus; see [2026-04-26 Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md).
 
 ## A. Canonical Paths
 

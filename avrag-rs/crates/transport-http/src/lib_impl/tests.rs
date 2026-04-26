@@ -111,6 +111,54 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn agent_preferences_api_can_get_put_and_delete_preferences() {
+        let state = test_app_state();
+        let app = build_router(state);
+        let org_id = "00000000-0000-0000-0000-000000000001";
+        let user_id = "00000000-0000-0000-0000-000000000002";
+
+        let put_req = Request::builder()
+            .uri("/api/auth/agent-preferences")
+            .method("PUT")
+            .header("Content-Type", "application/json")
+            .header(middleware::HEADER_ORG_ID, org_id)
+            .header(middleware::HEADER_USER_ID, user_id)
+            .body(Body::from(
+                r#"{"active":[{"id":"pref-1","text":"Use concise answers","category":"interaction","scope":"global","confidence":"explicit","source":"test","updated_at":"2026-04-26T00:00:00Z"}],"superseded":[],"blocked":[],"daily_log":[],"last_consolidated_at":null}"#,
+            ))
+            .unwrap();
+        let put_resp = app.clone().oneshot(put_req).await.unwrap();
+        assert_eq!(put_resp.status(), StatusCode::OK);
+
+        let get_req = Request::builder()
+            .uri("/api/auth/agent-preferences")
+            .method("GET")
+            .header(middleware::HEADER_ORG_ID, org_id)
+            .header(middleware::HEADER_USER_ID, user_id)
+            .body(Body::empty())
+            .unwrap();
+        let get_resp = app.clone().oneshot(get_req).await.unwrap();
+        assert_eq!(get_resp.status(), StatusCode::OK);
+        let get_body = to_bytes(get_resp.into_body(), usize::MAX).await.unwrap();
+        let get_payload: serde_json::Value = serde_json::from_slice(&get_body).unwrap();
+        assert_eq!(get_payload["active"][0]["id"], "pref-1");
+
+        let delete_req = Request::builder()
+            .uri("/api/auth/agent-preferences/pref-1")
+            .method("DELETE")
+            .header(middleware::HEADER_ORG_ID, org_id)
+            .header(middleware::HEADER_USER_ID, user_id)
+            .body(Body::empty())
+            .unwrap();
+        let delete_resp = app.clone().oneshot(delete_req).await.unwrap();
+        assert_eq!(delete_resp.status(), StatusCode::OK);
+        let delete_body = to_bytes(delete_resp.into_body(), usize::MAX).await.unwrap();
+        let delete_payload: serde_json::Value = serde_json::from_slice(&delete_body).unwrap();
+        assert!(delete_payload["active"].as_array().unwrap().is_empty());
+        assert_eq!(delete_payload["blocked"][0]["id"], "pref-1");
+    }
+
+    #[tokio::test]
     async fn chat_session_routes_work_with_auth_headers() {
         let state = test_app_state();
         let notebook = state

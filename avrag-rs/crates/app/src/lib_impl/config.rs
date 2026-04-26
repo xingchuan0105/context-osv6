@@ -5,9 +5,9 @@ use avrag_chatmemory::ChatMemory;
 use avrag_guardrails::GuardPipeline;
 use avrag_llm::{AnswerSynthesizer, EmbeddingClient, LlmClient, RerankerClient, RetrievalPlanner};
 use avrag_rag_core::{RagConfig, RagRuntime, context::SessionContext as RagSessionContext};
-use avrag_search::SearchExecutor;
+use avrag_search::{SearchExecutor, TantivyLexicalIndex};
 use avrag_storage_pg::{
-    DocumentAssetRow, DocumentTaskSeed, NotificationCreateParams, ObjectStoreHandle,
+    DocumentAssetRow, DocumentScopeState, DocumentTaskSeed, NotificationCreateParams, ObjectStoreHandle,
     PgAppRepository, PgStorageError, S3ObjectStore,
 };
 use avrag_storage_qdrant::HttpQdrantBackend;
@@ -55,6 +55,7 @@ pub struct AppConfig {
     pub database_url: Option<String>,
     pub auto_migrate: bool,
     pub object_root: String,
+    pub tantivy_index_dir: Option<String>,
     pub qdrant: QdrantConfig,
     pub embedding: ModelProviderConfig,
     pub mm_embedding: ModelProviderConfig,
@@ -159,6 +160,7 @@ impl Default for AppConfig {
             database_url: None,
             auto_migrate: true,
             object_root: default_object_root(),
+            tantivy_index_dir: None,
             qdrant: QdrantConfig {
                 url: "http://127.0.0.1:6333".to_string(),
                 host: "127.0.0.1".to_string(),
@@ -310,6 +312,7 @@ impl AppConfig {
         config.database_url = env_optional_string("DATABASE_URL");
         config.auto_migrate = env_bool("AVRAG_RUN_MIGRATIONS", config.auto_migrate);
         config.object_root = env_string("AVRAG_OBJECT_ROOT", &config.object_root);
+        config.tantivy_index_dir = env_optional_string("TANTIVY_INDEX_DIR");
 
         config.qdrant.host = env_string("QDRANT_HOST", &config.qdrant.host);
         config.qdrant.port = env_u16("QDRANT_PORT", config.qdrant.port);

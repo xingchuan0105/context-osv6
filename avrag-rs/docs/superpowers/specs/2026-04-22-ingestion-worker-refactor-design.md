@@ -1,5 +1,7 @@
 # ingestion worker 改造清单（双 collection / 双模型版）
 
+> 2026-04-26 文档状态: Partially superseded. The DocumentIR, parser backend routing, and text/multimodal split remain valid. The Qdrant-specific collection target is superseded by Milvus as the unified retrieval data plane; see [Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md).
+
 ## 1. 目标
 
 在不推翻现有 API、队列和 worker 骨架的前提下，把 ingestion 主链路升级为：
@@ -395,4 +397,3 @@ pub enum ParseBackendChoice {
 3. PDF 数字页和 OCR 页都能稳定落到正确 backend
 4. text collection 与 multimodal collection 长期稳定运行
 5. 新链路出错时可以从 `parse_run -> blocks -> chunks -> vectors` 全链审计
-

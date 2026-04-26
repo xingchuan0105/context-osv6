@@ -1,0 +1,40 @@
+{
+  "name": "frontend-next",
+  "private": true,
+  "version": "0.0.1",
+  "packageManager": "pnpm@10.32.1",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest",
+    "typecheck": "next typegen && tsc --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.99.2",
+    "@tiptap/extensions": "^3.22.4",
+    "@tiptap/markdown": "^3.22.4",
+    "@tiptap/pm": "^3.22.4",
+    "@tiptap/react": "^3.22.4",
+    "@tiptap/starter-kit": "^3.22.4",
+    "next": "16.2.4",
+    "next-intl": "4.9.1",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "react-hook-form": "7.72.1",
+    "zod": "4.3.6",
+    "zustand": "5.0.12"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.53.0",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/react": "16.3.0",
+    "@testing-library/user-event": "14.6.1",
+    "@types/node": "24.6.1",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "jsdom": "27.0.0",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  }
+}

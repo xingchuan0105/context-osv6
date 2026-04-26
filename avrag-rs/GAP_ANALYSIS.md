@@ -1,6 +1,7 @@
 # context-osv6 PRD 对照 Gap 分析
 
 > 基于 2026-03-20 代码审查，对照 PRD_RUST.md 逐项评估
+> Historical snapshot. Retrieval/storage target references to Qdrant, PG BM25, or March 2026 PRD sections are superseded by [2026-04-26 Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md).
 
 ## 一、已完成（真实实现，非占位）
 

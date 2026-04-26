@@ -1,4 +1,38 @@
 impl PgAppRepository {
+    pub async fn get_document_scope_states(
+        &self,
+        context: &AuthContext,
+        doc_ids: &[Uuid],
+    ) -> Result<Vec<DocumentScopeState>, PgStorageError> {
+        if doc_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut tx = self.pool.begin(context).await?;
+        let rows = sqlx::query(
+            r#"
+            select id, status
+            from documents
+            where id = any($1)
+            "#,
+        )
+        .bind(doc_ids)
+        .fetch_all(tx.inner())
+        .await?;
+        tx.commit().await?;
+
+        rows.into_iter()
+            .map(|row| {
+                let document_id: Uuid = row.try_get("id")?;
+                let status: String = row.try_get("status")?;
+                Ok(DocumentScopeState {
+                    document_id,
+                    status: parse_document_status(&status),
+                })
+            })
+            .collect()
+    }
+
     pub async fn get_chunk_by_id(
         &self,
         context: &AuthContext,

@@ -97,6 +97,7 @@ mod tests {
             apply_output_guard: true,
             response: response.clone(),
             llm_usage: None,
+            debug_metadata: None,
         };
         context.set(KEY_EXECUTION, execution).await;
 

@@ -153,7 +153,10 @@ pub(super) fn rag_summary_mode(plan: &RagPlan) -> String {
         .unwrap_or_else(|| "none".to_string())
 }
 
-pub(super) fn allocate_item_candidate_budgets(items: &[RagPlanItem]) -> Vec<usize> {
+pub(super) fn allocate_item_candidate_budgets_with_total(
+    items: &[RagPlanItem],
+    total_candidate_budget: usize,
+) -> Vec<usize> {
     let active_indices = items
         .iter()
         .enumerate()
@@ -164,8 +167,8 @@ pub(super) fn allocate_item_candidate_budgets(items: &[RagPlanItem]) -> Vec<usiz
     }
 
     let mut budgets = vec![0; items.len()];
-    if active_indices.len() >= TOTAL_CANDIDATE_BUDGET {
-        for index in active_indices.into_iter().take(TOTAL_CANDIDATE_BUDGET) {
+    if active_indices.len() >= total_candidate_budget {
+        for index in active_indices.into_iter().take(total_candidate_budget) {
             budgets[index] = 1;
         }
         return budgets;
@@ -175,7 +178,7 @@ pub(super) fn allocate_item_candidate_budgets(items: &[RagPlanItem]) -> Vec<usiz
         budgets[index] = 1;
     }
 
-    let remaining = TOTAL_CANDIDATE_BUDGET - active_indices.len();
+    let remaining = total_candidate_budget - active_indices.len();
     if remaining == 0 {
         return budgets;
     }
@@ -221,6 +224,11 @@ pub(super) fn allocate_item_candidate_budgets(items: &[RagPlanItem]) -> Vec<usiz
     budgets
 }
 
+#[cfg(test)]
+pub(super) fn allocate_item_candidate_budgets(items: &[RagPlanItem]) -> Vec<usize> {
+    allocate_item_candidate_budgets_with_total(items, TOTAL_CANDIDATE_BUDGET)
+}
+
 pub(super) fn request_doc_ids(request: &ChatRequest) -> Option<Vec<Uuid>> {
     (!request.doc_scope.is_empty()).then(|| {
         request
@@ -232,7 +240,16 @@ pub(super) fn request_doc_ids(request: &ChatRequest) -> Option<Vec<Uuid>> {
 }
 
 pub(super) fn build_item_trace(request: &ChatRequest, rag_plan: &RagPlan) -> Vec<RagTraceItem> {
-    let candidate_budgets = allocate_item_candidate_budgets(&rag_plan.items);
+    build_item_trace_with_total(request, rag_plan, TOTAL_CANDIDATE_BUDGET)
+}
+
+pub(super) fn build_item_trace_with_total(
+    request: &ChatRequest,
+    rag_plan: &RagPlan,
+    total_candidate_budget: usize,
+) -> Vec<RagTraceItem> {
+    let candidate_budgets =
+        allocate_item_candidate_budgets_with_total(&rag_plan.items, total_candidate_budget);
 
     rag_plan
         .items
@@ -261,7 +278,7 @@ pub(super) fn build_item_trace(request: &ChatRequest, rag_plan: &RagPlan) -> Vec
                 } else {
                     0
                 },
-                rerank_budget: FINAL_RERANK_BUDGET,
+                rerank_budget: total_candidate_budget.min(FINAL_RERANK_BUDGET),
                 source_count: 0,
                 source_ids: Vec::new(),
             }
@@ -302,6 +319,11 @@ pub(super) fn planner_session_context(session_context: Option<&SessionContext>) 
 }
 
 impl RagRuntime {
+    /// Legacy compatibility path for old `RagPlan` callers.
+    ///
+    /// Product chat now plans through the Main Agent and enters RAG via
+    /// `ExecutePlanRequest`; keep this only for direct runtime tests and older
+    /// integration surfaces.
     pub async fn plan(
         &self,
         request: &ChatRequest,

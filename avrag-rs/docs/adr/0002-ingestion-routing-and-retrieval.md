@@ -1,5 +1,9 @@
 # ADR 0002: 文件解析路由与多模态检索召回优化
 
+> Status: historical ADR, partially superseded on 2026-04-26.
+> The parser routing, DocumentIR, text/multimodal evidence, and citation ideas remain valid.
+> Storage and retrieval target descriptions that mention Qdrant or PostgreSQL BM25 are superseded by [Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md): Milvus is the retrieval data plane for BM25 sparse, text dense, multimodal dense, and graph relation retrieval; Postgres remains the product control plane.
+
 ## 背景
 
 当前 `context-osv6` 的文档处理主链路是：
@@ -7,7 +11,7 @@
 1. `ParserFactory` 按扩展名选择本地解析器
 2. 解析结果统一落成 `ParsedDocument { pages[] }`
 3. `build_chunk_items()` 只为文本生成 `ParsedPreviewItem`
-4. Worker 将文本块写入 PostgreSQL，并把同一批文本向量写入 Qdrant
+4. 当前实现中 Worker 将文本块写入 PostgreSQL，并把同一批文本向量写入 Qdrant
 5. RAG runtime 只运行文本 BM25 + 文本 Dense + 文本 rerank
 
 这条链路已经满足纯文本、代码、基础 Office/PDF 的 MVP 需求，但对复杂版面文档存在三个结构性缺口：
@@ -148,7 +152,7 @@ MinerU 精准解析路径应遵循以下约束：
 - 切块：继续使用 `text-splitter`
 - 预算：沿用当前 `512 token` 目标预算
 - overlap：维持低重叠策略，默认 32-64 token 对应字符窗口即可
-- 检索：PostgreSQL BM25 + 文本 embedding 向量召回
+- 检索目标：Milvus BM25 sparse + 文本 embedding 向量召回
 
 #### 图文辅路
 
@@ -181,14 +185,14 @@ MinerU 精准解析路径应遵循以下约束：
 
 如果希望降低初期迁移复杂度，也可以在第一阶段先保留 `chunks` 表不动，仅新增 `document_assets` 与 `document_multimodal_chunks`，等多模态链路稳定后再考虑统一抽象。
 
-Qdrant 存储建议分两步：
+Milvus 存储建议分两步：
 
 1. MVP 阶段使用两个 collection：
    - `chunks_text`
    - `chunks_multimodal`
-2. 后续若验证命中率与维护复杂度可控，再评估迁移到单 collection + named vectors
+2. 同一 retrieval data plane 内继续增加 `kg_entities`、`kg_relations` 与 graph passage/chunk evidence collections
 
-选择双 collection 的原因是：它与当前文本检索主链兼容，改动边界清晰，便于逐步接入多模态而不破坏已有文本 RAG。
+选择双 chunk collection 的原因是：文本向量与多模态向量的模型、得分分布、召回语义不同，分开索引便于调参与回滚。Milvus 同时承担 BM25 sparse、text dense、multimodal dense 与 graph relation retrieval。
 
 ### 7. 检索召回升级为“双主路并发 + 汇合重排”
 
@@ -218,7 +222,7 @@ Planner 需要新增一个轻量判断：当前问题是否需要视觉证据。
 2. 文本 Dense Top 50
 3. 用 RRF 融合，得到文本候选 Top 30
 
-该路径继续复用当前 PostgreSQL + Qdrant + reranker 基础设施。
+该路径在目标架构中迁移为 Milvus BM25 + Milvus text dense + reranker。Postgres 只保留产品控制面和文档生命周期状态。
 
 #### 7.3 视觉辅路
 
@@ -288,8 +292,8 @@ Planner 需要新增一个轻量判断：当前问题是否需要视觉证据。
 - `crates/storage-pg`
   - 新增 `document_assets` / `document_multimodal_chunks` 的 repository API
   - 文本 chunks API 保持兼容
-- `crates/storage-qdrant`
-  - 支持文本 collection 与多模态 collection 的独立 upsert/search
+- Milvus retrieval adapter
+  - 支持 BM25 sparse、文本 collection、多模态 collection、KG entity/relation/passages 的独立 upsert/search
 
 #### RAG 层
 

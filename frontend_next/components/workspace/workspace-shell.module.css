@@ -1,0 +1,1183 @@
+.shell {
+  display: flex;
+  min-height: 100dvh;
+  height: 100dvh;
+  flex-direction: column;
+  background: hsl(var(--background));
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 4.5rem;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  box-shadow: var(--shadow-topbar);
+}
+
+.topBarBrand {
+  display: flex;
+  align-items: center;
+  gap: 0.72rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.topBarBrandBlock {
+  display: flex;
+  align-items: center;
+  gap: 0.72rem;
+  flex: none;
+}
+
+.topBarMark {
+  width: calc(var(--font-size-brand) * 2.4);
+  height: calc(var(--font-size-brand) * 2.4);
+  border-radius: 0.6rem;
+  flex: none;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.topBarWordmark {
+  display: grid;
+  gap: 0.05rem;
+  line-height: 1;
+}
+
+.topBarBrandName {
+  font-size: var(--font-size-brand);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-title);
+  line-height: var(--line-height-brand);
+  color: hsl(var(--foreground));
+}
+
+.topBarBrandLabel {
+  font-size: var(--font-size-overline);
+  font-weight: 700;
+  line-height: var(--line-height-overline);
+  letter-spacing: var(--letter-spacing-overline);
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.topBarDivider {
+  width: 1px;
+  height: calc(var(--font-size-shell-title) * 2);
+  background: hsl(var(--border));
+  flex: none;
+}
+
+.topBarTitleArea {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+}
+
+.railSubtitle,
+.topBarMeta,
+.historyItemMeta,
+.emptyState {
+  color: hsl(var(--muted-foreground));
+}
+
+.topBarMeta {
+  display: none;
+}
+
+.historyItemMeta {
+  font-size: var(--font-size-meta);
+  line-height: var(--line-height-meta);
+}
+
+.titleForm {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.topBarTitleInline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.titleInput,
+.filterField input,
+.dialogField input,
+.dialogField textarea {
+  border: 1px solid transparent;
+  border-radius: 0.55rem;
+  background: transparent;
+  color: hsl(var(--foreground));
+  padding: 0.55rem 0.75rem;
+}
+
+.titleInput {
+  min-width: 0;
+  width: min(100%, 22rem);
+  flex: 0 1 22rem;
+  font-size: var(--font-size-shell-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-shell-title);
+  letter-spacing: var(--letter-spacing-title);
+  padding: 0.42rem 0.62rem;
+  border-radius: 0.7rem;
+}
+
+.titleInput:hover,
+.titleInput:focus {
+  outline: none;
+  border-color: hsl(var(--border-strong));
+  background: hsl(var(--surface-muted));
+}
+
+.topBarTitleTrigger {
+  appearance: none;
+  min-width: 0;
+  border: 0;
+  border-radius: 0.7rem;
+  background: transparent;
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  font-size: var(--font-size-shell-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-shell-title);
+  letter-spacing: var(--letter-spacing-title);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
+
+.topBarTitleTrigger:hover {
+  background: hsl(var(--surface-soft));
+}
+
+.workspaceId {
+  display: none;
+}
+
+.topBarActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.topBarActionGroup {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding-right: 0;
+}
+
+.menuAnchor,
+.historyMenuAnchor {
+  position: relative;
+}
+
+.secondaryButton,
+.primaryButton,
+.historySelectButton,
+.iconButton,
+.kebabButton,
+.titleSaveButton,
+.topBarPrimaryButton,
+.topBarActionButton,
+.topBarToggleButton,
+.topBarToggleButtonActive,
+.topBarIconButton,
+.railPrimaryButton,
+.railSecondaryButton,
+.historyMenuTrigger {
+  appearance: none;
+  border-radius: 0.72rem;
+  border: 1px solid transparent;
+  padding: 0.68rem 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-control);
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease,
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.secondaryButton,
+.primaryButton,
+.titleSaveButton,
+.topBarPrimaryButton,
+.topBarActionButton,
+.topBarToggleButton,
+.topBarToggleButtonActive,
+.railPrimaryButton,
+.railSecondaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.secondaryButton,
+.historySelectButton,
+.iconButton,
+.kebabButton {
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+}
+
+.iconButton,
+.kebabButton,
+.topBarIconButton,
+.historyMenuTrigger {
+  display: grid;
+  place-items: center;
+  width: calc(var(--font-size-control) * 3.25);
+  height: calc(var(--font-size-control) * 3.25);
+  padding: 0;
+  border-radius: 999px;
+}
+
+.actionIcon {
+  width: calc(var(--font-size-control) * 1.55);
+  height: calc(var(--font-size-control) * 1.55);
+  flex: none;
+}
+
+.topBarActionButton .actionIcon {
+  color: hsl(var(--foreground));
+}
+
+.primaryButton {
+  background: hsl(var(--foreground));
+  border-color: hsl(var(--foreground));
+  color: hsl(var(--primary-foreground));
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.primaryButton:hover {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+}
+
+.secondaryButton {
+  border-color: hsl(var(--border));
+  background: hsl(var(--card));
+}
+
+.secondaryButton:hover {
+  border-color: hsl(var(--border-strong));
+  background: hsl(var(--surface-muted));
+  color: hsl(var(--foreground));
+}
+
+.titleSaveButton,
+.topBarPrimaryButton,
+.topBarActionButton,
+.topBarToggleButton,
+.topBarToggleButtonActive {
+  min-height: calc(var(--font-size-shell-title) * 2.5);
+  padding: 0.68rem 1rem;
+  border-radius: 999px;
+  text-decoration: none;
+}
+
+.topBarToggleButton,
+.topBarToggleButtonActive {
+  min-width: 2.55rem;
+  padding-inline: 0;
+  border-radius: 999px;
+}
+
+.titleSaveButton,
+.topBarPrimaryButton,
+.topBarActionButton,
+.topBarToggleButton {
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--muted-foreground));
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.topBarPrimaryButton {
+  border-color: hsl(var(--foreground));
+  background: hsl(var(--foreground));
+  color: hsl(var(--primary-foreground));
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.topBarActionButton {
+  border-color: transparent;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  box-shadow: none;
+}
+
+.topBarPrimaryAction {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: hsl(var(--muted-foreground));
+  font-weight: 600;
+}
+
+.topBarPrimaryAction:hover {
+  border-color: transparent;
+  background: hsl(var(--surface-muted));
+}
+
+.topBarUtilityAction {
+  border-color: transparent;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+}
+
+.topBarUtilityAction:hover {
+  background: hsl(var(--surface-muted));
+  color: hsl(var(--foreground));
+}
+
+.titleSaveButton:hover,
+.topBarPrimaryButton:hover,
+.topBarActionButton:hover,
+.topBarToggleButton:hover,
+.topBarIconButton:hover,
+.iconButton:hover,
+.kebabButton:hover,
+.historyMenuTrigger:hover {
+  border-color: hsl(var(--border-strong));
+  background: hsl(var(--surface-muted));
+  color: hsl(var(--foreground));
+}
+
+.topBarPrimaryButton:hover {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+.topBarActionButton:hover,
+.topBarActionButton:focus-visible,
+.topBarActionButton[aria-expanded="true"] {
+  border-color: hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.topBarActionButton:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.topBarToggleButtonActive {
+  border-color: hsl(var(--border));
+  background: hsl(var(--surface-soft));
+  color: hsl(var(--foreground));
+}
+
+.topBarIconButton {
+  border: 1px solid transparent;
+  background: transparent;
+  color: hsl(var(--subtle-foreground));
+}
+
+.topBarActionLabel {
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-control);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.topBarUserLabel {
+  display: inline-block;
+  max-width: 6.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.railPrimaryButton {
+  width: 100%;
+  justify-content: center;
+  border-color: hsl(var(--foreground));
+  background: hsl(var(--foreground));
+  color: hsl(var(--primary-foreground));
+  border-radius: 999px;
+  padding-inline: 1rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.railPrimaryButton:hover {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+}
+
+.railSecondaryButton {
+  width: 100%;
+  justify-content: center;
+  border-color: hsl(var(--border));
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  border-radius: 999px;
+  min-height: calc(var(--font-size-shell-title) * 2.5);
+  padding: 0.68rem 1rem;
+  box-shadow: none;
+}
+
+.railSecondaryButton:hover {
+  border-color: hsl(var(--border-strong));
+  background: color-mix(in srgb, hsl(var(--background)) 88%, transparent);
+  color: hsl(var(--foreground));
+}
+
+.menuPanel,
+.menuPanelWide {
+  position: absolute;
+  top: calc(100% + 0.65rem);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  gap: 0.8rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.85rem;
+  background: hsl(var(--card));
+  padding: 0.55rem;
+  box-shadow: var(--shadow-deep-card);
+}
+
+.menuPanel {
+  min-width: 15rem;
+}
+
+.menuPanelWide {
+  min-width: 18rem;
+}
+
+.menuSection {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.menuSectionTitle {
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-overline);
+  font-weight: 700;
+  line-height: var(--line-height-overline);
+  letter-spacing: var(--letter-spacing-overline);
+  text-transform: uppercase;
+}
+
+.menuChoiceGroup {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.menuChoice,
+.menuChoiceActive,
+.menuDangerButton {
+  appearance: none;
+  display: block;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  background: transparent;
+  color: hsl(var(--foreground));
+  font-size: var(--font-size-control);
+  line-height: var(--line-height-control);
+  padding: 0.62rem 0.75rem;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.menuChoiceActive {
+  background: hsl(var(--surface-soft));
+  border-color: hsl(var(--border));
+}
+
+.menuChoice:hover,
+.menuDangerButton:hover {
+  background: hsl(var(--surface-soft));
+}
+
+.menuAccountCard {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.1rem 0.1rem 0.2rem;
+}
+
+.menuAccountName {
+  font-weight: 700;
+}
+
+.menuAccountEmail {
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-meta);
+  line-height: var(--line-height-meta);
+}
+
+.dialog {
+  width: min(32rem, 100%);
+  flex-basis: 100%;
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
+  background: hsl(var(--card));
+  padding: 1rem;
+}
+
+.dialogForm,
+.dialogField {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.dialogField textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.dialogField input {
+  font-size: var(--font-size-control);
+  line-height: var(--line-height-control);
+}
+
+.dialogField textarea {
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, hsl(var(--dashboard-overlay)) 38%, transparent);
+  padding: 1rem;
+}
+
+.modalCard {
+  width: min(28rem, 100%);
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
+  background: hsl(var(--card));
+  padding: 1rem;
+}
+
+.citationModalCard {
+  display: grid;
+  gap: 1rem;
+  width: min(42rem, 100%);
+}
+
+.citationPopoverBackdrop {
+  display: block;
+  background: transparent;
+  padding: 0;
+}
+
+.citationPopoverCard {
+  position: fixed;
+  display: block;
+  border-radius: 0.9rem;
+  background: hsl(var(--card));
+  padding: 0;
+  box-shadow: var(--shadow-deep-card);
+  overflow: hidden;
+}
+
+.citationPopoverContent {
+  max-height: inherit;
+  overflow-y: auto;
+  padding: 1rem 1.05rem;
+  color: hsl(var(--foreground));
+  font-size: var(--font-size-body-strong);
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.citationModalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.citationModalHeading {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.citationModalTitle {
+  margin: 0;
+  color: hsl(var(--foreground));
+  font-size: var(--font-size-section-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-section-title);
+}
+
+.citationModalMeta,
+.citationModalCaption,
+.citationModalLabel {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-meta);
+  line-height: var(--line-height-meta);
+}
+
+.citationModalImage {
+  width: 100%;
+  max-height: 18rem;
+  border-radius: 1rem;
+  background: hsl(var(--surface-muted));
+  object-fit: contain;
+}
+
+.citationModalBody {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.citationModalLabel {
+  font-weight: 600;
+}
+
+.citationModalTextarea {
+  width: 100%;
+  min-height: 16rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font: inherit;
+  font-size: var(--font-size-body-strong);
+  line-height: var(--line-height-body-strong);
+  resize: vertical;
+}
+
+.body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: hsl(var(--background));
+  --workspace-history-rail-width: 20rem;
+  --workspace-right-rail-width: 24.5rem;
+}
+
+.workspaceUnavailable {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  place-items: center;
+  padding: 2rem;
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, hsl(var(--surface-soft)) 84%, transparent), transparent 58%),
+    hsl(var(--background));
+}
+
+.workspaceUnavailableCard {
+  display: grid;
+  gap: 0.9rem;
+  width: min(42rem, 100%);
+  border: 1px solid hsl(var(--border));
+  border-radius: 1.25rem;
+  background: hsl(var(--card));
+  padding: 1.35rem 1.4rem;
+  box-shadow: var(--shadow-deep-card);
+}
+
+.workspaceUnavailableTitle {
+  margin: 0;
+  color: hsl(var(--foreground));
+  font-size: var(--font-size-section-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-section-title);
+}
+
+.workspaceUnavailableMessage,
+.workspaceUnavailableHint {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+
+.workspaceUnavailableActions {
+  display: flex;
+  justify-content: flex-start;
+  padding-top: 0.2rem;
+}
+
+.desktopHistoryRail,
+.desktopRightRail {
+  display: none;
+  min-height: 0;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: hsl(var(--surface-muted));
+}
+
+.desktopHistoryRail {
+  width: var(--workspace-history-rail-width);
+  min-width: var(--workspace-history-rail-width);
+  padding: 0.9rem 0.65rem 0.85rem 0.7rem;
+}
+
+.desktopRightRail {
+  width: var(--workspace-right-rail-width);
+  min-width: var(--workspace-right-rail-width);
+  padding: 0;
+}
+
+.desktopRailResizer {
+  position: relative;
+  display: none;
+  flex: 0 0 0.85rem;
+  cursor: col-resize;
+  background: hsl(var(--background));
+  touch-action: none;
+}
+
+.desktopRailResizer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  left: calc(50% - 0.5px);
+  width: 1px;
+  background: hsl(var(--border));
+  transition: background 120ms ease;
+}
+
+.desktopRailResizer::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.2rem;
+  height: 2.9rem;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: hsl(var(--border));
+  opacity: 0.38;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease;
+}
+
+.desktopRailResizer:hover::before,
+.desktopRailResizer:hover::after,
+.desktopRailResizer:active::before,
+.desktopRailResizer:active::after {
+  background: hsl(var(--border-strong));
+}
+
+.desktopRailResizer:hover::after,
+.desktopRailResizer:active::after {
+  opacity: 0.9;
+}
+
+.panePanel {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 0;
+  background: hsl(var(--background));
+}
+
+.mobileOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+}
+
+.mobileScrim {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, hsl(var(--dashboard-overlay)) 50%, transparent);
+}
+
+.mobileDrawer {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  overflow: hidden;
+  background: hsl(var(--card));
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+}
+
+.mobileHistoryDrawer {
+  left: 0;
+  width: min(84vw, 20rem);
+  padding: 1rem 0.75rem 1rem 0.8rem;
+}
+
+.mobileRightDrawer {
+  right: 0;
+  width: min(88vw, 26rem);
+  padding: 0.75rem 1rem;
+}
+
+.railPanel {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.railHeader {
+  display: grid;
+  gap: 0.62rem;
+}
+
+.railSectionHeading {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0 0.7rem;
+}
+
+.railTitle {
+  font-size: var(--font-size-overline);
+  font-weight: 700;
+  line-height: var(--line-height-overline);
+  letter-spacing: var(--letter-spacing-overline);
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.railSubtitle {
+  font-size: var(--font-size-meta);
+  line-height: var(--line-height-meta);
+  color: hsl(var(--muted-foreground));
+}
+
+.filterField {
+  position: relative;
+  display: block;
+}
+
+.filterIcon {
+  position: absolute;
+  top: 50%;
+  left: 0.85rem;
+  display: grid;
+  place-items: center;
+  color: hsl(var(--foreground));
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.filterIcon svg,
+.railActionIcon {
+  width: calc(var(--font-size-control) * 1.55);
+  height: calc(var(--font-size-control) * 1.55);
+}
+
+.filterField input {
+  width: 100%;
+  border-color: hsl(var(--border));
+  border-radius: 999px;
+  background: hsl(var(--card));
+  font-size: var(--font-size-control);
+  line-height: var(--line-height-control);
+  padding: 0.62rem 0.95rem 0.62rem 3rem;
+  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.02);
+}
+
+.filterField input:focus {
+  outline: none;
+  border-color: hsl(var(--border-strong));
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.historyList {
+  display: grid;
+  gap: 0.18rem;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.historyItem,
+.historyItemActive {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 0.18rem;
+  border-radius: 0.82rem;
+  padding: 0.12rem;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.historyItemActive {
+  background: hsl(var(--app-history-active));
+}
+
+.historyItemMenuOpen {
+  background: hsl(var(--app-history-active));
+}
+
+.historySelectButton {
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  border-radius: 0.72rem;
+  padding: 0.5rem 0.68rem;
+  display: grid;
+  gap: 0.12rem;
+  background: transparent;
+  color: inherit;
+}
+
+.historyItemHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.historyItemGlyph {
+  display: grid;
+  place-items: center;
+  width: var(--font-size-shell-title);
+  height: var(--font-size-shell-title);
+  color: hsl(var(--subtle-foreground));
+  flex: none;
+}
+
+.historyItemGlyph svg {
+  width: var(--font-size-shell-title);
+  height: var(--font-size-shell-title);
+}
+
+.historyItemTitle {
+  font-size: calc(var(--font-size-control) - 0.03125rem);
+  font-weight: 500;
+  line-height: var(--line-height-control);
+  color: hsl(var(--foreground));
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.historyItemActive .historyItemTitle {
+  font-weight: 600;
+}
+
+.historyItem:hover:not(.historyItemActive) {
+  background: hsl(var(--app-history-hover));
+}
+
+.historyItemSummary {
+  display: none;
+}
+
+.historyMenuTrigger {
+  align-self: start;
+  margin-top: 0.22rem;
+  color: hsl(var(--subtle-foreground));
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(0.2rem);
+  transition-delay: 140ms;
+}
+
+.historyMenuTriggerIcon {
+  width: calc(var(--font-size-control) * 1.5);
+  height: calc(var(--font-size-control) * 1.5);
+  color: hsl(var(--foreground));
+}
+
+.historyItem:hover .historyMenuTrigger,
+.historyItemActive:hover .historyMenuTrigger,
+.historyItem:focus-within .historyMenuTrigger,
+.historyItemActive:focus-within .historyMenuTrigger,
+.historyItemMenuOpen .historyMenuTrigger {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0);
+  transition-delay: 0ms;
+}
+
+.historyExpandedMenuShell {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0.12rem 0.12rem;
+  margin-top: -0.08rem;
+}
+
+.historyMenu {
+  display: grid;
+  gap: 0.2rem;
+  width: fit-content;
+  min-width: 6.4rem;
+  max-width: 100%;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.85rem;
+  background: hsl(var(--card));
+  padding: 0.24rem;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+.historyMenuButton {
+  appearance: none;
+  display: block;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  background: transparent;
+  color: hsl(var(--foreground));
+  font-size: var(--font-size-control);
+  line-height: var(--line-height-control);
+  padding: 0.48rem 0.68rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.historyMenuButton:hover {
+  background: hsl(var(--surface-soft));
+}
+
+.historyMenuButton:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.searchResultButton {
+  appearance: none;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.pageSection {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.sectionCard {
+  border: 1px solid hsl(var(--border));
+  border-radius: 1rem;
+  background: hsl(var(--surface-muted));
+  padding: 1rem;
+}
+
+.sectionHeading {
+  font-size: var(--font-size-section-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-section-title);
+  letter-spacing: -0.015em;
+  margin-bottom: 0.4rem;
+}
+
+.sectionText {
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-meta);
+  line-height: var(--line-height-meta);
+}
+
+.stack {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.sourceList {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.sourceButton {
+  justify-self: start;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (min-width: 768px) {
+  .desktopHistoryRail,
+  .desktopRightRail,
+  .desktopRailResizer {
+    display: block;
+  }
+}
+
+@media (max-width: 767px) {
+  .panePanel {
+    padding: 0.75rem;
+  }
+
+  .topBar {
+    flex-wrap: wrap;
+    padding: 1rem;
+  }
+
+  .topBarBrand {
+    min-width: 100%;
+  }
+
+  .topBarDivider {
+    display: none;
+  }
+
+  .topBarWordmark {
+    display: none;
+  }
+
+  .topBarActions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .topBarActionLabel {
+    max-width: 8.5rem;
+  }
+}
+
+@media (hover: none) {
+  .historyMenuTrigger {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(0);
+    transition-delay: 0ms;
+  }
+}

@@ -317,8 +317,9 @@ impl PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, org_id, session_id, user_id, state_type, current_topic, pending_questions,
-                   gathered_facts, confidence_score, state_history, last_updated_at
+            select id, org_id, session_id, user_id, state_type, current_topic, last_document,
+                   last_entity, unresolved_question, pending_questions, gathered_facts,
+                   confidence_score, state_history, last_updated_at
             from dialogue_states
             where session_id = $1
             "#,
@@ -340,14 +341,18 @@ impl PgAppRepository {
         sqlx::query(
             r#"
             insert into dialogue_states (
-                id, org_id, session_id, user_id, state_type, current_topic, pending_questions,
-                gathered_facts, confidence_score, state_history, last_updated_at
+                id, org_id, session_id, user_id, state_type, current_topic, last_document,
+                last_entity, unresolved_question, pending_questions, gathered_facts,
+                confidence_score, state_history, last_updated_at
             )
-            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             on conflict (session_id) do update
             set user_id = excluded.user_id,
                 state_type = excluded.state_type,
                 current_topic = excluded.current_topic,
+                last_document = excluded.last_document,
+                last_entity = excluded.last_entity,
+                unresolved_question = excluded.unresolved_question,
                 pending_questions = excluded.pending_questions,
                 gathered_facts = excluded.gathered_facts,
                 confidence_score = excluded.confidence_score,
@@ -362,6 +367,9 @@ impl PgAppRepository {
         .bind(state.user_id)
         .bind(&state.state_type)
         .bind(&state.current_topic)
+        .bind(&state.last_document)
+        .bind(&state.last_entity)
+        .bind(&state.unresolved_question)
         .bind(serde_json::to_value(&state.pending_questions)?)
         .bind(serde_json::to_value(&state.gathered_facts)?)
         .bind(state.confidence_score)
@@ -372,6 +380,4 @@ impl PgAppRepository {
         tx.commit().await?;
         Ok(())
     }
-
-
 }

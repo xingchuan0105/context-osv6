@@ -129,6 +129,8 @@ pub(crate) struct UserPreferencesPayload {
     pub dashboard: DashboardPreferences,
     #[serde(default)]
     pub notifications: NotificationPreferences,
+    #[serde(default)]
+    pub agent_memory: common::AgentPreferenceMemory,
 }
 
 #[allow(dead_code)]

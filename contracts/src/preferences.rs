@@ -69,11 +69,54 @@ impl Default for NotificationPreferences {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct AgentPreference {
+    pub id: String,
+    pub text: String,
+    pub category: String,
+    pub scope: String,
+    pub confidence: String,
+    pub source: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct BlockedAgentPreference {
+    pub id: String,
+    pub text: String,
+    pub blocked_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct DailyPreferenceLog {
+    pub date: String,
+    #[serde(default)]
+    pub added: Vec<String>,
+    #[serde(default)]
+    pub no_change: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct AgentPreferenceMemory {
+    #[serde(default)]
+    pub active: Vec<AgentPreference>,
+    #[serde(default)]
+    pub superseded: Vec<AgentPreference>,
+    #[serde(default)]
+    pub blocked: Vec<BlockedAgentPreference>,
+    #[serde(default)]
+    pub daily_log: Vec<DailyPreferenceLog>,
+    #[serde(default)]
+    pub last_consolidated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct UserPreferences {
     #[serde(default)]
     pub dashboard: DashboardPreferences,
     #[serde(default)]
     pub notifications: NotificationPreferences,
+    #[serde(default)]
+    pub agent_memory: AgentPreferenceMemory,
 }
 
 fn default_true() -> bool {

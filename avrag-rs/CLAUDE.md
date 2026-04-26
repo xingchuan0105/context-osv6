@@ -6,6 +6,10 @@ avrag-rs is a Rust workspace implementing a RAG (Retrieval-Augmented Generation)
 with a Leptos/WASM frontend. It runs as a single HTTP server on port 8080 serving both
 the API (`/api/*`) and the frontend (SSR + WASM hydration).
 
+Current product architecture target, as of 2026-04-26, is documented in
+[`docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md`](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md):
+Main Agent owns user interaction and final answers; RAG API is a retrieval service; Postgres is the product control plane; Milvus is the target retrieval data plane.
+
 ## API Key Management (CRITICAL)
 
 ### The Problem This Solves
@@ -95,7 +99,8 @@ avrag-rs/
 │   ├── search/      → Web search integration
 │   ├── guardrails/  → Input/output validation
 │   ├── storage-pg/  → PostgreSQL storage
-│   ├── storage-qdrant/ → Vector storage
+│   ├── storage-qdrant/ → Current vector storage compatibility adapter
+│   ├── storage-milvus/ → Target retrieval storage adapter (not yet fully implemented)
 │   ├── cache-redis/ → Redis cache + distributed lock
 │   ├── transport-http/ → HTTP client utilities
 │   ├── share/       → Share link management

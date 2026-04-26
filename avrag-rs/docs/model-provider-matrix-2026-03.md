@@ -2,6 +2,8 @@
 
 Last updated: 2026-03-26
 
+> Historical provider matrix. Local infra and retrieval references to Qdrant/Tantivy reflect the March 2026 implementation profile. The target retrieval data plane is now Milvus; see [2026-04-26 Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md).
+
 This document records the current model-provider wiring used by `context-osv6/avrag-rs`, including:
 - environment variables
 - base URLs
@@ -16,8 +18,10 @@ The goal is to prevent config drift during E2E, debugging, and future model swap
 
 Recommended current profile:
 - local infra: PostgreSQL + Redis + Qdrant + local object storage
-- DashScope: planner, text embedding, multimodal embedding, multimodal rerank
-- DMXAPI: answer generation, summary generation
+- DashScope: text embedding, multimodal embedding, multimodal rerank
+- DMXAPI: Main Agent answer/planning model, summary generation
+- 2026-04-26 target addition: graph triplet extraction uses the benchmarked Gemini 3.1 Flash-family provider/model via the existing DMXAPI-compatible configuration, with thinking disabled when supported.
+- `INTENT_LLM_*` is retained only for legacy RAG planner-compatible paths; `/api/v1/chat` uses `ANSWER_LLM_*` for Main Agent planning and answering.
 
 This means a full RAG E2E does not require SiliconFlow keys if text embedding is switched to DashScope-compatible mode and text rerank fallback is left unset.
 
@@ -31,6 +35,7 @@ Required local env:
 - `AVRAG_PUBLIC_BASE_URL`
 - `AVRAG_RUN_MIGRATIONS`
 - `AVRAG_OBJECT_ROOT`
+- `TANTIVY_INDEX_DIR` (optional lexical index; API reads it, worker writes it)
 
 Typical local values:
 
@@ -42,15 +47,17 @@ AVRAG_API_ADDR=127.0.0.1:38080
 AVRAG_PUBLIC_BASE_URL=http://127.0.0.1:38080
 AVRAG_RUN_MIGRATIONS=true
 AVRAG_OBJECT_ROOT=/home/chuan/.local/share/avrag-dev/objects
+TANTIVY_INDEX_DIR=/home/chuan/.local/share/avrag-dev/tantivy-index
 ```
 
 ## Provider Map
 
 | Function | Env Prefix | Recommended Provider | Base URL | Request Path | Code |
 |---|---|---|---|---|---|
-| Planner LLM | `INTENT_LLM_*` | DashScope compatible-mode | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `/chat/completions` | `crates/llm/src/client.rs` |
-| Answer LLM | `ANSWER_LLM_*` | DMXAPI OpenAI format | `https://www.dmxapi.cn/v1` | `/chat/completions` | `crates/llm/src/client.rs` |
+| Legacy planner LLM | `INTENT_LLM_*` | DashScope compatible-mode | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `/chat/completions` | `crates/llm/src/client.rs` |
+| Main Agent / Answer LLM | `ANSWER_LLM_*` | DMXAPI OpenAI format | `https://www.dmxapi.cn/v1` | `/chat/completions` | `crates/llm/src/client.rs` |
 | Summary LLM | `SUMMARY_LLM_*` | DMXAPI OpenAI format | `https://www.dmxapi.cn/v1` | `/chat/completions` | `crates/llm/src/client.rs` |
+| Graph triplet extraction target | graph extraction config TBD; benchmark used DMXAPI-compatible key | Gemini 3.1 Flash-family | `https://www.dmxapi.cn/v1` | `/chat/completions` | planned RAG API ingestion operator |
 | Text embedding | `EMBEDDING_*` | DashScope OpenAI-compatible embedding | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `/embeddings` | `crates/llm/src/embedding.rs` |
 | Multimodal embedding | `MM_EMBEDDING_*` | DashScope native multimodal embedding | `https://dashscope.aliyuncs.com/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding` | same URL | `crates/llm/src/embedding.rs` |
 | Multimodal rerank | `MM_RERANK_*` | DashScope native rerank | `https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank` | same URL | `crates/llm/src/reranker.rs` |
@@ -61,8 +68,8 @@ AVRAG_OBJECT_ROOT=/home/chuan/.local/share/avrag-dev/objects
 ### 1. OpenAI-style chat completions
 
 Used by:
-- planner
-- answer synthesis
+- Main Agent RAG execute-plan generation and answer synthesis through `ANSWER_LLM_*`
+- legacy planner-compatible paths through `INTENT_LLM_*`
 - summary generation
 
 Environment:
@@ -98,7 +105,7 @@ Planner profile:
 - `INTENT_LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`
 - `INTENT_LLM_MODEL=qwen3.5-flash`
 - `INTENT_LLM_ENABLE_THINKING=false`
-- This is the recommended low-latency planner setting for strict JSON plan generation.
+- This is a legacy planner setting. The current `/api/v1/chat` RAG path generates `ExecutePlanRequest` with the Main Agent on `ANSWER_LLM_*`.
 
 ### 2. OpenAI-compatible text embedding
 

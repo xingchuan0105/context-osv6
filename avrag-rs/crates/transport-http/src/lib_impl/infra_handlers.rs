@@ -69,7 +69,11 @@ async fn ready_handler(State(state): State<AppState>) -> Response {
     }
 
     if ready {
-        (StatusCode::OK, Json(json!({"ready": true, "checks": details}))).into_response()
+        (
+            StatusCode::OK,
+            Json(json!({"ready": true, "checks": details})),
+        )
+            .into_response()
     } else {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -234,7 +238,10 @@ async fn openai_chat_completions_handler(
     headers: HeaderMap,
     Json(mut req): Json<common::ChatRequest>,
 ) -> Response {
-    req.notebook_id = Some(notebook_id);
+    req.notebook_id = Some(notebook_id.clone());
+    if let Err(error) = expand_external_notebook_rag_scope(&state, &notebook_id, &mut req).await {
+        return handlers::app_error_response(error);
+    }
     handlers::chat_post_handler(Extension(RequestState(state)), headers, Json(req)).await
 }
 
@@ -323,9 +330,9 @@ async fn mcp_tool_call_handler(
         })
         .unwrap_or_default();
 
-    let req = common::ChatRequest {
+    let mut req = common::ChatRequest {
         query,
-        notebook_id: Some(notebook_id),
+        notebook_id: Some(notebook_id.clone()),
         session_id: None,
         agent_type,
         source_type: None,
@@ -334,6 +341,9 @@ async fn mcp_tool_call_handler(
         messages: vec![],
         stream: false,
     };
+    if let Err(error) = expand_external_notebook_rag_scope(&state, &notebook_id, &mut req).await {
+        return handlers::app_error_response(error);
+    }
 
     match state.execute_chat(req).await {
         Ok(response) => {
@@ -353,6 +363,37 @@ async fn mcp_tool_call_handler(
         }
         Err(error) => handlers::app_error_response(error),
     }
+}
+
+async fn expand_external_notebook_rag_scope(
+    state: &AppState,
+    notebook_id: &str,
+    req: &mut common::ChatRequest,
+) -> Result<(), common::AppError> {
+    if req.agent_type != "rag" || !req.doc_scope.is_empty() {
+        return Ok(());
+    }
+
+    state
+        .get_notebook(notebook_id)
+        .await
+        .ok_or_else(|| common::AppError::not_found("notebook_not_found", "notebook not found"))?;
+    let doc_scope = state
+        .list_documents(Some(notebook_id), None)
+        .await
+        .into_iter()
+        .filter(|document| matches!(document.status, common::DocumentStatus::Completed))
+        .map(|document| document.id)
+        .collect::<Vec<_>>();
+    if doc_scope.is_empty() {
+        return Err(common::AppError::validation(
+            "docscope_required",
+            "No ready documents are available in this notebook for RAG.",
+        ));
+    }
+
+    req.doc_scope = doc_scope;
+    Ok(())
 }
 
 async fn shared_notebook_handler(

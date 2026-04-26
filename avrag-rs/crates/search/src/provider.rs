@@ -137,7 +137,7 @@ fn search_response_from_agent_response(
     response: PerplexityAgentResponse,
     original_query: &str,
 ) -> SearchResponse {
-    let synthesized_answer = response
+    let raw_synthesized_answer = response
         .output_text()
         .unwrap_or_else(|| "No response from Perplexity.".to_string());
     let sub_queries = {
@@ -152,11 +152,13 @@ fn search_response_from_agent_response(
     let mut results = response.search_results();
     if results.is_empty() {
         let citation_urls = response.citation_urls();
-        results = citation_results_from_markers(&synthesized_answer, &citation_urls);
+        results = citation_results_from_markers(&raw_synthesized_answer, &citation_urls);
         if results.is_empty() {
             results = citation_results_from_urls(&citation_urls);
         }
     }
+
+    let synthesized_answer = strip_citation_markers(&raw_synthesized_answer, results.len());
 
     if results.is_empty() {
         results.push(SearchResult {
@@ -174,6 +176,49 @@ fn search_response_from_agent_response(
         synthesized_answer,
         llm_usage: response.llm_usage(),
     }
+}
+
+fn strip_citation_markers(answer: &str, max_citation_index: usize) -> String {
+    let re = regex::Regex::new(r"\[(?:web:|citation:)?\s*(\d+)\]").unwrap();
+    let whitespace_re = regex::Regex::new(r"[ \t]{2,}").unwrap();
+    let stripped = re.replace_all(answer, |caps: &regex::Captures<'_>| {
+        let marker = caps.get(0).unwrap();
+        let previous_is_bracket =
+            marker.start() > 0 && answer.as_bytes().get(marker.start() - 1) == Some(&b'[');
+        let next_is_bracket = answer.as_bytes().get(marker.end()) == Some(&b']');
+        if previous_is_bracket || next_is_bracket {
+            return marker.as_str().to_string();
+        }
+
+        let index = caps
+            .get(1)
+            .and_then(|value| value.as_str().parse::<usize>().ok())
+            .unwrap_or(0);
+        if index > 0 && index <= max_citation_index {
+            format!("[[{index}]]")
+        } else {
+            marker.as_str().to_string()
+        }
+    });
+    stripped
+        .lines()
+        .map(|line| {
+            let line = line.trim_end();
+            let body_start = line
+                .char_indices()
+                .find(|(_, character)| *character != ' ' && *character != '\t')
+                .map(|(index, _)| index)
+                .unwrap_or(line.len());
+            let (leading, body) = line.split_at(body_start);
+
+            format!("{}{}", leading, whitespace_re.replace_all(body, " "))
+                .replace(" .", ".")
+                .replace(" ,", ",")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
 }
 
 fn parse_results_from_value(value: Value) -> anyhow::Result<Vec<SearchResult>> {
@@ -413,7 +458,7 @@ struct PerplexitySearchResult {
 
 #[derive(Debug, Default)]
 struct PerplexitySseParser {
-    buffer: String,
+    buffer: Vec<u8>,
     event_name: String,
     data_lines: Vec<String>,
 }
@@ -424,14 +469,15 @@ impl PerplexitySseParser {
         chunk: &[u8],
         on_event: &mut impl FnMut(&str, &str) -> anyhow::Result<()>,
     ) -> anyhow::Result<()> {
-        self.buffer.push_str(std::str::from_utf8(chunk)?);
+        self.buffer.extend_from_slice(chunk);
 
-        while let Some(newline_index) = self.buffer.find('\n') {
-            let mut line = self.buffer[..newline_index].to_string();
-            self.buffer.drain(..=newline_index);
-            if line.ends_with('\r') {
+        while let Some(newline_index) = self.buffer.iter().position(|byte| *byte == b'\n') {
+            let mut line = self.buffer.drain(..=newline_index).collect::<Vec<_>>();
+            line.pop();
+            if line.last() == Some(&b'\r') {
                 line.pop();
             }
+            let line = std::str::from_utf8(&line)?;
             self.push_line(&line, on_event)?;
         }
 
@@ -443,8 +489,12 @@ impl PerplexitySseParser {
         on_event: &mut impl FnMut(&str, &str) -> anyhow::Result<()>,
     ) -> anyhow::Result<()> {
         if !self.buffer.is_empty() {
-            let line = std::mem::take(&mut self.buffer);
-            self.push_line(line.trim_end_matches('\r'), on_event)?;
+            let mut line = std::mem::take(&mut self.buffer);
+            if line.last() == Some(&b'\r') {
+                line.pop();
+            }
+            let line = std::str::from_utf8(&line)?;
+            self.push_line(line, on_event)?;
         }
         self.flush(on_event)
     }
@@ -502,7 +552,8 @@ impl PerplexitySseParser {
 #[cfg(test)]
 mod tests {
     use super::{
-        CompletedEvent, PerplexityAgentResponse, SearchResultsItem, search_response_from_agent_response,
+        CompletedEvent, PerplexityAgentResponse, PerplexitySseParser, SearchResultsItem,
+        search_response_from_agent_response,
     };
 
     #[test]
@@ -553,7 +604,13 @@ mod tests {
         assert_eq!(search_response.results.len(), 1);
         assert_eq!(search_response.results[0].title, "AI News");
         assert_eq!(search_response.synthesized_answer, "AI is moving fast.");
-        assert_eq!(search_response.llm_usage.as_ref().map(|usage| usage.total_tokens), Some(46));
+        assert_eq!(
+            search_response
+                .llm_usage
+                .as_ref()
+                .map(|usage| usage.total_tokens),
+            Some(46)
+        );
     }
 
     #[test]
@@ -575,6 +632,35 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].citation_index, Some(3));
         assert_eq!(results[0].url, "https://example.com");
+    }
+
+    #[test]
+    fn sse_parser_handles_utf8_split_across_chunks() {
+        let mut parser = PerplexitySseParser::default();
+        let mut events = Vec::new();
+        let bytes = "event: response.output_text.delta\ndata: {\"delta\":\"上海\"}\n\n".as_bytes();
+        let split_index = bytes
+            .windows("上".len())
+            .position(|window| window == "上".as_bytes())
+            .unwrap()
+            + 1;
+
+        parser
+            .feed_chunk(&bytes[..split_index], &mut |event_name, data| {
+                events.push((event_name.to_string(), data.to_string()));
+                Ok(())
+            })
+            .unwrap();
+        parser
+            .feed_chunk(&bytes[split_index..], &mut |event_name, data| {
+                events.push((event_name.to_string(), data.to_string()));
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, "response.output_text.delta");
+        assert_eq!(events[0].1, "{\"delta\":\"上海\"}");
     }
 
     #[test]
@@ -603,5 +689,103 @@ mod tests {
         let search_response = search_response_from_agent_response(response, "legacy query");
         assert_eq!(search_response.results.len(), 1);
         assert_eq!(search_response.results[0].url, "https://example.com/legacy");
+        assert_eq!(search_response.synthesized_answer, "Legacy output [[1]]");
+    }
+
+    mod strip_citation_markers {
+        use super::super::strip_citation_markers;
+
+        #[test]
+        fn removes_bare_numeric_markers() {
+            assert_eq!(
+                strip_citation_markers("Answer [1] and [2] end.", 3),
+                "Answer [[1]] and [[2]] end."
+            );
+        }
+
+        #[test]
+        fn removes_web_prefix_markers() {
+            assert_eq!(
+                strip_citation_markers("See [web:1] and [web:2] for details.", 3),
+                "See [[1]] and [[2]] for details."
+            );
+        }
+
+        #[test]
+        fn removes_citation_prefix_markers() {
+            assert_eq!(
+                strip_citation_markers("Ref [citation:1] and [citation:3].", 3),
+                "Ref [[1]] and [[3]]."
+            );
+        }
+
+        #[test]
+        fn preserves_markers_outside_valid_range() {
+            assert_eq!(
+                strip_citation_markers("Valid [1] but [5] is out of range.", 3),
+                "Valid [[1]] but [5] is out of range."
+            );
+        }
+
+        #[test]
+        fn preserves_markers_with_index_zero() {
+            assert_eq!(
+                strip_citation_markers("Zero marker [0] should stay.", 3),
+                "Zero marker [0] should stay."
+            );
+        }
+
+        #[test]
+        fn handles_multiline_answer() {
+            assert_eq!(
+                strip_citation_markers("Line 1 [1]\nLine 2 [2]\nLine 3", 3),
+                "Line 1 [[1]]\nLine 2 [[2]]\nLine 3"
+            );
+        }
+
+        #[test]
+        fn cleans_double_space_artifacts() {
+            assert_eq!(
+                strip_citation_markers("End of sentence  [1].", 3),
+                "End of sentence [[1]]."
+            );
+        }
+
+        #[test]
+        fn handles_markers_adjacent_to_text() {
+            assert_eq!(
+                strip_citation_markers("text[1]more[2]text", 3),
+                "text[[1]]more[[2]]text"
+            );
+        }
+
+        #[test]
+        fn empty_answer_unchanged() {
+            assert_eq!(strip_citation_markers("", 3), "");
+        }
+
+        #[test]
+        fn no_markers_unchanged() {
+            assert_eq!(
+                strip_citation_markers("Plain answer with no citations.", 3),
+                "Plain answer with no citations."
+            );
+        }
+
+        #[test]
+        fn whitespace_inside_brackets_handled() {
+            assert_eq!(
+                strip_citation_markers("See [web: 1] and [citation: 2].", 3),
+                "See [[1]] and [[2]]."
+            );
+        }
+
+        #[test]
+        fn max_citation_index_zero_preserves_all_markers() {
+            assert_eq!(
+                strip_citation_markers("Markers [1] [2] [3] all stay.", 0),
+                "Markers [1] [2] [3] all stay."
+            );
+        }
     }
 }

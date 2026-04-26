@@ -24,6 +24,7 @@ pub use contracts::notebooks::{
     UpdateNotebookNoteRequest,
 };
 pub use contracts::preferences::{
+    AgentPreference, AgentPreferenceMemory, BlockedAgentPreference, DailyPreferenceLog,
     DashboardPreferences, NotebookNotePreference, NotebookWorkspacePreference,
     NotificationPreferences, UserPreferences, WorkspaceDraftPreference,
 };

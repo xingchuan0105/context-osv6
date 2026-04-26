@@ -1,6 +1,7 @@
 # RAG Answer Prompt 优化实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> Historical prompt plan. Current product boundary places final answer generation in Main Agent and leaves RAG API as retrieval bundle producer; see [2026-04-26 Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md).
 
 **Goal:** 优化 RAG Answer Prompt，通过注入 Retrieval Index 和收紧 [INSUFFICIENT_EVIDENCE] 触发条件，让模型更自信地基于召回的 Chunk 回答问题。
 
@@ -199,4 +200,3 @@ Index 生成函数 `build_retrieval_index` 应能处理这种情况：如果 `it
 2. `cargo test -p avrag-llm` 通过。
 3. 生成的 Prompt 结构符合设计：`Retrieval Index` 在 `Context` 之前。
 4. `[INSUFFICIENT_EVIDENCE]` 只在 `top_chunks.is_empty()` (Line 270) 时才应该被考虑（但由于 System Prompt 约束，实际触发取决于 LLM 行为，测试主要验证条件被传达）。
-

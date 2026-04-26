@@ -44,6 +44,7 @@ pub use notebooks::{
     UpdateChatSessionRequest, UpdateNotebookNoteRequest, UpdateNotebookRequest,
 };
 pub use preferences::{
+    AgentPreference, AgentPreferenceMemory, BlockedAgentPreference, DailyPreferenceLog,
     DashboardPreferences, NotebookNotePreference, NotebookWorkspacePreference,
     NotificationPreferences, UserPreferences, WorkspaceDraftPreference,
 };

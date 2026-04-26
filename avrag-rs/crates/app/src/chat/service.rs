@@ -8,8 +8,9 @@ use crate::{
     AppState, RetrievedContext, agent_icon, agent_name, build_answer, build_citations,
     build_degrade_trace, build_mode_debug, build_planner_output, build_sources,
     derive_profile_domains, derive_profile_topics, detect_preferred_style, estimate_token_count,
-    extract_gathered_facts, extract_pending_questions, infer_current_topic, map_pg_error,
-    next_message_id, parse_uuid_or_app_error,
+    extract_pending_questions, infer_current_topic, infer_last_document, infer_last_entity,
+    map_pg_error, merge_general_profile_custom_preferences, next_message_id,
+    parse_uuid_or_app_error,
 };
 use avrag_storage_pg::PgAppRepository;
 use common::{

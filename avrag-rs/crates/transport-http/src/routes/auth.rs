@@ -1,7 +1,7 @@
 use app::AppState;
 use axum::{
     Router,
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
 };
 
 pub(crate) fn public_router() -> Router<AppState> {
@@ -40,6 +40,15 @@ pub(crate) fn protected_router() -> Router<AppState> {
         .route(
             "/preferences",
             get(crate::auth_get_preferences_handler).put(crate::auth_update_preferences_handler),
+        )
+        .route(
+            "/agent-preferences",
+            get(crate::auth_get_agent_preferences_handler)
+                .put(crate::auth_update_agent_preferences_handler),
+        )
+        .route(
+            "/agent-preferences/{preference_id}",
+            delete(crate::auth_delete_agent_preference_handler),
         )
         .route(
             "/change-password",

@@ -69,6 +69,8 @@ impl ModelProviderConfig {
         let url = self.base_url.to_ascii_lowercase();
         if url.contains("dashscope") {
             "dashscope".to_string()
+        } else if url.contains("deepseek") {
+            "deepseek".to_string()
         } else if url.contains("openai") {
             "openai".to_string()
         } else if url.contains("siliconflow") {

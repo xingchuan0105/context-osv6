@@ -1,3 +1,4 @@
+mod agent_memory_jobs;
 mod analytics_jobs;
 
 use anyhow::Result;
@@ -5,6 +6,7 @@ use app::{AppConfig, AppState};
 use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
 use avrag_cache_redis::DocumentLock;
 use avrag_llm::{MultiModalEmbeddingInput, SummaryGenerator};
+use avrag_search::{LexicalChunkDocument, TantivyLexicalIndex};
 use avrag_storage_pg::{
     NotificationCreateParams, ObjectStoreHandle, PgAppRepository, S3ObjectStore,
 };
@@ -27,6 +29,7 @@ use ingestion::{
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 use tokio::time::{Duration, interval};
 use tracing::info;
@@ -198,6 +201,7 @@ struct PgTaskProcessor {
     repo: PgAppRepository,
     object_store: ObjectStoreHandle,
     qdrant: Option<HttpQdrantBackend>,
+    lexical_index: Option<Arc<TantivyLexicalIndex>>,
     qdrant_collection: String,
     qdrant_multimodal_collection: String,
     embedding_dim: usize,
@@ -502,9 +506,20 @@ async fn main() -> Result<()> {
         if state.config().auto_migrate {
             repo.migrate().await?;
         }
+        let lexical_index = state
+            .config()
+            .tantivy_index_dir
+            .as_deref()
+            .map(TantivyLexicalIndex::open_writer)
+            .transpose()?
+            .map(Arc::new);
         let analytics_pool = repo.raw().clone();
         let mut analytics_job_runner =
             analytics_jobs::AnalyticsJobRunner::from_env(analytics_pool.clone());
+        let mut agent_memory_job_runner =
+            agent_memory_jobs::AgentPreferenceConsolidationJobRunner::from_env(
+                analytics_pool.clone(),
+            );
         let usage_limit_pool = repo.raw().clone();
         let mut worker = WorkerRuntime::new(
             PgTaskSource {
@@ -518,6 +533,7 @@ async fn main() -> Result<()> {
                 object_store: build_worker_object_store(state.config()).await?,
                 qdrant: Some(HttpQdrantBackend::new(state.config().qdrant.url.clone()))
                     .filter(|_| !state.config().qdrant.url.trim().is_empty()),
+                lexical_index,
                 qdrant_collection: state.config().qdrant.collection.clone(),
                 qdrant_multimodal_collection: state.config().qdrant.multimodal_collection.clone(),
                 embedding_dim,
@@ -589,6 +605,12 @@ async fn main() -> Result<()> {
                     {
                         telemetry::prometheus::record_dependency_failure("analytics_rollup");
                         info!(error = %error, worker_id, "analytics rollup job failed");
+                    }
+                    if let Some(runner) = agent_memory_job_runner.as_mut()
+                        && let Err(error) = runner.maybe_run().await
+                    {
+                        telemetry::prometheus::record_dependency_failure("agent_memory");
+                        info!(error = %error, worker_id, "agent preference consolidation job failed");
                     }
                     info!(runtime_mode = state.runtime_mode(), worker_id, "worker heartbeat");
                 }
@@ -740,8 +762,15 @@ async fn execute_parse_plan(
             execute_office_parse(processor, bytes, filename, document_id, &plan.doc_type).await
         }
         ParsePlan::External(plan) => {
-            execute_external_parse(processor, bytes, filename, object_path, document_id, &plan.kind)
-                .await
+            execute_external_parse(
+                processor,
+                bytes,
+                filename,
+                object_path,
+                document_id,
+                &plan.kind,
+            )
+            .await
         }
         ParsePlan::Pdf(plan) => {
             execute_pdf_parse(processor, bytes, filename, object_path, document_id, plan).await
@@ -825,6 +854,37 @@ async fn run_document_pipeline(
         .await
         .map_err(|error| IngestionError::StateSink(error.to_string()))?;
     let processed_chunk_count = chunks.len().max(1);
+
+    if let Some(index) = &processor.lexical_index {
+        let lexical_chunks = chunks
+            .iter()
+            .map(|chunk| {
+                let chunk_id = Uuid::parse_str(&chunk.chunk_id).map_err(|error| {
+                    IngestionError::StateSink(format!("invalid chunk id for Tantivy: {error}"))
+                })?;
+                let doc_id = Uuid::parse_str(&chunk.doc_id).map_err(|error| {
+                    IngestionError::StateSink(format!("invalid doc id for Tantivy: {error}"))
+                })?;
+                Ok(LexicalChunkDocument {
+                    org_id: context.org_id().into_uuid(),
+                    doc_id,
+                    chunk_id,
+                    page: chunk.page,
+                    content: chunk.content.clone(),
+                })
+            })
+            .collect::<std::result::Result<Vec<_>, IngestionError>>()?;
+        index
+            .replace_document_chunks(context.org_id().into_uuid(), document_id, &lexical_chunks)
+            .map_err(|error| {
+                IngestionError::StateSink(format!("Tantivy indexing failed: {error}"))
+            })?;
+        info!(
+            document_id = %document_id,
+            chunks = lexical_chunks.len(),
+            "Tantivy lexical index updated"
+        );
+    }
 
     let mut asset_uuid_by_ref = std::collections::HashMap::new();
     let mut stored_asset_path_by_ref = std::collections::HashMap::new();

@@ -63,26 +63,28 @@ impl Task for ModeSelectTask {
         info!(node = TASK_MODE_SELECT, "graphflow chat node start");
         let flow = ChatFlowContext::from(context);
         let request = flow.request().await?;
+        let decision = crate::main_agent::MainAgent::decide(&request);
+        if let crate::main_agent::MainAgentDecision::Clarify { message } = &decision {
+            let session = flow.session().await?;
+            let execution = self
+                .state
+                .execute_clarify_mode_core(&request, &session, message)
+                .await
+                .map_err(graph_app_error)?;
+            flow.set_execution(&execution).await;
+            return Ok(TaskResult::new(
+                None,
+                NextAction::GoTo(TASK_OUTPUT_GUARD.to_string()),
+            ));
+        }
         if self.state.pg().is_none() {
             return Ok(TaskResult::new(
                 None,
                 NextAction::GoTo(TASK_MEMORY_COMPAT.to_string()),
             ));
         }
-        let session = flow.session().await?;
-        match crate::main_agent::MainAgent::decide(&request) {
-            crate::main_agent::MainAgentDecision::Clarify { message } => {
-                let execution = self
-                    .state
-                    .execute_clarify_mode_core(&request, &session, &message)
-                    .await
-                    .map_err(graph_app_error)?;
-                flow.set_execution(&execution).await;
-                Ok(TaskResult::new(
-                    None,
-                    NextAction::GoTo(TASK_OUTPUT_GUARD.to_string()),
-                ))
-            }
+        match decision {
+            crate::main_agent::MainAgentDecision::Clarify { .. } => unreachable!(),
             crate::main_agent::MainAgentDecision::DirectChat => Ok(TaskResult::new(
                 None,
                 NextAction::GoTo(TASK_GENERAL.to_string()),

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use avrag_llm::{AnswerSynthesizer, EmbeddingClient, RerankerClient, RetrievalPlanner};
+use avrag_search::TantivyLexicalIndex;
 use avrag_storage_pg::PgAppRepository;
 use avrag_storage_qdrant::HttpQdrantBackend;
 use serde::{Deserialize, Serialize};
@@ -17,9 +18,13 @@ pub struct RagConfig {
     pub qdrant: Arc<HttpQdrantBackend>,
     /// PostgreSQL repository for sparse retrieval and content fetching.
     pub pg_repo: Option<Arc<PgAppRepository>>,
+    /// Optional Tantivy lexical backend for sparse/BM25-style retrieval.
+    pub lexical_index: Option<Arc<TantivyLexicalIndex>>,
+    /// Optional path used to lazily open a reader if the index appears after API startup.
+    pub lexical_index_dir: Option<String>,
     /// Answer synthesizer for generating responses
     pub answer_synthesizer: Option<Arc<AnswerSynthesizer>>,
-    /// Retrieval planner for intent classification
+    /// Legacy retrieval planner for planner-compatible paths.
     pub planner: Option<Arc<RetrievalPlanner>>,
     /// Reranker for cross-encoder reranking
     pub reranker: Option<Arc<RerankerClient>>,
@@ -40,6 +45,8 @@ impl RagConfig {
             multimodal_collection: "chunks_multimodal".to_string(),
             qdrant,
             pg_repo,
+            lexical_index: None,
+            lexical_index_dir: None,
             answer_synthesizer: None,
             planner: None,
             reranker: None,
@@ -61,6 +68,16 @@ impl RagConfig {
 
     pub fn with_mm_embedding(mut self, embedding: Arc<EmbeddingClient>) -> Self {
         self.mm_embedding_client = Some(embedding);
+        self
+    }
+
+    pub fn with_lexical_index(mut self, index: Arc<TantivyLexicalIndex>) -> Self {
+        self.lexical_index = Some(index);
+        self
+    }
+
+    pub fn with_lexical_index_dir(mut self, dir: Option<String>) -> Self {
+        self.lexical_index_dir = dir;
         self
     }
 

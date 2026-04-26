@@ -2,6 +2,7 @@
 
 > 基于 2026-03-20 代码审查 + PRD_RUST.md 对照生成
 > 优先级原则：知识不丢失 > 召回完整性 > 生产健壮性
+> Historical snapshot. Retrieval/storage target references to Qdrant, PG BM25, or March 2026 PRD sections are superseded by [2026-04-26 Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md).
 
 ---
 

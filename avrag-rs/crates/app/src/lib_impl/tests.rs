@@ -104,4 +104,126 @@ mod tests {
             "First line\nSecond line"
         );
     }
+
+    #[test]
+    fn general_profile_custom_preferences_preserves_agent_memory() {
+        let mut agent_memory = common::AgentPreferenceMemory::default();
+        agent_memory.active.push(common::AgentPreference {
+            id: "pref-1".to_string(),
+            text: "Use concise answers".to_string(),
+            category: "interaction".to_string(),
+            scope: "global".to_string(),
+            confidence: "explicit".to_string(),
+            source: "test".to_string(),
+            updated_at: "2026-04-26T00:00:00Z".to_string(),
+        });
+
+        let merged = merge_general_profile_custom_preferences(
+            serde_json::json!({ "theme": "dark" }),
+            agent_memory,
+            "hello",
+            "hello refined",
+        );
+
+        assert_eq!(
+            merged.get("theme").and_then(|value| value.as_str()),
+            Some("dark")
+        );
+        assert_eq!(
+            merged
+                .pointer("/agent_memory/active/0/text")
+                .and_then(|value| value.as_str()),
+            Some("Use concise answers")
+        );
+        assert_eq!(
+            merged
+                .get("last_general_query")
+                .and_then(|value| value.as_str()),
+            Some("hello")
+        );
+    }
+
+    #[tokio::test]
+    async fn memory_compat_execute_plan_caps_total_bundle_by_final_budget() {
+        let state = AppState::new(AppConfig::default());
+        let notebook = state
+            .create_notebook(CreateNotebookRequest {
+                name: "budget".to_string(),
+                description: String::new(),
+            })
+            .await
+            .unwrap();
+
+        let mut doc_scope = Vec::new();
+        for name in ["one.txt", "two.txt"] {
+            let upload = state
+                .create_document_upload(
+                    &notebook.id,
+                    CreateDocumentRequest {
+                        filename: name.to_string(),
+                        file_size: 32,
+                        mime_type: "text/plain".to_string(),
+                    },
+                )
+                .await
+                .unwrap();
+            state
+                .put_uploaded_document(&upload.document_id, b"atlas rollback checklist".to_vec())
+                .await
+                .unwrap();
+            state
+                .transition_document_status(&upload.document_id, DocumentStatus::Completed)
+                .await
+                .unwrap();
+            doc_scope.push(upload.document_id);
+        }
+
+        let response = state
+            .execute_rag_execute_plan(common::ExecutePlanRequest {
+                plan_version: "rag-execute-v1".to_string(),
+                doc_scope,
+                items: vec![common::ExecutePlanItem {
+                    priority: 1.0,
+                    query: Some("atlas".to_string()),
+                    bm25_terms: None,
+                }],
+                summary_mode: common::ExecutePlanSummaryMode::All,
+                budget: Some(common::ExecutePlanBudget {
+                    total_candidate_budget: Some(4),
+                    final_chunk_budget: Some(1),
+                }),
+                trace: None,
+            })
+            .await
+            .unwrap();
+
+        assert!(response.bundle.chunks.len() + response.bundle.summary_chunks.len() <= 1);
+        assert_eq!(
+            response.coverage.summary_chunk_count,
+            response.bundle.summary_chunks.len()
+        );
+    }
+
+    #[tokio::test]
+    async fn explicit_agent_preference_is_stored_without_answer_fact_extraction() {
+        let mut config = AppConfig::default();
+        config.user_id = "00000000-0000-0000-0000-000000000002".to_string();
+        let state = AppState::new(config);
+
+        state
+            .remember_explicit_agent_preference("remember that I prefer concise answers")
+            .await
+            .unwrap();
+        state
+            .remember_explicit_agent_preference("This answer contains a factual claim.")
+            .await
+            .unwrap();
+
+        let preferences = state.current_user_preferences().await.unwrap();
+        assert_eq!(preferences.agent_memory.active.len(), 1);
+        assert_eq!(
+            preferences.agent_memory.active[0].text,
+            "I prefer concise answers"
+        );
+    }
 }

@@ -52,4 +52,27 @@ mod tests {
         assert_eq!(value["must"][0]["match"]["value"], "org-1");
         assert_eq!(value["must"][1]["key"], "doc_id");
     }
+
+    #[test]
+    fn dense_search_filter_uses_any_for_multi_doc_scope() {
+        let org_id = "00000000-0000-0000-0000-000000000001"
+            .parse::<OrgId>()
+            .expect("valid org id");
+        let doc_ids = [
+            Uuid::parse_str("00000000-0000-0000-0000-000000000101").expect("valid doc id"),
+            Uuid::parse_str("00000000-0000-0000-0000-000000000102").expect("valid doc id"),
+        ];
+
+        let value = dense_search_filter_to_json(&org_id, Some(&doc_ids));
+
+        assert_eq!(value["must"][0]["key"], "org_id");
+        assert_eq!(value["must"][1]["key"], "doc_id");
+        assert_eq!(
+            value["must"][1]["match"]["any"],
+            serde_json::json!([
+                "00000000-0000-0000-0000-000000000101",
+                "00000000-0000-0000-0000-000000000102"
+            ])
+        );
+    }
 }

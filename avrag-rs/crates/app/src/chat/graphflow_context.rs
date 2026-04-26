@@ -40,23 +40,20 @@ impl ChatFlowContext {
         self.get(KEY_EXECUTION).await
     }
 
-    async fn set_rag_session_context(
-        &self,
-        session_context: &avrag_rag_core::context::SessionContext,
-    ) {
-        self.0.set(KEY_RAG_SESSION_CONTEXT, session_context).await;
-    }
-
-    async fn rag_session_context(&self) -> Option<avrag_rag_core::context::SessionContext> {
-        self.0.get(KEY_RAG_SESSION_CONTEXT).await
-    }
-
     async fn set_rag_plan(&self, plan: &common::RagPlan) {
         self.0.set(KEY_RAG_PLAN, plan).await;
     }
 
     async fn rag_plan(&self) -> graph_flow::Result<common::RagPlan> {
         self.get(KEY_RAG_PLAN).await
+    }
+
+    async fn set_rag_execute_request(&self, request: &common::ExecutePlanRequest) {
+        self.0.set(KEY_RAG_EXECUTE_REQUEST, request).await;
+    }
+
+    async fn rag_execute_request(&self) -> graph_flow::Result<common::ExecutePlanRequest> {
+        self.get(KEY_RAG_EXECUTE_REQUEST).await
     }
 
     async fn set_rag_execute_response(&self, response: &common::ExecutePlanResponse) {
@@ -194,6 +191,8 @@ pub(crate) struct ChatGraphExecution {
     pub apply_output_guard: bool,
     pub response: ChatResponse,
     pub llm_usage: Option<avrag_llm::LlmUsage>,
+    #[serde(default)]
+    pub debug_metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

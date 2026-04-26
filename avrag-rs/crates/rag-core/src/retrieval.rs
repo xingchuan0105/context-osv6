@@ -1,4 +1,5 @@
 use avrag_auth::AuthContext;
+use avrag_search::TantivyLexicalIndex;
 use avrag_storage_pg::PgAppRepository;
 use avrag_storage_qdrant::HttpQdrantBackend;
 use serde::{Deserialize, Serialize};
@@ -102,6 +103,20 @@ pub struct SparseRetrievalResult {
     pub hits: Vec<SparseSearchHit>,
 }
 
+#[derive(Debug, Clone)]
+pub struct SparseRetrievalTrace {
+    pub backend: String,
+    pub raw_hit_count: usize,
+    pub hydrated_hit_count: usize,
+    pub fallback_reason: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SparseRetrievalOutput {
+    pub chunks: Vec<ScoredChunk>,
+    pub trace: SparseRetrievalTrace,
+}
+
 pub async fn run_dense_retrieval(
     qdrant: &HttpQdrantBackend,
     repo: &PgAppRepository,
@@ -148,6 +163,108 @@ pub async fn run_dense_retrieval(
 }
 
 pub async fn run_sparse_retrieval(
+    repo: &PgAppRepository,
+    auth: &AuthContext,
+    query: &str,
+    doc_ids: Option<&[Uuid]>,
+    limit: usize,
+) -> anyhow::Result<Vec<ScoredChunk>> {
+    Ok(
+        run_sparse_retrieval_with_lexical(None, repo, auth, query, doc_ids, limit)
+            .await?
+            .chunks,
+    )
+}
+
+pub async fn run_sparse_retrieval_with_lexical(
+    lexical_index: Option<&TantivyLexicalIndex>,
+    repo: &PgAppRepository,
+    auth: &AuthContext,
+    query: &str,
+    doc_ids: Option<&[Uuid]>,
+    limit: usize,
+) -> anyhow::Result<SparseRetrievalOutput> {
+    if let Some(index) = lexical_index {
+        match index.search(auth.org_id().into_uuid(), query, doc_ids, limit) {
+            Ok(hits) => {
+                let raw_hit_count = hits.len();
+                let chunk_ids: Vec<Uuid> = hits.iter().map(|hit| hit.chunk_id).collect();
+                let chunk_map = repo.get_chunks_by_ids(auth, &chunk_ids).await?;
+                let mut chunks = Vec::with_capacity(hits.len());
+                for hit in hits {
+                    if let Some(chunk) = chunk_map.get(&hit.chunk_id) {
+                        chunks.push(
+                            ScoredChunk::new_text(
+                                hit.chunk_id,
+                                hit.doc_id,
+                                chunk.content.clone(),
+                                hit.score,
+                                "lexical".to_string(),
+                                chunk.page.or(hit.page),
+                            )
+                            .with_metadata(
+                                chunk_metadata_string(&chunk.metadata, "block_type")
+                                    .unwrap_or_else(|| "text".to_string()),
+                                chunk_metadata_string(&chunk.metadata, "parser_backend"),
+                                chunk_metadata_value(&chunk.metadata, "source_locator"),
+                            ),
+                        );
+                    }
+                }
+                let hydrated_hit_count = chunks.len();
+                tracing::info!(
+                    lexical_backend = "tantivy",
+                    raw_hit_count,
+                    hydrated_hit_count,
+                    "sparse retrieval completed"
+                );
+                return Ok(SparseRetrievalOutput {
+                    chunks,
+                    trace: SparseRetrievalTrace {
+                        backend: "tantivy".to_string(),
+                        raw_hit_count,
+                        hydrated_hit_count,
+                        fallback_reason: None,
+                    },
+                });
+            }
+            Err(error) => {
+                let fallback_reason = error.to_string();
+                tracing::info!(
+                    lexical_backend = "tantivy",
+                    error = %fallback_reason,
+                    "sparse retrieval falling back to postgres bm25"
+                );
+                let chunks =
+                    run_postgres_sparse_retrieval(repo, auth, query, doc_ids, limit).await?;
+                let hydrated_hit_count = chunks.len();
+                return Ok(SparseRetrievalOutput {
+                    chunks,
+                    trace: SparseRetrievalTrace {
+                        backend: "postgres_bm25".to_string(),
+                        raw_hit_count: hydrated_hit_count,
+                        hydrated_hit_count,
+                        fallback_reason: Some(fallback_reason),
+                    },
+                });
+            }
+        }
+    }
+
+    let chunks = run_postgres_sparse_retrieval(repo, auth, query, doc_ids, limit).await?;
+    let hydrated_hit_count = chunks.len();
+    Ok(SparseRetrievalOutput {
+        chunks,
+        trace: SparseRetrievalTrace {
+            backend: "postgres_bm25".to_string(),
+            raw_hit_count: hydrated_hit_count,
+            hydrated_hit_count,
+            fallback_reason: None,
+        },
+    })
+}
+
+async fn run_postgres_sparse_retrieval(
     repo: &PgAppRepository,
     auth: &AuthContext,
     query: &str,
