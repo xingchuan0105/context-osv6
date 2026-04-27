@@ -15,7 +15,7 @@
   padding: 1rem 2rem;
   border-bottom: 1px solid hsl(var(--border));
   background: hsl(var(--background));
-  box-shadow: var(--shadow-topbar);
+  box-shadow: var(--shadow-sm);
 }
 
 .topBarBrand {
@@ -38,7 +38,7 @@
   height: calc(var(--font-size-brand) * 2.4);
   border-radius: 0.6rem;
   flex: none;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-sm);
 }
 
 .topBarWordmark {
@@ -198,7 +198,7 @@
 .railSecondaryButton,
 .historyMenuTrigger {
   appearance: none;
-  border-radius: 0.72rem;
+  border-radius: var(--radius-button);
   border: 1px solid transparent;
   padding: 0.68rem 0.9rem;
   cursor: pointer;
@@ -264,13 +264,14 @@
   background: hsl(var(--foreground));
   border-color: hsl(var(--foreground));
   color: hsl(var(--primary-foreground));
-  border-radius: 999px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  border-radius: var(--radius-button);
+  box-shadow: var(--shadow-sm);
 }
 
 .primaryButton:hover {
-  background: hsl(var(--primary));
-  border-color: hsl(var(--primary));
+  background: hsl(var(--accent));
+  border-color: hsl(var(--accent));
+  box-shadow: var(--shadow-glow);
 }
 
 .secondaryButton {
@@ -291,7 +292,7 @@
 .topBarToggleButtonActive {
   min-height: calc(var(--font-size-shell-title) * 2.5);
   padding: 0.68rem 1rem;
-  border-radius: 999px;
+  border-radius: var(--radius-button);
   text-decoration: none;
 }
 
@@ -299,7 +300,7 @@
 .topBarToggleButtonActive {
   min-width: 2.55rem;
   padding-inline: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-button);
 }
 
 .titleSaveButton,
@@ -418,9 +419,9 @@
   border-color: hsl(var(--foreground));
   background: hsl(var(--foreground));
   color: hsl(var(--primary-foreground));
-  border-radius: 999px;
+  border-radius: var(--radius-button);
   padding-inline: 1rem;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-sm);
 }
 
 .railPrimaryButton:hover {
@@ -434,7 +435,7 @@
   border-color: hsl(var(--border));
   background: transparent;
   color: hsl(var(--muted-foreground));
-  border-radius: 999px;
+  border-radius: var(--radius-button);
   min-height: calc(var(--font-size-shell-title) * 2.5);
   padding: 0.68rem 1rem;
   box-shadow: none;
@@ -455,7 +456,7 @@
   display: grid;
   gap: 0.8rem;
   border: 1px solid hsl(var(--border));
-  border-radius: 0.85rem;
+  border-radius: var(--radius-card);
   background: hsl(var(--card));
   padding: 0.55rem;
   box-shadow: var(--shadow-deep-card);
@@ -536,7 +537,7 @@
   width: min(32rem, 100%);
   flex-basis: 100%;
   border: 1px solid hsl(var(--border));
-  border-radius: 1rem;
+  border-radius: var(--radius-card);
   background: hsl(var(--card));
   padding: 1rem;
 }
@@ -581,7 +582,7 @@
 .modalCard {
   width: min(28rem, 100%);
   border: 1px solid hsl(var(--border));
-  border-radius: 1rem;
+  border-radius: var(--radius-card);
   background: hsl(var(--card));
   padding: 1rem;
 }
@@ -929,7 +930,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
   gap: 0.18rem;
-  border-radius: 0.82rem;
+  border-radius: var(--radius-control);
   padding: 0.12rem;
   background: transparent;
   transition: background 120ms ease;
@@ -947,7 +948,7 @@
   width: 100%;
   min-width: 0;
   text-align: left;
-  border-radius: 0.72rem;
+  border-radius: var(--radius-button);
   padding: 0.5rem 0.68rem;
   display: grid;
   gap: 0.12rem;
