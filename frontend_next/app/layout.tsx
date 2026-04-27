@@ -2,12 +2,32 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
+import { Space_Grotesk, IBM_Plex_Sans, JetBrains_Mono } from "next/font/google";
 
 import "./globals.css";
 import { AuthProvider } from "../lib/auth/context";
 import { normalizeLocale } from "../lib/i18n/config";
 import { QueryProvider } from "../lib/query/provider";
 import { UiPreferencesProvider } from "../lib/ui-preferences";
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-heading",
+  display: "swap",
+});
+
+const ibmPlexSans = IBM_Plex_Sans({
+  weight: ["400", "500", "600"],
+  subsets: ["latin"],
+  variable: "--font-body",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+});
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000";
 
@@ -51,7 +71,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
 
   return (
     <html lang={locale} suppressHydrationWarning>
-      <body>
+      <body className={`${spaceGrotesk.variable} ${ibmPlexSans.variable} ${jetbrainsMono.variable}`}>
         <QueryProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>
             <UiPreferencesProvider initialLocale={locale}>
