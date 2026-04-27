@@ -123,6 +123,7 @@
 .message {
   display: flex;
   width: 100%;
+  animation: messageEnter 200ms ease-out;
 }
 
 .messageAssistant {
@@ -983,6 +984,7 @@
   border-color: hsl(var(--border));
   background: hsl(var(--surface-muted));
   color: hsl(var(--foreground));
+  transform: translateY(-1px);
 }
 
 .modeTag:focus-visible {
@@ -1113,8 +1115,8 @@
 
 .sendButton:hover {
   background: hsl(var(--accent) / 0.9);
-  transform: translateY(-1px);
-  box-shadow: 0 0 30px hsl(var(--accent-glow) / 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 0 30px hsl(var(--accent-glow) / 0.4), var(--shadow-glow);
 }
 
 .sendButton:disabled {
@@ -1228,6 +1230,51 @@
 .webSourceButton:focus-visible {
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
+}
+
+.thinkingIndicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.5rem 0;
+}
+
+.thinkingDot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: hsl(var(--accent));
+  animation: thinkingPulse 800ms ease-in-out infinite;
+}
+
+.thinkingDot:nth-child(2) {
+  animation-delay: 200ms;
+}
+
+.thinkingDot:nth-child(3) {
+  animation-delay: 400ms;
+}
+
+@keyframes thinkingPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 1;
+  }
+}
+
+@keyframes messageEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 @media (max-width: 767px) {
