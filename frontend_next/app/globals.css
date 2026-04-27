@@ -146,6 +146,7 @@ textarea {
 .app-input:hover {
   border-color: hsl(var(--border-strong));
   background: hsl(var(--surface-elevated));
+  transform: translateY(-0.5px);
 }
 
 .app-input:focus,
@@ -223,6 +224,7 @@ textarea {
   border-color: hsl(var(--border-strong));
   background: hsl(var(--surface-soft));
   color: hsl(var(--foreground));
+  transform: translateY(-1px);
 }
 
 .app-button-primary:focus-visible,
@@ -788,6 +790,7 @@ textarea {
   border-color: hsl(var(--dashboard-border-strong));
   background: hsl(var(--dashboard-surface-soft));
   color: hsl(var(--dashboard-foreground));
+  transform: translateY(-1px);
 }
 
 .dashboard-create-tile:disabled {
@@ -831,6 +834,7 @@ textarea {
 .dashboard-workspace-card:hover {
   border-color: hsl(var(--dashboard-border-strong));
   box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
 }
 
 .dashboard-workspace-card-rose {
@@ -1249,6 +1253,11 @@ textarea {
   border-radius: var(--radius-card);
   padding: 0.9rem 1rem;
   background: hsl(var(--dashboard-surface-muted));
+  transition: background 150ms ease, transform 150ms ease, border-color 150ms ease;
+}
+
+.dashboard-search-link:hover {
+  transform: translateY(-1px);
 }
 
 .dashboard-search-link-title {

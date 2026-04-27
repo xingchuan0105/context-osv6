@@ -594,6 +594,8 @@
 
 .listItem:hover {
   background: hsl(var(--surface-muted));
+  transform: translateX(2px);
+  transition: background 150ms ease, transform 150ms ease;
 }
 
 .listItemFocused {
@@ -633,6 +635,7 @@
   border-color: hsl(var(--border-strong));
   background: hsl(var(--card));
   box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+  transform: translateY(-1px);
 }
 
 .listItemHeader,
@@ -835,6 +838,7 @@
 
 .itemMenuButton:hover {
   background: hsl(var(--surface-soft));
+  transform: translateX(2px);
 }
 
 .itemMenuButtonDanger {

@@ -283,6 +283,7 @@
   border-color: hsl(var(--border-strong));
   background: hsl(var(--surface-muted));
   color: hsl(var(--foreground));
+  transform: translateY(-1px);
 }
 
 .titleSaveButton,
@@ -515,6 +516,8 @@
 .menuChoice:hover,
 .menuDangerButton:hover {
   background: hsl(var(--surface-soft));
+  transform: translateX(2px);
+  transition: background 150ms ease, transform 150ms ease;
 }
 
 .menuAccountCard {
@@ -993,6 +996,8 @@
 
 .historyItem:hover:not(.historyItemActive) {
   background: hsl(var(--app-history-hover));
+  transform: translateX(2px);
+  transition: background 150ms ease, transform 150ms ease;
 }
 
 .historyItemSummary {
