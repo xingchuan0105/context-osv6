@@ -17,12 +17,12 @@ body {
   min-height: 100vh;
   background: hsl(var(--background));
   color: hsl(var(--foreground));
-  font-family:
-    Inter, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei",
-    sans-serif;
+  font-family: var(--font-body), "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a {
@@ -47,10 +47,10 @@ textarea {
 .app-surface-card {
   width: 100%;
   border: 1px solid hsl(var(--border-whisper));
-  border-radius: 1.35rem;
+  border-radius: var(--radius-card);
   background: hsl(var(--card));
   color: hsl(var(--card-foreground));
-  box-shadow: var(--shadow-soft-card);
+  box-shadow: var(--shadow-sm);
   padding: 1.5rem;
 }
 
@@ -73,6 +73,7 @@ textarea {
 
 .app-auth-title {
   margin: 0;
+  font-family: var(--font-heading), sans-serif;
   font-size: clamp(1.65rem, 2.6vw, 1.95rem);
   line-height: 1.08;
   letter-spacing: -0.03em;
@@ -196,12 +197,13 @@ textarea {
   border-color: transparent;
   background: hsl(var(--cta-background));
   color: hsl(var(--cta-foreground));
-  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.1);
+  box-shadow: var(--shadow-sm);
 }
 
 .app-button-primary:hover {
-  background: hsl(var(--cta-background-hover));
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+  background: hsl(var(--accent));
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-1px);
 }
 
 .app-button-secondary {
@@ -254,7 +256,7 @@ textarea {
 
 .app-inline-surface {
   border: 1px solid hsl(var(--border-whisper));
-  border-radius: 1rem;
+  border-radius: var(--radius-card);
   background: hsl(var(--surface-muted));
   padding: 1rem 1.1rem;
 }
@@ -285,7 +287,7 @@ textarea {
 .app-notice-banner {
   margin: 0;
   border: 1px solid hsl(var(--destructive-border));
-  border-radius: 0.95rem;
+  border-radius: var(--radius-control);
   background: hsl(var(--destructive-soft));
   color: hsl(var(--destructive));
   padding: 0.9rem 1rem;
@@ -569,7 +571,7 @@ textarea {
   background: hsl(var(--dashboard-surface-soft));
   border-color: hsl(var(--dashboard-border));
   color: hsl(var(--dashboard-foreground));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
+  box-shadow: inset 0 0 0 1px hsl(var(--border-whisper) / 0.75);
 }
 
 .dashboard-tab-button {
@@ -720,7 +722,7 @@ textarea {
 
 .dashboard-empty-state {
   border: 1px dashed hsl(var(--dashboard-border));
-  border-radius: 1.25rem;
+  border-radius: var(--radius-card);
   background: hsl(var(--dashboard-surface));
   color: hsl(var(--dashboard-muted-foreground));
   padding: 2rem;
@@ -772,7 +774,7 @@ textarea {
   gap: 0.7rem;
   min-height: 11.25rem;
   border: 1px dashed hsl(var(--dashboard-border));
-  border-radius: 1rem;
+  border-radius: var(--radius-card);
   background: hsl(var(--dashboard-surface-muted));
   color: hsl(var(--dashboard-muted-foreground));
   cursor: pointer;
@@ -818,9 +820,9 @@ textarea {
   height: 100%;
   min-height: 11.25rem;
   border: 1px solid hsl(var(--dashboard-border) / 0.92);
-  border-radius: 1rem;
+  border-radius: var(--radius-card);
   background: hsl(var(--dashboard-surface));
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  box-shadow: var(--shadow-sm);
   transition:
     border-color 140ms ease,
     box-shadow 140ms ease;
@@ -828,7 +830,7 @@ textarea {
 
 .dashboard-workspace-card:hover {
   border-color: hsl(var(--dashboard-border-strong));
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.07);
+  box-shadow: var(--shadow-lg);
 }
 
 .dashboard-workspace-card-rose {
@@ -885,7 +887,7 @@ textarea {
   font-size: calc(var(--font-size-brand) * 1.15);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-shell-title);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 0 0 1px hsl(var(--border-whisper) / 0.8);
 }
 
 .dashboard-workspace-icon-rose {
@@ -1025,9 +1027,9 @@ textarea {
   min-width: 6.9rem;
   padding: 0.24rem;
   border: 1px solid hsl(var(--dashboard-border));
-  border-radius: 0.85rem;
+  border-radius: var(--radius-control);
   background: hsl(var(--dashboard-surface));
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+  box-shadow: var(--shadow-lg);
 }
 
 .dashboard-sort-dropdown {
@@ -1037,7 +1039,7 @@ textarea {
 .dashboard-action-menu-item {
   appearance: none;
   border: 0;
-  border-radius: 0.65rem;
+  border-radius: var(--radius-control);
   background: transparent;
   color: hsl(var(--dashboard-foreground));
   padding: 0.48rem 0.68rem;
@@ -1076,7 +1078,7 @@ textarea {
 
 .dashboard-list-item .dashboard-workspace-card:hover {
   transform: none;
-  background: #fafafa;
+  background: hsl(var(--surface-muted));
 }
 
 .dashboard-workspace-card-link-list {
@@ -1172,10 +1174,10 @@ textarea {
 .dashboard-search-modal {
   width: min(100%, 40rem);
   border: 1px solid hsl(var(--dashboard-border));
-  border-radius: 1.4rem;
+  border-radius: var(--radius-card);
   background: hsl(var(--dashboard-surface));
   color: hsl(var(--dashboard-foreground));
-  box-shadow: var(--shadow-deep-card);
+  box-shadow: var(--shadow-xl);
   padding: 1.25rem;
 }
 
@@ -1244,7 +1246,7 @@ textarea {
   display: grid;
   gap: 0.2rem;
   border: 1px solid hsl(var(--dashboard-border));
-  border-radius: 1rem;
+  border-radius: var(--radius-card);
   padding: 0.9rem 1rem;
   background: hsl(var(--dashboard-surface-muted));
 }
