@@ -158,10 +158,11 @@
 .bubbleAssistant {
   padding: 0.92rem 1.08rem;
   border: 1px solid hsl(var(--border-whisper));
-  border-radius: 1.35rem;
+  border-radius: var(--radius-message);
+  border-top-left-radius: 4px;  /* direction indicator */
   background: hsl(var(--card));
   color: hsl(var(--foreground));
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: var(--shadow-sm);
 }
 
 .bubbleAssistantGeneral {
@@ -174,7 +175,7 @@
   background: hsl(var(--success) / 0.08);
   box-shadow:
     inset 3px 0 0 hsl(var(--success) / 0.78),
-    0 1px 2px rgba(15, 23, 42, 0.04);
+    var(--shadow-sm);
 }
 
 .bubbleAssistantSearch {
@@ -182,15 +183,16 @@
   background: hsl(var(--info) / 0.08);
   box-shadow:
     inset 3px 0 0 hsl(var(--info) / 0.82),
-    0 1px 2px rgba(15, 23, 42, 0.04);
+    var(--shadow-sm);
 }
 
 .bubbleUser {
   width: min(100%, 44rem);
   padding: 0.84rem 1.04rem;
-  border-radius: 1.35rem;
-  background: hsl(var(--surface-soft));
-  color: hsl(var(--foreground));
+  border-radius: var(--radius-message);
+  border-top-right-radius: 4px;  /* direction indicator */
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
 }
 
 .bubblePending {
@@ -280,9 +282,9 @@
 }
 
 .inlineCitationButton:hover {
-  border-color: hsl(var(--border-strong));
-  background: hsl(var(--surface-muted));
-  color: hsl(var(--foreground));
+  border-color: hsl(var(--accent));
+  background: hsl(var(--surface-accent-soft));
+  color: hsl(var(--accent));
   transform: translateY(-0.08rem);
 }
 
@@ -932,7 +934,7 @@
   margin: 0 auto;
   padding: 0.86rem 0.92rem;
   border: 1px solid hsl(var(--border));
-  border-radius: 1.55rem;
+  border-radius: var(--radius-message);
   background: hsl(var(--card));
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
   transition:
@@ -943,7 +945,7 @@
 
 .composerForm:focus-within {
   border-color: hsl(var(--focus-ring));
-  box-shadow: var(--shadow-focus-ring);
+  box-shadow: var(--shadow-glow);
 }
 
 .tagRow {
@@ -1098,18 +1100,21 @@
   padding: 0;
   border: 0;
   border-radius: 999px;
-  background: hsl(var(--foreground));
+  background: hsl(var(--accent));  /* cyan */
   color: hsl(var(--primary-foreground));
   cursor: pointer;
+  box-shadow: var(--shadow-glow);  /* glow effect */
   transition:
-    background 120ms ease,
-    transform 120ms ease,
-    opacity 120ms ease;
+    background 150ms ease,
+    transform 150ms ease,
+    opacity 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .sendButton:hover {
-  background: hsl(var(--primary));
+  background: hsl(var(--accent) / 0.9);
   transform: translateY(-1px);
+  box-shadow: 0 0 30px hsl(var(--accent-glow) / 0.4);
 }
 
 .sendButton:disabled {
@@ -1207,7 +1212,7 @@
   padding: 0.35rem 0.72rem;
   border: 1px solid hsl(var(--border));
   border-radius: 6px;
-  background: hsl(var(--button));
+  background: hsl(var(--card));
   color: hsl(var(--foreground));
   font-size: 0.82rem;
   font-weight: 500;
@@ -1216,7 +1221,7 @@
 }
 
 .webSourceButton:hover {
-  background: hsl(var(--button-hover));
+  background: hsl(var(--surface-muted));
   border-color: hsl(var(--ring));
 }
 
