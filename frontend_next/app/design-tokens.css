@@ -1,350 +1,451 @@
 :root {
+  /* === Background & Surface === */
   --background: 0 0% 100%;
-  --foreground: 240 10% 10%;
+  --foreground: 222 47% 11%;
   --card: 0 0% 100%;
-  --card-foreground: 240 10% 10%;
-  --surface-muted: 240 14% 98%;
-  --surface-soft: 240 10% 96%;
+  --card-foreground: 222 47% 11%;
+  --surface-muted: 210 20% 98%;
+  --surface-soft: 210 20% 96%;
   --surface-elevated: 0 0% 100%;
-  --surface-sunken: 240 12% 94%;
-  --surface-accent-soft: 232 60% 95%;
+  --surface-sunken: 214 32% 91%;
+  --surface-accent-soft: 195 100% 97%;
+
+  /* === Popover === */
   --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 10%;
-  --primary: 240 10% 9%;
+  --popover-foreground: 222 47% 11%;
+
+  /* === Accent (Primary) === */
+  --primary: 222 47% 11%;
   --primary-foreground: 0 0% 100%;
-  --success: 155 35% 38%;
-  --warning: 36 74% 48%;
+  --accent: 193 90% 35%;
+  --accent-soft: 195 100% 97%;
+  --accent-glow: 193 90% 35%;
+
+  /* === Semantic Colors === */
+  --success: 174 72% 35%;
+  --warning: 38 92% 42%;
   --warning-foreground: 30 60% 24%;
   --warning-surface: 42 100% 96%;
   --warning-border: 38 78% 82%;
-  --info: 214 75% 46%;
-  --secondary: 240 10% 96%;
-  --secondary-foreground: 240 8% 22%;
-  --muted: 240 10% 95%;
-  --muted-foreground: 240 5% 45%;
-  --subtle-foreground: 240 4% 60%;
-  --accent: 240 10% 93%;
-  --accent-foreground: 240 8% 18%;
-  --destructive: 358 68% 47%;
+  --info: 200 98% 40%;
+  --destructive: 350 89% 55%;
   --destructive-foreground: 0 0% 100%;
-  --destructive-soft: 358 90% 97%;
-  --destructive-border: 358 62% 84%;
-  --border: 240 8% 86%;
-  --border-strong: 240 7% 80%;
-  --border-whisper: 240 7% 90%;
-  --input: 240 8% 86%;
-  --input-background: 240 14% 98%;
-  --switch-background: 240 6% 78%;
-  --ring: 214 80% 52%;
-  --focus-ring: 214 85% 58%;
-  --badge-background: 240 10% 96%;
-  --badge-foreground: 240 5% 40%;
-  --sidebar: 0 0% 99%;
-  --sidebar-foreground: 240 10% 10%;
-  --sidebar-primary: 240 10% 9%;
+  --destructive-soft: 350 90% 97%;
+  --destructive-border: 350 62% 84%;
+
+  /* === Secondary / Muted === */
+  --secondary: 210 20% 96%;
+  --secondary-foreground: 222 20% 18%;
+  --muted: 210 20% 95%;
+  --muted-foreground: 215 16% 47%;
+  --subtle-foreground: 215 20% 65%;
+
+  /* === Borders === */
+  --border: 214 32% 91%;
+  --border-strong: 215 20% 80%;
+  --border-whisper: 210 20% 96%;
+  --input: 214 32% 91%;
+  --input-background: 210 20% 98%;
+  --switch-background: 215 16% 47%;
+  --ring: 193 90% 35%;
+  --focus-ring: 193 90% 35%;
+
+  /* === Badge === */
+  --badge-background: 210 20% 96%;
+  --badge-foreground: 215 16% 47%;
+
+  /* === Sidebar === */
+  --sidebar: 210 20% 98%;
+  --sidebar-foreground: 222 47% 11%;
+  --sidebar-primary: 222 47% 11%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 240 10% 96%;
-  --sidebar-accent-foreground: 240 8% 18%;
-  --sidebar-border: 240 8% 86%;
-  --sidebar-ring: 214 80% 52%;
+  --sidebar-accent: 210 20% 96%;
+  --sidebar-accent-foreground: 222 20% 18%;
+  --sidebar-border: 214 32% 91%;
+  --sidebar-ring: 193 90% 35%;
+
+  /* === Workspace === */
   --workspace-shell: 0 0% 100%;
-  --workspace-foreground: 240 10% 10%;
+  --workspace-foreground: 222 47% 11%;
   --workspace-panel: 0 0% 100%;
-  --workspace-panel-muted: 240 14% 98%;
-  --workspace-rail: 240 10% 97%;
-  --workspace-rail-strong: 240 10% 95%;
-  --workspace-border: 240 8% 86%;
-  --workspace-primary: 240 10% 9%;
+  --workspace-panel-muted: 210 20% 98%;
+  --workspace-rail: 210 20% 97%;
+  --workspace-rail-strong: 210 20% 95%;
+  --workspace-border: 214 32% 91%;
+  --workspace-primary: 222 47% 11%;
   --workspace-primary-foreground: 0 0% 100%;
-  --workspace-secondary: 240 10% 96%;
-  --workspace-secondary-foreground: 240 8% 18%;
-  --workspace-muted: 240 10% 95%;
-  --workspace-muted-foreground: 240 5% 45%;
-  --workspace-accent: 240 10% 94%;
-  --workspace-accent-foreground: 240 8% 20%;
+  --workspace-secondary: 210 20% 96%;
+  --workspace-secondary-foreground: 222 20% 18%;
+  --workspace-muted: 210 20% 95%;
+  --workspace-muted-foreground: 215 16% 47%;
+  --workspace-accent: 214 32% 91%;
+  --workspace-accent-foreground: 222 20% 18%;
   --workspace-surface: 0 0% 100%;
-  --workspace-surface-muted: 240 14% 98%;
-  --workspace-pill: 240 10% 95%;
-  --workspace-input: 240 14% 98%;
-  --workspace-input-border: 240 8% 86%;
+  --workspace-surface-muted: 210 20% 98%;
+  --workspace-pill: 210 20% 95%;
+  --workspace-input: 210 20% 98%;
+  --workspace-input-border: 214 32% 91%;
   --workspace-menu: 0 0% 100%;
-  --workspace-menu-hover: 240 10% 96%;
-  --workspace-shadow: 32 25% 18%;
+  --workspace-menu-hover: 210 20% 96%;
+  --workspace-shadow: 222 47% 11%;
+
+  /* === Dashboard === */
   --dashboard-shell: 0 0% 100%;
-  --dashboard-foreground: 240 10% 10%;
-  --dashboard-brand-foreground: 240 10% 9%;
-  --dashboard-header-border: 240 8% 90%;
-  --dashboard-border: 240 8% 86%;
-  --dashboard-border-strong: 240 7% 80%;
+  --dashboard-foreground: 222 47% 11%;
+  --dashboard-brand-foreground: 222 47% 11%;
+  --dashboard-header-border: 214 32% 90%;
+  --dashboard-border: 214 32% 91%;
+  --dashboard-border-strong: 215 20% 80%;
   --dashboard-surface: 0 0% 100%;
-  --dashboard-surface-muted: 240 14% 98%;
-  --dashboard-surface-soft: 240 10% 96%;
-  --dashboard-muted-foreground: 240 5% 45%;
-  --dashboard-subtle-foreground: 240 4% 60%;
-  --dashboard-primary: 240 10% 9%;
-  --dashboard-primary-hover: 240 8% 16%;
+  --dashboard-surface-muted: 210 20% 98%;
+  --dashboard-surface-soft: 210 20% 96%;
+  --dashboard-muted-foreground: 215 16% 47%;
+  --dashboard-subtle-foreground: 215 20% 65%;
+  --dashboard-primary: 222 47% 11%;
+  --dashboard-primary-hover: 222 30% 18%;
   --dashboard-primary-foreground: 0 0% 100%;
-  --dashboard-danger: 358 68% 47%;
-  --dashboard-shadow: 32 25% 18%;
-  --dashboard-overlay: 224 18% 14%;
-  --cta-background: 240 10% 9%;
-  --cta-background-hover: 240 8% 14%;
-  --cta-background-active: 240 8% 18%;
+  --dashboard-danger: 350 89% 55%;
+  --dashboard-shadow: 222 47% 11%;
+  --dashboard-overlay: 222 47% 11%;
+
+  /* === CTA === */
+  --cta-background: 222 47% 11%;
+  --cta-background-hover: 193 90% 35%;
+  --cta-background-active: 193 90% 30%;
   --cta-foreground: 0 0% 100%;
-  --radius: 0.875rem;
-  --radius-card: 1rem;
-  --radius-control: 0.75rem;
-  --radius-button: 0.75rem;
+
+  /* === Radius === */
+  --radius: 0.75rem;
+  --radius-card: 0.75rem;
+  --radius-control: 0.5rem;
+  --radius-button: 0.5rem;
   --radius-badge: 999px;
   --radius-pill: 999px;
+  --radius-message: 1rem;
+
+  /* === Spacing === */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
   --space-4: 1rem;
   --space-5: 1.25rem;
   --space-6: 1.5rem;
-  --font-size-overline: 0.6875rem;
-  --font-size-meta: 0.75rem;
+  --space-7: 2rem;
+  --space-8: 3rem;
+  --space-9: 4rem;
+  --space-10: 6rem;
+
+  /* === Typography === */
+  --font-size-overline: 0.75rem;
+  --font-size-meta: 0.8125rem;
   --font-size-control: 0.875rem;
   --font-size-caption: 0.75rem;
-  --font-size-caption-strong: 0.78125rem;
+  --font-size-caption-strong: 0.8125rem;
   --font-size-label: 0.8125rem;
   --font-size-body: 0.9375rem;
   --font-size-body-strong: 1rem;
-  --font-size-section-title: 0.9375rem;
-  --font-size-shell-title: 1rem;
+  --font-size-section-title: 1rem;
+  --font-size-shell-title: 1.125rem;
   --font-size-brand: 1.0625rem;
   --font-size-title-sm: 1.25rem;
   --font-size-title: 1.75rem;
+
   --line-height-overline: 1.4;
   --line-height-meta: 1.5;
   --line-height-control: 1.48;
   --line-height-caption: 1.45;
   --line-height-label: 1.5;
-  --line-height-body: 1.62;
-  --line-height-body-strong: 1.64;
+  --line-height-body: 1.65;
+  --line-height-body-strong: 1.65;
   --line-height-section-title: 1.35;
   --line-height-shell-title: 1.25;
   --line-height-brand: 1.1;
   --line-height-title: 1.18;
+
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
-  --font-weight-strong: 650;
+  --font-weight-bold: 700;
+
   --letter-spacing-normal: 0;
-  --letter-spacing-overline: 0.08em;
+  --letter-spacing-overline: 0.05em;
   --letter-spacing-title: -0.02em;
   --letter-spacing-tight: -0.01em;
-  --shadow-soft-card: 0 8px 24px rgba(15, 23, 42, 0.05);
-  --shadow-deep-card: 0 18px 40px rgba(15, 23, 42, 0.08);
-  --shadow-focus-ring: 0 0 0 4px rgba(59, 130, 246, 0.16);
-  --shadow-topbar: 0 1px 3px rgba(15, 23, 42, 0.06);
-  --app-citation-bg: 240 10% 95%;
-  --app-history-hover: 240 10% 96%;
-  --app-history-active: 240 10% 94%;
+
+  /* === Shadows === */
+  --shadow-sm: 0 1px 2px hsl(222 47% 11% / 0.04);
+  --shadow-md: 0 4px 12px hsl(222 47% 11% / 0.06);
+  --shadow-lg: 0 8px 24px hsl(222 47% 11% / 0.08);
+  --shadow-xl: 0 16px 48px hsl(222 47% 11% / 0.12);
+  --shadow-glow: 0 0 20px hsl(193 90% 35% / 0.15);
+  --shadow-focus-ring: 0 0 0 3px hsl(193 90% 35% / 0.15);
+  --shadow-topbar: 0 1px 3px hsl(222 47% 11% / 0.06);
+
+  /* === App-specific === */
+  --app-citation-bg: 210 20% 95%;
+  --app-history-hover: 210 20% 96%;
+  --app-history-active: 214 32% 91%;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: 28 12% 10%;
-    --foreground: 36 28% 96%;
-    --card: 28 12% 12%;
-    --card-foreground: 36 28% 96%;
-    --surface-muted: 28 10% 14%;
-    --surface-soft: 28 10% 16%;
-    --surface-elevated: 28 10% 18%;
-    --surface-sunken: 28 10% 11%;
-    --surface-accent-soft: 218 24% 18%;
-    --popover: 28 12% 12%;
-    --popover-foreground: 36 28% 96%;
-    --primary: 36 28% 96%;
-    --primary-foreground: 224 24% 12%;
-    --success: 155 38% 52%;
-    --warning: 38 72% 62%;
-    --warning-foreground: 41 85% 92%;
-    --warning-surface: 34 32% 18%;
+    /* === Background & Surface === */
+    --background: 222 84% 5%;
+    --foreground: 210 20% 96%;
+    --card: 222 47% 11%;
+    --card-foreground: 210 20% 96%;
+    --surface-muted: 217 33% 17%;
+    --surface-soft: 215 25% 27%;
+    --surface-elevated: 222 47% 11%;
+    --surface-sunken: 222 84% 5%;
+    --surface-accent-soft: 193 90% 35%;
+
+    /* === Popover === */
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 20% 96%;
+
+    /* === Accent (Primary) === */
+    --primary: 210 20% 96%;
+    --primary-foreground: 222 84% 5%;
+    --accent: 187 85% 53%;
+    --accent-soft: 193 90% 35%;
+    --accent-glow: 187 85% 53%;
+
+    /* === Semantic Colors === */
+    --success: 168 76% 50%;
+    --warning: 45 93% 56%;
+    --warning-foreground: 45 93% 90%;
+    --warning-surface: 38 50% 18%;
     --warning-border: 35 42% 34%;
-    --info: 204 84% 66%;
-    --secondary: 28 8% 18%;
-    --secondary-foreground: 36 28% 96%;
-    --muted: 28 8% 18%;
-    --muted-foreground: 30 10% 72%;
-    --subtle-foreground: 30 8% 60%;
-    --accent: 28 8% 20%;
-    --accent-foreground: 36 28% 96%;
-    --destructive: 0 72% 64%;
+    --info: 198 93% 60%;
+    --destructive: 350 89% 70%;
     --destructive-foreground: 0 0% 100%;
-    --destructive-soft: 358 28% 18%;
-    --destructive-border: 358 34% 30%;
-    --border: 28 8% 24%;
-    --border-strong: 28 8% 30%;
-    --border-whisper: 28 8% 28%;
-    --input: 28 8% 24%;
-    --input-background: 28 10% 16%;
-    --switch-background: 28 8% 32%;
-    --ring: 204 84% 66%;
-    --focus-ring: 204 84% 66%;
-    --badge-background: 28 10% 22%;
-    --badge-foreground: 34 14% 78%;
-    --sidebar: 28 12% 11%;
-    --sidebar-foreground: 36 28% 96%;
-    --sidebar-primary: 36 28% 96%;
-    --sidebar-primary-foreground: 224 24% 12%;
-    --sidebar-accent: 28 8% 18%;
-    --sidebar-accent-foreground: 36 28% 96%;
-    --sidebar-border: 28 8% 24%;
-    --sidebar-ring: 204 84% 66%;
-    --workspace-shell: 28 12% 10%;
-    --workspace-foreground: 36 28% 96%;
-    --workspace-panel: 28 12% 12%;
-    --workspace-panel-muted: 28 10% 14%;
-    --workspace-rail: 28 10% 13%;
-    --workspace-rail-strong: 28 10% 15%;
-    --workspace-border: 28 8% 24%;
-    --workspace-primary: 36 28% 96%;
-    --workspace-primary-foreground: 224 24% 12%;
-    --workspace-secondary: 28 8% 18%;
-    --workspace-secondary-foreground: 36 28% 96%;
-    --workspace-muted: 28 8% 18%;
-    --workspace-muted-foreground: 30 10% 72%;
-    --workspace-accent: 218 28% 22%;
-    --workspace-accent-foreground: 214 84% 84%;
-    --workspace-surface: 28 12% 12%;
-    --workspace-surface-muted: 28 10% 14%;
-    --workspace-pill: 28 10% 20%;
-    --workspace-input: 28 10% 16%;
-    --workspace-input-border: 28 8% 24%;
-    --workspace-menu: 28 12% 12%;
-    --workspace-menu-hover: 28 8% 18%;
-    --workspace-shadow: 28 28% 4%;
-    --dashboard-shell: 28 12% 10%;
-    --dashboard-foreground: 36 28% 96%;
-    --dashboard-brand-foreground: 36 28% 96%;
-    --dashboard-header-border: 28 8% 20%;
-    --dashboard-border: 28 8% 24%;
-    --dashboard-border-strong: 28 8% 30%;
-    --dashboard-surface: 28 12% 12%;
-    --dashboard-surface-muted: 28 10% 14%;
-    --dashboard-surface-soft: 28 8% 18%;
-    --dashboard-muted-foreground: 30 10% 72%;
-    --dashboard-subtle-foreground: 30 8% 60%;
-    --dashboard-primary: 36 28% 96%;
-    --dashboard-primary-hover: 34 20% 86%;
-    --dashboard-primary-foreground: 224 24% 12%;
-    --dashboard-danger: 0 72% 64%;
-    --dashboard-shadow: 28 28% 4%;
-    --dashboard-overlay: 24 18% 6%;
-    --cta-background: 36 28% 96%;
-    --cta-background-hover: 34 20% 86%;
-    --cta-background-active: 34 16% 78%;
-    --cta-foreground: 224 24% 12%;
-    --shadow-soft-card: 0 14px 34px rgba(0, 0, 0, 0.26);
-    --shadow-deep-card: 0 22px 52px rgba(0, 0, 0, 0.34);
-    --shadow-focus-ring: 0 0 0 4px rgba(96, 165, 250, 0.2);
-    --shadow-topbar: 0 1px 3px rgba(0, 0, 0, 0.18);
-    --app-citation-bg: 28 8% 18%;
-    --app-history-hover: 28 8% 18%;
-    --app-history-active: 28 8% 20%;
+    --destructive-soft: 350 30% 18%;
+    --destructive-border: 350 34% 30%;
+
+    /* === Secondary / Muted === */
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 20% 96%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 16% 55%;
+    --subtle-foreground: 215 20% 45%;
+
+    /* === Borders === */
+    --border: 217 33% 17%;
+    --border-strong: 215 25% 27%;
+    --border-whisper: 222 47% 14%;
+    --input: 217 33% 17%;
+    --input-background: 222 47% 11%;
+    --switch-background: 215 25% 35%;
+    --ring: 187 85% 53%;
+    --focus-ring: 187 85% 53%;
+
+    /* === Badge === */
+    --badge-background: 217 33% 17%;
+    --badge-foreground: 215 16% 65%;
+
+    /* === Sidebar === */
+    --sidebar: 222 84% 6%;
+    --sidebar-foreground: 210 20% 96%;
+    --sidebar-primary: 210 20% 96%;
+    --sidebar-primary-foreground: 222 84% 5%;
+    --sidebar-accent: 217 33% 17%;
+    --sidebar-accent-foreground: 210 20% 96%;
+    --sidebar-border: 217 33% 17%;
+    --sidebar-ring: 187 85% 53%;
+
+    /* === Workspace === */
+    --workspace-shell: 222 84% 5%;
+    --workspace-foreground: 210 20% 96%;
+    --workspace-panel: 222 47% 11%;
+    --workspace-panel-muted: 217 33% 17%;
+    --workspace-rail: 222 47% 10%;
+    --workspace-rail-strong: 217 33% 15%;
+    --workspace-border: 217 33% 17%;
+    --workspace-primary: 210 20% 96%;
+    --workspace-primary-foreground: 222 84% 5%;
+    --workspace-secondary: 217 33% 17%;
+    --workspace-secondary-foreground: 210 20% 96%;
+    --workspace-muted: 217 33% 17%;
+    --workspace-muted-foreground: 215 16% 55%;
+    --workspace-accent: 193 90% 35%;
+    --workspace-accent-foreground: 187 85% 80%;
+    --workspace-surface: 222 47% 11%;
+    --workspace-surface-muted: 217 33% 17%;
+    --workspace-pill: 217 33% 20%;
+    --workspace-input: 222 47% 11%;
+    --workspace-input-border: 217 33% 17%;
+    --workspace-menu: 222 47% 11%;
+    --workspace-menu-hover: 217 33% 17%;
+    --workspace-shadow: 222 84% 3%;
+
+    /* === Dashboard === */
+    --dashboard-shell: 222 84% 5%;
+    --dashboard-foreground: 210 20% 96%;
+    --dashboard-brand-foreground: 210 20% 96%;
+    --dashboard-header-border: 217 33% 17%;
+    --dashboard-border: 217 33% 17%;
+    --dashboard-border-strong: 215 25% 27%;
+    --dashboard-surface: 222 47% 11%;
+    --dashboard-surface-muted: 217 33% 17%;
+    --dashboard-surface-soft: 217 33% 17%;
+    --dashboard-muted-foreground: 215 16% 55%;
+    --dashboard-subtle-foreground: 215 20% 45%;
+    --dashboard-primary: 210 20% 96%;
+    --dashboard-primary-hover: 210 20% 86%;
+    --dashboard-primary-foreground: 222 84% 5%;
+    --dashboard-danger: 350 89% 70%;
+    --dashboard-shadow: 222 84% 3%;
+    --dashboard-overlay: 222 84% 4%;
+
+    /* === CTA === */
+    --cta-background: 210 20% 96%;
+    --cta-background-hover: 187 85% 53%;
+    --cta-background-active: 187 85% 45%;
+    --cta-foreground: 222 84% 5%;
+
+    /* === Shadows === */
+    --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.3);
+    --shadow-md: 0 4px 12px hsl(0 0% 0% / 0.4);
+    --shadow-lg: 0 8px 24px hsl(0 0% 0% / 0.5);
+    --shadow-xl: 0 16px 48px hsl(0 0% 0% / 0.6);
+    --shadow-glow: 0 0 20px hsl(187 85% 53% / 0.3);
+    --shadow-focus-ring: 0 0 0 3px hsl(187 85% 53% / 0.25);
+    --shadow-topbar: 0 1px 3px hsl(0 0% 0% / 0.18);
+
+    /* === App-specific === */
+    --app-citation-bg: 217 33% 17%;
+    --app-history-hover: 217 33% 17%;
+    --app-history-active: 217 33% 20%;
   }
 }
 
 :root[data-theme="dark"] {
-  --background: 28 12% 10%;
-  --foreground: 36 28% 96%;
-  --card: 28 12% 12%;
-  --card-foreground: 36 28% 96%;
-  --surface-muted: 28 10% 14%;
-  --surface-soft: 28 10% 16%;
-  --surface-elevated: 28 10% 18%;
-  --surface-sunken: 28 10% 11%;
-  --surface-accent-soft: 218 24% 18%;
-  --popover: 28 12% 12%;
-  --popover-foreground: 36 28% 96%;
-  --primary: 36 28% 96%;
-  --primary-foreground: 224 24% 12%;
-  --success: 155 38% 52%;
-  --warning: 38 72% 62%;
-  --warning-foreground: 41 85% 92%;
-  --warning-surface: 34 32% 18%;
+  /* === Background & Surface === */
+  --background: 222 84% 5%;
+  --foreground: 210 20% 96%;
+  --card: 222 47% 11%;
+  --card-foreground: 210 20% 96%;
+  --surface-muted: 217 33% 17%;
+  --surface-soft: 215 25% 27%;
+  --surface-elevated: 222 47% 11%;
+  --surface-sunken: 222 84% 5%;
+  --surface-accent-soft: 193 90% 35%;
+
+  /* === Popover === */
+  --popover: 222 47% 11%;
+  --popover-foreground: 210 20% 96%;
+
+  /* === Accent (Primary) === */
+  --primary: 210 20% 96%;
+  --primary-foreground: 222 84% 5%;
+  --accent: 187 85% 53%;
+  --accent-soft: 193 90% 35%;
+  --accent-glow: 187 85% 53%;
+
+  /* === Semantic Colors === */
+  --success: 168 76% 50%;
+  --warning: 45 93% 56%;
+  --warning-foreground: 45 93% 90%;
+  --warning-surface: 38 50% 18%;
   --warning-border: 35 42% 34%;
-  --info: 204 84% 66%;
-  --secondary: 28 8% 18%;
-  --secondary-foreground: 36 28% 96%;
-  --muted: 28 8% 18%;
-  --muted-foreground: 30 10% 72%;
-  --subtle-foreground: 30 8% 60%;
-  --accent: 28 8% 20%;
-  --accent-foreground: 36 28% 96%;
-  --destructive: 0 72% 64%;
+  --info: 198 93% 60%;
+  --destructive: 350 89% 70%;
   --destructive-foreground: 0 0% 100%;
-  --destructive-soft: 358 28% 18%;
-  --destructive-border: 358 34% 30%;
-  --border: 28 8% 24%;
-  --border-strong: 28 8% 30%;
-  --border-whisper: 28 8% 28%;
-  --input: 28 8% 24%;
-  --input-background: 28 10% 16%;
-  --switch-background: 28 8% 32%;
-  --ring: 204 84% 66%;
-  --focus-ring: 204 84% 66%;
-  --badge-background: 28 10% 22%;
-  --badge-foreground: 34 14% 78%;
-  --sidebar: 28 12% 11%;
-  --sidebar-foreground: 36 28% 96%;
-  --sidebar-primary: 36 28% 96%;
-  --sidebar-primary-foreground: 224 24% 12%;
-  --sidebar-accent: 28 8% 18%;
-  --sidebar-accent-foreground: 36 28% 96%;
-  --sidebar-border: 28 8% 24%;
-  --sidebar-ring: 204 84% 66%;
-  --workspace-shell: 28 12% 10%;
-  --workspace-foreground: 36 28% 96%;
-  --workspace-panel: 28 12% 12%;
-  --workspace-panel-muted: 28 10% 14%;
-  --workspace-rail: 28 10% 13%;
-  --workspace-rail-strong: 28 10% 15%;
-  --workspace-border: 28 8% 24%;
-  --workspace-primary: 36 28% 96%;
-  --workspace-primary-foreground: 224 24% 12%;
-  --workspace-secondary: 28 8% 18%;
-  --workspace-secondary-foreground: 36 28% 96%;
-  --workspace-muted: 28 8% 18%;
-  --workspace-muted-foreground: 30 10% 72%;
-  --workspace-accent: 218 28% 22%;
-  --workspace-accent-foreground: 214 84% 84%;
-  --workspace-surface: 28 12% 12%;
-  --workspace-surface-muted: 28 10% 14%;
-  --workspace-pill: 28 10% 20%;
-  --workspace-input: 28 10% 16%;
-  --workspace-input-border: 28 8% 24%;
-  --workspace-menu: 28 12% 12%;
-  --workspace-menu-hover: 28 8% 18%;
-  --workspace-shadow: 28 28% 4%;
-  --dashboard-shell: 28 12% 10%;
-  --dashboard-foreground: 36 28% 96%;
-  --dashboard-brand-foreground: 36 28% 96%;
-  --dashboard-header-border: 28 8% 20%;
-  --dashboard-border: 28 8% 24%;
-  --dashboard-border-strong: 28 8% 30%;
-  --dashboard-surface: 28 12% 12%;
-  --dashboard-surface-muted: 28 10% 14%;
-  --dashboard-surface-soft: 28 8% 18%;
-  --dashboard-muted-foreground: 30 10% 72%;
-  --dashboard-subtle-foreground: 30 8% 60%;
-  --dashboard-primary: 36 28% 96%;
-  --dashboard-primary-hover: 34 20% 86%;
-  --dashboard-primary-foreground: 224 24% 12%;
-  --dashboard-danger: 0 72% 64%;
-  --dashboard-shadow: 28 28% 4%;
-  --dashboard-overlay: 24 18% 6%;
-  --cta-background: 36 28% 96%;
-  --cta-background-hover: 34 20% 86%;
-  --cta-background-active: 34 16% 78%;
-  --cta-foreground: 224 24% 12%;
-  --shadow-soft-card: 0 14px 34px rgba(0, 0, 0, 0.26);
-  --shadow-deep-card: 0 22px 52px rgba(0, 0, 0, 0.34);
-  --shadow-focus-ring: 0 0 0 4px rgba(96, 165, 250, 0.2);
-  --shadow-topbar: 0 1px 3px rgba(0, 0, 0, 0.18);
-  --app-citation-bg: 28 8% 18%;
-  --app-history-hover: 28 8% 18%;
-  --app-history-active: 28 8% 20%;
+  --destructive-soft: 350 30% 18%;
+  --destructive-border: 350 34% 30%;
+
+  /* === Secondary / Muted === */
+  --secondary: 217 33% 17%;
+  --secondary-foreground: 210 20% 96%;
+  --muted: 217 33% 17%;
+  --muted-foreground: 215 16% 55%;
+  --subtle-foreground: 215 20% 45%;
+
+  /* === Borders === */
+  --border: 217 33% 17%;
+  --border-strong: 215 25% 27%;
+  --border-whisper: 222 47% 14%;
+  --input: 217 33% 17%;
+  --input-background: 222 47% 11%;
+  --switch-background: 215 25% 35%;
+  --ring: 187 85% 53%;
+  --focus-ring: 187 85% 53%;
+
+  /* === Badge === */
+  --badge-background: 217 33% 17%;
+  --badge-foreground: 215 16% 65%;
+
+  /* === Sidebar === */
+  --sidebar: 222 84% 6%;
+  --sidebar-foreground: 210 20% 96%;
+  --sidebar-primary: 210 20% 96%;
+  --sidebar-primary-foreground: 222 84% 5%;
+  --sidebar-accent: 217 33% 17%;
+  --sidebar-accent-foreground: 210 20% 96%;
+  --sidebar-border: 217 33% 17%;
+  --sidebar-ring: 187 85% 53%;
+
+  /* === Workspace === */
+  --workspace-shell: 222 84% 5%;
+  --workspace-foreground: 210 20% 96%;
+  --workspace-panel: 222 47% 11%;
+  --workspace-panel-muted: 217 33% 17%;
+  --workspace-rail: 222 47% 10%;
+  --workspace-rail-strong: 217 33% 15%;
+  --workspace-border: 217 33% 17%;
+  --workspace-primary: 210 20% 96%;
+  --workspace-primary-foreground: 222 84% 5%;
+  --workspace-secondary: 217 33% 17%;
+  --workspace-secondary-foreground: 210 20% 96%;
+  --workspace-muted: 217 33% 17%;
+  --workspace-muted-foreground: 215 16% 55%;
+  --workspace-accent: 193 90% 35%;
+  --workspace-accent-foreground: 187 85% 80%;
+  --workspace-surface: 222 47% 11%;
+  --workspace-surface-muted: 217 33% 17%;
+  --workspace-pill: 217 33% 20%;
+  --workspace-input: 222 47% 11%;
+  --workspace-input-border: 217 33% 17%;
+  --workspace-menu: 222 47% 11%;
+  --workspace-menu-hover: 217 33% 17%;
+  --workspace-shadow: 222 84% 3%;
+
+  /* === Dashboard === */
+  --dashboard-shell: 222 84% 5%;
+  --dashboard-foreground: 210 20% 96%;
+  --dashboard-brand-foreground: 210 20% 96%;
+  --dashboard-header-border: 217 33% 17%;
+  --dashboard-border: 217 33% 17%;
+  --dashboard-border-strong: 215 25% 27%;
+  --dashboard-surface: 222 47% 11%;
+  --dashboard-surface-muted: 217 33% 17%;
+  --dashboard-surface-soft: 217 33% 17%;
+  --dashboard-muted-foreground: 215 16% 55%;
+  --dashboard-subtle-foreground: 215 20% 45%;
+  --dashboard-primary: 210 20% 96%;
+  --dashboard-primary-hover: 210 20% 86%;
+  --dashboard-primary-foreground: 222 84% 5%;
+  --dashboard-danger: 350 89% 70%;
+  --dashboard-shadow: 222 84% 3%;
+  --dashboard-overlay: 222 84% 4%;
+
+  /* === CTA === */
+  --cta-background: 210 20% 96%;
+  --cta-background-hover: 187 85% 53%;
+  --cta-background-active: 187 85% 45%;
+  --cta-foreground: 222 84% 5%;
+
+  /* === Shadows === */
+  --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.3);
+  --shadow-md: 0 4px 12px hsl(0 0% 0% / 0.4);
+  --shadow-lg: 0 8px 24px hsl(0 0% 0% / 0.5);
+  --shadow-xl: 0 16px 48px hsl(0 0% 0% / 0.6);
+  --shadow-glow: 0 0 20px hsl(187 85% 53% / 0.3);
+  --shadow-focus-ring: 0 0 0 3px hsl(187 85% 53% / 0.25);
+  --shadow-topbar: 0 1px 3px hsl(0 0% 0% / 0.18);
+
+  /* === App-specific === */
+  --app-citation-bg: 217 33% 17%;
+  --app-history-hover: 217 33% 17%;
+  --app-history-active: 217 33% 20%;
 }
