@@ -1,25 +1,15 @@
 use std::sync::Arc;
 
 use avrag_llm::{AnswerSynthesizer, EmbeddingClient, RerankerClient, RetrievalPlanner};
-use avrag_search::TantivyLexicalIndex;
 use avrag_storage_pg::PgAppRepository;
-use avrag_storage_qdrant::HttpQdrantBackend;
 
 /// Configuration for the RAG runtime
 #[derive(Clone)]
 pub struct RagConfig {
     pub embedding_client: Arc<EmbeddingClient>,
     pub mm_embedding_client: Option<Arc<EmbeddingClient>>,
-    pub qdrant_collection: String,
-    pub multimodal_collection: String,
-    /// Qdrant backend for dense retrieval
-    pub qdrant: Option<Arc<HttpQdrantBackend>>,
     /// PostgreSQL repository for sparse retrieval and content fetching.
     pub pg_repo: Option<Arc<PgAppRepository>>,
-    /// Optional Tantivy lexical backend for sparse/BM25-style retrieval.
-    pub lexical_index: Option<Arc<TantivyLexicalIndex>>,
-    /// Optional path used to lazily open a reader if the index appears after API startup.
-    pub lexical_index_dir: Option<String>,
     /// Answer synthesizer for generating responses
     pub answer_synthesizer: Option<Arc<AnswerSynthesizer>>,
     /// Legacy retrieval planner for planner-compatible paths.
@@ -31,27 +21,6 @@ pub struct RagConfig {
 }
 
 impl RagConfig {
-    pub fn new(
-        embedding_client: Arc<EmbeddingClient>,
-        qdrant: Arc<HttpQdrantBackend>,
-        pg_repo: Option<Arc<PgAppRepository>>,
-    ) -> Self {
-        Self {
-            embedding_client,
-            mm_embedding_client: None,
-            qdrant_collection: "chunks".to_string(),
-            multimodal_collection: "chunks_multimodal".to_string(),
-            qdrant: Some(qdrant),
-            pg_repo,
-            lexical_index: None,
-            lexical_index_dir: None,
-            answer_synthesizer: None,
-            planner: None,
-            reranker: None,
-            mm_reranker: None,
-        }
-    }
-
     pub fn new_for_data_plane(
         embedding_client: Arc<EmbeddingClient>,
         pg_repo: Option<Arc<PgAppRepository>>,
@@ -59,12 +28,7 @@ impl RagConfig {
         Self {
             embedding_client,
             mm_embedding_client: None,
-            qdrant_collection: "chunks".to_string(),
-            multimodal_collection: "chunks_multimodal".to_string(),
-            qdrant: None,
             pg_repo,
-            lexical_index: None,
-            lexical_index_dir: None,
             answer_synthesizer: None,
             planner: None,
             reranker: None,
@@ -86,16 +50,6 @@ impl RagConfig {
 
     pub fn with_mm_embedding(mut self, embedding: Arc<EmbeddingClient>) -> Self {
         self.mm_embedding_client = Some(embedding);
-        self
-    }
-
-    pub fn with_lexical_index(mut self, index: Arc<TantivyLexicalIndex>) -> Self {
-        self.lexical_index = Some(index);
-        self
-    }
-
-    pub fn with_lexical_index_dir(mut self, dir: Option<String>) -> Self {
-        self.lexical_index_dir = dir;
         self
     }
 

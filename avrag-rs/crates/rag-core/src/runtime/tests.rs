@@ -47,11 +47,8 @@ fn test_config() -> RagConfig {
             enable_thinking: None,
         },
     ));
-    let qdrant = Arc::new(avrag_storage_qdrant::HttpQdrantBackend::new(
-        "http://localhost:6333",
-    ));
     // Stage-level unit tests do not need a PostgreSQL repository.
-    RagConfig::new(embedding, qdrant, None)
+    RagConfig::new_for_data_plane(embedding, None)
 }
 
 fn make_session_context() -> SessionContext {
@@ -197,6 +194,55 @@ impl RetrievalDataPlane for GraphStubRetrievalDataPlane {
     }
 }
 
+struct PlaceholderTripletGraphDataPlane;
+
+#[async_trait]
+impl RetrievalDataPlane for PlaceholderTripletGraphDataPlane {
+    async fn search_text_dense(
+        &self,
+        _request: TextDenseSearchRequest,
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
+        Ok(Vec::new())
+    }
+
+    async fn search_bm25(&self, _request: Bm25SearchRequest) -> anyhow::Result<Bm25SearchOutput> {
+        Ok(Bm25SearchOutput {
+            chunks: Vec::new(),
+            trace: Bm25SearchTrace {
+                backend: "stub".to_string(),
+                raw_hit_count: 0,
+                hydrated_hit_count: 0,
+                fallback_reason: None,
+            },
+        })
+    }
+
+    async fn search_multimodal(
+        &self,
+        _request: MultimodalSearchRequest,
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
+        Ok(Vec::new())
+    }
+
+    async fn search_graph(&self, request: GraphSearchRequest) -> anyhow::Result<GraphSearchOutput> {
+        assert_eq!(request.entity_names, vec!["Atlas".to_string()]);
+        assert_eq!(request.relation_hints.len(), 1);
+        assert_eq!(request.relation_hints[0].subject.as_deref(), Some("Atlas"));
+        assert_eq!(request.relation_hints[0].predicate.as_deref(), Some("uses"));
+        assert_eq!(request.relation_hints[0].object.as_deref(), None);
+        Ok(GraphSearchOutput {
+            relation_paths: vec![RelationPathCandidate {
+                subject: "Atlas".to_string(),
+                predicate: "uses".to_string(),
+                object: "rollback checklist".to_string(),
+                score: 0.9,
+                supporting_chunk_ids: vec![Uuid::from_u128(92)],
+            }],
+            supporting_chunks: vec![make_scored_chunk(92, "stub_graph")],
+        })
+    }
+}
+
 struct BarrierGraphBm25DataPlane {
     barrier: Arc<Barrier>,
 }
@@ -319,6 +365,7 @@ async fn execute_plan_includes_graph_relation_paths_and_supporting_chunks() {
             kind: Some("project".to_string()),
         }],
         graph_hints: Vec::new(),
+        placeholder_triplets: Vec::new(),
         trace: None,
     };
 
@@ -377,6 +424,7 @@ async fn execute_plan_starts_bm25_and_graph_channels_in_parallel() {
             kind: None,
         }],
         graph_hints: Vec::new(),
+        placeholder_triplets: Vec::new(),
         trace: None,
     };
 
@@ -393,8 +441,50 @@ async fn execute_plan_starts_bm25_and_graph_channels_in_parallel() {
 }
 
 #[tokio::test]
+async fn execute_plan_maps_traceable_placeholder_triplets_to_graph_hints() {
+    let runtime =
+        RagRuntime::with_data_plane(test_config(), Arc::new(PlaceholderTripletGraphDataPlane));
+    let auth = AuthContext::new(OrgId::new(Uuid::from_u128(9)), SubjectKind::System);
+    let request = common::ExecutePlanRequest {
+        plan_version: "rag-execute-v1".to_string(),
+        doc_scope: vec![Uuid::from_u128(10_092).to_string()],
+        items: vec![common::ExecutePlanItem {
+            priority: 1.0,
+            query: Some("how does Atlas use the checklist?".to_string()),
+            bm25_terms: None,
+        }],
+        summary_mode: common::ExecutePlanSummaryMode::None,
+        budget: Some(common::ExecutePlanBudget {
+            total_candidate_budget: Some(8),
+            final_chunk_budget: Some(4),
+        }),
+        channel_budget: None,
+        query_entities: Vec::new(),
+        graph_hints: Vec::new(),
+        placeholder_triplets: vec![
+            common::PlaceholderTriplet {
+                subject: "Atlas".to_string(),
+                predicate: "uses".to_string(),
+                object: "?checklist".to_string(),
+            },
+            common::PlaceholderTriplet {
+                subject: "?system".to_string(),
+                predicate: "uses".to_string(),
+                object: "?artifact".to_string(),
+            },
+        ],
+        trace: None,
+    };
+
+    let response = runtime.execute_plan(&request, &auth).await.unwrap();
+
+    assert_eq!(response.bundle.relation_paths.len(), 1);
+    assert_eq!(response.coverage.channel_coverage.graph, 1);
+}
+
+#[tokio::test]
 async fn plan_without_llm_planner_falls_back_to_default_query_item() {
-    let runtime = RagRuntime::new(test_config());
+    let runtime = RagRuntime::with_data_plane(test_config(), Arc::new(StubRetrievalDataPlane));
     let request = make_request("latest AI news", "rag");
     let mut degrade_trace = Vec::new();
 
@@ -659,7 +749,7 @@ fn build_item_trace_reflects_query_bm25_and_summary_payloads() {
 
 #[test]
 fn build_answer_context_chunks_puts_retrieval_before_summary_chunks() {
-    let runtime = RagRuntime::new(test_config());
+    let runtime = RagRuntime::with_data_plane(test_config(), Arc::new(StubRetrievalDataPlane));
     let retrieval_chunks = vec![make_scored_chunk(1, "dense"), make_scored_chunk(2, "bm25")];
     let summary_chunks = vec![(Uuid::from_u128(9000), "summary context".to_string())];
 
@@ -676,7 +766,7 @@ fn build_answer_context_chunks_puts_retrieval_before_summary_chunks() {
 
 #[test]
 fn cut_final_candidates_backfills_to_minimum_when_threshold_matches_too_few() {
-    let runtime = RagRuntime::new(test_config());
+    let runtime = RagRuntime::with_data_plane(test_config(), Arc::new(StubRetrievalDataPlane));
     let chunks = (0..35)
         .map(|i| {
             let mut chunk = make_scored_chunk(i as u128 + 1, "dense");
@@ -698,7 +788,7 @@ fn cut_final_candidates_backfills_to_minimum_when_threshold_matches_too_few() {
 
 #[test]
 fn cut_final_candidates_keeps_all_chunks_above_threshold_even_past_minimum() {
-    let runtime = RagRuntime::new(test_config());
+    let runtime = RagRuntime::with_data_plane(test_config(), Arc::new(StubRetrievalDataPlane));
     let chunks = (0..32)
         .map(|i| {
             let mut chunk = make_scored_chunk(i as u128 + 100, "dense");
@@ -802,7 +892,7 @@ fn ensure_inline_image_placeholder_appends_first_image_when_missing() {
 
 #[tokio::test]
 async fn build_rag_chat_response_from_bundle_reuses_bundle_citations() {
-    let runtime = RagRuntime::new(test_config());
+    let runtime = RagRuntime::with_data_plane(test_config(), Arc::new(StubRetrievalDataPlane));
     let request = make_request("Summarize the finding", "rag");
     let rag_plan = RagPlan {
         plan_version: "rag-item-v2".to_string(),
@@ -899,5 +989,123 @@ async fn build_rag_chat_response_from_bundle_reuses_bundle_citations() {
 
     assert_eq!(response.citations.len(), 1);
     assert_eq!(response.citations[0].doc_name, "Atlas");
+    assert_eq!(response.answer, "结论 [[1]]");
+}
+
+#[tokio::test]
+async fn build_rag_chat_response_from_bundle_graph_only_non_empty_citations_and_sources() {
+    // Setup: graph-only retrieval bundle with no regular chunks
+    let config = test_config();
+    let runtime = RagRuntime::with_data_plane(config, Arc::new(StubRetrievalDataPlane));
+    let request = make_request("query", "main");
+
+    let rag_plan = RagPlan {
+        plan_version: "rag-item-v2".to_string(),
+        plan_confidence: 1.0,
+        clarify_needed: false,
+        clarify_message: String::new(),
+        items: vec![RagPlanItem {
+            priority: 1.0,
+            query: Some("query".to_string()),
+            bm25_terms: None,
+            summary: None,
+        }],
+    };
+
+    let execute_response = ExecutePlanResponse {
+        bundle: RetrievalBundle {
+            chunks: Vec::new(),
+            graph_supported_chunks: vec![RetrievedChunk {
+                chunk_id: "graph-chunk-1".to_string(),
+                doc_id: "doc-1".to_string(),
+                chunk_type: "graph_relation".to_string(),
+                page: None,
+                text: "Atlas uses checklist".to_string(),
+                score: 0.8,
+                retrieval_channel: "graph".to_string(),
+                asset_id: None,
+                caption: None,
+                image_url: None,
+                parser_backend: None,
+                source_locator: None,
+                parse_run_id: None,
+                score_breakdown: Vec::new(),
+            }],
+            relation_paths: Vec::new(),
+            citations: vec![Citation {
+                citation_id: 1,
+                doc_id: "doc-1".to_string(),
+                chunk_id: Some("graph-chunk-1".to_string()),
+                page: None,
+                doc_name: "Doc 1".to_string(),
+                preview: Some("Atlas uses checklist".to_string()),
+                content: Some("Atlas uses checklist".to_string()),
+                score: 0.8,
+                layer: Some("graph".to_string()),
+                chunk_type: Some("graph_relation".to_string()),
+                asset_id: None,
+                caption: None,
+                image_url: None,
+                parser_backend: None,
+                source_locator: None,
+                parse_run_id: None,
+            }],
+            summary_chunks: Vec::new(),
+        },
+        coverage: Coverage {
+            requested_doc_count: 1,
+            matched_doc_count: 1,
+            retrieved_chunk_count: 0,
+            summary_chunk_count: 0,
+            channel_coverage: Default::default(),
+        },
+        degrade_trace: Vec::new(),
+        backend_trace: BackendTrace {
+            trace: None,
+            item_trace: Vec::new(),
+            channel_trace: Vec::new(),
+            retrieval_trace: common::RagTraceSummary {
+                item_count: 0,
+                total_candidate_budget: TOTAL_CANDIDATE_BUDGET,
+                max_rerank_docs: FINAL_RERANK_BUDGET,
+                max_final_chunks: FINAL_MIN_CHUNKS,
+                top_k_returned: 1,
+                summary_mode: "none".to_string(),
+                items: Vec::new(),
+            },
+        },
+    };
+
+    let response = runtime
+        .build_rag_chat_response_from_bundle(
+            &request,
+            Some("session-1"),
+            &rag_plan,
+            &execute_response,
+            avrag_llm::SynthesisOutput {
+                answer_text: "结论 [[cite:graph-chunk-1]]".to_string(),
+                answer_blocks: Vec::new(),
+                cited_chunk_ids: vec!["graph-chunk-1".to_string()],
+                llm_usage: None,
+            },
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+
+    // Must return non-empty citations and sources
+    assert!(
+        !response.citations.is_empty(),
+        "graph-only response must have non-empty citations"
+    );
+    assert!(
+        !response.sources.is_empty(),
+        "graph-only response must have non-empty sources"
+    );
+    assert_eq!(
+        response.citations[0].chunk_id,
+        Some("graph-chunk-1".to_string())
+    );
+    // Graph chunk citation markup must render to normal citation number
     assert_eq!(response.answer, "结论 [[1]]");
 }

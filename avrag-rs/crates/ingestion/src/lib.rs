@@ -18,13 +18,14 @@ pub use ir_validator::{
     validate_document_ir,
 };
 pub use model::{
-    AuditAction, AuditRecord, DocumentStateMachine, IngestDocumentPayload, IngestionTask,
-    IngestionTaskKind, IngestionTaskPayload, ReindexDocumentPayload, ReindexReason, Transition,
-    build_ingest_task, build_reindex_task, task_audit,
+    AuditAction, AuditRecord, DEFAULT_MAX_ATTEMPTS, DocumentStateMachine, IngestDocumentPayload,
+    IngestionTask, IngestionTaskKind, IngestionTaskPayload, ReindexDocumentPayload, ReindexReason,
+    Transition, build_ingest_task, build_reindex_task, task_audit,
 };
 pub use runtime::{
     AuditSink, NoopAuditSink, NoopStateSink, NoopTaskProcessor, NoopTaskSource, StateSink,
-    TaskProcessor, TaskSource, WorkerRuntime, WorkerTick,
+    TaskCompletionOutcome, TaskFailureOutcome, TaskProcessor, TaskSource, WorkerRuntime,
+    WorkerTick,
 };
 
 #[cfg(test)]

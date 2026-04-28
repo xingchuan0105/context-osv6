@@ -4,7 +4,8 @@ use avrag_llm::{ChatMessage as LlmChatMessage, LlmClient, LlmUsage};
 use common::{
     AnswerContextChunk, ChatRequest, ChatResponse, DegradeTraceItem, ExecutePlanItem,
     ExecutePlanRequest, ExecutePlanResponse, ExecutePlanSummaryMode, GraphHint, ModeDebug,
-    PlannerOutput, QueryEntity, RagModeDebug, SourceRef, SummaryInjectionTrace, TraceInfo,
+    PlaceholderTriplet, PlannerOutput, QueryEntity, RagModeDebug, SourceRef, SummaryInjectionTrace,
+    TraceInfo,
 };
 use uuid::Uuid;
 
@@ -29,7 +30,10 @@ When retrieval can proceed, return an ExecutePlanRequest:
   ],
   "summary_mode": "none" | "related" | "all",
   "query_entities": [{ "text": "named entity", "kind": "optional kind" }],
-  "graph_hints": [{ "subject": "optional", "predicate": "optional", "object": "optional" }]
+  "graph_hints": [{ "subject": "optional", "predicate": "optional", "object": "optional" }],
+  "placeholder_triplets": [
+    { "subject": "known entity or ?placeholder", "predicate": "relationship", "object": "known entity or ?placeholder" }
+  ]
 }
 
 When the target cannot be identified from the current task, doc_scope, document metadata, and reference context, return:
@@ -47,6 +51,9 @@ Rules:
 - Prefer one high-priority semantic query; add bm25_terms only for filenames, exact names, codes, or rare terms.
 - Add query_entities only for concrete named people, organizations, projects, systems, artifacts, or concepts in the user request.
 - Add graph_hints only when the user asks about a relationship between entities.
+- Add placeholder_triplets only for relationship, comparison, or multi-hop questions where graph retrieval can help.
+- Use ? or named placeholders such as ?directorA for unknown triplet positions; prefer one-placeholder traceable triplets.
+- Do not add placeholder_triplets for plain summarization or broad semantic lookup.
 - Use summary_mode "related" when document summaries may help answer the question; otherwise use "none".
 - Ask for clarification only when multiple plausible targets remain or a required scope/entity/time range is missing.
 - Never ask for clarification only because a previous assistant message said retrieval failed.
@@ -86,13 +93,28 @@ pub struct MainAgentReferenceContext {
 }
 
 #[derive(Debug, Clone)]
+pub struct MainAgentBehaviorSkill {
+    pub name: String,
+    pub instructions: Vec<String>,
+}
+
+impl MainAgentBehaviorSkill {
+    fn new(name: impl Into<String>, instructions: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self {
+            name: name.into(),
+            instructions: instructions.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct MainAgentContext {
     pub mode: String,
     pub current_task: String,
     pub authoritative_context: String,
     pub reference_context: String,
     pub user_preference_memory: String,
-    pub skill: String,
+    pub skill: MainAgentBehaviorSkill,
     pub output_contract: String,
 }
 
@@ -170,7 +192,13 @@ impl MainAgent {
             authoritative_context: "none".to_string(),
             reference_context: reference,
             user_preference_memory: preferences,
-            skill: "Answer directly while preserving conversational continuity. Do not treat reference context as factual evidence for document claims.".to_string(),
+            skill: MainAgentBehaviorSkill::new(
+                "general_chat",
+                [
+                    "Answer directly while preserving conversational continuity.",
+                    "Do not treat reference context as factual evidence for document claims.",
+                ],
+            ),
             output_contract: "Return a natural-language answer only.".to_string(),
         });
 
@@ -458,18 +486,20 @@ impl MainAgent {
         degrade_trace: Vec<DegradeTraceItem>,
     ) -> ChatResponse {
         let cited_chunk_ids = extract_referenced_chunk_ids(&answer.answer_text);
+
+        // 使用 citation_chunks() 获取所有可用 chunks（包括 graph_supported_chunks）
+        let all_chunks = execute_response.bundle.citation_chunks();
+
         let ordered_chunks = if cited_chunk_ids.is_empty() {
-            execute_response.bundle.chunks.clone()
+            all_chunks.to_vec()
         } else {
-            let mut filtered = execute_response
-                .bundle
-                .chunks
+            let mut filtered = all_chunks
                 .iter()
                 .filter(|chunk| cited_chunk_ids.contains(&chunk.chunk_id))
                 .cloned()
                 .collect::<Vec<_>>();
             if filtered.is_empty() {
-                filtered = execute_response.bundle.chunks.clone();
+                filtered = all_chunks.to_vec();
             }
             filtered
         };
@@ -586,6 +616,7 @@ fn fallback_execute_plan_request(
         channel_budget: None,
         query_entities: Vec::new(),
         graph_hints: Vec::new(),
+        placeholder_triplets: Vec::new(),
         trace: None,
     }
 }
@@ -621,7 +652,13 @@ fn build_rag_plan_user_prompt(
         authoritative_context: authoritative,
         reference_context: reference,
         user_preference_memory: preferences,
-        skill: "Generate an execute-plan for the RAG API, or ask one natural-language clarification question.".to_string(),
+        skill: MainAgentBehaviorSkill::new(
+            "rag_plan",
+            [
+                "Generate an execute-plan for the RAG API.",
+                "Ask one natural-language clarification question when retrieval cannot proceed.",
+            ],
+        ),
         output_contract: "Return exactly one raw JSON object: either ExecutePlanRequest or {\"action\":\"clarify\",\"message\":\"...\"}.".to_string(),
     })
 }
@@ -658,9 +695,13 @@ fn build_rag_answer_user_prompt(
         ),
         reference_context: "none".to_string(),
         user_preference_memory: preferences,
-        skill: format!(
-            "Answer using only RAG Evidence for factual claims. Use preferences only for expression style. The executed doc_scope was: {}.",
-            execute_request.doc_scope.join(", ")
+        skill: MainAgentBehaviorSkill::new(
+            "rag_answer",
+            [
+                "Answer using only RAG Evidence for factual claims.",
+                "Use preferences only for expression style.",
+                &format!("The executed doc_scope was: {}.", execute_request.doc_scope.join(", ")),
+            ],
         ),
         output_contract: "Return a natural-language answer only.".to_string(),
     })
@@ -726,15 +767,29 @@ fn reference_context_section(reference_context: Option<&MainAgentReferenceContex
 
 fn build_main_agent_envelope(context: MainAgentContext) -> String {
     format!(
-        "<Mode>\n{}\n\n<Current Task>\n{}\n\n<Authoritative Context>\n{}\n\n<Reference Context>\n{}\n\n<User Preference Memory>\n{}\n\n<Skill>\n{}\n\n<Output Contract>\n{}",
+        "<Mode>\n{}\n\n<Current Task>\n{}\n\n<Authoritative Context>\n{}\n\n<Reference Context>\n{}\n\n<User Preference Memory>\n{}\n\n<Behavior Skill>\n{}\n\n<Output Contract>\n{}",
         context.mode,
         context.current_task,
         context.authoritative_context,
         context.reference_context,
         context.user_preference_memory,
-        context.skill,
+        format_behavior_skill(&context.skill),
         context.output_contract,
     )
+}
+
+fn format_behavior_skill(skill: &MainAgentBehaviorSkill) -> String {
+    let instructions = if skill.instructions.is_empty() {
+        "- none".to_string()
+    } else {
+        skill
+            .instructions
+            .iter()
+            .map(|instruction| format!("- {instruction}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    format!("name: {}\ninstructions:\n{}", skill.name, instructions)
 }
 
 fn normalize_execute_plan_request(
@@ -754,6 +809,7 @@ fn normalize_execute_plan_request(
         .collect();
     plan.query_entities = normalize_query_entities(plan.query_entities);
     plan.graph_hints = normalize_graph_hints(plan.graph_hints);
+    plan.placeholder_triplets = normalize_placeholder_triplets(plan.placeholder_triplets);
     plan.validate().ok()?;
     Some(plan)
 }
@@ -846,6 +902,32 @@ fn normalize_graph_hints(hints: Vec<GraphHint>) -> Vec<GraphHint> {
                 object,
             })
         })
+        .collect()
+}
+
+fn normalize_placeholder_triplets(triplets: Vec<PlaceholderTriplet>) -> Vec<PlaceholderTriplet> {
+    let mut seen = HashSet::new();
+    triplets
+        .into_iter()
+        .filter_map(|triplet| {
+            let subject = triplet.subject.trim().to_string();
+            let predicate = triplet.predicate.trim().to_string();
+            let object = triplet.object.trim().to_string();
+            if subject.is_empty() || predicate.is_empty() || object.is_empty() {
+                return None;
+            }
+            let key = (
+                subject.to_lowercase(),
+                predicate.to_lowercase(),
+                object.to_lowercase(),
+            );
+            seen.insert(key).then_some(PlaceholderTriplet {
+                subject,
+                predicate,
+                object,
+            })
+        })
+        .take(6)
         .collect()
 }
 
@@ -1047,6 +1129,31 @@ mod tests {
     }
 
     #[test]
+    fn main_agent_envelope_formats_behavior_skill_profile_without_tools() {
+        let envelope = build_main_agent_envelope(MainAgentContext {
+            mode: "rag_answer".to_string(),
+            current_task: "summarize".to_string(),
+            authoritative_context: "evidence".to_string(),
+            reference_context: "none".to_string(),
+            user_preference_memory: "none".to_string(),
+            skill: MainAgentBehaviorSkill {
+                name: "rag_answer".to_string(),
+                instructions: vec![
+                    "Use only RAG Evidence for factual claims.".to_string(),
+                    "Use preferences only for expression style.".to_string(),
+                ],
+            },
+            output_contract: "Return natural language.".to_string(),
+        });
+
+        assert!(envelope.contains("<Behavior Skill>"));
+        assert!(envelope.contains("name: rag_answer"));
+        assert!(envelope.contains("- Use only RAG Evidence for factual claims."));
+        assert!(!envelope.contains("<Tools>"));
+        assert!(!envelope.contains("tool_schema"));
+    }
+
+    #[test]
     fn mode_profiles_match_existing_frontend_values() {
         assert_eq!(MainAgent::profile("general"), ModeProfile::General);
         assert_eq!(MainAgent::profile("rag"), ModeProfile::Rag);
@@ -1208,6 +1315,18 @@ mod tests {
                 predicate: Some(" uses ".to_string()),
                 object: Some(" rollback checklist ".to_string()),
             }],
+            placeholder_triplets: vec![
+                PlaceholderTriplet {
+                    subject: " Atlas ".to_string(),
+                    predicate: " uses ".to_string(),
+                    object: " ?checklist ".to_string(),
+                },
+                PlaceholderTriplet {
+                    subject: "atlas".to_string(),
+                    predicate: "uses".to_string(),
+                    object: "?checklist".to_string(),
+                },
+            ],
             trace: None,
         };
 
@@ -1221,6 +1340,8 @@ mod tests {
             Some("project")
         );
         assert_eq!(normalized.graph_hints[0].predicate.as_deref(), Some("uses"));
+        assert_eq!(normalized.placeholder_triplets.len(), 1);
+        assert_eq!(normalized.placeholder_triplets[0].object, "?checklist");
     }
 
     #[tokio::test]
@@ -1301,5 +1422,110 @@ mod tests {
                 .is_some()
         );
         assert_eq!(degrade_trace[0].stage, "main_agent.rag_answer");
+    }
+
+    #[tokio::test]
+    async fn build_rag_chat_response_graph_only_returns_non_empty_citations_and_sources() {
+        let request = request("rag", "how does Atlas use the checklist?", &["doc-1"]);
+        let execute_request = fallback_execute_plan_request(&request, None);
+        let mut degrade_trace = Vec::new();
+
+        // Graph-only execute response: no regular chunks, only graph-supported chunks
+        let execute_response = ExecutePlanResponse {
+            bundle: common::RetrievalBundle {
+                chunks: Vec::new(),
+                graph_supported_chunks: vec![common::RetrievedChunk {
+                    chunk_id: "graph-chunk-1".to_string(),
+                    doc_id: "doc-1".to_string(),
+                    chunk_type: "graph_relation".to_string(),
+                    page: None,
+                    text: "Atlas uses checklist".to_string(),
+                    score: 0.8,
+                    retrieval_channel: "graph".to_string(),
+                    asset_id: None,
+                    caption: None,
+                    image_url: None,
+                    parser_backend: None,
+                    source_locator: None,
+                    parse_run_id: None,
+                    score_breakdown: Vec::new(),
+                }],
+                relation_paths: Vec::new(),
+                citations: vec![common::Citation {
+                    citation_id: 1,
+                    doc_id: "doc-1".to_string(),
+                    chunk_id: Some("graph-chunk-1".to_string()),
+                    page: None,
+                    doc_name: "Doc 1".to_string(),
+                    preview: Some("Atlas uses checklist".to_string()),
+                    content: Some("Atlas uses checklist".to_string()),
+                    score: 0.8,
+                    layer: Some("graph".to_string()),
+                    chunk_type: Some("graph_relation".to_string()),
+                    asset_id: None,
+                    caption: None,
+                    image_url: None,
+                    parser_backend: None,
+                    source_locator: None,
+                    parse_run_id: None,
+                }],
+                summary_chunks: Vec::new(),
+            },
+            coverage: common::Coverage {
+                requested_doc_count: 1,
+                matched_doc_count: 1,
+                retrieved_chunk_count: 0,
+                summary_chunk_count: 0,
+                channel_coverage: Default::default(),
+            },
+            degrade_trace: Vec::new(),
+            backend_trace: common::BackendTrace {
+                trace: None,
+                item_trace: Vec::new(),
+                channel_trace: Vec::new(),
+                retrieval_trace: common::RagTraceSummary {
+                    item_count: 0,
+                    total_candidate_budget: 100,
+                    max_rerank_docs: 100,
+                    max_final_chunks: 30,
+                    top_k_returned: 1,
+                    summary_mode: "none".to_string(),
+                    items: Vec::new(),
+                },
+            },
+        };
+
+        let answer = MainAgent::answer_rag(
+            &request,
+            &execute_request,
+            &execute_response,
+            None,
+            None,
+            Some(0.2),
+            &mut degrade_trace,
+        )
+        .await;
+        let response = MainAgent::build_rag_chat_response(
+            &request,
+            Some("session-1"),
+            &execute_request,
+            &execute_response,
+            answer,
+            degrade_trace.clone(),
+        );
+
+        assert!(!response.answer.is_empty());
+        assert!(
+            !response.citations.is_empty(),
+            "graph-only response must have non-empty citations"
+        );
+        assert!(
+            !response.sources.is_empty(),
+            "graph-only response must have non-empty sources"
+        );
+        assert_eq!(
+            response.citations[0].chunk_id,
+            Some("graph-chunk-1".to_string())
+        );
     }
 }

@@ -28,7 +28,6 @@
 这样可以同时支持：
 
 - 前端内置的产品级主控 agent
-- 对外接入 OpenClaw 一类 assistant agent
 
 ---
 

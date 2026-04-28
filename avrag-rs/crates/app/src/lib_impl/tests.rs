@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+    use tokio::fs;
 
     #[test]
     fn build_docscope_metadata_dedupes_known_profile_values() {
@@ -53,26 +55,11 @@ mod tests {
     }
 
     #[test]
-    fn app_config_defaults_to_milvus_with_legacy_override() {
-        assert_eq!(AppConfig::default().retrieval_backend, "milvus");
+    fn app_config_uses_milvus_data_plane() {
+        let config = AppConfig::default();
 
-        let previous = std::env::var("RETRIEVAL_BACKEND").ok();
-        unsafe {
-            std::env::set_var("RETRIEVAL_BACKEND", "legacy");
-        }
-
-        let config = AppConfig::from_env();
-
-        match previous {
-            Some(value) => unsafe {
-                std::env::set_var("RETRIEVAL_BACKEND", value);
-            },
-            None => unsafe {
-                std::env::remove_var("RETRIEVAL_BACKEND");
-            },
-        }
-
-        assert_eq!(config.retrieval_backend, "legacy");
+        assert_eq!(config.milvus.url, "http://127.0.0.1:19530");
+        assert_eq!(config.milvus.collection_prefix, "avrag");
     }
 
     #[test]
@@ -167,7 +154,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn memory_compat_execute_plan_caps_total_bundle_by_final_budget() {
+    async fn execute_plan_fails_closed_without_rag_runtime() {
         let state = AppState::new(AppConfig::default());
         let notebook = state
             .create_notebook(CreateNotebookRequest {
@@ -201,7 +188,7 @@ mod tests {
             doc_scope.push(upload.document_id);
         }
 
-        let response = state
+        let error = state
             .execute_rag_execute_plan(common::ExecutePlanRequest {
                 plan_version: "rag-execute-v1".to_string(),
                 doc_scope,
@@ -218,15 +205,109 @@ mod tests {
                 channel_budget: None,
                 query_entities: Vec::new(),
                 graph_hints: Vec::new(),
+                placeholder_triplets: Vec::new(),
                 trace: None,
             })
             .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), "rag_runtime_not_configured");
+    }
+
+    #[tokio::test]
+    async fn memory_delete_document_soft_deletes_and_hides_document() {
+        let state = AppState::new(AppConfig::default());
+        let notebook = state
+            .create_notebook(CreateNotebookRequest {
+                name: "soft delete".to_string(),
+                description: String::new(),
+            })
+            .await
+            .unwrap();
+        let upload = state
+            .create_document_upload(
+                &notebook.id,
+                CreateDocumentRequest {
+                    filename: "delete-me.txt".to_string(),
+                    file_size: 11,
+                    mime_type: "text/plain".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+        state
+            .put_uploaded_document(&upload.document_id, b"hello world".to_vec())
+            .await
             .unwrap();
 
-        assert!(response.bundle.chunks.len() + response.bundle.summary_chunks.len() <= 1);
+        let response = state.delete_document(&upload.document_id).await.unwrap();
+
+        assert_eq!(response.status, "deleting");
+        assert!(
+            state
+                .list_documents(Some(&notebook.id), Some(&upload.document_id))
+                .await
+                .is_empty()
+        );
         assert_eq!(
-            response.coverage.summary_chunk_count,
-            response.bundle.summary_chunks.len()
+            state
+                .get_document_content(&upload.document_id)
+                .await
+                .unwrap_err()
+                .code(),
+            "document_not_found"
+        );
+    }
+
+    #[tokio::test]
+    async fn memory_update_document_rejects_deletion_workflow_statuses() {
+        let state = AppState::new(AppConfig::default());
+        let notebook = state
+            .create_notebook(CreateNotebookRequest {
+                name: "status guard".to_string(),
+                description: String::new(),
+            })
+            .await
+            .unwrap();
+        let upload = state
+            .create_document_upload(
+                &notebook.id,
+                CreateDocumentRequest {
+                    filename: "status-guard.txt".to_string(),
+                    file_size: 11,
+                    mime_type: "text/plain".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+
+        let error = state
+            .update_document(
+                &upload.document_id,
+                UpdateDocumentRequest {
+                    filename: None,
+                    notebook_id: None,
+                    status: Some(DocumentStatus::Deleting),
+                },
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), "unsupported_document_status_update");
+        assert_eq!(
+            state
+                .transition_document_status(&upload.document_id, DocumentStatus::Deleted)
+                .await
+                .unwrap_err()
+                .code(),
+            "unsupported_document_status_transition"
+        );
+        assert_eq!(
+            state
+                .list_documents(Some(&notebook.id), Some(&upload.document_id))
+                .await
+                .len(),
+            1
         );
     }
 
@@ -251,5 +332,169 @@ mod tests {
             preferences.agent_memory.active[0].text,
             "I prefer concise answers"
         );
+    }
+
+    async fn upload_validation_pg_state() -> Option<(AppState, std::path::PathBuf)> {
+        let database_url = std::env::var("DATABASE_URL").ok()?;
+        let object_root = std::env::temp_dir().join(format!(
+            "avrag-app-upload-validation-test-{}",
+            Uuid::new_v4()
+        ));
+        let repo = PgAppRepository::connect(&database_url).await.unwrap();
+        repo.migrate().await.unwrap();
+
+        let mut config = AppConfig::default();
+        config.org_id = Uuid::new_v4().to_string();
+        config.user_id = Uuid::new_v4().to_string();
+        config.object_root = object_root.to_string_lossy().to_string();
+
+        let mut state = AppState::new(config);
+        state.pg = Some(Arc::new(repo));
+        state.uses_memory_adapters = false;
+        Some((state, object_root))
+    }
+
+    async fn create_upload(
+        state: &AppState,
+        filename: &str,
+        file_size: u64,
+    ) -> (Notebook, CreateDocumentUploadResponse) {
+        let notebook = state
+            .create_notebook(CreateNotebookRequest {
+                name: format!("upload validation {filename}"),
+                description: String::new(),
+            })
+            .await
+            .unwrap();
+        let upload = state
+            .create_document_upload(
+                &notebook.id,
+                CreateDocumentRequest {
+                    filename: filename.to_string(),
+                    file_size,
+                    mime_type: "text/plain".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+        (notebook, upload)
+    }
+
+    async fn document_status(
+        state: &AppState,
+        notebook_id: &str,
+        document_id: &str,
+    ) -> DocumentStatus {
+        state
+            .list_documents(Some(notebook_id), Some(document_id))
+            .await
+            .into_iter()
+            .next()
+            .unwrap()
+            .status
+    }
+
+    async fn ingestion_task_count(state: &AppState, document_id: &str) -> i64 {
+        let document_uuid = Uuid::parse_str(document_id).unwrap();
+        state
+            .pg
+            .as_ref()
+            .unwrap()
+            .count_ingestion_tasks_for_document(&state.auth, document_uuid)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn complete_upload_missing_object_marks_invalid_without_task_when_database_available() {
+        let Some((state, object_root)) = upload_validation_pg_state().await else {
+            return;
+        };
+        let (notebook, upload) = create_upload(&state, "missing-object.txt", 11).await;
+
+        let error = state
+            .complete_document_upload(&upload.document_id)
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), "upload_validation_failed");
+        assert_eq!(
+            document_status(&state, &notebook.id, &upload.document_id).await,
+            DocumentStatus::UploadInvalid
+        );
+        assert_eq!(ingestion_task_count(&state, &upload.document_id).await, 0);
+        let _ = fs::remove_dir_all(object_root).await;
+    }
+
+    #[tokio::test]
+    async fn complete_upload_size_mismatch_marks_invalid_without_task_when_database_available() {
+        let Some((state, object_root)) = upload_validation_pg_state().await else {
+            return;
+        };
+        let body = b"hello world".to_vec();
+        let (notebook, upload) = create_upload(&state, "size-mismatch.txt", 12).await;
+        state
+            .put_uploaded_document(&upload.document_id, body)
+            .await
+            .unwrap();
+
+        let error = state
+            .complete_document_upload(&upload.document_id)
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), "upload_validation_failed");
+        assert_eq!(
+            document_status(&state, &notebook.id, &upload.document_id).await,
+            DocumentStatus::UploadInvalid
+        );
+        assert_eq!(ingestion_task_count(&state, &upload.document_id).await, 0);
+        let _ = fs::remove_dir_all(object_root).await;
+    }
+
+    #[tokio::test]
+    async fn complete_upload_matching_size_records_validation_when_database_available() {
+        let Some((state, object_root)) = upload_validation_pg_state().await else {
+            return;
+        };
+        let body = b"hello world".to_vec();
+        let (notebook, upload) =
+            create_upload(&state, "valid-upload.txt", body.len() as u64).await;
+        state
+            .put_uploaded_document(&upload.document_id, body)
+            .await
+            .unwrap();
+
+        let response = state
+            .complete_document_upload(&upload.document_id)
+            .await
+            .unwrap();
+
+        assert_eq!(response.status, "queued");
+        assert_eq!(
+            document_status(&state, &notebook.id, &upload.document_id).await,
+            DocumentStatus::Queued
+        );
+        assert_eq!(ingestion_task_count(&state, &upload.document_id).await, 1);
+
+        let validation = state
+            .pg
+            .as_ref()
+            .unwrap()
+            .get_document_upload_validation(
+                &state.auth,
+                Uuid::parse_str(&upload.document_id).unwrap(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(validation.upload_size_bytes, Some(11));
+        assert_eq!(
+            validation.upload_sha256.as_deref(),
+            Some("b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
+        );
+        assert!(validation.upload_validated_at.is_some());
+        assert_eq!(validation.upload_validation_error, None);
+        let _ = fs::remove_dir_all(object_root).await;
     }
 }

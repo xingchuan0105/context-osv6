@@ -63,7 +63,7 @@ impl EvaluationHarness {
     ///
     /// NOTE: This is the *integration test* interface.
     /// It calls into `avrag_rag_core::RagRuntime::execute()` with mocked auth.
-    /// Production use would inject a real `PgAppRepository` + `HttpQdrantBackend`.
+    /// Production use would inject a real `PgAppRepository` + `MilvusDataPlane`.
     pub async fn run_all(&self) -> Result<EvaluationReport> {
         let HarnessConfig {
             recall_k,

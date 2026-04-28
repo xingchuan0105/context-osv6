@@ -11,6 +11,9 @@ fn status_label(status: &DocumentStatus) -> &'static str {
         DocumentStatus::Processing => "processing",
         DocumentStatus::Completed => "completed",
         DocumentStatus::Failed => "failed",
+        DocumentStatus::Deleting => "deleting",
+        DocumentStatus::Deleted => "deleted",
+        DocumentStatus::UploadInvalid => "upload_invalid",
     }
 }
 

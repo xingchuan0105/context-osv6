@@ -10,8 +10,6 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use leptos::view;
-use leptos_axum::render_app_to_stream;
 use sqlx::Row;
 use serde::Deserialize;
 use serde_json::json;
@@ -177,6 +175,8 @@ pub fn build_router(state: AppState) -> Router {
     let protected_api_v1 = routes::notebooks::router()
         .merge(routes::chat::router())
         .merge(routes::rag::router())
+        .merge(routes::billing::router())
+        .merge(routes::admin::router())
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             middleware::request_context_middleware,
@@ -193,27 +193,20 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/auth", routes::auth::public_router().merge(protected_auth))
         .nest("/api/v1", protected_api_v1)
         .merge(protected_chat_compat)
-        .nest_service("/pkg", tower_http::services::ServeDir::new(rust_frontend_pkg_root()))
         .with_state(state)
         .layer(axum::middleware::from_fn(middleware::observability_middleware))
         .layer(TraceLayer::new_for_http())
         .layer(build_cors_layer())
         .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024))
-        .fallback(render_app_to_stream(|| view! { <web_ui::Shell /> }))
-}
-
-fn rust_frontend_root() -> String {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../frontend_rust")
-        .to_string_lossy()
-        .to_string()
-}
-
-fn rust_frontend_pkg_root() -> String {
-    std::path::PathBuf::from(rust_frontend_root())
-        .join("pkg")
-        .to_string_lossy()
-        .to_string()
+        .fallback(|| async {
+            (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": "not_found",
+                    "message": "Route not found",
+                })),
+            )
+        })
 }
 
 // ---------------------------------------------------------------------------

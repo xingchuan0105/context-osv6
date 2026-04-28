@@ -187,6 +187,7 @@ impl ShareService {
             select id, file_name, status
             from documents
             where notebook_id = $1
+              and status not in ('deleting', 'deleted')
             order by updated_at desc, created_at desc
             "#,
         )

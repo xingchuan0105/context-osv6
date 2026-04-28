@@ -21,7 +21,6 @@ members = [
   "crates/share",
   "crates/storage-pg",
   "crates/storage-milvus",
-  "crates/storage-qdrant",
   "crates/telemetry",
   "crates/transport-http",
   "crates/usage-limit",

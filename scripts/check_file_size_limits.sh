@@ -9,7 +9,6 @@ files=(
   avrag-rs/crates/billing/src/lib.rs
   avrag-rs/crates/billing/src/core.rs
   avrag-rs/crates/share/src/lib.rs
-  avrag-rs/crates/storage-qdrant/src/lib.rs
   avrag-rs/crates/search/src/lib.rs
   avrag-rs/crates/usage-limit/src/lib.rs
   avrag-rs/crates/admin/src/lib.rs

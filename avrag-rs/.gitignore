@@ -12,6 +12,7 @@
 Cargo.lock
 
 # Storage / runtime state
+.run/.env.runtime
 .qdrant-initialized
 /storage/
 

@@ -395,15 +395,17 @@ function DashboardWorkspaceMeta({
 
 function DashboardCreateTile({
   creating,
+  delay,
   onCreate,
 }: {
   creating: boolean;
+  delay: number;
   onCreate: () => void;
 }) {
   const { locale } = useUiPreferences();
 
   return (
-    <button className="dashboard-create-tile" disabled={creating} type="button" onClick={onCreate}>
+    <button className="dashboard-create-tile animate-card-enter" disabled={creating} style={{ animationDelay: `${delay}ms` }} type="button" onClick={onCreate}>
       <span className="dashboard-create-tile-icon" aria-hidden="true">
         +
       </span>
@@ -528,12 +530,14 @@ function WorkspaceActions({
 function WorkspaceListItem({
   mode,
   workspace,
+  index,
   onFavoriteToggle,
   onRename,
   onDelete,
 }: {
   mode: DashboardViewMode;
   workspace: DashboardWorkspaceItem;
+  index: number;
   onFavoriteToggle: () => void;
   onRename: () => void;
   onDelete: () => void;
@@ -544,7 +548,7 @@ function WorkspaceListItem({
 
   if (mode === "list") {
     return (
-      <li className="dashboard-list-item">
+      <li className="dashboard-list-item animate-card-enter" style={{ animationDelay: `${index * 50}ms` }}>
         <article className="dashboard-workspace-card">
           <DashboardWorkspaceCardLink
             className="dashboard-workspace-card-link dashboard-workspace-card-link-list"
@@ -582,7 +586,7 @@ function WorkspaceListItem({
   }
 
   return (
-    <li className={mode === "card" ? "dashboard-card-item" : "dashboard-list-item"} role={mode === "card" ? "gridcell" : undefined}>
+    <li className={`${mode === "card" ? "dashboard-card-item" : "dashboard-list-item"} animate-card-enter`} role={mode === "card" ? "gridcell" : undefined} style={{ animationDelay: `${index * 50}ms` }}>
       <article className="dashboard-workspace-card">
         <DashboardWorkspaceCardLink
           className="dashboard-workspace-card-link dashboard-workspace-card-link-card"
@@ -979,11 +983,12 @@ export function DashboardSurface() {
           </section>
         ) : viewMode === "card" ? (
           <section aria-label={formatUiMessage(locale, "dashboardViewGridLabel")} className="dashboard-grid" role="grid">
-            <DashboardCreateTile creating={creatingWorkspace} onCreate={() => void handleCreateWorkspace()} />
-            {visibleWorkspaces.map((workspace) => {
+            <DashboardCreateTile creating={creatingWorkspace} delay={visibleWorkspaces.length * 50} onCreate={() => void handleCreateWorkspace()} />
+            {visibleWorkspaces.map((workspace, index) => {
               return (
                 <WorkspaceListItem
                   key={workspace.id}
+                  index={index}
                   mode="card"
                   onDelete={() => void deleteWorkspaceById(workspace)}
                   onFavoriteToggle={() => void toggleFavorite(workspace.id)}
@@ -1002,9 +1007,10 @@ export function DashboardSurface() {
               <div>{formatUiMessage(locale, "dashboardRoleColumn")}</div>
             </div>
             <ul aria-label={formatUiMessage(locale, "dashboardListLabel")} className="dashboard-list">
-              {visibleWorkspaces.map((workspace) => (
+              {visibleWorkspaces.map((workspace, index) => (
                 <WorkspaceListItem
                   key={workspace.id}
+                  index={index}
                   mode="list"
                   onDelete={() => void deleteWorkspaceById(workspace)}
                   onFavoriteToggle={() => void toggleFavorite(workspace.id)}

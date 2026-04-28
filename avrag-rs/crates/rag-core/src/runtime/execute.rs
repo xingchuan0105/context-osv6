@@ -10,7 +10,8 @@ use avrag_retrieval_data_plane::{
 };
 use common::{
     BackendTrace, ChannelCoverage, ChannelTraceItem, Coverage, DegradeTraceItem,
-    ExecutePlanRequest, ExecutePlanResponse, RelationPath, RetrievalBundle, RetrievedChunk,
+    ExecutePlanRequest, ExecutePlanResponse, PlaceholderTriplet, RelationPath, RetrievalBundle,
+    RetrievedChunk,
 };
 
 use crate::retrieval::ScoredChunk;
@@ -210,7 +211,7 @@ fn citation_from_scored(
 }
 
 fn graph_relation_hints(request: &ExecutePlanRequest) -> Vec<GraphRelationHint> {
-    request
+    let mut hints = request
         .graph_hints
         .iter()
         .filter_map(|hint| {
@@ -240,7 +241,39 @@ fn graph_relation_hints(request: &ExecutePlanRequest) -> Vec<GraphRelationHint> 
                 },
             )
         })
-        .collect()
+        .collect::<Vec<_>>();
+    hints.extend(
+        request
+            .placeholder_triplets
+            .iter()
+            .filter_map(placeholder_triplet_relation_hint),
+    );
+    hints
+}
+
+fn placeholder_triplet_relation_hint(triplet: &PlaceholderTriplet) -> Option<GraphRelationHint> {
+    let subject = normalize_triplet_slot(&triplet.subject);
+    let predicate = normalize_triplet_slot(&triplet.predicate);
+    let object = normalize_triplet_slot(&triplet.object);
+    let placeholder_count = usize::from(subject.is_none())
+        + usize::from(predicate.is_none())
+        + usize::from(object.is_none());
+
+    (placeholder_count <= 1 && (subject.is_some() || predicate.is_some() || object.is_some()))
+        .then_some(GraphRelationHint {
+            subject,
+            predicate,
+            object,
+        })
+}
+
+fn normalize_triplet_slot(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() || value.contains('?') {
+        None
+    } else {
+        Some(value.to_string())
+    }
 }
 
 fn dedupe_entity_names(values: impl IntoIterator<Item = String>) -> Vec<String> {
@@ -510,18 +543,19 @@ impl RagRuntime {
         }));
         entity_names = dedupe_entity_names(entity_names);
 
-        if entity_names.is_empty() && relation_hints.is_empty() {
-            if let Some(planner) = self.config.planner.as_ref() {
-                match planner.extract_query_entities(query).await {
-                    Ok(extracted) => {
-                        entity_names = dedupe_entity_names(extracted);
-                    }
-                    Err(error) => degrade_trace.push(DegradeTraceItem {
-                        stage: "graph".to_string(),
-                        reason: format!("Query entity extraction failed: {error}"),
-                        impact: "Skipping LLM-derived graph entity hints".to_string(),
-                    }),
+        if entity_names.is_empty()
+            && relation_hints.is_empty()
+            && let Some(planner) = self.config.planner.as_ref()
+        {
+            match planner.extract_query_entities(query).await {
+                Ok(extracted) => {
+                    entity_names = dedupe_entity_names(extracted);
                 }
+                Err(error) => degrade_trace.push(DegradeTraceItem {
+                    stage: "graph".to_string(),
+                    reason: format!("Query entity extraction failed: {error}"),
+                    impact: "Skipping LLM-derived graph entity hints".to_string(),
+                }),
             }
         }
 

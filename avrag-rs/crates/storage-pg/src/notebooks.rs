@@ -35,7 +35,13 @@ impl crate::PgAppRepository {
             left join lateral (
                 select count(*) as document_count,
                     jsonb_object_agg(status, cnt) as status_summary
-                from (select status, count(*) as cnt from documents d where d.notebook_id = n.id group by status) sub
+                from (
+                    select status, count(*) as cnt
+                    from documents d
+                    where d.notebook_id = n.id
+                      and d.status not in ('deleting', 'deleted')
+                    group by status
+                ) sub
             ) doc_stats on true
             order by n.updated_at desc, n.created_at desc
             "#,

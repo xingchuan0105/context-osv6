@@ -6,10 +6,9 @@ AVRAG_DIR="${ROOT_DIR}/avrag-rs"
 NEXT_DIR="${ROOT_DIR}/frontend_next"
 SESSION="${CONTEXT_OS_DEV_SESSION:-context-os-dev}"
 BASE_DIR="${HOME}/.local/share/avrag-dev"
-QDRANT_DIR="${BASE_DIR}/qdrant"
 MINIO_DATA_DIR="${BASE_DIR}/minio/data"
 CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${HOME}/.cache/context-osv6/target/avrag-rs}"
-QDRANT_URI="${QDRANT_URI:-http://127.0.0.1:6333}"
+MILVUS_URL="${MILVUS_URL:-http://127.0.0.1:19530}"
 MINIO_API_ADDR="${MINIO_API_ADDR:-127.0.0.1:9000}"
 MINIO_CONSOLE_ADDR="${MINIO_CONSOLE_ADDR:-127.0.0.1:9001}"
 
@@ -24,7 +23,7 @@ if tmux has-session -t "${SESSION}" 2>/dev/null; then
   exit 0
 fi
 
-mkdir -p "${QDRANT_DIR}" "${MINIO_DATA_DIR}"
+mkdir -p "${MINIO_DATA_DIR}"
 
 echo "Starting PostgreSQL and Redis..."
 sudo pg_ctlcluster 16 main start >/dev/null 2>&1 || true
@@ -38,10 +37,7 @@ sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='avrag'" | grep
 sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='avrag_rs'" | grep -q 1 || \
   sudo -u postgres psql -c "CREATE DATABASE avrag_rs OWNER avrag;"
 
-tmux new-session -d -s "${SESSION}" -n qdrant \
-  "cd '${QDRANT_DIR}' && exec qdrant --disable-telemetry --uri '${QDRANT_URI}'"
-
-tmux new-window -t "${SESSION}" -n minio \
+tmux new-session -d -s "${SESSION}" -n minio \
   "MINIO_ROOT_USER='${MINIO_ROOT_USER:-minioadmin}' MINIO_ROOT_PASSWORD='${MINIO_ROOT_PASSWORD:-minioadmin}' exec minio server '${MINIO_DATA_DIR}' --address '${MINIO_API_ADDR}' --console-address '${MINIO_CONSOLE_ADDR}'"
 
 tmux new-window -t "${SESSION}" -n office \
@@ -65,5 +61,5 @@ echo "URLs:"
 echo "  frontend       http://127.0.0.1:3000"
 echo "  api            http://127.0.0.1:8080"
 echo "  office parser  http://127.0.0.1:9090/v1/healthz"
-echo "  qdrant         http://127.0.0.1:6333"
+echo "  milvus         ${MILVUS_URL} (start separately)"
 echo "  minio          http://127.0.0.1:9001"

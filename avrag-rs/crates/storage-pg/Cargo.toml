@@ -11,6 +11,7 @@ avrag-auth = { path = "../auth" }
 aws-config = "1"
 aws-credential-types = "1"
 aws-sdk-s3 = "1"
+base64 = "0.22"
 chrono.workspace = true
 common = { path = "../common" }
 hex.workspace = true

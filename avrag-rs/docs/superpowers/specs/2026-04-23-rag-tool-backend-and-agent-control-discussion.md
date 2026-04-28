@@ -9,7 +9,6 @@
 1. 当前 RAG 主链路里，planner 受到 session context 污染，导致旧失败状态被重复放大。
 2. 后续产品形态希望支持：
    - 前端内置主控 agent
-   - 对外接入 OpenClaw 一类 assistant agent
 
 在这个目标下，需要重新明确：
 
@@ -143,7 +142,6 @@ planner 的 session context 当前包含两部分：
 无论是：
 
 - 前端网页中集成的主控 agent
-- 外接 OpenClaw 类 assistant agent
 
 都统一采用同一种模式：
 

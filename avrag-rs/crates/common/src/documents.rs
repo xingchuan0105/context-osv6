@@ -9,6 +9,10 @@ pub enum DocumentStatus {
     Processing,
     Completed,
     Failed,
+    Deleting,
+    Deleted,
+    #[serde(rename = "upload_invalid")]
+    UploadInvalid,
 }
 
 impl DocumentStatus {
@@ -20,6 +24,9 @@ impl DocumentStatus {
             Self::Processing => "processing",
             Self::Completed => "completed",
             Self::Failed => "failed",
+            Self::Deleting => "deleting",
+            Self::Deleted => "deleted",
+            Self::UploadInvalid => "upload_invalid",
         }
     }
 }
@@ -108,4 +115,32 @@ pub struct SourceRow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourcesResponse {
     pub sources: Vec<SourceRow>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn upload_invalid_status_serializes_as_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&DocumentStatus::UploadInvalid).unwrap(),
+            "\"upload_invalid\""
+        );
+        assert_eq!(DocumentStatus::UploadInvalid.as_str(), "upload_invalid");
+    }
+
+    #[test]
+    fn deletion_statuses_serialize_as_stable_lowercase_names() {
+        assert_eq!(
+            serde_json::to_string(&DocumentStatus::Deleting).unwrap(),
+            "\"deleting\""
+        );
+        assert_eq!(
+            serde_json::to_string(&DocumentStatus::Deleted).unwrap(),
+            "\"deleted\""
+        );
+        assert_eq!(DocumentStatus::Deleting.as_str(), "deleting");
+        assert_eq!(DocumentStatus::Deleted.as_str(), "deleted");
+    }
 }

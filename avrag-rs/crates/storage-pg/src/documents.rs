@@ -39,6 +39,7 @@ impl crate::PgAppRepository {
             from documents
             where ($1::uuid is null or notebook_id = $1)
               and ($2::uuid is null or id = $2)
+              and status not in ('deleting', 'deleted')
             order by updated_at desc, created_at desc
             "#,
         )

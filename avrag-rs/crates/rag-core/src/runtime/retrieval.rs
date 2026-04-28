@@ -1,24 +1,22 @@
 use std::{collections::HashMap, collections::HashSet};
 
-use anyhow::{Result, anyhow};
-use async_trait::async_trait;
+use anyhow::Result;
 use avrag_auth::AuthContext;
 use avrag_llm::{MultiModalEmbeddingInput, MultiModalRerankDocument};
 use avrag_retrieval_data_plane::{
-    Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, MultimodalSearchRequest,
-    RetrievalDataPlane, TextDenseSearchRequest, WeightedChunkList,
+    Bm25SearchRequest, MultimodalSearchRequest, TextDenseSearchRequest, WeightedChunkList,
 };
 use common::{ChatRequest, DegradeTraceItem, RagPlan};
 
 use crate::merge::{cut_top_k, dual_threshold_cut, global_rrf_merge};
-use crate::retrieval::{self, ScoredChunk};
+use crate::retrieval::ScoredChunk;
 
 use super::planner::{
     build_item_trace_with_total, effective_item_query, item_payload_kind, request_doc_ids,
 };
 use super::{
-    FINAL_MIN_CHUNKS, FINAL_RERANK_BUDGET, FINAL_SCORE_THRESHOLD, GLOBAL_RRF_K, RagConfig,
-    RagRuntime, TOTAL_CANDIDATE_BUDGET,
+    FINAL_MIN_CHUNKS, FINAL_RERANK_BUDGET, FINAL_SCORE_THRESHOLD, GLOBAL_RRF_K, RagRuntime,
+    TOTAL_CANDIDATE_BUDGET,
 };
 
 pub(super) fn build_final_candidate_pool(
@@ -76,135 +74,6 @@ pub(super) fn build_multimodal_rerank_documents(
             _ => MultiModalRerankDocument::Text(chunk.content.clone()),
         })
         .collect()
-}
-
-fn is_missing_qdrant_collection_error(error: &anyhow::Error) -> bool {
-    let message = error.to_string();
-    message.contains("Collection `") && message.contains("doesn't exist")
-}
-
-pub(super) struct LegacyRetrievalDataPlane {
-    config: RagConfig,
-}
-
-impl LegacyRetrievalDataPlane {
-    pub(super) fn new(config: RagConfig) -> Self {
-        Self { config }
-    }
-}
-
-#[async_trait]
-impl RetrievalDataPlane for LegacyRetrievalDataPlane {
-    async fn search_text_dense(&self, request: TextDenseSearchRequest) -> Result<Vec<ScoredChunk>> {
-        let pg_repo = self
-            .config
-            .pg_repo
-            .as_ref()
-            .ok_or_else(|| anyhow!("rag postgres repository is not configured"))?;
-        let qdrant = self
-            .config
-            .qdrant
-            .as_ref()
-            .ok_or_else(|| anyhow!("legacy Qdrant backend is not configured"))?;
-
-        retrieval::run_dense_retrieval(
-            qdrant,
-            pg_repo,
-            &request.auth,
-            &self.config.qdrant_collection,
-            request.query_vector,
-            request.doc_ids.as_deref(),
-            request.limit,
-        )
-        .await
-    }
-
-    async fn search_bm25(&self, request: Bm25SearchRequest) -> Result<Bm25SearchOutput> {
-        let pg_repo = self
-            .config
-            .pg_repo
-            .as_ref()
-            .ok_or_else(|| anyhow!("rag postgres repository is not configured"))?;
-        let transient_lexical_index = if self.config.lexical_index.is_none() {
-            self.config
-                .lexical_index_dir
-                .as_deref()
-                .and_then(|dir| avrag_search::TantivyLexicalIndex::open_reader(dir).ok())
-        } else {
-            None
-        };
-        let lexical_index = self
-            .config
-            .lexical_index
-            .as_deref()
-            .or(transient_lexical_index.as_ref());
-
-        let output = retrieval::run_sparse_retrieval_with_lexical(
-            lexical_index,
-            pg_repo,
-            &request.auth,
-            &request.query,
-            request.doc_ids.as_deref(),
-            request.limit,
-        )
-        .await?;
-
-        Ok(Bm25SearchOutput {
-            chunks: output.chunks,
-            trace: Bm25SearchTrace {
-                backend: output.trace.backend,
-                raw_hit_count: output.trace.raw_hit_count,
-                hydrated_hit_count: output.trace.hydrated_hit_count,
-                fallback_reason: output.trace.fallback_reason,
-            },
-        })
-    }
-
-    async fn search_multimodal(
-        &self,
-        request: MultimodalSearchRequest,
-    ) -> Result<Vec<ScoredChunk>> {
-        let pg_repo = self
-            .config
-            .pg_repo
-            .as_ref()
-            .ok_or_else(|| anyhow!("rag postgres repository is not configured"))?;
-        let qdrant = self
-            .config
-            .qdrant
-            .as_ref()
-            .ok_or_else(|| anyhow!("legacy Qdrant backend is not configured"))?;
-
-        let results = retrieval::run_multimodal_retrieval(
-            qdrant,
-            pg_repo,
-            &request.auth,
-            &self.config.multimodal_collection,
-            request.query_vector,
-            request.doc_ids.as_deref(),
-            request.limit,
-        )
-        .await?;
-
-        Ok(results
-            .into_iter()
-            .map(|chunk| ScoredChunk {
-                chunk_id: chunk.chunk_id,
-                doc_id: chunk.doc_id,
-                content: chunk.context_text,
-                score: chunk.score,
-                source: chunk.source,
-                page: chunk.page,
-                chunk_type: chunk.chunk_type,
-                asset_id: Some(chunk.asset_id),
-                caption: chunk.caption,
-                image_path: chunk.image_path,
-                parser_backend: Some(chunk.parser_backend),
-                source_locator: chunk.source_locator,
-                parse_run_id: chunk.parse_run_id,
-            })
-            .collect())
-    }
 }
 
 impl RagRuntime {
@@ -324,8 +193,8 @@ impl RagRuntime {
                     if let Some(reason) = output.trace.fallback_reason.as_ref() {
                         degrade_trace.push(DegradeTraceItem {
                             stage: "bm25".to_string(),
-                            reason: format!("Tantivy lexical retrieval failed: {}", reason),
-                            impact: "Fell back to PostgreSQL sparse retrieval for one lexical item"
+                            reason: format!("Sparse retrieval fallback: {}", reason),
+                            impact: "Used a fallback sparse retrieval path for one lexical item"
                                 .to_string(),
                         });
                     }
@@ -427,17 +296,11 @@ impl RagRuntime {
                 .await
             {
                 Ok(results) => chunks.extend(results),
-                Err(error) => {
-                    if is_missing_qdrant_collection_error(&error) {
-                        continue;
-                    }
-                    degrade_trace.push(DegradeTraceItem {
-                        stage: "multimodal_dense".to_string(),
-                        reason: format!("Multimodal dense retrieval failed: {}", error),
-                        impact: "Skipping multimodal dense retrieval for one query item"
-                            .to_string(),
-                    });
-                }
+                Err(error) => degrade_trace.push(DegradeTraceItem {
+                    stage: "multimodal_dense".to_string(),
+                    reason: format!("Multimodal dense retrieval failed: {}", error),
+                    impact: "Skipping multimodal dense retrieval for one query item".to_string(),
+                }),
             }
         }
 

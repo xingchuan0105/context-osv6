@@ -3,11 +3,6 @@ set -euo pipefail
 
 BASE_DIR="${HOME}/.local/share/avrag-dev"
 
-if [ -f "${BASE_DIR}/qdrant/qdrant.pid" ]; then
-  kill "$(cat "${BASE_DIR}/qdrant/qdrant.pid")" >/dev/null 2>&1 || true
-  rm -f "${BASE_DIR}/qdrant/qdrant.pid"
-fi
-
 if [ -f "${BASE_DIR}/minio/minio.pid" ]; then
   kill "$(cat "${BASE_DIR}/minio/minio.pid")" >/dev/null 2>&1 || true
   rm -f "${BASE_DIR}/minio/minio.pid"

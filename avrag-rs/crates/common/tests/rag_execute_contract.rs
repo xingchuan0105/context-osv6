@@ -54,6 +54,7 @@ fn execute_plan_request_validation_rejects_ambiguous_items() {
         channel_budget: None,
         query_entities: Vec::new(),
         graph_hints: Vec::new(),
+        placeholder_triplets: Vec::new(),
         trace: None,
     };
 
@@ -79,6 +80,7 @@ fn execute_plan_request_validation_rejects_empty_doc_scope() {
         channel_budget: None,
         query_entities: Vec::new(),
         graph_hints: Vec::new(),
+        placeholder_triplets: Vec::new(),
         trace: None,
     };
 
@@ -120,6 +122,7 @@ fn execute_plan_request_validation_rejects_more_than_four_items() {
         channel_budget: None,
         query_entities: Vec::new(),
         graph_hints: Vec::new(),
+        placeholder_triplets: Vec::new(),
         trace: None,
     };
 
@@ -154,6 +157,7 @@ fn execute_plan_request_compat_roundtrip_preserves_summary_mode() {
         channel_budget: None,
         query_entities: Vec::new(),
         graph_hints: Vec::new(),
+        placeholder_triplets: Vec::new(),
         trace: Some(common::ExecutePlanTrace {
             request_id: Some("req-123".to_string()),
             trace_id: None,
@@ -197,6 +201,9 @@ fn execute_plan_request_accepts_v2_optional_retrieval_fields() {
         "graph_hints": [
             { "subject": "Atlas", "predicate": "uses", "object": "rollback checklist" }
         ],
+        "placeholder_triplets": [
+            { "subject": "Atlas", "predicate": "uses", "object": "?checklist" }
+        ],
         "trace": {
             "request_id": "req-123",
             "trace_id": "trace-456",
@@ -215,6 +222,7 @@ fn execute_plan_request_accepts_v2_optional_retrieval_fields() {
     );
     assert_eq!(request.query_entities[0].text, "Atlas");
     assert_eq!(request.graph_hints[0].predicate.as_deref(), Some("uses"));
+    assert_eq!(request.placeholder_triplets[0].object, "?checklist");
     assert_eq!(
         request
             .trace
@@ -308,4 +316,121 @@ fn retrieval_bundle_relation_paths_roundtrip() {
 
     assert_eq!(bundle.relation_paths.len(), 1);
     assert_eq!(bundle.relation_paths[0].relations, vec!["uses"]);
+}
+
+#[test]
+fn retrieval_bundle_citation_chunks_includes_graph_supported_chunks() {
+    let bundle = RetrievalBundle {
+        chunks: vec![],
+        graph_supported_chunks: vec![common::RetrievedChunk {
+            chunk_id: "graph-chunk-1".to_string(),
+            doc_id: "doc-1".to_string(),
+            chunk_type: "graph_relation".to_string(),
+            page: None,
+            text: "Atlas uses checklist".to_string(),
+            score: 0.8,
+            retrieval_channel: "graph".to_string(),
+            asset_id: None,
+            caption: None,
+            image_url: None,
+            parser_backend: None,
+            source_locator: None,
+            parse_run_id: None,
+            score_breakdown: Vec::new(),
+        }],
+        relation_paths: vec![],
+        citations: vec![common::Citation {
+            citation_id: 1,
+            doc_id: "doc-1".to_string(),
+            chunk_id: Some("graph-chunk-1".to_string()),
+            page: None,
+            doc_name: "Doc 1".to_string(),
+            preview: Some("Atlas uses checklist".to_string()),
+            content: Some("Atlas uses checklist".to_string()),
+            score: 0.8,
+            layer: Some("graph".to_string()),
+            chunk_type: Some("graph_relation".to_string()),
+            asset_id: None,
+            caption: None,
+            image_url: None,
+            parser_backend: None,
+            source_locator: None,
+            parse_run_id: None,
+        }],
+        summary_chunks: vec![],
+    };
+
+    let chunks = bundle.citation_chunks();
+    assert_eq!(chunks.len(), 1);
+    assert_eq!(chunks[0].chunk_id, "graph-chunk-1");
+    assert!(bundle.has_evidence());
+}
+
+#[test]
+fn retrieval_bundle_has_evidence_with_summary_chunks_only() {
+    let bundle = RetrievalBundle {
+        chunks: vec![],
+        graph_supported_chunks: vec![],
+        relation_paths: vec![],
+        citations: vec![],
+        summary_chunks: vec![common::AnswerContextChunk {
+            chunk_id: "summary-doc-1".to_string(),
+            doc_id: Some("doc-1".to_string()),
+            chunk_type: "summary".to_string(),
+            page: None,
+            text: "summary".to_string(),
+            asset_id: None,
+            caption: None,
+            image_url: None,
+            parser_backend: None,
+            source_locator: None,
+        }],
+    };
+
+    assert!(bundle.has_evidence());
+}
+
+#[test]
+fn retrieval_bundle_citation_chunks_dedupes_regular_and_graph() {
+    let bundle = RetrievalBundle {
+        chunks: vec![common::RetrievedChunk {
+            chunk_id: "chunk-1".to_string(),
+            doc_id: "doc-1".to_string(),
+            chunk_type: "text".to_string(),
+            page: Some(1),
+            text: "regular".to_string(),
+            score: 0.9,
+            retrieval_channel: "dense".to_string(),
+            asset_id: None,
+            caption: None,
+            image_url: None,
+            parser_backend: None,
+            source_locator: None,
+            parse_run_id: None,
+            score_breakdown: Vec::new(),
+        }],
+        graph_supported_chunks: vec![common::RetrievedChunk {
+            chunk_id: "chunk-1".to_string(),
+            doc_id: "doc-1".to_string(),
+            chunk_type: "text".to_string(),
+            page: Some(1),
+            text: "regular".to_string(),
+            score: 0.9,
+            retrieval_channel: "graph".to_string(),
+            asset_id: None,
+            caption: None,
+            image_url: None,
+            parser_backend: None,
+            source_locator: None,
+            parse_run_id: None,
+            score_breakdown: Vec::new(),
+        }],
+        relation_paths: vec![],
+        citations: vec![],
+        summary_chunks: vec![],
+    };
+
+    let chunks = bundle.citation_chunks();
+    assert_eq!(chunks.len(), 1);
+    assert_eq!(chunks[0].retrieval_channel, "dense");
 }

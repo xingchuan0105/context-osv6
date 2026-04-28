@@ -7,13 +7,13 @@ use avrag_llm::{AnswerSynthesizer, EmbeddingClient, LlmClient, RerankerClient, R
 use avrag_rag_core::{
     RagConfig, RagRuntime, RetrievalDataPlane, context::SessionContext as RagSessionContext,
 };
-use avrag_search::{SearchExecutor, TantivyLexicalIndex};
+use avrag_search::SearchExecutor;
 use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
 use avrag_storage_pg::{
-    DocumentAssetRow, DocumentScopeState, DocumentTaskSeed, NotificationCreateParams,
-    ObjectStoreHandle, PgAppRepository, PgStorageError, S3ObjectStore,
+    DocumentAssetRow, DocumentDeletionOutcome, DocumentScopeState, DocumentTaskSeed,
+    DocumentUploadMutationOutcome, DocumentUploadQueueOutcome, NotificationCreateParams, ObjectStoreHandle,
+    ObjectStoreHeadError, PgAppRepository, PgStorageError, S3ObjectStore,
 };
-use avrag_storage_qdrant::HttpQdrantBackend;
 use common::{
     AddUrlSourceRequest, ApiKeyRow, AppError, ChatMessage, ChatRequest, ChatResponse, ChatSession,
     Citation, CitationLookupResponse, CreateApiKeyRequest, CreateApiKeyResponse,
@@ -57,9 +57,6 @@ pub struct AppConfig {
     pub database_url: Option<String>,
     pub auto_migrate: bool,
     pub object_root: String,
-    pub tantivy_index_dir: Option<String>,
-    pub retrieval_backend: String,
-    pub qdrant: QdrantConfig,
     pub milvus: MilvusConfig,
     pub embedding: ModelProviderConfig,
     pub mm_embedding: ModelProviderConfig,
@@ -86,19 +83,6 @@ pub struct ModelProviderConfig {
     pub api_style: Option<String>,
     pub dimensions: Option<usize>,
     pub enable_thinking: Option<bool>,
-}
-
-#[derive(Debug, Clone)]
-pub struct QdrantConfig {
-    pub url: String,
-    pub host: String,
-    pub port: u16,
-    pub api_key: String,
-    pub collection: String,
-    pub multimodal_collection: String,
-    pub vector_name: String,
-    pub multi_vector: bool,
-    pub use_tls: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -175,19 +159,6 @@ impl Default for AppConfig {
             database_url: None,
             auto_migrate: true,
             object_root: default_object_root(),
-            tantivy_index_dir: None,
-            retrieval_backend: "milvus".to_string(),
-            qdrant: QdrantConfig {
-                url: "http://127.0.0.1:6333".to_string(),
-                host: "127.0.0.1".to_string(),
-                port: 6333,
-                api_key: String::new(),
-                collection: "rag_chunks".to_string(),
-                multimodal_collection: "rag_chunks_multimodal".to_string(),
-                vector_name: "dense".to_string(),
-                multi_vector: true,
-                use_tls: false,
-            },
             milvus: MilvusConfig {
                 url: "http://127.0.0.1:19530".to_string(),
                 token: String::new(),
@@ -337,40 +308,6 @@ impl AppConfig {
         config.database_url = env_optional_string("DATABASE_URL");
         config.auto_migrate = env_bool("AVRAG_RUN_MIGRATIONS", config.auto_migrate);
         config.object_root = env_string("AVRAG_OBJECT_ROOT", &config.object_root);
-        config.tantivy_index_dir = env_optional_string("TANTIVY_INDEX_DIR");
-        config.retrieval_backend = env_string("RETRIEVAL_BACKEND", &config.retrieval_backend)
-            .trim()
-            .to_ascii_lowercase();
-
-        config.qdrant.host = env_string("QDRANT_HOST", &config.qdrant.host);
-        config.qdrant.port = env_u16("QDRANT_PORT", config.qdrant.port);
-        config.qdrant.api_key = env_string("QDRANT_API_KEY", &config.qdrant.api_key);
-        config.qdrant.collection = env_string("QDRANT_COLLECTION", &config.qdrant.collection);
-        let default_multimodal_collection = format!("{}_multimodal", config.qdrant.collection);
-        config.qdrant.multimodal_collection = env_string(
-            "QDRANT_MULTIMODAL_COLLECTION",
-            &default_multimodal_collection,
-        );
-        config.qdrant.vector_name = env_string("QDRANT_VECTOR_NAME", &config.qdrant.vector_name);
-        config.qdrant.multi_vector = env_bool("QDRANT_MULTI_VECTOR", config.qdrant.multi_vector);
-        config.qdrant.use_tls = env_bool("QDRANT_USE_TLS", config.qdrant.use_tls);
-        config.qdrant.url = env_string(
-            "QDRANT_URL",
-            &format!(
-                "{}://{}:{}",
-                if config.qdrant.use_tls {
-                    "https"
-                } else {
-                    "http"
-                },
-                config.qdrant.host,
-                if config.qdrant.port == 6334 {
-                    6333
-                } else {
-                    config.qdrant.port
-                }
-            ),
-        );
 
         config.milvus.url = env_string("MILVUS_URL", &config.milvus.url);
         config.milvus.token = env_string("MILVUS_TOKEN", &config.milvus.token);

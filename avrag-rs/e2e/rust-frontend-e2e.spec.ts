@@ -51,13 +51,11 @@ test.describe("Infrastructure & Auth", () => {
     expect(newToken).not.toBe(token); // new session token
   });
 
-  test("T03: Leptos SSR renders page shells", async ({ request }) => {
+  test("T03: API server returns JSON 404 for page routes", async ({ request }) => {
     const root = await request.get("/");
-    expect(root.ok(), `root failed: ${root.status()}`).toBeTruthy();
-    const html = await root.text();
-    // SSR should produce an HTML document with a shell
-    expect(html).toContain("<html");
-    expect(html).toContain("</html>");
+    expect(root.status(), `root returned unexpected status`).toBe(404);
+    const body = (await root.json()) as { error?: string };
+    expect(body.error).toBe("not_found");
   });
 });
 

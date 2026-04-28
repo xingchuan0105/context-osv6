@@ -49,6 +49,74 @@ pub struct DocumentTaskSeed {
     pub mime_type: String,
     pub file_size: u64,
     pub object_path: String,
+    pub status: DocumentStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DocumentUploadMutationOutcome {
+    Updated,
+    NotFound,
+    StatusConflict(DocumentStatus),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DocumentUploadQueueOutcome {
+    Queued { task_inserted: bool },
+    NotFound,
+    StatusConflict(DocumentStatus),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DocumentDeletionOutcome {
+    Queued { task_inserted: bool },
+    AlreadyDeleting { task_inserted: bool },
+    AlreadyDeleted,
+    NotFound,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DocumentCleanupTaskCompletionOutcome {
+    Completed,
+    LeaseLost,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DocumentCleanupTaskFailureOutcome {
+    Requeued,
+    DeadLettered,
+    LeaseLost,
+}
+
+#[derive(Debug, Clone)]
+pub struct DocumentCleanupTask {
+    pub task_id: Uuid,
+    pub org_id: Uuid,
+    pub notebook_id: Uuid,
+    pub document_id: Uuid,
+    pub requested_by: Option<Uuid>,
+    pub idempotency_key: String,
+    pub payload: serde_json::Value,
+    pub lock_token: Option<Uuid>,
+    pub attempt_count: i32,
+    pub max_attempts: i32,
+}
+
+#[derive(Debug, Clone)]
+pub struct DocumentCleanupTargets {
+    pub org_id: Uuid,
+    pub notebook_id: Uuid,
+    pub document_id: Uuid,
+    pub status: DocumentStatus,
+    pub object_path: Option<String>,
+    pub asset_storage_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DocumentUploadValidation {
+    pub upload_size_bytes: Option<u64>,
+    pub upload_sha256: Option<String>,
+    pub upload_validated_at: Option<DateTime<Utc>>,
+    pub upload_validation_error: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -310,6 +378,7 @@ fn map_document_task_seed(row: PgRow) -> Result<DocumentTaskSeed, PgStorageError
     let mime_type: Option<String> = row.try_get("mime_type")?;
     let file_size: i64 = row.try_get("file_size")?;
     let object_path: Option<String> = row.try_get("object_path")?;
+    let status: String = row.try_get("status")?;
     Ok(DocumentTaskSeed {
         document_id: document_id.to_string(),
         org_id: org_id.to_string(),
@@ -318,6 +387,17 @@ fn map_document_task_seed(row: PgRow) -> Result<DocumentTaskSeed, PgStorageError
         mime_type: mime_type.unwrap_or_else(|| "application/octet-stream".to_string()),
         file_size: u64::try_from(file_size).unwrap_or_default(),
         object_path: object_path.unwrap_or_default(),
+        status: parse_document_status(&status),
+    })
+}
+
+fn map_document_upload_validation(row: PgRow) -> Result<DocumentUploadValidation, PgStorageError> {
+    let upload_size_bytes: Option<i64> = row.try_get("upload_size_bytes")?;
+    Ok(DocumentUploadValidation {
+        upload_size_bytes: upload_size_bytes.and_then(|value| u64::try_from(value).ok()),
+        upload_sha256: row.try_get("upload_sha256")?,
+        upload_validated_at: row.try_get("upload_validated_at")?,
+        upload_validation_error: row.try_get("upload_validation_error")?,
     })
 }
 
@@ -330,6 +410,7 @@ fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
     let requested_by: Option<Uuid> = row.try_get("requested_by")?;
     let enqueued_at: DateTime<Utc> = row.try_get("enqueued_at")?;
     let payload: serde_json::Value = row.try_get("payload")?;
+    let lock_token: Option<Uuid> = row.try_get("lock_token").ok().flatten();
     Ok(IngestionTask {
         task_id: task_id.to_string(),
         kind: parse_ingestion_kind(&kind),
@@ -340,6 +421,24 @@ fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
         idempotency_key: row.try_get("idempotency_key")?,
         enqueued_at: enqueued_at.to_rfc3339(),
         payload: serde_json::from_value::<IngestionTaskPayload>(payload)?,
+        lock_token: lock_token.map(|value| value.to_string()),
+        attempt_count: row.try_get("attempt_count").unwrap_or(0),
+        max_attempts: row.try_get("max_attempts").unwrap_or(ingestion::DEFAULT_MAX_ATTEMPTS),
+    })
+}
+
+fn map_document_cleanup_task(row: PgRow) -> Result<DocumentCleanupTask, PgStorageError> {
+    Ok(DocumentCleanupTask {
+        task_id: row.try_get("task_id")?,
+        org_id: row.try_get("org_id")?,
+        notebook_id: row.try_get("notebook_id")?,
+        document_id: row.try_get("document_id")?,
+        requested_by: row.try_get("requested_by")?,
+        idempotency_key: row.try_get("idempotency_key")?,
+        payload: row.try_get("payload")?,
+        lock_token: row.try_get("lock_token").ok().flatten(),
+        attempt_count: row.try_get("attempt_count").unwrap_or(0),
+        max_attempts: row.try_get("max_attempts").unwrap_or(5),
     })
 }
 

@@ -19,7 +19,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn mode_select_routes_memory_mode_to_compat_task() {
+    async fn mode_select_routes_memory_runtime_to_memory_mode_task() {
         let task = ModeSelectTask {
             state: AppState::new(AppConfig::default()),
         };
@@ -30,7 +30,7 @@ mod tests {
 
         assert_eq!(
             result.next_action,
-            NextAction::GoTo(TASK_MEMORY_COMPAT.to_string())
+            NextAction::GoTo(TASK_MEMORY_MODE.to_string())
         );
     }
 

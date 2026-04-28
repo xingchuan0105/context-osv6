@@ -4,7 +4,10 @@ use common::{
     ApiKeyRow, ChatMessage, ChatSession, Citation, Document, DocumentContentResponse,
     DocumentStatus, Notebook, NotificationRow, ParsedPreviewItem, ParsedPreviewResponse, SourceRow,
 };
-use ingestion::{AuditRecord, IngestionTask, IngestionTaskKind, IngestionTaskPayload};
+use ingestion::{
+    AuditRecord, IngestionTask, IngestionTaskKind, IngestionTaskPayload, TaskCompletionOutcome,
+    TaskFailureOutcome,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -16,7 +19,9 @@ use std::collections::HashMap;
 use thiserror::Error;
 use uuid::Uuid;
 
-pub use object_store::{LocalObjectStore, ObjectStoreHandle, S3ObjectStore};
+pub use object_store::{
+    LocalObjectStore, ObjectStoreHandle, ObjectStoreHeadError, ObjectStoreMetadata, S3ObjectStore,
+};
 
 #[derive(Debug, Clone)]
 pub struct TenantPgPool {

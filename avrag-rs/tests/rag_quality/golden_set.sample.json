@@ -49,12 +49,12 @@
           "is_adversarial": false
         },
         {
-          "query": "Find references to the Qdrant collection rag_chunks_multimodal.",
-          "expected_answer": "rag_chunks_multimodal",
+          "query": "Find references to the Milvus collection prefix avrag.",
+          "expected_answer": "avrag",
           "source_chunks": [
             {
               "type": "keywords",
-              "keywords": ["rag_chunks_multimodal", "Qdrant", "collection"]
+              "keywords": ["MILVUS_COLLECTION_PREFIX", "avrag", "Milvus"]
             }
           ],
           "expected_citations": [0],

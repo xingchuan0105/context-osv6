@@ -4,7 +4,7 @@
 
 正式前端：
 - `../frontend_next/` 是当前正式前端实现，负责承接 Rust API、SSE、citation lookup、正文内联 citation 与图片块渲染。
-- `../frontend_rust/` 仅作为 legacy/dev-only fallback，不再作为默认开发入口。
+- `../frontend_rust/` 是历史 Rust 前端工程；`avrag-api` 不再提供 Leptos SSR fallback。
 
 ## 当前产品架构目标（2026-04-26）
 
@@ -21,10 +21,9 @@
 
 | 模块 | 路径 | 说明 |
 |------|------|------|
-| **RAG Runtime** | `crates/rag-core/` | Execute-plan 检索内核，默认通过 Milvus data plane 执行 BM25 sparse、text dense、multimodal dense 与 graph relation retrieval；`RETRIEVAL_BACKEND=legacy` 可回退到 Qdrant/Tantivy/PostgreSQL BM25 adapter |
+| **RAG Runtime** | `crates/rag-core/` | Execute-plan 检索内核，通过 Milvus data plane 执行 BM25 sparse、text dense、multimodal dense 与 graph relation retrieval |
 | **LLM** | `crates/llm/` | EmbeddingClient、RetrievalPlanner、AnswerSynthesizer、RerankerClient（OpenAI 兼容协议） |
 | **Storage PG** | `crates/storage-pg/` | PostgreSQL 全量操作：documents/chunks/sessions/chat_memory/notifications/audit_log |
-| **Storage Qdrant** | `crates/storage-qdrant/` | deprecated legacy rollback adapter；默认路径由 Milvus retrieval adapter 承担 |
 | **Cache Redis** | `crates/cache-redis/` | DocumentLock 分布式锁、TTL 支持 |
 | **Ingestion** | `crates/ingestion/` | ParserFactory（PDF/Office/代码）、Chunker、Summary extraction、Worker skeleton |
 | **Search** | `crates/search/` | Exa API 集成、Web search planning + synthesis |
@@ -64,7 +63,6 @@ crates/
   search/    — Exa web search executor
   share/     — Token-based sharing
   storage-pg/ — PostgreSQL 全量操作
-  storage-qdrant/ — deprecated legacy rollback adapter
   telemetry/ — Tracing/logging 初始化
   test-kit/  — 测试工具
   transport-http/ — Router、handlers、SSE、rate limit、metrics
@@ -88,21 +86,14 @@ pnpm install
 pnpm typecheck
 ```
 
-`../frontend_rust` 仅保留为 legacy/dev-only fallback。
+`../frontend_rust` 不再由 `avrag-api` 服务，仅保留为历史工程。
 
 环境变量参考 `.env.example`。
 
 RAG 检索默认使用 Milvus：
 
 ```bash
-RETRIEVAL_BACKEND=milvus
 MILVUS_URL=http://127.0.0.1:19530
-```
-
-需要回滚旧检索路径时显式设置：
-
-```bash
-RETRIEVAL_BACKEND=legacy
 ```
 
 密码重置邮件默认兼容 163 SMTP：

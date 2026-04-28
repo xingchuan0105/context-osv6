@@ -5,6 +5,12 @@ use serde_json::Value;
 
 use crate::IngestionError;
 
+pub const DEFAULT_MAX_ATTEMPTS: i32 = 5;
+
+fn default_max_attempts() -> i32 {
+    DEFAULT_MAX_ATTEMPTS
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IngestionTaskKind {
@@ -23,6 +29,12 @@ pub struct IngestionTask {
     pub idempotency_key: String,
     pub enqueued_at: String,
     pub payload: IngestionTaskPayload,
+    #[serde(default)]
+    pub lock_token: Option<String>,
+    #[serde(default)]
+    pub attempt_count: i32,
+    #[serde(default = "default_max_attempts")]
+    pub max_attempts: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -99,6 +111,7 @@ impl DocumentStateMachine {
                 | (DocumentStatus::Pending, DocumentStatus::Queued)
                 | (DocumentStatus::Enqueueing, DocumentStatus::Queued)
                 | (DocumentStatus::Queued, DocumentStatus::Processing)
+                | (DocumentStatus::Processing, DocumentStatus::Queued)
                 | (DocumentStatus::Processing, DocumentStatus::Completed)
                 | (DocumentStatus::Processing, DocumentStatus::Failed)
                 | (DocumentStatus::Failed, DocumentStatus::Queued)
@@ -149,6 +162,9 @@ pub fn build_ingest_task(
         idempotency_key,
         enqueued_at: Utc::now().to_rfc3339(),
         payload: IngestionTaskPayload::IngestDocument(payload),
+        lock_token: None,
+        attempt_count: 0,
+        max_attempts: DEFAULT_MAX_ATTEMPTS,
     }
 }
 
@@ -177,6 +193,9 @@ pub fn build_reindex_task(
         idempotency_key,
         enqueued_at: Utc::now().to_rfc3339(),
         payload: IngestionTaskPayload::ReindexDocument(payload),
+        lock_token: None,
+        attempt_count: 0,
+        max_attempts: DEFAULT_MAX_ATTEMPTS,
     }
 }
 

@@ -40,7 +40,9 @@ impl OfficeParserServiceConfig {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum OfficeParserFormat {
+    Doc,
     Docx,
+    Xls,
     Xlsx,
     Ppt,
     Pptx,
@@ -49,7 +51,9 @@ pub enum OfficeParserFormat {
 impl OfficeParserFormat {
     fn endpoint_path(self) -> &'static str {
         match self {
+            Self::Doc => "doc",
             Self::Docx => "docx",
+            Self::Xls => "xls",
             Self::Xlsx => "xlsx",
             Self::Ppt => "ppt",
             Self::Pptx => "pptx",
@@ -133,6 +137,16 @@ impl OfficeParserServiceClient {
             .context("Failed to decode office parser capabilities response")
     }
 
+    pub async fn parse_doc(
+        &self,
+        bytes: &[u8],
+        filename: &str,
+        document_id: &str,
+    ) -> Result<OfficeParserParseResponse> {
+        self.parse(OfficeParserFormat::Doc, bytes, filename, document_id)
+            .await
+    }
+
     pub async fn parse_docx(
         &self,
         bytes: &[u8],
@@ -140,6 +154,16 @@ impl OfficeParserServiceClient {
         document_id: &str,
     ) -> Result<OfficeParserParseResponse> {
         self.parse(OfficeParserFormat::Docx, bytes, filename, document_id)
+            .await
+    }
+
+    pub async fn parse_xls(
+        &self,
+        bytes: &[u8],
+        filename: &str,
+        document_id: &str,
+    ) -> Result<OfficeParserParseResponse> {
+        self.parse(OfficeParserFormat::Xls, bytes, filename, document_id)
             .await
     }
 
@@ -275,7 +299,9 @@ mod tests {
 
     #[test]
     fn office_parser_format_maps_to_expected_path() {
+        assert_eq!(OfficeParserFormat::Doc.endpoint_path(), "doc");
         assert_eq!(OfficeParserFormat::Docx.endpoint_path(), "docx");
+        assert_eq!(OfficeParserFormat::Xls.endpoint_path(), "xls");
         assert_eq!(OfficeParserFormat::Xlsx.endpoint_path(), "xlsx");
         assert_eq!(OfficeParserFormat::Ppt.endpoint_path(), "ppt");
         assert_eq!(OfficeParserFormat::Pptx.endpoint_path(), "pptx");

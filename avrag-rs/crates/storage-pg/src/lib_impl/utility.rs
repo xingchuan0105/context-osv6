@@ -5,6 +5,9 @@ fn parse_document_status(value: &str) -> DocumentStatus {
         "processing" => DocumentStatus::Processing,
         "completed" => DocumentStatus::Completed,
         "failed" => DocumentStatus::Failed,
+        "deleting" => DocumentStatus::Deleting,
+        "deleted" => DocumentStatus::Deleted,
+        "upload_invalid" => DocumentStatus::UploadInvalid,
         _ => DocumentStatus::Pending,
     }
 }
@@ -17,7 +20,17 @@ fn document_status_str(status: &DocumentStatus) -> &'static str {
         DocumentStatus::Processing => "processing",
         DocumentStatus::Completed => "completed",
         DocumentStatus::Failed => "failed",
+        DocumentStatus::Deleting => "deleting",
+        DocumentStatus::Deleted => "deleted",
+        DocumentStatus::UploadInvalid => "upload_invalid",
     }
+}
+
+fn document_upload_status_is_mutable(status: &DocumentStatus) -> bool {
+    matches!(
+        status,
+        DocumentStatus::Pending | DocumentStatus::UploadInvalid
+    )
 }
 
 fn agent_name(agent_type: &str) -> &'static str {

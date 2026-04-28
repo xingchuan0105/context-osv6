@@ -220,20 +220,16 @@ pub struct IndexWriteReport {
 #[async_trait]
 pub trait RetrievalDataPlane: Send + Sync {
     async fn ensure_schema(&self) -> anyhow::Result<()> {
-        Ok(())
+        Err(retrieval_data_plane_method_not_implemented("ensure_schema"))
     }
 
     async fn replace_document_index(
         &self,
-        batch: DocumentIndexBatch,
+        _batch: DocumentIndexBatch,
     ) -> anyhow::Result<IndexWriteReport> {
-        Ok(IndexWriteReport {
-            text_chunk_count: batch.text_chunks.len(),
-            multimodal_chunk_count: batch.multimodal_chunks.len(),
-            entity_count: batch.entities.len(),
-            relation_count: batch.relations.len(),
-            graph_passage_count: batch.graph_passages.len(),
-        })
+        Err(retrieval_data_plane_method_not_implemented(
+            "replace_document_index",
+        ))
     }
 
     async fn delete_document_index(
@@ -241,7 +237,9 @@ pub trait RetrievalDataPlane: Send + Sync {
         _auth: &AuthContext,
         _document_id: Uuid,
     ) -> anyhow::Result<()> {
-        Ok(())
+        Err(retrieval_data_plane_method_not_implemented(
+            "delete_document_index",
+        ))
     }
 
     async fn search_text_dense(
@@ -260,6 +258,116 @@ pub trait RetrievalDataPlane: Send + Sync {
         &self,
         _request: GraphSearchRequest,
     ) -> anyhow::Result<GraphSearchOutput> {
-        Ok(GraphSearchOutput::default())
+        Err(retrieval_data_plane_method_not_implemented("search_graph"))
+    }
+}
+
+fn retrieval_data_plane_method_not_implemented(method: &str) -> anyhow::Error {
+    anyhow::anyhow!(
+        "RetrievalDataPlane method {method} is not implemented; configure a concrete retrieval data plane adapter instead of relying on trait defaults"
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use avrag_auth::SubjectKind;
+
+    struct PartialRetrievalDataPlane;
+
+    #[async_trait]
+    impl RetrievalDataPlane for PartialRetrievalDataPlane {
+        async fn search_text_dense(
+            &self,
+            _request: TextDenseSearchRequest,
+        ) -> anyhow::Result<Vec<ScoredChunk>> {
+            Ok(Vec::new())
+        }
+
+        async fn search_bm25(
+            &self,
+            _request: Bm25SearchRequest,
+        ) -> anyhow::Result<Bm25SearchOutput> {
+            Ok(Bm25SearchOutput {
+                chunks: Vec::new(),
+                trace: Bm25SearchTrace {
+                    backend: "test".to_string(),
+                    raw_hit_count: 0,
+                    hydrated_hit_count: 0,
+                    fallback_reason: None,
+                },
+            })
+        }
+
+        async fn search_multimodal(
+            &self,
+            _request: MultimodalSearchRequest,
+        ) -> anyhow::Result<Vec<ScoredChunk>> {
+            Ok(Vec::new())
+        }
+    }
+
+    fn auth_context() -> AuthContext {
+        AuthContext::new(
+            OrgId::from(Uuid::from_u128(1)),
+            SubjectKind::System,
+        )
+    }
+
+    fn empty_index_batch() -> DocumentIndexBatch {
+        DocumentIndexBatch {
+            org_id: OrgId::from(Uuid::from_u128(1)),
+            workspace_id: None,
+            document_id: Uuid::from_u128(2),
+            parse_run_id: Uuid::from_u128(3),
+            doc_version: 1,
+            text_chunks: Vec::new(),
+            multimodal_chunks: Vec::new(),
+            entities: Vec::new(),
+            relations: Vec::new(),
+            graph_passages: Vec::new(),
+        }
+    }
+
+    fn assert_not_implemented(error: anyhow::Error, method: &str) {
+        let message = error.to_string();
+        assert!(message.contains(method), "{message}");
+        assert!(message.contains("not implemented"), "{message}");
+    }
+
+    #[tokio::test]
+    async fn default_write_and_graph_methods_fail_explicitly() {
+        let data_plane = PartialRetrievalDataPlane;
+        let auth = auth_context();
+
+        assert_not_implemented(data_plane.ensure_schema().await.unwrap_err(), "ensure_schema");
+        assert_not_implemented(
+            data_plane
+                .replace_document_index(empty_index_batch())
+                .await
+                .unwrap_err(),
+            "replace_document_index",
+        );
+        assert_not_implemented(
+            data_plane
+                .delete_document_index(&auth, Uuid::from_u128(2))
+                .await
+                .unwrap_err(),
+            "delete_document_index",
+        );
+        assert_not_implemented(
+            data_plane
+                .search_graph(GraphSearchRequest {
+                    auth,
+                    doc_ids: None,
+                    entity_names: Vec::new(),
+                    relation_hints: Vec::new(),
+                    relation_limit: 10,
+                    supporting_chunk_limit: 10,
+                })
+                .await
+                .unwrap_err(),
+            "search_graph",
+        );
     }
 }

@@ -377,13 +377,6 @@ fn env_u64(key: &str, default: u64) -> u64 {
         .unwrap_or(default)
 }
 
-fn env_u16(key: &str, default: u16) -> u16 {
-    std::env::var(key)
-        .ok()
-        .and_then(|value| value.trim().parse::<u16>().ok())
-        .unwrap_or(default)
-}
-
 fn env_i64(key: &str, default: i64) -> i64 {
     std::env::var(key)
         .ok()

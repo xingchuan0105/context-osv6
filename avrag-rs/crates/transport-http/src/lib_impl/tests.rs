@@ -238,9 +238,14 @@ mod tests {
             .unwrap();
         let register_resp = app.clone().oneshot(register_req).await.unwrap();
         assert_eq!(register_resp.status(), StatusCode::CREATED);
-        let register_body = to_bytes(register_resp.into_body(), usize::MAX).await.unwrap();
+        let register_body = to_bytes(register_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let register_payload: serde_json::Value = serde_json::from_slice(&register_body).unwrap();
-        let token = register_payload["data"]["token"].as_str().unwrap().to_string();
+        let token = register_payload["data"]["token"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         let notebook_req = Request::builder()
             .uri("/api/v1/notebooks")
@@ -251,9 +256,14 @@ mod tests {
             .unwrap();
         let notebook_resp = app.clone().oneshot(notebook_req).await.unwrap();
         assert_eq!(notebook_resp.status(), StatusCode::CREATED);
-        let notebook_body = to_bytes(notebook_resp.into_body(), usize::MAX).await.unwrap();
+        let notebook_body = to_bytes(notebook_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let notebook_payload: serde_json::Value = serde_json::from_slice(&notebook_body).unwrap();
-        let notebook_id = notebook_payload["notebook"]["id"].as_str().unwrap().to_string();
+        let notebook_id = notebook_payload["notebook"]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         let create_doc_req = Request::builder()
             .uri(format!("/api/v1/notebooks/{notebook_id}/documents"))
@@ -266,9 +276,15 @@ mod tests {
             .unwrap();
         let create_doc_resp = app.clone().oneshot(create_doc_req).await.unwrap();
         assert_eq!(create_doc_resp.status(), StatusCode::CREATED);
-        let create_doc_body = to_bytes(create_doc_resp.into_body(), usize::MAX).await.unwrap();
-        let create_doc_payload: serde_json::Value = serde_json::from_slice(&create_doc_body).unwrap();
-        let document_id = create_doc_payload["document_id"].as_str().unwrap().to_string();
+        let create_doc_body = to_bytes(create_doc_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let create_doc_payload: serde_json::Value =
+            serde_json::from_slice(&create_doc_body).unwrap();
+        let document_id = create_doc_payload["document_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         let status_req = Request::builder()
             .uri(format!("/api/v1/documents/{document_id}/status"))
@@ -389,7 +405,10 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(payload.get("status").and_then(|v| v.as_str()), Some("uploaded"));
+        assert_eq!(
+            payload.get("status").and_then(|v| v.as_str()),
+            Some("uploaded")
+        );
     }
 
     #[tokio::test]
@@ -460,7 +479,10 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(payload.get("status").and_then(|v| v.as_str()), Some("queued"));
+        assert_eq!(
+            payload.get("status").and_then(|v| v.as_str()),
+            Some("queued")
+        );
     }
 
     #[tokio::test]
@@ -494,7 +516,9 @@ mod tests {
             .unwrap();
         let register_resp = app.clone().oneshot(register_req).await.unwrap();
         assert_eq!(register_resp.status(), StatusCode::CREATED);
-        let body = to_bytes(register_resp.into_body(), usize::MAX).await.unwrap();
+        let body = to_bytes(register_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let token = payload["data"]["token"].as_str().unwrap().to_string();
 
@@ -538,9 +562,14 @@ mod tests {
             .unwrap();
         let register_resp = app.clone().oneshot(register_req).await.unwrap();
         assert_eq!(register_resp.status(), StatusCode::CREATED);
-        let register_body = to_bytes(register_resp.into_body(), usize::MAX).await.unwrap();
+        let register_body = to_bytes(register_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let register_payload: serde_json::Value = serde_json::from_slice(&register_body).unwrap();
-        let token = register_payload["data"]["token"].as_str().unwrap().to_string();
+        let token = register_payload["data"]["token"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         let update_req = Request::builder()
             .uri("/api/auth/preferences")
@@ -587,9 +616,14 @@ mod tests {
             .unwrap();
         let register_resp = app.clone().oneshot(register_req).await.unwrap();
         assert_eq!(register_resp.status(), StatusCode::CREATED);
-        let register_body = to_bytes(register_resp.into_body(), usize::MAX).await.unwrap();
+        let register_body = to_bytes(register_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let register_payload: serde_json::Value = serde_json::from_slice(&register_body).unwrap();
-        let token = register_payload["data"]["token"].as_str().unwrap().to_string();
+        let token = register_payload["data"]["token"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         let change_req = Request::builder()
             .uri("/api/auth/change-password")
@@ -641,7 +675,9 @@ mod tests {
             .unwrap();
         let missing_login_resp = app.clone().oneshot(missing_login_req).await.unwrap();
         assert_eq!(missing_login_resp.status(), StatusCode::UNAUTHORIZED);
-        let missing_login_body = to_bytes(missing_login_resp.into_body(), usize::MAX).await.unwrap();
+        let missing_login_body = to_bytes(missing_login_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let missing_login_payload: serde_json::Value =
             serde_json::from_slice(&missing_login_body).unwrap();
         assert_eq!(
@@ -671,8 +707,9 @@ mod tests {
             .unwrap();
         let wrong_password_resp = app.oneshot(wrong_password_req).await.unwrap();
         assert_eq!(wrong_password_resp.status(), StatusCode::UNAUTHORIZED);
-        let wrong_password_body =
-            to_bytes(wrong_password_resp.into_body(), usize::MAX).await.unwrap();
+        let wrong_password_body = to_bytes(wrong_password_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let wrong_password_payload: serde_json::Value =
             serde_json::from_slice(&wrong_password_body).unwrap();
         assert_eq!(
@@ -698,9 +735,14 @@ mod tests {
             .unwrap();
         let register_resp = app.clone().oneshot(register_req).await.unwrap();
         assert_eq!(register_resp.status(), StatusCode::CREATED);
-        let register_body = to_bytes(register_resp.into_body(), usize::MAX).await.unwrap();
+        let register_body = to_bytes(register_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let register_payload: serde_json::Value = serde_json::from_slice(&register_body).unwrap();
-        let token = register_payload["data"]["token"].as_str().unwrap().to_string();
+        let token = register_payload["data"]["token"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         let logout_req = Request::builder()
             .uri("/api/auth/logout")
@@ -825,6 +867,73 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn admin_billing_route_allows_real_admin_with_rls_when_database_available() {
+        let Some(state) = pg_test_app_state().await else {
+            return;
+        };
+        let app = build_router(state.clone());
+        let email = format!("admin-billing-{}@example.test", uuid::Uuid::new_v4());
+
+        let register_req = Request::builder()
+            .uri("/api/auth/register")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(format!(
+                r#"{{"email":"{email}","password":"password123","full_name":"Admin Billing User"}}"#
+            )))
+            .unwrap();
+        let register_resp = app.clone().oneshot(register_req).await.unwrap();
+        assert_eq!(register_resp.status(), StatusCode::CREATED);
+        let register_body = to_bytes(register_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let register_payload: serde_json::Value = serde_json::from_slice(&register_body).unwrap();
+        let token = register_payload["data"]["token"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let claims = verify_jwt(&token).expect("jwt should decode");
+        let user_id = Uuid::parse_str(&claims.sub).unwrap();
+        let org_id = Uuid::parse_str(&claims.org_id).unwrap();
+
+        let pg = state.pg().expect("pg expected");
+        let mut tx = begin_auth_admin_tx(pg.raw()).await.unwrap();
+        sqlx::query("update users set role = 'super_admin' where id = $1 and org_id = $2")
+            .bind(user_id)
+            .bind(org_id)
+            .execute(tx.as_mut())
+            .await
+            .unwrap();
+        sqlx::query(
+            "insert into subscriptions (org_id, stripe_subscription_id, stripe_price_id, plan_id, status) values ($1, $2, 'price_test', 'pro', 'active')",
+        )
+        .bind(org_id)
+        .bind(format!("sub_{}", Uuid::new_v4()))
+        .execute(tx.as_mut())
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        let admin_req = Request::builder()
+            .uri("/api/v1/admin/billing")
+            .method("GET")
+            .header("Authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap();
+        let admin_resp = app.clone().oneshot(admin_req).await.unwrap();
+        assert_eq!(admin_resp.status(), StatusCode::OK);
+        let admin_body = to_bytes(admin_resp.into_body(), usize::MAX).await.unwrap();
+        let admin_payload: serde_json::Value = serde_json::from_slice(&admin_body).unwrap();
+        assert_eq!(admin_payload["error"], serde_json::Value::Null);
+        assert!(
+            admin_payload["data"]["active_subscriptions"]
+                .as_i64()
+                .unwrap_or_default()
+                >= 1
+        );
+    }
+
+    #[tokio::test]
     async fn anonymous_share_chat_uses_share_token_without_persisting_owner_session() {
         let Some(state) = pg_test_app_state().await else {
             return;
@@ -842,9 +951,14 @@ mod tests {
             .unwrap();
         let register_resp = app.clone().oneshot(register_req).await.unwrap();
         assert_eq!(register_resp.status(), StatusCode::CREATED);
-        let register_body = to_bytes(register_resp.into_body(), usize::MAX).await.unwrap();
+        let register_body = to_bytes(register_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let register_payload: serde_json::Value = serde_json::from_slice(&register_body).unwrap();
-        let token = register_payload["data"]["token"].as_str().unwrap().to_string();
+        let token = register_payload["data"]["token"]
+            .as_str()
+            .unwrap()
+            .to_string();
         let claims = verify_jwt(&token).expect("jwt should decode");
         let user_id = Uuid::parse_str(&claims.sub).unwrap();
         let org_id = Uuid::parse_str(&claims.org_id).unwrap();
@@ -854,18 +968,25 @@ mod tests {
             .method("POST")
             .header("Content-Type", "application/json")
             .header("Authorization", format!("Bearer {token}"))
-            .body(Body::from(r#"{"name":"Shared Chat Notebook","description":""}"#))
+            .body(Body::from(
+                r#"{"name":"Shared Chat Notebook","description":""}"#,
+            ))
             .unwrap();
         let notebook_resp = app.clone().oneshot(notebook_req).await.unwrap();
         assert_eq!(notebook_resp.status(), StatusCode::CREATED);
-        let notebook_body = to_bytes(notebook_resp.into_body(), usize::MAX).await.unwrap();
+        let notebook_body = to_bytes(notebook_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let notebook: serde_json::Value = serde_json::from_slice(&notebook_body).unwrap();
         let notebook_id = notebook["id"].as_str().unwrap().to_string();
 
         let share_token = avrag_share::ShareService::new(state.pg().expect("pg expected"))
             .create_share_token(
-                &avrag_auth::AuthContext::new(avrag_auth::OrgId::from(org_id), avrag_auth::SubjectKind::User)
-                    .with_actor_id(avrag_auth::ActorId::new(user_id)),
+                &avrag_auth::AuthContext::new(
+                    avrag_auth::OrgId::from(org_id),
+                    avrag_auth::SubjectKind::User,
+                )
+                .with_actor_id(avrag_auth::ActorId::new(user_id)),
                 &notebook_id,
                 avrag_share::AccessLevel::Read,
                 None,
@@ -885,13 +1006,12 @@ mod tests {
         assert_eq!(chat_resp.status(), StatusCode::OK);
 
         let pg = state.pg().expect("pg expected");
-        let session_count: i64 = sqlx::query_scalar(
-            "select count(1) from chat_sessions where notebook_id = $1",
-        )
-        .bind(Uuid::parse_str(&notebook_id).unwrap())
-        .fetch_one(pg.raw())
-        .await
-        .unwrap();
+        let session_count: i64 =
+            sqlx::query_scalar("select count(1) from chat_sessions where notebook_id = $1")
+                .bind(Uuid::parse_str(&notebook_id).unwrap())
+                .fetch_one(pg.raw())
+                .await
+                .unwrap();
         assert_eq!(session_count, 0);
     }
 

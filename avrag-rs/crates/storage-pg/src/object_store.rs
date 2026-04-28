@@ -1,12 +1,34 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use aws_credential_types::Credentials;
 use aws_sdk_s3::config::Builder as S3ConfigBuilder;
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::types::ChecksumMode;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
+use sha2::{Digest, Sha256};
+use thiserror::Error;
 use tokio::fs;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObjectStoreMetadata {
+    pub size_bytes: u64,
+    pub sha256_hex: Option<String>,
+    pub content_type: Option<String>,
+    pub etag: Option<String>,
+}
+
+#[derive(Debug, Error)]
+pub enum ObjectStoreHeadError {
+    #[error("object not found: {path}")]
+    NotFound { path: String },
+    #[error("object path is not a file: {path}")]
+    NotFile { path: String },
+    #[error(transparent)]
+    Backend(#[from] anyhow::Error),
+}
 
 pub enum ObjectStoreHandle {
     Local(LocalObjectStore),
@@ -29,6 +51,16 @@ impl ObjectStoreHandle {
         match self {
             Self::Local(store) => store.get(path).await,
             Self::S3(store) => store.get(path).await,
+        }
+    }
+
+    pub async fn head(
+        &self,
+        path: &str,
+    ) -> std::result::Result<ObjectStoreMetadata, ObjectStoreHeadError> {
+        match self {
+            Self::Local(store) => store.head(path).await,
+            Self::S3(store) => store.head(path).await,
         }
     }
 
@@ -86,6 +118,34 @@ impl LocalObjectStore {
         Ok(bytes)
     }
 
+    pub async fn head(
+        &self,
+        path: &str,
+    ) -> std::result::Result<ObjectStoreMetadata, ObjectStoreHeadError> {
+        let full = self.full_path(path);
+        let metadata = fs::metadata(&full)
+            .await
+            .map_err(|error| local_head_io_error(&full, "stat", error))?;
+        if !metadata.is_file() {
+            return Err(ObjectStoreHeadError::NotFile {
+                path: full.display().to_string(),
+            });
+        }
+
+        let bytes = fs::read(&full)
+            .await
+            .map_err(|error| local_head_io_error(&full, "read", error))?;
+        let mut hasher = Sha256::new();
+        hasher.update(&bytes);
+
+        Ok(ObjectStoreMetadata {
+            size_bytes: metadata.len(),
+            sha256_hex: Some(hex::encode(hasher.finalize())),
+            content_type: None,
+            etag: None,
+        })
+    }
+
     pub async fn delete(&self, path: &str) -> Result<()> {
         let full = self.full_path(path);
         if fs::try_exists(&full).await.unwrap_or(false) {
@@ -138,10 +198,12 @@ impl S3ObjectStore {
     }
 
     pub async fn put(&self, path: &str, bytes: &[u8]) -> Result<()> {
+        let checksum_sha256 = BASE64_STANDARD.encode(Sha256::digest(bytes));
         self.client
             .put_object()
             .bucket(&self.bucket)
             .key(path)
+            .checksum_sha256(checksum_sha256)
             .body(ByteStream::from(bytes.to_vec()))
             .send()
             .await
@@ -164,6 +226,62 @@ impl S3ObjectStore {
             .await
             .context("s3 collect body failed")?;
         Ok(data.into_bytes().to_vec())
+    }
+
+    pub async fn head(
+        &self,
+        path: &str,
+    ) -> std::result::Result<ObjectStoreMetadata, ObjectStoreHeadError> {
+        let response = match self
+            .client
+            .head_object()
+            .bucket(&self.bucket)
+            .key(path)
+            .checksum_mode(ChecksumMode::Enabled)
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(error) => {
+                if error
+                    .as_service_error()
+                    .map(|service_error| service_error.is_not_found())
+                    .unwrap_or(false)
+                {
+                    return Err(ObjectStoreHeadError::NotFound {
+                        path: format!("s3://{}/{}", self.bucket, path),
+                    });
+                }
+                return Err(ObjectStoreHeadError::Backend(anyhow!(error).context(
+                    format!("s3 head object failed for s3://{}/{}", self.bucket, path),
+                )));
+            }
+        };
+
+        let content_length = response.content_length().ok_or_else(|| {
+            ObjectStoreHeadError::Backend(anyhow!("s3 head object missing content length"))
+        })?;
+        if content_length < 0 {
+            return Err(ObjectStoreHeadError::Backend(anyhow!(
+                "s3 head object returned negative content length: {content_length}"
+            )));
+        }
+
+        let sha256_hex = response
+            .checksum_sha256()
+            .and_then(normalize_sha256_value)
+            .or_else(|| response.metadata().and_then(sha256_from_user_metadata));
+
+        Ok(ObjectStoreMetadata {
+            size_bytes: u64::try_from(content_length).map_err(|_| {
+                ObjectStoreHeadError::Backend(anyhow!(
+                    "s3 head object content length does not fit u64"
+                ))
+            })?,
+            sha256_hex,
+            content_type: response.content_type().map(ToOwned::to_owned),
+            etag: response.e_tag().map(ToOwned::to_owned),
+        })
     }
 
     pub async fn delete(&self, path: &str) -> Result<()> {
@@ -205,5 +323,106 @@ impl S3ObjectStore {
             .await
             .context("s3 presign get failed")?;
         Ok(request.uri().to_string())
+    }
+}
+
+fn sha256_from_user_metadata(
+    metadata: &std::collections::HashMap<String, String>,
+) -> Option<String> {
+    metadata.iter().find_map(|(key, value)| {
+        let key = key.to_ascii_lowercase();
+        if matches!(
+            key.as_str(),
+            "sha256" | "sha256_hex" | "sha256-hex" | "x-amz-meta-sha256" | "x-amz-meta-sha256-hex"
+        ) {
+            normalize_sha256_value(value)
+        } else {
+            None
+        }
+    })
+}
+
+fn normalize_sha256_value(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.len() == 64 && lower.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Some(lower);
+    }
+
+    BASE64_STANDARD
+        .decode(trimmed)
+        .ok()
+        .filter(|bytes| bytes.len() == 32)
+        .map(hex::encode)
+}
+
+fn local_head_io_error(path: &Path, action: &str, error: std::io::Error) -> ObjectStoreHeadError {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        return ObjectStoreHeadError::NotFound {
+            path: path.display().to_string(),
+        };
+    }
+
+    ObjectStoreHeadError::Backend(
+        anyhow!(error).context(format!("failed to {action} object at {}", path.display())),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    #[tokio::test]
+    async fn local_head_returns_size_and_sha256() {
+        let root =
+            std::env::temp_dir().join(format!("avrag-local-object-head-test-{}", Uuid::new_v4()));
+        let store = ObjectStoreHandle::local(root.clone());
+
+        store.put("nested/hello.txt", b"hello world").await.unwrap();
+        let metadata = store.head("nested/hello.txt").await.unwrap();
+
+        assert_eq!(metadata.size_bytes, 11);
+        assert_eq!(
+            metadata.sha256_hex.as_deref(),
+            Some("b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
+        );
+        assert_eq!(metadata.content_type, None);
+        assert_eq!(metadata.etag, None);
+
+        let _ = fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn local_head_classifies_missing_object() {
+        let root = std::env::temp_dir().join(format!(
+            "avrag-local-object-head-missing-test-{}",
+            Uuid::new_v4()
+        ));
+        let store = ObjectStoreHandle::local(root.clone());
+
+        let error = store.head("missing.txt").await.unwrap_err();
+
+        assert!(matches!(error, ObjectStoreHeadError::NotFound { .. }));
+        let _ = fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn local_head_classifies_directory_as_not_file() {
+        let root = std::env::temp_dir().join(format!(
+            "avrag-local-object-head-directory-test-{}",
+            Uuid::new_v4()
+        ));
+        let store = ObjectStoreHandle::local(root.clone());
+        fs::create_dir_all(root.join("nested/dir")).await.unwrap();
+
+        let error = store.head("nested/dir").await.unwrap_err();
+
+        assert!(matches!(error, ObjectStoreHeadError::NotFile { .. }));
+        let _ = fs::remove_dir_all(root).await;
     }
 }

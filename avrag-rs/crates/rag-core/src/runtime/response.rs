@@ -554,9 +554,8 @@ impl RagRuntime {
         synthesis_output: avrag_llm::SynthesisOutput,
         degrade_trace: Vec<DegradeTraceItem>,
     ) -> Result<ChatResponse> {
-        if execute_response.bundle.chunks.is_empty()
-            && execute_response.bundle.summary_chunks.is_empty()
-        {
+        // 使用 has_evidence() 检查所有 evidence 类型
+        if !execute_response.bundle.has_evidence() {
             return Ok(no_chunks_response(
                 request,
                 rag_plan,
@@ -573,18 +572,19 @@ impl RagRuntime {
             .collect::<HashSet<_>>();
         cited_chunk_ids.extend(extract_referenced_chunk_ids(&synthesis_output.answer_text));
 
+        // 使用 citation_chunks() 获取所有可用 chunks
+        let all_chunks = execute_response.bundle.citation_chunks();
+
         let ordered_chunks = if cited_chunk_ids.is_empty() {
-            execute_response.bundle.chunks.clone()
+            all_chunks.to_vec()
         } else {
-            let mut filtered = execute_response
-                .bundle
-                .chunks
+            let mut filtered = all_chunks
                 .iter()
                 .filter(|chunk| cited_chunk_ids.contains(&chunk.chunk_id))
                 .cloned()
                 .collect::<Vec<_>>();
             if filtered.is_empty() {
-                filtered = execute_response.bundle.chunks.clone();
+                filtered = all_chunks.to_vec();
             }
             filtered
         };

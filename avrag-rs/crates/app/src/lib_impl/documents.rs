@@ -24,6 +24,7 @@ impl AppState {
                     && document_id
                         .map(|id| stored.document.id == id)
                         .unwrap_or(true)
+                    && !document_is_deleting_or_deleted(&stored.document.status)
             })
             .map(|stored| stored.document.clone())
             .collect()
@@ -210,6 +211,9 @@ impl AppState {
                 .await
                 .map_err(map_pg_error)?
                 .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
+            if !document_upload_status_is_mutable_for_app(&seed.status) {
+                return Err(upload_status_conflict_error(&seed.status));
+            }
             self.object_store
                 .put(&seed.object_path, &body)
                 .await
@@ -230,6 +234,9 @@ impl AppState {
                 "document not found",
             ));
         }
+        if !document_upload_status_is_mutable_for_app(&stored.document.status) {
+            return Err(upload_status_conflict_error(&stored.document.status));
+        }
 
         let content = String::from_utf8(body).unwrap_or_else(|_| {
             "Binary upload received. Parsed preview is not available.".to_string()
@@ -237,7 +244,6 @@ impl AppState {
         let parsed_items = build_parsed_preview(&content);
         stored.document.file_size = content.len() as u64;
         stored.document.chunk_count = parsed_items.len();
-        stored.document.status = DocumentStatus::Queued;
         stored.document.updated_at = now_rfc3339();
         stored.content = content.clone();
         stored.summary = Some(build_summary(&content));
@@ -259,19 +265,102 @@ impl AppState {
                 .await
                 .map_err(map_pg_error)?
                 .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
-            let _ = pg
-                .set_document_status(&self.auth, document_uuid, DocumentStatus::Queued)
+
+            if !document_upload_status_is_mutable_for_app(&seed.status) {
+                return Err(upload_status_conflict_error(&seed.status));
+            }
+
+            let object_metadata = match self.object_store.head(&seed.object_path).await {
+                Ok(metadata) => metadata,
+                Err(ObjectStoreHeadError::NotFound { .. } | ObjectStoreHeadError::NotFile { .. }) => {
+                    let detail = format!("object missing or invalid for {}", seed.object_path);
+                    handle_upload_invalid_outcome(
+                        pg.set_document_upload_invalid(&self.auth, document_uuid, &detail)
+                            .await
+                            .map_err(map_pg_error)?,
+                    )?;
+                    return Err(AppError::validation(
+                        "upload_validation_failed",
+                        "uploaded object is missing or invalid",
+                    ));
+                }
+                Err(ObjectStoreHeadError::Backend(error)) => {
+                    return Err(AppError::internal(format!(
+                        "uploaded object metadata check failed: {error}"
+                    )));
+                }
+            };
+
+            if object_metadata.size_bytes != seed.file_size {
+                let detail = format!(
+                    "object size mismatch for {}: expected {} bytes, got {} bytes",
+                    seed.object_path, seed.file_size, object_metadata.size_bytes
+                );
+                handle_upload_invalid_outcome(
+                    pg.set_document_upload_invalid(&self.auth, document_uuid, &detail)
+                        .await
+                        .map_err(map_pg_error)?,
+                )?;
+                return Err(AppError::validation(
+                    "upload_validation_failed",
+                    format!(
+                        "uploaded object size mismatch: expected {} bytes, got {} bytes",
+                        seed.file_size, object_metadata.size_bytes
+                    ),
+                ));
+            }
+
+            // Content-Type metadata is advisory in this phase. Browsers and S3-compatible
+            // clients often provide unstable MIME values, so size/checksum remain the
+            // blocking integrity checks.
+
+            let task = build_ingest_task(
+                seed.org_id.clone(),
+                seed.notebook_id.clone(),
+                seed.document_id.clone(),
+                Some(self.current_user_id()),
+                IngestDocumentPayload {
+                    source_uri: format!("object://{}", seed.object_path),
+                    object_path: seed.object_path.clone(),
+                    mime_type: seed.mime_type.clone(),
+                    filename: seed.filename.clone(),
+                    file_size: seed.file_size,
+                },
+            );
+            let queue_outcome = pg
+                .queue_validated_document_upload(
+                    &self.auth,
+                    document_uuid,
+                    object_metadata.size_bytes,
+                    object_metadata.sha256_hex.as_deref(),
+                    &task,
+                )
                 .await
                 .map_err(map_pg_error)?;
+            let task_inserted = handle_upload_queue_outcome(queue_outcome)?;
             let notebook_id = Uuid::parse_str(&seed.notebook_id).ok();
             let metadata = serde_json::json!({
                 "document_id": seed.document_id.clone(),
                 "filename": seed.filename.clone(),
                 "file_size": seed.file_size,
+                "actual_file_size": object_metadata.size_bytes,
+                "upload_sha256": object_metadata.sha256_hex.clone(),
                 "mime_type": seed.mime_type.clone(),
                 "status": "queued",
             });
-            self.enqueue_ingest_task(seed).await?;
+            if task_inserted {
+                pg.append_audit_record(&task_audit(
+                    &task,
+                    AuditAction::TaskEnqueued,
+                    serde_json::json!({
+                        "kind": task.kind,
+                        "document_id": task.document_id,
+                        "object_path": seed.object_path,
+                    }),
+                ))
+                .await
+                .map_err(map_pg_error)?;
+            }
             self.record_product_event_if_available(
                 analytics::ProductEventName::DocumentUploadCompleted,
                 analytics::Surface::Workspace,
@@ -292,6 +381,9 @@ impl AppState {
                 .documents
                 .get_mut(document_id)
                 .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
+            if !document_upload_status_is_mutable_for_app(&stored.document.status) {
+                return Err(upload_status_conflict_error(&stored.document.status));
+            }
             stored.document.status = DocumentStatus::Queued;
             stored.document.updated_at = now_rfc3339();
             (
@@ -326,6 +418,12 @@ impl AppState {
         document_id: &str,
         status: DocumentStatus,
     ) -> Result<(), AppError> {
+        if document_is_deleting_or_deleted(&status) {
+            return Err(AppError::validation(
+                "unsupported_document_status_transition",
+                "deleting and deleted are reserved for the document deletion workflow",
+            ));
+        }
         if let Some(pg) = &self.pg {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
@@ -353,6 +451,12 @@ impl AppState {
                 "document not found",
             ));
         }
+        if document_is_deleting_or_deleted(&stored.document.status) {
+            return Err(AppError::not_found(
+                "document_not_found",
+                "document not found",
+            ));
+        }
         stored.document.status = status;
         stored.document.updated_at = now_rfc3339();
         Ok(())
@@ -375,6 +479,16 @@ impl AppState {
         document_id: &str,
         req: UpdateDocumentRequest,
     ) -> Result<StatusOnlyResponse, AppError> {
+        if req
+            .status
+            .as_ref()
+            .is_some_and(document_is_deleting_or_deleted)
+        {
+            return Err(AppError::validation(
+                "unsupported_document_status_update",
+                "deleting and deleted are reserved for the document deletion workflow",
+            ));
+        }
         if let Some(pg) = &self.pg {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
@@ -417,6 +531,12 @@ impl AppState {
                 "document not found",
             ));
         }
+        if document_is_deleting_or_deleted(&stored.document.status) {
+            return Err(AppError::not_found(
+                "document_not_found",
+                "document not found",
+            ));
+        }
 
         if let Some(filename) = req.filename {
             stored.document.file_name = filename;
@@ -437,36 +557,33 @@ impl AppState {
         if let Some(pg) = &self.pg {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
-            let deleted = pg
+            let outcome = pg
                 .delete_document(&self.auth, document_id)
                 .await
                 .map_err(map_pg_error)?;
-            if !deleted {
-                return Err(AppError::not_found(
-                    "document_not_found",
-                    "document not found",
-                ));
-            }
-            return Ok(StatusOnlyResponse {
-                status: "deleted".to_string(),
-            });
+            return handle_document_deletion_outcome(outcome);
         }
 
         let mut state = self.inner.write().await;
-        let can_delete = state
+        let stored = state
             .documents
-            .get(document_id)
-            .map(|stored| stored.document.org_id == self.current_org_id())
-            .unwrap_or(false);
-        if !can_delete {
+            .get_mut(document_id)
+            .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
+        if stored.document.org_id != self.current_org_id() {
             return Err(AppError::not_found(
                 "document_not_found",
                 "document not found",
             ));
         }
-        state.documents.remove(document_id);
+        if matches!(stored.document.status, DocumentStatus::Deleted) {
+            return Ok(StatusOnlyResponse {
+                status: "deleted".to_string(),
+            });
+        }
+        stored.document.status = DocumentStatus::Deleting;
+        stored.document.updated_at = now_rfc3339();
         Ok(StatusOnlyResponse {
-            status: "deleted".to_string(),
+            status: "deleting".to_string(),
         })
     }
 
@@ -482,9 +599,16 @@ impl AppState {
                 .await
                 .map_err(map_pg_error)?
                 .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
-            pg.set_document_status(&self.auth, document_id, DocumentStatus::Queued)
+            if document_is_deleting_or_deleted(&seed.status) {
+                return Err(AppError::not_found("document_not_found", "document not found"));
+            }
+            let updated = pg
+                .set_document_status(&self.auth, document_id, DocumentStatus::Queued)
                 .await
                 .map_err(map_pg_error)?;
+            if !updated {
+                return Err(AppError::not_found("document_not_found", "document not found"));
+            }
             let notebook_id = Uuid::parse_str(&seed.notebook_id).ok();
             let metadata = serde_json::json!({
                 "document_id": seed.document_id.clone(),
@@ -550,6 +674,12 @@ impl AppState {
                 "document not found",
             ));
         }
+        if document_is_deleting_or_deleted(&stored.document.status) {
+            return Err(AppError::not_found(
+                "document_not_found",
+                "document not found",
+            ));
+        }
         Ok(DocumentContentResponse {
             content: stored.content.clone(),
             summary: stored.summary.clone(),
@@ -583,6 +713,12 @@ impl AppState {
                 "document not found",
             ));
         }
+        if document_is_deleting_or_deleted(&stored.document.status) {
+            return Err(AppError::not_found(
+                "document_not_found",
+                "document not found",
+            ));
+        }
         let items = stored
             .parsed_items
             .iter()
@@ -599,4 +735,70 @@ impl AppState {
         })
     }
 
+}
+
+fn document_upload_status_is_mutable_for_app(status: &DocumentStatus) -> bool {
+    matches!(
+        status,
+        DocumentStatus::Pending | DocumentStatus::UploadInvalid
+    )
+}
+
+fn document_is_deleting_or_deleted(status: &DocumentStatus) -> bool {
+    matches!(status, DocumentStatus::Deleting | DocumentStatus::Deleted)
+}
+
+fn handle_document_deletion_outcome(
+    outcome: DocumentDeletionOutcome,
+) -> Result<StatusOnlyResponse, AppError> {
+    match outcome {
+        DocumentDeletionOutcome::Queued { .. }
+        | DocumentDeletionOutcome::AlreadyDeleting { .. } => Ok(StatusOnlyResponse {
+            status: "deleting".to_string(),
+        }),
+        DocumentDeletionOutcome::AlreadyDeleted => Ok(StatusOnlyResponse {
+            status: "deleted".to_string(),
+        }),
+        DocumentDeletionOutcome::NotFound => Err(AppError::not_found(
+            "document_not_found",
+            "document not found",
+        )),
+    }
+}
+
+fn upload_status_conflict_error(status: &DocumentStatus) -> AppError {
+    AppError::conflict(
+        "upload_not_mutable",
+        format!(
+            "document upload cannot be modified while status is {}",
+            status.as_str()
+        ),
+    )
+}
+
+
+fn handle_upload_invalid_outcome(outcome: DocumentUploadMutationOutcome) -> Result<(), AppError> {
+    match outcome {
+        DocumentUploadMutationOutcome::Updated => Ok(()),
+        DocumentUploadMutationOutcome::NotFound => Err(AppError::not_found(
+            "document_not_found",
+            "document not found",
+        )),
+        DocumentUploadMutationOutcome::StatusConflict(status) => {
+            Err(upload_status_conflict_error(&status))
+        }
+    }
+}
+
+fn handle_upload_queue_outcome(outcome: DocumentUploadQueueOutcome) -> Result<bool, AppError> {
+    match outcome {
+        DocumentUploadQueueOutcome::Queued { task_inserted } => Ok(task_inserted),
+        DocumentUploadQueueOutcome::NotFound => Err(AppError::not_found(
+            "document_not_found",
+            "document not found",
+        )),
+        DocumentUploadQueueOutcome::StatusConflict(status) => {
+            Err(upload_status_conflict_error(&status))
+        }
+    }
 }

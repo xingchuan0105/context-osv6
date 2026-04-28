@@ -75,7 +75,7 @@ async fn post_chat_with_accept_sse_only_returns_sse() {
 }
 
 #[tokio::test]
-async fn post_rag_chat_stream_emits_timestamped_progress_before_answer() {
+async fn post_rag_chat_stream_without_runtime_fails_closed_after_retrieval_activity() {
     let (app, notebook_id, document_id, org_id) = test_app_with_ready_document().await;
     let request_id = "req-rag-progress";
     let response = app
@@ -118,32 +118,9 @@ async fn post_rag_chat_stream_emits_timestamped_progress_before_answer() {
 
         assert_eq!(
             activity_phases,
-            vec![
-                "planning",
-                "retrieving",
-                "reading_sources",
-                "drafting_answer"
-            ]
+            vec!["planning", "retrieving"]
         );
-
-        let answer_start_index = events
-            .iter()
-            .position(|event| {
-                matches!(event, ChatEvent::AnswerStart { request_id: rid, .. } if rid == request_id)
-            })
-            .expect("missing answer_start event");
-        let drafting_index = events
-            .iter()
-            .position(|event| {
-                matches!(
-                    event,
-                    ChatEvent::Activity { request_id: rid, phase, .. }
-                        if rid == request_id && phase == "drafting_answer"
-                )
-            })
-            .expect("missing drafting_answer activity");
-
-        assert!(drafting_index < answer_start_index);
+        assert!(matches!(events.last(), Some(ChatEvent::Error { request_id: rid, code, message }) if rid == request_id && code == "rag_runtime_not_configured" && !message.is_empty()));
     })
     .await;
 }

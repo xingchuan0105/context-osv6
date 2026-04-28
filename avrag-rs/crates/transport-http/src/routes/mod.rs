@@ -1,4 +1,6 @@
+pub mod admin;
 pub mod auth;
+pub mod billing;
 pub mod chat;
 pub mod infra;
 pub mod notebooks;

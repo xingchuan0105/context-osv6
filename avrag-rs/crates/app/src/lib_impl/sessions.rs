@@ -41,6 +41,7 @@ impl AppState {
                 .filter(|stored| {
                     stored.document.org_id == self.current_org_id()
                         && stored.document.file_name.to_lowercase().contains(&q)
+                        && !document_is_deleting_or_deleted(&stored.document.status)
                 })
                 .filter_map(|stored| {
                     let notebook = state.notebooks.get(&stored.document.notebook_id)?;

@@ -1,11 +1,9 @@
 #![allow(dead_code)]
 
-use std::sync::Arc;
-
 use async_trait::async_trait;
-use avrag_rag_core::RagRuntime;
 use graph_flow::{Context, GraphBuilder, GraphError, NextAction, Task, TaskResult};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::info;
 use uuid::Uuid;
 
@@ -28,7 +26,7 @@ const KEY_DEGRADE_TRACE: &str = "chat.degrade_trace";
 const TASK_PREFLIGHT: &str = "chat_preflight";
 const TASK_SESSION: &str = "chat_session";
 const TASK_MODE_SELECT: &str = "chat_mode_select";
-const TASK_MEMORY_COMPAT: &str = "chat_memory_compat";
+const TASK_MEMORY_MODE: &str = "chat_memory_mode";
 const TASK_GENERAL: &str = "chat_run_general";
 const TASK_SEARCH: &str = "chat_run_search";
 const TASK_RAG_PREPARE_PLANNER_INPUT: &str = "rag_prepare_planner_input";
@@ -80,7 +78,7 @@ fn build_chat_graph(state: AppState) -> graph_flow::Graph {
         .add_task(Arc::new(ModeSelectTask {
             state: state.clone(),
         }))
-        .add_task(Arc::new(MemoryCompatTask {
+        .add_task(Arc::new(MemoryModeTask {
             state: state.clone(),
         }))
         .add_task(Arc::new(GeneralModeTask {
@@ -122,11 +120,11 @@ fn build_chat_graph(state: AppState) -> graph_flow::Graph {
         .add_task(Arc::new(BuildResponseTask))
         .add_edge(TASK_PREFLIGHT, TASK_SESSION)
         .add_edge(TASK_SESSION, TASK_MODE_SELECT)
-        .add_edge(TASK_MODE_SELECT, TASK_MEMORY_COMPAT)
+        .add_edge(TASK_MODE_SELECT, TASK_MEMORY_MODE)
         .add_edge(TASK_MODE_SELECT, TASK_GENERAL)
         .add_edge(TASK_MODE_SELECT, TASK_SEARCH)
         .add_edge(TASK_MODE_SELECT, TASK_RAG_PREPARE_PLANNER_INPUT)
-        .add_edge(TASK_MEMORY_COMPAT, TASK_OUTPUT_GUARD)
+        .add_edge(TASK_MEMORY_MODE, TASK_OUTPUT_GUARD)
         .add_edge(TASK_RAG_PREPARE_PLANNER_INPUT, TASK_RAG_CALL_PLANNER)
         .add_edge(TASK_RAG_CALL_PLANNER, TASK_RAG_NORMALIZE_PLAN)
         .add_edge(TASK_RAG_NORMALIZE_PLAN, TASK_RAG_EXECUTE_PLAN)
@@ -160,15 +158,6 @@ fn map_graphflow_error(error: GraphError) -> AppError {
         }
         other => AppError::internal(format!("graphflow chat execution failed: {other}")),
     }
-}
-
-fn require_rag_runtime(state: &AppState) -> graph_flow::Result<Arc<RagRuntime>> {
-    state.rag_runtime.as_ref().cloned().ok_or_else(|| {
-        graph_app_error(AppError::validation(
-            "rag_runtime_not_configured",
-            "RAG mode requires rag_runtime to be configured.",
-        ))
-    })
 }
 
 include!("graphflow_tasks.rs");

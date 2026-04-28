@@ -80,7 +80,7 @@ impl Task for ModeSelectTask {
         if self.state.pg().is_none() {
             return Ok(TaskResult::new(
                 None,
-                NextAction::GoTo(TASK_MEMORY_COMPAT.to_string()),
+                NextAction::GoTo(TASK_MEMORY_MODE.to_string()),
             ));
         }
         match decision {
@@ -102,18 +102,18 @@ impl Task for ModeSelectTask {
 }
 
 #[derive(Clone)]
-struct MemoryCompatTask {
+struct MemoryModeTask {
     state: AppState,
 }
 
 #[async_trait]
-impl Task for MemoryCompatTask {
+impl Task for MemoryModeTask {
     fn id(&self) -> &str {
-        TASK_MEMORY_COMPAT
+        TASK_MEMORY_MODE
     }
 
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
-        info!(node = TASK_MEMORY_COMPAT, "graphflow chat node start");
+        info!(node = TASK_MEMORY_MODE, "graphflow chat node start");
         let flow = ChatFlowContext::from(context);
         let request = flow.request().await?;
         let session = flow.session().await?;

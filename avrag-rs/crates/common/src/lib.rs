@@ -52,8 +52,8 @@ pub use notebook_requests::{CreateNotebookRequest, UpdateNotebookRequest};
 pub use rag_execute::{
     BackendTrace, ChannelBudget, ChannelCoverage, ChannelTraceItem, Coverage, ExecutePlanBudget,
     ExecutePlanItem, ExecutePlanRequest, ExecutePlanResponse, ExecutePlanSummaryMode,
-    ExecutePlanTrace, ExecutePlanValidationError, GraphHint, QueryEntity, RelationPath,
-    RetrievalBundle, RetrievedChunk, ScoreBreakdown,
+    ExecutePlanTrace, ExecutePlanValidationError, GraphHint, PlaceholderTriplet, QueryEntity,
+    RelationPath, RetrievalBundle, RetrievedChunk, ScoreBreakdown,
 };
 pub use util::{
     estimate_token_count, infer_image_extension, infer_mime_type, is_remote_url, new_id,

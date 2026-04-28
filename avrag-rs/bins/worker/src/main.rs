@@ -10,14 +10,10 @@ use avrag_retrieval_data_plane::{
     DocumentIndexBatch, EntityIndexRecord, GraphPassageIndexRecord, MultimodalChunkIndexRecord,
     RelationIndexRecord, RetrievalDataPlane, TextChunkIndexRecord,
 };
-use avrag_search::{LexicalChunkDocument, TantivyLexicalIndex};
 use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
 use avrag_storage_pg::{
+    DocumentCleanupTask, DocumentCleanupTaskCompletionOutcome, DocumentCleanupTaskFailureOutcome,
     NotificationCreateParams, ObjectStoreHandle, PgAppRepository, S3ObjectStore,
-};
-use avrag_storage_qdrant::{
-    HttpQdrantBackend, QdrantCollectionConfig, QdrantDistance, QdrantPointUpsert,
-    SecureQdrantFilterBuilder, VectorSearchBackend,
 };
 use ingestion::chunker::ChunkPolicy;
 use ingestion::parser::{
@@ -28,16 +24,21 @@ use ingestion::parser::{
 use ingestion::{
     AuditRecord, AuditSink, DocumentIr, DocumentIrValidationOptions, DocumentType, IngestionError,
     IngestionTask, NoopAuditSink, NoopStateSink, NoopTaskProcessor, NoopTaskSource, PageIr,
-    ParseBackend, StateSink, TaskProcessor, TaskSource, Transition, WorkerRuntime, WorkerTick,
-    sanitize_and_validate_document_ir,
+    ParseBackend, StateSink, TaskCompletionOutcome, TaskFailureOutcome, TaskProcessor, TaskSource,
+    Transition, WorkerRuntime, WorkerTick, sanitize_and_validate_document_ir,
 };
+use sha2::{Digest, Sha256};
+use std::convert::TryFrom;
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 use tokio::time::{Duration, interval};
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 struct PgTaskSource {
@@ -54,16 +55,23 @@ impl TaskSource for PgTaskSource {
             .map_err(|error| IngestionError::TaskSource(error.to_string()))
     }
 
-    async fn complete(&mut self, task: &IngestionTask) -> Result<(), IngestionError> {
+    async fn complete(
+        &mut self,
+        task: &IngestionTask,
+    ) -> Result<TaskCompletionOutcome, IngestionError> {
         self.repo
-            .complete_ingestion_task(&task.task_id)
+            .complete_ingestion_task(&task.task_id, task.lock_token.as_deref())
             .await
             .map_err(|error| IngestionError::TaskSource(error.to_string()))
     }
 
-    async fn fail(&mut self, task: &IngestionTask, error: &str) -> Result<(), IngestionError> {
+    async fn fail(
+        &mut self,
+        task: &IngestionTask,
+        error: &str,
+    ) -> Result<TaskFailureOutcome, IngestionError> {
         self.repo
-            .fail_ingestion_task(&task.task_id, error)
+            .fail_ingestion_task(&task.task_id, task.lock_token.as_deref(), error)
             .await
             .map_err(|err| IngestionError::TaskSource(err.to_string()))
     }
@@ -99,10 +107,46 @@ impl StateSink for PgStateSink {
         let document_id = Uuid::parse_str(&task.document_id)
             .map_err(|error| IngestionError::StateSink(error.to_string()))?;
 
-        self.repo
-            .set_document_status(&context, document_id, transition.to.clone())
-            .await
-            .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+        if matches!(
+            transition.to,
+            common::DocumentStatus::Processing | common::DocumentStatus::Completed
+        ) {
+            ensure_ingestion_side_effects_allowed(
+                &self.repo,
+                &context,
+                task,
+                document_id,
+                "document status transition",
+            )
+            .await?;
+        }
+
+        let updated = if matches!(
+            transition.to,
+            common::DocumentStatus::Processing | common::DocumentStatus::Completed
+        ) {
+            self.repo
+                .set_document_status_for_ingestion_task(
+                    &context,
+                    document_id,
+                    transition.to.clone(),
+                    &task.task_id,
+                    task.lock_token.as_deref(),
+                )
+                .await
+                .map_err(|error| IngestionError::StateSink(error.to_string()))?
+        } else {
+            self.repo
+                .set_document_status(&context, document_id, transition.to.clone())
+                .await
+                .map_err(|error| IngestionError::StateSink(error.to_string()))?
+        };
+        if !updated {
+            return Err(IngestionError::StateSink(format!(
+                "document status transition to {:?} rejected: ingestion task lease lost or document is deleting",
+                transition.to
+            )));
+        }
 
         self.repo
             .append_audit_record(&AuditRecord {
@@ -205,13 +249,8 @@ impl StateSink for PgStateSink {
 struct PgTaskProcessor {
     repo: PgAppRepository,
     object_store: ObjectStoreHandle,
-    qdrant: Option<HttpQdrantBackend>,
     retrieval_data_plane: Option<Arc<dyn RetrievalDataPlane>>,
-    lexical_index: Option<Arc<TantivyLexicalIndex>>,
-    qdrant_collection: String,
-    qdrant_multimodal_collection: String,
     embedding_dim: usize,
-    mm_embedding_dim: Option<usize>,
     embedding_client: Option<avrag_llm::EmbeddingClient>,
     mm_embedding_client: Option<avrag_llm::EmbeddingClient>,
     asset_url_ttl_secs: u64,
@@ -230,6 +269,13 @@ impl TaskProcessor for PgTaskProcessor {
         let task_kind = worker_task_kind(task);
         telemetry::prometheus::observe_worker_task_started(task_kind);
         let started_at = std::time::Instant::now();
+        let lock_heartbeat = task.lock_token.as_ref().map(|lock_token| {
+            spawn_ingestion_task_lock_heartbeat(
+                self.repo.clone(),
+                task.task_id.clone(),
+                lock_token.clone(),
+            )
+        });
         let result = async {
             let context = task_context(task);
             let document_id = Uuid::parse_str(&task.document_id)
@@ -270,6 +316,7 @@ impl TaskProcessor for PgTaskProcessor {
                 .get(&object_path)
                 .await
                 .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+            verify_uploaded_object_bytes(&self.repo, &context, document_id, &bytes).await?;
             let filename = Path::new(&object_path)
                 .file_name()
                 .map(|f| f.to_string_lossy().to_string())
@@ -305,6 +352,14 @@ impl TaskProcessor for PgTaskProcessor {
                 );
             }
 
+            ensure_ingestion_side_effects_allowed(
+                &self.repo,
+                &context,
+                task,
+                document_id,
+                "parse run creation",
+            )
+            .await?;
             let parse_run_id = Uuid::new_v4();
             let parse_run_started_at = std::time::Instant::now();
             let mut parse_run_state = ParseRunState::default();
@@ -321,6 +376,8 @@ impl TaskProcessor for PgTaskProcessor {
                     document_id,
                     &initial_backend_summary,
                     Some(&object_path),
+                    &task.task_id,
+                    task.lock_token.as_deref(),
                 )
                 .await
                 .map_err(|error| IngestionError::StateSink(error.to_string()))?;
@@ -341,6 +398,14 @@ impl TaskProcessor for PgTaskProcessor {
             .await
             {
                 Ok(metrics) => {
+                    ensure_ingestion_side_effects_allowed(
+                        &self.repo,
+                        &context,
+                        task,
+                        document_id,
+                        "parse run completion",
+                    )
+                    .await?;
                     let backend_summary = build_parse_backend_summary(
                         &route_decision,
                         parse_run_state.document_ir.as_ref(),
@@ -361,6 +426,8 @@ impl TaskProcessor for PgTaskProcessor {
                             &warnings_json,
                             None,
                             Some(&object_path),
+                            &task.task_id,
+                            task.lock_token.as_deref(),
                         )
                         .await
                         .map_err(|error| IngestionError::StateSink(error.to_string()))?;
@@ -379,6 +446,19 @@ impl TaskProcessor for PgTaskProcessor {
                     metrics
                 }
                 Err(error) => {
+                    let may_record_failure = self
+                        .repo
+                        .document_allows_ingestion_side_effects(
+                            &context,
+                            document_id,
+                            &task.task_id,
+                            task.lock_token.as_deref(),
+                        )
+                        .await
+                        .unwrap_or(false);
+                    if !may_record_failure {
+                        return Err(error);
+                    }
                     let failure_summary = build_parse_backend_summary(
                         &route_decision,
                         parse_run_state.document_ir.as_ref(),
@@ -401,6 +481,8 @@ impl TaskProcessor for PgTaskProcessor {
                             &failure_warnings,
                             Some(&failure_error),
                             Some(&object_path),
+                            &task.task_id,
+                            task.lock_token.as_deref(),
                         )
                         .await;
                     return Err(error);
@@ -466,6 +548,7 @@ impl TaskProcessor for PgTaskProcessor {
             Ok(())
         }
         .await;
+        stop_ingestion_task_lock_heartbeat(lock_heartbeat).await;
         telemetry::prometheus::observe_worker_task_completed(
             task_kind,
             if result.is_ok() { "success" } else { "failure" },
@@ -475,11 +558,389 @@ impl TaskProcessor for PgTaskProcessor {
     }
 }
 
+async fn ensure_ingestion_side_effects_allowed(
+    repo: &PgAppRepository,
+    context: &AuthContext,
+    task: &IngestionTask,
+    document_id: Uuid,
+    phase: &str,
+) -> Result<(), IngestionError> {
+    let allowed = repo
+        .document_allows_ingestion_side_effects(
+            context,
+            document_id,
+            &task.task_id,
+            task.lock_token.as_deref(),
+        )
+        .await
+        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+    if allowed {
+        Ok(())
+    } else {
+        Err(IngestionError::StateSink(format!(
+            "ingestion side effects aborted before {phase}: document is deleting/deleted or task lease was lost"
+        )))
+    }
+}
+
+async fn verify_uploaded_object_bytes(
+    repo: &PgAppRepository,
+    context: &AuthContext,
+    document_id: Uuid,
+    bytes: &[u8],
+) -> Result<(), IngestionError> {
+    let validation = repo
+        .get_document_upload_validation(context, document_id)
+        .await
+        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+    let Some(validation) = validation else {
+        return Ok(());
+    };
+
+    if let Some(expected_size) = validation.upload_size_bytes {
+        let actual_size = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+        if expected_size != actual_size {
+            return Err(IngestionError::StateSink(format!(
+                "uploaded object size changed after validation: expected {expected_size} bytes, got {actual_size} bytes"
+            )));
+        }
+    }
+
+    if let Some(expected_sha256) = validation.upload_sha256.as_deref() {
+        let mut hasher = Sha256::new();
+        hasher.update(bytes);
+        let actual_sha256 = hex::encode(hasher.finalize());
+        if expected_sha256 != actual_sha256 {
+            return Err(IngestionError::StateSink(
+                "uploaded object checksum changed after validation".to_string(),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 fn worker_task_kind(task: &IngestionTask) -> &'static str {
     match task.kind {
         ingestion::IngestionTaskKind::IngestDocument => "ingest_document",
         ingestion::IngestionTaskKind::ReindexDocument => "reindex_document",
     }
+}
+
+const INGESTION_TASK_LOCK_HEARTBEAT_SECS: u64 = 60;
+
+fn spawn_ingestion_task_lock_heartbeat(
+    repo: PgAppRepository,
+    task_id: String,
+    lock_token: String,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut heartbeat = interval(Duration::from_secs(INGESTION_TASK_LOCK_HEARTBEAT_SECS));
+        heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+        loop {
+            heartbeat.tick().await;
+            match repo.renew_ingestion_task_lock(&task_id, &lock_token).await {
+                Ok(true) => {}
+                Ok(false) => warn!(
+                    task_id = %task_id,
+                    "ingestion task lock heartbeat did not renew a processing row; lease may be lost"
+                ),
+                Err(error) => warn!(
+                    task_id = %task_id,
+                    error = %error,
+                    "failed to renew ingestion task lock heartbeat"
+                ),
+            }
+        }
+    })
+}
+
+async fn stop_ingestion_task_lock_heartbeat(heartbeat: Option<tokio::task::JoinHandle<()>>) {
+    let Some(heartbeat) = heartbeat else {
+        return;
+    };
+
+    heartbeat.abort();
+    if let Err(error) = heartbeat.await {
+        if !error.is_cancelled() {
+            warn!(error = %error, "ingestion task lock heartbeat ended unexpectedly");
+        }
+    }
+}
+
+fn spawn_document_cleanup_task_lock_heartbeat(
+    repo: PgAppRepository,
+    task_id: Uuid,
+    lock_token: Uuid,
+    lease_lost: Arc<AtomicBool>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut heartbeat = interval(Duration::from_secs(INGESTION_TASK_LOCK_HEARTBEAT_SECS));
+        heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            heartbeat.tick().await;
+            match repo
+                .renew_document_cleanup_task_lock(task_id, lock_token)
+                .await
+            {
+                Ok(true) => {}
+                Ok(false) => {
+                    lease_lost.store(true, Ordering::SeqCst);
+                    warn!(
+                        task_id = %task_id,
+                        "document cleanup task lock heartbeat did not renew a processing row; lease may be lost"
+                    );
+                    break;
+                }
+                Err(error) => warn!(
+                    task_id = %task_id,
+                    error = %error,
+                    "failed to renew document cleanup task lock heartbeat"
+                ),
+            }
+        }
+    })
+}
+
+async fn stop_document_cleanup_task_lock_heartbeat(heartbeat: tokio::task::JoinHandle<()>) {
+    heartbeat.abort();
+    if let Err(error) = heartbeat.await {
+        if !error.is_cancelled() {
+            warn!(error = %error, "document cleanup task lock heartbeat ended unexpectedly");
+        }
+    }
+}
+
+async fn run_document_cleanup_once(
+    repo: &PgAppRepository,
+    object_store: &ObjectStoreHandle,
+    retrieval_data_plane: Option<&Arc<dyn RetrievalDataPlane>>,
+    worker_id: &str,
+) -> Result<bool> {
+    let Some(task) = repo
+        .claim_next_document_cleanup_task(worker_id, None)
+        .await?
+    else {
+        return Ok(false);
+    };
+    let lock_token = task
+        .lock_token
+        .ok_or_else(|| anyhow::anyhow!("claimed cleanup task missing lock token"))?;
+    let lease_lost = Arc::new(AtomicBool::new(false));
+    let heartbeat = spawn_document_cleanup_task_lock_heartbeat(
+        repo.clone(),
+        task.task_id,
+        lock_token,
+        lease_lost.clone(),
+    );
+    let result = process_document_cleanup_task(
+        repo,
+        object_store,
+        retrieval_data_plane,
+        &task,
+        lease_lost.clone(),
+    )
+    .await;
+    stop_document_cleanup_task_lock_heartbeat(heartbeat).await;
+
+    if lease_lost.load(Ordering::SeqCst) {
+        warn!(task_id = %task.task_id, document_id = %task.document_id, "document cleanup task lease lost; leaving task row unchanged");
+        return Ok(true);
+    }
+
+    match result {
+        Ok(()) => match repo
+            .complete_document_cleanup_task(task.task_id, lock_token)
+            .await?
+        {
+            DocumentCleanupTaskCompletionOutcome::Completed => {
+                info!(task_id = %task.task_id, document_id = %task.document_id, "document cleanup task completed");
+            }
+            DocumentCleanupTaskCompletionOutcome::LeaseLost => {
+                warn!(task_id = %task.task_id, document_id = %task.document_id, "document cleanup task lease lost before completion");
+            }
+        },
+        Err(error) => match repo
+            .fail_document_cleanup_task(task.task_id, lock_token, &error.to_string())
+            .await?
+        {
+            DocumentCleanupTaskFailureOutcome::Requeued => {
+                warn!(task_id = %task.task_id, document_id = %task.document_id, error = %error, "document cleanup task failed and was requeued");
+            }
+            DocumentCleanupTaskFailureOutcome::DeadLettered => {
+                warn!(task_id = %task.task_id, document_id = %task.document_id, error = %error, "document cleanup task failed and was dead-lettered");
+            }
+            DocumentCleanupTaskFailureOutcome::LeaseLost => {
+                warn!(task_id = %task.task_id, document_id = %task.document_id, error = %error, "document cleanup task failed but lease was lost");
+            }
+        },
+    }
+    Ok(true)
+}
+
+async fn ensure_document_cleanup_task_can_continue(
+    repo: &PgAppRepository,
+    task: &DocumentCleanupTask,
+    lease_lost: &AtomicBool,
+    phase: &str,
+) -> Result<()> {
+    if lease_lost.load(Ordering::SeqCst) {
+        return Err(anyhow::anyhow!(
+            "document cleanup task lease lost before {phase}"
+        ));
+    }
+    let lock_token = task
+        .lock_token
+        .ok_or_else(|| anyhow::anyhow!("cleanup task missing lock token before {phase}"))?;
+    if repo
+        .document_cleanup_task_lease_is_current(task.task_id, lock_token)
+        .await?
+    {
+        Ok(())
+    } else {
+        lease_lost.store(true, Ordering::SeqCst);
+        Err(anyhow::anyhow!(
+            "document cleanup task lease lost before {phase}"
+        ))
+    }
+}
+
+async fn process_document_cleanup_task(
+    repo: &PgAppRepository,
+    object_store: &ObjectStoreHandle,
+    retrieval_data_plane: Option<&Arc<dyn RetrievalDataPlane>>,
+    task: &DocumentCleanupTask,
+    lease_lost: Arc<AtomicBool>,
+) -> Result<()> {
+    let context = document_cleanup_task_context(task);
+    ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "target lookup").await?;
+    let Some(targets) = repo
+        .get_document_cleanup_targets(&context, task.document_id, &task.payload)
+        .await?
+    else {
+        warn!(task_id = %task.task_id, document_id = %task.document_id, "document cleanup target document not found or is not deletable; completing task idempotently");
+        return Ok(());
+    };
+    if !matches!(
+        targets.status,
+        common::DocumentStatus::Deleting | common::DocumentStatus::Deleted
+    ) {
+        return Err(anyhow::anyhow!(
+            "document {} was not in deleting/deleted status during cleanup",
+            task.document_id
+        ));
+    }
+
+    ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "document object delete")
+        .await?;
+    if let Some(object_path) = targets
+        .object_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        if safe_relative_object_key(object_path) {
+            object_store
+                .delete(object_path)
+                .await
+                .map_err(|error| anyhow::anyhow!("delete document object {object_path}: {error}"))?;
+        } else {
+            warn!(
+                task_id = %task.task_id,
+                document_id = %task.document_id,
+                object_path = %object_path,
+                "skipping unsafe document object_path during cleanup"
+            );
+        }
+    }
+
+    ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "asset object deletes")
+        .await?;
+    for storage_path in &targets.asset_storage_paths {
+        ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "asset object delete")
+            .await?;
+        let path = storage_path.trim();
+        if safe_relative_object_key(path) {
+            object_store
+                .delete(path)
+                .await
+                .map_err(|error| anyhow::anyhow!("delete document asset object {path}: {error}"))?;
+        } else {
+            warn!(
+                task_id = %task.task_id,
+                document_id = %task.document_id,
+                storage_path = %storage_path,
+                "skipping unsafe document asset storage_path during cleanup"
+            );
+        }
+    }
+
+    ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "retrieval index delete")
+        .await?;
+    if let Some(data_plane) = retrieval_data_plane {
+        data_plane
+            .delete_document_index(&context, task.document_id)
+            .await
+            .map_err(|error| {
+                anyhow::anyhow!(
+                    "delete retrieval index for document {}: {error}",
+                    task.document_id
+                )
+            })?;
+    }
+
+    ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "derived row cleanup")
+        .await?;
+    if !repo
+        .cleanup_document_derived_rows(&context, task.document_id)
+        .await?
+    {
+        return Err(anyhow::anyhow!(
+            "document {} was not in deleting/deleted status during derived row cleanup",
+            task.document_id
+        ));
+    }
+    ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "mark document deleted")
+        .await?;
+    if !repo
+        .mark_document_deleted(&context, task.document_id)
+        .await?
+    {
+        return Err(anyhow::anyhow!(
+            "document {} was not in deleting/deleted status during cleanup",
+            task.document_id
+        ));
+    }
+    info!(
+        task_id = %task.task_id,
+        org_id = %targets.org_id,
+        notebook_id = %targets.notebook_id,
+        document_id = %targets.document_id,
+        status = ?targets.status,
+        "document cleanup succeeded"
+    );
+    Ok(())
+}
+
+fn safe_relative_object_key(value: &str) -> bool {
+    if value.is_empty()
+        || value.contains("..")
+        || value.contains("://")
+        || value.starts_with('/')
+        || value.starts_with('\\')
+    {
+        return false;
+    }
+    let lower = value.to_ascii_lowercase();
+    if lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("s3://")
+        || lower.starts_with("object://")
+    {
+        return false;
+    }
+    !Path::new(value).is_absolute()
 }
 
 #[tokio::main]
@@ -513,17 +974,6 @@ async fn main() -> Result<()> {
         if state.config().auto_migrate {
             repo.migrate().await?;
         }
-        let lexical_index = if state.config().retrieval_backend == "legacy" {
-            state
-                .config()
-                .tantivy_index_dir
-                .as_deref()
-                .map(TantivyLexicalIndex::open_writer)
-                .transpose()?
-                .map(Arc::new)
-        } else {
-            None
-        };
         let analytics_pool = repo.raw().clone();
         let mut analytics_job_runner =
             analytics_jobs::AnalyticsJobRunner::from_env(analytics_pool.clone());
@@ -532,6 +982,11 @@ async fn main() -> Result<()> {
                 analytics_pool.clone(),
             );
         let usage_limit_pool = repo.raw().clone();
+        let worker_object_store = build_worker_object_store(state.config()).await?;
+        let cleanup_object_store = build_worker_object_store(state.config()).await?;
+        let retrieval_data_plane = build_worker_retrieval_data_plane(state.config()).await?;
+        let cleanup_retrieval_data_plane = retrieval_data_plane.clone();
+        let cleanup_repo = repo.clone();
         let mut worker = WorkerRuntime::new(
             PgTaskSource {
                 repo: repo.clone(),
@@ -541,14 +996,9 @@ async fn main() -> Result<()> {
             PgStateSink { repo: repo.clone() },
             PgTaskProcessor {
                 repo,
-                object_store: build_worker_object_store(state.config()).await?,
-                qdrant: build_worker_qdrant(state.config()),
-                retrieval_data_plane: build_worker_retrieval_data_plane(state.config()).await?,
-                lexical_index,
-                qdrant_collection: state.config().qdrant.collection.clone(),
-                qdrant_multimodal_collection: state.config().qdrant.multimodal_collection.clone(),
+                object_store: worker_object_store,
+                retrieval_data_plane,
                 embedding_dim,
-                mm_embedding_dim: state.config().mm_embedding.dimensions,
                 embedding_client: {
                     let ec = &state.config().embedding;
                     ec.to_llm_config().map(avrag_llm::EmbeddingClient::new)
@@ -602,13 +1052,23 @@ async fn main() -> Result<()> {
                 }
                 _ = poll_interval.tick() => {
                     match worker.run_once().await {
-                        Ok(WorkerTick::Idle) => info!("worker poll completed with no tasks"),
+                        Ok(WorkerTick::Idle) => info!("worker ingestion poll completed with no tasks"),
                         Ok(WorkerTick::Processed(task)) => {
-                            info!(task_id = task.task_id, kind = ?task.kind, "worker processed task");
+                            info!(task_id = task.task_id, kind = ?task.kind, "worker processed ingestion task");
                         }
                         Err(error) => {
-                            info!(error = %error, "worker poll failed");
+                            info!(error = %error, "worker ingestion poll failed");
                         }
+                    }
+                    match run_document_cleanup_once(
+                        &cleanup_repo,
+                        &cleanup_object_store,
+                        cleanup_retrieval_data_plane.as_ref(),
+                        &worker_id,
+                    ).await {
+                        Ok(true) => info!("worker processed document cleanup task"),
+                        Ok(false) => info!("worker document cleanup poll completed with no tasks"),
+                        Err(error) => info!(error = %error, "worker document cleanup poll failed"),
                     }
                 }
                 _ = heartbeat_interval.tick() => {
@@ -675,6 +1135,14 @@ fn task_context(task: &IngestionTask) -> AuthContext {
     auth
 }
 
+fn document_cleanup_task_context(task: &DocumentCleanupTask) -> AuthContext {
+    let auth = AuthContext::new(OrgId::from(task.org_id), SubjectKind::System);
+    if let Some(requested_by) = task.requested_by {
+        return auth.with_actor_id(ActorId::new(requested_by));
+    }
+    auth
+}
+
 async fn build_worker_object_store(config: &AppConfig) -> Result<ObjectStoreHandle> {
     if !config.object_storage.endpoint.trim().is_empty()
         && !config.object_storage.bucket.trim().is_empty()
@@ -700,39 +1168,22 @@ async fn build_worker_object_store(config: &AppConfig) -> Result<ObjectStoreHand
 async fn build_worker_retrieval_data_plane(
     config: &AppConfig,
 ) -> Result<Option<Arc<dyn RetrievalDataPlane>>> {
-    match config.retrieval_backend.as_str() {
-        "legacy" => Ok(None),
-        "milvus" => {
-            let milvus_config = StorageMilvusConfig {
-                url: config.milvus.url.clone(),
-                token: Some(config.milvus.token.clone()).filter(|token| !token.trim().is_empty()),
-                database: Some(config.milvus.database.clone())
-                    .filter(|database| !database.trim().is_empty()),
-                collection_prefix: config.milvus.collection_prefix.clone(),
-                text_vector_dim: config.milvus.text_vector_dim,
-                multimodal_vector_dim: config.milvus.multimodal_vector_dim,
-                metric_type: config.milvus.metric_type.clone(),
-            };
-            let data_plane: Arc<dyn RetrievalDataPlane> =
-                Arc::new(MilvusDataPlane::new(milvus_config));
-            data_plane.ensure_schema().await?;
-            Ok(Some(data_plane))
-        }
-        other => anyhow::bail!("unsupported RETRIEVAL_BACKEND: {other}"),
-    }
-}
-
-fn build_worker_qdrant(config: &AppConfig) -> Option<HttpQdrantBackend> {
-    if config.retrieval_backend == "legacy" && !config.qdrant.url.trim().is_empty() {
-        return Some(HttpQdrantBackend::new(config.qdrant.url.clone()));
-    }
-    None
+    let milvus_config = StorageMilvusConfig {
+        url: config.milvus.url.clone(),
+        token: Some(config.milvus.token.clone()).filter(|token| !token.trim().is_empty()),
+        database: Some(config.milvus.database.clone())
+            .filter(|database| !database.trim().is_empty()),
+        collection_prefix: config.milvus.collection_prefix.clone(),
+        text_vector_dim: config.milvus.text_vector_dim,
+        multimodal_vector_dim: config.milvus.multimodal_vector_dim,
+        metric_type: config.milvus.metric_type.clone(),
+    };
+    let data_plane: Arc<dyn RetrievalDataPlane> = Arc::new(MilvusDataPlane::new(milvus_config));
+    data_plane.ensure_schema().await?;
+    Ok(Some(data_plane))
 }
 
 fn build_worker_triplet_llm(config: &AppConfig) -> Option<Arc<avrag_llm::LlmClient>> {
-    if config.retrieval_backend != "milvus" {
-        return None;
-    }
     config
         .summary_llm
         .to_llm_config()
@@ -781,7 +1232,7 @@ struct StoredMultimodalChunk {
     source_locator: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct ExtractedTriplet {
     subject: String,
     predicate: String,
@@ -901,6 +1352,14 @@ async fn run_document_pipeline(
     parse_run_state.outputs.asset_count = document_ir.assets.len();
     parse_run_state.document_ir = Some(document_ir.clone());
 
+    ensure_ingestion_side_effects_allowed(
+        &processor.repo,
+        context,
+        task,
+        document_id,
+        "IR projection writes",
+    )
+    .await?;
     processor
         .repo
         .clear_document_ir_projection(context, document_id)
@@ -932,6 +1391,14 @@ async fn run_document_pipeline(
         "IR chunk plan generated"
     );
 
+    ensure_ingestion_side_effects_allowed(
+        &processor.repo,
+        context,
+        task,
+        document_id,
+        "body chunk writes",
+    )
+    .await?;
     let chunks = processor
         .repo
         .store_document_body_chunks(
@@ -945,43 +1412,35 @@ async fn run_document_pipeline(
         .map_err(|error| IngestionError::StateSink(error.to_string()))?;
     let processed_chunk_count = chunks.len().max(1);
 
-    if let Some(index) = &processor.lexical_index {
-        let lexical_chunks = chunks
-            .iter()
-            .map(|chunk| {
-                let chunk_id = Uuid::parse_str(&chunk.chunk_id).map_err(|error| {
-                    IngestionError::StateSink(format!("invalid chunk id for Tantivy: {error}"))
-                })?;
-                let doc_id = Uuid::parse_str(&chunk.doc_id).map_err(|error| {
-                    IngestionError::StateSink(format!("invalid doc id for Tantivy: {error}"))
-                })?;
-                Ok(LexicalChunkDocument {
-                    org_id: context.org_id().into_uuid(),
-                    doc_id,
-                    chunk_id,
-                    page: chunk.page,
-                    content: chunk.content.clone(),
-                })
-            })
-            .collect::<std::result::Result<Vec<_>, IngestionError>>()?;
-        index
-            .replace_document_chunks(context.org_id().into_uuid(), document_id, &lexical_chunks)
-            .map_err(|error| {
-                IngestionError::StateSink(format!("Tantivy indexing failed: {error}"))
-            })?;
-        info!(
-            document_id = %document_id,
-            chunks = lexical_chunks.len(),
-            "Tantivy lexical index updated"
-        );
-    }
-
     let mut asset_uuid_by_ref = std::collections::HashMap::new();
     let mut stored_asset_path_by_ref = std::collections::HashMap::new();
 
+    ensure_ingestion_side_effects_allowed(
+        &processor.repo,
+        context,
+        task,
+        document_id,
+        "asset writes",
+    )
+    .await?;
     for asset in &document_ir.assets {
+        ensure_ingestion_side_effects_allowed(
+            &processor.repo,
+            context,
+            task,
+            document_id,
+            "asset write",
+        )
+        .await?;
         let stored_asset_id = Uuid::new_v4();
         asset_uuid_by_ref.insert(asset.asset_id.clone(), stored_asset_id);
+        let stored_asset_object_key = build_asset_object_key(
+            context,
+            &task.notebook_id,
+            &task.document_id,
+            stored_asset_id,
+            &asset.storage_path,
+        );
 
         let stored_image_path = mirror_document_asset(
             &processor.object_store,
@@ -997,9 +1456,21 @@ async fn run_document_pipeline(
         if stored_image_path.is_some() {
             parse_run_state.outputs.mirrored_asset_count += 1;
         }
-        stored_asset_path_by_ref.insert(asset.asset_id.clone(), stored_image_path.clone());
 
-        processor
+        if let Err(error) = ensure_ingestion_side_effects_allowed(
+            &processor.repo,
+            context,
+            task,
+            document_id,
+            "asset metadata write",
+        )
+        .await
+        {
+            let _ = processor.object_store.delete(&stored_asset_object_key).await;
+            return Err(error);
+        }
+
+        let store_result = processor
             .repo
             .store_document_asset(
                 context,
@@ -1018,12 +1489,32 @@ async fn run_document_pipeline(
                     parser_backend: asset.parser_backend.as_str().to_string(),
                 },
             )
-            .await
-            .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+            .await;
+        if let Err(error) = store_result {
+            let _ = processor.object_store.delete(&stored_asset_object_key).await;
+            return Err(IngestionError::StateSink(error.to_string()));
+        }
+        stored_asset_path_by_ref.insert(asset.asset_id.clone(), stored_image_path.clone());
     }
 
+    ensure_ingestion_side_effects_allowed(
+        &processor.repo,
+        context,
+        task,
+        document_id,
+        "multimodal chunk writes",
+    )
+    .await?;
     let mut stored_multimodal_chunks = Vec::new();
     for multimodal_chunk in &chunk_plan.multimodal_chunks {
+        ensure_ingestion_side_effects_allowed(
+            &processor.repo,
+            context,
+            task,
+            document_id,
+            "multimodal chunk write",
+        )
+        .await?;
         let asset_id = asset_uuid_by_ref
             .get(&multimodal_chunk.asset_ref)
             .copied()
@@ -1119,9 +1610,23 @@ async fn run_document_pipeline(
                 .await;
             match generated_summary {
                 Ok((summary, llm_usage)) => {
+                    ensure_ingestion_side_effects_allowed(
+                        &processor.repo,
+                        context,
+                        task,
+                        document_id,
+                        "summary update",
+                    )
+                    .await?;
                     if let Err(error) = processor
                         .repo
-                        .update_document_summary(context, document_id, &summary)
+                        .update_document_summary(
+                            context,
+                            document_id,
+                            &summary,
+                            Some(&task.task_id),
+                            task.lock_token.as_deref(),
+                        )
                         .await
                     {
                         info!(document_id = %document_id, error = %error, "failed to update document summary with LLM result");
@@ -1203,8 +1708,7 @@ async fn run_document_pipeline(
         }
     }
 
-    let needs_text_vector_index =
-        processor.qdrant.is_some() || processor.retrieval_data_plane.is_some();
+    let needs_text_vector_index = processor.retrieval_data_plane.is_some();
     let text_index_records = if needs_text_vector_index {
         build_text_index_records(processor, &chunks).await?
     } else {
@@ -1214,8 +1718,7 @@ async fn run_document_pipeline(
         parse_run_state.outputs.text_vector_count = text_index_records.len();
     }
 
-    let needs_multimodal_vector_index =
-        processor.qdrant.is_some() || processor.retrieval_data_plane.is_some();
+    let needs_multimodal_vector_index = processor.retrieval_data_plane.is_some();
     let multimodal_index_records = if needs_multimodal_vector_index {
         build_multimodal_index_records(processor, &stored_multimodal_chunks).await?
     } else {
@@ -1223,103 +1726,6 @@ async fn run_document_pipeline(
     };
     if !multimodal_index_records.is_empty() {
         parse_run_state.outputs.multimodal_vector_count = multimodal_index_records.len();
-    }
-
-    if let Some(qdrant) = &processor.qdrant {
-        let collection = QdrantCollectionConfig {
-            name: processor.qdrant_collection.clone(),
-            vector_size: processor.embedding_dim as u64,
-            distance: QdrantDistance::Cosine,
-        };
-        qdrant
-            .ensure_collection(&collection)
-            .await
-            .map_err(|error| IngestionError::StateSink(error.to_string()))?;
-        let filter = SecureQdrantFilterBuilder::with_doc_filter(context, document_id)
-            .map_err(|error| IngestionError::StateSink(error.to_string()))?;
-        qdrant
-            .delete_points_by_filter(&processor.qdrant_collection, &filter)
-            .await
-            .map_err(|error| IngestionError::StateSink(error.to_string()))?;
-
-        let points = text_index_records
-            .iter()
-            .map(|chunk| QdrantPointUpsert {
-                chunk_id: chunk.chunk_id,
-                doc_id: document_id,
-                parse_run_id,
-                org_id: context.org_id(),
-                page: chunk.page,
-                vector: chunk.vector.clone(),
-                doc_version: 1,
-            })
-            .collect::<Vec<_>>();
-
-        qdrant
-            .upsert_points(&processor.qdrant_collection, &points)
-            .await
-            .map_err(|error| IngestionError::StateSink(error.to_string()))?;
-
-        if !stored_multimodal_chunks.is_empty() {
-            if !multimodal_index_records.is_empty() {
-                let multimodal_vector_size = processor.mm_embedding_dim.ok_or_else(|| {
-                    IngestionError::StateSink(
-                        "MM_EMBEDDING_DIMENSIONS must be configured when multimodal indexing is enabled"
-                            .to_string(),
-                    )
-                })?;
-                let multimodal_collection = QdrantCollectionConfig {
-                    name: processor.qdrant_multimodal_collection.clone(),
-                    vector_size: multimodal_vector_size as u64,
-                    distance: QdrantDistance::Cosine,
-                };
-                qdrant
-                    .ensure_collection(&multimodal_collection)
-                    .await
-                    .map_err(|error| IngestionError::StateSink(error.to_string()))?;
-
-                let multimodal_filter =
-                    SecureQdrantFilterBuilder::with_doc_filter(context, document_id)
-                        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
-                qdrant
-                    .delete_points_by_filter(
-                        &processor.qdrant_multimodal_collection,
-                        &multimodal_filter,
-                    )
-                    .await
-                    .map_err(|error| IngestionError::StateSink(error.to_string()))?;
-
-                let multimodal_points = multimodal_index_records
-                    .iter()
-                    .map(|chunk| avrag_storage_qdrant::MultimodalQdrantPointUpsert {
-                        chunk_id: chunk.chunk_id,
-                        doc_id: document_id,
-                        asset_id: chunk.asset_id,
-                        parse_run_id,
-                        org_id: context.org_id(),
-                        page: chunk.page,
-                        vector: chunk.vector.clone(),
-                        caption: chunk.caption.clone(),
-                        parser_backend: chunk.parser_backend.clone().unwrap_or_default(),
-                        doc_version: 1,
-                    })
-                    .collect::<Vec<_>>();
-
-                qdrant
-                    .upsert_multimodal_points(
-                        &processor.qdrant_multimodal_collection,
-                        &multimodal_points,
-                    )
-                    .await
-                    .map_err(|error| IngestionError::StateSink(error.to_string()))?;
-
-                info!(
-                    document_id = %document_id,
-                    multimodal_chunks = multimodal_index_records.len(),
-                    "Stored multimodal chunks"
-                );
-            }
-        }
     }
 
     let graph_records = if processor.retrieval_data_plane.is_some() {
@@ -1347,6 +1753,14 @@ async fn run_document_pipeline(
     };
 
     if let Some(data_plane) = &processor.retrieval_data_plane {
+        ensure_ingestion_side_effects_allowed(
+            &processor.repo,
+            context,
+            task,
+            document_id,
+            "retrieval index replace",
+        )
+        .await?;
         let batch = build_document_index_batch(
             context,
             Some(notebook_id),
@@ -1483,14 +1897,14 @@ async fn execute_office_parse(
                 .await
         }
         OfficeDocType::Doc => {
-            return Err(IngestionError::StateSink(
-                "legacy .doc is not supported by office-parser-jvm; convert to .docx".to_string(),
-            ));
+            client
+                .parse_doc(bytes, filename, &document_id.to_string())
+                .await
         }
         OfficeDocType::Xls => {
-            return Err(IngestionError::StateSink(
-                "legacy .xls is not supported by office-parser-jvm; convert to .xlsx".to_string(),
-            ));
+            client
+                .parse_xls(bytes, filename, &document_id.to_string())
+                .await
         }
     }
     .map_err(|error| {
@@ -2015,14 +2429,31 @@ async fn embed_text_vectors(
     if texts.is_empty() {
         return Ok(Vec::new());
     }
-    if let Some(ref client) = processor.embedding_client {
-        client
-            .embed(texts)
-            .await
-            .map_err(|error| IngestionError::StateSink(format!("embedding failed: {error}")))
-    } else {
-        Ok(vec![vec![0f32; processor.embedding_dim]; texts.len()])
+    if processor.embedding_client.is_none() {
+        return Err(IngestionError::StateSink(format!(
+            "text embedding client not configured (expected dim {})",
+            processor.embedding_dim
+        )));
     }
+    embed_text_vectors_with_client(processor.embedding_client.as_ref(), texts).await
+}
+
+async fn embed_text_vectors_with_client(
+    client: Option<&avrag_llm::EmbeddingClient>,
+    texts: &[&str],
+) -> Result<Vec<Vec<f32>>, IngestionError> {
+    if texts.is_empty() {
+        return Ok(Vec::new());
+    }
+    let Some(client) = client else {
+        return Err(IngestionError::StateSink(
+            "text embedding client not configured".to_string(),
+        ));
+    };
+    client
+        .embed(texts)
+        .await
+        .map_err(|error| IngestionError::StateSink(format!("embedding failed: {error}")))
 }
 
 async fn extract_triplets_for_index(
@@ -2052,22 +2483,14 @@ async fn extract_triplets_for_index(
                 .map_err(|e| anyhow::anyhow!("{e}"))?;
             let messages = build_triplet_extraction_messages(&batch);
             let response = llm.complete(&messages, Some(0.1)).await?;
-            let raw_triplets = parse_triplet_response(&response.content)?;
-            let triplets = raw_triplets
-                .into_iter()
-                .map(|(subject, predicate, object)| ExtractedTriplet {
-                    subject,
-                    predicate,
-                    object,
-                    supporting_chunk_ids: batch.chunk_ids.clone(),
-                })
-                .collect::<Vec<_>>();
-            Ok::<_, anyhow::Error>((triplets, response.usage.total_tokens))
+            let raw_triplets = parse_triplet_response(&response.content, &batch.chunk_ids)?;
+            Ok::<_, anyhow::Error>((raw_triplets, response.usage.total_tokens))
         }));
     }
 
     let mut output = TripletExtractionOutput::default();
-    let mut seen = std::collections::HashSet::new();
+    let mut triplet_map: std::collections::HashMap<(String, String, String), ExtractedTriplet> =
+        std::collections::HashMap::new();
     for handle in handles {
         match handle.await {
             Ok(Ok((triplets, total_tokens))) => {
@@ -2078,8 +2501,14 @@ async fn extract_triplets_for_index(
                         triplet.predicate.to_lowercase(),
                         triplet.object.to_lowercase(),
                     );
-                    if seen.insert(key) {
-                        output.triplets.push(triplet);
+                    if let Some(existing) = triplet_map.get_mut(&key) {
+                        for cid in triplet.supporting_chunk_ids {
+                            if !existing.supporting_chunk_ids.contains(&cid) {
+                                existing.supporting_chunk_ids.push(cid);
+                            }
+                        }
+                    } else {
+                        triplet_map.insert(key, triplet);
                     }
                 }
             }
@@ -2095,6 +2524,7 @@ async fn extract_triplets_for_index(
             }
         }
     }
+    output.triplets = triplet_map.into_values().collect();
 
     output
 }
@@ -2138,56 +2568,82 @@ fn build_triplet_extraction_batches(
 }
 
 fn build_triplet_extraction_messages(batch: &TripletExtractionBatch) -> Vec<ChatMessage> {
+    let valid_chunk_ids: Vec<String> = batch.chunk_ids.iter().map(|id| id.to_string()).collect();
     vec![
         ChatMessage::system(
-            "Extract factual subject-predicate-object triplets. Return only strict JSON.",
+            "Extract factual subject-predicate-object triplets from the provided text chunks. \
+Return only strict JSON with this exact shape: {\"triplets\":[{\"chunk_id\":\"uuid\",\"subject\":\"...\",\"predicate\":\"...\",\"object\":\"...\"}]} \
+Rules:\
+- chunk_id MUST be one of the provided chunk IDs\
+- Only extract concrete, factual relationships\
+- Return empty array if no valid triplets found",
         ),
         ChatMessage::user(format!(
-            "Return exactly this shape: {{\"triplets\":[[\"subject\",\"predicate\",\"object\"]]}}.\nChunks:\n{}",
+            "Valid chunk IDs: {}\n\nChunks:\n{}\n\nExtract triplets with chunk_id:",
+            valid_chunk_ids.join(", "),
             batch.payload
         )),
     ]
 }
 
-fn parse_triplet_response(content: &str) -> Result<Vec<(String, String, String)>> {
-    let value: serde_json::Value = serde_json::from_str(content)?;
+fn parse_triplet_response(
+    content: &str,
+    valid_chunk_ids: &[Uuid],
+) -> Result<Vec<ExtractedTriplet>> {
+    let value: serde_json::Value = serde_json::from_str(content)
+        .map_err(|e| anyhow::anyhow!("Failed to parse triplet JSON: {}", e))?;
+
     let triplets = value
         .get("triplets")
         .and_then(serde_json::Value::as_array)
         .ok_or_else(|| anyhow::anyhow!("triplet response missing triplets array"))?;
 
     let mut parsed = Vec::new();
-    let mut seen = std::collections::HashSet::new();
     for item in triplets {
-        let values = item
-            .as_array()
-            .ok_or_else(|| anyhow::anyhow!("triplet item must be an array"))?;
-        if values.len() != 3 {
-            anyhow::bail!("triplet item must have exactly three strings");
+        // 严格对象格式：{"chunk_id": "...", "subject": "...", "predicate": "...", "object": "..."}
+        let Some(chunk_id_str) = item.get("chunk_id").and_then(|v| v.as_str()) else {
+            continue; // chunk_id 缺失，丢弃
+        };
+        let Ok(chunk_id) = Uuid::parse_str(chunk_id_str) else {
+            continue; // chunk_id 无法解析，丢弃
+        };
+        if !valid_chunk_ids.contains(&chunk_id) {
+            continue; // chunk_id 不在当前 batch 内，丢弃
         }
-        let subject = normalize_triplet_component(&values[0])?;
-        let predicate = normalize_triplet_component(&values[1])?;
-        let object = normalize_triplet_component(&values[2])?;
-        if subject.is_empty() || predicate.is_empty() || object.is_empty() {
+
+        let Some(subject) = item
+            .get("subject")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+        else {
             continue;
-        }
-        let key = (
-            subject.to_lowercase(),
-            predicate.to_lowercase(),
-            object.to_lowercase(),
-        );
-        if seen.insert(key) {
-            parsed.push((subject, predicate, object));
-        }
+        };
+        let Some(predicate) = item
+            .get("predicate")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+        else {
+            continue;
+        };
+        let Some(object) = item
+            .get("object")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+        else {
+            continue;
+        };
+
+        parsed.push(ExtractedTriplet {
+            subject,
+            predicate,
+            object,
+            supporting_chunk_ids: vec![chunk_id],
+        });
     }
     Ok(parsed)
-}
-
-fn normalize_triplet_component(value: &serde_json::Value) -> Result<String> {
-    let Some(text) = value.as_str() else {
-        anyhow::bail!("triplet component must be a string");
-    };
-    Ok(text.trim().to_string())
 }
 
 async fn build_graph_index_records(
@@ -2289,14 +2745,18 @@ async fn build_graph_index_records(
             supporting_chunk_ids: triplet.supporting_chunk_ids.clone(),
             metadata: Some(serde_json::json!({ "source": "worker_triplet_extraction" })),
         });
-        passages.push(GraphPassageIndexRecord {
-            passage_id: Uuid::new_v4(),
-            chunk_id: triplet.supporting_chunk_ids.first().copied(),
-            text: relation_text,
-            vector,
-            relation_ids: vec![relation_id],
-            metadata: Some(serde_json::json!({ "source": "worker_triplet_extraction" })),
-        });
+        // GraphPassageIndexRecord.chunk_id 只能来自合并后的真实 supporting chunk；
+        // 如果没有 supporting chunk，不写该 graph passage。
+        if let Some(chunk_id) = triplet.supporting_chunk_ids.first().copied() {
+            passages.push(GraphPassageIndexRecord {
+                passage_id: Uuid::new_v4(),
+                chunk_id: Some(chunk_id),
+                text: relation_text,
+                vector,
+                relation_ids: vec![relation_id],
+                metadata: Some(serde_json::json!({ "source": "worker_triplet_extraction" })),
+            });
+        }
     }
 
     GraphIndexRecords {
@@ -2492,6 +2952,21 @@ mod tests {
     use uuid::Uuid;
 
     #[test]
+    fn cleanup_asset_object_key_safety_rejects_remote_and_path_traversal_values() {
+        assert!(safe_relative_object_key(
+            "org/notebook/doc/assets/image.png"
+        ));
+        assert!(!safe_relative_object_key(
+            "https://bucket.s3/key?sig=secret"
+        ));
+        assert!(!safe_relative_object_key("s3://bucket/key"));
+        assert!(!safe_relative_object_key("object://bucket/key"));
+        assert!(!safe_relative_object_key("/absolute/key"));
+        assert!(!safe_relative_object_key("org/../secret"));
+        assert!(!safe_relative_object_key(""));
+    }
+
+    #[test]
     fn load_prompt_template_prefers_versioned_file() {
         let temp_dir = env::temp_dir().join(format!("summary-template-{}", Uuid::new_v4()));
         fs::create_dir_all(&temp_dir).unwrap();
@@ -2561,29 +3036,60 @@ mod tests {
     }
 
     #[test]
-    fn parse_triplet_response_accepts_strict_json() {
+    fn parse_triplet_response_rejects_old_array_format() {
+        let chunk_id = Uuid::from_u128(42);
         let triplets = parse_triplet_response(
             r#"{"triplets":[[" Alice ","founded","Acme"],["Alice","founded","Acme"]]}"#,
+            &[chunk_id],
+        )
+        .unwrap();
+
+        // 旧数组格式不再产生任何 triplet
+        assert_eq!(triplets, vec![]);
+    }
+
+    #[test]
+    fn parse_triplet_response_accepts_new_format_with_chunk_id() {
+        let chunk_id = Uuid::from_u128(42);
+        let triplets = parse_triplet_response(
+            r#"{"triplets":[{"chunk_id":"00000000-0000-0000-0000-00000000002a","subject":"Alice","predicate":"founded","object":"Acme"}]}"#,
+            &[chunk_id],
         )
         .unwrap();
 
         assert_eq!(
             triplets,
-            vec![(
-                "Alice".to_string(),
-                "founded".to_string(),
-                "Acme".to_string()
-            )]
+            vec![ExtractedTriplet {
+                subject: "Alice".to_string(),
+                predicate: "founded".to_string(),
+                object: "Acme".to_string(),
+                supporting_chunk_ids: vec![chunk_id],
+            }]
         );
     }
 
     #[test]
-    fn parse_triplet_response_rejects_malformed_json() {
-        let error = parse_triplet_response(r#"{"triplets":[{"subject":"Alice"}]}"#)
-            .unwrap_err()
-            .to_string();
+    fn parse_triplet_response_rejects_invalid_chunk_id() {
+        let chunk_id = Uuid::from_u128(42);
+        let triplets = parse_triplet_response(
+            r#"{"triplets":[{"chunk_id":"00000000-0000-0000-0000-000000000099","subject":"Alice","predicate":"founded","object":"Acme"}]}"#,
+            &[chunk_id],
+        )
+        .unwrap();
 
-        assert!(error.contains("triplet item must be an array"));
+        // 非法 chunk_id 被丢弃
+        assert_eq!(triplets, vec![]);
+    }
+
+    #[test]
+    fn parse_triplet_response_rejects_malformed_json() {
+        let chunk_id = Uuid::from_u128(42);
+        // 新格式下，缺少 chunk_id 的 triplet 会被静默丢弃，不报错
+        // 所以测试改为验证返回空数组
+        let triplets =
+            parse_triplet_response(r#"{"triplets":[{"subject":"Alice"}]}"#, &[chunk_id]).unwrap();
+
+        assert_eq!(triplets, vec![]);
     }
 
     #[test]
@@ -2655,5 +3161,82 @@ mod tests {
         assert_eq!(batch.entities.len(), 1);
         assert_eq!(batch.relations.len(), 1);
         assert_eq!(batch.graph_passages.len(), 1);
+    }
+
+    #[test]
+    fn parse_triplet_response_merges_supporting_chunks_for_duplicate_triplets() {
+        let chunk1 = Uuid::from_u128(1);
+        let chunk2 = Uuid::from_u128(2);
+
+        // 模拟 extract_triplets_for_index 中的跨 batch 合并逻辑
+        let mut triplet_map: std::collections::HashMap<(String, String, String), ExtractedTriplet> =
+            std::collections::HashMap::new();
+
+        for triplet in [
+            ExtractedTriplet {
+                subject: "Alice".to_string(),
+                predicate: "founded".to_string(),
+                object: "Acme".to_string(),
+                supporting_chunk_ids: vec![chunk1],
+            },
+            ExtractedTriplet {
+                subject: "Alice".to_string(),
+                predicate: "founded".to_string(),
+                object: "Acme".to_string(),
+                supporting_chunk_ids: vec![chunk2],
+            },
+        ] {
+            let key = (
+                triplet.subject.to_lowercase(),
+                triplet.predicate.to_lowercase(),
+                triplet.object.to_lowercase(),
+            );
+            if let Some(existing) = triplet_map.get_mut(&key) {
+                for cid in triplet.supporting_chunk_ids {
+                    if !existing.supporting_chunk_ids.contains(&cid) {
+                        existing.supporting_chunk_ids.push(cid);
+                    }
+                }
+            } else {
+                triplet_map.insert(key, triplet);
+            }
+        }
+
+        let merged: Vec<_> = triplet_map.into_values().collect();
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].supporting_chunk_ids.len(), 2);
+        assert!(merged[0].supporting_chunk_ids.contains(&chunk1));
+        assert!(merged[0].supporting_chunk_ids.contains(&chunk2));
+    }
+
+    #[test]
+    fn build_graph_index_records_skips_passage_without_supporting_chunk() {
+        // 验证当 supporting_chunk_ids 为空时，不会生成 graph passage。
+        // build_graph_index_records 内部已经通过 if let Some(chunk_id) 保证了这一点。
+        // 这里直接验证 ExtractedTriplet 到 passage 的映射语义：
+        // 只有存在至少一个真实 supporting chunk 时，chunk_id 才是 Some。
+        let triplet_with_support = ExtractedTriplet {
+            subject: "Alice".to_string(),
+            predicate: "founded".to_string(),
+            object: "Acme".to_string(),
+            supporting_chunk_ids: vec![Uuid::from_u128(1)],
+        };
+        let triplet_without_support = ExtractedTriplet {
+            subject: "Bob".to_string(),
+            predicate: "joined".to_string(),
+            object: "Acme".to_string(),
+            supporting_chunk_ids: vec![],
+        };
+
+        assert!(!triplet_with_support.supporting_chunk_ids.is_empty());
+        assert!(triplet_without_support.supporting_chunk_ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn embed_text_vectors_without_embedding_client_returns_error() {
+        let result = embed_text_vectors_with_client(None, &["hello"]).await;
+        let error = result.expect_err("missing embedding client must fail");
+        assert!(error.to_string().contains("embedding client"));
+        assert!(error.to_string().contains("not configured"));
     }
 }

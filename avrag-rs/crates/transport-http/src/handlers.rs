@@ -40,18 +40,6 @@ pub(crate) fn app_error_response(e: AppError) -> Response {
     (status, Json(body)).into_response()
 }
 
-/// Return a JSON 501 for unimplemented endpoints.
-pub(crate) fn not_implemented(feature: &str) -> Response {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(serde_json::json!({
-            "error": "not_implemented",
-            "message": format!("{feature} is not yet implemented"),
-        })),
-    )
-        .into_response()
-}
-
 /// Return a JSON error response.
 pub(crate) fn error_response(status: StatusCode, code: &str, message: &str) -> Response {
     (
@@ -1026,7 +1014,7 @@ pub(crate) async fn get_document_status_handler(
         Some(document) => (
             StatusCode::OK,
             Json(contracts::documents::DocumentStatusResponse {
-                status: format!("{:?}", document.status).to_lowercase(),
+                status: document.status.as_str().to_string(),
             }),
         )
             .into_response(),

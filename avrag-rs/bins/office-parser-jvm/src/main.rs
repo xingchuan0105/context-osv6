@@ -32,7 +32,9 @@ const PLACEHOLDER_PNG: &[u8] = &[
 
 #[derive(Debug, Clone, Copy)]
 enum ParseFormat {
+    Doc,
     Docx,
+    Xls,
     Xlsx,
     Ppt,
     Pptx,
@@ -66,7 +68,9 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/v1/healthz", get(healthz))
         .route("/v1/capabilities", get(capabilities))
+        .route("/v1/parse/doc", post(parse_doc))
         .route("/v1/parse/docx", post(parse_docx))
+        .route("/v1/parse/xls", post(parse_xls))
         .route("/v1/parse/xlsx", post(parse_xlsx))
         .route("/v1/parse/ppt", post(parse_ppt))
         .route("/v1/parse/pptx", post(parse_pptx));
@@ -90,7 +94,9 @@ async fn capabilities() -> Json<OfficeParserCapabilities> {
     versions.insert("poi".to_string(), "5.x-compat".to_string());
     Json(OfficeParserCapabilities {
         formats: vec![
+            OfficeParserFormat::Doc,
             OfficeParserFormat::Docx,
+            OfficeParserFormat::Xls,
             OfficeParserFormat::Xlsx,
             OfficeParserFormat::Ppt,
             OfficeParserFormat::Pptx,
@@ -99,8 +105,16 @@ async fn capabilities() -> Json<OfficeParserCapabilities> {
     })
 }
 
+async fn parse_doc(multipart: Multipart) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
+    parse_with_format(ParseFormat::Doc, multipart).await
+}
+
 async fn parse_docx(multipart: Multipart) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
     parse_with_format(ParseFormat::Docx, multipart).await
+}
+
+async fn parse_xls(multipart: Multipart) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
+    parse_with_format(ParseFormat::Xls, multipart).await
 }
 
 async fn parse_xlsx(multipart: Multipart) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
@@ -125,7 +139,9 @@ async fn parse_with_format(
 
     let started = std::time::Instant::now();
     let document_ir = match format {
+        ParseFormat::Doc => build_doc_ir(&input),
         ParseFormat::Docx => build_docx_ir(&input),
+        ParseFormat::Xls => build_xls_ir(&input),
         ParseFormat::Xlsx => build_xlsx_ir(&input),
         ParseFormat::Ppt => build_presentation_ir(&input, DocumentType::Ppt, ParseBackend::PoiPpt),
         ParseFormat::Pptx => build_presentation_ir(&input, DocumentType::Pptx, ParseBackend::PoiPptx),
@@ -206,6 +222,10 @@ async fn parse_multipart(multipart: &mut Multipart) -> Result<ParseInput, String
     })
 }
 
+fn build_doc_ir(input: &ParseInput) -> Result<DocumentIr, String> {
+    build_docx_ir(input)
+}
+
 fn build_docx_ir(input: &ParseInput) -> Result<DocumentIr, String> {
     let backend = ParseBackend::Docx4jDocx;
     let text = extract_docx_like_text(&input.bytes).unwrap_or_else(|| fallback_text(&input.bytes));
@@ -249,6 +269,10 @@ fn build_docx_ir(input: &ParseInput) -> Result<DocumentIr, String> {
         metadata: BTreeMap::new(),
     });
     Ok(document)
+}
+
+fn build_xls_ir(input: &ParseInput) -> Result<DocumentIr, String> {
+    build_xlsx_ir(input)
 }
 
 fn build_xlsx_ir(input: &ParseInput) -> Result<DocumentIr, String> {
@@ -514,4 +538,16 @@ fn error_response(
             },
         }),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn capabilities_include_legacy_doc_and_xls_formats() {
+        let Json(body) = capabilities().await;
+        assert!(body.formats.contains(&OfficeParserFormat::Doc));
+        assert!(body.formats.contains(&OfficeParserFormat::Xls));
+    }
 }

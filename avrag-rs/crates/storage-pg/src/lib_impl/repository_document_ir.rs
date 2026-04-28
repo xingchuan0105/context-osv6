@@ -5,6 +5,24 @@ impl PgAppRepository {
         document_id: Uuid,
     ) -> Result<(), PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
+        let guard = sqlx::query(
+            r#"
+            select 1
+            from documents
+            where id = $1
+              and org_id = $2
+              and status not in ('deleting', 'deleted')
+            for update
+            "#,
+        )
+        .bind(document_id)
+        .bind(context.org_id().into_uuid())
+        .fetch_optional(tx.inner())
+        .await?;
+        if guard.is_none() {
+            tx.rollback().await?;
+            return Err(PgStorageError::NotFound("document not found".to_string()));
+        }
 
         sqlx::query("DELETE FROM document_multimodal_chunks WHERE document_id = $1")
             .bind(document_id)
@@ -31,9 +49,17 @@ impl PgAppRepository {
         document_id: Uuid,
         backend_summary: &serde_json::Value,
         artifact_path: Option<&str>,
+        task_id: &str,
+        lock_token: Option<&str>,
     ) -> Result<(), PgStorageError> {
+        let task_id = Uuid::parse_str(task_id)
+            .map_err(|_| PgStorageError::NotFound("ingestion task not found".to_string()))?;
+        let lock_token = lock_token
+            .and_then(|value| Uuid::parse_str(value).ok())
+            .ok_or_else(|| PgStorageError::NotFound("ingestion task lease not found".to_string()))?;
+
         let mut tx = self.pool.begin(context).await?;
-        sqlx::query(
+        let row = sqlx::query(
             r#"
             INSERT INTO document_parse_runs (
                 run_id,
@@ -44,7 +70,27 @@ impl PgAppRepository {
                 backend_summary,
                 artifact_path
             )
-            VALUES ($1, $2, $3, $4, 'running', $5, $6)
+            SELECT $1, $2, $3, $4, 'running', $5, $6
+            WHERE EXISTS (
+                SELECT 1
+                FROM documents d
+                WHERE d.id = $4
+                  AND d.org_id = $2
+                  AND d.notebook_id = $3
+                  AND d.status NOT IN ('deleting', 'deleted')
+                FOR UPDATE
+            )
+              AND EXISTS (
+                SELECT 1
+                FROM ingestion_tasks it
+                WHERE it.org_id = $2
+                  AND it.document_id = $4
+                  AND it.task_id = $7
+                  AND it.lock_token = $8
+                  AND it.status = 'processing'
+                  AND it.dead_lettered_at IS NULL
+            )
+            RETURNING run_id
             "#,
         )
         .bind(run_id)
@@ -53,8 +99,14 @@ impl PgAppRepository {
         .bind(document_id)
         .bind(backend_summary)
         .bind(artifact_path)
-        .execute(tx.inner())
+        .bind(task_id)
+        .bind(lock_token)
+        .fetch_optional(tx.inner())
         .await?;
+        if row.is_none() {
+            tx.rollback().await?;
+            return Err(PgStorageError::NotFound("document not found".to_string()));
+        }
         tx.commit().await?;
         Ok(())
     }
@@ -69,11 +121,19 @@ impl PgAppRepository {
         warnings_json: &serde_json::Value,
         error_json: Option<&serde_json::Value>,
         artifact_path: Option<&str>,
+        task_id: &str,
+        lock_token: Option<&str>,
     ) -> Result<(), PgStorageError> {
+        let task_id = Uuid::parse_str(task_id)
+            .map_err(|_| PgStorageError::NotFound("ingestion task not found".to_string()))?;
+        let lock_token = lock_token
+            .and_then(|value| Uuid::parse_str(value).ok())
+            .ok_or_else(|| PgStorageError::NotFound("ingestion task lease not found".to_string()))?;
+
         let mut tx = self.pool.begin(context).await?;
-        sqlx::query(
+        let result = sqlx::query(
             r#"
-            UPDATE document_parse_runs
+            UPDATE document_parse_runs pr
             SET status = $2,
                 backend_summary = $3,
                 duration_ms = $4,
@@ -81,7 +141,27 @@ impl PgAppRepository {
                 error_json = $6,
                 artifact_path = COALESCE($7, artifact_path),
                 updated_at = NOW()
-            WHERE run_id = $1
+            WHERE pr.run_id = $1
+              AND pr.org_id = $8
+              AND EXISTS (
+                  SELECT 1
+                  FROM documents d
+                  WHERE d.id = pr.document_id
+                    AND d.org_id = pr.org_id
+                    AND d.notebook_id = pr.notebook_id
+                    AND d.status NOT IN ('deleting', 'deleted')
+                  FOR UPDATE
+              )
+              AND EXISTS (
+                  SELECT 1
+                  FROM ingestion_tasks it
+                  WHERE it.org_id = pr.org_id
+                    AND it.document_id = pr.document_id
+                    AND it.task_id = $9
+                    AND it.lock_token = $10
+                    AND it.status = 'processing'
+                    AND it.dead_lettered_at IS NULL
+              )
             "#,
         )
         .bind(run_id)
@@ -91,8 +171,15 @@ impl PgAppRepository {
         .bind(warnings_json)
         .bind(error_json)
         .bind(artifact_path)
+        .bind(context.org_id().into_uuid())
+        .bind(task_id)
+        .bind(lock_token)
         .execute(tx.inner())
         .await?;
+        if result.rows_affected() == 0 {
+            tx.rollback().await?;
+            return Err(PgStorageError::NotFound("document parse run not found".to_string()));
+        }
         tx.commit().await?;
         Ok(())
     }
@@ -105,6 +192,24 @@ impl PgAppRepository {
         blocks: &[StoredDocumentBlock],
     ) -> Result<(), PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
+        let guard = sqlx::query(
+            r#"
+            select 1
+            from documents
+            where id = $1
+              and org_id = $2
+              and status not in ('deleting', 'deleted')
+            for update
+            "#,
+        )
+        .bind(document_id)
+        .bind(context.org_id().into_uuid())
+        .fetch_optional(tx.inner())
+        .await?;
+        if guard.is_none() {
+            tx.rollback().await?;
+            return Err(PgStorageError::NotFound("document not found".to_string()));
+        }
 
         sqlx::query("DELETE FROM document_blocks WHERE document_id = $1")
             .bind(document_id)

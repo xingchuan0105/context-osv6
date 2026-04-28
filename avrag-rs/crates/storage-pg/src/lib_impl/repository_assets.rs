@@ -8,7 +8,15 @@ impl PgAppRepository {
         let row = sqlx::query(
             r#"
             INSERT INTO document_assets (asset_id, org_id, notebook_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+            WHERE EXISTS (
+                SELECT 1
+                FROM documents
+                WHERE id = $4
+                  AND org_id = $2
+                  AND status NOT IN ('deleting', 'deleted')
+                FOR UPDATE
+            )
             RETURNING asset_id, org_id, notebook_id, document_id, parse_run_id, page, asset_kind, storage_path, mime_type, width, height, caption, parser_backend, created_at
             "#,
         )
@@ -40,7 +48,15 @@ impl PgAppRepository {
         let row = sqlx::query(
             r#"
             INSERT INTO document_multimodal_chunks (chunk_id, org_id, notebook_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+            WHERE EXISTS (
+                SELECT 1
+                FROM documents
+                WHERE id = $4
+                  AND org_id = $2
+                  AND status NOT IN ('deleting', 'deleted')
+                FOR UPDATE
+            )
             RETURNING chunk_id, org_id, notebook_id, document_id, parse_run_id, asset_id, page, context_text, caption, normalized_text, parser_backend, metadata, created_at
             "#,
         )

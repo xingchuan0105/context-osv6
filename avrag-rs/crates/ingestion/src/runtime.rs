@@ -1,15 +1,38 @@
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::model::{AuditAction, AuditRecord, DocumentStateMachine, IngestionTask, Transition};
 use crate::{IngestionError, model};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskFailureOutcome {
+    Requeued,
+    DeadLettered,
+    LeaseLost,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskCompletionOutcome {
+    Completed,
+    LeaseLost,
+}
+
 #[async_trait]
 pub trait TaskSource {
     async fn fetch_next(&mut self) -> Result<Option<IngestionTask>, IngestionError>;
-    async fn complete(&mut self, task: &IngestionTask) -> Result<(), IngestionError>;
-    async fn fail(&mut self, task: &IngestionTask, error: &str) -> Result<(), IngestionError>;
+    async fn complete(
+        &mut self,
+        task: &IngestionTask,
+    ) -> Result<TaskCompletionOutcome, IngestionError>;
+    async fn fail(
+        &mut self,
+        task: &IngestionTask,
+        error: &str,
+    ) -> Result<TaskFailureOutcome, IngestionError>;
 }
 
 #[async_trait]
@@ -40,12 +63,19 @@ impl TaskSource for NoopTaskSource {
         Ok(None)
     }
 
-    async fn complete(&mut self, _task: &IngestionTask) -> Result<(), IngestionError> {
-        Ok(())
+    async fn complete(
+        &mut self,
+        _task: &IngestionTask,
+    ) -> Result<TaskCompletionOutcome, IngestionError> {
+        Ok(TaskCompletionOutcome::Completed)
     }
 
-    async fn fail(&mut self, _task: &IngestionTask, _error: &str) -> Result<(), IngestionError> {
-        Ok(())
+    async fn fail(
+        &mut self,
+        _task: &IngestionTask,
+        _error: &str,
+    ) -> Result<TaskFailureOutcome, IngestionError> {
+        Ok(TaskFailureOutcome::Requeued)
     }
 }
 
@@ -136,52 +166,107 @@ where
                 )
                 .await?;
             self.processor.process(&task).await?;
-            self.state_sink
-                .transition(
-                    &task,
-                    Transition {
-                        from: common::DocumentStatus::Processing,
-                        to: common::DocumentStatus::Completed,
-                    },
-                )
-                .await?;
             Ok(())
         }
         .await;
 
         if let Err(error) = task_result {
-            let _ = self
-                .state_sink
-                .transition(
-                    &task,
-                    Transition {
-                        from: common::DocumentStatus::Processing,
-                        to: common::DocumentStatus::Failed,
-                    },
-                )
-                .await;
+            let error_message = error.to_string();
+            let failure_outcome = self.task_source.fail(&task, &error_message).await?;
+            match failure_outcome {
+                TaskFailureOutcome::DeadLettered => {
+                    if let Err(transition_error) = self
+                        .state_sink
+                        .transition(
+                            &task,
+                            Transition {
+                                from: common::DocumentStatus::Processing,
+                                to: common::DocumentStatus::Failed,
+                            },
+                        )
+                        .await
+                    {
+                        warn!(
+                            task_id = task.task_id,
+                            document_id = task.document_id,
+                            outcome = ?failure_outcome,
+                            error = %transition_error,
+                            processing_error = %error_message,
+                            "failed to transition dead-lettered ingestion task document to failed"
+                        );
+                    }
+                }
+                TaskFailureOutcome::Requeued => {
+                    if let Err(transition_error) = self
+                        .state_sink
+                        .transition(
+                            &task,
+                            Transition {
+                                from: common::DocumentStatus::Processing,
+                                to: common::DocumentStatus::Queued,
+                            },
+                        )
+                        .await
+                    {
+                        warn!(
+                            task_id = task.task_id,
+                            document_id = task.document_id,
+                            outcome = ?failure_outcome,
+                            error = %transition_error,
+                            processing_error = %error_message,
+                            "failed to transition retryable ingestion task document back to queued"
+                        );
+                    }
+                }
+                TaskFailureOutcome::LeaseLost => {
+                    warn!(
+                        task_id = task.task_id,
+                        document_id = task.document_id,
+                        outcome = ?failure_outcome,
+                        error = %error_message,
+                        "ingestion task failure lease lost; leaving document state unchanged"
+                    );
+                }
+            }
             self.audit_sink
                 .record(model::task_audit(
                     &task,
                     AuditAction::TaskFailed,
-                    json!({ "kind": task.kind, "error": error.to_string() }),
+                    json!({ "kind": task.kind, "error": error_message, "outcome": failure_outcome }),
                 ))
                 .await?;
-            self.task_source.fail(&task, &error.to_string()).await?;
             return Err(error);
         }
 
+        self.state_sink
+            .transition(
+                &task,
+                Transition {
+                    from: common::DocumentStatus::Processing,
+                    to: common::DocumentStatus::Completed,
+                },
+            )
+            .await?;
         self.audit_sink
             .record(model::task_audit(
                 &task,
                 AuditAction::TaskCompleted,
-                json!({ "kind": task.kind }),
+                json!({ "kind": task.kind, "outcome": TaskCompletionOutcome::Completed }),
             ))
             .await?;
-        self.task_source.complete(&task).await?;
+        let completion_outcome = self.task_source.complete(&task).await?;
+        if matches!(completion_outcome, TaskCompletionOutcome::LeaseLost) {
+            warn!(
+                task_id = task.task_id,
+                document_id = task.document_id,
+                ?completion_outcome,
+                "ingestion task completed document side effects but lost task lease before task row cleanup"
+            );
+        }
         info!(
             task_id = task.task_id,
             document_id = task.document_id,
+            ?completion_outcome,
             "worker task processed"
         );
         Ok(WorkerTick::Processed(task))

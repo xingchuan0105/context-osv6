@@ -149,7 +149,7 @@ impl PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, org_id, notebook_id, file_name, mime_type, file_size, object_path
+            select id, org_id, notebook_id, file_name, mime_type, file_size, object_path, status
             from documents
             where id = $1
             "#,
@@ -190,11 +190,14 @@ impl PgAppRepository {
             update documents
             set file_size = $2, chunk_count = $3, updated_at = now()
             where id = $1
+              and org_id = $4
+              and status not in ('deleting', 'deleted')
             "#,
         )
         .bind(document_id)
         .bind(i64::try_from(content.len()).unwrap_or(i64::MAX))
         .bind(i32::try_from(body_chunks.len()).unwrap_or(i32::MAX))
+        .bind(context.org_id().into_uuid())
         .execute(tx.inner())
         .await?;
 

@@ -1,0 +1,5 @@
+ALTER TABLE documents
+    ADD COLUMN IF NOT EXISTS upload_size_bytes BIGINT NULL,
+    ADD COLUMN IF NOT EXISTS upload_sha256 TEXT NULL,
+    ADD COLUMN IF NOT EXISTS upload_validated_at TIMESTAMPTZ NULL,
+    ADD COLUMN IF NOT EXISTS upload_validation_error TEXT NULL;

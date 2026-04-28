@@ -16,7 +16,6 @@ avrag-auth = { path = "../auth" }
 avrag-billing = { path = "../billing" }
 avrag-storage-pg = { path = "../storage-pg" }
 avrag-storage-milvus = { path = "../storage-milvus" }
-avrag-storage-qdrant = { path = "../storage-qdrant" }
 avrag-search = { path = "../search" }
 avrag-chatmemory = { path = "../chatmemory" }
 avrag-llm = { path = "../llm" }

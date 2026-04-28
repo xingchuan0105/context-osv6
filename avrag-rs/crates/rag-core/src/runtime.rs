@@ -23,11 +23,6 @@ pub struct RagRuntime {
 }
 
 impl RagRuntime {
-    pub fn new(config: RagConfig) -> Self {
-        let data_plane = Arc::new(retrieval::LegacyRetrievalDataPlane::new(config.clone()));
-        Self::with_data_plane(config, data_plane)
-    }
-
     pub fn with_data_plane(config: RagConfig, data_plane: Arc<dyn RetrievalDataPlane>) -> Self {
         Self { config, data_plane }
     }

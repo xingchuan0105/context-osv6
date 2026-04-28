@@ -14,16 +14,16 @@ avrag-auth = { path = "../../crates/auth" }
 avrag-cache-redis = { path = "../../crates/cache-redis" }
 avrag-llm = { path = "../../crates/llm" }
 avrag-retrieval-data-plane = { path = "../../crates/retrieval-data-plane" }
-avrag-search = { path = "../../crates/search" }
 avrag-storage-milvus = { path = "../../crates/storage-milvus" }
 avrag-storage-pg = { path = "../../crates/storage-pg" }
-avrag-storage-qdrant = { path = "../../crates/storage-qdrant" }
 chrono.workspace = true
 common = { path = "../../crates/common" }
 dotenvy = "0.15"
 ingestion = { path = "../../crates/ingestion" }
 reqwest.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "uuid", "chrono", "json"] }
 text-splitter.workspace = true
 tokio.workspace = true

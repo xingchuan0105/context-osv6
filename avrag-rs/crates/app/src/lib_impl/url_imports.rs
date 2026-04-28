@@ -162,6 +162,7 @@ impl AppState {
                     && notebook_id
                         .map(|id| stored.document.notebook_id == id)
                         .unwrap_or(true)
+                    && !document_is_deleting_or_deleted(&stored.document.status)
             })
             .filter_map(|stored| {
                 let notebook = state.notebooks.get(&stored.document.notebook_id)?;

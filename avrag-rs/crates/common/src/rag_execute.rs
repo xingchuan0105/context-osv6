@@ -77,6 +77,63 @@ pub struct GraphHint {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct PlaceholderTriplet {
+    pub subject: String,
+    pub predicate: String,
+    pub object: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaceholderTripletType {
+    Fuzzy,     // 2+ placeholders
+    Traceable, // 1 placeholder
+    Resolved,  // 0 placeholders
+}
+
+impl PlaceholderTriplet {
+    /// 分类 triplet 为 fuzzy/traceable/resolved
+    pub fn classify(&self) -> PlaceholderTripletType {
+        let placeholder_count = self.subject.starts_with("?") as usize
+            + self.predicate.starts_with("?") as usize
+            + self.object.starts_with("?") as usize;
+        match placeholder_count {
+            0 => PlaceholderTripletType::Resolved,
+            1 => PlaceholderTripletType::Traceable,
+            _ => PlaceholderTripletType::Fuzzy,
+        }
+    }
+
+    /// 返回已知实体（非占位符部分）
+    /// 注意：predicate 不是实体，只有 subject 和 object 是实体
+    pub fn known_entities(&self) -> Vec<String> {
+        let mut entities = Vec::new();
+        if !self.subject.starts_with("?") {
+            entities.push(self.subject.clone());
+        }
+        if !self.object.starts_with("?") {
+            entities.push(self.object.clone());
+        }
+        entities
+    }
+
+    /// 返回占位符位置
+    pub fn placeholder_positions(&self) -> Vec<&str> {
+        let mut positions = Vec::new();
+        if self.subject.starts_with("?") {
+            positions.push("subject");
+        }
+        if self.predicate.starts_with("?") {
+            positions.push("predicate");
+        }
+        if self.object.starts_with("?") {
+            positions.push("object");
+        }
+        positions
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ChannelBudget {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text_dense: Option<usize>,
@@ -117,6 +174,8 @@ pub struct ExecutePlanRequest {
     pub query_entities: Vec<QueryEntity>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub graph_hints: Vec<GraphHint>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub placeholder_triplets: Vec<PlaceholderTriplet>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trace: Option<ExecutePlanTrace>,
 }
@@ -241,6 +300,7 @@ impl ExecutePlanRequest {
             channel_budget: None,
             query_entities: Vec::new(),
             graph_hints: Vec::new(),
+            placeholder_triplets: Vec::new(),
             trace: None,
         }
     }
@@ -397,6 +457,33 @@ impl RetrievalBundle {
         );
         chunks.extend(self.summary_chunks.clone());
         chunks
+    }
+
+    /// 返回所有可用于 citation 的 chunks，去重并保持 regular chunks 优先
+    pub fn citation_chunks(&self) -> Vec<&RetrievedChunk> {
+        let mut all_chunks =
+            Vec::with_capacity(self.chunks.len() + self.graph_supported_chunks.len());
+
+        // Regular chunks 优先
+        all_chunks.extend(&self.chunks);
+
+        // Graph chunks 补充（去重）
+        let regular_ids: std::collections::HashSet<_> =
+            self.chunks.iter().map(|c| &c.chunk_id).collect();
+        for chunk in &self.graph_supported_chunks {
+            if !regular_ids.contains(&chunk.chunk_id) {
+                all_chunks.push(chunk);
+            }
+        }
+
+        all_chunks
+    }
+
+    /// 检查是否有任何 evidence
+    pub fn has_evidence(&self) -> bool {
+        !self.chunks.is_empty()
+            || !self.graph_supported_chunks.is_empty()
+            || !self.summary_chunks.is_empty()
     }
 }
 

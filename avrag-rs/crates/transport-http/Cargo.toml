@@ -22,8 +22,6 @@ bcrypt = "0.15"
 chrono.workspace = true
 common = { path = "../common" }
 contracts = { path = "../../../contracts" }
-leptos = { version = "0.8", features = ["ssr"] }
-leptos_axum = "0.8"
 hex.workspace = true
 jsonwebtoken = "9"
 redis.workspace = true
@@ -33,10 +31,9 @@ sha2.workspace = true
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "uuid", "chrono", "json"] }
 tokio.workspace = true
 tower = { workspace = true, features = ["util"] }
-tower-http = { workspace = true, features = ["fs"] }
+tower-http.workspace = true
 tracing.workspace = true
 uuid.workspace = true
-web-ui = { package = "frontend-web-ui", path = "../../../frontend_rust/crates/web-ui", default-features = false, features = ["ssr"] }
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-native-tls"] }
 
 [dev-dependencies]
