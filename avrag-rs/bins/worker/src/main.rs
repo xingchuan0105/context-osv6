@@ -841,10 +841,9 @@ async fn process_document_cleanup_task(
         .filter(|value| !value.is_empty())
     {
         if safe_relative_object_key(object_path) {
-            object_store
-                .delete(object_path)
-                .await
-                .map_err(|error| anyhow::anyhow!("delete document object {object_path}: {error}"))?;
+            object_store.delete(object_path).await.map_err(|error| {
+                anyhow::anyhow!("delete document object {object_path}: {error}")
+            })?;
         } else {
             warn!(
                 task_id = %task.task_id,
@@ -1466,7 +1465,10 @@ async fn run_document_pipeline(
         )
         .await
         {
-            let _ = processor.object_store.delete(&stored_asset_object_key).await;
+            let _ = processor
+                .object_store
+                .delete(&stored_asset_object_key)
+                .await;
             return Err(error);
         }
 
@@ -1491,7 +1493,10 @@ async fn run_document_pipeline(
             )
             .await;
         if let Err(error) = store_result {
-            let _ = processor.object_store.delete(&stored_asset_object_key).await;
+            let _ = processor
+                .object_store
+                .delete(&stored_asset_object_key)
+                .await;
             return Err(IngestionError::StateSink(error.to_string()));
         }
         stored_asset_path_by_ref.insert(asset.asset_id.clone(), stored_image_path.clone());

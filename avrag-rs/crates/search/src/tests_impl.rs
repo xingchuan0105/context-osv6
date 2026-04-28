@@ -23,7 +23,11 @@ async fn missing_provider_is_explicit_error() {
         avrag_auth::SubjectKind::User,
     );
     let error = executor.execute(&request, &auth).await.unwrap_err();
-    assert!(error.to_string().contains("Perplexity API key not configured"));
+    assert!(
+        error
+            .to_string()
+            .contains("Perplexity API key not configured")
+    );
 }
 
 #[tokio::test]
@@ -48,5 +52,9 @@ async fn unsupported_provider_is_explicit_error() {
         avrag_auth::SubjectKind::User,
     );
     let error = executor.execute(&request, &auth).await.unwrap_err();
-    assert!(error.to_string().contains("only perplexity agent is supported"));
+    assert!(
+        error
+            .to_string()
+            .contains("only perplexity agent is supported")
+    );
 }

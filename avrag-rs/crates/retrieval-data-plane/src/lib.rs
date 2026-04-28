@@ -308,10 +308,7 @@ mod tests {
     }
 
     fn auth_context() -> AuthContext {
-        AuthContext::new(
-            OrgId::from(Uuid::from_u128(1)),
-            SubjectKind::System,
-        )
+        AuthContext::new(OrgId::from(Uuid::from_u128(1)), SubjectKind::System)
     }
 
     fn empty_index_batch() -> DocumentIndexBatch {
@@ -340,7 +337,10 @@ mod tests {
         let data_plane = PartialRetrievalDataPlane;
         let auth = auth_context();
 
-        assert_not_implemented(data_plane.ensure_schema().await.unwrap_err(), "ensure_schema");
+        assert_not_implemented(
+            data_plane.ensure_schema().await.unwrap_err(),
+            "ensure_schema",
+        );
         assert_not_implemented(
             data_plane
                 .replace_document_index(empty_index_batch())

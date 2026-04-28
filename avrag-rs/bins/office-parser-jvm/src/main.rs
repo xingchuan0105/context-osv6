@@ -25,9 +25,9 @@ use uuid::Uuid;
 use zip::ZipArchive;
 
 const PLACEHOLDER_PNG: &[u8] = &[
-    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6,
-    0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 248, 255, 255, 63, 0,
-    5, 254, 2, 254, 167, 53, 129, 132, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0,
+    0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 248, 255, 255, 63, 0, 5,
+    254, 2, 254, 167, 53, 129, 132, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
 ];
 
 #[derive(Debug, Clone, Copy)]
@@ -105,27 +105,39 @@ async fn capabilities() -> Json<OfficeParserCapabilities> {
     })
 }
 
-async fn parse_doc(multipart: Multipart) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
+async fn parse_doc(
+    multipart: Multipart,
+) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
     parse_with_format(ParseFormat::Doc, multipart).await
 }
 
-async fn parse_docx(multipart: Multipart) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
+async fn parse_docx(
+    multipart: Multipart,
+) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
     parse_with_format(ParseFormat::Docx, multipart).await
 }
 
-async fn parse_xls(multipart: Multipart) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
+async fn parse_xls(
+    multipart: Multipart,
+) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
     parse_with_format(ParseFormat::Xls, multipart).await
 }
 
-async fn parse_xlsx(multipart: Multipart) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
+async fn parse_xlsx(
+    multipart: Multipart,
+) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
     parse_with_format(ParseFormat::Xlsx, multipart).await
 }
 
-async fn parse_ppt(multipart: Multipart) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
+async fn parse_ppt(
+    multipart: Multipart,
+) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
     parse_with_format(ParseFormat::Ppt, multipart).await
 }
 
-async fn parse_pptx(multipart: Multipart) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
+async fn parse_pptx(
+    multipart: Multipart,
+) -> Result<Json<OfficeParserParseResponse>, (StatusCode, Json<ErrorEnvelope>)> {
     parse_with_format(ParseFormat::Pptx, multipart).await
 }
 
@@ -144,11 +156,18 @@ async fn parse_with_format(
         ParseFormat::Xls => build_xls_ir(&input),
         ParseFormat::Xlsx => build_xlsx_ir(&input),
         ParseFormat::Ppt => build_presentation_ir(&input, DocumentType::Ppt, ParseBackend::PoiPpt),
-        ParseFormat::Pptx => build_presentation_ir(&input, DocumentType::Pptx, ParseBackend::PoiPptx),
+        ParseFormat::Pptx => {
+            build_presentation_ir(&input, DocumentType::Pptx, ParseBackend::PoiPptx)
+        }
     }
     .map_err(|error| {
         error!("parse error: {error}");
-        error_response(StatusCode::INTERNAL_SERVER_ERROR, "PARSE_FAILED", &error, true)
+        error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "PARSE_FAILED",
+            &error,
+            true,
+        )
     })?;
 
     let response = OfficeParserParseResponse {
@@ -451,10 +470,7 @@ fn extract_presentation_like_text(bytes: &[u8]) -> Option<Vec<String>> {
     }
 }
 
-fn read_zip_entries(
-    bytes: &[u8],
-    predicate: impl Fn(&str) -> bool,
-) -> Vec<(String, String)> {
+fn read_zip_entries(bytes: &[u8], predicate: impl Fn(&str) -> bool) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let cursor = Cursor::new(bytes);
     let Ok(mut archive) = ZipArchive::new(cursor) else {

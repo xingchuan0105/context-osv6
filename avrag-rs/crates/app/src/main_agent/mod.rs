@@ -99,7 +99,10 @@ pub struct MainAgentBehaviorSkill {
 }
 
 impl MainAgentBehaviorSkill {
-    fn new(name: impl Into<String>, instructions: impl IntoIterator<Item = impl Into<String>>) -> Self {
+    fn new(
+        name: impl Into<String>,
+        instructions: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
         Self {
             name: name.into(),
             instructions: instructions.into_iter().map(Into::into).collect(),
@@ -700,7 +703,10 @@ fn build_rag_answer_user_prompt(
             [
                 "Answer using only RAG Evidence for factual claims.",
                 "Use preferences only for expression style.",
-                &format!("The executed doc_scope was: {}.", execute_request.doc_scope.join(", ")),
+                &format!(
+                    "The executed doc_scope was: {}.",
+                    execute_request.doc_scope.join(", ")
+                ),
             ],
         ),
         output_contract: "Return a natural-language answer only.".to_string(),

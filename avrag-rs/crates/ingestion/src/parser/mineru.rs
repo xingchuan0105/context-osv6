@@ -125,7 +125,8 @@ impl MineruClient {
         info!(filename, mode = ?self.config.api_mode, "Starting MinerU precise parse");
         let result = match self.config.api_mode {
             MineruApiMode::LegacyV1Upload => {
-                self.parse_with_page_filter_legacy(bytes, filename, None).await?
+                self.parse_with_page_filter_legacy(bytes, filename, None)
+                    .await?
             }
             MineruApiMode::ExtractV4 => {
                 let source_url = require_remote_source_url(source_url, filename)?;
@@ -219,7 +220,9 @@ impl MineruClient {
         filename: &str,
         page_numbers: Option<&[u32]>,
     ) -> Result<NormalizedDocument> {
-        let task_id = self.upload_file_legacy(bytes, filename, page_numbers).await?;
+        let task_id = self
+            .upload_file_legacy(bytes, filename, page_numbers)
+            .await?;
         debug!(task_id, "File uploaded, waiting for processing");
 
         self.wait_for_completion_legacy(&task_id).await?;
@@ -338,7 +341,11 @@ impl MineruClient {
         }
     }
 
-    async fn fetch_result_legacy(&self, task_id: &str, filename: &str) -> Result<NormalizedDocument> {
+    async fn fetch_result_legacy(
+        &self,
+        task_id: &str,
+        filename: &str,
+    ) -> Result<NormalizedDocument> {
         let url = format!("{}/v1/parse/result/{}", self.config.base_url, task_id);
 
         let response = self
@@ -406,7 +413,11 @@ impl MineruClient {
             .await
             .context("Failed to decode MinerU v4 create task response")?;
         if body.code != 0 {
-            anyhow::bail!("MinerU v4 create task failed: code={} msg={}", body.code, body.msg);
+            anyhow::bail!(
+                "MinerU v4 create task failed: code={} msg={}",
+                body.code,
+                body.msg
+            );
         }
 
         body.data
@@ -445,7 +456,11 @@ impl MineruClient {
                 .await
                 .context("Failed to decode MinerU v4 task query response")?;
             if body.code != 0 {
-                anyhow::bail!("MinerU v4 task query failed: code={} msg={}", body.code, body.msg);
+                anyhow::bail!(
+                    "MinerU v4 task query failed: code={} msg={}",
+                    body.code,
+                    body.msg
+                );
             }
 
             let data = body
@@ -470,7 +485,12 @@ impl MineruClient {
                     sleep(Duration::from_secs(DEFAULT_POLL_INTERVAL_SECS)).await;
                 }
                 other => {
-                    debug!(task_id, attempt = attempts, state = other, "Unexpected MinerU v4 state");
+                    debug!(
+                        task_id,
+                        attempt = attempts,
+                        state = other,
+                        "Unexpected MinerU v4 state"
+                    );
                     sleep(Duration::from_secs(DEFAULT_POLL_INTERVAL_SECS)).await;
                 }
             }
@@ -598,9 +618,7 @@ fn require_remote_source_url(source_url: Option<&str>, filename: &str) -> Result
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .with_context(|| {
-            format!(
-                "MinerU v4 parse for {filename} requires a source URL, but none was provided"
-            )
+            format!("MinerU v4 parse for {filename} requires a source URL, but none was provided")
         })?;
     if !source_url.starts_with("http://") && !source_url.starts_with("https://") {
         anyhow::bail!(
@@ -702,7 +720,10 @@ fn extract_markdown_and_images_from_zip(
         file.read_to_end(&mut image_bytes)
             .context("Failed to read image bytes from MinerU v4 zip")?;
         std::fs::write(&file_path, &image_bytes).with_context(|| {
-            format!("Failed to write temporary MinerU image {}", file_path.display())
+            format!(
+                "Failed to write temporary MinerU image {}",
+                file_path.display()
+            )
         })?;
 
         images.push(ImageInfo {

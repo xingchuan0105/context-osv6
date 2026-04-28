@@ -42,7 +42,12 @@ impl SearchExecutor {
     }
 
     fn ensure_supported_provider(&self) -> anyhow::Result<()> {
-        if !self.config.provider.trim().eq_ignore_ascii_case("perplexity") {
+        if !self
+            .config
+            .provider
+            .trim()
+            .eq_ignore_ascii_case("perplexity")
+        {
             anyhow::bail!(
                 "unsupported search provider: {}; only perplexity agent is supported",
                 self.config.provider.trim()

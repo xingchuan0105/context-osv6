@@ -190,9 +190,7 @@ async fn share_chat_notebook_scope_from_request(
         return None;
     }
     let token = chat_request.source_token.as_deref()?;
-    let notebook_id = avrag_share::handle_validate_token(token, pg)
-        .await
-        .ok()??;
+    let notebook_id = avrag_share::handle_validate_token(token, pg).await.ok()??;
     let notebook_scope = Uuid::parse_str(&notebook_id).ok()?;
     if let Some(notebook_id) = chat_request.notebook_id.as_deref()
         && uuid::Uuid::parse_str(notebook_id).ok()? != notebook_scope
