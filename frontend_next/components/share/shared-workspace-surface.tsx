@@ -297,6 +297,12 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
                 </div>
               </div>
 
+              <div className={styles.metricSplit}>
+                <code className={styles.semanticCode}>{`permission=${normalizeSemanticValue(payload.share.permission)}`}</code>
+                <code className={styles.semanticCode}>{`scope=${normalizeSemanticValue(payload.share.scope)}`}</code>
+                <code className={styles.semanticCode}>{`allow_download=${String(payload.share.allow_download)}`}</code>
+              </div>
+
               <div className={styles.metricGrid}>
                 <article className={styles.metricCard}>
                   <div className={styles.metricLabel}>{formatUiMessage(locale, "sharedPublic.readAccessLabel")}</div>

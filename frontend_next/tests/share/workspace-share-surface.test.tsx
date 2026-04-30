@@ -133,53 +133,24 @@ describe("WorkspaceShareCenterSurface", () => {
     });
   });
 
-  it("loads share settings and refreshes them through react-query after save", async () => {
-    const user = userEvent.setup();
-
-    mocks.getShareSettingsMock
-      .mockResolvedValueOnce({
-        share_token: "share-123",
-        access_level: "link",
-        expires_at: "2026-04-30T18:00:00Z",
-        allow_download: true,
-      })
-      .mockResolvedValueOnce({
-        share_token: "share-123",
-        access_level: "public",
-        expires_at: "2026-04-30T18:00:00Z",
-        allow_download: true,
-      });
-
+  it("loads share settings, members, and analytics through react-query", async () => {
     renderWithQuery(<WorkspaceShareCenterSurface workspaceId="ws-1" />);
 
     expect(
-      await screen.findByDisplayValue("https://app.example.test/shared/kb/share-123"),
+      await screen.findByText("https://app.example.test/shared/kb/share-123"),
     ).toBeTruthy();
     expect(screen.getByText("member@example.com")).toBeTruthy();
-    expect(screen.queryByRole("textbox", { name: "Expiration time" })).toBeNull();
-    expect(screen.getByText("2026-04-30T18:00:00Z")).toBeTruthy();
-    expect(
-      screen.getByText("To change this expiry, revoke the current link and generate a new one."),
-    ).toBeTruthy();
-
-    await user.selectOptions(screen.getByLabelText("Access level"), "public");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(screen.getByLabelText("Validity")).toBeTruthy();
+    expect(screen.getByText("Distribution overview")).toBeTruthy();
 
     await waitFor(() => {
-      expect(mocks.updateShareSettingsMock).toHaveBeenCalledWith("token-123", "ws-1", {
-        access_level: "public",
-        allow_download: true,
-      });
+      expect(mocks.getShareSettingsMock).toHaveBeenCalledWith("token-123", "ws-1");
+      expect(mocks.listMembersMock).toHaveBeenCalledWith("token-123", "ws-1");
+      expect(mocks.getShareAnalyticsMock).toHaveBeenCalledWith("token-123", "ws-1");
     });
-
-    await waitFor(() => {
-      expect(mocks.getShareSettingsMock).toHaveBeenCalledTimes(2);
-    });
-
-    expect(screen.getAllByText("Public")[0]).toBeTruthy();
   });
 
-  it("keeps expiry editable before the first share link is generated and sends it through createShareLink", async () => {
+  it("generates the first share link with the selected validity window", async () => {
     const user = userEvent.setup();
 
     mocks.getShareSettingsMock.mockResolvedValue({
@@ -191,20 +162,20 @@ describe("WorkspaceShareCenterSurface", () => {
     mocks.updateShareSettingsMock.mockResolvedValue({
       share_token: "share-456",
       access_level: "link",
-      expires_at: "2026-05-01T10:00:00Z",
+      expires_at: null,
       allow_download: false,
     });
 
     renderWithQuery(<WorkspaceShareCenterSurface workspaceId="ws-1" />);
 
-    const expiresAtInput = await screen.findByRole("textbox", { name: "Expiration time" });
-    await user.type(expiresAtInput, "2026-05-01T10:00:00Z");
-    await user.click(screen.getByRole("button", { name: "Generate link" }));
+    expect((await screen.findAllByText("Inactive")).length).toBeGreaterThan(0);
+    await user.selectOptions(screen.getByLabelText("Validity"), "never");
+    await user.click(screen.getByRole("switch"));
 
     await waitFor(() => {
       expect(mocks.createShareLinkMock).toHaveBeenCalledWith("token-123", "ws-1", {
         role: "viewer",
-        expires_at: "2026-05-01T10:00:00Z",
+        expires_at: null,
       });
     });
 

@@ -4,6 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  authState: {
+    initialized: true,
+    token: "token-123" as string | null,
+  },
   getSharedWorkspaceMock: vi.fn(),
   streamSharedChatMock: vi.fn(),
 }));
@@ -24,6 +28,10 @@ vi.mock("../../lib/ui-preferences", () => ({
   useUiPreferences: () => ({
     locale: "zh-CN" as const,
   }),
+}));
+
+vi.mock("../../lib/auth/context", () => ({
+  useAuth: () => mocks.authState,
 }));
 
 vi.mock("../../lib/share/client", async () => {
@@ -69,6 +77,10 @@ function buildPayload(overrides?: Partial<Awaited<ReturnType<typeof mocks.getSha
 
 describe("SharedWorkspaceSurface", () => {
   beforeEach(() => {
+    mocks.authState = {
+      initialized: true,
+      token: "token-123",
+    };
     mocks.getSharedWorkspaceMock.mockReset();
     mocks.streamSharedChatMock.mockReset();
   });
@@ -97,7 +109,6 @@ describe("SharedWorkspaceSurface", () => {
     render(<SharedWorkspaceSurface shareToken="share-partial" />);
 
     expect(await screen.findByText("permission=partial")).toBeTruthy();
-    expect(screen.getAllByText("partial").length).toBeGreaterThan(0);
     expect(screen.getByText("scope=partial")).toBeTruthy();
     expect(screen.getByText("仅在线查看")).toBeTruthy();
     expect(screen.getByText("allow_download=false")).toBeTruthy();

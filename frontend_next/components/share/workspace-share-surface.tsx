@@ -16,8 +16,13 @@ import {
   getShareAccessLogs,
   getShareAnalytics,
   getShareSettings,
+  inviteMember,
+  listMembers,
+  removeMember,
   revokeShareLink,
   type AccessLogsResponse,
+  type MemberRow,
+  type MembersResponse,
   type ShareAnalyticsResponse,
   type ShareSettings,
   updateShareSettings,
@@ -36,6 +41,8 @@ const shareKeys = {
     ["share-center", workspaceId, "access-logs", token] as const,
   analytics: (workspaceId: string, token: string | null) =>
     ["share-center", workspaceId, "analytics", token] as const,
+  members: (workspaceId: string, token: string | null) =>
+    ["share-center", workspaceId, "members", token] as const,
   settings: (workspaceId: string, token: string | null) =>
     ["share-center", workspaceId, "settings", token] as const,
 };
@@ -316,6 +323,38 @@ function shareStatusBadgeStyle(status: ShareStatus | null) {
   };
 }
 
+function memberRoleLabel(locale: "zh-CN" | "en", role: string) {
+  if (role === "editor") {
+    return formatSettingsShareMessage(locale, "shareCenter.memberRole.editor");
+  }
+
+  if (role === "owner") {
+    return formatSettingsShareMessage(locale, "shareCenter.memberRole.owner");
+  }
+
+  return formatSettingsShareMessage(locale, "shareCenter.memberRole.viewer");
+}
+
+function memberStatusLabel(locale: "zh-CN" | "en", status: string) {
+  if (status === "accepted") {
+    return formatSettingsShareMessage(locale, "shareCenter.memberStatus.accepted");
+  }
+
+  if (status === "revoked") {
+    return formatSettingsShareMessage(locale, "shareCenter.memberStatus.revoked");
+  }
+
+  return formatSettingsShareMessage(locale, "shareCenter.memberStatus.pending");
+}
+
+function memberDisplayName(member: MemberRow) {
+  return member.email.trim() || member.user_id || member.member_id;
+}
+
+function isValidInviteEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 export function WorkspaceShareCenterSurface({
   workspaceId,
 }: WorkspaceShareCenterSurfaceProps) {
@@ -328,10 +367,19 @@ export function WorkspaceShareCenterSurface({
   const [actionError, setActionError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [expiresAtDraft, setExpiresAtDraft] = useState<ShareValidityOption>("30d");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"viewer" | "editor">("viewer");
+  const [inviteError, setInviteError] = useState("");
+  const [pendingRemoveMemberId, setPendingRemoveMemberId] = useState<string | null>(null);
   const settingsQuery = useQuery({
     queryKey: shareKeys.settings(workspaceId, auth.token),
     enabled: Boolean(auth.token && workspaceReady),
     queryFn: () => getShareSettings(auth.token as string, workspaceId),
+  });
+  const membersQuery = useQuery<MembersResponse>({
+    queryKey: shareKeys.members(workspaceId, auth.token),
+    enabled: Boolean(auth.token && workspaceReady),
+    queryFn: () => listMembers(auth.token as string, workspaceId),
   });
   const analyticsQuery = useQuery({
     queryKey: shareKeys.analytics(workspaceId, auth.token),
@@ -419,6 +467,45 @@ export function WorkspaceShareCenterSurface({
       queryClient.setQueryData(shareKeys.settings(workspaceId, auth.token), settings);
       await queryClient.invalidateQueries({
         queryKey: shareKeys.settings(workspaceId, auth.token),
+      });
+    },
+  });
+  const inviteMemberMutation = useMutation({
+    mutationFn: async () => {
+      if (!auth.token) {
+        throw new Error(formatSettingsShareMessage(locale, "shareCenter.loginRequired"));
+      }
+
+      if (!workspaceReady) {
+        throw new Error(invalidWorkspaceMessage);
+      }
+
+      return inviteMember(auth.token, workspaceId, inviteEmail.trim(), inviteRole);
+    },
+    onSuccess: async () => {
+      setInviteEmail("");
+      setInviteError("");
+      await queryClient.invalidateQueries({
+        queryKey: shareKeys.members(workspaceId, auth.token),
+      });
+    },
+  });
+  const removeMemberMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      if (!auth.token) {
+        throw new Error(formatSettingsShareMessage(locale, "shareCenter.loginRequired"));
+      }
+
+      if (!workspaceReady) {
+        throw new Error(invalidWorkspaceMessage);
+      }
+
+      return removeMember(auth.token, workspaceId, memberId);
+    },
+    onSuccess: async () => {
+      setPendingRemoveMemberId(null);
+      await queryClient.invalidateQueries({
+        queryKey: shareKeys.members(workspaceId, auth.token),
       });
     },
   });
@@ -514,6 +601,44 @@ export function WorkspaceShareCenterSurface({
         error instanceof Error
           ? error.message
           : formatSettingsShareMessage(locale, "shareCenter.saveError"),
+      );
+    }
+  }
+
+  async function handleInviteMember() {
+    setInviteError("");
+
+    if (!inviteEmail.trim()) {
+      setInviteError(formatSettingsShareMessage(locale, "shareCenter.inviteEmailRequired"));
+      return;
+    }
+
+    if (!isValidInviteEmail(inviteEmail)) {
+      setInviteError(formatSettingsShareMessage(locale, "shareCenter.inviteEmailInvalid"));
+      return;
+    }
+
+    try {
+      await inviteMemberMutation.mutateAsync();
+    } catch (error) {
+      setInviteError(
+        error instanceof Error
+          ? error.message
+          : formatSettingsShareMessage(locale, "shareCenter.membersLoadError"),
+      );
+    }
+  }
+
+  async function handleConfirmRemove(memberId: string) {
+    setActionError("");
+
+    try {
+      await removeMemberMutation.mutateAsync(memberId);
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : formatSettingsShareMessage(locale, "shareCenter.removeError"),
       );
     }
   }
@@ -792,6 +917,136 @@ export function WorkspaceShareCenterSurface({
             </p>
           </section>
         ) : null}
+
+        <section
+          className="app-surface-card"
+          style={{
+            display: "grid",
+            gap: "0.95rem",
+            padding: "0.95rem 1rem 1rem",
+          }}
+        >
+          <SectionHeader
+            subtitle={formatSettingsShareMessage(locale, "shareCenter.inviteSectionSubtitle")}
+            title={formatSettingsShareMessage(locale, "shareCenter.inviteSectionTitle")}
+          />
+
+          <div
+            className="app-inline-surface"
+            style={{ display: "grid", gap: "0.75rem", padding: "0.82rem 0.9rem 0.88rem" }}
+          >
+            <div style={{ display: "grid", gap: "0.35rem" }}>
+              <label className="app-form-label" htmlFor="invite-email">
+                {locale === "zh-CN" ? "邀请邮箱" : "Invite email"}
+              </label>
+              <input
+                className="app-input"
+                id="invite-email"
+                type="email"
+                value={inviteEmail}
+                onChange={(event) => setInviteEmail(event.target.value)}
+              />
+            </div>
+            <div style={{ display: "grid", gap: "0.35rem" }}>
+              <label className="app-form-label" htmlFor="invite-role">
+                {locale === "zh-CN" ? "邀请角色" : "Invite role"}
+              </label>
+              <select
+                className="app-input"
+                id="invite-role"
+                value={inviteRole}
+                onChange={(event) => setInviteRole(event.target.value as "viewer" | "editor")}
+              >
+                <option value="viewer">{memberRoleLabel(locale, "viewer")}</option>
+                <option value="editor">{memberRoleLabel(locale, "editor")}</option>
+              </select>
+            </div>
+            <button
+              className="app-button-primary"
+              disabled={inviteMemberMutation.isPending}
+              style={{ justifyContent: "center" }}
+              type="button"
+              onClick={() => void handleInviteMember()}
+            >
+              {inviteMemberMutation.isPending
+                ? formatSettingsShareMessage(locale, "shareCenter.inviteSending")
+                : locale === "zh-CN"
+                  ? "发送邀请"
+                  : "Send invite"}
+            </button>
+            {inviteError ? <p className="app-notice-banner" style={{ margin: 0 }}>{inviteError}</p> : null}
+          </div>
+
+          {membersQuery.isLoading && !membersQuery.data ? (
+            <p style={{ margin: 0 }}>{formatSettingsShareMessage(locale, "shareCenter.loading")}</p>
+          ) : membersQuery.error && !membersQuery.data ? (
+            <p className="app-notice-banner" style={{ margin: 0 }}>
+              {membersQuery.error instanceof Error
+                ? membersQuery.error.message
+                : formatSettingsShareMessage(locale, "shareCenter.membersLoadError")}
+            </p>
+          ) : membersQuery.data && membersQuery.data.members.length > 0 ? (
+            <div style={{ display: "grid", gap: "0.75rem" }}>
+              {membersQuery.data.members.map((member) => {
+                const displayName = memberDisplayName(member);
+                const confirming = pendingRemoveMemberId === member.member_id;
+
+                return (
+                  <article
+                    className="app-inline-surface"
+                    key={member.member_id}
+                    style={{ display: "grid", gap: "0.65rem", padding: "0.72rem 0.82rem 0.78rem" }}
+                  >
+                    <div style={{ display: "grid", gap: "0.2rem" }}>
+                      <strong>{displayName}</strong>
+                      <span style={{ color: "hsl(var(--muted-foreground))" }}>
+                        {memberRoleLabel(locale, member.role)} · {memberStatusLabel(locale, member.status)}
+                      </span>
+                      <span style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.88rem" }}>
+                        {formatSettingsShareMessage(locale, "shareCenter.memberInvitedAt", {
+                          value: formatAccessedAt(locale, member.invited_at),
+                        })}
+                      </span>
+                    </div>
+                    {confirming ? (
+                      <div className="app-button-row" style={{ justifyContent: "flex-start" }}>
+                        <button
+                          className="app-button-primary"
+                          disabled={removeMemberMutation.isPending}
+                          type="button"
+                          onClick={() => void handleConfirmRemove(member.member_id)}
+                        >
+                          {formatSettingsShareMessage(locale, "shareCenter.confirmRemoveAction")}
+                        </button>
+                        <button
+                          className="app-button-ghost"
+                          disabled={removeMemberMutation.isPending}
+                          type="button"
+                          onClick={() => setPendingRemoveMemberId(null)}
+                        >
+                          {locale === "zh-CN" ? "取消" : "Cancel"}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        className="app-button-ghost"
+                        style={{ justifySelf: "start" }}
+                        type="button"
+                        onClick={() => setPendingRemoveMemberId(member.member_id)}
+                      >
+                        {formatSettingsShareMessage(locale, "shareCenter.removeAction")}
+                      </button>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <p style={{ color: "hsl(var(--muted-foreground))", margin: 0 }}>
+              {locale === "zh-CN" ? "暂无成员。" : "No members yet."}
+            </p>
+          )}
+        </section>
 
         <section
           className="app-surface-card"
