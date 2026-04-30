@@ -22,8 +22,16 @@ impl SearchExecutor {
         request: &ChatRequest,
         _auth: &AuthContext,
     ) -> anyhow::Result<SearchResponse> {
-        self.ensure_supported_provider()?;
-        provider::execute_perplexity_agent(&self.config, &self.client, &request.query).await
+        match self.normalized_provider().as_str() {
+            "brave_llm_context" => {
+                provider::execute_brave_llm_context(&self.config, &self.client, &request.query)
+                    .await
+            }
+            "perplexity" => {
+                provider::execute_perplexity_agent(&self.config, &self.client, &request.query).await
+            }
+            provider => unsupported_provider(provider),
+        }
     }
 
     pub async fn execute_stream(
@@ -31,36 +39,37 @@ impl SearchExecutor {
         request: &ChatRequest,
         mut on_update: impl FnMut(SearchStreamUpdate),
     ) -> anyhow::Result<SearchResponse> {
-        self.ensure_supported_provider()?;
-        provider::stream_perplexity_agent(
-            &self.config,
-            &self.client,
-            &request.query,
-            &mut on_update,
-        )
-        .await
+        match self.normalized_provider().as_str() {
+            "brave_llm_context" => {
+                provider::stream_brave_llm_context(
+                    &self.config,
+                    &self.client,
+                    &request.query,
+                    &mut on_update,
+                )
+                .await
+            }
+            "perplexity" => {
+                provider::stream_perplexity_agent(
+                    &self.config,
+                    &self.client,
+                    &request.query,
+                    &mut on_update,
+                )
+                .await
+            }
+            provider => unsupported_provider(provider),
+        }
     }
 
-    fn ensure_supported_provider(&self) -> anyhow::Result<()> {
-        if !self
-            .config
-            .provider
-            .trim()
-            .eq_ignore_ascii_case("perplexity")
-        {
-            anyhow::bail!(
-                "unsupported search provider: {}; only perplexity agent is supported",
-                self.config.provider.trim()
-            );
-        }
-        if self
-            .config
-            .perplexity_api_key
-            .as_ref()
-            .map_or(true, |key| key.trim().is_empty())
-        {
-            anyhow::bail!("Perplexity API key not configured");
-        }
-        Ok(())
+    fn normalized_provider(&self) -> String {
+        self.config.provider.trim().to_ascii_lowercase()
     }
+}
+
+fn unsupported_provider<T>(provider: &str) -> anyhow::Result<T> {
+    anyhow::bail!(
+        "unsupported search provider: {}; supported providers: brave_llm_context, perplexity",
+        provider
+    )
 }

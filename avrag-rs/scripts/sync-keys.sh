@@ -30,10 +30,12 @@ KEY_VARS=(
   MM_RERANK_API_KEY
   RERANK_API_KEY
   SEARCH_LLM_API_KEY
-  # DMXAPI — answer, summary
+  # DeepSeek — Main Agent answer/planning
   ANSWER_LLM_API_KEY
+  # DMXAPI — summary
   SUMMARY_LLM_API_KEY
-  # Search — Perplexity only
+  # Search — Brave LLM Context primary, Perplexity legacy
+  SEARCH_API_KEY
   PERPLEXITY_API_KEY
   # Document parsing
   MINERU_API_KEY

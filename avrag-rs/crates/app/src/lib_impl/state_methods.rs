@@ -10,6 +10,9 @@ impl AppState {
         let chatmemory = None;
         let search_executor = Some(Arc::new(SearchExecutor::new(avrag_search::SearchConfig {
             provider: config.search.provider.clone(),
+            base_url: config.search.base_url.clone(),
+            api_key: config.search.api_key.clone(),
+            max_results: config.search.max_results,
             perplexity_api_key: config.search.perplexity_api_key.clone(),
         })));
 
@@ -51,6 +54,9 @@ impl AppState {
         let chatmemory = pg.as_ref().map(|p| Arc::new(ChatMemory::new(p.clone())));
         let search_executor = Some(Arc::new(SearchExecutor::new(avrag_search::SearchConfig {
             provider: config.search.provider.clone(),
+            base_url: config.search.base_url.clone(),
+            api_key: config.search.api_key.clone(),
+            max_results: config.search.max_results,
             perplexity_api_key: config.search.perplexity_api_key.clone(),
         })));
 

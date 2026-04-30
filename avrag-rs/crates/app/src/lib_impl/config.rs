@@ -256,8 +256,8 @@ impl Default for AppConfig {
                     "web_extractor".to_string(),
                     "code_interpreter".to_string(),
                 ],
-                provider: "perplexity".to_string(), // Changed default to perplexity
-                base_url: "https://api.exa.ai".to_string(),
+                provider: "brave_llm_context".to_string(),
+                base_url: "https://api.search.brave.com".to_string(),
                 api_key: String::new(),
                 max_results: 10,
                 max_sub_queries: 3,

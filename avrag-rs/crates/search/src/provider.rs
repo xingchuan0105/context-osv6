@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use avrag_llm::LlmUsage;
 use reqwest::Client;
@@ -9,13 +9,56 @@ use crate::{SearchConfig, SearchResponse, SearchResult, SearchStreamUpdate};
 
 const PERPLEXITY_AGENT_URL: &str = "https://api.perplexity.ai/v1/agent";
 const PERPLEXITY_SEARCH_PRESET: &str = "pro-search";
+const BRAVE_LLM_CONTEXT_PATH: &str = "/res/v1/llm/context";
+
+pub(crate) async fn execute_brave_llm_context(
+    config: &SearchConfig,
+    client: &Client,
+    query: &str,
+) -> anyhow::Result<SearchResponse> {
+    let api_key = configured_brave_api_key(config)?;
+    let endpoint = brave_llm_context_url(config);
+    let response = client
+        .post(endpoint)
+        .header("X-Subscription-Token", api_key)
+        .header("Accept", "application/json")
+        .header("Accept-Encoding", "gzip")
+        .json(&BraveLlmContextRequest::new(query, config.max_results))
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        anyhow::bail!("brave llm context api error {}: {}", status, body);
+    }
+
+    let context_response: BraveLlmContextResponse = response.json().await?;
+    Ok(search_response_from_brave_context(context_response, query))
+}
+
+pub(crate) async fn stream_brave_llm_context(
+    config: &SearchConfig,
+    client: &Client,
+    query: &str,
+    on_update: &mut impl FnMut(SearchStreamUpdate),
+) -> anyhow::Result<SearchResponse> {
+    on_update(SearchStreamUpdate::Searching {
+        queries: vec![query.trim().to_string()],
+    });
+    let response = execute_brave_llm_context(config, client, query).await?;
+    on_update(SearchStreamUpdate::SourcesCollected {
+        results: response.results.clone(),
+    });
+    Ok(response)
+}
 
 pub(crate) async fn execute_perplexity_agent(
     config: &SearchConfig,
     client: &Client,
     query: &str,
 ) -> anyhow::Result<SearchResponse> {
-    let api_key = configured_api_key(config)?;
+    let api_key = configured_perplexity_api_key(config)?;
     let response = client
         .post(PERPLEXITY_AGENT_URL)
         .header("Authorization", format!("Bearer {}", api_key))
@@ -40,7 +83,7 @@ pub(crate) async fn stream_perplexity_agent(
     query: &str,
     on_update: &mut impl FnMut(SearchStreamUpdate),
 ) -> anyhow::Result<SearchResponse> {
-    let api_key = configured_api_key(config)?;
+    let api_key = configured_perplexity_api_key(config)?;
     let mut response = client
         .post(PERPLEXITY_AGENT_URL)
         .header("Authorization", format!("Bearer {}", api_key))
@@ -83,13 +126,160 @@ pub(crate) async fn stream_perplexity_agent(
     completed.ok_or_else(|| anyhow::anyhow!("perplexity stream ended without response.completed"))
 }
 
-fn configured_api_key(config: &SearchConfig) -> anyhow::Result<&str> {
+fn configured_brave_api_key(config: &SearchConfig) -> anyhow::Result<&str> {
+    let api_key = config.api_key.trim();
+    if api_key.is_empty() {
+        anyhow::bail!("Brave LLM Context API key not configured");
+    }
+    Ok(api_key)
+}
+
+fn configured_perplexity_api_key(config: &SearchConfig) -> anyhow::Result<&str> {
     config
         .perplexity_api_key
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| anyhow::anyhow!("Perplexity API key not configured"))
+}
+
+fn brave_llm_context_url(config: &SearchConfig) -> String {
+    let base = config.base_url.trim().trim_end_matches('/');
+    if base.ends_with(BRAVE_LLM_CONTEXT_PATH) {
+        base.to_string()
+    } else {
+        format!("{base}{BRAVE_LLM_CONTEXT_PATH}")
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct BraveLlmContextRequest<'a> {
+    q: &'a str,
+    count: usize,
+    maximum_number_of_urls: usize,
+}
+
+impl<'a> BraveLlmContextRequest<'a> {
+    fn new(query: &'a str, max_results: usize) -> Self {
+        let count = max_results.clamp(1, 50);
+        Self {
+            q: query,
+            count,
+            maximum_number_of_urls: count,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct BraveLlmContextResponse {
+    #[serde(default)]
+    grounding: BraveGrounding,
+    #[serde(default)]
+    sources: HashMap<String, BraveSource>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct BraveGrounding {
+    #[serde(default)]
+    generic: Vec<BraveGroundingItem>,
+    #[serde(default)]
+    map: Vec<BraveGroundingItem>,
+    #[serde(default)]
+    poi: Option<BraveGroundingItem>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BraveGroundingItem {
+    url: String,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    snippets: Vec<String>,
+    #[serde(default)]
+    name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BraveSource {
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    hostname: Option<String>,
+}
+
+fn search_response_from_brave_context(
+    response: BraveLlmContextResponse,
+    original_query: &str,
+) -> SearchResponse {
+    let mut items = response.grounding.generic;
+    if let Some(poi) = response.grounding.poi {
+        items.push(poi);
+    }
+    items.extend(response.grounding.map);
+
+    let mut results = Vec::new();
+    let mut seen_urls = HashSet::new();
+    for item in items {
+        let url = item.url.trim().to_string();
+        if url.is_empty() || !seen_urls.insert(url.clone()) {
+            continue;
+        }
+        let source = response.sources.get(&url);
+        let title = item
+            .title
+            .or(item.name)
+            .or_else(|| source.and_then(|source| source.title.clone()))
+            .or_else(|| source.and_then(|source| source.hostname.clone()))
+            .unwrap_or_else(|| url.clone());
+        let snippet = item
+            .snippets
+            .iter()
+            .map(|snippet| snippet.trim())
+            .filter(|snippet| !snippet.is_empty())
+            .take(3)
+            .collect::<Vec<_>>()
+            .join("\n");
+        let citation_index = results.len() + 1;
+        results.push(SearchResult {
+            title,
+            url,
+            snippet,
+            citation_index: Some(citation_index),
+        });
+    }
+
+    let synthesized_answer = if results.is_empty() {
+        format!(
+            "No Brave LLM Context sources were found for: {}",
+            original_query.trim()
+        )
+    } else {
+        let source_lines = results
+            .iter()
+            .map(|result| {
+                let index = result.citation_index.unwrap_or(0);
+                if result.snippet.is_empty() {
+                    format!("[[{index}]] {}", result.title)
+                } else {
+                    format!("[[{index}]] {}: {}", result.title, result.snippet)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        format!(
+            "Brave LLM Context returned these sources for '{}':\n\n{}",
+            original_query.trim(),
+            source_lines
+        )
+    };
+
+    SearchResponse {
+        query_type: "brave_llm_context".to_string(),
+        sub_queries: vec![original_query.trim().to_string()],
+        results,
+        synthesized_answer,
+        llm_usage: None,
+    }
 }
 
 fn stream_update_from_event(
@@ -552,8 +742,8 @@ impl PerplexitySseParser {
 #[cfg(test)]
 mod tests {
     use super::{
-        CompletedEvent, PerplexityAgentResponse, PerplexitySseParser, SearchResultsItem,
-        search_response_from_agent_response,
+        BraveLlmContextResponse, CompletedEvent, PerplexityAgentResponse, PerplexitySseParser,
+        SearchResultsItem, search_response_from_agent_response, search_response_from_brave_context,
     };
 
     #[test]
@@ -632,6 +822,50 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].citation_index, Some(3));
         assert_eq!(results[0].url, "https://example.com");
+    }
+
+    #[test]
+    fn parses_brave_llm_context_grounding_into_sources() {
+        let response: BraveLlmContextResponse = serde_json::from_value(serde_json::json!({
+            "grounding": {
+                "generic": [
+                    {
+                        "url": "https://example.com/atlas",
+                        "title": "Atlas Checklist",
+                        "snippets": ["Atlas uses the rollback checklist.", "Incident timeline details."]
+                    },
+                    {
+                        "url": "https://example.com/atlas",
+                        "title": "Duplicate",
+                        "snippets": ["duplicate should be ignored"]
+                    }
+                ],
+                "map": []
+            },
+            "sources": {
+                "https://example.com/atlas": {
+                    "title": "Atlas Checklist",
+                    "hostname": "example.com"
+                }
+            }
+        }))
+        .unwrap();
+
+        let search_response = search_response_from_brave_context(response, "atlas rollback");
+
+        assert_eq!(search_response.query_type, "brave_llm_context");
+        assert_eq!(
+            search_response.sub_queries,
+            vec!["atlas rollback".to_string()]
+        );
+        assert_eq!(search_response.results.len(), 1);
+        assert_eq!(search_response.results[0].citation_index, Some(1));
+        assert_eq!(search_response.results[0].url, "https://example.com/atlas");
+        assert!(
+            search_response.results[0]
+                .snippet
+                .contains("rollback checklist")
+        );
     }
 
     #[test]
