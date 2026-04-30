@@ -12,6 +12,181 @@ mod tests {
         assert_eq!(ingestion_retry_backoff_seconds(9), 3600);
     }
 
+    async fn insert_test_document_block(
+        repo: &PgAppRepository,
+        org_id: Uuid,
+        notebook_id: Uuid,
+        document_id: Uuid,
+        block_id: &str,
+    ) {
+        let mut tx = repo.raw().begin().await.unwrap();
+        sqlx::query("select set_config('app.current_org', $1, true)")
+            .bind(org_id.to_string())
+            .execute(tx.as_mut())
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"
+            insert into document_blocks (
+                org_id, notebook_id, document_id, block_id, page, block_type, modality,
+                text, parser_backend
+            ) values ($1, $2, $3, $4, 1, 'paragraph', 'text', 'block text', 'test')
+            "#,
+        )
+        .bind(org_id)
+        .bind(notebook_id)
+        .bind(document_id)
+        .bind(block_id)
+        .execute(tx.as_mut())
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+    }
+
+    async fn count_document_blocks_for_org(
+        repo: &PgAppRepository,
+        org_id: Uuid,
+        document_id: Uuid,
+    ) -> i64 {
+        let mut tx = repo.raw().begin().await.unwrap();
+        sqlx::query("select set_config('app.current_org', $1, true)")
+            .bind(org_id.to_string())
+            .execute(tx.as_mut())
+            .await
+            .unwrap();
+        let row = sqlx::query(
+            "select count(*)::bigint as c from document_blocks where org_id = $1 and document_id = $2",
+        )
+        .bind(org_id)
+        .bind(document_id)
+        .fetch_one(tx.as_mut())
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        row.try_get("c").unwrap()
+    }
+
+    #[tokio::test]
+    async fn document_ir_projection_deletes_are_tenant_scoped_when_database_available() {
+        let Some(database_url) = env::var("DATABASE_URL").ok() else {
+            return;
+        };
+        let repo = PgAppRepository::connect(&database_url).await.unwrap();
+        repo.migrate().await.unwrap();
+
+        let org_id = OrgId::from(Uuid::new_v4());
+        let owner_org_uuid = org_id.into_uuid();
+        let other_org_uuid = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+            .with_actor_id(ActorId::new(user_id));
+        let notebook = repo
+            .create_notebook(&ctx, "ir tenant scope notebook", "ir tenant scope")
+            .await
+            .unwrap();
+        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+        let document = repo
+            .create_document(&ctx, notebook_id, "ir-tenant-scope.txt", 42, "text/plain")
+            .await
+            .unwrap();
+        let document_id = Uuid::parse_str(&document.id).unwrap();
+        let other_notebook_id = Uuid::new_v4();
+
+        insert_test_document_block(
+            &repo,
+            owner_org_uuid,
+            notebook_id,
+            document_id,
+            "owner-clear-block",
+        )
+        .await;
+        insert_test_document_block(
+            &repo,
+            other_org_uuid,
+            other_notebook_id,
+            document_id,
+            "other-clear-block",
+        )
+        .await;
+
+        repo.clear_document_ir_projection(&ctx, document_id)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            count_document_blocks_for_org(&repo, owner_org_uuid, document_id).await,
+            0
+        );
+        assert_eq!(
+            count_document_blocks_for_org(&repo, other_org_uuid, document_id).await,
+            1,
+            "clear_document_ir_projection must not delete another tenant's derived rows"
+        );
+
+        insert_test_document_block(
+            &repo,
+            owner_org_uuid,
+            notebook_id,
+            document_id,
+            "owner-replace-block",
+        )
+        .await;
+        let replacement = StoredDocumentBlock {
+            block_id: "owner-replacement-block".to_string(),
+            parse_run_id: None,
+            page: Some(1),
+            block_type: "paragraph".to_string(),
+            modality: "text".to_string(),
+            text: "replacement text".to_string(),
+            summary_text: None,
+            caption: None,
+            asset_refs: serde_json::json!([]),
+            section_path: serde_json::json!([]),
+            source_locator_json: serde_json::json!({}),
+            parser_backend: "test".to_string(),
+            metadata_json: serde_json::json!({}),
+        };
+
+        repo.replace_document_blocks(&ctx, notebook_id, document_id, &[replacement])
+            .await
+            .unwrap();
+
+        assert_eq!(
+            count_document_blocks_for_org(&repo, owner_org_uuid, document_id).await,
+            1
+        );
+        assert_eq!(
+            count_document_blocks_for_org(&repo, other_org_uuid, document_id).await,
+            1,
+            "replace_document_blocks must not delete another tenant's derived rows"
+        );
+    }
+
+    #[test]
+    fn derived_document_tables_have_tenant_rls_migration() {
+        let migration = include_str!("../../../../migrations/0029_document_derived_rls.up.sql");
+
+        for table in [
+            "document_assets",
+            "document_multimodal_chunks",
+            "document_parse_runs",
+            "document_blocks",
+        ] {
+            assert!(
+                migration.contains(&format!("ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")),
+                "{table} should enable row-level security"
+            );
+            assert!(
+                migration.contains(&format!("ALTER TABLE {table} FORCE ROW LEVEL SECURITY")),
+                "{table} should force row-level security"
+            );
+            assert!(
+                migration.contains(&format!("CREATE POLICY tenant_isolation_{table} ON {table}")),
+                "{table} should have tenant isolation policy"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn renew_ingestion_task_lock_matches_processing_task_lease_when_database_available() {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {

@@ -24,15 +24,18 @@ impl PgAppRepository {
             return Err(PgStorageError::NotFound("document not found".to_string()));
         }
 
-        sqlx::query("DELETE FROM document_multimodal_chunks WHERE document_id = $1")
+        sqlx::query("DELETE FROM document_multimodal_chunks WHERE org_id = $1 AND document_id = $2")
+            .bind(context.org_id().into_uuid())
             .bind(document_id)
             .execute(tx.inner())
             .await?;
-        sqlx::query("DELETE FROM document_assets WHERE document_id = $1")
+        sqlx::query("DELETE FROM document_assets WHERE org_id = $1 AND document_id = $2")
+            .bind(context.org_id().into_uuid())
             .bind(document_id)
             .execute(tx.inner())
             .await?;
-        sqlx::query("DELETE FROM document_blocks WHERE document_id = $1")
+        sqlx::query("DELETE FROM document_blocks WHERE org_id = $1 AND document_id = $2")
+            .bind(context.org_id().into_uuid())
             .bind(document_id)
             .execute(tx.inner())
             .await?;
@@ -211,7 +214,8 @@ impl PgAppRepository {
             return Err(PgStorageError::NotFound("document not found".to_string()));
         }
 
-        sqlx::query("DELETE FROM document_blocks WHERE document_id = $1")
+        sqlx::query("DELETE FROM document_blocks WHERE org_id = $1 AND document_id = $2")
+            .bind(context.org_id().into_uuid())
             .bind(document_id)
             .execute(tx.inner())
             .await?;
