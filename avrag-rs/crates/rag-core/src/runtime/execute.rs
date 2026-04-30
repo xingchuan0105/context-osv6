@@ -259,7 +259,7 @@ fn placeholder_triplet_relation_hint(triplet: &PlaceholderTriplet) -> Option<Gra
         + usize::from(predicate.is_none())
         + usize::from(object.is_none());
 
-    (placeholder_count <= 1 && (subject.is_some() || predicate.is_some() || object.is_some()))
+    (placeholder_count <= 2 && (subject.is_some() || predicate.is_some() || object.is_some()))
         .then_some(GraphRelationHint {
             subject,
             predicate,
@@ -495,14 +495,13 @@ impl RagRuntime {
         &self,
         request: &ExecutePlanRequest,
         auth: &AuthContext,
-        query: &str,
         relation_limit: usize,
         supporting_chunk_limit: usize,
     ) -> GraphChannelOutput {
         let started = Instant::now();
         let result = tokio::time::timeout(
             CHANNEL_TIMEOUT,
-            self.retrieve_graph_stage(request, auth, query, relation_limit, supporting_chunk_limit),
+            self.retrieve_graph_stage(request, auth, relation_limit, supporting_chunk_limit),
         )
         .await;
 
@@ -524,42 +523,27 @@ impl RagRuntime {
         &self,
         request: &ExecutePlanRequest,
         auth: &AuthContext,
-        query: &str,
         relation_limit: usize,
         supporting_chunk_limit: usize,
     ) -> GraphChannelOutput {
         let started = Instant::now();
         let mut degrade_trace = Vec::new();
-        let mut entity_names = request
-            .query_entities
-            .iter()
-            .map(|entity| entity.text.clone())
-            .collect::<Vec<_>>();
         let relation_hints = graph_relation_hints(request);
-        entity_names.extend(relation_hints.iter().flat_map(|hint| {
+        let entity_names = dedupe_entity_names(relation_hints.iter().flat_map(|hint| {
             [hint.subject.clone(), hint.object.clone()]
                 .into_iter()
                 .flatten()
         }));
-        entity_names = dedupe_entity_names(entity_names);
-
-        if entity_names.is_empty()
-            && relation_hints.is_empty()
-            && let Some(planner) = self.config.planner.as_ref()
-        {
-            match planner.extract_query_entities(query).await {
-                Ok(extracted) => {
-                    entity_names = dedupe_entity_names(extracted);
-                }
-                Err(error) => degrade_trace.push(DegradeTraceItem {
-                    stage: "graph".to_string(),
-                    reason: format!("Query entity extraction failed: {error}"),
-                    impact: "Skipping LLM-derived graph entity hints".to_string(),
-                }),
-            }
-        }
 
         if entity_names.is_empty() && relation_hints.is_empty() {
+            if relation_limit > 0 && supporting_chunk_limit > 0 {
+                degrade_trace.push(DegradeTraceItem {
+                    stage: "graph".to_string(),
+                    reason: "graph channel requires graph_hints or placeholder_triplets"
+                        .to_string(),
+                    impact: "Skipping graph retrieval without structured triplets".to_string(),
+                });
+            }
             let trace = ChannelTraceItem {
                 channel: "graph".to_string(),
                 raw_count: 0,
@@ -669,13 +653,7 @@ impl RagRuntime {
                 &compat_plan,
                 channel_budgets.multimodal_dense,
             ),
-            self.run_graph_channel(
-                request,
-                auth,
-                &compat_request.query,
-                channel_budgets.graph,
-                channel_budgets.graph,
-            ),
+            self.run_graph_channel(request, auth, channel_budgets.graph, channel_budgets.graph,),
         );
 
         let mut degrade_trace = Vec::new();

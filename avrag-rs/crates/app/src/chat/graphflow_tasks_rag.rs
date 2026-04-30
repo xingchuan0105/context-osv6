@@ -136,13 +136,19 @@ impl Task for RagNormalizePlanTask {
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         info!(node = TASK_RAG_NORMALIZE_PLAN, "graphflow chat node start");
         let flow = ChatFlowContext::from(context);
-        let execute_request = flow.rag_execute_request().await?;
+        let request = flow.request().await?;
+        let mut execute_request = flow.rag_execute_request().await?;
+        execute_request.ensure_original_query_text_dense_item(request.query.trim());
+        execute_request
+            .validate()
+            .map_err(|error| graph_app_error(AppError::validation("invalid_rag_plan", error.to_string())))?;
         let rag_plan = execute_request.to_rag_plan_compat();
         info!(
             node = TASK_RAG_NORMALIZE_PLAN,
             summary_mode = %rag_plan_summary_mode(&rag_plan),
             "main agent rag execute-plan request validated"
         );
+        flow.set_rag_execute_request(&execute_request).await;
         flow.set_rag_plan(&rag_plan).await;
         let _ = &self.state;
         Ok(TaskResult::move_to_next())

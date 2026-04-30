@@ -198,6 +198,10 @@ pub enum ExecutePlanValidationError {
     InvalidTotalCandidateBudget,
     #[error("budget.final_chunk_budget must be greater than zero")]
     InvalidFinalChunkBudget,
+    #[error("placeholder_triplets[{index}] must not contain more than two placeholders")]
+    TooManyPlaceholders { index: usize },
+    #[error("channel_budget.graph requires graph_hints or placeholder_triplets")]
+    GraphBudgetRequiresHints,
 }
 
 impl ExecutePlanRequest {
@@ -252,7 +256,69 @@ impl ExecutePlanRequest {
             return Err(ExecutePlanValidationError::InvalidFinalChunkBudget);
         }
 
+        for (index, triplet) in self.placeholder_triplets.iter().enumerate() {
+            if triplet.placeholder_positions().len() > 2 {
+                return Err(ExecutePlanValidationError::TooManyPlaceholders { index });
+            }
+        }
+
+        if self
+            .channel_budget
+            .as_ref()
+            .and_then(|budget| budget.graph)
+            .is_some_and(|value| value > 0)
+            && !self.has_structured_graph_input()
+        {
+            return Err(ExecutePlanValidationError::GraphBudgetRequiresHints);
+        }
+
         Ok(())
+    }
+
+    pub fn ensure_original_query_text_dense_item(&mut self, original_query: &str) {
+        let original_query = original_query.trim();
+        if original_query.is_empty() {
+            return;
+        }
+        if self.items.iter().any(|item| {
+            item.query
+                .as_deref()
+                .is_some_and(|query| query.trim() == original_query)
+        }) {
+            return;
+        }
+
+        self.items.insert(
+            0,
+            ExecutePlanItem {
+                priority: 1.0,
+                query: Some(original_query.to_string()),
+                bm25_terms: None,
+            },
+        );
+        while self.items.len() > Self::MAX_ITEMS {
+            self.items.pop();
+        }
+    }
+
+    fn has_structured_graph_input(&self) -> bool {
+        self.graph_hints.iter().any(|hint| {
+            hint.subject
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty())
+                || hint
+                    .predicate
+                    .as_deref()
+                    .is_some_and(|value| !value.trim().is_empty())
+                || hint
+                    .object
+                    .as_deref()
+                    .is_some_and(|value| !value.trim().is_empty())
+        }) || self.placeholder_triplets.iter().any(|triplet| {
+            !triplet.subject.trim().is_empty()
+                || !triplet.predicate.trim().is_empty()
+                || !triplet.object.trim().is_empty()
+        })
     }
 
     pub fn from_rag_plan(plan: &RagPlan, doc_scope: &[String]) -> Self {

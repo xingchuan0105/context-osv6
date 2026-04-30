@@ -731,6 +731,9 @@ fn parse_rag_plan_decision(raw: &str, request: &ChatRequest) -> Option<MainAgent
     }
 
     let plan = serde_json::from_str::<ExecutePlanRequest>(&json).ok()?;
+    if plan.validate().is_err() || plan.doc_scope != request.doc_scope {
+        return None;
+    }
     match normalize_execute_plan_request(plan, request) {
         Some(plan) => Some(MainAgentRagPlanDecision::Execute(plan)),
         None => Some(MainAgentRagPlanDecision::Clarify(
@@ -1348,6 +1351,38 @@ mod tests {
         assert_eq!(normalized.graph_hints[0].predicate.as_deref(), Some("uses"));
         assert_eq!(normalized.placeholder_triplets.len(), 1);
         assert_eq!(normalized.placeholder_triplets[0].object, "?checklist");
+    }
+
+    #[test]
+    fn parse_rag_plan_rejects_raw_invalid_payload_before_normalize() {
+        let request = request("rag", "find rollback checklist", &["doc-1"]);
+        let raw = serde_json::json!({
+            "plan_version": "rag-execute-v1",
+            "doc_scope": ["doc-1"],
+            "items": [{
+                "priority": 1.0,
+                "query": "semantic lookup",
+                "bm25_terms": ["exact"]
+            }],
+            "summary_mode": "none"
+        })
+        .to_string();
+
+        assert!(parse_rag_plan_decision(&raw, &request).is_none());
+    }
+
+    #[test]
+    fn parse_rag_plan_rejects_raw_doc_scope_mismatch_before_normalize() {
+        let request = request("rag", "find rollback checklist", &["doc-1"]);
+        let raw = serde_json::json!({
+            "plan_version": "rag-execute-v1",
+            "doc_scope": ["other-doc"],
+            "items": [{ "priority": 1.0, "query": "semantic lookup" }],
+            "summary_mode": "none"
+        })
+        .to_string();
+
+        assert!(parse_rag_plan_decision(&raw, &request).is_none());
     }
 
     #[tokio::test]

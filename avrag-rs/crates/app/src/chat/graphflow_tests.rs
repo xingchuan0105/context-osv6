@@ -45,6 +45,32 @@ mod tests {
         assert_eq!(mapped.message(), error.message());
     }
 
+    #[test]
+    fn normalize_rag_plan_injects_original_query_as_text_dense_item() {
+        let mut request = common::ExecutePlanRequest {
+            plan_version: "rag-execute-v1".to_string(),
+            doc_scope: vec!["doc-1".to_string()],
+            items: vec![common::ExecutePlanItem {
+                priority: 0.5,
+                query: None,
+                bm25_terms: Some(vec!["exact".to_string(), "term".to_string()]),
+            }],
+            summary_mode: common::ExecutePlanSummaryMode::None,
+            budget: None,
+            channel_budget: None,
+            query_entities: Vec::new(),
+            graph_hints: Vec::new(),
+            placeholder_triplets: Vec::new(),
+            trace: None,
+        };
+
+        request.ensure_original_query_text_dense_item("original question");
+
+        assert_eq!(request.items[0].query.as_deref(), Some("original question"));
+        assert_eq!(request.items[1].bm25_terms.as_ref().unwrap(), &vec!["exact".to_string(), "term".to_string()]);
+        request.validate().unwrap();
+    }
+
     #[tokio::test]
     async fn build_response_task_persists_final_chat_response() {
         let task = BuildResponseTask;

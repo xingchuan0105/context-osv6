@@ -233,6 +233,128 @@ fn execute_plan_request_accepts_v2_optional_retrieval_fields() {
 }
 
 #[test]
+fn execute_plan_request_validation_rejects_placeholder_triplet_with_three_placeholders() {
+    let request = ExecutePlanRequest {
+        plan_version: "rag-execute-v1".to_string(),
+        doc_scope: vec!["doc-1".to_string()],
+        items: vec![common::ExecutePlanItem {
+            priority: 1.0,
+            query: Some("semantic lookup".to_string()),
+            bm25_terms: None,
+        }],
+        summary_mode: ExecutePlanSummaryMode::None,
+        budget: None,
+        channel_budget: None,
+        query_entities: Vec::new(),
+        graph_hints: Vec::new(),
+        placeholder_triplets: vec![common::PlaceholderTriplet {
+            subject: "?subject".to_string(),
+            predicate: "?predicate".to_string(),
+            object: "?object".to_string(),
+        }],
+        trace: None,
+    };
+
+    assert_eq!(
+        request.validate().unwrap_err(),
+        ExecutePlanValidationError::TooManyPlaceholders { index: 0 }
+    );
+}
+
+#[test]
+fn execute_plan_request_validation_accepts_placeholder_triplet_with_two_placeholders() {
+    let request = ExecutePlanRequest {
+        plan_version: "rag-execute-v1".to_string(),
+        doc_scope: vec!["doc-1".to_string()],
+        items: vec![common::ExecutePlanItem {
+            priority: 1.0,
+            query: Some("semantic lookup".to_string()),
+            bm25_terms: None,
+        }],
+        summary_mode: ExecutePlanSummaryMode::None,
+        budget: None,
+        channel_budget: Some(common::ChannelBudget {
+            text_dense: None,
+            bm25: None,
+            multimodal_dense: None,
+            graph: Some(4),
+        }),
+        query_entities: Vec::new(),
+        graph_hints: Vec::new(),
+        placeholder_triplets: vec![common::PlaceholderTriplet {
+            subject: "Atlas".to_string(),
+            predicate: "?predicate".to_string(),
+            object: "?object".to_string(),
+        }],
+        trace: None,
+    };
+
+    request.validate().unwrap();
+}
+
+#[test]
+fn execute_plan_request_validation_rejects_graph_budget_without_structured_graph_input() {
+    let request = ExecutePlanRequest {
+        plan_version: "rag-execute-v1".to_string(),
+        doc_scope: vec!["doc-1".to_string()],
+        items: vec![common::ExecutePlanItem {
+            priority: 1.0,
+            query: Some("semantic lookup".to_string()),
+            bm25_terms: None,
+        }],
+        summary_mode: ExecutePlanSummaryMode::None,
+        budget: None,
+        channel_budget: Some(common::ChannelBudget {
+            text_dense: None,
+            bm25: None,
+            multimodal_dense: None,
+            graph: Some(4),
+        }),
+        query_entities: vec![common::QueryEntity {
+            text: "Atlas".to_string(),
+            kind: Some("project".to_string()),
+        }],
+        graph_hints: Vec::new(),
+        placeholder_triplets: Vec::new(),
+        trace: None,
+    };
+
+    assert_eq!(
+        request.validate().unwrap_err(),
+        ExecutePlanValidationError::GraphBudgetRequiresHints
+    );
+}
+
+#[test]
+fn execute_plan_request_injects_original_query_as_first_text_dense_item() {
+    let mut request = ExecutePlanRequest {
+        plan_version: "rag-execute-v1".to_string(),
+        doc_scope: vec!["doc-1".to_string()],
+        items: vec![common::ExecutePlanItem {
+            priority: 0.5,
+            query: None,
+            bm25_terms: Some(vec!["exact".to_string(), "term".to_string()]),
+        }],
+        summary_mode: ExecutePlanSummaryMode::None,
+        budget: None,
+        channel_budget: None,
+        query_entities: Vec::new(),
+        graph_hints: Vec::new(),
+        placeholder_triplets: Vec::new(),
+        trace: None,
+    };
+
+    request.ensure_original_query_text_dense_item("original question");
+
+    assert_eq!(request.items[0].query.as_deref(), Some("original question"));
+    assert_eq!(
+        request.items[1].bm25_terms.as_ref().unwrap(),
+        &vec!["exact".to_string(), "term".to_string()]
+    );
+    request.validate().unwrap();
+}
+
+#[test]
 fn retrieval_bundle_exposes_answer_context_in_retrieval_then_summary_order() {
     let bundle = RetrievalBundle {
         chunks: vec![common::RetrievedChunk {

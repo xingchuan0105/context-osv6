@@ -165,7 +165,10 @@ impl RetrievalDataPlane for GraphStubRetrievalDataPlane {
     }
 
     async fn search_graph(&self, request: GraphSearchRequest) -> anyhow::Result<GraphSearchOutput> {
-        assert_eq!(request.entity_names, vec!["Atlas".to_string()]);
+        assert_eq!(
+            request.entity_names,
+            vec!["Atlas".to_string(), "rollback checklist".to_string()]
+        );
         assert_eq!(request.relation_limit, 2);
         Ok(GraphSearchOutput {
             relation_paths: vec![RelationPathCandidate {
@@ -226,10 +229,13 @@ impl RetrievalDataPlane for PlaceholderTripletGraphDataPlane {
 
     async fn search_graph(&self, request: GraphSearchRequest) -> anyhow::Result<GraphSearchOutput> {
         assert_eq!(request.entity_names, vec!["Atlas".to_string()]);
-        assert_eq!(request.relation_hints.len(), 1);
+        assert_eq!(request.relation_hints.len(), 2);
         assert_eq!(request.relation_hints[0].subject.as_deref(), Some("Atlas"));
         assert_eq!(request.relation_hints[0].predicate.as_deref(), Some("uses"));
         assert_eq!(request.relation_hints[0].object.as_deref(), None);
+        assert_eq!(request.relation_hints[1].subject.as_deref(), None);
+        assert_eq!(request.relation_hints[1].predicate.as_deref(), Some("uses"));
+        assert_eq!(request.relation_hints[1].object.as_deref(), None);
         Ok(GraphSearchOutput {
             relation_paths: vec![RelationPathCandidate {
                 subject: "Atlas".to_string(),
@@ -360,11 +366,12 @@ async fn execute_plan_includes_graph_relation_paths_and_supporting_chunks() {
             final_chunk_budget: Some(4),
         }),
         channel_budget: None,
-        query_entities: vec![common::QueryEntity {
-            text: "Atlas".to_string(),
-            kind: Some("project".to_string()),
+        query_entities: Vec::new(),
+        graph_hints: vec![common::GraphHint {
+            subject: Some("Atlas".to_string()),
+            predicate: Some("uses".to_string()),
+            object: Some("rollback checklist".to_string()),
         }],
-        graph_hints: Vec::new(),
         placeholder_triplets: Vec::new(),
         trace: None,
     };
@@ -419,11 +426,12 @@ async fn execute_plan_starts_bm25_and_graph_channels_in_parallel() {
             multimodal_dense: Some(0),
             graph: Some(5),
         }),
-        query_entities: vec![common::QueryEntity {
-            text: "Atlas".to_string(),
-            kind: None,
+        query_entities: Vec::new(),
+        graph_hints: vec![common::GraphHint {
+            subject: Some("Atlas".to_string()),
+            predicate: Some("uses".to_string()),
+            object: Some("checklist".to_string()),
         }],
-        graph_hints: Vec::new(),
         placeholder_triplets: Vec::new(),
         trace: None,
     };

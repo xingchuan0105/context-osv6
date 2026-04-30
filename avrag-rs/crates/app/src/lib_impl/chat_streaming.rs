@@ -675,7 +675,11 @@ impl AppState {
         }
 
         let execute_request = match plan_result.decision {
-            crate::main_agent::MainAgentRagPlanDecision::Execute(execute_request) => {
+            crate::main_agent::MainAgentRagPlanDecision::Execute(mut execute_request) => {
+                execute_request.ensure_original_query_text_dense_item(req.query.trim());
+                execute_request.validate().map_err(|error| {
+                    AppError::validation("invalid_rag_plan", error.to_string())
+                })?;
                 execute_request
             }
             crate::main_agent::MainAgentRagPlanDecision::Clarify(message) => {
