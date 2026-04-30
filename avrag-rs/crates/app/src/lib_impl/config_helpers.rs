@@ -30,6 +30,25 @@ fn make_llm_client(config: &ModelProviderConfig) -> Option<LlmClient> {
     config.to_llm_config().map(LlmClient::new)
 }
 
+fn build_unified_agent_service(
+    llm_client: Option<LlmClient>,
+    temperature: Option<f32>,
+    search_executor: Option<Arc<SearchExecutor>>,
+    rag_runtime: Option<Arc<RagRuntime>>,
+) -> Arc<UnifiedAgentService> {
+    Arc::new(UnifiedAgentService::new(
+        Box::new(crate::agents::chat_agent::ChatAgent::new(
+            llm_client.clone(),
+            temperature,
+        )),
+        Box::new(
+            crate::agents::web_search_agent::WebSearchAgent::new(search_executor)
+                .with_answer_synthesizer(llm_client, temperature),
+        ),
+        Box::new(crate::agents::rag_agent::RagAgent::new(rag_runtime)),
+    ))
+}
+
 fn make_embedding_client(config: &ModelProviderConfig) -> Option<Arc<EmbeddingClient>> {
     config
         .to_llm_config()

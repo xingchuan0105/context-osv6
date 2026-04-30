@@ -14,8 +14,8 @@ use crate::{
 };
 use avrag_storage_pg::PgAppRepository;
 use common::{
-    AppError, ChatMessage, ChatRequest, ChatResponse, ChatSession, Citation,
-    CreateChatSessionRequest, DegradeTraceItem, ModeDebug, SourceRef, TraceInfo, now_rfc3339,
+    AppError, ChatMessage, ChatRequest, ChatResponse, ChatSession, CreateChatSessionRequest,
+    ModeDebug, TraceInfo, now_rfc3339,
 };
 use ingestion::{AuditAction, AuditRecord};
 use tracing::info;

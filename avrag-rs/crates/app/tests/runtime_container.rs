@@ -1,11 +1,11 @@
 use app::runtime::Runtime;
 
 #[tokio::test]
-async fn runtime_new_memory_exposes_service_registry() {
+async fn runtime_new_memory_requires_configured_chat_agent() {
     let runtime = Runtime::new_memory().await.unwrap();
 
     assert_eq!(runtime.runtime_mode(), "memory");
-    let response = runtime
+    let error = runtime
         .services
         .chat
         .execute(contracts::chat::ChatRequest {
@@ -20,7 +20,8 @@ async fn runtime_new_memory_exposes_service_registry() {
             stream: false,
         })
         .await
-        .unwrap();
+        .unwrap_err();
 
-    assert_eq!(response.agent_type, "general");
+    assert_eq!(error.code(), "internal_error");
+    assert!(error.message().contains("LLM client is not configured"));
 }

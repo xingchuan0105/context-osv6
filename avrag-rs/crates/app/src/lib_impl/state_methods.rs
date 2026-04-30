@@ -15,6 +15,12 @@ impl AppState {
             max_results: config.search.max_results,
             perplexity_api_key: config.search.perplexity_api_key.clone(),
         })));
+        let agent_service = Some(build_unified_agent_service(
+            llm_client.clone(),
+            config.answer_llm.temperature,
+            search_executor.clone(),
+            None,
+        ));
 
         // RAG components not available in memory mode
         Self {
@@ -28,6 +34,7 @@ impl AppState {
             analytics: None,
             search_executor,
             rag_runtime: None,
+            agent_service,
             object_store,
             guard_pipeline: Arc::new(GuardPipeline::new()),
             usage_limit: None,
@@ -129,6 +136,12 @@ impl AppState {
             .as_ref()
             .map(|p| Arc::new(analytics::AnalyticsService::new(p.raw().clone())));
         let uses_memory_adapters = pg.is_none();
+        let agent_service = Some(build_unified_agent_service(
+            llm_client.clone(),
+            config.answer_llm.temperature,
+            search_executor.clone(),
+            rag_runtime.clone(),
+        ));
 
         Ok(Self {
             config,
@@ -141,6 +154,7 @@ impl AppState {
             analytics,
             search_executor,
             rag_runtime,
+            agent_service,
             object_store,
             guard_pipeline: Arc::new(GuardPipeline::new()),
             usage_limit,
@@ -229,6 +243,7 @@ impl AppState {
             analytics: self.analytics.clone(),
             search_executor: self.search_executor.clone(),
             rag_runtime: self.rag_runtime.clone(),
+            agent_service: self.agent_service.clone(),
             object_store: self.object_store.clone(),
             guard_pipeline: self.guard_pipeline.clone(),
             usage_limit: self.usage_limit.clone(),
@@ -257,6 +272,94 @@ impl AppState {
 
     pub fn pg(&self) -> Option<Arc<PgAppRepository>> {
         self.pg.clone()
+    }
+
+    pub fn agent_service(&self) -> Option<Arc<UnifiedAgentService>> {
+        self.agent_service.clone()
+    }
+
+    pub fn set_agent_service(&mut self, service: UnifiedAgentService) {
+        self.agent_service = Some(Arc::new(service));
+    }
+
+    /// Build an `AgentRequest` from chat request and memory context.
+    /// This is the single conversion point from legacy `ChatRequest` to new agent protocol.
+    pub async fn build_agent_request(
+        &self,
+        req: &common::ChatRequest,
+        kind: crate::agents::AgentKind,
+    ) -> crate::agents::runtime::AgentRequest {
+        let notebook_id = req.notebook_id.clone();
+        let session_id = req.session_id.clone();
+        let doc_scope = req.doc_scope.clone();
+        let stream = req.stream;
+
+        let memory_context = if let (Some(sid), Some(cm)) = (&session_id, &self.chatmemory) {
+            if let Ok(session_uuid) = uuid::Uuid::parse_str(sid) {
+                cm.load(&self.auth, session_uuid)
+                    .await
+                    .ok()
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let session_summary = memory_context
+            .as_ref()
+            .and_then(|memory| memory.layer2.as_ref().map(|layer2| layer2.summary.clone()));
+        let user_preferences = memory_context
+            .as_ref()
+            .and_then(|memory| memory.layer3.as_ref().map(agent_user_preferences_json));
+        let working_memory = memory_context
+            .as_ref()
+            .and_then(|memory| memory.working_memory.as_ref().map(agent_working_memory_json));
+
+        crate::agents::runtime::AgentRequest {
+            kind,
+            query: req.query.clone(),
+            notebook_id,
+            session_id,
+            doc_scope,
+            messages: req.messages.clone(),
+            session_summary,
+            user_preferences,
+            working_memory,
+            debug: false,
+            stream,
+            auth_context: serde_json::json!({
+                "org_id": self.auth.org_id().to_string(),
+                "user_id": self.auth.actor_id().map(|a| a.into_uuid().to_string()).unwrap_or_default(),
+            }),
+            metadata: std::collections::BTreeMap::new(),
+        }
+    }
+
+    pub(crate) fn build_general_agent_debug(
+        &self,
+        agent_request: &crate::agents::runtime::AgentRequest,
+    ) -> BTreeMap<String, serde_json::Value> {
+        let mut general_debug = BTreeMap::new();
+        general_debug.insert(
+            "agent_kind".to_string(),
+            serde_json::json!(crate::agents::AgentKind::Chat.as_canonical_str()),
+        );
+        general_debug.insert(
+            "memory_loaded".to_string(),
+            serde_json::json!(agent_request.session_summary.is_some()
+                || agent_request.user_preferences.is_some()
+                || agent_request.working_memory.is_some()),
+        );
+        general_debug.insert("summary_updated".to_string(), serde_json::json!(false));
+        general_debug.insert(
+            "has_profile".to_string(),
+            serde_json::json!(agent_request.user_preferences.is_some()),
+        );
+        general_debug.insert(
+            "has_working_memory".to_string(),
+            serde_json::json!(agent_request.working_memory.is_some()),
+        );
+        general_debug
     }
 
     pub fn analytics(&self) -> Option<Arc<analytics::AnalyticsService>> {
@@ -434,4 +537,29 @@ fn non_empty_or_unknown(value: &str) -> String {
     } else {
         value.to_string()
     }
+}
+
+fn agent_user_preferences_json(profile: &avrag_chatmemory::Layer3Profile) -> serde_json::Value {
+    serde_json::json!({
+        "expertise_domains": profile.expertise_domains.clone(),
+        "preferred_answer_style": profile.preferred_answer_style.clone(),
+        "frequently_asked_topics": profile.frequently_asked_topics.clone(),
+        "custom_preferences": profile.custom_preferences.clone(),
+        "inference_version": profile.inference_version.clone(),
+    })
+}
+
+fn agent_working_memory_json(working: &avrag_chatmemory::WorkingMemory) -> serde_json::Value {
+    serde_json::json!({
+        "state_type": working.state_type.clone(),
+        "current_topic": working.current_topic.clone(),
+        "last_document": working.last_document.clone(),
+        "last_entity": working.last_entity.clone(),
+        "unresolved_question": working.unresolved_question.clone(),
+        "pending_questions": working.pending_questions.clone(),
+        "gathered_facts": working.gathered_facts.clone(),
+        "confidence_score": working.confidence_score,
+        "state_history": working.state_history.clone(),
+        "last_updated_at": working.last_updated_at.to_rfc3339(),
+    })
 }

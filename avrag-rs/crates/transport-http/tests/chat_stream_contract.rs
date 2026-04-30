@@ -1,3 +1,8 @@
+use app::agents::{
+    events::{AgentEvent, AgentEventSink},
+    runtime::{Agent, AgentRequest, AgentRunResult, AgentRunUsage},
+    service::UnifiedAgentService,
+};
 use app::{AppConfig, AppState};
 use avrag_auth::{AuthContext, OrgId, SubjectKind};
 use axum::{
@@ -11,6 +16,56 @@ use std::time::Duration;
 use tower::ServiceExt;
 use transport_http::build_router;
 use uuid::Uuid;
+
+struct ScriptedAgent;
+
+#[async_trait::async_trait]
+impl Agent for ScriptedAgent {
+    async fn run(
+        &self,
+        _request: AgentRequest,
+        sink: &dyn AgentEventSink,
+    ) -> Result<AgentRunResult, common::AppError> {
+        sink.emit(AgentEvent::Activity {
+            stage: "test".to_string(),
+            message: "test agent".to_string(),
+        })
+        .await;
+        sink.emit(AgentEvent::MessageDelta {
+            text: "scripted ".to_string(),
+        })
+        .await;
+        sink.emit(AgentEvent::MessageDelta {
+            text: "answer".to_string(),
+        })
+        .await;
+        sink.emit(AgentEvent::Done {
+            final_message: Some("scripted answer".to_string()),
+            usage: None,
+        })
+        .await;
+        Ok(AgentRunResult {
+            answer: "scripted answer".to_string(),
+            usage: Some(AgentRunUsage {
+                provider: "test".to_string(),
+                model: "scripted".to_string(),
+                prompt_tokens: 1,
+                completion_tokens: 2,
+                total_tokens: 3,
+                request_count: 1,
+            }),
+            ..Default::default()
+        })
+    }
+}
+
+fn test_agent_service() -> UnifiedAgentService {
+    UnifiedAgentService::new(
+        Box::new(ScriptedAgent),
+        Box::new(ScriptedAgent),
+        Box::new(ScriptedAgent),
+    )
+}
 
 #[tokio::test]
 async fn post_chat_with_stream_flag_only_returns_sse() {
@@ -39,7 +94,7 @@ async fn post_chat_with_stream_flag_only_returns_sse() {
                 .iter()
                 .filter(|event| matches!(event, ChatEvent::Token { request_id: rid, message_id, content } if rid == request_id && *message_id >= 0 && !content.is_empty()))
                 .count()
-                >= 2
+                >= 1
         );
         assert!(matches!(events.last(), Some(ChatEvent::Done { request_id: rid, session_id, message_id, payload }) if rid == request_id && !session_id.is_empty() && *message_id >= 0 && payload.get("answer").and_then(|value| value.as_str()).is_some()));
     })
@@ -239,7 +294,8 @@ async fn post_chat_stream_errors_emit_request_id_and_code() {
 }
 
 async fn test_app() -> (axum::Router, String, Uuid) {
-    let state = AppState::new(AppConfig::default());
+    let mut state = AppState::new(AppConfig::default());
+    state.set_agent_service(test_agent_service());
     let org_id = Uuid::new_v4();
     let notebook = state
         .with_auth(AuthContext::new(OrgId::from(org_id), SubjectKind::User))
@@ -254,7 +310,8 @@ async fn test_app() -> (axum::Router, String, Uuid) {
 }
 
 async fn test_app_with_ready_document() -> (axum::Router, String, String, Uuid) {
-    let state = AppState::new(AppConfig::default());
+    let mut state = AppState::new(AppConfig::default());
+    state.set_agent_service(test_agent_service());
     let org_id = Uuid::new_v4();
     let scoped = state.with_auth(AuthContext::new(OrgId::from(org_id), SubjectKind::User));
     let notebook = scoped

@@ -63,12 +63,17 @@ impl Task for ModeSelectTask {
         info!(node = TASK_MODE_SELECT, "graphflow chat node start");
         let flow = ChatFlowContext::from(context);
         let request = flow.request().await?;
-        let decision = crate::main_agent::MainAgent::decide(&request);
-        if let crate::main_agent::MainAgentDecision::Clarify { message } = &decision {
+
+        // Use AgentKind for canonical agent dispatch.
+        let agent_kind = crate::agents::AgentKind::parse(&request.agent_type);
+
+        // Clarify: RAG mode requires doc_scope
+        if matches!(agent_kind, Some(crate::agents::AgentKind::Rag)) && request.doc_scope.is_empty() {
+            let message = "请先选择要检索的文档范围，再让我执行知识库检索。".to_string();
             let session = flow.session().await?;
             let execution = self
                 .state
-                .execute_clarify_mode_core(&request, &session, message)
+                .execute_clarify_mode_core(&request, &session, &message)
                 .await
                 .map_err(graph_app_error)?;
             flow.set_execution(&execution).await;
@@ -77,23 +82,26 @@ impl Task for ModeSelectTask {
                 NextAction::GoTo(TASK_OUTPUT_GUARD.to_string()),
             ));
         }
-        if self.state.pg().is_none() {
+
+        if matches!(agent_kind, Some(crate::agents::AgentKind::Rag))
+            && self.state.uses_memory_adapters()
+        {
             return Ok(TaskResult::new(
                 None,
                 NextAction::GoTo(TASK_MEMORY_MODE.to_string()),
             ));
         }
-        match decision {
-            crate::main_agent::MainAgentDecision::Clarify { .. } => unreachable!(),
-            crate::main_agent::MainAgentDecision::DirectChat => Ok(TaskResult::new(
+
+        match agent_kind {
+            Some(crate::agents::AgentKind::Chat) | None => Ok(TaskResult::new(
                 None,
                 NextAction::GoTo(TASK_GENERAL.to_string()),
             )),
-            crate::main_agent::MainAgentDecision::ExternalSearch => Ok(TaskResult::new(
+            Some(crate::agents::AgentKind::Search) => Ok(TaskResult::new(
                 None,
                 NextAction::GoTo(TASK_SEARCH.to_string()),
             )),
-            crate::main_agent::MainAgentDecision::ExecutePlan => Ok(TaskResult::new(
+            Some(crate::agents::AgentKind::Rag) => Ok(TaskResult::new(
                 None,
                 NextAction::GoTo(TASK_RAG_PREPARE_PLANNER_INPUT.to_string()),
             )),
@@ -143,12 +151,9 @@ impl Task for GeneralModeTask {
         let flow = ChatFlowContext::from(context);
         let request = flow.request().await?;
         let session = flow.session().await?;
-        let pg = self.state.pg().ok_or_else(|| {
-            graph_app_error(AppError::internal("postgres backend is not configured"))
-        })?;
         let execution = self
             .state
-            .execute_general_mode_core(&request, &session, pg.as_ref())
+            .execute_general_mode_core(&request, &session)
             .await
             .map_err(graph_app_error)?;
         flow.set_execution(&execution).await;

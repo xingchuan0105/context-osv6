@@ -1,3 +1,4 @@
+use crate::agents::service::UnifiedAgentService;
 use anyhow::Result as AnyResult;
 use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
 use avrag_billing as billing;
@@ -185,7 +186,7 @@ impl Default for AppConfig {
                 timeout_ms: 30000,
                 temperature: None,
                 api_style: Some("dashscope_multimodal_embedding".to_string()),
-                dimensions: None,
+                dimensions: Some(1024),
                 enable_thinking: None,
             },
             mm_rerank: ModelProviderConfig {
@@ -219,14 +220,14 @@ impl Default for AppConfig {
                 enable_thinking: Some(false),
             },
             answer_llm: ModelProviderConfig {
-                base_url: "https://www.dmxapi.cn/v1".to_string(),
+                base_url: "https://api.deepseek.com".to_string(),
                 api_key: String::new(),
-                model: "gemini-3-flash-preview-thinking".to_string(),
+                model: "deepseek-v4-flash".to_string(),
                 timeout_ms: 180000,
                 temperature: Some(0.2),
                 api_style: Some("openai".to_string()),
                 dimensions: None,
-                enable_thinking: None,
+                enable_thinking: Some(true),
             },
             summary_llm: ModelProviderConfig {
                 base_url: "https://www.dmxapi.cn/v1".to_string(),

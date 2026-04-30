@@ -15,67 +15,6 @@ impl AppState {
             .collect()
     }
 
-    async fn refine_general_query(
-        &self,
-        query: &str,
-        memory_context: Option<&avrag_chatmemory::ChatMemoryData>,
-    ) -> String {
-        let Some(llm) = &self.llm_client else {
-            return query.to_string();
-        };
-        let mut context_parts = Vec::new();
-        if let Some(memory) = memory_context {
-            if let Some(layer2) = &memory.layer2 {
-                context_parts.push(format!("Summary: {}", layer2.summary));
-            }
-            if let Some(profile) = &memory.layer3 {
-                if !profile.frequently_asked_topics.is_empty() {
-                    context_parts.push(format!(
-                        "User topics: {}",
-                        profile.frequently_asked_topics.join(", ")
-                    ));
-                }
-            }
-            if let Some(working_memory) = &memory.working_memory {
-                if let Some(topic) = &working_memory.current_topic {
-                    context_parts.push(format!("Current topic: {}", topic));
-                }
-            }
-        }
-        if context_parts.is_empty() {
-            return query.to_string();
-        }
-
-        let response = llm
-            .complete(
-                &[
-                    avrag_llm::ChatMessage::system(
-                        "Rewrite the user's latest message into a standalone query using the provided memory context. Return only the rewritten query.",
-                    ),
-                    avrag_llm::ChatMessage::user(format!(
-                        "Memory context:\n{}\n\nLatest user message:\n{}",
-                        context_parts.join("\n"),
-                        query
-                    )),
-                ],
-                Some(0.1),
-            )
-            .await;
-        match response {
-            Ok(value) if !value.content.trim().is_empty() => {
-                self.record_llm_usage_if_available(
-                    avrag_usage_limit::BillableFeature::Chat,
-                    "query_refine",
-                    &value.usage,
-                    "inline",
-                )
-                .await;
-                value.content.trim().to_string()
-            }
-            _ => query.to_string(),
-        }
-    }
-
     fn build_rag_session_context(
         messages: Vec<ChatMessage>,
         summary: Option<String>,

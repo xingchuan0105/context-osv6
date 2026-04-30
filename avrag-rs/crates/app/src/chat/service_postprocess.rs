@@ -105,7 +105,7 @@ impl AppState {
             .remember_explicit_agent_preference(req.query.trim())
             .await;
 
-        if execution.mode == "general"
+        if is_direct_chat_mode(&execution.mode)
             && let Some(ref cm) = self.chatmemory
             && let Ok(messages) = pg.list_messages(&self.auth, session_uuid).await
         {
@@ -172,7 +172,7 @@ impl AppState {
                 .await;
         }
 
-        if execution.mode == "general" {
+        if is_direct_chat_mode(&execution.mode) {
             if summary_updated
                 && let Some(mode_debug) = execution.response.mode_debug.as_mut()
                 && let Some(general) = mode_debug.general.as_mut()
@@ -249,7 +249,7 @@ impl AppState {
         if let Some(ref usage_svc) = self.usage_limit {
             if let Some(ref llm_usage) = execution.llm_usage {
                 let feature = match execution.mode.as_str() {
-                    "general" => avrag_usage_limit::BillableFeature::Chat,
+                    "chat" | "general" => avrag_usage_limit::BillableFeature::Chat,
                     "search" => avrag_usage_limit::BillableFeature::Search,
                     "rag" => avrag_usage_limit::BillableFeature::Answer,
                     _ => avrag_usage_limit::BillableFeature::Chat,
@@ -294,7 +294,7 @@ impl AppState {
 
         if let Some(ref llm_usage) = execution.llm_usage {
             let feature = match execution.mode.as_str() {
-                "general" => "chat",
+                "chat" | "general" => "chat",
                 "search" => "search",
                 "rag" => "answer",
                 _ => "chat",
@@ -333,7 +333,7 @@ impl AppState {
         }
 
         let (title, body) = match execution.mode.as_str() {
-            "general" => (
+            mode if is_direct_chat_mode(mode) => (
                 "General mode degraded",
                 "General mode used a degraded path for the latest turn.",
             ),
@@ -361,4 +361,8 @@ impl AppState {
             .await;
         Ok(())
     }
+}
+
+fn is_direct_chat_mode(mode: &str) -> bool {
+    matches!(mode, "chat" | "general")
 }

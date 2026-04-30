@@ -1,0 +1,206 @@
+use common::Citation;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+/// Internal event emitted by agents during execution.
+/// These events are mapped to `ChatEvent` for SSE transport.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "event", rename_all = "snake_case")]
+pub enum AgentEvent {
+    /// High-level progress / activity notification.
+    Activity { stage: String, message: String },
+    /// Incremental reasoning summary text (e.g. from model's reasoning tokens).
+    ReasoningSummaryDelta { text: String },
+    /// Incremental answer/message text.
+    MessageDelta { text: String },
+    /// Debug trace event, gated by debug flag.
+    DebugTrace {
+        kind: String,
+        payload: serde_json::Value,
+    },
+    /// Citations discovered or validated.
+    Citations { citations: Vec<Citation> },
+    /// Usage telemetry (tokens, request count, provider, model).
+    Usage {
+        provider: String,
+        model: String,
+        prompt_tokens: u64,
+        completion_tokens: u64,
+        total_tokens: u64,
+        request_count: u64,
+        #[serde(default)]
+        metadata: BTreeMap<String, serde_json::Value>,
+    },
+    /// Final completion event.
+    Done {
+        #[serde(default)]
+        final_message: Option<String>,
+        #[serde(default)]
+        usage: Option<AgentUsage>,
+    },
+    /// Terminal error event.
+    Error { code: String, message: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentUsage {
+    pub provider: String,
+    pub model: String,
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub total_tokens: u64,
+}
+
+/// Sink for emitting agent events during a run.
+/// Both streaming and non-streaming paths use the same sink abstraction:
+/// - Streaming: forwards events immediately over SSE.
+/// - Non-streaming: collects events into a Vec, then returns final result.
+#[async_trait::async_trait]
+pub trait AgentEventSink: Send + Sync {
+    async fn emit(&self, event: AgentEvent);
+}
+
+/// A no-op sink that discards all events.
+pub struct NoopSink;
+
+#[async_trait::async_trait]
+impl AgentEventSink for NoopSink {
+    async fn emit(&self, _event: AgentEvent) {}
+}
+
+/// A collecting sink that accumulates events into an internal buffer.
+/// Used by the non-streaming path to gather events for final response assembly.
+pub struct CollectingSink {
+    events: std::sync::Mutex<Vec<AgentEvent>>,
+}
+
+impl CollectingSink {
+    pub fn new() -> Self {
+        Self {
+            events: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    pub fn into_events(self) -> Vec<AgentEvent> {
+        self.events.into_inner().unwrap_or_default()
+    }
+
+    pub fn events(&self) -> Vec<AgentEvent> {
+        match self.events.lock() {
+            Ok(guard) => guard.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl AgentEventSink for CollectingSink {
+    async fn emit(&self, event: AgentEvent) {
+        if let Ok(mut guard) = self.events.lock() {
+            guard.push(event);
+        }
+    }
+}
+
+/// A sink that wraps an `UnboundedSender` for immediate forwarding.
+/// Used by the streaming path to push events to the SSE coalescer.
+pub struct ChannelSink<T> {
+    sender: tokio::sync::mpsc::UnboundedSender<T>,
+}
+
+impl<T> ChannelSink<T> {
+    pub fn new(sender: tokio::sync::mpsc::UnboundedSender<T>) -> Self {
+        Self { sender }
+    }
+}
+
+#[async_trait::async_trait]
+impl AgentEventSink for ChannelSink<AgentEvent> {
+    async fn emit(&self, event: AgentEvent) {
+        let _ = self.sender.send(event);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_agent_event_serde_roundtrip() {
+        let events = vec![
+            AgentEvent::Activity {
+                stage: "planning".to_string(),
+                message: "Building retrieval plan".to_string(),
+            },
+            AgentEvent::ReasoningSummaryDelta {
+                text: "The user wants to know".to_string(),
+            },
+            AgentEvent::MessageDelta {
+                text: "Here is the answer".to_string(),
+            },
+            AgentEvent::DebugTrace {
+                kind: "retrieval".to_string(),
+                payload: serde_json::json!({"channel": "dense"}),
+            },
+            AgentEvent::Citations { citations: vec![] },
+            AgentEvent::Usage {
+                provider: "openai".to_string(),
+                model: "gpt-4".to_string(),
+                prompt_tokens: 100,
+                completion_tokens: 50,
+                total_tokens: 150,
+                request_count: 1,
+                metadata: BTreeMap::new(),
+            },
+            AgentEvent::Done {
+                final_message: Some("Done".to_string()),
+                usage: Some(AgentUsage {
+                    provider: "openai".to_string(),
+                    model: "gpt-4".to_string(),
+                    prompt_tokens: 100,
+                    completion_tokens: 50,
+                    total_tokens: 150,
+                }),
+            },
+            AgentEvent::Error {
+                code: "E001".to_string(),
+                message: "Something failed".to_string(),
+            },
+        ];
+
+        for event in events {
+            let json = serde_json::to_string(&event).unwrap();
+            let parsed: AgentEvent = serde_json::from_str(&json).unwrap();
+            let reparsed = serde_json::to_string(&parsed).unwrap();
+            assert_eq!(json, reparsed, "serde roundtrip failed for {:?}", event);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_noop_sink() {
+        let sink = NoopSink;
+        sink.emit(AgentEvent::MessageDelta {
+            text: "hello".to_string(),
+        })
+        .await;
+        // No panic, no collection.
+    }
+
+    #[tokio::test]
+    async fn test_collecting_sink() {
+        let sink = CollectingSink::new();
+        sink.emit(AgentEvent::Activity {
+            stage: "plan".to_string(),
+            message: "planning".to_string(),
+        })
+        .await;
+        sink.emit(AgentEvent::MessageDelta {
+            text: "answer".to_string(),
+        })
+        .await;
+        let events = sink.events();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], AgentEvent::Activity { .. }));
+        assert!(matches!(events[1], AgentEvent::MessageDelta { .. }));
+    }
+}

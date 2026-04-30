@@ -1,4 +1,5 @@
 pub mod adapters;
+pub mod agents;
 mod chat;
 pub mod main_agent;
 pub mod ports;

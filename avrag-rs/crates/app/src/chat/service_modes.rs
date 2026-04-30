@@ -139,86 +139,51 @@ impl AppState {
         &self,
         req: &ChatRequest,
         session: &ChatSession,
-        _pg: &PgAppRepository,
     ) -> Result<ChatGraphExecution, AppError> {
-        let session_uuid =
-            parse_uuid_or_app_error(&session.id, "session_not_found", "session not found")?;
-        let memory_context = if let Some(cm) = &self.chatmemory {
-            cm.load(&self.auth, session_uuid).await.ok()
-        } else {
-            None
+        let Some(agent_service) = self.agent_service() else {
+            return Err(AppError::internal("agent service is not configured"));
         };
-        let refined_query = self
-            .refine_general_query(req.query.trim(), memory_context.as_ref())
+        let mut agent_request = self
+            .build_agent_request(req, crate::agents::AgentKind::Chat)
             .await;
-        let reference_context = self.build_main_agent_reference_context(Some(session)).await;
-        let messages = crate::main_agent::MainAgent::build_general_messages(
-            &refined_query,
-            reference_context.as_ref(),
-        );
+        agent_request.stream = false;
+        let mut general_debug = self.build_general_agent_debug(&agent_request);
+        let sink = crate::agents::events::CollectingSink::new();
+        let agent_result = agent_service.run(agent_request, &sink).await?;
 
-        let mut degrade_trace = Vec::new();
-        let answer_result = crate::main_agent::MainAgent::answer_general(
-            self.llm_client.as_ref(),
-            &messages,
-            self.config.answer_llm.temperature,
-            &mut degrade_trace,
-        )
-        .await;
-        let answer_model = answer_result
-            .llm_usage
-            .as_ref()
-            .map(|usage| usage.model.clone())
-            .filter(|model| !model.trim().is_empty());
-        let general_llm_usage = answer_result.llm_usage.clone();
-        let answer = answer_result.answer_text;
+        if let Some(usage) = agent_result.usage.as_ref() {
+            general_debug.insert("answer_model".to_string(), serde_json::json!(usage.model.clone()));
+        }
 
-        let mut general_debug = BTreeMap::new();
-        general_debug.insert(
-            "refined_query".to_string(),
-            serde_json::json!(refined_query.clone()),
-        );
-        general_debug.insert(
-            "memory_loaded".to_string(),
-            serde_json::json!(memory_context.is_some()),
-        );
-        general_debug.insert("summary_updated".to_string(), serde_json::json!(false));
-        general_debug.insert(
-            "has_profile".to_string(),
-            serde_json::json!(
-                memory_context
-                    .as_ref()
-                    .and_then(|m| m.layer3.as_ref())
-                    .is_some()
-            ),
-        );
-        general_debug.insert(
-            "has_working_memory".to_string(),
-            serde_json::json!(
-                memory_context
-                    .as_ref()
-                    .and_then(|m| m.working_memory.as_ref())
-                    .is_some()
-            ),
-        );
-        general_debug.insert("answer_model".to_string(), serde_json::json!(answer_model));
+        let answer = agent_result.answer.clone();
+        let answer_blocks = if agent_result.answer_blocks.is_empty() {
+            common::plain_text_answer_blocks(&answer)
+        } else {
+            agent_result.answer_blocks.clone()
+        };
+        let llm_usage = agent_result.usage.as_ref().map(|usage| avrag_llm::LlmUsage {
+            prompt_tokens: usage.prompt_tokens.min(u32::MAX as u64) as u32,
+            completion_tokens: usage.completion_tokens.min(u32::MAX as u64) as u32,
+            total_tokens: usage.total_tokens.min(u32::MAX as u64) as u32,
+            provider: usage.provider.clone(),
+            model: usage.model.clone(),
+        });
 
-        let answer_blocks = common::plain_text_answer_blocks(&answer);
         Ok(ChatGraphExecution {
-            mode: "general".to_string(),
-            input_usage_text: refined_query,
+            mode: "chat".to_string(),
+            input_usage_text: req.query.trim().to_string(),
             apply_output_guard: false,
             response: ChatResponse {
                 answer,
                 answer_blocks,
                 session_id: session.id.clone(),
-                agent_type: req.agent_type.clone(),
-                sources: Vec::new(),
-                citations: Vec::new(),
+                agent_type: "chat".to_string(),
+                sources: agent_result.sources,
+                citations: agent_result.citations,
                 trace: TraceInfo {
-                    mode: session.agent_type.clone(),
+                    mode: "chat".to_string(),
                 },
-                degrade_trace,
+                degrade_trace: agent_result.degrade_trace,
                 planner_output: None,
                 mode_debug: Some(ModeDebug {
                     rag: None,
@@ -228,8 +193,8 @@ impl AppState {
                 message_id: None,
                 guard_report: None,
             },
-            llm_usage: general_llm_usage,
-            debug_metadata: None,
+            llm_usage,
+            debug_metadata: agent_result.debug_payload,
         })
     }
 
@@ -238,91 +203,25 @@ impl AppState {
         req: &ChatRequest,
         session: &ChatSession,
     ) -> Result<ChatGraphExecution, AppError> {
-        let mut degrade_trace = Vec::new();
-        let (answer, search_results, query_type, sub_queries, llm_usage) =
-            if let Some(ref executor) = self.search_executor {
-                match executor.execute(req, &self.auth).await {
-                    Ok(search_resp) => (
-                        search_resp.synthesized_answer.clone(),
-                        search_resp.results,
-                        search_resp.query_type,
-                        search_resp.sub_queries,
-                        search_resp.llm_usage,
-                    ),
-                    Err(error) => {
-                        degrade_trace.push(DegradeTraceItem {
-                            stage: "search.execute".to_string(),
-                            reason: error.to_string(),
-                            impact: "Search mode could not obtain external evidence".to_string(),
-                        });
-                        (
-                            format!("Search mode is unavailable: {}", error),
-                            Vec::new(),
-                            "unavailable".to_string(),
-                            vec![req.query.trim().to_string()],
-                            None,
-                        )
-                    }
-                }
-            } else {
-                degrade_trace.push(DegradeTraceItem {
-                    stage: "search.execute".to_string(),
-                    reason: "search_executor_not_configured".to_string(),
-                    impact: "Search mode is disabled".to_string(),
-                });
-                (
-                    "Search mode is unavailable because the search executor is not configured."
-                        .to_string(),
-                    Vec::new(),
-                    "unavailable".to_string(),
-                    vec![req.query.trim().to_string()],
-                    None,
-                )
-            };
-
-        let citations: Vec<Citation> = search_results
-            .iter()
-            .enumerate()
-            .map(|(index, result)| Citation {
-                citation_id: result.citation_index.unwrap_or(index + 1) as i64,
-                doc_id: result.url.clone(),
-                chunk_id: Some(format!(
-                    "search:{}",
-                    result.citation_index.unwrap_or(index + 1)
-                )),
-                page: None,
-                doc_name: result.title.clone(),
-                preview: Some(result.snippet.clone()),
-                content: None,
-                score: 1.0,
-                layer: Some("search".to_string()),
-                chunk_type: None,
-                asset_id: None,
-                caption: None,
-                image_url: None,
-                parser_backend: None,
-                source_locator: Some(serde_json::json!({
-                    "url": result.url.clone(),
-                    "citation_index": result.citation_index.unwrap_or(index + 1),
-                })),
-                parse_run_id: None,
-            })
-            .collect();
-
-        let sources: Vec<SourceRef> = search_results
-            .iter()
-            .map(|result| SourceRef {
-                id: result.url.clone(),
-                title: result.title.clone(),
-                snippet: Some(result.snippet.clone()),
-                doc_id: None,
-                page: None,
-            })
-            .collect();
+        let Some(agent_service) = self.agent_service() else {
+            return Err(AppError::internal("agent service is not configured"));
+        };
+        let mut agent_request = self
+            .build_agent_request(req, crate::agents::AgentKind::Search)
+            .await;
+        agent_request.stream = false;
+        let sink = crate::agents::events::CollectingSink::new();
+        let agent_result = agent_service.run(agent_request, &sink).await?;
 
         let mut search_debug = BTreeMap::new();
-        search_debug.insert("query_type".to_string(), serde_json::json!(query_type));
-        search_debug.insert("sub_queries".to_string(), serde_json::json!(sub_queries));
+        if let Some(payload) = agent_result.debug_payload.as_ref() {
+            if let Some(query_type) = payload.get("query_type") {
+                search_debug.insert("query_type".to_string(), query_type.clone());
+            }
+            if let Some(sub_queries) = payload.get("sub_queries") {
+                search_debug.insert("sub_queries".to_string(), sub_queries.clone());
+            }
+        }
         search_debug.insert(
             "provider".to_string(),
             serde_json::json!(self.config.search.provider.clone()),
@@ -333,9 +232,17 @@ impl AppState {
         );
         search_debug.insert(
             "result_count".to_string(),
-            serde_json::json!(search_results.len()),
+            serde_json::json!(agent_result.sources.len()),
         );
 
+        let answer = agent_result.answer.clone();
+        let llm_usage = agent_result.usage.as_ref().map(|usage| avrag_llm::LlmUsage {
+            prompt_tokens: usage.prompt_tokens.min(u32::MAX as u64) as u32,
+            completion_tokens: usage.completion_tokens.min(u32::MAX as u64) as u32,
+            total_tokens: usage.total_tokens.min(u32::MAX as u64) as u32,
+            provider: usage.provider.clone(),
+            model: usage.model.clone(),
+        });
         let answer_blocks = common::plain_text_answer_blocks(&answer);
         Ok(ChatGraphExecution {
             mode: "search".to_string(),
@@ -345,13 +252,13 @@ impl AppState {
                 answer,
                 answer_blocks,
                 session_id: session.id.clone(),
-                agent_type: req.agent_type.clone(),
-                sources,
-                citations,
+                agent_type: "search".to_string(),
+                sources: agent_result.sources,
+                citations: agent_result.citations,
                 trace: TraceInfo {
-                    mode: session.agent_type.clone(),
+                    mode: "search".to_string(),
                 },
-                degrade_trace,
+                degrade_trace: agent_result.degrade_trace,
                 planner_output: None,
                 mode_debug: Some(ModeDebug {
                     rag: None,

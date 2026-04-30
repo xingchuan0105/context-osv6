@@ -63,6 +63,24 @@ mod tests {
     }
 
     #[test]
+    fn app_config_defaults_qwen3_vl_embedding_to_multimodal_schema_dimension() {
+        let config = AppConfig::default();
+
+        assert_eq!(config.mm_embedding.model, "qwen3-vl-embedding");
+        assert_eq!(config.mm_embedding.dimensions, Some(1024));
+        assert_eq!(config.milvus.multimodal_vector_dim, 1024);
+    }
+
+    #[test]
+    fn app_config_defaults_main_agent_to_deepseek_v4_flash_max() {
+        let config = AppConfig::default();
+
+        assert_eq!(config.answer_llm.base_url, "https://api.deepseek.com");
+        assert_eq!(config.answer_llm.model, "deepseek-v4-flash");
+        assert_eq!(config.answer_llm.enable_thinking, Some(true));
+    }
+
+    #[test]
     fn build_rag_session_context_drops_blank_summary_and_empty_payload() {
         assert!(AppState::build_rag_session_context(Vec::new(), Some("   ".to_string())).is_none());
 
@@ -332,6 +350,303 @@ mod tests {
             preferences.agent_memory.active[0].text,
             "I prefer concise answers"
         );
+    }
+
+    struct ScriptedAgent;
+
+    #[async_trait::async_trait]
+    impl crate::agents::runtime::Agent for ScriptedAgent {
+        async fn run(
+            &self,
+            _request: crate::agents::runtime::AgentRequest,
+            sink: &dyn crate::agents::events::AgentEventSink,
+        ) -> Result<crate::agents::runtime::AgentRunResult, common::AppError> {
+            sink.emit(crate::agents::events::AgentEvent::Activity {
+                stage: "chat".to_string(),
+                message: "Scripted chat".to_string(),
+            })
+            .await;
+            sink.emit(crate::agents::events::AgentEvent::MessageDelta {
+                text: "agent ".to_string(),
+            })
+            .await;
+            sink.emit(crate::agents::events::AgentEvent::MessageDelta {
+                text: "answer".to_string(),
+            })
+            .await;
+            sink.emit(crate::agents::events::AgentEvent::Done {
+                final_message: Some("agent answer".to_string()),
+                usage: None,
+            })
+            .await;
+
+            Ok(crate::agents::runtime::AgentRunResult {
+                answer: "agent answer".to_string(),
+                usage: Some(crate::agents::runtime::AgentRunUsage {
+                    provider: "test".to_string(),
+                    model: "scripted".to_string(),
+                    prompt_tokens: 1,
+                    completion_tokens: 2,
+                    total_tokens: 3,
+                    request_count: 1,
+                }),
+                ..Default::default()
+            })
+        }
+    }
+
+    struct BufferedOnlyAgent;
+
+    #[async_trait::async_trait]
+    impl crate::agents::runtime::Agent for BufferedOnlyAgent {
+        async fn run(
+            &self,
+            _request: crate::agents::runtime::AgentRequest,
+            sink: &dyn crate::agents::events::AgentEventSink,
+        ) -> Result<crate::agents::runtime::AgentRunResult, common::AppError> {
+            sink.emit(crate::agents::events::AgentEvent::Activity {
+                stage: "chat".to_string(),
+                message: "Buffered chat".to_string(),
+            })
+            .await;
+
+            Ok(crate::agents::runtime::AgentRunResult {
+                answer: "buffered answer".to_string(),
+                ..Default::default()
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn chat_stream_routes_chat_through_unified_agent_service() {
+        let mut config = AppConfig::default();
+        config.answer_llm.api_key = "test-key".to_string();
+        let mut state = AppState::new(config);
+        state.set_agent_service(crate::agents::service::UnifiedAgentService::new(
+            Box::new(ScriptedAgent),
+            Box::new(ScriptedAgent),
+            Box::new(ScriptedAgent),
+        ));
+        let notebook = state
+            .create_notebook(CreateNotebookRequest {
+                name: "chat".to_string(),
+                description: String::new(),
+            })
+            .await
+            .unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+        state
+            .execute_chat_stream(
+                common::ChatRequest {
+                    query: "hello".to_string(),
+                    notebook_id: Some(notebook.id),
+                    session_id: None,
+                    agent_type: "general".to_string(),
+                    source_type: None,
+                    source_token: None,
+                    doc_scope: Vec::new(),
+                    messages: Vec::new(),
+                    stream: true,
+                },
+                "req-agent-chat".to_string(),
+                tx,
+            )
+            .await
+            .unwrap();
+
+        let mut events = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            events.push(event);
+        }
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            contracts::chat::ChatEvent::AnswerStart { agent_type, .. } if agent_type == "chat"
+        )));
+        let streamed_answer = events
+            .iter()
+            .filter_map(|event| match event {
+                contracts::chat::ChatEvent::Token { content, .. } => Some(content.as_str()),
+                _ => None,
+            })
+            .collect::<String>();
+        assert_eq!(streamed_answer, "agent answer");
+        let done_events = events
+            .iter()
+            .filter(|event| matches!(event, contracts::chat::ChatEvent::Done { .. }))
+            .count();
+        assert_eq!(done_events, 1);
+        assert!(matches!(events.last(), Some(contracts::chat::ChatEvent::Done { payload, .. })
+            if payload.get("agent_type").and_then(|value| value.as_str()) == Some("chat")
+                && payload.get("answer").and_then(|value| value.as_str()) == Some("agent answer")));
+    }
+
+    #[tokio::test]
+    async fn chat_stream_emits_buffered_agent_answer_when_no_delta_arrives() {
+        let mut config = AppConfig::default();
+        config.answer_llm.api_key = "test-key".to_string();
+        let mut state = AppState::new(config);
+        state.set_agent_service(crate::agents::service::UnifiedAgentService::new(
+            Box::new(BufferedOnlyAgent),
+            Box::new(BufferedOnlyAgent),
+            Box::new(BufferedOnlyAgent),
+        ));
+        let notebook = state
+            .create_notebook(CreateNotebookRequest {
+                name: "chat".to_string(),
+                description: String::new(),
+            })
+            .await
+            .unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+        state
+            .execute_chat_stream(
+                common::ChatRequest {
+                    query: "hello".to_string(),
+                    notebook_id: Some(notebook.id),
+                    session_id: None,
+                    agent_type: "general".to_string(),
+                    source_type: None,
+                    source_token: None,
+                    doc_scope: Vec::new(),
+                    messages: Vec::new(),
+                    stream: true,
+                },
+                "req-agent-buffered-chat".to_string(),
+                tx,
+            )
+            .await
+            .unwrap();
+
+        let mut events = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            events.push(event);
+        }
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            contracts::chat::ChatEvent::AnswerStart { agent_type, .. } if agent_type == "chat"
+        )));
+        let streamed_answer = events
+            .iter()
+            .filter_map(|event| match event {
+                contracts::chat::ChatEvent::Token { content, .. } => Some(content.as_str()),
+                _ => None,
+            })
+            .collect::<String>();
+        assert_eq!(streamed_answer, "buffered answer");
+        let done_events = events
+            .iter()
+            .filter(|event| matches!(event, contracts::chat::ChatEvent::Done { .. }))
+            .count();
+        assert_eq!(done_events, 1);
+    }
+
+    #[tokio::test]
+    async fn search_stream_emits_buffered_agent_answer_when_no_delta_arrives() {
+        let mut state = AppState::new(AppConfig::default());
+        state.set_agent_service(crate::agents::service::UnifiedAgentService::new(
+            Box::new(ScriptedAgent),
+            Box::new(BufferedOnlyAgent),
+            Box::new(ScriptedAgent),
+        ));
+        let notebook = state
+            .create_notebook(CreateNotebookRequest {
+                name: "search".to_string(),
+                description: String::new(),
+            })
+            .await
+            .unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+        state
+            .execute_chat_stream(
+                common::ChatRequest {
+                    query: "hello".to_string(),
+                    notebook_id: Some(notebook.id),
+                    session_id: None,
+                    agent_type: "search".to_string(),
+                    source_type: None,
+                    source_token: None,
+                    doc_scope: Vec::new(),
+                    messages: Vec::new(),
+                    stream: true,
+                },
+                "req-agent-buffered-search".to_string(),
+                tx,
+            )
+            .await
+            .unwrap();
+
+        let mut events = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            events.push(event);
+        }
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            contracts::chat::ChatEvent::AnswerStart { agent_type, .. } if agent_type == "search"
+        )));
+        let streamed_answer = events
+            .iter()
+            .filter_map(|event| match event {
+                contracts::chat::ChatEvent::Token { content, .. } => Some(content.as_str()),
+                _ => None,
+            })
+            .collect::<String>();
+        assert_eq!(streamed_answer, "buffered answer");
+        let done_events = events
+            .iter()
+            .filter(|event| matches!(event, contracts::chat::ChatEvent::Done { .. }))
+            .count();
+        assert_eq!(done_events, 1);
+    }
+
+    #[tokio::test]
+    async fn general_mode_core_routes_through_unified_chat_agent() {
+        let mut config = AppConfig::default();
+        config.answer_llm.api_key = "test-key".to_string();
+        let mut state = AppState::new(config);
+        state.set_agent_service(crate::agents::service::UnifiedAgentService::new(
+            Box::new(ScriptedAgent),
+            Box::new(ScriptedAgent),
+            Box::new(ScriptedAgent),
+        ));
+        let session = common::ChatSession {
+            id: Uuid::new_v4().to_string(),
+            notebook_id: Uuid::new_v4().to_string(),
+            title: None,
+            agent_type: "general".to_string(),
+            summary: None,
+            pinned: false,
+            created_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
+        };
+
+        let execution = state
+            .execute_general_mode_core(
+                &common::ChatRequest {
+                    query: "hello".to_string(),
+                    notebook_id: Some(session.notebook_id.clone()),
+                    session_id: Some(session.id.clone()),
+                    agent_type: "general".to_string(),
+                    source_type: None,
+                    source_token: None,
+                    doc_scope: Vec::new(),
+                    messages: Vec::new(),
+                    stream: false,
+                },
+                &session,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(execution.mode, "chat");
+        assert_eq!(execution.response.agent_type, "chat");
+        assert_eq!(execution.response.answer, "agent answer");
+        assert_eq!(execution.llm_usage.as_ref().map(|usage| usage.model.as_str()), Some("scripted"));
     }
 
     async fn upload_validation_pg_state() -> Option<(AppState, std::path::PathBuf)> {

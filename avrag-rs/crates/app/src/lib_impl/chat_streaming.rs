@@ -1,3 +1,7 @@
+use crate::agents::{
+    AgentKind,
+    events::{AgentEvent, AgentEventSink},
+};
 use contracts::chat::{ChatActivitySourcePreview, ChatEvent};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -66,64 +70,21 @@ fn chunk_text_for_stream(text: &str) -> Vec<String> {
         .collect()
 }
 
-fn chat_done_payload(response: &common::ChatResponse) -> serde_json::Value {
-    serde_json::to_value(response).unwrap_or_else(|_| serde_json::json!({}))
-}
+async fn emit_buffered_agent_answer_if_needed(
+    sink: &crate::agents::sse_sink::SseSink,
+    answer: &str,
+) {
+    if sink.has_message_delta() || answer.is_empty() {
+        return;
+    }
 
-fn search_source_preview(result: &avrag_search::SearchResult) -> ChatActivitySourcePreview {
-    ChatActivitySourcePreview {
-        id: result.url.clone(),
-        label: if result.title.trim().is_empty() {
-            result.url.clone()
-        } else {
-            result.title.clone()
-        },
-        href: Some(result.url.clone()),
+    for chunk in chunk_text_for_stream(answer) {
+        sink.emit(AgentEvent::MessageDelta { text: chunk }).await;
     }
 }
 
-fn search_citations(results: &[avrag_search::SearchResult]) -> Vec<common::Citation> {
-    results
-        .iter()
-        .enumerate()
-        .map(|(index, result)| common::Citation {
-            citation_id: result.citation_index.unwrap_or(index + 1) as i64,
-            doc_id: result.url.clone(),
-            chunk_id: Some(format!(
-                "search:{}",
-                result.citation_index.unwrap_or(index + 1)
-            )),
-            page: None,
-            doc_name: result.title.clone(),
-            preview: Some(result.snippet.clone()),
-            content: None,
-            score: 1.0,
-            layer: Some("search".to_string()),
-            chunk_type: None,
-            asset_id: None,
-            caption: None,
-            image_url: None,
-            parser_backend: None,
-            source_locator: Some(serde_json::json!({
-                "url": result.url.clone(),
-                "citation_index": result.citation_index.unwrap_or(index + 1),
-            })),
-            parse_run_id: None,
-        })
-        .collect()
-}
-
-fn search_sources(results: &[avrag_search::SearchResult]) -> Vec<common::SourceRef> {
-    results
-        .iter()
-        .map(|result| common::SourceRef {
-            id: result.url.clone(),
-            title: result.title.clone(),
-            snippet: Some(result.snippet.clone()),
-            doc_id: None,
-            page: None,
-        })
-        .collect()
+fn chat_done_payload(response: &common::ChatResponse) -> serde_json::Value {
+    serde_json::to_value(response).unwrap_or_else(|_| serde_json::json!({}))
 }
 
 impl AppState {
@@ -149,8 +110,11 @@ impl AppState {
             },
         );
 
-        match crate::main_agent::MainAgent::decide(&req) {
-            crate::main_agent::MainAgentDecision::Clarify { message } => {
+        // Route via AgentKind (canonical agent dispatch).
+        match AgentKind::parse(&req.agent_type) {
+            Some(AgentKind::Rag) if req.doc_scope.is_empty() => {
+                // Clarify: RAG mode requires doc_scope
+                let message = "请先选择要检索的文档范围，再让我执行知识库检索。".to_string();
                 let mut execution = self
                     .execute_clarify_mode_core(&req, &session, &message)
                     .await?;
@@ -182,18 +146,18 @@ impl AppState {
                 .await?;
                 return Ok(());
             }
-            crate::main_agent::MainAgentDecision::DirectChat => {
-                req.agent_type = "general".to_string();
+            Some(AgentKind::Chat) | None => {
+                req.agent_type = "chat".to_string();
             }
-            crate::main_agent::MainAgentDecision::ExternalSearch => {
+            Some(AgentKind::Search) => {
                 req.agent_type = "search".to_string();
             }
-            crate::main_agent::MainAgentDecision::ExecutePlan => {
+            Some(AgentKind::Rag) => {
                 req.agent_type = "rag".to_string();
             }
         }
 
-        if req.agent_type == "general"
+        if req.agent_type == "chat"
             && self
                 .execute_general_chat_stream(&req, &session, &preflight, &request_id, &sender)
                 .await?
@@ -350,126 +314,63 @@ impl AppState {
         request_id: &str,
         sender: &UnboundedSender<ChatEvent>,
     ) -> Result<bool, AppError> {
-        let Some(llm) = &self.llm_client else {
+        if self.llm_client.is_none() {
+            return Ok(false);
+        }
+        let Some(agent_service) = self.agent_service() else {
             return Ok(false);
         };
 
-        let session_uuid =
-            parse_uuid_or_app_error(&session.id, "session_not_found", "session not found")?;
-        let memory_context = if let Some(chatmemory) = &self.chatmemory {
-            chatmemory.load(&self.auth, session_uuid).await.ok()
-        } else {
-            None
-        };
-        let refined_query = self
-            .refine_general_query(req.query.trim(), memory_context.as_ref())
-            .await;
-        let reference_context = self.build_main_agent_reference_context(Some(session)).await;
-        let messages = crate::main_agent::MainAgent::build_general_messages(
-            &refined_query,
-            reference_context.as_ref(),
-        );
-
-        let mut streamed_any = false;
-        send_chat_answer_start_event(sender, request_id, &session.id, None, &req.agent_type);
-        let streamed = crate::main_agent::MainAgent::answer_general_stream(
-            llm,
-            &messages,
-            self.config.answer_llm.temperature,
-            |delta| {
-                if delta.is_empty() {
-                    return;
-                }
-
-                streamed_any = true;
-                send_chat_stream_event(
-                    sender,
-                    ChatEvent::Token {
-                        request_id: request_id.to_string(),
-                        message_id: STREAM_PLACEHOLDER_MESSAGE_ID,
-                        content: delta.to_string(),
-                    },
-                );
-            },
+        let mut agent_request = self.build_agent_request(req, AgentKind::Chat).await;
+        agent_request.stream = true;
+        let emit_debug_trace = agent_request.debug;
+        let mut general_debug = self.build_general_agent_debug(&agent_request);
+        let sink = crate::agents::sse_sink::SseSink::new_with_agent_type(
+            sender.clone(),
+            request_id.to_string(),
+            session.id.clone(),
+            STREAM_PLACEHOLDER_MESSAGE_ID,
+            "chat".to_string(),
         )
-        .await;
+        .without_done_event()
+        .with_debug_trace(emit_debug_trace);
 
-        let streamed = match streamed {
-            Ok(streamed) => streamed,
-            Err(error) if !streamed_any => {
-                info!(error = %error, "general mode streaming unavailable; falling back to buffered response");
-                return Ok(false);
-            }
-            Err(error) => {
-                return Err(AppError::internal(format!(
-                    "general mode stream interrupted: {error}"
-                )));
-            }
-        };
+        let agent_result = agent_service.run(agent_request, &sink).await?;
+        emit_buffered_agent_answer_if_needed(&sink, &agent_result.answer).await;
 
-        if !streamed_any {
-            for chunk in chunk_text_for_stream(&streamed.content) {
-                send_chat_stream_event(
-                    sender,
-                    ChatEvent::Token {
-                        request_id: request_id.to_string(),
-                        message_id: STREAM_PLACEHOLDER_MESSAGE_ID,
-                        content: chunk,
-                    },
-                );
-            }
+        if let Some(usage) = agent_result.usage.as_ref() {
+            general_debug.insert("answer_model".to_string(), serde_json::json!(usage.model.clone()));
         }
 
-        let mut general_debug = BTreeMap::new();
-        general_debug.insert(
-            "refined_query".to_string(),
-            serde_json::json!(refined_query.clone()),
-        );
-        general_debug.insert(
-            "memory_loaded".to_string(),
-            serde_json::json!(memory_context.is_some()),
-        );
-        general_debug.insert("summary_updated".to_string(), serde_json::json!(false));
-        general_debug.insert(
-            "has_profile".to_string(),
-            serde_json::json!(
-                memory_context
-                    .as_ref()
-                    .and_then(|m| m.layer3.as_ref())
-                    .is_some()
-            ),
-        );
-        general_debug.insert(
-            "has_working_memory".to_string(),
-            serde_json::json!(
-                memory_context
-                    .as_ref()
-                    .and_then(|m| m.working_memory.as_ref())
-                    .is_some()
-            ),
-        );
-        general_debug.insert(
-            "answer_model".to_string(),
-            serde_json::json!(streamed.model.clone()),
-        );
+        let answer = agent_result.answer.clone();
+        let answer_blocks = if agent_result.answer_blocks.is_empty() {
+            common::plain_text_answer_blocks(&answer)
+        } else {
+            agent_result.answer_blocks.clone()
+        };
+        let llm_usage = agent_result.usage.as_ref().map(|usage| avrag_llm::LlmUsage {
+            prompt_tokens: usage.prompt_tokens.min(u32::MAX as u64) as u32,
+            completion_tokens: usage.completion_tokens.min(u32::MAX as u64) as u32,
+            total_tokens: usage.total_tokens.min(u32::MAX as u64) as u32,
+            provider: usage.provider.clone(),
+            model: usage.model.clone(),
+        });
 
-        let answer = streamed.content;
-        let answer_blocks = common::plain_text_answer_blocks(&answer);
         let mut execution = crate::chat::ChatGraphExecution {
-            mode: "general".to_string(),
-            input_usage_text: refined_query,
+            mode: "chat".to_string(),
+            input_usage_text: req.query.trim().to_string(),
             apply_output_guard: false,
             response: common::ChatResponse {
                 answer,
                 answer_blocks,
                 session_id: session.id.clone(),
-                agent_type: req.agent_type.clone(),
-                sources: Vec::new(),
-                citations: Vec::new(),
+                agent_type: "chat".to_string(),
+                sources: agent_result.sources,
+                citations: agent_result.citations,
                 trace: common::TraceInfo {
-                    mode: session.agent_type.clone(),
+                    mode: "chat".to_string(),
                 },
-                degrade_trace: Vec::new(),
+                degrade_trace: agent_result.degrade_trace,
                 planner_output: None,
                 mode_debug: Some(common::ModeDebug {
                     rag: None,
@@ -479,8 +380,8 @@ impl AppState {
                 message_id: None,
                 guard_report: None,
             },
-            llm_usage: Some(streamed.usage),
-            debug_metadata: None,
+            llm_usage,
+            debug_metadata: agent_result.debug_payload,
         };
 
         self.finalize_stream_execution(req, session, preflight, request_id, sender, &mut execution)
@@ -497,92 +398,35 @@ impl AppState {
         request_id: &str,
         sender: &UnboundedSender<ChatEvent>,
     ) -> Result<bool, AppError> {
-        let Some(executor) = &self.search_executor else {
+        let Some(agent_service) = self.agent_service() else {
             return Ok(false);
         };
 
-        let mut answer_started = false;
-        let search_response = executor
-            .execute_stream(req, |update| match update {
-                avrag_search::SearchStreamUpdate::Searching { queries } => {
-                    if queries.is_empty() {
-                        return;
-                    }
-                    let mut counts = BTreeMap::new();
-                    counts.insert("queries".to_string(), queries.len());
-                    send_chat_activity_event(
-                        sender,
-                        request_id,
-                        "searching",
-                        "正在搜索网页",
-                        Some(format!("查询：{}", queries.join(" · "))),
-                        counts,
-                        Vec::new(),
-                    );
-                }
-                avrag_search::SearchStreamUpdate::SourcesCollected { results } => {
-                    let mut counts = BTreeMap::new();
-                    counts.insert("sources".to_string(), results.len());
-                    send_chat_activity_event(
-                        sender,
-                        request_id,
-                        "reading_sources",
-                        "正在阅读来源",
-                        Some("系统正在接收 Perplexity 搜索来源。".to_string()),
-                        counts,
-                        results.iter().take(3).map(search_source_preview).collect(),
-                    );
-                }
-                avrag_search::SearchStreamUpdate::TextDelta { delta } => {
-                    if delta.is_empty() {
-                        return;
-                    }
-                    if !answer_started {
-                        send_chat_answer_start_event(
-                            sender,
-                            request_id,
-                            &session.id,
-                            None,
-                            &req.agent_type,
-                        );
-                        answer_started = true;
-                    }
-                    send_chat_stream_event(
-                        sender,
-                        ChatEvent::Token {
-                            request_id: request_id.to_string(),
-                            message_id: STREAM_PLACEHOLDER_MESSAGE_ID,
-                            content: delta,
-                        },
-                    );
-                }
-            })
-            .await
-            .map_err(map_anyhow_error)?;
+        let mut agent_request = self.build_agent_request(req, AgentKind::Search).await;
+        agent_request.stream = true;
+        let emit_debug_trace = agent_request.debug;
+        let sink = crate::agents::sse_sink::SseSink::new_with_agent_type(
+            sender.clone(),
+            request_id.to_string(),
+            session.id.clone(),
+            STREAM_PLACEHOLDER_MESSAGE_ID,
+            "search".to_string(),
+        )
+        .without_done_event()
+        .with_debug_trace(emit_debug_trace);
 
-        if !answer_started {
-            send_chat_answer_start_event(sender, request_id, &session.id, None, &req.agent_type);
-            for chunk in chunk_text_for_stream(&search_response.synthesized_answer) {
-                send_chat_stream_event(
-                    sender,
-                    ChatEvent::Token {
-                        request_id: request_id.to_string(),
-                        message_id: STREAM_PLACEHOLDER_MESSAGE_ID,
-                        content: chunk,
-                    },
-                );
-            }
-        }
+        let agent_result = agent_service.run(agent_request, &sink).await?;
+        emit_buffered_agent_answer_if_needed(&sink, &agent_result.answer).await;
 
         let mut search_debug = BTreeMap::new();
-        search_debug.insert(
-            "query_type".to_string(),
-            serde_json::json!(search_response.query_type.clone()),
-        );
-        search_debug.insert(
-            "sub_queries".to_string(),
-            serde_json::json!(search_response.sub_queries.clone()),
-        );
+        if let Some(payload) = agent_result.debug_payload.as_ref() {
+            if let Some(query_type) = payload.get("query_type") {
+                search_debug.insert("query_type".to_string(), query_type.clone());
+            }
+            if let Some(sub_queries) = payload.get("sub_queries") {
+                search_debug.insert("sub_queries".to_string(), sub_queries.clone());
+            }
+        }
         search_debug.insert(
             "provider".to_string(),
             serde_json::json!(self.config.search.provider.clone()),
@@ -593,10 +437,17 @@ impl AppState {
         );
         search_debug.insert(
             "result_count".to_string(),
-            serde_json::json!(search_response.results.len()),
+            serde_json::json!(agent_result.sources.len()),
         );
 
-        let answer = search_response.synthesized_answer.clone();
+        let answer = agent_result.answer.clone();
+        let llm_usage = agent_result.usage.as_ref().map(|usage| avrag_llm::LlmUsage {
+            prompt_tokens: usage.prompt_tokens.min(u32::MAX as u64) as u32,
+            completion_tokens: usage.completion_tokens.min(u32::MAX as u64) as u32,
+            total_tokens: usage.total_tokens.min(u32::MAX as u64) as u32,
+            provider: usage.provider.clone(),
+            model: usage.model.clone(),
+        });
         let mut execution = crate::chat::ChatGraphExecution {
             mode: "search".to_string(),
             input_usage_text: req.query.trim().to_string(),
@@ -605,13 +456,13 @@ impl AppState {
                 answer: answer.clone(),
                 answer_blocks: common::plain_text_answer_blocks(&answer),
                 session_id: session.id.clone(),
-                agent_type: req.agent_type.clone(),
-                sources: search_sources(&search_response.results),
-                citations: search_citations(&search_response.results),
+                agent_type: "search".to_string(),
+                sources: agent_result.sources,
+                citations: agent_result.citations,
                 trace: common::TraceInfo {
-                    mode: session.agent_type.clone(),
+                    mode: "search".to_string(),
                 },
-                degrade_trace: Vec::new(),
+                degrade_trace: agent_result.degrade_trace,
                 planner_output: None,
                 mode_debug: Some(common::ModeDebug {
                     rag: None,
@@ -621,8 +472,8 @@ impl AppState {
                 message_id: None,
                 guard_report: None,
             },
-            llm_usage: search_response.llm_usage,
-            debug_metadata: None,
+            llm_usage,
+            debug_metadata: agent_result.debug_payload,
         };
 
         self.finalize_stream_execution(req, session, preflight, request_id, sender, &mut execution)

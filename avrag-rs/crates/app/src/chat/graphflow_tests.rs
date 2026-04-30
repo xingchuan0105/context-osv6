@@ -19,12 +19,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn mode_select_routes_memory_runtime_to_memory_mode_task() {
+    async fn mode_select_routes_memory_runtime_to_canonical_agent_task() {
         let task = ModeSelectTask {
             state: AppState::new(AppConfig::default()),
         };
         let context = Context::new();
         context.set(KEY_REQUEST, request_with_mode("search")).await;
+
+        let result = task.run(context).await.unwrap();
+
+        assert_eq!(
+            result.next_action,
+            NextAction::GoTo(TASK_SEARCH.to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn mode_select_keeps_memory_rag_compat_for_memory_adapters() {
+        let task = ModeSelectTask {
+            state: AppState::new(AppConfig::default()),
+        };
+        let context = Context::new();
+        context.set(KEY_REQUEST, request_with_mode("rag")).await;
 
         let result = task.run(context).await.unwrap();
 

@@ -11,6 +11,7 @@ pub struct AppState {
     usage_limit: Option<Arc<avrag_usage_limit::UsageLimitService>>,
     search_executor: Option<Arc<SearchExecutor>>,
     rag_runtime: Option<Arc<RagRuntime>>,
+    agent_service: Option<Arc<UnifiedAgentService>>,
     object_store: Arc<ObjectStoreHandle>,
     guard_pipeline: Arc<GuardPipeline>,
     uses_memory_adapters: bool,
