@@ -80,7 +80,7 @@ describe("workspaceUiStore", () => {
 
     const initial = store.getState().workspaces["ws-1"] ?? DEFAULT_WORKSPACE_UI_STATE;
 
-    expect(resolveWorkspaceChatMode(initial, false)).toBe("general");
+    expect(resolveWorkspaceChatMode(initial, false)).toBe("chat");
     expect(resolveWorkspaceChatMode(initial, true)).toBe("rag");
 
     store.getState().setChatMode("ws-1", "search");

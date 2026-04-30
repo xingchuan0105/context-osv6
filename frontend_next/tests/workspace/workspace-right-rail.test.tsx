@@ -483,7 +483,7 @@ describe("WorkspaceRightRail", () => {
     });
 
     expect(within(screen.getByText("notes.md").closest("li")!).getByRole("button", { pressed: true })).toBeTruthy();
-    expect(getWorkspaceUiState("ws-1").chatMode).toBe("general");
+    expect(getWorkspaceUiState("ws-1").chatMode).toBe("chat");
     expect(getWorkspaceUiState("ws-1").chatModePreference).toBe("manual");
   });
 

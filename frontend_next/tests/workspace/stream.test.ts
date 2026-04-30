@@ -44,6 +44,7 @@ describe("workspace chat stream transport", () => {
         'event: activity\ndata: {"request_id":"req-1","phase":"retrieving","title":"正在读取来源","detail":"已命中多个网页来源","counts":{"sources":4},"sources_preview":[{"id":"source-1","label":"example.com"}],"timestamp":"10:00"}\n\n',
         'event: answer_start\ndata: {"request_id":"req-1","session_id":"sess-1","message_id":0,"agent_type":"rag"}\n\n',
         'event: trace\ndata: {"request_id":"req-1","stage":"rag","status":"started","detail":{"step":1}}\n\n',
+        'event: reasoning_summary_delta\ndata: {"request_id":"req-1","message_id":7,"content":"正在比较候选证据"}\n\n',
         'event: token\ndata: {"request_id":"req-1","message_id":7,"content":"Hel',
         'lo"}\n\n',
         'event: citations\ndata: {"request_id":"req-1","message_id":7,"citations":[{"citation_id":1,"doc_id":"doc-1","doc_name":"Doc 1","score":0.9}]}\n\n',
@@ -93,6 +94,12 @@ describe("workspace chat stream transport", () => {
         detail: { step: 1 },
       },
       {
+        kind: "reasoning_summary_delta",
+        request_id: "req-1",
+        message_id: 7,
+        content: "正在比较候选证据",
+      },
+      {
         kind: "token",
         request_id: "req-1",
         message_id: 7,
@@ -134,6 +141,21 @@ describe("workspace chat stream transport", () => {
         message: "closed",
       },
     ]);
+  });
+
+  it("does not log token or trace payloads while parsing streaming diagnostics", async () => {
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await parseWorkspaceChatEventStream(
+      makeStream([
+        'event: activity\ndata: {"request_id":"req-log","phase":"planning","title":"正在生成网络搜索计划","detail":"系统正在拆解问题并准备搜索网页来源。","counts":{"queries":1},"sources_preview":[],"timestamp":"10:00"}\n\n',
+        'event: trace\ndata: {"request_id":"req-log","stage":"rag","status":"started","detail":{"secret_query":"sensitive"}}\n\n',
+        'event: token\ndata: {"request_id":"req-log","message_id":3,"content":"private-token"}\n\n',
+      ]),
+      () => {},
+    );
+
+    expect(infoSpy).not.toHaveBeenCalled();
   });
 
   it("posts the chat request to /api/v1/chat and streams the response", async () => {

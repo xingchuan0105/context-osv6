@@ -843,6 +843,7 @@ fn sse_event_name(event: &ChatEvent) -> &'static str {
         ChatEvent::AnswerStart { .. } => "answer_start",
         ChatEvent::Trace { .. } => "trace",
         ChatEvent::Token { .. } => "token",
+        ChatEvent::ReasoningSummaryDelta { .. } => "reasoning_summary_delta",
         ChatEvent::Citations { .. } => "citations",
         ChatEvent::Done { .. } => "done",
         ChatEvent::Error { .. } => "error",

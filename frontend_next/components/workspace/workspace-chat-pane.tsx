@@ -75,7 +75,7 @@ type WorkspaceChatPaneProps = {
   onOpenWebSources?: (request: WorkspaceWebSourcesRequest) => void;
 };
 
-const CHAT_MODE_ORDER: WorkspaceChatMode[] = ["rag", "search", "general"];
+const CHAT_MODE_ORDER: WorkspaceChatMode[] = ["rag", "search", "chat"];
 const MIN_COMPOSER_TEXTAREA_HEIGHT = 52;
 const AUTO_COMPOSER_TEXTAREA_MAX_HEIGHT = 192;
 const MANUAL_COMPOSER_TEXTAREA_MAX_HEIGHT = 360;
@@ -84,7 +84,11 @@ const STREAM_TYPEWRITER_INTERVAL_MS = 16;
 const STREAM_TYPEWRITER_MAX_DRAIN_CHARS_AFTER_DONE = 80;
 
 function normalizeMessageMode(mode: string | null | undefined): WorkspaceChatMode | null {
-  if (mode === "rag" || mode === "search" || mode === "general") {
+  if (mode === "general" || mode === "chat") {
+    return "chat";
+  }
+
+  if (mode === "rag" || mode === "search") {
     return mode;
   }
 
@@ -446,7 +450,7 @@ function getModeLabel(locale: "zh-CN" | "en", mode: WorkspaceChatMode) {
       return formatUiMessage(locale, "workspaceChatModeRag");
     case "search":
       return formatUiMessage(locale, "workspaceChatModeSearch");
-    case "general":
+    case "chat":
     default:
       return formatUiMessage(locale, "workspaceChatModeChat");
   }
@@ -458,7 +462,7 @@ function getModeCode(mode: WorkspaceChatMode) {
       return "RAG";
     case "search":
       return "web_search";
-    case "general":
+    case "chat":
     default:
       return "chat";
   }
@@ -1001,6 +1005,7 @@ export function WorkspaceChatPane({
   const streamReceivedTokenRef = useRef(false);
   const streamReduceMotionRef = useRef(false);
   const pendingDoneEventRef = useRef<PendingDoneEvent | null>(null);
+  const progressModeRef = useRef<WorkspaceChatMode | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1009,6 +1014,7 @@ export function WorkspaceChatPane({
     setActiveSessionId(sessionId);
     setMessages([]);
     setError("");
+    progressModeRef.current = null;
     setProgressMode(null);
     setProgressActivities([]);
     setProgressCollapsed(true);
@@ -1219,12 +1225,14 @@ export function WorkspaceChatPane({
   }
 
   function showProgressCard(mode: WorkspaceChatMode) {
+    progressModeRef.current = mode;
     setProgressMode(mode);
     setProgressActivities(isResearchMode(mode) ? [getInitialProgressEntry(locale, mode)] : []);
     setProgressCollapsed(true);
   }
 
   function hideProgressCard() {
+    progressModeRef.current = null;
     setProgressMode(null);
     setProgressActivities([]);
     setProgressCollapsed(true);
@@ -1555,16 +1563,33 @@ export function WorkspaceChatPane({
         ]);
         break;
       case "answer_start":
-        if (normalizeMessageMode(event.agent_type) !== "general") {
-          hideProgressCard();
+        if (normalizeMessageMode(event.agent_type) !== "chat") {
           beginAnswerStreaming(event);
         }
         break;
-      case "token":
-        hideProgressCard();
+      case "token": {
+        const activeProgressMode = progressModeRef.current;
+        if (!activeProgressMode || !isResearchMode(activeProgressMode)) {
+          hideProgressCard();
+        }
         ensureStreamingAssistant(event);
         streamReceivedTokenRef.current = true;
         enqueueStreamingText(event.content);
+        break;
+      }
+      case "reasoning_summary_delta":
+        setProgressActivities((current) => [
+          ...current,
+          {
+            id: `reasoning-${current.length}-${Date.now()}`,
+            phase: "reasoning",
+            title: locale === "zh-CN" ? "正在整理思路" : "Reasoning summary",
+            detail: event.content,
+            counts: {},
+            sourcesPreview: [],
+            timestamp: null,
+          },
+        ]);
         break;
       case "citations":
         ensureStreamingAssistant(event);
@@ -1746,8 +1771,8 @@ function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
                         .filter(Boolean)
                         .join(" ")}
                     >
-                      <span>{getModeLabel(locale, message.mode ?? "general")}</span>
-                      <span className={styles.modeBubbleTagCode}>{getModeCode(message.mode ?? "general")}</span>
+                      <span>{getModeLabel(locale, message.mode ?? "chat")}</span>
+                      <span className={styles.modeBubbleTagCode}>{getModeCode(message.mode ?? "chat")}</span>
                     </div>
                   ) : null}
 

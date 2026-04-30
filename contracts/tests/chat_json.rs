@@ -20,7 +20,7 @@ fn chat_request_deserializes_with_minimal_defaults_and_no_request_id_field() {
             "query": "hello",
             "notebook_id": null,
             "session_id": null,
-            "agent_type": "rag",
+            "agent_type": "chat",
             "source_type": null,
             "source_token": null,
             "doc_scope": [],

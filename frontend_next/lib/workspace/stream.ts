@@ -147,6 +147,12 @@ export type ChatEvent =
       content: string;
     }
   | {
+      event: "reasoning_summary_delta";
+      request_id: string;
+      message_id: number;
+      content: string;
+    }
+  | {
       event: "citations";
       request_id: string;
       message_id: number;
@@ -198,6 +204,12 @@ export type WorkspaceChatStreamEvent =
     }
   | {
       kind: "token";
+      request_id: string;
+      message_id: number;
+      content: string;
+    }
+  | {
+      kind: "reasoning_summary_delta";
       request_id: string;
       message_id: number;
       content: string;
@@ -310,6 +322,13 @@ function decodeChatEvent(eventName: string, dataText: string): WorkspaceChatStre
         request_id: String(raw.request_id ?? ""),
         message_id: Number(raw.message_id ?? 0),
         content: String(raw.content ?? ""),
+      };
+    case "reasoning_summary_delta":
+      return {
+        kind: "reasoning_summary_delta",
+        request_id: String(raw.request_id ?? ""),
+        message_id: Number(raw.message_id ?? 0),
+        content: String(raw.content ?? raw.summary ?? ""),
       };
     case "citations":
       return {

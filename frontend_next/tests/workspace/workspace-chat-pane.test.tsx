@@ -540,8 +540,12 @@ describe("WorkspaceChatPane", () => {
     const onSessionChange = vi.fn();
     const user = userEvent.setup();
     let answerStartReady = false;
+    let firstTokenReady = false;
     let releaseAnswerStart: () => void = () => {
       throw new Error("search answer gate was released before it was ready");
+    };
+    let releaseStreamFinish: () => void = () => {
+      throw new Error("search stream finish gate was released before it was ready");
     };
 
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
@@ -599,7 +603,10 @@ describe("WorkspaceChatPane", () => {
         content: "Hel",
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 25));
+      await new Promise<void>((resolve) => {
+        firstTokenReady = true;
+        releaseStreamFinish = () => resolve();
+      });
 
       await onEvent({
         kind: "token",
@@ -719,12 +726,13 @@ describe("WorkspaceChatPane", () => {
     releaseAnswerStart();
 
     await waitFor(() => {
-      expect(screen.queryByTestId("workspace-progress-card")).toBeNull();
+      expect(firstTokenReady).toBe(true);
+      const progressCard = screen.getByTestId("workspace-progress-card");
+      expect(within(progressCard).getByText("网络搜索中")).toBeTruthy();
+      expect(within(progressCard).getByText("正在搜索网页")).toBeTruthy();
     });
 
-    await waitFor(() => {
-      expect(screen.getByText("Hel")).toBeTruthy();
-    });
+    releaseStreamFinish();
 
     await waitFor(() => {
       expect(screen.getByText("Hello")).toBeTruthy();
@@ -1062,7 +1070,7 @@ describe("WorkspaceChatPane", () => {
       expect(request).toMatchObject({
         notebook_id: "ws-chat",
         session_id: null,
-        agent_type: "general",
+        agent_type: "chat",
         doc_scope: [],
         stream: true,
       });
@@ -1078,7 +1086,7 @@ describe("WorkspaceChatPane", () => {
         request_id: "req-chat",
         session_id: "sess-chat",
         message_id: 0,
-        agent_type: "general",
+        agent_type: "chat",
       });
 
       await new Promise<void>((resolve) => {
@@ -1102,7 +1110,7 @@ describe("WorkspaceChatPane", () => {
           answer: "Hi",
           answer_blocks: [],
           session_id: "sess-chat",
-          agent_type: "general",
+          agent_type: "chat",
           sources: [],
           citations: [],
           trace: { mode: "general" },
@@ -1180,7 +1188,7 @@ describe("WorkspaceChatPane", () => {
     await user.keyboard("{Enter}");
 
     await waitFor(() => {
-      expect(requests[0]?.agent_type).toBe("general");
+      expect(requests[0]?.agent_type).toBe("chat");
     });
 
     firstRender.unmount();

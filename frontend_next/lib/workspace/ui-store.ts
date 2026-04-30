@@ -7,7 +7,8 @@ import { createStore } from "zustand/vanilla";
 
 import type { WorkspaceCitationRequest } from "./model";
 
-export type WorkspaceChatMode = "rag" | "search" | "general";
+export type WorkspaceChatMode = "rag" | "search" | "chat";
+type WorkspaceChatModeInput = WorkspaceChatMode | "general";
 export type WorkspaceChatModePreference = "auto" | "manual";
 
 export type WorkspaceUiState = {
@@ -42,7 +43,7 @@ type WorkspaceUiStore = WorkspaceUiData & {
   setActiveCitation: (workspaceId: string, citation: WorkspaceCitationRequest | null) => void;
   setChatMode: (
     workspaceId: string,
-    mode: WorkspaceChatMode,
+    mode: WorkspaceChatModeInput,
     preference?: WorkspaceChatModePreference,
   ) => void;
 };
@@ -70,7 +71,7 @@ export const DEFAULT_WORKSPACE_UI_STATE: WorkspaceUiState = {
   selectedSourceIds: [],
   focusedSourceId: null,
   activeCitation: null,
-  chatMode: "general",
+  chatMode: "chat",
   chatModePreference: "auto",
 };
 
@@ -102,8 +103,12 @@ function clampRightRailWidth(width: number) {
   return Math.min(RIGHT_RAIL_MAX_WIDTH, Math.max(RIGHT_RAIL_MIN_WIDTH, Math.round(width)));
 }
 
-function normalizeChatMode(mode: WorkspaceChatMode) {
-  if (mode === "rag" || mode === "search" || mode === "general") {
+function normalizeChatMode(mode: string | null | undefined): WorkspaceChatMode {
+  if (mode === "general" || mode === "chat") {
+    return "chat";
+  }
+
+  if (mode === "rag" || mode === "search") {
     return mode;
   }
 
@@ -119,7 +124,7 @@ function normalizeChatModePreference(preference: WorkspaceChatModePreference | u
 }
 
 export function getDefaultWorkspaceChatMode(hasContentSources: boolean) {
-  return hasContentSources ? "rag" : "general";
+  return hasContentSources ? "rag" : "chat";
 }
 
 export function resolveWorkspaceChatMode(
@@ -361,7 +366,7 @@ export function useWorkspaceUi(workspaceId: string) {
         workspaceUiStore.getState().setFocusedSourceId(workspaceId, sourceId),
       setActiveCitation: (citation: WorkspaceCitationRequest | null) =>
         workspaceUiStore.getState().setActiveCitation(workspaceId, citation),
-      setChatMode: (mode: WorkspaceChatMode, preference?: WorkspaceChatModePreference) =>
+      setChatMode: (mode: WorkspaceChatModeInput, preference?: WorkspaceChatModePreference) =>
         workspaceUiStore.getState().setChatMode(workspaceId, mode, preference),
     }),
     [state, workspaceId],

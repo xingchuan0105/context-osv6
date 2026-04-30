@@ -8,7 +8,7 @@ pub struct ChatRequest {
     pub notebook_id: Option<String>,
     #[serde(default)]
     pub session_id: Option<String>,
-    #[serde(default = "default_rag_agent")]
+    #[serde(default = "default_chat_agent")]
     pub agent_type: String,
     #[serde(default)]
     pub source_type: Option<String>,
@@ -429,6 +429,11 @@ pub enum ChatEvent {
         message_id: i64,
         content: String,
     },
+    ReasoningSummaryDelta {
+        request_id: String,
+        message_id: i64,
+        content: String,
+    },
     Citations {
         request_id: String,
         message_id: i64,
@@ -447,8 +452,8 @@ pub enum ChatEvent {
     },
 }
 
-fn default_rag_agent() -> String {
-    "rag".to_string()
+fn default_chat_agent() -> String {
+    "chat".to_string()
 }
 
 fn default_rag_plan_version() -> String {

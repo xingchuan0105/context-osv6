@@ -344,7 +344,7 @@ function WorkspaceContextRail({
       if (hasEligibleSelectedSource) {
         const workspaceUi = getWorkspaceUiState(workspaceId);
 
-        if (workspaceUi.chatModePreference === "manual" && workspaceUi.chatMode !== "general") {
+        if (workspaceUi.chatModePreference === "manual" && workspaceUi.chatMode !== "chat") {
           pendingUploadedModeSwitchRef.current = false;
         } else {
           workspaceUiStore.getState().setChatMode(workspaceId, "rag", "auto");
@@ -605,7 +605,7 @@ function WorkspaceContextRail({
             workspaceUiStore.getState().setChatMode(workspaceId, "rag", "auto");
             pendingUploadedModeSwitchRef.current = false;
           } else if (workspaceUi.chatModePreference === "auto") {
-            workspaceUiStore.getState().setChatMode(workspaceId, "general", "manual");
+            workspaceUiStore.getState().setChatMode(workspaceId, "chat", "manual");
             pendingUploadedModeSwitchRef.current = true;
           } else {
             pendingUploadedModeSwitchRef.current = false;
