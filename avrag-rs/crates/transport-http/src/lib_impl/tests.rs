@@ -934,7 +934,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn anonymous_share_chat_uses_share_token_without_persisting_owner_session() {
+    async fn anonymous_share_chat_requires_login_without_persisting_owner_session() {
         let Some(state) = pg_test_app_state().await else {
             return;
         };
@@ -978,7 +978,7 @@ mod tests {
             .await
             .unwrap();
         let notebook: serde_json::Value = serde_json::from_slice(&notebook_body).unwrap();
-        let notebook_id = notebook["id"].as_str().unwrap().to_string();
+        let notebook_id = notebook["notebook"]["id"].as_str().unwrap().to_string();
 
         let share_token = avrag_share::ShareService::new(state.pg().expect("pg expected"))
             .create_share_token(
@@ -1003,7 +1003,15 @@ mod tests {
             )))
             .unwrap();
         let chat_resp = app.clone().oneshot(chat_req).await.unwrap();
-        assert_eq!(chat_resp.status(), StatusCode::OK);
+        assert_eq!(chat_resp.status(), StatusCode::UNAUTHORIZED);
+        let chat_body = to_bytes(chat_resp.into_body(), usize::MAX).await.unwrap();
+        let chat_payload: serde_json::Value = serde_json::from_slice(&chat_body).unwrap();
+        assert_eq!(chat_payload["error"].as_str(), Some("login_required"));
+        assert!(
+            chat_payload["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("asking questions requires sign-in"))
+        );
 
         let pg = state.pg().expect("pg expected");
         let session_count: i64 =

@@ -66,7 +66,8 @@ pub(crate) async fn request_context_middleware(
     next: Next,
 ) -> Response {
     let path = req.uri().path().to_string();
-    if (path == "/chat" || path == "/api/v1/chat") && req.method() != Method::POST {
+    let is_chat_endpoint = is_chat_endpoint_path(&path);
+    if is_chat_endpoint && req.method() != Method::POST {
         return next.run(req).await;
     }
 
@@ -93,9 +94,9 @@ pub(crate) async fn request_context_middleware(
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({
-                "error": if path == "/api/v1/chat" { "login_required" } else { "unauthorized" },
-                "message": if path == "/api/v1/chat" {
-                    "Viewing shared content does not require sign-in, but asking questions does."
+                "error": if is_chat_endpoint { "login_required" } else { "unauthorized" },
+                "message": if is_chat_endpoint {
+                    "Viewing shared content does not require sign-in, but asking questions requires sign-in."
                 } else {
                     "Authentication required. Provide a Bearer token or x-org-id header."
                 },
@@ -167,7 +168,7 @@ async fn share_chat_notebook_scope_from_request(
     state: &AppState,
     req: &mut Request,
 ) -> Option<Uuid> {
-    if req.method() != Method::POST || req.uri().path() != "/api/v1/chat" {
+    if req.method() != Method::POST || !is_chat_endpoint_path(req.uri().path()) {
         return None;
     }
     let Some(pg) = state.pg() else {
@@ -199,6 +200,10 @@ async fn share_chat_notebook_scope_from_request(
     }
 
     Some(notebook_scope)
+}
+
+fn is_chat_endpoint_path(path: &str) -> bool {
+    path == "/chat" || path == "/api/v1/chat"
 }
 
 pub(crate) async fn observability_middleware(req: Request, next: Next) -> Response {
