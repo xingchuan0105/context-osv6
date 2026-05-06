@@ -24,9 +24,13 @@ fn build_chat_completion_request_body(
     }
     if let Some(enable_thinking) = config.enable_thinking {
         if config.base_url.to_ascii_lowercase().contains("deepseek") {
-            request_body["thinking"] = serde_json::json!({
+            let mut thinking = serde_json::json!({
                 "type": if enable_thinking { "enabled" } else { "disabled" },
             });
+            if enable_thinking {
+                thinking["reasoning_effort"] = serde_json::json!("max");
+            }
+            request_body["thinking"] = thinking;
         } else {
             request_body["enable_thinking"] = serde_json::json!(enable_thinking);
         }
@@ -559,6 +563,20 @@ mod tests {
 
         assert_eq!(body["thinking"]["type"], "disabled");
         assert!(body.get("enable_thinking").is_none());
+    }
+
+    #[test]
+    fn deepseek_request_uses_max_reasoning_effort_when_thinking_enabled() {
+        let config = test_config("https://api.deepseek.com", Some(true));
+        let body = build_chat_completion_request_body(
+            &config,
+            &[ChatMessage::user("hello")],
+            Some(0.3),
+            false,
+        );
+
+        assert_eq!(body["thinking"]["type"], "enabled");
+        assert_eq!(body["thinking"]["reasoning_effort"], "max");
     }
 
     #[test]

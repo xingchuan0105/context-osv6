@@ -542,7 +542,10 @@ mod tests {
         assert_eq!(me_resp.status(), StatusCode::OK);
         let me_body = to_bytes(me_resp.into_body(), usize::MAX).await.unwrap();
         let me_payload: serde_json::Value = serde_json::from_slice(&me_body).unwrap();
-        assert_eq!(me_payload["full_name"].as_str(), Some("Updated Name"));
+        assert_eq!(
+            me_payload["data"]["user"]["full_name"].as_str(),
+            Some("Updated Name")
+        );
     }
 
     #[tokio::test]

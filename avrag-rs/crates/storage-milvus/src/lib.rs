@@ -1268,8 +1268,20 @@ fn field_dim(field: &Value) -> Option<usize> {
         .and_then(|params| params.get("dim"))
         .or_else(|| field.get("typeParams").and_then(|params| params.get("dim")))
         .or_else(|| field.get("params").and_then(|params| params.get("dim")))
+        .or_else(|| field.get("params").and_then(params_array_dim))
         .or_else(|| field.get("dim"))?;
     value_to_usize(dim_value)
+}
+
+fn params_array_dim(params: &Value) -> Option<&Value> {
+    params.as_array()?.iter().find_map(|param| {
+        let key = param.get("key").and_then(Value::as_str)?;
+        if key.eq_ignore_ascii_case("dim") {
+            param.get("value")
+        } else {
+            None
+        }
+    })
 }
 
 fn value_to_usize(value: &Value) -> Option<usize> {
@@ -1635,6 +1647,31 @@ mod tests {
         let (schema, indexes) = adapter.schema_text();
         assert_eq!(schema["functions"][0]["type"], "BM25");
         assert!(indexes.iter().any(|index| index["metricType"] == "BM25"));
+    }
+
+    #[test]
+    fn existing_schema_accepts_milvus_describe_params_array_dim() {
+        let expected_schema =
+            collection_schema(vec![float_vector_field("text_dense", 1024)], vec![]);
+        let describe_response = json!({
+            "code": 0,
+            "data": {
+                "fields": [
+                    {
+                        "name": "text_dense",
+                        "type": "FloatVector",
+                        "params": [{ "key": "dim", "value": "1024" }]
+                    }
+                ]
+            }
+        });
+
+        validate_existing_collection_schema(
+            "test_collection",
+            &expected_schema,
+            &describe_response,
+        )
+        .expect("Milvus v2 describe response params array should expose vector dim");
     }
 
     #[test]
