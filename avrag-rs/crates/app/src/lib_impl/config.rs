@@ -63,11 +63,8 @@ pub struct SearchConfig {
     pub max_sub_queries: usize,
     pub timeout_ms: u64,
     pub citation_required: bool,
-    pub planner_enabled: bool,
     pub query_type_enabled: bool,
     pub extract_enabled: bool,
-    pub perplexity_api_key: Option<String>,
-    pub perplexity_model: String,
     pub search_lang: Option<String>,
     pub country: Option<String>,
     pub freshness: Option<String>,
@@ -125,13 +122,13 @@ impl Default for AppConfig {
                 metric_type: "COSINE".to_string(),
             },
             embedding: ModelProviderConfig {
-                base_url: "https://api.siliconflow.cn/v1".to_string(),
+                base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
                 api_key: String::new(),
-                model: "Qwen/Qwen3-Embedding-8B".to_string(),
+                model: "text-embedding-v4".to_string(),
                 timeout_ms: 15000,
                 temperature: None,
                 api_style: None,
-                dimensions: None,
+                dimensions: Some(1024),
                 enable_thinking: None,
                 enable_cache: None,
             },
@@ -158,12 +155,12 @@ impl Default for AppConfig {
                 enable_cache: None,
             },
             rerank: ModelProviderConfig {
-                base_url: "https://api.siliconflow.cn/v1".to_string(),
+                base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
                 api_key: String::new(),
-                model: "Qwen/Qwen3-Reranker-8B".to_string(),
+                model: "qwen3-vl-rerank".to_string(),
                 timeout_ms: 15000,
                 temperature: None,
-                api_style: None,
+                api_style: Some("dashscope_vl_rerank".to_string()),
                 dimensions: None,
                 enable_thinking: None,
                 enable_cache: None,
@@ -216,11 +213,8 @@ impl Default for AppConfig {
                 max_sub_queries: 3,
                 timeout_ms: 30000,
                 citation_required: true,
-                planner_enabled: true,
                 query_type_enabled: true,
                 extract_enabled: false,
-                perplexity_api_key: None,
-                perplexity_model: "nvidia/nemotron-3-super-120b-a12b".to_string(),
                 search_lang: None,
                 country: None,
                 freshness: None,
@@ -273,7 +267,7 @@ impl AppConfig {
         config.embedding = model_config_from_env(
             "EMBEDDING",
             &config.embedding,
-            env_optional_string("SILICONFLOW_API_KEY"),
+            env_optional_string("DASHSCOPE_API_KEY"),
         );
         config.embedding.dimensions =
             env_usize_optional("AVRAG_EMBEDDING_DIM").or(config.embedding.dimensions);
@@ -290,7 +284,7 @@ impl AppConfig {
         config.rerank = model_config_from_env(
             "RERANK",
             &config.rerank,
-            env_optional_string("SILICONFLOW_API_KEY"),
+            env_optional_string("DASHSCOPE_API_KEY"),
         );
         config.milvus.text_vector_dim = env_usize(
             "MILVUS_TEXT_VECTOR_DIM",
@@ -323,17 +317,12 @@ impl AppConfig {
         config.search.timeout_ms = env_u64("SEARCH_TIMEOUT_MS", config.search.timeout_ms);
         config.search.citation_required =
             env_bool("SEARCH_CITATION_REQUIRED", config.search.citation_required);
-        config.search.planner_enabled =
-            env_bool("SEARCH_PLANNER_ENABLED", config.search.planner_enabled);
         config.search.query_type_enabled = env_bool(
             "SEARCH_QUERY_TYPE_ENABLED",
             config.search.query_type_enabled,
         );
         config.search.extract_enabled =
             env_bool("SEARCH_EXTRACT_ENABLED", config.search.extract_enabled);
-        config.search.perplexity_api_key = env_optional_string("PERPLEXITY_API_KEY");
-        config.search.perplexity_model =
-            env_string("PERPLEXITY_MODEL", &config.search.perplexity_model);
         config.search.search_lang = env_optional_string("SEARCH_LANG");
         config.search.country = env_optional_string("SEARCH_COUNTRY");
         config.search.freshness = env_optional_string("SEARCH_FRESHNESS");

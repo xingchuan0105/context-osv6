@@ -42,9 +42,6 @@ impl SearchExecutor {
                 provider::execute_brave_llm_context(&self.config, &self.client, &request.query)
                     .await
             }
-            "perplexity" => {
-                provider::execute_perplexity_agent(&self.config, &self.client, &request.query).await
-            }
             provider => unsupported_provider(provider),
         }
     }
@@ -64,15 +61,6 @@ impl SearchExecutor {
                 )
                 .await
             }
-            "perplexity" => {
-                provider::stream_perplexity_agent(
-                    &self.config,
-                    &self.client,
-                    &request.query,
-                    &mut on_update,
-                )
-                .await
-            }
             provider => unsupported_provider(provider),
         }
     }
@@ -84,7 +72,6 @@ impl SearchExecutor {
     pub fn provider(&self) -> &str {
         match self.normalized_provider().as_str() {
             "brave_llm_context" => "brave_llm_context",
-            "perplexity" => "perplexity",
             _ => "unknown",
         }
     }
@@ -104,9 +91,6 @@ impl SearchExecutor {
                     provider::execute_brave_llm_context(&self.config, &self.client, query).await
                 }
             }
-            "perplexity" => {
-                provider::execute_perplexity_agent(&self.config, &self.client, query).await
-            }
             provider => unsupported_provider(provider),
         }
     }
@@ -114,7 +98,7 @@ impl SearchExecutor {
 
 fn unsupported_provider<T>(provider: &str) -> anyhow::Result<T> {
     anyhow::bail!(
-        "unsupported search provider: {}; supported providers: brave_llm_context, perplexity",
+        "unsupported search provider: {}; supported providers: brave_llm_context",
         provider
     )
 }

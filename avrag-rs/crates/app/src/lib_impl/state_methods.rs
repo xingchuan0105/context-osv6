@@ -40,7 +40,6 @@ impl AppState {
             base_url: config.search.base_url.clone(),
             api_key: config.search.api_key.clone(),
             max_results: config.search.max_results,
-            perplexity_api_key: config.search.perplexity_api_key.clone(),
             search_lang: config.search.search_lang.clone(),
             country: config.search.country.clone(),
             freshness: config.search.freshness.clone(),
@@ -105,7 +104,6 @@ impl AppState {
             base_url: config.search.base_url.clone(),
             api_key: config.search.api_key.clone(),
             max_results: config.search.max_results,
-            perplexity_api_key: config.search.perplexity_api_key.clone(),
             search_lang: config.search.search_lang.clone(),
             country: config.search.country.clone(),
             freshness: config.search.freshness.clone(),
@@ -120,12 +118,12 @@ impl AppState {
             let mm_reranker = make_reranker(&config.mm_rerank);
 
             let fallback_embedding = Arc::new(EmbeddingClient::new(avrag_llm::ModelProviderConfig {
-                base_url: "https://api.siliconflow.cn/v1".to_string(),
+                base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
                 api_key: String::new(),
-                model: "Qwen/Qwen3-Embedding-8B".to_string(),
+                model: "text-embedding-v4".to_string(),
                 timeout_ms: 15000,
                 api_style: None,
-                dimensions: None,
+                dimensions: Some(1024),
                 enable_thinking: None,
                 enable_cache: None,
             }));
