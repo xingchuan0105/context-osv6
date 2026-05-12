@@ -23,6 +23,7 @@ use crate::agents::react_loop::{
 use crate::agents::runtime::{
     Agent, AgentRequest, AgentRunResult, AgentRunUsage, FinalDecision, IterationRecord,
 };
+use crate::agents::tool_registry::{AgentToolRegistry, PlaceholderTool};
 use avrag_llm::{ChatMessage as LlmChatMessage, LlmClient, LlmUsage};
 use avrag_search::{SearchProvider, SearchResponse, SearchResult};
 use common::{AppError, DegradeTraceItem};
@@ -96,15 +97,22 @@ pub struct WebSearchAgent {
     answer_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>>,
     llm_client: Option<LlmClient>,
     temperature: Option<f32>,
+    registry: AgentToolRegistry,
 }
 
 impl WebSearchAgent {
     pub fn new(executor: Option<Arc<dyn SearchProvider>>) -> Self {
+        let mut registry = AgentToolRegistry::new();
+        registry.register(Box::new(PlaceholderTool::load_skill()));
+        registry.register(Box::new(PlaceholderTool::compact_history()));
+        registry.register(Box::new(PlaceholderTool::brave_search()));
+        registry.register(Box::new(PlaceholderTool::fetch_full_page()));
         Self {
             executor,
             answer_synthesizer: None,
             llm_client: None,
             temperature: None,
+            registry,
         }
     }
 
