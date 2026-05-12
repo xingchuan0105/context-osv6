@@ -121,19 +121,86 @@ LLM 返回 ToolUse → AgentLoop 执行工具 → 工具返回 render_type →
 
 ---
 
-## 五、待确认问题
+## 五、已确认决策
 
-1. **P0 工具是否确认？** `render_html` + `create_document` + `visualize_data`
-2. **calculate 是否必要？** LLM 本身数学能力在提升，但精确计算仍有价值
-3. **execute_python 的安全沙箱？** 需要 Docker/WASM 隔离，实现成本高
-4. **前端渲染组件库？** 是否引入 ECharts / Mermaid.js / 自研组件
-5. **文档编辑是否持久化？** `create_document` 生成的文档是否保存到后端
+| 问题 | 决策 |
+|------|------|
+| 1. P0 工具 | **确认** — `render_html` + `create_document` + `visualize_data` |
+| 2. `calculate` | **需要** — 精确计算仍有价值 |
+| 3. `execute_python` | **不需要** — 安全沙箱成本高，暂不做 |
+| 4. 前端组件库 | **用成熟库** — ECharts、Mermaid.js 等，不自研 |
+| 5. 文档持久化 | **不持久化** — `create_document` 纯前端展示 |
 
 ---
 
-## 六、确认后下一步
+## 六、实现计划
 
-1. 确认工具清单 → 编写 ToolSpec JSON Schema
-2. 实现工具 execute() 方法
-3. 前端实现对应 React 渲染组件
-4. 添加端到端测试
+### Phase 1: 后端工具实现
+- [ ] `render_html` — 返回结构化组件数据
+- [ ] `create_document` — 返回文档结构化数据
+- [ ] `visualize_data` — 返回图表配置数据
+- [ ] `calculate` — 数学计算（安全 eval）
+
+### Phase 2: 前端渲染组件
+- [ ] ECharts 图表组件
+- [ ] Mermaid 图表组件
+- [ ] 文档/卡片/看板组件
+- [ ] 工具结果识别与路由
+
+### Phase 3: 集成测试
+- [ ] ChatAgent 工具调用端到端测试
+
+---
+
+## 七、全量工具清单（统一实现时参考）
+
+### ChatAgent 工具（非 RAG/非搜索）
+
+| # | 工具名 | 类别 | 用途 | 优先级 |
+|---|--------|------|------|--------|
+| 1 | `load_skill` | 基础 | 加载领域 skill 文件 | P1 |
+| 2 | `compact_history` | 基础 | 压缩对话历史 | P1 |
+| 3 | `render_html` | 渲染 | 交互式 HTML 组件（图表/表格/看板等） | **P0** |
+| 4 | `create_document` | 渲染 | 生成可编辑结构化文档 | **P0** |
+| 5 | `visualize_data` | 渲染 | 数据可视化（柱状图/折线图/饼图等） | **P0** |
+| 6 | `calculate` | 计算 | 精确数学计算 | P1 |
+| 7 | `get_datetime` | 计算 | 获取当前时间/时区转换 | P1 |
+| 8 | `parse_csv` | 处理 | 解析 CSV 数据 | P2 |
+| 9 | `render_mermaid` | 渲染 | Mermaid 图表（流程图/时序图） | P2 |
+
+### RagAgent 工具（RAG 检索）
+
+| # | 工具名 | 用途 | 状态 |
+|---|--------|------|------|
+| 1 | `load_skill` | 加载领域 skill 文件 | Stub |
+| 2 | `compact_history` | 压缩对话历史 | Stub |
+| 3 | `dense_retrieval` | 语义检索 | Stub（需接 RagRuntime） |
+| 4 | `lexical_retrieval` | 关键词检索 | Stub（需接 RagRuntime） |
+| 5 | `graph_retrieval` | 知识图谱遍历 | Stub（需接 RagRuntime） |
+| 6 | `doc_summary` | 文档摘要 | Stub（需接 RagRuntime） |
+| 7 | `index_lookup` | 精确块查找 | Stub（需接 RagRuntime） |
+| 8 | `doc_metadata` | 文档元数据 | Stub（需接 RagRuntime） |
+
+### WebSearchAgent 工具（网络搜索）
+
+| # | 工具名 | 用途 | 状态 |
+|---|--------|------|------|
+| 1 | `load_skill` | 加载领域 skill 文件 | Stub |
+| 2 | `compact_history` | 压缩对话历史 | Stub |
+| 3 | `brave_search` | Brave 搜索 | Stub（需接 SearchProvider） |
+| 4 | `fetch_full_page` | 获取网页全文 | Stub（需接 SearchProvider） |
+
+---
+
+## 八、统一实现优先级
+
+### 第一批（立即）
+- ChatAgent: `render_html`, `create_document`, `visualize_data`
+- ChatAgent: `calculate`
+
+### 第二批（随后）
+- RagAgent: 6 个 RAG 工具接 RagRuntime
+- WebSearchAgent: 2 个搜索工具接 SearchProvider
+
+### 第三批（可选）
+- `get_datetime`, `parse_csv`, `render_mermaid`
