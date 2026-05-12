@@ -16,7 +16,7 @@
 //! Thresholds are surfaced as `pub const` so they can be flipped via tests
 //! today and via env vars later (Risk R1).
 
-use crate::agents::react_loop::{DegradeReason, LoopBudget};
+use crate::agents::react_loop::{DegradeReason, LoopBudget, UserTier};
 use avrag_search::SearchResult;
 use common::AnswerContextChunk;
 use serde::{Deserialize, Serialize};
