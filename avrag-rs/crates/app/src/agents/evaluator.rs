@@ -491,9 +491,10 @@ mod tests {
             zero_hits_per_subquery: vec![],
         };
         let mut budget = LoopBudget::rag(UserTier::Pro);
-        budget.tick();
-        budget.tick();
-        budget.tick();
+        // Exhaust the budget: Pro tier = 4 iterations
+        while !budget.exhausted() {
+            budget.tick();
+        }
         let mut acc = AccumulatedRagResults::new();
         acc.merge_iteration(vec![(make_chunk("c1", None, ""), 0.4)], 0);
         assert_eq!(evaluate_rag_iteration(&signals, &budget, &acc), EvalAdvice::Synthesize);
@@ -508,9 +509,10 @@ mod tests {
             zero_hits_per_subquery: vec![],
         };
         let mut budget = LoopBudget::rag(UserTier::Pro);
-        budget.tick();
-        budget.tick();
-        budget.tick();
+        // Exhaust the budget: Pro tier = 4 iterations
+        while !budget.exhausted() {
+            budget.tick();
+        }
         let acc = AccumulatedRagResults::new();
         match evaluate_rag_iteration(&signals, &budget, &acc) {
             EvalAdvice::Degrade { reason } => match reason {
@@ -580,8 +582,10 @@ mod tests {
             zero_hits_per_subquery: vec![],
         };
         let mut budget = LoopBudget::search(UserTier::Pro);
-        budget.tick();
-        budget.tick();
+        // Exhaust the budget: Pro tier = 3 iterations
+        while !budget.exhausted() {
+            budget.tick();
+        }
         let results: Vec<SearchResult> = vec![];
         match evaluate_search_iteration(&signals, &budget, &results) {
             EvalAdvice::Degrade { reason } => match reason {
@@ -601,8 +605,10 @@ mod tests {
             zero_hits_per_subquery: vec![],
         };
         let mut budget = LoopBudget::search(UserTier::Pro);
-        budget.tick();
-        budget.tick();
+        // Exhaust the budget: Pro tier = 3 iterations
+        while !budget.exhausted() {
+            budget.tick();
+        }
         let results = vec![make_search_result("t", "u", "s")];
         assert_eq!(
             evaluate_search_iteration(&signals, &budget, &results),

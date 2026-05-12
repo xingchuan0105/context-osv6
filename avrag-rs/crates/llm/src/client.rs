@@ -8,6 +8,7 @@ fn build_chat_completion_request_body(
     messages: &[ChatMessage],
     temperature: Option<f32>,
     stream: bool,
+    tools: Option<&[common::ToolSpec]>,
 ) -> serde_json::Value {
     let mut request_body = serde_json::json!({
         "model": config.model,
@@ -22,6 +23,20 @@ fn build_chat_completion_request_body(
 
     if let Some(temp) = temperature {
         request_body["temperature"] = serde_json::json!(temp);
+    }
+    if let Some(tool_specs) = tools {
+        let tools_json: Vec<serde_json::Value> = tool_specs
+            .iter()
+            .map(|t| serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.input_schema
+                }
+            }))
+            .collect();
+        request_body["tools"] = serde_json::json!(tools_json);
     }
     if let Some(enable_thinking) = config.enable_thinking {
         if config.base_url.to_ascii_lowercase().contains("deepseek") {
@@ -254,7 +269,7 @@ impl LlmClient {
         }
 
         let request_body =
-            build_chat_completion_request_body(&self.config, messages, temperature, false);
+            build_chat_completion_request_body(&self.config, messages, temperature, false, None);
 
         let response = self
             .client
@@ -362,6 +377,152 @@ impl LlmClient {
         })
     }
 
+    /// Send a chat completion request with tool-calling support.
+    ///
+    /// The model may return `ToolUse` stop reason with one or more `tool_calls`,
+    /// or `EndTurn` with a direct text answer.
+    pub async fn complete_with_tools(
+        &self,
+        messages: &[ChatMessage],
+        tools: &[common::ToolSpec],
+        temperature: Option<f32>,
+    ) -> anyhow::Result<common::ToolAwareResponse> {
+        let started_at = std::time::Instant::now();
+        let provider = self.config.provider_name();
+        let configured_model = self.config.model.clone();
+        if !self.config.is_configured() {
+            telemetry::prometheus::observe_llm_call(
+                "generic",
+                &provider,
+                &configured_model,
+                "failure",
+                started_at.elapsed().as_secs_f64() * 1000.0,
+            );
+            anyhow::bail!("LLM not configured");
+        }
+
+        let request_body =
+            build_chat_completion_request_body(&self.config, messages, temperature, false, Some(tools));
+
+        let response = self
+            .client
+            .post(format!("{}/chat/completions", self.config.base_url))
+            .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await;
+        let response = match response {
+            Ok(response) => response,
+            Err(error) => {
+                telemetry::prometheus::record_dependency_failure(&provider);
+                telemetry::prometheus::observe_llm_call(
+                    "generic",
+                    &provider,
+                    &configured_model,
+                    "failure",
+                    started_at.elapsed().as_secs_f64() * 1000.0,
+                );
+                return Err(error).context("Failed to send chat completion request");
+            }
+        };
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            telemetry::prometheus::record_dependency_failure(&provider);
+            telemetry::prometheus::observe_llm_call(
+                "generic",
+                &provider,
+                &configured_model,
+                "failure",
+                started_at.elapsed().as_secs_f64() * 1000.0,
+            );
+            anyhow::bail!("Chat completion API error {}: {}", status, body);
+        }
+
+        #[derive(serde::Deserialize)]
+        struct ToolCallChoice {
+            message: ToolCallMessage,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct ToolCallMessage {
+            content: Option<String>,
+            #[serde(default)]
+            tool_calls: Vec<ToolCallEntry>,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct ToolCallEntry {
+            id: String,
+            function: ToolCallFunction,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct ToolCallFunction {
+            name: String,
+            arguments: String,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct ToolCompletionResponse {
+            choices: Vec<ToolCallChoice>,
+        }
+
+        let resp = response.json().await;
+        let resp: ToolCompletionResponse = match resp {
+            Ok(resp) => resp,
+            Err(error) => {
+                telemetry::prometheus::record_dependency_failure(&provider);
+                telemetry::prometheus::observe_llm_call(
+                    "generic",
+                    &provider,
+                    &configured_model,
+                    "failure",
+                    started_at.elapsed().as_secs_f64() * 1000.0,
+                );
+                return Err(error).context("Failed to parse tool completion response");
+            }
+        };
+
+        let choice = resp.choices.into_iter().next().context("No choices in response")?;
+        let message = choice.message;
+
+        let content = message.content.unwrap_or_default();
+        let tool_calls: Vec<common::ModelToolCall> = message
+            .tool_calls
+            .into_iter()
+            .map(|tc| common::ModelToolCall {
+                id: tc.id,
+                name: tc.function.name,
+                arguments: serde_json::from_str(&tc.function.arguments).unwrap_or_else(|_| {
+                    serde_json::json!({"raw": tc.function.arguments})
+                }),
+            })
+            .collect();
+
+        let stop_reason = if !tool_calls.is_empty() {
+            common::StopReason::ToolUse
+        } else {
+            common::StopReason::EndTurn
+        };
+
+        telemetry::prometheus::observe_llm_call(
+            "generic",
+            &provider,
+            &configured_model,
+            "success",
+            started_at.elapsed().as_secs_f64() * 1000.0,
+        );
+
+        Ok(common::ToolAwareResponse {
+            content,
+            tool_calls,
+            stop_reason,
+        })
+    }
+
     pub async fn complete_stream(
         &self,
         messages: &[ChatMessage],
@@ -384,7 +545,7 @@ impl LlmClient {
         }
 
         let request_body =
-            build_chat_completion_request_body(&self.config, messages, temperature, true);
+            build_chat_completion_request_body(&self.config, messages, temperature, true, None);
 
         let request = self
             .client
@@ -577,7 +738,7 @@ mod tests {
             &config,
             &[ChatMessage::user("hello")],
             Some(0.3),
-            false,
+            false, None,
         );
 
         assert_eq!(body["thinking"]["type"], "disabled");
@@ -591,7 +752,7 @@ mod tests {
             &config,
             &[ChatMessage::user("hello")],
             Some(0.3),
-            false,
+            false, None,
         );
 
         assert_eq!(body["thinking"]["type"], "enabled");
@@ -608,7 +769,7 @@ mod tests {
             &config,
             &[ChatMessage::user("hello")],
             Some(0.3),
-            false,
+            false, None,
         );
 
         assert_eq!(body["enable_thinking"], false);
@@ -718,7 +879,7 @@ data: [DONE]
             &config,
             &[ChatMessage::user("hello")],
             None,
-            false,
+            false, None,
         );
         assert_eq!(body["prompt_cache"], true);
     }
@@ -730,7 +891,7 @@ data: [DONE]
             &config,
             &[ChatMessage::user("hello")],
             None,
-            false,
+            false, None,
         );
         assert!(body.get("prompt_cache").is_none());
     }

@@ -1215,7 +1215,7 @@ mod tests {
             None,
         );
 
-        assert!(messages[0].content.contains("Cite sources with [[n]]"));
+        assert!(messages[0].content.contains("Cite every factual claim with the matching evidence id using [[n]]"));
         assert!(
             messages[1]
                 .content
@@ -1567,7 +1567,9 @@ mod tests {
 
         assert_eq!(result.iterations.len(), 2);
         assert_eq!(result.iterations[0].decision, "escalate_vertical");
-        assert_eq!(result.iterations[1].decision, "degrade");
+        // Iter 1: escalate_vertical advice but no more verticals available →
+        // decision is recorded as escalate_vertical, final outcome is Degrade.
+        assert_eq!(result.iterations[1].decision, "escalate_vertical");
         match result.final_decision {
             Some(FinalDecision::Degraded {
                 reason: DegradeReason::NoResultsAfterAllFallbacks,
