@@ -4,11 +4,11 @@ impl AppState {
         req: &ChatRequest,
         session: &ChatSession,
         message: &str,
-    ) -> Result<ChatGraphExecution, AppError> {
+    ) -> Result<ChatExecution, AppError> {
         let answer = message.trim().to_string();
         let answer_blocks = common::plain_text_answer_blocks(&answer);
 
-        Ok(ChatGraphExecution {
+        Ok(ChatExecution {
             mode: req.agent_type.clone(),
             input_usage_text: req.query.trim().to_string(),
             apply_output_guard: false,
@@ -34,6 +34,9 @@ impl AppState {
             },
             llm_usage: None,
             debug_metadata: None,
+            tokens_emitted: false,
+            citations_emitted: false,
+            canary_token: None,
         })
     }
 
@@ -41,7 +44,7 @@ impl AppState {
         &self,
         req: &ChatRequest,
         session: &ChatSession,
-    ) -> Result<ChatGraphExecution, AppError> {
+    ) -> Result<ChatExecution, AppError> {
         let notebook = self
             .get_notebook(&session.notebook_id)
             .await
@@ -99,7 +102,7 @@ impl AppState {
             content: answer.clone(),
             answer_blocks: common::answer_blocks_from_rendered_answer(&answer, &citations),
             agent_id: Some(req.agent_type.clone()),
-            agent_name: Some(agent_name(&req.agent_type).to_string()),
+            agent_name: Some(agent_name(&req.agent_type, req.language.as_deref()).to_string()),
             agent_icon: Some(agent_icon(&req.agent_type).to_string()),
             citations: citations.clone(),
             created_at: now.clone(),
@@ -110,7 +113,7 @@ impl AppState {
         }
 
         let answer_blocks = common::answer_blocks_from_rendered_answer(&answer, &citations);
-        Ok(ChatGraphExecution {
+        Ok(ChatExecution {
             mode: req.agent_type.clone(),
             input_usage_text: req.query.trim().to_string(),
             apply_output_guard: false,
@@ -132,144 +135,67 @@ impl AppState {
             },
             llm_usage: None,
             debug_metadata: None,
+            tokens_emitted: false,
+            citations_emitted: false,
+            canary_token: None,
         })
     }
 
-    pub(crate) async fn execute_general_mode_core(
-        &self,
-        req: &ChatRequest,
-        session: &ChatSession,
-    ) -> Result<ChatGraphExecution, AppError> {
-        let Some(agent_service) = self.agent_service() else {
-            return Err(AppError::internal("agent service is not configured"));
-        };
-        let mut agent_request = self
-            .build_agent_request(req, crate::agents::AgentKind::Chat)
-            .await;
-        agent_request.stream = false;
-        let mut general_debug = self.build_general_agent_debug(&agent_request);
-        let sink = crate::agents::events::CollectingSink::new();
-        let agent_result = agent_service.run(agent_request, &sink).await?;
+}
 
-        if let Some(usage) = agent_result.usage.as_ref() {
-            general_debug.insert("answer_model".to_string(), serde_json::json!(usage.model.clone()));
-        }
+pub(crate) struct BuildChatExecutionParams<'a> {
+    pub mode: &'a str,
+    pub agent_type: &'a str,
+    pub session_id: &'a str,
+    pub input_usage_text: &'a str,
+    pub apply_output_guard: bool,
+    pub mode_debug: Option<ModeDebug>,
+    pub debug_metadata: Option<serde_json::Value>,
+}
 
-        let answer = agent_result.answer.clone();
-        let answer_blocks = if agent_result.answer_blocks.is_empty() {
-            common::plain_text_answer_blocks(&answer)
-        } else {
-            agent_result.answer_blocks.clone()
-        };
-        let llm_usage = agent_result.usage.as_ref().map(|usage| avrag_llm::LlmUsage {
-            prompt_tokens: usage.prompt_tokens.min(u32::MAX as u64) as u32,
-            completion_tokens: usage.completion_tokens.min(u32::MAX as u64) as u32,
-            total_tokens: usage.total_tokens.min(u32::MAX as u64) as u32,
-            provider: usage.provider.clone(),
-            model: usage.model.clone(),
-        });
+pub(crate) fn build_chat_execution_from_result(
+    agent_result: &crate::agents::runtime::AgentRunResult,
+    params: BuildChatExecutionParams<'_>,
+) -> ChatExecution {
+    let answer = agent_result.answer.clone();
+    let answer_blocks = if agent_result.answer_blocks.is_empty() {
+        common::plain_text_answer_blocks(&answer)
+    } else {
+        agent_result.answer_blocks.clone()
+    };
+    let llm_usage = agent_result.usage.as_ref().map(|usage| avrag_llm::LlmUsage {
+        prompt_tokens: usage.prompt_tokens.min(u32::MAX as u64) as u32,
+        completion_tokens: usage.completion_tokens.min(u32::MAX as u64) as u32,
+        total_tokens: usage.total_tokens.min(u32::MAX as u64) as u32,
+        provider: usage.provider.clone(),
+        model: usage.model.clone(),
+        cached_tokens: 0,
+    });
 
-        Ok(ChatGraphExecution {
-            mode: "chat".to_string(),
-            input_usage_text: req.query.trim().to_string(),
-            apply_output_guard: false,
-            response: ChatResponse {
-                answer,
-                answer_blocks,
-                session_id: session.id.clone(),
-                agent_type: "chat".to_string(),
-                sources: agent_result.sources,
-                citations: agent_result.citations,
-                trace: TraceInfo {
-                    mode: "chat".to_string(),
-                },
-                degrade_trace: agent_result.degrade_trace,
-                planner_output: None,
-                mode_debug: Some(ModeDebug {
-                    rag: None,
-                    search: None,
-                    general: Some(general_debug),
-                }),
-                message_id: None,
-                guard_report: None,
+    ChatExecution {
+        mode: params.mode.to_string(),
+        input_usage_text: params.input_usage_text.to_string(),
+        apply_output_guard: params.apply_output_guard,
+        response: ChatResponse {
+            answer,
+            answer_blocks,
+            session_id: params.session_id.to_string(),
+            agent_type: params.agent_type.to_string(),
+            sources: agent_result.sources.clone(),
+            citations: agent_result.citations.clone(),
+            trace: TraceInfo {
+                mode: params.mode.to_string(),
             },
-            llm_usage,
-            debug_metadata: agent_result.debug_payload,
-        })
-    }
-
-    pub(crate) async fn execute_search_mode_core(
-        &self,
-        req: &ChatRequest,
-        session: &ChatSession,
-    ) -> Result<ChatGraphExecution, AppError> {
-        let Some(agent_service) = self.agent_service() else {
-            return Err(AppError::internal("agent service is not configured"));
-        };
-        let mut agent_request = self
-            .build_agent_request(req, crate::agents::AgentKind::Search)
-            .await;
-        agent_request.stream = false;
-        let sink = crate::agents::events::CollectingSink::new();
-        let agent_result = agent_service.run(agent_request, &sink).await?;
-
-        let mut search_debug = BTreeMap::new();
-        if let Some(payload) = agent_result.debug_payload.as_ref() {
-            if let Some(query_type) = payload.get("query_type") {
-                search_debug.insert("query_type".to_string(), query_type.clone());
-            }
-            if let Some(sub_queries) = payload.get("sub_queries") {
-                search_debug.insert("sub_queries".to_string(), sub_queries.clone());
-            }
-        }
-        search_debug.insert(
-            "provider".to_string(),
-            serde_json::json!(self.config.search.provider.clone()),
-        );
-        search_debug.insert(
-            "mode".to_string(),
-            serde_json::json!(self.config.search.mode.clone()),
-        );
-        search_debug.insert(
-            "result_count".to_string(),
-            serde_json::json!(agent_result.sources.len()),
-        );
-
-        let answer = agent_result.answer.clone();
-        let llm_usage = agent_result.usage.as_ref().map(|usage| avrag_llm::LlmUsage {
-            prompt_tokens: usage.prompt_tokens.min(u32::MAX as u64) as u32,
-            completion_tokens: usage.completion_tokens.min(u32::MAX as u64) as u32,
-            total_tokens: usage.total_tokens.min(u32::MAX as u64) as u32,
-            provider: usage.provider.clone(),
-            model: usage.model.clone(),
-        });
-        let answer_blocks = common::plain_text_answer_blocks(&answer);
-        Ok(ChatGraphExecution {
-            mode: "search".to_string(),
-            input_usage_text: req.query.trim().to_string(),
-            apply_output_guard: false,
-            response: ChatResponse {
-                answer,
-                answer_blocks,
-                session_id: session.id.clone(),
-                agent_type: "search".to_string(),
-                sources: agent_result.sources,
-                citations: agent_result.citations,
-                trace: TraceInfo {
-                    mode: "search".to_string(),
-                },
-                degrade_trace: agent_result.degrade_trace,
-                planner_output: None,
-                mode_debug: Some(ModeDebug {
-                    rag: None,
-                    search: Some(search_debug),
-                    general: None,
-                }),
-                message_id: None,
-                guard_report: None,
-            },
-            llm_usage,
-            debug_metadata: None,
-        })
+            degrade_trace: agent_result.degrade_trace.clone(),
+            planner_output: None,
+            mode_debug: params.mode_debug,
+            message_id: None,
+            guard_report: None,
+        },
+        llm_usage,
+        debug_metadata: params.debug_metadata,
+        tokens_emitted: false,
+        citations_emitted: false,
+        canary_token: None,
     }
 }

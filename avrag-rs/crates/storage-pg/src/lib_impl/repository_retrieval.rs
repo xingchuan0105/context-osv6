@@ -842,6 +842,47 @@ impl PgAppRepository {
         Ok(map)
     }
 
+    pub async fn get_document_metadata_by_ids(
+        &self,
+        context: &AuthContext,
+        doc_ids: &[Uuid],
+    ) -> Result<Vec<common::DocumentMetadata>, PgStorageError> {
+        if doc_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut tx = self.pool.begin(context).await?;
+        let rows = sqlx::query(
+            r#"
+            select id, file_name, mime_type, file_size, status, chunk_count
+            from documents
+            where id = any($1)
+            "#,
+        )
+        .bind(doc_ids)
+        .fetch_all(tx.inner())
+        .await?;
+        tx.commit().await?;
+        Ok(rows
+            .into_iter()
+            .filter_map(|row| {
+                let id: Uuid = row.try_get("id").ok()?;
+                let file_name: String = row.try_get("file_name").ok()?;
+                let mime_type: Option<String> = row.try_get("mime_type").ok().flatten();
+                let file_size: i64 = row.try_get("file_size").ok().unwrap_or(0);
+                let status: String = row.try_get("status").ok().unwrap_or_default();
+                let chunk_count: i32 = row.try_get("chunk_count").ok().unwrap_or(0);
+                Some(common::DocumentMetadata {
+                    doc_id: id.to_string(),
+                    name: file_name,
+                    mime_type: mime_type.unwrap_or_default(),
+                    file_size: file_size as u64,
+                    status: parse_document_status(&status),
+                    chunk_count: chunk_count as usize,
+                })
+            })
+            .collect())
+    }
+
     pub async fn update_document_summary(
         &self,
         context: &AuthContext,

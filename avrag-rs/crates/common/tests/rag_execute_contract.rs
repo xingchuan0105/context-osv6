@@ -153,6 +153,8 @@ fn execute_plan_request_compat_roundtrip_preserves_summary_mode() {
         budget: Some(common::ExecutePlanBudget {
             total_candidate_budget: Some(32),
             final_chunk_budget: Some(8),
+            graph_hop_limit: None,
+            graph_fan_out_limit: None,
         }),
         channel_budget: None,
         query_entities: Vec::new(),

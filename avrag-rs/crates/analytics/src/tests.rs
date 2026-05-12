@@ -44,7 +44,7 @@ fn cost_event_serializes_provider_and_usage_fields() {
         usage_units: 12,
         storage_bytes_delta: 0,
         external_call_count: 1,
-        source: "graphflow".to_string(),
+        source: "pipeline".to_string(),
         metadata: serde_json::json!({"mode": "rag"}),
     };
 

@@ -4,6 +4,9 @@ pub struct SearchConfig {
     pub api_key: String,
     pub max_results: usize,
     pub perplexity_api_key: Option<String>,
+    pub search_lang: Option<String>,
+    pub country: Option<String>,
+    pub freshness: Option<String>,
 }
 
 impl Default for SearchConfig {
@@ -14,6 +17,9 @@ impl Default for SearchConfig {
             api_key: String::new(),
             max_results: 10,
             perplexity_api_key: None,
+            search_lang: None,
+            country: None,
+            freshness: None,
         }
     }
 }

@@ -114,10 +114,10 @@ fn test_build_synthesis_request_includes_sections() {
     assert!(request.contains("User Question:"));
     assert!(request.contains("Retrieval Index (JSON):"));
     assert!(request.contains(
-        "Context Chunks (JSON array of objects with fields: chunk_id, doc_id, chunk_type, page, text, asset_id, caption, image_url, parser_backend, source_locator):"
+        "Context Chunks (JSON array of objects with fields: chunk_id, doc_id, chunk_type, page, text, asset_id, caption, image_url, parser_backend, source_locator, tool_source, score):"
     ));
     assert!(request.contains(
-        "chunk_id, doc_id, chunk_type, page, text, asset_id, caption, image_url, parser_backend, source_locator"
+        "chunk_id, doc_id, chunk_type, page, text, asset_id, caption, image_url, parser_backend, source_locator, tool_source, score"
     ));
 }
 
@@ -169,4 +169,162 @@ fn test_parse_synthesis_output_falls_back_to_plain_text() {
 
     assert_eq!(parsed.answer_text, "plain answer");
     assert!(parsed.cited_chunk_ids.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Tool-result → synthesis context tests
+// ---------------------------------------------------------------------------
+
+fn mock_tool_result(tool: &str, status: common::ToolStatus, chunks: Vec<serde_json::Value>) -> common::ToolResult {
+    common::ToolResult {
+        tool: tool.to_string(),
+        version: "1.0".to_string(),
+        status,
+        data: if chunks.is_empty() {
+            None
+        } else {
+            Some(serde_json::Value::Array(chunks.clone()))
+        },
+        trace: Some(common::ToolTrace {
+            elapsed_ms: Some(120),
+            raw_hit_count: Some(chunks.len()),
+            hydrated_hit_count: Some(chunks.len()),
+            degrade_reason: None,
+        }),
+    }
+}
+
+#[test]
+fn test_tool_results_to_context_chunks_extracts_ok_results() {
+    let results = vec![
+        mock_tool_result(
+            "dense_retrieval",
+            common::ToolStatus::Ok,
+            vec![
+                serde_json::json!({"chunk_id":"c1","doc_id":"d1","text":"hello","score":0.9}),
+                serde_json::json!({"chunk_id":"c2","doc_id":"d1","text":"world","score":0.8}),
+            ],
+        ),
+        mock_tool_result(
+            "lexical_retrieval",
+            common::ToolStatus::Ok,
+            vec![serde_json::json!({"chunk_id":"c3","doc_id":"d2","text":"foo","score":0.7})],
+        ),
+    ];
+
+    let chunks = tool_results_to_context_chunks(&results);
+    assert_eq!(chunks.len(), 3);
+    assert_eq!(chunks[0].chunk_id, "c1");
+    assert_eq!(chunks[0].text, "hello");
+    assert_eq!(chunks[2].chunk_id, "c3");
+}
+
+#[test]
+fn test_tool_results_to_context_chunks_skips_failed_tools() {
+    let results = vec![
+        mock_tool_result(
+            "dense_retrieval",
+            common::ToolStatus::Ok,
+            vec![serde_json::json!({"chunk_id":"c1","text":"ok"})],
+        ),
+        mock_tool_result("lexical_retrieval", common::ToolStatus::Timeout, vec![]),
+    ];
+
+    let chunks = tool_results_to_context_chunks(&results);
+    assert_eq!(chunks.len(), 1);
+    assert_eq!(chunks[0].chunk_id, "c1");
+}
+
+#[test]
+fn test_tool_results_to_context_chunks_deduplicates_by_chunk_id() {
+    let results = vec![
+        mock_tool_result(
+            "dense_retrieval",
+            common::ToolStatus::Ok,
+            vec![serde_json::json!({"chunk_id":"c1","text":"from dense"})],
+        ),
+        mock_tool_result(
+            "lexical_retrieval",
+            common::ToolStatus::Ok,
+            vec![serde_json::json!({"chunk_id":"c1","text":"from lexical"})],
+        ),
+    ];
+
+    let chunks = tool_results_to_context_chunks(&results);
+    assert_eq!(chunks.len(), 1);
+    // First occurrence wins
+    assert_eq!(chunks[0].text, "from dense");
+}
+
+#[test]
+fn test_build_tool_result_index_contains_tool_paths() {
+    let results = vec![
+        mock_tool_result(
+            "dense_retrieval",
+            common::ToolStatus::Ok,
+            vec![serde_json::json!({"chunk_id":"c1","text":"hello"})],
+        ),
+        mock_tool_result("graph_retrieval", common::ToolStatus::Timeout, vec![]),
+    ];
+
+    let index = build_tool_result_index("test query", &results, 1);
+    let parsed: serde_json::Value = serde_json::from_str(&index).unwrap();
+    assert_eq!(parsed["grounding"]["tool_call_count"], 2);
+    assert_eq!(parsed["grounding"]["recalled_chunk_count"], 1);
+    assert_eq!(parsed["tool_paths"][0]["tool"], "dense_retrieval");
+    assert_eq!(parsed["tool_paths"][0]["status"], "ok");
+    assert_eq!(parsed["tool_paths"][1]["tool"], "graph_retrieval");
+    assert_eq!(parsed["tool_paths"][1]["status"], "timeout");
+}
+
+#[test]
+fn test_build_tool_result_context_section_injects_tool_source() {
+    let results = vec![mock_tool_result(
+        "dense_retrieval",
+        common::ToolStatus::Ok,
+        vec![serde_json::json!({"chunk_id":"c1","text":"hello"})],
+    )];
+
+    let section = build_tool_result_context_section(&results);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&section).unwrap();
+    assert_eq!(parsed.len(), 1);
+    assert_eq!(parsed[0]["chunk_id"], "c1");
+    assert_eq!(parsed[0]["tool_source"], "dense_retrieval");
+}
+
+#[test]
+fn test_build_tool_result_context_section_deduplicates() {
+    let results = vec![
+        mock_tool_result(
+            "dense_retrieval",
+            common::ToolStatus::Ok,
+            vec![serde_json::json!({"chunk_id":"c1","text":"hello"})],
+        ),
+        mock_tool_result(
+            "lexical_retrieval",
+            common::ToolStatus::Ok,
+            vec![serde_json::json!({"chunk_id":"c1","text":"hello again"})],
+        ),
+    ];
+
+    let section = build_tool_result_context_section(&results);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&section).unwrap();
+    assert_eq!(parsed.len(), 1);
+}
+
+#[test]
+fn test_build_synthesis_request_from_tool_results_includes_sections() {
+    let results = vec![mock_tool_result(
+        "dense_retrieval",
+        common::ToolStatus::Ok,
+        vec![serde_json::json!({"chunk_id":"c1","text":"hello"})],
+    )];
+    let index = build_tool_result_index("What is Rust?", &results, 1);
+    let context = build_tool_result_context_section(&results);
+    let request = build_synthesis_request("What is Rust?", &index, &context);
+
+    assert!(request.contains("User Question:"));
+    assert!(request.contains("Retrieval Index (JSON):"));
+    assert!(request.contains("tool_source"));
+    assert!(request.contains("dense_retrieval"));
 }

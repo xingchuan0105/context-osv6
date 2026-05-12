@@ -1,0 +1,2961 @@
+{
+  "run_name": "e2e-minsky-agent-mech-1777528419-current",
+  "email": "e2e-minsky-agent-mech-1777390809@e2e.test",
+  "notebook_id": "b7774d00-df07-4d9b-8f32-c6f2a60b8f21",
+  "document_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+  "org_id": "7f743c86-738b-45fe-b426-d1477d3233a4",
+  "query": "请基于 minsky86.pdf 中 Minsky 的 Society of Mind 论文，用中文解释：Society of Mind、agents、K-lines、frames 之间是什么关系？这种由许多简单 agent 协作形成智能的机制，与现代软件 agent 的规划和工具/检索机制有什么可类比之处？",
+  "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+  "timeline": [
+    "[13:53:39] continue doc=db7bc56e-f840-46ef-91b4-8cbb534b5598",
+    "[13:53:40] login -> 200",
+    "[13:53:40] status 0: 200 completed {'status': 'completed'}",
+    "[13:54:20] chat -> 200, events={'start': 1, 'activity': 4, 'answer_start': 1, 'token': 227, 'citations': 1, 'done': 1}, answer_len=514",
+    "[13:54:22] plan={\"items\": [{\"query\": \"Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence\", \"priority\": 1.0}], \"doc_scope\": [\"db7bc56e-f840-46ef-91b4-8cbb534b5598\"], \"plan_version\": \"rag-execute-v1\", \"summary_mode\": \"related\", \"query_entities\": [{\"kind\": \"concept\", \"text\": \"Society of Mind\"}, {\"kind\": \"concept\", \"text\": \"agents\"}, {\"kind\": \"concept\", \"text\": \"K-lines\"}, {\"kind\": \"concept\", \"text\": \"frames\"}, {\"kind\": \"person\", \"text\": \"Marvin Minsky\"}]}",
+    "[13:54:27] probe full_captured_plan: status=200, chunks=12",
+    "[13:54:30] probe text_dense_only: status=200, chunks=8",
+    "[13:54:30] probe bm25_only: status=200, chunks=0",
+    "[13:54:33] probe multimodal_dense_only: status=200, chunks=8",
+    "[13:54:33] probe graph_only: status=200, chunks=0"
+  ],
+  "status_history": [
+    {
+      "i": 0,
+      "status": "completed",
+      "http_status": 200,
+      "body": {
+        "status": "completed"
+      }
+    }
+  ],
+  "chat": {
+    "http_status": 200,
+    "event_counts": {
+      "start": 1,
+      "activity": 4,
+      "answer_start": 1,
+      "token": 227,
+      "citations": 1,
+      "done": 1
+    },
+    "activity_events": [
+      {
+        "event": "activity",
+        "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+        "phase": "planning",
+        "title": "正在分析问题",
+        "detail": "系统正在规划知识库检索范围。",
+        "counts": {},
+        "sources_preview": [],
+        "timestamp": "2026-04-30T05:53:40.604330033+00:00"
+      },
+      {
+        "event": "activity",
+        "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+        "phase": "retrieving",
+        "title": "正在检索知识库",
+        "detail": "系统正在执行结构化检索计划。",
+        "counts": {
+          "queries": 1
+        },
+        "sources_preview": [],
+        "timestamp": "2026-04-30T05:54:00.488602292+00:00"
+      },
+      {
+        "event": "activity",
+        "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+        "phase": "reading_sources",
+        "title": "正在阅读命中内容",
+        "detail": "系统正在筛选证据片段并准备最终答案上下文。",
+        "counts": {
+          "chunks": 29,
+          "documents": 1
+        },
+        "sources_preview": [
+          {
+            "id": "34d7813a-4ff0-4442-adbb-23a4b00a92ec",
+            "label": "Doc db7bc56e-f840-46ef-91b4-8cbb534b5598",
+            "href": null
+          },
+          {
+            "id": "8bc2d8c6-724e-4029-847f-25dda9a5a869",
+            "label": "Doc db7bc56e-f840-46ef-91b4-8cbb534b5598",
+            "href": null
+          },
+          {
+            "id": "d41f13ef-a892-4214-8c01-2dc9908ee221",
+            "label": "Doc db7bc56e-f840-46ef-91b4-8cbb534b5598",
+            "href": null
+          }
+        ],
+        "timestamp": "2026-04-30T05:54:14.240942014+00:00"
+      },
+      {
+        "event": "activity",
+        "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+        "phase": "drafting_answer",
+        "title": "正在生成回答",
+        "detail": "证据整理完成，开始生成最终答案。",
+        "counts": {
+          "chunks": 30
+        },
+        "sources_preview": [],
+        "timestamp": "2026-04-30T05:54:14.241379048+00:00"
+      }
+    ],
+    "trace_events": [],
+    "answer_length": 514,
+    "answer": "根据检索到的文档内容，我无法回答您的问题。文档 `minsky86.pdf` 实际收录的是经济学家 Hyman Minsky 的著作 **《Stabilizing an Unstable Economy》**，其中讨论的是金融不稳定性、投资融资、价格形成、代理（agents）在经济学中的决策行为等宏观经济理论。文中出现的 \"agent\" 指的是经济主体（企业、银行等），而与 Marvin Minsky 在 **《Society of Mind》** 中提出的认知科学概念（如智能体（agents）、K-lines、框架（frames）以及简单智能体协作产生智能的机制）完全无关。\n\n检索到的证据不包含任何关于 Society of Mind 理论体系（agents、K-lines、frames）的内容，因此无法解释这些概念之间的关系，也无法进行与现代软件 agent 规划/工具/检索机制的类比。\n\n建议您：\n- 确认文档名称或来源是否正确，需要查找 Marvin Minsky 所著的 **《The Society of Mind》**（1986）原文。\n- 如果您能提供正确的 PDF 文件，我可以重新检索并为您分析。",
+    "done_payload": {
+      "agent_type": "rag",
+      "answer": "根据检索到的文档内容，我无法回答您的问题。文档 `minsky86.pdf` 实际收录的是经济学家 Hyman Minsky 的著作 **《Stabilizing an Unstable Economy》**，其中讨论的是金融不稳定性、投资融资、价格形成、代理（agents）在经济学中的决策行为等宏观经济理论。文中出现的 \"agent\" 指的是经济主体（企业、银行等），而与 Marvin Minsky 在 **《Society of Mind》** 中提出的认知科学概念（如智能体（agents）、K-lines、框架（frames）以及简单智能体协作产生智能的机制）完全无关。\n\n检索到的证据不包含任何关于 Society of Mind 理论体系（agents、K-lines、frames）的内容，因此无法解释这些概念之间的关系，也无法进行与现代软件 agent 规划/工具/检索机制的类比。\n\n建议您：\n- 确认文档名称或来源是否正确，需要查找 Marvin Minsky 所著的 **《The Society of Mind》**（1986）原文。\n- 如果您能提供正确的 PDF 文件，我可以重新检索并为您分析。\n\n[[image:1]]",
+      "answer_blocks": [
+        {
+          "citations": [],
+          "text": "根据检索到的文档内容，我无法回答您的问题。文档 `minsky86.pdf` 实际收录的是经济学家 Hyman Minsky 的著作 **《Stabilizing an Unstable Economy》**，其中讨论的是金融不稳定性、投资融资、价格形成、代理（agents）在经济学中的决策行为等宏观经济理论。文中出现的 \"agent\" 指的是经济主体（企业、银行等），而与 Marvin Minsky 在 **《Society of Mind》** 中提出的认知科学概念（如智能体（agents）、K-lines、框架（frames）以及简单智能体协作产生智能的机制）完全无关。",
+          "type": "text"
+        },
+        {
+          "citations": [],
+          "text": "检索到的证据不包含任何关于 Society of Mind 理论体系（agents、K-lines、frames）的内容，因此无法解释这些概念之间的关系，也无法进行与现代软件 agent 规划/工具/检索机制的类比。",
+          "type": "text"
+        },
+        {
+          "citations": [],
+          "text": "建议您： - 确认文档名称或来源是否正确，需要查找 Marvin Minsky 所著的 **《The Society of Mind》**（1986）原文。 - 如果您能提供正确的 PDF 文件，我可以重新检索并为您分析。",
+          "type": "text"
+        },
+        {
+          "chunk_id": "34d7813a-4ff0-4442-adbb-23a4b00a92ec",
+          "type": "image"
+        }
+      ],
+      "citations": [
+        {
+          "asset_id": "39382f01-35f6-4815-8d7f-91731f7454de",
+          "caption": null,
+          "chunk_id": "34d7813a-4ff0-4442-adbb-23a4b00a92ec",
+          "chunk_type": "figure",
+          "citation_id": 1,
+          "content": "[Image: f78e13b564f1675a4b4d3068178da4920e96d5b3d3efbcdd5ed7a3f2aa6227a5.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/39382f01-35f6-4815-8d7f-91731f7454de.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 317,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "[Image: f78e13b564f1675a4b4d3068178da4920e96d5b3d3efbcdd5ed7a3f2aa6227a5.jpg]",
+          "score": 0.3935074210166931,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":317,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "b9f91185-7930-4dfd-9289-139058f35aab",
+          "caption": null,
+          "chunk_id": "8bc2d8c6-724e-4029-847f-25dda9a5a869",
+          "chunk_type": "figure",
+          "citation_id": 2,
+          "content": "Price-taking firms react to changes in demand by adjusting output along their marginal cost curve. Even though such firms own and operate capital assets and have debts, they do not have the power to set their price according to what they need to satisfy such costs; instead, they are forced to accept what they can get; they take price as a parameter and set output along their MC curve.\n\n[Image: b553764fa05ab8f6c3542bc63693c1c17ef7b8adbaa39d0f2c0882fed85384b9.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/b9f91185-7930-4dfd-9289-139058f35aab.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 207,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "Price-taking firms react to changes in demand by adjusting output along their marginal cost curve. E",
+          "score": 0.3228076994419098,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":207,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "3bbf5855-27f4-45b3-a13a-30742145fe2a",
+          "caption": null,
+          "chunk_id": "d41f13ef-a892-4214-8c01-2dc9908ee221",
+          "chunk_type": "figure",
+          "citation_id": 3,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: 13ffd6c21550f7db29eb89d3b154bae8ed40b651b5c77d60cf373ba35bdb775b.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/3bbf5855-27f4-45b3-a13a-30742145fe2a.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.30891352891921997,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "d90c68a0-3990-4780-8d0d-de4971991fbe",
+          "caption": null,
+          "chunk_id": "1ff4be10-61fe-4488-ac8e-12e3c0748af3",
+          "chunk_type": "figure",
+          "citation_id": 4,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: d6690ff5a995bfe10b1fae4af02125d38dd31eb3ec069beb2cd4d6b97803e26f.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/d90c68a0-3990-4780-8d0d-de4971991fbe.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.30874156951904297,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "55f08925-ba6a-4a92-9696-872f97660af6",
+          "caption": null,
+          "chunk_id": "478ef542-696a-40a6-89d9-0c06b6d8ea23",
+          "chunk_type": "figure",
+          "citation_id": 5,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: bf959f38f5c8f6e095b010d7aa0aa8a55dc4084c20bc61de4893adfe820009f1.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/55f08925-ba6a-4a92-9696-872f97660af6.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.30627933144569397,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "422a67b3-161f-45a8-8355-e9d220c05244",
+          "caption": null,
+          "chunk_id": "c6ad29d9-8761-4b35-b29c-3c89be9352cf",
+          "chunk_type": "figure",
+          "citation_id": 6,
+          "content": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets.\n\n[Image: 1939cc94b0366914e56f3a2e7989bc06993863bf4177c9d19576d7e390153edf.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/422a67b3-161f-45a8-8355-e9d220c05244.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 191,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "will be extended to include more than the skeletal relations. In the more complete case, the governm",
+          "score": 0.30584466457366943,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":191,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "ce9caeb6-55b6-407d-a516-6c23a09867c3",
+          "caption": null,
+          "chunk_id": "61cb46e4-20de-40d9-b7dd-f8b30823fbef",
+          "chunk_type": "figure",
+          "citation_id": 7,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: eb72219185f66dfad048ff8b97d8850e96a65bba5cfd0b183dfa7447d6cf2e2e.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/ce9caeb6-55b6-407d-a516-6c23a09867c3.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.3053170442581177,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "846b783d-689a-4361-820b-cdd033e6303f",
+          "caption": null,
+          "chunk_id": "be68912c-7857-47bf-928c-ff46a8526570",
+          "chunk_type": "figure",
+          "citation_id": 8,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: 08f1ba78f649962bb6d8405c88a3d93e4401666fa85236432155d871b0054638.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/846b783d-689a-4361-820b-cdd033e6303f.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.3040465712547302,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "c73c42f6-680b-4fec-9e3b-f7e65f458db9",
+          "caption": null,
+          "chunk_id": "7054d497-8e2f-4c6f-8348-06044d4f2b5c",
+          "chunk_type": "figure",
+          "citation_id": 9,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: 02d2b676ed294db29b0e94300dd9cbe6b70a10e6fd684dbde0ae0ee887c90d3b.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/c73c42f6-680b-4fec-9e3b-f7e65f458db9.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.3037845492362976,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "ba334b5d-1bc7-4fa0-a93a-6d8e35218b2d",
+          "caption": null,
+          "chunk_id": "ca95141a-8697-42d3-9d79-bf2c28bce124",
+          "chunk_type": "figure",
+          "citation_id": 10,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: b4b5298bd4ca1eac7824489d21b9bee915bee4d5837352091e2775f59250154c.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/ba334b5d-1bc7-4fa0-a93a-6d8e35218b2d.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.3032226264476776,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "6b183025-5b14-44e5-bd48-6e403e49df42",
+          "caption": null,
+          "chunk_id": "18c697c0-8335-45ff-9bba-60b50ceac271",
+          "chunk_type": "figure",
+          "citation_id": 11,
+          "content": "Therefore, there exists a functional relation between the price, $\\mathbf{P}_{\\mathbf{K}}$ , of a particular or a representative capital or financial asset and the quantity of money, M. Normally the price of a capital asset is a rising function of the quantity of money, for as the quantity increases the value of the insurance embodied in money decreases. As the price of money is always one, this implies that the price level of income-yielding capital assets increases. Furthermore, the functional relation has a logarithmic shape unless:\n\n[Image: 4d00c23fdcbbb64ad6aa1e3d5ca9a7c10531627aabdbad1922c8221346d77054.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/6b183025-5b14-44e5-bd48-6e403e49df42.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 229,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "Therefore, there exists a functional relation between the price, $\\mathbf{P}_{\\mathbf{K}}$ , of a pa",
+          "score": 0.3028404116630554,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":229,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "b2ed2f0a-3943-43d0-bba6-73518920cba7",
+          "caption": null,
+          "chunk_id": "13b3f39c-2321-4567-9681-957d14d11f2a",
+          "chunk_type": "figure",
+          "citation_id": 12,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: 9a48ab07dbe3fa55f364bf77824983d81e3158592835cd070de1400f0507175e.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/b2ed2f0a-3943-43d0-bba6-73518920cba7.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.30237796902656555,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "c038980c-9a9f-4f01-9252-02edb70b6bb5",
+          "caption": null,
+          "chunk_id": "2a0ab83f-1b81-4baf-bfc9-5e84e332efa8",
+          "chunk_type": "figure",
+          "citation_id": 13,
+          "content": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets.\n\n[Image: 3e0fd4fe2070d67d67d35345c02e98fc68e7a15d0d0858f5922e87794df923d5.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/c038980c-9a9f-4f01-9252-02edb70b6bb5.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 191,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "will be extended to include more than the skeletal relations. In the more complete case, the governm",
+          "score": 0.301151841878891,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":191,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "e8a9bb26-b516-42b4-b72e-c66c5b1056f2",
+          "caption": null,
+          "chunk_id": "f2ec4945-02c8-46aa-89ce-d8627400f2d1",
+          "chunk_type": "figure",
+          "citation_id": 14,
+          "content": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets.\n\n[Image: cb1e0516ae2542e937e53bfacaca5d4033f7010dd2d68fda0667a6a13fe44dd3.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/e8a9bb26-b516-42b4-b72e-c66c5b1056f2.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 191,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "will be extended to include more than the skeletal relations. In the more complete case, the governm",
+          "score": 0.3008876144886017,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":191,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "b00830f4-d058-43ec-a1b5-4a1b2dd12c4b",
+          "caption": null,
+          "chunk_id": "ecdc2a18-7c40-46ea-af41-f95a200f7ff6",
+          "chunk_type": "figure",
+          "citation_id": 15,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: d362a04b5c6048a1f4eb5a25d919a3952a48a7e506698c9d7aad501190ae6078.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/b00830f4-d058-43ec-a1b5-4a1b2dd12c4b.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.30040037631988525,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "031a4344-92e0-43ee-a7c5-1861a4facadc",
+          "chunk_type": "paragraph",
+          "citation_id": 16,
+          "content": "FrankH.Hahn,MoneyandInflation(Cambridge:MITPress,1983):\"Theobjectivesofagentsthatdeterminetheiractionsandplansdonotdependonanynominalmagnitudes.Agentscareonlyaboutrealthings,suchasgoods(properlydatedanddistinguishedbystatesofnature),leisure,andeffort.Weknowthisastheaxiomoftheabsenceofmoneyillusion,whichitseemsimpossibletoabandoninanysensibleanalysis\"(p.34).SeealsoHymanP.Minsky,\"FrankHahn'sMoneyandInflation:AReviewArticle,\"JournalofPost-KeynesianEconomics6,no.3(Spring1984),pp.449-57.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 310,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "FrankH.Hahn,MoneyandInflation(Cambridge:MITPress,1983):\"Theobjectivesofagentsthatdeterminetheiractio",
+          "score": 0.01666666753590107,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":310,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "0e16ac87-92e6-4395-aa9a-f4e43bae3568",
+          "chunk_type": "paragraph",
+          "citation_id": 17,
+          "content": "xiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYmorefrequentandsevere.AsMinskyinsisted,thereisaninherentandfun-damentalinstabilityinoursortofeconomythattendstowardaspeculativeboom,followingJ.M.Keynes,whoarguedthat\"inanunstableeconomyspeculationdominatesenterprise\"(p.18).Unlikeothercriticalanalysesofcapitalistprocesses,whichemphasizethecrash,Minskywasmorecon-cernedwiththebehaviorofagentsduringtheeuphoricperiods.Andunlikeotheranalysesthatblame\"shocks,\"\"irrationalexuberance,\"or\"foolish\"policy,Minskyarguedthattheprocessesthatgeneratefinancialfragilityare\"natural,\"orendogenoustothesystem.AccordingtoMinsky,thecapitalisteconomyisatbest\"conditionallycoherent\"(p.117).Herejectedtheequilibriummethodologyofmainstreameconomicsasirrelevantinanalyzingareal-worldcapitalisteconomywithcomplexandovervaluedcapitalassets.Insteadofequilibrium,heproposed\"periodsoftranquility\"(p.197)characterizedbyarobustfinancialsystemandfewinnovations.Duringthoseperiods,thefinancialaspectsofinvest-mentarelessimportant.However,\"stabilityisdestabilizing,\"asrelativetranquilityencouragesmorerisk-takingandinnovativebehaviorthatincreasesincomeevenasitdisruptstheconditionsthatgenerate\"coherency\"and\"tranquility.\"",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 9,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "xiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYmorefrequentandsevere.AsMinskyinsisted,thereisaninherentandfu",
+          "score": 0.016393441706895828,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":9,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "124508ea-9816-461d-8269-65a250b36fbe",
+          "chunk_type": "paragraph",
+          "citation_id": 18,
+          "content": "The\"rationalexpectations\"schoolholdsthatagentsdonotknowthefuture,buttheyformulatetheirexpectationsonthebasisofasatisfactoryknowledge(i.e.,atheory)ofhowtheeconomyfunctions.Ifweaddpropositionstotheeffectthateachagent'sdecisionsarebasedonitsmaintainedtheoryofsystembehavior,thatgeneralequilibriumtheoryisanaptrepresentationoftheworld,andthatthosewhosebehaviorisconsistentwiththisapttheorywillbesuccessful,thenanequilibriumandequilibratingviewoftheeconomyemerges.(SeeRobertE.Lucas,Jr.,op.cit.)Iftheeconomydoesnotconformtothegeneralequilibriumtheory,ifitisendogenouslyunstable,andifunitsbehaveaccordingly,thenrationalexpectationswillexacerbateinstability.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 146,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "The\"rationalexpectations\"schoolholdsthatagentsdonotknowthefuture,buttheyformulatetheirexpectationson",
+          "score": 0.016129031777381897,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":146,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "7418e44c-d856-45b2-ab24-7927140ea48d",
+          "chunk_type": "paragraph",
+          "citation_id": 19,
+          "content": "Inasmuchasouraimistoindicatehowwecandobetterthanwehave,andasthebestisoftentheenemyofthegood,wecanforgetabouttheoptimum.Eventhoughatendencytowardcoherenceexistsbecauseoftheprocessesthatdetermineproductionandconsumptioninmarketeconomics,theprocessesofamarketeconomycansetoffinteractionsthatdisruptcoherence.Accordingly,theflawsthatleadtoinstabilitymakeques-tionsastotheoptimalityoftheresultsofthemarketmechanismirrelevant.Currenttheorymakesaneconomyalifelessarenainwhichdepersonalizedagentsplayabstractauctioningorrecontractinggames.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 141,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "Inasmuchasouraimistoindicatehowwecandobetterthanwehave,andasthebestisoftentheenemyofthegood,wecanfor",
+          "score": 0.01587301678955555,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":141,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "5e922121-04b6-455e-8776-e89cbc508442",
+          "chunk_type": "paragraph",
+          "citation_id": 20,
+          "content": "understandingisthefoundationoflegitimacyforreform.THEIMPORTANCEOFTHEAGENDATobin'sdefinitionoftheroleofthehouseintellectualmaybedescribedascontrollingtheagenda.Princesandpublicalikedependonintellectualsto1.JamesTobin,\"TheIntellectualRevolutioninUnitedStatesPolicy-Making,\"NoelBurton Lecture, UniversityofEssex,1966,p.14.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 345,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "understandingisthefoundationoflegitimacyforreform.THEIMPORTANCEOFTHEAGENDATobin'sdefinitionoftherole",
+          "score": 0.015625,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":345,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "c6313cf9-b079-4603-a2e5-c52bc38df7bf",
+          "chunk_type": "paragraph",
+          "citation_id": 21,
+          "content": "xviiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYrobustfinancialstructurecouldopenthedoortoasnowballofdefaultsthatwouldoverwhelmsuchconstraints.Thiswouldbecomemorelikelyiftheinstitutionalconstraintsfailedtoadapttochangingcircumstances-or,worse,ifthelessonsoftheGreatDepressionwereforgottensothatdan-gerous\"freemarket\"ideologycametodominatepolicy.Ofcourse,bothoftheseeventscametopass.MinskyformulatedwhathetermedhisAnti-Laissez-FaireTheme:\"inaworldwheretheinternaldynamicsimplyinstability,asemblanceofstabilitycanbeachievedorsustainedbyintroducingconventions,con-straintsandinterventionsintotheenvironment\"(MinskyandFerri1991).Heinsistedtheproblemisthatorthodox,neoclassicaltheory-basedeco-nomicscannotprovideanyinsightintooureconomy.Thisisbecauseinsta-bilityaswellasthemereexistenceofdepressioncouldnotbeexplainedbystandardtheoryexceptthroughinternalshocksandstubbornworkerswhorefusedtoallowwagestorespond-indeed,unemploymentmustbeseenbyorthodoxyasretributionforobstinacy(p.154).Themainstreamcanondictatesmorelaissez-faireasthesolutionto\"disequilibrium.\"Bycontrast,incoherentmarketresultsare\"natural,\"accordingtoMinsky,requiringinterventiontopreventtheinvisiblehandfromoperating:\"Tocontaintheevilsthatmarketsystemscaninflict,capitalisteconomiesdevelopedsetsofinstitutionsandauthorities,whichcanbecharacterizedastheequivalentofcircuitbreakers.Theseinstitutionsineffectstoptheeconomicprocessesthatbreedtheincoherenceandrestarttheeconomywithnewinitialcondi-tions...\"(MinskyetaI.,1994).Furthermore,\"Theaptnessofinstitutionsandinterventionswilllargelydeterminetheextenttowhichthepathoftheeconomythroughtimeistranquilorturbulent:progressive,stagnant,ordeteriorating\"(ibid).Postwargrowthwasbiasedtowardinvestmentspending,especiallyafter1970.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 15,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "xviiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYrobustfinancialstructurecouldopenthedoortoasnowballofdefaul",
+          "score": 0.015384615398943424,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":15,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "c03f6e82-b4de-4af2-acb3-ee3100d06750",
+          "chunk_type": "paragraph",
+          "citation_id": 22,
+          "content": "$$\n\\pi = I + D f - B T D f + T ^ {\\pi} \\text {o r} \\tag {16}\n$$",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "$$\n\\pi = I + D f - B T D f + T ^ {\\pi} \\text {o r} \\tag {16}\n$$",
+          "score": 0.01515151560306549,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "301a6d87-294d-4b3b-bb7f-2024f05025df",
+          "chunk_type": "paragraph",
+          "citation_id": 23,
+          "content": "$$\n\\pi^ {*} = I + D f - B T D f. \\tag {16a}\n$$",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "$$\n\\pi^ {*} = I + D f - B T D f. \\tag {16a}\n$$",
+          "score": 0.014925372786819935,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "27e31482-3b52-420d-92a5-e58ba852a7b1",
+          "chunk_type": "paragraph",
+          "citation_id": 24,
+          "content": "*Whenmoneyiscreatedaborrowerentersuponacontractualcom-mitmenttopaymoneytothelendingbankinthefuture.Theabilityofbusi-nessborrowerstosatisfythesecommitmentsultimatelyrestsuponthequasi-rentsthatcapitalassetsearnwhenusedinproduction,althoughtheproximatesourceofcashmayberolloverborrowingbythedebtororbor-rowingbyaunitthatbuysfromthedebtor.Normalfunctioningofacapi-talisteconomydependsupontheincome-producingsystemgeneratingprofitsthatserviceloansandthefinancialsystemmakingloansthatleadtoinvestmentandthereforetoprofits.Bankswhoseliabilitiesaremoneyareunlikemoneylenderswhosefinancingactivitiesarerestrictedtothecontentsoftheirstrongbox.Banks*Theaboveisstrictlytrueforano-governmentlno-householddebt-closedeconomy,thatis,forthebasicskeletalcapitalisteconomy.1.JohnMaynardKeynes,&saysinPersuasion:CollectedWritingsofJohnMaynardKeynes,vol.9(London:Macmillan,St.Martin'sPress,fortheRoyalEconomicSociety,1972),p.151.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 274,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "*Whenmoneyiscreatedaborrowerentersuponacontractualcom-mitmenttopaymoneytothelendingbankinthefuture.T",
+          "score": 0.014705882407724857,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":274,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "246a4587-5d52-44b2-84ec-5ac4c08b96f2",
+          "chunk_type": "paragraph",
+          "citation_id": 25,
+          "content": "Thatis,themarketforcesthatoperatewhenasystemisstablewillpushittowardinstability,sothatevenifanythinglikeanequilibriumcouldbeachieved,itwouldsetoffbehavioralresponsesthatwouldquicklymovetheeconomyawayfromequilibrium.Minskyborrowedhis\"investmenttheoryofthecycle\"fromJohnMaynardKeynes.Minsky'scycletheoryderivedfromcombiningtwothings:thefamousexpositionfoundinKeynes'sChapter12oftheGeneralTheory,whichfocusesontheinherentinstabilityofinvestmentdecisionsastheyaremadeinconditionsoffundamentaluncertainty,andtheapproachtakeninChapter17tovaluationoffinancialandcapitalassets.Whirlwindsofoptimismandpessimismaffecttheaggregatequantityofinvestment,whichthenthroughthespendingmultiplierdeterminesoutputandemploy-ment.WhileMinskycreditedKeynesforpointingthewaytowardanalyz-ingtheprocessoffinancinginvestment,hefounditnecessarytogomuchfurther.Thus,Minsky'scontributionwastoaddthe\"financialtheoryofinvestment\"toKeynes's\"investmenttheoryofthecycle.\"Thiswasthemainthemeofhisearlierbook,JohnMaynardKeynes(1975).Sincefinanc-inginvestmentisthemostimportantsourceoftheinstabilityfoundinoureconomy,itmustalsobethemaintopicofanalysisifonewantstostabilizetheunstableeconomy.Hence,Minsky'streatmentofinvestmentandhowitisfinancedplaysacentralroleinthisvolume.Thesuperiorityofhisanaly-sisbecomes readily apparentonaclosere-readingofChapter8.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 9,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "Thatis,themarketforcesthatoperatewhenasystemisstablewillpushittowardinstability,sothatevenifanything",
+          "score": 0.014492753893136978,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":9,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "ecb06c2b-0feb-46a8-949f-077a58cc4e2f",
+          "chunk_type": "paragraph",
+          "citation_id": 26,
+          "content": "assetdecisionsneedtotakeintoaccountwhatcanhappenoverthelifeofprojects;presentdecisionsmustallowforthefuture,andwhathappenstodayisthefutureforsomepriordecisions.Itisimpossibletosustainanaiveargumentthatallsuchdecisionsaremadeontheexpectationsthatwhatiswillruleforeveror,alternatively,thatrational9.OscarLange,\"OntheEconomicTheoryofSocialism,\"OntheEconomicTheoryofSocialism,ed.BenjaminE.Lippincott(Minneapolis:UniversityofMinnesotaPress,1938).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 145,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "assetdecisionsneedtotakeintoaccountwhatcanhappenoverthelifeofprojects;presentdecisionsmustallowforth",
+          "score": 0.014285714365541935,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":145,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "71205719-c965-4f15-b7d2-aa938bad0406",
+          "chunk_type": "paragraph",
+          "citation_id": 27,
+          "content": "Internal cash flows can pay for some level of investment (for both an individual firm and for the economy). Once anticipated internal flows (Q) are estimated, their relation to investment output can be represented as a rectangular hyperbola $(\\mathrm{Q_NQ_N}$ in Figure 8.3) because the internal cash flows, or quasi-rents, $Q_{N}$ are related to the price $\\mathbf{P}_{\\mathrm{I}}$ and the output $\\mathrm{I_I}$ of investment by the formula $\\mathrm{P_IQ_I} = \\mathrm{Q_N}$ . The intersection of this rectangular hyperbola with the supply price, $\\mathbf{P}_{\\mathrm{I}}$ , of investment output yields $\\mathrm{I_I}$ (internal), the investment that can be financed by anticipated internal funds (point A in Figure 8.3).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 239,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "Internal cash flows can pay for some level of investment (for both an individual firm and for the ec",
+          "score": 0.014084506779909134,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":239,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "ce4f8610-8722-4d46-912e-bd639a7c76c7",
+          "chunk_type": "paragraph",
+          "citation_id": 28,
+          "content": "PERSPECTIVESONTHEORY117pricingprocessmaysustaincoherenceinsomemarkets,whileinothers,processeswillbeatworkthatwill,intime,disruptcoherence.Ifthisisthenatureoftheeconomy,thenitisnecessarytoinquireifpoliciescanbeadoptedorinstitutionscreatedthatareabletoconstrainoroffsettheprocessesthatwouldleadtoincoherence.Ifthepricingmechanismofadecentralizedcapitalisteconomycanleadtocoherentresultsonlyifproperpolicyorinstitutionsrule,theninterventionisnecessaryeventhoughthemarketmechanismcanbereliedupontotakecareofdetails.Oncesuchconditionalcoherenceisacceptedasacharacteristicofacapitalisteconomy,blindfaithinandacceptanceoftheresultsofmarketprocessescannolongerbesustained.Moreover,inaneconomythatisconditionallycoherent,legislatedandevolutionaryinstitutionalchangesaffectthepolicyactionsneededtosustaincoherence.Policycannotbeaonce-and-for-allproposition:asinstitutionsandrelationschangesodoesthepolicythatisneededtosustaincoherence.Furthermore,forcoherencetoruleinasetofmarketsasubstitutionprinciplemustapply.Onefacetofthisprincipleisthatifsupplyconditionschangesothatthepriceofacommodity(orservice)usedinconsumptionorproductionrises(orfalls)relativetootherprices,thequantitytakenwilldecrease(orincrease);thismeansthatdemandcurvesareusuallynega-tivelysloped.Thesecondfacetisthatifthepriceofacommodityrises(falls),thequantitiesthatwillbetakenofothercommoditiesatafixedpricewilltendtoincrease(decrease).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 143,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "PERSPECTIVESONTHEORY117pricingprocessmaysustaincoherenceinsomemarkets,whileinothers,processeswillbea",
+          "score": 0.013888888992369175,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":143,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "1fca8ed0-be1b-4233-9a93-a63fe142f9c1",
+          "chunk_type": "paragraph",
+          "citation_id": 29,
+          "content": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxixbytheinstitutionalfloorsthatpreventseriousrecessionsandthatvalidateriskierbehaviors.Minsky'sbesttreatmentofthisinflationbiasispresentedinChapter11ofthisvolume,usingamarkupapproachtotheaggregatepricelevel.Wewillnotprovideadetailedexpositionhere,butthebasicideaisthatpricesoftheconsumptiongoodspartofthecurrentoutputpricesystemaresetasamarkupovercosts-mostlywagecostsinthatsector.Themarkupinturnisdeterminedbyspendingonconsumptiongoodsinexcessoftheconsumptionbytheworkersthatproducedthem-thatis,bywork-ersintheinvestmentsectorandthegovernmentsector,byforeigners,andbytransferrecipients(retirees,thoseonAFDCandunemploymentcom-pensation,etc.).ThiswasathemeinMinsky'searliestworkandoneofthemainreasonshevehementlyopposedtheKennedylJohnsonWaronPoverty(Minsky1965,1968).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 16,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxixbytheinstitutionalfloorsthatpreventseriousrecessionsandthatva",
+          "score": 0.013698630034923553,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":16,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        }
+      ],
+      "degrade_trace": [
+        {
+          "impact": "Falling back to text rerank or pre-rerank ordering",
+          "reason": "Multimodal reranker call failed: Multimodal rerank API error 400 Bad Request: {\"request_id\":\"d7964fb7-4a57-9c78-8196-c70f511abc79\",\"code\":\"InvalidParameter\",\"message\":\"<400> InternalError.Algo.InvalidParameter: Image URL or Base64 is invalid. URL must be a valid HTTP/HTTPS link, and Base64 must start with 'image/xxx;base64\"}",
+          "stage": "mm_reranker"
+        },
+        {
+          "impact": "Using pre-rerank ordering",
+          "reason": "Reranker call failed: Rerank API error 401 Unauthorized: \"Api key is invalid\"",
+          "stage": "reranker"
+        }
+      ],
+      "guard_report": {
+        "blocked": false,
+        "degrade_trace": [],
+        "input_results": [],
+        "output_results": [
+          {
+            "action": "Allow",
+            "details": null,
+            "guard_type": "output:citation_provability",
+            "operator": null,
+            "passed": true,
+            "reason": "",
+            "risk_level": "Low",
+            "trace_id": null
+          },
+          {
+            "action": "Allow",
+            "details": null,
+            "guard_type": "output:pii_detection",
+            "operator": null,
+            "passed": true,
+            "reason": "",
+            "risk_level": "Low",
+            "trace_id": null
+          },
+          {
+            "action": "Allow",
+            "details": null,
+            "guard_type": "output:harmful_content",
+            "operator": null,
+            "passed": true,
+            "reason": "",
+            "risk_level": "Low",
+            "trace_id": null
+          }
+        ]
+      },
+      "message_id": 472,
+      "mode_debug": {
+        "general": null,
+        "rag": {
+          "item_trace": [
+            {
+              "bm25_k": 0,
+              "bm25_terms": [],
+              "dense_k": 100,
+              "payload_kind": "query",
+              "priority": 1.0,
+              "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+              "recall_budget": 100,
+              "rerank_budget": 100,
+              "source_count": 0,
+              "source_ids": []
+            },
+            {
+              "bm25_k": 0,
+              "bm25_terms": [],
+              "dense_k": 0,
+              "payload_kind": "summary",
+              "priority": 0.0,
+              "recall_budget": 0,
+              "rerank_budget": 100,
+              "source_count": 0,
+              "source_ids": [],
+              "summary": "related"
+            }
+          ],
+          "retrieval_trace": {
+            "item_count": 2,
+            "items": [
+              {
+                "bm25_k": 0,
+                "bm25_terms": [],
+                "dense_k": 100,
+                "payload_kind": "query",
+                "priority": 1.0,
+                "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+                "recall_budget": 100,
+                "rerank_budget": 100,
+                "source_count": 0,
+                "source_ids": []
+              },
+              {
+                "bm25_k": 0,
+                "bm25_terms": [],
+                "dense_k": 0,
+                "payload_kind": "summary",
+                "priority": 0.0,
+                "recall_budget": 0,
+                "rerank_budget": 100,
+                "source_count": 0,
+                "source_ids": [],
+                "summary": "related"
+              }
+            ],
+            "max_final_chunks": 30,
+            "max_rerank_docs": 75,
+            "summary_mode": "related",
+            "top_k_returned": 29,
+            "total_candidate_budget": 100
+          },
+          "summary_injection_trace": {
+            "injected_count": 1,
+            "mode": "related"
+          }
+        },
+        "search": null
+      },
+      "planner_output": {
+        "mode": "rag",
+        "rag_plan": {
+          "clarify_message": "",
+          "clarify_needed": false,
+          "items": [
+            {
+              "priority": 1.0,
+              "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence"
+            },
+            {
+              "priority": 0.0,
+              "summary": "related"
+            }
+          ],
+          "plan_confidence": 1.0,
+          "plan_version": "rag-execute-v1"
+        }
+      },
+      "session_id": "3b5baac9-4da0-4adc-be2c-f605ff5348d7",
+      "sources": [
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "34d7813a-4ff0-4442-adbb-23a4b00a92ec",
+          "page": 317,
+          "snippet": "[Image: f78e13b564f1675a4b4d3068178da4920e96d5b3d3efbcdd5ed7a3f2aa6227a5.jpg]",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "8bc2d8c6-724e-4029-847f-25dda9a5a869",
+          "page": 207,
+          "snippet": "Price-taking firms react to changes in demand by adjusting output along their marginal cost curve. Even though such firms own and operate capital assets and have debts, they do not have the power to s",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "d41f13ef-a892-4214-8c01-2dc9908ee221",
+          "page": 194,
+          "snippet": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: 13ffd6c21550f7db29eb89d3b15",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "1ff4be10-61fe-4488-ac8e-12e3c0748af3",
+          "page": 194,
+          "snippet": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: d6690ff5a995bfe10b1fae4af02",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "478ef542-696a-40a6-89d9-0c06b6d8ea23",
+          "page": 194,
+          "snippet": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: bf959f38f5c8f6e095b010d7aa0",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "c6ad29d9-8761-4b35-b29c-3c89be9352cf",
+          "page": 191,
+          "snippet": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "61cb46e4-20de-40d9-b7dd-f8b30823fbef",
+          "page": 194,
+          "snippet": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: eb72219185f66dfad048ff8b97d",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "be68912c-7857-47bf-928c-ff46a8526570",
+          "page": 194,
+          "snippet": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: 08f1ba78f649962bb6d8405c88a",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "7054d497-8e2f-4c6f-8348-06044d4f2b5c",
+          "page": 194,
+          "snippet": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: 02d2b676ed294db29b0e94300dd",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "ca95141a-8697-42d3-9d79-bf2c28bce124",
+          "page": 194,
+          "snippet": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: b4b5298bd4ca1eac7824489d21b",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "18c697c0-8335-45ff-9bba-60b50ceac271",
+          "page": 229,
+          "snippet": "Therefore, there exists a functional relation between the price, $\\mathbf{P}_{\\mathbf{K}}$ , of a particular or a representative capital or financial asset and the quantity of money, M. Normally the p",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "13b3f39c-2321-4567-9681-957d14d11f2a",
+          "page": 194,
+          "snippet": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: 9a48ab07dbe3fa55f364bf77824",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "2a0ab83f-1b81-4baf-bfc9-5e84e332efa8",
+          "page": 191,
+          "snippet": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "f2ec4945-02c8-46aa-89ce-d8627400f2d1",
+          "page": 191,
+          "snippet": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "ecdc2a18-7c40-46ea-af41-f95a200f7ff6",
+          "page": 194,
+          "snippet": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: d362a04b5c6048a1f4eb5a25d91",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "031a4344-92e0-43ee-a7c5-1861a4facadc",
+          "page": 310,
+          "snippet": "FrankH.Hahn,MoneyandInflation(Cambridge:MITPress,1983):\"Theobjectivesofagentsthatdeterminetheiractionsandplansdonotdependonanynominalmagnitudes.Agentscareonlyaboutrealthings,suchasgoods(properlydateda",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "0e16ac87-92e6-4395-aa9a-f4e43bae3568",
+          "page": 9,
+          "snippet": "xiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYmorefrequentandsevere.AsMinskyinsisted,thereisaninherentandfun-damentalinstabilityinoursortofeconomythattendstowardaspeculativeboom,followingJ.M.Keynes,whoargued",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "124508ea-9816-461d-8269-65a250b36fbe",
+          "page": 146,
+          "snippet": "The\"rationalexpectations\"schoolholdsthatagentsdonotknowthefuture,buttheyformulatetheirexpectationsonthebasisofasatisfactoryknowledge(i.e.,atheory)ofhowtheeconomyfunctions.Ifweaddpropositionstotheeffec",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "7418e44c-d856-45b2-ab24-7927140ea48d",
+          "page": 141,
+          "snippet": "Inasmuchasouraimistoindicatehowwecandobetterthanwehave,andasthebestisoftentheenemyofthegood,wecanforgetabouttheoptimum.Eventhoughatendencytowardcoherenceexistsbecauseoftheprocessesthatdetermineproduct",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "5e922121-04b6-455e-8776-e89cbc508442",
+          "page": 345,
+          "snippet": "understandingisthefoundationoflegitimacyforreform.THEIMPORTANCEOFTHEAGENDATobin'sdefinitionoftheroleofthehouseintellectualmaybedescribedascontrollingtheagenda.Princesandpublicalikedependonintellectual",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "c6313cf9-b079-4603-a2e5-c52bc38df7bf",
+          "page": 15,
+          "snippet": "xviiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYrobustfinancialstructurecouldopenthedoortoasnowballofdefaultsthatwouldoverwhelmsuchconstraints.Thiswouldbecomemorelikelyiftheinstitutionalconstraintsfailedtoad",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "c03f6e82-b4de-4af2-acb3-ee3100d06750",
+          "page": 194,
+          "snippet": "$$\n\\pi = I + D f - B T D f + T ^ {\\pi} \\text {o r} \\tag {16}\n$$",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "301a6d87-294d-4b3b-bb7f-2024f05025df",
+          "page": 194,
+          "snippet": "$$\n\\pi^ {*} = I + D f - B T D f. \\tag {16a}\n$$",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "27e31482-3b52-420d-92a5-e58ba852a7b1",
+          "page": 274,
+          "snippet": "*Whenmoneyiscreatedaborrowerentersuponacontractualcom-mitmenttopaymoneytothelendingbankinthefuture.Theabilityofbusi-nessborrowerstosatisfythesecommitmentsultimatelyrestsuponthequasi-rentsthatcapitalas",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "246a4587-5d52-44b2-84ec-5ac4c08b96f2",
+          "page": 9,
+          "snippet": "Thatis,themarketforcesthatoperatewhenasystemisstablewillpushittowardinstability,sothatevenifanythinglikeanequilibriumcouldbeachieved,itwouldsetoffbehavioralresponsesthatwouldquicklymovetheeconomyawayf",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "ecb06c2b-0feb-46a8-949f-077a58cc4e2f",
+          "page": 145,
+          "snippet": "assetdecisionsneedtotakeintoaccountwhatcanhappenoverthelifeofprojects;presentdecisionsmustallowforthefuture,andwhathappenstodayisthefutureforsomepriordecisions.Itisimpossibletosustainanaiveargumenttha",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "71205719-c965-4f15-b7d2-aa938bad0406",
+          "page": 239,
+          "snippet": "Internal cash flows can pay for some level of investment (for both an individual firm and for the economy). Once anticipated internal flows (Q) are estimated, their relation to investment output can b",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "ce4f8610-8722-4d46-912e-bd639a7c76c7",
+          "page": 143,
+          "snippet": "PERSPECTIVESONTHEORY117pricingprocessmaysustaincoherenceinsomemarkets,whileinothers,processeswillbeatworkthatwill,intime,disruptcoherence.Ifthisisthenatureoftheeconomy,thenitisnecessarytoinquireifpoli",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "1fca8ed0-be1b-4233-9a93-a63fe142f9c1",
+          "page": 16,
+          "snippet": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxixbytheinstitutionalfloorsthatpreventseriousrecessionsandthatvalidateriskierbehaviors.Minsky'sbesttreatmentofthisinflationbiasispresentedinChapter11ofthisvolume,us",
+          "title": "minsky86.pdf"
+        }
+      ],
+      "trace": {
+        "mode": "rag"
+      }
+    },
+    "citations_payload": {
+      "event": "citations",
+      "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+      "message_id": 472,
+      "citations": [
+        {
+          "asset_id": "39382f01-35f6-4815-8d7f-91731f7454de",
+          "caption": null,
+          "chunk_id": "34d7813a-4ff0-4442-adbb-23a4b00a92ec",
+          "chunk_type": "figure",
+          "citation_id": 1,
+          "content": "[Image: f78e13b564f1675a4b4d3068178da4920e96d5b3d3efbcdd5ed7a3f2aa6227a5.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/39382f01-35f6-4815-8d7f-91731f7454de.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 317,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "[Image: f78e13b564f1675a4b4d3068178da4920e96d5b3d3efbcdd5ed7a3f2aa6227a5.jpg]",
+          "score": 0.3935074210166931,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":317,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "b9f91185-7930-4dfd-9289-139058f35aab",
+          "caption": null,
+          "chunk_id": "8bc2d8c6-724e-4029-847f-25dda9a5a869",
+          "chunk_type": "figure",
+          "citation_id": 2,
+          "content": "Price-taking firms react to changes in demand by adjusting output along their marginal cost curve. Even though such firms own and operate capital assets and have debts, they do not have the power to set their price according to what they need to satisfy such costs; instead, they are forced to accept what they can get; they take price as a parameter and set output along their MC curve.\n\n[Image: b553764fa05ab8f6c3542bc63693c1c17ef7b8adbaa39d0f2c0882fed85384b9.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/b9f91185-7930-4dfd-9289-139058f35aab.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 207,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "Price-taking firms react to changes in demand by adjusting output along their marginal cost curve. E",
+          "score": 0.3228076994419098,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":207,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "3bbf5855-27f4-45b3-a13a-30742145fe2a",
+          "caption": null,
+          "chunk_id": "d41f13ef-a892-4214-8c01-2dc9908ee221",
+          "chunk_type": "figure",
+          "citation_id": 3,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: 13ffd6c21550f7db29eb89d3b154bae8ed40b651b5c77d60cf373ba35bdb775b.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/3bbf5855-27f4-45b3-a13a-30742145fe2a.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.30891352891921997,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "d90c68a0-3990-4780-8d0d-de4971991fbe",
+          "caption": null,
+          "chunk_id": "1ff4be10-61fe-4488-ac8e-12e3c0748af3",
+          "chunk_type": "figure",
+          "citation_id": 4,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: d6690ff5a995bfe10b1fae4af02125d38dd31eb3ec069beb2cd4d6b97803e26f.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/d90c68a0-3990-4780-8d0d-de4971991fbe.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.30874156951904297,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "55f08925-ba6a-4a92-9696-872f97660af6",
+          "caption": null,
+          "chunk_id": "478ef542-696a-40a6-89d9-0c06b6d8ea23",
+          "chunk_type": "figure",
+          "citation_id": 5,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: bf959f38f5c8f6e095b010d7aa0aa8a55dc4084c20bc61de4893adfe820009f1.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/55f08925-ba6a-4a92-9696-872f97660af6.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.30627933144569397,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "422a67b3-161f-45a8-8355-e9d220c05244",
+          "caption": null,
+          "chunk_id": "c6ad29d9-8761-4b35-b29c-3c89be9352cf",
+          "chunk_type": "figure",
+          "citation_id": 6,
+          "content": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets.\n\n[Image: 1939cc94b0366914e56f3a2e7989bc06993863bf4177c9d19576d7e390153edf.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/422a67b3-161f-45a8-8355-e9d220c05244.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 191,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "will be extended to include more than the skeletal relations. In the more complete case, the governm",
+          "score": 0.30584466457366943,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":191,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "ce9caeb6-55b6-407d-a516-6c23a09867c3",
+          "caption": null,
+          "chunk_id": "61cb46e4-20de-40d9-b7dd-f8b30823fbef",
+          "chunk_type": "figure",
+          "citation_id": 7,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: eb72219185f66dfad048ff8b97d8850e96a65bba5cfd0b183dfa7447d6cf2e2e.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/ce9caeb6-55b6-407d-a516-6c23a09867c3.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.3053170442581177,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "846b783d-689a-4361-820b-cdd033e6303f",
+          "caption": null,
+          "chunk_id": "be68912c-7857-47bf-928c-ff46a8526570",
+          "chunk_type": "figure",
+          "citation_id": 8,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: 08f1ba78f649962bb6d8405c88a3d93e4401666fa85236432155d871b0054638.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/846b783d-689a-4361-820b-cdd033e6303f.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.3040465712547302,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "c73c42f6-680b-4fec-9e3b-f7e65f458db9",
+          "caption": null,
+          "chunk_id": "7054d497-8e2f-4c6f-8348-06044d4f2b5c",
+          "chunk_type": "figure",
+          "citation_id": 9,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: 02d2b676ed294db29b0e94300dd9cbe6b70a10e6fd684dbde0ae0ee887c90d3b.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/c73c42f6-680b-4fec-9e3b-f7e65f458db9.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.3037845492362976,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "ba334b5d-1bc7-4fa0-a93a-6d8e35218b2d",
+          "caption": null,
+          "chunk_id": "ca95141a-8697-42d3-9d79-bf2c28bce124",
+          "chunk_type": "figure",
+          "citation_id": 10,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: b4b5298bd4ca1eac7824489d21b9bee915bee4d5837352091e2775f59250154c.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/ba334b5d-1bc7-4fa0-a93a-6d8e35218b2d.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.3032226264476776,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "6b183025-5b14-44e5-bd48-6e403e49df42",
+          "caption": null,
+          "chunk_id": "18c697c0-8335-45ff-9bba-60b50ceac271",
+          "chunk_type": "figure",
+          "citation_id": 11,
+          "content": "Therefore, there exists a functional relation between the price, $\\mathbf{P}_{\\mathbf{K}}$ , of a particular or a representative capital or financial asset and the quantity of money, M. Normally the price of a capital asset is a rising function of the quantity of money, for as the quantity increases the value of the insurance embodied in money decreases. As the price of money is always one, this implies that the price level of income-yielding capital assets increases. Furthermore, the functional relation has a logarithmic shape unless:\n\n[Image: 4d00c23fdcbbb64ad6aa1e3d5ca9a7c10531627aabdbad1922c8221346d77054.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/6b183025-5b14-44e5-bd48-6e403e49df42.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 229,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "Therefore, there exists a functional relation between the price, $\\mathbf{P}_{\\mathbf{K}}$ , of a pa",
+          "score": 0.3028404116630554,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":229,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "b2ed2f0a-3943-43d0-bba6-73518920cba7",
+          "caption": null,
+          "chunk_id": "13b3f39c-2321-4567-9681-957d14d11f2a",
+          "chunk_type": "figure",
+          "citation_id": 12,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: 9a48ab07dbe3fa55f364bf77824983d81e3158592835cd070de1400f0507175e.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/b2ed2f0a-3943-43d0-bba6-73518920cba7.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.30237796902656555,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "c038980c-9a9f-4f01-9252-02edb70b6bb5",
+          "caption": null,
+          "chunk_id": "2a0ab83f-1b81-4baf-bfc9-5e84e332efa8",
+          "chunk_type": "figure",
+          "citation_id": 13,
+          "content": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets.\n\n[Image: 3e0fd4fe2070d67d67d35345c02e98fc68e7a15d0d0858f5922e87794df923d5.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/c038980c-9a9f-4f01-9252-02edb70b6bb5.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 191,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "will be extended to include more than the skeletal relations. In the more complete case, the governm",
+          "score": 0.301151841878891,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":191,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "e8a9bb26-b516-42b4-b72e-c66c5b1056f2",
+          "caption": null,
+          "chunk_id": "f2ec4945-02c8-46aa-89ce-d8627400f2d1",
+          "chunk_type": "figure",
+          "citation_id": 14,
+          "content": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets.\n\n[Image: cb1e0516ae2542e937e53bfacaca5d4033f7010dd2d68fda0667a6a13fe44dd3.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/e8a9bb26-b516-42b4-b72e-c66c5b1056f2.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 191,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "will be extended to include more than the skeletal relations. In the more complete case, the governm",
+          "score": 0.3008876144886017,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":191,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "b00830f4-d058-43ec-a1b5-4a1b2dd12c4b",
+          "caption": null,
+          "chunk_id": "ecdc2a18-7c40-46ea-af41-f95a200f7ff6",
+          "chunk_type": "figure",
+          "citation_id": 15,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: d362a04b5c6048a1f4eb5a25d919a3952a48a7e506698c9d7aad501190ae6078.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/b00830f4-d058-43ec-a1b5-4a1b2dd12c4b.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.30040037631988525,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "031a4344-92e0-43ee-a7c5-1861a4facadc",
+          "chunk_type": "paragraph",
+          "citation_id": 16,
+          "content": "FrankH.Hahn,MoneyandInflation(Cambridge:MITPress,1983):\"Theobjectivesofagentsthatdeterminetheiractionsandplansdonotdependonanynominalmagnitudes.Agentscareonlyaboutrealthings,suchasgoods(properlydatedanddistinguishedbystatesofnature),leisure,andeffort.Weknowthisastheaxiomoftheabsenceofmoneyillusion,whichitseemsimpossibletoabandoninanysensibleanalysis\"(p.34).SeealsoHymanP.Minsky,\"FrankHahn'sMoneyandInflation:AReviewArticle,\"JournalofPost-KeynesianEconomics6,no.3(Spring1984),pp.449-57.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 310,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "FrankH.Hahn,MoneyandInflation(Cambridge:MITPress,1983):\"Theobjectivesofagentsthatdeterminetheiractio",
+          "score": 0.01666666753590107,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":310,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "0e16ac87-92e6-4395-aa9a-f4e43bae3568",
+          "chunk_type": "paragraph",
+          "citation_id": 17,
+          "content": "xiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYmorefrequentandsevere.AsMinskyinsisted,thereisaninherentandfun-damentalinstabilityinoursortofeconomythattendstowardaspeculativeboom,followingJ.M.Keynes,whoarguedthat\"inanunstableeconomyspeculationdominatesenterprise\"(p.18).Unlikeothercriticalanalysesofcapitalistprocesses,whichemphasizethecrash,Minskywasmorecon-cernedwiththebehaviorofagentsduringtheeuphoricperiods.Andunlikeotheranalysesthatblame\"shocks,\"\"irrationalexuberance,\"or\"foolish\"policy,Minskyarguedthattheprocessesthatgeneratefinancialfragilityare\"natural,\"orendogenoustothesystem.AccordingtoMinsky,thecapitalisteconomyisatbest\"conditionallycoherent\"(p.117).Herejectedtheequilibriummethodologyofmainstreameconomicsasirrelevantinanalyzingareal-worldcapitalisteconomywithcomplexandovervaluedcapitalassets.Insteadofequilibrium,heproposed\"periodsoftranquility\"(p.197)characterizedbyarobustfinancialsystemandfewinnovations.Duringthoseperiods,thefinancialaspectsofinvest-mentarelessimportant.However,\"stabilityisdestabilizing,\"asrelativetranquilityencouragesmorerisk-takingandinnovativebehaviorthatincreasesincomeevenasitdisruptstheconditionsthatgenerate\"coherency\"and\"tranquility.\"",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 9,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "xiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYmorefrequentandsevere.AsMinskyinsisted,thereisaninherentandfu",
+          "score": 0.016393441706895828,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":9,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "124508ea-9816-461d-8269-65a250b36fbe",
+          "chunk_type": "paragraph",
+          "citation_id": 18,
+          "content": "The\"rationalexpectations\"schoolholdsthatagentsdonotknowthefuture,buttheyformulatetheirexpectationsonthebasisofasatisfactoryknowledge(i.e.,atheory)ofhowtheeconomyfunctions.Ifweaddpropositionstotheeffectthateachagent'sdecisionsarebasedonitsmaintainedtheoryofsystembehavior,thatgeneralequilibriumtheoryisanaptrepresentationoftheworld,andthatthosewhosebehaviorisconsistentwiththisapttheorywillbesuccessful,thenanequilibriumandequilibratingviewoftheeconomyemerges.(SeeRobertE.Lucas,Jr.,op.cit.)Iftheeconomydoesnotconformtothegeneralequilibriumtheory,ifitisendogenouslyunstable,andifunitsbehaveaccordingly,thenrationalexpectationswillexacerbateinstability.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 146,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "The\"rationalexpectations\"schoolholdsthatagentsdonotknowthefuture,buttheyformulatetheirexpectationson",
+          "score": 0.016129031777381897,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":146,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "7418e44c-d856-45b2-ab24-7927140ea48d",
+          "chunk_type": "paragraph",
+          "citation_id": 19,
+          "content": "Inasmuchasouraimistoindicatehowwecandobetterthanwehave,andasthebestisoftentheenemyofthegood,wecanforgetabouttheoptimum.Eventhoughatendencytowardcoherenceexistsbecauseoftheprocessesthatdetermineproductionandconsumptioninmarketeconomics,theprocessesofamarketeconomycansetoffinteractionsthatdisruptcoherence.Accordingly,theflawsthatleadtoinstabilitymakeques-tionsastotheoptimalityoftheresultsofthemarketmechanismirrelevant.Currenttheorymakesaneconomyalifelessarenainwhichdepersonalizedagentsplayabstractauctioningorrecontractinggames.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 141,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "Inasmuchasouraimistoindicatehowwecandobetterthanwehave,andasthebestisoftentheenemyofthegood,wecanfor",
+          "score": 0.01587301678955555,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":141,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "5e922121-04b6-455e-8776-e89cbc508442",
+          "chunk_type": "paragraph",
+          "citation_id": 20,
+          "content": "understandingisthefoundationoflegitimacyforreform.THEIMPORTANCEOFTHEAGENDATobin'sdefinitionoftheroleofthehouseintellectualmaybedescribedascontrollingtheagenda.Princesandpublicalikedependonintellectualsto1.JamesTobin,\"TheIntellectualRevolutioninUnitedStatesPolicy-Making,\"NoelBurton Lecture, UniversityofEssex,1966,p.14.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 345,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "understandingisthefoundationoflegitimacyforreform.THEIMPORTANCEOFTHEAGENDATobin'sdefinitionoftherole",
+          "score": 0.015625,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":345,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "c6313cf9-b079-4603-a2e5-c52bc38df7bf",
+          "chunk_type": "paragraph",
+          "citation_id": 21,
+          "content": "xviiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYrobustfinancialstructurecouldopenthedoortoasnowballofdefaultsthatwouldoverwhelmsuchconstraints.Thiswouldbecomemorelikelyiftheinstitutionalconstraintsfailedtoadapttochangingcircumstances-or,worse,ifthelessonsoftheGreatDepressionwereforgottensothatdan-gerous\"freemarket\"ideologycametodominatepolicy.Ofcourse,bothoftheseeventscametopass.MinskyformulatedwhathetermedhisAnti-Laissez-FaireTheme:\"inaworldwheretheinternaldynamicsimplyinstability,asemblanceofstabilitycanbeachievedorsustainedbyintroducingconventions,con-straintsandinterventionsintotheenvironment\"(MinskyandFerri1991).Heinsistedtheproblemisthatorthodox,neoclassicaltheory-basedeco-nomicscannotprovideanyinsightintooureconomy.Thisisbecauseinsta-bilityaswellasthemereexistenceofdepressioncouldnotbeexplainedbystandardtheoryexceptthroughinternalshocksandstubbornworkerswhorefusedtoallowwagestorespond-indeed,unemploymentmustbeseenbyorthodoxyasretributionforobstinacy(p.154).Themainstreamcanondictatesmorelaissez-faireasthesolutionto\"disequilibrium.\"Bycontrast,incoherentmarketresultsare\"natural,\"accordingtoMinsky,requiringinterventiontopreventtheinvisiblehandfromoperating:\"Tocontaintheevilsthatmarketsystemscaninflict,capitalisteconomiesdevelopedsetsofinstitutionsandauthorities,whichcanbecharacterizedastheequivalentofcircuitbreakers.Theseinstitutionsineffectstoptheeconomicprocessesthatbreedtheincoherenceandrestarttheeconomywithnewinitialcondi-tions...\"(MinskyetaI.,1994).Furthermore,\"Theaptnessofinstitutionsandinterventionswilllargelydeterminetheextenttowhichthepathoftheeconomythroughtimeistranquilorturbulent:progressive,stagnant,ordeteriorating\"(ibid).Postwargrowthwasbiasedtowardinvestmentspending,especiallyafter1970.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 15,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "xviiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYrobustfinancialstructurecouldopenthedoortoasnowballofdefaul",
+          "score": 0.015384615398943424,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":15,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "c03f6e82-b4de-4af2-acb3-ee3100d06750",
+          "chunk_type": "paragraph",
+          "citation_id": 22,
+          "content": "$$\n\\pi = I + D f - B T D f + T ^ {\\pi} \\text {o r} \\tag {16}\n$$",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "$$\n\\pi = I + D f - B T D f + T ^ {\\pi} \\text {o r} \\tag {16}\n$$",
+          "score": 0.01515151560306549,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "301a6d87-294d-4b3b-bb7f-2024f05025df",
+          "chunk_type": "paragraph",
+          "citation_id": 23,
+          "content": "$$\n\\pi^ {*} = I + D f - B T D f. \\tag {16a}\n$$",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "$$\n\\pi^ {*} = I + D f - B T D f. \\tag {16a}\n$$",
+          "score": 0.014925372786819935,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "27e31482-3b52-420d-92a5-e58ba852a7b1",
+          "chunk_type": "paragraph",
+          "citation_id": 24,
+          "content": "*Whenmoneyiscreatedaborrowerentersuponacontractualcom-mitmenttopaymoneytothelendingbankinthefuture.Theabilityofbusi-nessborrowerstosatisfythesecommitmentsultimatelyrestsuponthequasi-rentsthatcapitalassetsearnwhenusedinproduction,althoughtheproximatesourceofcashmayberolloverborrowingbythedebtororbor-rowingbyaunitthatbuysfromthedebtor.Normalfunctioningofacapi-talisteconomydependsupontheincome-producingsystemgeneratingprofitsthatserviceloansandthefinancialsystemmakingloansthatleadtoinvestmentandthereforetoprofits.Bankswhoseliabilitiesaremoneyareunlikemoneylenderswhosefinancingactivitiesarerestrictedtothecontentsoftheirstrongbox.Banks*Theaboveisstrictlytrueforano-governmentlno-householddebt-closedeconomy,thatis,forthebasicskeletalcapitalisteconomy.1.JohnMaynardKeynes,&saysinPersuasion:CollectedWritingsofJohnMaynardKeynes,vol.9(London:Macmillan,St.Martin'sPress,fortheRoyalEconomicSociety,1972),p.151.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 274,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "*Whenmoneyiscreatedaborrowerentersuponacontractualcom-mitmenttopaymoneytothelendingbankinthefuture.T",
+          "score": 0.014705882407724857,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":274,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "246a4587-5d52-44b2-84ec-5ac4c08b96f2",
+          "chunk_type": "paragraph",
+          "citation_id": 25,
+          "content": "Thatis,themarketforcesthatoperatewhenasystemisstablewillpushittowardinstability,sothatevenifanythinglikeanequilibriumcouldbeachieved,itwouldsetoffbehavioralresponsesthatwouldquicklymovetheeconomyawayfromequilibrium.Minskyborrowedhis\"investmenttheoryofthecycle\"fromJohnMaynardKeynes.Minsky'scycletheoryderivedfromcombiningtwothings:thefamousexpositionfoundinKeynes'sChapter12oftheGeneralTheory,whichfocusesontheinherentinstabilityofinvestmentdecisionsastheyaremadeinconditionsoffundamentaluncertainty,andtheapproachtakeninChapter17tovaluationoffinancialandcapitalassets.Whirlwindsofoptimismandpessimismaffecttheaggregatequantityofinvestment,whichthenthroughthespendingmultiplierdeterminesoutputandemploy-ment.WhileMinskycreditedKeynesforpointingthewaytowardanalyz-ingtheprocessoffinancinginvestment,hefounditnecessarytogomuchfurther.Thus,Minsky'scontributionwastoaddthe\"financialtheoryofinvestment\"toKeynes's\"investmenttheoryofthecycle.\"Thiswasthemainthemeofhisearlierbook,JohnMaynardKeynes(1975).Sincefinanc-inginvestmentisthemostimportantsourceoftheinstabilityfoundinoureconomy,itmustalsobethemaintopicofanalysisifonewantstostabilizetheunstableeconomy.Hence,Minsky'streatmentofinvestmentandhowitisfinancedplaysacentralroleinthisvolume.Thesuperiorityofhisanaly-sisbecomes readily apparentonaclosere-readingofChapter8.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 9,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "Thatis,themarketforcesthatoperatewhenasystemisstablewillpushittowardinstability,sothatevenifanything",
+          "score": 0.014492753893136978,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":9,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "ecb06c2b-0feb-46a8-949f-077a58cc4e2f",
+          "chunk_type": "paragraph",
+          "citation_id": 26,
+          "content": "assetdecisionsneedtotakeintoaccountwhatcanhappenoverthelifeofprojects;presentdecisionsmustallowforthefuture,andwhathappenstodayisthefutureforsomepriordecisions.Itisimpossibletosustainanaiveargumentthatallsuchdecisionsaremadeontheexpectationsthatwhatiswillruleforeveror,alternatively,thatrational9.OscarLange,\"OntheEconomicTheoryofSocialism,\"OntheEconomicTheoryofSocialism,ed.BenjaminE.Lippincott(Minneapolis:UniversityofMinnesotaPress,1938).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 145,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "assetdecisionsneedtotakeintoaccountwhatcanhappenoverthelifeofprojects;presentdecisionsmustallowforth",
+          "score": 0.014285714365541935,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":145,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "71205719-c965-4f15-b7d2-aa938bad0406",
+          "chunk_type": "paragraph",
+          "citation_id": 27,
+          "content": "Internal cash flows can pay for some level of investment (for both an individual firm and for the economy). Once anticipated internal flows (Q) are estimated, their relation to investment output can be represented as a rectangular hyperbola $(\\mathrm{Q_NQ_N}$ in Figure 8.3) because the internal cash flows, or quasi-rents, $Q_{N}$ are related to the price $\\mathbf{P}_{\\mathrm{I}}$ and the output $\\mathrm{I_I}$ of investment by the formula $\\mathrm{P_IQ_I} = \\mathrm{Q_N}$ . The intersection of this rectangular hyperbola with the supply price, $\\mathbf{P}_{\\mathrm{I}}$ , of investment output yields $\\mathrm{I_I}$ (internal), the investment that can be financed by anticipated internal funds (point A in Figure 8.3).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 239,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "Internal cash flows can pay for some level of investment (for both an individual firm and for the ec",
+          "score": 0.014084506779909134,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":239,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "ce4f8610-8722-4d46-912e-bd639a7c76c7",
+          "chunk_type": "paragraph",
+          "citation_id": 28,
+          "content": "PERSPECTIVESONTHEORY117pricingprocessmaysustaincoherenceinsomemarkets,whileinothers,processeswillbeatworkthatwill,intime,disruptcoherence.Ifthisisthenatureoftheeconomy,thenitisnecessarytoinquireifpoliciescanbeadoptedorinstitutionscreatedthatareabletoconstrainoroffsettheprocessesthatwouldleadtoincoherence.Ifthepricingmechanismofadecentralizedcapitalisteconomycanleadtocoherentresultsonlyifproperpolicyorinstitutionsrule,theninterventionisnecessaryeventhoughthemarketmechanismcanbereliedupontotakecareofdetails.Oncesuchconditionalcoherenceisacceptedasacharacteristicofacapitalisteconomy,blindfaithinandacceptanceoftheresultsofmarketprocessescannolongerbesustained.Moreover,inaneconomythatisconditionallycoherent,legislatedandevolutionaryinstitutionalchangesaffectthepolicyactionsneededtosustaincoherence.Policycannotbeaonce-and-for-allproposition:asinstitutionsandrelationschangesodoesthepolicythatisneededtosustaincoherence.Furthermore,forcoherencetoruleinasetofmarketsasubstitutionprinciplemustapply.Onefacetofthisprincipleisthatifsupplyconditionschangesothatthepriceofacommodity(orservice)usedinconsumptionorproductionrises(orfalls)relativetootherprices,thequantitytakenwilldecrease(orincrease);thismeansthatdemandcurvesareusuallynega-tivelysloped.Thesecondfacetisthatifthepriceofacommodityrises(falls),thequantitiesthatwillbetakenofothercommoditiesatafixedpricewilltendtoincrease(decrease).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 143,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "PERSPECTIVESONTHEORY117pricingprocessmaysustaincoherenceinsomemarkets,whileinothers,processeswillbea",
+          "score": 0.013888888992369175,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":143,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "1fca8ed0-be1b-4233-9a93-a63fe142f9c1",
+          "chunk_type": "paragraph",
+          "citation_id": 29,
+          "content": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxixbytheinstitutionalfloorsthatpreventseriousrecessionsandthatvalidateriskierbehaviors.Minsky'sbesttreatmentofthisinflationbiasispresentedinChapter11ofthisvolume,usingamarkupapproachtotheaggregatepricelevel.Wewillnotprovideadetailedexpositionhere,butthebasicideaisthatpricesoftheconsumptiongoodspartofthecurrentoutputpricesystemaresetasamarkupovercosts-mostlywagecostsinthatsector.Themarkupinturnisdeterminedbyspendingonconsumptiongoodsinexcessoftheconsumptionbytheworkersthatproducedthem-thatis,bywork-ersintheinvestmentsectorandthegovernmentsector,byforeigners,andbytransferrecipients(retirees,thoseonAFDCandunemploymentcom-pensation,etc.).ThiswasathemeinMinsky'searliestworkandoneofthemainreasonshevehementlyopposedtheKennedylJohnsonWaronPoverty(Minsky1965,1968).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 16,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxixbytheinstitutionalfloorsthatpreventseriousrecessionsandthatva",
+          "score": 0.013698630034923553,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":16,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        }
+      ]
+    }
+  },
+  "execute_plan_request": {
+    "items": [
+      {
+        "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+        "priority": 1.0
+      }
+    ],
+    "doc_scope": [
+      "db7bc56e-f840-46ef-91b4-8cbb534b5598"
+    ],
+    "plan_version": "rag-execute-v1",
+    "summary_mode": "related",
+    "query_entities": [
+      {
+        "kind": "concept",
+        "text": "Society of Mind"
+      },
+      {
+        "kind": "concept",
+        "text": "agents"
+      },
+      {
+        "kind": "concept",
+        "text": "K-lines"
+      },
+      {
+        "kind": "concept",
+        "text": "frames"
+      },
+      {
+        "kind": "person",
+        "text": "Marvin Minsky"
+      }
+    ]
+  },
+  "product_event_metadata": [
+    {
+      "result": "success",
+      "metadata": {
+        "stream": true,
+        "agent_type": "rag",
+        "query_length": 287
+      },
+      "event_name": "chat_started",
+      "event_time": "2026-04-30T13:53:40.480447+08:00",
+      "session_id": null,
+      "notebook_id": "b7774d00-df07-4d9b-8f32-c6f2a60b8f21"
+    },
+    {
+      "result": "success",
+      "metadata": {
+        "agent_type": "rag"
+      },
+      "event_name": "session_created",
+      "event_time": "2026-04-30T13:53:40.590647+08:00",
+      "session_id": "3b5baac9-4da0-4adc-be2c-f605ff5348d7",
+      "notebook_id": "b7774d00-df07-4d9b-8f32-c6f2a60b8f21"
+    },
+    {
+      "result": "degraded",
+      "metadata": {
+        "mode": "rag",
+        "rag_tool": {
+          "execute_plan_request": {
+            "items": [
+              {
+                "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+                "priority": 1.0
+              }
+            ],
+            "doc_scope": [
+              "db7bc56e-f840-46ef-91b4-8cbb534b5598"
+            ],
+            "plan_version": "rag-execute-v1",
+            "summary_mode": "related",
+            "query_entities": [
+              {
+                "kind": "concept",
+                "text": "Society of Mind"
+              },
+              {
+                "kind": "concept",
+                "text": "agents"
+              },
+              {
+                "kind": "concept",
+                "text": "K-lines"
+              },
+              {
+                "kind": "concept",
+                "text": "frames"
+              },
+              {
+                "kind": "person",
+                "text": "Marvin Minsky"
+              }
+            ]
+          },
+          "execute_plan_coverage": {
+            "channel_coverage": {
+              "bm25": 0,
+              "graph": 0,
+              "text_dense": 14,
+              "multimodal_dense": 15
+            },
+            "matched_doc_count": 1,
+            "requested_doc_count": 1,
+            "summary_chunk_count": 1,
+            "retrieved_chunk_count": 29
+          },
+          "execute_plan_backend_trace": {
+            "item_trace": [
+              {
+                "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+                "bm25_k": 0,
+                "dense_k": 100,
+                "priority": 1.0,
+                "bm25_terms": [],
+                "source_ids": [],
+                "payload_kind": "query",
+                "source_count": 0,
+                "recall_budget": 100,
+                "rerank_budget": 100
+              },
+              {
+                "bm25_k": 0,
+                "dense_k": 0,
+                "summary": "related",
+                "priority": 0.0,
+                "bm25_terms": [],
+                "source_ids": [],
+                "payload_kind": "summary",
+                "source_count": 0,
+                "recall_budget": 0,
+                "rerank_budget": 100
+              }
+            ],
+            "channel_trace": [
+              {
+                "channel": "text_dense",
+                "raw_count": 35,
+                "latency_ms": 442,
+                "hydrated_count": 35,
+                "selected_count": 35
+              },
+              {
+                "channel": "bm25",
+                "raw_count": 0,
+                "latency_ms": 0,
+                "hydrated_count": 0,
+                "selected_count": 0
+              },
+              {
+                "channel": "multimodal_dense",
+                "raw_count": 15,
+                "latency_ms": 412,
+                "hydrated_count": 15,
+                "selected_count": 15
+              },
+              {
+                "channel": "graph",
+                "raw_count": 0,
+                "latency_ms": 131,
+                "hydrated_count": 0,
+                "selected_count": 0
+              }
+            ],
+            "retrieval_trace": {
+              "items": [
+                {
+                  "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+                  "bm25_k": 0,
+                  "dense_k": 100,
+                  "priority": 1.0,
+                  "bm25_terms": [],
+                  "source_ids": [],
+                  "payload_kind": "query",
+                  "source_count": 0,
+                  "recall_budget": 100,
+                  "rerank_budget": 100
+                },
+                {
+                  "bm25_k": 0,
+                  "dense_k": 0,
+                  "summary": "related",
+                  "priority": 0.0,
+                  "bm25_terms": [],
+                  "source_ids": [],
+                  "payload_kind": "summary",
+                  "source_count": 0,
+                  "recall_budget": 0,
+                  "rerank_budget": 100
+                }
+              ],
+              "item_count": 2,
+              "summary_mode": "related",
+              "top_k_returned": 29,
+              "max_rerank_docs": 75,
+              "max_final_chunks": 30,
+              "total_candidate_budget": 100
+            }
+          }
+        },
+        "agent_type": "rag",
+        "message_id": 472,
+        "degrade_count": 2,
+        "citation_count": 29
+      },
+      "event_name": "chat_completed",
+      "event_time": "2026-04-30T13:54:20.793267+08:00",
+      "session_id": "3b5baac9-4da0-4adc-be2c-f605ff5348d7",
+      "notebook_id": "b7774d00-df07-4d9b-8f32-c6f2a60b8f21"
+    }
+  ],
+  "channel_probes": {
+    "full_captured_plan": {
+      "http_status": 200,
+      "request": {
+        "items": [
+          {
+            "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+            "priority": 1.0
+          }
+        ],
+        "doc_scope": [
+          "db7bc56e-f840-46ef-91b4-8cbb534b5598"
+        ],
+        "plan_version": "rag-execute-v1",
+        "summary_mode": "related",
+        "query_entities": [
+          {
+            "kind": "concept",
+            "text": "Society of Mind"
+          },
+          {
+            "kind": "concept",
+            "text": "agents"
+          },
+          {
+            "kind": "concept",
+            "text": "K-lines"
+          },
+          {
+            "kind": "concept",
+            "text": "frames"
+          },
+          {
+            "kind": "person",
+            "text": "Marvin Minsky"
+          }
+        ],
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+          "origin": "e2e_probe:full_captured_plan"
+        },
+        "budget": {
+          "total_candidate_budget": 40,
+          "final_chunk_budget": 12
+        },
+        "channel_budget": {}
+      },
+      "coverage": {
+        "requested_doc_count": 1,
+        "matched_doc_count": 1,
+        "retrieved_chunk_count": 12,
+        "summary_chunk_count": 0,
+        "channel_coverage": {
+          "text_dense": 6,
+          "bm25": 0,
+          "multimodal_dense": 6,
+          "graph": 0
+        }
+      },
+      "backend_trace": {
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+          "origin": "e2e_probe:full_captured_plan"
+        },
+        "item_trace": [
+          {
+            "priority": 1.0,
+            "payload_kind": "query",
+            "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+            "bm25_terms": [],
+            "recall_budget": 40,
+            "bm25_k": 0,
+            "dense_k": 40,
+            "rerank_budget": 40,
+            "source_count": 0,
+            "source_ids": []
+          },
+          {
+            "priority": 0.0,
+            "payload_kind": "summary",
+            "bm25_terms": [],
+            "summary": "related",
+            "recall_budget": 0,
+            "bm25_k": 0,
+            "dense_k": 0,
+            "rerank_budget": 40,
+            "source_count": 0,
+            "source_ids": []
+          }
+        ],
+        "channel_trace": [
+          {
+            "channel": "text_dense",
+            "raw_count": 14,
+            "hydrated_count": 14,
+            "selected_count": 14,
+            "latency_ms": 195
+          },
+          {
+            "channel": "bm25",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "multimodal_dense",
+            "raw_count": 6,
+            "hydrated_count": 6,
+            "selected_count": 6,
+            "latency_ms": 118
+          },
+          {
+            "channel": "graph",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 8
+          }
+        ],
+        "retrieval_trace": {
+          "item_count": 2,
+          "total_candidate_budget": 40,
+          "max_rerank_docs": 30,
+          "max_final_chunks": 12,
+          "top_k_returned": 12,
+          "summary_mode": "related",
+          "items": [
+            {
+              "priority": 1.0,
+              "payload_kind": "query",
+              "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+              "bm25_terms": [],
+              "recall_budget": 40,
+              "bm25_k": 0,
+              "dense_k": 40,
+              "rerank_budget": 40,
+              "source_count": 0,
+              "source_ids": []
+            },
+            {
+              "priority": 0.0,
+              "payload_kind": "summary",
+              "bm25_terms": [],
+              "summary": "related",
+              "recall_budget": 0,
+              "bm25_k": 0,
+              "dense_k": 0,
+              "rerank_budget": 40,
+              "source_count": 0,
+              "source_ids": []
+            }
+          ]
+        }
+      },
+      "degrade_trace": [
+        {
+          "stage": "mm_reranker",
+          "reason": "Multimodal reranker call failed: Multimodal rerank API error 400 Bad Request: {\"request_id\":\"5b9ee38c-9128-96aa-a206-8bb62dfd2810\",\"code\":\"InvalidParameter\",\"message\":\"<400> InternalError.Algo.InvalidParameter: Image URL or Base64 is invalid. URL must be a valid HTTP/HTTPS link, and Base64 must start with 'image/xxx;base64\"}",
+          "impact": "Falling back to text rerank or pre-rerank ordering"
+        },
+        {
+          "stage": "reranker",
+          "reason": "Reranker call failed: Rerank API error 401 Unauthorized: \"Api key is invalid\"",
+          "impact": "Using pre-rerank ordering"
+        }
+      ],
+      "relation_paths": [],
+      "chunks": [
+        {
+          "kind": "regular",
+          "chunk_id": "34d7813a-4ff0-4442-adbb-23a4b00a92ec",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 317,
+          "score": 0.39350742,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "[Image: f78e13b564f1675a4b4d3068178da4920e96d5b3d3efbcdd5ed7a3f2aa6227a5.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "8bc2d8c6-724e-4029-847f-25dda9a5a869",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 207,
+          "score": 0.3228077,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "Price-taking firms react to changes in demand by adjusting output along their marginal cost curve. Even though such firms own and operate capital assets and have debts, they do not have the power to set their price according to what they need to satisfy such costs; instead, they are forced to accept what they can get; they take price as a parameter and set output along their MC curve. [Image: b553764fa05ab8f6c3542bc63693c1c17ef7b8adbaa39d0f2c0882fed85384b9.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "d41f13ef-a892-4214-8c01-2dc9908ee221",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 194,
+          "score": 0.30891353,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices. [Image: 13ffd6c21550f7db29eb89d3b154bae8ed40b651b5c77d60cf373ba35bdb775b.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "1ff4be10-61fe-4488-ac8e-12e3c0748af3",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 194,
+          "score": 0.30874157,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices. [Image: d6690ff5a995bfe10b1fae4af02125d38dd31eb3ec069beb2cd4d6b97803e26f.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "478ef542-696a-40a6-89d9-0c06b6d8ea23",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 194,
+          "score": 0.30627933,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices. [Image: bf959f38f5c8f6e095b010d7aa0aa8a55dc4084c20bc61de4893adfe820009f1.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "c6ad29d9-8761-4b35-b29c-3c89be9352cf",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 191,
+          "score": 0.30584466,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets. [Image: 1939cc94b0366914e56f3a2e7989bc06993863bf4177c9d19576d7e390153edf.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "031a4344-92e0-43ee-a7c5-1861a4facadc",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 310,
+          "score": 0.016666668,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "FrankH.Hahn,MoneyandInflation(Cambridge:MITPress,1983):\"Theobjectivesofagentsthatdeterminetheiractionsandplansdonotdependonanynominalmagnitudes.Agentscareonlyaboutrealthings,suchasgoods(properlydatedanddistinguishedbystatesofnature),leisure,andeffort.Weknowthisastheaxiomoftheabsenceofmoneyillusion,whichitseemsimpossibletoabandoninanysensibleanalysis\"(p.34).SeealsoHymanP.Minsky,\"FrankHahn'sMoneyandInflation:AReviewArticle,\"JournalofPost-KeynesianEconomics6,no.3(Spring1984),pp.449-57."
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "0e16ac87-92e6-4395-aa9a-f4e43bae3568",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 9,
+          "score": 0.016393442,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "xiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYmorefrequentandsevere.AsMinskyinsisted,thereisaninherentandfun-damentalinstabilityinoursortofeconomythattendstowardaspeculativeboom,followingJ.M.Keynes,whoarguedthat\"inanunstableeconomyspeculationdominatesenterprise\"(p.18).Unlikeothercriticalanalysesofcapitalistprocesses,whichemphasizethecrash,Minskywasmorecon-cernedwiththebehaviorofagentsduringtheeuphoricperiods.Andunlikeotheranalysesthatblame\"shocks,\"\"irrationalexuberance,\"or\"foolish\"policy,Minskyarguedthattheprocessesthatgeneratefinancialfragilityare\"natural,\"orendogenoustothesystem.AccordingtoMinsky,thecapitalisteconomyisatbest\"conditionallycoherent\"(p.117).Herejectedtheequilibriummethodologyofmains"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "124508ea-9816-461d-8269-65a250b36fbe",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 146,
+          "score": 0.016129032,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "The\"rationalexpectations\"schoolholdsthatagentsdonotknowthefuture,buttheyformulatetheirexpectationsonthebasisofasatisfactoryknowledge(i.e.,atheory)ofhowtheeconomyfunctions.Ifweaddpropositionstotheeffectthateachagent'sdecisionsarebasedonitsmaintainedtheoryofsystembehavior,thatgeneralequilibriumtheoryisanaptrepresentationoftheworld,andthatthosewhosebehaviorisconsistentwiththisapttheorywillbesuccessful,thenanequilibriumandequilibratingviewoftheeconomyemerges.(SeeRobertE.Lucas,Jr.,op.cit.)Iftheeconomydoesnotconformtothegeneralequilibriumtheory,ifitisendogenouslyunstable,andifunitsbehaveaccordingly,thenrationalexpectationswillexacerbateinstability."
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "7418e44c-d856-45b2-ab24-7927140ea48d",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 141,
+          "score": 0.015873017,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "Inasmuchasouraimistoindicatehowwecandobetterthanwehave,andasthebestisoftentheenemyofthegood,wecanforgetabouttheoptimum.Eventhoughatendencytowardcoherenceexistsbecauseoftheprocessesthatdetermineproductionandconsumptioninmarketeconomics,theprocessesofamarketeconomycansetoffinteractionsthatdisruptcoherence.Accordingly,theflawsthatleadtoinstabilitymakeques-tionsastotheoptimalityoftheresultsofthemarketmechanismirrelevant.Currenttheorymakesaneconomyalifelessarenainwhichdepersonalizedagentsplayabstractauctioningorrecontractinggames."
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "5e922121-04b6-455e-8776-e89cbc508442",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 345,
+          "score": 0.015625,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "understandingisthefoundationoflegitimacyforreform.THEIMPORTANCEOFTHEAGENDATobin'sdefinitionoftheroleofthehouseintellectualmaybedescribedascontrollingtheagenda.Princesandpublicalikedependonintellectualsto1.JamesTobin,\"TheIntellectualRevolutioninUnitedStatesPolicy-Making,\"NoelBurton Lecture, UniversityofEssex,1966,p.14."
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "c6313cf9-b079-4603-a2e5-c52bc38df7bf",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 15,
+          "score": 0.015384615,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "xviiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYrobustfinancialstructurecouldopenthedoortoasnowballofdefaultsthatwouldoverwhelmsuchconstraints.Thiswouldbecomemorelikelyiftheinstitutionalconstraintsfailedtoadapttochangingcircumstances-or,worse,ifthelessonsoftheGreatDepressionwereforgottensothatdan-gerous\"freemarket\"ideologycametodominatepolicy.Ofcourse,bothoftheseeventscametopass.MinskyformulatedwhathetermedhisAnti-Laissez-FaireTheme:\"inaworldwheretheinternaldynamicsimplyinstability,asemblanceofstabilitycanbeachievedorsustainedbyintroducingconventions,con-straintsandinterventionsintotheenvironment\"(MinskyandFerri1991).Heinsistedtheproblemisthatorthodox,neoclassicaltheory-basedeco-nomicscannotprovide"
+        }
+      ]
+    },
+    "text_dense_only": {
+      "http_status": 200,
+      "request": {
+        "items": [
+          {
+            "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+            "priority": 1.0
+          }
+        ],
+        "doc_scope": [
+          "db7bc56e-f840-46ef-91b4-8cbb534b5598"
+        ],
+        "plan_version": "rag-execute-v1",
+        "summary_mode": "related",
+        "query_entities": [
+          {
+            "kind": "concept",
+            "text": "Society of Mind"
+          },
+          {
+            "kind": "concept",
+            "text": "agents"
+          },
+          {
+            "kind": "concept",
+            "text": "K-lines"
+          },
+          {
+            "kind": "concept",
+            "text": "frames"
+          },
+          {
+            "kind": "person",
+            "text": "Marvin Minsky"
+          }
+        ],
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+          "origin": "e2e_probe:text_dense_only"
+        },
+        "budget": {
+          "total_candidate_budget": 40,
+          "final_chunk_budget": 8
+        },
+        "channel_budget": {
+          "text_dense": 40,
+          "bm25": 0,
+          "multimodal_dense": 0,
+          "graph": 0
+        }
+      },
+      "coverage": {
+        "requested_doc_count": 1,
+        "matched_doc_count": 1,
+        "retrieved_chunk_count": 8,
+        "summary_chunk_count": 0,
+        "channel_coverage": {
+          "text_dense": 8,
+          "bm25": 0,
+          "multimodal_dense": 0,
+          "graph": 0
+        }
+      },
+      "backend_trace": {
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+          "origin": "e2e_probe:text_dense_only"
+        },
+        "item_trace": [
+          {
+            "priority": 1.0,
+            "payload_kind": "query",
+            "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+            "bm25_terms": [],
+            "recall_budget": 40,
+            "bm25_k": 0,
+            "dense_k": 40,
+            "rerank_budget": 40,
+            "source_count": 0,
+            "source_ids": []
+          },
+          {
+            "priority": 0.0,
+            "payload_kind": "summary",
+            "bm25_terms": [],
+            "summary": "related",
+            "recall_budget": 0,
+            "bm25_k": 0,
+            "dense_k": 0,
+            "rerank_budget": 40,
+            "source_count": 0,
+            "source_ids": []
+          }
+        ],
+        "channel_trace": [
+          {
+            "channel": "text_dense",
+            "raw_count": 40,
+            "hydrated_count": 40,
+            "selected_count": 40,
+            "latency_ms": 167
+          },
+          {
+            "channel": "bm25",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "multimodal_dense",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "graph",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          }
+        ],
+        "retrieval_trace": {
+          "item_count": 2,
+          "total_candidate_budget": 40,
+          "max_rerank_docs": 40,
+          "max_final_chunks": 8,
+          "top_k_returned": 8,
+          "summary_mode": "related",
+          "items": [
+            {
+              "priority": 1.0,
+              "payload_kind": "query",
+              "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+              "bm25_terms": [],
+              "recall_budget": 40,
+              "bm25_k": 0,
+              "dense_k": 40,
+              "rerank_budget": 40,
+              "source_count": 0,
+              "source_ids": []
+            },
+            {
+              "priority": 0.0,
+              "payload_kind": "summary",
+              "bm25_terms": [],
+              "summary": "related",
+              "recall_budget": 0,
+              "bm25_k": 0,
+              "dense_k": 0,
+              "rerank_budget": 40,
+              "source_count": 0,
+              "source_ids": []
+            }
+          ]
+        }
+      },
+      "degrade_trace": [],
+      "relation_paths": [],
+      "chunks": [
+        {
+          "kind": "regular",
+          "chunk_id": "031a4344-92e0-43ee-a7c5-1861a4facadc",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 310,
+          "score": 0.016666668,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "FrankH.Hahn,MoneyandInflation(Cambridge:MITPress,1983):\"Theobjectivesofagentsthatdeterminetheiractionsandplansdonotdependonanynominalmagnitudes.Agentscareonlyaboutrealthings,suchasgoods(properlydatedanddistinguishedbystatesofnature),leisure,andeffort.Weknowthisastheaxiomoftheabsenceofmoneyillusion,whichitseemsimpossibletoabandoninanysensibleanalysis\"(p.34).SeealsoHymanP.Minsky,\"FrankHahn'sMoneyandInflation:AReviewArticle,\"JournalofPost-KeynesianEconomics6,no.3(Spring1984),pp.449-57."
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "0e16ac87-92e6-4395-aa9a-f4e43bae3568",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 9,
+          "score": 0.016393442,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "xiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYmorefrequentandsevere.AsMinskyinsisted,thereisaninherentandfun-damentalinstabilityinoursortofeconomythattendstowardaspeculativeboom,followingJ.M.Keynes,whoarguedthat\"inanunstableeconomyspeculationdominatesenterprise\"(p.18).Unlikeothercriticalanalysesofcapitalistprocesses,whichemphasizethecrash,Minskywasmorecon-cernedwiththebehaviorofagentsduringtheeuphoricperiods.Andunlikeotheranalysesthatblame\"shocks,\"\"irrationalexuberance,\"or\"foolish\"policy,Minskyarguedthattheprocessesthatgeneratefinancialfragilityare\"natural,\"orendogenoustothesystem.AccordingtoMinsky,thecapitalisteconomyisatbest\"conditionallycoherent\"(p.117).Herejectedtheequilibriummethodologyofmains"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "124508ea-9816-461d-8269-65a250b36fbe",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 146,
+          "score": 0.016129032,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "The\"rationalexpectations\"schoolholdsthatagentsdonotknowthefuture,buttheyformulatetheirexpectationsonthebasisofasatisfactoryknowledge(i.e.,atheory)ofhowtheeconomyfunctions.Ifweaddpropositionstotheeffectthateachagent'sdecisionsarebasedonitsmaintainedtheoryofsystembehavior,thatgeneralequilibriumtheoryisanaptrepresentationoftheworld,andthatthosewhosebehaviorisconsistentwiththisapttheorywillbesuccessful,thenanequilibriumandequilibratingviewoftheeconomyemerges.(SeeRobertE.Lucas,Jr.,op.cit.)Iftheeconomydoesnotconformtothegeneralequilibriumtheory,ifitisendogenouslyunstable,andifunitsbehaveaccordingly,thenrationalexpectationswillexacerbateinstability."
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "7418e44c-d856-45b2-ab24-7927140ea48d",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 141,
+          "score": 0.015873017,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "Inasmuchasouraimistoindicatehowwecandobetterthanwehave,andasthebestisoftentheenemyofthegood,wecanforgetabouttheoptimum.Eventhoughatendencytowardcoherenceexistsbecauseoftheprocessesthatdetermineproductionandconsumptioninmarketeconomics,theprocessesofamarketeconomycansetoffinteractionsthatdisruptcoherence.Accordingly,theflawsthatleadtoinstabilitymakeques-tionsastotheoptimalityoftheresultsofthemarketmechanismirrelevant.Currenttheorymakesaneconomyalifelessarenainwhichdepersonalizedagentsplayabstractauctioningorrecontractinggames."
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "5e922121-04b6-455e-8776-e89cbc508442",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 345,
+          "score": 0.015625,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "understandingisthefoundationoflegitimacyforreform.THEIMPORTANCEOFTHEAGENDATobin'sdefinitionoftheroleofthehouseintellectualmaybedescribedascontrollingtheagenda.Princesandpublicalikedependonintellectualsto1.JamesTobin,\"TheIntellectualRevolutioninUnitedStatesPolicy-Making,\"NoelBurton Lecture, UniversityofEssex,1966,p.14."
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "c6313cf9-b079-4603-a2e5-c52bc38df7bf",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 15,
+          "score": 0.015384615,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "xviiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYrobustfinancialstructurecouldopenthedoortoasnowballofdefaultsthatwouldoverwhelmsuchconstraints.Thiswouldbecomemorelikelyiftheinstitutionalconstraintsfailedtoadapttochangingcircumstances-or,worse,ifthelessonsoftheGreatDepressionwereforgottensothatdan-gerous\"freemarket\"ideologycametodominatepolicy.Ofcourse,bothoftheseeventscametopass.MinskyformulatedwhathetermedhisAnti-Laissez-FaireTheme:\"inaworldwheretheinternaldynamicsimplyinstability,asemblanceofstabilitycanbeachievedorsustainedbyintroducingconventions,con-straintsandinterventionsintotheenvironment\"(MinskyandFerri1991).Heinsistedtheproblemisthatorthodox,neoclassicaltheory-basedeco-nomicscannotprovide"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "c03f6e82-b4de-4af2-acb3-ee3100d06750",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 194,
+          "score": 0.015151516,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "$$ \\pi = I + D f - B T D f + T ^ {\\pi} \\text {o r} \\tag {16} $$"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "301a6d87-294d-4b3b-bb7f-2024f05025df",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 194,
+          "score": 0.014925373,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "$$ \\pi^ {*} = I + D f - B T D f. \\tag {16a} $$"
+        }
+      ]
+    },
+    "bm25_only": {
+      "http_status": 200,
+      "request": {
+        "items": [
+          {
+            "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+            "priority": 1.0
+          }
+        ],
+        "doc_scope": [
+          "db7bc56e-f840-46ef-91b4-8cbb534b5598"
+        ],
+        "plan_version": "rag-execute-v1",
+        "summary_mode": "related",
+        "query_entities": [
+          {
+            "kind": "concept",
+            "text": "Society of Mind"
+          },
+          {
+            "kind": "concept",
+            "text": "agents"
+          },
+          {
+            "kind": "concept",
+            "text": "K-lines"
+          },
+          {
+            "kind": "concept",
+            "text": "frames"
+          },
+          {
+            "kind": "person",
+            "text": "Marvin Minsky"
+          }
+        ],
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+          "origin": "e2e_probe:bm25_only"
+        },
+        "budget": {
+          "total_candidate_budget": 40,
+          "final_chunk_budget": 8
+        },
+        "channel_budget": {
+          "text_dense": 0,
+          "bm25": 40,
+          "multimodal_dense": 0,
+          "graph": 0
+        }
+      },
+      "coverage": {
+        "requested_doc_count": 1,
+        "matched_doc_count": 0,
+        "retrieved_chunk_count": 0,
+        "summary_chunk_count": 0,
+        "channel_coverage": {
+          "text_dense": 0,
+          "bm25": 0,
+          "multimodal_dense": 0,
+          "graph": 0
+        }
+      },
+      "backend_trace": {
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+          "origin": "e2e_probe:bm25_only"
+        },
+        "item_trace": [
+          {
+            "priority": 1.0,
+            "payload_kind": "query",
+            "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+            "bm25_terms": [],
+            "recall_budget": 40,
+            "bm25_k": 0,
+            "dense_k": 40,
+            "rerank_budget": 40,
+            "source_count": 0,
+            "source_ids": []
+          },
+          {
+            "priority": 0.0,
+            "payload_kind": "summary",
+            "bm25_terms": [],
+            "summary": "related",
+            "recall_budget": 0,
+            "bm25_k": 0,
+            "dense_k": 0,
+            "rerank_budget": 40,
+            "source_count": 0,
+            "source_ids": []
+          }
+        ],
+        "channel_trace": [
+          {
+            "channel": "text_dense",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "bm25",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "multimodal_dense",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "graph",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          }
+        ],
+        "retrieval_trace": {
+          "item_count": 2,
+          "total_candidate_budget": 40,
+          "max_rerank_docs": 40,
+          "max_final_chunks": 8,
+          "top_k_returned": 0,
+          "summary_mode": "related",
+          "items": [
+            {
+              "priority": 1.0,
+              "payload_kind": "query",
+              "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+              "bm25_terms": [],
+              "recall_budget": 40,
+              "bm25_k": 0,
+              "dense_k": 40,
+              "rerank_budget": 40,
+              "source_count": 0,
+              "source_ids": []
+            },
+            {
+              "priority": 0.0,
+              "payload_kind": "summary",
+              "bm25_terms": [],
+              "summary": "related",
+              "recall_budget": 0,
+              "bm25_k": 0,
+              "dense_k": 0,
+              "rerank_budget": 40,
+              "source_count": 0,
+              "source_ids": []
+            }
+          ]
+        }
+      },
+      "degrade_trace": [
+        {
+          "stage": "retrieval",
+          "reason": "no_valid_retrieval_results",
+          "impact": "Passing zero-recall context to answer synthesis"
+        }
+      ],
+      "relation_paths": [],
+      "chunks": []
+    },
+    "multimodal_dense_only": {
+      "http_status": 200,
+      "request": {
+        "items": [
+          {
+            "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+            "priority": 1.0
+          }
+        ],
+        "doc_scope": [
+          "db7bc56e-f840-46ef-91b4-8cbb534b5598"
+        ],
+        "plan_version": "rag-execute-v1",
+        "summary_mode": "related",
+        "query_entities": [
+          {
+            "kind": "concept",
+            "text": "Society of Mind"
+          },
+          {
+            "kind": "concept",
+            "text": "agents"
+          },
+          {
+            "kind": "concept",
+            "text": "K-lines"
+          },
+          {
+            "kind": "concept",
+            "text": "frames"
+          },
+          {
+            "kind": "person",
+            "text": "Marvin Minsky"
+          }
+        ],
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+          "origin": "e2e_probe:multimodal_dense_only"
+        },
+        "budget": {
+          "total_candidate_budget": 40,
+          "final_chunk_budget": 8
+        },
+        "channel_budget": {
+          "text_dense": 0,
+          "bm25": 0,
+          "multimodal_dense": 40,
+          "graph": 0
+        }
+      },
+      "coverage": {
+        "requested_doc_count": 1,
+        "matched_doc_count": 1,
+        "retrieved_chunk_count": 8,
+        "summary_chunk_count": 0,
+        "channel_coverage": {
+          "text_dense": 0,
+          "bm25": 0,
+          "multimodal_dense": 8,
+          "graph": 0
+        }
+      },
+      "backend_trace": {
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+          "origin": "e2e_probe:multimodal_dense_only"
+        },
+        "item_trace": [
+          {
+            "priority": 1.0,
+            "payload_kind": "query",
+            "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+            "bm25_terms": [],
+            "recall_budget": 40,
+            "bm25_k": 0,
+            "dense_k": 40,
+            "rerank_budget": 40,
+            "source_count": 0,
+            "source_ids": []
+          },
+          {
+            "priority": 0.0,
+            "payload_kind": "summary",
+            "bm25_terms": [],
+            "summary": "related",
+            "recall_budget": 0,
+            "bm25_k": 0,
+            "dense_k": 0,
+            "rerank_budget": 40,
+            "source_count": 0,
+            "source_ids": []
+          }
+        ],
+        "channel_trace": [
+          {
+            "channel": "text_dense",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "bm25",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "multimodal_dense",
+            "raw_count": 40,
+            "hydrated_count": 40,
+            "selected_count": 40,
+            "latency_ms": 129
+          },
+          {
+            "channel": "graph",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          }
+        ],
+        "retrieval_trace": {
+          "item_count": 2,
+          "total_candidate_budget": 40,
+          "max_rerank_docs": 40,
+          "max_final_chunks": 8,
+          "top_k_returned": 8,
+          "summary_mode": "related",
+          "items": [
+            {
+              "priority": 1.0,
+              "payload_kind": "query",
+              "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+              "bm25_terms": [],
+              "recall_budget": 40,
+              "bm25_k": 0,
+              "dense_k": 40,
+              "rerank_budget": 40,
+              "source_count": 0,
+              "source_ids": []
+            },
+            {
+              "priority": 0.0,
+              "payload_kind": "summary",
+              "bm25_terms": [],
+              "summary": "related",
+              "recall_budget": 0,
+              "bm25_k": 0,
+              "dense_k": 0,
+              "rerank_budget": 40,
+              "source_count": 0,
+              "source_ids": []
+            }
+          ]
+        }
+      },
+      "degrade_trace": [
+        {
+          "stage": "mm_reranker",
+          "reason": "Multimodal reranker call failed: Multimodal rerank API error 400 Bad Request: {\"request_id\":\"f856f2bc-ec44-9dbf-8a8f-d90a9d16cd55\",\"code\":\"InvalidParameter\",\"message\":\"<400> InternalError.Algo.InvalidParameter: Image URL or Base64 is invalid. URL must be a valid HTTP/HTTPS link, and Base64 must start with 'image/xxx;base64\"}",
+          "impact": "Falling back to text rerank or pre-rerank ordering"
+        },
+        {
+          "stage": "reranker",
+          "reason": "Reranker call failed: Rerank API error 401 Unauthorized: \"Api key is invalid\"",
+          "impact": "Using pre-rerank ordering"
+        }
+      ],
+      "relation_paths": [],
+      "chunks": [
+        {
+          "kind": "regular",
+          "chunk_id": "34d7813a-4ff0-4442-adbb-23a4b00a92ec",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 317,
+          "score": 0.39350742,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "[Image: f78e13b564f1675a4b4d3068178da4920e96d5b3d3efbcdd5ed7a3f2aa6227a5.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "8bc2d8c6-724e-4029-847f-25dda9a5a869",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 207,
+          "score": 0.3228077,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "Price-taking firms react to changes in demand by adjusting output along their marginal cost curve. Even though such firms own and operate capital assets and have debts, they do not have the power to set their price according to what they need to satisfy such costs; instead, they are forced to accept what they can get; they take price as a parameter and set output along their MC curve. [Image: b553764fa05ab8f6c3542bc63693c1c17ef7b8adbaa39d0f2c0882fed85384b9.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "d41f13ef-a892-4214-8c01-2dc9908ee221",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 194,
+          "score": 0.30891353,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices. [Image: 13ffd6c21550f7db29eb89d3b154bae8ed40b651b5c77d60cf373ba35bdb775b.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "1ff4be10-61fe-4488-ac8e-12e3c0748af3",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 194,
+          "score": 0.30874157,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices. [Image: d6690ff5a995bfe10b1fae4af02125d38dd31eb3ec069beb2cd4d6b97803e26f.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "478ef542-696a-40a6-89d9-0c06b6d8ea23",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 194,
+          "score": 0.30627933,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices. [Image: bf959f38f5c8f6e095b010d7aa0aa8a55dc4084c20bc61de4893adfe820009f1.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "c6ad29d9-8761-4b35-b29c-3c89be9352cf",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 191,
+          "score": 0.30584466,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets. [Image: 1939cc94b0366914e56f3a2e7989bc06993863bf4177c9d19576d7e390153edf.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "61cb46e4-20de-40d9-b7dd-f8b30823fbef",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 194,
+          "score": 0.30531704,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices. [Image: eb72219185f66dfad048ff8b97d8850e96a65bba5cfd0b183dfa7447d6cf2e2e.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "be68912c-7857-47bf-928c-ff46a8526570",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 194,
+          "score": 0.30404657,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices. [Image: 08f1ba78f649962bb6d8405c88a3d93e4401666fa85236432155d871b0054638.jpg]"
+        }
+      ]
+    },
+    "graph_only": {
+      "http_status": 200,
+      "request": {
+        "items": [
+          {
+            "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+            "priority": 1.0
+          }
+        ],
+        "doc_scope": [
+          "db7bc56e-f840-46ef-91b4-8cbb534b5598"
+        ],
+        "plan_version": "rag-execute-v1",
+        "summary_mode": "related",
+        "query_entities": [
+          {
+            "kind": "concept",
+            "text": "Society of Mind"
+          },
+          {
+            "kind": "concept",
+            "text": "agents"
+          },
+          {
+            "kind": "concept",
+            "text": "K-lines"
+          },
+          {
+            "kind": "concept",
+            "text": "frames"
+          },
+          {
+            "kind": "person",
+            "text": "Marvin Minsky"
+          }
+        ],
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+          "origin": "e2e_probe:graph_only"
+        },
+        "budget": {
+          "total_candidate_budget": 40,
+          "final_chunk_budget": 8
+        },
+        "channel_budget": {
+          "text_dense": 0,
+          "bm25": 0,
+          "multimodal_dense": 0,
+          "graph": 40
+        }
+      },
+      "coverage": {
+        "requested_doc_count": 1,
+        "matched_doc_count": 0,
+        "retrieved_chunk_count": 0,
+        "summary_chunk_count": 0,
+        "channel_coverage": {
+          "text_dense": 0,
+          "bm25": 0,
+          "multimodal_dense": 0,
+          "graph": 0
+        }
+      },
+      "backend_trace": {
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777528419-current-chat",
+          "origin": "e2e_probe:graph_only"
+        },
+        "item_trace": [
+          {
+            "priority": 1.0,
+            "payload_kind": "query",
+            "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+            "bm25_terms": [],
+            "recall_budget": 40,
+            "bm25_k": 0,
+            "dense_k": 40,
+            "rerank_budget": 40,
+            "source_count": 0,
+            "source_ids": []
+          },
+          {
+            "priority": 0.0,
+            "payload_kind": "summary",
+            "bm25_terms": [],
+            "summary": "related",
+            "recall_budget": 0,
+            "bm25_k": 0,
+            "dense_k": 0,
+            "rerank_budget": 40,
+            "source_count": 0,
+            "source_ids": []
+          }
+        ],
+        "channel_trace": [
+          {
+            "channel": "text_dense",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "bm25",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "multimodal_dense",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "graph",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 4
+          }
+        ],
+        "retrieval_trace": {
+          "item_count": 2,
+          "total_candidate_budget": 40,
+          "max_rerank_docs": 1,
+          "max_final_chunks": 8,
+          "top_k_returned": 0,
+          "summary_mode": "related",
+          "items": [
+            {
+              "priority": 1.0,
+              "payload_kind": "query",
+              "query": "Society of Mind agents K-lines frames relationship mechanism simple agent cooperation forming intelligence",
+              "bm25_terms": [],
+              "recall_budget": 40,
+              "bm25_k": 0,
+              "dense_k": 40,
+              "rerank_budget": 40,
+              "source_count": 0,
+              "source_ids": []
+            },
+            {
+              "priority": 0.0,
+              "payload_kind": "summary",
+              "bm25_terms": [],
+              "summary": "related",
+              "recall_budget": 0,
+              "bm25_k": 0,
+              "dense_k": 0,
+              "rerank_budget": 40,
+              "source_count": 0,
+              "source_ids": []
+            }
+          ]
+        }
+      },
+      "degrade_trace": [
+        {
+          "stage": "retrieval",
+          "reason": "no_valid_retrieval_results",
+          "impact": "Passing zero-recall context to answer synthesis"
+        }
+      ],
+      "relation_paths": [],
+      "chunks": []
+    }
+  },
+  "db_counts": {
+    "document": {
+      "id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+      "status": "completed",
+      "file_name": "minsky86.pdf",
+      "created_at": "2026-04-28T23:40:09.845019+08:00",
+      "updated_at": "2026-04-28T23:52:25.382067+08:00",
+      "chunk_count": 881,
+      "notebook_id": "b7774d00-df07-4d9b-8f32-c6f2a60b8f21"
+    },
+    "parse_runs": [
+      {
+        "run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+        "status": "completed",
+        "created_at": "2026-04-28T23:40:18.005428+08:00",
+        "updated_at": "2026-04-28T23:52:25.337149+08:00",
+        "duration_ms": 677149
+      }
+    ],
+    "chunks_by_type": {
+      "body": 881,
+      "summary": 1
+    },
+    "multimodal_chunks": 45
+  },
+  "error": null
+}

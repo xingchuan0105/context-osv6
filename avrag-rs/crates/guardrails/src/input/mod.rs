@@ -1,4 +1,10 @@
 //! Input guards — run before the RAG pipeline.
+//!
+//! Current implementation uses regex-based pattern matching.
+//! This is lightweight but can be bypassed with semantic variations.
+//!
+//! TODO: Evaluate LLM-based semantic guard for production hardening.
+//! See: https://github.com/protectai/llm-guard or custom lightweight classifier.
 
 mod privilege_escalation;
 mod prompt_injection;
@@ -46,11 +52,10 @@ impl InputGuardPipeline {
     /// Run all guards. Returns `None` if all passed, or `Some(result)` for the first blocking guard.
     pub fn run(&self, ctx: &InputGuardContext<'_>) -> Option<GuardResult> {
         for guard in &self.guards {
-            if let Some(result) = guard.check(ctx) {
-                if !result.passed {
+            if let Some(result) = guard.check(ctx)
+                && !result.passed {
                     return Some(result);
                 }
-            }
         }
         None
     }

@@ -926,18 +926,6 @@ export function DashboardSurface() {
     }
   }
 
-  const searchResults = useMemo(
-    () =>
-      buildDashboardWorkspaceListState(workspaceInputs, {
-        locale,
-        currentUserId,
-        favoriteIds,
-        tab: "all",
-        sort: "recent",
-        query: searchQuery,
-      }),
-    [currentUserId, favoriteIds, locale, searchQuery, workspaceInputs],
-  );
 
   return (
     <main className="dashboard-shell">

@@ -1,4 +1,5 @@
 use crate::retrieval::ScoredChunk;
+use rayon::prelude::*;
 
 /// Reciprocal Rank Fusion for merging dense + sparse results
 ///
@@ -41,7 +42,7 @@ pub fn rrf_merge(
         })
         .collect();
 
-    results.sort_by(|a, b| {
+    results.par_sort_by(|a, b| {
         b.score
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
@@ -80,7 +81,7 @@ pub fn global_rrf_merge(
         })
         .collect();
 
-    results.sort_by(|a, b| {
+    results.par_sort_by(|a, b| {
         b.score
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)

@@ -12,6 +12,14 @@ fn ingestion_retry_backoff_seconds(attempt_count: i32) -> i32 {
     retry_backoff_seconds(attempt_count)
 }
 
+pub struct ChatTurn<'a> {
+    pub user_content: &'a str,
+    pub assistant_content: &'a str,
+    pub assistant_answer_blocks: &'a [common::AnswerBlock],
+    pub agent_type: &'a str,
+    pub citations: &'a [common::Citation],
+}
+
 impl PgAppRepository {
     pub async fn list_sessions(
         &self,
@@ -170,16 +178,12 @@ impl PgAppRepository {
         &self,
         context: &AuthContext,
         session_id: Uuid,
-        user_content: &str,
-        assistant_content: &str,
-        assistant_answer_blocks: &[common::AnswerBlock],
-        agent_type: &str,
-        citations: &[Citation],
+        turn: ChatTurn<'_>,
     ) -> Result<i64, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         ensure_org_and_actor(tx.inner(), context).await?;
         let answer_blocks_value =
-            serde_json::to_value(assistant_answer_blocks).unwrap_or_else(|_| json!([]));
+            serde_json::to_value(turn.assistant_answer_blocks).unwrap_or_else(|_| json!([]));
         sqlx::query(
             r#"
             insert into chat_messages (org_id, session_id, role, content, citations)
@@ -188,7 +192,7 @@ impl PgAppRepository {
         )
         .bind(context.org_id().into_uuid())
         .bind(session_id)
-        .bind(user_content)
+        .bind(turn.user_content)
         .execute(tx.inner())
         .await?;
 
@@ -201,12 +205,12 @@ impl PgAppRepository {
         )
         .bind(context.org_id().into_uuid())
         .bind(session_id)
-        .bind(assistant_content)
+        .bind(turn.assistant_content)
         .bind(answer_blocks_value)
-        .bind(agent_type)
-        .bind(agent_name(agent_type))
-        .bind(agent_icon(agent_type))
-        .bind(serde_json::to_value(citations).unwrap_or_else(|_| json!([])))
+        .bind(turn.agent_type)
+        .bind(agent_name(turn.agent_type))
+        .bind(agent_icon(turn.agent_type))
+        .bind(serde_json::to_value(turn.citations).unwrap_or_else(|_| json!([])))
         .fetch_one(tx.inner())
         .await?;
 

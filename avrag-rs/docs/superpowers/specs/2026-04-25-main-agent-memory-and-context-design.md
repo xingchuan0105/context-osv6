@@ -1,3 +1,5 @@
+> **⚠️ 部分过时**：本文档 §4.4 "session working state"、§8.3 "session working state"、§10 "长期偏好生成机制" 等概念已被 `2026-05-12-architecture-baseline.md` 的三层模型取代。工作记忆层已完全移除。
+
 # Main Agent 记忆层与业务场景适配方案
 
 > **状态**: Draft for Review; 2026-04-26 minimal backend memory v1 implemented without `memvid`.

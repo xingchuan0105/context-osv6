@@ -1,54 +1,8 @@
-use crate::agents::service::UnifiedAgentService;
-use anyhow::Result as AnyResult;
-use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
-use avrag_billing as billing;
-use avrag_chatmemory::ChatMemory;
-use avrag_guardrails::GuardPipeline;
-use avrag_llm::{AnswerSynthesizer, EmbeddingClient, LlmClient, RerankerClient, RetrievalPlanner};
-use avrag_rag_core::{
-    RagConfig, RagRuntime, RetrievalDataPlane, context::SessionContext as RagSessionContext,
-};
-use avrag_search::SearchExecutor;
-use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
-use avrag_storage_pg::{
-    DocumentAssetRow, DocumentDeletionOutcome, DocumentScopeState, DocumentTaskSeed,
-    DocumentUploadMutationOutcome, DocumentUploadQueueOutcome, NotificationCreateParams, ObjectStoreHandle,
-    ObjectStoreHeadError, PgAppRepository, PgStorageError, S3ObjectStore,
-};
 use common::{
-    AddUrlSourceRequest, ApiKeyRow, AppError, ChatMessage, ChatRequest, ChatResponse, ChatSession,
-    Citation, CitationLookupResponse, CreateApiKeyRequest, CreateApiKeyResponse,
-    CreateChatSessionRequest, CreateDocumentRequest, CreateDocumentUploadResponse,
-    CreateNotebookRequest, DegradeTraceItem, Document, DocumentContentResponse, DocumentStatus,
-    ModeDebug, Notebook, NotificationRow, ParsedPreviewItem, ParsedPreviewResponse, PlannerOutput,
-    RagModeDebug, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary, ShareTokenResponse,
-    SourceRef, SourceRow, StatusOnlyResponse, SummaryInjectionTrace, UpdateChatSessionRequest,
-    UpdateDocumentRequest, UpdateNotebookRequest, default_org_id, default_user_id, new_id,
-    now_rfc3339,
+    default_org_id, default_user_id,
 };
-use contracts::UserPreferences;
-use hmac::{Hmac, Mac};
-use ingestion::parser::{DocumentParser, HtmlParser};
-use ingestion::{
-    AuditAction, IngestDocumentPayload, ReindexDocumentPayload, ReindexReason, build_ingest_task,
-    build_reindex_task, task_audit,
-};
-use reqwest::{Client as HttpClient, Url, header::CONTENT_TYPE, redirect::Policy};
-use sha2::Sha256;
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
-use tokio::{
-    fs,
-    sync::RwLock,
-    time::{Duration, sleep},
-};
-use tracing::info;
-use uuid::Uuid;
 
-type HmacSha256 = Hmac<Sha256>;
+use crate::lib_impl::*;
 
 #[derive(Debug, Clone)]
 pub struct AppConfig {
@@ -63,10 +17,9 @@ pub struct AppConfig {
     pub mm_embedding: ModelProviderConfig,
     pub mm_rerank: ModelProviderConfig,
     pub rerank: ModelProviderConfig,
-    pub intent_llm: ModelProviderConfig,
-    pub answer_llm: ModelProviderConfig,
-    pub summary_llm: ModelProviderConfig,
-    pub search_llm: ModelProviderConfig,
+    pub agent_llm: ModelProviderConfig,
+    pub memory_llm: ModelProviderConfig,
+    pub ingestion_llm: ModelProviderConfig,
     pub search: SearchConfig,
     pub redis: RedisConfig,
     pub object_storage: ObjectStorageConfig,
@@ -84,6 +37,7 @@ pub struct ModelProviderConfig {
     pub api_style: Option<String>,
     pub dimensions: Option<usize>,
     pub enable_thinking: Option<bool>,
+    pub enable_cache: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -114,6 +68,9 @@ pub struct SearchConfig {
     pub extract_enabled: bool,
     pub perplexity_api_key: Option<String>,
     pub perplexity_model: String,
+    pub search_lang: Option<String>,
+    pub country: Option<String>,
+    pub freshness: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -139,8 +96,6 @@ pub struct ObjectStorageConfig {
 #[derive(Debug, Clone)]
 pub struct PromptConfig {
     pub dir: String,
-    pub intent_template_path: String,
-    pub intent_version: String,
     pub summary_version: String,
 }
 
@@ -178,6 +133,7 @@ impl Default for AppConfig {
                 api_style: None,
                 dimensions: None,
                 enable_thinking: None,
+                enable_cache: None,
             },
             mm_embedding: ModelProviderConfig {
                 base_url: "https://dashscope.aliyuncs.com/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding".to_string(),
@@ -188,6 +144,7 @@ impl Default for AppConfig {
                 api_style: Some("dashscope_multimodal_embedding".to_string()),
                 dimensions: Some(1024),
                 enable_thinking: None,
+                enable_cache: None,
             },
             mm_rerank: ModelProviderConfig {
                 base_url: "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank".to_string(),
@@ -198,6 +155,7 @@ impl Default for AppConfig {
                 api_style: Some("dashscope_vl_rerank".to_string()),
                 dimensions: None,
                 enable_thinking: None,
+                enable_cache: None,
             },
             rerank: ModelProviderConfig {
                 base_url: "https://api.siliconflow.cn/v1".to_string(),
@@ -208,46 +166,40 @@ impl Default for AppConfig {
                 api_style: None,
                 dimensions: None,
                 enable_thinking: None,
+                enable_cache: None,
             },
-            intent_llm: ModelProviderConfig {
-                base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
-                api_key: String::new(),
-                model: "qwen3.5-flash".to_string(),
-                timeout_ms: 30000,
-                temperature: None,
-                api_style: None,
-                dimensions: None,
-                enable_thinking: Some(false),
-            },
-            answer_llm: ModelProviderConfig {
+            agent_llm: ModelProviderConfig {
                 base_url: "https://api.deepseek.com".to_string(),
                 api_key: String::new(),
-                model: "deepseek-v4-flash".to_string(),
+                model: "deepseek-v4-pro".to_string(),
                 timeout_ms: 180000,
                 temperature: Some(0.2),
                 api_style: Some("openai".to_string()),
                 dimensions: None,
                 enable_thinking: Some(true),
+                enable_cache: Some(true),
             },
-            summary_llm: ModelProviderConfig {
+            memory_llm: ModelProviderConfig {
+                base_url: "https://api.deepseek.com".to_string(),
+                api_key: String::new(),
+                model: "deepseek-v4-flash".to_string(),
+                timeout_ms: 30000,
+                temperature: Some(0.2),
+                api_style: Some("openai".to_string()),
+                dimensions: None,
+                enable_thinking: Some(false),
+                enable_cache: None,
+            },
+            ingestion_llm: ModelProviderConfig {
                 base_url: "https://www.dmxapi.cn/v1".to_string(),
                 api_key: String::new(),
                 model: "gemini-3.1-flash-lite-preview".to_string(),
                 timeout_ms: 30000,
-                temperature: None,
+                temperature: Some(0.2),
                 api_style: Some("openai".to_string()),
                 dimensions: None,
                 enable_thinking: None,
-            },
-            search_llm: ModelProviderConfig {
-                base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
-                api_key: String::new(),
-                model: "qwen3.5-plus".to_string(),
-                timeout_ms: 30000,
-                temperature: None,
-                api_style: Some("auto".to_string()),
-                dimensions: None,
-                enable_thinking: None,
+                enable_cache: None,
             },
             search: SearchConfig {
                 mode: "llm_tools".to_string(),
@@ -269,6 +221,9 @@ impl Default for AppConfig {
                 extract_enabled: false,
                 perplexity_api_key: None,
                 perplexity_model: "nvidia/nemotron-3-super-120b-a12b".to_string(),
+                search_lang: None,
+                country: None,
+                freshness: None,
             },
             redis: RedisConfig {
                 url: "redis://127.0.0.1:6379".to_string(),
@@ -288,8 +243,6 @@ impl Default for AppConfig {
             },
             prompts: PromptConfig {
                 dir: "./prompts".to_string(),
-                intent_template_path: String::new(),
-                intent_version: "freeze-v2".to_string(),
                 summary_version: "v1".to_string(),
             },
             usage_limit: UsageLimitConfig {
@@ -353,10 +306,9 @@ impl AppConfig {
                 .dimensions
                 .unwrap_or(config.milvus.multimodal_vector_dim),
         );
-        config.intent_llm = model_config_from_env("INTENT_LLM", &config.intent_llm, None);
-        config.answer_llm = model_config_from_env("ANSWER_LLM", &config.answer_llm, None);
-        config.summary_llm = model_config_from_env("SUMMARY_LLM", &config.summary_llm, None);
-        config.search_llm = model_config_from_env("SEARCH_LLM", &config.search_llm, None);
+        config.agent_llm = model_config_from_env("AGENT_LLM", &config.agent_llm, None);
+        config.memory_llm = model_config_from_env("MEMORY_LLM", &config.memory_llm, None);
+        config.ingestion_llm = model_config_from_env("INGESTION_LLM", &config.ingestion_llm, None);
 
         config.search.mode = env_string("SEARCH_MODE", &config.search.mode);
         config.search.enable_thinking =
@@ -382,6 +334,9 @@ impl AppConfig {
         config.search.perplexity_api_key = env_optional_string("PERPLEXITY_API_KEY");
         config.search.perplexity_model =
             env_string("PERPLEXITY_MODEL", &config.search.perplexity_model);
+        config.search.search_lang = env_optional_string("SEARCH_LANG");
+        config.search.country = env_optional_string("SEARCH_COUNTRY");
+        config.search.freshness = env_optional_string("SEARCH_FRESHNESS");
         config.redis.addr = env_string("REDIS_ADDR", &config.redis.addr);
         config.redis.password = env_string("REDIS_PASSWORD", &config.redis.password);
         config.redis.db = env_i64("REDIS_DB", config.redis.db);
@@ -419,12 +374,6 @@ impl AppConfig {
         );
 
         config.prompts.dir = env_string("PROMPT_DIR", &config.prompts.dir);
-        config.prompts.intent_template_path = env_string(
-            "PROMPT_INTENT_TEMPLATE_PATH",
-            &config.prompts.intent_template_path,
-        );
-        config.prompts.intent_version =
-            env_string("PROMPT_INTENT_VERSION", &config.prompts.intent_version);
         config.prompts.summary_version =
             env_string("PROMPT_SUMMARY_VERSION", &config.prompts.summary_version);
 

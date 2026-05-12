@@ -4,6 +4,21 @@ use reqwest::Client;
 
 use crate::{SearchConfig, SearchResponse, SearchStreamUpdate, provider};
 
+/// Object-safe abstraction over `SearchExecutor::execute_search`.
+///
+/// The web-search agent's ReAct loop only dispatches single-query searches
+/// (with optional vertical), so the trait surface is intentionally narrow.
+/// `SearchExecutor` is the production implementor; tests can plug in fakes
+/// without spinning up a real HTTP server.
+#[async_trait::async_trait]
+pub trait SearchProvider: Send + Sync {
+    async fn execute_search(
+        &self,
+        query: &str,
+        vertical: Option<&str>,
+    ) -> anyhow::Result<SearchResponse>;
+}
+
 pub struct SearchExecutor {
     config: SearchConfig,
     client: Client,
@@ -65,6 +80,36 @@ impl SearchExecutor {
     fn normalized_provider(&self) -> String {
         self.config.provider.trim().to_ascii_lowercase()
     }
+
+    pub fn provider(&self) -> &str {
+        match self.normalized_provider().as_str() {
+            "brave_llm_context" => "brave_llm_context",
+            "perplexity" => "perplexity",
+            _ => "unknown",
+        }
+    }
+
+    /// Execute a single search query without streaming or auth requirements.
+    /// Used by the web-search agent for parallel sub-query execution.
+    pub async fn execute_search(
+        &self,
+        query: &str,
+        vertical: Option<&str>,
+    ) -> anyhow::Result<SearchResponse> {
+        match self.normalized_provider().as_str() {
+            "brave_llm_context" => {
+                if vertical == Some("news") {
+                    provider::execute_brave_news(&self.config, &self.client, query).await
+                } else {
+                    provider::execute_brave_llm_context(&self.config, &self.client, query).await
+                }
+            }
+            "perplexity" => {
+                provider::execute_perplexity_agent(&self.config, &self.client, query).await
+            }
+            provider => unsupported_provider(provider),
+        }
+    }
 }
 
 fn unsupported_provider<T>(provider: &str) -> anyhow::Result<T> {
@@ -72,4 +117,15 @@ fn unsupported_provider<T>(provider: &str) -> anyhow::Result<T> {
         "unsupported search provider: {}; supported providers: brave_llm_context, perplexity",
         provider
     )
+}
+
+#[async_trait::async_trait]
+impl SearchProvider for SearchExecutor {
+    async fn execute_search(
+        &self,
+        query: &str,
+        vertical: Option<&str>,
+    ) -> anyhow::Result<SearchResponse> {
+        SearchExecutor::execute_search(self, query, vertical).await
+    }
 }

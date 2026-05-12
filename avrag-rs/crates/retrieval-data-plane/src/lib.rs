@@ -119,6 +119,21 @@ pub struct GraphSearchRequest {
     pub relation_hints: Vec<GraphRelationHint>,
     pub relation_limit: usize,
     pub supporting_chunk_limit: usize,
+    /// Query-time entity names extracted from the user query.
+    /// Used for vector similarity search against kg_entities when
+    /// exact attribute matching is insufficient.
+    pub query_entities: Vec<String>,
+    /// Pre-computed vectors for query_entities.
+    /// If provided, these are used for ANN search against kg_entities.
+    /// If empty, query_entities text is used for exact-match fallback.
+    pub query_entity_vectors: Vec<Vec<f32>>,
+    /// Maximum number of hops for subgraph expansion. Default 1.
+    pub hop_limit: usize,
+    /// Maximum number of relations to retrieve per hop.
+    pub fan_out_limit: usize,
+    /// Tenant context for mandatory access control.
+    /// All searches are scoped to this tenant's data.
+    pub tenant_org_id: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -364,6 +379,11 @@ mod tests {
                     relation_hints: Vec::new(),
                     relation_limit: 10,
                     supporting_chunk_limit: 10,
+                    query_entities: Vec::new(),
+                    query_entity_vectors: Vec::new(),
+                    hop_limit: 1,
+                    fan_out_limit: 10,
+                    tenant_org_id: "test-org".to_string(),
                 })
                 .await
                 .unwrap_err(),

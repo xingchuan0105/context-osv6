@@ -22,7 +22,7 @@ require_var "MILVUS_URL"
 if [[ "${STRICT_CITATIONS}" == "true" ]]; then
   echo "[preflight] strict citation mode enabled."
   require_var "EMBEDDING_API_KEY"
-  require_var "ANSWER_LLM_API_KEY"
+  require_var "AGENT_LLM_API_KEY"
 fi
 
 if [[ "${#missing[@]}" -gt 0 ]]; then

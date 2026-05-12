@@ -86,6 +86,32 @@ export type ChatRequest = {
   doc_scope?: string[];
   messages?: ChatTurnInput[];
   stream?: boolean;
+  language?: string | null;
+};
+
+export type ModeDebug = {
+  rag?: Record<string, unknown> | null;
+  search?: Record<string, unknown> | null;
+  general?: Record<string, unknown> | null;
+};
+
+export type PlannerOutput = {
+  plan_version?: string | null;
+  plan_confidence?: number | null;
+  clarify_needed?: boolean | null;
+  items?: Array<{
+    priority: number;
+    query?: string | null;
+    bm25_terms?: string[] | null;
+  }> | null;
+};
+
+export type GuardReport = {
+  passed: boolean;
+  guard_type: string;
+  risk_level?: string | null;
+  message?: string | null;
+  degrade_trace?: DegradeTraceItem[] | null;
 };
 
 export type ChatResponse = {
@@ -97,10 +123,10 @@ export type ChatResponse = {
   citations: Citation[];
   trace: TraceInfo;
   degrade_trace: DegradeTraceItem[];
-  planner_output?: unknown | null;
-  mode_debug?: unknown | null;
+  planner_output?: PlannerOutput | null;
+  mode_debug?: ModeDebug | null;
   message_id?: number | null;
-  guard_report?: unknown | null;
+  guard_report?: GuardReport | null;
 };
 
 export type ChatDonePayload = {
@@ -296,7 +322,14 @@ function decodeChatEvent(eventName: string, dataText: string): WorkspaceChatStre
               )
             : {},
         sources_preview: Array.isArray(raw.sources_preview)
-          ? (raw.sources_preview as ProgressSourcePreview[])
+          ? raw.sources_preview.map((item: unknown) => {
+              const src = item as Record<string, unknown>;
+              return {
+                id: String(src.id ?? ""),
+                label: String(src.label ?? ""),
+                href: src.href == null ? null : String(src.href),
+              };
+            })
           : [],
         timestamp: raw.timestamp == null ? null : String(raw.timestamp),
       };
@@ -335,7 +368,33 @@ function decodeChatEvent(eventName: string, dataText: string): WorkspaceChatStre
         kind: "citations",
         request_id: String(raw.request_id ?? ""),
         message_id: Number(raw.message_id ?? 0),
-        citations: Array.isArray(raw.citations) ? (raw.citations as Citation[]) : [],
+        citations: Array.isArray(raw.citations)
+          ? raw.citations
+              .map((item: unknown) => {
+                const c = item as Record<string, unknown>;
+                return {
+                  citation_id: Number(c.citation_id ?? 0),
+                  doc_id: String(c.doc_id ?? ""),
+                  chunk_id: c.chunk_id == null ? null : String(c.chunk_id),
+                  page: c.page == null ? null : Number(c.page),
+                  doc_name: String(c.doc_name ?? ""),
+                  preview: c.preview == null ? null : String(c.preview),
+                  content: c.content == null ? null : String(c.content),
+                  score: Number(c.score ?? 0),
+                  layer: c.layer == null ? null : String(c.layer),
+                  chunk_type: c.chunk_type == null ? null : String(c.chunk_type),
+                  asset_id: c.asset_id == null ? null : String(c.asset_id),
+                  caption: c.caption == null ? null : String(c.caption),
+                  image_url: c.image_url == null ? null : String(c.image_url),
+                  source_locator:
+                    c.source_locator == null
+                      ? null
+                      : (c.source_locator as CitationSourceLocator),
+                  parse_run_id: c.parse_run_id == null ? null : String(c.parse_run_id),
+                };
+              })
+              .filter((c) => c.doc_id)
+          : [],
       };
     case "done":
       return {
@@ -466,10 +525,12 @@ export async function streamWorkspaceChat(
   token: string,
   request: ChatRequest,
   onEvent: (event: WorkspaceChatStreamEvent) => void | Promise<void>,
+  options?: { signal?: AbortSignal },
 ): Promise<void> {
   const response = await fetch(buildApiUrl("/api/v1/chat"), {
     method: "POST",
     cache: "no-store",
+    signal: options?.signal,
     headers: {
       Accept: "text/event-stream",
       "Content-Type": "application/json",

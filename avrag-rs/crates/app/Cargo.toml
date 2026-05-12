@@ -9,9 +9,9 @@ version.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 analytics = { path = "../analytics" }
+bytes = "1"
 contracts = { path = "../../../contracts" }
 serde.workspace = true
-graph-flow.workspace = true
 avrag-auth = { path = "../auth" }
 avrag-billing = { path = "../billing" }
 avrag-storage-pg = { path = "../storage-pg" }
@@ -23,8 +23,8 @@ avrag-rag-core = { path = "../rag-core" }
 avrag-guardrails = { path = "../guardrails" }
 telemetry = { path = "../telemetry" }
 common = { path = "../common" }
-avrag-usage-limit = { path = "../usage-limit" }
 chrono.workspace = true
+futures = "0.3"
 hex.workspace = true
 hmac.workspace = true
 ingestion = { path = "../ingestion" }
@@ -36,5 +36,8 @@ tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 rig-core = "0.36.0"
+regex.workspace = true
+thiserror.workspace = true
+tokio-util.workspace = true
 
 [dev-dependencies]

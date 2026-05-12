@@ -32,6 +32,7 @@ fn make_request(query: &str, agent_type: &str) -> ChatRequest {
         doc_scope: Vec::new(),
         messages: Vec::new(),
         stream: false,
+        language: None,
     }
 }
 
@@ -45,6 +46,7 @@ fn test_config() -> RagConfig {
             api_style: None,
             dimensions: None,
             enable_thinking: None,
+            enable_cache: None,
         },
     ));
     // Stage-level unit tests do not need a PostgreSQL repository.
@@ -364,6 +366,8 @@ async fn execute_plan_includes_graph_relation_paths_and_supporting_chunks() {
         budget: Some(common::ExecutePlanBudget {
             total_candidate_budget: Some(8),
             final_chunk_budget: Some(4),
+            graph_hop_limit: None,
+            graph_fan_out_limit: None,
         }),
         channel_budget: None,
         query_entities: Vec::new(),
@@ -419,6 +423,8 @@ async fn execute_plan_starts_bm25_and_graph_channels_in_parallel() {
         budget: Some(common::ExecutePlanBudget {
             total_candidate_budget: Some(20),
             final_chunk_budget: Some(5),
+            graph_hop_limit: None,
+            graph_fan_out_limit: None,
         }),
         channel_budget: Some(common::ChannelBudget {
             text_dense: Some(0),
@@ -465,6 +471,8 @@ async fn execute_plan_maps_traceable_placeholder_triplets_to_graph_hints() {
         budget: Some(common::ExecutePlanBudget {
             total_candidate_budget: Some(8),
             final_chunk_budget: Some(4),
+            graph_hop_limit: None,
+            graph_fan_out_limit: None,
         }),
         channel_budget: None,
         query_entities: Vec::new(),
@@ -510,29 +518,12 @@ async fn plan_without_llm_planner_falls_back_to_default_query_item() {
 }
 
 #[test]
-fn no_valid_retrieval_results_answer_is_user_facing() {
-    let answer = response::no_valid_retrieval_results_answer();
-    assert!(answer.contains("未找到"));
-    assert!(answer.contains("相关文档"));
-}
-
-#[test]
 fn planner_session_context_includes_summary_and_recent_messages() {
     let context = planner::planner_session_context(Some(&make_session_context())).unwrap();
     assert!(context.contains("Conversation summary:"));
     assert!(context.contains("Rust ownership rules"));
     assert!(context.contains("user: Can you explain ownership?"));
     assert!(context.contains("assistant: Ownership controls who frees memory."));
-}
-
-#[test]
-fn synthesizer_history_includes_summary_and_chat_turns() {
-    let history = response::synthesizer_history(Some(&make_session_context()));
-    assert_eq!(history.len(), 3);
-    assert_eq!(history[0].role, "system");
-    assert!(history[0].content.contains("Conversation summary:"));
-    assert_eq!(history[1].role, "user");
-    assert_eq!(history[2].role, "assistant");
 }
 
 #[test]

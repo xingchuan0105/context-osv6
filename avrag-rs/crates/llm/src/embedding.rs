@@ -250,6 +250,7 @@ mod tests {
             api_style: None,
             dimensions: None,
             enable_thinking: None,
+            enable_cache: None,
         };
         assert!(!empty.is_configured());
 
@@ -261,6 +262,7 @@ mod tests {
             api_style: None,
             dimensions: None,
             enable_thinking: None,
+            enable_cache: None,
         };
         assert!(configured.is_configured());
     }
@@ -281,6 +283,7 @@ mod tests {
             api_style: None,
             dimensions: None,
             enable_thinking: None,
+            enable_cache: None,
         });
         assert!(client.uses_dashscope_multimodal_embedding());
     }

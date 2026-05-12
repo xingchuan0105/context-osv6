@@ -13,10 +13,15 @@ serde.workspace = true
 serde_json.workspace = true
 tiktoken-rs.workspace = true
 uuid.workspace = true
+rayon.workspace = true
 tracing = "0.1"
+futures-util = "0.3"
 # Internal
 common = { path = "../common" }
 avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
 avrag-auth = { path = "../auth" }
 avrag-storage-pg = { path = "../storage-pg" }
 avrag-llm = { path = "../llm" }
+
+[dev-dependencies]
+insta.workspace = true

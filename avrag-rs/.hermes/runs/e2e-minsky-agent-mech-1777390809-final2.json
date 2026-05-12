@@ -1,0 +1,2698 @@
+{
+  "run_name": "e2e-minsky-agent-mech-1777390809-final2",
+  "email": "e2e-minsky-agent-mech-1777390809@e2e.test",
+  "notebook_id": "b7774d00-df07-4d9b-8f32-c6f2a60b8f21",
+  "document_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+  "org_id": "7f743c86-738b-45fe-b426-d1477d3233a4",
+  "query": "请基于 minsky86.pdf 中 Minsky 的 Society of Mind 论文，用中文解释：Society of Mind、agents、K-lines、frames 之间是什么关系？这种由许多简单 agent 协作形成智能的机制，与现代软件 agent 的规划和工具/检索机制有什么可类比之处？",
+  "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+  "timeline": [
+    "[23:53:35] continue doc=db7bc56e-f840-46ef-91b4-8cbb534b5598",
+    "[23:53:36] login -> 200",
+    "[23:53:36] status 0: 200 completed {'status': 'completed'}",
+    "[23:54:09] chat -> 200, events={'start': 1, 'activity': 4, 'answer_start': 1, 'token': 95, 'citations': 1, 'done': 1}, answer_len=219",
+    "[23:54:10] plan={\"items\": [{\"query\": \"Minsky's Society of Mind: relationship between agents, K-lines, and frames\", \"priority\": 1.0}], \"doc_scope\": [\"db7bc56e-f840-46ef-91b4-8cbb534b5598\"], \"plan_version\": \"rag-execute-v1\", \"summary_mode\": \"none\", \"query_entities\": [{\"kind\": \"person\", \"text\": \"Minsky\"}, {\"kind\": \"concept\", \"text\": \"Society of Mind\"}, {\"kind\": \"concept\", \"text\": \"agents\"}, {\"kind\": \"concept\", \"text\": \"K-lines\"}, {\"kind\": \"concept\", \"text\": \"frames\"}]}",
+    "[23:54:14] probe full_captured_plan: status=200, chunks=12",
+    "[23:54:17] probe text_dense_only: status=200, chunks=8",
+    "[23:54:17] probe bm25_only: status=200, chunks=0",
+    "[23:54:20] probe multimodal_dense_only: status=200, chunks=8",
+    "[23:54:20] probe graph_only: status=200, chunks=0"
+  ],
+  "status_history": [
+    {
+      "i": 0,
+      "status": "completed",
+      "http_status": 200,
+      "body": {
+        "status": "completed"
+      }
+    }
+  ],
+  "chat": {
+    "http_status": 200,
+    "event_counts": {
+      "start": 1,
+      "activity": 4,
+      "answer_start": 1,
+      "token": 95,
+      "citations": 1,
+      "done": 1
+    },
+    "activity_events": [
+      {
+        "event": "activity",
+        "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+        "phase": "planning",
+        "title": "正在分析问题",
+        "detail": "系统正在规划知识库检索范围。",
+        "counts": {},
+        "sources_preview": [],
+        "timestamp": "2026-04-28T15:53:36.538537522+00:00"
+      },
+      {
+        "event": "activity",
+        "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+        "phase": "retrieving",
+        "title": "正在检索知识库",
+        "detail": "系统正在执行结构化检索计划。",
+        "counts": {
+          "queries": 1
+        },
+        "sources_preview": [],
+        "timestamp": "2026-04-28T15:53:53.257349074+00:00"
+      },
+      {
+        "event": "activity",
+        "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+        "phase": "reading_sources",
+        "title": "正在阅读命中内容",
+        "detail": "系统正在筛选证据片段并准备最终答案上下文。",
+        "counts": {
+          "chunks": 27,
+          "documents": 1
+        },
+        "sources_preview": [
+          {
+            "id": "c6ad29d9-8761-4b35-b29c-3c89be9352cf",
+            "label": "Doc db7bc56e-f840-46ef-91b4-8cbb534b5598",
+            "href": null
+          },
+          {
+            "id": "f2ec4945-02c8-46aa-89ce-d8627400f2d1",
+            "label": "Doc db7bc56e-f840-46ef-91b4-8cbb534b5598",
+            "href": null
+          },
+          {
+            "id": "2a0ab83f-1b81-4baf-bfc9-5e84e332efa8",
+            "label": "Doc db7bc56e-f840-46ef-91b4-8cbb534b5598",
+            "href": null
+          }
+        ],
+        "timestamp": "2026-04-28T15:54:04.529537638+00:00"
+      },
+      {
+        "event": "activity",
+        "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+        "phase": "drafting_answer",
+        "title": "正在生成回答",
+        "detail": "证据整理完成，开始生成最终答案。",
+        "counts": {
+          "chunks": 27
+        },
+        "sources_preview": [],
+        "timestamp": "2026-04-28T15:54:04.529626238+00:00"
+      }
+    ],
+    "trace_events": [],
+    "answer_length": 219,
+    "answer": "根据提供的检索材料，我无法找到关于 Minsky 的《Society of Mind》论文中 agents、K-lines、frames 等概念的解释及相关关系，也无法进行其与现代软件 agent 机制的类比分析。检索到的内容均为经济学相关内容，与您所询问的认知科学或人工智能理论无关。\n\n建议您检查所提供的文档来源（minsky86.pdf），或者提供一个明确包含《Society of Mind》相关内容的文件，以便我进行准确的回答。",
+    "done_payload": {
+      "agent_type": "rag",
+      "answer": "根据提供的检索材料，我无法找到关于 Minsky 的《Society of Mind》论文中 agents、K-lines、frames 等概念的解释及相关关系，也无法进行其与现代软件 agent 机制的类比分析。检索到的内容均为经济学相关内容，与您所询问的认知科学或人工智能理论无关。\n\n建议您检查所提供的文档来源（minsky86.pdf），或者提供一个明确包含《Society of Mind》相关内容的文件，以便我进行准确的回答。\n\n[[image:1]]",
+      "answer_blocks": [
+        {
+          "citations": [],
+          "text": "根据提供的检索材料，我无法找到关于 Minsky 的《Society of Mind》论文中 agents、K-lines、frames 等概念的解释及相关关系，也无法进行其与现代软件 agent 机制的类比分析。检索到的内容均为经济学相关内容，与您所询问的认知科学或人工智能理论无关。",
+          "type": "text"
+        },
+        {
+          "citations": [],
+          "text": "建议您检查所提供的文档来源（minsky86.pdf），或者提供一个明确包含《Society of Mind》相关内容的文件，以便我进行准确的回答。",
+          "type": "text"
+        },
+        {
+          "chunk_id": "c6ad29d9-8761-4b35-b29c-3c89be9352cf",
+          "type": "image"
+        }
+      ],
+      "citations": [
+        {
+          "asset_id": "422a67b3-161f-45a8-8355-e9d220c05244",
+          "caption": null,
+          "chunk_id": "c6ad29d9-8761-4b35-b29c-3c89be9352cf",
+          "chunk_type": "figure",
+          "citation_id": 1,
+          "content": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets.\n\n[Image: 1939cc94b0366914e56f3a2e7989bc06993863bf4177c9d19576d7e390153edf.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/422a67b3-161f-45a8-8355-e9d220c05244.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 191,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "will be extended to include more than the skeletal relations. In the more complete case, the governm",
+          "score": 0.36286431550979614,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":191,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "e8a9bb26-b516-42b4-b72e-c66c5b1056f2",
+          "caption": null,
+          "chunk_id": "f2ec4945-02c8-46aa-89ce-d8627400f2d1",
+          "chunk_type": "figure",
+          "citation_id": 2,
+          "content": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets.\n\n[Image: cb1e0516ae2542e937e53bfacaca5d4033f7010dd2d68fda0667a6a13fe44dd3.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/e8a9bb26-b516-42b4-b72e-c66c5b1056f2.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 191,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "will be extended to include more than the skeletal relations. In the more complete case, the governm",
+          "score": 0.3587435781955719,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":191,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "c038980c-9a9f-4f01-9252-02edb70b6bb5",
+          "caption": null,
+          "chunk_id": "2a0ab83f-1b81-4baf-bfc9-5e84e332efa8",
+          "chunk_type": "figure",
+          "citation_id": 3,
+          "content": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets.\n\n[Image: 3e0fd4fe2070d67d67d35345c02e98fc68e7a15d0d0858f5922e87794df923d5.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/c038980c-9a9f-4f01-9252-02edb70b6bb5.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 191,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "will be extended to include more than the skeletal relations. In the more complete case, the governm",
+          "score": 0.35782840847969055,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":191,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "a582e05a-05f0-4422-bfec-4b217905ba8f",
+          "caption": null,
+          "chunk_id": "68690497-98b2-46b4-bf61-a59125cd0673",
+          "chunk_type": "figure",
+          "citation_id": 4,
+          "content": "various items of overhead, ancillary, and capital costs. Each of these average cost curves, in turn, has its minimum point on the unique marginal cost curve. These average and marginal cost curves are sketched in Figure 7.2.\n\n[Image: e959508787bca33ebb2f23aed00f05c512b0154724c45adbd5296cf16820462c.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/a582e05a-05f0-4422-bfec-4b217905ba8f.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 204,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "various items of overhead, ancillary, and capital costs. Each of these average cost curves, in turn,",
+          "score": 0.3319101929664612,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":204,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "6b183025-5b14-44e5-bd48-6e403e49df42",
+          "caption": null,
+          "chunk_id": "18c697c0-8335-45ff-9bba-60b50ceac271",
+          "chunk_type": "figure",
+          "citation_id": 5,
+          "content": "Therefore, there exists a functional relation between the price, $\\mathbf{P}_{\\mathbf{K}}$ , of a particular or a representative capital or financial asset and the quantity of money, M. Normally the price of a capital asset is a rising function of the quantity of money, for as the quantity increases the value of the insurance embodied in money decreases. As the price of money is always one, this implies that the price level of income-yielding capital assets increases. Furthermore, the functional relation has a logarithmic shape unless:\n\n[Image: 4d00c23fdcbbb64ad6aa1e3d5ca9a7c10531627aabdbad1922c8221346d77054.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/6b183025-5b14-44e5-bd48-6e403e49df42.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 229,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "Therefore, there exists a functional relation between the price, $\\mathbf{P}_{\\mathbf{K}}$ , of a pa",
+          "score": 0.32456281781196594,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":229,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "39382f01-35f6-4815-8d7f-91731f7454de",
+          "caption": null,
+          "chunk_id": "34d7813a-4ff0-4442-adbb-23a4b00a92ec",
+          "chunk_type": "figure",
+          "citation_id": 6,
+          "content": "[Image: f78e13b564f1675a4b4d3068178da4920e96d5b3d3efbcdd5ed7a3f2aa6227a5.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/39382f01-35f6-4815-8d7f-91731f7454de.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 317,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "[Image: f78e13b564f1675a4b4d3068178da4920e96d5b3d3efbcdd5ed7a3f2aa6227a5.jpg]",
+          "score": 0.3134804666042328,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":317,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "e18c531c-9ce5-438b-8cd4-65a33014ab05",
+          "caption": null,
+          "chunk_id": "d8b7dc0c-66e9-4905-b66a-43315de5671b",
+          "chunk_type": "figure",
+          "citation_id": 7,
+          "content": "Figures 4.5 and 4.6 show data for households; Figure 4.5 the ratio of liabilities to personal income and Figure 4.6 the ratio of liabilities to money.\n\n[Image: 20325152a194c5a0cb66221e1e3d0e1b72aea352940cdcf6f5cd754cc937200d.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/e18c531c-9ce5-438b-8cd4-65a33014ab05.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 119,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "Figures 4.5 and 4.6 show data for households; Figure 4.5 the ratio of liabilities to personal income",
+          "score": 0.30656060576438904,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":119,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "b9f91185-7930-4dfd-9289-139058f35aab",
+          "caption": null,
+          "chunk_id": "8bc2d8c6-724e-4029-847f-25dda9a5a869",
+          "chunk_type": "figure",
+          "citation_id": 8,
+          "content": "Price-taking firms react to changes in demand by adjusting output along their marginal cost curve. Even though such firms own and operate capital assets and have debts, they do not have the power to set their price according to what they need to satisfy such costs; instead, they are forced to accept what they can get; they take price as a parameter and set output along their MC curve.\n\n[Image: b553764fa05ab8f6c3542bc63693c1c17ef7b8adbaa39d0f2c0882fed85384b9.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/b9f91185-7930-4dfd-9289-139058f35aab.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 207,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "Price-taking firms react to changes in demand by adjusting output along their marginal cost curve. E",
+          "score": 0.2939046621322632,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":207,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "990a7595-a853-4bca-a315-9a079ccfe0af",
+          "caption": null,
+          "chunk_id": "687be929-bbfe-497d-ac35-a1a52da26395",
+          "chunk_type": "figure",
+          "citation_id": 9,
+          "content": "in investment goods increases even as the purchasing power of wages in consumption goods decreases.\n\n[Image: 4a1adc01959f7d8f1b745b876c74e4ecfb0aeeb27542cdc0dd77afbc5a6d9778.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/990a7595-a853-4bca-a315-9a079ccfe0af.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 406,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "in investment goods increases even as the purchasing power of wages in consumption goods decreases.\n",
+          "score": 0.26520586013793945,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":406,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "3bbf5855-27f4-45b3-a13a-30742145fe2a",
+          "caption": null,
+          "chunk_id": "d41f13ef-a892-4214-8c01-2dc9908ee221",
+          "chunk_type": "figure",
+          "citation_id": 10,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: 13ffd6c21550f7db29eb89d3b154bae8ed40b651b5c77d60cf373ba35bdb775b.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/3bbf5855-27f4-45b3-a13a-30742145fe2a.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.26457032561302185,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "41dd9871-cb2f-4371-bca8-7f5b4c39a02a",
+          "caption": null,
+          "chunk_id": "84bf45fb-b172-4691-8f3f-e6bb034cc201",
+          "chunk_type": "figure",
+          "citation_id": 11,
+          "content": "# INFLATION\n\n[Image: 4ddeb93f5079056047d558e3c3f09740484ffa0a6d0c7694569e8c63d2d344fe.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/41dd9871-cb2f-4371-bca8-7f5b4c39a02a.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 307,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "# INFLATION\n\n[Image: 4ddeb93f5079056047d558e3c3f09740484ffa0a6d0c7694569e8c63d2d344fe.jpg]",
+          "score": 0.26421788334846497,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":307,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "d90c68a0-3990-4780-8d0d-de4971991fbe",
+          "caption": null,
+          "chunk_id": "1ff4be10-61fe-4488-ac8e-12e3c0748af3",
+          "chunk_type": "figure",
+          "citation_id": 12,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: d6690ff5a995bfe10b1fae4af02125d38dd31eb3ec069beb2cd4d6b97803e26f.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/d90c68a0-3990-4780-8d0d-de4971991fbe.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.2640494108200073,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "55f08925-ba6a-4a92-9696-872f97660af6",
+          "caption": null,
+          "chunk_id": "478ef542-696a-40a6-89d9-0c06b6d8ea23",
+          "chunk_type": "figure",
+          "citation_id": 13,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: bf959f38f5c8f6e095b010d7aa0aa8a55dc4084c20bc61de4893adfe820009f1.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/55f08925-ba6a-4a92-9696-872f97660af6.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.26133647561073303,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "ce9caeb6-55b6-407d-a516-6c23a09867c3",
+          "caption": null,
+          "chunk_id": "61cb46e4-20de-40d9-b7dd-f8b30823fbef",
+          "chunk_type": "figure",
+          "citation_id": 14,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: eb72219185f66dfad048ff8b97d8850e96a65bba5cfd0b183dfa7447d6cf2e2e.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/ce9caeb6-55b6-407d-a516-6c23a09867c3.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.2607974410057068,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "c10c896d-c745-44ba-92d3-3abab7b54ede",
+          "caption": null,
+          "chunk_id": "11191f05-f74c-4def-b350-1ae151a408c8",
+          "chunk_type": "figure",
+          "citation_id": 15,
+          "content": "# CONSUMER PRICES AND REAL WAGES\n\n[Image: 451b55e3dd5bd82c4c30b3dc26b2911f194e881f9f4a46c742505c7c9f19b70a.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/c10c896d-c745-44ba-92d3-3abab7b54ede.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 404,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "# CONSUMER PRICES AND REAL WAGES\n\n[Image: 451b55e3dd5bd82c4c30b3dc26b2911f194e881f9f4a46c742505c7c9f",
+          "score": 0.2597399652004242,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":404,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "0e16ac87-92e6-4395-aa9a-f4e43bae3568",
+          "chunk_type": "paragraph",
+          "citation_id": 16,
+          "content": "xiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYmorefrequentandsevere.AsMinskyinsisted,thereisaninherentandfun-damentalinstabilityinoursortofeconomythattendstowardaspeculativeboom,followingJ.M.Keynes,whoarguedthat\"inanunstableeconomyspeculationdominatesenterprise\"(p.18).Unlikeothercriticalanalysesofcapitalistprocesses,whichemphasizethecrash,Minskywasmorecon-cernedwiththebehaviorofagentsduringtheeuphoricperiods.Andunlikeotheranalysesthatblame\"shocks,\"\"irrationalexuberance,\"or\"foolish\"policy,Minskyarguedthattheprocessesthatgeneratefinancialfragilityare\"natural,\"orendogenoustothesystem.AccordingtoMinsky,thecapitalisteconomyisatbest\"conditionallycoherent\"(p.117).Herejectedtheequilibriummethodologyofmainstreameconomicsasirrelevantinanalyzingareal-worldcapitalisteconomywithcomplexandovervaluedcapitalassets.Insteadofequilibrium,heproposed\"periodsoftranquility\"(p.197)characterizedbyarobustfinancialsystemandfewinnovations.Duringthoseperiods,thefinancialaspectsofinvest-mentarelessimportant.However,\"stabilityisdestabilizing,\"asrelativetranquilityencouragesmorerisk-takingandinnovativebehaviorthatincreasesincomeevenasitdisruptstheconditionsthatgenerate\"coherency\"and\"tranquility.\"",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 9,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "xiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYmorefrequentandsevere.AsMinskyinsisted,thereisaninherentandfu",
+          "score": 0.01666666753590107,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":9,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "031a4344-92e0-43ee-a7c5-1861a4facadc",
+          "chunk_type": "paragraph",
+          "citation_id": 17,
+          "content": "FrankH.Hahn,MoneyandInflation(Cambridge:MITPress,1983):\"Theobjectivesofagentsthatdeterminetheiractionsandplansdonotdependonanynominalmagnitudes.Agentscareonlyaboutrealthings,suchasgoods(properlydatedanddistinguishedbystatesofnature),leisure,andeffort.Weknowthisastheaxiomoftheabsenceofmoneyillusion,whichitseemsimpossibletoabandoninanysensibleanalysis\"(p.34).SeealsoHymanP.Minsky,\"FrankHahn'sMoneyandInflation:AReviewArticle,\"JournalofPost-KeynesianEconomics6,no.3(Spring1984),pp.449-57.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 310,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "FrankH.Hahn,MoneyandInflation(Cambridge:MITPress,1983):\"Theobjectivesofagentsthatdeterminetheiractio",
+          "score": 0.016393441706895828,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":310,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "246a4587-5d52-44b2-84ec-5ac4c08b96f2",
+          "chunk_type": "paragraph",
+          "citation_id": 18,
+          "content": "Thatis,themarketforcesthatoperatewhenasystemisstablewillpushittowardinstability,sothatevenifanythinglikeanequilibriumcouldbeachieved,itwouldsetoffbehavioralresponsesthatwouldquicklymovetheeconomyawayfromequilibrium.Minskyborrowedhis\"investmenttheoryofthecycle\"fromJohnMaynardKeynes.Minsky'scycletheoryderivedfromcombiningtwothings:thefamousexpositionfoundinKeynes'sChapter12oftheGeneralTheory,whichfocusesontheinherentinstabilityofinvestmentdecisionsastheyaremadeinconditionsoffundamentaluncertainty,andtheapproachtakeninChapter17tovaluationoffinancialandcapitalassets.Whirlwindsofoptimismandpessimismaffecttheaggregatequantityofinvestment,whichthenthroughthespendingmultiplierdeterminesoutputandemploy-ment.WhileMinskycreditedKeynesforpointingthewaytowardanalyz-ingtheprocessoffinancinginvestment,hefounditnecessarytogomuchfurther.Thus,Minsky'scontributionwastoaddthe\"financialtheoryofinvestment\"toKeynes's\"investmenttheoryofthecycle.\"Thiswasthemainthemeofhisearlierbook,JohnMaynardKeynes(1975).Sincefinanc-inginvestmentisthemostimportantsourceoftheinstabilityfoundinoureconomy,itmustalsobethemaintopicofanalysisifonewantstostabilizetheunstableeconomy.Hence,Minsky'streatmentofinvestmentandhowitisfinancedplaysacentralroleinthisvolume.Thesuperiorityofhisanaly-sisbecomes readily apparentonaclosere-readingofChapter8.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 9,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "Thatis,themarketforcesthatoperatewhenasystemisstablewillpushittowardinstability,sothatevenifanything",
+          "score": 0.016129031777381897,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":9,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "1fca8ed0-be1b-4233-9a93-a63fe142f9c1",
+          "chunk_type": "paragraph",
+          "citation_id": 19,
+          "content": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxixbytheinstitutionalfloorsthatpreventseriousrecessionsandthatvalidateriskierbehaviors.Minsky'sbesttreatmentofthisinflationbiasispresentedinChapter11ofthisvolume,usingamarkupapproachtotheaggregatepricelevel.Wewillnotprovideadetailedexpositionhere,butthebasicideaisthatpricesoftheconsumptiongoodspartofthecurrentoutputpricesystemaresetasamarkupovercosts-mostlywagecostsinthatsector.Themarkupinturnisdeterminedbyspendingonconsumptiongoodsinexcessoftheconsumptionbytheworkersthatproducedthem-thatis,bywork-ersintheinvestmentsectorandthegovernmentsector,byforeigners,andbytransferrecipients(retirees,thoseonAFDCandunemploymentcom-pensation,etc.).ThiswasathemeinMinsky'searliestworkandoneofthemainreasonshevehementlyopposedtheKennedylJohnsonWaronPoverty(Minsky1965,1968).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 16,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxixbytheinstitutionalfloorsthatpreventseriousrecessionsandthatva",
+          "score": 0.01587301678955555,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":16,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "de41e5fc-fd6a-4f33-a766-6d5a295e8ae8",
+          "chunk_type": "paragraph",
+          "citation_id": 20,
+          "content": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxiiiMinskyarguedthatnoonehadpreviouslythoughtthroughthepolicyimplicationsofKeynes'sGeneralTheory(p.324).Asimpliedbythetitleofhisbook,Minsky'smissionwastorectifythatlacunabydevelopingpolicyforthemodern,financial,capitalisteconomy.Chapter12and,especially,Chapter13presenthisalternativeagendaforpolicyreform.ThosewhoknewMinskyrecognizehispersistentdivergencefromthewell-known\"Keynesian\"mainstreamprescriptionsthatemphasized\"fine-tuning\"ofaggregatedemand,promotinginvestment,andinstituting\"welfare-statism\"toprovideasafetynet.Often,hishostilitytowelfareand\"pump-priming\"thatdatestotheearly1960smusthaveappearedincomprehensibletofellowcriticsoffree-marketsolutionstoreal-worldproblems.ButMinskytookanalternativepath,emphasizing that: a)fine-tuningisimpossible;b)relyingoninvestment-ledgrowthtoproviderisinglivingstandardsgen-eratesdestructiveinstabilityandinflation;andc)welfareisinflationaryandmerelyinstitutionalizesunemployment.InChapter13hepresentsanalter-nativestrategy,whichreliesonconsumption,employment,andtheuseofinstitutionsandregulationstoconstraininstability-towhichwewillreturnformoredetaileddiscussionlater.Intherestofthisintroduction,weprovideabriefoverviewofMinsky'scontributionstotheoryandtopolicyanalysis.Weincludeadiscussionofsomeofhisearlierworkthatledtothewritingofthisbook.Finally,weaddresssomeextensionstocurrentreal-worldproblemsinformedbyhisanalysis.MINSKY'SEARLYCONTRIBUTIONSInhispublicationsinthe195Osthroughthemid1960s,Minskygraduallydevelopedhisanalysisofcycles(Minsky1957a,1964,1979).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 10,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxiiiMinskyarguedthatnoonehadpreviouslythoughtthroughthepolicyimp",
+          "score": 0.015625,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":10,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "c6313cf9-b079-4603-a2e5-c52bc38df7bf",
+          "chunk_type": "paragraph",
+          "citation_id": 21,
+          "content": "xviiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYrobustfinancialstructurecouldopenthedoortoasnowballofdefaultsthatwouldoverwhelmsuchconstraints.Thiswouldbecomemorelikelyiftheinstitutionalconstraintsfailedtoadapttochangingcircumstances-or,worse,ifthelessonsoftheGreatDepressionwereforgottensothatdan-gerous\"freemarket\"ideologycametodominatepolicy.Ofcourse,bothoftheseeventscametopass.MinskyformulatedwhathetermedhisAnti-Laissez-FaireTheme:\"inaworldwheretheinternaldynamicsimplyinstability,asemblanceofstabilitycanbeachievedorsustainedbyintroducingconventions,con-straintsandinterventionsintotheenvironment\"(MinskyandFerri1991).Heinsistedtheproblemisthatorthodox,neoclassicaltheory-basedeco-nomicscannotprovideanyinsightintooureconomy.Thisisbecauseinsta-bilityaswellasthemereexistenceofdepressioncouldnotbeexplainedbystandardtheoryexceptthroughinternalshocksandstubbornworkerswhorefusedtoallowwagestorespond-indeed,unemploymentmustbeseenbyorthodoxyasretributionforobstinacy(p.154).Themainstreamcanondictatesmorelaissez-faireasthesolutionto\"disequilibrium.\"Bycontrast,incoherentmarketresultsare\"natural,\"accordingtoMinsky,requiringinterventiontopreventtheinvisiblehandfromoperating:\"Tocontaintheevilsthatmarketsystemscaninflict,capitalisteconomiesdevelopedsetsofinstitutionsandauthorities,whichcanbecharacterizedastheequivalentofcircuitbreakers.Theseinstitutionsineffectstoptheeconomicprocessesthatbreedtheincoherenceandrestarttheeconomywithnewinitialcondi-tions...\"(MinskyetaI.,1994).Furthermore,\"Theaptnessofinstitutionsandinterventionswilllargelydeterminetheextenttowhichthepathoftheeconomythroughtimeistranquilorturbulent:progressive,stagnant,ordeteriorating\"(ibid).Postwargrowthwasbiasedtowardinvestmentspending,especiallyafter1970.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 15,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "xviiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYrobustfinancialstructurecouldopenthedoortoasnowballofdefaul",
+          "score": 0.015384615398943424,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":15,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "19aa522a-87ae-41d5-94af-ad4b5ac41db6",
+          "chunk_type": "paragraph",
+          "citation_id": 22,
+          "content": "xviMINSKY'SSTABILIZINGANUNSTABLEECONOMYFromhisearlywork,Minskyrecognizedthatfinanciers'desiretoraiseleverageandmovetomorespeculativepositionscouldbefrustrated.Ifresultsaremorefavorablethanexpected,aninvestorattemptingtoengageinspeculativefinancecouldremainhedgedbecausehisincomeisgreaterthanheanticipated.Thus,whileMinskydidnotincorporatethenowwell-knownKaleckirelationinJMK,hedidrecognizethataninvestmentboomcouldraiseaggregatedemandandspendingthroughthemultiplierandgeneratemoresalesthanprojected.Later,heexplicitlyincorporatedtheKaleckianresult,whereaggregateprofitsequalinvestmentplusthegov-ernment'sdeficitinthetruncatedmodel.Thus,inaninvestmentboom,profitswouldbeincreasingalongwithinvestment,helpingtovalidateexpec-tationsandencouragingevenmoreinvestment.Thisaddedcredencetohispropositionthatthefundamentalinstabilityinthecapitalisteconomyincreasesuntilitreachesaspeculativefrenzy.Inaddition,intheearly1960s,hehadarguedthatimpactsonprivatesectorbalancesheetswoulddependonthestanceofthegovernment'sbalancesheet(Minsky1963).Agovernment-spending-Iedexpansionwouldallowtheprivatesectortoexpandwithoutcreatingfragilebalancesheets-governmentdeficitswouldaddsafetreasurydebttoprivateportfolios(oneoftheeffectsofdeficitspendingdiscussedinChapter2below).Arobustexpansion,however,wouldtendtocausetaxrevenuestogrowfasterthanprivatesectorincomesothatthegovernmentbudgetwould\"improve\"(movetowardsurplus)andtheprivatesectorbalancewoulddeteriorate(movetowarddeficit).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 13,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "xviMINSKY'SSTABILIZINGANUNSTABLEECONOMYFromhisearlywork,Minskyrecognizedthatfinanciers'desiretoraise",
+          "score": 0.01515151560306549,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":13,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "541226b6-3146-47d6-9a79-c0617e3440e9",
+          "chunk_type": "paragraph",
+          "citation_id": 23,
+          "content": "OnceheaddedtheKaleckiequationtohisexposi-tion(ashedoesinthisvolume,pp.17,162),hecouldexplainhowthiscountercyclicalmovementofthebudgetwouldautomaticallystabilizeprofits-limitingboththeupsideinaboomandthedownsideinaslump.WiththeKaleckiviewofprofitsincorporatedinhisinvestmenttheoryofthecycle,Minskyarguedthatinvestmentisforthcomingtodayonlyifinvestmentisexpectedinthefuture-sinceinvestmentinthefuturewilldetermineprofitsinthefuture(intheskeletalmodel)(p.163).Fur-thermore,becauseinvestmenttodayvalidatesthedecisionsundertaken\"yes-terday,\"expectationsabout\"tomorrow\"affectabilitytomeetcommitmentsthatweremadewhenfinancingtheexistingcapitalassets.ThereisthusacomplextemporalrelationinvolvedinMinsky'sapproachtoinvestmentthatcouldbeeasilydisturbed(pp.213-218).Oncethisislinkedtothe\"twoprice\"approach,itbecomesapparentthatanythingthatlowersexpectedfutureprofitabilitycanpushthedemandpriceofcapitalbelowthesupplyprice.Thisreducesinvestmentandtoday'sprofitsbelowthelevelnecessarytovalidatethepastexpectationsthatdemandpriceswerebasedonwhen",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 13,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "OnceheaddedtheKaleckiequationtohisexposi-tion(ashedoesinthisvolume,pp.17,162),hecouldexplainhowthisc",
+          "score": 0.014925372786819935,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":13,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "60111020-7ed9-4bad-91ad-cf242810e4f8",
+          "chunk_type": "paragraph",
+          "citation_id": 24,
+          "content": "ThesearenotdevelopmentsthatMinskywouldhavewelcomed,astheyraisethepossibilityofrenewedstagflation.InChapters2and3,Minskyexaminedthesharpdownturnsin1974-75and1981-82.HeshowsthatBigGovernmentplayedanimportantroleinbothdownturns,maintainingincomeandprofitflows.Inparticular,theresultingbudgetdeficitineachrecessionaddedtoaggregateprofits(asintheKaleckiequation)toenablefirmstocontinuetoservicedebt.Further,transferpaymentsroseinbothperiods,sothat,accordingtoMinsky,forthefirsttimepersonalincomedidnotfallduringarecession.Thiskeptcon-sumptionfromcollapsingevenasunemploymentrose.MinskyalsoanalyzedtheoperationsoftheFed,arguingthatlender-of-Iast-resortoperationswereparticularlyimportantduringthesecondperiod.Wray(1989)extendsMinsky'sanalysistotheReaganrecovery,showingthatitwasnotsupply-sideeconomicsthatbroughttheeconomyoutofrecession;rather,itwasthe",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 17,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "ThesearenotdevelopmentsthatMinskywouldhavewelcomed,astheyraisethepossibilityofrenewedstagflation.InC",
+          "score": 0.014705882407724857,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":17,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "61dbf677-1b17-4673-998d-5aba7adb8b5c",
+          "chunk_type": "paragraph",
+          "citation_id": 25,
+          "content": "risksofclassesofborrowers.Almostalloftheincentivewasplacedonthroughput,orquan-tityofloansoriginated,andalmostnoneonabilitytopay.Minskyalwaysarguedthataskepticalloanofficerisrequiredtoassessthecharacterofeachindividualborrower.Arelationshipshouldbedevelopedsothatthe",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 28,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "risksofclassesofborrowers.Almostalloftheincentivewasplacedonthroughput,orquan-tityofloansoriginated,",
+          "score": 0.014492753893136978,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":28,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "f8b30511-2807-47ba-b0eb-9f05753494a0",
+          "chunk_type": "paragraph",
+          "citation_id": 26,
+          "content": "Preface and Acknowledgments to the First Edition by Hyman P. Minsky ix",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 2,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "Preface and Acknowledgments to the First Edition by Hyman P. Minsky ix",
+          "score": 0.014285714365541935,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":2,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "4ebf421f-8d4f-4632-a6c0-76b913bf6960",
+          "chunk_type": "paragraph",
+          "citation_id": 27,
+          "content": "xivMINSKY'SSTABILIZINGANUNSTABLEECONOMYallowedforthepossibilityofexplosivegrowth(Minsky1957b).Insomeofhisearliestwork,headdedinstitutionalceilingsandfloorstoproduceavari-etyofpossibleoutcomes,includingsteadygrowth,cycles,booms,andlongdepressions.Heultimatelycamebacktothesemodelsinsomeofhislastpaperswrittenatthe Levy EconomicsInstitute(MinskyandFerri1991).Itisclear,however,thattheresultsoftheseanalysesplayedaroleinhisargumentthattheNewDealandpost-warinstitutionalarrangementsconstrainedtheinherentinstabilityofmoderncapitalism,producingthesemblanceofstability.Atthesametime,heexaminedfinancialinnovation,arguingthatnor-malprofitseekingbyfinancialinstitutionscontinuallysubvertedattemptsbytheauthoritiestoconstrainmoneysupplygrowth(Minsky1957a).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 11,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "xivMINSKY'SSTABILIZINGANUNSTABLEECONOMYallowedforthepossibilityofexplosivegrowth(Minsky1957b).Insome",
+          "score": 0.014084506779909134,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":11,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        }
+      ],
+      "degrade_trace": [
+        {
+          "impact": "Falling back to text rerank or pre-rerank ordering",
+          "reason": "Multimodal reranker call failed: Multimodal rerank API error 400 Bad Request: {\"request_id\":\"3c290027-3cf7-9147-bb94-2e95a8e7ca00\",\"code\":\"InvalidParameter\",\"message\":\"<400> InternalError.Algo.InvalidParameter: Image URL or Base64 is invalid. URL must be a valid HTTP/HTTPS link, and Base64 must start with 'image/xxx;base64\"}",
+          "stage": "mm_reranker"
+        },
+        {
+          "impact": "Using pre-rerank ordering",
+          "reason": "Reranker call failed: Rerank API error 401 Unauthorized: \"Api key is invalid\"",
+          "stage": "reranker"
+        }
+      ],
+      "guard_report": {
+        "blocked": false,
+        "degrade_trace": [],
+        "input_results": [],
+        "output_results": [
+          {
+            "action": "Allow",
+            "details": null,
+            "guard_type": "output:citation_provability",
+            "operator": null,
+            "passed": true,
+            "reason": "",
+            "risk_level": "Low",
+            "trace_id": null
+          },
+          {
+            "action": "Allow",
+            "details": null,
+            "guard_type": "output:pii_detection",
+            "operator": null,
+            "passed": true,
+            "reason": "",
+            "risk_level": "Low",
+            "trace_id": null
+          },
+          {
+            "action": "Allow",
+            "details": null,
+            "guard_type": "output:harmful_content",
+            "operator": null,
+            "passed": true,
+            "reason": "",
+            "risk_level": "Low",
+            "trace_id": null
+          }
+        ]
+      },
+      "message_id": 470,
+      "mode_debug": {
+        "general": null,
+        "rag": {
+          "item_trace": [
+            {
+              "bm25_k": 0,
+              "bm25_terms": [],
+              "dense_k": 100,
+              "payload_kind": "query",
+              "priority": 1.0,
+              "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+              "recall_budget": 100,
+              "rerank_budget": 100,
+              "source_count": 0,
+              "source_ids": []
+            }
+          ],
+          "retrieval_trace": {
+            "item_count": 1,
+            "items": [
+              {
+                "bm25_k": 0,
+                "bm25_terms": [],
+                "dense_k": 100,
+                "payload_kind": "query",
+                "priority": 1.0,
+                "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+                "recall_budget": 100,
+                "rerank_budget": 100,
+                "source_count": 0,
+                "source_ids": []
+              }
+            ],
+            "max_final_chunks": 30,
+            "max_rerank_docs": 75,
+            "summary_mode": "none",
+            "top_k_returned": 27,
+            "total_candidate_budget": 100
+          },
+          "summary_injection_trace": {
+            "injected_count": 0,
+            "mode": "none"
+          }
+        },
+        "search": null
+      },
+      "planner_output": {
+        "mode": "rag",
+        "rag_plan": {
+          "clarify_message": "",
+          "clarify_needed": false,
+          "items": [
+            {
+              "priority": 1.0,
+              "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames"
+            }
+          ],
+          "plan_confidence": 1.0,
+          "plan_version": "rag-execute-v1"
+        }
+      },
+      "session_id": "23a47250-8c33-49f7-a719-c00d93876dee",
+      "sources": [
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "c6ad29d9-8761-4b35-b29c-3c89be9352cf",
+          "page": 191,
+          "snippet": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "f2ec4945-02c8-46aa-89ce-d8627400f2d1",
+          "page": 191,
+          "snippet": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "2a0ab83f-1b81-4baf-bfc9-5e84e332efa8",
+          "page": 191,
+          "snippet": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "68690497-98b2-46b4-bf61-a59125cd0673",
+          "page": 204,
+          "snippet": "various items of overhead, ancillary, and capital costs. Each of these average cost curves, in turn, has its minimum point on the unique marginal cost curve. These average and marginal cost curves are",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "18c697c0-8335-45ff-9bba-60b50ceac271",
+          "page": 229,
+          "snippet": "Therefore, there exists a functional relation between the price, $\\mathbf{P}_{\\mathbf{K}}$ , of a particular or a representative capital or financial asset and the quantity of money, M. Normally the p",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "34d7813a-4ff0-4442-adbb-23a4b00a92ec",
+          "page": 317,
+          "snippet": "[Image: f78e13b564f1675a4b4d3068178da4920e96d5b3d3efbcdd5ed7a3f2aa6227a5.jpg]",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "d8b7dc0c-66e9-4905-b66a-43315de5671b",
+          "page": 119,
+          "snippet": "Figures 4.5 and 4.6 show data for households; Figure 4.5 the ratio of liabilities to personal income and Figure 4.6 the ratio of liabilities to money.\n\n[Image: 20325152a194c5a0cb66221e1e3d0e1b72aea352",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "8bc2d8c6-724e-4029-847f-25dda9a5a869",
+          "page": 207,
+          "snippet": "Price-taking firms react to changes in demand by adjusting output along their marginal cost curve. Even though such firms own and operate capital assets and have debts, they do not have the power to s",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "687be929-bbfe-497d-ac35-a1a52da26395",
+          "page": 406,
+          "snippet": "in investment goods increases even as the purchasing power of wages in consumption goods decreases.\n\n[Image: 4a1adc01959f7d8f1b745b876c74e4ecfb0aeeb27542cdc0dd77afbc5a6d9778.jpg]",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "d41f13ef-a892-4214-8c01-2dc9908ee221",
+          "page": 194,
+          "snippet": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: 13ffd6c21550f7db29eb89d3b15",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "84bf45fb-b172-4691-8f3f-e6bb034cc201",
+          "page": 307,
+          "snippet": "# INFLATION\n\n[Image: 4ddeb93f5079056047d558e3c3f09740484ffa0a6d0c7694569e8c63d2d344fe.jpg]",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "1ff4be10-61fe-4488-ac8e-12e3c0748af3",
+          "page": 194,
+          "snippet": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: d6690ff5a995bfe10b1fae4af02",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "478ef542-696a-40a6-89d9-0c06b6d8ea23",
+          "page": 194,
+          "snippet": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: bf959f38f5c8f6e095b010d7aa0",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "61cb46e4-20de-40d9-b7dd-f8b30823fbef",
+          "page": 194,
+          "snippet": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: eb72219185f66dfad048ff8b97d",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "11191f05-f74c-4def-b350-1ae151a408c8",
+          "page": 404,
+          "snippet": "# CONSUMER PRICES AND REAL WAGES\n\n[Image: 451b55e3dd5bd82c4c30b3dc26b2911f194e881f9f4a46c742505c7c9f19b70a.jpg]",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "0e16ac87-92e6-4395-aa9a-f4e43bae3568",
+          "page": 9,
+          "snippet": "xiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYmorefrequentandsevere.AsMinskyinsisted,thereisaninherentandfun-damentalinstabilityinoursortofeconomythattendstowardaspeculativeboom,followingJ.M.Keynes,whoargued",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "031a4344-92e0-43ee-a7c5-1861a4facadc",
+          "page": 310,
+          "snippet": "FrankH.Hahn,MoneyandInflation(Cambridge:MITPress,1983):\"Theobjectivesofagentsthatdeterminetheiractionsandplansdonotdependonanynominalmagnitudes.Agentscareonlyaboutrealthings,suchasgoods(properlydateda",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "246a4587-5d52-44b2-84ec-5ac4c08b96f2",
+          "page": 9,
+          "snippet": "Thatis,themarketforcesthatoperatewhenasystemisstablewillpushittowardinstability,sothatevenifanythinglikeanequilibriumcouldbeachieved,itwouldsetoffbehavioralresponsesthatwouldquicklymovetheeconomyawayf",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "1fca8ed0-be1b-4233-9a93-a63fe142f9c1",
+          "page": 16,
+          "snippet": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxixbytheinstitutionalfloorsthatpreventseriousrecessionsandthatvalidateriskierbehaviors.Minsky'sbesttreatmentofthisinflationbiasispresentedinChapter11ofthisvolume,us",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "de41e5fc-fd6a-4f33-a766-6d5a295e8ae8",
+          "page": 10,
+          "snippet": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxiiiMinskyarguedthatnoonehadpreviouslythoughtthroughthepolicyimplicationsofKeynes'sGeneralTheory(p.324).Asimpliedbythetitleofhisbook,Minsky'smissionwastorectifythat",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "c6313cf9-b079-4603-a2e5-c52bc38df7bf",
+          "page": 15,
+          "snippet": "xviiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYrobustfinancialstructurecouldopenthedoortoasnowballofdefaultsthatwouldoverwhelmsuchconstraints.Thiswouldbecomemorelikelyiftheinstitutionalconstraintsfailedtoad",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "19aa522a-87ae-41d5-94af-ad4b5ac41db6",
+          "page": 13,
+          "snippet": "xviMINSKY'SSTABILIZINGANUNSTABLEECONOMYFromhisearlywork,Minskyrecognizedthatfinanciers'desiretoraiseleverageandmovetomorespeculativepositionscouldbefrustrated.Ifresultsaremorefavorablethanexpected,ani",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "541226b6-3146-47d6-9a79-c0617e3440e9",
+          "page": 13,
+          "snippet": "OnceheaddedtheKaleckiequationtohisexposi-tion(ashedoesinthisvolume,pp.17,162),hecouldexplainhowthiscountercyclicalmovementofthebudgetwouldautomaticallystabilizeprofits-limitingboththeupsideinaboomandt",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "60111020-7ed9-4bad-91ad-cf242810e4f8",
+          "page": 17,
+          "snippet": "ThesearenotdevelopmentsthatMinskywouldhavewelcomed,astheyraisethepossibilityofrenewedstagflation.InChapters2and3,Minskyexaminedthesharpdownturnsin1974-75and1981-82.HeshowsthatBigGovernmentplayedanimpo",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "61dbf677-1b17-4673-998d-5aba7adb8b5c",
+          "page": 28,
+          "snippet": "risksofclassesofborrowers.Almostalloftheincentivewasplacedonthroughput,orquan-tityofloansoriginated,andalmostnoneonabilitytopay.Minskyalwaysarguedthataskepticalloanofficerisrequiredtoassessthecharacte",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "f8b30511-2807-47ba-b0eb-9f05753494a0",
+          "page": 2,
+          "snippet": "Preface and Acknowledgments to the First Edition by Hyman P. Minsky ix",
+          "title": "minsky86.pdf"
+        },
+        {
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "id": "4ebf421f-8d4f-4632-a6c0-76b913bf6960",
+          "page": 11,
+          "snippet": "xivMINSKY'SSTABILIZINGANUNSTABLEECONOMYallowedforthepossibilityofexplosivegrowth(Minsky1957b).Insomeofhisearliestwork,headdedinstitutionalceilingsandfloorstoproduceavari-etyofpossibleoutcomes,includin",
+          "title": "minsky86.pdf"
+        }
+      ],
+      "trace": {
+        "mode": "rag"
+      }
+    },
+    "citations_payload": {
+      "event": "citations",
+      "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+      "message_id": 470,
+      "citations": [
+        {
+          "asset_id": "422a67b3-161f-45a8-8355-e9d220c05244",
+          "caption": null,
+          "chunk_id": "c6ad29d9-8761-4b35-b29c-3c89be9352cf",
+          "chunk_type": "figure",
+          "citation_id": 1,
+          "content": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets.\n\n[Image: 1939cc94b0366914e56f3a2e7989bc06993863bf4177c9d19576d7e390153edf.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/422a67b3-161f-45a8-8355-e9d220c05244.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 191,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "will be extended to include more than the skeletal relations. In the more complete case, the governm",
+          "score": 0.36286431550979614,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":191,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "e8a9bb26-b516-42b4-b72e-c66c5b1056f2",
+          "caption": null,
+          "chunk_id": "f2ec4945-02c8-46aa-89ce-d8627400f2d1",
+          "chunk_type": "figure",
+          "citation_id": 2,
+          "content": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets.\n\n[Image: cb1e0516ae2542e937e53bfacaca5d4033f7010dd2d68fda0667a6a13fe44dd3.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/e8a9bb26-b516-42b4-b72e-c66c5b1056f2.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 191,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "will be extended to include more than the skeletal relations. In the more complete case, the governm",
+          "score": 0.3587435781955719,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":191,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "c038980c-9a9f-4f01-9252-02edb70b6bb5",
+          "caption": null,
+          "chunk_id": "2a0ab83f-1b81-4baf-bfc9-5e84e332efa8",
+          "chunk_type": "figure",
+          "citation_id": 3,
+          "content": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets.\n\n[Image: 3e0fd4fe2070d67d67d35345c02e98fc68e7a15d0d0858f5922e87794df923d5.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/c038980c-9a9f-4f01-9252-02edb70b6bb5.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 191,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "will be extended to include more than the skeletal relations. In the more complete case, the governm",
+          "score": 0.35782840847969055,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":191,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "a582e05a-05f0-4422-bfec-4b217905ba8f",
+          "caption": null,
+          "chunk_id": "68690497-98b2-46b4-bf61-a59125cd0673",
+          "chunk_type": "figure",
+          "citation_id": 4,
+          "content": "various items of overhead, ancillary, and capital costs. Each of these average cost curves, in turn, has its minimum point on the unique marginal cost curve. These average and marginal cost curves are sketched in Figure 7.2.\n\n[Image: e959508787bca33ebb2f23aed00f05c512b0154724c45adbd5296cf16820462c.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/a582e05a-05f0-4422-bfec-4b217905ba8f.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 204,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "various items of overhead, ancillary, and capital costs. Each of these average cost curves, in turn,",
+          "score": 0.3319101929664612,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":204,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "6b183025-5b14-44e5-bd48-6e403e49df42",
+          "caption": null,
+          "chunk_id": "18c697c0-8335-45ff-9bba-60b50ceac271",
+          "chunk_type": "figure",
+          "citation_id": 5,
+          "content": "Therefore, there exists a functional relation between the price, $\\mathbf{P}_{\\mathbf{K}}$ , of a particular or a representative capital or financial asset and the quantity of money, M. Normally the price of a capital asset is a rising function of the quantity of money, for as the quantity increases the value of the insurance embodied in money decreases. As the price of money is always one, this implies that the price level of income-yielding capital assets increases. Furthermore, the functional relation has a logarithmic shape unless:\n\n[Image: 4d00c23fdcbbb64ad6aa1e3d5ca9a7c10531627aabdbad1922c8221346d77054.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/6b183025-5b14-44e5-bd48-6e403e49df42.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 229,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "Therefore, there exists a functional relation between the price, $\\mathbf{P}_{\\mathbf{K}}$ , of a pa",
+          "score": 0.32456281781196594,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":229,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "39382f01-35f6-4815-8d7f-91731f7454de",
+          "caption": null,
+          "chunk_id": "34d7813a-4ff0-4442-adbb-23a4b00a92ec",
+          "chunk_type": "figure",
+          "citation_id": 6,
+          "content": "[Image: f78e13b564f1675a4b4d3068178da4920e96d5b3d3efbcdd5ed7a3f2aa6227a5.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/39382f01-35f6-4815-8d7f-91731f7454de.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 317,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "[Image: f78e13b564f1675a4b4d3068178da4920e96d5b3d3efbcdd5ed7a3f2aa6227a5.jpg]",
+          "score": 0.3134804666042328,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":317,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "e18c531c-9ce5-438b-8cd4-65a33014ab05",
+          "caption": null,
+          "chunk_id": "d8b7dc0c-66e9-4905-b66a-43315de5671b",
+          "chunk_type": "figure",
+          "citation_id": 7,
+          "content": "Figures 4.5 and 4.6 show data for households; Figure 4.5 the ratio of liabilities to personal income and Figure 4.6 the ratio of liabilities to money.\n\n[Image: 20325152a194c5a0cb66221e1e3d0e1b72aea352940cdcf6f5cd754cc937200d.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/e18c531c-9ce5-438b-8cd4-65a33014ab05.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 119,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "Figures 4.5 and 4.6 show data for households; Figure 4.5 the ratio of liabilities to personal income",
+          "score": 0.30656060576438904,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":119,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "b9f91185-7930-4dfd-9289-139058f35aab",
+          "caption": null,
+          "chunk_id": "8bc2d8c6-724e-4029-847f-25dda9a5a869",
+          "chunk_type": "figure",
+          "citation_id": 8,
+          "content": "Price-taking firms react to changes in demand by adjusting output along their marginal cost curve. Even though such firms own and operate capital assets and have debts, they do not have the power to set their price according to what they need to satisfy such costs; instead, they are forced to accept what they can get; they take price as a parameter and set output along their MC curve.\n\n[Image: b553764fa05ab8f6c3542bc63693c1c17ef7b8adbaa39d0f2c0882fed85384b9.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/b9f91185-7930-4dfd-9289-139058f35aab.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 207,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "Price-taking firms react to changes in demand by adjusting output along their marginal cost curve. E",
+          "score": 0.2939046621322632,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":207,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "990a7595-a853-4bca-a315-9a079ccfe0af",
+          "caption": null,
+          "chunk_id": "687be929-bbfe-497d-ac35-a1a52da26395",
+          "chunk_type": "figure",
+          "citation_id": 9,
+          "content": "in investment goods increases even as the purchasing power of wages in consumption goods decreases.\n\n[Image: 4a1adc01959f7d8f1b745b876c74e4ecfb0aeeb27542cdc0dd77afbc5a6d9778.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/990a7595-a853-4bca-a315-9a079ccfe0af.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 406,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "in investment goods increases even as the purchasing power of wages in consumption goods decreases.\n",
+          "score": 0.26520586013793945,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":406,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "3bbf5855-27f4-45b3-a13a-30742145fe2a",
+          "caption": null,
+          "chunk_id": "d41f13ef-a892-4214-8c01-2dc9908ee221",
+          "chunk_type": "figure",
+          "citation_id": 10,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: 13ffd6c21550f7db29eb89d3b154bae8ed40b651b5c77d60cf373ba35bdb775b.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/3bbf5855-27f4-45b3-a13a-30742145fe2a.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.26457032561302185,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "41dd9871-cb2f-4371-bca8-7f5b4c39a02a",
+          "caption": null,
+          "chunk_id": "84bf45fb-b172-4691-8f3f-e6bb034cc201",
+          "chunk_type": "figure",
+          "citation_id": 11,
+          "content": "# INFLATION\n\n[Image: 4ddeb93f5079056047d558e3c3f09740484ffa0a6d0c7694569e8c63d2d344fe.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/41dd9871-cb2f-4371-bca8-7f5b4c39a02a.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 307,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "# INFLATION\n\n[Image: 4ddeb93f5079056047d558e3c3f09740484ffa0a6d0c7694569e8c63d2d344fe.jpg]",
+          "score": 0.26421788334846497,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":307,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "d90c68a0-3990-4780-8d0d-de4971991fbe",
+          "caption": null,
+          "chunk_id": "1ff4be10-61fe-4488-ac8e-12e3c0748af3",
+          "chunk_type": "figure",
+          "citation_id": 12,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: d6690ff5a995bfe10b1fae4af02125d38dd31eb3ec069beb2cd4d6b97803e26f.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/d90c68a0-3990-4780-8d0d-de4971991fbe.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.2640494108200073,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "55f08925-ba6a-4a92-9696-872f97660af6",
+          "caption": null,
+          "chunk_id": "478ef542-696a-40a6-89d9-0c06b6d8ea23",
+          "chunk_type": "figure",
+          "citation_id": 13,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: bf959f38f5c8f6e095b010d7aa0aa8a55dc4084c20bc61de4893adfe820009f1.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/55f08925-ba6a-4a92-9696-872f97660af6.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.26133647561073303,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "ce9caeb6-55b6-407d-a516-6c23a09867c3",
+          "caption": null,
+          "chunk_id": "61cb46e4-20de-40d9-b7dd-f8b30823fbef",
+          "chunk_type": "figure",
+          "citation_id": 14,
+          "content": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist economic policies helps raise profits even as it raises prices.\n\n[Image: eb72219185f66dfad048ff8b97d8850e96a65bba5cfd0b183dfa7447d6cf2e2e.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/ce9caeb6-55b6-407d-a516-6c23a09867c3.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 194,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "increases domestic profits and raises prices. The favorable balance of trade sought by mercantilist ",
+          "score": 0.2607974410057068,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":194,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": "c10c896d-c745-44ba-92d3-3abab7b54ede",
+          "caption": null,
+          "chunk_id": "11191f05-f74c-4def-b350-1ae151a408c8",
+          "chunk_type": "figure",
+          "citation_id": 15,
+          "content": "# CONSUMER PRICES AND REAL WAGES\n\n[Image: 451b55e3dd5bd82c4c30b3dc26b2911f194e881f9f4a46c742505c7c9f19b70a.jpg]",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": "7f743c86-738b-45fe-b426-d1477d3233a4/b7774d00-df07-4d9b-8f32-c6f2a60b8f21/db7bc56e-f840-46ef-91b4-8cbb534b5598/assets/c10c896d-c745-44ba-92d3-3abab7b54ede.jpg",
+          "layer": "milvus_multimodal_dense",
+          "page": 404,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "# CONSUMER PRICES AND REAL WAGES\n\n[Image: 451b55e3dd5bd82c4c30b3dc26b2911f194e881f9f4a46c742505c7c9f",
+          "score": 0.2597399652004242,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":404,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "0e16ac87-92e6-4395-aa9a-f4e43bae3568",
+          "chunk_type": "paragraph",
+          "citation_id": 16,
+          "content": "xiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYmorefrequentandsevere.AsMinskyinsisted,thereisaninherentandfun-damentalinstabilityinoursortofeconomythattendstowardaspeculativeboom,followingJ.M.Keynes,whoarguedthat\"inanunstableeconomyspeculationdominatesenterprise\"(p.18).Unlikeothercriticalanalysesofcapitalistprocesses,whichemphasizethecrash,Minskywasmorecon-cernedwiththebehaviorofagentsduringtheeuphoricperiods.Andunlikeotheranalysesthatblame\"shocks,\"\"irrationalexuberance,\"or\"foolish\"policy,Minskyarguedthattheprocessesthatgeneratefinancialfragilityare\"natural,\"orendogenoustothesystem.AccordingtoMinsky,thecapitalisteconomyisatbest\"conditionallycoherent\"(p.117).Herejectedtheequilibriummethodologyofmainstreameconomicsasirrelevantinanalyzingareal-worldcapitalisteconomywithcomplexandovervaluedcapitalassets.Insteadofequilibrium,heproposed\"periodsoftranquility\"(p.197)characterizedbyarobustfinancialsystemandfewinnovations.Duringthoseperiods,thefinancialaspectsofinvest-mentarelessimportant.However,\"stabilityisdestabilizing,\"asrelativetranquilityencouragesmorerisk-takingandinnovativebehaviorthatincreasesincomeevenasitdisruptstheconditionsthatgenerate\"coherency\"and\"tranquility.\"",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 9,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "xiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYmorefrequentandsevere.AsMinskyinsisted,thereisaninherentandfu",
+          "score": 0.01666666753590107,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":9,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "031a4344-92e0-43ee-a7c5-1861a4facadc",
+          "chunk_type": "paragraph",
+          "citation_id": 17,
+          "content": "FrankH.Hahn,MoneyandInflation(Cambridge:MITPress,1983):\"Theobjectivesofagentsthatdeterminetheiractionsandplansdonotdependonanynominalmagnitudes.Agentscareonlyaboutrealthings,suchasgoods(properlydatedanddistinguishedbystatesofnature),leisure,andeffort.Weknowthisastheaxiomoftheabsenceofmoneyillusion,whichitseemsimpossibletoabandoninanysensibleanalysis\"(p.34).SeealsoHymanP.Minsky,\"FrankHahn'sMoneyandInflation:AReviewArticle,\"JournalofPost-KeynesianEconomics6,no.3(Spring1984),pp.449-57.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 310,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "FrankH.Hahn,MoneyandInflation(Cambridge:MITPress,1983):\"Theobjectivesofagentsthatdeterminetheiractio",
+          "score": 0.016393441706895828,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":310,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "246a4587-5d52-44b2-84ec-5ac4c08b96f2",
+          "chunk_type": "paragraph",
+          "citation_id": 18,
+          "content": "Thatis,themarketforcesthatoperatewhenasystemisstablewillpushittowardinstability,sothatevenifanythinglikeanequilibriumcouldbeachieved,itwouldsetoffbehavioralresponsesthatwouldquicklymovetheeconomyawayfromequilibrium.Minskyborrowedhis\"investmenttheoryofthecycle\"fromJohnMaynardKeynes.Minsky'scycletheoryderivedfromcombiningtwothings:thefamousexpositionfoundinKeynes'sChapter12oftheGeneralTheory,whichfocusesontheinherentinstabilityofinvestmentdecisionsastheyaremadeinconditionsoffundamentaluncertainty,andtheapproachtakeninChapter17tovaluationoffinancialandcapitalassets.Whirlwindsofoptimismandpessimismaffecttheaggregatequantityofinvestment,whichthenthroughthespendingmultiplierdeterminesoutputandemploy-ment.WhileMinskycreditedKeynesforpointingthewaytowardanalyz-ingtheprocessoffinancinginvestment,hefounditnecessarytogomuchfurther.Thus,Minsky'scontributionwastoaddthe\"financialtheoryofinvestment\"toKeynes's\"investmenttheoryofthecycle.\"Thiswasthemainthemeofhisearlierbook,JohnMaynardKeynes(1975).Sincefinanc-inginvestmentisthemostimportantsourceoftheinstabilityfoundinoureconomy,itmustalsobethemaintopicofanalysisifonewantstostabilizetheunstableeconomy.Hence,Minsky'streatmentofinvestmentandhowitisfinancedplaysacentralroleinthisvolume.Thesuperiorityofhisanaly-sisbecomes readily apparentonaclosere-readingofChapter8.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 9,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "Thatis,themarketforcesthatoperatewhenasystemisstablewillpushittowardinstability,sothatevenifanything",
+          "score": 0.016129031777381897,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":9,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "1fca8ed0-be1b-4233-9a93-a63fe142f9c1",
+          "chunk_type": "paragraph",
+          "citation_id": 19,
+          "content": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxixbytheinstitutionalfloorsthatpreventseriousrecessionsandthatvalidateriskierbehaviors.Minsky'sbesttreatmentofthisinflationbiasispresentedinChapter11ofthisvolume,usingamarkupapproachtotheaggregatepricelevel.Wewillnotprovideadetailedexpositionhere,butthebasicideaisthatpricesoftheconsumptiongoodspartofthecurrentoutputpricesystemaresetasamarkupovercosts-mostlywagecostsinthatsector.Themarkupinturnisdeterminedbyspendingonconsumptiongoodsinexcessoftheconsumptionbytheworkersthatproducedthem-thatis,bywork-ersintheinvestmentsectorandthegovernmentsector,byforeigners,andbytransferrecipients(retirees,thoseonAFDCandunemploymentcom-pensation,etc.).ThiswasathemeinMinsky'searliestworkandoneofthemainreasonshevehementlyopposedtheKennedylJohnsonWaronPoverty(Minsky1965,1968).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 16,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxixbytheinstitutionalfloorsthatpreventseriousrecessionsandthatva",
+          "score": 0.01587301678955555,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":16,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "de41e5fc-fd6a-4f33-a766-6d5a295e8ae8",
+          "chunk_type": "paragraph",
+          "citation_id": 20,
+          "content": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxiiiMinskyarguedthatnoonehadpreviouslythoughtthroughthepolicyimplicationsofKeynes'sGeneralTheory(p.324).Asimpliedbythetitleofhisbook,Minsky'smissionwastorectifythatlacunabydevelopingpolicyforthemodern,financial,capitalisteconomy.Chapter12and,especially,Chapter13presenthisalternativeagendaforpolicyreform.ThosewhoknewMinskyrecognizehispersistentdivergencefromthewell-known\"Keynesian\"mainstreamprescriptionsthatemphasized\"fine-tuning\"ofaggregatedemand,promotinginvestment,andinstituting\"welfare-statism\"toprovideasafetynet.Often,hishostilitytowelfareand\"pump-priming\"thatdatestotheearly1960smusthaveappearedincomprehensibletofellowcriticsoffree-marketsolutionstoreal-worldproblems.ButMinskytookanalternativepath,emphasizing that: a)fine-tuningisimpossible;b)relyingoninvestment-ledgrowthtoproviderisinglivingstandardsgen-eratesdestructiveinstabilityandinflation;andc)welfareisinflationaryandmerelyinstitutionalizesunemployment.InChapter13hepresentsanalter-nativestrategy,whichreliesonconsumption,employment,andtheuseofinstitutionsandregulationstoconstraininstability-towhichwewillreturnformoredetaileddiscussionlater.Intherestofthisintroduction,weprovideabriefoverviewofMinsky'scontributionstotheoryandtopolicyanalysis.Weincludeadiscussionofsomeofhisearlierworkthatledtothewritingofthisbook.Finally,weaddresssomeextensionstocurrentreal-worldproblemsinformedbyhisanalysis.MINSKY'SEARLYCONTRIBUTIONSInhispublicationsinthe195Osthroughthemid1960s,Minskygraduallydevelopedhisanalysisofcycles(Minsky1957a,1964,1979).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 10,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxiiiMinskyarguedthatnoonehadpreviouslythoughtthroughthepolicyimp",
+          "score": 0.015625,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":10,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "c6313cf9-b079-4603-a2e5-c52bc38df7bf",
+          "chunk_type": "paragraph",
+          "citation_id": 21,
+          "content": "xviiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYrobustfinancialstructurecouldopenthedoortoasnowballofdefaultsthatwouldoverwhelmsuchconstraints.Thiswouldbecomemorelikelyiftheinstitutionalconstraintsfailedtoadapttochangingcircumstances-or,worse,ifthelessonsoftheGreatDepressionwereforgottensothatdan-gerous\"freemarket\"ideologycametodominatepolicy.Ofcourse,bothoftheseeventscametopass.MinskyformulatedwhathetermedhisAnti-Laissez-FaireTheme:\"inaworldwheretheinternaldynamicsimplyinstability,asemblanceofstabilitycanbeachievedorsustainedbyintroducingconventions,con-straintsandinterventionsintotheenvironment\"(MinskyandFerri1991).Heinsistedtheproblemisthatorthodox,neoclassicaltheory-basedeco-nomicscannotprovideanyinsightintooureconomy.Thisisbecauseinsta-bilityaswellasthemereexistenceofdepressioncouldnotbeexplainedbystandardtheoryexceptthroughinternalshocksandstubbornworkerswhorefusedtoallowwagestorespond-indeed,unemploymentmustbeseenbyorthodoxyasretributionforobstinacy(p.154).Themainstreamcanondictatesmorelaissez-faireasthesolutionto\"disequilibrium.\"Bycontrast,incoherentmarketresultsare\"natural,\"accordingtoMinsky,requiringinterventiontopreventtheinvisiblehandfromoperating:\"Tocontaintheevilsthatmarketsystemscaninflict,capitalisteconomiesdevelopedsetsofinstitutionsandauthorities,whichcanbecharacterizedastheequivalentofcircuitbreakers.Theseinstitutionsineffectstoptheeconomicprocessesthatbreedtheincoherenceandrestarttheeconomywithnewinitialcondi-tions...\"(MinskyetaI.,1994).Furthermore,\"Theaptnessofinstitutionsandinterventionswilllargelydeterminetheextenttowhichthepathoftheeconomythroughtimeistranquilorturbulent:progressive,stagnant,ordeteriorating\"(ibid).Postwargrowthwasbiasedtowardinvestmentspending,especiallyafter1970.",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 15,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "xviiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYrobustfinancialstructurecouldopenthedoortoasnowballofdefaul",
+          "score": 0.015384615398943424,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":15,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "19aa522a-87ae-41d5-94af-ad4b5ac41db6",
+          "chunk_type": "paragraph",
+          "citation_id": 22,
+          "content": "xviMINSKY'SSTABILIZINGANUNSTABLEECONOMYFromhisearlywork,Minskyrecognizedthatfinanciers'desiretoraiseleverageandmovetomorespeculativepositionscouldbefrustrated.Ifresultsaremorefavorablethanexpected,aninvestorattemptingtoengageinspeculativefinancecouldremainhedgedbecausehisincomeisgreaterthanheanticipated.Thus,whileMinskydidnotincorporatethenowwell-knownKaleckirelationinJMK,hedidrecognizethataninvestmentboomcouldraiseaggregatedemandandspendingthroughthemultiplierandgeneratemoresalesthanprojected.Later,heexplicitlyincorporatedtheKaleckianresult,whereaggregateprofitsequalinvestmentplusthegov-ernment'sdeficitinthetruncatedmodel.Thus,inaninvestmentboom,profitswouldbeincreasingalongwithinvestment,helpingtovalidateexpec-tationsandencouragingevenmoreinvestment.Thisaddedcredencetohispropositionthatthefundamentalinstabilityinthecapitalisteconomyincreasesuntilitreachesaspeculativefrenzy.Inaddition,intheearly1960s,hehadarguedthatimpactsonprivatesectorbalancesheetswoulddependonthestanceofthegovernment'sbalancesheet(Minsky1963).Agovernment-spending-Iedexpansionwouldallowtheprivatesectortoexpandwithoutcreatingfragilebalancesheets-governmentdeficitswouldaddsafetreasurydebttoprivateportfolios(oneoftheeffectsofdeficitspendingdiscussedinChapter2below).Arobustexpansion,however,wouldtendtocausetaxrevenuestogrowfasterthanprivatesectorincomesothatthegovernmentbudgetwould\"improve\"(movetowardsurplus)andtheprivatesectorbalancewoulddeteriorate(movetowarddeficit).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 13,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "xviMINSKY'SSTABILIZINGANUNSTABLEECONOMYFromhisearlywork,Minskyrecognizedthatfinanciers'desiretoraise",
+          "score": 0.01515151560306549,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":13,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "541226b6-3146-47d6-9a79-c0617e3440e9",
+          "chunk_type": "paragraph",
+          "citation_id": 23,
+          "content": "OnceheaddedtheKaleckiequationtohisexposi-tion(ashedoesinthisvolume,pp.17,162),hecouldexplainhowthiscountercyclicalmovementofthebudgetwouldautomaticallystabilizeprofits-limitingboththeupsideinaboomandthedownsideinaslump.WiththeKaleckiviewofprofitsincorporatedinhisinvestmenttheoryofthecycle,Minskyarguedthatinvestmentisforthcomingtodayonlyifinvestmentisexpectedinthefuture-sinceinvestmentinthefuturewilldetermineprofitsinthefuture(intheskeletalmodel)(p.163).Fur-thermore,becauseinvestmenttodayvalidatesthedecisionsundertaken\"yes-terday,\"expectationsabout\"tomorrow\"affectabilitytomeetcommitmentsthatweremadewhenfinancingtheexistingcapitalassets.ThereisthusacomplextemporalrelationinvolvedinMinsky'sapproachtoinvestmentthatcouldbeeasilydisturbed(pp.213-218).Oncethisislinkedtothe\"twoprice\"approach,itbecomesapparentthatanythingthatlowersexpectedfutureprofitabilitycanpushthedemandpriceofcapitalbelowthesupplyprice.Thisreducesinvestmentandtoday'sprofitsbelowthelevelnecessarytovalidatethepastexpectationsthatdemandpriceswerebasedonwhen",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 13,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "OnceheaddedtheKaleckiequationtohisexposi-tion(ashedoesinthisvolume,pp.17,162),hecouldexplainhowthisc",
+          "score": 0.014925372786819935,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":13,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "60111020-7ed9-4bad-91ad-cf242810e4f8",
+          "chunk_type": "paragraph",
+          "citation_id": 24,
+          "content": "ThesearenotdevelopmentsthatMinskywouldhavewelcomed,astheyraisethepossibilityofrenewedstagflation.InChapters2and3,Minskyexaminedthesharpdownturnsin1974-75and1981-82.HeshowsthatBigGovernmentplayedanimportantroleinbothdownturns,maintainingincomeandprofitflows.Inparticular,theresultingbudgetdeficitineachrecessionaddedtoaggregateprofits(asintheKaleckiequation)toenablefirmstocontinuetoservicedebt.Further,transferpaymentsroseinbothperiods,sothat,accordingtoMinsky,forthefirsttimepersonalincomedidnotfallduringarecession.Thiskeptcon-sumptionfromcollapsingevenasunemploymentrose.MinskyalsoanalyzedtheoperationsoftheFed,arguingthatlender-of-Iast-resortoperationswereparticularlyimportantduringthesecondperiod.Wray(1989)extendsMinsky'sanalysistotheReaganrecovery,showingthatitwasnotsupply-sideeconomicsthatbroughttheeconomyoutofrecession;rather,itwasthe",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 17,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "ThesearenotdevelopmentsthatMinskywouldhavewelcomed,astheyraisethepossibilityofrenewedstagflation.InC",
+          "score": 0.014705882407724857,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":17,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "61dbf677-1b17-4673-998d-5aba7adb8b5c",
+          "chunk_type": "paragraph",
+          "citation_id": 25,
+          "content": "risksofclassesofborrowers.Almostalloftheincentivewasplacedonthroughput,orquan-tityofloansoriginated,andalmostnoneonabilitytopay.Minskyalwaysarguedthataskepticalloanofficerisrequiredtoassessthecharacterofeachindividualborrower.Arelationshipshouldbedevelopedsothatthe",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 28,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "risksofclassesofborrowers.Almostalloftheincentivewasplacedonthroughput,orquan-tityofloansoriginated,",
+          "score": 0.014492753893136978,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":28,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "f8b30511-2807-47ba-b0eb-9f05753494a0",
+          "chunk_type": "paragraph",
+          "citation_id": 26,
+          "content": "Preface and Acknowledgments to the First Edition by Hyman P. Minsky ix",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 2,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "mineru_pdf_ocr",
+          "preview": "Preface and Acknowledgments to the First Edition by Hyman P. Minsky ix",
+          "score": 0.014285714365541935,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":2,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        },
+        {
+          "asset_id": null,
+          "caption": null,
+          "chunk_id": "4ebf421f-8d4f-4632-a6c0-76b913bf6960",
+          "chunk_type": "paragraph",
+          "citation_id": 27,
+          "content": "xivMINSKY'SSTABILIZINGANUNSTABLEECONOMYallowedforthepossibilityofexplosivegrowth(Minsky1957b).Insomeofhisearliestwork,headdedinstitutionalceilingsandfloorstoproduceavari-etyofpossibleoutcomes,includingsteadygrowth,cycles,booms,andlongdepressions.Heultimatelycamebacktothesemodelsinsomeofhislastpaperswrittenatthe Levy EconomicsInstitute(MinskyandFerri1991).Itisclear,however,thattheresultsoftheseanalysesplayedaroleinhisargumentthattheNewDealandpost-warinstitutionalarrangementsconstrainedtheinherentinstabilityofmoderncapitalism,producingthesemblanceofstability.Atthesametime,heexaminedfinancialinnovation,arguingthatnor-malprofitseekingbyfinancialinstitutionscontinuallysubvertedattemptsbytheauthoritiestoconstrainmoneysupplygrowth(Minsky1957a).",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "doc_name": "minsky86.pdf",
+          "image_url": null,
+          "layer": "milvus_text_dense",
+          "page": 11,
+          "parse_run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+          "parser_backend": "edge_parse_pdf",
+          "preview": "xivMINSKY'SSTABILIZINGANUNSTABLEECONOMYallowedforthepossibilityofexplosivegrowth(Minsky1957b).Insome",
+          "score": 0.014084506779909134,
+          "source_locator": "{\"bbox\":null,\"col_range\":null,\"page\":11,\"paragraph_index\":null,\"row_range\":null,\"shape_name\":null,\"sheet_name\":null,\"slide_index\":null,\"table_index\":null}"
+        }
+      ]
+    }
+  },
+  "execute_plan_request": {
+    "items": [
+      {
+        "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+        "priority": 1.0
+      }
+    ],
+    "doc_scope": [
+      "db7bc56e-f840-46ef-91b4-8cbb534b5598"
+    ],
+    "plan_version": "rag-execute-v1",
+    "summary_mode": "none",
+    "query_entities": [
+      {
+        "kind": "person",
+        "text": "Minsky"
+      },
+      {
+        "kind": "concept",
+        "text": "Society of Mind"
+      },
+      {
+        "kind": "concept",
+        "text": "agents"
+      },
+      {
+        "kind": "concept",
+        "text": "K-lines"
+      },
+      {
+        "kind": "concept",
+        "text": "frames"
+      }
+    ]
+  },
+  "product_event_metadata": [
+    {
+      "result": "success",
+      "metadata": {
+        "stream": true,
+        "agent_type": "rag",
+        "query_length": 287
+      },
+      "event_name": "chat_started",
+      "event_time": "2026-04-28T23:53:36.491644+08:00",
+      "session_id": null,
+      "notebook_id": "b7774d00-df07-4d9b-8f32-c6f2a60b8f21"
+    },
+    {
+      "result": "success",
+      "metadata": {
+        "agent_type": "rag"
+      },
+      "event_name": "session_created",
+      "event_time": "2026-04-28T23:53:36.530299+08:00",
+      "session_id": "23a47250-8c33-49f7-a719-c00d93876dee",
+      "notebook_id": "b7774d00-df07-4d9b-8f32-c6f2a60b8f21"
+    },
+    {
+      "result": "degraded",
+      "metadata": {
+        "mode": "rag",
+        "rag_tool": {
+          "execute_plan_request": {
+            "items": [
+              {
+                "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+                "priority": 1.0
+              }
+            ],
+            "doc_scope": [
+              "db7bc56e-f840-46ef-91b4-8cbb534b5598"
+            ],
+            "plan_version": "rag-execute-v1",
+            "summary_mode": "none",
+            "query_entities": [
+              {
+                "kind": "person",
+                "text": "Minsky"
+              },
+              {
+                "kind": "concept",
+                "text": "Society of Mind"
+              },
+              {
+                "kind": "concept",
+                "text": "agents"
+              },
+              {
+                "kind": "concept",
+                "text": "K-lines"
+              },
+              {
+                "kind": "concept",
+                "text": "frames"
+              }
+            ]
+          },
+          "execute_plan_coverage": {
+            "channel_coverage": {
+              "bm25": 0,
+              "graph": 0,
+              "text_dense": 12,
+              "multimodal_dense": 15
+            },
+            "matched_doc_count": 1,
+            "requested_doc_count": 1,
+            "summary_chunk_count": 0,
+            "retrieved_chunk_count": 27
+          },
+          "execute_plan_backend_trace": {
+            "item_trace": [
+              {
+                "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+                "bm25_k": 0,
+                "dense_k": 100,
+                "priority": 1.0,
+                "bm25_terms": [],
+                "source_ids": [],
+                "payload_kind": "query",
+                "source_count": 0,
+                "recall_budget": 100,
+                "rerank_budget": 100
+              }
+            ],
+            "channel_trace": [
+              {
+                "channel": "text_dense",
+                "raw_count": 35,
+                "latency_ms": 2151,
+                "hydrated_count": 35,
+                "selected_count": 35
+              },
+              {
+                "channel": "bm25",
+                "raw_count": 0,
+                "latency_ms": 0,
+                "hydrated_count": 0,
+                "selected_count": 0
+              },
+              {
+                "channel": "multimodal_dense",
+                "raw_count": 15,
+                "latency_ms": 386,
+                "hydrated_count": 15,
+                "selected_count": 15
+              },
+              {
+                "channel": "graph",
+                "raw_count": 0,
+                "latency_ms": 9,
+                "hydrated_count": 0,
+                "selected_count": 0
+              }
+            ],
+            "retrieval_trace": {
+              "items": [
+                {
+                  "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+                  "bm25_k": 0,
+                  "dense_k": 100,
+                  "priority": 1.0,
+                  "bm25_terms": [],
+                  "source_ids": [],
+                  "payload_kind": "query",
+                  "source_count": 0,
+                  "recall_budget": 100,
+                  "rerank_budget": 100
+                }
+              ],
+              "item_count": 1,
+              "summary_mode": "none",
+              "top_k_returned": 27,
+              "max_rerank_docs": 75,
+              "max_final_chunks": 30,
+              "total_candidate_budget": 100
+            }
+          }
+        },
+        "agent_type": "rag",
+        "message_id": 470,
+        "degrade_count": 2,
+        "citation_count": 27
+      },
+      "event_name": "chat_completed",
+      "event_time": "2026-04-28T23:54:09.239017+08:00",
+      "session_id": "23a47250-8c33-49f7-a719-c00d93876dee",
+      "notebook_id": "b7774d00-df07-4d9b-8f32-c6f2a60b8f21"
+    }
+  ],
+  "channel_probes": {
+    "full_captured_plan": {
+      "http_status": 200,
+      "request": {
+        "items": [
+          {
+            "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+            "priority": 1.0
+          }
+        ],
+        "doc_scope": [
+          "db7bc56e-f840-46ef-91b4-8cbb534b5598"
+        ],
+        "plan_version": "rag-execute-v1",
+        "summary_mode": "none",
+        "query_entities": [
+          {
+            "kind": "person",
+            "text": "Minsky"
+          },
+          {
+            "kind": "concept",
+            "text": "Society of Mind"
+          },
+          {
+            "kind": "concept",
+            "text": "agents"
+          },
+          {
+            "kind": "concept",
+            "text": "K-lines"
+          },
+          {
+            "kind": "concept",
+            "text": "frames"
+          }
+        ],
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+          "origin": "e2e_probe:full_captured_plan"
+        },
+        "budget": {
+          "total_candidate_budget": 40,
+          "final_chunk_budget": 12
+        },
+        "channel_budget": {}
+      },
+      "coverage": {
+        "requested_doc_count": 1,
+        "matched_doc_count": 1,
+        "retrieved_chunk_count": 12,
+        "summary_chunk_count": 0,
+        "channel_coverage": {
+          "text_dense": 6,
+          "bm25": 0,
+          "multimodal_dense": 6,
+          "graph": 0
+        }
+      },
+      "backend_trace": {
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+          "origin": "e2e_probe:full_captured_plan"
+        },
+        "item_trace": [
+          {
+            "priority": 1.0,
+            "payload_kind": "query",
+            "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+            "bm25_terms": [],
+            "recall_budget": 40,
+            "bm25_k": 0,
+            "dense_k": 40,
+            "rerank_budget": 40,
+            "source_count": 0,
+            "source_ids": []
+          }
+        ],
+        "channel_trace": [
+          {
+            "channel": "text_dense",
+            "raw_count": 14,
+            "hydrated_count": 14,
+            "selected_count": 14,
+            "latency_ms": 140
+          },
+          {
+            "channel": "bm25",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "multimodal_dense",
+            "raw_count": 6,
+            "hydrated_count": 6,
+            "selected_count": 6,
+            "latency_ms": 100
+          },
+          {
+            "channel": "graph",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 3
+          }
+        ],
+        "retrieval_trace": {
+          "item_count": 1,
+          "total_candidate_budget": 40,
+          "max_rerank_docs": 30,
+          "max_final_chunks": 12,
+          "top_k_returned": 12,
+          "summary_mode": "none",
+          "items": [
+            {
+              "priority": 1.0,
+              "payload_kind": "query",
+              "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+              "bm25_terms": [],
+              "recall_budget": 40,
+              "bm25_k": 0,
+              "dense_k": 40,
+              "rerank_budget": 40,
+              "source_count": 0,
+              "source_ids": []
+            }
+          ]
+        }
+      },
+      "degrade_trace": [
+        {
+          "stage": "mm_reranker",
+          "reason": "Multimodal reranker call failed: Multimodal rerank API error 400 Bad Request: {\"request_id\":\"c146dfd5-a183-9e5a-8432-93976e03ee61\",\"code\":\"InvalidParameter\",\"message\":\"<400> InternalError.Algo.InvalidParameter: Image URL or Base64 is invalid. URL must be a valid HTTP/HTTPS link, and Base64 must start with 'image/xxx;base64\"}",
+          "impact": "Falling back to text rerank or pre-rerank ordering"
+        },
+        {
+          "stage": "reranker",
+          "reason": "Reranker call failed: Rerank API error 401 Unauthorized: \"Api key is invalid\"",
+          "impact": "Using pre-rerank ordering"
+        }
+      ],
+      "relation_paths": [],
+      "chunks": [
+        {
+          "kind": "regular",
+          "chunk_id": "c6ad29d9-8761-4b35-b29c-3c89be9352cf",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 191,
+          "score": 0.36286432,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets. [Image: 1939cc94b0366914e56f3a2e7989bc06993863bf4177c9d19576d7e390153edf.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "f2ec4945-02c8-46aa-89ce-d8627400f2d1",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 191,
+          "score": 0.35874358,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets. [Image: cb1e0516ae2542e937e53bfacaca5d4033f7010dd2d68fda0667a6a13fe44dd3.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "2a0ab83f-1b81-4baf-bfc9-5e84e332efa8",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 191,
+          "score": 0.3578284,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets. [Image: 3e0fd4fe2070d67d67d35345c02e98fc68e7a15d0d0858f5922e87794df923d5.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "68690497-98b2-46b4-bf61-a59125cd0673",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 204,
+          "score": 0.3319102,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "various items of overhead, ancillary, and capital costs. Each of these average cost curves, in turn, has its minimum point on the unique marginal cost curve. These average and marginal cost curves are sketched in Figure 7.2. [Image: e959508787bca33ebb2f23aed00f05c512b0154724c45adbd5296cf16820462c.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "18c697c0-8335-45ff-9bba-60b50ceac271",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 229,
+          "score": 0.32456282,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "Therefore, there exists a functional relation between the price, $\\mathbf{P}_{\\mathbf{K}}$ , of a particular or a representative capital or financial asset and the quantity of money, M. Normally the price of a capital asset is a rising function of the quantity of money, for as the quantity increases the value of the insurance embodied in money decreases. As the price of money is always one, this implies that the price level of income-yielding capital assets increases. Furthermore, the functional relation has a logarithmic shape unless: [Image: 4d00c23fdcbbb64ad6aa1e3d5ca9a7c10531627aabdbad1922c8221346d77054.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "34d7813a-4ff0-4442-adbb-23a4b00a92ec",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 317,
+          "score": 0.31348047,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "[Image: f78e13b564f1675a4b4d3068178da4920e96d5b3d3efbcdd5ed7a3f2aa6227a5.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "0e16ac87-92e6-4395-aa9a-f4e43bae3568",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 9,
+          "score": 0.016666668,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "xiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYmorefrequentandsevere.AsMinskyinsisted,thereisaninherentandfun-damentalinstabilityinoursortofeconomythattendstowardaspeculativeboom,followingJ.M.Keynes,whoarguedthat\"inanunstableeconomyspeculationdominatesenterprise\"(p.18).Unlikeothercriticalanalysesofcapitalistprocesses,whichemphasizethecrash,Minskywasmorecon-cernedwiththebehaviorofagentsduringtheeuphoricperiods.Andunlikeotheranalysesthatblame\"shocks,\"\"irrationalexuberance,\"or\"foolish\"policy,Minskyarguedthattheprocessesthatgeneratefinancialfragilityare\"natural,\"orendogenoustothesystem.AccordingtoMinsky,thecapitalisteconomyisatbest\"conditionallycoherent\"(p.117).Herejectedtheequilibriummethodologyofmains"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "031a4344-92e0-43ee-a7c5-1861a4facadc",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 310,
+          "score": 0.016393442,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "FrankH.Hahn,MoneyandInflation(Cambridge:MITPress,1983):\"Theobjectivesofagentsthatdeterminetheiractionsandplansdonotdependonanynominalmagnitudes.Agentscareonlyaboutrealthings,suchasgoods(properlydatedanddistinguishedbystatesofnature),leisure,andeffort.Weknowthisastheaxiomoftheabsenceofmoneyillusion,whichitseemsimpossibletoabandoninanysensibleanalysis\"(p.34).SeealsoHymanP.Minsky,\"FrankHahn'sMoneyandInflation:AReviewArticle,\"JournalofPost-KeynesianEconomics6,no.3(Spring1984),pp.449-57."
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "246a4587-5d52-44b2-84ec-5ac4c08b96f2",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 9,
+          "score": 0.016129032,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "Thatis,themarketforcesthatoperatewhenasystemisstablewillpushittowardinstability,sothatevenifanythinglikeanequilibriumcouldbeachieved,itwouldsetoffbehavioralresponsesthatwouldquicklymovetheeconomyawayfromequilibrium.Minskyborrowedhis\"investmenttheoryofthecycle\"fromJohnMaynardKeynes.Minsky'scycletheoryderivedfromcombiningtwothings:thefamousexpositionfoundinKeynes'sChapter12oftheGeneralTheory,whichfocusesontheinherentinstabilityofinvestmentdecisionsastheyaremadeinconditionsoffundamentaluncertainty,andtheapproachtakeninChapter17tovaluationoffinancialandcapitalassets.Whirlwindsofoptimismandpessimismaffecttheaggregatequantityofinvestment,whichthenthroughthespendingmultiplierdeterminesoutputandempl"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "1fca8ed0-be1b-4233-9a93-a63fe142f9c1",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 16,
+          "score": 0.015873017,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxixbytheinstitutionalfloorsthatpreventseriousrecessionsandthatvalidateriskierbehaviors.Minsky'sbesttreatmentofthisinflationbiasispresentedinChapter11ofthisvolume,usingamarkupapproachtotheaggregatepricelevel.Wewillnotprovideadetailedexpositionhere,butthebasicideaisthatpricesoftheconsumptiongoodspartofthecurrentoutputpricesystemaresetasamarkupovercosts-mostlywagecostsinthatsector.Themarkupinturnisdeterminedbyspendingonconsumptiongoodsinexcessoftheconsumptionbytheworkersthatproducedthem-thatis,bywork-ersintheinvestmentsectorandthegovernmentsector,byforeigners,andbytransferrecipients(retirees,thoseonAFDCandunemploymentcom-pensation,etc.).ThiswasathemeinMinsky'"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "de41e5fc-fd6a-4f33-a766-6d5a295e8ae8",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 10,
+          "score": 0.015625,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxiiiMinskyarguedthatnoonehadpreviouslythoughtthroughthepolicyimplicationsofKeynes'sGeneralTheory(p.324).Asimpliedbythetitleofhisbook,Minsky'smissionwastorectifythatlacunabydevelopingpolicyforthemodern,financial,capitalisteconomy.Chapter12and,especially,Chapter13presenthisalternativeagendaforpolicyreform.ThosewhoknewMinskyrecognizehispersistentdivergencefromthewell-known\"Keynesian\"mainstreamprescriptionsthatemphasized\"fine-tuning\"ofaggregatedemand,promotinginvestment,andinstituting\"welfare-statism\"toprovideasafetynet.Often,hishostilitytowelfareand\"pump-priming\"thatdatestotheearly1960smusthaveappearedincomprehensibletofellowcriticsoffree-marketsolutionstorea"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "c6313cf9-b079-4603-a2e5-c52bc38df7bf",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 15,
+          "score": 0.015384615,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "xviiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYrobustfinancialstructurecouldopenthedoortoasnowballofdefaultsthatwouldoverwhelmsuchconstraints.Thiswouldbecomemorelikelyiftheinstitutionalconstraintsfailedtoadapttochangingcircumstances-or,worse,ifthelessonsoftheGreatDepressionwereforgottensothatdan-gerous\"freemarket\"ideologycametodominatepolicy.Ofcourse,bothoftheseeventscametopass.MinskyformulatedwhathetermedhisAnti-Laissez-FaireTheme:\"inaworldwheretheinternaldynamicsimplyinstability,asemblanceofstabilitycanbeachievedorsustainedbyintroducingconventions,con-straintsandinterventionsintotheenvironment\"(MinskyandFerri1991).Heinsistedtheproblemisthatorthodox,neoclassicaltheory-basedeco-nomicscannotprovide"
+        }
+      ]
+    },
+    "text_dense_only": {
+      "http_status": 200,
+      "request": {
+        "items": [
+          {
+            "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+            "priority": 1.0
+          }
+        ],
+        "doc_scope": [
+          "db7bc56e-f840-46ef-91b4-8cbb534b5598"
+        ],
+        "plan_version": "rag-execute-v1",
+        "summary_mode": "none",
+        "query_entities": [
+          {
+            "kind": "person",
+            "text": "Minsky"
+          },
+          {
+            "kind": "concept",
+            "text": "Society of Mind"
+          },
+          {
+            "kind": "concept",
+            "text": "agents"
+          },
+          {
+            "kind": "concept",
+            "text": "K-lines"
+          },
+          {
+            "kind": "concept",
+            "text": "frames"
+          }
+        ],
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+          "origin": "e2e_probe:text_dense_only"
+        },
+        "budget": {
+          "total_candidate_budget": 40,
+          "final_chunk_budget": 8
+        },
+        "channel_budget": {
+          "text_dense": 40,
+          "bm25": 0,
+          "multimodal_dense": 0,
+          "graph": 0
+        }
+      },
+      "coverage": {
+        "requested_doc_count": 1,
+        "matched_doc_count": 1,
+        "retrieved_chunk_count": 8,
+        "summary_chunk_count": 0,
+        "channel_coverage": {
+          "text_dense": 8,
+          "bm25": 0,
+          "multimodal_dense": 0,
+          "graph": 0
+        }
+      },
+      "backend_trace": {
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+          "origin": "e2e_probe:text_dense_only"
+        },
+        "item_trace": [
+          {
+            "priority": 1.0,
+            "payload_kind": "query",
+            "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+            "bm25_terms": [],
+            "recall_budget": 40,
+            "bm25_k": 0,
+            "dense_k": 40,
+            "rerank_budget": 40,
+            "source_count": 0,
+            "source_ids": []
+          }
+        ],
+        "channel_trace": [
+          {
+            "channel": "text_dense",
+            "raw_count": 40,
+            "hydrated_count": 40,
+            "selected_count": 40,
+            "latency_ms": 156
+          },
+          {
+            "channel": "bm25",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "multimodal_dense",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "graph",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          }
+        ],
+        "retrieval_trace": {
+          "item_count": 1,
+          "total_candidate_budget": 40,
+          "max_rerank_docs": 40,
+          "max_final_chunks": 8,
+          "top_k_returned": 8,
+          "summary_mode": "none",
+          "items": [
+            {
+              "priority": 1.0,
+              "payload_kind": "query",
+              "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+              "bm25_terms": [],
+              "recall_budget": 40,
+              "bm25_k": 0,
+              "dense_k": 40,
+              "rerank_budget": 40,
+              "source_count": 0,
+              "source_ids": []
+            }
+          ]
+        }
+      },
+      "degrade_trace": [],
+      "relation_paths": [],
+      "chunks": [
+        {
+          "kind": "regular",
+          "chunk_id": "0e16ac87-92e6-4395-aa9a-f4e43bae3568",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 9,
+          "score": 0.016666668,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "xiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYmorefrequentandsevere.AsMinskyinsisted,thereisaninherentandfun-damentalinstabilityinoursortofeconomythattendstowardaspeculativeboom,followingJ.M.Keynes,whoarguedthat\"inanunstableeconomyspeculationdominatesenterprise\"(p.18).Unlikeothercriticalanalysesofcapitalistprocesses,whichemphasizethecrash,Minskywasmorecon-cernedwiththebehaviorofagentsduringtheeuphoricperiods.Andunlikeotheranalysesthatblame\"shocks,\"\"irrationalexuberance,\"or\"foolish\"policy,Minskyarguedthattheprocessesthatgeneratefinancialfragilityare\"natural,\"orendogenoustothesystem.AccordingtoMinsky,thecapitalisteconomyisatbest\"conditionallycoherent\"(p.117).Herejectedtheequilibriummethodologyofmains"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "031a4344-92e0-43ee-a7c5-1861a4facadc",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 310,
+          "score": 0.016393442,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "FrankH.Hahn,MoneyandInflation(Cambridge:MITPress,1983):\"Theobjectivesofagentsthatdeterminetheiractionsandplansdonotdependonanynominalmagnitudes.Agentscareonlyaboutrealthings,suchasgoods(properlydatedanddistinguishedbystatesofnature),leisure,andeffort.Weknowthisastheaxiomoftheabsenceofmoneyillusion,whichitseemsimpossibletoabandoninanysensibleanalysis\"(p.34).SeealsoHymanP.Minsky,\"FrankHahn'sMoneyandInflation:AReviewArticle,\"JournalofPost-KeynesianEconomics6,no.3(Spring1984),pp.449-57."
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "246a4587-5d52-44b2-84ec-5ac4c08b96f2",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 9,
+          "score": 0.016129032,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "Thatis,themarketforcesthatoperatewhenasystemisstablewillpushittowardinstability,sothatevenifanythinglikeanequilibriumcouldbeachieved,itwouldsetoffbehavioralresponsesthatwouldquicklymovetheeconomyawayfromequilibrium.Minskyborrowedhis\"investmenttheoryofthecycle\"fromJohnMaynardKeynes.Minsky'scycletheoryderivedfromcombiningtwothings:thefamousexpositionfoundinKeynes'sChapter12oftheGeneralTheory,whichfocusesontheinherentinstabilityofinvestmentdecisionsastheyaremadeinconditionsoffundamentaluncertainty,andtheapproachtakeninChapter17tovaluationoffinancialandcapitalassets.Whirlwindsofoptimismandpessimismaffecttheaggregatequantityofinvestment,whichthenthroughthespendingmultiplierdeterminesoutputandempl"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "1fca8ed0-be1b-4233-9a93-a63fe142f9c1",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 16,
+          "score": 0.015873017,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxixbytheinstitutionalfloorsthatpreventseriousrecessionsandthatvalidateriskierbehaviors.Minsky'sbesttreatmentofthisinflationbiasispresentedinChapter11ofthisvolume,usingamarkupapproachtotheaggregatepricelevel.Wewillnotprovideadetailedexpositionhere,butthebasicideaisthatpricesoftheconsumptiongoodspartofthecurrentoutputpricesystemaresetasamarkupovercosts-mostlywagecostsinthatsector.Themarkupinturnisdeterminedbyspendingonconsumptiongoodsinexcessoftheconsumptionbytheworkersthatproducedthem-thatis,bywork-ersintheinvestmentsectorandthegovernmentsector,byforeigners,andbytransferrecipients(retirees,thoseonAFDCandunemploymentcom-pensation,etc.).ThiswasathemeinMinsky'"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "de41e5fc-fd6a-4f33-a766-6d5a295e8ae8",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 10,
+          "score": 0.015625,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "MINSKY'SSTABILIZINGANUNSTABLEECONOMYxiiiMinskyarguedthatnoonehadpreviouslythoughtthroughthepolicyimplicationsofKeynes'sGeneralTheory(p.324).Asimpliedbythetitleofhisbook,Minsky'smissionwastorectifythatlacunabydevelopingpolicyforthemodern,financial,capitalisteconomy.Chapter12and,especially,Chapter13presenthisalternativeagendaforpolicyreform.ThosewhoknewMinskyrecognizehispersistentdivergencefromthewell-known\"Keynesian\"mainstreamprescriptionsthatemphasized\"fine-tuning\"ofaggregatedemand,promotinginvestment,andinstituting\"welfare-statism\"toprovideasafetynet.Often,hishostilitytowelfareand\"pump-priming\"thatdatestotheearly1960smusthaveappearedincomprehensibletofellowcriticsoffree-marketsolutionstorea"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "c6313cf9-b079-4603-a2e5-c52bc38df7bf",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 15,
+          "score": 0.015384615,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "xviiiMINSKY'SSTABILIZINGANUNSTABLEECONOMYrobustfinancialstructurecouldopenthedoortoasnowballofdefaultsthatwouldoverwhelmsuchconstraints.Thiswouldbecomemorelikelyiftheinstitutionalconstraintsfailedtoadapttochangingcircumstances-or,worse,ifthelessonsoftheGreatDepressionwereforgottensothatdan-gerous\"freemarket\"ideologycametodominatepolicy.Ofcourse,bothoftheseeventscametopass.MinskyformulatedwhathetermedhisAnti-Laissez-FaireTheme:\"inaworldwheretheinternaldynamicsimplyinstability,asemblanceofstabilitycanbeachievedorsustainedbyintroducingconventions,con-straintsandinterventionsintotheenvironment\"(MinskyandFerri1991).Heinsistedtheproblemisthatorthodox,neoclassicaltheory-basedeco-nomicscannotprovide"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "19aa522a-87ae-41d5-94af-ad4b5ac41db6",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 13,
+          "score": 0.015151516,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "xviMINSKY'SSTABILIZINGANUNSTABLEECONOMYFromhisearlywork,Minskyrecognizedthatfinanciers'desiretoraiseleverageandmovetomorespeculativepositionscouldbefrustrated.Ifresultsaremorefavorablethanexpected,aninvestorattemptingtoengageinspeculativefinancecouldremainhedgedbecausehisincomeisgreaterthanheanticipated.Thus,whileMinskydidnotincorporatethenowwell-knownKaleckirelationinJMK,hedidrecognizethataninvestmentboomcouldraiseaggregatedemandandspendingthroughthemultiplierandgeneratemoresalesthanprojected.Later,heexplicitlyincorporatedtheKaleckianresult,whereaggregateprofitsequalinvestmentplusthegov-ernment'sdeficitinthetruncatedmodel.Thus,inaninvestmentboom,profitswouldbeincreasingalongwithinvestment,h"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "541226b6-3146-47d6-9a79-c0617e3440e9",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "paragraph",
+          "page": 13,
+          "score": 0.014925373,
+          "retrieval_channel": "milvus_text_dense",
+          "parser_backend": "edge_parse_pdf",
+          "caption": null,
+          "text_preview": "OnceheaddedtheKaleckiequationtohisexposi-tion(ashedoesinthisvolume,pp.17,162),hecouldexplainhowthiscountercyclicalmovementofthebudgetwouldautomaticallystabilizeprofits-limitingboththeupsideinaboomandthedownsideinaslump.WiththeKaleckiviewofprofitsincorporatedinhisinvestmenttheoryofthecycle,Minskyarguedthatinvestmentisforthcomingtodayonlyifinvestmentisexpectedinthefuture-sinceinvestmentinthefuturewilldetermineprofitsinthefuture(intheskeletalmodel)(p.163).Fur-thermore,becauseinvestmenttodayvalidatesthedecisionsundertaken\"yes-terday,\"expectationsabout\"tomorrow\"affectabilitytomeetcommitmentsthatweremadewhenfinancingtheexistingcapitalassets.ThereisthusacomplextemporalrelationinvolvedinMinsky'sappr"
+        }
+      ]
+    },
+    "bm25_only": {
+      "http_status": 200,
+      "request": {
+        "items": [
+          {
+            "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+            "priority": 1.0
+          }
+        ],
+        "doc_scope": [
+          "db7bc56e-f840-46ef-91b4-8cbb534b5598"
+        ],
+        "plan_version": "rag-execute-v1",
+        "summary_mode": "none",
+        "query_entities": [
+          {
+            "kind": "person",
+            "text": "Minsky"
+          },
+          {
+            "kind": "concept",
+            "text": "Society of Mind"
+          },
+          {
+            "kind": "concept",
+            "text": "agents"
+          },
+          {
+            "kind": "concept",
+            "text": "K-lines"
+          },
+          {
+            "kind": "concept",
+            "text": "frames"
+          }
+        ],
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+          "origin": "e2e_probe:bm25_only"
+        },
+        "budget": {
+          "total_candidate_budget": 40,
+          "final_chunk_budget": 8
+        },
+        "channel_budget": {
+          "text_dense": 0,
+          "bm25": 40,
+          "multimodal_dense": 0,
+          "graph": 0
+        }
+      },
+      "coverage": {
+        "requested_doc_count": 1,
+        "matched_doc_count": 0,
+        "retrieved_chunk_count": 0,
+        "summary_chunk_count": 0,
+        "channel_coverage": {
+          "text_dense": 0,
+          "bm25": 0,
+          "multimodal_dense": 0,
+          "graph": 0
+        }
+      },
+      "backend_trace": {
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+          "origin": "e2e_probe:bm25_only"
+        },
+        "item_trace": [
+          {
+            "priority": 1.0,
+            "payload_kind": "query",
+            "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+            "bm25_terms": [],
+            "recall_budget": 40,
+            "bm25_k": 0,
+            "dense_k": 40,
+            "rerank_budget": 40,
+            "source_count": 0,
+            "source_ids": []
+          }
+        ],
+        "channel_trace": [
+          {
+            "channel": "text_dense",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "bm25",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "multimodal_dense",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "graph",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          }
+        ],
+        "retrieval_trace": {
+          "item_count": 1,
+          "total_candidate_budget": 40,
+          "max_rerank_docs": 40,
+          "max_final_chunks": 8,
+          "top_k_returned": 0,
+          "summary_mode": "none",
+          "items": [
+            {
+              "priority": 1.0,
+              "payload_kind": "query",
+              "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+              "bm25_terms": [],
+              "recall_budget": 40,
+              "bm25_k": 0,
+              "dense_k": 40,
+              "rerank_budget": 40,
+              "source_count": 0,
+              "source_ids": []
+            }
+          ]
+        }
+      },
+      "degrade_trace": [
+        {
+          "stage": "retrieval",
+          "reason": "no_valid_retrieval_results",
+          "impact": "Passing zero-recall context to answer synthesis"
+        }
+      ],
+      "relation_paths": [],
+      "chunks": []
+    },
+    "multimodal_dense_only": {
+      "http_status": 200,
+      "request": {
+        "items": [
+          {
+            "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+            "priority": 1.0
+          }
+        ],
+        "doc_scope": [
+          "db7bc56e-f840-46ef-91b4-8cbb534b5598"
+        ],
+        "plan_version": "rag-execute-v1",
+        "summary_mode": "none",
+        "query_entities": [
+          {
+            "kind": "person",
+            "text": "Minsky"
+          },
+          {
+            "kind": "concept",
+            "text": "Society of Mind"
+          },
+          {
+            "kind": "concept",
+            "text": "agents"
+          },
+          {
+            "kind": "concept",
+            "text": "K-lines"
+          },
+          {
+            "kind": "concept",
+            "text": "frames"
+          }
+        ],
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+          "origin": "e2e_probe:multimodal_dense_only"
+        },
+        "budget": {
+          "total_candidate_budget": 40,
+          "final_chunk_budget": 8
+        },
+        "channel_budget": {
+          "text_dense": 0,
+          "bm25": 0,
+          "multimodal_dense": 40,
+          "graph": 0
+        }
+      },
+      "coverage": {
+        "requested_doc_count": 1,
+        "matched_doc_count": 1,
+        "retrieved_chunk_count": 8,
+        "summary_chunk_count": 0,
+        "channel_coverage": {
+          "text_dense": 0,
+          "bm25": 0,
+          "multimodal_dense": 8,
+          "graph": 0
+        }
+      },
+      "backend_trace": {
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+          "origin": "e2e_probe:multimodal_dense_only"
+        },
+        "item_trace": [
+          {
+            "priority": 1.0,
+            "payload_kind": "query",
+            "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+            "bm25_terms": [],
+            "recall_budget": 40,
+            "bm25_k": 0,
+            "dense_k": 40,
+            "rerank_budget": 40,
+            "source_count": 0,
+            "source_ids": []
+          }
+        ],
+        "channel_trace": [
+          {
+            "channel": "text_dense",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "bm25",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "multimodal_dense",
+            "raw_count": 40,
+            "hydrated_count": 40,
+            "selected_count": 40,
+            "latency_ms": 92
+          },
+          {
+            "channel": "graph",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          }
+        ],
+        "retrieval_trace": {
+          "item_count": 1,
+          "total_candidate_budget": 40,
+          "max_rerank_docs": 40,
+          "max_final_chunks": 8,
+          "top_k_returned": 8,
+          "summary_mode": "none",
+          "items": [
+            {
+              "priority": 1.0,
+              "payload_kind": "query",
+              "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+              "bm25_terms": [],
+              "recall_budget": 40,
+              "bm25_k": 0,
+              "dense_k": 40,
+              "rerank_budget": 40,
+              "source_count": 0,
+              "source_ids": []
+            }
+          ]
+        }
+      },
+      "degrade_trace": [
+        {
+          "stage": "mm_reranker",
+          "reason": "Multimodal reranker call failed: Multimodal rerank API error 400 Bad Request: {\"request_id\":\"69e8a467-2325-9aa2-a624-7a449cfb1434\",\"code\":\"InvalidParameter\",\"message\":\"<400> InternalError.Algo.InvalidParameter: Image URL or Base64 is invalid. URL must be a valid HTTP/HTTPS link, and Base64 must start with 'image/xxx;base64\"}",
+          "impact": "Falling back to text rerank or pre-rerank ordering"
+        },
+        {
+          "stage": "reranker",
+          "reason": "Reranker call failed: Rerank API error 401 Unauthorized: \"Api key is invalid\"",
+          "impact": "Using pre-rerank ordering"
+        }
+      ],
+      "relation_paths": [],
+      "chunks": [
+        {
+          "kind": "regular",
+          "chunk_id": "c6ad29d9-8761-4b35-b29c-3c89be9352cf",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 191,
+          "score": 0.36286432,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets. [Image: 1939cc94b0366914e56f3a2e7989bc06993863bf4177c9d19576d7e390153edf.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "f2ec4945-02c8-46aa-89ce-d8627400f2d1",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 191,
+          "score": 0.35874358,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets. [Image: cb1e0516ae2542e937e53bfacaca5d4033f7010dd2d68fda0667a6a13fe44dd3.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "2a0ab83f-1b81-4baf-bfc9-5e84e332efa8",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 191,
+          "score": 0.3578284,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "will be extended to include more than the skeletal relations. In the more complete case, the government budget position will be seen to affect relative prices, money prices, and the movement of prices. The money supply does not appear in the price level equation; the quantity theory is not visible. Money appears in the subsystems that determine realized investment and the financing of government deficits. In particular, money affects total demand and the course of prices through the banking mechanisms that finance activity and control over capital and financial assets. [Image: 3e0fd4fe2070d67d67d35345c02e98fc68e7a15d0d0858f5922e87794df923d5.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "68690497-98b2-46b4-bf61-a59125cd0673",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 204,
+          "score": 0.3319102,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "various items of overhead, ancillary, and capital costs. Each of these average cost curves, in turn, has its minimum point on the unique marginal cost curve. These average and marginal cost curves are sketched in Figure 7.2. [Image: e959508787bca33ebb2f23aed00f05c512b0154724c45adbd5296cf16820462c.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "18c697c0-8335-45ff-9bba-60b50ceac271",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 229,
+          "score": 0.32456282,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "Therefore, there exists a functional relation between the price, $\\mathbf{P}_{\\mathbf{K}}$ , of a particular or a representative capital or financial asset and the quantity of money, M. Normally the price of a capital asset is a rising function of the quantity of money, for as the quantity increases the value of the insurance embodied in money decreases. As the price of money is always one, this implies that the price level of income-yielding capital assets increases. Furthermore, the functional relation has a logarithmic shape unless: [Image: 4d00c23fdcbbb64ad6aa1e3d5ca9a7c10531627aabdbad1922c8221346d77054.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "34d7813a-4ff0-4442-adbb-23a4b00a92ec",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 317,
+          "score": 0.31348047,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "[Image: f78e13b564f1675a4b4d3068178da4920e96d5b3d3efbcdd5ed7a3f2aa6227a5.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "d8b7dc0c-66e9-4905-b66a-43315de5671b",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 119,
+          "score": 0.3065606,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "Figures 4.5 and 4.6 show data for households; Figure 4.5 the ratio of liabilities to personal income and Figure 4.6 the ratio of liabilities to money. [Image: 20325152a194c5a0cb66221e1e3d0e1b72aea352940cdcf6f5cd754cc937200d.jpg]"
+        },
+        {
+          "kind": "regular",
+          "chunk_id": "8bc2d8c6-724e-4029-847f-25dda9a5a869",
+          "doc_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+          "chunk_type": "figure",
+          "page": 207,
+          "score": 0.29390466,
+          "retrieval_channel": "milvus_multimodal_dense",
+          "parser_backend": "mineru_pdf_ocr",
+          "caption": null,
+          "text_preview": "Price-taking firms react to changes in demand by adjusting output along their marginal cost curve. Even though such firms own and operate capital assets and have debts, they do not have the power to set their price according to what they need to satisfy such costs; instead, they are forced to accept what they can get; they take price as a parameter and set output along their MC curve. [Image: b553764fa05ab8f6c3542bc63693c1c17ef7b8adbaa39d0f2c0882fed85384b9.jpg]"
+        }
+      ]
+    },
+    "graph_only": {
+      "http_status": 200,
+      "request": {
+        "items": [
+          {
+            "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+            "priority": 1.0
+          }
+        ],
+        "doc_scope": [
+          "db7bc56e-f840-46ef-91b4-8cbb534b5598"
+        ],
+        "plan_version": "rag-execute-v1",
+        "summary_mode": "none",
+        "query_entities": [
+          {
+            "kind": "person",
+            "text": "Minsky"
+          },
+          {
+            "kind": "concept",
+            "text": "Society of Mind"
+          },
+          {
+            "kind": "concept",
+            "text": "agents"
+          },
+          {
+            "kind": "concept",
+            "text": "K-lines"
+          },
+          {
+            "kind": "concept",
+            "text": "frames"
+          }
+        ],
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+          "origin": "e2e_probe:graph_only"
+        },
+        "budget": {
+          "total_candidate_budget": 40,
+          "final_chunk_budget": 8
+        },
+        "channel_budget": {
+          "text_dense": 0,
+          "bm25": 0,
+          "multimodal_dense": 0,
+          "graph": 40
+        }
+      },
+      "coverage": {
+        "requested_doc_count": 1,
+        "matched_doc_count": 0,
+        "retrieved_chunk_count": 0,
+        "summary_chunk_count": 0,
+        "channel_coverage": {
+          "text_dense": 0,
+          "bm25": 0,
+          "multimodal_dense": 0,
+          "graph": 0
+        }
+      },
+      "backend_trace": {
+        "trace": {
+          "request_id": "e2e-minsky-agent-mech-1777390809-final2-chat",
+          "origin": "e2e_probe:graph_only"
+        },
+        "item_trace": [
+          {
+            "priority": 1.0,
+            "payload_kind": "query",
+            "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+            "bm25_terms": [],
+            "recall_budget": 40,
+            "bm25_k": 0,
+            "dense_k": 40,
+            "rerank_budget": 40,
+            "source_count": 0,
+            "source_ids": []
+          }
+        ],
+        "channel_trace": [
+          {
+            "channel": "text_dense",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "bm25",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "multimodal_dense",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 0
+          },
+          {
+            "channel": "graph",
+            "raw_count": 0,
+            "hydrated_count": 0,
+            "selected_count": 0,
+            "latency_ms": 2
+          }
+        ],
+        "retrieval_trace": {
+          "item_count": 1,
+          "total_candidate_budget": 40,
+          "max_rerank_docs": 1,
+          "max_final_chunks": 8,
+          "top_k_returned": 0,
+          "summary_mode": "none",
+          "items": [
+            {
+              "priority": 1.0,
+              "payload_kind": "query",
+              "query": "Minsky's Society of Mind: relationship between agents, K-lines, and frames",
+              "bm25_terms": [],
+              "recall_budget": 40,
+              "bm25_k": 0,
+              "dense_k": 40,
+              "rerank_budget": 40,
+              "source_count": 0,
+              "source_ids": []
+            }
+          ]
+        }
+      },
+      "degrade_trace": [
+        {
+          "stage": "retrieval",
+          "reason": "no_valid_retrieval_results",
+          "impact": "Passing zero-recall context to answer synthesis"
+        }
+      ],
+      "relation_paths": [],
+      "chunks": []
+    }
+  },
+  "db_counts": {
+    "document": {
+      "id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+      "status": "completed",
+      "file_name": "minsky86.pdf",
+      "created_at": "2026-04-28T23:40:09.845019+08:00",
+      "updated_at": "2026-04-28T23:52:25.382067+08:00",
+      "chunk_count": 881,
+      "notebook_id": "b7774d00-df07-4d9b-8f32-c6f2a60b8f21"
+    },
+    "parse_runs": [
+      {
+        "run_id": "e88b91df-d55e-4fc6-8aaa-76dbe7102088",
+        "status": "completed",
+        "created_at": "2026-04-28T23:40:18.005428+08:00",
+        "updated_at": "2026-04-28T23:52:25.337149+08:00",
+        "duration_ms": 677149
+      }
+    ],
+    "chunks_by_type": {
+      "body": 881,
+      "summary": 1
+    },
+    "multimodal_chunks": 45
+  },
+  "error": null
+}

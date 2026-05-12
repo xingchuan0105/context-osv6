@@ -16,6 +16,7 @@ fn default_max_attempts() -> i32 {
 pub enum IngestionTaskKind {
     IngestDocument,
     ReindexDocument,
+    IngestUrl,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,6 +43,7 @@ pub struct IngestionTask {
 pub enum IngestionTaskPayload {
     IngestDocument(IngestDocumentPayload),
     ReindexDocument(ReindexDocumentPayload),
+    IngestUrl(IngestUrlPayload),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,6 +59,11 @@ pub struct IngestDocumentPayload {
 pub struct ReindexDocumentPayload {
     pub reason: ReindexReason,
     pub requested_revision: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IngestUrlPayload {
+    pub url: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -162,6 +169,34 @@ pub fn build_ingest_task(
         idempotency_key,
         enqueued_at: Utc::now().to_rfc3339(),
         payload: IngestionTaskPayload::IngestDocument(payload),
+        lock_token: None,
+        attempt_count: 0,
+        max_attempts: DEFAULT_MAX_ATTEMPTS,
+    }
+}
+
+pub fn build_ingest_url_task(
+    org_id: impl Into<String>,
+    notebook_id: impl Into<String>,
+    document_id: impl Into<String>,
+    requested_by: Option<String>,
+    payload: IngestUrlPayload,
+) -> IngestionTask {
+    let org_id = org_id.into();
+    let notebook_id = notebook_id.into();
+    let document_id = document_id.into();
+    let idempotency_key = format!("{}:{}:{}", org_id, document_id, payload.url);
+
+    IngestionTask {
+        task_id: new_id(),
+        kind: IngestionTaskKind::IngestUrl,
+        org_id,
+        notebook_id,
+        document_id,
+        requested_by,
+        idempotency_key,
+        enqueued_at: Utc::now().to_rfc3339(),
+        payload: IngestionTaskPayload::IngestUrl(payload),
         lock_token: None,
         attempt_count: 0,
         max_attempts: DEFAULT_MAX_ATTEMPTS,

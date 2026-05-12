@@ -190,11 +190,10 @@ pub(crate) fn subscription_snapshot_from_event(
         .map(str::trim)
         .unwrap_or_default()
         .to_string();
-    if plan_id.is_empty() {
-        if let Some(mapped_plan) = config.plan_id_by_price_id(&stripe_price_id) {
+    if plan_id.is_empty()
+        && let Some(mapped_plan) = config.plan_id_by_price_id(&stripe_price_id) {
             plan_id = mapped_plan.to_string();
         }
-    }
     if org_id.is_empty() && stripe_customer_id.is_empty() {
         bail!("subscription metadata missing org_id and customer id");
     }
@@ -241,13 +240,12 @@ async fn hydrate_subscription_snapshot(
     snapshot: &mut StripeSubscriptionSnapshot,
     config: &BillingConfig,
 ) -> Result<()> {
-    if snapshot.org_id.is_empty() && !snapshot.stripe_customer_id.is_empty() {
-        if let Some(org_id) =
+    if snapshot.org_id.is_empty() && !snapshot.stripe_customer_id.is_empty()
+        && let Some(org_id) =
             find_org_id_by_customer_id(repo.clone(), &snapshot.stripe_customer_id).await?
         {
             snapshot.org_id = org_id;
         }
-    }
 
     if let Some(existing) =
         load_existing_subscription_fields(repo.clone(), &snapshot.stripe_subscription_id).await?
@@ -263,16 +261,14 @@ async fn hydrate_subscription_snapshot(
         }
     }
 
-    if snapshot.plan_id.is_empty() && !snapshot.stripe_price_id.is_empty() {
-        if let Some(mapped_plan) = config.plan_id_by_price_id(&snapshot.stripe_price_id) {
+    if snapshot.plan_id.is_empty() && !snapshot.stripe_price_id.is_empty()
+        && let Some(mapped_plan) = config.plan_id_by_price_id(&snapshot.stripe_price_id) {
             snapshot.plan_id = mapped_plan.to_string();
         }
-    }
-    if snapshot.stripe_price_id.is_empty() && !snapshot.plan_id.is_empty() {
-        if let Some(price_id) = config.checkout_price_for_plan(&snapshot.plan_id) {
+    if snapshot.stripe_price_id.is_empty() && !snapshot.plan_id.is_empty()
+        && let Some(price_id) = config.checkout_price_for_plan(&snapshot.plan_id) {
             snapshot.stripe_price_id = price_id.to_string();
         }
-    }
 
     if snapshot.org_id.is_empty()
         || snapshot.stripe_subscription_id.is_empty()

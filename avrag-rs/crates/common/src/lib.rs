@@ -5,8 +5,11 @@ pub mod errors;
 pub mod guards_access;
 pub mod health;
 pub mod identity;
+pub mod key_vault;
 pub mod notebook_requests;
 pub mod rag_execute;
+pub mod tool_call;
+pub mod tool_spec;
 pub mod util;
 
 pub use contracts::chat::{
@@ -37,9 +40,9 @@ pub use chat::{
 };
 pub use docscope::{DocScopeMetadata, DocScopeProfile, SummaryMetadata, SummaryOutput};
 pub use documents::{
-    AddUrlSourceRequest, CreateDocumentRequest, Document, DocumentContentResponse, DocumentStatus,
-    DocumentsResponse, ParsedPreviewItem, ParsedPreviewResponse, SourceRow, SourcesResponse,
-    StatusOnlyResponse, UpdateDocumentRequest,
+    AddUrlSourceRequest, CreateDocumentRequest, Document, DocumentContentResponse,
+    DocumentMetadata, DocumentStatus, DocumentsResponse, ParsedPreviewItem, ParsedPreviewResponse,
+    SourceRow, SourcesResponse, StatusOnlyResponse, UpdateDocumentRequest,
 };
 pub use errors::{ApiError, ApiResponse, AppError, ErrorBody};
 pub use guards_access::{
@@ -55,6 +58,13 @@ pub use rag_execute::{
     ExecutePlanTrace, ExecutePlanValidationError, GraphHint, PlaceholderTriplet, QueryEntity,
     RelationPath, RetrievalBundle, RetrievedChunk, ScoreBreakdown,
 };
+pub use tool_call::{
+    DenseRetrievalArgs, DenseRetrievalModality, DocMetadataArgs, DocSummaryArgs, DocSummaryLevel,
+    GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs, MergeConfig, NextStep,
+    RetrievalPlannerOutput, RuntimeExecuteRequest, RuntimeExecuteResponse, ToolCall,
+    ToolCallAdapterError, ToolResult, ToolSpec, ToolStatus, ToolTrace,
+};
+pub use tool_spec::{ModelToolCall, StopReason, ToolAwareResponse, ToolSpec as AgentToolSpec};
 pub use util::{
     estimate_token_count, infer_image_extension, infer_mime_type, is_remote_url, new_id,
     now_rfc3339,

@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
 
 use common::{
     ChatRequest, ChatResponse, Citation, DegradeTraceItem, ModeDebug, PlannerOutput, RagModeDebug,
@@ -8,10 +9,6 @@ use uuid::Uuid;
 
 use super::planner::rag_summary_mode;
 use super::{FINAL_MIN_CHUNKS, FINAL_RERANK_BUDGET, TOTAL_CANDIDATE_BUDGET};
-
-pub(super) fn no_valid_retrieval_results_answer() -> &'static str {
-    "未找到足够的证据来回答您的问题。请尝试更换关键词或上传更多相关文档。"
-}
 
 pub(super) fn materialize_answer_markup(answer_text: &str, citations: &[Citation]) -> String {
     let citation_index_by_chunk = citations
@@ -38,12 +35,12 @@ pub(super) fn materialize_answer_markup(answer_text: &str, citations: &[Citation
         let token = after_start[..end].trim();
         if let Some(chunk_id) = token.strip_prefix("cite:").map(str::trim) {
             if let Some(citation_id) = citation_index_by_chunk.get(chunk_id) {
-                rendered.push_str(&format!("[[{citation_id}]]"));
+                write!(rendered, "[[{citation_id}]]").unwrap();
                 replaced_any = true;
             }
         } else if let Some(chunk_id) = token.strip_prefix("image:").map(str::trim) {
             if let Some(citation_id) = citation_index_by_chunk.get(chunk_id) {
-                rendered.push_str(&format!("[[image:{citation_id}]]"));
+                write!(rendered, "[[image:{citation_id}]]").unwrap();
                 replaced_any = true;
             }
         } else {

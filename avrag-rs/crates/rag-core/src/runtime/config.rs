@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use avrag_llm::{AnswerSynthesizer, EmbeddingClient, RerankerClient, RetrievalPlanner};
+use avrag_llm::{EmbeddingClient, RerankerClient, RetrievalPlanner};
 use avrag_storage_pg::PgAppRepository;
 
 /// Configuration for the RAG runtime
@@ -10,8 +10,6 @@ pub struct RagConfig {
     pub mm_embedding_client: Option<Arc<EmbeddingClient>>,
     /// PostgreSQL repository for sparse retrieval and content fetching.
     pub pg_repo: Option<Arc<PgAppRepository>>,
-    /// Answer synthesizer for generating responses
-    pub answer_synthesizer: Option<Arc<AnswerSynthesizer>>,
     /// Legacy retrieval planner for planner-compatible paths.
     pub planner: Option<Arc<RetrievalPlanner>>,
     /// Reranker for cross-encoder reranking
@@ -29,17 +27,10 @@ impl RagConfig {
             embedding_client,
             mm_embedding_client: None,
             pg_repo,
-            answer_synthesizer: None,
             planner: None,
             reranker: None,
             mm_reranker: None,
         }
-    }
-
-    /// Builder-style method to set the answer synthesizer
-    pub fn with_synthesizer(mut self, synthesizer: Arc<AnswerSynthesizer>) -> Self {
-        self.answer_synthesizer = Some(synthesizer);
-        self
     }
 
     /// Builder-style method to set the planner

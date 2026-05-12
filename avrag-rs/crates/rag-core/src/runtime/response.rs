@@ -2,7 +2,6 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use anyhow::Result;
 use avrag_auth::AuthContext;
-use avrag_llm::ChatMessage as LlmChatMessage;
 use common::{
     ChatRequest, ChatResponse, Citation, DegradeTraceItem, ExecutePlanResponse, ModeDebug,
     PlannerOutput, RagModeDebug, RagPlan, RagTraceItem, RagTraceSummary, SourceRef,
@@ -17,9 +16,21 @@ use super::RagRuntime;
 use super::planner::rag_summary_mode;
 pub(super) use super::response_utils::{
     ensure_inline_image_placeholder, extract_referenced_chunk_ids, materialize_answer_markup,
-    no_chunks_response, no_valid_retrieval_results_answer,
+    no_chunks_response,
 };
 use super::{FINAL_MIN_CHUNKS, FINAL_RERANK_BUDGET, TOTAL_CANDIDATE_BUDGET};
+
+pub struct BuildRagChatResponseParams<'a> {
+    pub request: &'a ChatRequest,
+    pub resolved_session_id: Option<&'a str>,
+    pub auth: &'a AuthContext,
+    pub rag_plan: &'a RagPlan,
+    pub chunks: &'a [ScoredChunk],
+    pub item_trace: &'a [RagTraceItem],
+    pub summary_count: usize,
+    pub synthesis_output: avrag_llm::SynthesisOutput,
+    pub degrade_trace: Vec<DegradeTraceItem>,
+}
 
 const DEFAULT_MODEL_MAX_TOKENS: usize = 8192;
 const RESERVED_SYSTEM_TOKENS: usize = 768;
@@ -31,64 +42,6 @@ pub(super) fn answer_context_budget_tokens() -> usize {
     DEFAULT_MODEL_MAX_TOKENS
         .saturating_sub(RESERVED_SYSTEM_TOKENS + RESERVED_HISTORY_TOKENS + RESERVED_OUTPUT_TOKENS)
         .max(MIN_CONTEXT_BUDGET_TOKENS)
-}
-
-pub(super) fn synthesizer_history(
-    session_context: Option<&crate::context::SessionContext>,
-) -> Vec<LlmChatMessage> {
-    let Some(session_context) = session_context else {
-        return Vec::new();
-    };
-
-    let mut history = Vec::new();
-    if let Some(summary) = session_context
-        .summary
-        .as_deref()
-        .map(str::trim)
-        .filter(|summary| !summary.is_empty())
-    {
-        history.push(LlmChatMessage::system(format!(
-            "Conversation summary:\n{}",
-            summary
-        )));
-    }
-
-    history.extend(
-        session_context
-            .messages
-            .iter()
-            .rev()
-            .take(8)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .filter_map(|message| {
-                let content = message.content.trim();
-                if content.is_empty() {
-                    return None;
-                }
-                let role = match message.role.as_str() {
-                    "user" => "user",
-                    "assistant" => "assistant",
-                    _ => return None,
-                };
-                Some(LlmChatMessage {
-                    role: role.to_string(),
-                    content: content.to_string(),
-                })
-            }),
-    );
-
-    history
-}
-
-fn stream_cited_chunk_ids(context_chunks: &[common::AnswerContextChunk]) -> Vec<String> {
-    context_chunks
-        .iter()
-        .filter(|chunk| chunk.chunk_type != "summary")
-        .map(|chunk| chunk.chunk_id.clone())
-        .take(6)
-        .collect()
 }
 
 impl RagRuntime {
@@ -200,237 +153,36 @@ impl RagRuntime {
         context_chunks
     }
 
-    /// Legacy compatibility synthesizer for old `RagPlan` + session context callers.
-    ///
-    /// Product chat now answers through the Main Agent with the execute-plan
-    /// retrieval bundle as the only factual evidence.
-    pub async fn synthesize_answer_text(
-        &self,
-        request: &ChatRequest,
-        session_context: Option<&crate::context::SessionContext>,
-        rag_plan: &RagPlan,
-        item_trace: &[RagTraceItem],
-        context_chunks: &[common::AnswerContextChunk],
-        degrade_trace: &mut Vec<DegradeTraceItem>,
-    ) -> avrag_llm::SynthesisOutput {
-        let synthesizer_history = synthesizer_history(session_context);
-        let synthesizer_history_ref =
-            (!synthesizer_history.is_empty()).then_some(synthesizer_history.as_slice());
-
-        if context_chunks.is_empty() {
-            if let Some(synthesizer) = &self.config.answer_synthesizer {
-                match synthesizer
-                    .synthesize(
-                        &request.query,
-                        &[],
-                        &Some(rag_plan.clone()),
-                        item_trace,
-                        synthesizer_history_ref,
-                    )
-                    .await
-                {
-                    Ok(answer) => return answer,
-                    Err(error) => {
-                        degrade_trace.push(DegradeTraceItem {
-                            stage: "synthesizer".to_string(),
-                            reason: format!("Synthesizer call failed: {}", error),
-                            impact: "Returning a fallback no-results answer".to_string(),
-                        });
-                        return avrag_llm::SynthesisOutput {
-                            answer_text: no_valid_retrieval_results_answer().to_string(),
-                            answer_blocks: common::plain_text_answer_blocks(
-                                no_valid_retrieval_results_answer(),
-                            ),
-                            cited_chunk_ids: Vec::new(),
-                            llm_usage: None,
-                        };
-                    }
-                }
-            }
-
-            degrade_trace.push(DegradeTraceItem {
-                stage: "synthesizer".to_string(),
-                reason: "Synthesizer not configured".to_string(),
-                impact: "Returning a fallback no-results answer".to_string(),
-            });
-            return avrag_llm::SynthesisOutput {
-                answer_text: no_valid_retrieval_results_answer().to_string(),
-                answer_blocks: common::plain_text_answer_blocks(no_valid_retrieval_results_answer()),
-                cited_chunk_ids: Vec::new(),
-                llm_usage: None,
-            };
-        }
-
-        if let Some(synthesizer) = &self.config.answer_synthesizer {
-            match synthesizer
-                .synthesize(
-                    &request.query,
-                    context_chunks,
-                    &Some(rag_plan.clone()),
-                    item_trace,
-                    synthesizer_history_ref,
-                )
-                .await
-            {
-                Ok(answer) => answer,
-                Err(error) => {
-                    degrade_trace.push(DegradeTraceItem {
-                        stage: "synthesizer".to_string(),
-                        reason: format!("Synthesizer call failed: {}", error),
-                        impact: "Returning explicit synthesis-unavailable answer".to_string(),
-                    });
-                    avrag_llm::SynthesisOutput {
-                        answer_text:
-                            "Answer generation is currently unavailable even though relevant evidence was retrieved."
-                                .to_string(),
-                        answer_blocks: common::plain_text_answer_blocks(
-                            "Answer generation is currently unavailable even though relevant evidence was retrieved.",
-                        ),
-                        cited_chunk_ids: Vec::new(),
-                        llm_usage: None,
-                    }
-                }
-            }
-        } else {
-            degrade_trace.push(DegradeTraceItem {
-                stage: "synthesizer".to_string(),
-                reason: "Synthesizer not configured".to_string(),
-                impact: "Returning explicit synthesis-unavailable answer".to_string(),
-            });
-            avrag_llm::SynthesisOutput {
-                answer_text:
-                    "Answer generation is currently unavailable even though relevant evidence was retrieved."
-                        .to_string(),
-                answer_blocks: common::plain_text_answer_blocks(
-                    "Answer generation is currently unavailable even though relevant evidence was retrieved.",
-                ),
-                cited_chunk_ids: Vec::new(),
-                llm_usage: None,
-            }
-        }
-    }
-
-    /// Legacy compatibility streaming synthesizer for old `RagPlan` callers.
-    pub async fn synthesize_answer_text_stream(
-        &self,
-        request: &ChatRequest,
-        session_context: Option<&crate::context::SessionContext>,
-        rag_plan: &RagPlan,
-        item_trace: &[RagTraceItem],
-        context_chunks: &[common::AnswerContextChunk],
-        degrade_trace: &mut Vec<DegradeTraceItem>,
-        on_delta: impl FnMut(&str),
-    ) -> avrag_llm::SynthesisOutput {
-        let synthesizer_history = synthesizer_history(session_context);
-        let synthesizer_history_ref =
-            (!synthesizer_history.is_empty()).then_some(synthesizer_history.as_slice());
-
-        if context_chunks.is_empty() {
-            return self
-                .synthesize_answer_text(
-                    request,
-                    session_context,
-                    rag_plan,
-                    item_trace,
-                    context_chunks,
-                    degrade_trace,
-                )
-                .await;
-        }
-
-        if let Some(synthesizer) = &self.config.answer_synthesizer {
-            match synthesizer
-                .synthesize_stream_text(
-                    &request.query,
-                    context_chunks,
-                    &Some(rag_plan.clone()),
-                    item_trace,
-                    synthesizer_history_ref,
-                    on_delta,
-                )
-                .await
-            {
-                Ok(answer) => avrag_llm::SynthesisOutput {
-                    answer_text: answer.content,
-                    answer_blocks: Vec::new(),
-                    cited_chunk_ids: stream_cited_chunk_ids(context_chunks),
-                    llm_usage: Some(answer.usage),
-                },
-                Err(error) => {
-                    degrade_trace.push(DegradeTraceItem {
-                        stage: "synthesizer".to_string(),
-                        reason: format!("Streaming synthesizer call failed: {}", error),
-                        impact: "Returning explicit synthesis-unavailable answer".to_string(),
-                    });
-                    avrag_llm::SynthesisOutput {
-                        answer_text:
-                            "Answer generation is currently unavailable even though relevant evidence was retrieved."
-                                .to_string(),
-                        answer_blocks: common::plain_text_answer_blocks(
-                            "Answer generation is currently unavailable even though relevant evidence was retrieved.",
-                        ),
-                        cited_chunk_ids: Vec::new(),
-                        llm_usage: None,
-                    }
-                }
-            }
-        } else {
-            degrade_trace.push(DegradeTraceItem {
-                stage: "synthesizer".to_string(),
-                reason: "Synthesizer not configured".to_string(),
-                impact: "Returning explicit synthesis-unavailable answer".to_string(),
-            });
-            avrag_llm::SynthesisOutput {
-                answer_text:
-                    "Answer generation is currently unavailable even though relevant evidence was retrieved."
-                        .to_string(),
-                answer_blocks: common::plain_text_answer_blocks(
-                    "Answer generation is currently unavailable even though relevant evidence was retrieved.",
-                ),
-                cited_chunk_ids: Vec::new(),
-                llm_usage: None,
-            }
-        }
-    }
-
     pub async fn build_rag_chat_response(
         &self,
-        request: &ChatRequest,
-        resolved_session_id: Option<&str>,
-        auth: &AuthContext,
-        rag_plan: &RagPlan,
-        chunks: &[ScoredChunk],
-        item_trace: &[RagTraceItem],
-        summary_count: usize,
-        synthesis_output: avrag_llm::SynthesisOutput,
-        degrade_trace: Vec<DegradeTraceItem>,
+        params: BuildRagChatResponseParams<'_>,
     ) -> Result<ChatResponse> {
-        if chunks.is_empty() {
+        if params.chunks.is_empty() {
             return Ok(no_chunks_response(
-                request,
-                rag_plan,
-                item_trace,
-                degrade_trace,
-                synthesis_output.answer_text,
+                params.request,
+                params.rag_plan,
+                params.item_trace,
+                params.degrade_trace,
+                params.synthesis_output.answer_text,
             ));
         }
 
-        let mut cited_chunk_ids = synthesis_output
+        let mut cited_chunk_ids = params.synthesis_output
             .cited_chunk_ids
             .iter()
             .cloned()
             .collect::<HashSet<_>>();
-        cited_chunk_ids.extend(extract_referenced_chunk_ids(&synthesis_output.answer_text));
+        cited_chunk_ids.extend(extract_referenced_chunk_ids(&params.synthesis_output.answer_text));
         let ordered_chunks = if cited_chunk_ids.is_empty() {
-            chunks.to_vec()
+            params.chunks.to_vec()
         } else {
-            let mut filtered = chunks
+            let mut filtered = params.chunks
                 .iter()
                 .filter(|chunk| cited_chunk_ids.contains(&chunk.chunk_id.to_string()))
                 .cloned()
                 .collect::<Vec<_>>();
             if filtered.is_empty() {
-                filtered = chunks.to_vec();
+                filtered = params.chunks.to_vec();
             }
             filtered
         };
@@ -443,7 +195,7 @@ impl RagRuntime {
             .collect::<Vec<_>>();
         let doc_names = if let Some(pg_repo) = self.config.pg_repo.as_ref() {
             pg_repo
-                .get_document_names(auth, &unique_doc_ids)
+                .get_document_names(params.auth, &unique_doc_ids)
                 .await
                 .unwrap_or_default()
         } else {
@@ -489,52 +241,52 @@ impl RagRuntime {
             })
             .collect::<Vec<_>>();
 
-        let summary_mode = rag_summary_mode(rag_plan);
-        let answer_text = if synthesis_output.answer_blocks.is_empty() {
-            ensure_inline_image_placeholder(&synthesis_output.answer_text, &citations)
+        let summary_mode = rag_summary_mode(params.rag_plan);
+        let answer_text = if params.synthesis_output.answer_blocks.is_empty() {
+            ensure_inline_image_placeholder(&params.synthesis_output.answer_text, &citations)
         } else {
-            common::answer_blocks_to_markup(&synthesis_output.answer_blocks)
+            common::answer_blocks_to_markup(&params.synthesis_output.answer_blocks)
         };
-        let answer_blocks = if synthesis_output.answer_blocks.is_empty() {
+        let answer_blocks = if params.synthesis_output.answer_blocks.is_empty() {
             common::answer_blocks_from_rendered_answer(&answer_text, &citations)
         } else {
-            synthesis_output.answer_blocks.clone()
+            params.synthesis_output.answer_blocks.clone()
         };
         Ok(ChatResponse {
             answer: materialize_answer_markup(&answer_text, &citations),
             answer_blocks,
-            session_id: resolved_session_id
+            session_id: params.resolved_session_id
                 .map(str::to_string)
-                .or_else(|| request.session_id.clone())
+                .or_else(|| params.request.session_id.clone())
                 .unwrap_or_else(|| Uuid::new_v4().to_string()),
-            agent_type: request.agent_type.clone(),
+            agent_type: params.request.agent_type.clone(),
             sources,
             citations,
             trace: TraceInfo {
                 mode: "rag".to_string(),
             },
-            degrade_trace,
+            degrade_trace: params.degrade_trace,
             planner_output: Some(PlannerOutput {
                 mode: "rag".to_string(),
-                rag_plan: Some(rag_plan.clone()),
+                rag_plan: Some(params.rag_plan.clone()),
                 search_plan: None,
                 general_plan: None,
             }),
             mode_debug: Some(ModeDebug {
                 rag: Some(RagModeDebug {
-                    item_trace: item_trace.to_vec(),
+                    item_trace: params.item_trace.to_vec(),
                     retrieval_trace: RagTraceSummary {
-                        item_count: item_trace.len(),
+                        item_count: params.item_trace.len(),
                         total_candidate_budget: TOTAL_CANDIDATE_BUDGET,
                         max_rerank_docs: FINAL_RERANK_BUDGET,
                         max_final_chunks: FINAL_MIN_CHUNKS,
-                        top_k_returned: chunks.len(),
+                        top_k_returned: params.chunks.len(),
                         summary_mode: summary_mode.clone(),
-                        items: item_trace.to_vec(),
+                        items: params.item_trace.to_vec(),
                     },
                     summary_injection_trace: SummaryInjectionTrace {
                         mode: summary_mode,
-                        injected_count: summary_count,
+                        injected_count: params.summary_count,
                     },
                 }),
                 search: None,

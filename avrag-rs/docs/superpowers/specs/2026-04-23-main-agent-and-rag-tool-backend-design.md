@@ -1,3 +1,5 @@
+> **⚠️ 术语过时**：本文档使用 "Main Agent" 术语，已被 `2026-05-12-architecture-baseline.md` 的 "UnifiedAgentService" 取代。三独立 Agent 架构已替代单体式 Main Agent。
+
 # Main Agent 与 RAG 工具后端架构设计
 
 > **状态**: Draft for Review; 2026-04-26 backend v1 boundary implemented for `Main Agent -> ExecutePlanRequest -> RAG API`.

@@ -9,9 +9,10 @@ pub struct Runtime {
 
 impl Runtime {
     pub async fn new_memory() -> anyhow::Result<Self> {
-        let state = AppState::new(crate::AppConfig::default());
+        let config = crate::AppConfig::default();
+        let state = AppState::new(config.clone());
         Ok(Self {
-            config: state.config().clone(),
+            config,
             services: ServiceRegistry::from_memory_state(&state),
             runtime_mode: "memory",
         })

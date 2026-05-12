@@ -1,18 +1,15 @@
-use std::collections::BTreeMap;
-
 use chrono::Utc;
 use uuid::Uuid;
 
-use super::{ChatGraphExecution, ChatPreflight, execute_graphflow_chat};
+use super::{ChatExecution, ChatPreflight, execute_chat_pipeline};
 use crate::{
     AppState, RetrievedContext, agent_icon, agent_name, build_answer, build_citations,
     build_degrade_trace, build_mode_debug, build_planner_output, build_sources,
     derive_profile_domains, derive_profile_topics, detect_preferred_style, estimate_token_count,
-    extract_pending_questions, infer_current_topic, infer_last_document, infer_last_entity,
     map_pg_error, merge_general_profile_custom_preferences, next_message_id,
     parse_uuid_or_app_error,
 };
-use avrag_storage_pg::PgAppRepository;
+use avrag_storage_pg::{ChatTurn, PgAppRepository};
 use common::{
     AppError, ChatMessage, ChatRequest, ChatResponse, ChatSession, CreateChatSessionRequest,
     ModeDebug, TraceInfo, now_rfc3339,
@@ -21,7 +18,8 @@ use ingestion::{AuditAction, AuditRecord};
 use tracing::info;
 
 impl AppState {
-    pub(crate) async fn execute_chat_graphflow(
+    #[tracing::instrument(skip(self, req), fields(agent_type = %req.agent_type, notebook_id = ?req.notebook_id))]
+    pub(crate) async fn execute_chat_pipeline(
         &self,
         req: ChatRequest,
     ) -> Result<ChatResponse, AppError> {
@@ -36,13 +34,10 @@ impl AppState {
                 "Please select at least one document before using RAG.",
             ));
         }
-        info!(
-            orchestrator = "graphflow",
-            "executing chat with graphflow orchestrator"
-        );
-        execute_graphflow_chat(self.clone(), req).await
+        execute_chat_pipeline(self.clone(), req).await
     }
 
+    #[tracing::instrument(skip(self, req), fields(agent_type = %req.agent_type, notebook_id = ?req.notebook_id, trace_id = tracing::field::Empty))]
     pub(crate) async fn execute_chat_preflight(
         &self,
         req: &ChatRequest,
@@ -63,7 +58,7 @@ impl AppState {
             .await?;
         self.ensure_metric_quota("llm_output_tokens", 1024).await?;
 
-        let phase = &self.config().usage_limit.enforcement_phase;
+        let phase = &self.usage_limit_phase;
         let enforce_5h = phase == "5h_enforcement" || phase == "7d_enforcement";
         let enforce_7d = phase == "7d_enforcement";
         let quota = match self.check_user_quota().await {
@@ -71,7 +66,7 @@ impl AppState {
             Err(error) if enforce_5h || enforce_7d => return Err(error),
             Err(error) => {
                 tracing::warn!(error = %error, "usage limit unavailable in shadow mode; continuing");
-                avrag_usage_limit::QuotaCheckResult::default()
+                avrag_billing::usage_limit::QuotaCheckResult::default()
             }
         };
 
@@ -115,6 +110,7 @@ impl AppState {
         }
 
         let trace_id = Uuid::new_v4().to_string();
+        tracing::Span::current().record("trace_id", &trace_id);
         let notebook_uuid = effective_notebook_id;
         if req.source_type.as_deref() == Some("share")
             && req.notebook_id.as_ref().is_some()
@@ -191,6 +187,7 @@ impl AppState {
         })
     }
 
+    #[tracing::instrument(skip(self, req), fields(agent_type = %req.agent_type, session_id = ?req.session_id))]
     pub(crate) async fn resolve_chat_session(
         &self,
         req: &ChatRequest,

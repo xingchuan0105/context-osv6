@@ -12,8 +12,10 @@ aws-config = "1"
 aws-credential-types = "1"
 aws-sdk-s3 = "1"
 base64 = "0.22"
+bytes = "1"
 chrono.workspace = true
 common = { path = "../common" }
+futures = "0.3"
 hex.workspace = true
 ingestion = { path = "../ingestion" }
 serde.workspace = true
@@ -23,3 +25,4 @@ sqlx = { version = "0.8", default-features = false, features = ["postgres", "run
 thiserror.workspace = true
 tokio.workspace = true
 uuid.workspace = true
+sea-query.workspace = true

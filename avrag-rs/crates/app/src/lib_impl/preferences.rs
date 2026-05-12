@@ -1,3 +1,12 @@
+use common::{
+    AppError, new_id,
+    now_rfc3339,
+};
+use contracts::UserPreferences;
+use uuid::Uuid;
+
+use crate::lib_impl::*;
+
 impl AppState {
     pub async fn load_user_preferences(
         &self,
@@ -48,6 +57,10 @@ impl AppState {
                     .unwrap_or_default(),
                 custom_preferences: serde_json::to_value(preferences)
                     .unwrap_or_else(|_| serde_json::json!({})),
+                structured_profile: existing_profile
+                    .as_ref()
+                    .map(|profile| profile.structured_profile.clone())
+                    .unwrap_or_else(|| serde_json::json!({})),
                 inferred_at: chrono::Utc::now(),
                 inference_version: existing_profile
                     .as_ref()

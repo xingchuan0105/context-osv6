@@ -9,9 +9,9 @@ fn test_build_summary_user_prompt_uses_batch_fields() {
         content: "ctx".to_string(),
     };
     let rendered = build_summary_user_prompt("Atlas Plan", "atlas.txt", &batch);
-    assert!(rendered.contains("第 1 批 / 共 2 批"));
-    assert!(rendered.contains("当前批 token：3"));
-    assert!(rendered.contains("原文：\nctx"));
+    assert!(rendered.contains("Batch: 1 / 2"));
+    assert!(rendered.contains("Token count: 3"));
+    assert!(rendered.contains("Original text:\nctx"));
 }
 
 #[test]
@@ -40,7 +40,7 @@ fn test_finalize_user_prompt_labels_partials() {
         &["first".to_string(), "second".to_string()],
     );
     assert!(prompt.contains("[partial_summary_1]"));
-    assert!(prompt.contains("阶段摘要数量：2"));
+    assert!(prompt.contains("Partial summaries count: 2"));
 }
 
 #[test]

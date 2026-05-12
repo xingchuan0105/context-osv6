@@ -25,7 +25,6 @@ import {
   type CreateWorkspaceNoteRequest,
   type UpdateWorkspaceNoteRequest,
   type WorkspaceParsedPreviewItem,
-  type WorkspaceSourceContentResponse,
 } from "./client";
 import {
   isWorkspaceSourceTerminal,

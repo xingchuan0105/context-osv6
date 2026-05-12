@@ -1,6 +1,8 @@
+> **⚠️ 已被取代**：本文档的讨论结论已整合进 `2026-05-12-architecture-baseline.md` §4（RAG API 边界）。请以基准版为准。
+
 # RAG 工具后端与主控 Agent 边界讨论纪要
 
-> 历史讨论纪要。边界结论仍然有效，但“RAG API 是纯工具 backend / 不带任何 agent 能力”的说法已经细化为：RAG API 不是面向用户的自主 agent，但可以运行有边界的模型辅助检索算子，例如三元组抽取、query entity extraction、relation/path rerank、chunk rerank。见 [2026-04-26 当前产品架构](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md)。
+> 历史讨论纪要。边界结论仍然有效，但”RAG API 是纯工具 backend / 不带任何 agent 能力”的说法已经细化为：RAG API 不是面向用户的自主 agent，但可以运行有边界的模型辅助检索算子，例如三元组抽取、query entity extraction、relation/path rerank、chunk rerank。见 [2026-04-26 当前产品架构](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md)。
 
 ## 1. 讨论背景
 

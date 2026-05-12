@@ -318,34 +318,9 @@ fn map_user_profile(row: PgRow) -> Result<UserProfileRow, PgStorageError> {
         preferred_answer_style: row.try_get("preferred_answer_style").ok(),
         frequently_asked_topics,
         custom_preferences: row.try_get("custom_preferences")?,
+        structured_profile: row.try_get("structured_profile").unwrap_or_else(|_| serde_json::json!({})),
         inferred_at,
         inference_version: row.try_get("inference_version")?,
-    })
-}
-
-fn map_dialogue_state(row: PgRow) -> Result<DialogueStateRow, PgStorageError> {
-    let id: Uuid = row.try_get("id")?;
-    let org_id: Uuid = row.try_get("org_id")?;
-    let session_id: Uuid = row.try_get("session_id")?;
-    let user_id: Option<Uuid> = row.try_get("user_id").ok().flatten();
-    let last_updated_at: DateTime<Utc> = row.try_get("last_updated_at")?;
-    Ok(DialogueStateRow {
-        id,
-        org_id: OrgId::from(org_id),
-        session_id,
-        user_id,
-        state_type: row.try_get("state_type")?,
-        current_topic: row.try_get("current_topic").ok(),
-        last_document: row.try_get("last_document").ok().flatten(),
-        last_entity: row.try_get("last_entity").ok().flatten(),
-        unresolved_question: row.try_get("unresolved_question").ok().flatten(),
-        pending_questions: json_string_vec(row.try_get("pending_questions")?),
-        gathered_facts: json_string_vec(row.try_get("gathered_facts")?),
-        confidence_score: row
-            .try_get::<f32, _>("confidence_score")
-            .unwrap_or_default(),
-        state_history: json_string_vec(row.try_get("state_history")?),
-        last_updated_at,
     })
 }
 

@@ -140,11 +140,10 @@ impl PgAppRepository {
         tx.commit().await?;
         let mut map = HashMap::new();
         for row in rows {
-            if let Ok(chunk) = map_indexed_chunk(row) {
-                if let Ok(uuid) = Uuid::parse_str(&chunk.chunk_id) {
+            if let Ok(chunk) = map_indexed_chunk(row)
+                && let Ok(uuid) = Uuid::parse_str(&chunk.chunk_id) {
                     map.insert(uuid, chunk);
                 }
-            }
         }
         Ok(map)
     }

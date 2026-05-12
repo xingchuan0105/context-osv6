@@ -4,7 +4,7 @@ mod provider;
 mod types;
 
 pub use config::SearchConfig;
-pub use executor::SearchExecutor;
+pub use executor::{SearchExecutor, SearchProvider};
 pub use types::{SearchResponse, SearchResult, SearchStreamUpdate};
 
 #[cfg(test)]

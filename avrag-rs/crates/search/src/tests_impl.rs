@@ -18,6 +18,7 @@ async fn missing_brave_key_is_explicit_error() {
         doc_scope: Vec::new(),
         messages: Vec::new(),
         stream: false,
+        language: None,
     };
     let auth = avrag_auth::AuthContext::new(
         avrag_auth::OrgId::from(uuid::Uuid::nil()),
@@ -48,6 +49,7 @@ async fn missing_perplexity_key_is_explicit_error() {
         doc_scope: Vec::new(),
         messages: Vec::new(),
         stream: false,
+        language: None,
     };
     let auth = avrag_auth::AuthContext::new(
         avrag_auth::OrgId::from(uuid::Uuid::nil()),
@@ -78,6 +80,7 @@ async fn unsupported_provider_is_explicit_error() {
         doc_scope: Vec::new(),
         messages: Vec::new(),
         stream: false,
+        language: None,
     };
     let auth = avrag_auth::AuthContext::new(
         avrag_auth::OrgId::from(uuid::Uuid::nil()),
@@ -88,6 +91,24 @@ async fn unsupported_provider_is_explicit_error() {
         error
             .to_string()
             .contains("supported providers: brave_llm_context, perplexity")
+    );
+}
+
+#[tokio::test]
+async fn executor_routes_news_vertical_to_news_endpoint() {
+    let executor = SearchExecutor::new(SearchConfig {
+        api_key: "dummy".to_string(),
+        ..SearchConfig::default()
+    });
+    let error = executor
+        .execute_search("test", Some("news"))
+        .await
+        .unwrap_err();
+    let msg = error.to_string();
+    assert!(
+        msg.contains("brave news api error"),
+        "expected news endpoint error, got: {}",
+        msg
     );
 }
 
@@ -116,6 +137,7 @@ async fn brave_llm_context_live_smoke_returns_grounding_sources() {
         doc_scope: Vec::new(),
         messages: Vec::new(),
         stream: false,
+        language: None,
     };
     let auth = avrag_auth::AuthContext::new(
         avrag_auth::OrgId::from(uuid::Uuid::nil()),

@@ -404,6 +404,7 @@ pub fn ChatPanel(
                                     );
                                     chat_for_async.set_citations(current_citations.clone());
                                 }
+                                SseEvent::ReasoningSummaryDelta { .. } => {}
                                 SseEvent::Done {
                                     session_id,
                                     message_id,

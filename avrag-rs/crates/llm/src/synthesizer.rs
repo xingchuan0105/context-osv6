@@ -4,118 +4,12 @@ use anyhow::Context;
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::{BTreeSet, HashSet};
+use tokio_util::sync::CancellationToken;
 
-const SYNTHESIZER_SYSTEM_PROMPT: &str = r#"You are a grounded answer agent.
-
-Your job is to answer the user's latest question using the provided retrieval evidence.
-Do not answer from unsupported prior knowledge when grounding is missing, weak, or partial.
-Do not explain your internal process.
-Return raw JSON only.
-
-Evidence priority:
-1. Read the Retrieval Index first to understand retrieval attempts, query rewrites, bm25 terms, summary policy, recall status, and retrieval coverage.
-2. Use Context Chunks as the primary grounding evidence.
-3. If Context Chunks support only part of the question, answer only the supported part and explicitly state which part is not grounded.
-4. If retrieval clearly provides no grounded support or insufficient grounded support, say that the current retrieval did not return enough grounded material to answer reliably, and ask the user to rephrase, add more specific keywords, or narrow the scope.
-5. Reply in the same language as the user's question unless the conversation strongly indicates another language.
-
-Grounding rules:
-- Treat Context Chunks as structured evidence, not loose prose.
-- Use only information grounded in the provided chunk fields.
-- Do not invent facts, details, implications, or visual content not supported by the chunks.
-- Do not present unsupported inferences as certain.
-- If grounded context exists, do not claim that there were no results.
-- Prefer grounded evidence over generic world knowledge.
-
-Composition rules:
-- Build the answer as a sequence of short answer blocks.
-- Prefer one factual sentence per text block.
-- Keep each text block tightly scoped to one supported claim or one short connected claim set.
-- Do not merge many unrelated claims into one long block.
-- If the answer has multiple points, split them into separate text blocks.
-
-Citation rules:
-- Every text block containing grounded factual content must include a non-empty `citations` array.
-- `citations` must list the `chunk_id` values that directly support that block.
-- Use the smallest set of chunk ids that materially supports the block.
-- Do not attach citations to blocks that are purely conversational fillers.
-- Do not include unsupported chunk ids.
-- `cited_chunk_ids` must be the deduplicated union of all chunk ids used in all blocks.
-
-Image rules:
-- If a chunk has `chunk_type = "image_with_context"`, treat `text`, `caption`, and `image_url` as the complete allowed visual grounding package.
-- Do not infer objects, attributes, layout, or relationships beyond those fields.
-- Only emit an image block when the image materially helps the answer.
-- An image block must reference a valid image chunk by `chunk_id`.
-- If an image is included, the immediately preceding text block should introduce why the image is relevant.
-
-Output schema:
-{
-  "answer_blocks": [
-    {
-      "type": "text",
-      "text": "human-facing answer sentence",
-      "citations": ["chunk-id-1"]
-    },
-    {
-      "type": "text",
-      "text": "another grounded sentence",
-      "citations": ["chunk-id-2", "chunk-id-3"]
-    },
-    {
-      "type": "image",
-      "chunk_id": "chunk-id-9"
-    }
-  ],
-  "cited_chunk_ids": ["chunk-id-1", "chunk-id-2", "chunk-id-3", "chunk-id-9"]
-}
-
-Schema rules:
-- Return exactly one raw JSON object.
-- Do not output markdown, code fences, comments, or explanations.
-- Do not output any top-level fields other than `answer_blocks` and `cited_chunk_ids`.
-- `answer_blocks` must be an array.
-- `cited_chunk_ids` must be an array.
-- Each block must have a `type` field.
-- Allowed block types are only `text` and `image`.
-
-Text block rules:
-- A text block must contain exactly:
-  - `type`: `"text"`
-  - `text`: string
-  - `citations`: array of valid `chunk_id` values from Context Chunks
-- Do not add extra fields.
-- `text` must be plain user-facing answer text.
-- `citations` may be empty only when the block contains no grounded factual claim, such as a brief uncertainty notice or a clarification-style transition.
-
-Image block rules:
-- An image block must contain exactly:
-  - `type`: `"image"`
-  - `chunk_id`: valid image chunk id from Context Chunks
-- Do not add extra fields.
-- The image block's `chunk_id` must also appear in `cited_chunk_ids`.
-
-No-support behavior:
-- If there is no grounded support, return one or more text blocks explaining that the current retrieval did not return enough grounded material to answer reliably and suggesting the user rephrase, add specific keywords, or narrow the scope.
-- In that case, `cited_chunk_ids` should be an empty array unless a block explicitly cites a chunk to explain the retrieval state.
-
-General output rules:
-- Keep the answer concise but complete.
-- Prefer short, high-confidence blocks over long synthesized paragraphs.
-- Do not emit control tokens or placeholder markers like `[INSUFFICIENT_EVIDENCE]`.
-"#;
-
-const SYNTHESIZER_STREAM_SYSTEM_PROMPT: &str = r#"You are a grounded answer agent.
-
-Answer the user's latest question using only the provided retrieval evidence.
-Do not mention internal planning, tool calls, or hidden reasoning.
-Do not output JSON.
-Do not output markdown code fences.
-Do not include inline citation markers, chunk ids, or source ids.
-Reply in the same language as the user's question unless the conversation strongly indicates another language.
-If the evidence is partial, answer only the grounded portion and clearly note what remains uncertain.
-If the evidence is insufficient, say so plainly and suggest how the user can refine the request.
-"#;
+const SYNTHESIZER_SYSTEM_PROMPT: &str = include_str!("../../../prompts/rag_answer_system.txt");
+const SYNTHESIZER_STREAM_SYSTEM_PROMPT: &str = include_str!("../../../prompts/rag_answer_system.txt");
+const DEFAULT_SYNTHESIZER_USER_TEMPLATE: &str =
+    include_str!("../../../prompts/synthesizer_user.tmpl");
 
 #[derive(Debug, Clone)]
 pub struct SynthesisOutput {
@@ -123,6 +17,15 @@ pub struct SynthesisOutput {
     pub answer_blocks: Vec<common::AnswerBlock>,
     pub cited_chunk_ids: Vec<String>,
     pub llm_usage: Option<crate::LlmUsage>,
+}
+
+pub struct SynthesizeStreamParams<'a> {
+    pub query: &'a str,
+    pub context_chunks: &'a [common::AnswerContextChunk],
+    pub rag_plan: &'a Option<common::RagPlan>,
+    pub item_traces: &'a [common::RagTraceItem],
+    pub history: Option<&'a [ChatMessage]>,
+    pub token: CancellationToken,
 }
 
 #[derive(Debug, Deserialize)]
@@ -262,10 +165,166 @@ fn build_context_section(context_chunks: &[common::AnswerContextChunk]) -> Strin
 }
 
 fn build_synthesis_request(query: &str, index_section: &str, context_section: &str) -> String {
-    format!(
-        "User Question:\n{}\n\nRetrieval Index (JSON):\n{}\n\nContext Chunks (JSON array of objects with fields: chunk_id, doc_id, chunk_type, page, text, asset_id, caption, image_url, parser_backend, source_locator):\n{}",
-        query, index_section, context_section
-    )
+    DEFAULT_SYNTHESIZER_USER_TEMPLATE
+        .replace("{query}", query)
+        .replace("{index_section}", index_section)
+        .replace("{context_section}", context_section)
+}
+
+// ---------------------------------------------------------------------------
+// Tool-result → synthesis context helpers (new tool-call paradigm)
+// ---------------------------------------------------------------------------
+
+fn tool_status_str(status: common::ToolStatus) -> String {
+    serde_json::to_value(status)
+        .ok()
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+/// Extract `AnswerContextChunk`s from a slice of `ToolResult`s.
+/// Only `Ok` results with array `data` are considered.
+/// Deduplicates by `chunk_id`; first occurrence wins.
+pub fn tool_results_to_context_chunks(
+    tool_results: &[common::ToolResult],
+) -> Vec<common::AnswerContextChunk> {
+    let mut chunks = Vec::new();
+    let mut seen = HashSet::new();
+
+    for result in tool_results {
+        if result.status != common::ToolStatus::Ok {
+            continue;
+        }
+        let Some(data) = result.data.as_ref().and_then(|d| d.as_array()) else {
+            continue;
+        };
+        for item in data {
+            let chunk_id = item
+                .get("chunk_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if chunk_id.is_empty() || !seen.insert(chunk_id.clone()) {
+                continue;
+            }
+            chunks.push(common::AnswerContextChunk {
+                chunk_id,
+                doc_id: item
+                    .get("doc_id")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                chunk_type: "text".to_string(),
+                page: item.get("page").and_then(|v| v.as_i64()),
+                text: item
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                asset_id: None,
+                caption: None,
+                image_url: None,
+                parser_backend: None,
+                source_locator: None,
+            });
+        }
+    }
+    chunks
+}
+
+/// Build a retrieval-index JSON from `ToolResult`s.
+/// Each tool result becomes a "path" with its name, status, trace, and chunk count.
+pub fn build_tool_result_index(
+    original_query: &str,
+    tool_results: &[common::ToolResult],
+    context_chunk_count: usize,
+) -> String {
+    let recalled_chunk_ids: BTreeSet<String> = tool_results
+        .iter()
+        .filter(|r| r.status == common::ToolStatus::Ok)
+        .flat_map(|r| {
+            r.data
+                .as_ref()
+                .and_then(|d| d.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|item| {
+                            item.get("chunk_id")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default()
+        })
+        .collect();
+
+    let tool_paths: Vec<_> = tool_results
+        .iter()
+        .enumerate()
+        .map(|(index, result)| {
+            let chunk_count = result
+                .data
+                .as_ref()
+                .and_then(|d| d.as_array())
+                .map(|arr| arr.len())
+                .unwrap_or(0);
+            let trace = result.trace.as_ref();
+            json!({
+                "path_id": index + 1,
+                "tool": result.tool,
+                "version": result.version,
+                "status": tool_status_str(result.status),
+                "chunk_count": chunk_count,
+                "elapsed_ms": trace.and_then(|t| t.elapsed_ms),
+                "raw_hit_count": trace.and_then(|t| t.raw_hit_count),
+                "degrade_reason": trace.and_then(|t| t.degrade_reason.clone()),
+            })
+        })
+        .collect();
+
+    serde_json::to_string_pretty(&json!({
+        "original_query": original_query,
+        "grounding": {
+            "tool_call_count": tool_results.len(),
+            "recalled_chunk_count": recalled_chunk_ids.len(),
+            "context_chunk_count": context_chunk_count,
+            "zero_recall": recalled_chunk_ids.is_empty(),
+        },
+        "tool_paths": tool_paths,
+    }))
+    .unwrap_or_else(|_| "{}".to_string())
+}
+
+/// Build a context-section JSON from `ToolResult`s.
+/// Each chunk object is annotated with a `tool_source` field so the
+/// synthesizer knows which tool produced it.
+pub fn build_tool_result_context_section(tool_results: &[common::ToolResult]) -> String {
+    let mut all_chunks = Vec::new();
+    let mut seen = HashSet::new();
+
+    for result in tool_results {
+        if result.status != common::ToolStatus::Ok {
+            continue;
+        }
+        let Some(data) = result.data.as_ref().and_then(|d| d.as_array()) else {
+            continue;
+        };
+        for item in data {
+            let chunk_id = item
+                .get("chunk_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if chunk_id.is_empty() || !seen.insert(chunk_id.clone()) {
+                continue;
+            }
+            let mut chunk = item.clone();
+            chunk["tool_source"] = serde_json::Value::String(result.tool.clone());
+            all_chunks.push(chunk);
+        }
+    }
+
+    serde_json::to_string_pretty(&all_chunks).unwrap_or_else(|_| "[]".to_string())
 }
 
 fn append_unique_chunk_ids(
@@ -442,6 +501,10 @@ impl AnswerSynthesizer {
         }
     }
 
+    pub fn from_llm_client(llm: LlmClient) -> Self {
+        Self { llm }
+    }
+
     pub async fn synthesize(
         &self,
         query: &str,
@@ -478,11 +541,81 @@ impl AnswerSynthesizer {
 
     pub async fn synthesize_stream_text(
         &self,
+        params: SynthesizeStreamParams<'_>,
+        on_delta: impl FnMut(&str),
+    ) -> anyhow::Result<crate::LlmResponse> {
+        let mut messages = vec![ChatMessage::system(SYNTHESIZER_STREAM_SYSTEM_PROMPT)];
+
+        if let Some(hist) = params.history {
+            messages.extend(hist.iter().cloned());
+        }
+
+        let index_section = build_retrieval_index(
+            params.query,
+            params.rag_plan,
+            params.item_traces,
+            params.context_chunks.len(),
+        );
+        let context_section = build_context_section(params.context_chunks);
+        messages.push(ChatMessage::user(build_synthesis_request(
+            params.query,
+            &index_section,
+            &context_section,
+        )));
+
+        self.llm
+            .complete_stream(&messages, Some(0.7), params.token, on_delta)
+            .await
+            .context("Failed to stream synthesizer response")
+    }
+
+    /// Synthesize an answer from `Vec<ToolResult>` (tool-call paradigm).
+    ///
+    /// This is the synthesizer entry-point for the new runtime architecture where
+    /// the planner emits `ToolCall`s and the runtime returns `ToolResult`s.
+    /// Chunks are extracted from successful tool results, deduplicated, and
+    /// annotated with their `tool_source` so the LLM knows which evidence came
+    /// from which retrieval pipeline.
+    pub async fn synthesize_from_tool_results(
+        &self,
         query: &str,
-        context_chunks: &[common::AnswerContextChunk],
-        rag_plan: &Option<common::RagPlan>,
-        item_traces: &[common::RagTraceItem],
+        tool_results: &[common::ToolResult],
         history: Option<&[ChatMessage]>,
+    ) -> anyhow::Result<SynthesisOutput> {
+        let mut messages = vec![ChatMessage::system(SYNTHESIZER_SYSTEM_PROMPT)];
+
+        if let Some(hist) = history {
+            messages.extend(hist.iter().cloned());
+        }
+
+        let context_chunks = tool_results_to_context_chunks(tool_results);
+        let index_section =
+            build_tool_result_index(query, tool_results, context_chunks.len());
+        let context_section = build_tool_result_context_section(tool_results);
+        messages.push(ChatMessage::user(build_synthesis_request(
+            query,
+            &index_section,
+            &context_section,
+        )));
+
+        let response = self
+            .llm
+            .complete(&messages, Some(0.7))
+            .await
+            .context("Failed to get synthesizer response")?;
+
+        let mut output = parse_synthesis_output(&response.content);
+        output.llm_usage = Some(response.usage);
+        Ok(output)
+    }
+
+    /// Stream an answer from `Vec<ToolResult>`.
+    pub async fn synthesize_stream_text_from_tool_results(
+        &self,
+        query: &str,
+        tool_results: &[common::ToolResult],
+        history: Option<&[ChatMessage]>,
+        token: CancellationToken,
         on_delta: impl FnMut(&str),
     ) -> anyhow::Result<crate::LlmResponse> {
         let mut messages = vec![ChatMessage::system(SYNTHESIZER_STREAM_SYSTEM_PROMPT)];
@@ -491,9 +624,10 @@ impl AnswerSynthesizer {
             messages.extend(hist.iter().cloned());
         }
 
+        let context_chunks = tool_results_to_context_chunks(tool_results);
         let index_section =
-            build_retrieval_index(query, rag_plan, item_traces, context_chunks.len());
-        let context_section = build_context_section(context_chunks);
+            build_tool_result_index(query, tool_results, context_chunks.len());
+        let context_section = build_tool_result_context_section(tool_results);
         messages.push(ChatMessage::user(build_synthesis_request(
             query,
             &index_section,
@@ -501,7 +635,7 @@ impl AnswerSynthesizer {
         )));
 
         self.llm
-            .complete_stream(&messages, Some(0.7), on_delta)
+            .complete_stream(&messages, Some(0.7), token, on_delta)
             .await
             .context("Failed to stream synthesizer response")
     }

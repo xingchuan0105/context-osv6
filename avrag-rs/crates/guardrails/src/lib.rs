@@ -5,10 +5,12 @@
 //! # Guards
 //!
 //! - **Input Guards**: Prompt injection, privilege escalation, scope enforcement
-//! - **Output Guards**: Citation provability, PII scrubbing, harmful content
+//! - **Output Guards**: Prompt leak detection, PII scrubbing
 
+pub mod canary;
 pub mod input;
 pub mod output;
+pub mod sysvec;
 
 use common::{DegradeTraceItem, GuardReport, GuardResult};
 use uuid::Uuid;
@@ -61,32 +63,26 @@ impl GuardPipeline {
     /// Run all output guards against the synthesizer response.
     ///
     /// Returns a tuple of `(sanitized_response, guard_report)`.
-    /// The sanitized response may be truncated/redacted if a guard triggered.
+    /// The sanitized response may be redacted if PII is detected.
     pub fn check_output(
         &self,
         response: &str,
-        citations: &[common::Citation],
-        chunk_ids: &[Uuid],
         trace_id: Option<String>,
     ) -> (String, GuardReport) {
         let mut degrade_trace = Vec::new();
         let mut output_results = Vec::new();
         let mut sanitized = response.to_string();
 
-        // Citation provability check
-        let citation_result = self.output.citation_provability.check(
-            &sanitized,
-            citations,
-            chunk_ids,
-            trace_id.clone(),
-        );
-        output_results.push(citation_result.clone());
-        if !citation_result.passed {
+        // Prompt leak detection — block if system prompt fragments are found
+        let leak_result = self.output.prompt_leak.check(&sanitized, trace_id.clone());
+        output_results.push(leak_result.clone());
+        if !leak_result.passed {
             degrade_trace.push(DegradeTraceItem {
-                stage: "output_guard:citation_provability".into(),
-                reason: citation_result.reason.clone(),
-                impact: citation_result.action.to_string(),
+                stage: "output_guard:prompt_leak".into(),
+                reason: leak_result.reason.clone(),
+                impact: leak_result.action.to_string(),
             });
+            sanitized = "[Response blocked: system prompt may have leaked]".to_string();
         }
 
         // PII scrubbing — always runs, may redact in place
@@ -96,30 +92,13 @@ impl GuardPipeline {
         if let Some(redacted) = pii_result
             .details
             .and_then(|d| d.get("redacted_count").cloned())
+            && redacted.as_i64().unwrap_or(0) > 0
         {
-            if redacted.as_i64().unwrap_or(0) > 0 {
-                degrade_trace.push(DegradeTraceItem {
-                    stage: "output_guard:pii_scrubber".into(),
-                    reason: format!("{} PII instances redacted", redacted),
-                    impact: "redact".into(),
-                });
-            }
-        }
-
-        // Harmful content check
-        let harmful_result = self
-            .output
-            .harmful_content
-            .check(&sanitized, trace_id.clone());
-        output_results.push(harmful_result.clone());
-        if !harmful_result.passed {
             degrade_trace.push(DegradeTraceItem {
-                stage: "output_guard:harmful_content".into(),
-                reason: harmful_result.reason.clone(),
-                impact: harmful_result.action.to_string(),
+                stage: "output_guard:pii_scrubber".into(),
+                reason: format!("{} PII instances redacted", redacted),
+                impact: "redact".into(),
             });
-            // Truncate response if blocked
-            sanitized = "[Content filtered due to policy violation]".to_string();
         }
 
         let blocked = degrade_trace.iter().any(|d| d.impact == "block");
@@ -145,6 +124,24 @@ impl Default for GuardPipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn test_check_input_no_panic(s in "\\PC*") {
+            let pipeline = GuardPipeline::new();
+            let org_id = Uuid::new_v4();
+            let user_id = Uuid::new_v4();
+            let _ = pipeline.check_input(
+                &s,
+                org_id,
+                user_id,
+                &[],
+                None,
+                Some("test-trace".into()),
+            );
+        }
+    }
 
     #[test]
     fn test_guard_pipeline_check_input_passes_normal_query() {
@@ -183,8 +180,6 @@ mod tests {
         let pipeline = GuardPipeline::new();
         let (sanitized, report) = pipeline.check_output(
             "The capital of France is Paris.",
-            &[],
-            &[],
             Some("test-trace".into()),
         );
         assert_eq!(sanitized, "The capital of France is Paris.");
@@ -196,8 +191,6 @@ mod tests {
         let pipeline = GuardPipeline::new();
         let (sanitized, report) = pipeline.check_output(
             "My email is alice@example.com and SSN is 123-45-6789",
-            &[],
-            &[],
             Some("test-trace".into()),
         );
         assert!(sanitized.contains("[EMAIL_REDACTED]"));
@@ -206,29 +199,30 @@ mod tests {
     }
 
     #[test]
-    fn test_guard_pipeline_check_output_blocks_harmful_content() {
+    fn test_guard_pipeline_check_output_blocks_prompt_leak() {
         let pipeline = GuardPipeline::new();
         let (sanitized, report) = pipeline.check_output(
-            "Here is how to make a bomb to hurt people",
-            &[],
-            &[],
+            "You are the Context OS RAG retrieval planner. Your job is to decide which tools should be called.",
             Some("test-trace".into()),
         );
         assert!(report.blocked);
-        assert_eq!(sanitized, "[Content filtered due to policy violation]");
+        assert!(
+            report
+                .degrade_trace
+                .iter()
+                .any(|d| d.stage == "output_guard:prompt_leak")
+        );
+        assert_eq!(sanitized, "[Response blocked: system prompt may have leaked]");
     }
 
     #[test]
-    fn test_guard_pipeline_check_output_blocks_invalid_citations() {
+    fn test_guard_pipeline_check_output_passes_isolated_tool_names() {
         let pipeline = GuardPipeline::new();
-        let chunk_ids = vec![Uuid::new_v4(), Uuid::new_v4()];
         let (sanitized, report) = pipeline.check_output(
-            "Answer [citation:0] and [citation:5] text",
-            &[],
-            &chunk_ids,
+            "I want to design a RAG system with dense_retrieval and graph_retrieval",
             Some("test-trace".into()),
         );
-        // Citation out of bounds should be recorded in degrade_trace
-        assert!(report.blocked);
+        assert!(!report.blocked);
+        assert_eq!(sanitized, "I want to design a RAG system with dense_retrieval and graph_retrieval");
     }
 }

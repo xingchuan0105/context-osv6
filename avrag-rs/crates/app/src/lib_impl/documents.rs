@@ -1,3 +1,22 @@
+use avrag_storage_pg::{
+    DocumentDeletionOutcome,
+    DocumentUploadMutationOutcome, DocumentUploadQueueOutcome,
+    ObjectStoreHeadError,
+};
+use common::{
+    AppError, CreateDocumentRequest, CreateDocumentUploadResponse, Document, DocumentContentResponse, DocumentStatus, ParsedPreviewResponse, StatusOnlyResponse,
+    UpdateDocumentRequest, new_id,
+    now_rfc3339,
+};
+use ingestion::{
+    AuditAction, IngestDocumentPayload, build_ingest_task, task_audit,
+};
+use tokio::time::{Duration, sleep};
+use tracing::info;
+use uuid::Uuid;
+
+use crate::lib_impl::*;
+
 impl AppState {
     pub async fn list_documents(
         &self,
@@ -251,6 +270,46 @@ impl AppState {
         Ok(StatusOnlyResponse {
             status: "uploaded".to_string(),
         })
+    }
+
+    pub async fn put_uploaded_document_stream<S, E>(
+        &self,
+        document_id: &str,
+        stream: S,
+    ) -> Result<StatusOnlyResponse, AppError>
+    where
+        S: futures::Stream<Item = std::result::Result<bytes::Bytes, E>> + Send + Sync + Unpin + 'static,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        if let Some(pg) = &self.pg {
+            let document_id =
+                parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
+            let seed = pg
+                .get_document_task_seed(&self.auth, document_id)
+                .await
+                .map_err(map_pg_error)?
+                .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
+            if !document_upload_status_is_mutable_for_app(&seed.status) {
+                return Err(upload_status_conflict_error(&seed.status));
+            }
+            self.object_store
+                .put_stream(&seed.object_path, stream)
+                .await
+                .map_err(|error| AppError::internal(error.to_string()))?;
+            return Ok(StatusOnlyResponse {
+                status: "uploaded".to_string(),
+            });
+        }
+
+        // Fallback for memory adapter: collect stream into memory
+        use futures::StreamExt;
+        let mut body = Vec::new();
+        let mut stream = stream;
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| AppError::internal(e.to_string()))?;
+            body.extend_from_slice(&chunk);
+        }
+        self.put_uploaded_document(document_id, body).await
     }
 
     pub async fn complete_document_upload(
@@ -744,7 +803,7 @@ fn document_upload_status_is_mutable_for_app(status: &DocumentStatus) -> bool {
     )
 }
 
-fn document_is_deleting_or_deleted(status: &DocumentStatus) -> bool {
+pub fn document_is_deleting_or_deleted(status: &DocumentStatus) -> bool {
     matches!(status, DocumentStatus::Deleting | DocumentStatus::Deleted)
 }
 

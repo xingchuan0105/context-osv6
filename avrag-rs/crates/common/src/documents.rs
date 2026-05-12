@@ -81,6 +81,16 @@ pub struct DocumentContentResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentMetadata {
+    pub doc_id: String,
+    pub name: String,
+    pub mime_type: String,
+    pub file_size: u64,
+    pub status: DocumentStatus,
+    pub chunk_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedPreviewResponse {
     pub items: Vec<ParsedPreviewItem>,
     pub has_more: bool,

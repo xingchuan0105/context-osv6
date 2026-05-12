@@ -1,0 +1,500 @@
+{
+  "run_name": "e2e-minsky-agent-mech-1777390809-continue",
+  "email": "e2e-minsky-agent-mech-1777390809@e2e.test",
+  "notebook_id": "b7774d00-df07-4d9b-8f32-c6f2a60b8f21",
+  "document_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+  "org_id": "7f743c86-738b-45fe-b426-d1477d3233a4",
+  "query": "请基于 minsky86.pdf 中 Minsky 的 Society of Mind 论文，用中文解释：Society of Mind、agents、K-lines、frames 之间是什么关系？这种由许多简单 agent 协作形成智能的机制，与现代软件 agent 的规划和工具/检索机制有什么可类比之处？",
+  "request_id": "e2e-minsky-agent-mech-1777390809-continue-chat",
+  "timeline": [
+    "[23:47:18] continue doc=db7bc56e-f840-46ef-91b4-8cbb534b5598",
+    "[23:47:18] login -> 200",
+    "[23:47:18] status 0: 200 processing {'status': 'processing'}",
+    "[23:48:23] status 12: 200 processing {'status': 'processing'}",
+    "[23:49:28] status 24: 200 processing {'status': 'processing'}",
+    "[23:50:32] status 36: 200 processing {'status': 'processing'}",
+    "[23:51:36] status 48: 200 processing {'status': 'processing'}",
+    "[23:52:29] status 58: 200 completed {'status': 'completed'}",
+    "[23:52:29] ERROR RuntimeError('ERROR:  column \"id\" does not exist\\nLINE 6: ...s\\',(select jsonb_agg(row_to_json(r)) from (select id,status,...\\n                                                             ^')"
+  ],
+  "status_history": [
+    {
+      "i": 0,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 1,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 2,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 3,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 4,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 5,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 6,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 7,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 8,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 9,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 10,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 11,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 12,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 13,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 14,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 15,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 16,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 17,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 18,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 19,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 20,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 21,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 22,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 23,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 24,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 25,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 26,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 27,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 28,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 29,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 30,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 31,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 32,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 33,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 34,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 35,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 36,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 37,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 38,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 39,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 40,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 41,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 42,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 43,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 44,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 45,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 46,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 47,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 48,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 49,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 50,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 51,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 52,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 53,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 54,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 55,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 56,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 57,
+      "status": "processing",
+      "http_status": 200,
+      "body": {
+        "status": "processing"
+      }
+    },
+    {
+      "i": 58,
+      "status": "completed",
+      "http_status": 200,
+      "body": {
+        "status": "completed"
+      }
+    }
+  ],
+  "chat": null,
+  "execute_plan_request": null,
+  "product_event_metadata": null,
+  "channel_probes": {},
+  "db_counts": null,
+  "error": "RuntimeError('ERROR:  column \"id\" does not exist\\nLINE 6: ...s\\',(select jsonb_agg(row_to_json(r)) from (select id,status,...\\n                                                             ^')"
+}

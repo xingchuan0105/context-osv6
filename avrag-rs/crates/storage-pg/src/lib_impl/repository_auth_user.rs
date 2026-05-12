@@ -259,7 +259,7 @@ impl PgAppRepository {
         let row = sqlx::query(
             r#"
             select user_id, org_id, expertise_domains, preferred_answer_style, frequently_asked_topics,
-                   custom_preferences, inferred_at, inference_version
+                   custom_preferences, structured_profile, inferred_at, inference_version
             from user_profiles
             where user_id = $1
             "#,
@@ -282,14 +282,15 @@ impl PgAppRepository {
             r#"
             insert into user_profiles (
                 user_id, org_id, expertise_domains, preferred_answer_style, frequently_asked_topics,
-                custom_preferences, inferred_at, inference_version
+                custom_preferences, structured_profile, inferred_at, inference_version
             )
-            values ($1, $2, $3, $4, $5, $6, $7, $8)
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             on conflict (user_id) do update
             set expertise_domains = excluded.expertise_domains,
                 preferred_answer_style = excluded.preferred_answer_style,
                 frequently_asked_topics = excluded.frequently_asked_topics,
                 custom_preferences = excluded.custom_preferences,
+                structured_profile = excluded.structured_profile,
                 inferred_at = excluded.inferred_at,
                 inference_version = excluded.inference_version,
                 updated_at = now()
@@ -301,6 +302,7 @@ impl PgAppRepository {
         .bind(&profile.preferred_answer_style)
         .bind(serde_json::to_value(&profile.frequently_asked_topics)?)
         .bind(&profile.custom_preferences)
+        .bind(&profile.structured_profile)
         .bind(profile.inferred_at)
         .bind(&profile.inference_version)
         .execute(tx.inner())
@@ -309,75 +311,4 @@ impl PgAppRepository {
         Ok(())
     }
 
-    pub async fn get_dialogue_state(
-        &self,
-        context: &AuthContext,
-        session_id: Uuid,
-    ) -> Result<Option<DialogueStateRow>, PgStorageError> {
-        let mut tx = self.pool.begin(context).await?;
-        let row = sqlx::query(
-            r#"
-            select id, org_id, session_id, user_id, state_type, current_topic, last_document,
-                   last_entity, unresolved_question, pending_questions, gathered_facts,
-                   confidence_score, state_history, last_updated_at
-            from dialogue_states
-            where session_id = $1
-            "#,
-        )
-        .bind(session_id)
-        .fetch_optional(tx.inner())
-        .await?;
-        tx.commit().await?;
-        row.map(map_dialogue_state).transpose()
-    }
-
-    pub async fn upsert_dialogue_state(
-        &self,
-        context: &AuthContext,
-        state: &DialogueStateRow,
-    ) -> Result<(), PgStorageError> {
-        let mut tx = self.pool.begin(context).await?;
-        ensure_org_and_actor(tx.inner(), context).await?;
-        sqlx::query(
-            r#"
-            insert into dialogue_states (
-                id, org_id, session_id, user_id, state_type, current_topic, last_document,
-                last_entity, unresolved_question, pending_questions, gathered_facts,
-                confidence_score, state_history, last_updated_at
-            )
-            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-            on conflict (session_id) do update
-            set user_id = excluded.user_id,
-                state_type = excluded.state_type,
-                current_topic = excluded.current_topic,
-                last_document = excluded.last_document,
-                last_entity = excluded.last_entity,
-                unresolved_question = excluded.unresolved_question,
-                pending_questions = excluded.pending_questions,
-                gathered_facts = excluded.gathered_facts,
-                confidence_score = excluded.confidence_score,
-                state_history = excluded.state_history,
-                last_updated_at = excluded.last_updated_at,
-                updated_at = now()
-            "#,
-        )
-        .bind(state.id)
-        .bind(state.org_id.into_uuid())
-        .bind(state.session_id)
-        .bind(state.user_id)
-        .bind(&state.state_type)
-        .bind(&state.current_topic)
-        .bind(&state.last_document)
-        .bind(&state.last_entity)
-        .bind(&state.unresolved_question)
-        .bind(serde_json::to_value(&state.pending_questions)?)
-        .bind(serde_json::to_value(&state.gathered_facts)?)
-        .bind(state.confidence_score)
-        .bind(serde_json::to_value(&state.state_history)?)
-        .bind(state.last_updated_at)
-        .execute(tx.inner())
-        .await?;
-        tx.commit().await?;
-        Ok(())
-    }
 }

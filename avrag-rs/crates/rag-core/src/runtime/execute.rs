@@ -343,7 +343,7 @@ fn timeout_degrade(stage: &str) -> DegradeTraceItem {
     DegradeTraceItem {
         stage: stage.to_string(),
         reason: format!("{stage} channel timed out"),
-        impact: format!("Skipping {stage} retrieval channel").to_string(),
+        impact: format!("Skipping {stage} retrieval channel"),
     }
 }
 
@@ -587,6 +587,11 @@ impl RagRuntime {
                 relation_hints,
                 relation_limit,
                 supporting_chunk_limit,
+                query_entities: Vec::new(),
+                query_entity_vectors: Vec::new(),
+                hop_limit: 1,
+                fan_out_limit: 10,
+                tenant_org_id: auth.org_id().to_string(),
             })
             .await
         {

@@ -6,9 +6,8 @@ use common::AppError;
 /// Unified dispatcher for direct agent execution.
 ///
 /// Owns the concrete agent implementations and routes requests based on
-/// `AgentRequest.kind`. Chat and Web Search production chat paths execute
-/// through this service. RAG production orchestration still lives in GraphFlow;
-/// the direct `RagAgent` branch fails closed until it is wired as that adapter.
+/// `AgentRequest.kind`. Chat, Web Search, and RAG production chat paths all
+/// execute through this service.
 ///
 /// # Usage
 ///
@@ -34,6 +33,7 @@ impl UnifiedAgentService {
     /// For streaming paths these events are forwarded immediately over SSE;
     /// for non-streaming paths a `CollectingSink` can be used and the final
     /// `AgentRunResult` assembled from the collected events.
+    #[tracing::instrument(skip(self, sink), fields(agent_kind = ?request.kind))]
     pub async fn run(
         &self,
         request: AgentRequest,
@@ -97,11 +97,13 @@ mod tests {
             messages: vec![],
             session_summary: None,
             user_preferences: None,
-            working_memory: None,
             debug: false,
             stream: false,
+            language: None,
             auth_context: serde_json::json!({}),
+            docscope_metadata: None,
             metadata: Default::default(),
+            cancellation_token: None,
         };
         let _ = svc.run(req, &sink).await.unwrap();
         let events = sink.events();
@@ -126,11 +128,13 @@ mod tests {
             messages: vec![],
             session_summary: None,
             user_preferences: None,
-            working_memory: None,
             debug: false,
             stream: false,
+            language: None,
             auth_context: serde_json::json!({}),
+            docscope_metadata: None,
             metadata: Default::default(),
+            cancellation_token: None,
         };
         let _ = svc.run(req, &sink).await.unwrap();
         let events = sink.events();
@@ -154,11 +158,13 @@ mod tests {
             messages: vec![],
             session_summary: None,
             user_preferences: None,
-            working_memory: None,
             debug: false,
             stream: false,
+            language: None,
             auth_context: serde_json::json!({}),
+            docscope_metadata: None,
             metadata: Default::default(),
+            cancellation_token: None,
         };
         let _ = svc.run(req, &sink).await.unwrap();
         let events = sink.events();

@@ -1,3 +1,11 @@
+use crate::lib_impl::*;
+use common::{
+    AppError, ChatMessage, ChatRequest, ChatResponse, ChatSession, CreateChatSessionRequest,
+    Notebook, SourceRow, StatusOnlyResponse, UpdateChatSessionRequest,
+    new_id, now_rfc3339,
+};
+use uuid::Uuid;
+
 impl AppState {
     pub async fn search(
         &self,
@@ -369,7 +377,7 @@ impl AppState {
             return Err(AppError::validation("query_required", "query is required"));
         }
 
-        services::chat_service::ChatService::new(self.clone())
+        crate::services::chat_service::ChatService::new(self.clone())
             .execute(req)
             .await
     }

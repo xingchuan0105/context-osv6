@@ -4,7 +4,6 @@ use common::{SummaryMetadata, SummaryOutput};
 use serde::Deserialize;
 use text_splitter::{ChunkConfig, CodeSplitter, MarkdownSplitter, TextSplitter};
 use tiktoken_rs::{CoreBPE, cl100k_base};
-
 const MAX_SUMMARY_CONTEXT_TOKENS: usize = 900_000;
 const RESERVED_PROMPT_TOKENS: usize = 4_000;
 const MAX_BATCH_CONTEXT_TOKENS: usize = MAX_SUMMARY_CONTEXT_TOKENS - RESERVED_PROMPT_TOKENS;
@@ -12,6 +11,9 @@ const DEFAULT_SUMMARY_SYSTEM_PROMPT: &str =
     include_str!("../../../prompts/summary_generation.v1.tmpl");
 const DEFAULT_SUMMARY_FINALIZE_SYSTEM_PROMPT: &str =
     include_str!("../../../prompts/summary_generation_finalize.v1.tmpl");
+const DEFAULT_SUMMARY_USER_TEMPLATE: &str = include_str!("../../../prompts/summary_user.tmpl");
+const DEFAULT_SUMMARY_FINALIZE_USER_TEMPLATE: &str =
+    include_str!("../../../prompts/summary_finalize_user.tmpl");
 const SUMMARY_BLOCK_LABELS: &[&str] = &["summary_text", "markdown", "md", "text"];
 
 #[derive(Debug, Clone)]
@@ -303,7 +305,7 @@ fn extract_code_block(raw_output: &str, label: &str, from_end: bool) -> Option<S
     };
     let content_start = start + fence.len();
     let after_fence =
-        raw_output[content_start..].trim_start_matches(|ch| matches!(ch, '\r' | '\n' | ' ' | '\t'));
+        raw_output[content_start..].trim_start_matches(['\r', '\n', ' ', '\t']);
     let content_end = after_fence.find("```")?;
     Some(after_fence[..content_end].trim().to_string())
 }
@@ -316,10 +318,13 @@ fn build_summary_system_prompt(prompt_template: Option<&str>) -> String {
 }
 
 fn build_summary_user_prompt(title: &str, filename: &str, batch: &SummaryBatch) -> String {
-    format!(
-        "当前批次：第 {} 批 / 共 {} 批\n当前批 token：{}\n\n文档标题：{}\n文件名：{}\n\n原文：\n{}",
-        batch.batch_index, batch.batch_count, batch.token_count, title, filename, batch.content,
-    )
+    DEFAULT_SUMMARY_USER_TEMPLATE
+        .replace("{batch_index}", &batch.batch_index.to_string())
+        .replace("{batch_count}", &batch.batch_count.to_string())
+        .replace("{token_count}", &batch.token_count.to_string())
+        .replace("{title}", title)
+        .replace("{filename}", filename)
+        .replace("{content}", &batch.content)
 }
 fn build_finalize_system_prompt(prompt_template: Option<&str>) -> String {
     prompt_template
@@ -335,13 +340,11 @@ fn build_finalize_user_prompt(title: &str, filename: &str, partial_summaries: &[
         .map(|(index, summary)| format!("[partial_summary_{}]\n{}", index + 1, summary.trim()))
         .collect::<Vec<_>>()
         .join("\n\n");
-    format!(
-        "文档标题：{}\n文件名：{}\n阶段摘要数量：{}\n\n阶段摘要：\n{}",
-        title,
-        filename,
-        partial_summaries.len(),
-        partial_text,
-    )
+    DEFAULT_SUMMARY_FINALIZE_USER_TEMPLATE
+        .replace("{title}", title)
+        .replace("{filename}", filename)
+        .replace("{partial_count}", &partial_summaries.len().to_string())
+        .replace("{partial_text}", &partial_text)
 }
 fn build_summary_batches(filename: &str, content: &str) -> anyhow::Result<Vec<SummaryBatch>> {
     build_summary_batches_for_limit(filename, content, MAX_BATCH_CONTEXT_TOKENS)

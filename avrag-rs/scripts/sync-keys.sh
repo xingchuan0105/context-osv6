@@ -22,18 +22,18 @@ VAULT="$HOME/.config/avrag/keys.env"
 # Key variables managed by this script
 # Source: crates/app/src/lib.rs AppConfig::from_env()
 KEY_VARS=(
-  # DashScope — planner, embedding, MM embedding, MM rerank, rerank, search LLM
+  # DashScope — embedding, MM embedding, MM rerank, rerank
   DASHSCOPE_API_KEY
   EMBEDDING_API_KEY
-  INTENT_LLM_API_KEY
   MM_EMBEDDING_API_KEY
   MM_RERANK_API_KEY
   RERANK_API_KEY
-  SEARCH_LLM_API_KEY
-  # DeepSeek — Main Agent answer/planning
-  ANSWER_LLM_API_KEY
-  # DMXAPI — summary
-  SUMMARY_LLM_API_KEY
+  # Agent LLM — Chat, RAG, WebSearch (DeepSeek)
+  AGENT_LLM_API_KEY
+  # Memory LLM — Session summary, user profile (DeepSeek Flash)
+  MEMORY_LLM_API_KEY
+  # Ingestion LLM — Document summary, triplets (Gemini via DMXAPI)
+  INGESTION_LLM_API_KEY
   # Search — Brave LLM Context primary, Perplexity legacy
   SEARCH_API_KEY
   PERPLEXITY_API_KEY

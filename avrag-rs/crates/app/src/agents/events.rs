@@ -57,7 +57,8 @@ pub struct AgentUsage {
 /// - Non-streaming: collects events into a Vec, then returns final result.
 #[async_trait::async_trait]
 pub trait AgentEventSink: Send + Sync {
-    async fn emit(&self, event: AgentEvent);
+    /// Emit an event. Returns Err(()) if the sink is closed (e.g. client disconnected).
+    async fn emit(&self, event: AgentEvent) -> Result<(), ()>;
 }
 
 /// A no-op sink that discards all events.
@@ -65,13 +66,21 @@ pub struct NoopSink;
 
 #[async_trait::async_trait]
 impl AgentEventSink for NoopSink {
-    async fn emit(&self, _event: AgentEvent) {}
+    async fn emit(&self, _event: AgentEvent) -> Result<(), ()> {
+        Ok(())
+    }
 }
 
 /// A collecting sink that accumulates events into an internal buffer.
 /// Used by the non-streaming path to gather events for final response assembly.
 pub struct CollectingSink {
     events: std::sync::Mutex<Vec<AgentEvent>>,
+}
+
+impl Default for CollectingSink {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CollectingSink {
@@ -95,9 +104,12 @@ impl CollectingSink {
 
 #[async_trait::async_trait]
 impl AgentEventSink for CollectingSink {
-    async fn emit(&self, event: AgentEvent) {
+    async fn emit(&self, event: AgentEvent) -> Result<(), ()> {
         if let Ok(mut guard) = self.events.lock() {
             guard.push(event);
+            Ok(())
+        } else {
+            Err(())
         }
     }
 }
@@ -116,8 +128,8 @@ impl<T> ChannelSink<T> {
 
 #[async_trait::async_trait]
 impl AgentEventSink for ChannelSink<AgentEvent> {
-    async fn emit(&self, event: AgentEvent) {
-        let _ = self.sender.send(event);
+    async fn emit(&self, event: AgentEvent) -> Result<(), ()> {
+        self.sender.send(event).map_err(|_| ())
     }
 }
 
@@ -179,7 +191,7 @@ mod tests {
     #[tokio::test]
     async fn test_noop_sink() {
         let sink = NoopSink;
-        sink.emit(AgentEvent::MessageDelta {
+        let _ = sink.emit(AgentEvent::MessageDelta {
             text: "hello".to_string(),
         })
         .await;
@@ -189,12 +201,12 @@ mod tests {
     #[tokio::test]
     async fn test_collecting_sink() {
         let sink = CollectingSink::new();
-        sink.emit(AgentEvent::Activity {
+        let _ = sink.emit(AgentEvent::Activity {
             stage: "plan".to_string(),
             message: "planning".to_string(),
         })
         .await;
-        sink.emit(AgentEvent::MessageDelta {
+        let _ = sink.emit(AgentEvent::MessageDelta {
             text: "answer".to_string(),
         })
         .await;

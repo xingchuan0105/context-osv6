@@ -1,9 +1,11 @@
 pub mod adapters;
 pub mod agents;
 mod chat;
-pub mod main_agent;
+pub mod rag_prompts;
 pub mod ports;
 pub mod runtime;
 pub mod services;
+pub mod token_budget;
 
-include!("lib_impl.rs");
+pub mod lib_impl;
+pub use lib_impl::*;

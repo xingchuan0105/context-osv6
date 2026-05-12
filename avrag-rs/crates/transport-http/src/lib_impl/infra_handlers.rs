@@ -142,7 +142,6 @@ async fn dev_upload_handler(
     State(state): State<AppState>,
     body: Bytes,
 ) -> Response {
-    telemetry::prometheus::observe_upload("dev", body.len() as u64);
     let upload_state = match upload_state_for_document(&state, &document_id).await {
         Ok((upload_state, _)) => upload_state,
         Err(error) => return handlers::app_error_response(error),
@@ -167,7 +166,6 @@ async fn signed_upload_handler(
     State(state): State<AppState>,
     body: Bytes,
 ) -> Response {
-    telemetry::prometheus::observe_upload("signed", body.len() as u64);
     let (upload_state, object_path) = match upload_state_for_document(&state, &document_id).await {
         Ok(value) => value,
         Err(error) => return handlers::app_error_response(error),
@@ -340,6 +338,7 @@ async fn mcp_tool_call_handler(
         doc_scope,
         messages: vec![],
         stream: false,
+        language: None,
     };
     if let Err(error) = expand_external_notebook_rag_scope(&state, &notebook_id, &mut req).await {
         return handlers::app_error_response(error);

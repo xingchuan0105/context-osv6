@@ -1,4 +1,31 @@
-fn auth_context_from_config(config: &AppConfig) -> AuthContext {
+use crate::agents::service::UnifiedAgentService;
+use anyhow::Result as AnyResult;
+use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
+use avrag_llm::{EmbeddingClient, LlmClient, RerankerClient, RetrievalPlanner};
+use avrag_rag_core::RagRuntime;
+use avrag_search::SearchExecutor;
+use avrag_storage_pg::{
+    ObjectStoreHandle, PgStorageError, S3ObjectStore,
+};
+use common::AppError;
+use hmac::{Hmac, Mac};
+
+type HmacSha256 = Hmac<sha2::Sha256>;
+use ingestion::parser::{DocumentParser, HtmlParser};
+use reqwest::{Client as HttpClient, Url, header::CONTENT_TYPE, redirect::Policy};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+use tokio::{
+    fs,
+    time::Duration,
+};
+use uuid::Uuid;
+
+use crate::lib_impl::*;
+
+pub(crate) fn auth_context_from_config(config: &AppConfig) -> AuthContext {
     let org_uuid = Uuid::parse_str(&config.org_id).unwrap_or_else(|_| Uuid::nil());
     let user_uuid = Uuid::parse_str(&config.user_id).unwrap_or_else(|_| Uuid::nil());
     AuthContext::new(OrgId::from(org_uuid), SubjectKind::User)
@@ -22,65 +49,64 @@ impl ModelProviderConfig {
                 .and_then(avrag_llm::ApiStyle::from_config_str),
             dimensions: self.dimensions,
             enable_thinking: self.enable_thinking,
+            enable_cache: self.enable_cache,
         })
     }
 }
 
-fn make_llm_client(config: &ModelProviderConfig) -> Option<LlmClient> {
+pub(crate) fn make_llm_client(config: &ModelProviderConfig) -> Option<LlmClient> {
     config.to_llm_config().map(LlmClient::new)
 }
 
-fn build_unified_agent_service(
+pub(crate) fn build_unified_agent_service(
     llm_client: Option<LlmClient>,
     temperature: Option<f32>,
     search_executor: Option<Arc<SearchExecutor>>,
     rag_runtime: Option<Arc<RagRuntime>>,
+    _prompts_dir: &str,
 ) -> Arc<UnifiedAgentService> {
+    let chat_agent = crate::agents::chat_agent::ChatAgent::new(llm_client.clone(), temperature);
+    let rag_agent = crate::agents::rag_agent::RagAgent::new(rag_runtime, llm_client.clone(), temperature);
+
+    let search_provider: Option<Arc<dyn avrag_search::SearchProvider>> = search_executor
+        .map(|executor| -> Arc<dyn avrag_search::SearchProvider> { executor });
+
     Arc::new(UnifiedAgentService::new(
-        Box::new(crate::agents::chat_agent::ChatAgent::new(
-            llm_client.clone(),
-            temperature,
-        )),
+        Box::new(chat_agent),
         Box::new(
-            crate::agents::web_search_agent::WebSearchAgent::new(search_executor)
+            crate::agents::web_search_agent::WebSearchAgent::new(search_provider)
                 .with_answer_synthesizer(llm_client, temperature),
         ),
-        Box::new(crate::agents::rag_agent::RagAgent::new(rag_runtime)),
+        Box::new(rag_agent),
     ))
 }
 
-fn make_embedding_client(config: &ModelProviderConfig) -> Option<Arc<EmbeddingClient>> {
+pub(crate) fn make_embedding_client(config: &ModelProviderConfig) -> Option<Arc<EmbeddingClient>> {
     config
         .to_llm_config()
         .map(|c| Arc::new(EmbeddingClient::new(c)))
 }
 
-fn make_planner(config: &ModelProviderConfig) -> Option<Arc<RetrievalPlanner>> {
+pub(crate) fn make_planner(config: &ModelProviderConfig) -> Option<Arc<RetrievalPlanner>> {
     config
         .to_llm_config()
         .map(|c| Arc::new(RetrievalPlanner::new(c)))
 }
 
-fn make_synthesizer(config: &ModelProviderConfig) -> Option<Arc<AnswerSynthesizer>> {
-    config
-        .to_llm_config()
-        .map(|c| Arc::new(AnswerSynthesizer::new(c)))
-}
-
-fn make_reranker(config: &ModelProviderConfig) -> Option<Arc<RerankerClient>> {
+pub(crate) fn make_reranker(config: &ModelProviderConfig) -> Option<Arc<RerankerClient>> {
     config
         .to_llm_config()
         .map(|c| Arc::new(RerankerClient::new(c)))
 }
 
-fn default_object_root() -> String {
+pub(crate) fn default_object_root() -> String {
     format!(
         "{}/.local/share/avrag-dev/objects",
         std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string())
     )
 }
 
-async fn write_raw_object(
+pub(crate) async fn write_raw_object(
     object_root: &Path,
     object_path: &str,
     bytes: &[u8],
@@ -92,14 +118,14 @@ async fn write_raw_object(
     fs::write(full_path, bytes).await
 }
 
-fn upload_signing_secret() -> String {
+pub(crate) fn upload_signing_secret() -> String {
     std::env::var("AVRAG_UPLOAD_SIGNING_SECRET")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "context-osv6-local-upload-secret".to_string())
 }
 
-async fn build_object_store(config: &AppConfig) -> AnyResult<ObjectStoreHandle> {
+pub(crate) async fn build_object_store(config: &AppConfig) -> AnyResult<ObjectStoreHandle> {
     if !config.object_storage.endpoint.trim().is_empty()
         && !config.object_storage.bucket.trim().is_empty()
         && !config.object_storage.access_key.trim().is_empty()
@@ -121,7 +147,7 @@ async fn build_object_store(config: &AppConfig) -> AnyResult<ObjectStoreHandle> 
     )))
 }
 
-fn sign_upload_payload(
+pub(crate) fn sign_upload_payload(
     secret: &str,
     document_id: &str,
     object_path: &str,
@@ -137,7 +163,7 @@ fn sign_upload_payload(
     Ok(hex::encode(mac.finalize().into_bytes()))
 }
 
-fn sanitize_filename(filename: &str) -> String {
+pub(crate) fn sanitize_filename(filename: &str) -> String {
     filename
         .chars()
         .map(|ch| match ch {
@@ -150,14 +176,14 @@ fn sanitize_filename(filename: &str) -> String {
 const URL_IMPORT_MAX_BYTES: usize = 5 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
-struct UrlImportPayload {
-    filename: String,
-    mime_type: String,
-    raw_bytes: Vec<u8>,
-    extracted_content: String,
+pub(crate) struct UrlImportPayload {
+    pub(crate) filename: String,
+    pub(crate) mime_type: String,
+    pub(crate) raw_bytes: Vec<u8>,
+    pub(crate) extracted_content: String,
 }
 
-async fn fetch_url_import(raw_url: &str) -> Result<UrlImportPayload, AppError> {
+pub(crate) async fn fetch_url_import(raw_url: &str) -> Result<UrlImportPayload, AppError> {
     let url = Url::parse(raw_url)
         .map_err(|_| AppError::validation("invalid_url", "url must be a valid absolute URL"))?;
     if !matches!(url.scheme(), "http" | "https") {
@@ -248,7 +274,7 @@ async fn fetch_url_import(raw_url: &str) -> Result<UrlImportPayload, AppError> {
     })
 }
 
-fn infer_url_import_mime_type(content_type: &str, bytes: &[u8]) -> &'static str {
+pub(crate) fn infer_url_import_mime_type(content_type: &str, bytes: &[u8]) -> &'static str {
     let normalized = content_type
         .split(';')
         .next()
@@ -261,14 +287,12 @@ fn infer_url_import_mime_type(content_type: &str, bytes: &[u8]) -> &'static str 
         "application/json"
     } else if normalized.contains("xml") {
         "application/xml"
-    } else if normalized.starts_with("text/") {
-        "text/plain"
     } else {
         "text/plain"
     }
 }
 
-async fn extract_url_import_content(
+pub(crate) async fn extract_url_import_content(
     bytes: &[u8],
     mime_type: &str,
     filename: &str,
@@ -292,7 +316,7 @@ async fn extract_url_import_content(
     Ok((String::from_utf8_lossy(bytes).into_owned(), None))
 }
 
-fn looks_like_html(bytes: &[u8]) -> bool {
+pub(crate) fn looks_like_html(bytes: &[u8]) -> bool {
     let prefix = String::from_utf8_lossy(&bytes[..bytes.len().min(1024)]).to_ascii_lowercase();
     prefix.contains("<html")
         || prefix.contains("<body")
@@ -300,7 +324,7 @@ fn looks_like_html(bytes: &[u8]) -> bool {
         || prefix.contains("<!doctype html")
 }
 
-fn build_url_source_filename(url: &Url, mime_type: &str, title_hint: Option<&str>) -> String {
+pub(crate) fn build_url_source_filename(url: &Url, mime_type: &str, title_hint: Option<&str>) -> String {
     let extension = match mime_type {
         "text/html" => "html",
         "application/json" => "json",
@@ -336,7 +360,7 @@ fn build_url_source_filename(url: &Url, mime_type: &str, title_hint: Option<&str
     }
 }
 
-fn normalize_imported_text(content: &str) -> String {
+pub(crate) fn normalize_imported_text(content: &str) -> String {
     content
         .lines()
         .map(str::trim)
@@ -345,7 +369,7 @@ fn normalize_imported_text(content: &str) -> String {
         .join("\n")
 }
 
-fn parse_uuid_or_app_error(
+pub(crate) fn parse_uuid_or_app_error(
     value: &str,
     code: &'static str,
     message: &'static str,
@@ -353,32 +377,32 @@ fn parse_uuid_or_app_error(
     Uuid::parse_str(value).map_err(|_| AppError::not_found(code, message))
 }
 
-fn map_pg_error(error: PgStorageError) -> AppError {
+pub(crate) fn map_pg_error(error: PgStorageError) -> AppError {
     match error {
         PgStorageError::NotFound(message) => AppError::not_found("not_found", message),
         other => AppError::internal(other.to_string()),
     }
 }
 
-fn map_anyhow_error(error: anyhow::Error) -> AppError {
+pub(crate) fn map_anyhow_error(error: anyhow::Error) -> AppError {
     AppError::internal(error.to_string())
 }
 
-fn env_string(key: &str, default: &str) -> String {
+pub(crate) fn env_string(key: &str, default: &str) -> String {
     std::env::var(key)
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| default.to_string())
 }
 
-fn env_optional_string(key: &str) -> Option<String> {
+pub(crate) fn env_optional_string(key: &str) -> Option<String> {
     std::env::var(key)
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
 }
 
-fn env_bool(key: &str, default: bool) -> bool {
+pub(crate) fn env_bool(key: &str, default: bool) -> bool {
     std::env::var(key)
         .ok()
         .and_then(|value| match value.trim().to_ascii_lowercase().as_str() {
@@ -389,35 +413,35 @@ fn env_bool(key: &str, default: bool) -> bool {
         .unwrap_or(default)
 }
 
-fn env_u64(key: &str, default: u64) -> u64 {
+pub(crate) fn env_u64(key: &str, default: u64) -> u64 {
     std::env::var(key)
         .ok()
         .and_then(|value| value.trim().parse::<u64>().ok())
         .unwrap_or(default)
 }
 
-fn env_i64(key: &str, default: i64) -> i64 {
+pub(crate) fn env_i64(key: &str, default: i64) -> i64 {
     std::env::var(key)
         .ok()
         .and_then(|value| value.trim().parse::<i64>().ok())
         .unwrap_or(default)
 }
 
-fn env_usize(key: &str, default: usize) -> usize {
+pub(crate) fn env_usize(key: &str, default: usize) -> usize {
     std::env::var(key)
         .ok()
         .and_then(|value| value.trim().parse::<usize>().ok())
         .unwrap_or(default)
 }
 
-fn env_f32_optional(key: &str, default: Option<f32>) -> Option<f32> {
+pub(crate) fn env_f32_optional(key: &str, default: Option<f32>) -> Option<f32> {
     std::env::var(key)
         .ok()
         .and_then(|value| value.trim().parse::<f32>().ok())
         .or(default)
 }
 
-fn env_bool_optional(key: &str) -> Option<bool> {
+pub(crate) fn env_bool_optional(key: &str) -> Option<bool> {
     std::env::var(key).ok().map(|value| {
         matches!(
             value.trim().to_ascii_lowercase().as_str(),
@@ -426,13 +450,13 @@ fn env_bool_optional(key: &str) -> Option<bool> {
     })
 }
 
-fn env_usize_optional(key: &str) -> Option<usize> {
+pub(crate) fn env_usize_optional(key: &str) -> Option<usize> {
     std::env::var(key)
         .ok()
         .and_then(|value| value.trim().parse::<usize>().ok())
 }
 
-fn env_csv(key: &str, default: &[String]) -> Vec<String> {
+pub(crate) fn env_csv(key: &str, default: &[String]) -> Vec<String> {
     std::env::var(key)
         .ok()
         .map(|value| {
@@ -447,7 +471,7 @@ fn env_csv(key: &str, default: &[String]) -> Vec<String> {
         .unwrap_or_else(|| default.to_vec())
 }
 
-fn model_config_from_env(
+pub(crate) fn model_config_from_env(
     prefix: &str,
     default: &ModelProviderConfig,
     fallback_api_key: Option<String>,
@@ -469,10 +493,12 @@ fn model_config_from_env(
             .or_else(|| inferred_embedding_dimensions(&model)),
         enable_thinking: env_bool_optional(&format!("{prefix}_ENABLE_THINKING"))
             .or(default.enable_thinking),
+        enable_cache: env_bool_optional(&format!("{prefix}_ENABLE_CACHE"))
+            .or(default.enable_cache),
     }
 }
 
-fn inferred_embedding_dimensions(model: &str) -> Option<usize> {
+pub(crate) fn inferred_embedding_dimensions(model: &str) -> Option<usize> {
     match model.trim() {
         "text-embedding-v4" | "text-embedding-v3" => Some(1024),
         "text-embedding-v2" => Some(1536),

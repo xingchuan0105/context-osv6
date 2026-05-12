@@ -287,9 +287,7 @@ pub(super) fn build_item_trace_with_total(
 }
 
 pub(super) fn planner_session_context(session_context: Option<&SessionContext>) -> Option<String> {
-    let Some(session_context) = session_context else {
-        return None;
-    };
+    let session_context = session_context?;
 
     let mut parts = Vec::new();
     if let Some(summary) = session_context

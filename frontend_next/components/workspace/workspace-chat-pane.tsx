@@ -1653,6 +1653,9 @@ export function WorkspaceChatPane({
     ]);
     showProgressCard(effectiveChatMode);
 
+    const controller = new AbortController();
+    stopControllerRef.current = controller;
+
     void (async () => {
       try {
         await streamWorkspaceChat(
@@ -1667,8 +1670,12 @@ export function WorkspaceChatPane({
             stream: true,
           },
           handleStreamEvent,
+          { signal: controller.signal },
         );
       } catch (submitError) {
+        if (submitError instanceof Error && submitError.name === "AbortError") {
+          return;
+        }
         hideProgressCard();
         resetStreamingTypewriter();
         clearPendingStreamingAssistant();
@@ -1676,6 +1683,10 @@ export function WorkspaceChatPane({
         setIsStreaming(false);
         setStreamingMessageId(null);
         streamingMessageIdRef.current = null;
+      } finally {
+        if (stopControllerRef.current === controller) {
+          stopControllerRef.current = null;
+        }
       }
     })();
   }
@@ -1977,6 +1988,16 @@ function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
                 {isStreaming ? formatUiMessage(locale, "workspaceSending") : formatUiMessage(locale, "workspaceSend")}
               </span>
             </button>
+          </div>
+        </form>
+      </div>
+    </section>
+  );
+}
+sage(locale, "workspaceSend")}
+                </span>
+              </button>
+            )}
           </div>
         </form>
       </div>

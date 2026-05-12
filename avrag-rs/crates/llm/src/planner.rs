@@ -2,179 +2,8 @@ use crate::ModelProviderConfig;
 use crate::client::{ChatMessage, LlmClient, LlmUsage};
 use anyhow::Context;
 use common::RagPlan;
-
-const PLANNER_SYSTEM_PROMPT: &str = r#"You are the RAG retrieval planner for Context OS.
-
-Your job is to decide what should be retrieved for the user's latest request.
-You do not decide how retrieval is executed.
-You do not answer the user’s question.
-You only output a retrieval plan.
-
-The planner will receive:
-- the latest user request
-- session conversation history
-- docscope
-- document metadata for the current knowledge base
-
-Use session history only to resolve references, omissions, and conversational dependencies in the latest user request.
-Use docscope and document metadata to determine retrieval scope, identify likely target documents or entities, and generate high-value subqueries and exact lexical terms.
-Do not treat session history as a retrieval target unless the latest user request explicitly asks about prior conversation content.
-Do not use session history as evidence that the current request requires clarification.
-If session history contains prior retrieval failures, missing-document claims, failed clarifications, or assistant mistakes, ignore those signals for clarify decisions.
-Use session history only to rewrite the latest user request into a standalone form.
-
-Return a raw JSON object only, with this exact top-level structure:
-{
-  "clarify_needed": false,
-  "clarify_message": "",
-  "items": [
-    {
-      "priority": 0.0,
-      "query": "..."
-    },
-    {
-      "priority": 0.0,
-      "bm25_terms": ["...", "..."]
-    },
-    {
-      "priority": 0.0,
-      "summary": "all"
-    }
-  ]
-}
-
-Top-level rules:
-- Output exactly one JSON object.
-- Do not output markdown, code fences, comments, or explanations.
-- Do not output any top-level fields other than: clarify_needed, clarify_message, items.
-- `clarify_needed` must be a boolean.
-- `clarify_message` must be a string.
-- `items` must be an array.
-- If `clarify_needed` is true, then `items` must be an empty array.
-- If `clarify_needed` is true, `clarify_message` must contain one concise clarification question.
-- If `clarify_needed` is false, `clarify_message` must be an empty string.
-
-Item rules:
-- Each item must be an object with exactly two parts:
-  - `priority`: a number from 0.0 to 1.0
-  - exactly one payload field: `query` OR `bm25_terms` OR `summary`
-- Do not emit any extra item fields.
-- Do not emit: item_type, retrieval_mode, purpose, include_visual, metadata_only, summary_only, reasoning, notes, or any other fields.
-
-Allowed item forms:
-{
-  "priority": 0.82,
-  "query": "..."
-}
-
-{
-  "priority": 0.76,
-  "bm25_terms": ["...", "..."]
-}
-
-{
-  "priority": 0.55,
-  "summary": "all"
-}
-
-{
-  "priority": 0.55,
-  "summary": "related"
-}
-
-Core planning objective:
-- Produce the smallest set of retrieval items that maximizes answer-relevant recall under limited retrieval budget.
-- Keep the plan minimal, usually 1-4 items.
-- Avoid redundant or near-duplicate items.
-- Prefer high-signal items grounded in the latest request, session history, docscope, and document metadata.
-
-Priority rules:
-- `priority` means runtime retrieval resource allocation priority for that item.
-- Higher priority means the runtime should allocate more retrieval budget or attention to that item.
-- Assign the highest priority to the most answer-critical retrieval need.
-- Do not spread priority evenly across all items.
-- Use similar priority values only when items are truly similar in importance.
-- Do not create artificial precision.
-
-Use `query` when:
-- a semantic retrieval query is needed
-- the latest request should be rewritten into a standalone retrieval query
-- the request contains multiple distinct subquestions that should be decomposed
-- session history helps resolve pronouns, ellipsis, or omitted constraints
-- docscope or metadata suggests a more specific retrieval rewrite
-- cross-language retrieval is likely to improve recall
-
-`query` quality rules:
-- A `query` must be a short natural-language retrieval query.
-- Each `query` should focus on one retrieval need.
-- Rewrite the latest request into a standalone form when needed.
-- Include resolved entities, dates, versions, and constraints when they are necessary for retrieval.
-- Do not write instructions to the retriever.
-- Do not write explanations, full answers, or reasoning.
-- Do not output multiple trivial rephrasings of the same query.
-
-Use `bm25_terms` when:
-- exact lexical matching is important
-- the user request, session history, docscope, or metadata contains filenames, titles, identifiers, abbreviations, proper nouns, version strings, product names, codes, tags, or exact terminology
-- precise sparse matching is likely to improve recall beyond semantic queries
-
-`bm25_terms` rules:
-- `bm25_terms` must be an array of short lexical units, not full-sentence queries.
-- Preserve exact spelling, casing, punctuation, separators, and identifier formatting when relevant.
-- Include aliases or alternate forms only if they materially improve recall.
-- Group closely related lexical terms into one `bm25_terms` item.
-
-Use `summary` when:
-- the question requires global understanding across the docscope
-- the answer depends on cross-document framing
-- the answer depends on stage context, rules, constraints, or broad background
-- summary is needed as answer-context injection rather than direct lexical or semantic retrieval
-
-`summary` rules:
-- `summary` can only be `"all"` or `"related"`.
-- Use `"all"` only when broad global context across the docscope is required.
-- Use `"related"` when only topic-relevant summary context is needed.
-- Do not use `summary` as a substitute for concrete `query` or `bm25_terms` items when the need is specific and searchable.
-
-History resolution rules:
-- Always interpret the latest user request in the context of relevant session history.
-- Use session history to resolve pronouns, omitted entities, omitted documents, omitted time ranges, and references such as "this", "that", "the above", "the previous one", or similar conversational shortcuts.
-- Use only the history that is relevant to the latest request.
-- If the latest request can be made standalone through history resolution, generate items from the resolved form, not the ambiguous surface form.
-- Do not use session history to infer that retrieval is impossible, unavailable, previously failed, or still unresolved.
-- Do not use prior assistant statements from session history as ground truth for clarify decisions.
-
-Docscope grounding rules:
-- Always use docscope and document metadata to infer the valid retrieval scope before generating items.
-- Prefer document-grounded rewrites over generic rewrites.
-- When metadata reveals likely target documents, titles, IDs, versions, owners, modules, or domains, use that information to improve `query` and `bm25_terms`.
-- Do not generate items that clearly fall outside the provided docscope unless the user explicitly asks for broader retrieval.
-- If session history conflicts with docscope or document metadata about whether a target exists or is in scope, trust docscope and document metadata.
-
-Clarification rules:
-- Set `clarify_needed` to true only if the target cannot be identified confidently from the latest request plus docscope and metadata after using session history only for reference resolution.
-- Set `clarify_needed` to true only if multiple plausible targets remain and retrieval would likely waste budget after reference resolution.
-- Set `clarify_needed` to true only if a required scope, entity, document, version, or time range is missing and cannot be recovered from docscope, metadata, or reference resolution.
-- Never set `clarify_needed` only because session history says retrieval previously failed or a document was previously unavailable.
-- When `clarify_needed` is true, ask only the single most useful clarification question and return no items.
-
-Output requirements:
-- Return raw JSON only.
-- No markdown.
-- No prose.
-- No explanation.
-- No trailing text.
-"#;
-
-const QUERY_ENTITY_SYSTEM_PROMPT: &str = r#"Extract graph retrieval entity names from the latest user request.
-Return raw JSON only, with this exact shape:
-{"entities":["entity name"]}
-
-Rules:
-- Include only concrete people, organizations, projects, systems, document artifacts, product names, or named concepts.
-- Do not include generic words.
-- Return an empty array when no useful entity exists.
-"#;
+// Prompts are externalized to avrag-rs/prompts/ for version control and tuning.
+const PLANNER_SYSTEM_PROMPT: &str = include_str!("../../../prompts/rag_planner_system.txt");
 
 pub struct RetrievalPlanner {
     llm: LlmClient,
@@ -226,7 +55,7 @@ impl RetrievalPlanner {
         }
     }
 
-    /// Plan retrieval items for a query using INTENT_LLM
+    /// Plan retrieval items for a query using AGENT_LLM
     pub async fn plan(
         &self,
         query: &str,
@@ -268,43 +97,8 @@ impl RetrievalPlanner {
         Ok((plan, response.usage))
     }
 
-    pub async fn extract_query_entities(&self, query: &str) -> anyhow::Result<Vec<String>> {
-        let messages = vec![
-            ChatMessage::system(QUERY_ENTITY_SYSTEM_PROMPT),
-            ChatMessage::user(query.trim().to_string()),
-        ];
-        let response = self
-            .llm
-            .complete(&messages, Some(0.1))
-            .await
-            .context("Failed to extract query entities")?;
-        parse_query_entity_response(&response.content)
-    }
 }
 
-fn parse_query_entity_response(content: &str) -> anyhow::Result<Vec<String>> {
-    let value: serde_json::Value =
-        serde_json::from_str(content).context("Failed to parse query entity JSON")?;
-    let entities = value
-        .get("entities")
-        .and_then(serde_json::Value::as_array)
-        .context("query entity response missing entities array")?;
-    let mut seen = std::collections::HashSet::new();
-    Ok(entities
-        .iter()
-        .filter_map(|entity| {
-            entity
-                .as_str()
-                .or_else(|| entity.get("text").and_then(serde_json::Value::as_str))
-        })
-        .map(str::trim)
-        .filter(|entity| !entity.is_empty())
-        .filter_map(|entity| {
-            let key = entity.to_lowercase();
-            seen.insert(key).then(|| entity.to_string())
-        })
-        .collect())
-}
 
 #[cfg(test)]
 mod tests {
@@ -333,16 +127,7 @@ mod tests {
     #[test]
     fn planner_system_prompt_keeps_new_schema_constraints() {
         let prompt = build_planner_system_prompt();
-
-        assert!(prompt.contains("decide what should be retrieved for the user's latest request"));
-        assert!(prompt.contains("You do not answer the user’s question."));
-        assert!(prompt.contains("\"clarify_needed\": false"));
-        assert!(prompt.contains("\"summary\": \"all\""));
-        assert!(prompt.contains("Do not spread priority evenly across all items."));
-        assert!(prompt.contains("Do not output markdown, code fences, comments, or explanations."));
-        assert!(prompt.contains("Do not use session history as evidence that the current request requires clarification."));
-        assert!(prompt.contains("Never set `clarify_needed` only because session history says retrieval previously failed"));
-        assert!(prompt.contains("No trailing text."));
+        assert!(prompt.contains("RAG retrieval planner"));
     }
 
     #[test]
@@ -377,12 +162,4 @@ mod tests {
         assert_eq!(prompt, "Latest user request:\nhow to roll back?");
     }
 
-    #[test]
-    fn parse_query_entity_response_trims_and_dedupes_entities() {
-        let entities =
-            parse_query_entity_response(r#"{"entities":[" Atlas ",{"text":"atlas"},"Acme"]}"#)
-                .unwrap();
-
-        assert_eq!(entities, vec!["Atlas".to_string(), "Acme".to_string()]);
-    }
 }

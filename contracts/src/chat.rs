@@ -20,6 +20,8 @@ pub struct ChatRequest {
     pub messages: Vec<ChatTurnInput>,
     #[serde(default)]
     pub stream: bool,
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

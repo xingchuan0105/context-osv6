@@ -2,7 +2,7 @@ mod agent_memory_jobs;
 mod analytics_jobs;
 
 use anyhow::Result;
-use app::{AppConfig, AppState};
+use app::{AppConfig, AppState, load_prompt_template};
 use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
 use avrag_cache_redis::DocumentLock;
 use avrag_llm::{ChatMessage, MultiModalEmbeddingInput, SummaryGenerator};
@@ -30,7 +30,6 @@ use ingestion::{
 use sha2::{Digest, Sha256};
 use std::convert::TryFrom;
 use std::{
-    fs,
     path::{Path, PathBuf},
     sync::{
         Arc,
@@ -170,8 +169,8 @@ impl StateSink for PgStateSink {
             transition.to,
             common::DocumentStatus::Completed | common::DocumentStatus::Failed
         ) {
-            if matches!(transition.to, common::DocumentStatus::Failed) {
-                if let Some(user_id) = task
+            if matches!(transition.to, common::DocumentStatus::Failed)
+                && let Some(user_id) = task
                     .requested_by
                     .as_deref()
                     .and_then(|value| Uuid::parse_str(value).ok())
@@ -198,7 +197,6 @@ impl StateSink for PgStateSink {
                         info!(error = %error, document_id = task.document_id, "failed to record document upload failure event");
                     }
                 }
-            }
             if let Some(user_id) = task
                 .requested_by
                 .as_deref()
@@ -258,7 +256,7 @@ struct PgTaskProcessor {
     summary_generator: Option<avrag_llm::SummaryGenerator>,
     triplet_llm: Option<Arc<avrag_llm::LlmClient>>,
     analytics: Option<analytics::AnalyticsService>,
-    usage_limit: Option<avrag_usage_limit::UsageLimitService>,
+    usage_limit: Option<avrag_billing::usage_limit::UsageLimitService>,
     mineru_client: Option<MineruClient>,
     office_parser_client: Option<OfficeParserServiceClient>,
 }
@@ -294,9 +292,9 @@ impl TaskProcessor for PgTaskProcessor {
                 None
             };
 
-            let (object_path, claimed_mime_type) = match &task.payload {
+            let (object_path, claimed_mime_type, is_url_task) = match &task.payload {
                 ingestion::IngestionTaskPayload::IngestDocument(payload) => {
-                    (payload.object_path.clone(), payload.mime_type.clone())
+                    (payload.object_path.clone(), payload.mime_type.clone(), false)
                 }
                 ingestion::IngestionTaskPayload::ReindexDocument(_) => {
                     let seed = self
@@ -307,24 +305,49 @@ impl TaskProcessor for PgTaskProcessor {
                         .ok_or_else(|| {
                             IngestionError::StateSink("document seed not found".to_string())
                         })?;
-                    (seed.object_path, seed.mime_type)
+                    (seed.object_path, seed.mime_type, false)
+                }
+                ingestion::IngestionTaskPayload::IngestUrl(payload) => {
+                    (payload.url.clone(), "text/html".to_string(), true)
                 }
             };
 
-            let bytes = self
-                .object_store
-                .get(&object_path)
-                .await
-                .map_err(|error| IngestionError::StateSink(error.to_string()))?;
-            verify_uploaded_object_bytes(&self.repo, &context, document_id, &bytes).await?;
-            let filename = Path::new(&object_path)
-                .file_name()
-                .map(|f| f.to_string_lossy().to_string())
-                .unwrap_or_else(|| object_path.clone());
+            let bytes = if is_url_task {
+                fetch_url_content(&object_path)
+                    .await
+                    .map_err(|error| IngestionError::StateSink(error.to_string()))?
+            } else {
+                self.object_store
+                    .get(&object_path)
+                    .await
+                    .map_err(|error| IngestionError::StateSink(error.to_string()))?
+            };
+            if !is_url_task {
+                verify_uploaded_object_bytes(&self.repo, &context, document_id, &bytes).await?;
+            }
+            let filename = if is_url_task {
+                url_to_filename(&object_path)
+            } else {
+                Path::new(&object_path)
+                    .file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+                    .unwrap_or_else(|| object_path.clone())
+            };
             let notebook_id = Uuid::parse_str(&task.notebook_id).unwrap_or_else(|_| Uuid::nil());
 
-            let route_decision = ParseRouter::route(&bytes, &filename, &claimed_mime_type)
-                .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+            let route_decision = if is_url_task {
+                ingestion::parser::ParseRouteDecision {
+                    route: ingestion::parser::ParseRoute::Local,
+                    reason: ingestion::parser::RouteReason::TextFile,
+                    probe_result: None,
+                    plan: ingestion::parser::ParsePlan::Local(ingestion::parser::LocalParsePlan {
+                        kind: ingestion::parser::LocalParseKind::Html,
+                    }),
+                }
+            } else {
+                ParseRouter::route(&bytes, &filename, &claimed_mime_type)
+                    .map_err(|error| IngestionError::StateSink(error.to_string()))?
+            };
 
             info!(
                 filename = %filename,
@@ -371,28 +394,32 @@ impl TaskProcessor for PgTaskProcessor {
             self.repo
                 .create_document_parse_run(
                     &context,
-                    parse_run_id,
-                    notebook_id,
-                    document_id,
-                    &initial_backend_summary,
-                    Some(&object_path),
-                    &task.task_id,
-                    task.lock_token.as_deref(),
+                    avrag_storage_pg::CreateDocumentParseRunParams {
+                        run_id: parse_run_id,
+                        notebook_id,
+                        document_id,
+                        backend_summary: &initial_backend_summary,
+                        artifact_path: Some(&object_path),
+                        task_id: &task.task_id,
+                        lock_token: task.lock_token.as_deref(),
+                    },
                 )
                 .await
                 .map_err(|error| IngestionError::StateSink(error.to_string()))?;
 
             let pipeline_metrics = match run_document_pipeline(
                 self,
-                task,
-                &context,
-                notebook_id,
-                document_id,
-                parse_run_id,
-                &bytes,
-                &filename,
-                &object_path,
-                &route_decision,
+                RunDocumentPipelineParams {
+                    task,
+                    context: &context,
+                    notebook_id,
+                    document_id,
+                    parse_run_id,
+                    bytes: &bytes,
+                    filename: &filename,
+                    object_path: &object_path,
+                    route_decision: &route_decision,
+                },
                 &mut parse_run_state,
             )
             .await
@@ -418,16 +445,20 @@ impl TaskProcessor for PgTaskProcessor {
                     self.repo
                         .finish_document_parse_run(
                             &context,
-                            parse_run_id,
-                            "completed",
-                            &backend_summary,
-                            i64::try_from(parse_run_started_at.elapsed().as_millis())
+                            avrag_storage_pg::FinishDocumentParseRunParams {
+                                run_id: parse_run_id,
+                                status: "completed",
+                                backend_summary: &backend_summary,
+                                duration_ms: i64::try_from(
+                                    parse_run_started_at.elapsed().as_millis(),
+                                )
                                 .unwrap_or(i64::MAX),
-                            &warnings_json,
-                            None,
-                            Some(&object_path),
-                            &task.task_id,
-                            task.lock_token.as_deref(),
+                                warnings_json: &warnings_json,
+                                error_json: None,
+                                artifact_path: Some(&object_path),
+                                task_id: &task.task_id,
+                                lock_token: task.lock_token.as_deref(),
+                            },
                         )
                         .await
                         .map_err(|error| IngestionError::StateSink(error.to_string()))?;
@@ -473,16 +504,20 @@ impl TaskProcessor for PgTaskProcessor {
                         .repo
                         .finish_document_parse_run(
                             &context,
-                            parse_run_id,
-                            "failed",
-                            &failure_summary,
-                            i64::try_from(parse_run_started_at.elapsed().as_millis())
+                            avrag_storage_pg::FinishDocumentParseRunParams {
+                                run_id: parse_run_id,
+                                status: "failed",
+                                backend_summary: &failure_summary,
+                                duration_ms: i64::try_from(
+                                    parse_run_started_at.elapsed().as_millis(),
+                                )
                                 .unwrap_or(i64::MAX),
-                            &failure_warnings,
-                            Some(&failure_error),
-                            Some(&object_path),
-                            &task.task_id,
-                            task.lock_token.as_deref(),
+                                warnings_json: &failure_warnings,
+                                error_json: Some(&failure_error),
+                                artifact_path: Some(&object_path),
+                                task_id: &task.task_id,
+                                lock_token: task.lock_token.as_deref(),
+                            },
                         )
                         .await;
                     return Err(error);
@@ -511,8 +546,8 @@ impl TaskProcessor for PgTaskProcessor {
                     "worker_ingestion",
                 )
                 .await;
-            if let Some(ref analytics) = self.analytics {
-                if let Some(user_id) = task
+            if let Some(ref analytics) = self.analytics
+                && let Some(user_id) = task
                     .requested_by
                     .as_deref()
                     .and_then(|value| Uuid::parse_str(value).ok())
@@ -544,7 +579,6 @@ impl TaskProcessor for PgTaskProcessor {
                         info!(document_id = %document_id, error = %error, "failed to record embedding analytics event");
                     }
                 }
-            }
             Ok(())
         }
         .await;
@@ -624,6 +658,7 @@ fn worker_task_kind(task: &IngestionTask) -> &'static str {
     match task.kind {
         ingestion::IngestionTaskKind::IngestDocument => "ingest_document",
         ingestion::IngestionTaskKind::ReindexDocument => "reindex_document",
+        ingestion::IngestionTaskKind::IngestUrl => "ingest_url",
     }
 }
 
@@ -662,11 +697,10 @@ async fn stop_ingestion_task_lock_heartbeat(heartbeat: Option<tokio::task::JoinH
     };
 
     heartbeat.abort();
-    if let Err(error) = heartbeat.await {
-        if !error.is_cancelled() {
+    if let Err(error) = heartbeat.await
+        && !error.is_cancelled() {
             warn!(error = %error, "ingestion task lock heartbeat ended unexpectedly");
         }
-    }
 }
 
 fn spawn_document_cleanup_task_lock_heartbeat(
@@ -705,11 +739,10 @@ fn spawn_document_cleanup_task_lock_heartbeat(
 
 async fn stop_document_cleanup_task_lock_heartbeat(heartbeat: tokio::task::JoinHandle<()>) {
     heartbeat.abort();
-    if let Err(error) = heartbeat.await {
-        if !error.is_cancelled() {
+    if let Err(error) = heartbeat.await
+        && !error.is_cancelled() {
             warn!(error = %error, "document cleanup task lock heartbeat ended unexpectedly");
         }
-    }
 }
 
 async fn run_document_cleanup_once(
@@ -948,8 +981,8 @@ async fn main() -> Result<()> {
     telemetry::init("avrag-worker")?;
     let config = AppConfig::from_env();
     let database_url = config.database_url.clone();
-    let state = AppState::bootstrap(config).await?;
-    let embedding_dim = state.config().embedding.dimensions.unwrap_or(64);
+    let state = AppState::bootstrap(config.clone()).await?;
+    let embedding_dim = config.embedding.dimensions.unwrap_or(64);
     let heartbeat_secs = std::env::var("AVRAG_WORKER_HEARTBEAT_SECS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
@@ -970,7 +1003,7 @@ async fn main() -> Result<()> {
 
     if let Some(database_url) = database_url {
         let repo = PgAppRepository::connect(&database_url).await?;
-        if state.config().auto_migrate {
+        if config.auto_migrate {
             repo.migrate().await?;
         }
         let analytics_pool = repo.raw().clone();
@@ -981,9 +1014,9 @@ async fn main() -> Result<()> {
                 analytics_pool.clone(),
             );
         let usage_limit_pool = repo.raw().clone();
-        let worker_object_store = build_worker_object_store(state.config()).await?;
-        let cleanup_object_store = build_worker_object_store(state.config()).await?;
-        let retrieval_data_plane = build_worker_retrieval_data_plane(state.config()).await?;
+        let worker_object_store = build_worker_object_store(&config).await?;
+        let cleanup_object_store = build_worker_object_store(&config).await?;
+        let retrieval_data_plane = build_worker_retrieval_data_plane(&config).await?;
         let cleanup_retrieval_data_plane = retrieval_data_plane.clone();
         let cleanup_repo = repo.clone();
         let mut worker = WorkerRuntime::new(
@@ -999,16 +1032,16 @@ async fn main() -> Result<()> {
                 retrieval_data_plane,
                 embedding_dim,
                 embedding_client: {
-                    let ec = &state.config().embedding;
+                    let ec = &config.embedding;
                     ec.to_llm_config().map(avrag_llm::EmbeddingClient::new)
                 },
-                asset_url_ttl_secs: state.config().object_storage.download_url_expire_sec,
+                asset_url_ttl_secs: config.object_storage.download_url_expire_sec,
                 mm_embedding_client: {
-                    let ec = &state.config().mm_embedding;
+                    let ec = &config.mm_embedding;
                     ec.to_llm_config().map(avrag_llm::EmbeddingClient::new)
                 },
                 redis_lock: {
-                    let url = &state.config().redis.url;
+                    let url = &config.redis.url;
                     if !url.trim().is_empty() {
                         DocumentLock::new(url).ok()
                     } else {
@@ -1016,16 +1049,16 @@ async fn main() -> Result<()> {
                     }
                 },
                 summary_generator: {
-                    let sc = &state.config().summary_llm;
-                    if let Some(config) = sc.to_llm_config() {
-                        let mut generator = SummaryGenerator::new(config);
+                    let sc = &config.ingestion_llm;
+                    if let Some(llm_config) = sc.to_llm_config() {
+                        let mut generator = SummaryGenerator::new(llm_config);
                         if let Some(template) =
-                            load_prompt_template(state.config(), "summary_generation")
+                            load_prompt_template(&config.prompts.dir, &config.prompts.summary_version, "summary_generation").await
                         {
                             generator = generator.with_prompt_template(template);
                         }
                         if let Some(template) =
-                            load_prompt_template(state.config(), "summary_generation_finalize")
+                            load_prompt_template(&config.prompts.dir, &config.prompts.summary_version, "summary_generation_finalize").await
                         {
                             generator = generator.with_finalize_prompt_template(template);
                         }
@@ -1034,9 +1067,9 @@ async fn main() -> Result<()> {
                         None
                     }
                 },
-                triplet_llm: build_worker_triplet_llm(state.config()),
+                triplet_llm: build_worker_triplet_llm(&config),
                 analytics: Some(analytics::AnalyticsService::new(analytics_pool)),
-                usage_limit: Some(avrag_usage_limit::UsageLimitService::new(usage_limit_pool)),
+                usage_limit: Some(avrag_billing::usage_limit::UsageLimitService::new(usage_limit_pool)),
                 mineru_client: MineruConfig::from_env().map(MineruClient::new),
                 office_parser_client: OfficeParserServiceConfig::from_env()
                     .map(OfficeParserServiceClient::new),
@@ -1164,6 +1197,23 @@ async fn build_worker_object_store(config: &AppConfig) -> Result<ObjectStoreHand
     )))
 }
 
+async fn fetch_url_content(url: &str) -> Result<Vec<u8>> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()?;
+    let response = client.get(url).send().await?.error_for_status()?;
+    let bytes = response.bytes().await?;
+    Ok(bytes.to_vec())
+}
+
+fn url_to_filename(url: &str) -> String {
+    url.rsplit('/')
+        .next()
+        .filter(|s| !s.is_empty() && s.contains('.'))
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "page.html".to_string())
+}
+
 async fn build_worker_retrieval_data_plane(
     config: &AppConfig,
 ) -> Result<Option<Arc<dyn RetrievalDataPlane>>> {
@@ -1184,9 +1234,8 @@ async fn build_worker_retrieval_data_plane(
 
 fn build_worker_triplet_llm(config: &AppConfig) -> Option<Arc<avrag_llm::LlmClient>> {
     config
-        .summary_llm
+        .ingestion_llm
         .to_llm_config()
-        .or_else(|| config.answer_llm.to_llm_config())
         .map(avrag_llm::LlmClient::new)
         .map(Arc::new)
 }
@@ -1318,19 +1367,34 @@ async fn execute_parse_plan(
     }
 }
 
-async fn run_document_pipeline(
-    processor: &PgTaskProcessor,
-    task: &IngestionTask,
-    context: &AuthContext,
+struct RunDocumentPipelineParams<'a> {
+    task: &'a IngestionTask,
+    context: &'a AuthContext,
     notebook_id: Uuid,
     document_id: Uuid,
     parse_run_id: Uuid,
-    bytes: &[u8],
-    filename: &str,
-    object_path: &str,
-    route_decision: &ingestion::parser::ParseRouteDecision,
+    bytes: &'a [u8],
+    filename: &'a str,
+    object_path: &'a str,
+    route_decision: &'a ingestion::parser::ParseRouteDecision,
+}
+
+async fn run_document_pipeline(
+    processor: &PgTaskProcessor,
+    params: RunDocumentPipelineParams<'_>,
     parse_run_state: &mut ParseRunState,
 ) -> Result<IngestionPipelineMetrics, IngestionError> {
+    let RunDocumentPipelineParams {
+        task,
+        context,
+        notebook_id,
+        document_id,
+        parse_run_id,
+        bytes,
+        filename,
+        object_path,
+        route_decision,
+    } = params;
     let validation_report = sanitize_and_validate_document_ir(
         execute_parse_plan(
             processor,
@@ -1410,6 +1474,27 @@ async fn run_document_pipeline(
         .await
         .map_err(|error| IngestionError::StateSink(error.to_string()))?;
     let processed_chunk_count = chunks.len().max(1);
+
+    let toc_entries = build_toc_entries(&document_ir, &chunks);
+    if !toc_entries.is_empty() {
+        ensure_ingestion_side_effects_allowed(
+            &processor.repo,
+            context,
+            task,
+            document_id,
+            "toc writes",
+        )
+        .await?;
+        if let Err(error) = processor
+            .repo
+            .replace_document_toc(context, notebook_id, document_id, &toc_entries)
+            .await
+        {
+            info!(document_id = %document_id, error = %error, "failed to write document toc");
+        } else {
+            info!(document_id = %document_id, toc_count = toc_entries.len(), "document toc written");
+        }
+    }
 
     let mut asset_uuid_by_ref = std::collections::HashMap::new();
     let mut stored_asset_path_by_ref = std::collections::HashMap::new();
@@ -1639,10 +1724,10 @@ async fn run_document_pipeline(
                         info!(document_id = %document_id, "successfully updated document summary with LLM result");
                     }
                     if let (Some(svc), Some(user_id)) = (&processor.usage_limit, user_uuid) {
-                        let ctx = avrag_usage_limit::MeteringContext {
+                        let ctx = avrag_billing::usage_limit::MeteringContext {
                             user_id,
                             org_id: context.org_id().into_uuid(),
-                            feature: avrag_usage_limit::BillableFeature::Summary,
+                            feature: avrag_billing::usage_limit::BillableFeature::Summary,
                             stage: "worker_summary".to_string(),
                             session_id: None,
                             document_id: Some(document_id),
@@ -1652,12 +1737,14 @@ async fn run_document_pipeline(
                         if let Err(error) = svc
                             .record_usage(
                                 &ctx,
-                                &llm_usage.provider,
-                                &llm_usage.model,
-                                llm_usage.prompt_tokens,
-                                llm_usage.completion_tokens,
-                                llm_usage.total_tokens,
-                                avrag_usage_limit::UsageSource::Actual,
+                                avrag_billing::usage_limit::UsageRecord {
+                                    provider: &llm_usage.provider,
+                                    model: &llm_usage.model,
+                                    prompt_tokens: llm_usage.prompt_tokens,
+                                    completion_tokens: llm_usage.completion_tokens,
+                                    total_tokens: llm_usage.total_tokens,
+                                    usage_source: avrag_billing::usage_limit::UsageSource::Actual,
+                                },
                             )
                             .await
                         {
@@ -1686,7 +1773,7 @@ async fn run_document_pipeline(
                             prompt_tokens: i64::from(llm_usage.prompt_tokens),
                             completion_tokens: i64::from(llm_usage.completion_tokens),
                             embedding_tokens: 0,
-                            usage_units: avrag_usage_limit::compute_usage_units(
+                            usage_units: avrag_billing::usage_limit::compute_usage_units(
                                 &llm_usage.provider,
                                 &llm_usage.model,
                                 llm_usage.prompt_tokens,
@@ -2375,8 +2462,8 @@ async fn build_multimodal_index_records(
 
     let semaphore = Arc::new(tokio::sync::Semaphore::new(4));
     let client = client.clone();
-    let mut handles: Vec<tokio::task::JoinHandle<anyhow::Result<(usize, Vec<f32>)>>> =
-        Vec::with_capacity(chunks.len());
+    type MmEmbeddingHandle = tokio::task::JoinHandle<anyhow::Result<(usize, Vec<f32>)>>;
+    let mut handles: Vec<MmEmbeddingHandle> = Vec::with_capacity(chunks.len());
 
     for (idx, chunk) in chunks.iter().enumerate() {
         let input = if is_remote_media_reference(&chunk.image_path) {
@@ -2572,17 +2659,13 @@ fn build_triplet_extraction_batches(
     batches
 }
 
+const TRIPLET_EXTRACTION_SYSTEM_PROMPT: &str =
+    include_str!("../../../prompts/triplet_extraction_system.txt");
+
 fn build_triplet_extraction_messages(batch: &TripletExtractionBatch) -> Vec<ChatMessage> {
     let valid_chunk_ids: Vec<String> = batch.chunk_ids.iter().map(|id| id.to_string()).collect();
     vec![
-        ChatMessage::system(
-            "Extract factual subject-predicate-object triplets from the provided text chunks. \
-Return only strict JSON with this exact shape: {\"triplets\":[{\"chunk_id\":\"uuid\",\"subject\":\"...\",\"predicate\":\"...\",\"object\":\"...\"}]} \
-Rules:\
-- chunk_id MUST be one of the provided chunk IDs\
-- Only extract concrete, factual relationships\
-- Return empty array if no valid triplets found",
-        ),
+        ChatMessage::system(TRIPLET_EXTRACTION_SYSTEM_PROMPT),
         ChatMessage::user(format!(
             "Valid chunk IDs: {}\n\nChunks:\n{}\n\nExtract triplets with chunk_id:",
             valid_chunk_ids.join(", "),
@@ -2929,22 +3012,73 @@ async fn finalize_mirrored_asset_path(
     }
 }
 
-fn load_prompt_template(config: &AppConfig, base_name: &str) -> Option<String> {
-    let prompts_dir = PathBuf::from(config.prompts.dir.trim());
-    let version = config.prompts.summary_version.trim();
-    let mut candidates = Vec::new();
-    if !version.is_empty() {
-        candidates.push(prompts_dir.join(format!("{base_name}.{version}.tmpl")));
-        candidates.push(prompts_dir.join(format!("{base_name}_{version}.tmpl")));
-    }
-    candidates.push(prompts_dir.join(format!("{base_name}.tmpl")));
+// load_prompt_template moved to avrag_app::lib_impl::prompt_loader
 
-    candidates.into_iter().find_map(|path| {
-        fs::read_to_string(&path)
-            .ok()
-            .map(|template| template.trim().to_string())
-            .filter(|template| !template.is_empty())
-    })
+fn build_toc_entries(
+    document_ir: &ingestion::DocumentIr,
+    chunks: &[avrag_storage_pg::IndexedChunk],
+) -> Vec<avrag_storage_pg::TocEntry> {
+    let mut block_id_to_chunk_id = std::collections::HashMap::new();
+    for chunk in chunks {
+        if let Ok(chunk_uuid) = Uuid::parse_str(&chunk.chunk_id)
+            && let Some(block_id) = chunk
+                .metadata
+                .get("block_id")
+                .and_then(|v| v.as_str())
+            {
+                block_id_to_chunk_id.insert(block_id.to_string(), chunk_uuid);
+            }
+    }
+
+    let mut entries = Vec::new();
+    let mut heading_stack: Vec<(usize, Uuid)> = Vec::new();
+
+    for (rank, block) in document_ir
+        .blocks
+        .iter()
+        .filter(|b| matches!(b.block_type, ingestion::BlockType::Heading))
+        .enumerate()
+    {
+        let heading_level = block
+            .metadata
+            .get("heading_level")
+            .and_then(|v| v.parse::<i32>().ok())
+            .unwrap_or(1);
+
+        let title = if block.text.trim().is_empty() {
+            document_ir.title.clone()
+        } else {
+            block.text.trim().to_string()
+        };
+
+        let page = block.page.map(|p| p as i32);
+        let chunk_id = block_id_to_chunk_id.get(&block.block_id).copied();
+        let entry_id = Uuid::new_v4();
+
+        let parent_id = {
+            while let Some(&(top_level, _)) = heading_stack.last() {
+                if top_level < heading_level as usize {
+                    break;
+                }
+                heading_stack.pop();
+            }
+            heading_stack.last().map(|&(_, id)| id)
+        };
+
+        entries.push(avrag_storage_pg::TocEntry {
+            id: entry_id,
+            parent_id,
+            title,
+            heading_level,
+            page,
+            chunk_id,
+            rank: rank as i32,
+        });
+
+        heading_stack.push((heading_level as usize, entry_id));
+    }
+
+    entries
 }
 
 #[cfg(test)]
@@ -2971,8 +3105,8 @@ mod tests {
         assert!(!safe_relative_object_key(""));
     }
 
-    #[test]
-    fn load_prompt_template_prefers_versioned_file() {
+    #[tokio::test]
+    async fn load_prompt_template_prefers_versioned_file() {
         let temp_dir = env::temp_dir().join(format!("summary-template-{}", Uuid::new_v4()));
         fs::create_dir_all(&temp_dir).unwrap();
         fs::write(
@@ -2990,7 +3124,7 @@ mod tests {
         config.prompts.dir = temp_dir.to_string_lossy().to_string();
         config.prompts.summary_version = "v2".to_string();
 
-        let template = load_prompt_template(&config, "summary_generation").unwrap();
+        let template = load_prompt_template(&config.prompts.dir, &config.prompts.summary_version, "summary_generation").await.unwrap();
         assert_eq!(template, "versioned {{title}}");
 
         let _ = fs::remove_dir_all(temp_dir);
@@ -3243,5 +3377,17 @@ mod tests {
         let error = result.expect_err("missing embedding client must fail");
         assert!(error.to_string().contains("embedding client"));
         assert!(error.to_string().contains("not configured"));
+    }
+
+    #[test]
+    fn url_to_filename_extracts_last_path_segment_with_extension() {
+        assert_eq!(url_to_filename("https://example.com/article.html"), "article.html");
+        assert_eq!(url_to_filename("https://example.com/path/page.htm"), "page.htm");
+    }
+
+    #[test]
+    fn url_to_filename_falls_back_to_page_html() {
+        assert_eq!(url_to_filename("https://example.com/article"), "page.html");
+        assert_eq!(url_to_filename("https://example.com/"), "page.html");
     }
 }

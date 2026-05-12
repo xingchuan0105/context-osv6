@@ -1029,10 +1029,10 @@ impl MineruClient {
             anyhow::bail!("Failed to fetch markdown: {}", response.status());
         }
 
-        Ok(response
+        response
             .text()
             .await
-            .context("Failed to read markdown content")?)
+            .context("Failed to read markdown content")
     }
 
     fn normalize_result(
@@ -1123,12 +1123,13 @@ fn prepare_v4_file_upload_payload<'a>(
     filename: &str,
     page_numbers: Option<&'a [u32]>,
 ) -> Result<MineruV4FileUploadPayload<'a>> {
-    if page_numbers.is_some() && filename.to_ascii_lowercase().ends_with(".pdf") {
-        return Ok(MineruV4FileUploadPayload {
-            bytes: extract_pdf_pages(bytes, page_numbers.unwrap())?,
-            page_numbers: None,
-        });
-    }
+    if let Some(pages) = page_numbers
+        && filename.to_ascii_lowercase().ends_with(".pdf") {
+            return Ok(MineruV4FileUploadPayload {
+                bytes: extract_pdf_pages(bytes, pages)?,
+                page_numbers: None,
+            });
+        }
 
     Ok(MineruV4FileUploadPayload {
         bytes: bytes.to_vec(),
@@ -1193,11 +1194,10 @@ fn extract_pdf_pages(bytes: &[u8], page_numbers: &[u32]) -> Result<Vec<u8>> {
     if page_numbers.is_empty() {
         anyhow::bail!("MinerU v4 PDF upload page filter must not be empty");
     }
-    if let [page_number] = page_numbers {
-        if let Ok(split) = extract_single_pdf_page_with_pdfseparate(bytes, *page_number) {
+    if let [page_number] = page_numbers
+        && let Ok(split) = extract_single_pdf_page_with_pdfseparate(bytes, *page_number) {
             return Ok(split);
         }
-    }
 
     let mut document =
         Document::load_mem(bytes).context("Failed to load PDF for MinerU page upload")?;

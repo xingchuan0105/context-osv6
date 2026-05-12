@@ -105,26 +105,9 @@ pub struct UserProfileRow {
     pub preferred_answer_style: Option<String>,
     pub frequently_asked_topics: Vec<String>,
     pub custom_preferences: serde_json::Value,
+    pub structured_profile: serde_json::Value,
     pub inferred_at: DateTime<Utc>,
     pub inference_version: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DialogueStateRow {
-    pub id: Uuid,
-    pub org_id: OrgId,
-    pub session_id: Uuid,
-    pub user_id: Option<Uuid>,
-    pub state_type: String,
-    pub current_topic: Option<String>,
-    pub last_document: Option<String>,
-    pub last_entity: Option<String>,
-    pub unresolved_question: Option<String>,
-    pub pending_questions: Vec<String>,
-    pub gathered_facts: Vec<String>,
-    pub confidence_score: f32,
-    pub state_history: Vec<String>,
-    pub last_updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone)]

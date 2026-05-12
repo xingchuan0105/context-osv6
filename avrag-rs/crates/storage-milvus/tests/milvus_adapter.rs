@@ -332,6 +332,11 @@ async fn reindex_replaces_old_parse_run_and_only_latest_is_visible() -> anyhow::
             }],
             relation_limit: 10,
             supporting_chunk_limit: 5,
+            query_entities: Vec::new(),
+            query_entity_vectors: Vec::new(),
+            hop_limit: 1,
+            fan_out_limit: 10,
+            tenant_org_id: "test-org".to_string(),
         })
         .await?;
 

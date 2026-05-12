@@ -4,8 +4,10 @@ pub mod planner;
 pub mod reranker;
 pub mod summary;
 pub mod synthesizer;
+pub mod token_counter;
 
 pub use client::{ChatMessage, LlmClient, LlmResponse, LlmUsage};
+pub use token_counter::{count_chat_messages, count_system_and_query, count_tokens};
 pub use embedding::{EmbeddingClient, MultiModalEmbeddingInput};
 pub use planner::RetrievalPlanner;
 pub use reranker::{
@@ -58,6 +60,9 @@ pub struct ModelProviderConfig {
     pub api_style: Option<ApiStyle>,
     pub dimensions: Option<usize>,
     pub enable_thinking: Option<bool>,
+    /// Whether to request prompt caching for this provider.
+    /// When true, adds `prompt_cache` to the request body.
+    pub enable_cache: Option<bool>,
 }
 
 impl ModelProviderConfig {

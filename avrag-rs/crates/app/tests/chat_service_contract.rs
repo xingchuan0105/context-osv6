@@ -98,6 +98,7 @@ async fn chat_service_executes_against_ports() {
             doc_scope: Vec::new(),
             messages: Vec::new(),
             stream: false,
+            language: None,
         })
         .await
         .unwrap();

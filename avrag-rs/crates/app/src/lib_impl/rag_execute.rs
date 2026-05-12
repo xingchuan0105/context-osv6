@@ -1,3 +1,8 @@
+use crate::lib_impl::*;
+use avrag_storage_pg::DocumentScopeState;
+use common::{AppError, DocumentStatus};
+use uuid::Uuid;
+
 impl AppState {
     pub async fn execute_rag_execute_plan(
         &self,
@@ -17,6 +22,28 @@ impl AppState {
         Err(AppError::validation(
             "rag_runtime_not_configured",
             "RAG execute-plan requires rag_runtime to be configured.",
+        ))
+    }
+
+    pub async fn execute_runtime_tools(
+        &self,
+        req: common::RuntimeExecuteRequest,
+    ) -> Result<common::RuntimeExecuteResponse, AppError> {
+        if req.calls.is_empty() {
+            return Err(AppError::validation(
+                "invalid_calls",
+                "calls must not be empty",
+            ));
+        }
+
+        if let Some(rag_runtime) = &self.rag_runtime {
+            let results = rag_runtime.execute_tools(&self.auth, req.calls).await;
+            return Ok(common::RuntimeExecuteResponse { results });
+        }
+
+        Err(AppError::validation(
+            "rag_runtime_not_configured",
+            "RAG runtime execute requires rag_runtime to be configured.",
         ))
     }
 

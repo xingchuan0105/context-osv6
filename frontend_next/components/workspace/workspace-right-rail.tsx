@@ -29,7 +29,6 @@ import {
   isWorkspaceSourceDocscopeEligible,
   isWorkspaceSourceTerminal,
   WorkspaceNoteSyncState,
-  type WorkspaceNote,
   type WorkspaceWebSourcesRequest,
 } from "../../lib/workspace/model";
 import { getWorkspaceUiState, workspaceUiStore } from "../../lib/workspace/ui-store";

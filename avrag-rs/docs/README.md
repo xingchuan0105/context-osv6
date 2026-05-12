@@ -6,7 +6,8 @@
 
 当前产品架构以此文档为准：
 
-- [当前产品架构：Main Agent + RAG API + Milvus 检索数据面](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md)
+- [产品架构基准版（2026-05-12）](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-05-12-architecture-baseline.md)
+- [历史文档：当前产品架构（2026-04-26，部分过时）](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md)
 
 摘要：
 

@@ -165,6 +165,7 @@ macro_rules! repo_or_response {
     };
 }
 
+#[allow(clippy::result_large_err)]
 fn parse_org_id(value: &str) -> Result<common::OrgId, Response> {
     value.parse::<common::OrgId>().map_err(|_| {
         Json(ApiResponse::<serde_json::Value>::err(
@@ -175,6 +176,7 @@ fn parse_org_id(value: &str) -> Result<common::OrgId, Response> {
     })
 }
 
+#[allow(clippy::result_large_err)]
 fn actor_uuid(state: &AppState) -> Result<Uuid, Response> {
     state
         .auth()

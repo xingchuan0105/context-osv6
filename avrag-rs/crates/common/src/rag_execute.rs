@@ -54,6 +54,10 @@ pub struct ExecutePlanBudget {
     pub total_candidate_budget: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub final_chunk_budget: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph_hop_limit: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph_fan_out_limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -371,6 +375,20 @@ impl ExecutePlanRequest {
         }
     }
 
+    /// Extract document IDs from the doc_scope field.
+    ///
+    /// This replaces the previous `to_chat_request_compat()` + `request_doc_ids()`
+    /// hack where ExecutePlanRequest had to be converted to ChatRequest just to
+    /// extract doc_ids. Now ExecutePlanRequest directly provides doc_ids.
+    pub fn doc_ids(&self) -> Option<Vec<uuid::Uuid>> {
+        (!self.doc_scope.is_empty()).then(|| {
+            self.doc_scope
+                .iter()
+                .filter_map(|id| uuid::Uuid::parse_str(id).ok())
+                .collect::<Vec<_>>()
+        })
+    }
+
     pub fn to_chat_request_compat(&self) -> ChatRequest {
         let query = self
             .items
@@ -393,6 +411,7 @@ impl ExecutePlanRequest {
             source_type: None,
             source_token: None,
             doc_scope: self.doc_scope.clone(),
+            language: None,
             messages: Vec::new(),
             stream: false,
         }

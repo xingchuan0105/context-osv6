@@ -265,6 +265,95 @@ impl PgAppRepository {
         Ok(indexed_chunks)
     }
 
+    pub async fn replace_document_toc(
+        &self,
+        context: &AuthContext,
+        notebook_id: Uuid,
+        document_id: Uuid,
+        entries: &[TocEntry],
+    ) -> Result<(), PgStorageError> {
+        let mut tx = self.pool.begin(context).await?;
+        ensure_org_and_actor(tx.inner(), context).await?;
+
+        sqlx::query("delete from document_toc where document_id = $1")
+            .bind(document_id)
+            .execute(tx.inner())
+            .await?;
+
+        for entry in entries {
+            sqlx::query(
+                r#"
+                insert into document_toc (id, org_id, document_id, notebook_id, parent_id, title, heading_level, page, chunk_id, rank)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                "#,
+            )
+            .bind(entry.id)
+            .bind(context.org_id().into_uuid())
+            .bind(document_id)
+            .bind(notebook_id)
+            .bind(entry.parent_id)
+            .bind(&entry.title)
+            .bind(entry.heading_level)
+            .bind(entry.page)
+            .bind(entry.chunk_id)
+            .bind(entry.rank)
+            .execute(tx.inner())
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn get_document_toc_entries(
+        &self,
+        context: &AuthContext,
+        doc_ids: &[Uuid],
+    ) -> Result<Vec<(Uuid, TocEntry)>, PgStorageError> {
+        if doc_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut tx = self.pool.begin(context).await?;
+        let rows = sqlx::query(
+            r#"
+            select document_id, id, parent_id, title, heading_level, page, chunk_id, rank
+            from document_toc
+            where document_id = any($1)
+            order by document_id, rank
+            "#,
+        )
+        .bind(doc_ids)
+        .fetch_all(tx.inner())
+        .await?;
+        tx.commit().await?;
+
+        Ok(rows
+            .into_iter()
+            .filter_map(|row| {
+                let doc_id: Uuid = row.try_get("document_id").ok()?;
+                let id: Uuid = row.try_get("id").ok()?;
+                let parent_id: Option<Uuid> = row.try_get("parent_id").ok().flatten();
+                let title: String = row.try_get("title").ok()?;
+                let heading_level: i32 = row.try_get("heading_level").ok()?;
+                let page: Option<i32> = row.try_get("page").ok().flatten();
+                let chunk_id: Option<Uuid> = row.try_get("chunk_id").ok().flatten();
+                let rank: i32 = row.try_get("rank").ok()?;
+                Some((
+                    doc_id,
+                    TocEntry {
+                        id,
+                        parent_id,
+                        title,
+                        heading_level,
+                        page,
+                        chunk_id,
+                        rank,
+                    },
+                ))
+            })
+            .collect())
+    }
+
     pub async fn store_document_body_items(
         &self,
         context: &AuthContext,

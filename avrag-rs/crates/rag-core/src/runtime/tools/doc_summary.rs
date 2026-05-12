@@ -1,0 +1,115 @@
+use avrag_auth::AuthContext;
+use common::{DocSummaryArgs, DocSummaryLevel, ToolResult, ToolStatus, ToolTrace};
+use uuid::Uuid;
+
+use crate::RagRuntime;
+
+pub async fn run(
+    runtime: &RagRuntime,
+    auth: &AuthContext,
+    args: &serde_json::Value,
+) -> ToolResult {
+    let args: DocSummaryArgs = match serde_json::from_value(args.clone()) {
+        Ok(a) => a,
+        Err(e) => {
+            return super::error_result("doc_summary", format!("invalid args: {e}"));
+        }
+    };
+
+    if args.doc_ids.is_empty() {
+        return super::error_result("doc_summary", "doc_ids must not be empty".to_string());
+    }
+
+    let doc_uuids: Vec<Uuid> = args
+        .doc_ids
+        .iter()
+        .filter_map(|id| Uuid::parse_str(id).ok())
+        .collect();
+
+    if doc_uuids.is_empty() {
+        return super::error_result("doc_summary", "no valid doc_ids provided".to_string());
+    }
+
+    let pg_repo = match runtime.config.pg_repo.as_ref() {
+        Some(repo) => repo,
+        None => {
+            return super::error_result(
+                "doc_summary",
+                "pg_repo is not configured".to_string(),
+            );
+        }
+    };
+
+    let started = std::time::Instant::now();
+
+    match args.level {
+        DocSummaryLevel::Doc => {
+            match pg_repo.get_summary_chunks(auth, &doc_uuids).await {
+                Ok(summaries) => {
+                    let results: Vec<serde_json::Value> = summaries
+                        .into_iter()
+                        .map(|(doc_id, content)| {
+                            serde_json::json!({
+                                "doc_id": doc_id.to_string(),
+                                "level": "doc",
+                                "summary": content,
+                            })
+                        })
+                        .collect();
+
+                    let hydrated_count = results.len();
+                    ToolResult {
+                        tool: "doc_summary".to_string(),
+                        version: "1.0".to_string(),
+                        status: ToolStatus::Ok,
+                        data: Some(serde_json::Value::Array(results)),
+                        trace: Some(ToolTrace {
+                            elapsed_ms: Some(started.elapsed().as_millis() as u64),
+                            raw_hit_count: Some(doc_uuids.len()),
+                            hydrated_hit_count: Some(hydrated_count),
+                            degrade_reason: None,
+                        }),
+                    }
+                }
+                Err(e) => super::error_result("doc_summary", e.to_string()),
+            }
+        }
+        DocSummaryLevel::Section => {
+            match pg_repo.get_document_toc_entries(auth, &doc_uuids).await {
+                Ok(entries) => {
+                    let results: Vec<serde_json::Value> = entries
+                        .into_iter()
+                        .map(|(doc_id, entry)| {
+                            serde_json::json!({
+                                "doc_id": doc_id.to_string(),
+                                "level": "section",
+                                "section_title": entry.title,
+                                "heading_level": entry.heading_level,
+                                "page": entry.page,
+                            })
+                        })
+                        .collect();
+
+                    let hydrated_count = results.len();
+                    ToolResult {
+                        tool: "doc_summary".to_string(),
+                        version: "1.0".to_string(),
+                        status: ToolStatus::Ok,
+                        data: Some(serde_json::Value::Array(results)),
+                        trace: Some(ToolTrace {
+                            elapsed_ms: Some(started.elapsed().as_millis() as u64),
+                            raw_hit_count: Some(doc_uuids.len()),
+                            hydrated_hit_count: Some(hydrated_count),
+                            degrade_reason: if hydrated_count == 0 {
+                                Some("no_toc_entries_found".to_string())
+                            } else {
+                                None
+                            },
+                        }),
+                    }
+                }
+                Err(e) => super::error_result("doc_summary", e.to_string()),
+            }
+        }
+    }
+}

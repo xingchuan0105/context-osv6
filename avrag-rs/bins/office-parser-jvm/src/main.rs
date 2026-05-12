@@ -451,7 +451,7 @@ fn extract_xlsx_like_text(bytes: &[u8]) -> Option<String> {
     if parts.is_empty() {
         None
     } else {
-        Some(parts.drain(..).collect::<Vec<_>>().join("\n"))
+        Some(std::mem::take(&mut parts).join("\n"))
     }
 }
 

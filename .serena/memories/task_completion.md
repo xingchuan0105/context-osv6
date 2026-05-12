@@ -1,0 +1,1 @@
+Before finishing code changes: run focused tests for touched behavior; run cargo fmt --check for Rust changes; run relevant cargo check/test packages; run pnpm typecheck and focused/full frontend tests for frontend changes; run gitnexus_detect_changes(scope='all') to inspect affected symbols/flows. Do not commit unless explicitly requested.

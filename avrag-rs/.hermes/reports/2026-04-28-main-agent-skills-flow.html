@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Context OS Main Agent Skill Loading Flow</title>
+  <style>
+    :root {
+      --bg: #020617;
+      --panel: #0f172a;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --cyan: #22d3ee;
+      --emerald: #34d399;
+      --violet: #a78bfa;
+      --amber: #fbbf24;
+      --rose: #fb7185;
+      --orange: #fb923c;
+      --slate: #64748b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      line-height: 1.5;
+    }
+    .wrap { max-width: 1440px; margin: 0 auto; padding: 28px; }
+    .title { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--emerald); box-shadow: 0 0 22px var(--emerald); }
+    h1 { font-size: 22px; margin: 0; letter-spacing: .02em; }
+    .sub { color: var(--muted); margin-bottom: 22px; font-size: 13px; }
+    .canvas {
+      border: 1px solid #1e293b;
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(15,23,42,.86), rgba(2,6,23,.86));
+      overflow: auto;
+      box-shadow: 0 24px 80px rgba(0,0,0,.35);
+    }
+    svg { display: block; min-width: 1360px; }
+    .legend, .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 16px; }
+    .card { border: 1px solid #1e293b; border-radius: 14px; background: rgba(15,23,42,.72); padding: 14px; }
+    .card h3 { margin: 0 0 8px; font-size: 13px; color: var(--cyan); }
+    .card p, .card li { color: var(--muted); font-size: 12px; margin: 0; }
+    .card ul { margin: 0; padding-left: 18px; }
+    @media (max-width: 900px) { .legend, .cards { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="title"><span class="dot"></span><h1>Context OS Main Agent：Query → Answer 的 Behavior Skill 装载机制</h1></div>
+    <div class="sub">基于当前代码实现：RAG 与 Chat 两种模式。Behavior Skill 是 prompt envelope 内的静态行为 profile，不是动态工具系统。</div>
+
+    <div class="canvas">
+      <svg width="1360" height="940" viewBox="0 0 1360 940" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8" />
+          </marker>
+          <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#34d399" />
+          </marker>
+          <marker id="arrowViolet" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#a78bfa" />
+          </marker>
+          <marker id="arrowAmber" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L0,6 L9,3 z" fill="#fbbf24" />
+          </marker>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <style>
+            .label { fill: #e5e7eb; font-size: 12px; font-weight: 700; }
+            .subtxt { fill: #94a3b8; font-size: 9px; }
+            .tiny { fill: #cbd5e1; font-size: 8px; }
+            .boxText { dominant-baseline: middle; text-anchor: middle; }
+            .arrow { stroke: #94a3b8; stroke-width: 1.8; fill: none; marker-end: url(#arrow); }
+            .arrowG { stroke: #34d399; stroke-width: 1.8; fill: none; marker-end: url(#arrowGreen); }
+            .arrowV { stroke: #a78bfa; stroke-width: 1.8; fill: none; marker-end: url(#arrowViolet); }
+            .arrowA { stroke: #fbbf24; stroke-width: 1.8; fill: none; marker-end: url(#arrowAmber); }
+            .dashed { stroke-dasharray: 5 5; }
+          </style>
+        </defs>
+
+        <rect width="1360" height="940" fill="#020617" />
+        <rect width="1360" height="940" fill="url(#grid)" opacity=".9" />
+
+        <!-- arrows behind boxes -->
+        <path class="arrow" d="M 680 70 L 680 115" />
+        <path class="arrow" d="M 680 170 L 680 212" />
+        <path class="arrowG" d="M 620 265 C 420 290, 330 315, 275 365" />
+        <path class="arrowV" d="M 740 265 C 940 290, 1030 315, 1085 365" />
+
+        <!-- Chat arrows -->
+        <path class="arrowG" d="M 275 425 L 275 480" />
+        <path class="arrowG" d="M 275 540 L 275 595" />
+        <path class="arrowG" d="M 275 655 L 275 710" />
+        <path class="arrowG" d="M 275 770 L 275 825" />
+        <path class="arrowG dashed" d="M 480 625 C 570 625, 570 740, 480 740" />
+
+        <!-- RAG arrows -->
+        <path class="arrowV" d="M 1085 425 L 1085 480" />
+        <path class="arrowV" d="M 1085 540 L 1085 595" />
+        <path class="arrowV" d="M 1085 655 L 1085 710" />
+        <path class="arrowV" d="M 1085 770 L 1085 825" />
+        <path class="arrowA" d="M 890 625 C 790 625, 790 740, 890 740" />
+        <path class="arrowA dashed" d="M 1165 655 L 1165 710" />
+
+        <!-- common ingress -->
+        <g>
+          <rect x="520" y="25" width="320" height="45" rx="8" fill="#0f172a" />
+          <rect x="520" y="25" width="320" height="45" rx="8" fill="rgba(8, 51, 68, 0.42)" stroke="#22d3ee" stroke-width="1.5" />
+          <text x="680" y="45" class="label boxText">POST /api/v1/chat</text>
+          <text x="680" y="60" class="subtxt boxText">ChatRequest: query + agent_type + doc_scope + stream</text>
+        </g>
+
+        <g>
+          <rect x="500" y="115" width="360" height="55" rx="8" fill="#0f172a" />
+          <rect x="500" y="115" width="360" height="55" rx="8" fill="rgba(6, 78, 59, 0.42)" stroke="#34d399" stroke-width="1.5" />
+          <text x="680" y="136" class="label boxText">AppState::execute_chat_stream</text>
+          <text x="680" y="153" class="subtxt boxText">preflight / session / start event</text>
+        </g>
+
+        <g>
+          <rect x="500" y="212" width="360" height="54" rx="8" fill="#0f172a" />
+          <rect x="500" y="212" width="360" height="54" rx="8" fill="rgba(30, 41, 59, 0.58)" stroke="#94a3b8" stroke-width="1.5" />
+          <text x="680" y="233" class="label boxText">MainAgent::decide</text>
+          <text x="680" y="250" class="subtxt boxText">general → DirectChat / rag + doc_scope → ExecutePlan</text>
+        </g>
+
+        <!-- lane labels -->
+        <text x="275" y="320" fill="#34d399" font-size="17" font-weight="800" text-anchor="middle">CHAT / GENERAL MODE</text>
+        <text x="1085" y="320" fill="#a78bfa" font-size="17" font-weight="800" text-anchor="middle">RAG MODE</text>
+
+        <!-- Chat lane -->
+        <g>
+          <rect x="80" y="365" width="390" height="60" rx="8" fill="#0f172a" />
+          <rect x="80" y="365" width="390" height="60" rx="8" fill="rgba(6, 78, 59, 0.42)" stroke="#34d399" stroke-width="1.5" />
+          <text x="275" y="386" class="label boxText">execute_general_chat_stream</text>
+          <text x="275" y="403" class="subtxt boxText">load memory → refine_general_query → reference_context</text>
+        </g>
+
+        <g>
+          <rect x="80" y="480" width="390" height="60" rx="8" fill="#0f172a" />
+          <rect x="80" y="480" width="390" height="60" rx="8" fill="rgba(8, 51, 68, 0.42)" stroke="#22d3ee" stroke-width="1.5" />
+          <text x="275" y="501" class="label boxText">System Prompt</text>
+          <text x="275" y="518" class="subtxt boxText">GENERAL_SYSTEM_PROMPT</text>
+        </g>
+
+        <g>
+          <rect x="80" y="595" width="390" height="60" rx="8" fill="#0f172a" />
+          <rect x="80" y="595" width="390" height="60" rx="8" fill="rgba(120, 53, 15, 0.35)" stroke="#fbbf24" stroke-width="1.5" />
+          <text x="275" y="616" class="label boxText">User Envelope</text>
+          <text x="275" y="633" class="subtxt boxText">&lt;Behavior Skill&gt; name: general_chat</text>
+          <text x="275" y="646" class="tiny boxText">direct answer + continuity; reference context ≠ doc evidence</text>
+        </g>
+
+        <g>
+          <rect x="80" y="710" width="390" height="60" rx="8" fill="#0f172a" />
+          <rect x="80" y="710" width="390" height="60" rx="8" fill="rgba(6, 78, 59, 0.42)" stroke="#34d399" stroke-width="1.5" />
+          <text x="275" y="731" class="label boxText">llm.complete_stream</text>
+          <text x="275" y="748" class="subtxt boxText">answer_start + token stream</text>
+        </g>
+
+        <g>
+          <rect x="80" y="825" width="390" height="60" rx="8" fill="#0f172a" />
+          <rect x="80" y="825" width="390" height="60" rx="8" fill="rgba(30, 41, 59, 0.58)" stroke="#94a3b8" stroke-width="1.5" />
+          <text x="275" y="846" class="label boxText">finalize_stream_execution</text>
+          <text x="275" y="863" class="subtxt boxText">persist messages → done; citations=[]</text>
+        </g>
+
+        <!-- RAG lane -->
+        <g>
+          <rect x="890" y="365" width="390" height="60" rx="8" fill="#0f172a" />
+          <rect x="890" y="365" width="390" height="60" rx="8" fill="rgba(76, 29, 149, 0.42)" stroke="#a78bfa" stroke-width="1.5" />
+          <text x="1085" y="386" class="label boxText">execute_rag_chat_stream</text>
+          <text x="1085" y="403" class="subtxt boxText">load docscope metadata + activity: planning</text>
+        </g>
+
+        <g>
+          <rect x="890" y="480" width="390" height="60" rx="8" fill="#0f172a" />
+          <rect x="890" y="480" width="390" height="60" rx="8" fill="rgba(8, 51, 68, 0.42)" stroke="#22d3ee" stroke-width="1.5" />
+          <text x="1085" y="501" class="label boxText">Plan System Prompt</text>
+          <text x="1085" y="518" class="subtxt boxText">RAG_PLAN_SYSTEM_PROMPT → raw JSON only</text>
+        </g>
+
+        <g>
+          <rect x="890" y="595" width="390" height="60" rx="8" fill="#0f172a" />
+          <rect x="890" y="595" width="390" height="60" rx="8" fill="rgba(120, 53, 15, 0.35)" stroke="#fbbf24" stroke-width="1.5" />
+          <text x="1085" y="616" class="label boxText">Plan User Envelope</text>
+          <text x="1085" y="633" class="subtxt boxText">&lt;Behavior Skill&gt; name: rag_plan</text>
+          <text x="1085" y="646" class="tiny boxText">generate ExecutePlanRequest or clarify</text>
+        </g>
+
+        <g>
+          <rect x="890" y="710" width="390" height="60" rx="8" fill="#0f172a" />
+          <rect x="890" y="710" width="390" height="60" rx="8" fill="rgba(76, 29, 149, 0.42)" stroke="#a78bfa" stroke-width="1.5" />
+          <text x="1085" y="731" class="label boxText">RAG Runtime Retrieval</text>
+          <text x="1085" y="748" class="subtxt boxText">text_dense + bm25 + multimodal_dense + graph</text>
+        </g>
+
+        <g>
+          <rect x="890" y="825" width="390" height="60" rx="8" fill="#0f172a" />
+          <rect x="890" y="825" width="390" height="60" rx="8" fill="rgba(6, 78, 59, 0.42)" stroke="#34d399" stroke-width="1.5" />
+          <text x="1085" y="846" class="label boxText">Answer Generation + Finalize</text>
+          <text x="1085" y="863" class="subtxt boxText">rag_answer skill + RAG Evidence → tokens → citations + done</text>
+        </g>
+
+        <!-- Answer prompt callout -->
+        <g>
+          <rect x="520" y="690" width="300" height="95" rx="8" fill="#0f172a" />
+          <rect x="520" y="690" width="300" height="95" rx="8" fill="rgba(120, 53, 15, 0.30)" stroke="#fbbf24" stroke-width="1.5" />
+          <text x="670" y="710" class="label boxText">RAG Answer Prompt</text>
+          <text x="670" y="730" class="subtxt boxText">system: RAG_ANSWER_SYSTEM_PROMPT</text>
+          <text x="670" y="746" class="subtxt boxText">user envelope: rag_answer skill</text>
+          <text x="670" y="762" class="subtxt boxText">authoritative: RAG Evidence only</text>
+        </g>
+
+        <!-- important note -->
+        <g>
+          <rect x="520" y="340" width="300" height="108" rx="8" fill="#0f172a" />
+          <rect x="520" y="340" width="300" height="108" rx="8" fill="rgba(136, 19, 55, 0.32)" stroke="#fb7185" stroke-width="1.5" />
+          <text x="670" y="362" class="label boxText">Skill Mechanism Boundary</text>
+          <text x="670" y="385" class="subtxt boxText">MainAgentBehaviorSkill is static</text>
+          <text x="670" y="401" class="subtxt boxText">Injected into &lt;Behavior Skill&gt;</text>
+          <text x="670" y="417" class="subtxt boxText">No registry / discovery / tool schema</text>
+          <text x="670" y="433" class="subtxt boxText">It is prompt behavior, not execution capability</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <h3>Chat / General</h3>
+        <ul>
+          <li>system: GENERAL_SYSTEM_PROMPT</li>
+          <li>skill: general_chat</li>
+          <li>context: memory + recent turns + preferences</li>
+          <li>output: natural-language answer, no citations</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>RAG Plan</h3>
+        <ul>
+          <li>system: RAG_PLAN_SYSTEM_PROMPT</li>
+          <li>skill: rag_plan</li>
+          <li>context: doc_scope + doc metadata</li>
+          <li>output: ExecutePlanRequest JSON or clarify</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>RAG Answer</h3>
+        <ul>
+          <li>system: RAG_ANSWER_SYSTEM_PROMPT</li>
+          <li>skill: rag_answer</li>
+          <li>context: retrieval bundle + coverage + backend trace</li>
+          <li>output: streamed answer + citations + done</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

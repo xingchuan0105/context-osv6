@@ -1,6 +1,7 @@
 use crate::ModelProviderConfig;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
+use tokio_util::sync::CancellationToken;
 
 fn build_chat_completion_request_body(
     config: &ModelProviderConfig,
@@ -40,6 +41,9 @@ fn build_chat_completion_request_body(
         request_body["stream_options"] = serde_json::json!({
             "include_usage": true,
         });
+    }
+    if config.enable_cache == Some(true) {
+        request_body["prompt_cache"] = serde_json::json!(true);
     }
 
     request_body
@@ -141,6 +145,7 @@ impl ChatCompletionStreamParser {
                 total_tokens: 0,
                 provider: self.provider,
                 model: self.model.clone(),
+                cached_tokens: 0,
             }),
             model: self.model,
         })
@@ -189,6 +194,7 @@ impl ChatCompletionStreamParser {
                 total_tokens: usage.total_tokens,
                 provider: self.provider.clone(),
                 model: self.model.clone(),
+                cached_tokens: 0,
             });
         }
 
@@ -214,7 +220,7 @@ impl ChatCompletionStreamParser {
 
 #[derive(Debug, Clone)]
 pub struct LlmClient {
-    config: ModelProviderConfig,
+    pub config: ModelProviderConfig,
     client: reqwest::Client,
 }
 
@@ -350,6 +356,7 @@ impl LlmClient {
                 total_tokens: resp.usage.total_tokens,
                 provider: self.config.provider_name(),
                 model: resp.model.clone(),
+                cached_tokens: 0,
             },
             model: resp.model,
         })
@@ -359,6 +366,7 @@ impl LlmClient {
         &self,
         messages: &[ChatMessage],
         temperature: Option<f32>,
+        token: CancellationToken,
         mut on_delta: impl FnMut(&str),
     ) -> anyhow::Result<LlmResponse> {
         let started_at = std::time::Instant::now();
@@ -378,15 +386,19 @@ impl LlmClient {
         let request_body =
             build_chat_completion_request_body(&self.config, messages, temperature, true);
 
-        let response = self
+        let request = self
             .client
             .post(format!("{}/chat/completions", self.config.base_url))
             .header("Authorization", format!("Bearer {}", self.config.api_key))
             .header("Content-Type", "application/json")
             .header("Accept", "text/event-stream")
-            .json(&request_body)
-            .send()
-            .await;
+            .json(&request_body);
+
+        let response = tokio::select! {
+            res = request.send() => res,
+            _ = token.cancelled() => anyhow::bail!("LLM request cancelled"),
+        };
+
         let mut response = match response {
             Ok(response) => response,
             Err(error) => {
@@ -398,7 +410,7 @@ impl LlmClient {
                     "failure",
                     started_at.elapsed().as_secs_f64() * 1000.0,
                 );
-                return Err(error).context("Failed to send chat completion stream request");
+                return Err(anyhow::Error::new(error)).context("Failed to send chat completion stream request");
             }
         };
 
@@ -420,10 +432,10 @@ impl LlmClient {
             ChatCompletionStreamParser::new(provider.clone(), configured_model.clone());
 
         loop {
-            let next_chunk = response
-                .chunk()
-                .await
-                .context("Failed to read chat completion stream chunk")?;
+            let next_chunk = tokio::select! {
+                chunk = response.chunk() => chunk.context("Failed to read chat completion stream chunk")?,
+                _ = token.cancelled() => anyhow::bail!("LLM request cancelled"),
+            };
             let Some(chunk) = next_chunk else {
                 break;
             };
@@ -490,6 +502,9 @@ pub struct LlmUsage {
     pub provider: String,
     #[serde(default)]
     pub model: String,
+    /// Tokens served from prompt cache (when provider supports it).
+    #[serde(default)]
+    pub cached_tokens: u32,
 }
 
 impl LlmUsage {
@@ -500,6 +515,7 @@ impl LlmUsage {
             total_tokens: 0,
             provider: String::new(),
             model: String::new(),
+            cached_tokens: 0,
         }
     }
 
@@ -507,6 +523,7 @@ impl LlmUsage {
         self.prompt_tokens += other.prompt_tokens;
         self.completion_tokens += other.completion_tokens;
         self.total_tokens += other.total_tokens;
+        self.cached_tokens += other.cached_tokens;
         if self.provider.is_empty() && !other.provider.is_empty() {
             self.provider = other.provider.clone();
         }
@@ -532,6 +549,7 @@ mod tests {
             api_style: None,
             dimensions: None,
             enable_thinking,
+            enable_cache: None,
         }
     }
 
@@ -544,6 +562,7 @@ mod tests {
             total_tokens: 30,
             provider: "dmxapi".to_string(),
             model: "gemini-test".to_string(),
+            cached_tokens: 5,
         });
 
         assert_eq!(total.total_tokens, 30);
@@ -689,5 +708,30 @@ data: [DONE]
                 .to_string()
                 .contains("Chat completion stream finished without content")
         );
+    }
+
+    #[test]
+    fn request_includes_prompt_cache_when_enable_cache_is_true() {
+        let mut config = test_config("https://api.deepseek.com", None);
+        config.enable_cache = Some(true);
+        let body = build_chat_completion_request_body(
+            &config,
+            &[ChatMessage::user("hello")],
+            None,
+            false,
+        );
+        assert_eq!(body["prompt_cache"], true);
+    }
+
+    #[test]
+    fn request_omits_prompt_cache_when_enable_cache_is_none() {
+        let config = test_config("https://api.deepseek.com", None);
+        let body = build_chat_completion_request_body(
+            &config,
+            &[ChatMessage::user("hello")],
+            None,
+            false,
+        );
+        assert!(body.get("prompt_cache").is_none());
     }
 }

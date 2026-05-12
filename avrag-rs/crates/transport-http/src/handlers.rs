@@ -13,12 +13,14 @@ use axum::{
 use common::{
     AddUrlSourceRequest, AppError, ChatRequest, CitationLookupRequest, CreateChatSessionRequest,
     CreateDocumentRequest, CreateNotebookNoteRequest, CreateNotebookRequest, ExecutePlanRequest,
-    UpdateChatSessionRequest, UpdateDocumentRequest, UpdateNotebookNoteRequest,
-    UpdateNotebookRequest,
+    NotebookListResponse, NotebookResponse,
+    RuntimeExecuteRequest, UpdateChatSessionRequest, UpdateDocumentRequest,
+    UpdateNotebookNoteRequest, UpdateNotebookRequest,
 };
 use contracts::chat::ChatEvent;
 use std::{convert::Infallible, time::Duration};
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::RequestState;
@@ -56,6 +58,14 @@ pub(crate) fn error_response(status: StatusCode, code: &str, message: &str) -> R
 // Notebook handlers
 // ---------------------------------------------------------------------------
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/notebooks",
+    responses(
+        (status = 200, description = "List all notebooks", body = NotebookListResponse)
+    ),
+    tag = "notebooks"
+)]
 pub(crate) async fn list_notebooks(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
@@ -67,6 +77,18 @@ pub(crate) async fn list_notebooks(
         .into_response()
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/notebooks/{id}",
+    responses(
+        (status = 200, description = "Get a notebook by ID", body = NotebookResponse),
+        (status = 404, description = "Notebook not found")
+    ),
+    params(
+        ("id" = String, Path, description = "Notebook ID")
+    ),
+    tag = "notebooks"
+)]
 pub(crate) async fn get_notebook(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(id): Path<String>,
@@ -99,6 +121,15 @@ pub(crate) async fn get_notebook(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/notebooks",
+    request_body = CreateNotebookRequest,
+    responses(
+        (status = 201, description = "Notebook created", body = NotebookResponse)
+    ),
+    tag = "notebooks"
+)]
 pub(crate) async fn create_notebook(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(req): Json<CreateNotebookRequest>,
@@ -113,6 +144,19 @@ pub(crate) async fn create_notebook(
     }
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/notebooks/{id}",
+    request_body = UpdateNotebookRequest,
+    responses(
+        (status = 200, description = "Notebook updated", body = NotebookResponse),
+        (status = 404, description = "Notebook not found")
+    ),
+    params(
+        ("id" = String, Path, description = "Notebook ID")
+    ),
+    tag = "notebooks"
+)]
 pub(crate) async fn update_notebook(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(id): Path<String>,
@@ -128,6 +172,18 @@ pub(crate) async fn update_notebook(
     }
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/notebooks/{id}",
+    responses(
+        (status = 200, description = "Notebook deleted"),
+        (status = 404, description = "Notebook not found")
+    ),
+    params(
+        ("id" = String, Path, description = "Notebook ID")
+    ),
+    tag = "notebooks"
+)]
 pub(crate) async fn delete_notebook(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(id): Path<String>,
@@ -463,7 +519,7 @@ pub(crate) async fn promote_notebook_note_handler(
             &notebook_id,
             CreateDocumentRequest {
                 filename,
-                file_size: markdown.as_bytes().len() as u64,
+                file_size: markdown.len() as u64,
                 mime_type: "text/markdown".to_string(),
             },
         )
@@ -661,6 +717,26 @@ pub(crate) async fn rag_execute_plan_handler(
     }
 }
 
+pub(crate) async fn runtime_execute_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+    payload: Result<Json<RuntimeExecuteRequest>, axum::extract::rejection::JsonRejection>,
+) -> Response {
+    let Json(req) = match payload {
+        Ok(payload) => payload,
+        Err(error) => {
+            return app_error_response(AppError::validation(
+                "invalid_runtime_execute",
+                format!("invalid runtime execute JSON: {error}"),
+            ));
+        }
+    };
+    match state.execute_runtime_tools(req).await {
+        Ok(response) => (StatusCode::OK, Json(response)).into_response(),
+        Err(error) => app_error_response(error),
+    }
+}
+
+#[tracing::instrument(skip(state, headers), fields(agent_type = %req.agent_type, request_id = tracing::field::Empty))]
 pub(crate) async fn chat_post_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     headers: HeaderMap,
@@ -690,6 +766,7 @@ pub(crate) async fn chat_post_handler(
                 .map(str::to_string)
         })
         .unwrap_or_else(|| Uuid::new_v4().to_string());
+    tracing::Span::current().record("request_id", &request_id);
 
     let started_event = if source_type.as_deref() == Some("share") {
         analytics::ProductEventName::SharedKbChatStarted
@@ -776,7 +853,7 @@ fn chat_live_stream_response(
     tokio::spawn(async move {
         let error_sender = sender.clone();
         if let Err(error) = state
-            .execute_chat_stream(req, request_id_for_task.clone(), sender)
+            .execute_chat_stream(req, request_id_for_task.clone(), sender, CancellationToken::new())
             .await
         {
             state
@@ -809,7 +886,7 @@ fn sse_response_from_receiver(
     surface: &'static str,
 ) -> Response {
     let stream = async_stream::stream! {
-        let _guard = SseStreamGuard(surface);
+        let _guard = SseStreamGuard(surface, CancellationToken::new());
         telemetry::prometheus::inc_sse_streams(surface);
 
         while let Some(event) = receiver.recv().await {
@@ -874,11 +951,12 @@ fn surface_label(surface: analytics::Surface) -> &'static str {
     }
 }
 
-struct SseStreamGuard(&'static str);
+struct SseStreamGuard(&'static str, CancellationToken);
 
 impl Drop for SseStreamGuard {
     fn drop(&mut self) {
         telemetry::prometheus::dec_sse_streams(self.0);
+        self.1.cancel();
     }
 }
 

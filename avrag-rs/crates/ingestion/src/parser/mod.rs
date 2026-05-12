@@ -195,8 +195,8 @@ pub fn normalize_parsed_document(doc: &ParsedDocument, parser_backend: &str) -> 
         })
         .collect::<Vec<_>>();
 
-    if let Some(images_json) = doc.metadata.get("embedded_images_json") {
-        if let Ok(images) = serde_json::from_str::<Vec<EmbeddedImageMeta>>(images_json) {
+    if let Some(images_json) = doc.metadata.get("embedded_images_json")
+        && let Ok(images) = serde_json::from_str::<Vec<EmbeddedImageMeta>>(images_json) {
             let base_context = doc
                 .pages
                 .first()
@@ -226,7 +226,6 @@ pub fn normalize_parsed_document(doc: &ParsedDocument, parser_backend: &str) -> 
                 ));
             }
         }
-    }
 
     NormalizedDocument {
         title: doc.title.clone(),

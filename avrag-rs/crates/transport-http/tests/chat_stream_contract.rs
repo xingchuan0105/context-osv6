@@ -23,9 +23,47 @@ struct ScriptedAgent;
 impl Agent for ScriptedAgent {
     async fn run(
         &self,
-        _request: AgentRequest,
+        request: AgentRequest,
         sink: &dyn AgentEventSink,
     ) -> Result<AgentRunResult, common::AppError> {
+        // Simulate RAG-specific behaviour so that RAG contract tests can verify
+        // end-to-end streaming without a real runtime.
+        if request.kind == app::agents::AgentKind::Rag {
+            sink.emit(AgentEvent::Activity {
+                stage: "planning".to_string(),
+                message: "planning".to_string(),
+            })
+            .await;
+
+            if request.doc_scope.is_empty() {
+                let answer = "请选择一个或多个文档以继续。".to_string();
+                sink.emit(AgentEvent::MessageDelta {
+                    text: answer.clone(),
+                })
+                .await;
+                sink.emit(AgentEvent::Done {
+                    final_message: Some(answer.clone()),
+                    usage: None,
+                })
+                .await;
+                return Ok(AgentRunResult {
+                    answer,
+                    ..Default::default()
+                });
+            }
+
+            sink.emit(AgentEvent::Activity {
+                stage: "retrieving".to_string(),
+                message: "retrieving".to_string(),
+            })
+            .await;
+
+            return Err(common::AppError::validation(
+                "rag_runtime_not_configured",
+                "RAG runtime is not configured",
+            ));
+        }
+
         sink.emit(AgentEvent::Activity {
             stage: "test".to_string(),
             message: "test agent".to_string(),
@@ -311,6 +349,7 @@ async fn test_app() -> (axum::Router, String, Uuid) {
 
 async fn test_app_with_ready_document() -> (axum::Router, String, String, Uuid) {
     let mut state = AppState::new(AppConfig::default());
+    state.set_uses_memory_adapters(false);
     state.set_agent_service(test_agent_service());
     let org_id = Uuid::new_v4();
     let scoped = state.with_auth(AuthContext::new(OrgId::from(org_id), SubjectKind::User));

@@ -74,21 +74,16 @@ pub(crate) async fn request_context_middleware(
     let headers = req.headers().clone();
 
     let share_chat_notebook_scope = share_chat_notebook_scope_from_request(&state, &mut req).await;
-    let auth = if let Some(auth) = auth_from_bearer(&state, &headers).await {
-        Some(if let Some(notebook_scope) = share_chat_notebook_scope {
-            auth.with_notebook_scope(notebook_scope)
-        } else {
-            auth
-        })
-    } else if let Some(auth) = auth_from_proxy_headers(&headers) {
-        Some(if let Some(notebook_scope) = share_chat_notebook_scope {
-            auth.with_notebook_scope(notebook_scope)
-        } else {
-            auth
-        })
-    } else {
-        None
-    };
+    let auth = auth_from_bearer(&state, &headers)
+        .await
+        .or_else(|| auth_from_proxy_headers(&headers))
+        .map(|auth| {
+            if let Some(notebook_scope) = share_chat_notebook_scope {
+                auth.with_notebook_scope(notebook_scope)
+            } else {
+                auth
+            }
+        });
 
     let Some(auth) = auth else {
         return (
@@ -114,7 +109,7 @@ pub(crate) async fn request_context_middleware(
     );
     let limit_rpm = DEFAULT_RATE_LIMIT_RPM;
     let (allowed, remaining, limit) =
-        check_rate_limit_with_fallback(&state.config().redis.url, &rate_key, limit_rpm).await;
+        check_rate_limit_with_fallback(state.redis_url(), &rate_key, limit_rpm).await;
 
     let auth = if let Some(request_id) = headers
         .get(HEADER_REQUEST_ID)
@@ -171,9 +166,7 @@ async fn share_chat_notebook_scope_from_request(
     if req.method() != Method::POST || !is_chat_endpoint_path(req.uri().path()) {
         return None;
     }
-    let Some(pg) = state.pg() else {
-        return None;
-    };
+    let pg = state.pg()?;
 
     let (parts, body) = std::mem::replace(req, Request::new(Body::empty())).into_parts();
     let body_bytes = match to_bytes(body, usize::MAX).await {
@@ -227,15 +220,12 @@ async fn check_rate_limit_with_fallback(
     key: &str,
     limit_rpm: u32,
 ) -> (bool, u32, u32) {
-    if !redis_url.trim().is_empty() {
-        if let Ok(limiter) =
+    if !redis_url.trim().is_empty()
+        && let Ok(limiter) =
             RedisFixedWindowRateLimiter::new(redis_url.to_string(), limit_rpm).await
-        {
-            if let Ok(decision) = limiter.check(key).await {
+            && let Ok(decision) = limiter.check(key).await {
                 return (decision.allowed, decision.remaining, decision.limit);
             }
-        }
-    }
 
     check_rate_limit(key, limit_rpm)
 }

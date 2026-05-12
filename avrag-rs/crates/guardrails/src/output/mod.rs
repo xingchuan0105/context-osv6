@@ -1,26 +1,22 @@
 //! Output guards — run after synthesis.
 
-pub mod citation_provability;
-pub mod harmful_content;
 pub mod pii_scrubber;
+pub mod prompt_leak;
 
-pub use citation_provability::CitationProvabilityGuard;
-pub use harmful_content::HarmfulContentGuard;
 pub use pii_scrubber::PiiScrubberGuard;
+pub use prompt_leak::PromptLeakGuard;
 
 #[derive(Debug, Clone)]
 pub struct OutputGuardPipeline {
-    pub citation_provability: CitationProvabilityGuard,
+    pub prompt_leak: PromptLeakGuard,
     pub pii_scrubber: PiiScrubberGuard,
-    pub harmful_content: HarmfulContentGuard,
 }
 
 impl OutputGuardPipeline {
     pub fn new() -> Self {
         Self {
-            citation_provability: CitationProvabilityGuard::new(),
+            prompt_leak: PromptLeakGuard::new(),
             pii_scrubber: PiiScrubberGuard::new(),
-            harmful_content: HarmfulContentGuard::new(),
         }
     }
 }

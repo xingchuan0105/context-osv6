@@ -1,0 +1,15 @@
+User Question:
+{query}
+
+Retrieval Index (JSON):
+{index_section}
+
+Context Chunks (JSON array of objects with fields: chunk_id, doc_id, chunk_type, page, text, asset_id, caption, image_url, parser_backend, source_locator, tool_source, score):
+{context_section}
+
+Note on evidence groups:
+- Each chunk carries a `tool_source` label (e.g. "dense_retrieval", "lexical_retrieval", "graph_retrieval").
+- `dense_retrieval` chunks come from semantic vector search — good for conceptual questions.
+- `lexical_retrieval` chunks come from exact keyword/BM25 match — good for IDs, names, and precise terms.
+- `graph_retrieval` chunks come from relationship/triplet search — good for multi-hop or relational questions.
+- Use the `score` field as a relevance signal when deciding which evidence to trust most.

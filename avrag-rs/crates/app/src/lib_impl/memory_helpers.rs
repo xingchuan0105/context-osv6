@@ -1,9 +1,19 @@
-fn next_message_id(state: &mut MemoryState) -> i64 {
+use common::{
+    ChatMessage, ChatRequest,
+    Citation, DegradeTraceItem, DocumentStatus,
+    ModeDebug, ParsedPreviewItem, PlannerOutput,
+    RagModeDebug, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary,
+    SourceRef, SummaryInjectionTrace,
+};
+
+use crate::lib_impl::*;
+
+pub(crate) fn next_message_id(state: &mut MemoryState) -> i64 {
     state.next_message_id += 1;
     state.next_message_id
 }
 
-fn status_label(status: &DocumentStatus) -> &'static str {
+pub fn status_label(status: &DocumentStatus) -> &'static str {
     match status {
         DocumentStatus::Pending => "pending",
         DocumentStatus::Enqueueing => "enqueueing",
@@ -17,7 +27,7 @@ fn status_label(status: &DocumentStatus) -> &'static str {
     }
 }
 
-fn derive_profile_domains(messages: &[ChatMessage], query: &str) -> Vec<String> {
+pub fn derive_profile_domains(messages: &[ChatMessage], query: &str) -> Vec<String> {
     let corpus = messages
         .iter()
         .map(|m| m.content.as_str())
@@ -38,7 +48,7 @@ fn derive_profile_domains(messages: &[ChatMessage], query: &str) -> Vec<String> 
     domains
 }
 
-fn derive_profile_topics(messages: &[ChatMessage], query: &str) -> Vec<String> {
+pub fn derive_profile_topics(messages: &[ChatMessage], query: &str) -> Vec<String> {
     messages
         .iter()
         .map(|m| m.content.trim())
@@ -53,7 +63,7 @@ fn derive_profile_topics(messages: &[ChatMessage], query: &str) -> Vec<String> {
         .collect()
 }
 
-fn detect_preferred_style(query: &str) -> Option<String> {
+pub fn detect_preferred_style(query: &str) -> Option<String> {
     let normalized = query.to_ascii_lowercase();
     if normalized.contains("brief") || normalized.contains("concise") || normalized.contains("??") {
         Some("concise".to_string())
@@ -64,60 +74,7 @@ fn detect_preferred_style(query: &str) -> Option<String> {
     }
 }
 
-fn infer_current_topic(query: &str) -> Option<String> {
-    let trimmed = query.trim();
-    (!trimmed.is_empty()).then(|| trimmed.chars().take(80).collect())
-}
-
-fn extract_pending_questions(query: &str) -> Vec<String> {
-    let trimmed = query.trim();
-    if trimmed.ends_with('?') || trimmed.ends_with('?') {
-        vec![trimmed.to_string()]
-    } else {
-        Vec::new()
-    }
-}
-
-fn infer_last_document(response: &ChatResponse) -> Option<String> {
-    response
-        .citations
-        .iter()
-        .map(|citation| citation.doc_name.trim())
-        .find(|value| !value.is_empty())
-        .or_else(|| {
-            response
-                .sources
-                .iter()
-                .map(|source| source.title.trim())
-                .find(|value| !value.is_empty())
-        })
-        .map(ToOwned::to_owned)
-}
-
-fn infer_last_entity(query: &str) -> Option<String> {
-    let trimmed = query.trim();
-    for (open, close) in [
-        ("`", "`"),
-        ("\"", "\""),
-        ("'", "'"),
-        ("“", "”"),
-        ("《", "》"),
-    ] {
-        if let Some(start) = trimmed.find(open) {
-            let rest = &trimmed[start + open.len()..];
-            if let Some(end) = rest.find(close) {
-                let entity = rest[..end].trim();
-                if !entity.is_empty() {
-                    return Some(entity.chars().take(80).collect());
-                }
-            }
-        }
-    }
-
-    None
-}
-
-fn merge_general_profile_custom_preferences(
+pub fn merge_general_profile_custom_preferences(
     mut custom_preferences: serde_json::Value,
     agent_memory: common::AgentPreferenceMemory,
     query: &str,
@@ -142,7 +99,7 @@ fn merge_general_profile_custom_preferences(
     custom_preferences
 }
 
-fn build_degrade_trace(agent_type: &str, has_context: bool) -> Vec<DegradeTraceItem> {
+pub fn build_degrade_trace(agent_type: &str, has_context: bool) -> Vec<DegradeTraceItem> {
     if has_context {
         Vec::new()
     } else {
@@ -154,12 +111,12 @@ fn build_degrade_trace(agent_type: &str, has_context: bool) -> Vec<DegradeTraceI
     }
 }
 
-fn build_summary(content: &str) -> String {
+pub fn build_summary(content: &str) -> String {
     let compact = content.split_whitespace().collect::<Vec<_>>().join(" ");
     compact.chars().take(180).collect()
 }
 
-fn build_parsed_preview(content: &str) -> Vec<ParsedPreviewItem> {
+pub fn build_parsed_preview(content: &str) -> Vec<ParsedPreviewItem> {
     let mut items = Vec::new();
     for (index, line) in content.lines().enumerate() {
         let trimmed = line.trim();
@@ -184,7 +141,7 @@ fn build_parsed_preview(content: &str) -> Vec<ParsedPreviewItem> {
     items
 }
 
-fn build_answer(
+pub(crate) fn build_answer(
     query: &str,
     agent_type: &str,
     notebook_name: &str,
@@ -213,7 +170,7 @@ fn build_answer(
     }
 }
 
-fn build_citations(context_document: Option<&RetrievedContext>) -> Vec<Citation> {
+pub(crate) fn build_citations(context_document: Option<&RetrievedContext>) -> Vec<Citation> {
     let Some(document) = context_document else {
         return Vec::new();
     };
@@ -237,7 +194,7 @@ fn build_citations(context_document: Option<&RetrievedContext>) -> Vec<Citation>
     }]
 }
 
-fn build_sources(context_document: Option<&RetrievedContext>) -> Vec<SourceRef> {
+pub(crate) fn build_sources(context_document: Option<&RetrievedContext>) -> Vec<SourceRef> {
     let Some(document) = context_document else {
         return Vec::new();
     };
@@ -250,7 +207,7 @@ fn build_sources(context_document: Option<&RetrievedContext>) -> Vec<SourceRef> 
     }]
 }
 
-fn build_planner_output(
+pub(crate) fn build_planner_output(
     req: &ChatRequest,
     retrieval: Option<&RetrievedContext>,
 ) -> Option<PlannerOutput> {
@@ -285,7 +242,7 @@ fn build_planner_output(
     })
 }
 
-fn build_mode_debug(
+pub(crate) fn build_mode_debug(
     req: &ChatRequest,
     retrieval: Option<&RetrievedContext>,
     sources: &[SourceRef],
@@ -336,11 +293,11 @@ fn build_mode_debug(
     })
 }
 
-fn estimate_token_count(text: &str) -> i64 {
+pub fn estimate_token_count(text: &str) -> i64 {
     common::estimate_token_count(text)
 }
 
-fn extract_keyword_hint(query: &str) -> Option<String> {
+pub fn extract_keyword_hint(query: &str) -> Option<String> {
     let quoted = query
         .split('"')
         .nth(1)
@@ -359,15 +316,11 @@ fn extract_keyword_hint(query: &str) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn agent_name(agent_type: &str) -> &'static str {
-    match agent_type {
-        "search" => "网络搜索助手",
-        "general" => "通用聊天助手",
-        _ => "知识库助手",
-    }
+pub fn agent_name(agent_type: &str, language: Option<&str>) -> &'static str {
+    crate::chat::i18n::agent_name(agent_type, language)
 }
 
-fn agent_icon(agent_type: &str) -> &'static str {
+pub fn agent_icon(agent_type: &str) -> &'static str {
     match agent_type {
         "search" => "🔍",
         "general" => "💬",

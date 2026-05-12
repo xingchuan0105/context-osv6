@@ -94,12 +94,14 @@ fn ingestion_kind_str(kind: &IngestionTaskKind) -> &'static str {
     match kind {
         IngestionTaskKind::IngestDocument => "ingest_document",
         IngestionTaskKind::ReindexDocument => "reindex_document",
+        IngestionTaskKind::IngestUrl => "ingest_url",
     }
 }
 
 fn parse_ingestion_kind(value: &str) -> IngestionTaskKind {
     match value {
         "reindex_document" => IngestionTaskKind::ReindexDocument,
+        "ingest_url" => IngestionTaskKind::IngestUrl,
         _ => IngestionTaskKind::IngestDocument,
     }
 }

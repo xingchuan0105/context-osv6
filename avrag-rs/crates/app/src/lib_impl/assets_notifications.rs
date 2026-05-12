@@ -1,3 +1,11 @@
+use common::{
+    ApiKeyRow, AppError, CitationLookupResponse, CreateApiKeyRequest, CreateApiKeyResponse, NotificationRow, ShareTokenResponse, StatusOnlyResponse, new_id,
+    now_rfc3339,
+};
+use std::collections::BTreeMap;
+
+use crate::lib_impl::*;
+
 impl AppState {
     pub async fn lookup_citation(
         &self,
@@ -210,8 +218,8 @@ impl AppState {
                 .map_err(map_pg_error);
         }
 
-        let state = self.inner.read().await;
-        Ok(state.api_keys.get(notebook_id).cloned().unwrap_or_default())
+        let keys = self.api_keys.read().await;
+        Ok(keys.get(notebook_id).cloned().unwrap_or_default())
     }
 
     pub async fn create_api_key(
@@ -270,9 +278,8 @@ impl AppState {
             updated_at: now_rfc3339(),
         };
         {
-            let mut state = self.inner.write().await;
-            state
-                .api_keys
+            let mut keys = self.api_keys.write().await;
+            keys
                 .entry(notebook_id.to_string())
                 .or_default()
                 .push(row.clone());
@@ -308,8 +315,8 @@ impl AppState {
             });
         }
 
-        let mut state = self.inner.write().await;
-        let keys = state.api_keys.entry(notebook_id.to_string()).or_default();
+        let mut keys_map = self.api_keys.write().await;
+        let keys = keys_map.entry(notebook_id.to_string()).or_default();
         let before = keys.len();
         keys.retain(|item| item.id != key_id);
         if before == keys.len() {

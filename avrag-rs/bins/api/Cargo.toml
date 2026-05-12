@@ -10,6 +10,9 @@ anyhow.workspace = true
 any_spawner = { version = "0.3", features = ["tokio"] }
 app = { path = "../../crates/app" }
 axum.workspace = true
+axum-extra.workspace = true
+utoipa.workspace = true
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
 dotenvy = "0.15"
 telemetry = { path = "../../crates/telemetry" }
 tokio.workspace = true

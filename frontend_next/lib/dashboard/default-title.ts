@@ -69,7 +69,7 @@ export function getDefaultWorkspaceTitle(locale: DashboardLocale, date: string) 
   return formatDefaultWorkspaceTitle(locale, date, count);
 }
 
-export function markDefaultWorkspaceTitleUsed(locale: DashboardLocale, date: string) {
+export function markDefaultWorkspaceTitleUsed(locale: DashboardLocale, _date: string) {
   const key = workspaceCreateCounterKey(locale);
   const counters = readWorkspaceCreateCounters();
   const count = counters.counts[key] ?? 0;

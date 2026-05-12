@@ -8,7 +8,6 @@ import {
   createWorkspaceSession,
   deleteWorkspaceDocument,
   deleteWorkspaceNote,
-  deleteWorkspaceSession,
   getWorkspace,
   getWorkspaceSession,
   listWorkspaceSessionMessages,

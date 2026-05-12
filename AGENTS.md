@@ -120,61 +120,47 @@ These guidelines override your default tendency to be overly helpful, overly ver
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **context-osv6** (12112 symbols, 25925 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **context-osv6** (12669 symbols, 27558 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
-## Low-Context Usage Policy
+## Always Do
 
-- Default to `rg` and direct source reads for local navigation.
-- Use GitNexus when code relationships are not obvious, or when a change touches exported/shared functions, classes, hooks, components, public types, schemas, route handlers, or cross-module business logic.
-- Skip GitNexus for pure styling, copy, comments, formatting, local test fixtures, snapshots, and single-file private helpers whose callers are obvious.
-- Do not read `clusters`, `processes`, or full process traces as a default prelude. Read them only after `query`, `context`, or `impact` shows uncertainty that source reads do not resolve.
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
 
-## Required Checks
+## When Debugging
 
-- Before editing exported/shared symbols or cross-module behavior, run a shallow upstream impact check:
-  `gitnexus_impact({target: "symbolName", direction: "upstream", maxDepth: 1, minConfidence: 0.8, repo: "context-osv6"})`
-- If impact returns many direct callers, critical flows, or HIGH/CRITICAL risk, warn the user before proceeding and expand to deeper impact or process reads only as needed.
-- Before committing, run `gitnexus_detect_changes({repo: "context-osv6"})` to verify the affected symbols and execution flows match the intended scope.
-- For multi-file renames, use `gitnexus_rename({symbol_name: "old", new_name: "new", dry_run: true, repo: "context-osv6"})`. Review the preview before applying changes.
+1. `gitnexus_query({query: "<error or symptom>"})` — find execution flows related to the issue
+2. `gitnexus_context({name: "<suspect function>"})` — see all callers, callees, and process participation
+3. `READ gitnexus://repo/context-osv6/process/{processName}` — trace the full execution flow step by step
+4. For regressions: `gitnexus_detect_changes({scope: "compare", base_ref: "main"})` — see what your branch changed
 
-## Common Workflows
+## When Refactoring
 
-Understanding unfamiliar code:
-1. Start with `rg` and direct source reads.
-2. If the entry point or flow is unclear, use `gitnexus_query({query: "concept", repo: "context-osv6"})`.
-3. For a key symbol, use `gitnexus_context({name: "symbolName", repo: "context-osv6"})`.
-4. Read `gitnexus://repo/context-osv6/process/{processName}` only when a full execution trace is needed.
-
-Debugging:
-1. Reproduce or localize the symptom with normal source/test inspection first.
-2. If the call chain is unclear, use `gitnexus_query({query: "<error or symptom>", repo: "context-osv6"})`.
-3. Use `gitnexus_context({name: "<suspect symbol>", repo: "context-osv6"})` for callers, callees, and process participation.
-4. For regressions, use `gitnexus_detect_changes({scope: "compare", base_ref: "main", repo: "context-osv6"})`.
-
-Refactoring:
-- Rename with `gitnexus_rename(..., dry_run: true)` instead of find-and-replace.
-- Before extracting, splitting, or moving shared behavior, use `gitnexus_context` and the shallow `gitnexus_impact` check.
-- After substantial refactors, run `gitnexus_detect_changes({scope: "all", repo: "context-osv6"})`.
+- **Renaming**: MUST use `gitnexus_rename({symbol_name: "old", new_name: "new", dry_run: true})` first. Review the preview — graph edits are safe, text_search edits need manual review. Then run with `dry_run: false`.
+- **Extracting/Splitting**: MUST run `gitnexus_context({name: "target"})` to see all incoming/outgoing refs, then `gitnexus_impact({target: "target", direction: "upstream"})` to find all external callers before moving code.
+- After any refactor: run `gitnexus_detect_changes({scope: "all"})` to verify only expected files changed.
 
 ## Never Do
 
-- NEVER treat GitNexus as mandatory setup for every task.
-- NEVER edit exported/shared symbols or cross-module behavior without the required shallow impact check, unless GitNexus is unavailable and the fallback is stated.
+- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
 - NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
 - NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
-- NEVER commit changes without running `gitnexus_detect_changes()` when GitNexus is available.
+- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
 
 ## Tools Quick Reference
 
 | Tool | When to use | Command |
 |------|-------------|---------|
-| `query` | Find code by concept when `rg` is not enough | `gitnexus_query({query: "auth validation", repo: "context-osv6"})` |
-| `context` | 360-degree view of one key symbol | `gitnexus_context({name: "validateUser", repo: "context-osv6"})` |
-| `impact` | Blast radius for shared/exported behavior | `gitnexus_impact({target: "X", direction: "upstream", maxDepth: 1, minConfidence: 0.8, repo: "context-osv6"})` |
-| `detect_changes` | Pre-commit scope check | `gitnexus_detect_changes({repo: "context-osv6"})` |
-| `rename` | Safe multi-file rename | `gitnexus_rename({symbol_name: "old", new_name: "new", dry_run: true, repo: "context-osv6"})` |
+| `query` | Find code by concept | `gitnexus_query({query: "auth validation"})` |
+| `context` | 360-degree view of one symbol | `gitnexus_context({name: "validateUser"})` |
+| `impact` | Blast radius before editing | `gitnexus_impact({target: "X", direction: "upstream"})` |
+| `detect_changes` | Pre-commit scope check | `gitnexus_detect_changes({scope: "staged"})` |
+| `rename` | Safe multi-file rename | `gitnexus_rename({symbol_name: "old", new_name: "new", dry_run: true})` |
 | `cypher` | Custom graph queries | `gitnexus_cypher({query: "MATCH ..."})` |
 
 ## Impact Risk Levels
@@ -187,8 +173,6 @@ Refactoring:
 
 ## Resources
 
-Use these only when targeted tool results indicate they are needed:
-
 | Resource | Use for |
 |----------|---------|
 | `gitnexus://repo/context-osv6/context` | Codebase overview, check index freshness |
@@ -198,10 +182,10 @@ Use these only when targeted tool results indicate they are needed:
 
 ## Self-Check Before Finishing
 
-Before completing code changes where GitNexus was required, verify:
-1. `gitnexus_impact` was run for exported/shared symbols or cross-module behavior
+Before completing any code modification task, verify:
+1. `gitnexus_impact` was run for all modified symbols
 2. No HIGH/CRITICAL risk warnings were ignored
-3. `gitnexus_detect_changes()` confirms changes match expected scope before commit
+3. `gitnexus_detect_changes()` confirms changes match expected scope
 4. All d=1 (WILL BREAK) dependents were updated
 
 ## Keeping the Index Fresh
@@ -234,3 +218,21 @@ To check whether embeddings exist, inspect `.gitnexus/meta.json` — the `stats.
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked as local markdown files under `.scratch/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Using standard triage labels (needs-triage, needs-info, etc.). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.
+
+### Roadmap & Technical Debt
+
+See `TECHNICAL_UPGRADES.md` for the approved Rust tool upgrade list (utoipa, insta, proptest, etc.).

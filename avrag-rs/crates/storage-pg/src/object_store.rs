@@ -1,3 +1,5 @@
+use bytes::Bytes;
+use futures::Stream;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -44,6 +46,17 @@ impl ObjectStoreHandle {
         match self {
             Self::Local(store) => store.put(path, bytes).await,
             Self::S3(store) => store.put(path, bytes).await,
+        }
+    }
+
+    pub async fn put_stream<S, E>(&self, path: &str, stream: S) -> Result<()>
+    where
+        S: Stream<Item = std::result::Result<Bytes, E>> + Send + Sync + Unpin + 'static,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        match self {
+            Self::Local(store) => store.put_stream(path, stream).await,
+            Self::S3(store) => store.put_stream(path, stream).await,
         }
     }
 
@@ -112,6 +125,28 @@ impl LocalObjectStore {
         Ok(())
     }
 
+    pub async fn put_stream<S, E>(&self, path: &str, mut stream: S) -> Result<()>
+    where
+        S: Stream<Item = std::result::Result<Bytes, E>> + Unpin + Send + Sync + 'static,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        use futures::StreamExt;
+        use tokio::io::AsyncWriteExt;
+
+        let full = self.full_path(path);
+        if let Some(parent) = full.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+
+        let mut file = fs::File::create(&full).await?;
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| anyhow!(e))?;
+            file.write_all(&chunk).await?;
+        }
+        file.flush().await?;
+        Ok(())
+    }
+
     pub async fn get(&self, path: &str) -> Result<Vec<u8>> {
         let full = self.full_path(path);
         let bytes = fs::read(&full).await?;
@@ -132,11 +167,22 @@ impl LocalObjectStore {
             });
         }
 
-        let bytes = fs::read(&full)
+        use tokio::io::AsyncReadExt;
+        let mut file = fs::File::open(&full)
             .await
-            .map_err(|error| local_head_io_error(&full, "read", error))?;
+            .map_err(|error| local_head_io_error(&full, "open", error))?;
         let mut hasher = Sha256::new();
-        hasher.update(&bytes);
+        let mut buffer = [0u8; 8192];
+        loop {
+            let n = file
+                .read(&mut buffer)
+                .await
+                .map_err(|error| local_head_io_error(&full, "read", error))?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buffer[..n]);
+        }
 
         Ok(ObjectStoreMetadata {
             size_bytes: metadata.len(),
@@ -208,6 +254,29 @@ impl S3ObjectStore {
             .send()
             .await
             .context("s3 put object failed")?;
+        Ok(())
+    }
+
+    pub async fn put_stream<S, E>(&self, path: &str, stream: S) -> Result<()>
+    where
+        S: Stream<Item = std::result::Result<Bytes, E>> + Send + Sync + 'static,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        use futures::StreamExt;
+        let mut bytes = bytes::BytesMut::new();
+        let mut pinned_stream = Box::pin(stream);
+        while let Some(chunk) = pinned_stream.next().await {
+            bytes.extend_from_slice(&chunk.map_err(|e| anyhow!(e))?);
+        }
+        let body = ByteStream::from(bytes.freeze());
+        self.client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(path)
+            .body(body)
+            .send()
+            .await
+            .context("s3 put stream failed")?;
         Ok(())
     }
 

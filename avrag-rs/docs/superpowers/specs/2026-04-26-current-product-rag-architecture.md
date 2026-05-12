@@ -1,29 +1,42 @@
-# 当前产品架构：Main Agent + RAG API + Milvus 检索数据面
+> **⚠️ 部分过时**：本文档 §11 WebSearchAgent、§12 Prompt 管理体系、§2 semantic memory vectors 等内容已被 `2026-05-12-architecture-baseline.md` 取代。请以基准版为准。
 
-> 状态：2026-04-26 当前目标架构。
+# 当前产品架构：UnifiedAgentService + 三独立 Agent + RAG API + Milvus 检索数据面
+
+> 状态：2026-05-11 更新。三 Agent 拆分已落地，Chat、Search、RAG 生产路径均已走 UnifiedAgentService。GraphFlow 已退场。
 > 本文档覆盖 `PRD_RUST.md`、ADR 0002 以及 2026-03 旧实施计划中以 Qdrant/Tantivy 为最终目标的检索描述。
 
 ## 1. 核心结论
 
-产品采用 `Main Agent + RAG API` 架构：
+产品采用 **UnifiedAgentService + 三独立 Agent** 架构：
 
 ```text
 User
-  -> Main Agent
-      -> 可选 clarify / chat
-      -> 生成 RAG tool plan schema
-          -> RAG API
-              -> BM25 retrieval
-              -> text dense retrieval
-              -> multimodal dense retrieval
-              -> graph relation retrieval
-              -> fusion / rerank / evidence packaging
-      -> 生成最终有证据约束的回答
+  -> UnifiedAgentService (dispatcher)
+      -> ChatAgent         → 直接对话 / 创意写作 / 头脑风暴
+      -> WebSearchAgent    → 外部搜索 (Brave LLM Context / Perplexity)
+      -> RagAgent          → 检索增强生成 (已生产化，走 UnifiedAgentService + tool-call 范式)
+
+RAG API (检索服务，非自主 agent)
+  -> BM25 retrieval
+  -> text dense retrieval
+  -> multimodal dense retrieval
+  -> graph relation retrieval
+  -> fusion / rerank / evidence packaging
 ```
 
-`Main Agent` 是唯一面向用户的 agent，负责用户交互、mode routing、workspace 指代消解、记忆使用、工具规划和最终回答。
+`UnifiedAgentService` 是面向用户的唯一调度层，根据 `AgentRequest.kind` 路由到三个独立 Agent：
+
+| Agent | 职责 | 生产状态 |
+|-------|------|----------|
+| `ChatAgent` | 直接对话、创意写作、头脑风暴、解释说明 | 已生产化，走 UnifiedAgentService |
+| `WebSearchAgent` | 本地 planner → 多子查询并行 → 结果聚合 → 答案合成 | 已生产化，走 UnifiedAgentService |
+| `RagAgent` | 检索计划生成 → RAG API 调用 → 答案合成 | 已生产化，走 UnifiedAgentService；tool-call 范式已落地 |
+
+每个 Agent 独立实现 `Agent` trait，通过统一的 `AgentEvent` 事件流与调用方通信。这种拆分避免了单体式 Main Agent 的职责膨胀，使各模式有独立的 skill、prompt 和降级策略。
 
 `RAG API` 不是自主 agent，而是检索服务。它可以调用 LLM 或 reranker 完成有边界的检索子任务，但不负责对话策略、澄清策略、长程规划或最终回答风格。
+
+---
 
 ## 2. 存储分工
 
@@ -36,7 +49,7 @@ Postgres: 产品控制面
 - workspaces / notebooks
 - auth and sessions
 - chat history
-- agent memory metadata
+- agent memory metadata (session summaries, user profiles)
 - ingestion jobs
 - audit / usage / billing
 - document lifecycle state
@@ -55,9 +68,30 @@ Milvus: 检索数据面
 
 即使不考虑当前项目已经使用 Postgres 的事实，从功能和场景出发，Postgres 仍然是产品控制面的最佳默认选择：事务、关系约束、schema 演进、JSONB、运维生态和行级安全都更适合用户、权限、会话、任务、审计、计费等产品数据。Milvus 应作为统一检索数据库，而不是唯一产品数据库。
 
-## 3. RAG API 边界
+---
 
-### 3.1 输入
+## 3. Agent 事件契约
+
+所有 Agent 通过统一的 `AgentEvent` 事件流与调用方通信：
+
+```text
+AgentEvent::Activity         → 进度通知 (planning / searching / reading_sources)
+AgentEvent::ReasoningSummaryDelta → 推理摘要增量
+AgentEvent::MessageDelta     → 答案文本增量
+AgentEvent::Citations        → 引用来源
+AgentEvent::Usage            → Token 用量 (provider, model, tokens)
+AgentEvent::DebugTrace       → 调试信息 (debug flag 控制)
+AgentEvent::Done             → 最终完成
+AgentEvent::Error            → 终端错误
+```
+
+Streaming 路径通过 `ChannelSink` 实时转发到 SSE；非 streaming 路径通过 `CollectingSink` 收集后组装响应。所有 Agent 共享同一事件契约，前端无需感知底层 Agent 差异。
+
+---
+
+## 4. RAG API 边界
+
+### 4.1 输入
 
 `RAG API` 接收结构化检索计划与服务端执行上下文。
 
@@ -77,7 +111,7 @@ Milvus: 检索数据面
 
 它不依赖原始 session history、用户偏好记忆或上一轮 assistant 失败结论。
 
-### 3.2 输出
+### 4.2 输出
 
 `RAG API` 返回 retrieval bundle：
 
@@ -93,7 +127,9 @@ Milvus: 检索数据面
 
 它不返回最终用户回答，也不返回是否澄清的对话级决策。
 
-## 4. 模型辅助检索算子
+---
+
+## 5. 模型辅助检索算子
 
 RAG API 可以使用模型调用，但这些调用必须是确定边界的检索算子。
 
@@ -112,9 +148,11 @@ RAG API 可以使用模型调用，但这些调用必须是确定边界的检索
 - 最终回答口吻和会话策略
 - 持久化偏好解释
 
-这条边界保留了产品结构：一个 `Main Agent`，多个有界检索算子。
+这条边界保留了产品结构：一个 `UnifiedAgentService` 调度层，多个有界检索算子。
 
-## 5. 三元组抽取
+---
+
+## 6. 三元组抽取
 
 三元组抽取复用前期 benchmark 脚本策略：
 
@@ -147,7 +185,9 @@ JSON 契约与 vector-graph-rag 兼容：
 }
 ```
 
-## 6. Vector Graph RAG 路线
+---
+
+## 7. Vector Graph RAG 路线
 
 Rust 后端应移植核心行为，不把 Python 服务作为运行时依赖。
 
@@ -181,7 +221,9 @@ query -> query entity extraction
 
 原 Python 项目适合作为参考实现，但不能照搬为产品实现。例如它的 `add_documents` 路径会 drop/recreate collections；产品实现需要增量 upsert、delete、ACL filter 和 rebuild 语义。
 
-## 7. 检索通道
+---
+
+## 8. 检索通道
 
 每次 query 至少包含以下检索通道：
 
@@ -192,7 +234,7 @@ multimodal dense retrieval
 graph relation retrieval
 ```
 
-### 7.1 BM25
+### 8.1 BM25
 
 BM25 迁移到 Milvus，作为统一检索数据面的一部分。
 
@@ -204,11 +246,11 @@ bm25_keywords = ["明斯基", "心智社会", "框架"]
 
 默认不启用中文滑动 n-gram 检索。滑动检索能提升模糊召回，但也可能命中无关片段、降低精度。若短词 OR 召回不足，再增加单独的 char bigram/trigram 字段并做对比后决定是否启用。
 
-### 7.2 Text Dense
+### 8.2 Text Dense
 
 文本 chunk 使用 text embedding collection，负责普通文本语义召回。
 
-### 7.3 Multimodal Dense
+### 8.3 Multimodal Dense
 
 多模态 chunk 使用独立 multimodal collection。一次 query 同时搜索 text 与 multimodal collection，再进入统一 rerank 和证据预算。
 
@@ -221,11 +263,13 @@ bm25_keywords = ["明斯基", "心智社会", "框架"]
 - source locator
 - original document id
 
-### 7.4 Graph Relation Retrieval
+### 8.4 Graph Relation Retrieval
 
 图关系检索返回 relation paths 与 supporting chunks。它不是普通 chunk 相似度检索，而是服务于多跳问题的桥接证据召回。
 
-## 8. 融合与预算
+---
+
+## 9. 融合与预算
 
 图关系结果应参与最终排序，但第一版不建议完全无保护混排。
 
@@ -249,47 +293,123 @@ graph-supported chunks: 20-30%
 6. 在 token budget 内裁剪最终上下文。
 ```
 
-原因：图检索常找到的是“推理链条中的必要桥”，不一定是词面或语义上最相似的 chunk。完全混排可能把关键桥接证据排掉。
+原因：图检索常找到的是"推理链条中的必要桥"，不一定是词面或语义上最相似的 chunk。完全混排可能把关键桥接证据排掉。
 
-## 9. Main Agent 记忆层
+---
 
-Main Agent 记忆既包含产品数据，也包含检索数据，取决于具体层级。
+## 10. 记忆层架构（三层模型）
+
+Agent 记忆层采用三层架构，已完全取代早期的工作记忆设计：
 
 ```text
-短期工作记忆:
-- current session references
-- current topic
-- recent explicit document/entity mentions
-- runtime or Postgres-backed session state
+Layer 1 (短期): chat_messages — 对话原文
+  - 用途：指代消解、对话连续性
+  - 触发：每轮对话自动加载最近 N 条
+  - 衰减：无需衰减，原始记录
 
-长期用户偏好:
-- language preference
-- answer length
-- formatting style
-- technical depth
-- Postgres as source of truth
+Layer 2 (中期): chat_sessions.summary — 结构化 JSON 摘要
+  - 用途：跨轮次上下文压缩、session 主题提炼
+  - 触发：每 10 轮对话触发一次 LLM 摘要
+  - 格式：结构化 JSON（主题、关键信息、未完成事项等）
+  - 消费：注入 agent system prompt 作为 continuity context
 
-Workspace 记忆:
-- document metadata
-- entity aliases
-- project/workspace state
-- Postgres for structured truth
-- Milvus for semantic lookup copies
-
-语义记忆:
-- embeddable memory snippets
-- Milvus vectors
-
-操作/审计记忆:
-- user actions
-- ingestion events
-- tool calls
-- Postgres
+Layer 3 (长期): user_profiles.structured_profile — 用户结构化画像
+  - 用途：跨 session 用户偏好、专业领域、常用表达方式
+  - 触发：每日"做梦"（24h 节流）
+  - 机制：LLM 输出 delta 建议（add/reinforce/revise/weaken/remove）
+  - 合并：运行时确定性合并（含置信度衰减、冲突消解、版本隔离）
+  - 固定槽位：expertise_domains / preferred_answer_style / frequently_asked_topics
 ```
 
-原则：需要权限、删除、审计、事务一致性的记忆放 Postgres；需要语义召回的记忆可以同步到 Milvus。
+### 10.1 记忆注入规则
 
-## 10. 评测范围
+所有 LLM 调用点统一遵循以下注入规则：
+
+- **Session summary**：提供对话连续性；不作为事实证据
+- **User preferences**：只影响表达风格，不覆盖事实或推理
+- **对话原文**：用于指代消解，但不参与事实判断
+- **RAG Evidence**：唯一的事实权威来源
+
+### 10.2 淘汰与冲突消解
+
+- Layer 3 冲突消解按时间顺序进行，非固定周期淘汰
+- 长期不用用户偏好不会被清空（非固定周期衰减）
+- 新增 `session_continuity_hints` 表：跨 session 短期衔接桥梁（FIFO 上限 3 条，7 天过期）
+
+---
+
+## 11. WebSearch Agent 设计
+
+`WebSearchAgent` 实现完整的本地 agent pipeline：
+
+```text
+planner (intent recognition + coreference resolution + sub-query generation)
+  → multi-query execution → result aggregation → answer synthesis
+```
+
+### 11.1 Search Plan
+
+Planner 输出 `SearchPlan` 结构：
+
+- `sub_queries`: 1-3 个子查询，覆盖用户意图
+- `intent_summary`: 用户意图摘要
+- `needs_clarification`: 是否需要澄清
+- `preferred_vertical`: 搜索垂直领域 (`web` | `news`)
+
+### 11.2 Brave LLM Context 路径
+
+- 本地 planner 生成子查询和垂直偏好
+- 并行执行多个子查询（支持 vertical 路由到 `/res/v1/news/search`）
+- URL 去重 + citation 重新编号
+- LLM 合成最终答案（流式或非流式）
+
+### 11.3 Perplexity 路径
+
+- 委托给 provider 的 built-in agentic flow
+- 流式透传 provider 的事件
+
+### 11.4 Runtime 参数注入
+
+Brave 搜索支持运行时参数：
+
+- `SEARCH_LANG` → `search_lang`
+- `SEARCH_COUNTRY` → `country`
+- `SEARCH_FRESHNESS` → `freshness`
+
+---
+
+## 12. Prompt 管理体系
+
+Prompt 从硬编码字符串迁移到 `prompts/` 目录下的外置文件，使用 `include_str!()` 加载：
+
+```text
+prompts/
+  chat_agent_system.txt           → ChatAgent system prompt
+  search_plan_system.txt          → WebSearchAgent planner prompt
+  web_search_system.txt           → WebSearchAgent answer synthesis prompt
+  rag_plan_system.txt             → RAG planning prompt (GraphFlow)
+  rag_answer_system.txt           → RAG answer prompt (GraphFlow)
+  session_summary_system.txt      → Layer 2 摘要生成 prompt
+  user_profile_extraction_system.txt → Layer 3 "做梦" delta prompt
+  triplet_extraction_system.txt   → 三元组抽取 prompt
+  *.tmpl                          → 用户消息模板
+```
+
+共享加载器：`load_prompt_template()` 支持按目录/版本/名称加载。
+
+---
+
+## 13. i18n 支持
+
+Agent 输出支持中英双语：
+
+- `ChatRequest.language` 字段贯穿调用链
+- `activity::planning_title()` / `fallback::no_valid_retrieval_results()` 等 i18n 函数
+- Agent name 和 icon 根据语言动态选择
+
+---
+
+## 14. 评测范围
 
 完整 retrieval evaluation 平台暂不作为第一阶段目标。
 
@@ -308,7 +428,9 @@ Workspace 记忆:
 
 完整 Recall@k / MRR / answer-faithfulness 评测等检索链路稳定后再补。
 
-## 11. 产品级保护约束
+---
+
+## 15. 产品级保护约束
 
 目标架构必须保留以下约束：
 
@@ -320,12 +442,14 @@ Workspace 记忆:
 - 图扩展必须有 fan-out limit、hop limit 与 relation count eviction。
 - RAG API trace 必须显示最终上下文由哪些通道贡献。
 
-## 12. 后续待定项
+---
+
+## 16. 后续待定项
 
 仍需单独确认：
 
-- Milvus schema 与字段名。
-- Milvus 中文 analyzer 配置。
-- graph relation rerank 是只复用现有 reranker，还是增加单独 LLM relation selector。
-- 是否在 Postgres 中保留一份规范化 graph adjacency，用于更强的产品治理。
-- Qdrant/Tantivy 相关代码迁移到 Milvus 的时间表。
+- **graph relation rerank**：是只复用现有 reranker，还是增加单独 LLM relation selector（未实现）
+- **是否在 Postgres 中保留一份规范化 graph adjacency**，用于更强的产品治理
+- **Qdrant/Tantivy 相关代码迁移到 Milvus 的时间表**（已完成：workspace 中已无 Qdrant/Tantivy 代码）
+- ~~RagAgent 接线~~ ✅ 已完成：GraphFlow 已退场，RagAgent 已接入 UnifiedAgentService
+- ~~GraphFlow 退场~~ ✅ 已完成

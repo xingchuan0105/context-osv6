@@ -38,6 +38,6 @@ impl ChatService {
             req.notebook_id = Some(notebook.id);
         }
 
-        self.state.execute_chat_graphflow(req).await
+        self.state.execute_chat_pipeline(req).await
     }
 }

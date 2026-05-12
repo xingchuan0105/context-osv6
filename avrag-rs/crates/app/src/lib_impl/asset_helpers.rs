@@ -1,4 +1,8 @@
-fn build_docscope_metadata(metadata: Vec<common::SummaryMetadata>) -> common::DocScopeMetadata {
+use avrag_storage_pg::DocumentAssetRow;
+
+use crate::lib_impl::*;
+
+pub(crate) fn build_docscope_metadata(metadata: Vec<common::SummaryMetadata>) -> common::DocScopeMetadata {
     let mut languages = Vec::new();
     let mut domains = Vec::new();
     let mut genres = Vec::new();
@@ -40,7 +44,7 @@ fn build_docscope_metadata(metadata: Vec<common::SummaryMetadata>) -> common::Do
 }
 
 impl AppState {
-    async fn resolve_citation_asset_url(&self, asset: &DocumentAssetRow) -> Option<String> {
+    pub(crate) async fn resolve_citation_asset_url(&self, asset: &DocumentAssetRow) -> Option<String> {
         let storage_path = asset.storage_path.as_deref()?;
         if is_remote_asset_reference(storage_path) {
             return Some(storage_path.to_string());
@@ -50,7 +54,7 @@ impl AppState {
             .object_store
             .presigned_get_url(
                 storage_path,
-                self.config.object_storage.download_url_expire_sec,
+                self.object_storage_download_expire_sec,
             )
             .await
         {
@@ -60,7 +64,7 @@ impl AppState {
     }
 }
 
-fn build_redis_url(addr: &str, password: &str, db: i64) -> String {
+pub(crate) fn build_redis_url(addr: &str, password: &str, db: i64) -> String {
     if password.is_empty() {
         format!("redis://{addr}/{db}")
     } else {
@@ -68,10 +72,10 @@ fn build_redis_url(addr: &str, password: &str, db: i64) -> String {
     }
 }
 
-fn is_remote_asset_reference(value: &str) -> bool {
+pub(crate) fn is_remote_asset_reference(value: &str) -> bool {
     common::is_remote_url(value)
 }
 
-fn infer_mime_type_from_path(path: &str) -> Option<String> {
+pub(crate) fn infer_mime_type_from_path(path: &str) -> Option<String> {
     common::infer_mime_type(path).map(|s| s.to_string())
 }

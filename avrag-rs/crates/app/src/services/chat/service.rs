@@ -35,7 +35,7 @@ impl ChatService {
             .rate_limiter
             .check("chat-service")
             .await
-            .map_err(|e| AppError::internal(&format!("rate limiter failure: {}", e)))?;
+            .map_err(|e| AppError::internal(format!("rate limiter failure: {}", e)))?;
         if !decision.allowed {
             return Err(AppError::validation(
                 "rate_limit_exceeded",

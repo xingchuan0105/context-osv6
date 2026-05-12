@@ -518,7 +518,6 @@ export function WorkspaceShareCenterSurface({
   }, [settingsQuery.data]);
 
   const shareUrl = buildShareUrl(settingsQuery.data?.share_token ?? "");
-  const hasShareLink = Boolean(settingsQuery.data?.share_token);
   const shareStatus = resolveShareStatus(settingsQuery.data ?? null);
   const shareStatusText = shareStatusLabel(locale, shareStatus);
   const sevenDaySeries = buildDailyViewsSeries(analyticsQuery.data, 7);

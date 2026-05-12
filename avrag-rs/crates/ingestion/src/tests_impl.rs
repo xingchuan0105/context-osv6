@@ -264,6 +264,29 @@ fn builds_reindex_task_with_deterministic_idempotency_key() {
     assert_eq!(task.idempotency_key, "org-1:doc-1:reindex:7");
 }
 
+#[test]
+fn builds_ingest_url_task_with_url_in_idempotency_key() {
+    let task = build_ingest_url_task(
+        "org-1",
+        "notebook-1",
+        "doc-1",
+        Some("user-1".to_string()),
+        IngestUrlPayload {
+            url: "https://example.com/article".to_string(),
+        },
+    );
+
+    assert_eq!(task.kind, IngestionTaskKind::IngestUrl);
+    assert_eq!(
+        task.idempotency_key,
+        "org-1:doc-1:https://example.com/article"
+    );
+    assert_eq!(
+        matches!(task.payload, IngestionTaskPayload::IngestUrl(payload) if payload.url == "https://example.com/article"),
+        true
+    );
+}
+
 #[tokio::test]
 async fn worker_runtime_processes_ingest_task() {
     let task = build_ingest_task(
@@ -288,7 +311,7 @@ async fn worker_runtime_processes_ingest_task() {
     );
 
     let tick = worker.run_once().await.expect("worker should process task");
-    assert_eq!(tick, WorkerTick::Processed(task));
+    assert_eq!(tick, WorkerTick::Processed(Box::new(task)));
 }
 
 #[tokio::test]

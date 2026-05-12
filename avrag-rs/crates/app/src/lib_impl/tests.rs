@@ -1,8 +1,18 @@
 #[cfg(test)]
 mod tests {
+    use crate::lib_impl::*;
+    use common::{
+        ChatMessage, CreateDocumentRequest, CreateDocumentUploadResponse, CreateNotebookRequest,
+        DocumentStatus, Notebook, UpdateDocumentRequest, default_org_id, default_user_id,
+    };
+    use tokio::time::sleep;
+    use std::time::Duration;
+    use uuid::Uuid;
     use super::*;
     use std::sync::Arc;
     use tokio::fs;
+    use reqwest::Url;
+    use avrag_storage_pg::PgAppRepository;
 
     #[test]
     fn build_docscope_metadata_dedupes_known_profile_values() {
@@ -72,12 +82,29 @@ mod tests {
     }
 
     #[test]
-    fn app_config_defaults_main_agent_to_deepseek_v4_flash_max() {
+    fn app_config_defaults_agent_llm_to_deepseek_v4_pro() {
         let config = AppConfig::default();
 
-        assert_eq!(config.answer_llm.base_url, "https://api.deepseek.com");
-        assert_eq!(config.answer_llm.model, "deepseek-v4-flash");
-        assert_eq!(config.answer_llm.enable_thinking, Some(true));
+        assert_eq!(config.agent_llm.base_url, "https://api.deepseek.com");
+        assert_eq!(config.agent_llm.model, "deepseek-v4-pro");
+        assert_eq!(config.agent_llm.enable_thinking, Some(true));
+    }
+
+    #[test]
+    fn app_config_defaults_memory_llm_to_deepseek_v4_flash() {
+        let config = AppConfig::default();
+
+        assert_eq!(config.memory_llm.base_url, "https://api.deepseek.com");
+        assert_eq!(config.memory_llm.model, "deepseek-v4-flash");
+        assert_eq!(config.memory_llm.enable_thinking, Some(false));
+    }
+
+    #[test]
+    fn app_config_defaults_ingestion_llm_to_gemini_flash_lite() {
+        let config = AppConfig::default();
+
+        assert_eq!(config.ingestion_llm.base_url, "https://www.dmxapi.cn/v1");
+        assert_eq!(config.ingestion_llm.model, "gemini-3.1-flash-lite-preview");
     }
 
     #[test]
@@ -219,6 +246,8 @@ mod tests {
                 budget: Some(common::ExecutePlanBudget {
                     total_candidate_budget: Some(4),
                     final_chunk_budget: Some(1),
+                    graph_hop_limit: None,
+                    graph_fan_out_limit: None,
                 }),
                 channel_budget: None,
                 query_entities: Vec::new(),
@@ -420,7 +449,7 @@ mod tests {
     #[tokio::test]
     async fn chat_stream_routes_chat_through_unified_agent_service() {
         let mut config = AppConfig::default();
-        config.answer_llm.api_key = "test-key".to_string();
+        config.agent_llm.api_key = "test-key".to_string();
         let mut state = AppState::new(config);
         state.set_agent_service(crate::agents::service::UnifiedAgentService::new(
             Box::new(ScriptedAgent),
@@ -448,9 +477,11 @@ mod tests {
                     doc_scope: Vec::new(),
                     messages: Vec::new(),
                     stream: true,
+                    language: None,
                 },
                 "req-agent-chat".to_string(),
                 tx,
+                tokio_util::sync::CancellationToken::new(),
             )
             .await
             .unwrap();
@@ -485,7 +516,7 @@ mod tests {
     #[tokio::test]
     async fn chat_stream_emits_buffered_agent_answer_when_no_delta_arrives() {
         let mut config = AppConfig::default();
-        config.answer_llm.api_key = "test-key".to_string();
+        config.agent_llm.api_key = "test-key".to_string();
         let mut state = AppState::new(config);
         state.set_agent_service(crate::agents::service::UnifiedAgentService::new(
             Box::new(BufferedOnlyAgent),
@@ -513,9 +544,11 @@ mod tests {
                     doc_scope: Vec::new(),
                     messages: Vec::new(),
                     stream: true,
+                    language: None,
                 },
                 "req-agent-buffered-chat".to_string(),
                 tx,
+                tokio_util::sync::CancellationToken::new(),
             )
             .await
             .unwrap();
@@ -573,9 +606,11 @@ mod tests {
                     doc_scope: Vec::new(),
                     messages: Vec::new(),
                     stream: true,
+                    language: None,
                 },
                 "req-agent-buffered-search".to_string(),
                 tx,
+                tokio_util::sync::CancellationToken::new(),
             )
             .await
             .unwrap();
@@ -602,51 +637,6 @@ mod tests {
             .filter(|event| matches!(event, contracts::chat::ChatEvent::Done { .. }))
             .count();
         assert_eq!(done_events, 1);
-    }
-
-    #[tokio::test]
-    async fn general_mode_core_routes_through_unified_chat_agent() {
-        let mut config = AppConfig::default();
-        config.answer_llm.api_key = "test-key".to_string();
-        let mut state = AppState::new(config);
-        state.set_agent_service(crate::agents::service::UnifiedAgentService::new(
-            Box::new(ScriptedAgent),
-            Box::new(ScriptedAgent),
-            Box::new(ScriptedAgent),
-        ));
-        let session = common::ChatSession {
-            id: Uuid::new_v4().to_string(),
-            notebook_id: Uuid::new_v4().to_string(),
-            title: None,
-            agent_type: "general".to_string(),
-            summary: None,
-            pinned: false,
-            created_at: now_rfc3339(),
-            updated_at: now_rfc3339(),
-        };
-
-        let execution = state
-            .execute_general_mode_core(
-                &common::ChatRequest {
-                    query: "hello".to_string(),
-                    notebook_id: Some(session.notebook_id.clone()),
-                    session_id: Some(session.id.clone()),
-                    agent_type: "general".to_string(),
-                    source_type: None,
-                    source_token: None,
-                    doc_scope: Vec::new(),
-                    messages: Vec::new(),
-                    stream: false,
-                },
-                &session,
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(execution.mode, "chat");
-        assert_eq!(execution.response.agent_type, "chat");
-        assert_eq!(execution.response.answer, "agent answer");
-        assert_eq!(execution.llm_usage.as_ref().map(|usage| usage.model.as_str()), Some("scripted"));
     }
 
     async fn upload_validation_pg_state() -> Option<(AppState, std::path::PathBuf)> {

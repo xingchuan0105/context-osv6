@@ -1,0 +1,122 @@
+use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc::UnboundedSender;
+use tokio_util::sync::CancellationToken;
+use tracing::info;
+use uuid::Uuid;
+
+use crate::AppState;
+use common::{AppError, ChatRequest, ChatResponse};
+
+#[derive(Clone)]
+pub(crate) struct StreamConfig {
+    pub sender: UnboundedSender<contracts::chat::ChatEvent>,
+    pub request_id: String,
+    pub token: CancellationToken,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct ChatPreflight {
+    pub trace_id: String,
+    pub user_uuid: Uuid,
+    pub notebook_uuid: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct ChatExecution {
+    pub mode: String,
+    pub input_usage_text: String,
+    pub apply_output_guard: bool,
+    pub response: ChatResponse,
+    pub llm_usage: Option<avrag_llm::LlmUsage>,
+    #[serde(default)]
+    pub debug_metadata: Option<serde_json::Value>,
+    /// Whether Token events were already emitted during mode-step execution.
+    /// When true, `build_response` skips its own token emission to avoid duplication.
+    #[serde(default)]
+    pub tokens_emitted: bool,
+    /// Whether Citations events were already emitted during mode-step execution.
+    #[serde(default)]
+    pub citations_emitted: bool,
+    /// Optional per-request canary token for prompt-leakage detection.
+    #[serde(default)]
+    pub canary_token: Option<String>,
+}
+
+pub(crate) async fn execute_chat_pipeline(
+    state: AppState,
+    request: ChatRequest,
+) -> Result<ChatResponse, AppError> {
+    info!(orchestrator = "pipeline", "executing chat with linear pipeline");
+    run_pipeline(state, request, None).await
+}
+
+pub(crate) async fn execute_chat_pipeline_stream(
+    state: AppState,
+    request: ChatRequest,
+    request_id: String,
+    sender: UnboundedSender<contracts::chat::ChatEvent>,
+    token: CancellationToken,
+) -> Result<(), AppError> {
+    let stream_config = StreamConfig {
+        sender,
+        request_id,
+        token,
+    };
+    info!(
+        orchestrator = "pipeline",
+        "executing streaming chat with linear pipeline"
+    );
+    run_pipeline(state, request, Some(stream_config)).await.map(|_| ())
+}
+
+async fn run_pipeline(
+    state: AppState,
+    request: ChatRequest,
+    stream_config: Option<StreamConfig>,
+) -> Result<ChatResponse, AppError> {
+    let preflight = state.execute_chat_preflight(&request).await?;
+    let session = state.resolve_chat_session(&request).await?;
+
+    if let Some(ref config) = stream_config {
+        let _ = config.sender.send(contracts::chat::ChatEvent::Start {
+            request_id: config.request_id.clone(),
+            session_id: session.id.clone(),
+        });
+    }
+
+    let mut execution =
+        crate::chat::pipeline_steps::dispatch_mode(&state, &request, &session, stream_config.as_ref())
+            .await?;
+
+    if execution.apply_output_guard {
+        state
+            .apply_output_guard_to_execution(
+                &session,
+                &mut execution,
+                &preflight.trace_id,
+                preflight.user_uuid,
+                state.pg().as_deref(),
+            )
+            .await?;
+    }
+
+    if request.source_type.as_deref() != Some("share")
+        && let Some(pg) = state.pg()
+    {
+        state
+            .persist_chat_execution(&request, &session, &mut execution, pg.as_ref())
+            .await?;
+    }
+
+    state.record_usage_for_execution(&execution).await?;
+
+    if request.source_type.as_deref() != Some("share") {
+        state
+            .emit_notifications_for_execution(&session, &execution)
+            .await?;
+    }
+
+    crate::chat::pipeline_steps::emit_terminal_stream_events(stream_config.as_ref(), &execution);
+
+    Ok(execution.response)
+}

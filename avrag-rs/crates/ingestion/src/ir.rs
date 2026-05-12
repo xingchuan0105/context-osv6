@@ -404,4 +404,45 @@ mod tests {
         assert_eq!(document.blocks[1].modality, BlockModality::ImageWithContext);
         assert_eq!(document.blocks[1].asset_refs.len(), 1);
     }
+
+    #[test]
+    fn test_document_ir_snapshot() {
+        let normalized = NormalizedDocument {
+            title: "Snapshot Test Doc".to_string(),
+            units: vec![
+                ParsedUnit {
+                    unit_id: "block-1".to_string(),
+                    page: 1,
+                    kind: ParsedUnitKind::Text,
+                    text: "Page 1 text content".to_string(),
+                    image_path: None,
+                    caption: None,
+                    context: None,
+                    parser_backend: "local".to_string(),
+                    metadata: BTreeMap::new(),
+                },
+                ParsedUnit {
+                    unit_id: "block-2".to_string(),
+                    page: 2,
+                    kind: ParsedUnitKind::ImageWithContext,
+                    text: "Page 2 image context".to_string(),
+                    image_path: Some("img2.png".to_string()),
+                    caption: Some("Figure 2.1".to_string()),
+                    context: None,
+                    parser_backend: "local".to_string(),
+                    metadata: BTreeMap::new(),
+                },
+            ],
+            metadata: BTreeMap::from([("author".to_string(), "Gemini".to_string())]),
+        };
+
+        let document = DocumentIr::from_normalized_document(
+            "doc-snapshot",
+            DocumentType::Pdf,
+            ParseBackend::EdgeParsePdf,
+            &normalized,
+        );
+
+        insta::assert_json_snapshot!(document);
+    }
 }

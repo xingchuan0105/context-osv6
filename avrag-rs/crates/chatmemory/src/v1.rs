@@ -108,7 +108,7 @@ pub struct WorkspaceLongTermMemory {
 }
 
 pub fn should_refresh_long_term_memory(turn_count: usize, every_n_turns: usize) -> bool {
-    (6..=8).contains(&every_n_turns) && turn_count > 0 && turn_count % every_n_turns == 0
+    (6..=8).contains(&every_n_turns) && turn_count > 0 && turn_count.is_multiple_of(every_n_turns)
 }
 
 pub trait LongTermMemoryStore: Send + Sync {

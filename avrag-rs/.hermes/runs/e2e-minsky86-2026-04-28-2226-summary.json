@@ -1,0 +1,39 @@
+{
+  "timestamp_cst": "2026-04-28 22:26 CST",
+  "sample": "/mnt/e/Download/minsky86.pdf",
+  "primary_document_id": "e1a2052e-53f9-4e93-b817-ed82e35cebeb",
+  "primary_notebook_id": "abc47464-3b9c-4b8f-b4fe-58c40baf559e",
+  "final_status": "completed",
+  "parse_duration_ms": 646719,
+  "document_chunk_count": 881,
+  "postgres_chunks": {
+    "body": 881,
+    "summary": 1,
+    "multimodal": 45
+  },
+  "milvus_counts": {
+    "text_chunks": 881,
+    "multimodal_chunks": 45,
+    "kg_entities": 894,
+    "kg_relations": 640,
+    "graph_passages": 640
+  },
+  "chat": {
+    "http_status": 200,
+    "event_counts": {
+      "start": 1,
+      "activity": 4,
+      "answer_start": 1,
+      "token": 183,
+      "citations": 1,
+      "done": 1
+    },
+    "answer_length": 375,
+    "citation_count": 30
+  },
+  "secondary_document_id": "9695f744-49d7-48b0-a42f-010d3c23cdac",
+  "secondary_status": "completed",
+  "artifacts": [
+    "/home/chuan/context-osv6/avrag-rs/.hermes/runs/e2e-minsky86-1777384972-chat.json"
+  ]
+}

@@ -23,7 +23,7 @@ members = [
   "crates/storage-milvus",
   "crates/telemetry",
   "crates/transport-http",
-  "crates/usage-limit",
+  "crates/web-ui",
   "crates/test-kit",
   "tests/rag_quality",
 ]
@@ -58,6 +58,7 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
 uuid = { version = "1.18.1", features = ["serde", "v4"] }
 reqwest = { version = "0.12", features = ["json"] }
+tokio-util = { version = "0.7", features = ["full"] }
 regex = "1.11"
 lazy_static = "1.5"
 once_cell = "1.20"
@@ -68,4 +69,10 @@ redis = { version = "0.32", features = ["tokio-comp"] }
 tiktoken-rs = "0.9.1"
 text-splitter = { version = "0.29.3", features = ["markdown", "code", "tiktoken-rs"] }
 common = { path = "crates/common" }
-graph-flow = "0.4.0"
+utoipa = { version = "5.5", features = ["axum_extras", "uuid", "chrono"] }
+axum-extra = { version = "0.12", features = ["typed-header"] }
+insta = { version = "1.47", features = ["json", "yaml"] }
+proptest = "1.11"
+rayon = "1.12"
+sea-query = { version = "0.32", features = ["backend-postgres", "with-chrono", "with-uuid"] }
+syn = { version = "2.0", features = ["full", "extra-traits"] }

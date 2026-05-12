@@ -1,0 +1,102 @@
+---
+source: crates/ingestion/src/ir.rs
+assertion_line: 449
+expression: document
+---
+{
+  "document_id": "doc-snapshot",
+  "title": "Snapshot Test Doc",
+  "doc_type": "pdf",
+  "primary_backend": "edge_parse_pdf",
+  "backend_version": null,
+  "language": null,
+  "metadata": {
+    "author": "Gemini"
+  },
+  "pages": [
+    {
+      "page_number": 1,
+      "width": null,
+      "height": null,
+      "backend": "edge_parse_pdf",
+      "text_char_count": 19,
+      "image_count": 0,
+      "metadata": {}
+    },
+    {
+      "page_number": 2,
+      "width": null,
+      "height": null,
+      "backend": "edge_parse_pdf",
+      "text_char_count": 20,
+      "image_count": 1,
+      "metadata": {}
+    }
+  ],
+  "blocks": [
+    {
+      "block_id": "block-1",
+      "page": 1,
+      "block_type": "paragraph",
+      "modality": "text_only",
+      "text": "Page 1 text content",
+      "summary_text": null,
+      "asset_refs": [],
+      "caption": null,
+      "section_path": [],
+      "source_locator": {
+        "page": 1,
+        "bbox": null,
+        "paragraph_index": null,
+        "table_index": null,
+        "sheet_name": null,
+        "row_range": null,
+        "col_range": null,
+        "slide_index": null,
+        "shape_name": null
+      },
+      "parser_backend": "edge_parse_pdf",
+      "metadata": {}
+    },
+    {
+      "block_id": "block-2",
+      "page": 2,
+      "block_type": "figure",
+      "modality": "image_with_context",
+      "text": "Page 2 image context",
+      "summary_text": "Page 2 image context",
+      "asset_refs": [
+        "block-2-asset"
+      ],
+      "caption": "Figure 2.1",
+      "section_path": [],
+      "source_locator": {
+        "page": 2,
+        "bbox": null,
+        "paragraph_index": null,
+        "table_index": null,
+        "sheet_name": null,
+        "row_range": null,
+        "col_range": null,
+        "slide_index": null,
+        "shape_name": null
+      },
+      "parser_backend": "edge_parse_pdf",
+      "metadata": {}
+    }
+  ],
+  "assets": [
+    {
+      "asset_id": "block-2-asset",
+      "page": 2,
+      "asset_kind": "image",
+      "storage_path": "img2.png",
+      "mime_type": null,
+      "width": null,
+      "height": null,
+      "parser_backend": "edge_parse_pdf",
+      "metadata": {}
+    }
+  ],
+  "warnings": []
+}

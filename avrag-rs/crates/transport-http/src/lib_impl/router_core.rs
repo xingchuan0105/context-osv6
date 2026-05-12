@@ -17,6 +17,32 @@ use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::warn;
 use uuid::Uuid;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        crate::handlers::list_notebooks,
+        crate::handlers::get_notebook,
+        crate::handlers::create_notebook,
+        crate::handlers::update_notebook,
+        crate::handlers::delete_notebook,
+    ),
+    components(
+        schemas(
+            common::Notebook,
+            common::NotebookResponse,
+            common::NotebookListResponse,
+            common::CreateNotebookRequest,
+            common::UpdateNotebookRequest,
+        )
+    ),
+    tags(
+        (name = "notebooks", description = "Notebook management APIs")
+    )
+)]
+struct ApiDoc;
 
 use auth_types::{
     AuthEnvelope, AuthPayload, AuthUserDto, ChangePasswordRequest,
@@ -189,6 +215,7 @@ pub fn build_router(state: AppState) -> Router {
     );
 
     Router::new()
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .merge(routes::infra::router())
         .nest("/api/auth", routes::auth::public_router().merge(protected_auth))
         .nest("/api/v1", protected_api_v1)
@@ -197,7 +224,7 @@ pub fn build_router(state: AppState) -> Router {
         .layer(axum::middleware::from_fn(middleware::observability_middleware))
         .layer(TraceLayer::new_for_http())
         .layer(build_cors_layer())
-        .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024))
+        .layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024))
         .fallback(|| async {
             (
                 StatusCode::NOT_FOUND,

@@ -169,30 +169,32 @@ impl SseSink {
         }
     }
 
-    fn ensure_answer_started(&self) {
+    fn ensure_answer_started(&self) -> Result<(), ()> {
         if self
             .answer_started
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_ok()
         {
-            let _ = self.sender.send(ChatEvent::AnswerStart {
+            self.sender.send(ChatEvent::AnswerStart {
                 request_id: self.request_id.clone(),
                 session_id: self.session_id.clone(),
                 message_id: self.message_id,
                 agent_type: self.agent_type.clone(),
-            });
+            }).map_err(|_| ())?;
         }
+        Ok(())
     }
 }
 
 #[async_trait::async_trait]
 impl AgentEventSink for SseSink {
-    async fn emit(&self, event: AgentEvent) {
+    async fn emit(&self, event: AgentEvent) -> Result<(), ()> {
         if matches!(event, AgentEvent::MessageDelta { .. }) {
-            self.ensure_answer_started();
+            self.ensure_answer_started()?;
             self.message_delta_emitted.store(true, Ordering::SeqCst);
         }
         self.send(event);
+        Ok(())
     }
 }
 
@@ -215,7 +217,7 @@ mod tests {
             stage: "planning".to_string(),
             message: " analysing".to_string(),
         });
-        let event = rx.try_recv().unwrap();
+        let event = rx.try_recv().expect("activity event should be sent");
         assert!(
             matches!(event, ChatEvent::Activity { request_id, phase, title, .. }
                 if request_id == "req-1" && phase == "planning" && title == " analysing"
@@ -230,7 +232,7 @@ mod tests {
         sink.send(AgentEvent::MessageDelta {
             text: "hello".to_string(),
         });
-        let event = rx.try_recv().unwrap();
+        let event = rx.try_recv().expect("token event should be sent");
         assert!(
             matches!(event, ChatEvent::Token { request_id, message_id, content }
                 if request_id == "req-1" && message_id == 7 && content == "hello"
@@ -250,14 +252,14 @@ mod tests {
         .await;
         assert!(sink.has_message_delta());
 
-        let first = rx.try_recv().unwrap();
+        let first = rx.try_recv().expect("answer_start should be sent before first delta");
         assert!(
             matches!(first, ChatEvent::AnswerStart { request_id, session_id, message_id, agent_type }
                 if request_id == "req-1" && session_id == "sess-1" && message_id == 7 && agent_type == "chat"
             )
         );
 
-        let second = rx.try_recv().unwrap();
+        let second = rx.try_recv().expect("token event should follow answer_start");
         assert!(
             matches!(second, ChatEvent::Token { request_id, message_id, content }
                 if request_id == "req-1" && message_id == 7 && content == "hello"
@@ -289,7 +291,7 @@ mod tests {
                 parse_run_id: None,
             }],
         });
-        let event = rx.try_recv().unwrap();
+        let event = rx.try_recv().expect("citations event should be sent");
         assert!(
             matches!(event, ChatEvent::Citations { request_id, message_id, .. }
                 if request_id == "req-1" && message_id == 1
@@ -305,7 +307,7 @@ mod tests {
             code: "E404".to_string(),
             message: "not found".to_string(),
         });
-        let event = rx.try_recv().unwrap();
+        let event = rx.try_recv().expect("error event should be sent");
         assert!(
             matches!(event, ChatEvent::Error { request_id, code, message }
                 if request_id == "req-1" && code == "E404" && message == "not found"
@@ -321,7 +323,7 @@ mod tests {
             final_message: Some("done".to_string()),
             usage: None,
         });
-        let event = rx.try_recv().unwrap();
+        let event = rx.try_recv().expect("done event should be sent");
         assert!(
             matches!(&event, ChatEvent::Done { request_id, session_id, message_id, .. }
                 if request_id == "req-1" && session_id == "sess-1" && *message_id == 99
@@ -366,7 +368,7 @@ mod tests {
             kind: "search.execution".to_string(),
             payload: serde_json::json!({"internal": true}),
         });
-        let event = rx.try_recv().unwrap();
+        let event = rx.try_recv().expect("debug trace event should be sent when enabled");
         assert!(matches!(event, ChatEvent::Trace { stage, status, .. }
             if stage == "search.execution" && status == "debug"));
     }

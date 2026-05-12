@@ -22,9 +22,9 @@ impl ChatAgent {
 }
 
 pub(crate) fn build_chat_messages(request: &AgentRequest) -> Vec<avrag_llm::ChatMessage> {
-    let mut system = String::from(
-        "You are a direct chat assistant. Answer from the current conversation and general knowledge only. Do not invent document or web citations; if the user asks for document evidence or fresh web facts, explain that they should switch to RAG or WebSearch mode.",
-    );
+    let mut system = String::from(include_str!(
+        "../../../../prompts/chat_agent_system.txt"
+    ));
     if let Some(summary) = request
         .session_summary
         .as_deref()
@@ -36,10 +36,6 @@ pub(crate) fn build_chat_messages(request: &AgentRequest) -> Vec<avrag_llm::Chat
     if let Some(preferences) = request.user_preferences.as_ref() {
         system.push_str("\n\nUser preferences:\n");
         system.push_str(&preferences.to_string());
-    }
-    if let Some(working_memory) = request.working_memory.as_ref() {
-        system.push_str("\n\nWorking memory:\n");
-        system.push_str(&working_memory.to_string());
     }
 
     let mut messages = vec![avrag_llm::ChatMessage::system(system)];
@@ -55,13 +51,14 @@ pub(crate) fn build_chat_messages(request: &AgentRequest) -> Vec<avrag_llm::Chat
 
 #[async_trait::async_trait]
 impl Agent for ChatAgent {
+    #[tracing::instrument(skip(self, sink), fields(agent_kind = ?request.kind))]
     async fn run(
         &self,
         request: AgentRequest,
         sink: &dyn AgentEventSink,
     ) -> Result<AgentRunResult, AppError> {
         let Some(ref llm) = self.llm_client else {
-            sink.emit(AgentEvent::Error {
+            let _ = sink.emit(AgentEvent::Error {
                 code: "llm_unavailable".to_string(),
                 message: "LLM client is not configured".to_string(),
             })
@@ -69,7 +66,7 @@ impl Agent for ChatAgent {
             return Err(AppError::internal("LLM client is not configured"));
         };
 
-        sink.emit(AgentEvent::Activity {
+        let _ = sink.emit(AgentEvent::Activity {
             stage: "chat".to_string(),
             message: "Direct chat".to_string(),
         })
@@ -79,7 +76,11 @@ impl Agent for ChatAgent {
 
         let response = if request.stream {
             let (delta_tx, mut delta_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-            let stream = llm.complete_stream(&messages, self.temperature, move |delta| {
+            let token = request
+                .cancellation_token
+                .clone()
+                .unwrap_or_default();
+            let stream = llm.complete_stream(&messages, self.temperature, token, move |delta| {
                 if !delta.is_empty() {
                     let _ = delta_tx.send(delta.to_string());
                 }
@@ -90,7 +91,7 @@ impl Agent for ChatAgent {
                 tokio::select! {
                     delta = delta_rx.recv() => {
                         if let Some(delta) = delta {
-                            sink.emit(AgentEvent::MessageDelta { text: delta }).await;
+                            let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
                         }
                     }
                     result = &mut stream => {
@@ -100,7 +101,7 @@ impl Agent for ChatAgent {
             };
 
             while let Ok(delta) = delta_rx.try_recv() {
-                sink.emit(AgentEvent::MessageDelta { text: delta }).await;
+                let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
             }
 
             response
@@ -109,7 +110,7 @@ impl Agent for ChatAgent {
                 .complete(&messages, self.temperature)
                 .await
                 .map_err(|e| AppError::internal(format!("LLM completion failed: {}", e)))?;
-            sink.emit(AgentEvent::MessageDelta {
+            let _ = sink.emit(AgentEvent::MessageDelta {
                 text: response.content.clone(),
             })
             .await;
@@ -117,7 +118,7 @@ impl Agent for ChatAgent {
         };
 
         let usage = response.usage.clone();
-        sink.emit(AgentEvent::Usage {
+        let _ = sink.emit(AgentEvent::Usage {
             provider: usage.provider.clone(),
             model: usage.model.clone(),
             prompt_tokens: usage.prompt_tokens as u64,
@@ -137,7 +138,7 @@ impl Agent for ChatAgent {
             request_count: 1,
         };
 
-        sink.emit(AgentEvent::Done {
+        let _ = sink.emit(AgentEvent::Done {
             final_message: Some(response.content.clone()),
             usage: Some(crate::agents::events::AgentUsage {
                 provider: usage.provider.clone(),
@@ -177,11 +178,13 @@ mod tests {
             messages: vec![],
             session_summary: None,
             user_preferences: None,
-            working_memory: None,
+            language: None,
+                docscope_metadata: None,
             debug: false,
             stream: false,
             auth_context: serde_json::json!({}),
             metadata: Default::default(),
+            cancellation_token: None,
         };
         let result = agent.run(req, &sink).await;
         assert!(result.is_err());
@@ -200,11 +203,13 @@ mod tests {
             messages: vec![],
             session_summary: Some("Previously discussed pricing.".to_string()),
             user_preferences: Some(serde_json::json!({"preferred_answer_style": "concise"})),
-            working_memory: Some(serde_json::json!({"current_topic": "pricing"})),
+            language: None,
+            docscope_metadata: None,
             debug: false,
             stream: false,
             auth_context: serde_json::json!({}),
             metadata: Default::default(),
+            cancellation_token: None,
         };
 
         let messages = build_chat_messages(&req);
@@ -212,6 +217,5 @@ mod tests {
 
         assert!(system.contains("Previously discussed pricing."));
         assert!(system.contains("preferred_answer_style"));
-        assert!(system.contains("current_topic"));
     }
 }

@@ -269,12 +269,12 @@ where
             ?completion_outcome,
             "worker task processed"
         );
-        Ok(WorkerTick::Processed(task))
+        Ok(WorkerTick::Processed(Box::new(task)))
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorkerTick {
     Idle,
-    Processed(IngestionTask),
+    Processed(Box<IngestionTask>),
 }

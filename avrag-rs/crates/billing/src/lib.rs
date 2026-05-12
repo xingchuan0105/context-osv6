@@ -4,6 +4,10 @@ mod stripe_client;
 #[cfg(test)]
 mod tests_impl;
 mod types;
+pub mod usage_limit;
+pub mod quota_service;
+
+pub use quota_service::{QuotaManager, UnifiedQuotaDecision};
 
 pub use api::{
     CheckoutResponse, CreateCheckoutRequest, PortalResponse, QuotaDecision, SubscriptionResponse,

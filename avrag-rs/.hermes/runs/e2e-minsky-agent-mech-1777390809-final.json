@@ -1,0 +1,31 @@
+{
+  "run_name": "e2e-minsky-agent-mech-1777390809-final",
+  "email": "e2e-minsky-agent-mech-1777390809@e2e.test",
+  "notebook_id": "b7774d00-df07-4d9b-8f32-c6f2a60b8f21",
+  "document_id": "db7bc56e-f840-46ef-91b4-8cbb534b5598",
+  "org_id": "7f743c86-738b-45fe-b426-d1477d3233a4",
+  "query": "请基于 minsky86.pdf 中 Minsky 的 Society of Mind 论文，用中文解释：Society of Mind、agents、K-lines、frames 之间是什么关系？这种由许多简单 agent 协作形成智能的机制，与现代软件 agent 的规划和工具/检索机制有什么可类比之处？",
+  "request_id": "e2e-minsky-agent-mech-1777390809-final-chat",
+  "timeline": [
+    "[23:53:03] continue doc=db7bc56e-f840-46ef-91b4-8cbb534b5598",
+    "[23:53:03] login -> 200",
+    "[23:53:03] status 0: 200 completed {'status': 'completed'}",
+    "[23:53:03] ERROR JSONDecodeError('Extra data: line 1 column 2 (char 1)')"
+  ],
+  "status_history": [
+    {
+      "i": 0,
+      "status": "completed",
+      "http_status": 200,
+      "body": {
+        "status": "completed"
+      }
+    }
+  ],
+  "chat": null,
+  "execute_plan_request": null,
+  "product_event_metadata": null,
+  "channel_probes": {},
+  "db_counts": null,
+  "error": "JSONDecodeError('Extra data: line 1 column 2 (char 1)')"
+}

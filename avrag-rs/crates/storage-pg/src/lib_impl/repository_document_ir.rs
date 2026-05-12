@@ -43,21 +43,39 @@ impl PgAppRepository {
         tx.commit().await?;
         Ok(())
     }
+}
 
+pub struct CreateDocumentParseRunParams<'a> {
+    pub run_id: Uuid,
+    pub notebook_id: Uuid,
+    pub document_id: Uuid,
+    pub backend_summary: &'a serde_json::Value,
+    pub artifact_path: Option<&'a str>,
+    pub task_id: &'a str,
+    pub lock_token: Option<&'a str>,
+}
+
+pub struct FinishDocumentParseRunParams<'a> {
+    pub run_id: Uuid,
+    pub status: &'a str,
+    pub backend_summary: &'a serde_json::Value,
+    pub duration_ms: i64,
+    pub warnings_json: &'a serde_json::Value,
+    pub error_json: Option<&'a serde_json::Value>,
+    pub artifact_path: Option<&'a str>,
+    pub task_id: &'a str,
+    pub lock_token: Option<&'a str>,
+}
+
+impl PgAppRepository {
     pub async fn create_document_parse_run(
         &self,
         context: &AuthContext,
-        run_id: Uuid,
-        notebook_id: Uuid,
-        document_id: Uuid,
-        backend_summary: &serde_json::Value,
-        artifact_path: Option<&str>,
-        task_id: &str,
-        lock_token: Option<&str>,
+        params: CreateDocumentParseRunParams<'_>,
     ) -> Result<(), PgStorageError> {
-        let task_id = Uuid::parse_str(task_id)
+        let task_id = Uuid::parse_str(params.task_id)
             .map_err(|_| PgStorageError::NotFound("ingestion task not found".to_string()))?;
-        let lock_token = lock_token
+        let lock_token = params.lock_token
             .and_then(|value| Uuid::parse_str(value).ok())
             .ok_or_else(|| PgStorageError::NotFound("ingestion task lease not found".to_string()))?;
 
@@ -96,12 +114,12 @@ impl PgAppRepository {
             RETURNING run_id
             "#,
         )
-        .bind(run_id)
+        .bind(params.run_id)
         .bind(context.org_id().into_uuid())
-        .bind(notebook_id)
-        .bind(document_id)
-        .bind(backend_summary)
-        .bind(artifact_path)
+        .bind(params.notebook_id)
+        .bind(params.document_id)
+        .bind(params.backend_summary)
+        .bind(params.artifact_path)
         .bind(task_id)
         .bind(lock_token)
         .fetch_optional(tx.inner())
@@ -117,19 +135,11 @@ impl PgAppRepository {
     pub async fn finish_document_parse_run(
         &self,
         context: &AuthContext,
-        run_id: Uuid,
-        status: &str,
-        backend_summary: &serde_json::Value,
-        duration_ms: i64,
-        warnings_json: &serde_json::Value,
-        error_json: Option<&serde_json::Value>,
-        artifact_path: Option<&str>,
-        task_id: &str,
-        lock_token: Option<&str>,
+        params: FinishDocumentParseRunParams<'_>,
     ) -> Result<(), PgStorageError> {
-        let task_id = Uuid::parse_str(task_id)
+        let task_id = Uuid::parse_str(params.task_id)
             .map_err(|_| PgStorageError::NotFound("ingestion task not found".to_string()))?;
-        let lock_token = lock_token
+        let lock_token = params.lock_token
             .and_then(|value| Uuid::parse_str(value).ok())
             .ok_or_else(|| PgStorageError::NotFound("ingestion task lease not found".to_string()))?;
 
@@ -167,13 +177,13 @@ impl PgAppRepository {
               )
             "#,
         )
-        .bind(run_id)
-        .bind(status)
-        .bind(backend_summary)
-        .bind(duration_ms)
-        .bind(warnings_json)
-        .bind(error_json)
-        .bind(artifact_path)
+        .bind(params.run_id)
+        .bind(params.status)
+        .bind(params.backend_summary)
+        .bind(params.duration_ms)
+        .bind(params.warnings_json)
+        .bind(params.error_json)
+        .bind(params.artifact_path)
         .bind(context.org_id().into_uuid())
         .bind(task_id)
         .bind(lock_token)

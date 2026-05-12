@@ -1,3 +1,10 @@
+use crate::lib_impl::*;
+use common::{
+    AddUrlSourceRequest, AppError, CreateDocumentUploadResponse, Document, DocumentStatus,
+    SourceRow, now_rfc3339, new_id,
+};
+use uuid::Uuid;
+
 impl AppState {
     pub async fn add_url_source(
         &self,
@@ -88,6 +95,10 @@ impl AppState {
             });
         }
 
+        // Memory mode: URL content is stored directly without going through
+        // the full ingestion pipeline. This is a lightweight path for
+        // development/testing. Production deployments should use pg mode
+        // to get full chunking, embedding, and graph extraction.
         let now = now_rfc3339();
         let document_id = new_id();
         let parsed_items = build_parsed_preview(&fetched.extracted_content);
