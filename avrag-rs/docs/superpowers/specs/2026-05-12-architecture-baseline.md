@@ -287,30 +287,19 @@ Output Guards:
 
 ---
 
-## 12. Agent Harness 升级方向（2026-05-12，待审阅）
+## 12. Agent Harness 升级方向（已回撤）
 
-来源：`2026-05-12-agent-harness-upgrades.md`
+> **状态：已回撤** (commit `f8407c1`)
+> **原因**：产品定位调整，核心聚焦知识库检索+网络检索，Agent 协作由用户自选的 Claude Code/Hermes 提供。
 
-三项未来升级，按依赖顺序实施：
+原设计的三项升级（真 tool-use 循环、滑动窗口、Skill 按需加载）曾记录于 `2026-05-12-agent-harness-upgrades.md`，现已废弃。
 
-| # | 升级项 | 目的 | 优先级 | 依赖 |
-|---|--------|------|--------|------|
-| 1 | **真 tool-use 循环** | 让模型在单次对话内自主决定调多少次工具、何时停；打破当前 "planner 一次出计划 → runtime 跑 → synthesizer 出答" 的硬流水线 | P1 | Rig 0.4+ |
-| 2 | **滑动窗口替换 `session_summary`** | 长会话 (>30 轮) token 上限稳定性；消除单点摘要信息丢失 | P1 | 升级 1 |
-| 3 | **Skill 按需加载** | 把当前一次性塞入 system prompt 的领域知识拆为模型可按需 `load_skill` 的小文件 | P2 | 升级 1 |
+**保留的参考结论**：
+- Skill 两层加载机制（目录+按需）可用于优化当前 system prompt 体积
+- 三层滑动窗口可用于替换当前 `session_summary` 单点摘要
+- 共享 context 块缓存策略可用于减少 Plan+Answer 模式的 token 重复
 
-**关键决策**：
-- 终止判定：模型 `stop_reason` + 代码 evaluator 两者并存，模型优先
-- 工具集可见性：按 AgentKind 过滤（ChatAgent 见 `[load_skill, compact_history]`；RagAgent 额外见 6 个 RAG 工具 + `search_web`）
-- 与 Rig 关系：走 Rig（`rig-core` 0.4+ 已支持 multi-turn tool-calling）
-- Streaming 兼容：tool_use 段以 `Activity` 事件代替 `MessageDelta`
-- 回滚：全量 feature flag `AGENT_TOOL_LOOP_ENABLED`
-
-**与 learn-claude-code 对应**：
-- §1 tool-use loop → LCC s01+s02（保留 `LoopBudget` 硬上限）
-- §2 滑动窗口 → LCC s06（三层结构相同；数据存 PG 而非 JSON 文件）
-- §3 Skill → LCC s05（增加 i18n / `applicable_when` 元数据）
-- **明确不抄**：LCC s07–s12（任务图、团队、worktree、自主认领）对应 CLI 多 agent 范式，COS6 是 HTTP 服务，不适配。
+**废弃的内容**：AgentLoop、AgentToolRegistry、多 Agent 协作、后台任务管理。
 
 ---
 
