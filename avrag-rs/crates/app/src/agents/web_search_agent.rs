@@ -376,9 +376,9 @@ async fn run_react_loop(
                 )
                 .await;
                 
-                // If planner found results, skip to evaluation
+                // If planner found results, evaluate with both code and LLM
                 if !state.accumulated_results.is_empty() {
-                    // Run one evaluation iteration with accumulated results
+                    // --- Code-based evaluation (fast) ---
                     let signals = EvaluationSignals {
                         recall_count: state.accumulated_results.len(),
                         max_score: 0.0,
@@ -389,11 +389,56 @@ async fn run_react_loop(
                         zero_hits_per_subquery: Vec::new(),
                     };
                     
-                    let advice = evaluate_search_iteration(
+                    let code_advice = evaluate_search_iteration(
                         &signals,
                         &state.budget,
                         &state.accumulated_results,
                     );
+                    
+                    // --- LLM-based evaluation (deep) ---
+                    // Build a synthetic response for the LLM evaluator
+                    let synthetic_response = SearchResponse {
+                        query_type: "planner".to_string(),
+                        sub_queries: all_sub_queries.clone(),
+                        results: state.accumulated_results.clone(),
+                        synthesized_answer: String::new(),
+                        llm_usage: state.aggregated_usage.clone(),
+                    };
+                    let synthetic_params = WebSearchIterationParams {
+                        query: original_query.clone(),
+                        vertical: plan.preferred_vertical.clone(),
+                        directive: Some("planner_phase".to_string()),
+                    };
+                    
+                    let llm_eval = evaluate_search_strategy(
+                        state,
+                        &original_query,
+                        &synthetic_params,
+                        &synthetic_response,
+                        0,
+                    ).await;
+                    
+                    // Aggregate evaluator usage
+                    if let Some((_, eval_usage)) = &llm_eval {
+                        state.aggregated_usage = Some(merge_usage(
+                            state.aggregated_usage.as_ref(),
+                            eval_usage,
+                        ));
+                        state.request_count = state.request_count.saturating_add(1);
+                    }
+                    
+                    // Use LLM evaluation if available, otherwise fall back to code
+                    let (final_advice, llm_eval_json) = match &llm_eval {
+                        Some((eval, _)) => {
+                            let mapped = map_search_strategy_to_advice(
+                                eval,
+                                plan.preferred_vertical.as_deref(),
+                            );
+                            let json = serde_json::to_value(eval).ok();
+                            (mapped, json)
+                        }
+                        None => (code_advice, None),
+                    };
                     
                     state.iterations.push(IterationRecord {
                         iteration: 0,
@@ -404,13 +449,13 @@ async fn run_react_loop(
                             "planner": true,
                         }),
                         signals,
-                        decision: decision_label(&advice).to_string(),
+                        decision: decision_label(&final_advice).to_string(),
                         elapsed_ms: 0,
-                        llm_evaluation: None,
+                        llm_evaluation: llm_eval_json,
                         usage: build_run_usage(state.aggregated_usage.as_ref(), state.request_count),
                     });
                     
-                    match advice {
+                    match final_advice {
                         EvalAdvice::Synthesize => {
                             return Ok(WebSearchLoopOutcome::Synthesize);
                         }
