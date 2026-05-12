@@ -45,6 +45,8 @@ pub struct AgentLoopConfig<'a> {
     pub cancellation: tokio_util::sync::CancellationToken,
     /// Trace id for logging.
     pub trace_id: String,
+    /// Agent kind for tool scoping.
+    pub kind: crate::agents::AgentKind,
 }
 
 /// Run the generic tool-use loop.
@@ -65,10 +67,11 @@ pub async fn run_agent_loop(
         mut budget,
         cancellation,
         trace_id,
+        kind,
     } = config;
 
     let ctx = ReactContext::new(sink, &cancellation, &trace_id);
-    let tool_specs = registry.specs_for_kind(crate::agents::AgentKind::Chat); // TODO: pass kind
+    let tool_specs = registry.specs_for_kind(kind);
 
     // Prepend system prompt
     messages.insert(0, LlmChatMessage::system(system_prompt));

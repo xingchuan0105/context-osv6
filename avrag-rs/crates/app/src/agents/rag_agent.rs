@@ -50,12 +50,12 @@ impl RagAgent {
         temperature: Option<f32>,
     ) -> Self {
         let mut registry = AgentToolRegistry::new();
-        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::dense_retrieval()));
-        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::lexical_retrieval()));
-        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::graph_retrieval()));
-        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::doc_summary()));
-        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::index_lookup()));
-        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::doc_metadata()));
+        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::dense_retrieval(rag_runtime.clone())));
+        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::lexical_retrieval(rag_runtime.clone())));
+        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::graph_retrieval(rag_runtime.clone())));
+        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::doc_summary(rag_runtime.clone())));
+        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::index_lookup(rag_runtime.clone())));
+        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::doc_metadata(rag_runtime.clone())));
         registry.register(Box::new(crate::agents::tool_registry::PlaceholderTool::load_skill()));
         registry.register(Box::new(crate::agents::tool_registry::PlaceholderTool::compact_history()));
         Self {

@@ -91,6 +91,7 @@ impl Agent for ChatAgent {
             budget: LoopBudget::chat(UserTier::Pro),
             cancellation: request.cancellation_token.clone().unwrap_or_default(),
             trace_id: request.session_id.clone().unwrap_or_else(|| "chat-agent".to_string()),
+            kind: crate::agents::AgentKind::Chat,
         };
 
         let outcome = run_agent_loop(config, sink).await?;

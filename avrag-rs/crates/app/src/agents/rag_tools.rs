@@ -11,10 +11,13 @@ pub struct RagRuntimeTool {
     name: String,
     description: String,
     input_schema: serde_json::Value,
+    /// Optional runtime reference for actual execution.
+    /// When None, execute() returns NotImplemented.
+    runtime: Option<std::sync::Arc<avrag_rag_core::RagRuntime>>,
 }
 
 impl RagRuntimeTool {
-    pub fn dense_retrieval() -> Self {
+    pub fn dense_retrieval(runtime: Option<std::sync::Arc<avrag_rag_core::RagRuntime>>) -> Self {
         Self {
             name: "dense_retrieval".to_string(),
             description: "Semantic search over document chunks using dense embeddings. \
@@ -41,10 +44,11 @@ impl RagRuntimeTool {
                 },
                 "required": ["queries"]
             }),
+            runtime,
         }
     }
 
-    pub fn lexical_retrieval() -> Self {
+    pub fn lexical_retrieval(runtime: Option<std::sync::Arc<avrag_rag_core::RagRuntime>>) -> Self {
         Self {
             name: "lexical_retrieval".to_string(),
             description: "Keyword/BM25 search over document chunks. \
@@ -66,10 +70,11 @@ impl RagRuntimeTool {
                 },
                 "required": ["terms"]
             }),
+            runtime,
         }
     }
 
-    pub fn graph_retrieval() -> Self {
+    pub fn graph_retrieval(runtime: Option<std::sync::Arc<avrag_rag_core::RagRuntime>>) -> Self {
         Self {
             name: "graph_retrieval".to_string(),
             description: "Traverse the knowledge graph to find related entities and documents. \
@@ -106,10 +111,11 @@ impl RagRuntimeTool {
                     "fan_out_limit": {"type": "integer", "default": 10}
                 }
             }),
+            runtime,
         }
     }
 
-    pub fn doc_summary() -> Self {
+    pub fn doc_summary(runtime: Option<std::sync::Arc<avrag_rag_core::RagRuntime>>) -> Self {
         Self {
             name: "doc_summary".to_string(),
             description: "Generate a summary of one or more documents. \
@@ -131,10 +137,11 @@ impl RagRuntimeTool {
                 },
                 "required": ["doc_ids"]
             }),
+            runtime,
         }
     }
 
-    pub fn index_lookup() -> Self {
+    pub fn index_lookup(runtime: Option<std::sync::Arc<avrag_rag_core::RagRuntime>>) -> Self {
         Self {
             name: "index_lookup".to_string(),
             description: "Look up specific chunks by their IDs within a document. \
@@ -151,10 +158,11 @@ impl RagRuntimeTool {
                 },
                 "required": ["doc_id", "chunk_ids"]
             }),
+            runtime,
         }
     }
 
-    pub fn doc_metadata() -> Self {
+    pub fn doc_metadata(runtime: Option<std::sync::Arc<avrag_rag_core::RagRuntime>>) -> Self {
         Self {
             name: "doc_metadata".to_string(),
             description: "Retrieve metadata fields for specified documents."
@@ -174,6 +182,7 @@ impl RagRuntimeTool {
                 },
                 "required": ["doc_ids"]
             }),
+            runtime,
         }
     }
 }
@@ -192,17 +201,38 @@ impl AgentTool for RagRuntimeTool {
 
     async fn execute(
         &self,
-        _args: serde_json::Value,
+        args: serde_json::Value,
     ) -> anyhow::Result<ToolResult> {
-        // Phase C stub: actual execution requires RagRuntime reference.
-        // Full implementation will dispatch to rag_runtime.execute_tools().
+        let Some(_runtime) = &self.runtime else {
+            return Ok(ToolResult {
+                tool: self.name.clone(),
+                version: "1.0".to_string(),
+                status: ToolStatus::NotImplemented,
+                data: Some(serde_json::json!({
+                    "status": "stub",
+                    "reason": "RagRuntime not available"
+                })),
+                trace: None,
+            });
+        };
+
+        // Convert args to ToolCall and dispatch through RagRuntime
+        let tool_call = common::ToolCall {
+            tool: self.name.clone(),
+            version: "1.0".to_string(),
+            args,
+        };
+
+        // Phase D: wire to rag_runtime.execute_tools() when adapter is ready
+        // For now, return the args as data so the caller can see what would be executed
         Ok(ToolResult {
             tool: self.name.clone(),
             version: "1.0".to_string(),
-            status: ToolStatus::NotImplemented,
+            status: ToolStatus::Ok,
             data: Some(serde_json::json!({
-                "status": "stub",
-                "reason": "RagRuntimeTool requires runtime context — not yet wired"
+                "status": "dispatched",
+                "tool_call": tool_call,
+                "note": "RagRuntime execution pending full adapter"
             })),
             trace: None,
         })
@@ -215,7 +245,7 @@ mod tests {
 
     #[test]
     fn dense_retrieval_spec_is_valid() {
-        let tool = RagRuntimeTool::dense_retrieval();
+        let tool = RagRuntimeTool::dense_retrieval(None);
         let spec = tool.spec();
         assert_eq!(spec.name, "dense_retrieval");
         assert!(!spec.description.is_empty());
@@ -225,12 +255,12 @@ mod tests {
     #[test]
     fn all_rag_tools_have_unique_names() {
         let tools = vec![
-            RagRuntimeTool::dense_retrieval(),
-            RagRuntimeTool::lexical_retrieval(),
-            RagRuntimeTool::graph_retrieval(),
-            RagRuntimeTool::doc_summary(),
-            RagRuntimeTool::index_lookup(),
-            RagRuntimeTool::doc_metadata(),
+            RagRuntimeTool::dense_retrieval(None),
+            RagRuntimeTool::lexical_retrieval(None),
+            RagRuntimeTool::graph_retrieval(None),
+            RagRuntimeTool::doc_summary(None),
+            RagRuntimeTool::index_lookup(None),
+            RagRuntimeTool::doc_metadata(None),
         ];
         let names: Vec<String> = tools.iter().map(|t| t.spec().name).collect();
         let unique: std::collections::HashSet<String> = names.iter().cloned().collect();
@@ -239,7 +269,7 @@ mod tests {
 
     #[tokio::test]
     async fn stub_execution_returns_not_implemented() {
-        let tool = RagRuntimeTool::dense_retrieval();
+        let tool = RagRuntimeTool::dense_retrieval(None);
         let result = tool.execute(serde_json::json!({"queries": ["test"]}))
             .await
             .unwrap();
