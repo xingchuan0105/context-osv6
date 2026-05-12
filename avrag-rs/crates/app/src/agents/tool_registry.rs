@@ -228,10 +228,11 @@ mod tests {
         reg.register(Box::new(PlaceholderTool::brave_search()));
 
         let specs = reg.specs_for_kind(AgentKind::Rag);
-        assert_eq!(specs.len(), 3); // only registered ones
+        // Only registered tools that match Rag allowed list: load_skill, compact_history
+        // brave_search is NOT in Rag allowed list (it's for Search agent)
+        assert_eq!(specs.len(), 2);
         assert!(specs.iter().any(|s| s.name == "load_skill"));
         assert!(specs.iter().any(|s| s.name == "compact_history"));
-        assert!(specs.iter().any(|s| s.name == "search_web"));
     }
 
     #[tokio::test]
