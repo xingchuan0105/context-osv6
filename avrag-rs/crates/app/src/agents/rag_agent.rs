@@ -22,7 +22,6 @@ use crate::agents::react_loop::{
 use crate::agents::runtime::{
     Agent, AgentRequest, AgentRunResult, AgentRunUsage, FinalDecision, IterationRecord,
 };
-use crate::agents::tool_registry::AgentToolRegistry;
 use crate::rag_prompts::{
     RAG_PLAN_SYSTEM_PROMPT, RagPlanDecision, build_rag_plan_user_prompt,
     parse_rag_plan_decision,
@@ -40,7 +39,6 @@ pub struct RagAgent {
     rag_runtime: Option<Arc<avrag_rag_core::RagRuntime>>,
     llm_client: Option<LlmClient>,
     temperature: Option<f32>,
-    registry: AgentToolRegistry,
 }
 
 impl RagAgent {
@@ -49,20 +47,10 @@ impl RagAgent {
         llm_client: Option<LlmClient>,
         temperature: Option<f32>,
     ) -> Self {
-        let mut registry = AgentToolRegistry::new();
-        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::dense_retrieval(rag_runtime.clone())));
-        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::lexical_retrieval(rag_runtime.clone())));
-        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::graph_retrieval(rag_runtime.clone())));
-        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::doc_summary(rag_runtime.clone())));
-        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::index_lookup(rag_runtime.clone())));
-        registry.register(Box::new(crate::agents::rag_tools::RagRuntimeTool::doc_metadata(rag_runtime.clone())));
-        registry.register(Box::new(crate::agents::tool_registry::PlaceholderTool::load_skill()));
-        registry.register(Box::new(crate::agents::tool_registry::PlaceholderTool::compact_history()));
         Self {
             rag_runtime,
             llm_client,
             temperature,
-            registry,
         }
     }
 }

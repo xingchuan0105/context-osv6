@@ -40,18 +40,15 @@ impl AgentKind {
     }
 }
 
-pub mod agent_loop;
 pub mod chat_agent;
 pub mod evaluator;
 pub mod events;
 pub mod rag_agent;
-pub mod rag_tools;
 pub mod react_loop;
 pub mod rig_adapter;
 pub mod runtime;
 pub mod service;
 pub mod sse_sink;
-pub mod tool_registry;
 pub mod web_search_agent;
 
 #[cfg(test)]

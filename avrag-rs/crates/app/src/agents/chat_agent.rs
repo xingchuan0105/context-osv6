@@ -1,30 +1,22 @@
-use crate::agents::agent_loop::{AgentLoopConfig, AgentLoopOutcome, run_agent_loop};
 use crate::agents::events::{AgentEvent, AgentEventSink};
-use crate::agents::react_loop::{LoopBudget, UserTier};
 use crate::agents::runtime::{Agent, AgentRequest, AgentRunResult, AgentRunUsage};
-use crate::agents::tool_registry::{AgentToolRegistry, PlaceholderTool};
 use common::AppError;
 
 /// ChatAgent handles direct (non-RAG, non-search) conversational queries.
 ///
-/// It uses the generic [`run_agent_loop`] with a minimal tool set
-/// (`load_skill`, `compact_history`) so the model can self-improve its
-/// context when needed.
+/// It uses a configured LLM client to answer the user query.  Memory context
+/// (session summary, user preferences, working memory) is injected by the
+/// caller via `AgentRequest` fields.
 pub struct ChatAgent {
     llm_client: Option<avrag_llm::LlmClient>,
     temperature: Option<f32>,
-    registry: AgentToolRegistry,
 }
 
 impl ChatAgent {
     pub fn new(llm_client: Option<avrag_llm::LlmClient>, temperature: Option<f32>) -> Self {
-        let mut registry = AgentToolRegistry::new();
-        registry.register(Box::new(PlaceholderTool::load_skill()));
-        registry.register(Box::new(PlaceholderTool::compact_history()));
         Self {
             llm_client,
             temperature,
-            registry,
         }
     }
 }
@@ -82,63 +74,87 @@ impl Agent for ChatAgent {
 
         let messages = build_chat_messages(&request);
 
-        let config = AgentLoopConfig {
-            llm,
-            temperature: self.temperature,
-            system_prompt: messages[0].content.clone(),
-            messages: messages.into_iter().skip(1).collect(),
-            registry: &self.registry,
-            budget: LoopBudget::chat(UserTier::Pro),
-            cancellation: request.cancellation_token.clone().unwrap_or_default(),
-            trace_id: request.session_id.clone().unwrap_or_else(|| "chat-agent".to_string()),
-            kind: crate::agents::AgentKind::Chat,
+        let response = if request.stream {
+            let (delta_tx, mut delta_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+            let token = request
+                .cancellation_token
+                .clone()
+                .unwrap_or_default();
+            let stream = llm.complete_stream(&messages, self.temperature, token, move |delta| {
+                if !delta.is_empty() {
+                    let _ = delta_tx.send(delta.to_string());
+                }
+            });
+            tokio::pin!(stream);
+
+            let response = loop {
+                tokio::select! {
+                    delta = delta_rx.recv() => {
+                        if let Some(delta) = delta {
+                            let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
+                        }
+                    }
+                    result = &mut stream => {
+                        break result.map_err(|e| AppError::internal(format!("LLM completion stream failed: {}", e)))?;
+                    }
+                }
+            };
+
+            while let Ok(delta) = delta_rx.try_recv() {
+                let _ = sink.emit(AgentEvent::MessageDelta { text: delta }).await;
+            }
+
+            response
+        } else {
+            let response = llm
+                .complete(&messages, self.temperature)
+                .await
+                .map_err(|e| AppError::internal(format!("LLM completion failed: {}", e)))?;
+            let _ = sink.emit(AgentEvent::MessageDelta {
+                text: response.content.clone(),
+            })
+            .await;
+            response
         };
 
-        let outcome = run_agent_loop(config, sink).await?;
+        let usage = response.usage.clone();
+        let _ = sink.emit(AgentEvent::Usage {
+            provider: usage.provider.clone(),
+            model: usage.model.clone(),
+            prompt_tokens: usage.prompt_tokens as u64,
+            completion_tokens: usage.completion_tokens as u64,
+            total_tokens: usage.total_tokens as u64,
+            request_count: 1,
+            metadata: Default::default(),
+        })
+        .await;
 
-        match outcome {
-            AgentLoopOutcome::Answer(answer) => {
-                // Emit usage and done events
-                let _ = sink.emit(AgentEvent::Done {
-                    final_message: Some(answer.clone()),
-                    usage: None,
-                })
-                .await;
+        let run_usage = AgentRunUsage {
+            provider: usage.provider.clone(),
+            model: usage.model.clone(),
+            prompt_tokens: usage.prompt_tokens as u64,
+            completion_tokens: usage.completion_tokens as u64,
+            total_tokens: usage.total_tokens as u64,
+            request_count: 1,
+        };
 
-                Ok(AgentRunResult {
-                    answer,
-                    usage: None,
-                    ..Default::default()
-                })
-            }
-            AgentLoopOutcome::Degraded { reason, partial_answer } => {
-                let _ = sink.emit(AgentEvent::Error {
-                    code: "chat_degraded".to_string(),
-                    message: format!("Chat degraded: {reason:?}"),
-                })
-                .await;
-                Ok(AgentRunResult {
-                    answer: partial_answer.unwrap_or_else(|| {
-                        "I'm sorry, I couldn't process your request.".to_string()
-                    }),
-                    usage: None,
-                    final_decision: Some(crate::agents::runtime::FinalDecision::Degraded { reason }),
-                    ..Default::default()
-                })
-            }
-            AgentLoopOutcome::Clarify(question) => {
-                let _ = sink.emit(AgentEvent::Done {
-                    final_message: Some(question.clone()),
-                    usage: None,
-                })
-                .await;
-                Ok(AgentRunResult {
-                    answer: question,
-                    usage: None,
-                    ..Default::default()
-                })
-            }
-        }
+        let _ = sink.emit(AgentEvent::Done {
+            final_message: Some(response.content.clone()),
+            usage: Some(crate::agents::events::AgentUsage {
+                provider: usage.provider.clone(),
+                model: usage.model.clone(),
+                prompt_tokens: usage.prompt_tokens as u64,
+                completion_tokens: usage.completion_tokens as u64,
+                total_tokens: usage.total_tokens as u64,
+            }),
+        })
+        .await;
+
+        Ok(AgentRunResult {
+            answer: response.content,
+            usage: Some(run_usage),
+            ..Default::default()
+        })
     }
 }
 

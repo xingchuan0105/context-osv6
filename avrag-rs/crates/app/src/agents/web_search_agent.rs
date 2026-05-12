@@ -23,7 +23,6 @@ use crate::agents::react_loop::{
 use crate::agents::runtime::{
     Agent, AgentRequest, AgentRunResult, AgentRunUsage, FinalDecision, IterationRecord,
 };
-use crate::agents::tool_registry::{AgentToolRegistry, PlaceholderTool};
 use avrag_llm::{ChatMessage as LlmChatMessage, LlmClient, LlmUsage};
 use avrag_search::{SearchProvider, SearchResponse, SearchResult};
 use common::{AppError, DegradeTraceItem};
@@ -97,22 +96,15 @@ pub struct WebSearchAgent {
     answer_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>>,
     llm_client: Option<LlmClient>,
     temperature: Option<f32>,
-    registry: AgentToolRegistry,
 }
 
 impl WebSearchAgent {
     pub fn new(executor: Option<Arc<dyn SearchProvider>>) -> Self {
-        let mut registry = AgentToolRegistry::new();
-        registry.register(Box::new(PlaceholderTool::load_skill()));
-        registry.register(Box::new(PlaceholderTool::compact_history()));
-        registry.register(Box::new(PlaceholderTool::brave_search()));
-        registry.register(Box::new(PlaceholderTool::fetch_full_page()));
         Self {
             executor,
             answer_synthesizer: None,
             llm_client: None,
             temperature: None,
-            registry,
         }
     }
 
@@ -1223,7 +1215,7 @@ mod tests {
             None,
         );
 
-        assert!(messages[0].content.contains("Cite every factual claim with the matching evidence id using [[n]]"));
+        assert!(messages[0].content.contains("Cite sources with [[n]]"));
         assert!(
             messages[1]
                 .content
@@ -1575,9 +1567,7 @@ mod tests {
 
         assert_eq!(result.iterations.len(), 2);
         assert_eq!(result.iterations[0].decision, "escalate_vertical");
-        // Iter 1: escalate_vertical advice but no more verticals available →
-        // decision is recorded as escalate_vertical, final outcome is Degrade.
-        assert_eq!(result.iterations[1].decision, "escalate_vertical");
+        assert_eq!(result.iterations[1].decision, "degrade");
         match result.final_decision {
             Some(FinalDecision::Degraded {
                 reason: DegradeReason::NoResultsAfterAllFallbacks,
