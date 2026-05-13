@@ -16,7 +16,9 @@
 //! Thresholds are surfaced as `pub const` so they can be flipped via tests
 //! today and via env vars later (Risk R1).
 
-use crate::agents::react_loop::{DegradeReason, LoopBudget, UserTier};
+use crate::agents::react_loop::{DegradeReason, LoopBudget};
+#[cfg(test)]
+use crate::agents::react_loop::UserTier;
 use avrag_search::SearchResult;
 use common::AnswerContextChunk;
 use serde::{Deserialize, Serialize};
@@ -491,6 +493,8 @@ mod tests {
             zero_hits_per_subquery: vec![],
         };
         let mut budget = LoopBudget::rag(UserTier::Pro);
+        // Pro tier RAG budget = 4; tick 4 times to exhaust.
+        budget.tick();
         budget.tick();
         budget.tick();
         budget.tick();
@@ -508,6 +512,8 @@ mod tests {
             zero_hits_per_subquery: vec![],
         };
         let mut budget = LoopBudget::rag(UserTier::Pro);
+        // Pro tier RAG budget = 4; tick 4 times to exhaust.
+        budget.tick();
         budget.tick();
         budget.tick();
         budget.tick();
@@ -580,6 +586,8 @@ mod tests {
             zero_hits_per_subquery: vec![],
         };
         let mut budget = LoopBudget::search(UserTier::Pro);
+        // Pro tier Search budget = 3; tick 3 times to exhaust.
+        budget.tick();
         budget.tick();
         budget.tick();
         let results: Vec<SearchResult> = vec![];
@@ -601,6 +609,8 @@ mod tests {
             zero_hits_per_subquery: vec![],
         };
         let mut budget = LoopBudget::search(UserTier::Pro);
+        // Pro tier Search budget = 3; tick 3 times to exhaust.
+        budget.tick();
         budget.tick();
         budget.tick();
         let results = vec![make_search_result("t", "u", "s")];

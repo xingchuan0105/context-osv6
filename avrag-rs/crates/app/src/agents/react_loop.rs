@@ -3,7 +3,9 @@
 //! Per `docs/CHAT_GRAPHFLOW_REMOVAL_AND_AGENT_REACT_2026-05-10.md` §4.1, this
 //! module supplies the type-safe scaffolding for bounded ReAct iteration:
 //!
-//! - [`LoopBudget`]: enforces an iteration ceiling (RAG = 3, Search = 2).
+//! - [`LoopBudget`]: enforces a tier-aware iteration ceiling. Free tier:
+//!   RAG = 2, Search = 1, Chat = 1. Pro/Enterprise: RAG = 4, Search = 3,
+//!   Chat = 3. See [`LoopBudget::rag`] / [`LoopBudget::search`] / [`LoopBudget::chat`].
 //! - [`LoopDecision`]: the only way to advance — `Continue` *requires* fresh
 //!   `new_params`, so a fallback that does not change inputs cannot type-check
 //!   (decision ⑦).

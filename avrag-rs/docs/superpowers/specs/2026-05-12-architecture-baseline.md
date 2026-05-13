@@ -69,9 +69,16 @@ Milvus: 检索数据面
 - text chunks, multimodal chunks
 - BM25 sparse vectors, dense text vectors, multimodal vectors
 - kg_entities, kg_relations, graph passages / chunk evidence
+
+Redis: 短时辅助（注意分工差异）
+- bins/worker:   `avrag-cache-redis::DocumentLock` —— 分布式文档锁
+- crates/app:    `adapters/redis_rate_limiter.rs` 直接使用 `redis` crate —— API 限流
+- 注：`avrag-cache-redis` 不在 API 请求路径上；app 与 worker 共享 Redis 实例但各走一套客户端
 ```
 
 > **Note**：`semantic memory vectors` 在 `2026-04-26 §10` 中列出，但 `2026-05-10` 明确标记为 P3-1 "不修复（长期画像全存 md 文档）"。当前代码未实现。
+
+> **2026-05-13 修订**：补充 Redis 分工说明（cache-redis 仅 worker / app 走 redis 直连），与 §17 文档冲突清单第 14 项配套。
 
 ---
 
@@ -440,6 +447,8 @@ Output Guards:
 | 11 | 三 agent 迁移顺序 | `2026-04-29` 计划 Phase 0→7 严格顺序 | `2026-04-30` Kilo 报告实际并行推进多模块 | 以 Kilo 实际验收状态为准（Chat 92、WebSearch 83、RAG 86） |
 | 12 | GraphFlow 角色 | `2026-04-29` 计划明确保留 GraphFlow 作为编排内核 | `2026-04-30` agent gap 文档确认 GraphFlow 负责 rails | ✅ 保留，已写入 §10 |
 | 13 | Milvus 检索数据面 | `2026-04-26` 目标架构 | `2026-04-26-rag-milvus-graph-plan` Phase 0-6 已代码实现 | ✅ 已实现，live smoke pending |
+| 14 | Redis 分工（2026-05-13） | 既往文档把 `cache-redis` 列在 app 路径 | 实际：`cache-redis::DocumentLock` 仅 worker 使用，app 用 `redis` crate 直连做限流 | 已在 §2 补充分工说明 |
+| 15 | LoopBudget 数值（2026-05-13） | `agents/react_loop.rs:6` 注释写 RAG=3/Search=2 | 实际：Free RAG=2/Search=1/Chat=1；Pro/Enterprise RAG=4/Search=3/Chat=3 | 注释已修正 commit b67c803 后续修订 |
 
 ---
 
