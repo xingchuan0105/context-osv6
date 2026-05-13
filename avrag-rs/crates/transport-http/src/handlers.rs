@@ -850,10 +850,16 @@ fn chat_live_stream_response(
     let request_id_for_task = request_id.clone();
     let agent_type_for_task = agent_type.clone();
 
+    // Shared cancellation token: SseStreamGuard cancels it on stream drop
+    // (which happens when the client disconnects), and execute_chat_stream
+    // observes it via AgentRequest.cancellation_token to stop work early.
+    let cancel = CancellationToken::new();
+    let cancel_for_task = cancel.clone();
+
     tokio::spawn(async move {
         let error_sender = sender.clone();
         if let Err(error) = state
-            .execute_chat_stream(req, request_id_for_task.clone(), sender, CancellationToken::new())
+            .execute_chat_stream(req, request_id_for_task.clone(), sender, cancel_for_task)
             .await
         {
             state
@@ -878,15 +884,16 @@ fn chat_live_stream_response(
         }
     });
 
-    sse_response_from_receiver(receiver, surface_label(surface))
+    sse_response_from_receiver(receiver, surface_label(surface), cancel)
 }
 
 fn sse_response_from_receiver(
     mut receiver: UnboundedReceiver<ChatEvent>,
     surface: &'static str,
+    cancel: CancellationToken,
 ) -> Response {
     let stream = async_stream::stream! {
-        let _guard = SseStreamGuard(surface, CancellationToken::new());
+        let _guard = SseStreamGuard(surface, cancel);
         telemetry::prometheus::inc_sse_streams(surface);
 
         while let Some(event) = receiver.recv().await {
