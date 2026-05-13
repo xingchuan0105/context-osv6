@@ -36,7 +36,6 @@ impl AppState {
             debug_metadata: None,
             tokens_emitted: false,
             citations_emitted: false,
-            canary_token: None,
         })
     }
 
@@ -137,7 +136,6 @@ impl AppState {
             debug_metadata: None,
             tokens_emitted: false,
             citations_emitted: false,
-            canary_token: None,
         })
     }
 
@@ -196,6 +194,5 @@ pub(crate) fn build_chat_execution_from_result(
         debug_metadata: params.debug_metadata,
         tokens_emitted: false,
         citations_emitted: false,
-        canary_token: None,
     }
 }

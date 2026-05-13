@@ -13,6 +13,11 @@
 >   - §18.1：`search_plan_system_legacy.txt` 已被重命名为 `web_search_plan_system.txt`，成为当前生产 prompt（commit `ce1fa96`）；`web_search_plan_system_new.txt` 为死文件
 >   - §18.3：`SEARCH_PLANNER_ENABLED` 死配置已彻底清理
 >   - §9.3 / §18 新增第 13 项 Cleanup backlog：`canary.rs` / `sysvec.rs` 模块和 `canary_token` 字段属结构性残留，未装到 pipeline
+> - **2026-05-13（次日修订 · 二轮）**：§18.13 cleanup backlog 部分项已清理：
+>   - 删除 `crates/guardrails/src/{canary,sysvec}.rs` 文件及 `lib.rs` 两处 `pub mod` 声明
+>   - 删除 `ChatExecution.canary_token` 字段及 `service_modes.rs` 3 处 `None` 实例化
+>   - 删除孤儿 `prompts/web_search_plan_system_new.txt`
+>   - §9.3 同步更新；§18.13 仅剩 `llm::lib.rs` 残留分支与 `search` 注释中的 Perplexity/SiliconFlow 提及
 
 ---
 
@@ -278,16 +283,16 @@ Output Guards:
 
 > **确认**：`prompt_leak` + `pii_scrubber` 为设计目标。G1（semantic guard）❌ 不修复（沙盒环境足够）。G2（canary token / SysVec）已取消，不再推进。
 
-### 9.3 结构性残留（已知）
+### 9.3 结构性残留（已清理）
 
-虽然 G2 已取消，以下死代码仍在仓库中，未装入 `GuardPipeline`（参见 §18 第 13 项 Cleanup backlog）：
+G2（canary token / SysVec）取消后，相关死代码于 2026-05-13 二轮修订统一清理：
 
-- `crates/guardrails/src/canary.rs`、`crates/guardrails/src/sysvec.rs` 文件存在
-- `crates/guardrails/src/lib.rs:10,13`：`pub mod canary; pub mod sysvec;` 模块声明
-- `crates/app/src/chat/pipeline.rs:40-42`：`canary_token: Option<String>` 字段
-- `crates/app/src/chat/service_modes.rs:39,140,199`：3 处 `canary_token: None` 塞入
+- ~~`crates/guardrails/src/canary.rs`、`crates/guardrails/src/sysvec.rs`~~：已删除
+- ~~`crates/guardrails/src/lib.rs:10,13`：`pub mod canary; pub mod sysvec;`~~：已删除
+- ~~`crates/app/src/chat/pipeline.rs:40-42`：`canary_token: Option<String>` 字段~~：已删除
+- ~~`crates/app/src/chat/service_modes.rs:39,140,199`：3 处 `canary_token: None` 塞入~~：已删除
 
-这些残留不影响运行时行为（pipeline 不调用），属于 cleanup backlog。
+清理过程中验证 `canary` / `sysvec` 仅自我引用、`canary_token` 无读端，零行为变化。`cargo check --workspace` 零警告，guardrails 44 + app 156 测试全过。
 
 ### 9.4 Output guard 按模式启用矩阵（2026-05-13）
 
@@ -479,10 +484,10 @@ Output Guards:
 10. **Brave LLM Context 主路径**：Search provider 默认已切 Brave，`perplexity` 作为 legacy provider 保留但非默认。
 11. **Auth error contract**：`login_required` vs `unauthorized` 语义边界待核验（middleware nest 路径匹配失败时可能混淆）。
 12. **三 agent 迁移不做 legacy/Rig 双路径**：`2026-04-29` 计划明确不做 feature flag 灰度，直接切新架构。唯一兼容：`general` → `chat` alias。
-13. **Cleanup backlog（2026-05-13 新增）**：以下为已知死代码 / 死文件，不影响运行时行为，待统一清理：
-    - `crates/guardrails/src/canary.rs`、`crates/guardrails/src/sysvec.rs`（G2 已取消，文件和 `pub mod` 声明残留）
-    - `crates/app/src/chat/pipeline.rs:42` 的 `canary_token: Option<String>` 字段及 `service_modes.rs` 3 处 `None` 塞入
-    - `prompts/web_search_plan_system_new.txt`（24 行短版本，无代码引用，commit `88532b1` 实施期间的中间产物）
+13. **Cleanup backlog（2026-05-13 新增，部分已清理）**：已知死代码 / 死文件清单——
+    - ~~`crates/guardrails/src/canary.rs`、`crates/guardrails/src/sysvec.rs`（G2 已取消，文件和 `pub mod` 声明残留）~~ ✅ 已清理（2026-05-13 二轮）
+    - ~~`crates/app/src/chat/pipeline.rs:42` 的 `canary_token: Option<String>` 字段及 `service_modes.rs` 3 处 `None` 塞入~~ ✅ 已清理
+    - ~~`prompts/web_search_plan_system_new.txt`（24 行短版本，无代码引用，commit `88532b1` 实施期间的中间产物）~~ ✅ 已清理
     - `crates/llm/src/lib.rs:81-84`：`provider name` URL 推断 match 中残留 `siliconflow` / `perplexity` 分支
     - `crates/search/src/types.rs:8` 注释 + `crates/search/src/tests_impl.rs:36-93` 测试中对 Perplexity 的提及
 

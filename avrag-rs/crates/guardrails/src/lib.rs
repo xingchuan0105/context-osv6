@@ -7,10 +7,8 @@
 //! - **Input Guards**: Prompt injection, privilege escalation, scope enforcement
 //! - **Output Guards**: Prompt leak detection, PII scrubbing
 
-pub mod canary;
 pub mod input;
 pub mod output;
-pub mod sysvec;
 
 use common::{DegradeTraceItem, GuardReport, GuardResult};
 use uuid::Uuid;

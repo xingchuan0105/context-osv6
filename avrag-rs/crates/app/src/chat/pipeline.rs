@@ -37,9 +37,6 @@ pub(crate) struct ChatExecution {
     /// Whether Citations events were already emitted during mode-step execution.
     #[serde(default)]
     pub citations_emitted: bool,
-    /// Optional per-request canary token for prompt-leakage detection.
-    #[serde(default)]
-    pub canary_token: Option<String>,
 }
 
 pub(crate) async fn execute_chat_pipeline(
