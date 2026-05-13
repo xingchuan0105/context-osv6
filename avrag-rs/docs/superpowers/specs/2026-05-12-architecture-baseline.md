@@ -7,6 +7,12 @@
 >
 > **修订记录**：
 > - **2026-05-12（当日修订）**：修正 §13、§14、§18 中关于 MainAgent 和 RagAgent 的过时描述。MainAgent 模块已从代码库完全删除，RagAgent 已独立承载 RAG production path。
+> - **2026-05-13（次日修订）**：同步定稿后 5 次提交的代码变更：
+>   - §1.2 / §7：W1（本地 planner 未实现）+ W2（跳过 planner）**已修复**，落地双评估架构（commit `88532b1`、`b2e4f1f`）
+>   - §14：AGENT_LLM 模型由 `deepseek-v4-flash` 改为 `deepseek-v4-pro`（代码与 .env.example 实际值）；SEARCH_LLM 独立行已删除（统一为 AGENT_LLM_\*）；Perplexity/SiliconFlow 主路径已删但代码层残留待清理
+>   - §18.1：`search_plan_system_legacy.txt` 已被重命名为 `web_search_plan_system.txt`，成为当前生产 prompt（commit `ce1fa96`）；`web_search_plan_system_new.txt` 为死文件
+>   - §18.3：`SEARCH_PLANNER_ENABLED` 死配置已彻底清理
+>   - §9.3 / §18 新增第 13 项 Cleanup backlog：`canary.rs` / `sysvec.rs` 模块和 `canary_token` 字段属结构性残留，未装到 pipeline
 
 ---
 
@@ -37,14 +43,13 @@ RAG API (检索服务，非自主 agent)
 | Agent | 职责 | 生产状态 |
 |-------|------|----------|
 | `ChatAgent` | 直接对话、创意写作、头脑风暴、解释说明 | 已生产化，走 UnifiedAgentService |
-| `WebSearchAgent` | 本地 planner → 多子查询并行 → 结果聚合 → 答案合成 | Brave LLM Context 主路径已接入；本地 planner **未实现** |
+| `WebSearchAgent` | 本地 planner → 多子查询并行 → 双评估 → 答案合成 | 已生产化，走 UnifiedAgentService；本地 planner + 双评估（code + LLM）架构已落地 |
 | `RagAgent` | 检索计划生成 → RAG API 调用 → 答案合成 | 已生产化，走 UnifiedAgentService；tool-call 范式已落地；独立 ReAct 循环执行完整 RAG 流程 |
 
-> **Gap W1**：`WebSearchAgent` 的本地 planner 在代码中未实现。
-> - 文档描述（`2026-04-26 §11`）：`planner → multi-query execution → result aggregation → answer synthesis`
-> - 实际代码：`execute_search(&params.query)` 直接调用 Brave/Perplexity API，API 内部处理 sub_queries
-> - `search_plan_system.txt` 从未被代码引用（git history 零记录）
-> - `SEARCH_PLANNER_ENABLED` 配置存在但无任何代码使用
+> **Gap W1（已修复 2026-05-12 commit `88532b1`）**：`WebSearchAgent` 本地 planner 已实现。
+> - `web_search_agent.rs:218-275` 的 `plan_search()` 调用 AGENT_LLM 生成 `SearchPlan`（sub_queries / intent_summary / needs_clarification / preferred_vertical）
+> - `web_search_agent.rs:288-475` 在 ReAct 之前先跑 Phase 1 Local Planner：并行执行所有 sub_queries（`futures::future::join_all`），按 URL 去重累积结果
+> - 加载 prompt `prompts/web_search_plan_system.txt`（内容由 `search_plan_system_legacy.txt` 直接重命名而来，commit `ce1fa96`）
 >
 > **Gap W3**：`WebSearchAgent` streaming callback 已修复为 channel bridge（2026-04-30），但缺少 live Brave LLM Context E2E smoke 验证。
 
@@ -185,21 +190,28 @@ Planner 输出 `SearchPlan`：
 - 委托给 provider 的 built-in agentic flow
 - 流式透传 provider 的事件
 
-### 7.4 当前代码实际状态与计划
+### 7.4 当前代码实际状态
 
-> **状态**：本地 planner 待补实现（已确认需求）。
+> **状态**：本地 planner 已实现并生产化（2026-05-12 commit `88532b1`、`b2e4f1f`）。
 >
-> **Gap W2**：Brave 路径当前**跳过本地 planner**，直接把原始 query 发给 Brave API：
-> ```rust
-> // search/src/provider.rs:15-39
-> execute_brave_llm_context(config, client, query) // query 是原始用户查询
-> ```
-> Brave API 内部返回 `sub_queries` 和结果。Perplexity 路径同理。
+> **Gap W2（已修复）**：Brave 路径不再跳过本地 planner。`web_search_agent.rs::run_react_loop()` 分两阶段：
 >
-> 当前 `web_search_agent.rs` 的 ReAct loop 负责：
-> - 调用 `executor.execute_search(&params.query)`（外部 API）
-> - 策略评估（`evaluate_search_strategy`）：LLM 判断是否 escalate vertical / broaden query
-> - 答案合成（`finalize_synthesize`）
+> **Phase 1 — Local Planner**（`web_search_agent.rs:294-472`）：
+> - `plan_search()` 调用 AGENT_LLM 生成 `SearchPlan`
+> - 解析输出（`parse_search_plan`）：`sub_queries`（1-3 条）+ `intent_summary` + `needs_clarification` + `preferred_vertical`（"general"/"news"）
+> - 并行执行所有 sub_queries（`futures::future::join_all`），按 URL 去重累积
+> - **双评估架构**：
+>   - Code 评估：`EvaluationSignals::compute_term_coverage`（快速,基于 recall/term coverage）
+>   - LLM 评估：`evaluate_search_strategy`（深度,输出 `SearchStrategyEvaluation` + `suggested_followup_queries`）
+>   - LLM 评估可用时优先采纳，code 评估作为兜底
+> - 评估结果若为 `Synthesize` 则直接进入答案合成；否则透传 `all_sub_queries` 进入 Phase 2
+>
+> **Phase 2 — ReAct Loop**（回退/精化，`web_search_agent.rs:474-737`）：
+> - 在 `LoopBudget::search(UserTier::Pro)`（b=2）预算内执行
+> - 每轮按对象信号路由：`EscalateVertical`(general→news)、`BroadenQuery`(去末尾 token)、`Replan`、`Synthesize`、`Degrade`
+> - LLM 给出的 `suggested_followup_queries` 优先于机械式 broaden
+>
+> Brave provider 入口 `executor.execute_search(query, vertical)`（`search/src/provider.rs`）只负责单次 API 调用，不再承担 sub_query 拆分。Perplexity 路径已在 commit `4dd71a1` 中从主路径移除。
 
 ---
 
@@ -258,6 +270,17 @@ Output Guards:
 - **当前代码**：已移除 `citation_provability`、`harmful_content`、`canary_leak` 三个 guard，只保留 `prompt_leak` + `pii_scrubber`
 
 > **确认**：`prompt_leak` + `pii_scrubber` 为设计目标。G1（semantic guard）❌ 不修复（沙盒环境足够）。G2（canary token / SysVec）已取消，不再推进。
+
+### 9.3 结构性残留（已知）
+
+虽然 G2 已取消，以下死代码仍在仓库中，未装入 `GuardPipeline`（参见 §18 第 13 项 Cleanup backlog）：
+
+- `crates/guardrails/src/canary.rs`、`crates/guardrails/src/sysvec.rs` 文件存在
+- `crates/guardrails/src/lib.rs:10,13`：`pub mod canary; pub mod sysvec;` 模块声明
+- `crates/app/src/chat/pipeline.rs:40-42`：`canary_token: Option<String>` 字段
+- `crates/app/src/chat/service_modes.rs:39,140,199`：3 处 `canary_token: None` 塞入
+
+这些残留不影响运行时行为（pipeline 不调用），属于 cleanup backlog。
 
 ---
 
@@ -324,22 +347,30 @@ Output Guards:
 
 ---
 
-## 14. 模型 Provider 矩阵（2026-04-28 审计）
+## 14. 模型 Provider 矩阵（2026-05-13 修订）
 
 | 用途 | Provider | Model | 配置前缀 | 状态 |
 |------|----------|-------|----------|------|
-| RagAgent (plan + answer) | DeepSeek | `deepseek-v4-flash` | `ANSWER_LLM_*` | ✅ 已切换 |
-| Legacy planner | DashScope | `qwen3.5-flash` | `INTENT_LLM_*` | ⚠️ 仍存在，仅低层 RAG runtime 使用 |
-| 摘要 / 三元组抽取 | DMXAPI | `gemini-3.1-flash-lite-preview` | `SUMMARY_LLM_*` | ✅ 已恢复 |
-| 文本 Embedding | DashScope | `text-embedding-v4` | `EMBEDDING_*` | ✅ runtime 使用 |
+| Agent LLM（Chat / RAG / WebSearch plan+answer+eval） | DeepSeek | `deepseek-v4-pro` | `AGENT_LLM_*` | ✅ 主 agentic 推理 |
+| Memory LLM（session summary / user profile） | DeepSeek | `deepseek-v4-flash` | `MEMORY_LLM_*` | ✅ 快速廉价 |
+| Ingestion LLM（文档摘要 / 三元组抽取） | DMXAPI | `gemini-3.1-flash-lite-preview` | `INGESTION_LLM_*` | ✅ 超快 |
+| Legacy retrieval planner | DashScope | `qwen3.5-flash` | `INTENT_LLM_*` | ⚠️ 仅低层 RAG runtime 使用 |
+| 文本 Embedding | DashScope | `text-embedding-v4` | `EMBEDDING_*` | ✅ 1024 维 |
 | 多模态 Embedding | DashScope | `qwen3-vl-embedding` | `MM_EMBEDDING_*` | ✅ 1024 维对齐 |
 | 多模态 Rerank | DashScope | `qwen3-vl-rerank` | `MM_RERANK_*` | ✅ |
-| 文本 Rerank | SiliconFlow | `Qwen/Qwen3-Reranker-8B` | `RERANK_*` | ❌ 待清理移除 |
-| Search LLM | DashScope | `qwen3.5-plus` | `SEARCH_LLM_*` | ⚠️ 仅 search planner/tool mode |
-| WebSearch provider | Brave | LLM Context | `SEARCH_API_KEY` | ✅ 主路径 |
-| WebSearch provider | Perplexity | — | `PERPLEXITY_API_KEY` | ❌ 待清理移除 |
+| 文本 Rerank | DashScope | `qwen3-vl-rerank` | `RERANK_*` | ✅ DashScope 化（commit `4dd71a1`） |
+| WebSearch provider | Brave | LLM Context | `SEARCH_API_KEY` | ✅ 唯一生产 provider |
 
-> **Note**：RagAgent 已切 DeepSeek，但后端仍包含多个旧 provider 路径（摘要/triplet → DMXAPI/Gemini、legacy planner → DashScope、search → DashScope/Perplexity）。这些是有意的多 provider 架构，不是迁移遗漏。
+> **2026-05-13 变更**：
+> - Agent LLM 模型由 `deepseek-v4-flash` 改为 `deepseek-v4-pro`（`config.rs:171` + `.env.example:76`）
+> - SEARCH_LLM 独立行已删除：`.env.example:103` 显式标注 "SEARCH_LLM is deprecated — all search-agent LLM calls now use AGENT_LLM_*"
+> - 文本 Rerank 由 SiliconFlow `Qwen3-Reranker-8B` 切到 DashScope `qwen3-vl-rerank`（DashScope-only profile）
+> - Perplexity 已不再在 `.env.example` 出现，`SEARCH_PROVIDER=brave_llm_context` 锁定
+>
+> **残留代码（不影响主路径）**：
+> - `crates/llm/src/lib.rs:81-84`：`provider name` 推断 match 仍含 `siliconflow` / `perplexity` 分支
+> - `crates/search/src/{types.rs,tests_impl.rs}`：注释和测试中提及 Perplexity
+> 建议跟随后续清理一并删除。
 
 ---
 
@@ -396,7 +427,7 @@ Output Guards:
 
 | # | 冲突点 | 旧文档说法 | 新文档说法 | 基准版采用 |
 |---|--------|-----------|-----------|-----------|
-| 1 | WebSearchAgent 本地 planner | `2026-04-26 §11` 描述完整实现 | `2026-04-27` 标记"完成" | 保留设计目标，标注 **Gap W1/W2** |
+| 1 | WebSearchAgent 本地 planner | `2026-04-26 §11` 描述完整实现 | `2026-04-27` 标记"完成" | ✅ 已实现（2026-05-12 commit `88532b1`、`b2e4f1f`），Phase 1 Planner + Phase 2 ReAct + 双评估 |
 | 2 | GuardPipeline 能力 | `2026-04-27 P1-7` "是壳" | `2026-05-10 P1-1" 含 citation_provability + harmful_content | 以当前代码为准：prompt_leak + pii_scrubber |
 | 3 | Prompt 共享加载器 | `2026-04-27` 声称"已建立" | 无后续文档提及 | 以代码为准：`include_str!` 直接加载，**Gap P1** |
 | 4 | RagAgent 状态 | `2026-04-27 P0-1` "未接线" | `2026-05-10` "已完成" | ✅ 已完成；`RagAgent` 已独立承载 RAG production path，`main_agent` 模块已删除 |
@@ -414,9 +445,9 @@ Output Guards:
 
 ## 18. 已确认项
 
-1. **WebSearchAgent 本地 planner**：保留为**设计目标**，当前代码未实现（不是"被修 BUG 修坏"，而是从未被实现）。`search_plan_system_legacy.txt` 保留作为未来实现参考。
-2. **`rag_planner_system.txt`**：`RetrievalPlanner` 组件已标记为 legacy，由 `RagAgent` 取代。提示词文件和对应代码保留到 RagAgent 完全稳定后删除。
-3. **`SEARCH_PLANNER_ENABLED` 配置**：死配置字段，无代码引用。待清理。
+1. **WebSearchAgent 本地 planner**：**已实现**（2026-05-12 commit `88532b1`、`b2e4f1f`）。`prompts/web_search_plan_system.txt` 为当前生产 prompt，内容由 `search_plan_system_legacy.txt` 直接重命名而来（commit `ce1fa96`，两文件 byte-identical）。设计架构：Phase 1 Local Planner（LLM 生成 sub_queries + 双评估）→ Phase 2 ReAct loop（兜底）。
+2. **`rag_planner_system.txt`**：`RetrievalPlanner` 组件已标记为 legacy，由 `RagAgent` 取代。提示词文件和对应代码保留到 RagAgent 完全稳定后删除。注：`crates/guardrails/src/output/prompt_leak.rs:62` 通过 `include_str!` 引用此文件作为系统提示词泄露检测的指纹，删除前需迁移该引用。
+3. **`SEARCH_PLANNER_ENABLED` 配置**：**已清理 ✅**。`grep -rn "SEARCH_PLANNER_ENABLED"` 在仓库内零命中。
 4. **Guard 语义层**：❌ 不修复。沙盒环境规则层已足够。
 5. **Prompt 管理 infra**：❌ 不修复。等上线后根据实际更新频率再评估。
 6. **`load_prompt_template()` 共享加载器**：不存在于代码中。`include_str!` 为当前实际加载方式。
@@ -426,6 +457,12 @@ Output Guards:
 10. **Brave LLM Context 主路径**：Search provider 默认已切 Brave，`perplexity` 作为 legacy provider 保留但非默认。
 11. **Auth error contract**：`login_required` vs `unauthorized` 语义边界待核验（middleware nest 路径匹配失败时可能混淆）。
 12. **三 agent 迁移不做 legacy/Rig 双路径**：`2026-04-29` 计划明确不做 feature flag 灰度，直接切新架构。唯一兼容：`general` → `chat` alias。
+13. **Cleanup backlog（2026-05-13 新增）**：以下为已知死代码 / 死文件，不影响运行时行为，待统一清理：
+    - `crates/guardrails/src/canary.rs`、`crates/guardrails/src/sysvec.rs`（G2 已取消，文件和 `pub mod` 声明残留）
+    - `crates/app/src/chat/pipeline.rs:42` 的 `canary_token: Option<String>` 字段及 `service_modes.rs` 3 处 `None` 塞入
+    - `prompts/web_search_plan_system_new.txt`（24 行短版本，无代码引用，commit `88532b1` 实施期间的中间产物）
+    - `crates/llm/src/lib.rs:81-84`：`provider name` URL 推断 match 中残留 `siliconflow` / `perplexity` 分支
+    - `crates/search/src/types.rs:8` 注释 + `crates/search/src/tests_impl.rs:36-93` 测试中对 Perplexity 的提及
 
 ---
 
