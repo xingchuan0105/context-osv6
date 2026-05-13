@@ -289,6 +289,18 @@ Output Guards:
 
 这些残留不影响运行时行为（pipeline 不调用），属于 cleanup backlog。
 
+### 9.4 Output guard 按模式启用矩阵（2026-05-13）
+
+`check_output` 是同步纯函数（无 LLM/无 I/O），由 `BuildChatExecutionParams.apply_output_guard` 字段在 `pipeline_steps.rs` 按模式切换：
+
+| 模式 | apply_output_guard | 理由 |
+|------|-------------------|------|
+| Chat (general) | `false` | 仅用户 query + 自有 L2/L3 memory 进入 LLM，无外部数据。开启会 scrub 用户自己输入的联系方式，弊大于利 |
+| Search | **`true`**（2026-05-13 起）| 外部网页 snippet 直接进 LLM 上下文（`web_search_agent.rs:1192`），prompt 注入和 PII 泄露是真实风险 |
+| RAG | `true` | 文档内容进 LLM 上下文，与 Search 同理 |
+
+> **说明**：`PromptLeakGuard` 的 `PROMPT_SOURCES` 已 `include_str!` 收录 chat/search/rag 三套 prompt 指纹（`prompt_leak.rs:16-64`）；`PiiScrubberGuard` 只匹配 SSN/信用卡/邮箱/美式电话/MRN/护照/驾照标准格式，不会误伤人名地名。Chat 模式不开 guard 是 ROI 取舍，不是安全等级降低。
+
 ---
 
 ## 10. GraphFlow 退场
@@ -449,6 +461,7 @@ Output Guards:
 | 13 | Milvus 检索数据面 | `2026-04-26` 目标架构 | `2026-04-26-rag-milvus-graph-plan` Phase 0-6 已代码实现 | ✅ 已实现，live smoke pending |
 | 14 | Redis 分工（2026-05-13） | 既往文档把 `cache-redis` 列在 app 路径 | 实际：`cache-redis::DocumentLock` 仅 worker 使用，app 用 `redis` crate 直连做限流 | 已在 §2 补充分工说明 |
 | 15 | LoopBudget 数值（2026-05-13） | `agents/react_loop.rs:6` 注释写 RAG=3/Search=2 | 实际：Free RAG=2/Search=1/Chat=1；Pro/Enterprise RAG=4/Search=3/Chat=3 | 注释已修正 commit b67c803 后续修订 |
+| 16 | Search output guard（2026-05-13） | search 模式 `apply_output_guard:false`，外网 snippet 进 LLM 不过 guard | search 模式启用 `prompt_leak + pii_scrubber`；chat 模式保留 false（无外部数据） | 已在 §9.4 写入矩阵 |
 
 ---
 

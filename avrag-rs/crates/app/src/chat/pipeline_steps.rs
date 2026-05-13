@@ -190,7 +190,9 @@ async fn run_search_mode(
                 agent_type: "search",
                 session_id: &session.id,
                 input_usage_text: request.query.trim(),
-                apply_output_guard: false,
+                // Search 答案合成基于外部网页 snippet，存在 prompt 注入与 PII
+                // 泄露风险，必须经过 prompt_leak + pii_scrubber 双层过滤。
+                apply_output_guard: true,
                 mode_debug: Some(ModeDebug {
                     rag: None,
                     search: Some(search_debug),
@@ -215,7 +217,8 @@ async fn run_search_mode(
             agent_type: "search",
             session_id: &session.id,
             input_usage_text: request.query.trim(),
-            apply_output_guard: false,
+            // 同 stream 分支：search 模式输出必经 output guard。
+            apply_output_guard: true,
             mode_debug: Some(ModeDebug {
                 rag: None,
                 search: Some(search_debug),
