@@ -18,6 +18,7 @@ pub struct ChatTurn<'a> {
     pub assistant_answer_blocks: &'a [common::AnswerBlock],
     pub agent_type: &'a str,
     pub citations: &'a [common::Citation],
+    pub tool_results: &'a [common::ToolResult],
 }
 
 impl PgAppRepository {
@@ -161,7 +162,7 @@ impl PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, session_id, role, content, answer_blocks, agent_id, agent_name, agent_icon, citations, created_at
+            select id, session_id, role, content, answer_blocks, agent_id, agent_name, agent_icon, citations, tool_results, created_at
             from chat_messages
             where session_id = $1 and id = $2
             "#,
@@ -196,10 +197,12 @@ impl PgAppRepository {
         .execute(tx.inner())
         .await?;
 
+        let tool_results_value =
+            serde_json::to_value(turn.tool_results).unwrap_or_else(|_| json!([]));
         let assistant_row = sqlx::query(
             r#"
-            insert into chat_messages (org_id, session_id, role, content, answer_blocks, agent_id, agent_name, agent_icon, citations)
-            values ($1, $2, 'assistant', $3, $4, $5, $6, $7, $8)
+            insert into chat_messages (org_id, session_id, role, content, answer_blocks, agent_id, agent_name, agent_icon, citations, tool_results)
+            values ($1, $2, 'assistant', $3, $4, $5, $6, $7, $8, $9)
             returning id
             "#,
         )
@@ -211,6 +214,7 @@ impl PgAppRepository {
         .bind(agent_name(turn.agent_type))
         .bind(agent_icon(turn.agent_type))
         .bind(serde_json::to_value(turn.citations).unwrap_or_else(|_| json!([])))
+        .bind(tool_results_value)
         .fetch_one(tx.inner())
         .await?;
 
@@ -985,6 +989,24 @@ impl PgAppRepository {
         .await?;
         tx.commit().await?;
         Ok(())
+    }
+
+    /// Prune audit_log records older than the retention period.
+    /// Returns the number of deleted rows.
+    pub async fn prune_audit_log(
+        &self,
+        retention_days: i32,
+    ) -> Result<u64, PgStorageError> {
+        let result = sqlx::query(
+            r#"
+            delete from audit_log
+            where created_at < now() - ($1::int * interval '1 day')
+            "#,
+        )
+        .bind(retention_days)
+        .execute(self.pool.raw())
+        .await?;
+        Ok(result.rows_affected())
     }
 
 }

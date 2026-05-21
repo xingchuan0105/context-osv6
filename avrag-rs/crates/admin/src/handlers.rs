@@ -3,6 +3,7 @@ use std::sync::Arc;
 use avrag_auth::OrgId;
 use avrag_storage_pg::PgAppRepository;
 use common::ApiResponse;
+use uuid::Uuid;
 
 use crate::models::{AuditLogPage, AuditLogQuery, HealthStatus, OrgInfo, UsageStats, UserInfo};
 use crate::service::AdminService;
@@ -42,6 +43,20 @@ pub async fn handle_list_users(
     match service.list_users(&ctx, org_id).await {
         Ok(users) => ApiResponse::ok(users),
         Err(e) => ApiResponse::err("list_users_failed", &e.to_string()),
+    }
+}
+
+pub async fn handle_delete_user(
+    ctx: AuthContext,
+    org_id: OrgId,
+    user_id: Uuid,
+    repo: Arc<PgAppRepository>,
+) -> ApiResponse<()> {
+    let service = AdminService::new(repo);
+    match service.delete_user(&ctx, org_id, user_id).await {
+        Ok(true) => ApiResponse::ok(()),
+        Ok(false) => ApiResponse::err("user_not_found", "User not found in this organization"),
+        Err(e) => ApiResponse::err("delete_user_failed", &e.to_string()),
     }
 }
 

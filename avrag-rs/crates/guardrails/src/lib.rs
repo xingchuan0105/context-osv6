@@ -58,6 +58,14 @@ impl GuardPipeline {
         GuardResult::pass("input:all")
     }
 
+    /// Lightweight content check — only runs the prompt_injection guard.
+    ///
+    /// Useful for sanitizing tool results / snippets where a full `InputGuardContext`
+    /// (org_id, user_id, doc_scope, etc.) is not available.
+    pub fn check_content(&self, text: &str, trace_id: Option<String>) -> Option<GuardResult> {
+        self.input.check_content(text, trace_id)
+    }
+
     /// Run all output guards against the synthesizer response.
     ///
     /// Returns a tuple of `(sanitized_response, guard_report)`.

@@ -14,16 +14,41 @@ use common::{GuardResult, RiskLevel};
 /// System prompt sources loaded at compile time.
 /// Each tuple is (name, full_prompt_text).
 const PROMPT_SOURCES: &[(&str, &str)] = &[
-    // File-based system prompts (from prompts/ directory)
-    ("rag_plan", include_str!("../../../../prompts/rag_plan_system.txt")),
+    // Skills (from prompts/skills/ directory)
+    ("rag-plan", include_str!("../../../../prompts/skills/rag-plan/SKILL.md")),
     (
-        "rag_strategy_eval",
-        include_str!("../../../../prompts/rag_strategy_eval_system.txt"),
+        "rag-eval",
+        include_str!("../../../../prompts/skills/rag-eval/SKILL.md"),
     ),
     (
-        "search_strategy_eval",
-        include_str!("../../../../prompts/search_strategy_eval_system.txt"),
+        "search-eval",
+        include_str!("../../../../prompts/skills/search-eval/SKILL.md"),
     ),
+    (
+        "session-summary",
+        include_str!("../../../../prompts/skills/session-summary/SKILL.md"),
+    ),
+    (
+        "user-profile-extraction",
+        include_str!("../../../../prompts/skills/user-profile-extraction/SKILL.md"),
+    ),
+    (
+        "triplet-extraction",
+        include_str!("../../../../prompts/skills/triplet-extraction/SKILL.md"),
+    ),
+    (
+        "chat",
+        include_str!("../../../../prompts/skills/chat/SKILL.md"),
+    ),
+    (
+        "rag-answer",
+        include_str!("../../../../prompts/skills/rag-answer/SKILL.md"),
+    ),
+    (
+        "search-answer",
+        include_str!("../../../../prompts/skills/search-answer/SKILL.md"),
+    ),
+    // Templates (from prompts/ root directory)
     (
         "summary_generation",
         include_str!("../../../../prompts/summary_generation.v1.tmpl"),
@@ -31,31 +56,6 @@ const PROMPT_SOURCES: &[(&str, &str)] = &[
     (
         "summary_generation_finalize",
         include_str!("../../../../prompts/summary_generation_finalize.v1.tmpl"),
-    ),
-    (
-        "session_summary",
-        include_str!("../../../../prompts/session_summary_system.txt"),
-    ),
-    (
-        "user_profile_extraction",
-        include_str!("../../../../prompts/user_profile_extraction_system.txt"),
-    ),
-    (
-        "triplet_extraction",
-        include_str!("../../../../prompts/triplet_extraction_system.txt"),
-    ),
-    // Hardcoded system prompts (externalized to prompts/ directory)
-    (
-        "chat_agent",
-        include_str!("../../../../prompts/chat_agent_system.txt"),
-    ),
-    (
-        "rag_synthesizer",
-        include_str!("../../../../prompts/rag_answer_system.txt"),
-    ),
-    (
-        "web_search_synthesizer",
-        include_str!("../../../../prompts/web_search_system.txt"),
     ),
     (
         "legacy_planner",

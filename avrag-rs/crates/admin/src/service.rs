@@ -4,6 +4,7 @@ use anyhow::{bail, Result};
 use avrag_auth::{AuthContext, OrgId};
 use avrag_storage_pg::PgAppRepository;
 use sqlx::Row;
+use uuid::Uuid;
 
 use crate::audit::{
     audit_log_rows, audit_log_total, audit_logs_to_csv, map_audit_log_entry, map_org_info,
@@ -221,6 +222,33 @@ impl AdminService {
                 .map(map_audit_log_entry)
                 .collect::<Result<Vec<_>>>()?,
         ))
+    }
+
+    pub async fn delete_user(
+        &self,
+        ctx: &AuthContext,
+        org_id: OrgId,
+        user_id: Uuid,
+    ) -> Result<bool> {
+        let mut tx = self.begin_admin_tx(ctx).await?;
+        // Verify the user exists and belongs to the specified org.
+        let exists: bool = sqlx::query_scalar(
+            "select exists(select 1 from users where id = $1 and org_id = $2)",
+        )
+        .bind(user_id)
+        .bind(org_id.into_uuid())
+        .fetch_one(tx.as_mut())
+        .await?;
+        if !exists {
+            tx.commit().await?;
+            return Ok(false);
+        }
+        let deleted: i64 = sqlx::query_scalar("select delete_user_cascade($1)")
+            .bind(user_id)
+            .fetch_one(tx.as_mut())
+            .await?;
+        tx.commit().await?;
+        Ok(deleted > 0)
     }
 
     pub async fn get_health() -> HealthStatus {

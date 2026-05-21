@@ -932,9 +932,9 @@ mod tests {
                 filename: "summary-test.txt".to_string(),
                 docname: "summary test".to_string(),
                 language: "en".to_string(),
-                domain: "test".to_string(),
-                genre: "test".to_string(),
-                era: "contemporary".to_string(),
+                domain: common::Domain::Unknown,
+                genre: common::Genre::Unknown,
+                era: common::Era::Contemporary,
             },
         };
         repo.update_document_summary(&ctx, document_id, &summary_output, None, None)
@@ -947,5 +947,95 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(preview.summary.as_deref(), Some("LLM upgraded summary"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Tool results persistence roundtrip
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn chat_message_tool_results_roundtrip_when_database_available() {
+        let Some(database_url) = env::var("DATABASE_URL").ok() else {
+            return;
+        };
+        let repo = PgAppRepository::connect(&database_url).await.unwrap();
+        repo.migrate().await.unwrap();
+
+        let org_id = OrgId::from(Uuid::new_v4());
+        let _org_uuid = org_id.into_uuid();
+        let user_id = Uuid::new_v4();
+        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+            .with_actor_id(ActorId::new(user_id));
+
+        let notebook = repo
+            .create_notebook(&ctx, "tool-results-test", "tool results test")
+            .await
+            .unwrap();
+        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+
+        let session = repo
+            .create_session(
+                &ctx,
+                notebook_id,
+                Some("test-session-title"),
+                "rag",
+            )
+            .await
+            .unwrap();
+        let session_id = Uuid::parse_str(&session.id).unwrap();
+
+        let tool_results: Vec<common::ToolResult> = vec![
+            common::ToolResult {
+                tool: "calculator".to_string(),
+                version: "1.0".to_string(),
+                status: common::ToolStatus::Ok,
+                data: Some(serde_json::json!({"result": 42.0, "expression": "6*7"})),
+                trace: None,
+            },
+            common::ToolResult {
+                tool: "code_interpreter".to_string(),
+                version: "1.0".to_string(),
+                status: common::ToolStatus::Error,
+                data: Some(serde_json::json!({"error": "SyntaxError"})),
+                trace: None,
+            },
+        ];
+
+        let message_id = repo
+            .append_chat_turn(
+                &ctx,
+                session_id,
+                ChatTurn {
+                    user_content: "Calculate something",
+                    assistant_content: "Here are the results.",
+                    assistant_answer_blocks: &[],
+                    agent_type: "chat",
+                    citations: &[],
+                    tool_results: &tool_results,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(message_id > 0);
+
+        let messages = repo.list_messages(&ctx, session_id).await.unwrap();
+        let assistant_message = messages
+            .iter()
+            .find(|m| m.role == "assistant")
+            .expect("assistant message exists");
+
+        assert_eq!(assistant_message.tool_results.len(), 2);
+        assert_eq!(assistant_message.tool_results[0].tool, "calculator");
+        assert_eq!(assistant_message.tool_results[0].status, common::ToolStatus::Ok);
+        assert_eq!(
+            assistant_message.tool_results[0].data.as_ref().unwrap()["result"],
+            42.0
+        );
+        assert_eq!(assistant_message.tool_results[1].tool, "code_interpreter");
+        assert_eq!(assistant_message.tool_results[1].status, common::ToolStatus::Error);
+        assert_eq!(
+            assistant_message.tool_results[1].data.as_ref().unwrap()["error"],
+            "SyntaxError"
+        );
     }
 }

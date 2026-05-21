@@ -182,6 +182,17 @@ async fn signed_upload_handler(
         return handlers::app_error_response(error);
     }
 
+    if body.len() as u64 > state.max_upload_file_size_bytes() {
+        return handlers::app_error_response(common::AppError::validation(
+            "file_too_large",
+            format!(
+                "upload body size {} exceeds maximum allowed size of {} bytes",
+                body.len(),
+                state.max_upload_file_size_bytes()
+            ),
+        ));
+    }
+
     match upload_state
         .put_uploaded_document(&document_id, body.to_vec())
         .await
@@ -429,6 +440,122 @@ async fn shared_notebook_handler(
         )
             .into_response(),
         Err(error) => handlers::app_error_response(error),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Object-storage webhook handler (S3/MinIO event trigger)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct S3Event {
+    #[serde(default)]
+    records: Vec<S3EventRecord>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct S3EventRecord {
+    event_name: String,
+    s3: S3Entity,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct S3Entity {
+    bucket: S3Bucket,
+    object: S3Object,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct S3Bucket {
+    name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct S3Object {
+    key: String,
+}
+
+async fn object_storage_webhook_handler(
+    State(state): State<AppState>,
+    body: Bytes,
+) -> Response {
+    let event: S3Event = match serde_json::from_slice(body.as_ref()) {
+        Ok(event) => event,
+        Err(error) => {
+            return handlers::error_response(
+                StatusCode::BAD_REQUEST,
+                "invalid_event_json",
+                &format!("failed to parse S3 event: {error}"),
+            );
+        }
+    };
+
+    let mut processed = 0usize;
+    let mut failed = 0usize;
+    let mut skipped = 0usize;
+    let mut errors = Vec::new();
+
+    for record in event.records {
+        if !record.event_name.contains("ObjectCreated") {
+            skipped += 1;
+            continue;
+        }
+
+        let key = record.s3.object.key.replace('+', " ");
+
+        let document_id = match extract_document_id_from_object_path(&key) {
+            Some(id) => id,
+            None => {
+                skipped += 1;
+                errors.push(format!("unable to extract document_id from key: {key}"));
+                continue;
+            }
+        };
+
+        let (upload_state, _) = match upload_state_for_document(&state, &document_id).await {
+            Ok(result) => result,
+            Err(error) => {
+                failed += 1;
+                errors.push(format!("document {document_id}: {error}"));
+                continue;
+            }
+        };
+
+        match upload_state.complete_document_upload(&document_id).await {
+            Ok(_) => {
+                processed += 1;
+            }
+            Err(error) => {
+                failed += 1;
+                errors.push(format!("document {document_id}: {error}"));
+            }
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "processed": processed,
+            "failed": failed,
+            "skipped": skipped,
+            "errors": errors,
+        })),
+    )
+        .into_response()
+}
+
+fn extract_document_id_from_object_path(path: &str) -> Option<String> {
+    let parts: Vec<&str> = path.split('/').collect();
+    // Expected format: {org_id}/{notebook_id}/{document_id}/{filename}
+    if parts.len() >= 3 {
+        Some(parts[2].to_string())
+    } else {
+        None
     }
 }
 

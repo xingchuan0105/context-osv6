@@ -5,7 +5,7 @@ pub struct SearchResult {
     pub title: String,
     pub url: String,
     pub snippet: String,
-    /// 引用索引，Perplexity 返回的引用标记（如 [1], [2]）
+    /// 引用索引（如 [1], [2]），用于句子级引用标注
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub citation_index: Option<usize>,
 }

@@ -57,6 +57,14 @@ pub struct LlmDurationLabels {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct LlmUsageLabels {
+    pub feature: String,
+    pub provider: String,
+    pub model: String,
+    pub token_type: String,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub struct RetrievalLabels {
     pub mode: String,
     pub stage: String,
@@ -73,6 +81,38 @@ pub struct GuardrailLabels {
     pub action: String,
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct DegradeLabels {
+    pub agent_type: String,
+    pub reason: String,
+}
+
+// ---------------------------------------------------------------------------
+// Agent v5 metrics labels
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct AgentRunLabels {
+    pub strategy: String,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct AgentStateLabels {
+    pub strategy: String,
+    pub state_id: String,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct AgentToolLabels {
+    pub tool_name: String,
+    pub status: String,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct AgentErrorLabels {
+    pub error_kind: String,
+}
+
 struct MetricsState {
     registry: Registry,
     http_requests_total: Family<HttpLabels, Counter>,
@@ -87,11 +127,21 @@ struct MetricsState {
     worker_task_duration_ms: Family<TaskKindLabels, Histogram>,
     llm_calls_total: Family<LlmLabels, Counter>,
     llm_call_duration_ms: Family<LlmDurationLabels, Histogram>,
+    llm_usage_tokens_total: Family<LlmUsageLabels, Counter>,
     retrieval_requests_total: Family<RetrievalLabels, Counter>,
     retrieval_zero_result_total: Family<ModeLabel, Counter>,
     guardrail_blocks_total: Family<GuardrailLabels, Counter>,
     usage_limit_blocks_total: Family<SingleLabel, Counter>,
     dependency_failures_total: Family<SingleLabel, Counter>,
+    degrades_total: Family<DegradeLabels, Counter>,
+    // v5 agent metrics
+    agent_run_total: Family<AgentRunLabels, Counter>,
+    agent_run_duration_ms: Family<AgentRunLabels, Histogram>,
+    agent_state_duration_ms: Family<AgentStateLabels, Histogram>,
+    agent_tool_call_total: Family<AgentToolLabels, Counter>,
+    agent_tool_call_duration_ms: Family<AgentToolLabels, Histogram>,
+    agent_budget_exhausted_total: Family<AgentRunLabels, Counter>,
+    agent_error_total: Family<AgentErrorLabels, Counter>,
 }
 
 impl MetricsState {
@@ -118,11 +168,29 @@ impl MetricsState {
             Family::<LlmDurationLabels, Histogram>::new_with_constructor(|| {
                 Histogram::new(exponential_buckets(10.0, 2.0, 16))
             });
+        let llm_usage_tokens_total = Family::<LlmUsageLabels, Counter>::default();
         let retrieval_requests_total = Family::<RetrievalLabels, Counter>::default();
         let retrieval_zero_result_total = Family::<ModeLabel, Counter>::default();
         let guardrail_blocks_total = Family::<GuardrailLabels, Counter>::default();
         let usage_limit_blocks_total = Family::<SingleLabel, Counter>::default();
         let dependency_failures_total = Family::<SingleLabel, Counter>::default();
+        let degrades_total = Family::<DegradeLabels, Counter>::default();
+        let agent_run_total = Family::<AgentRunLabels, Counter>::default();
+        let agent_run_duration_ms =
+            Family::<AgentRunLabels, Histogram>::new_with_constructor(|| {
+                Histogram::new(exponential_buckets(10.0, 2.0, 16))
+            });
+        let agent_state_duration_ms =
+            Family::<AgentStateLabels, Histogram>::new_with_constructor(|| {
+                Histogram::new(exponential_buckets(1.0, 2.0, 16))
+            });
+        let agent_tool_call_total = Family::<AgentToolLabels, Counter>::default();
+        let agent_tool_call_duration_ms =
+            Family::<AgentToolLabels, Histogram>::new_with_constructor(|| {
+                Histogram::new(exponential_buckets(1.0, 2.0, 16))
+            });
+        let agent_budget_exhausted_total = Family::<AgentRunLabels, Counter>::default();
+        let agent_error_total = Family::<AgentErrorLabels, Counter>::default();
 
         registry.register(
             "http_requests_total",
@@ -185,6 +253,11 @@ impl MetricsState {
             llm_call_duration_ms.clone(),
         );
         registry.register(
+            "llm_usage_tokens_total",
+            "LLM token usage by feature, provider, model, and token type.",
+            llm_usage_tokens_total.clone(),
+        );
+        registry.register(
             "retrieval_requests_total",
             "Retrieval requests by mode and stage.",
             retrieval_requests_total.clone(),
@@ -209,6 +282,46 @@ impl MetricsState {
             "Dependency failures by dependency name.",
             dependency_failures_total.clone(),
         );
+        registry.register(
+            "degrades_total",
+            "Agent degrade events by agent type and reason.",
+            degrades_total.clone(),
+        );
+        registry.register(
+            "agent_run_total",
+            "Total agent runs by strategy.",
+            agent_run_total.clone(),
+        );
+        registry.register(
+            "agent_run_duration_ms",
+            "Agent run duration in milliseconds by strategy.",
+            agent_run_duration_ms.clone(),
+        );
+        registry.register(
+            "agent_state_duration_ms",
+            "Agent state duration in milliseconds by strategy and state_id.",
+            agent_state_duration_ms.clone(),
+        );
+        registry.register(
+            "agent_tool_call_total",
+            "Total agent tool calls by tool_name and status.",
+            agent_tool_call_total.clone(),
+        );
+        registry.register(
+            "agent_tool_call_duration_ms",
+            "Agent tool call duration in milliseconds by tool_name.",
+            agent_tool_call_duration_ms.clone(),
+        );
+        registry.register(
+            "agent_budget_exhausted_total",
+            "Total agent budget exhausted events by strategy.",
+            agent_budget_exhausted_total.clone(),
+        );
+        registry.register(
+            "agent_error_total",
+            "Total agent errors by error_kind.",
+            agent_error_total.clone(),
+        );
 
         Self {
             registry,
@@ -224,11 +337,20 @@ impl MetricsState {
             worker_task_duration_ms,
             llm_calls_total,
             llm_call_duration_ms,
+            llm_usage_tokens_total,
             retrieval_requests_total,
             retrieval_zero_result_total,
             guardrail_blocks_total,
             usage_limit_blocks_total,
             dependency_failures_total,
+            degrades_total,
+            agent_run_total,
+            agent_run_duration_ms,
+            agent_state_duration_ms,
+            agent_tool_call_total,
+            agent_tool_call_duration_ms,
+            agent_budget_exhausted_total,
+            agent_error_total,
         }
     }
 }
@@ -371,6 +493,43 @@ pub fn observe_llm_call(
         .observe(duration_ms);
 }
 
+pub fn observe_llm_usage(
+    feature: &str,
+    provider: &str,
+    model: &str,
+    prompt_tokens: u64,
+    completion_tokens: u64,
+) {
+    let total = prompt_tokens + completion_tokens;
+    METRICS
+        .llm_usage_tokens_total
+        .get_or_create(&LlmUsageLabels {
+            feature: non_empty(feature),
+            provider: non_empty(provider),
+            model: non_empty(model),
+            token_type: "prompt".to_string(),
+        })
+        .inc_by(prompt_tokens);
+    METRICS
+        .llm_usage_tokens_total
+        .get_or_create(&LlmUsageLabels {
+            feature: non_empty(feature),
+            provider: non_empty(provider),
+            model: non_empty(model),
+            token_type: "completion".to_string(),
+        })
+        .inc_by(completion_tokens);
+    METRICS
+        .llm_usage_tokens_total
+        .get_or_create(&LlmUsageLabels {
+            feature: non_empty(feature),
+            provider: non_empty(provider),
+            model: non_empty(model),
+            token_type: "total".to_string(),
+        })
+        .inc_by(total);
+}
+
 pub fn observe_retrieval_request(mode: &str, stage: &str) {
     METRICS
         .retrieval_requests_total
@@ -414,6 +573,80 @@ pub fn record_dependency_failure(name: &str) {
         .dependency_failures_total
         .get_or_create(&SingleLabel {
             value: non_empty(name),
+        })
+        .inc();
+}
+
+pub fn observe_degrade(agent_type: &str, reason: &str) {
+    METRICS
+        .degrades_total
+        .get_or_create(&DegradeLabels {
+            agent_type: non_empty(agent_type),
+            reason: non_empty(reason),
+        })
+        .inc();
+}
+
+// ---------------------------------------------------------------------------
+// Agent v5 metrics
+// ---------------------------------------------------------------------------
+
+pub fn observe_agent_run(strategy: &str, duration_ms: f64) {
+    METRICS
+        .agent_run_total
+        .get_or_create(&AgentRunLabels {
+            strategy: non_empty(strategy),
+        })
+        .inc();
+    METRICS
+        .agent_run_duration_ms
+        .get_or_create(&AgentRunLabels {
+            strategy: non_empty(strategy),
+        })
+        .observe(duration_ms);
+}
+
+pub fn observe_agent_state(strategy: &str, state_id: &str, duration_ms: f64) {
+    METRICS
+        .agent_state_duration_ms
+        .get_or_create(&AgentStateLabels {
+            strategy: non_empty(strategy),
+            state_id: non_empty(state_id),
+        })
+        .observe(duration_ms);
+}
+
+pub fn observe_agent_tool_call(tool_name: &str, status: &str, duration_ms: f64) {
+    METRICS
+        .agent_tool_call_total
+        .get_or_create(&AgentToolLabels {
+            tool_name: non_empty(tool_name),
+            status: non_empty(status),
+        })
+        .inc();
+    METRICS
+        .agent_tool_call_duration_ms
+        .get_or_create(&AgentToolLabels {
+            tool_name: non_empty(tool_name),
+            status: "".to_string(),
+        })
+        .observe(duration_ms);
+}
+
+pub fn observe_agent_budget_exhausted(strategy: &str) {
+    METRICS
+        .agent_budget_exhausted_total
+        .get_or_create(&AgentRunLabels {
+            strategy: non_empty(strategy),
+        })
+        .inc();
+}
+
+pub fn observe_agent_error(error_kind: &str) {
+    METRICS
+        .agent_error_total
+        .get_or_create(&AgentErrorLabels {
+            error_kind: non_empty(error_kind),
         })
         .inc();
 }

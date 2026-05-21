@@ -117,5 +117,17 @@ fn audit_action_str(action: &ingestion::AuditAction) -> &'static str {
         ingestion::AuditAction::OutputGuardBlock => "output_guard_block",
         ingestion::AuditAction::OutputGuardRedact => "output_guard_redact",
         ingestion::AuditAction::OutputGuardFlag => "output_guard_flag",
+        ingestion::AuditAction::ChatRequest => "chat_request",
+        ingestion::AuditAction::SearchRequest => "search_request",
+        ingestion::AuditAction::RagRequest => "rag_request",
+        ingestion::AuditAction::MessageFeedback => "message_feedback",
+        ingestion::AuditAction::CitationClick => "citation_click",
+        ingestion::AuditAction::RoutingDecision => "routing_decision",
+        ingestion::AuditAction::HighRiskToolCall => "high_risk_tool_call",
+        ingestion::AuditAction::PolicyDeny => "policy_deny",
+        ingestion::AuditAction::PolicyRequireApproval => "policy_require_approval",
+        ingestion::AuditAction::BudgetExhausted => "budget_exhausted",
+        ingestion::AuditAction::DegradeEvent => "degrade_event",
+        ingestion::AuditAction::PermissionDenied => "permission_denied",
     }
 }

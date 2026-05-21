@@ -36,10 +36,20 @@ pub(crate) fn app_error_response(e: AppError) -> Response {
         "error": e.code(),
         "message": e.message(),
     });
-    if let Some(secs) = e.retry_after_secs() {
+    let retry_after = e.retry_after_secs();
+    if let Some(secs) = retry_after {
         body["retry_after_secs"] = serde_json::json!(secs);
     }
-    (status, Json(body)).into_response()
+    let mut response = (status, Json(body)).into_response();
+    if status == StatusCode::TOO_MANY_REQUESTS {
+        if let Some(secs) = retry_after {
+            response.headers_mut().insert(
+                header::RETRY_AFTER,
+                HeaderValue::from(secs as u64),
+            );
+        }
+    }
+    response
 }
 
 /// Return a JSON error response.
@@ -1715,6 +1725,27 @@ pub(crate) async fn mark_notification_read_handler(
     }
 }
 
+pub(crate) async fn message_feedback_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Json(req): Json<common::MessageFeedbackRequest>,
+) -> Response {
+    let metadata = serde_json::json!({
+        "message_id": req.message_id,
+        "rating": req.rating,
+    });
+    state
+        .record_product_event_if_available(
+            analytics::ProductEventName::MessageFeedback,
+            analytics::Surface::Workspace,
+            analytics::ResultTag::Success,
+            uuid::Uuid::parse_str(&req.session_id).ok(),
+            None,
+            metadata,
+        )
+        .await;
+    (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response()
+}
+
 fn parse_expires_in_secs(raw: &str) -> Option<i64> {
     let expires_at = chrono::DateTime::parse_from_rfc3339(raw).ok()?;
     let delta = expires_at
@@ -1722,4 +1753,13 @@ fn parse_expires_in_secs(raw: &str) -> Option<i64> {
         .signed_duration_since(chrono::Utc::now())
         .num_seconds();
     (delta > 0).then_some(delta)
+}
+
+// ---------------------------------------------------------------------------
+// Agent capabilities
+// ---------------------------------------------------------------------------
+
+pub(crate) async fn agent_capabilities_handler() -> Response {
+    let response = app::agents::capability::build_capabilities_response();
+    (StatusCode::OK, Json(response)).into_response()
 }

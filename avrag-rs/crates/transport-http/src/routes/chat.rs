@@ -24,6 +24,10 @@ pub(crate) fn router() -> Router<AppState> {
             get(handlers::get_chat_messages_handler),
         )
         .route(
+            "/chat/sessions/{session_id}/messages/{message_id}/feedback",
+            post(handlers::message_feedback_handler),
+        )
+        .route(
             "/chat/citations/lookup",
             post(handlers::citation_lookup_handler),
         )
@@ -32,6 +36,7 @@ pub(crate) fn router() -> Router<AppState> {
             get(handlers::citation_asset_handler),
         )
         .route("/search", get(handlers::search_handler))
+        .route("/agent/capabilities", get(handlers::agent_capabilities_handler))
 }
 
 pub(crate) fn compat_router() -> Router<AppState> {

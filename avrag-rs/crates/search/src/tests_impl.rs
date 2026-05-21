@@ -33,41 +33,9 @@ async fn missing_brave_key_is_explicit_error() {
 }
 
 #[tokio::test]
-async fn missing_perplexity_key_is_explicit_error() {
-    let executor = SearchExecutor::new(SearchConfig {
-        provider: "perplexity".to_string(),
-        perplexity_api_key: None,
-        ..SearchConfig::default()
-    });
-    let request = common::ChatRequest {
-        query: "test".to_string(),
-        notebook_id: None,
-        session_id: None,
-        agent_type: "search".to_string(),
-        source_type: None,
-        source_token: None,
-        doc_scope: Vec::new(),
-        messages: Vec::new(),
-        stream: false,
-        language: None,
-    };
-    let auth = avrag_auth::AuthContext::new(
-        avrag_auth::OrgId::from(uuid::Uuid::nil()),
-        avrag_auth::SubjectKind::User,
-    );
-    let error = executor.execute(&request, &auth).await.unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("Perplexity API key not configured")
-    );
-}
-
-#[tokio::test]
 async fn unsupported_provider_is_explicit_error() {
     let executor = SearchExecutor::new(SearchConfig {
         provider: "exa".to_string(),
-        perplexity_api_key: Some("test".to_string()),
         ..SearchConfig::default()
     });
     let request = common::ChatRequest {
@@ -90,11 +58,12 @@ async fn unsupported_provider_is_explicit_error() {
     assert!(
         error
             .to_string()
-            .contains("supported providers: brave_llm_context, perplexity")
+            .contains("supported providers: brave_llm_context")
     );
 }
 
 #[tokio::test]
+#[ignore = "requires external network connectivity to Brave Search API"]
 async fn executor_routes_news_vertical_to_news_endpoint() {
     let executor = SearchExecutor::new(SearchConfig {
         api_key: "dummy".to_string(),

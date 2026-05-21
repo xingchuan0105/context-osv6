@@ -5,7 +5,7 @@ use axum::{
     Json,
     body::{Body, to_bytes},
     extract::{Request, State},
-    http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode},
+    http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -21,8 +21,11 @@ pub(crate) const HEADER_ORG_ID: &str = "x-org-id";
 pub(crate) const HEADER_USER_ID: &str = "x-user-id";
 pub(crate) const HEADER_RATE_LIMIT_LIMIT: &str = "x-ratelimit-limit";
 pub(crate) const HEADER_RATE_LIMIT_REMAINING: &str = "x-ratelimit-remaining";
+pub(crate) const HEADER_FORWARDED_FOR: &str = "x-forwarded-for";
+pub(crate) const HEADER_REAL_IP: &str = "x-real-ip";
 
 pub(crate) const DEFAULT_RATE_LIMIT_RPM: u32 = 60;
+pub(crate) const DEFAULT_EDGE_RATE_LIMIT_RPM: u32 = 120;
 
 static LOCAL_RATE_LIMITER: LazyLock<Mutex<HashMap<String, FixedWindowCounter>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -60,6 +63,29 @@ pub(crate) fn check_rate_limit(key: &str, limit_rpm: u32) -> (bool, u32, u32) {
     }
 }
 
+fn extract_client_ip(headers: &HeaderMap) -> String {
+    headers
+        .get(HEADER_FORWARDED_FOR)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(',').next())
+        .map(|ip| ip.trim().to_string())
+        .or_else(|| {
+            headers
+                .get(HEADER_REAL_IP)
+                .and_then(|value| value.to_str().ok())
+                .map(|ip| ip.trim().to_string())
+        })
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn retry_after_seconds_for_window() -> u64 {
+    let now_epoch_sec = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    60 - (now_epoch_sec % 60)
+}
+
 pub(crate) async fn request_context_middleware(
     State(state): State<AppState>,
     mut req: Request,
@@ -72,6 +98,38 @@ pub(crate) async fn request_context_middleware(
     }
 
     let headers = req.headers().clone();
+
+    // Edge-layer rate limit (IP-based coarse limit before App layer)
+    let edge_ip = extract_client_ip(&headers);
+    let edge_key = format!("edge:{}", edge_ip);
+    let (edge_allowed, _edge_remaining, edge_limit) =
+        check_rate_limit_with_fallback(state.redis_url(), &edge_key, DEFAULT_EDGE_RATE_LIMIT_RPM).await;
+    if !edge_allowed {
+        let retry_after = retry_after_seconds_for_window();
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            [
+                (
+                    HeaderName::from_static(HEADER_RATE_LIMIT_LIMIT),
+                    edge_limit.to_string(),
+                ),
+                (
+                    HeaderName::from_static(HEADER_RATE_LIMIT_REMAINING),
+                    "0".to_string(),
+                ),
+                (
+                    header::RETRY_AFTER,
+                    retry_after.to_string(),
+                ),
+            ],
+            Json(json!({
+                "error": "rate_limit_exceeded",
+                "message": format!("Edge rate limit of {} requests/minute exceeded", edge_limit),
+                "retry_after_secs": retry_after,
+            })),
+        )
+            .into_response();
+    }
 
     let share_chat_notebook_scope = share_chat_notebook_scope_from_request(&state, &mut req).await;
     let auth = auth_from_bearer(&state, &headers)
@@ -126,6 +184,7 @@ pub(crate) async fn request_context_middleware(
     let response = next.run(req).await;
 
     if !allowed {
+        let retry_after = retry_after_seconds_for_window();
         return (
             StatusCode::TOO_MANY_REQUESTS,
             [
@@ -137,10 +196,15 @@ pub(crate) async fn request_context_middleware(
                     HeaderName::from_static(HEADER_RATE_LIMIT_REMAINING),
                     "0".to_string(),
                 ),
+                (
+                    header::RETRY_AFTER,
+                    retry_after.to_string(),
+                ),
             ],
             Json(json!({
                 "error": "rate_limit_exceeded",
                 "message": format!("Rate limit of {limit} requests/minute exceeded"),
+                "retry_after_secs": retry_after,
             })),
         )
             .into_response();

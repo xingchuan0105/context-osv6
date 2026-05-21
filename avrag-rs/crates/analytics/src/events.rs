@@ -57,6 +57,7 @@ pub enum ProductEventName {
     NoteSynced,
     ShareLinkCreated,
     ShareLinkDisabled,
+    MessageFeedback,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

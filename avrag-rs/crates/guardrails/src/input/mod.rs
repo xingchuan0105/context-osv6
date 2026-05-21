@@ -59,6 +59,27 @@ impl InputGuardPipeline {
         }
         None
     }
+
+    /// Lightweight content check — only runs the prompt_injection guard.
+    ///
+    /// Useful for sanitizing tool results / snippets where a full `InputGuardContext`
+    /// (org_id, user_id, doc_scope, etc.) is not available.
+    pub fn check_content(&self, text: &str, trace_id: Option<String>) -> Option<GuardResult> {
+        let ctx = InputGuardContext {
+            query: text,
+            org_id: uuid::Uuid::nil(),
+            user_id: uuid::Uuid::nil(),
+            doc_scope: &[],
+            notebook_id: None,
+            trace_id,
+        };
+        for guard in &self.guards {
+            if guard.name() == "prompt_injection" {
+                return guard.check(&ctx);
+            }
+        }
+        None
+    }
 }
 
 impl Default for InputGuardPipeline {

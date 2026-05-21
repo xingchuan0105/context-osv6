@@ -101,6 +101,13 @@ impl ObjectStoreHandle {
     pub fn is_remote(&self) -> bool {
         matches!(self, Self::S3(_))
     }
+
+    pub async fn list(&self) -> Result<Vec<String>> {
+        match self {
+            Self::Local(store) => store.list().await,
+            Self::S3(store) => store.list().await,
+        }
+    }
 }
 
 pub struct LocalObjectStore {
@@ -206,6 +213,24 @@ impl LocalObjectStore {
 
     pub async fn presigned_get_url(&self, path: &str, _ttl_secs: u64) -> Result<String> {
         Ok(format!("file://{}", path))
+    }
+
+    pub async fn list(&self) -> Result<Vec<String>> {
+        let mut paths = Vec::new();
+        let mut dirs = vec![self.root.clone()];
+        while let Some(dir) = dirs.pop() {
+            let mut entries = fs::read_dir(&dir).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let path = entry.path();
+                if entry.file_type().await?.is_dir() {
+                    dirs.push(path);
+                } else {
+                    let relative = path.strip_prefix(&self.root)?.to_string_lossy().to_string();
+                    paths.push(relative);
+                }
+            }
+        }
+        Ok(paths)
     }
 }
 
@@ -392,6 +417,30 @@ impl S3ObjectStore {
             .await
             .context("s3 presign get failed")?;
         Ok(request.uri().to_string())
+    }
+
+    pub async fn list(&self) -> Result<Vec<String>> {
+        let mut paths = Vec::new();
+        let mut continuation_token: Option<String> = None;
+        loop {
+            let mut req = self.client.list_objects_v2().bucket(&self.bucket);
+            if let Some(ref token) = continuation_token {
+                req = req.continuation_token(token);
+            }
+            let resp = req.send().await.context("s3 list objects failed")?;
+            if let Some(contents) = resp.contents {
+                for obj in contents {
+                    if let Some(key) = obj.key {
+                        paths.push(key);
+                    }
+                }
+            }
+            continuation_token = resp.next_continuation_token;
+            if continuation_token.is_none() {
+                break;
+            }
+        }
+        Ok(paths)
     }
 }
 

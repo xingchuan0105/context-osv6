@@ -311,4 +311,19 @@ impl PgAppRepository {
         Ok(())
     }
 
+    pub async fn delete_user_cascade(
+        &self,
+        _context: &AuthContext,
+        user_id: Uuid,
+    ) -> Result<bool, PgStorageError> {
+        let mut tx = self.pool.raw().begin().await?;
+        let row = sqlx::query("select delete_user_cascade($1) as deleted")
+            .bind(user_id)
+            .fetch_one(tx.as_mut())
+            .await?;
+        let deleted: i64 = row.try_get("deleted")?;
+        tx.commit().await?;
+        Ok(deleted > 0)
+    }
+
 }

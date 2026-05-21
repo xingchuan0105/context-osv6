@@ -18,6 +18,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/admin/organizations", get(list_orgs))
         .route("/admin/organizations/{org_id}", get(get_org))
         .route("/admin/users", get(list_users))
+        .route("/admin/users/{user_id}", axum::routing::delete(delete_user))
         .route("/admin/usage", get(get_usage))
         .route("/admin/billing/block", axum::routing::post(block_org))
         .route("/admin/health", get(health))
@@ -326,6 +327,29 @@ async fn list_users(
         Err(response) => return response,
     };
     Json(avrag_admin::handle_list_users(state.auth().clone(), org_id, repo).await).into_response()
+}
+
+async fn delete_user(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Path(user_id): Path<String>,
+) -> Response {
+    if let Err(response) = ensure_admin_access(&state).await {
+        return response;
+    }
+    let repo = repo_or_response!(state);
+    let user_id = match user_id.parse::<Uuid>() {
+        Ok(id) => id,
+        Err(_) => {
+            return Json(ApiResponse::<serde_json::Value>::err(
+                "invalid_user_id",
+                "user_id must be a UUID",
+            ))
+            .into_response();
+        }
+    };
+    let org_id = state.auth().org_id();
+    Json(avrag_admin::handle_delete_user(state.auth().clone(), org_id, user_id, repo).await)
+        .into_response()
 }
 
 async fn get_usage(
