@@ -1,6 +1,6 @@
 use crate::client::{ChatMessage, LlmClient};
 use anyhow::Context;
-use common::{SummaryMetadata, SummaryOutput};
+use common::{Domain, Era, Genre, SummaryMetadata, SummaryOutput};
 use serde::Deserialize;
 use text_splitter::{ChunkConfig, CodeSplitter, MarkdownSplitter, TextSplitter};
 use tiktoken_rs::{CoreBPE, cl100k_base};
@@ -268,17 +268,20 @@ fn build_summary_metadata(
             .domain
             .map(|value| normalize_metadata_field(&value))
             .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| "unknown".to_string()),
+            .map(|value| Domain::from(value.as_str()))
+            .unwrap_or(Domain::Unknown),
         genre: metadata
             .genre
             .map(|value| normalize_metadata_field(&value))
             .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| "unknown".to_string()),
+            .map(|value| Genre::from(value.as_str()))
+            .unwrap_or(Genre::Unknown),
         era: metadata
             .era
             .map(|value| normalize_metadata_field(&value))
             .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| "unknown".to_string()),
+            .map(|value| Era::from(value.as_str()))
+            .unwrap_or(Era::Unknown),
     }
 }
 

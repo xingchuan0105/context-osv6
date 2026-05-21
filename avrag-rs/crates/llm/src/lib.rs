@@ -1,6 +1,7 @@
 pub mod client;
 pub mod embedding;
 pub mod planner;
+pub mod rate_limiter;
 pub mod reranker;
 pub mod summary;
 pub mod synthesizer;
@@ -10,6 +11,7 @@ pub use client::{ChatMessage, LlmClient, LlmResponse, LlmUsage};
 pub use token_counter::{count_chat_messages, count_system_and_query, count_tokens};
 pub use embedding::{EmbeddingClient, MultiModalEmbeddingInput};
 pub use planner::RetrievalPlanner;
+pub use rate_limiter::{RateLimiter, RateLimitError, SharedRateLimiter, default_rpm_limit, default_tpm_limit, provider_defaults};
 pub use reranker::{
     MultiModalRerankDocument, MultiModalRerankResult, RerankResult, RerankerClient,
 };
@@ -63,6 +65,10 @@ pub struct ModelProviderConfig {
     /// Whether to request prompt caching for this provider.
     /// When true, adds `prompt_cache` to the request body.
     pub enable_cache: Option<bool>,
+    /// Requests-per-minute limit. `None` means use provider default.
+    pub rpm_limit: Option<u32>,
+    /// Tokens-per-minute limit. `None` means use provider default.
+    pub tpm_limit: Option<u32>,
 }
 
 impl ModelProviderConfig {
@@ -80,10 +86,20 @@ impl ModelProviderConfig {
             "openai".to_string()
         } else if url.contains("siliconflow") {
             "siliconflow".to_string()
-        } else if url.contains("perplexity") {
-            "perplexity".to_string()
         } else {
             "unknown".to_string()
         }
+    }
+
+    /// Resolve the effective RPM limit, falling back to provider-specific defaults.
+    pub fn effective_rpm_limit(&self) -> u32 {
+        self.rpm_limit
+            .unwrap_or_else(|| provider_defaults(&self.base_url).0)
+    }
+
+    /// Resolve the effective TPM limit, falling back to provider-specific defaults.
+    pub fn effective_tpm_limit(&self) -> u32 {
+        self.tpm_limit
+            .unwrap_or_else(|| provider_defaults(&self.base_url).1)
     }
 }

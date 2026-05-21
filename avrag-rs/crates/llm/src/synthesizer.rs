@@ -6,8 +6,7 @@ use serde_json::json;
 use std::collections::{BTreeSet, HashSet};
 use tokio_util::sync::CancellationToken;
 
-const SYNTHESIZER_SYSTEM_PROMPT: &str = include_str!("../../../prompts/rag_answer_system.txt");
-const SYNTHESIZER_STREAM_SYSTEM_PROMPT: &str = include_str!("../../../prompts/rag_answer_system.txt");
+const SYNTHESIZER_SYSTEM_PROMPT: &str = include_str!("../../../prompts/skills/rag-answer/SKILL.md");
 const DEFAULT_SYNTHESIZER_USER_TEMPLATE: &str =
     include_str!("../../../prompts/synthesizer_user.tmpl");
 
@@ -492,17 +491,27 @@ fn extract_json_code_block(raw_output: &str) -> Option<String> {
 
 pub struct AnswerSynthesizer {
     llm: LlmClient,
+    system_prompt: String,
 }
 
 impl AnswerSynthesizer {
     pub fn new(answer_config: ModelProviderConfig) -> Self {
         Self {
             llm: LlmClient::new(answer_config),
+            system_prompt: SYNTHESIZER_SYSTEM_PROMPT.to_string(),
         }
     }
 
     pub fn from_llm_client(llm: LlmClient) -> Self {
-        Self { llm }
+        Self {
+            llm,
+            system_prompt: SYNTHESIZER_SYSTEM_PROMPT.to_string(),
+        }
+    }
+
+    pub fn with_system_prompt(mut self, prompt: impl Into<String>) -> Self {
+        self.system_prompt = prompt.into();
+        self
     }
 
     pub async fn synthesize(
@@ -513,7 +522,7 @@ impl AnswerSynthesizer {
         item_traces: &[common::RagTraceItem],
         history: Option<&[ChatMessage]>,
     ) -> anyhow::Result<SynthesisOutput> {
-        let mut messages = vec![ChatMessage::system(SYNTHESIZER_SYSTEM_PROMPT)];
+        let mut messages = vec![ChatMessage::system(&self.system_prompt)];
 
         if let Some(hist) = history {
             messages.extend(hist.iter().cloned());
@@ -544,7 +553,7 @@ impl AnswerSynthesizer {
         params: SynthesizeStreamParams<'_>,
         on_delta: impl FnMut(&str),
     ) -> anyhow::Result<crate::LlmResponse> {
-        let mut messages = vec![ChatMessage::system(SYNTHESIZER_STREAM_SYSTEM_PROMPT)];
+        let mut messages = vec![ChatMessage::system(&self.system_prompt)];
 
         if let Some(hist) = params.history {
             messages.extend(hist.iter().cloned());
@@ -582,7 +591,7 @@ impl AnswerSynthesizer {
         tool_results: &[common::ToolResult],
         history: Option<&[ChatMessage]>,
     ) -> anyhow::Result<SynthesisOutput> {
-        let mut messages = vec![ChatMessage::system(SYNTHESIZER_SYSTEM_PROMPT)];
+        let mut messages = vec![ChatMessage::system(&self.system_prompt)];
 
         if let Some(hist) = history {
             messages.extend(hist.iter().cloned());
@@ -618,7 +627,7 @@ impl AnswerSynthesizer {
         token: CancellationToken,
         on_delta: impl FnMut(&str),
     ) -> anyhow::Result<crate::LlmResponse> {
-        let mut messages = vec![ChatMessage::system(SYNTHESIZER_STREAM_SYSTEM_PROMPT)];
+        let mut messages = vec![ChatMessage::system(&self.system_prompt)];
 
         if let Some(hist) = history {
             messages.extend(hist.iter().cloned());

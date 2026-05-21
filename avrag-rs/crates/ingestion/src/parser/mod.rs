@@ -22,7 +22,7 @@ pub use office_service::{
     OfficeParserServiceConfig,
 };
 pub use pdf::PdfParser;
-pub use probe::{ParseProbe, ParseProbeResult, PdfPageProbeResult};
+pub use probe::{ParseProbe, ParseProbeConfig, ParseProbeResult, PdfPageProbeResult};
 pub use router::{
     ExternalParseKind, ExternalParsePlan, LocalParseKind, LocalParsePlan, OfficeDocType,
     OfficeParsePlan, ParsePlan, ParseRoute, ParseRouteDecision, ParseRouteError, ParseRouter,

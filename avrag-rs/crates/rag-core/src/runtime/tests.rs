@@ -47,6 +47,8 @@ fn test_config() -> RagConfig {
             dimensions: None,
             enable_thinking: None,
             enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
         },
     ));
     // Stage-level unit tests do not need a PostgreSQL repository.
@@ -67,6 +69,7 @@ fn make_session_context() -> SessionContext {
                 agent_name: None,
                 agent_icon: None,
                 citations: Vec::new(),
+                tool_results: Vec::new(),
                 created_at: "2026-03-22T00:00:00Z".to_string(),
             },
             ChatMessage {
@@ -79,6 +82,7 @@ fn make_session_context() -> SessionContext {
                 agent_name: None,
                 agent_icon: None,
                 citations: Vec::new(),
+                tool_results: Vec::new(),
                 created_at: "2026-03-22T00:01:00Z".to_string(),
             },
         ],

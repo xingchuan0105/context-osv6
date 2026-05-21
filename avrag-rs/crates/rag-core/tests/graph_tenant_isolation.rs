@@ -65,6 +65,8 @@ fn test_runtime(data_owner_org_id: &str) -> RagRuntime {
             dimensions: None,
             enable_thinking: None,
             enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
         },
     ));
     let config = avrag_rag_core::RagConfig::new_for_data_plane(embedding, None);

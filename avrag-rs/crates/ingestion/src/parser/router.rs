@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::probe::{ParseProbe, ParseProbeResult, PdfPageProbeResult};
+use super::probe::{ParseProbe, ParseProbeConfig, ParseProbeResult, PdfPageProbeResult};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -174,6 +174,15 @@ impl ParseRouter {
         filename: &str,
         mime_type: &str,
     ) -> Result<ParseRouteDecision, ParseRouteError> {
+        Self::route_with_config(bytes, filename, mime_type, &ParseProbeConfig::default())
+    }
+
+    pub fn route_with_config(
+        bytes: &[u8],
+        filename: &str,
+        mime_type: &str,
+        config: &ParseProbeConfig,
+    ) -> Result<ParseRouteDecision, ParseRouteError> {
         Self::ensure_supported_file_type(filename, mime_type)?;
         let extension =
             normalize_extension(filename).expect("validated file types must retain an extension");
@@ -226,9 +235,9 @@ impl ParseRouter {
                 }),
             }),
             "pdf" => {
-                let probe_result = ParseProbe::probe(bytes, filename)
+                let probe_result = ParseProbe::probe_with_config(bytes, filename, config)
                     .map_err(|error| ParseRouteError::unsupported(error.to_string()))?;
-                let plan = ParsePlan::Pdf(build_pdf_parse_plan(&probe_result));
+                let plan = ParsePlan::Pdf(build_pdf_parse_plan(&probe_result, config));
                 Ok(ParseRouteDecision {
                     route: ParseRoute::Pdf,
                     reason: summarize_pdf_reason(&probe_result, &plan),
@@ -267,10 +276,13 @@ impl ParseRouter {
     }
 }
 
-fn build_pdf_parse_plan(probe_result: &ParseProbeResult) -> PdfParsePlan {
+fn build_pdf_parse_plan(
+    probe_result: &ParseProbeResult,
+    config: &ParseProbeConfig,
+) -> PdfParsePlan {
     let fallback_backend = if probe_result.likely_scanned
-        || probe_result.image_hint_count > 5
-        || probe_result.table_hint_count > 10
+        || probe_result.image_hint_count > config.image_heavy_threshold
+        || probe_result.table_hint_count > config.table_heavy_threshold
     {
         PdfPageBackend::MineruOcr
     } else {
@@ -278,7 +290,9 @@ fn build_pdf_parse_plan(probe_result: &ParseProbeResult) -> PdfParsePlan {
     };
     let fallback_reason = if probe_result.likely_scanned {
         RouteReason::ScannedPdf
-    } else if probe_result.image_hint_count > 5 || probe_result.table_hint_count > 10 {
+    } else if probe_result.image_hint_count > config.image_heavy_threshold
+        || probe_result.table_hint_count > config.table_heavy_threshold
+    {
         RouteReason::ComplexPdf
     } else {
         RouteReason::SimplePdf
@@ -297,17 +311,22 @@ fn build_pdf_parse_plan(probe_result: &ParseProbeResult) -> PdfParsePlan {
         probe_result
             .pdf_page_probes
             .iter()
-            .map(build_pdf_page_plan)
+            .map(|p| build_pdf_page_plan(p, config))
             .collect()
     };
 
     PdfParsePlan { pages }
 }
 
-fn build_pdf_page_plan(page_probe: &PdfPageProbeResult) -> PdfPagePlan {
+fn build_pdf_page_plan(
+    page_probe: &PdfPageProbeResult,
+    config: &ParseProbeConfig,
+) -> PdfPagePlan {
     let (backend, reason) = if page_probe.likely_scanned {
         (PdfPageBackend::MineruOcr, RouteReason::ScannedPdf)
-    } else if page_probe.image_hint_count > 5 || page_probe.table_hint_count > 10 {
+    } else if page_probe.image_hint_count > config.image_heavy_threshold
+        || page_probe.table_hint_count > config.table_heavy_threshold
+    {
         (PdfPageBackend::MineruOcr, RouteReason::ComplexPdf)
     } else {
         (PdfPageBackend::EdgeParse, RouteReason::SimplePdf)
@@ -493,7 +512,7 @@ fn is_generic_text_mime(mime_type: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::super::probe::PdfPageProbeResult;
+    use super::super::probe::{ParseProbeConfig, PdfPageProbeResult};
     use super::*;
 
     #[test]
@@ -576,7 +595,7 @@ mod tests {
             },
         ];
 
-        let plan = build_pdf_parse_plan(&probe_result);
+        let plan = build_pdf_parse_plan(&probe_result, &ParseProbeConfig::default());
         assert_eq!(plan.pages.len(), 3);
         assert_eq!(plan.pages[0].backend, PdfPageBackend::EdgeParse);
         assert_eq!(plan.pages[1].backend, PdfPageBackend::MineruOcr);

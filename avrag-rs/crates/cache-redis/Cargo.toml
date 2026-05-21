@@ -7,6 +7,7 @@ edition = "2021"
 avrag-auth = { path = "../auth" }
 redis.workspace = true
 serde = { version = "1", features = ["derive"] }
+serde_json = { workspace = true }
 thiserror = "2"
 tokio.workspace = true
 tracing.workspace = true

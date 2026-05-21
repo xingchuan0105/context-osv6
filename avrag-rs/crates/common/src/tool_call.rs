@@ -85,6 +85,9 @@ pub struct RetrievalPlannerOutput {
     pub calls: Vec<ToolCall>,
     #[serde(default = "default_next_step")]
     pub next_step: NextStep,
+    /// Optional output-format skills selected by the planner for the Answer phase.
+    #[serde(default)]
+    pub skills: Vec<String>,
 }
 
 /// Optional merge strategy for the external `/runtime/execute` endpoint.

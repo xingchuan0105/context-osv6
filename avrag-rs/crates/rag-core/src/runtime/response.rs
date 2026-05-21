@@ -294,6 +294,7 @@ impl RagRuntime {
             }),
             message_id: None,
             guard_report: None,
+            tool_results: Vec::new(),
         })
     }
 
@@ -433,6 +434,7 @@ impl RagRuntime {
             }),
             message_id: None,
             guard_report: None,
+            tool_results: Vec::new(),
         })
     }
 }

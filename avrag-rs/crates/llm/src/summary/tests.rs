@@ -69,9 +69,9 @@ fn test_parse_summary_and_metadata_supports_block_contract() {
     assert_eq!(metadata.filename, "atlas.md");
     assert_eq!(metadata.docname, "Atlas Plan");
     assert_eq!(metadata.language, "zh");
-    assert_eq!(metadata.domain, "technology");
-    assert_eq!(metadata.genre, "technical_report");
-    assert_eq!(metadata.era, "contemporary");
+    assert_eq!(metadata.domain, "technology".into());
+    assert_eq!(metadata.genre, "technical_report".into());
+    assert_eq!(metadata.era, "contemporary".into());
 }
 
 #[test]
@@ -98,9 +98,9 @@ fn test_parse_summary_and_metadata_supports_json_envelope() {
     assert_eq!(metadata.filename, "atlas.txt");
     assert_eq!(metadata.docname, "Atlas Guide");
     assert_eq!(metadata.language, "en");
-    assert_eq!(metadata.domain, "operations");
-    assert_eq!(metadata.genre, "manual");
-    assert_eq!(metadata.era, "modern");
+    assert_eq!(metadata.domain, "operations".into());
+    assert_eq!(metadata.genre, "manual".into());
+    assert_eq!(metadata.era, "modern".into());
 }
 
 #[test]
@@ -124,9 +124,9 @@ fn test_parse_summary_and_metadata_supports_legacy_text_and_metadata() {
 
     assert_eq!(summary_text, "【宏观命题树】\n1. 第一层");
     assert_eq!(metadata.language, "zh");
-    assert_eq!(metadata.domain, "technology");
-    assert_eq!(metadata.genre, "technical_report");
-    assert_eq!(metadata.era, "contemporary");
+    assert_eq!(metadata.domain, "technology".into());
+    assert_eq!(metadata.genre, "technical_report".into());
+    assert_eq!(metadata.era, "contemporary".into());
 }
 
 #[test]
@@ -149,7 +149,7 @@ not valid json
     assert_eq!(metadata.filename, "broken.md");
     assert_eq!(metadata.docname, "Broken");
     assert_eq!(metadata.language, "unknown");
-    assert_eq!(metadata.domain, "unknown");
-    assert_eq!(metadata.genre, "unknown");
-    assert_eq!(metadata.era, "unknown");
+    assert_eq!(metadata.domain, "unknown".into());
+    assert_eq!(metadata.genre, "unknown".into());
+    assert_eq!(metadata.era, "unknown".into());
 }

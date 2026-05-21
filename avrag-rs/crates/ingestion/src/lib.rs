@@ -7,6 +7,7 @@ pub mod ir;
 pub mod ir_validator;
 pub mod semantic;
 pub mod parser;
+pub mod security_scanner;
 
 pub use error::IngestionError;
 pub use ir::{

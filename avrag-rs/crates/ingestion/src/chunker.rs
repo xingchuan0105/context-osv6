@@ -451,7 +451,7 @@ pub fn build_ir_chunk_plan(doc: &DocumentIr, filename: &str, policy: &ChunkPolic
 
             let summary_text = build_multimodal_summary_text(block);
             let context_text = block
-                .summary_text
+                .alt_text
                 .clone()
                 .filter(|value| !value.trim().is_empty())
                 .unwrap_or_else(|| summary_text.clone());
@@ -516,7 +516,7 @@ fn build_multimodal_summary_text(block: &crate::ir::BlockIr) -> String {
         block.caption.clone().unwrap_or_default(),
         block.section_path.last().cloned().unwrap_or_default(),
         block
-            .summary_text
+            .alt_text
             .clone()
             .unwrap_or_else(|| block.text.clone()),
     ]
@@ -552,7 +552,7 @@ mod ir_chunk_plan_tests {
                     block_type: BlockType::SlideText,
                     modality: BlockModality::TextOnly,
                     text: "Agenda".to_string(),
-                    summary_text: None,
+                    alt_text: None,
                     asset_refs: Vec::new(),
                     caption: None,
                     section_path: vec!["Agenda".to_string()],
@@ -570,7 +570,7 @@ mod ir_chunk_plan_tests {
                     block_type: BlockType::SlideImage,
                     modality: BlockModality::ImageWithContext,
                     text: "Revenue chart".to_string(),
-                    summary_text: Some("Q1 revenue chart".to_string()),
+                    alt_text: Some("Q1 revenue chart".to_string()),
                     asset_refs: vec!["asset-1".to_string()],
                     caption: Some("Revenue chart".to_string()),
                     section_path: vec!["Agenda".to_string()],

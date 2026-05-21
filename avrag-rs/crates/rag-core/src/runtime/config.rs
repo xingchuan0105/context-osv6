@@ -16,6 +16,8 @@ pub struct RagConfig {
     pub reranker: Option<Arc<RerankerClient>>,
     /// Multimodal reranker for image/text candidates
     pub mm_reranker: Option<Arc<RerankerClient>>,
+    /// Optional Redis cache store for L2 retrieval and L4 generation caching.
+    pub cache: Option<std::sync::Arc<avrag_cache_redis::CacheStore>>,
 }
 
 impl RagConfig {
@@ -30,6 +32,7 @@ impl RagConfig {
             planner: None,
             reranker: None,
             mm_reranker: None,
+            cache: None,
         }
     }
 
@@ -52,6 +55,12 @@ impl RagConfig {
 
     pub fn with_mm_reranker(mut self, reranker: Arc<RerankerClient>) -> Self {
         self.mm_reranker = Some(reranker);
+        self
+    }
+
+    /// Builder-style method to set the cache store
+    pub fn with_cache(mut self, cache: Arc<avrag_cache_redis::CacheStore>) -> Self {
+        self.cache = Some(cache);
         self
     }
 }

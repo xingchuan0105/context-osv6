@@ -43,6 +43,16 @@ impl RagRuntime {
         self
     }
 
+    /// Access the cache store if configured.
+    pub fn cache(&self) -> Option<&avrag_cache_redis::CacheStore> {
+        self.config.cache.as_deref()
+    }
+
+    /// Clone the cache store Arc if configured.
+    pub fn cache_arc(&self) -> Option<std::sync::Arc<avrag_cache_redis::CacheStore>> {
+        self.config.cache.clone()
+    }
+
     /// Access the PostgreSQL repository if configured.
     pub fn pg_repo(&self) -> Option<std::sync::Arc<avrag_storage_pg::PgAppRepository>> {
         self.config.pg_repo.clone()

@@ -88,6 +88,21 @@ pub enum AuditAction {
     OutputGuardBlock,
     OutputGuardRedact,
     OutputGuardFlag,
+    // Core API actions
+    ChatRequest,
+    SearchRequest,
+    RagRequest,
+    // Quality feedback
+    MessageFeedback,
+    CitationClick,
+    // v5 Agent runtime events
+    RoutingDecision,
+    HighRiskToolCall,
+    PolicyDeny,
+    PolicyRequireApproval,
+    BudgetExhausted,
+    DegradeEvent,
+    PermissionDenied,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

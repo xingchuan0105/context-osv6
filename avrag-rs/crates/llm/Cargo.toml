@@ -13,7 +13,10 @@ tokio = { workspace = true }
 tokio-util.workspace = true
 text-splitter = { workspace = true }
 tiktoken-rs = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
 
+avrag-cache-redis = { path = "../cache-redis" }
 common = { path = "../common" }
 telemetry = { path = "../telemetry" }
 tree-sitter-rust = "0.24"

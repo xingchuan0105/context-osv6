@@ -2,11 +2,42 @@ use crate::ModelProviderConfig;
 use crate::client::{ChatMessage, LlmClient, LlmUsage};
 use anyhow::Context;
 use common::RagPlan;
+use sha2::{Digest, Sha256};
+use std::sync::Arc;
+
 // Prompts are externalized to avrag-rs/prompts/ for version control and tuning.
 const PLANNER_SYSTEM_PROMPT: &str = include_str!("../../../prompts/rag_planner_system.txt");
+const PLANNER_CACHE_TTL_SECS: u64 = 60 * 60; // 1 hour
+
+fn sha256_hex(input: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(input.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+fn planner_cache_key(model: &str, query: &str, docscope: Option<&common::DocScopeMetadata>, session_context: Option<&str>) -> String {
+    let query_hash = sha256_hex(query);
+    let mut hasher = Sha256::new();
+    if let Some(ctx) = session_context {
+        hasher.update(ctx.as_bytes());
+    }
+    let ctx_hash = hex::encode(hasher.finalize());
+    let mut hasher = Sha256::new();
+    if let Some(ds) = docscope {
+        for doc in &ds.documents {
+            hasher.update(doc.doc_id.as_bytes());
+        }
+        for lang in &ds.profile.languages {
+            hasher.update(lang.as_bytes());
+        }
+    }
+    let ds_hash = hex::encode(hasher.finalize());
+    format!("planner:{model}:{query_hash}:{ctx_hash}:{ds_hash}")
+}
 
 pub struct RetrievalPlanner {
     llm: LlmClient,
+    cache: Option<Arc<avrag_cache_redis::CacheStore>>,
 }
 
 fn build_planner_system_prompt() -> String {
@@ -52,7 +83,13 @@ impl RetrievalPlanner {
     pub fn new(intent_config: ModelProviderConfig) -> Self {
         Self {
             llm: LlmClient::new(intent_config),
+            cache: None,
         }
+    }
+
+    pub fn with_cache(mut self, cache: Arc<avrag_cache_redis::CacheStore>) -> Self {
+        self.cache = Some(cache);
+        self
     }
 
     /// Plan retrieval items for a query using AGENT_LLM
@@ -74,6 +111,15 @@ impl RetrievalPlanner {
         session_context: Option<&str>,
         docscope: Option<&common::DocScopeMetadata>,
     ) -> anyhow::Result<(RagPlan, LlmUsage)> {
+        let model = &self.llm.config.model;
+        let cache_key = planner_cache_key(model, query, docscope, session_context);
+        if let Some(cache) = &self.cache {
+            match cache.get_json::<RagPlan>(&cache_key).await {
+                Ok(Some(plan)) => return Ok((plan, LlmUsage::zeroed())),
+                _ => {}
+            }
+        }
+
         let mut messages = vec![ChatMessage::system(build_planner_system_prompt())];
         messages.push(ChatMessage::user(build_planner_user_prompt(
             query,
@@ -94,6 +140,10 @@ impl RetrievalPlanner {
             )
         })?;
 
+        if let Some(cache) = &self.cache {
+            let _ = cache.set_json(&cache_key, &plan, PLANNER_CACHE_TTL_SECS).await;
+        }
+
         Ok((plan, response.usage))
     }
 
@@ -111,15 +161,15 @@ mod tests {
                 filename: "atlas-plan.md".to_string(),
                 docname: "Atlas Plan".to_string(),
                 language: "zh".to_string(),
-                domain: "technology".to_string(),
-                genre: "manual".to_string(),
-                era: "contemporary".to_string(),
+                domain: "technology".into(),
+                genre: "manual".into(),
+                era: "contemporary".into(),
             }],
             profile: common::DocScopeProfile {
                 languages: vec!["zh".to_string()],
-                domains: vec!["technology".to_string()],
-                genres: vec!["manual".to_string()],
-                eras: vec!["contemporary".to_string()],
+                domains: vec!["technology".into()],
+                genres: vec!["manual".into()],
+                eras: vec!["contemporary".into()],
             },
         }
     }

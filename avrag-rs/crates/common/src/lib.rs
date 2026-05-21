@@ -35,10 +35,10 @@ pub use contracts::preferences::{
 pub use chat::{
     ChatMessage, ChatMessageListResponse, ChatSession, ChatSessionListResponse,
     CitationLookupRequest, CitationLookupResponse, CreateChatSessionRequest,
-    UpdateChatSessionRequest, answer_blocks_from_rendered_answer, answer_blocks_to_markup,
-    plain_text_answer_blocks,
+    MessageFeedbackRequest, UpdateChatSessionRequest, answer_blocks_from_rendered_answer,
+    answer_blocks_to_markup, plain_text_answer_blocks,
 };
-pub use docscope::{DocScopeMetadata, DocScopeProfile, SummaryMetadata, SummaryOutput};
+pub use docscope::{DocScopeMetadata, DocScopeProfile, Domain, Era, Genre, SummaryMetadata, SummaryOutput};
 pub use documents::{
     AddUrlSourceRequest, CreateDocumentRequest, Document, DocumentContentResponse,
     DocumentMetadata, DocumentStatus, DocumentsResponse, ParsedPreviewItem, ParsedPreviewResponse,

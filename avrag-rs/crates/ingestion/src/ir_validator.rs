@@ -106,9 +106,9 @@ pub fn sanitize_document_ir(
             block_id.clone(),
             block.page,
         );
-        if let Some(summary_text) = &mut block.summary_text {
+        if let Some(alt_text) = &mut block.alt_text {
             sanitize_string_field(
-                summary_text,
+                alt_text,
                 options,
                 &mut warnings,
                 block_id.clone(),
@@ -173,11 +173,11 @@ pub fn validate_document_ir(document: &DocumentIr) -> Result<(), DocumentIrValid
                 block.page,
             ));
         }
-        if block.summary_text.as_deref().is_some_and(contains_nul) {
+        if block.alt_text.as_deref().is_some_and(contains_nul) {
             issues.push(issue(
-                "nul_in_summary_text",
+                "nul_in_alt_text",
                 format!(
-                    "block {} contains NUL bytes in summary_text",
+                    "block {} contains NUL bytes in alt_text",
                     block.block_id
                 ),
                 Some(block.block_id.clone()),
@@ -443,7 +443,7 @@ mod tests {
                 block_type: BlockType::Paragraph,
                 modality: BlockModality::TextOnly,
                 text: "hello".to_string(),
-                summary_text: None,
+                alt_text: None,
                 asset_refs: Vec::new(),
                 caption: None,
                 section_path: Vec::new(),
@@ -516,7 +516,7 @@ mod tests {
         let mut document = base_document();
         document.blocks[0].modality = BlockModality::ImageWithContext;
         document.blocks[0].block_type = BlockType::Figure;
-        document.blocks[0].summary_text = Some("summary".to_string());
+        document.blocks[0].alt_text = Some("summary".to_string());
         document.blocks[0].asset_refs.push("asset-1".to_string());
         document.assets.push(AssetIr {
             asset_id: "asset-1".to_string(),
@@ -558,7 +558,7 @@ mod tests {
                     block_type: BlockType::SlideText,
                     modality: BlockModality::TextOnly,
                     text: "Agenda".to_string(),
-                    summary_text: None,
+                    alt_text: None,
                     asset_refs: Vec::new(),
                     caption: None,
                     section_path: Vec::new(),
@@ -576,7 +576,7 @@ mod tests {
                     block_type: BlockType::SlideImage,
                     modality: BlockModality::ImageWithContext,
                     text: "Agenda slide".to_string(),
-                    summary_text: Some("Agenda slide render".to_string()),
+                    alt_text: Some("Agenda slide render".to_string()),
                     asset_refs: vec!["slide-render-1".to_string()],
                     caption: Some("Agenda slide".to_string()),
                     section_path: Vec::new(),

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{AnswerBlock, Citation};
+use crate::{AnswerBlock, Citation, ToolResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatSession {
@@ -55,6 +55,8 @@ pub struct ChatMessage {
     pub agent_icon: Option<String>,
     #[serde(default)]
     pub citations: Vec<Citation>,
+    #[serde(default)]
+    pub tool_results: Vec<ToolResult>,
     pub created_at: String,
 }
 
@@ -254,4 +256,11 @@ pub struct CitationLookupResponse {
     pub parser_backend: Option<String>,
     #[serde(default)]
     pub source_locator: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageFeedbackRequest {
+    pub session_id: String,
+    pub message_id: i64,
+    pub rating: String, // "up" | "down"
 }

@@ -2,8 +2,45 @@ use crate::ModelProviderConfig;
 use anyhow::Context;
 use serde::Deserialize;
 use serde_json::json;
+use sha2::{Digest, Sha256};
+use std::sync::Arc;
 
 const TEXT_EMBEDDING_BATCH_SIZE: usize = 10;
+const EMBEDDING_CACHE_TTL_SECS: u64 = 7 * 24 * 60 * 60; // 7 days
+
+fn sha256_hex(input: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(input.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+fn embedding_cache_key(model: &str, dimensions: Option<usize>, text_hash: &str) -> String {
+    match dimensions {
+        Some(d) => format!("embedding:{model}:{d}:{text_hash}"),
+        None => format!("embedding:{model}:{text_hash}"),
+    }
+}
+
+fn mm_embedding_cache_key(model: &str, dimension: Option<usize>, input: &MultiModalEmbeddingInput) -> String {
+    let mut hasher = Sha256::new();
+    if let Some(text) = input.text.as_deref() {
+        hasher.update(b"text:");
+        hasher.update(text.as_bytes());
+    }
+    if let Some(image) = input.image.as_deref() {
+        hasher.update(b"image:");
+        hasher.update(image.as_bytes());
+    }
+    if let Some(video) = input.video.as_deref() {
+        hasher.update(b"video:");
+        hasher.update(video.as_bytes());
+    }
+    let hash = hex::encode(hasher.finalize());
+    match dimension {
+        Some(d) => format!("mm_embedding:{model}:{d}:{hash}"),
+        None => format!("mm_embedding:{model}:{hash}"),
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct MultiModalEmbeddingInput {
@@ -40,6 +77,8 @@ impl MultiModalEmbeddingInput {
 pub struct EmbeddingClient {
     config: ModelProviderConfig,
     client: reqwest::Client,
+    rate_limiter: Option<crate::SharedRateLimiter>,
+    cache: Option<Arc<avrag_cache_redis::CacheStore>>,
 }
 
 impl EmbeddingClient {
@@ -48,7 +87,44 @@ impl EmbeddingClient {
             .timeout(std::time::Duration::from_millis(config.timeout_ms))
             .build()
             .expect("reqwest client should build");
-        Self { config, client }
+        let rate_limiter = if config.is_configured() {
+            let rpm = config.effective_rpm_limit();
+            let tpm = config.effective_tpm_limit();
+            Some(std::sync::Arc::new(crate::RateLimiter::new(rpm, tpm)))
+        } else {
+            None
+        };
+        Self {
+            config,
+            client,
+            rate_limiter,
+            cache: None,
+        }
+    }
+
+    pub fn with_cache(mut self, cache: Arc<avrag_cache_redis::CacheStore>) -> Self {
+        self.cache = Some(cache);
+        self
+    }
+
+    fn estimate_tokens_for_texts(&self, texts: &[&str]) -> usize {
+        texts.iter().map(|t| crate::count_tokens(t)).sum()
+    }
+
+    fn check_rate_limit(&self, estimated_tokens: usize) -> anyhow::Result<()> {
+        if let Some(limiter) = &self.rate_limiter {
+            match limiter.check_request(estimated_tokens) {
+                Ok(_) => Ok(()),
+                Err(crate::RateLimitError::RpmExceeded) => {
+                    anyhow::bail!("Embedding rate limit exceeded: too many requests per minute")
+                }
+                Err(crate::RateLimitError::TpmExceeded) => {
+                    anyhow::bail!("Embedding rate limit exceeded: too many tokens per minute")
+                }
+            }
+        } else {
+            Ok(())
+        }
     }
 
     pub async fn embed(&self, texts: &[&str]) -> anyhow::Result<Vec<Vec<f32>>> {
@@ -64,9 +140,42 @@ impl EmbeddingClient {
         }
 
         let mut vectors = Vec::with_capacity(texts.len());
-        for batch in texts.chunks(TEXT_EMBEDDING_BATCH_SIZE) {
-            vectors.extend(self.embed_openai_compatible_text(batch).await?);
+        let mut missing_indices = Vec::new();
+        let mut missing_texts = Vec::new();
+
+        if let Some(cache) = &self.cache {
+            for (index, text) in texts.iter().enumerate() {
+                let key = embedding_cache_key(&self.config.model, self.config.dimensions, &sha256_hex(text));
+                match cache.get_json::<Vec<f32>>(&key).await {
+                    Ok(Some(cached)) => vectors.push(cached),
+                    _ => {
+                        missing_indices.push(index);
+                        missing_texts.push(*text);
+                    }
+                }
+            }
+        } else {
+            missing_indices = (0..texts.len()).collect();
+            missing_texts = texts.iter().copied().collect();
         }
+
+        if !missing_texts.is_empty() {
+            for batch in missing_texts.chunks(TEXT_EMBEDDING_BATCH_SIZE) {
+                self.check_rate_limit(self.estimate_tokens_for_texts(batch))?;
+                let batch_vectors = self.embed_openai_compatible_text(batch).await?;
+                if let Some(cache) = &self.cache {
+                    for (text, vector) in batch.iter().zip(batch_vectors.iter()) {
+                        let key = embedding_cache_key(&self.config.model, self.config.dimensions, &sha256_hex(text));
+                        let _ = cache.set_json(&key, vector, EMBEDDING_CACHE_TTL_SECS).await;
+                    }
+                }
+                for (batch_index, vector) in batch_vectors.into_iter().enumerate() {
+                    let original_index = missing_indices[batch_index];
+                    vectors.insert(original_index, vector);
+                }
+            }
+        }
+
         Ok(vectors)
     }
 
@@ -83,6 +192,22 @@ impl EmbeddingClient {
                 "embed_multimodal_fused requires a DashScope multimodal embedding config"
             );
         }
+
+        let effective_dimension = dimension.or(self.config.dimensions);
+        let cache_key = mm_embedding_cache_key(&self.config.model, effective_dimension, input);
+        if let Some(cache) = &self.cache {
+            match cache.get_json::<Vec<f32>>(&cache_key).await {
+                Ok(Some(cached)) => return Ok(cached),
+                _ => {}
+            }
+        }
+
+        let estimated_tokens = input
+            .text
+            .as_deref()
+            .map(|t| crate::count_tokens(t))
+            .unwrap_or(100);
+        self.check_rate_limit(estimated_tokens)?;
 
         let mut content = serde_json::Map::new();
         if let Some(text) = input
@@ -170,12 +295,18 @@ impl EmbeddingClient {
             .await
             .context("Failed to parse DashScope multimodal embedding response")?;
 
-        resp.output
+        let vector = resp.output
             .embeddings
             .into_iter()
             .next()
             .map(|item| item.embedding)
-            .context("DashScope multimodal embedding response did not include any vectors")
+            .context("DashScope multimodal embedding response did not include any vectors")?;
+
+        if let Some(cache) = &self.cache {
+            let _ = cache.set_json(&cache_key, &vector, EMBEDDING_CACHE_TTL_SECS).await;
+        }
+
+        Ok(vector)
     }
 
     fn uses_dashscope_multimodal_embedding(&self) -> bool {
@@ -251,6 +382,8 @@ mod tests {
             dimensions: None,
             enable_thinking: None,
             enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
         };
         assert!(!empty.is_configured());
 
@@ -263,6 +396,8 @@ mod tests {
             dimensions: None,
             enable_thinking: None,
             enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
         };
         assert!(configured.is_configured());
     }
@@ -284,6 +419,8 @@ mod tests {
             dimensions: None,
             enable_thinking: None,
             enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
         });
         assert!(client.uses_dashscope_multimodal_embedding());
     }

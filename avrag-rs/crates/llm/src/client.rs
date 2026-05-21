@@ -222,6 +222,7 @@ impl ChatCompletionStreamParser {
 pub struct LlmClient {
     pub config: ModelProviderConfig,
     client: reqwest::Client,
+    rate_limiter: Option<crate::SharedRateLimiter>,
 }
 
 impl LlmClient {
@@ -230,7 +231,44 @@ impl LlmClient {
             .timeout(std::time::Duration::from_millis(config.timeout_ms))
             .build()
             .expect("reqwest client should build");
-        Self { config, client }
+        let rate_limiter = if config.is_configured() {
+            let rpm = config.effective_rpm_limit();
+            let tpm = config.effective_tpm_limit();
+            Some(std::sync::Arc::new(crate::RateLimiter::new(rpm, tpm)))
+        } else {
+            None
+        };
+        Self {
+            config,
+            client,
+            rate_limiter,
+        }
+    }
+
+    fn estimate_input_tokens(&self, messages: &[ChatMessage]) -> usize {
+        crate::count_chat_messages(messages)
+    }
+
+    fn check_rate_limit(&self, estimated_tokens: usize) -> anyhow::Result<usize> {
+        if let Some(limiter) = &self.rate_limiter {
+            match limiter.check_request(estimated_tokens) {
+                Ok(deducted) => Ok(deducted),
+                Err(crate::RateLimitError::RpmExceeded) => {
+                    anyhow::bail!("LLM rate limit exceeded: too many requests per minute")
+                }
+                Err(crate::RateLimitError::TpmExceeded) => {
+                    anyhow::bail!("LLM rate limit exceeded: too many tokens per minute")
+                }
+            }
+        } else {
+            Ok(estimated_tokens)
+        }
+    }
+
+    fn record_usage(&self, pre_deducted: usize, actual_tokens: usize) {
+        if let Some(limiter) = &self.rate_limiter {
+            limiter.record_actual_usage(pre_deducted, actual_tokens);
+        }
     }
 
     /// Send a chat completion request
@@ -255,6 +293,9 @@ impl LlmClient {
 
         let request_body =
             build_chat_completion_request_body(&self.config, messages, temperature, false);
+
+        let estimated_tokens = self.estimate_input_tokens(messages);
+        let pre_deducted = self.check_rate_limit(estimated_tokens)?;
 
         let response = self
             .client
@@ -347,6 +388,15 @@ impl LlmClient {
             "success",
             started_at.elapsed().as_secs_f64() * 1000.0,
         );
+        telemetry::prometheus::observe_llm_usage(
+            "generic",
+            &provider,
+            &resp.model,
+            resp.usage.prompt_tokens as u64,
+            resp.usage.completion_tokens as u64,
+        );
+
+        self.record_usage(pre_deducted, resp.usage.total_tokens as usize);
 
         Ok(LlmResponse {
             content,
@@ -385,6 +435,9 @@ impl LlmClient {
 
         let request_body =
             build_chat_completion_request_body(&self.config, messages, temperature, true);
+
+        let estimated_tokens = self.estimate_input_tokens(messages);
+        let pre_deducted = self.check_rate_limit(estimated_tokens)?;
 
         let request = self
             .client
@@ -452,6 +505,15 @@ impl LlmClient {
             "success",
             started_at.elapsed().as_secs_f64() * 1000.0,
         );
+        telemetry::prometheus::observe_llm_usage(
+            "generic",
+            &provider,
+            &parsed.model,
+            parsed.usage.prompt_tokens as u64,
+            parsed.usage.completion_tokens as u64,
+        );
+
+        self.record_usage(pre_deducted, parsed.usage.total_tokens as usize);
 
         Ok(parsed)
     }
@@ -550,6 +612,8 @@ mod tests {
             dimensions: None,
             enable_thinking,
             enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
         }
     }
 

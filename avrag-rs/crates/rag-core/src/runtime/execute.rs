@@ -13,6 +13,20 @@ use common::{
     ExecutePlanRequest, ExecutePlanResponse, PlaceholderTriplet, RelationPath, RetrievalBundle,
     RetrievedChunk,
 };
+use sha2::{Digest, Sha256};
+
+const RETRIEVAL_CACHE_TTL_SECS: u64 = 30 * 60; // 30 minutes
+
+fn sha256_hex(input: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(input.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+fn retrieval_cache_key(request: &ExecutePlanRequest) -> String {
+    let json = serde_json::to_string(request).unwrap_or_default();
+    format!("rag:execute:{}", sha256_hex(&json))
+}
 
 use crate::retrieval::ScoredChunk;
 
@@ -618,6 +632,24 @@ impl RagRuntime {
         request: &ExecutePlanRequest,
         auth: &AuthContext,
     ) -> Result<ExecutePlanResponse> {
+        let cache_key = format!(
+            "rag:execute:{}:{}",
+            auth.org_id(),
+            retrieval_cache_key(request)
+        );
+        if let Some(cache) = self.cache() {
+            match cache.get_json::<ExecutePlanResponse>(&cache_key).await {
+                Ok(Some(cached)) => {
+                    tracing::debug!("L2 cache hit for execute_plan");
+                    return Ok(cached);
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    tracing::warn!("L2 cache read error: {}", e);
+                }
+            }
+        }
+
         request
             .validate()
             .map_err(|error| anyhow!(error.to_string()))?;
@@ -765,7 +797,7 @@ impl RagRuntime {
         let summary_chunk_count = summary_chunks.len();
         let summary_mode = rag_summary_mode(&compat_plan);
 
-        Ok(ExecutePlanResponse {
+        let response = ExecutePlanResponse {
             bundle: RetrievalBundle {
                 chunks: filtered_retrieved_chunks
                     .iter()
@@ -809,7 +841,18 @@ impl RagRuntime {
                     items: item_trace,
                 },
             },
-        })
+        };
+
+        if let Some(cache) = self.cache() {
+            if let Err(e) = cache
+                .set_json(&cache_key, &response, RETRIEVAL_CACHE_TTL_SECS)
+                .await
+            {
+                tracing::warn!("L2 cache write error: {}", e);
+            }
+        }
+
+        Ok(response)
     }
 }
 

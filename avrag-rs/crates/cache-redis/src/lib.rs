@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+mod cache;
 mod lock;
+
+pub use cache::CacheStore;
 pub use lock::{DocumentLock, DocumentLockGuard};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
