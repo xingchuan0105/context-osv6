@@ -30,13 +30,16 @@ pub(crate) async fn dispatch_mode(
 
     match agent_kind {
         Some(crate::agents::AgentKind::Chat) | None => {
-            run_general_mode(state, request, session, stream_config).await
+            run_general_mode(state, request, session, stream_config, crate::agents::AgentKind::Chat, "chat").await
         }
         Some(crate::agents::AgentKind::Search) => {
             run_search_mode(state, request, session, stream_config).await
         }
         Some(crate::agents::AgentKind::Rag) => {
             run_rag_mode(state, request, session, stream_config).await
+        }
+        Some(crate::agents::AgentKind::Composite) => {
+            run_general_mode(state, request, session, stream_config, crate::agents::AgentKind::Composite, "composite").await
         }
     }
 }
@@ -46,13 +49,15 @@ async fn run_general_mode(
     request: &ChatRequest,
     session: &ChatSession,
     stream_config: Option<&StreamConfig>,
+    kind: crate::agents::AgentKind,
+    agent_type: &'static str,
 ) -> Result<ChatExecution, AppError> {
     let Some(agent_service) = state.agent_service() else {
         return Err(AppError::internal("agent service is not configured"));
     };
 
     let mut agent_request = state
-        .build_agent_request(request, crate::agents::AgentKind::Chat)
+        .build_agent_request(request, kind)
         .await;
     if let Some(config) = stream_config {
         agent_request.stream = true;
@@ -67,7 +72,7 @@ async fn run_general_mode(
             config.request_id.clone(),
             session.id.clone(),
             crate::STREAM_PLACEHOLDER_MESSAGE_ID,
-            "chat".to_string(),
+            agent_type.to_string(),
         )
         .without_done_event()
         .with_debug_trace(emit_debug_trace);
@@ -85,8 +90,8 @@ async fn run_general_mode(
         let mut execution = crate::chat::build_chat_execution_from_result(
             &agent_result,
             crate::chat::BuildChatExecutionParams {
-                mode: "chat",
-                agent_type: "chat",
+                mode: agent_type,
+                agent_type,
                 session_id: &session.id,
                 input_usage_text: request.query.trim(),
                 apply_output_guard: false,
@@ -116,8 +121,8 @@ async fn run_general_mode(
     let mut execution = crate::chat::build_chat_execution_from_result(
         &agent_result,
         crate::chat::BuildChatExecutionParams {
-            mode: "chat",
-            agent_type: "chat",
+            mode: agent_type,
+            agent_type,
             session_id: &session.id,
             input_usage_text: request.query.trim(),
             apply_output_guard: false,

@@ -2,6 +2,9 @@ use common::Citation;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+/// Re-export audit record type for event embedding.
+pub use ingestion::AuditRecord;
+
 /// Internal event emitted by agents during execution.
 /// These events are mapped to `ChatEvent` for SSE transport.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,6 +43,62 @@ pub enum AgentEvent {
     },
     /// Terminal error event.
     Error { code: String, message: String },
+    /// v5 white-box state transition event.
+    /// Emitted by StrategyExecutor at each state enter/complete boundary.
+    StateTransition {
+        #[serde(rename = "type")]
+        transition_type: StateTransitionType,
+        state_id: String,
+        state_kind: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        elapsed_ms: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        payload: Option<serde_json::Value>,
+    },
+    /// Plan/Decompose phase decision output (white-box observability).
+    PlanDecision {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        selected_tools: Vec<common::ToolCall>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        selected_skills: Vec<String>,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reasoning: String,
+    },
+    /// Tool execution result (white-box observability).
+    ToolResult {
+        tool: String,
+        status: common::ToolStatus,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        data: Option<serde_json::Value>,
+        elapsed_ms: u64,
+    },
+    /// Evaluation phase output (white-box observability).
+    Evaluation {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        signals: Option<serde_json::Value>,
+        decision: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reasoning: String,
+    },
+    /// Budget consumption tick (white-box observability).
+    BudgetTick {
+        current: u8,
+        max: u8,
+    },
+    /// Audit record emitted at key security/policy decision points.
+    /// Collected by the orchestrator for persistence into the audit log.
+    Audit {
+        record: AuditRecord,
+    },
+}
+
+/// Classification of state-transition events for white-box observability.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StateTransitionType {
+    Entered,
+    Completed,
+    Terminal,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +118,10 @@ pub struct AgentUsage {
 pub trait AgentEventSink: Send + Sync {
     /// Emit an event. Returns Err(()) if the sink is closed (e.g. client disconnected).
     async fn emit(&self, event: AgentEvent) -> Result<(), ()>;
+    /// Return a boxed clone of this sink so contexts can take ownership.
+    /// For channel-backed sinks the clone shares the same channel;
+    /// for collecting sinks the clone shares the same buffer.
+    fn clone_boxed(&self) -> Box<dyn AgentEventSink>;
 }
 
 /// A no-op sink that discards all events.
@@ -69,12 +132,16 @@ impl AgentEventSink for NoopSink {
     async fn emit(&self, _event: AgentEvent) -> Result<(), ()> {
         Ok(())
     }
+
+    fn clone_boxed(&self) -> Box<dyn AgentEventSink> {
+        Box::new(NoopSink)
+    }
 }
 
 /// A collecting sink that accumulates events into an internal buffer.
 /// Used by the non-streaming path to gather events for final response assembly.
 pub struct CollectingSink {
-    events: std::sync::Mutex<Vec<AgentEvent>>,
+    events: std::sync::Arc<std::sync::Mutex<Vec<AgentEvent>>>,
 }
 
 impl Default for CollectingSink {
@@ -83,15 +150,26 @@ impl Default for CollectingSink {
     }
 }
 
+impl Clone for CollectingSink {
+    fn clone(&self) -> Self {
+        Self {
+            events: std::sync::Arc::clone(&self.events),
+        }
+    }
+}
+
 impl CollectingSink {
     pub fn new() -> Self {
         Self {
-            events: std::sync::Mutex::new(Vec::new()),
+            events: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         }
     }
 
     pub fn into_events(self) -> Vec<AgentEvent> {
-        self.events.into_inner().unwrap_or_default()
+        match std::sync::Arc::try_unwrap(self.events) {
+            Ok(mutex) => mutex.into_inner().unwrap_or_default(),
+            Err(arc) => arc.lock().map(|g| g.clone()).unwrap_or_default(),
+        }
     }
 
     pub fn events(&self) -> Vec<AgentEvent> {
@@ -112,6 +190,10 @@ impl AgentEventSink for CollectingSink {
             Err(())
         }
     }
+
+    fn clone_boxed(&self) -> Box<dyn AgentEventSink> {
+        Box::new(self.clone())
+    }
 }
 
 /// A sink that wraps an `UnboundedSender` for immediate forwarding.
@@ -130,6 +212,10 @@ impl<T> ChannelSink<T> {
 impl AgentEventSink for ChannelSink<AgentEvent> {
     async fn emit(&self, event: AgentEvent) -> Result<(), ()> {
         self.sender.send(event).map_err(|_| ())
+    }
+
+    fn clone_boxed(&self) -> Box<dyn AgentEventSink> {
+        Box::new(ChannelSink::new(self.sender.clone()))
     }
 }
 
@@ -177,6 +263,49 @@ mod tests {
             AgentEvent::Error {
                 code: "E001".to_string(),
                 message: "Something failed".to_string(),
+            },
+            AgentEvent::Audit {
+                record: ingestion::AuditRecord {
+                    audit_id: "a1".to_string(),
+                    org_id: "o1".to_string(),
+                    actor_id: Some("u1".to_string()),
+                    action: ingestion::AuditAction::RoutingDecision,
+                    resource_type: "agent_request".to_string(),
+                    resource_id: "r1".to_string(),
+                    payload: serde_json::json!({"strategy_id": "rag"}),
+                    created_at: "2024-01-01T00:00:00Z".to_string(),
+                },
+            },
+            AgentEvent::StateTransition {
+                transition_type: StateTransitionType::Entered,
+                state_id: "plan".to_string(),
+                state_kind: "plan".to_string(),
+                elapsed_ms: Some(42),
+                payload: Some(serde_json::json!({"extra": true})),
+            },
+            AgentEvent::PlanDecision {
+                selected_tools: vec![common::ToolCall {
+                    tool: "dense_retrieval".to_string(),
+                    version: "1.0".to_string(),
+                    args: serde_json::json!({"query": "test"}),
+                }],
+                selected_skills: vec!["rag-plan".to_string()],
+                reasoning: "selected based on query type".to_string(),
+            },
+            AgentEvent::ToolResult {
+                tool: "web_search".to_string(),
+                status: common::ToolStatus::Ok,
+                data: Some(serde_json::json!({"results": 5})),
+                elapsed_ms: 1234,
+            },
+            AgentEvent::Evaluation {
+                signals: Some(serde_json::json!({"recall": 10})),
+                decision: "synthesize".to_string(),
+                reasoning: "sufficient evidence".to_string(),
+            },
+            AgentEvent::BudgetTick {
+                current: 1,
+                max: 3,
             },
         ];
 

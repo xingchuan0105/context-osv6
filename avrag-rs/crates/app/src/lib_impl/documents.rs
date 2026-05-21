@@ -66,6 +66,16 @@ impl AppState {
         )
         .map_err(|error| AppError::validation(error.code(), error.to_string()))?;
 
+        if req.file_size > self.max_upload_file_size_bytes {
+            return Err(AppError::validation(
+                "file_too_large",
+                format!(
+                    "file size {} exceeds maximum allowed size of {} bytes",
+                    req.file_size, self.max_upload_file_size_bytes
+                ),
+            ));
+        }
+
         if let Some(pg) = &self.pg {
             self.ensure_metric_quota("storage_bytes", req.file_size as i64)
                 .await?;

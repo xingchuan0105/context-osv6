@@ -10,14 +10,6 @@ use common::{
 
 const RAG_EXECUTE_PLAN_VERSION: &str = "rag-execute-v1";
 
-pub(crate) const RAG_PLAN_SYSTEM_PROMPT: &str = include_str!("../../../prompts/rag_plan_system.txt");
-
-pub(crate) const RAG_STRATEGY_EVAL_SYSTEM_PROMPT: &str =
-    include_str!("../../../prompts/rag_strategy_eval_system.txt");
-
-pub(crate) const SEARCH_STRATEGY_EVAL_SYSTEM_PROMPT: &str =
-    include_str!("../../../prompts/search_strategy_eval_system.txt");
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RagStrategyEvaluation {
     #[serde(default)]
@@ -96,9 +88,29 @@ pub(crate) struct SubQueryItem {
     pub tool_index: usize,
 }
 
+/// Plan strategy emitted by the PLAN phase LLM (P4 format).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PlanStrategy {
+    pub strategy: Vec<PlanStrategyItem>,
+    #[serde(default = "default_next_step_str")]
+    pub next_step: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PlanStrategyItem {
+    pub tool: String,
+    #[serde(flatten)]
+    pub params: serde_json::Value,
+}
+
+fn default_next_step_str() -> String {
+    "answer".to_string()
+}
+
 #[derive(Debug, Clone)]
 pub enum RagPlanDecision {
     ToolCalls(Vec<ToolCall>),
+    Strategy(PlanStrategy),
     Clarify(String),
 }
 
@@ -177,35 +189,52 @@ pub(crate) fn fallback_execute_plan_request(
 pub(crate) fn build_rag_plan_user_prompt(
     request: &ChatRequest,
     docscope_metadata: Option<&common::DocScopeMetadata>,
+    previous_tool_results: &[common::ToolResult],
 ) -> String {
     let metadata_json = docscope_metadata
         .and_then(|metadata| serde_json::to_string_pretty(metadata).ok())
         .unwrap_or_else(|| "null".to_string());
     let doc_scope_json =
         serde_json::to_string(&request.doc_scope).unwrap_or_else(|_| "[]".to_string());
-    let authoritative = format!(
+    let mut authoritative = format!(
         "Provided doc_scope JSON:\n{}\n\nDocscope metadata JSON:\n{}",
         doc_scope_json, metadata_json
     );
 
+    // Inject previously retrieved doc_index results so the planner can issue index_lookup.
+    let doc_index_results: Vec<&serde_json::Value> = previous_tool_results
+        .iter()
+        .filter(|r| r.tool == "doc_index" && r.status == common::ToolStatus::Ok)
+        .filter_map(|r| r.data.as_ref())
+        .collect();
+    if !doc_index_results.is_empty() {
+        let index_json = serde_json::to_string_pretty(&doc_index_results)
+            .unwrap_or_else(|_| "[]".to_string());
+        authoritative.push_str(&format!(
+            "\n\nDocument index already retrieved (from prior iteration):\n{}\n\n\
+             Based on this index, call index_lookup for the sections needed to answer the user.",
+            index_json
+        ));
+    }
+
     build_rag_envelope(RagContext {
-        mode: "rag_plan".to_string(),
+        mode: "rag-plan".to_string(),
         current_task: request.query.trim().to_string(),
         authoritative_context: authoritative,
         reference_context: "none".to_string(),
         user_preference_memory: "none".to_string(),
         skill: RagBehaviorSkill::new(
-            "rag_plan",
+            "rag-plan",
             [
                 "Generate an execute-plan for the RAG API.",
                 "Ask one natural-language clarification question when retrieval cannot proceed.",
             ],
         ),
-        output_contract: "Return exactly one raw JSON object: either PlannerOutput ({\"calls\":[...],\"next_step\":\"answer\"}) or {\"action\":\"clarify\",\"message\":\"...\"}.".to_string(),
+        output_contract: "Return exactly one raw JSON object: either PlanStrategy ({\"strategy\":[{tool, param1, param2}],\"next_step\":\"answer\"}) or {\"action\":\"clarify\",\"message\":\"...\"}.".to_string(),
     })
 }
 
-pub(crate) fn parse_rag_plan_decision(raw: &str, request: &ChatRequest) -> Option<RagPlanDecision> {
+pub(crate) fn parse_rag_plan_decision(raw: &str, request: &ChatRequest) -> Option<(RagPlanDecision, Vec<String>)> {
     let json = extract_json_object(raw).unwrap_or_else(|| raw.trim().to_string());
 
     // 1. Clarification object (either format)
@@ -220,28 +249,48 @@ pub(crate) fn parse_rag_plan_decision(raw: &str, request: &ChatRequest) -> Optio
                 .and_then(serde_json::Value::as_str)
                 .map(str::trim)
                 .filter(|message| !message.is_empty())?;
-            return Some(RagPlanDecision::Clarify(message.to_string()));
+            return Some((RagPlanDecision::Clarify(message.to_string()), Vec::new()));
         }
 
-    // 2. New format: RetrievalPlannerOutput (ToolCall[])
+    // 2. P4 format: PlanStrategy (plan-only, no schema-compliant args yet)
+    if let Ok(strategy) = serde_json::from_str::<PlanStrategy>(&json)
+        && !strategy.strategy.is_empty() {
+            return Some((RagPlanDecision::Strategy(strategy), Vec::new()));
+        }
+
+    // 3. Phase-3c format: RetrievalPlannerOutput (ToolCall[])
     if let Ok(planner_output) = serde_json::from_str::<RetrievalPlannerOutput>(&json)
         && !planner_output.calls.is_empty() {
             // Phase-3c: bypass adapter — return raw ToolCalls for the dispatcher
-            return Some(RagPlanDecision::ToolCalls(planner_output.calls));
+            return Some((RagPlanDecision::ToolCalls(planner_output.calls), planner_output.skills));
         }
 
-    // 3. Legacy format: ExecutePlanRequest (backward compatibility)
+    // 4. Legacy format: ExecutePlanRequest (backward compatibility)
     let plan = serde_json::from_str::<ExecutePlanRequest>(&json).ok()?;
     if plan.validate().is_err() || plan.doc_scope != request.doc_scope {
         return None;
     }
     match normalize_execute_plan_request(plan, request) {
-        Some(plan) => Some(RagPlanDecision::ToolCalls(execute_plan_request_to_tool_calls(plan))),
-        None => Some(RagPlanDecision::Clarify(
+        Some(plan) => Some((RagPlanDecision::ToolCalls(execute_plan_request_to_tool_calls(plan)), Vec::new())),
+        None => Some((RagPlanDecision::Clarify(
             crate::chat::i18n::clarify::need_query_or_doc_scope(request.language.as_deref())
                 .to_string(),
-        )),
+        ), Vec::new())),
     }
+}
+
+/// Convert a `PlanStrategy` (plan-only format) directly into fully-formed `ToolCall`s.
+/// Eliminates the need for a separate execute-phase LLM call.
+pub(crate) fn plan_strategy_to_tool_calls(strategy: &PlanStrategy) -> Vec<ToolCall> {
+    strategy
+        .strategy
+        .iter()
+        .map(|item| ToolCall {
+            tool: item.tool.clone(),
+            version: "1.0".to_string(),
+            args: item.params.clone(),
+        })
+        .collect()
 }
 
 /// Convert a legacy `ExecutePlanRequest` into the modern `Vec<ToolCall>` representation.
@@ -598,16 +647,31 @@ pub(crate) fn build_rag_strategy_evaluation_prompt(
         String::new()
     };
 
+    let doc_index_hint = {
+        let has_doc_index = tool_results
+            .iter()
+            .any(|r| r.tool == "doc_index" && r.status == common::ToolStatus::Ok);
+        let has_index_lookup = tool_results
+            .iter()
+            .any(|r| r.tool == "index_lookup" && r.status == common::ToolStatus::Ok);
+        if has_doc_index && !has_index_lookup {
+            "\n\nNote: Document index was retrieved but section content (index_lookup) has not been fetched yet. If the user's question requires reading specific sections, recommend Replan and suggest calling index_lookup with the relevant chunk_ids from the document index."
+        } else {
+            ""
+        }
+    };
+
     format!(
         "User's original question:\n{}\n\n\
          Executed sub-queries (iteration {}):\n{}{}\n\n\
          Accumulated across all iterations so far:\n  - unique chunks: {}\n\n\
-         Evaluate retrieval coverage.",
+         Evaluate retrieval coverage.{}",
         query.trim(),
         iteration + 1,
         sub_query_lines.join("\n"),
         tools_line,
         accumulated_chunk_count,
+        doc_index_hint,
     )
 }
 
@@ -754,13 +818,13 @@ mod tests {
     #[test]
     fn rag_envelope_formats_behavior_skill_profile_without_tools() {
         let envelope = build_rag_envelope(RagContext {
-            mode: "rag_answer".to_string(),
+            mode: "rag-answer".to_string(),
             current_task: "summarize".to_string(),
             authoritative_context: "evidence".to_string(),
             reference_context: "none".to_string(),
             user_preference_memory: "none".to_string(),
             skill: RagBehaviorSkill {
-                name: "rag_answer".to_string(),
+                name: "rag-answer".to_string(),
                 instructions: vec![
                     "Use only RAG Evidence for factual claims.".to_string(),
                     "Use preferences only for expression style.".to_string(),
@@ -770,7 +834,7 @@ mod tests {
         });
 
         assert!(envelope.contains("<Behavior Skill>"));
-        assert!(envelope.contains("name: rag_answer"));
+        assert!(envelope.contains("name: rag-answer"));
         assert!(envelope.contains("- Use only RAG Evidence for factual claims."));
         assert!(!envelope.contains("<Tools>"));
         assert!(!envelope.contains("tool_schema"));
@@ -961,7 +1025,7 @@ mod tests {
 
         let decision = parse_rag_plan_decision(&raw, &request);
         assert!(
-            matches!(decision, Some(RagPlanDecision::ToolCalls(ref calls)) if calls.len() == 1),
+            matches!(decision, Some((RagPlanDecision::ToolCalls(ref calls), _)) if calls.len() == 1),
             "expected ToolCalls with 1 call, got {:?}",
             decision
         );
@@ -980,7 +1044,7 @@ mod tests {
 
         let decision = parse_rag_plan_decision(&raw, &request);
         assert!(
-            matches!(decision, Some(RagPlanDecision::ToolCalls(ref calls)) if calls.len() == 1 && calls[0].tool == "dense_retrieval"),
+            matches!(decision, Some((RagPlanDecision::ToolCalls(ref calls), _)) if calls.len() == 1 && calls[0].tool == "dense_retrieval"),
             "expected ToolCalls with 1 dense_retrieval call, got {:?}",
             decision
         );
@@ -1000,10 +1064,71 @@ mod tests {
         // Phase-3c: adapter is bypassed — any valid ToolCall is accepted raw
         let decision = parse_rag_plan_decision(&raw, &request);
         assert!(
-            matches!(decision, Some(RagPlanDecision::ToolCalls(ref calls)) if calls.len() == 1),
+            matches!(decision, Some((RagPlanDecision::ToolCalls(ref calls), _)) if calls.len() == 1),
             "expected ToolCalls with 1 call, got {:?}",
             decision
         );
+    }
+
+    #[test]
+    fn parse_rag_plan_accepts_p4_plan_strategy_format() {
+        let request = request("rag", "How does Atlas handle rollback?", &["doc-1"]);
+        let raw = serde_json::json!({
+            "strategy": [
+                { "tool": "dense_retrieval", "queries": ["Atlas rollback mechanism"] },
+                { "tool": "lexical_retrieval", "terms": ["FE-2048", "PRD"] }
+            ],
+            "next_step": "answer"
+        })
+        .to_string();
+
+        let decision = parse_rag_plan_decision(&raw, &request);
+        assert!(
+            matches!(decision, Some((RagPlanDecision::Strategy(ref s), _)) if s.strategy.len() == 2),
+            "expected Strategy with 2 items, got {:?}",
+            decision
+        );
+        if let Some((RagPlanDecision::Strategy(s), _)) = decision {
+            assert_eq!(s.strategy[0].tool, "dense_retrieval");
+            assert_eq!(s.strategy[1].tool, "lexical_retrieval");
+        }
+    }
+
+    #[test]
+    fn plan_strategy_to_tool_calls_converts_items_directly() {
+        let strategy = PlanStrategy {
+            strategy: vec![
+                PlanStrategyItem {
+                    tool: "dense_retrieval".to_string(),
+                    params: serde_json::json!({ "queries": ["q1"], "modality": "text", "top_k": 10 }),
+                },
+                PlanStrategyItem {
+                    tool: "lexical_retrieval".to_string(),
+                    params: serde_json::json!({ "terms": ["a", "b"], "top_k": 5 }),
+                },
+            ],
+            next_step: "answer".to_string(),
+        };
+
+        let calls = plan_strategy_to_tool_calls(&strategy);
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].tool, "dense_retrieval");
+        assert_eq!(calls[0].version, "1.0");
+        assert_eq!(
+            calls[0].args,
+            serde_json::json!({ "queries": ["q1"], "modality": "text", "top_k": 10 })
+        );
+        assert_eq!(calls[1].tool, "lexical_retrieval");
+    }
+
+    #[test]
+    fn plan_strategy_to_tool_calls_handles_empty_strategy() {
+        let strategy = PlanStrategy {
+            strategy: vec![],
+            next_step: "answer".to_string(),
+        };
+        let calls = plan_strategy_to_tool_calls(&strategy);
+        assert!(calls.is_empty());
     }
 
     // ---------------- strategy evaluation prompt / parser ----------------

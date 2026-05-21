@@ -72,6 +72,7 @@ impl RagExecutor for FakeRagExecutor {
                 mode: "general".into(),
             },
             degrade_trace: Vec::new(),
+            tool_results: Vec::new(),
             answer_blocks: Vec::new(),
             guard_report: None,
         })
@@ -82,7 +83,7 @@ impl RagExecutor for FakeRagExecutor {
 async fn chat_service_executes_against_ports() {
     let service = ChatService::new(
         Arc::new(FakeNotebookStore),
-        Arc::new(app::services::chat::session::MemoryChatSessionStore::default()),
+        Arc::new(app::services::chat::session::MemoryChatSessionStore),
         Arc::new(FakeRateLimiter),
         Arc::new(FakeRagExecutor),
     );

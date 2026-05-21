@@ -34,6 +34,7 @@ pub struct AppState {
     pub(crate) redis_url: String,
     pub(crate) object_storage_upload_expire_sec: u64,
     pub(crate) object_storage_download_expire_sec: u64,
+    pub(crate) max_upload_file_size_bytes: u64,
     pub(crate) api_keys: Arc<RwLock<BTreeMap<String, Vec<ApiKeyRow>>>>,
     pub(crate) key_vault: Arc<dyn KeyVault>,
 }

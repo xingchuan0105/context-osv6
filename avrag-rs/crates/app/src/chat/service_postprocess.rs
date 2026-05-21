@@ -73,6 +73,21 @@ impl AppState {
             answer_blocks = ?execution.response.answer_blocks,
             "persisting assistant answer blocks"
         );
+        let tool_results: Vec<common::ToolResult> = execution.response.tool_results.iter().map(|r| {
+            common::ToolResult {
+                tool: r.tool.clone(),
+                version: r.version.clone(),
+                status: match r.status {
+                    contracts::chat::ToolStatus::Ok => common::ToolStatus::Ok,
+                    contracts::chat::ToolStatus::Timeout => common::ToolStatus::Timeout,
+                    contracts::chat::ToolStatus::Error => common::ToolStatus::Error,
+                    contracts::chat::ToolStatus::NotFound => common::ToolStatus::NotFound,
+                    contracts::chat::ToolStatus::NotImplemented => common::ToolStatus::NotImplemented,
+                },
+                data: r.data.clone(),
+                trace: None,
+            }
+        }).collect();
         let assistant_message_id = pg
             .append_chat_turn(
                 &self.auth,
@@ -83,6 +98,7 @@ impl AppState {
                     assistant_answer_blocks: &execution.response.answer_blocks,
                     agent_type: &req.agent_type,
                     citations: &execution.response.citations,
+                    tool_results: &tool_results,
                 },
             )
             .await
@@ -97,53 +113,58 @@ impl AppState {
         if is_direct_chat_mode(&execution.mode)
             && let Some(ref cm) = self.chatmemory
             && let Ok(messages) = pg.list_messages(&self.auth, session_uuid).await
+            && let Some(user_id) = self.auth.actor_id().map(|value| value.into_uuid())
         {
-            let raw_custom_preferences =
-                if let Some(user_id) = self.auth.actor_id().map(|value| value.into_uuid()) {
-                    pg.get_user_profile(&self.auth, user_id)
-                        .await
-                        .ok()
-                        .flatten()
-                        .map(|profile| profile.custom_preferences)
-                        .unwrap_or_else(|| serde_json::json!({}))
-                } else {
-                    serde_json::json!({})
-                };
-            let agent_memory = self
-                .current_user_preferences()
+            let existing_profile = pg
+                .get_user_profile(&self.auth, user_id)
                 .await
                 .ok()
-                .map(|preferences| preferences.agent_memory)
-                .unwrap_or_default();
-            let custom_preferences = merge_general_profile_custom_preferences(
-                raw_custom_preferences,
-                agent_memory,
-                req.query.trim(),
-                &execution.input_usage_text,
-            );
-            let structured_profile = if let Some(user_id) = self.auth.actor_id().map(|value| value.into_uuid()) {
-                pg.get_user_profile(&self.auth, user_id)
+                .flatten();
+
+            let should_update = match &existing_profile {
+                Some(profile) => {
+                    let since_last =
+                        chrono::Utc::now().signed_duration_since(profile.inferred_at);
+                    since_last.num_hours() >= 24
+                }
+                None => true,
+            };
+
+            if should_update {
+                let raw_custom_preferences = existing_profile
+                    .as_ref()
+                    .map(|p| p.custom_preferences.clone())
+                    .unwrap_or_else(|| serde_json::json!({}));
+                let agent_memory = self
+                    .current_user_preferences()
                     .await
                     .ok()
-                    .flatten()
-                    .map(|profile| profile.structured_profile)
-                    .unwrap_or_else(|| serde_json::json!({}))
-            } else {
-                serde_json::json!({})
-            };
-            let _ = cm
-                .update_user_profile(
-                    &self.auth,
-                    avrag_chatmemory::UserProfileUpdate {
-                        expertise_domains: derive_profile_domains(&messages, req.query.trim()),
-                        preferred_answer_style: detect_preferred_style(req.query.trim()),
-                        frequently_asked_topics: derive_profile_topics(&messages, req.query.trim()),
-                        custom_preferences,
-                        structured_profile,
-                        inference_version: "general-v1".to_string(),
-                    },
-                )
-                .await;
+                    .map(|preferences| preferences.agent_memory)
+                    .unwrap_or_default();
+                let custom_preferences = merge_general_profile_custom_preferences(
+                    raw_custom_preferences,
+                    agent_memory,
+                    req.query.trim(),
+                    &execution.input_usage_text,
+                );
+                let structured_profile = existing_profile
+                    .as_ref()
+                    .map(|p| p.structured_profile.clone())
+                    .unwrap_or_else(|| serde_json::json!({}));
+                let _ = cm
+                    .update_user_profile(
+                        &self.auth,
+                        avrag_chatmemory::UserProfileUpdate {
+                            expertise_domains: derive_profile_domains(&messages, req.query.trim()),
+                            preferred_answer_style: detect_preferred_style(req.query.trim()),
+                            frequently_asked_topics: derive_profile_topics(&messages, req.query.trim()),
+                            custom_preferences,
+                            structured_profile,
+                            inference_version: "general-v1".to_string(),
+                        },
+                    )
+                    .await;
+            }
         }
 
         if summary_updated {

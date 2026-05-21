@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::AppState;
 use common::{AppError, ChatRequest, ChatResponse};
+use ingestion::{AuditAction, AuditRecord};
 
 #[derive(Clone)]
 pub(crate) struct StreamConfig {
@@ -84,6 +85,30 @@ async fn run_pipeline(
     let mut execution =
         crate::chat::pipeline_steps::dispatch_mode(&state, &request, &session, stream_config.as_ref())
             .await?;
+
+    let audit_action = match execution.mode.as_str() {
+        "search" => AuditAction::SearchRequest,
+        "rag" => AuditAction::RagRequest,
+        _ => AuditAction::ChatRequest,
+    };
+    let audit_record = AuditRecord {
+        audit_id: Uuid::new_v4().to_string(),
+        org_id: state.auth.org_id().into_uuid().to_string(),
+        actor_id: preflight.user_uuid.to_string().into(),
+        action: audit_action,
+        resource_type: "chat".to_string(),
+        resource_id: session.id.clone(),
+        payload: serde_json::json!({
+            "mode": execution.mode,
+            "agent_type": request.agent_type,
+            "trace_id": preflight.trace_id,
+            "notebook_id": session.notebook_id,
+        }),
+        created_at: common::now_rfc3339(),
+    };
+    if let Some(ref pg) = state.pg {
+        let _ = pg.append_audit_record(&audit_record).await;
+    }
 
     if execution.apply_output_guard {
         state

@@ -12,14 +12,14 @@ pub(crate) fn build_docscope_metadata(metadata: Vec<common::SummaryMetadata>) ->
         if !meta.language.is_empty() && meta.language != "unknown" {
             languages.push(meta.language.clone());
         }
-        if !meta.domain.is_empty() && meta.domain != "unknown" {
-            domains.push(meta.domain.clone());
+        if meta.domain != common::Domain::Unknown {
+            domains.push(meta.domain);
         }
-        if !meta.genre.is_empty() && meta.genre != "unknown" {
-            genres.push(meta.genre.clone());
+        if meta.genre != common::Genre::Unknown {
+            genres.push(meta.genre);
         }
-        if !meta.era.is_empty() && meta.era != "unknown" {
-            eras.push(meta.era.clone());
+        if meta.era != common::Era::Unknown {
+            eras.push(meta.era);
         }
     }
 

@@ -160,7 +160,7 @@ impl AppState {
         existing_profile: &serde_json::Value,
     ) -> serde_json::Value {
         const DREAM_SYSTEM_PROMPT: &str =
-            include_str!("../../../../prompts/user_profile_extraction_system.txt");
+            include_str!("../../../../prompts/skills/user-profile-extraction/SKILL.md");
         let system_prompt = DREAM_SYSTEM_PROMPT.trim();
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
         let user_prompt = format!(
@@ -202,7 +202,7 @@ impl AppState {
     }
 
     pub(crate) async fn build_session_summary(&self, messages: &[ChatMessage]) -> String {
-        const SESSION_SUMMARY_SYSTEM_PROMPT: &str = include_str!("../../../../prompts/session_summary_system.txt");
+        const SESSION_SUMMARY_SYSTEM_PROMPT: &str = include_str!("../../../../prompts/skills/session-summary/SKILL.md");
         let summary_prompt = SESSION_SUMMARY_SYSTEM_PROMPT.trim();
         let prompt = messages
             .iter()

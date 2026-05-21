@@ -50,6 +50,8 @@ impl ModelProviderConfig {
             dimensions: self.dimensions,
             enable_thinking: self.enable_thinking,
             enable_cache: self.enable_cache,
+            rpm_limit: self.rpm_limit,
+            tpm_limit: self.tpm_limit,
         })
     }
 }
@@ -65,32 +67,44 @@ pub(crate) fn build_unified_agent_service(
     rag_runtime: Option<Arc<RagRuntime>>,
     _prompts_dir: &str,
 ) -> Arc<UnifiedAgentService> {
-    let chat_agent = crate::agents::chat_agent::ChatAgent::new(llm_client.clone(), temperature);
-    let rag_agent = crate::agents::rag_agent::RagAgent::new(rag_runtime, llm_client.clone(), temperature);
-
     let search_provider: Option<Arc<dyn avrag_search::SearchProvider>> = search_executor
         .map(|executor| -> Arc<dyn avrag_search::SearchProvider> { executor });
 
-    Arc::new(UnifiedAgentService::new(
-        Box::new(chat_agent),
-        Box::new(
-            crate::agents::web_search_agent::WebSearchAgent::new(search_provider)
-                .with_answer_synthesizer(llm_client, temperature),
-        ),
-        Box::new(rag_agent),
-    ))
+    let agent = crate::agents::unified::UnifiedAgent::new(llm_client.clone(), temperature)
+        .with_rag_runtime(rag_runtime)
+        .with_search_executor(search_provider);
+
+    Arc::new(UnifiedAgentService::new(Box::new(agent)))
 }
 
-pub(crate) fn make_embedding_client(config: &ModelProviderConfig) -> Option<Arc<EmbeddingClient>> {
-    config
-        .to_llm_config()
-        .map(|c| Arc::new(EmbeddingClient::new(c)))
+pub(crate) fn make_embedding_client(
+    config: &ModelProviderConfig,
+    cache: Option<Arc<avrag_cache_redis::CacheStore>>,
+) -> Option<Arc<EmbeddingClient>> {
+    config.to_llm_config().map(|c| {
+        let client = EmbeddingClient::new(c);
+        let client = if let Some(cache) = cache {
+            client.with_cache(cache)
+        } else {
+            client
+        };
+        Arc::new(client)
+    })
 }
 
-pub(crate) fn make_planner(config: &ModelProviderConfig) -> Option<Arc<RetrievalPlanner>> {
-    config
-        .to_llm_config()
-        .map(|c| Arc::new(RetrievalPlanner::new(c)))
+pub(crate) fn make_planner(
+    config: &ModelProviderConfig,
+    cache: Option<Arc<avrag_cache_redis::CacheStore>>,
+) -> Option<Arc<RetrievalPlanner>> {
+    config.to_llm_config().map(|c| {
+        let planner = RetrievalPlanner::new(c);
+        let planner = if let Some(cache) = cache {
+            planner.with_cache(cache)
+        } else {
+            planner
+        };
+        Arc::new(planner)
+    })
 }
 
 pub(crate) fn make_reranker(config: &ModelProviderConfig) -> Option<Arc<RerankerClient>> {
@@ -441,6 +455,13 @@ pub(crate) fn env_f32_optional(key: &str, default: Option<f32>) -> Option<f32> {
         .or(default)
 }
 
+pub(crate) fn env_u32_optional(key: &str, default: Option<u32>) -> Option<u32> {
+    std::env::var(key)
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .or(default)
+}
+
 pub(crate) fn env_bool_optional(key: &str) -> Option<bool> {
     std::env::var(key).ok().map(|value| {
         matches!(
@@ -495,6 +516,8 @@ pub(crate) fn model_config_from_env(
             .or(default.enable_thinking),
         enable_cache: env_bool_optional(&format!("{prefix}_ENABLE_CACHE"))
             .or(default.enable_cache),
+        rpm_limit: env_u32_optional(&format!("{prefix}_RPM_LIMIT"), default.rpm_limit),
+        tpm_limit: env_u32_optional(&format!("{prefix}_TPM_LIMIT"), default.tpm_limit),
     }
 }
 

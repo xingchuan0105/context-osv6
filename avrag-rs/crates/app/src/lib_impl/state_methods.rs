@@ -78,6 +78,7 @@ impl AppState {
             redis_url: config.redis.url.clone(),
             object_storage_upload_expire_sec: config.object_storage.upload_url_expire_sec,
             object_storage_download_expire_sec: config.object_storage.download_url_expire_sec,
+            max_upload_file_size_bytes: config.max_upload_file_size_bytes,
             api_keys: Arc::new(RwLock::new(BTreeMap::new())),
             key_vault,
         }
@@ -109,11 +110,20 @@ impl AppState {
             freshness: config.search.freshness.clone(),
         })));
 
+        // Create shared cache store if Redis URL is non-empty
+        let cache_store = if config.redis.url.trim().is_empty() {
+            None
+        } else {
+            avrag_cache_redis::CacheStore::new(&config.redis.url)
+                .ok()
+                .map(Arc::new)
+        };
+
         // Create RAG components if pg and embedding are available
         let rag_runtime = if let Some(ref pg_repo) = pg {
-            let embedding = make_embedding_client(&config.embedding);
-            let mm_embedding = make_embedding_client(&config.mm_embedding);
-            let planner = make_planner(&config.agent_llm);
+            let embedding = make_embedding_client(&config.embedding, cache_store.clone());
+            let mm_embedding = make_embedding_client(&config.mm_embedding, cache_store.clone());
+            let planner = make_planner(&config.agent_llm, cache_store.clone());
             let reranker = make_reranker(&config.rerank);
             let mm_reranker = make_reranker(&config.mm_rerank);
 
@@ -126,6 +136,8 @@ impl AppState {
                 dimensions: Some(1024),
                 enable_thinking: None,
                 enable_cache: None,
+                rpm_limit: None,
+                tpm_limit: None,
             }));
             let embedding_for_config = embedding.unwrap_or(fallback_embedding);
             let attach_rag_components = |mut rag_config: RagConfig| {
@@ -140,6 +152,9 @@ impl AppState {
                 }
                 if let Some(mm_r) = mm_reranker.clone() {
                     rag_config = rag_config.with_mm_reranker(mm_r);
+                }
+                if let Some(cache) = cache_store.clone() {
+                    rag_config = rag_config.with_cache(cache);
                 }
                 rag_config
             };
@@ -208,6 +223,7 @@ impl AppState {
             redis_url: config.redis.url.clone(),
             object_storage_upload_expire_sec: config.object_storage.upload_url_expire_sec,
             object_storage_download_expire_sec: config.object_storage.download_url_expire_sec,
+            max_upload_file_size_bytes: config.max_upload_file_size_bytes,
             api_keys: Arc::new(RwLock::new(BTreeMap::new())),
             key_vault,
         })
@@ -332,6 +348,10 @@ impl AppState {
         &self.redis_url
     }
 
+    pub fn max_upload_file_size_bytes(&self) -> u64 {
+        self.max_upload_file_size_bytes
+    }
+
     pub fn key_vault(&self) -> Arc<dyn common::key_vault::KeyVault> {
         self.key_vault.clone()
     }
@@ -381,6 +401,7 @@ impl AppState {
             docscope_metadata: None,
             metadata: std::collections::BTreeMap::new(),
             cancellation_token: None,
+            guard_pipeline: None,
         }
     }
 

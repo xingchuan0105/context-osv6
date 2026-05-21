@@ -20,6 +20,7 @@ avrag-search = { path = "../search" }
 avrag-chatmemory = { path = "../chatmemory" }
 avrag-llm = { path = "../llm" }
 avrag-rag-core = { path = "../rag-core" }
+avrag-cache-redis = { path = "../cache-redis" }
 avrag-guardrails = { path = "../guardrails" }
 telemetry = { path = "../telemetry" }
 common = { path = "../common" }
@@ -39,5 +40,7 @@ rig-core = "0.36.0"
 regex.workspace = true
 thiserror.workspace = true
 tokio-util.workspace = true
+evalexpr.workspace = true
+avrag-code-interpreter = { path = "../code-interpreter" }
 
 [dev-dependencies]

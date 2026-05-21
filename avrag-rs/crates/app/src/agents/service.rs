@@ -1,49 +1,26 @@
-use crate::agents::AgentKind;
-use crate::agents::events::AgentEventSink;
 use crate::agents::runtime::{Agent, AgentRequest, AgentRunResult};
 use common::AppError;
 
-/// Unified dispatcher for direct agent execution.
+/// Thin wrapper around any [`Agent`] implementation.
 ///
-/// Owns the concrete agent implementations and routes requests based on
-/// `AgentRequest.kind`. Chat, Web Search, and RAG production chat paths all
-/// execute through this service.
-///
-/// # Usage
-///
-/// ```ignore
-/// let service = UnifiedAgentService::new(chat_agent, search_agent, rag_agent);
-/// let result = service.run(request, &sink).await?;
-/// ```
+/// Production uses [`crate::agents::unified::UnifiedAgent`];
+/// tests may inject custom `dyn Agent` implementations.
 pub struct UnifiedAgentService {
-    chat: Box<dyn Agent>,
-    search: Box<dyn Agent>,
-    rag: Box<dyn Agent>,
+    agent: Box<dyn Agent>,
 }
 
 impl UnifiedAgentService {
-    /// Build the service from three agent implementations.
-    pub fn new(chat: Box<dyn Agent>, search: Box<dyn Agent>, rag: Box<dyn Agent>) -> Self {
-        Self { chat, search, rag }
+    pub fn new(agent: Box<dyn Agent>) -> Self {
+        Self { agent }
     }
 
-    /// Run the agent that matches `request.kind`.
-    ///
-    /// The `sink` receives progress events (`AgentEvent`) during execution.
-    /// For streaming paths these events are forwarded immediately over SSE;
-    /// for non-streaming paths a `CollectingSink` can be used and the final
-    /// `AgentRunResult` assembled from the collected events.
     #[tracing::instrument(skip(self, sink), fields(agent_kind = ?request.kind))]
     pub async fn run(
         &self,
         request: AgentRequest,
-        sink: &dyn AgentEventSink,
+        sink: &dyn crate::agents::events::AgentEventSink,
     ) -> Result<AgentRunResult, AppError> {
-        match request.kind {
-            AgentKind::Chat => self.chat.run(request, sink).await,
-            AgentKind::Search => self.search.run(request, sink).await,
-            AgentKind::Rag => self.rag.run(request, sink).await,
-        }
+        self.agent.run(request, sink).await
     }
 }
 
@@ -60,36 +37,36 @@ mod tests {
         async fn run(
             &self,
             request: AgentRequest,
-            sink: &dyn AgentEventSink,
+            sink: &dyn crate::agents::events::AgentEventSink,
         ) -> Result<AgentRunResult, AppError> {
             sink.emit(AgentEvent::Activity {
                 stage: self.0.to_string(),
                 message: "running".to_string(),
             })
             .await;
+            let query = request.query.clone();
             sink.emit(AgentEvent::MessageDelta {
-                text: request.query.clone(),
+                text: query.clone(),
             })
             .await;
             sink.emit(AgentEvent::Done {
-                final_message: Some(request.query),
+                final_message: Some(query),
                 usage: None,
             })
             .await;
-            Ok(AgentRunResult::default())
+            Ok(AgentRunResult {
+                answer: request.query.clone(),
+                ..Default::default()
+            })
         }
     }
 
     #[tokio::test]
     async fn test_service_routes_chat() {
-        let svc = UnifiedAgentService::new(
-            Box::new(EchoAgent("chat")),
-            Box::new(EchoAgent("search")),
-            Box::new(EchoAgent("rag")),
-        );
+        let svc = UnifiedAgentService::new(Box::new(EchoAgent("chat")));
         let sink = CollectingSink::new();
         let req = AgentRequest {
-            kind: AgentKind::Chat,
+            kind: crate::agents::AgentKind::Chat,
             query: "hello".to_string(),
             notebook_id: None,
             session_id: None,
@@ -104,23 +81,19 @@ mod tests {
             docscope_metadata: None,
             metadata: Default::default(),
             cancellation_token: None,
+            guard_pipeline: None,
         };
-        let _ = svc.run(req, &sink).await.unwrap();
-        let events = sink.events();
-        assert_eq!(events.len(), 3);
-        assert!(matches!(&events[0], AgentEvent::Activity { stage, .. } if stage == "chat"));
+        let result = svc.run(req, &sink).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().answer, "hello");
     }
 
     #[tokio::test]
     async fn test_service_routes_search() {
-        let svc = UnifiedAgentService::new(
-            Box::new(EchoAgent("chat")),
-            Box::new(EchoAgent("search")),
-            Box::new(EchoAgent("rag")),
-        );
+        let svc = UnifiedAgentService::new(Box::new(EchoAgent("search")));
         let sink = CollectingSink::new();
         let req = AgentRequest {
-            kind: AgentKind::Search,
+            kind: crate::agents::AgentKind::Search,
             query: "q".to_string(),
             notebook_id: None,
             session_id: None,
@@ -135,22 +108,19 @@ mod tests {
             docscope_metadata: None,
             metadata: Default::default(),
             cancellation_token: None,
+            guard_pipeline: None,
         };
-        let _ = svc.run(req, &sink).await.unwrap();
-        let events = sink.events();
-        assert!(matches!(&events[0], AgentEvent::Activity { stage, .. } if stage == "search"));
+        let result = svc.run(req, &sink).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().answer, "q");
     }
 
     #[tokio::test]
     async fn test_service_routes_rag() {
-        let svc = UnifiedAgentService::new(
-            Box::new(EchoAgent("chat")),
-            Box::new(EchoAgent("search")),
-            Box::new(EchoAgent("rag")),
-        );
+        let svc = UnifiedAgentService::new(Box::new(EchoAgent("rag")));
         let sink = CollectingSink::new();
         let req = AgentRequest {
-            kind: AgentKind::Rag,
+            kind: crate::agents::AgentKind::Rag,
             query: "q".to_string(),
             notebook_id: None,
             session_id: None,
@@ -165,9 +135,10 @@ mod tests {
             docscope_metadata: None,
             metadata: Default::default(),
             cancellation_token: None,
+            guard_pipeline: None,
         };
-        let _ = svc.run(req, &sink).await.unwrap();
-        let events = sink.events();
-        assert!(matches!(&events[0], AgentEvent::Activity { stage, .. } if stage == "rag"));
+        let result = svc.run(req, &sink).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().answer, "q");
     }
 }

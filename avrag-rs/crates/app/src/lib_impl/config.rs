@@ -25,6 +25,8 @@ pub struct AppConfig {
     pub object_storage: ObjectStorageConfig,
     pub prompts: PromptConfig,
     pub usage_limit: UsageLimitConfig,
+    /// Maximum allowed file size for a single upload in bytes (default: 100 MB).
+    pub max_upload_file_size_bytes: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +40,8 @@ pub struct ModelProviderConfig {
     pub dimensions: Option<usize>,
     pub enable_thinking: Option<bool>,
     pub enable_cache: Option<bool>,
+    pub rpm_limit: Option<u32>,
+    pub tpm_limit: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -131,6 +135,8 @@ impl Default for AppConfig {
                 dimensions: Some(1024),
                 enable_thinking: None,
                 enable_cache: None,
+                rpm_limit: None,
+                tpm_limit: None,
             },
             mm_embedding: ModelProviderConfig {
                 base_url: "https://dashscope.aliyuncs.com/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding".to_string(),
@@ -142,6 +148,8 @@ impl Default for AppConfig {
                 dimensions: Some(1024),
                 enable_thinking: None,
                 enable_cache: None,
+                rpm_limit: None,
+                tpm_limit: None,
             },
             mm_rerank: ModelProviderConfig {
                 base_url: "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank".to_string(),
@@ -153,6 +161,8 @@ impl Default for AppConfig {
                 dimensions: None,
                 enable_thinking: None,
                 enable_cache: None,
+                rpm_limit: None,
+                tpm_limit: None,
             },
             rerank: ModelProviderConfig {
                 base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
@@ -164,6 +174,8 @@ impl Default for AppConfig {
                 dimensions: None,
                 enable_thinking: None,
                 enable_cache: None,
+                rpm_limit: None,
+                tpm_limit: None,
             },
             agent_llm: ModelProviderConfig {
                 base_url: "https://api.deepseek.com".to_string(),
@@ -175,6 +187,8 @@ impl Default for AppConfig {
                 dimensions: None,
                 enable_thinking: Some(true),
                 enable_cache: Some(true),
+                rpm_limit: None,
+                tpm_limit: None,
             },
             memory_llm: ModelProviderConfig {
                 base_url: "https://api.deepseek.com".to_string(),
@@ -186,6 +200,8 @@ impl Default for AppConfig {
                 dimensions: None,
                 enable_thinking: Some(false),
                 enable_cache: None,
+                rpm_limit: None,
+                tpm_limit: None,
             },
             ingestion_llm: ModelProviderConfig {
                 base_url: "https://www.dmxapi.cn/v1".to_string(),
@@ -197,6 +213,8 @@ impl Default for AppConfig {
                 dimensions: None,
                 enable_thinking: None,
                 enable_cache: None,
+                rpm_limit: None,
+                tpm_limit: None,
             },
             search: SearchConfig {
                 mode: "llm_tools".to_string(),
@@ -242,6 +260,7 @@ impl Default for AppConfig {
             usage_limit: UsageLimitConfig {
                 enforcement_phase: "shadow".to_string(),
             },
+            max_upload_file_size_bytes: 100 * 1024 * 1024,
         }
     }
 }
@@ -369,6 +388,10 @@ impl AppConfig {
         config.usage_limit.enforcement_phase = env_string(
             "USAGE_LIMIT_ENFORCEMENT_PHASE",
             &config.usage_limit.enforcement_phase,
+        );
+        config.max_upload_file_size_bytes = env_u64(
+            "AVRAG_MAX_UPLOAD_FILE_SIZE_BYTES",
+            config.max_upload_file_size_bytes,
         );
 
         config

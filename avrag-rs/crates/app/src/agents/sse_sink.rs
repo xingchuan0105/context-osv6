@@ -23,6 +23,22 @@ pub struct SseSink {
     message_delta_emitted: AtomicBool,
 }
 
+impl Clone for SseSink {
+    fn clone(&self) -> Self {
+        Self {
+            sender: self.sender.clone(),
+            request_id: self.request_id.clone(),
+            session_id: self.session_id.clone(),
+            message_id: self.message_id,
+            agent_type: self.agent_type.clone(),
+            emit_done: self.emit_done,
+            emit_debug_trace: self.emit_debug_trace,
+            answer_started: AtomicBool::new(self.answer_started.load(Ordering::SeqCst)),
+            message_delta_emitted: AtomicBool::new(self.message_delta_emitted.load(Ordering::SeqCst)),
+        }
+    }
+}
+
 impl SseSink {
     pub fn new(
         sender: UnboundedSender<ChatEvent>,
@@ -79,6 +95,10 @@ impl SseSink {
             return;
         }
         if matches!(event, AgentEvent::DebugTrace { .. }) && !self.emit_debug_trace {
+            return;
+        }
+        // Audit records are internal — never forwarded to the client SSE stream.
+        if matches!(event, AgentEvent::Audit { .. }) {
             return;
         }
         let chat_event = self.map_event(event);
@@ -166,6 +186,79 @@ impl SseSink {
                 status: "debug".to_string(),
                 detail: Some(payload),
             },
+            AgentEvent::StateTransition {
+                transition_type,
+                state_id,
+                state_kind,
+                elapsed_ms,
+                payload,
+            } => ChatEvent::Trace {
+                request_id: self.request_id.clone(),
+                stage: format!("state_{}", serde_json::to_string(&transition_type).unwrap_or_default().trim_matches('"')),
+                status: "ok".to_string(),
+                detail: Some(serde_json::json!({
+                    "state_id": state_id,
+                    "state_kind": state_kind,
+                    "elapsed_ms": elapsed_ms,
+                    "payload": payload,
+                })),
+            },
+            AgentEvent::PlanDecision {
+                selected_tools,
+                selected_skills,
+                reasoning,
+            } => ChatEvent::Trace {
+                request_id: self.request_id.clone(),
+                stage: "plan_decision".to_string(),
+                status: "ok".to_string(),
+                detail: Some(serde_json::json!({
+                    "selected_tools": selected_tools,
+                    "selected_skills": selected_skills,
+                    "reasoning": reasoning,
+                })),
+            },
+            AgentEvent::ToolResult {
+                tool,
+                status,
+                data,
+                elapsed_ms,
+            } => ChatEvent::Trace {
+                request_id: self.request_id.clone(),
+                stage: format!("tool_result.{}", tool),
+                status: format!("{:?}", status).to_lowercase(),
+                detail: Some(serde_json::json!({
+                    "tool": tool,
+                    "status": status,
+                    "data": data,
+                    "elapsed_ms": elapsed_ms,
+                })),
+            },
+            AgentEvent::Evaluation {
+                signals,
+                decision,
+                reasoning,
+            } => ChatEvent::Trace {
+                request_id: self.request_id.clone(),
+                stage: "evaluation".to_string(),
+                status: "ok".to_string(),
+                detail: Some(serde_json::json!({
+                    "signals": signals,
+                    "decision": decision,
+                    "reasoning": reasoning,
+                })),
+            },
+            AgentEvent::BudgetTick { current, max } => ChatEvent::Trace {
+                request_id: self.request_id.clone(),
+                stage: "budget_tick".to_string(),
+                status: "ok".to_string(),
+                detail: Some(serde_json::json!({
+                    "current": current,
+                    "max": max,
+                })),
+            },
+            AgentEvent::Audit { .. } => {
+                unreachable!("Audit events are filtered in on_event before map_event")
+            }
         }
     }
 
@@ -195,6 +288,10 @@ impl AgentEventSink for SseSink {
         }
         self.send(event);
         Ok(())
+    }
+
+    fn clone_boxed(&self) -> Box<dyn AgentEventSink> {
+        Box::new(self.clone())
     }
 }
 

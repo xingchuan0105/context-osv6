@@ -3,12 +3,12 @@ mod tests {
     use crate::lib_impl::*;
     use common::{
         ChatMessage, CreateDocumentRequest, CreateDocumentUploadResponse, CreateNotebookRequest,
-        DocumentStatus, Notebook, UpdateDocumentRequest, default_org_id, default_user_id,
+        DocumentStatus, Notebook, UpdateDocumentRequest,
     };
-    use tokio::time::sleep;
-    use std::time::Duration;
+    
+    
     use uuid::Uuid;
-    use super::*;
+    
     use std::sync::Arc;
     use tokio::fs;
     use reqwest::Url;
@@ -22,45 +22,45 @@ mod tests {
                 filename: "atlas-1.md".to_string(),
                 docname: "Atlas One".to_string(),
                 language: "zh".to_string(),
-                domain: "technology".to_string(),
-                genre: "manual".to_string(),
-                era: "contemporary".to_string(),
+                domain: common::Domain::Technology,
+                genre: common::Genre::Manual,
+                era: common::Era::Contemporary,
             },
             common::SummaryMetadata {
                 doc_id: "doc-2".to_string(),
                 filename: "atlas-2.md".to_string(),
                 docname: "Atlas Two".to_string(),
                 language: "zh".to_string(),
-                domain: "technology".to_string(),
-                genre: "report".to_string(),
-                era: "unknown".to_string(),
+                domain: common::Domain::Technology,
+                genre: common::Genre::Report,
+                era: common::Era::Unknown,
             },
             common::SummaryMetadata {
                 doc_id: "doc-3".to_string(),
                 filename: "atlas-3.md".to_string(),
                 docname: "Atlas Three".to_string(),
                 language: "en".to_string(),
-                domain: "unknown".to_string(),
-                genre: "".to_string(),
-                era: "modern".to_string(),
+                domain: common::Domain::Unknown,
+                genre: common::Genre::Unknown,
+                era: common::Era::Modern,
             },
         ];
 
-        let result = build_docscope_metadata(metadata.clone());
+        let result = build_docscope_metadata(metadata);
 
         assert_eq!(result.documents.len(), 3);
         assert_eq!(
             result.profile.languages,
             vec!["en".to_string(), "zh".to_string()]
         );
-        assert_eq!(result.profile.domains, vec!["technology".to_string()]);
+        assert_eq!(result.profile.domains, vec![common::Domain::Technology]);
         assert_eq!(
             result.profile.genres,
-            vec!["manual".to_string(), "report".to_string()]
+            vec![common::Genre::Report, common::Genre::Manual]
         );
         assert_eq!(
             result.profile.eras,
-            vec!["contemporary".to_string(), "modern".to_string()]
+            vec![common::Era::Modern, common::Era::Contemporary]
         );
     }
 
@@ -122,6 +122,7 @@ mod tests {
                 agent_name: None,
                 agent_icon: None,
                 citations: Vec::new(),
+                tool_results: Vec::new(),
                 created_at: "2026-03-25T00:00:00Z".to_string(),
             }],
             Some("  carry this forward  ".to_string()),
@@ -453,8 +454,6 @@ mod tests {
         let mut state = AppState::new(config);
         state.set_agent_service(crate::agents::service::UnifiedAgentService::new(
             Box::new(ScriptedAgent),
-            Box::new(ScriptedAgent),
-            Box::new(ScriptedAgent),
         ));
         let notebook = state
             .create_notebook(CreateNotebookRequest {
@@ -520,8 +519,6 @@ mod tests {
         let mut state = AppState::new(config);
         state.set_agent_service(crate::agents::service::UnifiedAgentService::new(
             Box::new(BufferedOnlyAgent),
-            Box::new(BufferedOnlyAgent),
-            Box::new(BufferedOnlyAgent),
         ));
         let notebook = state
             .create_notebook(CreateNotebookRequest {
@@ -581,9 +578,7 @@ mod tests {
     async fn search_stream_emits_buffered_agent_answer_when_no_delta_arrives() {
         let mut state = AppState::new(AppConfig::default());
         state.set_agent_service(crate::agents::service::UnifiedAgentService::new(
-            Box::new(ScriptedAgent),
             Box::new(BufferedOnlyAgent),
-            Box::new(ScriptedAgent),
         ));
         let notebook = state
             .create_notebook(CreateNotebookRequest {

@@ -241,7 +241,7 @@ fn simulate_search(scenario: &Scenario) -> SimulationResult {
 
     for iter in 0..iterations {
         // Evaluator prompt: system + query + sub_queries + result metadata
-        let eval_system = include_str!("../../../../prompts/search_strategy_eval_system.txt");
+        let eval_system = include_str!("../../../../prompts/skills/search-eval/SKILL.md");
         let eval_prompt = format!(
             "User question: {}\n\nSub-queries: {}\n\nResults this iteration: {}\nAccumulated results: {}\nIteration: {}",
             scenario.query,
@@ -306,7 +306,7 @@ fn simulate_rag(scenario: &Scenario) -> SimulationResult {
 
     for iter in 0..iterations {
         // --- Planner ---
-        let plan_system = include_str!("../../../../prompts/rag_plan_system.txt");
+        let plan_system = include_str!("../../../../prompts/skills/rag-plan/SKILL.md");
         let mut plan_user = format!("Query: {}\n", scenario.query);
         if !scenario.history.is_empty() {
             plan_user.push_str("Conversation history:\n");
@@ -350,7 +350,7 @@ fn simulate_rag(scenario: &Scenario) -> SimulationResult {
         });
 
         // --- Evaluator ---
-        let eval_system = include_str!("../../../../prompts/rag_strategy_eval_system.txt");
+        let eval_system = include_str!("../../../../prompts/skills/rag-eval/SKILL.md");
         let sub_queries = scenario.query; // simplified
         let eval_prompt = format!(
             "Original query: {}\n\nSub-queries: {}\n\nRetrieval results: {} chunks\nAccumulated unique chunks: {}\nIteration: {}",
@@ -542,9 +542,9 @@ mod tests {
     fn typical_user_single_session_estimate() {
         // --- Measure actual system-prompt sizes ---
         let chat_system = "You are a direct chat assistant. Answer from the current conversation and general knowledge only. Do not invent document or web citations; if the user asks for document evidence or fresh web facts, explain that they should switch to RAG or WebSearch mode.";
-        let rag_plan_sys = include_str!("../../../../prompts/rag_plan_system.txt");
-        let rag_eval_sys = include_str!("../../../../prompts/rag_strategy_eval_system.txt");
-        let search_eval_sys = include_str!("../../../../prompts/search_strategy_eval_system.txt");
+        let rag_plan_sys = include_str!("../../../../prompts/skills/rag-plan/SKILL.md");
+        let rag_eval_sys = include_str!("../../../../prompts/skills/rag-eval/SKILL.md");
+        let search_eval_sys = include_str!("../../../../prompts/skills/search-eval/SKILL.md");
 
         let chat_system_tokens = count_tokens(chat_system);
         let rag_plan_sys_tokens = count_tokens(rag_plan_sys);

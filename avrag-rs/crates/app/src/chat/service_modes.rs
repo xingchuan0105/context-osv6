@@ -31,6 +31,7 @@ impl AppState {
                 }),
                 message_id: None,
                 guard_report: None,
+                tool_results: Vec::new(),
             },
             llm_usage: None,
             debug_metadata: None,
@@ -92,6 +93,7 @@ impl AppState {
             agent_name: None,
             agent_icon: None,
             citations: Vec::new(),
+            tool_results: Vec::new(),
             created_at: now.clone(),
         });
         messages.push(ChatMessage {
@@ -104,6 +106,7 @@ impl AppState {
             agent_name: Some(agent_name(&req.agent_type, req.language.as_deref()).to_string()),
             agent_icon: Some(agent_icon(&req.agent_type).to_string()),
             citations: citations.clone(),
+            tool_results: Vec::new(),
             created_at: now.clone(),
         });
 
@@ -131,6 +134,7 @@ impl AppState {
                 mode_debug,
                 message_id: Some(assistant_message_id),
                 guard_report: None,
+                tool_results: Vec::new(),
             },
             llm_usage: None,
             debug_metadata: None,
@@ -189,6 +193,18 @@ pub(crate) fn build_chat_execution_from_result(
             mode_debug: params.mode_debug,
             message_id: None,
             guard_report: None,
+            tool_results: agent_result.tool_results.iter().map(|r| contracts::chat::ToolResult {
+                tool: r.tool.clone(),
+                version: r.version.clone(),
+                status: match r.status {
+                    common::ToolStatus::Ok => contracts::chat::ToolStatus::Ok,
+                    common::ToolStatus::Timeout => contracts::chat::ToolStatus::Timeout,
+                    common::ToolStatus::Error => contracts::chat::ToolStatus::Error,
+                    common::ToolStatus::NotFound => contracts::chat::ToolStatus::NotFound,
+                    common::ToolStatus::NotImplemented => contracts::chat::ToolStatus::NotImplemented,
+                },
+                data: r.data.clone(),
+            }).collect(),
         },
         llm_usage,
         debug_metadata: params.debug_metadata,
