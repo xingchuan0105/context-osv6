@@ -5,8 +5,30 @@
 use crate::golden_set::{GoldenDataset, GoldenExample};
 use crate::metrics::EvaluationMetrics;
 use anyhow::Result;
+use std::future::Future;
 use std::path::Path;
+use std::pin::Pin;
 use tracing::{info, warn};
+
+/// Trait for plugging a real RAG runtime into the evaluation harness.
+///
+/// Implementors provide retrieval + synthesis so the harness can compute
+/// Recall@K, Citation Accuracy, and Hallucination Rate against a golden set.
+pub trait RagEvaluator: Send + Sync {
+    /// Retrieve up to `k` chunk contents for `query`.
+    fn retrieve(
+        &self,
+        query: &str,
+        k: usize,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<String>>> + Send + '_>>;
+
+    /// Synthesize an answer from `query` and retrieved `chunks`.
+    fn synthesize(
+        &self,
+        query: &str,
+        chunks: &[String],
+    ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + '_>>;
+}
 
 /// Configuration for the evaluation harness.
 #[derive(Debug, Clone)]
@@ -33,22 +55,46 @@ impl Default for HarnessConfig {
 }
 
 /// The evaluation harness.
-#[derive(Debug)]
 pub struct EvaluationHarness {
     dataset: GoldenDataset,
     config: HarnessConfig,
+    evaluator: Option<Box<dyn RagEvaluator>>,
+}
+
+impl std::fmt::Debug for EvaluationHarness {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EvaluationHarness")
+            .field("dataset", &self.dataset)
+            .field("config", &self.config)
+            .field("evaluator", &self.evaluator.is_some())
+            .finish()
+    }
 }
 
 impl EvaluationHarness {
     /// Create a harness from a golden-set JSON file.
     pub fn from_file(path: impl AsRef<Path>, config: HarnessConfig) -> Result<Self> {
         let dataset = GoldenDataset::load(path)?;
-        Ok(Self { dataset, config })
+        Ok(Self {
+            dataset,
+            config,
+            evaluator: None,
+        })
     }
 
     /// Create a harness from an in-memory dataset.
     pub fn new(dataset: GoldenDataset, config: HarnessConfig) -> Self {
-        Self { dataset, config }
+        Self {
+            dataset,
+            config,
+            evaluator: None,
+        }
+    }
+
+    /// Attach a real RAG evaluator so `run_all` exercises the live pipeline.
+    pub fn with_evaluator(mut self, evaluator: Box<dyn RagEvaluator>) -> Self {
+        self.evaluator = Some(evaluator);
+        self
     }
 
     /// Run evaluation across the entire golden set.
@@ -139,13 +185,18 @@ impl EvaluationHarness {
         crate::metrics::HallucinationResult,
     )> {
         // ─── RETRIEVAL ─────────────────────────────────────────────────────────
-        // In integration tests, retrieve from the RAG runtime:
-        // let retrieved_chunks = runtime.retrieve(&example.query, TopK(recall_k)).await?;
-        let retrieved_chunks: Vec<String> = Vec::new(); // TODO: wire to RagRuntime
+        let retrieved_chunks = if let Some(ref evaluator) = self.evaluator {
+            evaluator.retrieve(&example.query, recall_k).await?
+        } else {
+            Vec::new()
+        };
 
         // ─── GENERATION ────────────────────────────────────────────────────────
-        // let answer = runtime.synthesize(&example.query, &retrieved_chunks).await?;
-        let answer = String::new(); // TODO: wire to RagRuntime
+        let answer = if let Some(ref evaluator) = self.evaluator {
+            evaluator.synthesize(&example.query, &retrieved_chunks).await?
+        } else {
+            String::new()
+        };
 
         // ─── CITATION EXTRACTION ───────────────────────────────────────────────
         let citation_indices = crate::metrics::EvaluationMetrics::extract_citation_indices(&answer);

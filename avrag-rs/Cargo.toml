@@ -11,6 +11,7 @@ members = [
   "crates/billing",
   "crates/cache-redis",
   "crates/chatmemory",
+  "crates/code-interpreter",
   "crates/common",
   "crates/guardrails",
   "crates/ingestion",
@@ -76,3 +77,4 @@ proptest = "1.11"
 rayon = "1.12"
 sea-query = { version = "0.32", features = ["backend-postgres", "with-chrono", "with-uuid"] }
 syn = { version = "2.0", features = ["full", "extra-traits"] }
+evalexpr = "11"

@@ -154,8 +154,11 @@ B. 分类型
 2. 再输出一个 `json` 代码块：
 - 代码块内只放 `summary_metadata`
 - 仅包含以下字段：
-  - language
-  - domain
-  - genre
-  - era
-- 字段值尽量稳定、短、可枚举；未知时写 "unknown"
+  - language: 文档主要语言代码（如 zh, en, ja, de, fr, es, ru, ar, ko, unknown）
+  - domain: 必须从以下枚举中选择一项：
+    policy, finance, medical, computer_science, legal, technology, science, engineering, business, education, arts, history, literature, unknown
+  - genre: 必须从以下枚举中选择一项：
+    regulation, report, research_paper, slides, manual, news, article, book, thesis, documentation, tutorial, review, essay, blog, unknown
+  - era: 必须从以下枚举中选择一项：
+    classical, modern, contemporary, ancient, medieval, renaissance, enlightenment, industrial, postmodern, unknown
+- 字段值必须严格使用上述枚举值，不能输出自由散文；未知时写 "unknown"

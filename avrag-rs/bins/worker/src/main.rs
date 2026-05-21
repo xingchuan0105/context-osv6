@@ -1,5 +1,7 @@
 mod agent_memory_jobs;
 mod analytics_jobs;
+mod audit_log_jobs;
+mod orphan_object_jobs;
 
 use anyhow::Result;
 use app::{AppConfig, AppState, load_prompt_template};
@@ -334,6 +336,26 @@ impl TaskProcessor for PgTaskProcessor {
                     .unwrap_or_else(|| object_path.clone())
             };
             let notebook_id = Uuid::parse_str(&task.notebook_id).unwrap_or_else(|_| Uuid::nil());
+
+            // Security scan: malware (ClamAV) + ZIP-bomb detection.
+            if !is_url_task {
+                match ingestion::security_scanner::scan_upload(&bytes, &filename).await {
+                    Ok(ingestion::security_scanner::ScanResult::Clean) => {}
+                    Ok(ingestion::security_scanner::ScanResult::ThreatDetected { threat_name }) => {
+                        return Err(IngestionError::StateSink(format!(
+                            "security scan failed: malware detected ({threat_name})"
+                        )));
+                    }
+                    Ok(ingestion::security_scanner::ScanResult::ZipBomb { ratio }) => {
+                        return Err(IngestionError::StateSink(format!(
+                            "security scan failed: ZIP bomb detected (compression ratio {ratio:.1})"
+                        )));
+                    }
+                    Err(error) => {
+                        warn!(error = %error, "security scan encountered an error, allowing processing to continue");
+                    }
+                }
+            }
 
             let route_decision = if is_url_task {
                 ingestion::parser::ParseRouteDecision {
@@ -1013,9 +1035,17 @@ async fn main() -> Result<()> {
             agent_memory_jobs::AgentPreferenceConsolidationJobRunner::from_env(
                 analytics_pool.clone(),
             );
+        let mut audit_log_job_runner =
+            audit_log_jobs::AuditLogJobRunner::from_env(repo.raw().clone());
         let usage_limit_pool = repo.raw().clone();
         let worker_object_store = build_worker_object_store(&config).await?;
         let cleanup_object_store = build_worker_object_store(&config).await?;
+        let orphan_object_store = Arc::new(build_worker_object_store(&config).await?);
+        let mut orphan_object_job_runner =
+            orphan_object_jobs::OrphanObjectJobRunner::from_env(
+                repo.raw().clone(),
+                orphan_object_store,
+            );
         let retrieval_data_plane = build_worker_retrieval_data_plane(&config).await?;
         let cleanup_retrieval_data_plane = retrieval_data_plane.clone();
         let cleanup_repo = repo.clone();
@@ -1115,6 +1145,18 @@ async fn main() -> Result<()> {
                     {
                         telemetry::prometheus::record_dependency_failure("agent_memory");
                         info!(error = %error, worker_id, "agent preference consolidation job failed");
+                    }
+                    if let Some(runner) = audit_log_job_runner.as_mut()
+                        && let Err(error) = runner.maybe_run().await
+                    {
+                        telemetry::prometheus::record_dependency_failure("audit_log_prune");
+                        info!(error = %error, worker_id, "audit_log prune job failed");
+                    }
+                    if let Some(runner) = orphan_object_job_runner.as_mut()
+                        && let Err(error) = runner.maybe_run().await
+                    {
+                        telemetry::prometheus::record_dependency_failure("orphan_object_cleanup");
+                        info!(error = %error, worker_id, "orphan object cleanup job failed");
                     }
                     info!(runtime_mode = state.runtime_mode(), worker_id, "worker heartbeat");
                 }
@@ -2367,7 +2409,7 @@ fn build_document_block_rows(
             block_type: block.block_type.as_str().to_string(),
             modality: block.modality.as_str().to_string(),
             text: block.text.clone(),
-            summary_text: block.summary_text.clone(),
+            summary_text: block.alt_text.clone(),
             caption: block.caption.clone(),
             asset_refs: serde_json::json!(block.asset_refs),
             section_path: serde_json::json!(block.section_path),
@@ -2660,7 +2702,7 @@ fn build_triplet_extraction_batches(
 }
 
 const TRIPLET_EXTRACTION_SYSTEM_PROMPT: &str =
-    include_str!("../../../prompts/triplet_extraction_system.txt");
+    include_str!("../../../prompts/skills/triplet-extraction/SKILL.md");
 
 fn build_triplet_extraction_messages(batch: &TripletExtractionBatch) -> Vec<ChatMessage> {
     let valid_chunk_ids: Vec<String> = batch.chunk_ids.iter().map(|id| id.to_string()).collect();
