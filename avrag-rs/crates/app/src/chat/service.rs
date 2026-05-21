@@ -180,6 +180,50 @@ impl AppState {
             ));
         }
 
+        // R1: Check history messages for prompt injection bypass attempts.
+        for msg in &req.messages {
+            if msg.role == "user" {
+                let msg_guard = self.guard_pipeline.check_input(
+                    &msg.content,
+                    self.auth.org_id().into_uuid(),
+                    user_uuid,
+                    &guard_scope,
+                    notebook_uuid,
+                    Some(trace_id.clone()),
+                );
+                if !msg_guard.passed {
+                    telemetry::prometheus::observe_guardrail_block(
+                        &msg_guard.guard_type.to_string(),
+                        &msg_guard.action.to_string(),
+                    );
+                    let audit_record = AuditRecord {
+                        audit_id: Uuid::new_v4().to_string(),
+                        org_id: self.auth.org_id().into_uuid().to_string(),
+                        actor_id: Some(user_uuid.to_string()),
+                        action: AuditAction::InputGuardBlock,
+                        resource_type: "chat".to_string(),
+                        resource_id: String::new(),
+                        payload: serde_json::json!({
+                            "guard_type": msg_guard.guard_type,
+                            "risk_level": msg_guard.risk_level.to_string(),
+                            "action": msg_guard.action.to_string(),
+                            "reason": msg_guard.reason,
+                            "trace_id": trace_id,
+                            "source": "history_message",
+                        }),
+                        created_at: now_rfc3339(),
+                    };
+                    if let Some(ref pg) = self.pg {
+                        let _ = pg.append_audit_record(&audit_record).await;
+                    }
+                    return Err(AppError::validation(
+                        "input_guard_blocked",
+                        format!("Message blocked by guard: {}", msg_guard.reason),
+                    ));
+                }
+            }
+        }
+
         Ok(ChatPreflight {
             trace_id,
             user_uuid,

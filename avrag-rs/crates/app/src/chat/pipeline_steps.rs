@@ -94,7 +94,7 @@ async fn run_general_mode(
                 agent_type,
                 session_id: &session.id,
                 input_usage_text: request.query.trim(),
-                apply_output_guard: false,
+                apply_output_guard: true,
                 mode_debug: Some(ModeDebug {
                     rag: None,
                     search: None,
@@ -125,7 +125,7 @@ async fn run_general_mode(
             agent_type,
             session_id: &session.id,
             input_usage_text: request.query.trim(),
-            apply_output_guard: false,
+            apply_output_guard: true,
             mode_debug: Some(ModeDebug {
                 rag: None,
                 search: None,
