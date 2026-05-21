@@ -1,0 +1,44 @@
+name: Weekly RAG Quality Regression
+
+on:
+  schedule:
+    # Every Sunday at 02:00 UTC (off-peak)
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rag-quality-regression:
+    name: RAG Golden Set Regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run RAG quality unit tests
+        run: cargo test -p rag_quality -- --nocapture
+
+      - name: Run golden set sample sanity check
+        run: cargo test -p rag_quality sample_sanity_set_has_required_phase6_coverage -- --nocapture

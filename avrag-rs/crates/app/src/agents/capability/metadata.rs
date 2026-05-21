@@ -1,0 +1,89 @@
+/// Risk level for tools and skills.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum RiskLevel {
+    /// No external dependencies, no sensitive data access.
+    #[default]
+    Low,
+    /// Accesses user data or internal systems.
+    Medium,
+    /// Accesses external network or executes code.
+    High,
+    /// Modifies system state or accesses sensitive credentials.
+    Critical,
+}
+
+/// Retry policy for tool execution.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct RetryPolicy {
+    pub max_retries: u32,
+    pub backoff_ms: u64,
+    pub backoff_multiplier: f64,
+    pub max_backoff_ms: u64,
+    pub idempotent: bool,
+    pub idempotency_key_header: Option<String>,
+}
+
+impl Default for RetryPolicy {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            backoff_ms: 1000,
+            backoff_multiplier: 2.0,
+            max_backoff_ms: 30000,
+            idempotent: false,
+            idempotency_key_header: None,
+        }
+    }
+}
+
+/// Deprecation notice for tools and skills.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Deprecation {
+    pub since_version: String,
+    pub note: String,
+    pub replacement_id: Option<String>,
+}
+
+/// Permission required to invoke a tool or skill.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Permission {
+    /// Standard authenticated user.
+    User,
+    /// Advanced user with elevated privileges.
+    Advanced,
+    /// Administrator.
+    Admin,
+    /// External network access.
+    ExternalNetwork,
+    /// Code execution.
+    CodeExecution,
+}
+
+/// Metadata for a registered tool.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ToolMetadata {
+    pub id: String,
+    pub version: String,
+    pub owner: String,
+    pub description: String,
+    pub input_schema: serde_json::Value,
+    pub output_schema: serde_json::Value,
+    pub risk_level: RiskLevel,
+    pub permissions: Vec<Permission>,
+    pub external_deps: Vec<String>,
+    pub deprecation: Option<Deprecation>,
+    pub retry_policy: RetryPolicy,
+}
+
+/// Metadata for a registered skill.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SkillMetadata {
+    pub id: String,
+    pub version: String,
+    pub owner: String,
+    pub description: String,
+    pub applicable_strategies: Vec<String>,
+    pub required_tools: Vec<String>,
+    pub risk_level: RiskLevel,
+    pub deprecation: Option<Deprecation>,
+}
