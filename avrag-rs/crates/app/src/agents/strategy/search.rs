@@ -731,7 +731,15 @@ impl SearchStrategy {
             .await;
         let llm_suggested = strategy_eval
             .as_ref()
-            .map(|(e, _)| e.suggested_followup_queries.clone())
+            .map(|(e, _)| {
+                e.next_actions
+                    .iter()
+                    .filter_map(|a| match a {
+                        crate::rag_prompts::NextAction::SubQuery { query } => Some(query.clone()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default();
 
         if let Some((_, eval_usage)) = &strategy_eval {
@@ -1346,32 +1354,25 @@ fn map_search_strategy_to_advice(
     eval: &crate::rag_prompts::SearchStrategyEvaluation,
     current_vertical: Option<&str>,
 ) -> EvalAdvice {
-    use crate::rag_prompts::{EvalDecision, SearchStrategyRecommendation};
-    match eval.recommendation {
-        Some(SearchStrategyRecommendation::Synthesize) => EvalAdvice::Synthesize,
-        Some(SearchStrategyRecommendation::Broaden) => EvalAdvice::BroadenQuery {
-            reason: "llm_strategy_broaden",
+    match eval.decision {
+        crate::rag_prompts::EvalDecision::Sufficient => EvalAdvice::Synthesize,
+        crate::rag_prompts::EvalDecision::GiveUp => EvalAdvice::Degrade {
+            reason: DegradeReason::NoResultsAfterAllFallbacks,
         },
-        Some(SearchStrategyRecommendation::EscalateVertical) => {
-            if next_vertical_step(current_vertical).is_some() {
+        crate::rag_prompts::EvalDecision::Insufficient => {
+            let has_vertical_hint = eval.next_actions.iter().any(|a| {
+                matches!(a, crate::rag_prompts::NextAction::ToolCall { tool, .. } if tool == "web_search")
+            });
+            if has_vertical_hint && next_vertical_step(current_vertical).is_some() {
                 EvalAdvice::EscalateVertical {
                     reason: "llm_strategy_escalate_vertical",
                 }
             } else {
-                EvalAdvice::Degrade {
-                    reason: DegradeReason::NoResultsAfterAllFallbacks,
+                EvalAdvice::Replan {
+                    reason: "llm_strategy_insufficient",
                 }
             }
         }
-        None => match eval.decision {
-            EvalDecision::Sufficient => EvalAdvice::Synthesize,
-            EvalDecision::GiveUp => EvalAdvice::Degrade {
-                reason: DegradeReason::NoResultsAfterAllFallbacks,
-            },
-            EvalDecision::Insufficient => EvalAdvice::BroadenQuery {
-                reason: "llm_strategy_insufficient",
-            },
-        },
     }
 }
 
@@ -1733,5 +1734,60 @@ mod tests {
         let prompt = super::build_eval_system_prompt("search");
         assert!(prompt.contains("Available Tools for Replanning"));
         assert!(!prompt.is_empty());
+    }
+
+    #[test]
+    fn map_search_strategy_sufficient_maps_to_synthesize() {
+        let eval = crate::rag_prompts::SearchStrategyEvaluation {
+            dimensions: vec![],
+            missing_dimensions: vec![],
+            weak_dimensions: vec![],
+            recommendation: None,
+            reason: None,
+            suggested_followup_queries: vec![],
+            decision: crate::rag_prompts::EvalDecision::Sufficient,
+            next_actions: vec![],
+            reasoning: "all covered".to_string(),
+        };
+        let advice = super::map_search_strategy_to_advice(&eval, None);
+        assert!(matches!(advice, super::EvalAdvice::Synthesize));
+    }
+
+    #[test]
+    fn map_search_strategy_give_up_maps_to_degrade() {
+        let eval = crate::rag_prompts::SearchStrategyEvaluation {
+            dimensions: vec![],
+            missing_dimensions: vec![],
+            weak_dimensions: vec![],
+            recommendation: None,
+            reason: None,
+            suggested_followup_queries: vec![],
+            decision: crate::rag_prompts::EvalDecision::GiveUp,
+            next_actions: vec![],
+            reasoning: "no results".to_string(),
+        };
+        let advice = super::map_search_strategy_to_advice(&eval, None);
+        assert!(matches!(advice, super::EvalAdvice::Degrade { .. }));
+    }
+
+    #[test]
+    fn map_search_strategy_tool_call_web_search_maps_to_escalate_vertical() {
+        let eval = crate::rag_prompts::SearchStrategyEvaluation {
+            dimensions: vec![],
+            missing_dimensions: vec![],
+            weak_dimensions: vec![],
+            recommendation: None,
+            reason: None,
+            suggested_followup_queries: vec![],
+            decision: crate::rag_prompts::EvalDecision::Insufficient,
+            next_actions: vec![crate::rag_prompts::NextAction::ToolCall {
+                tool: "web_search".to_string(),
+                args: serde_json::json!({}),
+                reason: "try news".to_string(),
+            }],
+            reasoning: "need vertical".to_string(),
+        };
+        let advice = super::map_search_strategy_to_advice(&eval, None);
+        assert!(matches!(advice, super::EvalAdvice::EscalateVertical { .. }));
     }
 }
