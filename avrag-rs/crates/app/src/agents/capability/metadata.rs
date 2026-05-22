@@ -87,3 +87,14 @@ pub struct SkillMetadata {
     pub risk_level: RiskLevel,
     pub deprecation: Option<Deprecation>,
 }
+
+/// 工具/技能在策略哪个阶段可见
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ActivationPhase {
+    /// Plan + Evaluate 阶段可见：检索/搜索工具、规划类工具
+    #[default]
+    PlanAndEvaluate,
+    /// Answer 阶段可见：输出格式技能（html/ppt/teaching）
+    Answer,
+}
