@@ -638,9 +638,10 @@ impl RagStrategy {
         let (decision_str, llm_eval_json) = match &strategy_advice {
             Some((eval, _)) => {
                 let label = match eval.recommendation {
-                    crate::rag_prompts::StrategyRecommendation::Synthesize => "synthesize".to_string(),
-                    crate::rag_prompts::StrategyRecommendation::Replan => "replan".to_string(),
-                    crate::rag_prompts::StrategyRecommendation::Broaden => "broaden_query".to_string(),
+                    Some(crate::rag_prompts::StrategyRecommendation::Synthesize) => "synthesize".to_string(),
+                    Some(crate::rag_prompts::StrategyRecommendation::Replan) => "replan".to_string(),
+                    Some(crate::rag_prompts::StrategyRecommendation::Broaden) => "broaden_query".to_string(),
+                    None => "unknown".to_string(),
                 };
                 let json = serde_json::to_value(eval).ok();
                 (label, json)
@@ -675,11 +676,11 @@ impl RagStrategy {
 
         match strategy_advice {
             Some((eval, _)) => match eval.recommendation {
-                crate::rag_prompts::StrategyRecommendation::Synthesize => {
+                Some(crate::rag_prompts::StrategyRecommendation::Synthesize) => {
                     Ok(StepOutcome::Next(Box::new(RagState::Answer)))
                 }
-                crate::rag_prompts::StrategyRecommendation::Replan => {
-                    let reason = eval.reason;
+                Some(crate::rag_prompts::StrategyRecommendation::Replan) => {
+                    let reason = eval.reason.clone().unwrap_or_default();
                     let suggested = eval.suggested_followup_queries.clone();
                     let directive = if let Some(hint) =
                         build_doc_index_directive_hint(&tool_results)
@@ -695,8 +696,8 @@ impl RagStrategy {
                     };
                     Ok(StepOutcome::Next(Box::new(RagState::Plan)))
                 }
-                crate::rag_prompts::StrategyRecommendation::Broaden => {
-                    let reason = eval.reason;
+                Some(crate::rag_prompts::StrategyRecommendation::Broaden) => {
+                    let reason = eval.reason.clone().unwrap_or_default();
                     let suggested = eval.suggested_followup_queries.clone();
                     ctx.iteration_params = RagIterationParams {
                         query: if suggested.is_empty() {
@@ -708,6 +709,9 @@ impl RagStrategy {
                         suggested_queries: suggested,
                     };
                     Ok(StepOutcome::Next(Box::new(RagState::Plan)))
+                }
+                None => {
+                    Ok(StepOutcome::Next(Box::new(RagState::Answer)))
                 }
             },
             None => {

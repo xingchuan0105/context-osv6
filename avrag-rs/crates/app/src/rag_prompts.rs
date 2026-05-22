@@ -19,10 +19,19 @@ pub struct RagStrategyEvaluation {
     pub missing_dimensions: Vec<String>,
     #[serde(default)]
     pub weak_dimensions: Vec<String>,
-    pub recommendation: StrategyRecommendation,
-    pub reason: String,
+    // Legacy fields (backward compat — kept as Option/default)
+    #[serde(default)]
+    pub recommendation: Option<StrategyRecommendation>,
+    #[serde(default)]
+    pub reason: Option<String>,
     #[serde(default)]
     pub suggested_followup_queries: Vec<String>,
+    // New canonical fields
+    pub decision: EvalDecision,
+    #[serde(default)]
+    pub next_actions: Vec<NextAction>,
+    #[serde(default)]
+    pub reasoning: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1365,7 +1374,7 @@ mod tests {
 
     #[test]
     fn parse_rag_strategy_evaluation_parses_valid_json() {
-        let raw = r#"{"dimensions": [{"name": "async runtime", "attempted": true, "covered": true, "retrieved_count": 3, "query_ids": ["q1"], "status": "covered_strong"}], "missing_dimensions": ["memory model"], "weak_dimensions": [], "recommendation": "replan", "reason": "missing memory model dimension", "suggested_followup_queries": ["memory model async rust"] }"#;
+        let raw = r#"{"dimensions": [{"name": "async runtime", "attempted": true, "covered": true, "retrieved_count": 3, "query_ids": ["q1"], "status": "covered_strong"}], "missing_dimensions": ["memory model"], "weak_dimensions": [], "recommendation": "replan", "reason": "missing memory model dimension", "suggested_followup_queries": ["memory model async rust"], "decision": "insufficient"}"#;
         let eval = parse_rag_strategy_evaluation(raw).unwrap();
         assert_eq!(eval.dimensions.len(), 1);
         assert_eq!(eval.dimensions[0].name, "async runtime");
@@ -1376,28 +1385,28 @@ mod tests {
         assert!(matches!(eval.dimensions[0].status, DimensionStatus::CoveredStrong));
         assert_eq!(eval.missing_dimensions, vec!["memory model"]);
         assert!(eval.weak_dimensions.is_empty());
-        assert!(matches!(eval.recommendation, StrategyRecommendation::Replan));
-        assert_eq!(eval.reason, "missing memory model dimension");
+        assert!(matches!(eval.recommendation, Some(StrategyRecommendation::Replan)));
+        assert_eq!(eval.reason.as_deref(), Some("missing memory model dimension"));
         assert_eq!(eval.suggested_followup_queries, vec!["memory model async rust"]);
     }
 
     #[test]
     fn parse_rag_strategy_evaluation_parses_snake_case_recommendations() {
-        let synthesize = r#"{"recommendation": "synthesize", "reason": "done", "status": "covered_strong"}"#;
-        let replan = r#"{"recommendation": "replan", "reason": "missing", "status": "missing"}"#;
-        let broaden = r#"{"recommendation": "broaden", "reason": "too few", "status": "covered_weak"}"#;
+        let synthesize = r#"{"recommendation": "synthesize", "reason": "done", "status": "covered_strong", "decision": "sufficient"}"#;
+        let replan = r#"{"recommendation": "replan", "reason": "missing", "status": "missing", "decision": "insufficient"}"#;
+        let broaden = r#"{"recommendation": "broaden", "reason": "too few", "status": "covered_weak", "decision": "insufficient"}"#;
 
         assert!(matches!(
             parse_rag_strategy_evaluation(synthesize).unwrap().recommendation,
-            StrategyRecommendation::Synthesize
+            Some(StrategyRecommendation::Synthesize)
         ));
         assert!(matches!(
             parse_rag_strategy_evaluation(replan).unwrap().recommendation,
-            StrategyRecommendation::Replan
+            Some(StrategyRecommendation::Replan)
         ));
         assert!(matches!(
             parse_rag_strategy_evaluation(broaden).unwrap().recommendation,
-            StrategyRecommendation::Broaden
+            Some(StrategyRecommendation::Broaden)
         ));
     }
 
@@ -1407,7 +1416,7 @@ mod tests {
             {"name": "a", "status": "covered_strong"},
             {"name": "b", "status": "covered_weak"},
             {"name": "c", "status": "missing"}
-        ], "recommendation": "synthesize", "reason": "ok"}"#;
+        ], "recommendation": "synthesize", "reason": "ok", "decision": "sufficient"}"#;
         let eval = parse_rag_strategy_evaluation(raw).unwrap();
         assert!(matches!(eval.dimensions[0].status, DimensionStatus::CoveredStrong));
         assert!(matches!(eval.dimensions[1].status, DimensionStatus::CoveredWeak));
@@ -1418,11 +1427,11 @@ mod tests {
     fn parse_rag_strategy_evaluation_handles_json_wrapped_in_markdown() {
         let raw = r#"Here is my evaluation:
 ```json
-{"dimensions": [], "missing_dimensions": [], "weak_dimensions": [], "recommendation": "synthesize", "reason": "complete", "suggested_followup_queries": []}
+{"dimensions": [], "missing_dimensions": [], "weak_dimensions": [], "recommendation": "synthesize", "reason": "complete", "suggested_followup_queries": [], "decision": "sufficient"}
 ```"#;
         let eval = parse_rag_strategy_evaluation(raw).unwrap();
-        assert!(matches!(eval.recommendation, StrategyRecommendation::Synthesize));
-        assert_eq!(eval.reason, "complete");
+        assert!(matches!(eval.recommendation, Some(StrategyRecommendation::Synthesize)));
+        assert_eq!(eval.reason.as_deref(), Some("complete"));
     }
 
     #[test]
@@ -1433,7 +1442,7 @@ mod tests {
 
     #[test]
     fn parse_rag_strategy_evaluation_uses_defaults_for_optional_fields() {
-        let raw = r#"{"recommendation": "synthesize", "reason": "ok"}"#;
+        let raw = r#"{"decision": "sufficient", "recommendation": "synthesize", "reason": "ok"}"#;
         let eval = parse_rag_strategy_evaluation(raw).unwrap();
         assert!(eval.dimensions.is_empty());
         assert!(eval.missing_dimensions.is_empty());
@@ -1571,5 +1580,36 @@ mod tests {
         assert_eq!(json["type"], "tool_call");
         assert_eq!(json["tool"], "graph_retrieval");
         assert_eq!(json["reason"], "dense failed");
+    }
+
+    #[test]
+    fn rag_strategy_evaluation_has_decision_and_next_actions() {
+        let eval: RagStrategyEvaluation = serde_json::from_str(r#"{
+            "decision": "insufficient",
+            "next_actions": [
+                {"type": "sub_query", "query": "new query"}
+            ],
+            "reasoning": "missing dimension",
+            "dimensions": [],
+            "missing_dimensions": [],
+            "weak_dimensions": []
+        }"#).unwrap();
+        assert!(matches!(eval.decision, EvalDecision::Insufficient));
+        assert_eq!(eval.next_actions.len(), 1);
+        assert_eq!(eval.reasoning, "missing dimension");
+    }
+
+    #[test]
+    fn rag_strategy_evaluation_backwards_compat_with_recommendation() {
+        let eval: RagStrategyEvaluation = serde_json::from_str(r#"{
+            "decision": "sufficient",
+            "next_actions": [],
+            "reasoning": "all covered",
+            "recommendation": "synthesize",
+            "dimensions": [],
+            "missing_dimensions": [],
+            "weak_dimensions": []
+        }"#).unwrap();
+        assert!(matches!(eval.recommendation, Some(StrategyRecommendation::Synthesize)));
     }
 }
