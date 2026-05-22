@@ -637,11 +637,10 @@ impl RagStrategy {
 
         let (decision_str, llm_eval_json) = match &strategy_advice {
             Some((eval, _)) => {
-                let label = match eval.recommendation {
-                    Some(crate::rag_prompts::StrategyRecommendation::Synthesize) => "synthesize".to_string(),
-                    Some(crate::rag_prompts::StrategyRecommendation::Replan) => "replan".to_string(),
-                    Some(crate::rag_prompts::StrategyRecommendation::Broaden) => "broaden_query".to_string(),
-                    None => "unknown".to_string(),
+                let label = match eval.decision {
+                    crate::rag_prompts::EvalDecision::Sufficient => "sufficient".to_string(),
+                    crate::rag_prompts::EvalDecision::Insufficient => "insufficient".to_string(),
+                    crate::rag_prompts::EvalDecision::GiveUp => "give_up".to_string(),
                 };
                 let json = serde_json::to_value(eval).ok();
                 (label, json)
@@ -668,50 +667,57 @@ impl RagStrategy {
             .emit(AgentEvent::Evaluation {
                 signals: eval_signals,
                 decision: decision_str.clone(),
-                reasoning: llm_eval_json
-                    .and_then(|v| v.get("reason").and_then(|r| r.as_str().map(|s| s.to_string())))
+                reasoning: llm_eval_json.as_ref()
+                    .and_then(|v| v.get("reasoning").and_then(|r| r.as_str().map(|s| s.to_string())))
+                    .or_else(|| llm_eval_json.as_ref().and_then(|v| v.get("reason").and_then(|r| r.as_str().map(|s| s.to_string()))))
                     .unwrap_or_default(),
             })
             .await;
 
         match strategy_advice {
-            Some((eval, _)) => match eval.recommendation {
-                Some(crate::rag_prompts::StrategyRecommendation::Synthesize) => {
+            Some((eval, _)) => match eval.decision {
+                crate::rag_prompts::EvalDecision::Sufficient => {
                     Ok(StepOutcome::Next(Box::new(RagState::Answer)))
                 }
-                Some(crate::rag_prompts::StrategyRecommendation::Replan) => {
-                    let reason = eval.reason.clone().unwrap_or_default();
-                    let suggested = eval.suggested_followup_queries.clone();
-                    let directive = if let Some(hint) =
-                        build_doc_index_directive_hint(&tool_results)
-                    {
-                        Some(format!("replan: {}\n\n{}", reason, hint))
-                    } else {
-                        Some(format!("replan: {reason}"))
-                    };
+                crate::rag_prompts::EvalDecision::GiveUp => {
+                    self.finalize_degrade(ctx, DegradeReason::NoResultsAfterAllFallbacks)
+                        .await
+                        .map(StepOutcome::Terminate)
+                }
+                crate::rag_prompts::EvalDecision::Insufficient => {
+                    let mut sub_queries = Vec::new();
+                    let mut tool_hints = Vec::new();
+                    for action in &eval.next_actions {
+                        match action {
+                            crate::rag_prompts::NextAction::SubQuery { query } => {
+                                sub_queries.push(query.clone());
+                            }
+                            crate::rag_prompts::NextAction::ToolCall { tool, args, reason } => {
+                                tool_hints.push(format!(
+                                    "{tool}: {} ({reason})",
+                                    serde_json::to_string(args).unwrap_or_default()
+                                ));
+                            }
+                        }
+                    }
+
+                    let mut directive_parts = vec![format!("replan: {}", eval.reasoning)];
+                    if !tool_hints.is_empty() {
+                        directive_parts.push(format!(
+                            "suggested tools: {}",
+                            tool_hints.join(", ")
+                        ));
+                    }
+                    if let Some(hint) = build_doc_index_directive_hint(&tool_results) {
+                        directive_parts.push(hint);
+                    }
+
                     ctx.iteration_params = RagIterationParams {
                         query: original_query.clone(),
-                        directive,
-                        suggested_queries: suggested,
+                        directive: Some(directive_parts.join("\n")),
+                        suggested_queries: sub_queries,
                     };
                     Ok(StepOutcome::Next(Box::new(RagState::Plan)))
-                }
-                Some(crate::rag_prompts::StrategyRecommendation::Broaden) => {
-                    let reason = eval.reason.clone().unwrap_or_default();
-                    let suggested = eval.suggested_followup_queries.clone();
-                    ctx.iteration_params = RagIterationParams {
-                        query: if suggested.is_empty() {
-                            helpers::broaden_query(&ctx.iteration_params.query)
-                        } else {
-                            ctx.iteration_params.query.clone()
-                        },
-                        directive: Some(format!("broaden: {reason}")),
-                        suggested_queries: suggested,
-                    };
-                    Ok(StepOutcome::Next(Box::new(RagState::Plan)))
-                }
-                None => {
-                    Ok(StepOutcome::Next(Box::new(RagState::Answer)))
                 }
             },
             None => {
