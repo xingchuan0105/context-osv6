@@ -79,6 +79,32 @@ pub enum SearchStrategyRecommendation {
     EscalateVertical,
 }
 
+// ---------------- Unified evaluation output ----------------
+
+/// Decision emitted by Evaluate phase.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvalDecision {
+    /// Evidence sufficient, proceed to Answer.
+    Sufficient,
+    /// Evidence insufficient, replan with new actions.
+    Insufficient,
+    /// Give up, degrade gracefully.
+    GiveUp,
+}
+
+/// Action the Evaluate phase recommends for replanning.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum NextAction {
+    SubQuery { query: String },
+    ToolCall {
+        tool: String,
+        args: serde_json::Value,
+        reason: String,
+    },
+}
+
 /// Per-sub-query item used to build the strategy evaluation prompt.
 /// `tool_index` maps this sub-query back to the `tool_results` array so
 /// result counts are reported against the correct tool call.
@@ -1514,5 +1540,36 @@ mod tests {
     #[test]
     fn parse_search_strategy_evaluation_returns_none_for_invalid_json() {
         assert!(parse_search_strategy_evaluation("not json").is_none());
+    }
+
+    // ---------------- EvalDecision / NextAction serialization ----------------
+
+    #[test]
+    fn eval_decision_serializes_snake_case() {
+        let d = EvalDecision::Sufficient;
+        assert_eq!(serde_json::to_string(&d).unwrap(), "\"sufficient\"");
+        let d: EvalDecision = serde_json::from_str("\"give_up\"").unwrap();
+        assert!(matches!(d, EvalDecision::GiveUp));
+    }
+
+    #[test]
+    fn next_action_sub_query_serializes() {
+        let a = NextAction::SubQuery { query: "test query".to_string() };
+        let json = serde_json::to_value(&a).unwrap();
+        assert_eq!(json["type"], "sub_query");
+        assert_eq!(json["query"], "test query");
+    }
+
+    #[test]
+    fn next_action_tool_call_serializes() {
+        let a = NextAction::ToolCall {
+            tool: "graph_retrieval".to_string(),
+            args: serde_json::json!({"query": "test"}),
+            reason: "dense failed".to_string(),
+        };
+        let json = serde_json::to_value(&a).unwrap();
+        assert_eq!(json["type"], "tool_call");
+        assert_eq!(json["tool"], "graph_retrieval");
+        assert_eq!(json["reason"], "dense failed");
     }
 }
