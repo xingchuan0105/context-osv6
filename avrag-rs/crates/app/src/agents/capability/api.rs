@@ -56,6 +56,8 @@ pub struct SkillCapability {
 /// Schema describing a strategy's states and transitions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StrategySchema {
+    #[serde(default)]
+    pub id: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub states: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -113,66 +115,11 @@ pub fn build_capabilities_response() -> CapabilitiesResponse {
         })
         .collect();
 
-    let mut strategies = BTreeMap::new();
-    strategies.insert(
-        "chat".to_string(),
-        StrategySchema {
-            states: vec!["Plan".to_string(), "ExecuteAtomic".to_string(), "Answer".to_string()],
-            transitions: vec![
-                TransitionSchema { from: "Plan".to_string(), to: "ExecuteAtomic".to_string() },
-                TransitionSchema { from: "Plan".to_string(), to: "Answer".to_string() },
-                TransitionSchema { from: "ExecuteAtomic".to_string(), to: "Answer".to_string() },
-            ],
-            external_tools_used: vec![],
-            requires_internet: false,
-            max_budget: 1,
-        },
-    );
-    strategies.insert(
-        "rag".to_string(),
-        StrategySchema {
-            states: vec!["Plan".to_string(), "ExecuteRetrieve".to_string(), "Evaluate".to_string(), "Answer".to_string()],
-            transitions: vec![
-                TransitionSchema { from: "Plan".to_string(), to: "ExecuteRetrieve".to_string() },
-                TransitionSchema { from: "ExecuteRetrieve".to_string(), to: "Evaluate".to_string() },
-                TransitionSchema { from: "Evaluate".to_string(), to: "Answer".to_string() },
-                TransitionSchema { from: "Evaluate".to_string(), to: "Plan".to_string() },
-            ],
-            external_tools_used: vec!["dense_retrieval".to_string(), "lexical_retrieval".to_string()],
-            requires_internet: false,
-            max_budget: 4,
-        },
-    );
-    strategies.insert(
-        "search".to_string(),
-        StrategySchema {
-            states: vec!["Decompose".to_string(), "ParallelSearch".to_string(), "Aggregate".to_string(), "Evaluate".to_string(), "Answer".to_string()],
-            transitions: vec![
-                TransitionSchema { from: "Decompose".to_string(), to: "ParallelSearch".to_string() },
-                TransitionSchema { from: "ParallelSearch".to_string(), to: "Aggregate".to_string() },
-                TransitionSchema { from: "Aggregate".to_string(), to: "Evaluate".to_string() },
-                TransitionSchema { from: "Evaluate".to_string(), to: "Answer".to_string() },
-                TransitionSchema { from: "Evaluate".to_string(), to: "ParallelSearch".to_string() },
-            ],
-            external_tools_used: vec!["web_search".to_string()],
-            requires_internet: true,
-            max_budget: 3,
-        },
-    );
-    strategies.insert(
-        "composite".to_string(),
-        StrategySchema {
-            states: vec!["Decompose".to_string(), "ParallelExecute".to_string(), "Merge".to_string(), "Answer".to_string()],
-            transitions: vec![
-                TransitionSchema { from: "Decompose".to_string(), to: "ParallelExecute".to_string() },
-                TransitionSchema { from: "ParallelExecute".to_string(), to: "Merge".to_string() },
-                TransitionSchema { from: "Merge".to_string(), to: "Answer".to_string() },
-            ],
-            external_tools_used: vec!["dense_retrieval".to_string(), "web_search".to_string()],
-            requires_internet: true,
-            max_budget: 4,
-        },
-    );
+    let strategies: BTreeMap<String, StrategySchema> = registry
+        .list_strategies()
+        .into_iter()
+        .map(|s| (s.id.clone(), s.clone()))
+        .collect();
 
     CapabilitiesResponse {
         api_version: "v5".to_string(),

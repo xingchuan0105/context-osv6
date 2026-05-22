@@ -158,6 +158,12 @@ fn skill_to_metadata(skill: &super::super::progressive::Skill) -> SkillMetadata 
         .and_then(|s| parse_risk_level(s))
         .unwrap_or_else(|| infer_skill_risk_level(skill.id()));
 
+    // 新增：从 frontmatter 解析 activation_phase
+    let activation_phase = md
+        .get("activation_phase")
+        .and_then(|s| parse_activation_phase(s))
+        .unwrap_or_else(|| infer_skill_activation_phase(skill.id()));
+
     SkillMetadata {
         id: skill.id().to_string(),
         version: skill.version().to_string(),
@@ -170,6 +176,7 @@ fn skill_to_metadata(skill: &super::super::progressive::Skill) -> SkillMetadata 
         required_tools,
         risk_level,
         deprecation: None,
+        activation_phase,
     }
 }
 
@@ -257,6 +264,27 @@ fn infer_skill_risk_level(id: &str) -> super::RiskLevel {
     match id {
         "code_interpreter" | "web_search" => super::RiskLevel::High,
         _ => super::RiskLevel::Low,
+    }
+}
+
+fn parse_activation_phase(s: &str) -> Option<ActivationPhase> {
+    match s.to_lowercase().as_str() {
+        "plan_and_evaluate" | "planandevalue" => Some(ActivationPhase::PlanAndEvaluate),
+        "answer" => Some(ActivationPhase::Answer),
+        _ => None,
+    }
+}
+
+fn infer_skill_activation_phase(skill_id: &str) -> ActivationPhase {
+    // format 技能默认 Answer，其他技能默认 PlanAndEvaluate
+    if skill_id == "html-renderer"
+        || skill_id == "ppt-generation"
+        || skill_id == "teaching"
+        || skill_id == "framework-extraction"
+    {
+        ActivationPhase::Answer
+    } else {
+        ActivationPhase::PlanAndEvaluate
     }
 }
 

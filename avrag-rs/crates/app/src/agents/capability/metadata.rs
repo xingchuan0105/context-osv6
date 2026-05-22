@@ -87,6 +87,7 @@ pub struct SkillMetadata {
     pub required_tools: Vec<String>,
     pub risk_level: RiskLevel,
     pub deprecation: Option<Deprecation>,
+    pub activation_phase: ActivationPhase,
 }
 
 /// 工具/技能在策略哪个阶段可见

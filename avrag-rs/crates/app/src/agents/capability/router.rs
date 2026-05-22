@@ -9,7 +9,57 @@
 
 use crate::agents::AgentKind;
 use crate::agents::runtime::AgentRequest;
+use serde::{Deserialize, Serialize};
 use super::RiskLevel;
+
+/// Classification of user query intent for auto-routing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Intent {
+    /// Factual query that can be answered from internal documents.
+    Factual,
+    /// Query requiring external knowledge (news, weather, current events).
+    ExternalKnowledge,
+    /// Creative or open-ended conversational query.
+    Creative,
+    /// Code-related query.
+    Code,
+}
+
+/// Infer intent from query text using keyword heuristics.
+pub fn infer_intent(query: &str) -> Intent {
+    let lower = query.to_lowercase();
+    if lower.contains("code")
+        || lower.contains("program")
+        || lower.contains("function")
+        || lower.contains("debug")
+        || lower.contains("script")
+    {
+        return Intent::Code;
+    }
+    if lower.contains("news")
+        || lower.contains("weather")
+        || lower.contains("current")
+        || lower.contains("latest")
+        || lower.contains("today")
+        || lower.contains("now")
+    {
+        return Intent::ExternalKnowledge;
+    }
+    if lower.contains("write")
+        || lower.contains("create")
+        || lower.contains("imagine")
+        || lower.contains("story")
+        || lower.contains("poem")
+    {
+        return Intent::Creative;
+    }
+    Intent::Factual
+}
+
+/// Rough token estimate: chars / 4 (good enough for routing decisions).
+fn estimate_tokens(text: &str) -> u64 {
+    (text.len() / 4) as u64
+}
 
 /// Collection of routing rules evaluated in priority order.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +89,10 @@ pub enum RouterCondition {
     HasDocScope,
     /// Request query contains one of the given keywords.
     QueryContains(Vec<String>),
+    /// Query intent matches the given classification.
+    IntentClassified(Intent),
+    /// Total estimated context length exceeds threshold.
+    ContextLength { max_tokens: u64 },
     /// All sub-conditions must match (AND).
     All(Vec<RouterCondition>),
     /// Any sub-condition must match (OR).
@@ -48,7 +102,7 @@ pub enum RouterCondition {
 }
 
 /// Outcome of the routing decision.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RoutingDecision {
     pub strategy_id: String,
     pub matched_rule: String,
@@ -130,6 +184,14 @@ impl RouterCondition {
                 let query_lower = request.query.to_lowercase();
                 keywords.iter().any(|kw| query_lower.contains(kw))
             }
+            RouterCondition::IntentClassified(intent) => infer_intent(&request.query) == *intent,
+            RouterCondition::ContextLength { max_tokens } => {
+                let mut total = estimate_tokens(&request.query);
+                for msg in &request.messages {
+                    total += estimate_tokens(&msg.content);
+                }
+                total > *max_tokens
+            }
             RouterCondition::All(conds) => conds.iter().all(|c| c.evaluate(request)),
             RouterCondition::Any(conds) => conds.iter().any(|c| c.evaluate(request)),
             RouterCondition::Always => true,
@@ -176,12 +238,7 @@ pub fn standard_policy() -> RouterPolicy {
             RouterRule {
                 name: "auto-rag-factual".to_string(),
                 condition: RouterCondition::All(vec![
-                    RouterCondition::QueryContains(vec![
-                        "document".to_string(),
-                        "file".to_string(),
-                        "pdf".to_string(),
-                        "report".to_string(),
-                    ]),
+                    RouterCondition::IntentClassified(Intent::Factual),
                     RouterCondition::HasDocScope,
                 ]),
                 strategy: "rag".to_string(),
@@ -191,13 +248,7 @@ pub fn standard_policy() -> RouterPolicy {
             },
             RouterRule {
                 name: "auto-search-external".to_string(),
-                condition: RouterCondition::QueryContains(vec![
-                    "news".to_string(),
-                    "weather".to_string(),
-                    "current".to_string(),
-                    "latest".to_string(),
-                    "search".to_string(),
-                ]),
+                condition: RouterCondition::IntentClassified(Intent::ExternalKnowledge),
                 strategy: "search".to_string(),
                 priority: 60,
                 user_overridable: false,
@@ -257,6 +308,9 @@ mod tests {
             metadata: BTreeMap::new(),
             cancellation_token: None,
             guard_pipeline: None,
+            preferred_tools: vec![],
+            format_hint: None,
+            max_iterations: None,
         }
     }
 
@@ -360,5 +414,52 @@ mod tests {
         ]);
         let req_chat = dummy_request(AgentKind::Chat, "search for x", vec![]);
         assert!(cond.evaluate(&req_chat));
+    }
+
+    #[test]
+    fn intent_classified_matches_external_knowledge() {
+        let cond = RouterCondition::IntentClassified(Intent::ExternalKnowledge);
+        let req_weather = dummy_request(AgentKind::Chat, "what is the weather today", vec![]);
+        assert!(cond.evaluate(&req_weather));
+        let req_factual = dummy_request(AgentKind::Chat, "what is the capital of France", vec![]);
+        assert!(!cond.evaluate(&req_factual));
+    }
+
+    #[test]
+    fn intent_classified_matches_code() {
+        let cond = RouterCondition::IntentClassified(Intent::Code);
+        let req_code = dummy_request(AgentKind::Chat, "write a python function to sort", vec![]);
+        assert!(cond.evaluate(&req_code));
+        let req_chat = dummy_request(AgentKind::Chat, "hello", vec![]);
+        assert!(!cond.evaluate(&req_chat));
+    }
+
+    #[test]
+    fn intent_classified_matches_creative() {
+        let cond = RouterCondition::IntentClassified(Intent::Creative);
+        let req_creative = dummy_request(AgentKind::Chat, "write a story about dragons", vec![]);
+        assert!(cond.evaluate(&req_creative));
+        let req_factual = dummy_request(AgentKind::Chat, "what is 2+2", vec![]);
+        assert!(!cond.evaluate(&req_factual));
+    }
+
+    #[test]
+    fn context_length_matches_when_exceeded() {
+        let cond = RouterCondition::ContextLength { max_tokens: 10 };
+        // query "this is a very long query with many words" ~ 40 chars ~ 10 tokens
+        let req_short = dummy_request(AgentKind::Chat, "hi", vec![]);
+        assert!(!cond.evaluate(&req_short));
+        let req_long = dummy_request(AgentKind::Chat, "this is a very long query with many words exceeding ten tokens", vec![]);
+        assert!(cond.evaluate(&req_long));
+    }
+
+    #[test]
+    fn auto_search_external_knowledge_via_intent() {
+        let policy = standard_policy();
+        // Use a query that triggers Intent::ExternalKnowledge but not user explicit kind
+        let req = dummy_request(AgentKind::Chat, "what is the weather today", vec![]);
+        let decision = policy.resolve(&req);
+        // user-chat (priority 100) overrides auto-search-external (60)
+        assert_eq!(decision.strategy_id, "chat");
     }
 }
