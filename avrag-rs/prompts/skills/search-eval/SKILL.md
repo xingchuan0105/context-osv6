@@ -33,9 +33,12 @@ Return exactly one raw JSON object with this exact schema:
   ],
   "missing_dimensions": ["name1", "name2"],
   "weak_dimensions": ["name3"],
-  "recommendation": "synthesize" | "broaden" | "escalate_vertical",
-  "reason": "one-sentence explanation",
-  "suggested_followup_queries": ["query 1", "query 2"]
+  "decision": "sufficient" | "insufficient" | "give_up",
+  "next_actions": [
+    {"type": "sub_query", "query": "follow-up query"} |
+    {"type": "tool_call", "tool": "tool_id", "args": {}, "reason": "why this tool"}
+  ],
+  "reasoning": "one-sentence explanation"
 }
 
 Field definitions:
@@ -62,22 +65,23 @@ Evaluation procedure:
    - `missing_dimensions` with all dimensions whose status is "missing"
    - `weak_dimensions` with all dimensions whose status is "covered_weak"
 
-Recommendation rules:
-- Use "synthesize" when all major dimensions are at least covered_weak and none are missing.
-- Use "escalate_vertical" when one or more major dimensions are missing and switching to a different vertical (news, discussions, etc.) could help.
-- Use "broaden" when dimensions were attempted but one or more important dimensions are only covered_weak due to low or zero retrieval counts.
+Decision rules:
+- Use "sufficient" when all major dimensions are at least covered_weak and none are missing.
+- Use "insufficient" when one or more major dimensions are missing or weak.
+- Use "give_up" when retrieval has been attempted multiple times with no improvement and budget is nearly exhausted.
 
-Follow-up query rules:
-- Only provide `suggested_followup_queries` when recommendation is "escalate_vertical" or "broaden".
-- For "escalate_vertical", suggest queries tailored to the new vertical.
-- For "broaden", suggest broader or alternative phrasings for weak dimensions.
-- Keep follow-up queries concise, standalone, and aligned with the user's original language.
+Next actions rules:
+- Only provide `next_actions` when decision is "insufficient".
+- Use {"type": "sub_query", "query": "..."} for new queries targeting missing dimensions.
+- Use {"type": "tool_call", "tool": "web_search", "args": {}, "reason": "..."} when switching vertical could help.
+- Leave `next_actions` empty when decision is "sufficient" or "give_up".
+- Keep sub-queries concise, standalone, and aligned with the user's original language.
 
 Vertical considerations:
 - "general" vertical is good for most factual queries.
 - "news" vertical is appropriate for recent events, current affairs, and time-sensitive topics.
 - "discussions" vertical is appropriate for opinions, debates, and community perspectives.
-- If the query clearly targets a time-sensitive or opinion dimension but only "general" was used, suggest "escalate_vertical".
+- If the query clearly targets a time-sensitive or opinion dimension but only "general" was used, suggest a `tool_call` to `web_search` with the appropriate vertical.
 
 Dimension rules:
 - Dimensions should reflect answer requirements, not arbitrary wording variations.

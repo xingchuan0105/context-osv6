@@ -34,9 +34,12 @@ Return exactly one raw JSON object with this exact schema:
   ],
   "missing_dimensions": ["name1", "name2"],
   "weak_dimensions": ["name3"],
-  "recommendation": "synthesize" | "replan" | "broaden",
-  "reason": "one-sentence explanation",
-  "suggested_followup_queries": ["query 1", "query 2"]
+  "decision": "sufficient" | "insufficient" | "give_up",
+  "next_actions": [
+    {"type": "sub_query", "query": "follow-up query"} |
+    {"type": "tool_call", "tool": "tool_id", "args": {}, "reason": "why this tool"}
+  ],
+  "reasoning": "one-sentence explanation"
 }
 
 Field definitions:
@@ -63,16 +66,17 @@ Evaluation procedure:
    - `missing_dimensions` with all dimensions whose status is "missing"
    - `weak_dimensions` with all dimensions whose status is "covered_weak"
 
-Recommendation rules:
-- Use "synthesize" when all major dimensions are at least covered_weak and none are missing.
-- Use "replan" when one or more major dimensions are missing because no sub-query addressed them.
-- Use "broaden" when dimensions were attempted but one or more important dimensions are only covered_weak due to low or zero retrieval counts.
+Decision rules:
+- Use "sufficient" when all major dimensions are at least covered_weak and none are missing.
+- Use "insufficient" when one or more major dimensions are missing or weak.
+- Use "give_up" when retrieval has been attempted multiple times with no improvement and budget is nearly exhausted.
 
-Follow-up query rules:
-- Only provide `suggested_followup_queries` when recommendation is "replan" or "broaden".
-- For "replan", suggest new sub-queries that target missing dimensions.
-- For "broaden", suggest broader or alternative phrasings for weak dimensions.
-- Keep follow-up queries concise, standalone, and aligned with the user's original language.
+Next actions rules:
+- Only provide `next_actions` when decision is "insufficient".
+- Use {"type": "sub_query", "query": "..."} for new queries targeting missing dimensions.
+- Use {"type": "tool_call", "tool": "tool_id", "args": {}, "reason": "..."} when switching to a different retrieval tool would help (e.g., from dense_retrieval to graph_retrieval).
+- Leave `next_actions` empty when decision is "sufficient" or "give_up".
+- Keep sub-queries concise, standalone, and aligned with the user's original language.
 
 Dimension rules:
 - Dimensions should reflect answer requirements, not arbitrary wording variations.
@@ -127,9 +131,9 @@ Output:
   ],
   "missing_dimensions": [],
   "weak_dimensions": [],
-  "recommendation": "synthesize",
-  "reason": "All major dimensions were explicitly targeted and returned results.",
-  "suggested_followup_queries": []
+  "decision": "sufficient",
+  "next_actions": [],
+  "reasoning": "All major dimensions were explicitly targeted and returned results."
 }
 
 Example 2:
@@ -160,12 +164,12 @@ Output:
   ],
   "missing_dimensions": ["tradeoffs introduced by the architecture change"],
   "weak_dimensions": [],
-  "recommendation": "replan",
-  "reason": "A key dimension of the original question was never directly targeted by any executed sub-query.",
-  "suggested_followup_queries": [
-    "project architecture change 2023 tradeoffs",
-    "project architecture redesign drawbacks 2023"
-  ]
+  "decision": "insufficient",
+  "next_actions": [
+    {"type": "sub_query", "query": "project architecture change 2023 tradeoffs"},
+    {"type": "sub_query", "query": "project architecture redesign drawbacks 2023"}
+  ],
+  "reasoning": "A key dimension of the original question was never directly targeted by any executed sub-query."
 }
 
 Example 3:
@@ -196,11 +200,11 @@ Output:
   ],
   "missing_dimensions": [],
   "weak_dimensions": ["latest pricing", "enterprise plan availability"],
-  "recommendation": "broaden",
-  "reason": "The main dimensions were attempted, but retrieval coverage is weak based on sparse results.",
-  "suggested_followup_queries": [
-    "Figma pricing plans official",
-    "Figma enterprise plan official",
-    "Figma pricing latest"
-  ]
+  "decision": "insufficient",
+  "next_actions": [
+    {"type": "sub_query", "query": "Figma pricing plans official"},
+    {"type": "sub_query", "query": "Figma enterprise plan official"},
+    {"type": "tool_call", "tool": "lexical_retrieval", "args": {"terms": ["Figma", "pricing", "enterprise"]}, "reason": "BM25 may find keyword matches that dense missed"}
+  ],
+  "reasoning": "The main dimensions were attempted, but retrieval coverage is weak based on sparse results."
 }
