@@ -113,6 +113,23 @@ impl CapabilityRegistry {
     pub fn strategy_count(&self) -> usize {
         self.strategies.len()
     }
+
+    /// Plan/Evaluate 阶段：返回指定策略可用的工具目录
+    pub fn plan_tools(&self, _strategy: &str) -> Vec<&ToolMetadata> {
+        self.tools
+            .values()
+            .filter(|t| t.activation_phase == ActivationPhase::PlanAndEvaluate)
+            .collect()
+    }
+
+    /// Answer 阶段：返回 format 技能目录
+    pub fn answer_format_skills(&self, strategy: &str) -> Vec<&SkillMetadata> {
+        self.skills
+            .values()
+            .filter(|s| s.activation_phase == ActivationPhase::Answer)
+            .filter(|s| s.applicable_strategies.contains(&strategy.to_string()))
+            .collect()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -489,5 +506,46 @@ mod tests {
         let registry = CapabilityRegistry::standard();
         let strategies = registry.list_strategies();
         assert_eq!(strategies.len(), 4);
+    }
+
+    #[test]
+    fn plan_tools_filters_by_phase() {
+        let registry = CapabilityRegistry::standard();
+        let plan_tools = registry.plan_tools("rag");
+
+        // 所有返回的工具都应该是 PlanAndEvaluate phase
+        for tool in &plan_tools {
+            assert_eq!(tool.activation_phase, super::super::ActivationPhase::PlanAndEvaluate);
+        }
+
+        // 应该包含 RAG 工具
+        assert!(plan_tools.iter().any(|t| t.id == "dense_retrieval"));
+    }
+
+    #[test]
+    fn answer_format_skills_filters_by_phase() {
+        let registry = CapabilityRegistry::standard();
+        let answer_skills = registry.answer_format_skills("rag");
+
+        // 所有返回的技能都应该是 Answer phase
+        for skill in &answer_skills {
+            assert_eq!(skill.activation_phase, super::super::ActivationPhase::Answer);
+        }
+
+        // 应该包含 format 技能
+        assert!(answer_skills.iter().any(|s| s.id == "html-renderer"));
+        assert!(answer_skills.iter().any(|s| s.id == "ppt-generation"));
+    }
+
+    #[test]
+    fn answer_format_skills_respects_strategy() {
+        let registry = CapabilityRegistry::standard();
+
+        let rag_skills = registry.answer_format_skills("rag");
+        let chat_skills = registry.answer_format_skills("chat");
+
+        // framework-extraction 只对 rag 适用
+        assert!(rag_skills.iter().any(|s| s.id == "framework-extraction"));
+        assert!(!chat_skills.iter().any(|s| s.id == "framework-extraction"));
     }
 }
