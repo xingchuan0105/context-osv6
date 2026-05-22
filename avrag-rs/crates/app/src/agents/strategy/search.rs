@@ -1,14 +1,16 @@
 //! SearchStrategy — v5 state machine for Search mode.
 //!
 //! Search is multi-iteration with web search, evaluation, and optional broaden:
-//!   Decompose → Search → Evaluate → Answer
-//!                 ↑       │
-//!                 └───────┘ (broaden/escalate_vertical/replan)
+//!   Decompose → ParallelSearch → Aggregate → Evaluate → Answer
+//!                               ↑            │
+//!                               └────────────┘ (broaden/escalate_vertical/replan)
 //!
 //! Decompose runs once at the start to generate sub-queries.
-//! Search executes web_search (parallel for initial plan, single for follow-ups).
+//! ParallelSearch executes web_search in parallel for all sub-queries.
+//! Aggregate collects and deduplicates results from parallel searches.
 
 use super::{State, StateKind, StepOutcome, Strategy, StrategyContext};
+use crate::agents::error_kind::AgentErrorKind;
 use crate::agents::evaluator::{evaluate_search_iteration, EvalAdvice, EvaluationSignals};
 use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::progressive::PromptRegistry;
@@ -31,8 +33,10 @@ use tokio_util::sync::CancellationToken;
 pub enum SearchState {
     /// Decompose: run planner LLM to generate sub-queries and search plan.
     Decompose,
-    /// Search: execute web_search (parallel sub-queries or single query).
-    Search,
+    /// ParallelSearch: execute web_search in parallel for all sub-queries.
+    ParallelSearch { queries: Vec<String> },
+    /// Aggregate: collect and deduplicate results from parallel searches.
+    Aggregate,
     /// Evaluate: assess search quality and decide next action.
     Evaluate,
     /// Answer: synthesize final response from accumulated results.
@@ -43,7 +47,8 @@ impl State for SearchState {
     fn state_id(&self) -> &'static str {
         match self {
             SearchState::Decompose => "decompose",
-            SearchState::Search => "search",
+            SearchState::ParallelSearch { .. } => "parallel_search",
+            SearchState::Aggregate => "aggregate",
             SearchState::Evaluate => "evaluate",
             SearchState::Answer => "answer",
         }
@@ -52,7 +57,8 @@ impl State for SearchState {
     fn state_kind(&self) -> StateKind {
         match self {
             SearchState::Decompose => StateKind::Plan,
-            SearchState::Search => StateKind::Execute,
+            SearchState::ParallelSearch { .. } => StateKind::Execute,
+            SearchState::Aggregate => StateKind::Control,
             SearchState::Evaluate => StateKind::Evaluate,
             SearchState::Answer => StateKind::Answer,
         }
@@ -61,7 +67,8 @@ impl State for SearchState {
     fn to_observable(&self) -> serde_json::Value {
         match self {
             SearchState::Decompose => serde_json::json!({"state": "decompose"}),
-            SearchState::Search => serde_json::json!({"state": "search"}),
+            SearchState::ParallelSearch { queries } => serde_json::json!({"state": "parallel_search", "queries": queries}),
+            SearchState::Aggregate => serde_json::json!({"state": "aggregate"}),
             SearchState::Evaluate => serde_json::json!({"state": "evaluate"}),
             SearchState::Answer => serde_json::json!({"state": "answer"}),
         }
@@ -95,6 +102,7 @@ pub struct SearchContext {
     pub current_search_response: Option<SearchResponse>,
     pub current_plan: Option<SearchPlan>,
     pub iterations: Vec<IterationRecord>,
+    /// True during the initial ParallelSearch+Aggregate phase; false during follow-up iterations.
     pub is_phase1: bool,
 
     // Accumulated
@@ -204,17 +212,59 @@ impl Strategy for SearchStrategy {
         &self,
         state: Box<dyn State>,
         ctx: &mut SearchContext,
-    ) -> Result<StepOutcome, AppError> {
+    ) -> Result<StepOutcome, AgentErrorKind> {
         let search_state = state
             .as_any()
             .downcast_ref::<SearchState>()
-            .ok_or_else(|| AppError::internal("invalid state type for SearchStrategy"))?;
+            .ok_or_else(|| AgentErrorKind::ModelOutputInvalid {
+                expected_schema: "SearchState".to_string(),
+                got: "unknown state type".to_string(),
+            })?;
 
         match search_state {
             SearchState::Decompose => self.step_decompose(ctx).await,
-            SearchState::Search => self.step_search(ctx).await,
+            SearchState::ParallelSearch { .. } => self.step_parallel_search(ctx).await,
+            SearchState::Aggregate => self.step_aggregate(ctx).await,
             SearchState::Evaluate => self.step_evaluate(ctx).await,
             SearchState::Answer => self.step_answer(ctx).await,
+        }
+    }
+
+    fn schema() -> crate::agents::capability::StrategySchema {
+        crate::agents::capability::StrategySchema {
+            id: "search".to_string(),
+            states: vec![
+                "Decompose".to_string(),
+                "ParallelSearch".to_string(),
+                "Aggregate".to_string(),
+                "Evaluate".to_string(),
+                "Answer".to_string(),
+            ],
+            transitions: vec![
+                crate::agents::capability::TransitionSchema {
+                    from: "Decompose".to_string(),
+                    to: "ParallelSearch".to_string(),
+                },
+                crate::agents::capability::TransitionSchema {
+                    from: "ParallelSearch".to_string(),
+                    to: "Aggregate".to_string(),
+                },
+                crate::agents::capability::TransitionSchema {
+                    from: "Aggregate".to_string(),
+                    to: "Evaluate".to_string(),
+                },
+                crate::agents::capability::TransitionSchema {
+                    from: "Evaluate".to_string(),
+                    to: "Answer".to_string(),
+                },
+                crate::agents::capability::TransitionSchema {
+                    from: "Evaluate".to_string(),
+                    to: "ParallelSearch".to_string(),
+                },
+            ],
+            external_tools_used: vec!["web_search".to_string()],
+            requires_internet: true,
+            max_budget: 3,
         }
     }
 }
@@ -225,14 +275,13 @@ impl SearchStrategy {
     async fn step_decompose(
         &self,
         ctx: &mut SearchContext,
-    ) -> Result<StepOutcome, AppError> {
+    ) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
-        let registry = PromptRegistry::standard_cached();
-        let system_prompt = registry
-            .skill("search-plan")
-            .map(|s| s.system_prompt().to_string())
-            .unwrap_or_default();
+        let system_prompt = crate::agents::strategy::prompts::build_plan_system_prompt(
+            "search-plan",
+            "search",
+        );
 
         let plan = plan_search(
             &self.llm,
@@ -255,147 +304,175 @@ impl SearchStrategy {
         ctx.current_plan = plan;
         ctx.is_phase1 = true;
 
-        Ok(StepOutcome::Next(Box::new(SearchState::Search)))
+        // Extract sub-queries from the plan to pass to ParallelSearch state.
+        let queries = ctx
+            .current_plan
+            .as_ref()
+            .map(|p| p.sub_queries.clone())
+            .unwrap_or_default();
+
+        Ok(StepOutcome::Next(Box::new(SearchState::ParallelSearch { queries })))
     }
 
-    // --- Search step ---
+    // --- ParallelSearch step ---
 
-    async fn step_search(
+    async fn step_parallel_search(
         &self,
         ctx: &mut SearchContext,
-    ) -> Result<StepOutcome, AppError> {
+    ) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
-        // Phase 1: parallel execution of planner sub-queries (first call only).
-        if let Some(plan) = ctx.current_plan.take() {
-            let _ = ctx
-                .sink
-                .emit(AgentEvent::Activity {
-                    stage: "planning".to_string(),
-                    message: format!(
-                        "Plan: {} | Sub-queries: {} | Atomic calls: {}",
-                        plan.intent_summary,
-                        plan.sub_queries.join(", "),
-                        plan.atomic_calls.len(),
-                    ),
-                })
-                .await;
+        // Take the plan and execute all sub-queries in parallel.
+        let Some(plan) = ctx.current_plan.take() else {
+            // No plan available — fall back to single search with current_query.
+            return self.step_single_search(ctx).await;
+        };
 
-            let mut all_calls: Vec<common::ToolCall> = plan
-                .sub_queries
-                .iter()
-                .map(|q| common::ToolCall {
-                    tool: "web_search".to_string(),
-                    version: "1.0".to_string(),
-                    args: serde_json::json!({
-                        "query": q,
-                        "vertical": plan.preferred_vertical,
-                    }),
-                })
-                .collect();
-            all_calls.extend(plan.atomic_calls);
-
-            // Save calls for white-box reporting before they are consumed.
-            let calls_for_records = all_calls.clone();
-
-            let tool_results = crate::agents::unified::atomic_tools::dispatch_atomic_tools_with_enforcement(
-                all_calls,
-                Some(self.search_executor.as_ref()),
-                Some(&ctx.auth),
-            )
+        let _ = ctx
+            .sink
+            .emit(AgentEvent::Activity {
+                stage: "planning".to_string(),
+                message: format!(
+                    "Plan: {} | Sub-queries: {} | Atomic calls: {}",
+                    plan.intent_summary,
+                    plan.sub_queries.join(", "),
+                    plan.atomic_calls.len(),
+                ),
+            })
             .await;
 
-            let mut all_new_results: Vec<SearchResult> = Vec::new();
-            let mut all_sub_queries: Vec<String> = Vec::new();
+        let mut all_calls: Vec<common::ToolCall> = plan
+            .sub_queries
+            .iter()
+            .map(|q| common::ToolCall {
+                tool: "web_search".to_string(),
+                version: "1.0".to_string(),
+                args: serde_json::json!({
+                    "query": q,
+                    "vertical": plan.preferred_vertical,
+                }),
+            })
+            .collect();
+        all_calls.extend(plan.atomic_calls);
 
-            // Record tool call details for white-box reporting.
-            let iteration_idx = ctx.iterations.len() as u8;
-            for (call, result) in calls_for_records.iter().zip(tool_results.iter()) {
-                let elapsed_ms = result.trace.as_ref().and_then(|t| t.elapsed_ms).unwrap_or(0);
-                ctx.tool_call_records.push(crate::agents::runtime::ToolCallRecord {
-                    tool: call.tool.clone(),
-                    iteration: iteration_idx,
-                    args: call.args.clone(),
-                    status: result.status,
-                    elapsed_ms,
-                });
-                let _ = ctx
-                    .sink
-                    .emit(AgentEvent::ToolResult {
-                        tool: call.tool.clone(),
-                        status: result.status,
-                        data: result.data.clone(),
-                        elapsed_ms,
-                    })
-                    .await;
-            }
+        // Save calls for white-box reporting before they are consumed.
+        let calls_for_records = all_calls.clone();
 
-            for result in tool_results {
-                match result.tool.as_str() {
-                    "web_search" => {
-                        if result.status == common::ToolStatus::Ok {
-                            if let Some(data) = result.data
-                                && let Ok(response) = serde_json::from_value::<SearchResponse>(data) {
-                                    for sub in &response.sub_queries {
-                                        if !all_sub_queries.contains(sub) {
-                                            all_sub_queries.push(sub.clone());
-                                        }
-                                    }
-                                    for r in &response.results {
-                                        if ctx.seen_urls.insert(r.url.clone()) {
-                                            let cloned = r.clone();
-                                            all_new_results.push(cloned.clone());
-                                            ctx.accumulated_search_results.push(cloned);
-                                        }
-                                    }
-                                    if let Some(usage) = response.llm_usage.as_ref() {
-                                        ctx.aggregated_usage = Some(helpers::merge_usage(
-                                            ctx.aggregated_usage.as_ref(),
-                                            usage,
-                                        ));
-                                        ctx.request_count += 1;
-                                    }
-                                }
-                        } else if let Some(data) = result.data
-                            && let Some(error) = data.get("error").and_then(|v| v.as_str()) {
-                                tracing::warn!(error = %error, "web_search tool failed");
-                            }
-                    }
-                    _ => {
-                        ctx.all_tool_results.push(result);
-                    }
-                }
-            }
+        let tool_results = crate::agents::unified::atomic_tools::dispatch_atomic_tools_with_enforcement(
+            all_calls,
+            Some(self.search_executor.as_ref()),
+            Some(&ctx.auth),
+        )
+        .await;
 
+        let mut all_new_results: Vec<SearchResult> = Vec::new();
+        let mut all_sub_queries: Vec<String> = Vec::new();
+
+        // Record tool call details for white-box reporting.
+        let iteration_idx = ctx.iterations.len() as u8;
+        for (call, result) in calls_for_records.iter().zip(tool_results.iter()) {
+            let elapsed_ms = result.trace.as_ref().and_then(|t| t.elapsed_ms).unwrap_or(0);
+            ctx.tool_call_records.push(crate::agents::runtime::ToolCallRecord {
+                tool: call.tool.clone(),
+                iteration: iteration_idx,
+                args: call.args.clone(),
+                status: result.status,
+                elapsed_ms,
+            });
             let _ = ctx
                 .sink
-                .emit(AgentEvent::Activity {
-                    stage: "reading_sources".to_string(),
-                    message: format!(
-                        "Planner collected {} sources from {} sub-queries",
-                        all_new_results.len(),
-                        plan.sub_queries.len()
-                    ),
+                .emit(AgentEvent::ToolResult {
+                    tool: call.tool.clone(),
+                    status: result.status,
+                    data: result.data.clone(),
+                    elapsed_ms,
                 })
                 .await;
-
-            ctx.all_sub_queries.extend(all_sub_queries);
-
-            // Store synthetic response for evaluate phase.
-            ctx.current_search_response = Some(SearchResponse {
-                query_type: "planner".to_string(),
-                sub_queries: ctx.all_sub_queries.clone(),
-                results: ctx.accumulated_search_results.clone(),
-                synthesized_answer: String::new(),
-                llm_usage: ctx.aggregated_usage.clone(),
-            });
-
-            return Ok(StepOutcome::Next(Box::new(SearchState::Evaluate)));
         }
 
-        // ------------------------------------------------------------------
-        // Phase 2: single search execution (follow-up iterations).
-        // ------------------------------------------------------------------
+        for result in tool_results {
+            match result.tool.as_str() {
+                "web_search" => {
+                    if result.status == common::ToolStatus::Ok {
+                        if let Some(data) = result.data
+                            && let Ok(response) = serde_json::from_value::<SearchResponse>(data) {
+                                for sub in &response.sub_queries {
+                                    if !all_sub_queries.contains(sub) {
+                                        all_sub_queries.push(sub.clone());
+                                    }
+                                }
+                                for r in &response.results {
+                                    if ctx.seen_urls.insert(r.url.clone()) {
+                                        let cloned = r.clone();
+                                        all_new_results.push(cloned.clone());
+                                        ctx.accumulated_search_results.push(cloned);
+                                    }
+                                }
+                                if let Some(usage) = response.llm_usage.as_ref() {
+                                    ctx.aggregated_usage = Some(helpers::merge_usage(
+                                        ctx.aggregated_usage.as_ref(),
+                                        usage,
+                                    ));
+                                    ctx.request_count += 1;
+                                }
+                            }
+                    } else if let Some(data) = result.data
+                        && let Some(error) = data.get("error").and_then(|v| v.as_str()) {
+                            tracing::warn!(error = %error, "web_search tool failed");
+                        }
+                }
+                _ => {
+                    ctx.all_tool_results.push(result);
+                }
+            }
+        }
+
+        let _ = ctx
+            .sink
+            .emit(AgentEvent::Activity {
+                stage: "reading_sources".to_string(),
+                message: format!(
+                    "Planner collected {} sources from {} sub-queries",
+                    all_new_results.len(),
+                    plan.sub_queries.len()
+                ),
+            })
+            .await;
+
+        ctx.all_sub_queries.extend(all_sub_queries);
+
+        // Store raw results for the Aggregate phase.
+        ctx.current_search_response = Some(SearchResponse {
+            query_type: "planner".to_string(),
+            sub_queries: ctx.all_sub_queries.clone(),
+            results: ctx.accumulated_search_results.clone(),
+            synthesized_answer: String::new(),
+            llm_usage: ctx.aggregated_usage.clone(),
+        });
+
+        Ok(StepOutcome::Next(Box::new(SearchState::Aggregate)))
+    }
+
+    // --- Aggregate step ---
+
+    async fn step_aggregate(
+        &self,
+        _ctx: &mut SearchContext,
+    ) -> Result<StepOutcome, AgentErrorKind> {
+        // Aggregation is already done during ParallelSearch (dedup via seen_urls,
+        // accumulation into accumulated_search_results). This state serves as an
+        // explicit control point in the state machine.
+        Ok(StepOutcome::Next(Box::new(SearchState::Evaluate)))
+    }
+
+    // --- Single search (follow-up iteration, shared by Evaluate→ParallelSearch loop) ---
+
+    async fn step_single_search(
+        &self,
+        ctx: &mut SearchContext,
+    ) -> Result<StepOutcome, AgentErrorKind> {
+        ctx.check_cancelled()?;
+
         let iteration_idx = ctx.budget.current;
         let iter_started = std::time::Instant::now();
 
@@ -427,7 +504,7 @@ impl SearchStrategy {
         let response = tokio::select! {
             biased;
             _ = ctx.cancel.cancelled() => {
-                return Err(AppError::internal("request cancelled"));
+                return Err(AgentErrorKind::Unknown("cancelled".to_string()));
             }
             results = crate::agents::unified::atomic_tools::dispatch_atomic_tools_with_enforcement(
                 vec![search_call],
@@ -576,7 +653,7 @@ impl SearchStrategy {
     async fn step_evaluate(
         &self,
         ctx: &mut SearchContext,
-    ) -> Result<StepOutcome, AppError> {
+    ) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
         let original_query = ctx.request.query.clone();
@@ -742,7 +819,9 @@ impl SearchStrategy {
                 } else {
                     llm_suggested[0].clone()
                 };
-                Ok(StepOutcome::Next(Box::new(SearchState::Search)))
+                Ok(StepOutcome::Next(Box::new(SearchState::ParallelSearch {
+                    queries: vec![ctx.current_query.clone()],
+                })))
             }
             EvalAdvice::BroadenQuery { reason } => {
                 ctx.current_query = if llm_suggested.is_empty() {
@@ -757,7 +836,9 @@ impl SearchStrategy {
                         message: format!("Broaden: {reason}"),
                     })
                     .await;
-                Ok(StepOutcome::Next(Box::new(SearchState::Search)))
+                Ok(StepOutcome::Next(Box::new(SearchState::ParallelSearch {
+                    queries: vec![ctx.current_query.clone()],
+                })))
             }
             EvalAdvice::Replan { reason } => {
                 ctx.current_query = if llm_suggested.is_empty() {
@@ -773,7 +854,9 @@ impl SearchStrategy {
                         message: format!("Replan: {reason}"),
                     })
                     .await;
-                Ok(StepOutcome::Next(Box::new(SearchState::Search)))
+                Ok(StepOutcome::Next(Box::new(SearchState::ParallelSearch {
+                    queries: vec![ctx.current_query.clone()],
+                })))
             }
             EvalAdvice::FetchFullPage { .. } | EvalAdvice::EscalateToSearch { .. } => {
                 Ok(StepOutcome::Next(Box::new(SearchState::Answer)))
@@ -786,7 +869,7 @@ impl SearchStrategy {
     async fn step_answer(
         &self,
         ctx: &mut SearchContext,
-    ) -> Result<StepOutcome, AppError> {
+    ) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
         let system_prompt = build_answer_system_prompt();
@@ -833,7 +916,7 @@ impl SearchStrategy {
         &self,
         ctx: &mut SearchContext,
         system_prompt: &str,
-    ) -> Result<AgentRunResult, AppError> {
+    ) -> Result<AgentRunResult, AgentErrorKind> {
         let sink = ctx.sink.as_ref();
 
         let _ = sink.emit(AgentEvent::Activity {
@@ -1006,7 +1089,7 @@ impl SearchStrategy {
         &self,
         ctx: &mut SearchContext,
         reason: DegradeReason,
-    ) -> Result<AgentRunResult, AppError> {
+    ) -> Result<AgentRunResult, AgentErrorKind> {
         let sink = ctx.sink.as_ref();
         let fallback = ctx.current_search_response
             .as_ref()
@@ -1518,7 +1601,11 @@ mod tests {
     #[test]
     fn search_state_ids() {
         assert_eq!(SearchState::Decompose.state_id(), "decompose");
-        assert_eq!(SearchState::Search.state_id(), "search");
+        assert_eq!(
+            SearchState::ParallelSearch { queries: vec![] }.state_id(),
+            "parallel_search"
+        );
+        assert_eq!(SearchState::Aggregate.state_id(), "aggregate");
         assert_eq!(SearchState::Evaluate.state_id(), "evaluate");
         assert_eq!(SearchState::Answer.state_id(), "answer");
     }
@@ -1526,7 +1613,11 @@ mod tests {
     #[test]
     fn search_state_kinds() {
         assert_eq!(SearchState::Decompose.state_kind(), StateKind::Plan);
-        assert_eq!(SearchState::Search.state_kind(), StateKind::Execute);
+        assert_eq!(
+            SearchState::ParallelSearch { queries: vec![] }.state_kind(),
+            StateKind::Execute
+        );
+        assert_eq!(SearchState::Aggregate.state_kind(), StateKind::Control);
         assert_eq!(SearchState::Evaluate.state_kind(), StateKind::Evaluate);
         assert_eq!(SearchState::Answer.state_kind(), StateKind::Answer);
     }

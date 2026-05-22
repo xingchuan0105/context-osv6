@@ -5,7 +5,7 @@
 //!                              ↓ replan/broaden, budget ok
 //!                         Plan (loop)
 
-use super::{State, StateKind, StepOutcome, Strategy, StrategyContext};
+use super::{AgentErrorKind, State, StateKind, StepOutcome, Strategy, StrategyContext};
 use crate::agents::evaluator::{
     evaluate_rag_iteration, AccumulatedRagResults, EvalAdvice, EvaluationSignals,
 };
@@ -246,15 +246,51 @@ impl Strategy for RagStrategy {
         Ok(Box::new(RagState::Plan))
     }
 
+    fn schema() -> crate::agents::capability::StrategySchema {
+        crate::agents::capability::StrategySchema {
+            id: "rag".to_string(),
+            states: vec![
+                "Plan".to_string(),
+                "ExecuteRetrieve".to_string(),
+                "Evaluate".to_string(),
+                "Answer".to_string(),
+            ],
+            transitions: vec![
+                crate::agents::capability::TransitionSchema {
+                    from: "Plan".to_string(),
+                    to: "ExecuteRetrieve".to_string(),
+                },
+                crate::agents::capability::TransitionSchema {
+                    from: "ExecuteRetrieve".to_string(),
+                    to: "Evaluate".to_string(),
+                },
+                crate::agents::capability::TransitionSchema {
+                    from: "Evaluate".to_string(),
+                    to: "Answer".to_string(),
+                },
+                crate::agents::capability::TransitionSchema {
+                    from: "Evaluate".to_string(),
+                    to: "Plan".to_string(),
+                },
+            ],
+            external_tools_used: vec![],
+            requires_internet: false,
+            max_budget: 4,
+        }
+    }
+
     async fn step(
         &self,
         state: Box<dyn State>,
         ctx: &mut RagContext,
-    ) -> Result<StepOutcome, AppError> {
+    ) -> Result<StepOutcome, AgentErrorKind> {
         let rag_state = state
             .as_any()
             .downcast_ref::<RagState>()
-            .ok_or_else(|| AppError::internal("invalid state type for RagStrategy"))?;
+            .ok_or_else(|| AgentErrorKind::ModelOutputInvalid {
+                expected_schema: "RagState".to_string(),
+                got: "unknown state type".to_string(),
+            })?;
 
         match rag_state {
             RagState::Plan => self.step_plan(ctx).await,
@@ -268,7 +304,7 @@ impl Strategy for RagStrategy {
 impl RagStrategy {
     // --- Plan step ---
 
-    async fn step_plan(&self, ctx: &mut RagContext) -> Result<StepOutcome, AppError> {
+    async fn step_plan(&self, ctx: &mut RagContext) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
         let iteration_idx = ctx.budget.current;
@@ -283,15 +319,14 @@ impl RagStrategy {
 
         let mut plan_system = crate::agents::strategy::prompts::build_plan_system_prompt(
             crate::agents::strategy::prompts::rag::PLANNER_SKILL_ID,
-            &crate::agents::strategy::prompts::rag::plan_tools(),
-            crate::agents::strategy::prompts::rag::format_skills(),
+            "rag",
         );
         inject_memory_context(ctx, &mut plan_system);
 
         let plan_response = tokio::select! {
             biased;
             _ = ctx.cancel.cancelled() => {
-                return Err(AppError::internal("request cancelled"));
+                return Err(AgentErrorKind::Unknown("cancelled".to_string()));
             }
             result = self.call_planner(ctx, &plan_system) => {
                 result?
@@ -340,15 +375,16 @@ impl RagStrategy {
                     .await;
                 Ok(StepOutcome::Next(Box::new(RagState::ExecuteRetrieve)))
             }
-            None => Err(AppError::internal(
-                "RAG planner produced an invalid plan output",
-            )),
+            None => Err(AgentErrorKind::ModelOutputInvalid {
+                expected_schema: "RagPlanDecision".to_string(),
+                got: "RAG planner produced an invalid plan output".to_string(),
+            }),
         }
     }
 
     // --- Execute step ---
 
-    async fn step_execute(&self, ctx: &mut RagContext) -> Result<StepOutcome, AppError> {
+    async fn step_execute(&self, ctx: &mut RagContext) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
         let iteration_idx = ctx.budget.current;
@@ -425,7 +461,7 @@ impl RagStrategy {
         let mut tool_results = tokio::select! {
             biased;
             _ = ctx.cancel.cancelled() => {
-                return Err(AppError::internal("request cancelled"));
+                return Err(AgentErrorKind::Unknown("cancelled".to_string()));
             }
             results = async {
                 if rag_calls.is_empty() {
@@ -571,7 +607,7 @@ impl RagStrategy {
 
     // --- Evaluate step ---
 
-    async fn step_evaluate(&self, ctx: &mut RagContext) -> Result<StepOutcome, AppError> {
+    async fn step_evaluate(&self, ctx: &mut RagContext) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
         let iteration_idx = ctx.budget.current;
@@ -737,7 +773,7 @@ impl RagStrategy {
 
     // --- Answer step ---
 
-    async fn step_answer(&self, ctx: &mut RagContext) -> Result<StepOutcome, AppError> {
+    async fn step_answer(&self, ctx: &mut RagContext) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
         let system_prompt = build_answer_system_prompt(ctx);
@@ -758,7 +794,7 @@ impl RagStrategy {
         &self,
         ctx: &RagContext,
         system_prompt: &str,
-    ) -> Result<avrag_llm::LlmResponse, AppError> {
+    ) -> Result<avrag_llm::LlmResponse, AgentErrorKind> {
         let mut iter_chat_req = ctx.chat_req.clone();
         iter_chat_req.query = match &ctx.iteration_params.directive {
             Some(directive) => format!(
@@ -794,7 +830,10 @@ impl RagStrategy {
         self.llm
             .complete(&plan_messages, self.temperature)
             .await
-            .map_err(|e| AppError::internal(format!("RAG planning failed: {e}")))
+            .map_err(|_e| AgentErrorKind::ModelUnavailable {
+                provider: "unknown".to_string(),
+                model: "unknown".to_string(),
+            })
     }
 
     async fn evaluate_retrieval_strategy(
@@ -827,7 +866,7 @@ impl RagStrategy {
         &self,
         ctx: &mut RagContext,
         system_prompt: &str,
-    ) -> Result<AgentRunResult, AppError> {
+    ) -> Result<AgentRunResult, AgentErrorKind> {
         let sink = ctx.sink.as_ref();
 
         let _ = sink.emit(AgentEvent::Activity {
@@ -859,7 +898,7 @@ impl RagStrategy {
                 tokio::select! {
                     biased;
                     _ = ctx.cancel.cancelled() => {
-                        return Err(AppError::internal("request cancelled"));
+                        return Err(AgentErrorKind::Unknown("cancelled".to_string()));
                     }
                     delta = delta_rx.recv() => {
                         if let Some(delta) = delta {
@@ -867,7 +906,10 @@ impl RagStrategy {
                         }
                     }
                     result = &mut synthesis_future => {
-                        break result.map_err(|e| AppError::internal(format!("RAG synthesis stream failed: {e}")))?;
+                        break result.map_err(|_e| AgentErrorKind::ModelUnavailable {
+                            provider: "unknown".to_string(),
+                            model: "unknown".to_string(),
+                        })?;
                     }
                 }
             };
@@ -885,7 +927,10 @@ impl RagStrategy {
                     Some(&ctx.history),
                 )
                 .await
-                .map_err(|e| AppError::internal(format!("RAG synthesis failed: {e}")))?;
+                .map_err(|_e| AgentErrorKind::ModelUnavailable {
+                    provider: "unknown".to_string(),
+                    model: "unknown".to_string(),
+                })?;
 
             let text = synthesis.answer_text.clone();
             let _ = sink.emit(AgentEvent::MessageDelta { text }).await;
@@ -953,7 +998,7 @@ impl RagStrategy {
         &self,
         ctx: &mut RagContext,
         reason: DegradeReason,
-    ) -> Result<AgentRunResult, AppError> {
+    ) -> Result<AgentRunResult, AgentErrorKind> {
         let sink = ctx.sink.as_ref();
         let fallback = crate::chat::i18n::fallback::no_valid_retrieval_results(
             ctx.request.language.as_deref(),

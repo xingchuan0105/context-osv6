@@ -4,7 +4,7 @@
 //!   Plan → [ExecuteAtomic] → Answer
 //! No evaluation loop.
 
-use super::{State, StateKind, StepOutcome, Strategy, StrategyContext};
+use super::{AgentErrorKind, State, StateKind, StepOutcome, Strategy, StrategyContext};
 use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::react_loop::LoopBudget;
 use crate::agents::runtime::{AgentRequest, AgentRunResult, FinalDecision};
@@ -80,6 +80,8 @@ pub struct ChatContext {
     pub aggregated_usage: Option<avrag_llm::LlmUsage>,
     /// Number of LLM requests made.
     pub request_count: u64,
+    /// Degrade trace from content guard sanitization (R3/R6).
+    pub content_guard_trace: Vec<common::DegradeTraceItem>,
 }
 
 impl StrategyContext for ChatContext {
@@ -141,6 +143,7 @@ impl ChatContext {
             tool_call_records: Vec::new(),
             aggregated_usage: None,
             request_count: 0,
+            content_guard_trace: Vec::new(),
         })
     }
 }
@@ -166,16 +169,34 @@ impl Strategy for ChatStrategy {
         Ok(Box::new(ChatState::Plan))
     }
 
+    fn schema() -> crate::agents::capability::StrategySchema {
+        crate::agents::capability::StrategySchema {
+            id: "chat".to_string(),
+            states: vec!["Plan".to_string(), "ExecuteAtomic".to_string(), "Answer".to_string()],
+            transitions: vec![
+                crate::agents::capability::TransitionSchema { from: "Plan".to_string(), to: "ExecuteAtomic".to_string() },
+                crate::agents::capability::TransitionSchema { from: "Plan".to_string(), to: "Answer".to_string() },
+                crate::agents::capability::TransitionSchema { from: "ExecuteAtomic".to_string(), to: "Answer".to_string() },
+            ],
+            external_tools_used: vec![],
+            requires_internet: false,
+            max_budget: 1,
+        }
+    }
+
     async fn step(
         &self,
         state: Box<dyn State>,
         ctx: &mut ChatContext,
-    ) -> Result<StepOutcome, AppError> {
+    ) -> Result<StepOutcome, AgentErrorKind> {
         // Downcast to concrete ChatState.
         let chat_state = state
             .as_any()
             .downcast_ref::<ChatState>()
-            .ok_or_else(|| AppError::internal("invalid state type for ChatStrategy"))?;
+            .ok_or_else(|| AgentErrorKind::ModelOutputInvalid {
+                expected_schema: "ChatState".to_string(),
+                got: "unknown state type".to_string(),
+            })?;
 
         match chat_state {
             ChatState::Plan => self.step_plan(ctx).await,
@@ -188,7 +209,7 @@ impl Strategy for ChatStrategy {
 impl ChatStrategy {
     // --- Plan step ---
 
-    async fn step_plan(&self, ctx: &mut ChatContext) -> Result<StepOutcome, AppError> {
+    async fn step_plan(&self, ctx: &mut ChatContext) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
         ctx.budget.tick();
         let _ = ctx
@@ -202,8 +223,7 @@ impl ChatStrategy {
         // Build system prompt from chat-plan skill + tool catalog.
         let system_prompt = crate::agents::strategy::prompts::build_plan_system_prompt(
             crate::agents::strategy::prompts::chat::PLANNER_SKILL_ID,
-            &crate::agents::strategy::prompts::chat::plan_tools(),
-            crate::agents::strategy::prompts::chat::format_skills(),
+            "chat",
         );
         let messages = build_chat_messages_with_system(&ctx.request, &system_prompt);
 
@@ -211,10 +231,13 @@ impl ChatStrategy {
         let plan_response = tokio::select! {
             biased;
             _ = ctx.cancel.cancelled() => {
-                return Err(AppError::internal("request cancelled"));
+                return Err(AgentErrorKind::Unknown("cancelled".to_string()));
             }
             result = self.llm.complete(&messages, self.temperature) => {
-                result.map_err(|e| AppError::internal(format!("Chat planning failed: {e}")))?
+                result.map_err(|_e| AgentErrorKind::ModelUnavailable {
+                    provider: "unknown".to_string(),
+                    model: "unknown".to_string(),
+                })?
             }
         };
 
@@ -275,7 +298,7 @@ impl ChatStrategy {
         &self,
         ctx: &mut ChatContext,
         calls: Vec<ToolCall>,
-    ) -> Result<StepOutcome, AppError> {
+    ) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
         let results = crate::agents::unified::atomic_tools::dispatch_atomic_tools_with_enforcement(
@@ -284,6 +307,40 @@ impl ChatStrategy {
             Some(&ctx.auth),
         )
         .await;
+
+        // ① content_guard: R3/R6 — scan tool results for prompt injection.
+        let (mut results, guard_trace) = if let Some(ref guard) = ctx.request.guard_pipeline {
+            crate::agents::content_guard::sanitize_tool_results(
+                &results,
+                guard.as_ref(),
+                Some(ctx.trace_id.clone()),
+            )
+        } else {
+            (results, Vec::new())
+        };
+        ctx.content_guard_trace.extend(guard_trace);
+
+        // ② UntrustedInputProcessor: R17 — heuristic injection detection + structured wrapping.
+        let mut rejected = Vec::new();
+        for result in &mut results {
+            if result.status == common::ToolStatus::Ok {
+                let reasons = crate::agents::untrusted_input::UntrustedInputProcessor
+                    ::sanitize_tool_result_data(result, 0.8);
+                rejected.extend(reasons);
+            }
+        }
+        if !rejected.is_empty() {
+            let _ = ctx
+                .sink
+                .emit(AgentEvent::DebugTrace {
+                    kind: "untrusted_input.rejected".to_string(),
+                    payload: serde_json::json!({
+                        "source": "chat.atomic_tools",
+                        "rejected_count": rejected.len(),
+                    }),
+                })
+                .await;
+        }
 
         // Record tool call details for white-box reporting.
         for (call, result) in calls.iter().zip(results.iter()) {
@@ -313,7 +370,7 @@ impl ChatStrategy {
 
     // --- Answer step ---
 
-    async fn step_answer(&self, ctx: &mut ChatContext) -> Result<StepOutcome, AppError> {
+    async fn step_answer(&self, ctx: &mut ChatContext) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
         // Build system prompt from answer skill.
@@ -357,7 +414,7 @@ impl ChatStrategy {
                 tokio::select! {
                     biased;
                     _ = ctx.cancel.cancelled() => {
-                        return Err(AppError::internal("request cancelled"));
+                        return Err(AgentErrorKind::Unknown("cancelled".to_string()));
                     }
                     delta = delta_rx.recv() => {
                         if let Some(delta) = delta {
@@ -365,7 +422,10 @@ impl ChatStrategy {
                         }
                     }
                     result = &mut stream => {
-                        break result.map_err(|e| AppError::internal(format!("LLM completion stream failed: {e}")))?;
+                        break result.map_err(|_e| AgentErrorKind::ModelUnavailable {
+                            provider: "unknown".to_string(),
+                            model: "unknown".to_string(),
+                        })?;
                     }
                 }
             };
@@ -379,10 +439,13 @@ impl ChatStrategy {
             let response = tokio::select! {
                 biased;
                 _ = ctx.cancel.cancelled() => {
-                    return Err(AppError::internal("request cancelled"));
+                    return Err(AgentErrorKind::Unknown("cancelled".to_string()));
                 }
                 result = self.llm.complete(&messages, self.temperature) => {
-                    result.map_err(|e| AppError::internal(format!("LLM completion failed: {e}")))?
+                    result.map_err(|_e| AgentErrorKind::ModelUnavailable {
+                        provider: "unknown".to_string(),
+                        model: "unknown".to_string(),
+                    })?
                 }
             };
             let _ = sink
@@ -439,6 +502,7 @@ impl ChatStrategy {
             });
         }
         result.tool_calls = std::mem::take(&mut ctx.tool_call_records);
+        result.degrade_trace.extend(std::mem::take(&mut ctx.content_guard_trace));
 
         Ok(StepOutcome::Terminate(result))
     }
