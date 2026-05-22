@@ -160,6 +160,8 @@ mod tests {
     fn chat_plan_prompt_is_not_empty() {
         let prompt = build_plan_system_prompt(chat::PLANNER_SKILL_ID, "chat");
         assert!(!prompt.is_empty());
+        // Plan prompt should NOT contain format skills (those are Answer-phase only)
+        assert!(!prompt.contains("Available Output Formats"));
     }
 
     #[test]
@@ -178,5 +180,7 @@ mod tests {
     fn chat_answer_prompt_is_not_empty() {
         let prompt = build_answer_system_prompt(chat::ANSWER_SKILL_ID, "chat", &[]);
         assert!(!prompt.is_empty());
+        // Answer prompt should contain format skills catalog
+        assert!(prompt.contains("Available Output Formats"));
     }
 }
