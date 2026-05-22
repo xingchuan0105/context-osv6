@@ -4,7 +4,7 @@
 //! Tool catalogs are queried from `CapabilityRegistry` by phase+strategy.
 //! Skill bodies are loaded via `PromptRegistry` (v4 progressive layer).
 
-use crate::agents::progressive::{PromptRegistry, Tool};
+use crate::agents::progressive::PromptRegistry;
 
 // ---------------------------------------------------------------------------
 // Plan-phase system prompt
@@ -86,70 +86,23 @@ pub fn build_answer_system_prompt(
 
 /// Skill and tool configuration for Chat mode.
 pub mod chat {
-    use super::*;
-
     pub const PLANNER_SKILL_ID: &str = "chat-plan";
     pub const ANSWER_SKILL_ID: &str = "chat";
     pub const EVAL_SKILL_ID: Option<&str> = None;
-
-    pub fn plan_tools() -> Vec<Tool> {
-        let atomic = crate::agents::progressive::atomic_tool_catalog_cached();
-        vec![
-            find_tool(atomic, "calculator").expect("calculator must be in atomic catalog"),
-            find_tool(atomic, "code_interpreter").expect("code_interpreter must be in atomic catalog"),
-            find_tool(atomic, "weather_query").expect("weather_query must be in atomic catalog"),
-        ]
-    }
-
-    pub fn format_skills() -> &'static [&'static str] {
-        &[]
-    }
 }
 
 /// Skill and tool configuration for RAG mode.
 pub mod rag {
-    use super::*;
-
     pub const PLANNER_SKILL_ID: &str = "rag-plan";
     pub const EVAL_SKILL_ID: &str = "rag-eval";
     pub const ANSWER_SKILL_ID: &str = "rag-answer";
-
-    pub fn plan_tools() -> Vec<Tool> {
-        crate::agents::progressive::rag_tool_catalog_cached().to_vec()
-    }
-
-    pub fn format_skills() -> &'static [&'static str] {
-        &[
-            "ppt-generation",
-            "html-renderer",
-            "teaching",
-            "framework-extraction",
-        ]
-    }
 }
 
 /// Skill and tool configuration for Search mode.
 pub mod search {
-    use super::*;
-
     pub const PLANNER_SKILL_ID: &str = "search-plan";
     pub const EVAL_SKILL_ID: &str = "search-eval";
     pub const ANSWER_SKILL_ID: &str = "search-answer";
-
-    pub fn plan_tools() -> Vec<Tool> {
-        vec![]
-    }
-
-    pub fn format_skills() -> &'static [&'static str] {
-        &[]
-    }
-}
-
-fn find_tool(tools: &[Tool], name: &str) -> Option<Tool> {
-    tools
-        .iter()
-        .find(|t| t.spec().name == name)
-        .cloned()
 }
 
 #[cfg(test)]
