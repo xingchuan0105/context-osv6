@@ -376,6 +376,8 @@ impl ChatStrategy {
         // Build system prompt from answer skill.
         let system_prompt = crate::agents::strategy::prompts::build_answer_system_prompt(
             crate::agents::strategy::prompts::chat::ANSWER_SKILL_ID,
+            "chat",
+            &[],
         );
 
         let mut messages = build_chat_messages_with_system(&ctx.request, &system_prompt);

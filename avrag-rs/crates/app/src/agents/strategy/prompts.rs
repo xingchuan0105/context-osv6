@@ -43,13 +43,41 @@ pub fn build_plan_system_prompt(
     }
 }
 
-/// Build the Answer-phase system prompt from a skill ID.
-pub fn build_answer_system_prompt(answer_skill_id: &str) -> String {
+/// Build the Answer-phase system prompt: answer skill body + format skills catalog +
+/// selected format skill bodies.
+pub fn build_answer_system_prompt(
+    answer_skill_id: &str,
+    strategy: &str,
+    selected_format_skills: &[String],
+) -> String {
     let registry = PromptRegistry::standard_cached();
-    registry
-        .skill(answer_skill_id)
-        .map(|s| s.system_prompt().to_string())
-        .unwrap_or_default()
+    let mut parts = Vec::new();
+
+    // 1. answer skill 全文（基底）
+    if let Some(skill) = registry.skill(answer_skill_id) {
+        parts.push(skill.system_prompt().to_string());
+    }
+
+    // 2. format 技能目录（Index tier）
+    let cap_registry = crate::agents::capability::CapabilityRegistry::standard_cached();
+    let format_skills = cap_registry.answer_format_skills(strategy);
+    if !format_skills.is_empty() {
+        let catalog = format_skills
+            .iter()
+            .map(|s| format!("- {} (v{}): {}", s.id, s.version, s.description))
+            .collect::<Vec<_>>()
+            .join("\n");
+        parts.push(format!("## Available Output Formats\n\n{catalog}"));
+    }
+
+    // 3. 选中的 format skill 全文（Load tier）
+    for skill_id in selected_format_skills {
+        if let Some(skill) = registry.skill(skill_id.as_str()) {
+            parts.push(skill.system_prompt().to_string());
+        }
+    }
+
+    parts.join("\n\n---\n\n")
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +176,7 @@ mod tests {
 
     #[test]
     fn chat_answer_prompt_is_not_empty() {
-        let prompt = build_answer_system_prompt(chat::ANSWER_SKILL_ID);
+        let prompt = build_answer_system_prompt(chat::ANSWER_SKILL_ID, "chat", &[]);
         assert!(!prompt.is_empty());
     }
 }

@@ -776,7 +776,17 @@ impl RagStrategy {
     async fn step_answer(&self, ctx: &mut RagContext) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
-        let system_prompt = build_answer_system_prompt(ctx);
+        // Compute selected format skills: prefer explicit selection, fall back to keyword detection
+        let selected_format_skills: Vec<String> = if !ctx.selected_skills.is_empty() {
+            ctx.selected_skills.clone()
+        } else {
+            detect_format_skills(&ctx.request.query).iter().map(|s| s.to_string()).collect()
+        };
+        let system_prompt = crate::agents::strategy::prompts::build_answer_system_prompt(
+            crate::agents::strategy::prompts::rag::ANSWER_SKILL_ID,
+            "rag",
+            &selected_format_skills,
+        );
 
         if !helpers::has_evidence(&ctx.all_tool_results) {
             return self.finalize_degrade(ctx, DegradeReason::NoResultsAfterAllFallbacks)
@@ -1069,31 +1079,6 @@ fn build_eval_system_prompt() -> String {
         .unwrap_or_default()
 }
 
-fn build_answer_system_prompt(ctx: &RagContext) -> String {
-    let registry = PromptRegistry::standard_cached();
-    let mut parts = Vec::new();
-
-    if let Some(skill) = registry.skill(crate::agents::strategy::prompts::rag::ANSWER_SKILL_ID) {
-        parts.push(skill.system_prompt().to_string());
-    }
-
-    // Disclose selected format skills.
-    let format_skill_ids: Vec<String> = if !ctx.selected_skills.is_empty() {
-        ctx.selected_skills.clone()
-    } else {
-        detect_format_skills(&ctx.request.query)
-            .iter()
-            .map(|s| s.to_string())
-            .collect()
-    };
-    for skill_id in &format_skill_ids {
-        if let Some(skill) = registry.skill(skill_id) {
-            parts.push(skill.system_prompt().to_string());
-        }
-    }
-
-    parts.join("\n\n---\n\n")
-}
 
 // ---------------------------------------------------------------------------
 // Helpers (migrated from mode_rag.rs)
