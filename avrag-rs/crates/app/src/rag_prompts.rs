@@ -74,10 +74,19 @@ pub struct SearchStrategyEvaluation {
     pub missing_dimensions: Vec<String>,
     #[serde(default)]
     pub weak_dimensions: Vec<String>,
-    pub recommendation: SearchStrategyRecommendation,
-    pub reason: String,
+    // Legacy fields (backward compat)
+    #[serde(default)]
+    pub recommendation: Option<SearchStrategyRecommendation>,
+    #[serde(default)]
+    pub reason: Option<String>,
     #[serde(default)]
     pub suggested_followup_queries: Vec<String>,
+    // New canonical fields
+    pub decision: EvalDecision,
+    #[serde(default)]
+    pub next_actions: Vec<NextAction>,
+    #[serde(default)]
+    pub reasoning: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1513,7 +1522,7 @@ mod tests {
 
     #[test]
     fn parse_search_strategy_evaluation_parses_valid_json() {
-        let raw = r#"{"dimensions": [{"name": "latest news", "attempted": true, "covered": true, "retrieved_count": 5, "query_ids": ["q1"], "status": "covered_strong"}], "missing_dimensions": ["opinions"], "weak_dimensions": [], "recommendation": "escalate_vertical", "reason": "need discussions vertical", "suggested_followup_queries": ["rust async opinions reddit"] }"#;
+        let raw = r#"{"dimensions": [{"name": "latest news", "attempted": true, "covered": true, "retrieved_count": 5, "query_ids": ["q1"], "status": "covered_strong"}], "missing_dimensions": ["opinions"], "weak_dimensions": [], "recommendation": "escalate_vertical", "reason": "need discussions vertical", "suggested_followup_queries": ["rust async opinions reddit"], "decision": "insufficient"}"#;
         let eval = parse_search_strategy_evaluation(raw).unwrap();
         assert_eq!(eval.dimensions.len(), 1);
         assert_eq!(eval.dimensions[0].name, "latest news");
@@ -1521,28 +1530,28 @@ mod tests {
         assert!(matches!(eval.dimensions[0].status, DimensionStatus::CoveredStrong));
         assert_eq!(eval.missing_dimensions, vec!["opinions"]);
         assert!(eval.weak_dimensions.is_empty());
-        assert!(matches!(eval.recommendation, SearchStrategyRecommendation::EscalateVertical));
-        assert_eq!(eval.reason, "need discussions vertical");
+        assert!(matches!(eval.recommendation, Some(SearchStrategyRecommendation::EscalateVertical)));
+        assert_eq!(eval.reason.as_deref(), Some("need discussions vertical"));
         assert_eq!(eval.suggested_followup_queries, vec!["rust async opinions reddit"]);
     }
 
     #[test]
     fn parse_search_strategy_evaluation_parses_all_recommendations() {
-        let synthesize = r#"{"recommendation": "synthesize", "reason": "done"}"#;
-        let broaden = r#"{"recommendation": "broaden", "reason": "too few"}"#;
-        let escalate = r#"{"recommendation": "escalate_vertical", "reason": "need news"}"#;
+        let synthesize = r#"{"recommendation": "synthesize", "reason": "done", "decision": "sufficient"}"#;
+        let broaden = r#"{"recommendation": "broaden", "reason": "too few", "decision": "insufficient"}"#;
+        let escalate = r#"{"recommendation": "escalate_vertical", "reason": "need news", "decision": "insufficient"}"#;
 
         assert!(matches!(
             parse_search_strategy_evaluation(synthesize).unwrap().recommendation,
-            SearchStrategyRecommendation::Synthesize
+            Some(SearchStrategyRecommendation::Synthesize)
         ));
         assert!(matches!(
             parse_search_strategy_evaluation(broaden).unwrap().recommendation,
-            SearchStrategyRecommendation::Broaden
+            Some(SearchStrategyRecommendation::Broaden)
         ));
         assert!(matches!(
             parse_search_strategy_evaluation(escalate).unwrap().recommendation,
-            SearchStrategyRecommendation::EscalateVertical
+            Some(SearchStrategyRecommendation::EscalateVertical)
         ));
     }
 
@@ -1611,5 +1620,18 @@ mod tests {
             "weak_dimensions": []
         }"#).unwrap();
         assert!(matches!(eval.recommendation, Some(StrategyRecommendation::Synthesize)));
+    }
+
+    #[test]
+    fn search_strategy_evaluation_has_decision_and_next_actions() {
+        let eval: SearchStrategyEvaluation = serde_json::from_str(r#"{
+            "decision": "insufficient",
+            "next_actions": [
+                {"type": "tool_call", "tool": "web_search", "args": {}, "reason": "try news"}
+            ],
+            "reasoning": "need vertical escalation"
+        }"#).unwrap();
+        assert!(matches!(eval.decision, EvalDecision::Insufficient));
+        assert_eq!(eval.next_actions.len(), 1);
     }
 }

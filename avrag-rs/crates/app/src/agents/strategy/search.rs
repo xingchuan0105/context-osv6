@@ -1332,13 +1332,13 @@ fn map_search_strategy_to_advice(
     eval: &crate::rag_prompts::SearchStrategyEvaluation,
     current_vertical: Option<&str>,
 ) -> EvalAdvice {
-    use crate::rag_prompts::SearchStrategyRecommendation;
+    use crate::rag_prompts::{EvalDecision, SearchStrategyRecommendation};
     match eval.recommendation {
-        SearchStrategyRecommendation::Synthesize => EvalAdvice::Synthesize,
-        SearchStrategyRecommendation::Broaden => EvalAdvice::BroadenQuery {
+        Some(SearchStrategyRecommendation::Synthesize) => EvalAdvice::Synthesize,
+        Some(SearchStrategyRecommendation::Broaden) => EvalAdvice::BroadenQuery {
             reason: "llm_strategy_broaden",
         },
-        SearchStrategyRecommendation::EscalateVertical => {
+        Some(SearchStrategyRecommendation::EscalateVertical) => {
             if next_vertical_step(current_vertical).is_some() {
                 EvalAdvice::EscalateVertical {
                     reason: "llm_strategy_escalate_vertical",
@@ -1349,6 +1349,15 @@ fn map_search_strategy_to_advice(
                 }
             }
         }
+        None => match eval.decision {
+            EvalDecision::Sufficient => EvalAdvice::Synthesize,
+            EvalDecision::GiveUp => EvalAdvice::Degrade {
+                reason: DegradeReason::NoResultsAfterAllFallbacks,
+            },
+            EvalDecision::Insufficient => EvalAdvice::BroadenQuery {
+                reason: "llm_strategy_insufficient",
+            },
+        },
     }
 }
 
