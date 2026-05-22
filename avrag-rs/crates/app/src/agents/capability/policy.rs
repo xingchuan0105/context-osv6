@@ -52,6 +52,8 @@ pub enum EnforcementAction {
     LogOnly,
     /// Execute but mask specific output fields.
     MaskOutput { fields: Vec<String> },
+    /// Require human approval before executing (interrupts the flow).
+    RequireApproval { reason: String },
 }
 
 /// Runtime policy enforcer.
@@ -72,9 +74,10 @@ impl PolicyEnforcer {
     ///
     /// Evaluation order:
     /// 1. If any Deny rule matches → Deny (explicit deny takes highest precedence).
-    /// 2. If any Allow rule matches → Allow.
-    /// 3. If a LogOnly or MaskOutput rule matches → return that action.
-    /// 4. No rule matched → Default Deny.
+    /// 2. If any RequireApproval rule matches → RequireApproval (interrupt flow).
+    /// 3. If any Allow rule matches → Allow.
+    /// 4. If a LogOnly or MaskOutput rule matches → return that action.
+    /// 5. No rule matched → Default Deny.
     pub fn evaluate(
         &self,
         tool: &ToolMetadata,
@@ -90,7 +93,17 @@ impl PolicyEnforcer {
                 }
         }
 
-        // 2. Allow rules.
+        // 2. RequireApproval rules (interrupt flow but don't deny).
+        for rule in &self.rules {
+            if rule.condition.evaluate(tool, auth)
+                && let EnforcementAction::RequireApproval { reason } = &rule.action {
+                    return EnforcementAction::RequireApproval {
+                        reason: reason.clone(),
+                    };
+                }
+        }
+
+        // 3. Allow rules.
         for rule in &self.rules {
             if rule.condition.evaluate(tool, auth)
                 && let EnforcementAction::Allow = &rule.action {
@@ -98,7 +111,7 @@ impl PolicyEnforcer {
                 }
         }
 
-        // 3. LogOnly / MaskOutput rules.
+        // 4. LogOnly / MaskOutput rules.
         for rule in &self.rules {
             if rule.condition.evaluate(tool, auth) {
                 match &rule.action {
@@ -269,6 +282,34 @@ pub fn strict() -> PolicyEnforcer {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// Context risk level for data classification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ContextRiskLevel {
+    /// Internal-use data (e.g. team docs, internal APIs).
+    Internal,
+    /// Confidential data (e.g. user PII, financial records).
+    Confidential,
+    /// Publicly available data.
+    Public,
+}
+
+impl ContextRiskLevel {
+    /// Determine whether a tool is allowed given the context risk level.
+    ///
+    /// Rules:
+    /// - Public context: only Low-risk tools allowed.
+    /// - Internal context: Low and Medium-risk tools allowed.
+    /// - Confidential context: all risk levels allowed (High/Critical require
+    ///   additional policy enforcement via `PolicyEnforcer`).
+    pub fn tool_allowed(&self, tool_risk: RiskLevel) -> bool {
+        match self {
+            ContextRiskLevel::Public => matches!(tool_risk, RiskLevel::Low),
+            ContextRiskLevel::Internal => matches!(tool_risk, RiskLevel::Low | RiskLevel::Medium),
+            ContextRiskLevel::Confidential => true,
+        }
+    }
+}
+
 fn risk_level_value(level: RiskLevel) -> u8 {
     match level {
         RiskLevel::Low => 1,
@@ -305,6 +346,7 @@ mod tests {
             external_deps: deps.iter().map(|s| s.to_string()).collect(),
             deprecation: None,
             retry_policy: super::super::RetryPolicy::default(),
+            activation_phase: super::super::ActivationPhase::default(),
         }
     }
 
@@ -433,5 +475,71 @@ mod tests {
         let cond = EnforcementCondition::ToolNotInAllowlist(vec!["a".to_string(), "b".to_string()]);
         let tool = dummy_tool("a", RiskLevel::Low, &[], &[]);
         assert!(!cond.evaluate(&tool, None));
+    }
+
+    #[test]
+    fn require_approval_interrupts_flow() {
+        let rules = vec![
+            EnforcementRule {
+                name: "approve-high-risk".to_string(),
+                condition: EnforcementCondition::RiskLevelExceeds(RiskLevel::Medium),
+                action: EnforcementAction::RequireApproval { reason: "high risk tool".to_string() },
+            },
+            EnforcementRule {
+                name: "allow-all".to_string(),
+                condition: EnforcementCondition::Always,
+                action: EnforcementAction::Allow,
+            },
+        ];
+        let enforcer = PolicyEnforcer::new(rules);
+        let tool = dummy_tool("dangerous", RiskLevel::High, &[], &[]);
+        let action = enforcer.evaluate(&tool, None);
+        assert!(
+            matches!(action, EnforcementAction::RequireApproval { reason } if reason == "high risk tool")
+        );
+    }
+
+    #[test]
+    fn deny_takes_precedence_over_require_approval() {
+        let rules = vec![
+            EnforcementRule {
+                name: "deny-banned".to_string(),
+                condition: EnforcementCondition::ToolIsOneOf(vec!["banned".to_string()]),
+                action: EnforcementAction::Deny { reason: "banned".to_string() },
+            },
+            EnforcementRule {
+                name: "approve-high-risk".to_string(),
+                condition: EnforcementCondition::RiskLevelExceeds(RiskLevel::Medium),
+                action: EnforcementAction::RequireApproval { reason: "high risk".to_string() },
+            },
+        ];
+        let enforcer = PolicyEnforcer::new(rules);
+        let tool = dummy_tool("banned", RiskLevel::High, &[], &[]);
+        let action = enforcer.evaluate(&tool, None);
+        assert!(
+            matches!(action, EnforcementAction::Deny { reason } if reason == "banned")
+        );
+    }
+
+    #[test]
+    fn require_approval_takes_precedence_over_allow() {
+        let rules = vec![
+            EnforcementRule {
+                name: "approve-high-risk".to_string(),
+                condition: EnforcementCondition::RiskLevelExceeds(RiskLevel::Medium),
+                action: EnforcementAction::RequireApproval { reason: "high risk".to_string() },
+            },
+            EnforcementRule {
+                name: "allow-all".to_string(),
+                condition: EnforcementCondition::Always,
+                action: EnforcementAction::Allow,
+            },
+        ];
+        let enforcer = PolicyEnforcer::new(rules);
+        let tool = dummy_tool("dangerous", RiskLevel::High, &[], &[]);
+        let action = enforcer.evaluate(&tool, None);
+        assert!(
+            matches!(action, EnforcementAction::RequireApproval { reason } if reason == "high risk")
+        );
     }
 }

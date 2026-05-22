@@ -11,7 +11,7 @@ mod registry;
 mod router;
 
 pub use api::{build_capabilities_response, CapabilitiesResponse, SkillCapability, StrategySchema, ToolCapability, TransitionSchema};
-pub use metadata::{Deprecation, Permission, RetryPolicy, RiskLevel, SkillMetadata, ToolMetadata};
-pub use policy::{permissive, strict, standard_rules, EnforcementAction, EnforcementCondition, EnforcementRule, PolicyEnforcer};
+pub use metadata::{ActivationPhase, Deprecation, Permission, RetryPolicy, RiskLevel, SkillMetadata, ToolMetadata};
+pub use policy::{permissive, strict, standard_rules, ContextRiskLevel, EnforcementAction, EnforcementCondition, EnforcementRule, PolicyEnforcer};
 pub use registry::CapabilityRegistry;
 pub use router::{standard_policy, RouterCondition, RouterPolicy, RouterRule, RoutingDecision};

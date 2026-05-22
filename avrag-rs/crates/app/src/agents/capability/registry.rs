@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use super::{SkillMetadata, ToolMetadata};
+use super::{ActivationPhase, SkillMetadata, ToolMetadata};
+use crate::agents::strategy::Strategy;
 
 static STANDARD_REGISTRY: OnceLock<CapabilityRegistry> = OnceLock::new();
 
@@ -14,6 +15,7 @@ static STANDARD_REGISTRY: OnceLock<CapabilityRegistry> = OnceLock::new();
 pub struct CapabilityRegistry {
     tools: HashMap<String, ToolMetadata>,
     skills: HashMap<String, SkillMetadata>,
+    strategies: HashMap<String, super::StrategySchema>,
 }
 
 impl CapabilityRegistry {
@@ -48,7 +50,18 @@ impl CapabilityRegistry {
             skills.insert(meta.id.clone(), meta);
         }
 
-        Self { tools, skills }
+        // --- Ingest strategy schemas from v5 Strategy implementations ---
+        let mut strategies = HashMap::new();
+        let chat_schema = crate::agents::strategy::chat::ChatStrategy::schema();
+        strategies.insert(chat_schema.id.clone(), chat_schema);
+        let rag_schema = crate::agents::strategy::rag::RagStrategy::schema();
+        strategies.insert(rag_schema.id.clone(), rag_schema);
+        let search_schema = crate::agents::strategy::search::SearchStrategy::schema();
+        strategies.insert(search_schema.id.clone(), search_schema);
+        let composite_schema = crate::agents::strategy::composite::CompositeStrategy::schema();
+        strategies.insert(composite_schema.id.clone(), composite_schema);
+
+        Self { tools, skills, strategies }
     }
 
     /// Lazily-initialised global singleton.
@@ -85,6 +98,21 @@ impl CapabilityRegistry {
     pub fn skill_count(&self) -> usize {
         self.skills.len()
     }
+
+    /// Look up a strategy by id.
+    pub fn strategy(&self, id: &str) -> Option<&super::StrategySchema> {
+        self.strategies.get(id)
+    }
+
+    /// List all registered strategies.
+    pub fn list_strategies(&self) -> Vec<&super::StrategySchema> {
+        self.strategies.values().collect()
+    }
+
+    /// Count of registered strategies.
+    pub fn strategy_count(&self) -> usize {
+        self.strategies.len()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +133,7 @@ fn tool_to_metadata(tool: &super::super::progressive::Tool) -> ToolMetadata {
         external_deps: infer_tool_external_deps(&spec.name),
         deprecation: None,
         retry_policy: infer_tool_retry_policy(&spec.name),
+        activation_phase: ActivationPhase::PlanAndEvaluate,
     }
 }
 
@@ -371,5 +400,66 @@ mod tests {
         // chat skill has no applicable_strategies in frontmatter — should infer from id
         let skill = registry.skill("chat").unwrap();
         assert!(skill.applicable_strategies.contains(&"chat".to_string()));
+    }
+
+    #[test]
+    fn registry_can_lookup_all_strategies() {
+        let registry = CapabilityRegistry::standard();
+        assert_eq!(registry.strategy_count(), 4, "expected 4 strategies");
+        assert!(registry.strategy("chat").is_some());
+        assert!(registry.strategy("rag").is_some());
+        assert!(registry.strategy("search").is_some());
+        assert!(registry.strategy("composite").is_some());
+        assert!(registry.strategy("nonexistent").is_none());
+    }
+
+    #[test]
+    fn chat_strategy_schema_matches_state_machine() {
+        let registry = CapabilityRegistry::standard();
+        let schema = registry.strategy("chat").unwrap();
+        assert_eq!(schema.id, "chat");
+        assert_eq!(schema.states, vec!["Plan", "ExecuteAtomic", "Answer"]);
+        assert_eq!(schema.max_budget, 1);
+        assert!(!schema.requires_internet);
+    }
+
+    #[test]
+    fn rag_strategy_schema_has_replan_loop() {
+        let registry = CapabilityRegistry::standard();
+        let schema = registry.strategy("rag").unwrap();
+        assert_eq!(schema.id, "rag");
+        assert_eq!(schema.states, vec!["Plan", "ExecuteRetrieve", "Evaluate", "Answer"]);
+        assert_eq!(schema.max_budget, 4);
+        let has_replan = schema.transitions.iter().any(|t| t.from == "Evaluate" && t.to == "Plan");
+        assert!(has_replan, "RAG strategy should have Evaluate→Plan replan transition");
+    }
+
+    #[test]
+    fn search_strategy_schema_has_replan_loop() {
+        let registry = CapabilityRegistry::standard();
+        let schema = registry.strategy("search").unwrap();
+        assert_eq!(schema.id, "search");
+        assert_eq!(schema.states, vec!["Decompose", "ParallelSearch", "Aggregate", "Evaluate", "Answer"]);
+        assert_eq!(schema.max_budget, 3);
+        assert!(schema.requires_internet);
+        let has_replan = schema.transitions.iter().any(|t| t.from == "Evaluate" && t.to == "ParallelSearch");
+        assert!(has_replan, "Search strategy should have Evaluate→ParallelSearch replan transition");
+    }
+
+    #[test]
+    fn composite_strategy_schema_matches_state_machine() {
+        let registry = CapabilityRegistry::standard();
+        let schema = registry.strategy("composite").unwrap();
+        assert_eq!(schema.id, "composite");
+        assert_eq!(schema.states, vec!["Decompose", "ParallelExecute", "Merge", "Answer"]);
+        assert_eq!(schema.max_budget, 4);
+        assert!(schema.requires_internet);
+    }
+
+    #[test]
+    fn list_strategies_returns_all() {
+        let registry = CapabilityRegistry::standard();
+        let strategies = registry.list_strategies();
+        assert_eq!(strategies.len(), 4);
     }
 }

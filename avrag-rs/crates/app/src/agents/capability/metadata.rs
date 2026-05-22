@@ -73,6 +73,7 @@ pub struct ToolMetadata {
     pub external_deps: Vec<String>,
     pub deprecation: Option<Deprecation>,
     pub retry_policy: RetryPolicy,
+    pub activation_phase: ActivationPhase,
 }
 
 /// Metadata for a registered skill.
