@@ -903,9 +903,10 @@ impl SearchStrategy {
             original_query,
             ctx.current_vertical.as_deref(),
             &response.sub_queries,
-            response.results.len(),
+            &response.results,
             ctx.accumulated_search_results.len(),
             iteration_idx,
+            15,
         );
         let messages = vec![
             LlmChatMessage::system(system_prompt),

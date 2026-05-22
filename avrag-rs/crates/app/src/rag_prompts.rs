@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 use avrag_llm::LlmUsage;
+use avrag_search::SearchResult;
 use common::{
     AnswerContextChunk, ChatRequest, ExecutePlanItem, ExecutePlanRequest, ExecutePlanResponse,
     ExecutePlanSummaryMode, GraphHint, PlaceholderTriplet, QueryEntity, RetrievalPlannerOutput,
@@ -684,9 +685,10 @@ pub(crate) fn build_search_strategy_evaluation_prompt(
     query: &str,
     vertical: Option<&str>,
     sub_queries: &[String],
-    result_count: usize,
+    results: &[SearchResult],
     accumulated_count: usize,
     iteration: u8,
+    max_results: usize,
 ) -> String {
     let sub_query_lines: Vec<String> = sub_queries
         .iter()
@@ -698,17 +700,46 @@ pub(crate) fn build_search_strategy_evaluation_prompt(
         .map(|v| format!("\nVertical used: {}", v))
         .unwrap_or_default();
 
+    let top_results: Vec<String> = results
+        .iter()
+        .take(max_results)
+        .enumerate()
+        .map(|(i, r)| {
+            format!(
+                "- [{}] {}\n  {}\n  URL: {}",
+                i + 1,
+                r.title,
+                r.snippet,
+                r.url,
+            )
+        })
+        .collect();
+
+    let results_header = if results.len() > max_results {
+        format!(
+            "({}  (showing top {} of {} total))",
+            top_results.len(),
+            max_results,
+            results.len()
+        )
+    } else {
+        format!("({})", top_results.len())
+    };
+
     format!(
         "User's original question:\n{}\n\n\
-         Executed search queries (iteration {}):\n{}{}\n\n\
-         Results from this iteration:\n  - total results: {}\n\n\
-         Accumulated across all iterations so far:\n  - unique sources: {}\n\n\
-         Evaluate search coverage.",
+         Executed search queries (iteration {}):{}\n\n\
+         Actual results {}:{}{}\n\n\
+         Accumulated unique sources so far: {}\n\n\
+         Evaluate whether these results cover the user's question. \
+         If coverage is insufficient, suggest specific follow-up queries \
+         or alternative search approaches.",
         query.trim(),
         iteration + 1,
         sub_query_lines.join("\n"),
+        results_header,
         vertical_line,
-        result_count,
+        top_results.join("\n"),
         accumulated_count,
     )
 }
@@ -1318,33 +1349,57 @@ mod tests {
 
     #[test]
     fn build_search_strategy_evaluation_prompt_contains_all_inputs() {
+        let results = vec![
+            SearchResult {
+                title: "Result 1".to_string(),
+                url: "https://example.com/1".to_string(),
+                snippet: "Description 1".to_string(),
+                citation_index: None,
+            },
+            SearchResult {
+                title: "Result 2".to_string(),
+                url: "https://example.com/2".to_string(),
+                snippet: "Description 2".to_string(),
+                citation_index: None,
+            },
+        ];
+
         let prompt = build_search_strategy_evaluation_prompt(
-            "What is the latest on Rust async?",
-            Some("news"),
-            &["rust async latest".to_string(), "tokio 2026 updates".to_string()],
+            "What is Rust?",
+            Some("web"),
+            &["q1".to_string(), "q2".to_string()],
+            &results,
             5,
-            3,
-            1,
+            0,
+            15,
         );
 
-        assert!(prompt.contains("What is the latest on Rust async?"));
-        assert!(prompt.contains("iteration 2"));
-        assert!(prompt.contains("- q1: \"rust async latest\""));
-        assert!(prompt.contains("- q2: \"tokio 2026 updates\""));
-        assert!(prompt.contains("Vertical used: news"));
-        assert!(prompt.contains("total results: 5"));
-        assert!(prompt.contains("unique sources: 3"));
+        assert!(prompt.contains("What is Rust?"));
+        assert!(prompt.contains("q1"));
+        assert!(prompt.contains("Result 1"));
+        assert!(prompt.contains("https://example.com/1"));
+        assert!(prompt.contains("Actual results (2)"));
     }
 
     #[test]
     fn build_search_strategy_evaluation_prompt_omits_vertical_when_none() {
+        let results = vec![
+            SearchResult {
+                title: "Test".to_string(),
+                url: "https://test.com".to_string(),
+                snippet: "Test snippet".to_string(),
+                citation_index: None,
+            },
+        ];
+
         let prompt = build_search_strategy_evaluation_prompt(
             "test",
             None,
             &["query".to_string()],
-            1,
+            &results,
             0,
             0,
+            15,
         );
 
         assert!(prompt.contains("test"));
