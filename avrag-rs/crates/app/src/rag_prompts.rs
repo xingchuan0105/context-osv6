@@ -599,8 +599,9 @@ pub(crate) fn build_rag_strategy_evaluation_prompt(
     query: &str,
     sub_queries: &[SubQueryItem],
     tool_results: &[common::ToolResult],
-    accumulated_chunk_count: usize,
+    chunks: &[common::RetrievedChunk],
     iteration: u8,
+    max_chunks: usize,
 ) -> String {
     let sub_query_lines: Vec<String> = sub_queries
         .iter()
@@ -662,16 +663,45 @@ pub(crate) fn build_rag_strategy_evaluation_prompt(
         }
     };
 
+    let top_chunks: Vec<String> = chunks
+        .iter()
+        .take(max_chunks)
+        .enumerate()
+        .map(|(i, c)| {
+            format!(
+                "- [{}] (score={:.2}, source={})\n  {}",
+                i + 1,
+                c.score,
+                c.doc_id,
+                c.text,
+            )
+        })
+        .collect();
+
+    let truncation_note = if chunks.len() > max_chunks {
+        format!(
+            "\n(showing top {} of {} total chunks)",
+            max_chunks,
+            chunks.len()
+        )
+    } else {
+        String::new()
+    };
+
     format!(
         "User's original question:\n{}\n\n\
          Executed sub-queries (iteration {}):\n{}{}\n\n\
-         Accumulated across all iterations so far:\n  - unique chunks: {}\n\n\
-         Evaluate retrieval coverage.{}",
+         Retrieved chunks ({}):{}{}\n\n\
+         Evaluate whether these chunks cover the user's question. \
+         If coverage is insufficient, suggest specific follow-up queries \
+         or alternative retrieval tools.{}",
         query.trim(),
         iteration + 1,
         sub_query_lines.join("\n"),
         tools_line,
-        accumulated_chunk_count,
+        top_chunks.len(),
+        truncation_note,
+        top_chunks.join("\n"),
         doc_index_hint,
     )
 }
@@ -1206,12 +1236,48 @@ mod tests {
             },
         ];
 
+        let chunks = vec![
+            common::RetrievedChunk {
+                chunk_id: "c1".to_string(),
+                doc_id: "doc1".to_string(),
+                chunk_type: "paragraph".to_string(),
+                page: None,
+                text: "alpha text".to_string(),
+                score: 0.95,
+                retrieval_channel: "dense".to_string(),
+                asset_id: None,
+                caption: None,
+                image_url: None,
+                parser_backend: None,
+                source_locator: None,
+                parse_run_id: None,
+                score_breakdown: vec![],
+            },
+            common::RetrievedChunk {
+                chunk_id: "c2".to_string(),
+                doc_id: "doc1".to_string(),
+                chunk_type: "paragraph".to_string(),
+                page: None,
+                text: "beta text".to_string(),
+                score: 0.85,
+                retrieval_channel: "dense".to_string(),
+                asset_id: None,
+                caption: None,
+                image_url: None,
+                parser_backend: None,
+                source_locator: None,
+                parse_run_id: None,
+                score_breakdown: vec![],
+            },
+        ];
+
         let prompt = build_rag_strategy_evaluation_prompt(
             "How does async runtime work in Rust?",
             &sub_queries,
             &tool_results,
-            5,
+            &chunks,
             1,
+            15,
         );
 
         assert!(prompt.contains("How does async runtime work in Rust?"));
@@ -1220,7 +1286,8 @@ mod tests {
         assert!(prompt.contains("- q2: \"BM25: async, runtime, tokio\" -> 0 results"));
         assert!(prompt.contains("Additional tool calls:"));
         assert!(prompt.contains("tool=graph_retrieval -> Error"));
-        assert!(prompt.contains("unique chunks: 5"));
+        assert!(prompt.contains("Retrieved chunks (2)"));
+        assert!(prompt.contains("alpha text"));
     }
 
     #[test]
@@ -1253,12 +1320,15 @@ mod tests {
             },
         ];
 
+        let chunks: Vec<common::RetrievedChunk> = vec![];
+
         let prompt = build_rag_strategy_evaluation_prompt(
             "test",
             &sub_queries,
             &tool_results,
+            &chunks,
             0,
-            0,
+            15,
         );
 
         // Both q1 and q2 should report 3 results (from the same tool_result at index 0)

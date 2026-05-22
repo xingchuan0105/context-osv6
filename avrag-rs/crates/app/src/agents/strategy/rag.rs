@@ -848,7 +848,7 @@ impl RagStrategy {
 
     async fn evaluate_retrieval_strategy(
         &self,
-        ctx: &RagContext,
+        _ctx: &RagContext,
         original_query: &str,
         plan_calls: &[ToolCall],
         tool_results: &[ToolResult],
@@ -856,12 +856,14 @@ impl RagStrategy {
         system_prompt: &str,
     ) -> Option<(crate::rag_prompts::RagStrategyEvaluation, avrag_llm::LlmUsage)> {
         let sub_queries = extract_sub_queries_from_plan_calls(plan_calls);
+        let chunks = extract_chunks_from_tool_results(tool_results);
         let prompt = crate::rag_prompts::build_rag_strategy_evaluation_prompt(
             original_query,
             &sub_queries,
             tool_results,
-            ctx.accumulated.unique_chunk_count(),
+            &chunks,
             iteration_idx,
+            15,
         );
         let messages = vec![
             avrag_llm::ChatMessage::system(system_prompt),
@@ -1216,6 +1218,26 @@ fn detect_format_skills(query: &str) -> Vec<&'static str> {
         skills.push("teaching");
     }
     skills
+}
+
+fn extract_chunks_from_tool_results(
+    tool_results: &[common::ToolResult],
+) -> Vec<common::RetrievedChunk> {
+    tool_results
+        .iter()
+        .filter(|r| r.status == common::ToolStatus::Ok)
+        .filter_map(|r| {
+            let data = r.data.as_ref()?;
+            let array = data.as_array()?;
+            Some(
+                array
+                    .iter()
+                    .filter_map(|v| serde_json::from_value::<common::RetrievedChunk>(v.clone()).ok())
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .flatten()
+        .collect()
 }
 
 #[cfg(test)]
