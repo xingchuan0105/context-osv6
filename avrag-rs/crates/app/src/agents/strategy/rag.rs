@@ -615,7 +615,7 @@ impl RagStrategy {
         let plan_calls = ctx.current_plan_calls.clone().unwrap_or_default();
         let tool_results = ctx.all_tool_results.clone();
 
-        let eval_system = build_eval_system_prompt();
+        let eval_system = build_eval_system_prompt("rag");
         let strategy_advice = self
             .evaluate_retrieval_strategy(
                 ctx,
@@ -1077,12 +1077,26 @@ impl RagStrategy {
 // System prompt builders
 // ---------------------------------------------------------------------------
 
-fn build_eval_system_prompt() -> String {
+fn build_eval_system_prompt(strategy: &str) -> String {
     let registry = PromptRegistry::standard_cached();
-    registry
+    let skill_body = registry
         .skill("rag-eval")
         .map(|s| s.system_prompt().to_string())
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    let cap_registry = crate::agents::capability::CapabilityRegistry::standard_cached();
+    let plan_tools = cap_registry.plan_tools(strategy);
+    let tool_catalog = plan_tools
+        .iter()
+        .map(|t| format!("- {} (v{}): {}", t.id, t.version, t.description))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if tool_catalog.is_empty() {
+        skill_body
+    } else {
+        format!("{skill_body}\n\n---\n\n## Available Tools for Replanning\n\n{tool_catalog}")
+    }
 }
 
 
@@ -1306,5 +1320,13 @@ mod tests {
     #[test]
     fn is_rag_tool_false_for_calculator() {
         assert!(!is_rag_tool("calculator"));
+    }
+
+    #[test]
+    fn build_eval_system_prompt_contains_tool_catalog() {
+        let prompt = super::build_eval_system_prompt("rag");
+        assert!(prompt.contains("Available Tools for Replanning"));
+        // RAG strategy should have at least one tool
+        assert!(!prompt.is_empty());
     }
 }
