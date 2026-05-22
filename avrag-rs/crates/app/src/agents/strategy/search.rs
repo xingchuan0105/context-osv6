@@ -719,7 +719,7 @@ impl SearchStrategy {
         }
 
         // LLM strategy evaluation.
-        let eval_system = build_eval_system_prompt();
+        let eval_system = build_eval_system_prompt("search");
         let strategy_eval = self
             .evaluate_search_strategy(
                 ctx,
@@ -1235,12 +1235,26 @@ impl SearchStrategy {
 // System prompt builders
 // ---------------------------------------------------------------------------
 
-fn build_eval_system_prompt() -> String {
+fn build_eval_system_prompt(strategy: &str) -> String {
     let registry = PromptRegistry::standard_cached();
-    registry
+    let skill_body = registry
         .skill("search-eval")
         .map(|s| s.system_prompt().to_string())
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    let cap_registry = crate::agents::capability::CapabilityRegistry::standard_cached();
+    let plan_tools = cap_registry.plan_tools(strategy);
+    let tool_catalog = plan_tools
+        .iter()
+        .map(|t| format!("- {} (v{}): {}", t.id, t.version, t.description))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if tool_catalog.is_empty() {
+        skill_body
+    } else {
+        format!("{skill_body}\n\n---\n\n## Available Tools for Replanning\n\n{tool_catalog}")
+    }
 }
 
 
@@ -1712,5 +1726,12 @@ mod tests {
         assert_eq!(decision_label(&EvalAdvice::Replan { reason: "r" }), "replan");
         assert_eq!(decision_label(&EvalAdvice::BroadenQuery { reason: "r" }), "broaden_query");
         assert_eq!(decision_label(&EvalAdvice::EscalateVertical { reason: "r" }), "escalate_vertical");
+    }
+
+    #[test]
+    fn build_eval_system_prompt_contains_tool_catalog() {
+        let prompt = super::build_eval_system_prompt("search");
+        assert!(prompt.contains("Available Tools for Replanning"));
+        assert!(!prompt.is_empty());
     }
 }
