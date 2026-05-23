@@ -1,0 +1,60 @@
+name: E2E Staging Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Daily at 2:17 AM UTC (off the :00 mark to avoid thundering herd)
+    - cron: '17 2 * * *'
+
+concurrency:
+  group: e2e-staging
+  cancel-in-progress: true
+
+jobs:
+  e2e-tests:
+    name: E2E State Machine + Progressive Disclosure
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            avrag-rs/target/
+          key: ${{ runner.os }}-cargo-e2e-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-e2e-
+
+      - name: Run E2E tests (ignored)
+        working-directory: avrag-rs
+        env:
+          E2E_LLM_BASE_URL: ${{ secrets.E2E_LLM_BASE_URL }}
+          E2E_LLM_API_KEY: ${{ secrets.E2E_LLM_API_KEY }}
+          E2E_LLM_MODEL: gpt-4o-mini
+          E2E_BRAVE_API_KEY: ${{ secrets.E2E_BRAVE_API_KEY }}
+          E2E_MILVUS_URL: ${{ secrets.E2E_MILVUS_URL }}
+          E2E_MILVUS_TOKEN: ${{ secrets.E2E_MILVUS_TOKEN }}
+          E2E_EMBEDDING_BASE_URL: ${{ secrets.E2E_EMBEDDING_BASE_URL }}
+          E2E_EMBEDDING_API_KEY: ${{ secrets.E2E_EMBEDDING_API_KEY }}
+          E2E_EMBEDDING_MODEL: text-embedding-3-small
+        run: cargo test --ignored -p app --test e2e_chat --test e2e_rag --test e2e_search -- --test-threads=1
+
+      - name: Upload test output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-output
+          path: avrag-rs/target/debug/deps/e2e_*
+          retention-days: 7
