@@ -13,6 +13,11 @@ use serde::{Deserialize, Serialize};
 use super::RiskLevel;
 
 /// Classification of user query intent for auto-routing.
+///
+/// **Status: Reserved for future "auto mode".**
+/// Currently all requests arrive with an explicit `agent_type` from the frontend
+/// (Chat/Rag/Search buttons), so intent-based auto-routing is never triggered.
+/// When an "auto" mode is added, replace `infer_intent` with an LLM classifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Intent {
     /// Factual query that can be answered from internal documents.

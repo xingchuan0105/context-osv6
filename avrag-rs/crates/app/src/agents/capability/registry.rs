@@ -264,16 +264,18 @@ fn infer_tool_retry_policy(name: &str) -> super::RetryPolicy {
 }
 
 fn infer_skill_strategies(id: &str) -> Vec<String> {
-    if id.starts_with("rag-") || id == "framework-extraction" {
+    let all = || vec!["chat".to_string(), "rag".to_string(), "search".to_string()];
+    if id.starts_with("rag-") {
         vec!["rag".to_string()]
     } else if id.starts_with("search-") {
         vec!["search".to_string()]
     } else if id.starts_with("chat") || id == "session-summary" {
         vec!["chat".to_string()]
-    } else if ["ppt-generation", "html-renderer", "teaching"].contains(&id) {
-        vec!["rag".to_string(), "chat".to_string()]
+    } else if ["ppt-generation", "html-renderer", "teaching", "framework-extraction"].contains(&id) {
+        // Format skills are output-agnostic — available to all strategies
+        all()
     } else {
-        vec!["chat".to_string(), "rag".to_string(), "search".to_string()]
+        all()
     }
 }
 
@@ -538,14 +540,20 @@ mod tests {
     }
 
     #[test]
-    fn answer_format_skills_respects_strategy() {
+    fn answer_format_skills_universal_across_strategies() {
         let registry = CapabilityRegistry::standard();
 
-        let rag_skills = registry.answer_format_skills("rag");
-        let chat_skills = registry.answer_format_skills("chat");
+        let format_ids = ["ppt-generation", "html-renderer", "teaching", "framework-extraction"];
 
-        // framework-extraction 只对 rag 适用
-        assert!(rag_skills.iter().any(|s| s.id == "framework-extraction"));
-        assert!(!chat_skills.iter().any(|s| s.id == "framework-extraction"));
+        // Format skills are output-agnostic — available to all strategies
+        for strategy in ["chat", "rag", "search"] {
+            let skills = registry.answer_format_skills(strategy);
+            for id in &format_ids {
+                assert!(
+                    skills.iter().any(|s| s.id == *id),
+                    "format skill '{id}' should be available to strategy '{strategy}'"
+                );
+            }
+        }
     }
 }

@@ -22,14 +22,22 @@ pub fn build_plan_system_prompt(
         .map(|s| s.system_prompt().to_string())
         .unwrap_or_default();
 
-    // 从 Registry 按 phase+strategy 查询工具目录
+    // 从 Registry 按 phase+strategy 查询工具目录（含 input_schema 参数）
     let cap_registry = crate::agents::capability::CapabilityRegistry::standard_cached();
     let plan_tools = cap_registry.plan_tools(strategy);
-    let tool_catalog = plan_tools
+    let tool_entries: Vec<String> = plan_tools
         .iter()
-        .map(|t| format!("- {} (v{}): {}", t.id, t.version, t.description))
-        .collect::<Vec<_>>()
-        .join("\n");
+        .map(|t| {
+            let header = format!("### {} (v{})\n{}", t.id, t.version, t.description);
+            let params = format_tool_params(&t.input_schema);
+            if params.is_empty() {
+                header
+            } else {
+                format!("{header}\n{params}")
+            }
+        })
+        .collect();
+    let tool_catalog = tool_entries.join("\n\n");
 
     let mut parts = vec![planner_body];
     if !tool_catalog.is_empty() {
@@ -78,6 +86,45 @@ pub fn build_answer_system_prompt(
     }
 
     parts.join("\n\n---\n\n")
+}
+
+/// Format tool input_schema properties as a human-readable parameter list.
+fn format_tool_params(input_schema: &serde_json::Value) -> String {
+    let Some(properties) = input_schema.get("properties").and_then(|p| p.as_object()) else {
+        return String::new();
+    };
+    let required: Vec<&str> = input_schema
+        .get("required")
+        .and_then(|r| r.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+
+    let mut lines = vec!["Parameters:".to_string()];
+    for (name, schema) in properties {
+        let ty = schema.get("type").and_then(|t| t.as_str()).unwrap_or("any");
+        let desc = schema
+            .get("description")
+            .and_then(|d| d.as_str())
+            .unwrap_or("");
+        let req = if required.contains(&name.as_str()) {
+            " (required)"
+        } else {
+            ""
+        };
+        let enum_vals = schema
+            .get("enum")
+            .and_then(|e| e.as_array())
+            .map(|arr| {
+                let vals: Vec<String> = arr
+                    .iter()
+                    .filter_map(|v| v.as_str().map(|s| format!("\"{s}\"")))
+                    .collect();
+                format!(" [{}]", vals.join(", "))
+            })
+            .unwrap_or_default();
+        lines.push(format!("  - {name}: {ty}{req}{enum_vals} — {desc}"));
+    }
+    lines.join("\n")
 }
 
 // ---------------------------------------------------------------------------
