@@ -476,6 +476,8 @@ mod tests {
         assert_eq!(schema.max_budget, 4);
         let has_replan = schema.transitions.iter().any(|t| t.from == "Evaluate" && t.to == "Plan");
         assert!(has_replan, "RAG strategy should have Evaluate→Plan replan transition");
+        let has_re_execute = schema.transitions.iter().any(|t| t.from == "Evaluate" && t.to == "ExecuteRetrieve");
+        assert!(has_re_execute, "RAG strategy should have Evaluate→ExecuteRetrieve transition for direct tool re-calls");
     }
 
     #[test]

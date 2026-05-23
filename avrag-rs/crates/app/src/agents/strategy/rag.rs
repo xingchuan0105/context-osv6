@@ -270,6 +270,10 @@ impl Strategy for RagStrategy {
                 },
                 crate::agents::capability::TransitionSchema {
                     from: "Evaluate".to_string(),
+                    to: "ExecuteRetrieve".to_string(),
+                },
+                crate::agents::capability::TransitionSchema {
+                    from: "Evaluate".to_string(),
                     to: "Plan".to_string(),
                 },
             ],
@@ -685,39 +689,49 @@ impl RagStrategy {
                         .map(StepOutcome::Terminate)
                 }
                 crate::rag_prompts::EvalDecision::Insufficient => {
-                    let mut sub_queries = Vec::new();
-                    let mut tool_hints = Vec::new();
+                    // Convert next_actions directly to tool calls — skip Plan LLM.
+                    let mut calls: Vec<ToolCall> = Vec::new();
                     for action in &eval.next_actions {
                         match action {
                             crate::rag_prompts::NextAction::SubQuery { query } => {
-                                sub_queries.push(query.clone());
+                                calls.push(ToolCall {
+                                    tool: "dense_retrieval".to_string(),
+                                    version: "1.0".to_string(),
+                                    args: serde_json::json!({
+                                        "queries": [query],
+                                        "modality": "text",
+                                        "top_k": 10,
+                                    }),
+                                });
                             }
-                            crate::rag_prompts::NextAction::ToolCall { tool, args, reason } => {
-                                tool_hints.push(format!(
-                                    "{tool}: {} ({reason})",
-                                    serde_json::to_string(args).unwrap_or_default()
-                                ));
+                            crate::rag_prompts::NextAction::ToolCall { tool, args, reason: _ } => {
+                                calls.push(ToolCall {
+                                    tool: tool.clone(),
+                                    version: "1.0".to_string(),
+                                    args: args.clone(),
+                                });
                             }
                         }
                     }
 
-                    let mut directive_parts = vec![format!("replan: {}", eval.reasoning)];
-                    if !tool_hints.is_empty() {
-                        directive_parts.push(format!(
-                            "suggested tools: {}",
-                            tool_hints.join(", ")
-                        ));
-                    }
-                    if let Some(hint) = build_doc_index_directive_hint(&tool_results) {
-                        directive_parts.push(hint);
+                    if calls.is_empty() {
+                        // No actionable next actions — broaden as fallback
+                        ctx.iteration_params = RagIterationParams {
+                            query: helpers::broaden_query(&original_query),
+                            directive: Some(format!("broaden: {}", eval.reasoning)),
+                            suggested_queries: Vec::new(),
+                        };
+                        return Ok(StepOutcome::Next(Box::new(RagState::Plan)));
                     }
 
+                    // Store calls for step_execute to dispatch directly
+                    ctx.current_plan_calls = Some(calls);
                     ctx.iteration_params = RagIterationParams {
                         query: original_query.clone(),
-                        directive: Some(directive_parts.join("\n")),
-                        suggested_queries: sub_queries,
+                        directive: Some(format!("evaluate: {}", eval.reasoning)),
+                        suggested_queries: Vec::new(),
                     };
-                    Ok(StepOutcome::Next(Box::new(RagState::Plan)))
+                    Ok(StepOutcome::Next(Box::new(RagState::ExecuteRetrieve)))
                 }
             },
             None => {
