@@ -26,6 +26,7 @@ pub mod weather;
 /// Unified agent that dispatches to Chat / RAG / Search based on `request.kind`.
 pub struct UnifiedAgent {
     llm_client: Option<LlmClient>,
+    llm_provider: Option<Arc<dyn avrag_llm::LlmProvider>>,
     temperature: Option<f32>,
     rag_runtime: Option<Arc<avrag_rag_core::RagRuntime>>,
     search_executor: Option<Arc<dyn SearchProvider>>,
@@ -36,12 +37,22 @@ impl UnifiedAgent {
         llm_client: Option<LlmClient>,
         temperature: Option<f32>,
     ) -> Self {
+        let llm_provider = llm_client.clone().map(|c| {
+            Arc::new(c) as Arc<dyn avrag_llm::LlmProvider>
+        });
         Self {
             llm_client,
+            llm_provider,
             temperature,
             rag_runtime: None,
             search_executor: None,
         }
+    }
+
+    /// Override the LLM provider (used by E2E tests to inject RecordingLlmProvider).
+    pub fn with_llm_provider(mut self, provider: Option<Arc<dyn avrag_llm::LlmProvider>>) -> Self {
+        self.llm_provider = provider;
+        self
     }
 
     pub fn with_rag_runtime(mut self, runtime: Option<Arc<avrag_rag_core::RagRuntime>>) -> Self {
@@ -69,8 +80,8 @@ impl Agent for UnifiedAgent {
             .clone()
             .unwrap_or_else(|| "unified-agent".to_string());
 
-        let llm = match self.llm_client.clone() {
-            Some(llm) => llm,
+        let llm_provider = match self.llm_provider.clone() {
+            Some(provider) => provider,
             None => {
                 let _ = sink.emit(AgentEvent::Error {
                     code: "llm_unavailable".to_string(),
@@ -79,6 +90,7 @@ impl Agent for UnifiedAgent {
                 return Err(AppError::internal("LLM client is not configured"));
             }
         };
+        let llm_client = self.llm_client.clone();
 
         // v5: RouterPolicy produces an observable routing decision.
         let router_policy = crate::agents::capability::standard_policy();
@@ -129,7 +141,8 @@ impl Agent for UnifiedAgent {
                     cancellation,
                 )?;
                 let strategy = ChatStrategy {
-                    llm,
+                    llm: llm_provider.clone(),
+                    llm_client: llm_client.clone(),
                     temperature: self.temperature,
                 };
                 let mut result = executor.run(&strategy, ctx).await?;
@@ -168,7 +181,8 @@ impl Agent for UnifiedAgent {
                     rag,
                 )?;
                 let strategy = RagStrategy {
-                    llm,
+                    llm: llm_provider.clone(),
+                    llm_client: llm_client.clone(),
                     temperature: self.temperature,
                 };
                 let mut result = executor.run(&strategy, ctx).await?;
@@ -195,10 +209,11 @@ impl Agent for UnifiedAgent {
                     cancellation,
                 )?;
                 let strategy = SearchStrategy {
-                    llm,
+                    llm: llm_provider.clone(),
+                    llm_client: llm_client.clone(),
                     temperature: self.temperature,
                     search_executor,
-                    search_synthesizer: self.llm_client.clone().map(|llm| {
+                    search_synthesizer: llm_client.clone().map(|llm| {
                         Arc::new(crate::agents::strategy::search::LlmSearchAnswerSynthesizer { llm })
                             as Arc<dyn crate::agents::strategy::search::SearchAnswerSynthesizer>
                     }),

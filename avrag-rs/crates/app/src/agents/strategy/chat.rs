@@ -154,7 +154,8 @@ impl ChatContext {
 
 /// Strategy implementation for Chat mode.
 pub struct ChatStrategy {
-    pub llm: avrag_llm::LlmClient,
+    pub llm: std::sync::Arc<dyn avrag_llm::LlmProvider>,
+    pub llm_client: Option<avrag_llm::LlmClient>,
     pub temperature: Option<f32>,
 }
 
@@ -405,7 +406,12 @@ impl ChatStrategy {
 
         let response = if ctx.request.stream {
             let (delta_tx, mut delta_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-            let stream = self.llm.complete_stream(&messages, self.temperature, cancel, move |delta| {
+            let llm_client = self.llm_client.as_ref()
+                .ok_or_else(|| AgentErrorKind::ModelUnavailable {
+                    provider: "unknown".to_string(),
+                    model: "streaming requires LlmClient".to_string(),
+                })?;
+            let stream = llm_client.complete_stream(&messages, self.temperature, cancel, move |delta| {
                 if !delta.is_empty() {
                     let _ = delta_tx.send(delta.to_string());
                 }

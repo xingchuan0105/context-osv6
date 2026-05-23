@@ -231,7 +231,8 @@ impl RagContext {
 
 /// Strategy implementation for RAG mode.
 pub struct RagStrategy {
-    pub llm: avrag_llm::LlmClient,
+    pub llm: std::sync::Arc<dyn avrag_llm::LlmProvider>,
+    pub llm_client: Option<avrag_llm::LlmClient>,
     pub temperature: Option<f32>,
 }
 
@@ -911,7 +912,12 @@ impl RagStrategy {
         })
         .await;
 
-        let synthesizer = avrag_llm::AnswerSynthesizer::from_llm_client(self.llm.clone())
+        let llm_client = self.llm_client.clone()
+            .ok_or_else(|| AgentErrorKind::ModelUnavailable {
+                provider: "unknown".to_string(),
+                model: "AnswerSynthesizer requires LlmClient".to_string(),
+            })?;
+        let synthesizer = avrag_llm::AnswerSynthesizer::from_llm_client(llm_client)
             .with_system_prompt(system_prompt);
         let cancel = ctx.cancel.clone();
 

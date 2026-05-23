@@ -191,7 +191,8 @@ impl SearchContext {
 // ---------------------------------------------------------------------------
 
 pub struct SearchStrategy {
-    pub llm: avrag_llm::LlmClient,
+    pub llm: std::sync::Arc<dyn avrag_llm::LlmProvider>,
+    pub llm_client: Option<avrag_llm::LlmClient>,
     pub temperature: Option<f32>,
     pub search_executor: std::sync::Arc<dyn avrag_search::SearchProvider>,
     pub search_synthesizer: Option<std::sync::Arc<dyn SearchAnswerSynthesizer>>,
@@ -284,7 +285,7 @@ impl SearchStrategy {
         );
 
         let plan = plan_search(
-            &self.llm,
+            self.llm.as_ref(),
             &ctx.request.query,
             self.temperature,
             &system_prompt,
@@ -1271,7 +1272,7 @@ fn build_eval_system_prompt(strategy: &str) -> String {
 // ---------------------------------------------------------------------------
 
 async fn plan_search(
-    llm: &avrag_llm::LlmClient,
+    llm: &dyn avrag_llm::LlmProvider,
     query: &str,
     temperature: Option<f32>,
     system_prompt: &str,
