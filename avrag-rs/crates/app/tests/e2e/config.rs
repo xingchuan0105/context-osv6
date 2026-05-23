@@ -31,8 +31,10 @@ impl E2EConfig {
 
     /// Build an LlmClient from this config.
     pub fn llm_client(&self) -> avrag_llm::LlmClient {
+        // Strip trailing slash to avoid double-slash in URLs like "{base}/chat/completions"
+        let base_url = self.llm_base_url.trim_end_matches('/').to_string();
         avrag_llm::LlmClient::new(avrag_llm::ModelProviderConfig {
-            base_url: self.llm_base_url.clone(),
+            base_url,
             api_key: self.llm_api_key.clone(),
             model: self.llm_model.clone(),
             timeout_ms: 30_000,
