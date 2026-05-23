@@ -95,6 +95,7 @@ impl AgentErrorKind {
                 | AgentErrorKind::ToolSchemaMismatch { .. }
                 | AgentErrorKind::ToolOutputMalformed { .. }
                 | AgentErrorKind::ExternalDependencyFailed { .. }
+                | AgentErrorKind::PermissionDenied { .. }
         )
     }
 
@@ -216,6 +217,45 @@ impl AgentErrorKind {
     }
 }
 
+impl From<AgentErrorKind> for common::AppError {
+    fn from(kind: AgentErrorKind) -> Self {
+        kind.to_app_error()
+    }
+}
+
+/// Conservative classification of an AppError into AgentErrorKind.
+/// Used when a strategy calls a downstream function that returns AppError
+/// and the error needs to propagate through the Strategy::step boundary.
+impl From<common::AppError> for AgentErrorKind {
+    fn from(err: common::AppError) -> Self {
+        // AppError carries a code string — map known codes to typed variants.
+        let code = err.code();
+        match code {
+            "permission_denied" => AgentErrorKind::PermissionDenied {
+                tool: "unknown".to_string(),
+                required: vec![],
+            },
+            "rate_limited" | "model_rate_limited" | "tool_rate_limited" => {
+                AgentErrorKind::ModelRateLimited
+            }
+            "budget_exhausted" => AgentErrorKind::BudgetExhausted {
+                current: 0,
+                max: 0,
+            },
+            "tool_error" => AgentErrorKind::ToolExecutionFailed {
+                tool: "unknown".to_string(),
+                reason: err.message().to_string(),
+            },
+            "model_error" => AgentErrorKind::ModelOutputInvalid {
+                expected_schema: "unknown".to_string(),
+                got: err.message().to_string(),
+            },
+            "request_cancelled" => AgentErrorKind::Unknown("cancelled".to_string()),
+            _ => AgentErrorKind::Unknown(err.message().to_string()),
+        }
+    }
+}
+
 /// Minimum error-handling strategy required for a given failure kind.
 ///
 /// Strategies are ordered from least to most severe:
@@ -276,13 +316,14 @@ mod tests {
     }
 
     #[test]
-    fn permission_denied_masks() {
+    fn permission_denied_is_degradable_and_masks() {
         let e = AgentErrorKind::PermissionDenied {
             tool: "code_interpreter".to_string(),
             required: vec![Permission::CodeExecution],
         };
         assert!(!e.is_retriable());
-        assert!(!e.is_degradable());
+        // Degradable so Rag/Search can skip the denied tool and continue others.
+        assert!(e.is_degradable());
         assert_eq!(e.minimum_strategy(), ErrorHandlingStrategy::MaskAndContinue);
     }
 

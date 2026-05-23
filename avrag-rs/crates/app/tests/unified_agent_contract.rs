@@ -46,6 +46,9 @@ fn base_request(kind: AgentKind) -> AgentRequest {
         metadata: BTreeMap::new(),
         cancellation_token: None,
         guard_pipeline: None,
+        preferred_tools: vec![],
+        format_hint: None,
+        max_iterations: None,
     }
 }
 

@@ -141,7 +141,6 @@ mod tests {
         assert!(resp.strategies.contains_key("chat"));
         assert!(resp.strategies.contains_key("rag"));
         assert!(resp.strategies.contains_key("search"));
-        assert!(resp.strategies.contains_key("composite"));
     }
 
     #[test]
@@ -150,7 +149,6 @@ mod tests {
         assert_eq!(resp.strategies["chat"].max_budget, 1);
         assert_eq!(resp.strategies["rag"].max_budget, 4);
         assert_eq!(resp.strategies["search"].max_budget, 3);
-        assert_eq!(resp.strategies["composite"].max_budget, 4);
     }
 
     #[test]
@@ -167,6 +165,6 @@ mod tests {
         let json = serde_json::to_string(&resp).unwrap();
         let parsed: CapabilitiesResponse = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.api_version, "v5");
-        assert_eq!(parsed.strategies.len(), 4);
+        assert_eq!(parsed.strategies.len(), 3);
     }
 }

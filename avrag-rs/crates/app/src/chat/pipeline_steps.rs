@@ -38,9 +38,6 @@ pub(crate) async fn dispatch_mode(
         Some(crate::agents::AgentKind::Rag) => {
             run_rag_mode(state, request, session, stream_config).await
         }
-        Some(crate::agents::AgentKind::Composite) => {
-            run_general_mode(state, request, session, stream_config, crate::agents::AgentKind::Composite, "composite").await
-        }
     }
 }
 

@@ -82,6 +82,7 @@ impl StrategyExecutor {
                     state_id: state_id.clone(),
                     state_kind: state_kind.clone(),
                     elapsed_ms: None,
+                    timestamp_ms: Some(entered_at),
                     payload: Some(observable),
                 })
                 .await;
@@ -129,6 +130,7 @@ impl StrategyExecutor {
                             state_id: state_id.clone(),
                             state_kind: state_kind.clone(),
                             elapsed_ms: Some(elapsed_ms),
+                            timestamp_ms: Some(completed_at),
                             payload: None,
                         })
                         .await;
@@ -147,6 +149,7 @@ impl StrategyExecutor {
                             state_id: state_id.clone(),
                             state_kind: state_kind.clone(),
                             elapsed_ms: Some(elapsed_ms),
+                            timestamp_ms: Some(completed_at),
                             payload: None,
                         })
                         .await;
@@ -185,6 +188,29 @@ impl StrategyExecutor {
                         result.snapshot = snapshot;
                     }
 
+                    // Emit Terminal event
+                    let final_decision_str = result
+                        .final_decision
+                        .as_ref()
+                        .map(|d| format!("{:?}", d))
+                        .unwrap_or_else(|| "synthesized".to_string());
+                    let _ = ctx
+                        .sink()
+                        .emit(AgentEvent::Terminal {
+                            decision: final_decision_str,
+                            reason: result.degrade_trace.first().map(|d| d.reason.clone()),
+                        })
+                        .await;
+
+                    // Emit TraceSummary event
+                    let _ = ctx
+                        .sink()
+                        .emit(AgentEvent::TraceSummary {
+                            trace_id: trace_id.clone(),
+                            total_elapsed_ms,
+                        })
+                        .await;
+
                     // Emit run-level metric
                     telemetry::prometheus::observe_agent_run(
                         &strategy,
@@ -195,8 +221,8 @@ impl StrategyExecutor {
                 }
                 Err(e) => {
                     // Error path: mark spans as failed
-                    state_span.set_error(&e.to_string());
-                    root_span.set_error(&e.to_string());
+                    state_span.set_error(&e.display_message());
+                    root_span.set_error(&e.display_message());
 
                     let mut trace = AgentTrace::new(&trace_id);
                     trace.add_span(root_span);
@@ -204,6 +230,32 @@ impl StrategyExecutor {
 
                     let total_elapsed_ms = start_time.elapsed().as_millis() as u64;
                     let strategy = strategy_name::<S>();
+
+                    // Degradable errors: return Ok with degrade trace instead of failing.
+                    if e.is_degradable() {
+                        let degrade_trace = vec![common::DegradeTraceItem {
+                            stage: "executor".to_string(),
+                            reason: e.display_message(),
+                            impact: "degraded due to error".to_string(),
+                        }];
+                        let result = AgentRunResult {
+                            trace_id: Some(trace_id),
+                            state_history: Some(state_history),
+                            trace: Some(trace),
+                            total_elapsed_ms: Some(total_elapsed_ms),
+                            degrade_trace,
+                            final_decision: Some(crate::agents::runtime::FinalDecision::Degraded {
+                                reason: crate::agents::react_loop::DegradeReason::Other(e.display_message()),
+                            }),
+                            ..Default::default()
+                        };
+                        telemetry::prometheus::observe_agent_error(&format!("{:?}", e));
+                        telemetry::prometheus::observe_agent_run(
+                            &strategy,
+                            total_elapsed_ms as f64,
+                        );
+                        return Ok(result);
+                    }
 
                     let _result = AgentRunResult {
                         trace_id: Some(trace_id),
@@ -214,15 +266,14 @@ impl StrategyExecutor {
                     };
 
                     // Emit error metric
-                    telemetry::prometheus::observe_agent_error(&format!("{}", e),
-                    );
+                    telemetry::prometheus::observe_agent_error(&format!("{:?}", e));
                     // Emit run metric (failed)
                     telemetry::prometheus::observe_agent_run(
                         &strategy,
                         total_elapsed_ms as f64,
                     );
 
-                    return Err(e);
+                    return Err(e.into());
                 }
             }
         }

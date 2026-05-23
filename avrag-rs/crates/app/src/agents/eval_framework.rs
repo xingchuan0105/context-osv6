@@ -267,39 +267,63 @@ pub fn compare_eval_runs(
 // ---------------------------------------------------------------------------
 
 /// What triggered an evaluation run.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EvalTrigger {
     /// Pre-merge gate: runs on every PR before merge.
-    PreMerge,
+    PreMerge { dataset: String, sample_size: usize },
     /// Nightly regression suite: compares against baseline.
-    NightlyRegression,
+    NightlyRegression { dataset: String },
     /// Online sampling: evaluates a fraction of live traffic.
-    OnlineSampling,
+    OnlineSampling { rate: f64 },
     /// Red-team / adversarial probing.
-    RedTeam,
+    RedTeam { attack_vectors: Vec<crate::agents::redteam::AttackVector> },
 }
 
 impl EvalTrigger {
     /// Default sample size per trigger type.
     pub fn default_sample_size(&self) -> usize {
         match self {
-            EvalTrigger::PreMerge => 20,
-            EvalTrigger::NightlyRegression => 100,
-            EvalTrigger::OnlineSampling => 50,
-            EvalTrigger::RedTeam => 30,
+            EvalTrigger::PreMerge { .. } => 20,
+            EvalTrigger::NightlyRegression { .. } => 100,
+            EvalTrigger::OnlineSampling { .. } => 50,
+            EvalTrigger::RedTeam { .. } => 30,
         }
     }
 
     /// Default minimum pass threshold (overall score must be >= this).
     pub fn default_pass_threshold(&self) -> f64 {
         match self {
-            EvalTrigger::PreMerge => 0.75,
-            EvalTrigger::NightlyRegression => 0.80,
-            EvalTrigger::OnlineSampling => 0.70,
-            EvalTrigger::RedTeam => 0.60,
+            EvalTrigger::PreMerge { .. } => 0.75,
+            EvalTrigger::NightlyRegression { .. } => 0.80,
+            EvalTrigger::OnlineSampling { .. } => 0.70,
+            EvalTrigger::RedTeam { .. } => 0.60,
         }
     }
+}
+
+/// Result of a trigger-based evaluation, including metrics and optional baseline comparison.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvalResult {
+    /// What triggered this evaluation run.
+    pub trigger: EvalTrigger,
+    /// Fraction of cases that passed all thresholds.
+    pub pass_rate: f64,
+    /// Average latency per case in milliseconds.
+    pub avg_latency_ms: u64,
+    /// Average token consumption per case.
+    pub avg_tokens: u64,
+    /// Cases that failed (score below threshold or evaluator error).
+    pub failures: Vec<EvalFailure>,
+    /// Comparison against a baseline run, if one was provided.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comparison: Option<EvalComparison>,
+    /// Quality metrics computed from the evaluation run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub quality_metrics: Vec<MetricValue>,
+    /// System metrics computed from the evaluation run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub system_metrics: Vec<MetricValue>,
 }
 
 /// Record of a failed evaluation case.
@@ -310,6 +334,96 @@ pub struct EvalFailure {
     pub score: f64,
     pub threshold: f64,
     pub reason: String,
+}
+
+// ---------------------------------------------------------------------------
+// Quality / System metric definitions
+// ---------------------------------------------------------------------------
+
+/// Quality metrics: measure the correctness and usefulness of agent outputs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QualityMetric {
+    /// Fraction of cases that met all pass thresholds.
+    TaskCompletionRate,
+    /// Fraction of citations that are accurate (ground-truth aligned).
+    CitationAccuracy,
+    /// Whether the answer can be directly executed or acted upon.
+    AnswerExecutability,
+    /// Fraction of cases where hallucination was detected.
+    HallucinationRate,
+    /// Aggregated user satisfaction score (when available).
+    UserSatisfaction,
+}
+
+impl QualityMetric {
+    pub fn name(&self) -> &'static str {
+        match self {
+            QualityMetric::TaskCompletionRate => "task_completion_rate",
+            QualityMetric::CitationAccuracy => "citation_accuracy",
+            QualityMetric::AnswerExecutability => "answer_executability",
+            QualityMetric::HallucinationRate => "hallucination_rate",
+            QualityMetric::UserSatisfaction => "user_satisfaction",
+        }
+    }
+}
+
+/// System metrics: measure operational efficiency and reliability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SystemMetric {
+    /// Fraction of tool invocations that returned Ok.
+    ToolSuccessRate,
+    /// 50th percentile latency across cases (ms).
+    LatencyP50,
+    /// 95th percentile latency across cases (ms).
+    LatencyP95,
+    /// 99th percentile latency across cases (ms).
+    LatencyP99,
+    /// Tokens consumed per unit of useful output.
+    TokenEfficiency,
+    /// Estimated cost per evaluation run.
+    CostPerRun,
+    /// Fraction of runs that exhausted their budget.
+    BudgetExhaustionRate,
+    /// Fraction of cases that triggered a replan.
+    ReplanRate,
+    /// Fraction of failures that were successfully recovered.
+    FailureRecoveryRate,
+    /// Average number of tool calls per task.
+    AvgToolCallsPerTask,
+    /// Consistency score when replaying the same case.
+    ReplayConsistency,
+}
+
+impl SystemMetric {
+    pub fn name(&self) -> &'static str {
+        match self {
+            SystemMetric::ToolSuccessRate => "tool_success_rate",
+            SystemMetric::LatencyP50 => "latency_p50",
+            SystemMetric::LatencyP95 => "latency_p95",
+            SystemMetric::LatencyP99 => "latency_p99",
+            SystemMetric::TokenEfficiency => "token_efficiency",
+            SystemMetric::CostPerRun => "cost_per_run",
+            SystemMetric::BudgetExhaustionRate => "budget_exhaustion_rate",
+            SystemMetric::ReplanRate => "replan_rate",
+            SystemMetric::FailureRecoveryRate => "failure_recovery_rate",
+            SystemMetric::AvgToolCallsPerTask => "avg_tool_calls_per_task",
+            SystemMetric::ReplayConsistency => "replay_consistency",
+        }
+    }
+}
+
+/// A single computed metric value with an optional target.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MetricValue {
+    /// Metric name (use `QualityMetric::name()` or `SystemMetric::name()`).
+    pub metric: String,
+    /// Computed value (0.0–1.0 for rates, raw units for latencies / counts).
+    pub value: f64,
+    /// Optional target / SLO value for comparison.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<f64>,
 }
 
 /// Built-in evaluation metrics.
@@ -645,6 +759,187 @@ pub async fn run_evaluation(
     })
 }
 
+/// Compute quality and system metrics from an EvalRun.
+///
+/// Derives what it can from the `EvalRun` / `AgentRunResult` fields;
+/// metrics that require data not yet collected (e.g. cost, replay) are
+/// emitted with a value of `0.0` and no target.
+fn compute_metrics(run: &EvalRun) -> (Vec<MetricValue>, Vec<MetricValue>) {
+    let mut quality = Vec::new();
+    let mut system = Vec::new();
+
+    // ---- Quality metrics ----
+
+    // TaskCompletionRate = pass_rate (already computed).
+    let total_cases = run.cases.len();
+    let unique_failed: std::collections::HashSet<_> = run
+        .failures
+        .iter()
+        .filter(|f| f.case_id != "__overall__")
+        .map(|f| f.case_id.clone())
+        .collect();
+    let passed = total_cases.saturating_sub(unique_failed.len());
+    let task_completion_rate = if total_cases == 0 {
+        0.0
+    } else {
+        passed as f64 / total_cases as f64
+    };
+    quality.push(MetricValue {
+        metric: QualityMetric::TaskCompletionRate.name().to_string(),
+        value: task_completion_rate,
+        target: Some(0.8),
+    });
+
+    // CitationAccuracy: average of citation_precision scores when available.
+    let citation_scores: Vec<f64> = run
+        .cases
+        .iter()
+        .flat_map(|c| c.scores.iter())
+        .filter(|s| s.metric == "citation_precision" || s.metric == "citation_recall")
+        .map(|s| s.score)
+        .collect();
+    if !citation_scores.is_empty() {
+        let avg = citation_scores.iter().sum::<f64>() / citation_scores.len() as f64;
+        quality.push(MetricValue {
+            metric: QualityMetric::CitationAccuracy.name().to_string(),
+            value: avg,
+            target: Some(0.75),
+        });
+    }
+
+    // HallucinationRate: fraction of cases with a hallucination score below threshold.
+    let hallucination_scores: Vec<f64> = run
+        .cases
+        .iter()
+        .flat_map(|c| c.scores.iter())
+        .filter(|s| s.metric == "hallucination")
+        .map(|s| s.score)
+        .collect();
+    if !hallucination_scores.is_empty() {
+        // Higher hallucination score = more hallucination detected; rate = average.
+        let avg = hallucination_scores.iter().sum::<f64>() / hallucination_scores.len() as f64;
+        quality.push(MetricValue {
+            metric: QualityMetric::HallucinationRate.name().to_string(),
+            value: avg,
+            target: Some(0.1),
+        });
+    }
+
+    // ---- System metrics ----
+
+    // ToolSuccessRate: from tool_calls status across all cases.
+    let total_tool_calls: usize = run
+        .cases
+        .iter()
+        .map(|c| c.result.tool_calls.len())
+        .sum();
+    let ok_tool_calls: usize = run
+        .cases
+        .iter()
+        .flat_map(|c| c.result.tool_calls.iter())
+        .filter(|tc| tc.status == common::ToolStatus::Ok)
+        .count();
+    if total_tool_calls > 0 {
+        system.push(MetricValue {
+            metric: SystemMetric::ToolSuccessRate.name().to_string(),
+            value: ok_tool_calls as f64 / total_tool_calls as f64,
+            target: Some(0.95),
+        });
+    }
+
+    // Latency percentiles from total_elapsed_ms.
+    let mut latencies: Vec<u64> = run
+        .cases
+        .iter()
+        .filter_map(|c| c.result.total_elapsed_ms)
+        .collect();
+    if !latencies.is_empty() {
+        latencies.sort_unstable();
+        let p50_idx = (latencies.len() as f64 * 0.50) as usize;
+        let p95_idx = ((latencies.len() as f64 * 0.95) as usize).min(latencies.len() - 1);
+        let p99_idx = ((latencies.len() as f64 * 0.99) as usize).min(latencies.len() - 1);
+        system.push(MetricValue {
+            metric: SystemMetric::LatencyP50.name().to_string(),
+            value: latencies[p50_idx] as f64,
+            target: Some(2000.0),
+        });
+        system.push(MetricValue {
+            metric: SystemMetric::LatencyP95.name().to_string(),
+            value: latencies[p95_idx] as f64,
+            target: Some(5000.0),
+        });
+        system.push(MetricValue {
+            metric: SystemMetric::LatencyP99.name().to_string(),
+            value: latencies[p99_idx] as f64,
+            target: Some(10000.0),
+        });
+    }
+
+    // TokenEfficiency: total tokens per case (lower is better, but we emit raw).
+    let total_tokens: u64 = run
+        .cases
+        .iter()
+        .filter_map(|c| c.result.usage.as_ref().map(|u| u.total_tokens))
+        .sum();
+    if total_cases > 0 && total_tokens > 0 {
+        system.push(MetricValue {
+            metric: SystemMetric::TokenEfficiency.name().to_string(),
+            value: total_tokens as f64 / total_cases as f64,
+            target: Some(2000.0),
+        });
+    }
+
+    // BudgetExhaustionRate: fraction of cases where current >= max budget.
+    let budget_exhausted: usize = run
+        .cases
+        .iter()
+        .filter(|c| {
+            c.result
+                .budget_used
+                .as_ref()
+                .map(|b| b.current >= b.max && b.max > 0)
+                .unwrap_or(false)
+        })
+        .count();
+    if total_cases > 0 {
+        system.push(MetricValue {
+            metric: SystemMetric::BudgetExhaustionRate.name().to_string(),
+            value: budget_exhausted as f64 / total_cases as f64,
+            target: Some(0.05),
+        });
+    }
+
+    // ReplanRate: fraction of cases with at least one replan decision.
+    let replanned: usize = run
+        .cases
+        .iter()
+        .filter(|c| {
+            c.result
+                .iterations
+                .iter()
+                .any(|it| it.decision == "replan")
+        })
+        .count();
+    if total_cases > 0 {
+        system.push(MetricValue {
+            metric: SystemMetric::ReplanRate.name().to_string(),
+            value: replanned as f64 / total_cases as f64,
+            target: Some(0.2),
+        });
+    }
+
+    // AvgToolCallsPerTask.
+    if total_cases > 0 {
+        system.push(MetricValue {
+            metric: SystemMetric::AvgToolCallsPerTask.name().to_string(),
+            value: total_tool_calls as f64 / total_cases as f64,
+            target: Some(5.0),
+        });
+    }
+
+    (quality, system)
+}
+
 /// Dataset specification for a trigger-based evaluation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvalDatasetSpec {
@@ -671,24 +966,27 @@ pub struct EvalTriggerConfig {
 impl EvalTriggerConfig {
     /// Build a default config for a trigger type and dataset.
     pub fn new(trigger: EvalTrigger, dataset_id: impl Into<String>) -> Self {
+        let sample_size = trigger.default_sample_size();
+        let pass_threshold = trigger.default_pass_threshold();
         Self {
             trigger,
             dataset: EvalDatasetSpec {
                 dataset_id: dataset_id.into(),
-                sample_size: trigger.default_sample_size(),
+                sample_size,
                 filter: None,
             },
-            pass_threshold: trigger.default_pass_threshold(),
+            pass_threshold,
             metric_thresholds: BTreeMap::new(),
         }
     }
 }
 
-/// Run an evaluation under a specific trigger, collecting failures.
+/// Run an evaluation under a specific trigger, collecting failures and producing an EvalResult.
 ///
 /// 1. Runs all evaluators over the cases.
 /// 2. Compares scores against trigger-specific thresholds.
 /// 3. Populates `EvalRun.trigger` and `EvalRun.failures`.
+/// 4. If `baseline` is provided, computes an `EvalComparison` and attaches it to the result.
 pub async fn run_eval_with_trigger(
     run_name: impl Into<String>,
     strategy: impl Into<String>,
@@ -696,10 +994,11 @@ pub async fn run_eval_with_trigger(
     cases: Vec<EvalCase>,
     evaluators: Vec<Box<dyn Evaluator>>,
     config: EvalTriggerConfig,
-) -> Result<EvalRun, common::AppError> {
+    baseline: Option<&EvalRun>,
+) -> Result<(EvalRun, EvalResult), common::AppError> {
     let mut run = run_evaluation(run_name, strategy, strategy_version, cases, evaluators).await?;
 
-    run.trigger = Some(config.trigger);
+    run.trigger = Some(config.trigger.clone());
     run.failures.clear();
 
     // Collect failures: per-case per-metric under threshold.
@@ -741,7 +1040,44 @@ pub async fn run_eval_with_trigger(
         });
     }
 
-    Ok(run)
+    // Compute pass rate.
+    let total_cases = run.cases.len();
+    let pass_rate = if total_cases == 0 {
+        0.0
+    } else {
+        let _failed_count = run.failures.iter().filter(|f| f.case_id != "__overall__").count();
+        let unique_failed_cases: std::collections::HashSet<_> = run
+            .failures
+            .iter()
+            .filter(|f| f.case_id != "__overall__")
+            .map(|f| f.case_id.clone())
+            .collect();
+        let passed = total_cases.saturating_sub(unique_failed_cases.len());
+        passed as f64 / total_cases as f64
+    };
+
+    // Compute system metrics from case results.
+    let (quality_metrics, system_metrics) = compute_metrics(&run);
+
+    // Build EvalResult.
+    let mut result = EvalResult {
+        trigger: config.trigger,
+        pass_rate,
+        avg_latency_ms: 0, // TODO: collect per-case latency when available
+        avg_tokens: 0,     // TODO: collect per-case tokens when available
+        failures: run.failures.clone(),
+        comparison: None,
+        quality_metrics,
+        system_metrics,
+    };
+
+    // If baseline provided, compute comparison.
+    if let Some(base) = baseline {
+        let comparison = compare_eval_runs(base, &run, 0.05);
+        result.comparison = Some(comparison);
+    }
+
+    Ok((run, result))
 }
 
 // ---------------------------------------------------------------------------
@@ -815,6 +1151,9 @@ mod tests {
                 metadata: BTreeMap::new(),
                 cancellation_token: None,
                 guard_pipeline: None,
+                preferred_tools: vec![],
+                format_hint: None,
+                max_iterations: None,
             },
             result: {
                 let mut r = crate::agents::runtime::AgentRunResult::default();
@@ -1014,23 +1353,23 @@ mod tests {
 
     #[test]
     fn eval_trigger_default_sample_sizes() {
-        assert_eq!(EvalTrigger::PreMerge.default_sample_size(), 20);
-        assert_eq!(EvalTrigger::NightlyRegression.default_sample_size(), 100);
-        assert_eq!(EvalTrigger::OnlineSampling.default_sample_size(), 50);
-        assert_eq!(EvalTrigger::RedTeam.default_sample_size(), 30);
+        assert_eq!(EvalTrigger::PreMerge { dataset: "d".to_string(), sample_size: 20 }.default_sample_size(), 20);
+        assert_eq!(EvalTrigger::NightlyRegression { dataset: "d".to_string() }.default_sample_size(), 100);
+        assert_eq!(EvalTrigger::OnlineSampling { rate: 0.1 }.default_sample_size(), 50);
+        assert_eq!(EvalTrigger::RedTeam { attack_vectors: vec![] }.default_sample_size(), 30);
     }
 
     #[test]
     fn eval_trigger_default_pass_thresholds() {
-        assert!((EvalTrigger::PreMerge.default_pass_threshold() - 0.75).abs() < 1e-6);
-        assert!((EvalTrigger::NightlyRegression.default_pass_threshold() - 0.80).abs() < 1e-6);
-        assert!((EvalTrigger::OnlineSampling.default_pass_threshold() - 0.70).abs() < 1e-6);
-        assert!((EvalTrigger::RedTeam.default_pass_threshold() - 0.60).abs() < 1e-6);
+        assert!((EvalTrigger::PreMerge { dataset: "d".to_string(), sample_size: 20 }.default_pass_threshold() - 0.75).abs() < 1e-6);
+        assert!((EvalTrigger::NightlyRegression { dataset: "d".to_string() }.default_pass_threshold() - 0.80).abs() < 1e-6);
+        assert!((EvalTrigger::OnlineSampling { rate: 0.1 }.default_pass_threshold() - 0.70).abs() < 1e-6);
+        assert!((EvalTrigger::RedTeam { attack_vectors: vec![] }.default_pass_threshold() - 0.60).abs() < 1e-6);
     }
 
     #[test]
     fn eval_trigger_config_builds_defaults() {
-        let config = EvalTriggerConfig::new(EvalTrigger::PreMerge, "chat_smoke");
+        let config = EvalTriggerConfig::new(EvalTrigger::PreMerge { dataset: "chat_smoke".to_string(), sample_size: 20 }, "chat_smoke");
         assert_eq!(config.dataset.dataset_id, "chat_smoke");
         assert_eq!(config.dataset.sample_size, 20);
         assert!((config.pass_threshold - 0.75).abs() < 1e-6);
@@ -1048,7 +1387,7 @@ mod tests {
             Box::new(F1Evaluator),
         ];
         let config = EvalTriggerConfig {
-            trigger: EvalTrigger::PreMerge,
+            trigger: EvalTrigger::PreMerge { dataset: "test".to_string(), sample_size: 2 },
             dataset: EvalDatasetSpec {
                 dataset_id: "test".to_string(),
                 sample_size: 2,
@@ -1057,13 +1396,15 @@ mod tests {
             pass_threshold: 0.75,
             metric_thresholds: BTreeMap::new(),
         };
-        let run = run_eval_with_trigger("t", "ChatStrategy", "v1", cases, evaluators, config)
+        let (run, result) = run_eval_with_trigger("t", "ChatStrategy", "v1", cases, evaluators, config, None)
             .await
             .unwrap();
-        assert_eq!(run.trigger, Some(EvalTrigger::PreMerge));
+        assert_eq!(run.trigger, Some(EvalTrigger::PreMerge { dataset: "test".to_string(), sample_size: 2 }));
         assert!(!run.failures.is_empty(), "expected some failures below 0.75 threshold");
         assert!(run.failures.iter().any(|f| f.metric == "exact_match"));
         assert!(run.failures.iter().any(|f| f.metric == "overall"));
+        assert_eq!(result.trigger, EvalTrigger::PreMerge { dataset: "test".to_string(), sample_size: 2 });
+        assert!(result.pass_rate >= 0.0 && result.pass_rate <= 1.0);
     }
 
     #[tokio::test]
@@ -1073,7 +1414,7 @@ mod tests {
         let mut metric_thresholds = BTreeMap::new();
         metric_thresholds.insert("exact_match".to_string(), 1.01); // impossible
         let config = EvalTriggerConfig {
-            trigger: EvalTrigger::NightlyRegression,
+            trigger: EvalTrigger::NightlyRegression { dataset: "test".to_string() },
             dataset: EvalDatasetSpec {
                 dataset_id: "test".to_string(),
                 sample_size: 1,
@@ -1082,10 +1423,10 @@ mod tests {
             pass_threshold: 0.5,
             metric_thresholds,
         };
-        let run = run_eval_with_trigger("t", "ChatStrategy", "v1", cases, evaluators, config)
+        let (run, _result) = run_eval_with_trigger("t", "ChatStrategy", "v1", cases, evaluators, config, None)
             .await
             .unwrap();
-        assert_eq!(run.trigger, Some(EvalTrigger::NightlyRegression));
+        assert_eq!(run.trigger, Some(EvalTrigger::NightlyRegression { dataset: "test".to_string() }));
         assert!(run.failures.iter().any(|f| f.metric == "exact_match" && f.threshold == 1.01));
     }
 
@@ -1094,7 +1435,7 @@ mod tests {
         let cases = vec![dummy_case("hello world", Some("hello world"))];
         let evaluators: Vec<Box<dyn Evaluator>> = vec![Box::new(ExactMatchEvaluator)];
         let config = EvalTriggerConfig {
-            trigger: EvalTrigger::RedTeam,
+            trigger: EvalTrigger::RedTeam { attack_vectors: vec![] },
             dataset: EvalDatasetSpec {
                 dataset_id: "test".to_string(),
                 sample_size: 1,
@@ -1103,10 +1444,42 @@ mod tests {
             pass_threshold: 0.0, // everything passes
             metric_thresholds: BTreeMap::new(),
         };
-        let run = run_eval_with_trigger("t", "ChatStrategy", "v1", cases, evaluators, config)
+        let (run, result) = run_eval_with_trigger("t", "ChatStrategy", "v1", cases, evaluators, config, None)
             .await
             .unwrap();
         assert!(run.failures.is_empty(), "expected no failures with threshold 0.0");
+        assert_eq!(result.pass_rate, 1.0);
+    }
+
+    #[tokio::test]
+    async fn run_eval_with_trigger_comparison_with_baseline() {
+        let cases = vec![
+            dummy_case("hello world", Some("hello world")),
+        ];
+        let evaluators: Vec<Box<dyn Evaluator>> = vec![Box::new(ExactMatchEvaluator)];
+        let config = EvalTriggerConfig {
+            trigger: EvalTrigger::PreMerge { dataset: "test".to_string(), sample_size: 1 },
+            dataset: EvalDatasetSpec {
+                dataset_id: "test".to_string(),
+                sample_size: 1,
+                filter: None,
+            },
+            pass_threshold: 0.0,
+            metric_thresholds: BTreeMap::new(),
+        };
+
+        // Build a baseline run with lower score.
+        let baseline = make_run("base", vec![case_with_score("c1", "exact_match", 0.5)], 0.5);
+
+        let (_run, result) = run_eval_with_trigger("t", "ChatStrategy", "v1", cases, evaluators, config, Some(&baseline))
+            .await
+            .unwrap();
+
+        assert!(result.comparison.is_some(), "expected comparison when baseline is provided");
+        let comp = result.comparison.unwrap();
+        assert_eq!(comp.baseline_run_id, "base");
+        assert!(comp.overall_delta > 0.0, "expected positive delta since candidate improved");
+        assert!(comp.regressions.is_empty(), "expected no regressions since candidate improved");
     }
 
     // ---------------- parse_llm_judge_output ----------------

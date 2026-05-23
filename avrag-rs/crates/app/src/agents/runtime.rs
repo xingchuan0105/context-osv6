@@ -146,6 +146,15 @@ pub struct AgentRequest {
     pub stream: bool,
     /// Preferred language for agent output (e.g. "zh", "en").
     pub language: Option<String>,
+    /// Optional: override Plan-phase tool selection (intervention).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub preferred_tools: Vec<String>,
+    /// Optional: hint for answer format skill (intervention).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format_hint: Option<String>,
+    /// Optional: override max iteration budget (intervention).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_iterations: Option<u8>,
     /// Auth / org context serialized as JSON to avoid leaking auth types into agent layer.
     pub auth_context: serde_json::Value,
     /// Docscope metadata for RAG (loaded by orchestrator, passed to agent).
@@ -248,6 +257,12 @@ pub struct AgentRunResult {
     /// Tool invocation records collected during the run.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tool_calls: Vec<ToolCallRecord>,
+    /// Routing decision that selected this strategy (white-box observability).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_decision: Option<crate::agents::capability::RoutingDecision>,
+    /// Evaluation summary synthesized across all iterations (white-box).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eval_summary: Option<String>,
 }
 
 /// A single state execution record in the v5 StrategyExecutor.
@@ -387,6 +402,9 @@ mod tests {
             metadata: BTreeMap::new(),
             cancellation_token: None,
             guard_pipeline: None,
+            preferred_tools: vec![],
+            format_hint: None,
+            max_iterations: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         let parsed: AgentRequest = serde_json::from_str(&json).unwrap();

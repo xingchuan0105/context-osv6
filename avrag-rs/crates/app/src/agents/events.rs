@@ -52,6 +52,9 @@ pub enum AgentEvent {
         state_kind: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         elapsed_ms: Option<u64>,
+        /// Unix timestamp in milliseconds when the state transition occurred.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        timestamp_ms: Option<u64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         payload: Option<serde_json::Value>,
     },
@@ -84,6 +87,27 @@ pub enum AgentEvent {
     BudgetTick {
         current: u8,
         max: u8,
+    },
+    /// Routing decision event (white-box observability).
+    /// Emitted when the router resolves a strategy for the request.
+    RoutingDecision {
+        strategy_id: String,
+        matched_rule: String,
+        confidence: f64,
+        explanation: String,
+    },
+    /// Terminal decision event (white-box observability).
+    /// Emitted when the strategy reaches a final decision.
+    Terminal {
+        decision: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    /// Trace summary event (white-box observability).
+    /// Emitted at the end of a run with complete trace information.
+    TraceSummary {
+        trace_id: String,
+        total_elapsed_ms: u64,
     },
     /// Audit record emitted at key security/policy decision points.
     /// Collected by the orchestrator for persistence into the audit log.
@@ -281,6 +305,7 @@ mod tests {
                 state_id: "plan".to_string(),
                 state_kind: "plan".to_string(),
                 elapsed_ms: Some(42),
+                timestamp_ms: Some(1_000_000),
                 payload: Some(serde_json::json!({"extra": true})),
             },
             AgentEvent::PlanDecision {

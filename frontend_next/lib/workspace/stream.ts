@@ -16,6 +16,15 @@ export type AnswerBlock =
       chunk_id: string;
     };
 
+export type ToolStatus = "ok" | "timeout" | "error" | "not_found" | "not_implemented";
+
+export type ToolResult = {
+  tool: string;
+  version: string;
+  status: ToolStatus;
+  data?: Record<string, unknown> | null;
+};
+
 export type CitationSourceLocator = {
   url?: string | null;
   citation_index?: number | null;
@@ -127,6 +136,7 @@ export type ChatResponse = {
   mode_debug?: ModeDebug | null;
   message_id?: number | null;
   guard_report?: GuardReport | null;
+  tool_results?: ToolResult[] | null;
 };
 
 export type ChatDonePayload = {

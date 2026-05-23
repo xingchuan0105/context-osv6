@@ -4,7 +4,7 @@
 //! so that a run can be replayed for debugging, evaluation, or regression testing.
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 // ---------------------------------------------------------------------------
 // Core snapshot structures
@@ -159,11 +159,59 @@ pub struct ToolResponse {
 }
 
 // ---------------------------------------------------------------------------
+// SemVer requirement
+// ---------------------------------------------------------------------------
+
+/// A semantic version requirement string (e.g. "^1.2.3", ">=1.0.0").
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct SemVerReq(pub String);
+
+impl SemVerReq {
+    pub fn new(req: impl Into<String>) -> Self {
+        Self(req.into())
+    }
+}
+
+impl From<&str> for SemVerReq {
+    fn from(s: &str) -> Self {
+        Self::new(s)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Compatibility matrix
+// ---------------------------------------------------------------------------
+
+/// Compatibility matrix governing strategy dependencies and replay policy.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompatibilityMatrix {
+    /// Strategy -> tool_id -> SemVerReq
+    pub strategy_tool_deps: HashMap<String, HashMap<String, SemVerReq>>,
+    /// Strategy -> skill_id -> SemVerReq
+    pub strategy_skill_deps: HashMap<String, HashMap<String, SemVerReq>>,
+    /// Maximum number of concurrent versions allowed.
+    pub max_concurrent_versions: u32,
+    /// Default replay compatibility policy.
+    pub replay_compatibility: ReplayCompatibility,
+}
+
+impl Default for CompatibilityMatrix {
+    fn default() -> Self {
+        Self {
+            strategy_tool_deps: HashMap::new(),
+            strategy_skill_deps: HashMap::new(),
+            max_concurrent_versions: 3,
+            replay_compatibility: ReplayCompatibility::Strict,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Replay compatibility
 // ---------------------------------------------------------------------------
 
 /// How strictly to enforce version matching during replay.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReplayCompatibility {
     /// Versions must match exactly.
@@ -171,7 +219,9 @@ pub enum ReplayCompatibility {
     /// Patch-level differences allowed (e.g. v1.2.3 vs v1.2.4).
     PatchLevel,
     /// Minor-level differences allowed (results may differ).
-    BestEffort,
+    MinorLevel,
+    /// Best-effort replay with a confidence score.
+    BestEffort { confidence: f64 },
 }
 
 /// Result of a replay attempt.
@@ -180,6 +230,20 @@ pub struct ReplayResult {
     pub tag: ReplayResultTag,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub result: Option<crate::agents::runtime::AgentRunResult>,
+    /// Differences between snapshot environment and current environment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment_diff: Option<EnvironmentDiff>,
+}
+
+/// Description of differences between two environment snapshots.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvironmentDiff {
+    pub strategy_changed: bool,
+    pub registry_changed: bool,
+    pub router_changed: bool,
+    pub model_changes: Vec<String>,
+    pub tool_changes: Vec<String>,
+    pub skill_changes: Vec<String>,
 }
 
 /// Classification of replay outcome.
@@ -191,7 +255,7 @@ pub enum ReplayResultTag {
     /// 环境存在 patch 级差异，或部分不可重放工具被 mock。
     ReplayedWithWarning { warnings: Vec<String> },
     /// 环境存在 minor 级差异，或 ReplayCompatibility 为 BestEffort。
-    BestEffort,
+    BestEffort { confidence: f64, notes: Vec<String> },
     /// 环境存在 major 级差异，或缺少必需快照数据。
     NotReplayable { reason: String },
 }
@@ -314,7 +378,7 @@ pub fn check_replay_compatibility(
                 };
             }
         }
-        PatchLevel | BestEffort => {
+        ReplayCompatibility::PatchLevel | ReplayCompatibility::MinorLevel | ReplayCompatibility::BestEffort { .. } => {
             // For patch level, we would parse semver and compare major.minor.
             // For simplicity, we do exact match here and leave semver parsing
             // as a future enhancement.
@@ -331,7 +395,10 @@ pub fn check_replay_compatibility(
 
     // If snapshot itself is marked non-replayable (e.g. due to non-replayable tools).
     if !snapshot.is_replayable {
-        return ReplayResultTag::BestEffort;
+        return ReplayResultTag::BestEffort {
+            confidence: 0.5,
+            notes: vec!["snapshot marked non-replayable (e.g. due to non-replayable tools)".to_string()],
+        };
     }
 
     ReplayResultTag::ReplayedExact
@@ -416,7 +483,7 @@ pub fn replay(
             .map(crate::agents::runtime::AgentRunResult::from),
     };
 
-    ReplayResult { tag, result }
+    ReplayResult { tag, result, environment_diff: None }
 }
 
 // ---------------------------------------------------------------------------
@@ -458,6 +525,9 @@ mod tests {
                 metadata: BTreeMap::new(),
                 cancellation_token: None,
                 guard_pipeline: None,
+                preferred_tools: vec![],
+                format_hint: None,
+                max_iterations: None,
             },
             environment: dummy_env(env_version),
             llm_responses: vec![],
@@ -493,7 +563,9 @@ mod tests {
         snap.is_replayable = false;
         let current = dummy_env("v1");
         let result = check_replay_compatibility(&snap, &current, ReplayCompatibility::Strict);
-        assert!(matches!(result, ReplayResultTag::BestEffort));
+        assert!(
+            matches!(result, ReplayResultTag::BestEffort { confidence, .. } if confidence == 0.5)
+        );
     }
 
     #[test]
@@ -533,6 +605,9 @@ mod tests {
                 metadata: BTreeMap::new(),
                 cancellation_token: None,
                 guard_pipeline: None,
+                preferred_tools: vec![],
+                format_hint: None,
+                max_iterations: None,
             })
             .environment(dummy_env("v1"));
 
@@ -568,7 +643,10 @@ mod tests {
             ReplayResultTag::ReplayedWithWarning {
                 warnings: vec!["a".to_string()],
             },
-            ReplayResultTag::BestEffort,
+            ReplayResultTag::BestEffort {
+                confidence: 0.75,
+                notes: vec!["note".to_string()],
+            },
             ReplayResultTag::NotReplayable {
                 reason: "x".to_string(),
             },

@@ -83,14 +83,11 @@ impl Agent for UnifiedAgent {
         // v5: RouterPolicy produces an observable routing decision.
         let router_policy = crate::agents::capability::standard_policy();
         let routing_decision = router_policy.resolve(&request);
-        let _ = sink.emit(AgentEvent::DebugTrace {
-            kind: "routing.decision".to_string(),
-            payload: serde_json::json!({
-                "strategy_id": routing_decision.strategy_id,
-                "matched_rule": routing_decision.matched_rule,
-                "confidence": routing_decision.confidence,
-                "explanation": routing_decision.explanation,
-            }),
+        let _ = sink.emit(AgentEvent::RoutingDecision {
+            strategy_id: routing_decision.strategy_id.clone(),
+            matched_rule: routing_decision.matched_rule.clone(),
+            confidence: routing_decision.confidence,
+            explanation: routing_decision.explanation.clone(),
         }).await;
 
         // Emit audit record for routing decision.
@@ -135,7 +132,9 @@ impl Agent for UnifiedAgent {
                     llm,
                     temperature: self.temperature,
                 };
-                executor.run(&strategy, ctx).await
+                let mut result = executor.run(&strategy, ctx).await?;
+                result.routing_decision = Some(routing_decision.clone());
+                Ok(result)
             }
             crate::agents::AgentKind::Rag => {
                 if request.doc_scope.is_empty() {
@@ -172,7 +171,9 @@ impl Agent for UnifiedAgent {
                     llm,
                     temperature: self.temperature,
                 };
-                executor.run(&strategy, ctx).await
+                let mut result = executor.run(&strategy, ctx).await?;
+                result.routing_decision = Some(routing_decision.clone());
+                Ok(result)
             }
             crate::agents::AgentKind::Search => {
                 let search_executor = match self.search_executor.clone() {
@@ -202,26 +203,9 @@ impl Agent for UnifiedAgent {
                             as Arc<dyn crate::agents::strategy::search::SearchAnswerSynthesizer>
                     }),
                 };
-                executor.run(&strategy, ctx).await
-            }
-            crate::agents::AgentKind::Composite => {
-                let rag_runtime = self.rag_runtime.clone();
-                let search_executor = self.search_executor.clone();
-
-                let ctx = crate::agents::strategy::composite::CompositeContext::from_request(
-                    request,
-                    trace_id,
-                    LoopBudget::rag(UserTier::Pro), // composite uses rag-level budget
-                    sink.clone_boxed(),
-                    cancellation,
-                )?;
-                let strategy = crate::agents::strategy::composite::CompositeStrategy {
-                    llm,
-                    temperature: self.temperature,
-                    rag_runtime,
-                    search_executor,
-                };
-                executor.run(&strategy, ctx).await
+                let mut result = executor.run(&strategy, ctx).await?;
+                result.routing_decision = Some(routing_decision.clone());
+                Ok(result)
             }
         }
     }

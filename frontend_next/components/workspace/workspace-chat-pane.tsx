@@ -14,7 +14,11 @@ import {
 import { useAuth } from "../../lib/auth/context";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
-import { listWorkspaceSessionMessages, type WorkspaceChatMessage } from "../../lib/workspace/client";
+import {
+  listWorkspaceSessionMessages,
+  submitWorkspaceMessageFeedback,
+  type WorkspaceChatMessage,
+} from "../../lib/workspace/client";
 import type {
   WorkspaceCitationAnchor,
   WorkspaceCitationRequest,
@@ -32,6 +36,7 @@ import {
   type AnswerBlock,
   type Citation,
   type DegradeTraceItem,
+  type ToolResult,
   type WorkspaceChatStreamEvent,
 } from "../../lib/workspace/stream";
 import { markdownToInlineHtml, markdownToRichTextHtml } from "./workspace-note-rich-text";
@@ -50,6 +55,8 @@ type PaneMessage = {
   messageId: number | null;
   pending?: boolean;
   sessionId: string | null;
+  feedbackRating?: "up" | "down" | null;
+  toolResults: ToolResult[];
 };
 
 type ProgressEntry = {
@@ -107,6 +114,7 @@ function mapTranscriptMessage(message: WorkspaceChatMessage): PaneMessage {
     guarded: false,
     messageId: message.id,
     sessionId: message.session_id,
+    toolResults: message.tool_results ?? [],
   };
 }
 
@@ -717,6 +725,350 @@ function ResearchProgressCard({
   );
 }
 
+type ToolResultCardProps = {
+  locale: "zh-CN" | "en";
+  result: ToolResult;
+};
+
+/// Maps backend skill id to frontend render hint.
+/// Keep in sync with `SkillComponent::render_hint()` in the Rust backend.
+const TOOL_RENDER_HINTS: Record<string, string> = {
+  calculator: "calculator",
+  code_interpreter: "code",
+  weather_query: "weather",
+  web_search: "search",
+};
+
+function getToolRenderHint(toolName: string): string {
+  return TOOL_RENDER_HINTS[toolName] ?? "json";
+}
+
+export function ToolResultCard({ locale, result }: ToolResultCardProps) {
+  const [expanded, setExpanded] = useState(true);
+  const data = result.data ?? {};
+  const isError = result.status === "error";
+  const isOk = result.status === "ok";
+  const renderHint = getToolRenderHint(result.tool);
+
+  const statusClass = isOk
+    ? styles.toolResultStatusOk
+    : isError
+      ? styles.toolResultStatusError
+      : styles.toolResultStatusOther;
+
+  const statusLabel =
+    result.status === "ok"
+      ? "OK"
+      : result.status === "error"
+        ? locale === "zh-CN"
+          ? "错误"
+          : "Error"
+        : result.status === "timeout"
+          ? locale === "zh-CN"
+            ? "超时"
+            : "Timeout"
+          : result.status === "not_found"
+            ? locale === "zh-CN"
+              ? "未找到"
+              : "Not Found"
+            : result.status === "not_implemented"
+              ? locale === "zh-CN"
+                ? "未实现"
+                : "Not Implemented"
+              : result.status;
+
+  function renderBody() {
+    if (renderHint === "code") {
+      const stdout = typeof data.stdout === "string" ? data.stdout : "";
+      const stderr = typeof data.stderr === "string" ? data.stderr : "";
+      const execResult = data.result ?? "";
+      const success = data.success === true;
+
+      return (
+        <div className={styles.toolResultBody}>
+          {data.error ? (
+            <div className={styles.toolResultSection}>
+              <div className={styles.toolResultSectionLabel}>
+                {locale === "zh-CN" ? "错误" : "Error"}
+              </div>
+              <pre>{String(data.error)}</pre>
+            </div>
+          ) : null}
+          {execResult !== "" ? (
+            <div className={styles.toolResultSection}>
+              <div className={styles.toolResultSectionLabel}>
+                {locale === "zh-CN" ? "返回值" : "Result"}
+              </div>
+              <pre>{typeof execResult === "string" ? execResult : JSON.stringify(execResult, null, 2)}</pre>
+            </div>
+          ) : null}
+          {stdout ? (
+            <div className={styles.toolResultSection}>
+              <div className={styles.toolResultSectionLabel}>stdout</div>
+              <pre>{stdout}</pre>
+            </div>
+          ) : null}
+          {stderr ? (
+            <div className={styles.toolResultSection}>
+              <div className={styles.toolResultSectionLabel}>stderr</div>
+              <pre style={{ color: "hsl(0 84% 60%)" }}>{stderr}</pre>
+            </div>
+          ) : null}
+          {!success && data.exit_code !== undefined ? (
+            <div className={styles.toolResultSection}>
+              <div className={styles.toolResultSectionLabel}>
+                {locale === "zh-CN" ? "退出码" : "Exit Code"}
+              </div>
+              <pre>{String(data.exit_code)}</pre>
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
+    if (renderHint === "calculator") {
+      const expression = typeof data.expression === "string" ? data.expression : "";
+      const calcResult = data.result !== undefined ? String(data.result) : "";
+
+      return (
+        <div className={styles.toolResultBody}>
+          {expression ? (
+            <div className={styles.toolResultSection}>
+              <div className={styles.toolResultSectionLabel}>
+                {locale === "zh-CN" ? "表达式" : "Expression"}
+              </div>
+              <pre>{expression}</pre>
+            </div>
+          ) : null}
+          {calcResult ? (
+            <div className={styles.toolResultSection}>
+              <div className={styles.toolResultSectionLabel}>
+                {locale === "zh-CN" ? "结果" : "Result"}
+              </div>
+              <pre>{calcResult}</pre>
+            </div>
+          ) : null}
+          {data.error ? (
+            <div className={styles.toolResultSection}>
+              <div className={styles.toolResultSectionLabel}>
+                {locale === "zh-CN" ? "错误" : "Error"}
+              </div>
+              <pre>{String(data.error)}</pre>
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
+    if (renderHint === "weather") {
+      const location = typeof data.location === "string" ? data.location : "";
+      const description = typeof data.description === "string" ? data.description : "";
+      const temperature = data.temperature !== undefined ? String(data.temperature) : "";
+      const feelsLike = data.feels_like !== undefined ? String(data.feels_like) : "";
+      const humidity = data.humidity !== undefined ? String(data.humidity) : "";
+      const windSpeed = data.wind_speed !== undefined ? String(data.wind_speed) : "";
+      const units = typeof data.units === "string" ? data.units : "";
+
+      return (
+        <div className={styles.toolResultBody}>
+          {location || description ? (
+            <div style={{ fontWeight: 600, marginBottom: "0.4rem" }}>
+              {location}
+              {location && description ? " — " : ""}
+              {description}
+            </div>
+          ) : null}
+          <div className={styles.toolResultWeatherGrid}>
+            {temperature ? (
+              <div className={styles.toolResultWeatherItem}>
+                <span className={styles.toolResultWeatherLabel}>
+                  {locale === "zh-CN" ? "温度" : "Temperature"}
+                </span>
+                <span className={styles.toolResultWeatherValue}>
+                  {temperature}
+                  {units === "metric" ? "°C" : units === "imperial" ? "°F" : ""}
+                </span>
+              </div>
+            ) : null}
+            {feelsLike ? (
+              <div className={styles.toolResultWeatherItem}>
+                <span className={styles.toolResultWeatherLabel}>
+                  {locale === "zh-CN" ? "体感" : "Feels Like"}
+                </span>
+                <span className={styles.toolResultWeatherValue}>
+                  {feelsLike}
+                  {units === "metric" ? "°C" : units === "imperial" ? "°F" : ""}
+                </span>
+              </div>
+            ) : null}
+            {humidity ? (
+              <div className={styles.toolResultWeatherItem}>
+                <span className={styles.toolResultWeatherLabel}>
+                  {locale === "zh-CN" ? "湿度" : "Humidity"}
+                </span>
+                <span className={styles.toolResultWeatherValue}>{humidity}%</span>
+              </div>
+            ) : null}
+            {windSpeed ? (
+              <div className={styles.toolResultWeatherItem}>
+                <span className={styles.toolResultWeatherLabel}>
+                  {locale === "zh-CN" ? "风速" : "Wind Speed"}
+                </span>
+                <span className={styles.toolResultWeatherValue}>
+                  {windSpeed}
+                  {units === "metric" ? " m/s" : units === "imperial" ? " mph" : ""}
+                </span>
+              </div>
+            ) : null}
+          </div>
+          {data.error ? (
+            <div className={styles.toolResultSection}>
+              <div className={styles.toolResultSectionLabel}>
+                {locale === "zh-CN" ? "错误" : "Error"}
+              </div>
+              <pre>{String(data.error)}</pre>
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
+    if (renderHint === "search") {
+      const results = Array.isArray(data.results) ? data.results : [];
+      const answer = typeof data.synthesized_answer === "string" ? data.synthesized_answer : "";
+
+      return (
+        <div className={styles.toolResultBody}>
+          {answer ? (
+            <div className={styles.toolResultSection}>
+              <div className={styles.toolResultSectionLabel}>
+                {locale === "zh-CN" ? "摘要" : "Summary"}
+              </div>
+              <div style={{ lineHeight: 1.5 }}>{answer}</div>
+            </div>
+          ) : null}
+          {results.length > 0 ? (
+            <div className={styles.toolResultSection}>
+              <div className={styles.toolResultSectionLabel}>
+                {locale === "zh-CN" ? "搜索结果" : "Search Results"}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                {results.map((r: any, i: number) => (
+                  <div
+                    key={i}
+                    style={{
+                      padding: "0.4rem 0.5rem",
+                      borderRadius: "6px",
+                      background: "hsl(var(--muted) / 0.15)",
+                    }}
+                  >
+                    {r.url ? (
+                      <a
+                        href={r.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          fontWeight: 600,
+                          fontSize: "0.85rem",
+                          color: "hsl(217 91% 60%)",
+                          textDecoration: "none",
+                        }}
+                      >
+                        {typeof r.title === "string" ? r.title : r.url}
+                      </a>
+                    ) : (
+                      <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>
+                        {typeof r.title === "string" ? r.title : ""}
+                      </div>
+                    )}
+                    {typeof r.snippet === "string" && r.snippet ? (
+                      <div style={{ fontSize: "0.78rem", color: "hsl(var(--muted-foreground))", marginTop: "0.15rem" }}>
+                        {r.snippet}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {data.error ? (
+            <div className={styles.toolResultSection}>
+              <div className={styles.toolResultSectionLabel}>
+                {locale === "zh-CN" ? "错误" : "Error"}
+              </div>
+              <pre>{String(data.error)}</pre>
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
+    // Generic fallback: render data as JSON
+    return (
+      <div className={styles.toolResultBody}>
+        <pre>{JSON.stringify(data, null, 2)}</pre>
+      </div>
+    );
+  }
+
+  const toolLabel =
+    renderHint === "code"
+      ? locale === "zh-CN"
+        ? "代码执行"
+        : "Code Execution"
+      : renderHint === "calculator"
+        ? locale === "zh-CN"
+          ? "计算器"
+          : "Calculator"
+        : renderHint === "weather"
+          ? locale === "zh-CN"
+            ? "天气查询"
+            : "Weather"
+          : renderHint === "search"
+            ? locale === "zh-CN"
+              ? "网页搜索"
+              : "Web Search"
+            : result.tool;
+
+  return (
+    <div className={styles.toolResultCard}>
+      <button
+        className={styles.toolResultHeader}
+        onClick={() => setExpanded((prev) => !prev)}
+        type="button"
+      >
+        <span className={styles.toolResultTitle}>
+          {toolLabel}
+          <span className={[styles.toolResultStatus, statusClass].join(" ")}>{statusLabel}</span>
+        </span>
+        <span style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
+          {expanded ? "▾" : "▸"}
+        </span>
+      </button>
+      {expanded ? renderBody() : null}
+    </div>
+  );
+}
+
+type ToolResultsPanelProps = {
+  locale: "zh-CN" | "en";
+  results: ToolResult[];
+};
+
+export function ToolResultsPanel({ locale, results }: ToolResultsPanelProps) {
+  if (results.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={styles.toolResultsPanel}>
+      {results.map((result, index) => (
+        <ToolResultCard key={`${result.tool}-${index}`} locale={locale} result={result} />
+      ))}
+    </div>
+  );
+}
+
 type AssistantAnswerContentProps = {
   locale: "zh-CN" | "en";
   message: PaneMessage;
@@ -744,6 +1096,12 @@ function AssistantAnswerContent({
   function renderCitationButton(citation: Citation, key: string) {
     const citationIndex = findCitationIndex(message.citations, citation);
     const resolvedIndex = citationIndex >= 0 ? citationIndex : 0;
+    const label = getCitationLabel(citation, resolvedIndex);
+    const pageText = getCitationPageText(locale, citation.page);
+    const preview = citation.preview?.trim() || citation.content?.trim() || "";
+    const hoverTitle = pageText
+      ? `${label} (${pageText})\n${preview}`
+      : `${label}\n${preview}`;
 
     return (
       <button
@@ -753,6 +1111,7 @@ function AssistantAnswerContent({
         onClick={(event) => {
           handleCitationClick(citation, event.currentTarget);
         }}
+        title={hoverTitle.slice(0, 300)}
         type="button"
       >
         {getCitationDisplayId(citation, resolvedIndex)}
@@ -807,160 +1166,172 @@ function AssistantAnswerContent({
       );
 
       return (
-        <div
-          className={styles.markdownContent}
-          onClick={(event) => {
-            const target = event.target as HTMLElement;
-            const button = target.closest<HTMLButtonElement>(
-              "button[data-inline-citation-token-index]",
-            );
+        <>
+          <div
+            className={styles.markdownContent}
+            onClick={(event) => {
+              const target = event.target as HTMLElement;
+              const button = target.closest<HTMLButtonElement>(
+                "button[data-inline-citation-token-index]",
+              );
 
-            if (!button) {
-              return;
-            }
+              if (!button) {
+                return;
+              }
 
-            const tokenIndex = Number.parseInt(
-              button.dataset.inlineCitationTokenIndex ?? "",
-              10,
-            );
-            const citation = richMarkdown.citationTokens[tokenIndex]?.citation;
+              const tokenIndex = Number.parseInt(
+                button.dataset.inlineCitationTokenIndex ?? "",
+                10,
+              );
+              const citation = richMarkdown.citationTokens[tokenIndex]?.citation;
 
-            if (citation) {
-              handleCitationClick(citation, button);
-            }
-          }}
-          dangerouslySetInnerHTML={{
-            __html: richMarkdown.html,
-          }}
-        />
+              if (citation) {
+                handleCitationClick(citation, button);
+              }
+            }}
+            dangerouslySetInnerHTML={{
+              __html: richMarkdown.html,
+            }}
+          />
+          <ToolResultsPanel locale={locale} results={message.toolResults} />
+        </>
       );
     }
 
     return (
-      <div className={styles.answerBlockStack}>
-        {message.answerBlocks.map((block, blockIndex) => {
-          if (block.type === "image") {
-            const citation = findCitationByChunkId(message.citations, block.chunk_id);
+      <>
+        <div className={styles.answerBlockStack}>
+          {message.answerBlocks.map((block, blockIndex) => {
+            if (block.type === "image") {
+              const citation = findCitationByChunkId(message.citations, block.chunk_id);
 
-            if (!citation) {
+              if (!citation) {
+                return null;
+              }
+
+              return renderImageCard(citation, `image-${blockIndex}`);
+            }
+
+            const blockHtml = markdownToInlineHtml(block.text);
+            const blockCitations = dedupeCitations(
+              block.citations.map((chunkId) => findCitationByChunkId(message.citations, chunkId)),
+            );
+
+            if (!blockHtml && blockCitations.length === 0) {
               return null;
             }
 
-            return renderImageCard(citation, `image-${blockIndex}`);
-          }
-
-          const blockHtml = markdownToInlineHtml(block.text);
-          const blockCitations = dedupeCitations(
-            block.citations.map((chunkId) => findCitationByChunkId(message.citations, chunkId)),
-          );
-
-          if (!blockHtml && blockCitations.length === 0) {
-            return null;
-          }
-
-          return (
-            <p className={styles.answerTextBlock} key={`text-${blockIndex}`}>
-              {blockHtml ? (
-                <span
-                  dangerouslySetInnerHTML={{
-                    __html: blockHtml,
-                  }}
-                />
-              ) : null}
-              {blockCitations.length > 0 ? (
-                <span className={styles.inlineCitationGroup}>
-                  {blockCitations.map((citation, citationIndex) =>
-                    renderCitationButton(citation, `block-${blockIndex}-${citationIndex}`),
-                  )}
-                </span>
-              ) : null}
-            </p>
-          );
-        })}
-      </div>
+            return (
+              <p className={styles.answerTextBlock} key={`text-${blockIndex}`}>
+                {blockHtml ? (
+                  <span
+                    dangerouslySetInnerHTML={{
+                      __html: blockHtml,
+                    }}
+                  />
+                ) : null}
+                {blockCitations.length > 0 ? (
+                  <span className={styles.inlineCitationGroup}>
+                    {blockCitations.map((citation, citationIndex) =>
+                      renderCitationButton(citation, `block-${blockIndex}-${citationIndex}`),
+                    )}
+                  </span>
+                ) : null}
+              </p>
+            );
+          })}
+        </div>
+        <ToolResultsPanel locale={locale} results={message.toolResults} />
+      </>
     );
   }
 
   if (hasRenderedCitationMarkup(message.content)) {
     return (
-      <div className={styles.answerBlockStack}>
-        {message.content.split("\n").map((line, lineIndex) => {
-          const trimmedLine = line.trim();
+      <>
+        <div className={styles.answerBlockStack}>
+          {message.content.split("\n").map((line, lineIndex) => {
+            const trimmedLine = line.trim();
 
-          if (!trimmedLine) {
-            return <div aria-hidden="true" className={styles.answerSpacer} key={`spacer-${lineIndex}`} />;
-          }
-
-          const tokens = tokenizeRenderedAnswerLine(line);
-
-          if (tokens.length === 1 && tokens[0]?.type === "image") {
-            const citation = findCitationByDisplayId(message.citations, tokens[0].displayId);
-
-            if (!citation) {
-              return null;
+            if (!trimmedLine) {
+              return <div aria-hidden="true" className={styles.answerSpacer} key={`spacer-${lineIndex}`} />;
             }
 
-            return renderImageCard(citation, `rendered-image-${lineIndex}`);
-          }
+            const tokens = tokenizeRenderedAnswerLine(line);
 
-          return (
-            <p className={styles.answerTextBlock} key={`line-${lineIndex}`}>
-              {tokens.map((token, tokenIndex) => {
-                if (token.type === "text") {
-                  if (!token.text) {
-                    return null;
+            if (tokens.length === 1 && tokens[0]?.type === "image") {
+              const citation = findCitationByDisplayId(message.citations, tokens[0].displayId);
+
+              if (!citation) {
+                return null;
+              }
+
+              return renderImageCard(citation, `rendered-image-${lineIndex}`);
+            }
+
+            return (
+              <p className={styles.answerTextBlock} key={`line-${lineIndex}`}>
+                {tokens.map((token, tokenIndex) => {
+                  if (token.type === "text") {
+                    if (!token.text) {
+                      return null;
+                    }
+
+                    return (
+                      <span
+                        dangerouslySetInnerHTML={{
+                          __html: markdownToInlineHtml(token.text),
+                        }}
+                        key={`text-${lineIndex}-${tokenIndex}`}
+                      />
+                    );
                   }
 
-                  return (
-                    <span
-                      dangerouslySetInnerHTML={{
-                        __html: markdownToInlineHtml(token.text),
-                      }}
-                      key={`text-${lineIndex}-${tokenIndex}`}
-                    />
-                  );
-                }
+                  if (token.type === "citation") {
+                    const citation = findCitationByDisplayId(message.citations, token.displayId);
 
-                if (token.type === "citation") {
+                    if (!citation) {
+                      return (
+                        <span className={styles.inlineCitationFallback} key={`fallback-${lineIndex}-${tokenIndex}`}>
+                          [{token.displayId}]
+                        </span>
+                      );
+                    }
+
+                    return renderCitationButton(citation, `inline-${lineIndex}-${tokenIndex}`);
+                  }
+
                   const citation = findCitationByDisplayId(message.citations, token.displayId);
 
                   if (!citation) {
                     return (
-                      <span className={styles.inlineCitationFallback} key={`fallback-${lineIndex}-${tokenIndex}`}>
-                        [{token.displayId}]
+                      <span className={styles.inlineCitationFallback} key={`image-fallback-${lineIndex}-${tokenIndex}`}>
+                        [image {token.displayId}]
                       </span>
                     );
                   }
 
-                  return renderCitationButton(citation, `inline-${lineIndex}-${tokenIndex}`);
-                }
-
-                const citation = findCitationByDisplayId(message.citations, token.displayId);
-
-                if (!citation) {
-                  return (
-                    <span className={styles.inlineCitationFallback} key={`image-fallback-${lineIndex}-${tokenIndex}`}>
-                      [image {token.displayId}]
-                    </span>
-                  );
-                }
-
-                return renderCitationButton(citation, `image-inline-${lineIndex}-${tokenIndex}`);
-              })}
-            </p>
-          );
-        })}
-      </div>
+                  return renderCitationButton(citation, `image-inline-${lineIndex}-${tokenIndex}`);
+                })}
+              </p>
+            );
+          })}
+        </div>
+        <ToolResultsPanel locale={locale} results={message.toolResults} />
+      </>
     );
   }
 
   return (
-    <div
-      className={styles.markdownContent}
-      dangerouslySetInnerHTML={{
-        __html: markdownToRichTextHtml(message.content || (message.pending ? "..." : "")),
-      }}
-    />
+    <>
+      <div
+        className={styles.markdownContent}
+        dangerouslySetInnerHTML={{
+          __html: markdownToRichTextHtml(message.content || (message.pending ? "..." : "")),
+        }}
+      />
+      <ToolResultsPanel locale={locale} results={message.toolResults} />
+    </>
   );
 }
 
@@ -1004,6 +1375,7 @@ export function WorkspaceChatPane({
   const streamDisplayedTextRef = useRef("");
   const streamReceivedTokenRef = useRef(false);
   const streamReduceMotionRef = useRef(false);
+  const stopControllerRef = useRef<AbortController | null>(null);
   const pendingDoneEventRef = useRef<PendingDoneEvent | null>(null);
   const progressModeRef = useRef<WorkspaceChatMode | null>(null);
 
@@ -1275,6 +1647,28 @@ export function WorkspaceChatPane({
     textareaRef.current?.focus();
   }
 
+  async function handleSubmitFeedback(message: PaneMessage, rating: "up" | "down") {
+    if (!auth.token || !message.sessionId || message.messageId === null) {
+      return;
+    }
+
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === message.id ? { ...m, feedbackRating: rating } : m,
+      ),
+    );
+
+    try {
+      await submitWorkspaceMessageFeedback(auth.token, {
+        session_id: message.sessionId,
+        message_id: message.messageId,
+        rating,
+      });
+    } catch {
+      // Silently fail — feedback is best-effort
+    }
+  }
+
   function handleCitationSelect(message: PaneMessage, citation: Citation, target?: HTMLElement | null) {
     if (message.sessionId && message.messageId !== null) {
       onSelectCitation?.({
@@ -1365,6 +1759,7 @@ export function WorkspaceChatPane({
           event.kind === "answer_start"
             ? current?.sessionId ?? event.session_id
             : current?.sessionId ?? streamingSessionIdRef.current,
+        toolResults: current?.toolResults ?? [],
       }),
       undefined,
       fallbackAssistantId,
@@ -1389,6 +1784,7 @@ export function WorkspaceChatPane({
       messageId: current?.messageId ?? null,
       pending: true,
       sessionId: current?.sessionId ?? streamingSessionIdRef.current,
+      toolResults: current?.toolResults ?? [],
     }));
   }
 
@@ -1416,6 +1812,7 @@ export function WorkspaceChatPane({
         messageId: resolvedMessageId ?? current?.messageId ?? null,
         pending: false,
         sessionId: event.session_id,
+        toolResults: event.payload.tool_results ?? current?.toolResults ?? [],
       }),
       undefined,
       fallbackAssistantId,
@@ -1649,6 +2046,7 @@ export function WorkspaceChatPane({
         guarded: false,
         messageId: null,
         sessionId: requestSessionId,
+        toolResults: [],
       },
     ]);
     showProgressCard(effectiveChatMode);
@@ -1863,6 +2261,40 @@ function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
                         {action}
                       </button>
                     ))}
+                    {message.role === "assistant" && !message.pending ? (
+                      <>
+                        <button
+                          aria-label={formatUiMessage(locale, "workspaceChatActionThumbUp")}
+                          className={[
+                            styles.messageActionButton,
+                            message.feedbackRating === "up" ? styles.messageActionButtonActive : "",
+                          ].filter(Boolean).join(" ")}
+                          disabled={message.feedbackRating === "up"}
+                          type="button"
+                          onClick={() => {
+                            void handleSubmitFeedback(message, "up");
+                          }}
+                          title={formatUiMessage(locale, "workspaceChatActionThumbUp")}
+                        >
+                          {message.feedbackRating === "up" ? "👍" : "🤙"}
+                        </button>
+                        <button
+                          aria-label={formatUiMessage(locale, "workspaceChatActionThumbDown")}
+                          className={[
+                            styles.messageActionButton,
+                            message.feedbackRating === "down" ? styles.messageActionButtonActive : "",
+                          ].filter(Boolean).join(" ")}
+                          disabled={message.feedbackRating === "down"}
+                          type="button"
+                          onClick={() => {
+                            void handleSubmitFeedback(message, "down");
+                          }}
+                          title={formatUiMessage(locale, "workspaceChatActionThumbDown")}
+                        >
+                          {message.feedbackRating === "down" ? "👎" : "🫣"}
+                        </button>
+                      </>
+                    ) : null}
                   </div>
 
                   {message.role === "assistant" && (message.guarded || message.degradeTrace.length > 0) ? (
@@ -1988,16 +2420,6 @@ function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
                 {isStreaming ? formatUiMessage(locale, "workspaceSending") : formatUiMessage(locale, "workspaceSend")}
               </span>
             </button>
-          </div>
-        </form>
-      </div>
-    </section>
-  );
-}
-sage(locale, "workspaceSend")}
-                </span>
-              </button>
-            )}
           </div>
         </form>
       </div>

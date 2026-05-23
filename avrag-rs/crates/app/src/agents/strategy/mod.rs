@@ -7,12 +7,12 @@
 //! This replaces the v4 `ProgressiveLoop` + `LoopAdapter` fixed-phase architecture.
 
 pub mod chat;
-pub mod composite;
 pub mod executor;
 pub mod prompts;
 pub mod rag;
 pub mod search;
 
+use crate::agents::error_kind::AgentErrorKind;
 use crate::agents::events::AgentEventSink;
 use crate::agents::react_loop::LoopBudget;
 use crate::agents::runtime::AgentRunResult;
@@ -114,7 +114,12 @@ pub trait Strategy: Send + Sync {
         &self,
         state: Box<dyn State>,
         ctx: &mut Self::Context,
-    ) -> Result<StepOutcome, AppError>;
+    ) -> Result<StepOutcome, AgentErrorKind>;
+
+    /// Return the static schema describing this strategy's states and transitions.
+    fn schema() -> crate::agents::capability::StrategySchema
+    where
+        Self: Sized;
 }
 
 #[cfg(test)]

@@ -82,6 +82,9 @@ mod tests {
             metadata: Default::default(),
             cancellation_token: None,
             guard_pipeline: None,
+            preferred_tools: vec![],
+            format_hint: None,
+            max_iterations: None,
         };
         let result = svc.run(req, &sink).await;
         assert!(result.is_ok());
@@ -109,6 +112,9 @@ mod tests {
             metadata: Default::default(),
             cancellation_token: None,
             guard_pipeline: None,
+            preferred_tools: vec![],
+            format_hint: None,
+            max_iterations: None,
         };
         let result = svc.run(req, &sink).await;
         assert!(result.is_ok());
@@ -136,6 +142,9 @@ mod tests {
             metadata: Default::default(),
             cancellation_token: None,
             guard_pipeline: None,
+            preferred_tools: vec![],
+            format_hint: None,
+            max_iterations: None,
         };
         let result = svc.run(req, &sink).await;
         assert!(result.is_ok());

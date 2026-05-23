@@ -62,7 +62,7 @@ impl AuditLifecycleManager {
     }
 
     /// Prune online audit log records older than the online retention period.
-    pub async fn prune_online<P: AuditStorage>(
+    pub async fn prune_online<P: AuditStorageLegacy>(
         &self,
         storage: &P,
     ) -> Result<u64, common::AppError> {
@@ -80,12 +80,84 @@ impl AuditLifecycleManager {
 }
 
 // ---------------------------------------------------------------------------
-// Storage trait
+// Storage trait (v5 — aligned with ADR-003)
+// ---------------------------------------------------------------------------
+
+/// Audit storage interface for persisting audit records.
+#[async_trait::async_trait]
+pub trait AuditStorage: Send + Sync {
+    /// Store a single audit record.
+    async fn store(&self, record: &AuditRecord) -> Result<(), String>;
+
+    /// Query audit records by org_id and time range (unix timestamps in seconds).
+    async fn query(
+        &self,
+        org_id: &str,
+        start: u64,
+        end: u64,
+    ) -> Result<Vec<AuditRecord>, String>;
+}
+
+// ---------------------------------------------------------------------------
+// In-memory audit storage (for testing and local dev)
+// ---------------------------------------------------------------------------
+
+/// In-memory audit storage (for testing and local dev).
+pub struct InMemoryAuditStorage {
+    records: std::sync::Arc<std::sync::Mutex<Vec<AuditRecord>>>,
+}
+
+impl InMemoryAuditStorage {
+    pub fn new() -> Self {
+        Self {
+            records: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+        }
+    }
+}
+
+impl Default for InMemoryAuditStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait::async_trait]
+impl AuditStorage for InMemoryAuditStorage {
+    async fn store(&self, record: &AuditRecord) -> Result<(), String> {
+        let mut guard = self.records.lock().map_err(|e| e.to_string())?;
+        guard.push(record.clone());
+        Ok(())
+    }
+
+    async fn query(
+        &self,
+        org_id: &str,
+        start: u64,
+        end: u64,
+    ) -> Result<Vec<AuditRecord>, String> {
+        let guard = self.records.lock().map_err(|e| e.to_string())?;
+        let filtered: Vec<AuditRecord> = guard
+            .iter()
+            .filter(|r| {
+                r.org_id == org_id
+                    && r.created_at
+                        .parse::<u64>()
+                        .map(|ts| ts >= start && ts <= end)
+                        .unwrap_or(false)
+            })
+            .cloned()
+            .collect();
+        Ok(filtered)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Legacy storage trait (for backward compatibility with existing impls)
 // ---------------------------------------------------------------------------
 
 /// Abstract storage for audit lifecycle operations.
 #[async_trait::async_trait]
-pub trait AuditStorage: Send + Sync {
+pub trait AuditStorageLegacy: Send + Sync {
     /// Append a single audit record to persistent storage.
     async fn append_audit_record(
         &self,
@@ -342,7 +414,7 @@ impl AuditSinkAdapter {
 // ---------------------------------------------------------------------------
 
 #[async_trait::async_trait]
-impl AuditStorage for avrag_storage_pg::PgAppRepository {
+impl AuditStorageLegacy for avrag_storage_pg::PgAppRepository {
     async fn append_audit_record(
         &self,
         record: &AuditRecord,

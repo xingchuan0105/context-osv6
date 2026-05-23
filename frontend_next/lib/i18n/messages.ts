@@ -738,6 +738,14 @@ export const UI_MESSAGES = {
     zh: "重新生成",
     en: "Regenerate",
   },
+  workspaceChatActionThumbUp: {
+    zh: "有用",
+    en: "Helpful",
+  },
+  workspaceChatActionThumbDown: {
+    zh: "无用",
+    en: "Not helpful",
+  },
   workspaceChatClearMode: {
     zh: "清除对话模式",
     en: "Clear chat mode",

@@ -191,6 +191,7 @@ impl SseSink {
                 state_id,
                 state_kind,
                 elapsed_ms,
+                timestamp_ms: _,
                 payload,
             } => ChatEvent::Trace {
                 request_id: self.request_id.clone(),
@@ -259,6 +260,43 @@ impl SseSink {
             AgentEvent::Audit { .. } => {
                 unreachable!("Audit events are filtered in on_event before map_event")
             }
+            AgentEvent::RoutingDecision {
+                strategy_id,
+                matched_rule,
+                confidence,
+                explanation,
+            } => ChatEvent::Trace {
+                request_id: self.request_id.clone(),
+                stage: "routing_decision".to_string(),
+                status: "ok".to_string(),
+                detail: Some(serde_json::json!({
+                    "strategy_id": strategy_id,
+                    "matched_rule": matched_rule,
+                    "confidence": confidence,
+                    "explanation": explanation,
+                })),
+            },
+            AgentEvent::Terminal { decision, reason } => ChatEvent::Trace {
+                request_id: self.request_id.clone(),
+                stage: "terminal".to_string(),
+                status: "ok".to_string(),
+                detail: Some(serde_json::json!({
+                    "decision": decision,
+                    "reason": reason,
+                })),
+            },
+            AgentEvent::TraceSummary {
+                trace_id,
+                total_elapsed_ms,
+            } => ChatEvent::Trace {
+                request_id: self.request_id.clone(),
+                stage: "trace_summary".to_string(),
+                status: "ok".to_string(),
+                detail: Some(serde_json::json!({
+                    "trace_id": trace_id,
+                    "total_elapsed_ms": total_elapsed_ms,
+                })),
+            },
         }
     }
 

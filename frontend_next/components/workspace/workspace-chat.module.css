@@ -596,6 +596,16 @@
   color: hsl(var(--foreground));
 }
 
+.messageActionButtonActive {
+  background: hsl(var(--surface-soft));
+  color: hsl(var(--foreground));
+}
+
+.messageActionButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .messageNotice {
   display: grid;
   gap: 0.22rem;
@@ -1281,4 +1291,129 @@
   .webSourceButton {
     font-size: 0.78rem;
   }
+}
+
+/* Tool Results */
+.toolResultsPanel {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.toolResultCard {
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--card));
+  overflow: hidden;
+}
+
+.toolResultHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: hsl(var(--surface-muted));
+  border-bottom: 1px solid hsl(var(--border));
+  cursor: pointer;
+  user-select: none;
+}
+
+.toolResultHeader:hover {
+  background: hsl(var(--muted) / 0.5);
+}
+
+.toolResultTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.toolResultStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.toolResultStatusOk {
+  background: hsl(142 76% 36% / 0.12);
+  color: hsl(142 76% 36%);
+}
+
+.toolResultStatusError {
+  background: hsl(0 84% 60% / 0.12);
+  color: hsl(0 84% 60%);
+}
+
+.toolResultStatusOther {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--muted-foreground));
+}
+
+.toolResultBody {
+  padding: 0.6rem 0.75rem;
+  font-size: 0.82rem;
+  color: hsl(var(--foreground));
+}
+
+.toolResultBody pre {
+  margin: 0;
+  padding: 0.5rem;
+  border-radius: 6px;
+  background: hsl(var(--muted) / 0.3);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.toolResultSection {
+  margin-top: 0.4rem;
+}
+
+.toolResultSection:first-child {
+  margin-top: 0;
+}
+
+.toolResultSectionLabel {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.25rem;
+}
+
+.toolResultWeatherGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.4rem;
+}
+
+.toolResultWeatherItem {
+  display: flex;
+  flex-direction: column;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  background: hsl(var(--muted) / 0.2);
+}
+
+.toolResultWeatherLabel {
+  font-size: 0.7rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.toolResultWeatherValue {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
 }

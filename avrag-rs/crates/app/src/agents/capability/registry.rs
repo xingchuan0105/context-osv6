@@ -58,8 +58,6 @@ impl CapabilityRegistry {
         strategies.insert(rag_schema.id.clone(), rag_schema);
         let search_schema = crate::agents::strategy::search::SearchStrategy::schema();
         strategies.insert(search_schema.id.clone(), search_schema);
-        let composite_schema = crate::agents::strategy::composite::CompositeStrategy::schema();
-        strategies.insert(composite_schema.id.clone(), composite_schema);
 
         Self { tools, skills, strategies }
     }
@@ -452,11 +450,10 @@ mod tests {
     #[test]
     fn registry_can_lookup_all_strategies() {
         let registry = CapabilityRegistry::standard();
-        assert_eq!(registry.strategy_count(), 4, "expected 4 strategies");
+        assert_eq!(registry.strategy_count(), 3, "expected 3 strategies");
         assert!(registry.strategy("chat").is_some());
         assert!(registry.strategy("rag").is_some());
         assert!(registry.strategy("search").is_some());
-        assert!(registry.strategy("composite").is_some());
         assert!(registry.strategy("nonexistent").is_none());
     }
 
@@ -494,20 +491,10 @@ mod tests {
     }
 
     #[test]
-    fn composite_strategy_schema_matches_state_machine() {
-        let registry = CapabilityRegistry::standard();
-        let schema = registry.strategy("composite").unwrap();
-        assert_eq!(schema.id, "composite");
-        assert_eq!(schema.states, vec!["Decompose", "ParallelExecute", "Merge", "Answer"]);
-        assert_eq!(schema.max_budget, 4);
-        assert!(schema.requires_internet);
-    }
-
-    #[test]
     fn list_strategies_returns_all() {
         let registry = CapabilityRegistry::standard();
         let strategies = registry.list_strategies();
-        assert_eq!(strategies.len(), 4);
+        assert_eq!(strategies.len(), 3);
     }
 
     #[test]

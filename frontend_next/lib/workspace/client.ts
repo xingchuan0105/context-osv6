@@ -4,7 +4,7 @@ import type {
   WorkspaceSession,
   WorkspaceSource,
 } from "./model";
-import type { AnswerBlock, Citation } from "./stream";
+import type { AnswerBlock, Citation, ToolResult } from "./stream";
 
 export type Workspace = {
   workspace_id: string;
@@ -38,6 +38,7 @@ export type WorkspaceChatMessage = {
   agent_name?: string | null;
   agent_icon?: string | null;
   citations: Citation[];
+  tool_results?: ToolResult[] | null;
   created_at: string;
 };
 
@@ -125,6 +126,12 @@ export type WorkspaceCitationLookupResponse = {
   asset_id: string | null;
   caption: string | null;
   image_url: string | null;
+};
+
+export type WorkspaceMessageFeedbackRequest = {
+  session_id: string;
+  message_id: number;
+  rating: "up" | "down";
 };
 
 type ErrorEnvelope = {
@@ -670,6 +677,20 @@ export async function lookupWorkspaceCitation(
   );
 
   return mapWorkspaceCitationLookupResponse(response);
+}
+
+export async function submitWorkspaceMessageFeedback(
+  token: string,
+  requestBody: WorkspaceMessageFeedbackRequest,
+): Promise<void> {
+  await request<EmptyResponse>(
+    `/api/v1/chat/sessions/${requestBody.session_id}/messages/${requestBody.message_id}/feedback`,
+    {
+      method: "POST",
+      body: JSON.stringify(requestBody),
+    },
+    token,
+  );
 }
 
 export async function listWorkspaceNotes(

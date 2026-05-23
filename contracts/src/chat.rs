@@ -46,6 +46,8 @@ pub struct ChatMessage {
     pub agent_icon: Option<String>,
     #[serde(default)]
     pub citations: Vec<Citation>,
+    #[serde(default)]
+    pub tool_results: Vec<ToolResult>,
     pub created_at: String,
 }
 
@@ -353,6 +355,25 @@ pub struct SummaryInjectionTrace {
     pub injected_count: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolStatus {
+    Ok,
+    Timeout,
+    Error,
+    NotFound,
+    NotImplemented,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolResult {
+    pub tool: String,
+    pub version: String,
+    pub status: ToolStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<serde_json::Value>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatResponse {
     pub answer: String,
@@ -372,6 +393,8 @@ pub struct ChatResponse {
     pub message_id: Option<i64>,
     #[serde(default)]
     pub guard_report: Option<GuardReport>,
+    #[serde(default)]
+    pub tool_results: Vec<ToolResult>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

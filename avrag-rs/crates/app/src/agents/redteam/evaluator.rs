@@ -192,7 +192,18 @@ pub async fn run_redteam_evaluation(
     agent: &dyn crate::agents::runtime::Agent,
     sink: &dyn crate::agents::events::AgentEventSink,
 ) -> Result<crate::agents::eval_framework::EvalRun, AppError> {
+    use crate::agents::eval_framework::{EvalTrigger, EvalTriggerConfig, EvalDatasetSpec};
+
     let mut cases = Vec::with_capacity(dataset.cases.len());
+
+    // Collect unique attack vectors from the dataset.
+    let mut attack_vectors = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for case in &dataset.cases {
+        if seen.insert(case.attack_vector) {
+            attack_vectors.push(case.attack_vector);
+        }
+    }
 
     for case in &dataset.cases {
         let request = case.input.clone();
@@ -208,14 +219,30 @@ pub async fn run_redteam_evaluation(
     }
 
     let evaluators: Vec<Box<dyn Evaluator>> = vec![Box::new(RedTeamEvaluator)];
-    crate::agents::eval_framework::run_evaluation(
+
+    let config = EvalTriggerConfig {
+        trigger: EvalTrigger::RedTeam { attack_vectors },
+        dataset: EvalDatasetSpec {
+            dataset_id: dataset.name.clone(),
+            sample_size: dataset.cases.len(),
+            filter: None,
+        },
+        pass_threshold: EvalTrigger::RedTeam { attack_vectors: vec![] }.default_pass_threshold(),
+        metric_thresholds: std::collections::BTreeMap::new(),
+    };
+
+    let (run, _result) = crate::agents::eval_framework::run_eval_with_trigger(
         &dataset.name,
         "RedTeam",
         "v1",
         cases,
         evaluators,
+        config,
+        None,
     )
-    .await
+    .await?;
+
+    Ok(run)
 }
 
 // ---------------------------------------------------------------------------

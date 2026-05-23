@@ -73,6 +73,18 @@ pub async fn dispatch_atomic_tool_with_enforcement(
                     trace: None,
                 };
             }
+            crate::agents::capability::EnforcementAction::RequireApproval { reason } => {
+                return ToolResult {
+                    tool: call.tool.clone(),
+                    version: call.version.clone(),
+                    status: ToolStatus::Error,
+                    data: Some(serde_json::json!({
+                        "error": reason,
+                        "requires_approval": true,
+                    })),
+                    trace: None,
+                };
+            }
             _ => {} // LogOnly / MaskOutput — allow through for now
         }
     }
