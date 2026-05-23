@@ -18,6 +18,29 @@ pub use reranker::{
 pub use summary::SummaryGenerator;
 pub use synthesizer::{AnswerSynthesizer, SynthesisOutput};
 
+/// Trait for LLM completion providers.
+/// Allows injecting mock/recording providers in tests.
+#[async_trait::async_trait]
+pub trait LlmProvider: Send + Sync {
+    async fn complete(
+        &self,
+        messages: &[ChatMessage],
+        temperature: Option<f32>,
+    ) -> anyhow::Result<LlmResponse>;
+}
+
+/// Zero-cost wrapper: implement LlmProvider for LlmClient.
+#[async_trait::async_trait]
+impl LlmProvider for LlmClient {
+    async fn complete(
+        &self,
+        messages: &[ChatMessage],
+        temperature: Option<f32>,
+    ) -> anyhow::Result<LlmResponse> {
+        self.complete(messages, temperature).await
+    }
+}
+
 /// API dispatch style — determines request/response format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
