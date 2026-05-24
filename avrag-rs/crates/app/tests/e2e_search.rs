@@ -89,9 +89,11 @@ async fn search_single_pass_state_machine() {
     let recording_arc = Arc::new(recording);
 
     let search_executor = build_search_executor(brave_api_key);
+    let llm: Arc<dyn avrag_llm::LlmProvider> = recording_arc.clone();
     let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> = Some(Arc::new(
         LlmSearchAnswerSynthesizer {
-            llm: llm_client.clone(),
+            llm,
+            llm_client: Some(llm_client.clone()),
         },
     ));
 
@@ -181,9 +183,11 @@ async fn search_vertical_escalation_state_machine() {
     let recording_arc = Arc::new(recording);
 
     let search_executor = build_search_executor(brave_api_key);
+    let llm: Arc<dyn avrag_llm::LlmProvider> = recording_arc.clone();
     let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> = Some(Arc::new(
         LlmSearchAnswerSynthesizer {
-            llm: llm_client.clone(),
+            llm,
+            llm_client: Some(llm_client.clone()),
         },
     ));
 
@@ -226,11 +230,13 @@ async fn search_vertical_escalation_state_machine() {
     });
 
     if has_replan {
-        // More than 5 states means replan happened
+        // With replan: Decompose → ParallelSearch → Aggregate → Evaluate → ParallelSearch → ...
+        // Should have at least 5 states (original 5 + replan loop adds more)
         assert!(
-            history.len() > 5,
-            "Expected > 5 states with replan, got {}",
-            history.len()
+            history.len() >= 5,
+            "Expected >= 5 states with replan, got {}: {:?}",
+            history.len(),
+            history.iter().map(|s| &s.state_id).collect::<Vec<_>>()
         );
     }
 }

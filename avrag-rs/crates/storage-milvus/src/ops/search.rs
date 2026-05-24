@@ -15,18 +15,16 @@ impl MilvusDataPlane {
         limit: usize,
         output_fields: &[&str],
     ) -> Result<Vec<Value>> {
+        let body = self.with_database(json!({
+            "collectionName": collection,
+            "annsField": vector_field,
+            "data": data,
+            "filter": filter,
+            "limit": limit,
+            "outputFields": output_fields
+        }));
         let response = self
-            .post_json(
-                "/v2/vectordb/entities/search",
-                self.with_database(json!({
-                    "collectionName": collection,
-                    "annsField": vector_field,
-                    "data": data,
-                    "filter": filter,
-                    "limit": limit,
-                    "outputFields": output_fields
-                })),
-            )
+            .post_json("/v2/vectordb/entities/search", body)
             .await?;
         Ok(response["data"].as_array().cloned().unwrap_or_default())
     }
@@ -48,9 +46,14 @@ impl MilvusDataPlane {
                 &TEXT_OUTPUT_FIELDS,
             )
             .await?;
-        rows.into_iter()
-            .map(|row| scored_text_chunk(row, "milvus_text_dense"))
-            .collect()
+        let mut chunks = Vec::new();
+        for row in rows {
+            match scored_text_chunk(row, "milvus_text_dense") {
+                Ok(chunk) => chunks.push(chunk),
+                Err(e) => eprintln!("[MILVUS WARN] skipped row: {}", e),
+            }
+        }
+        Ok(chunks)
     }
 
     pub async fn search_bm25(&self, request: Bm25SearchRequest) -> anyhow::Result<Bm25SearchOutput> {
@@ -77,10 +80,13 @@ impl MilvusDataPlane {
             )
             .await?;
         let raw_hit_count = rows.len();
-        let chunks = rows
-            .into_iter()
-            .map(|row| scored_text_chunk(row, "milvus_bm25"))
-            .collect::<anyhow::Result<Vec<_>>>()?;
+        let mut chunks = Vec::new();
+        for row in rows {
+            match scored_text_chunk(row, "milvus_bm25") {
+                Ok(chunk) => chunks.push(chunk),
+                Err(e) => eprintln!("[MILVUS WARN] skipped row: {}", e),
+            }
+        }
         let hydrated_hit_count = chunks.len();
 
         Ok(Bm25SearchOutput {
@@ -111,9 +117,14 @@ impl MilvusDataPlane {
                 &MULTIMODAL_OUTPUT_FIELDS,
             )
             .await?;
-        rows.into_iter()
-            .map(|row| scored_multimodal_chunk(row, "milvus_multimodal_dense"))
-            .collect()
+        let mut chunks = Vec::new();
+        for row in rows {
+            match scored_multimodal_chunk(row, "milvus_multimodal_dense") {
+                Ok(chunk) => chunks.push(chunk),
+                Err(e) => eprintln!("[MILVUS WARN] skipped row: {}", e),
+            }
+        }
+        Ok(chunks)
     }
 }
 

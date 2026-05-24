@@ -620,6 +620,27 @@ impl RagStrategy {
         let plan_calls = ctx.current_plan_calls.clone().unwrap_or_default();
         let tool_results = ctx.all_tool_results.clone();
 
+        // Short-circuit: zero recall with no accumulated results → degrade immediately.
+        // Prevents LLM from entering pointless replan loops on empty collections.
+        if let Some(last_record) = ctx.iterations.last() {
+            if last_record.signals.recall_count == 0 && ctx.accumulated.is_empty() {
+                let _ = ctx
+                    .sink
+                    .emit(AgentEvent::Evaluation {
+                        signals: serde_json::to_value(&last_record.signals).ok(),
+                        decision: "degrade".to_string(),
+                        reasoning: "zero recall and no accumulated results — skipping LLM evaluation".to_string(),
+                    })
+                    .await;
+                if let Some(last) = ctx.iterations.last_mut() {
+                    last.decision = "degrade".to_string();
+                }
+                return self.finalize_degrade(ctx, DegradeReason::NoResultsAfterAllFallbacks)
+                    .await
+                    .map(StepOutcome::Terminate);
+            }
+        }
+
         let eval_system = build_eval_system_prompt("rag");
         let strategy_advice = self
             .evaluate_retrieval_strategy(

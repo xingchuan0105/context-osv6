@@ -213,9 +213,12 @@ impl Agent for UnifiedAgent {
                     llm_client: llm_client.clone(),
                     temperature: self.temperature,
                     search_executor,
-                    search_synthesizer: llm_client.clone().map(|llm| {
-                        Arc::new(crate::agents::strategy::search::LlmSearchAnswerSynthesizer { llm })
-                            as Arc<dyn crate::agents::strategy::search::SearchAnswerSynthesizer>
+                    search_synthesizer: llm_client.clone().map(|llm_client| {
+                        let llm: Arc<dyn avrag_llm::LlmProvider> = Arc::new(llm_client.clone());
+                        Arc::new(crate::agents::strategy::search::LlmSearchAnswerSynthesizer {
+                            llm,
+                            llm_client: Some(llm_client),
+                        }) as Arc<dyn crate::agents::strategy::search::SearchAnswerSynthesizer>
                     }),
                 };
                 let mut result = executor.run(&strategy, ctx).await?;

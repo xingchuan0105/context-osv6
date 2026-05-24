@@ -17,12 +17,12 @@ use crate::agents::progressive::PromptRegistry;
 use crate::agents::react_loop::{DegradeReason, LoopBudget};
 use crate::agents::runtime::{AgentRequest, AgentRunResult, FinalDecision, IterationRecord};
 use crate::agents::unified::helpers;
-use avrag_llm::LlmClient;
 use avrag_llm::LlmUsage;
 use avrag_llm::ChatMessage as LlmChatMessage;
 use avrag_search::{SearchResponse, SearchResult};
 use common::{AppError, DegradeTraceItem};
 use std::collections::HashSet;
+use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 // ---------------------------------------------------------------------------
@@ -1583,7 +1583,8 @@ pub trait SearchAnswerSynthesizer: Send + Sync {
 
 /// LLM-based implementation of [`SearchAnswerSynthesizer`].
 pub struct LlmSearchAnswerSynthesizer {
-    pub llm: LlmClient,
+    pub llm: Arc<dyn avrag_llm::LlmProvider>,
+    pub llm_client: Option<avrag_llm::LlmClient>,
 }
 
 #[async_trait::async_trait]
@@ -1607,8 +1608,10 @@ impl SearchAnswerSynthesizer for LlmSearchAnswerSynthesizer {
         token: tokio_util::sync::CancellationToken,
         on_delta: &mut (dyn FnMut(String) + Send),
     ) -> anyhow::Result<SynthesizedSearchAnswer> {
-        let response = self
-            .llm
+        let client = self.llm_client.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("LlmSearchAnswerSynthesizer: llm_client required for streaming")
+        })?;
+        let response = client
             .complete_stream(messages, temperature, token, |delta| on_delta(delta.to_string()))
             .await?;
         Ok(SynthesizedSearchAnswer {

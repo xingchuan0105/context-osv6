@@ -17,9 +17,8 @@ pub fn optional_uuid_field(row: &Value, key: &str) -> anyhow::Result<Option<Uuid
     if s.is_empty() {
         return Ok(None);
     }
-    Ok(Some(
-        Uuid::parse_str(s).map_err(|e| anyhow::anyhow!("invalid uuid in field {}: {}", key, e))?,
-    ))
+    // Gracefully ignore non-UUID values (e.g. legacy string identifiers)
+    Ok(Uuid::parse_str(s).ok())
 }
 
 pub fn string_field(row: &Value, key: &str) -> Option<String> {

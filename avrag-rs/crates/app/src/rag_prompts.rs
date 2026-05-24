@@ -272,10 +272,11 @@ pub(crate) fn build_rag_plan_user_prompt(
             "rag-plan",
             [
                 "Generate an execute-plan for the RAG API.",
-                "Ask one natural-language clarification question when retrieval cannot proceed.",
+                "Return a strategy with retrieval tool calls for every non-empty user query.",
+                "Use clarify ONLY when the user query is empty, meaningless, or the provided doc_scope contains no relevant documents.",
             ],
         ),
-        output_contract: "Return exactly one raw JSON object: either PlanStrategy ({\"strategy\":[{tool, param1, param2}],\"next_step\":\"answer\"}) or {\"action\":\"clarify\",\"message\":\"...\"}.".to_string(),
+        output_contract: "Return exactly one raw JSON object: PlanStrategy ({\"strategy\":[{tool, param1, param2}],\"next_step\":\"answer\"}). Use {\"action\":\"clarify\",\"message\":\"...\"} ONLY when the query is empty or doc_scope is completely irrelevant.".to_string(),
     })
 }
 
@@ -294,6 +295,24 @@ pub(crate) fn parse_rag_plan_decision(raw: &str, request: &ChatRequest) -> Optio
                 .and_then(serde_json::Value::as_str)
                 .map(str::trim)
                 .filter(|message| !message.is_empty())?;
+            // v5: fallback to default retrieval strategy when query and doc_scope are valid.
+            // Prevents over-eager clarify from models that default to asking questions.
+            if !request.query.trim().is_empty() && !request.doc_scope.is_empty() {
+                return Some((
+                    RagPlanDecision::Strategy(PlanStrategy {
+                        strategy: vec![PlanStrategyItem {
+                            tool: "dense_retrieval".to_string(),
+                            params: serde_json::json!({
+                                "queries": vec![request.query.clone()],
+                                "modality": "text",
+                                "top_k": 10,
+                            }),
+                        }],
+                        next_step: "answer".to_string(),
+                    }),
+                    Vec::new(),
+                ));
+            }
             return Some((RagPlanDecision::Clarify(message.to_string()), Vec::new()));
         }
 

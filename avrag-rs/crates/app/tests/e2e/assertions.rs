@@ -133,7 +133,8 @@ pub fn assert_state_kinds(history: &[StateRecord]) {
         let expected_kind = match record.state_id.as_str() {
             "plan" | "decompose" => "Plan",
             "execute_atomic" | "execute_retrieve" | "parallel_search" => "Execute",
-            "evaluate" | "aggregate" => "Evaluate",
+            "evaluate" => "Evaluate",
+            "aggregate" => "Control",
             "answer" => "Answer",
             _ => continue,
         };
