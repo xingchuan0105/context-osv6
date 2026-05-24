@@ -64,6 +64,8 @@ impl StrategyExecutor {
                     final_decision: Some(crate::agents::runtime::FinalDecision::Degraded {
                         reason: crate::agents::react_loop::DegradeReason::BudgetExhausted,
                     }),
+                    state_history: Some(state_history),
+                    trace_id: Some(trace_id),
                     ..Default::default()
                 });
             }

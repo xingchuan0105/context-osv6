@@ -2,6 +2,9 @@
 //!
 //! Run with: cargo test --ignored -p app --test e2e_search
 //! Requires: E2E_LLM_* + E2E_BRAVE_API_KEY env vars.
+//!
+//! Mock mode: set E2E_BRAVE_API_KEY=mock to use MockSearchProvider (fast,
+//! no external HTTP calls). Production mode: use a real Brave API key.
 
 #[path = "e2e/config.rs"]
 mod config;
@@ -24,6 +27,42 @@ use std::sync::Arc;
 
 use config::E2EConfig;
 use recording_llm::RecordingLlmProvider;
+
+// ---------------------------------------------------------------------------
+// MockSearchProvider — eliminates external API dependency for fast E2E tests
+// ---------------------------------------------------------------------------
+
+struct MockSearchProvider;
+
+#[async_trait::async_trait]
+impl avrag_search::SearchProvider for MockSearchProvider {
+    async fn execute_search(
+        &self,
+        _query: &str,
+        _vertical: Option<&str>,
+    ) -> anyhow::Result<avrag_search::SearchResponse> {
+        Ok(avrag_search::SearchResponse {
+            query_type: "brave".to_string(),
+            sub_queries: vec![_query.to_string()],
+            results: vec![
+                avrag_search::SearchResult {
+                    title: "Rust Programming Language".to_string(),
+                    url: "https://www.rust-lang.org".to_string(),
+                    snippet: "Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety.".to_string(),
+                    citation_index: Some(1),
+                },
+                avrag_search::SearchResult {
+                    title: "The Rust Programming Language - Wikipedia".to_string(),
+                    url: "https://en.wikipedia.org/wiki/Rust_(programming_language)".to_string(),
+                    snippet: "Rust is a general-purpose programming language emphasizing performance, type safety, and concurrency.".to_string(),
+                    citation_index: Some(2),
+                },
+            ],
+            synthesized_answer: String::new(),
+            llm_usage: None,
+        })
+    }
+}
 
 fn test_auth_context() -> serde_json::Value {
     serde_json::json!({
@@ -61,6 +100,9 @@ fn search_request(query: &str) -> AgentRequest {
 }
 
 fn build_search_executor(api_key: &str) -> Arc<dyn avrag_search::SearchProvider> {
+    if api_key == "mock" {
+        return Arc::new(MockSearchProvider);
+    }
     Arc::new(avrag_search::SearchExecutor::new(
         avrag_search::SearchConfig {
             provider: "brave_llm_context".to_string(),
@@ -80,10 +122,7 @@ fn build_search_executor(api_key: &str) -> Arc<dyn avrag_search::SearchProvider>
 async fn search_single_pass_state_machine() {
     let config = E2EConfig::from_env().expect("E2E config not set");
     let llm_client = config.llm_client();
-    let brave_api_key = config
-        .brave_api_key
-        .as_ref()
-        .expect("E2E_BRAVE_API_KEY required for Search tests");
+    let brave_api_key = config.brave_api_key.as_deref().unwrap_or("mock");
 
     let recording = RecordingLlmProvider::new(Arc::new(llm_client.clone()));
     let recording_arc = Arc::new(recording);
@@ -174,10 +213,7 @@ async fn search_single_pass_state_machine() {
 async fn search_vertical_escalation_state_machine() {
     let config = E2EConfig::from_env().expect("E2E config not set");
     let llm_client = config.llm_client();
-    let brave_api_key = config
-        .brave_api_key
-        .as_ref()
-        .expect("E2E_BRAVE_API_KEY required");
+    let brave_api_key = config.brave_api_key.as_deref().unwrap_or("mock");
 
     let recording = RecordingLlmProvider::new(Arc::new(llm_client.clone()));
     let recording_arc = Arc::new(recording);

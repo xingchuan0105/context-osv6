@@ -88,7 +88,7 @@ def upload_to_milvus(chunks, embeddings):
             "workspace_id": WORKSPACE_ID,
             "doc_id": DOC_ID,
             "chunk_id": str(uuid.uuid4()),
-            "parse_run_id": "e2e-upload-001",
+            "parse_run_id": str(uuid.uuid4()),
             "doc_version": 1,
             "page": chunk["page"],
             "text": chunk["text"][:4096],  # truncate if too long

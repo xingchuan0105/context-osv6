@@ -646,7 +646,9 @@ impl SearchStrategy {
             .await;
         ctx.is_phase1 = false;
 
-        Ok(StepOutcome::Next(Box::new(SearchState::Evaluate)))
+        // v5 fix: single_search must transition through Aggregate to keep
+        // the state machine consistent (ParallelSearch → Aggregate → Evaluate).
+        Ok(StepOutcome::Next(Box::new(SearchState::Aggregate)))
     }
 
     // --- Evaluate step ---
