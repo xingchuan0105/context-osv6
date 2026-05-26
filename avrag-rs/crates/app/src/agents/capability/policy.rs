@@ -347,6 +347,7 @@ mod tests {
             deprecation: None,
             retry_policy: super::super::RetryPolicy::default(),
             activation_phase: super::super::ActivationPhase::default(),
+            applicable_strategies: vec!["chat".to_string(), "rag".to_string(), "search".to_string()],
         }
     }
 

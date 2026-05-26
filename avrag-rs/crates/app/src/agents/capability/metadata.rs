@@ -74,6 +74,7 @@ pub struct ToolMetadata {
     pub deprecation: Option<Deprecation>,
     pub retry_policy: RetryPolicy,
     pub activation_phase: ActivationPhase,
+    pub applicable_strategies: Vec<String>,
 }
 
 /// Metadata for a registered skill.

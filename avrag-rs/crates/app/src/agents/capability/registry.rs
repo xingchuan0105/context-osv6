@@ -31,15 +31,15 @@ impl CapabilityRegistry {
 
         // --- Ingest tools from v4 tool catalogs ---
         for tool in super::super::progressive::rag_tool_catalog_cached() {
-            let meta = tool_to_metadata(tool);
+            let meta = tool_to_metadata(tool, ToolSource::RagToolCatalog);
             tools.insert(meta.id.clone(), meta);
         }
         for tool in super::super::progressive::atomic_tool_catalog_cached() {
-            let meta = tool_to_metadata(tool);
+            let meta = tool_to_metadata(tool, ToolSource::AtomicToolCatalog);
             tools.insert(meta.id.clone(), meta);
         }
         for tool in super::super::progressive::search_specific_tools_cached() {
-            let meta = tool_to_metadata(tool);
+            let meta = tool_to_metadata(tool, ToolSource::SearchSpecific);
             tools.insert(meta.id.clone(), meta);
         }
 
@@ -113,10 +113,11 @@ impl CapabilityRegistry {
     }
 
     /// Plan/Evaluate 阶段：返回指定策略可用的工具目录
-    pub fn plan_tools(&self, _strategy: &str) -> Vec<&ToolMetadata> {
+    pub fn plan_tools(&self, strategy: &str) -> Vec<&ToolMetadata> {
         self.tools
             .values()
             .filter(|t| t.activation_phase == ActivationPhase::PlanAndEvaluate)
+            .filter(|t| t.applicable_strategies.contains(&strategy.to_string()))
             .collect()
     }
 
@@ -134,8 +135,26 @@ impl CapabilityRegistry {
 // Helpers: convert v4 types into v5 metadata
 // ---------------------------------------------------------------------------
 
-fn tool_to_metadata(tool: &super::super::progressive::Tool) -> ToolMetadata {
+/// Source of tool registration, used to determine applicable strategies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ToolSource {
+    RagToolCatalog,
+    AtomicToolCatalog,
+    SearchSpecific,
+}
+
+fn tool_to_metadata(
+    tool: &super::super::progressive::Tool,
+    source: ToolSource,
+) -> ToolMetadata {
     let spec = tool.spec();
+    let applicable_strategies = match source {
+        ToolSource::RagToolCatalog => vec!["rag".to_string()],
+        ToolSource::AtomicToolCatalog => {
+            vec!["chat".to_string(), "rag".to_string(), "search".to_string()]
+        }
+        ToolSource::SearchSpecific => vec!["search".to_string()],
+    };
     ToolMetadata {
         id: spec.name.clone(),
         version: spec.version.clone(),
@@ -149,6 +168,7 @@ fn tool_to_metadata(tool: &super::super::progressive::Tool) -> ToolMetadata {
         deprecation: None,
         retry_policy: infer_tool_retry_policy(&spec.name),
         activation_phase: ActivationPhase::PlanAndEvaluate,
+        applicable_strategies,
     }
 }
 
