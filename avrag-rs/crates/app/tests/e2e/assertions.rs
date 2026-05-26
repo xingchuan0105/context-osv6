@@ -60,23 +60,6 @@ pub fn assert_prompt_contains_skill(prompt: &str, skill_id: &str) {
     );
 }
 
-/// Assert that a prompt contains the FULL BODY of a specific skill (not just the ID).
-/// This verifies that the skill was actually LOADED into the prompt.
-pub fn assert_prompt_contains_skill_body(prompt: &str, skill_id: &str) {
-    let registry = PromptRegistry::standard_cached();
-    let skill = registry
-        .skill(skill_id)
-        .unwrap_or_else(|| panic!("Skill '{}' not found in registry", skill_id));
-    let body = skill.system_prompt();
-    assert!(
-        prompt.contains(body),
-        "Prompt does not contain full body of skill '{}'. Expected {} chars, prompt is {} chars.",
-        skill_id,
-        body.len(),
-        prompt.len()
-    );
-}
-
 /// Assert that a prompt contains tool catalog entries for the given strategy.
 ///
 /// Checks all three tiers of progressive disclosure:

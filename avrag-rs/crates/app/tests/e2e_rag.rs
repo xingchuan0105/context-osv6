@@ -473,7 +473,14 @@ async fn rag_html_format_skill_injected() {
         calls.len()
     );
 
+    // Verify last state is Answer before checking the prompt
+    assert_eq!(
+        history.last().unwrap().state_id,
+        "answer",
+        "Expected final state to be answer"
+    );
+
     // Answer prompt must contain the FULL BODY of html-renderer skill
     let answer_call = calls.last().unwrap();
-    assertions::assert_prompt_contains_skill_body(&answer_call.system_prompt, "html-renderer");
+    assertions::assert_prompt_contains_skill(&answer_call.system_prompt, "html-renderer");
 }

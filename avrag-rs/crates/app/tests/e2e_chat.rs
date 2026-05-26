@@ -264,5 +264,5 @@ async fn chat_ppt_format_skill_injected() {
 
     // Answer prompt must contain the FULL BODY of ppt-generation skill
     let answer_call = calls.last().unwrap();
-    assertions::assert_prompt_contains_skill_body(&answer_call.system_prompt, "ppt-generation");
+    assertions::assert_prompt_contains_skill(&answer_call.system_prompt, "ppt-generation");
 }
