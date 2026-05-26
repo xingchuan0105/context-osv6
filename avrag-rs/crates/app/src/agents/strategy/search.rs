@@ -297,13 +297,15 @@ impl SearchStrategy {
         .await;
 
         if let Some(ref p) = plan {
+            ctx.selected_writing_styles = p.writing_styles.clone();
+            ctx.behavior_mode = p.behavior_mode.clone();
             let _ = ctx
                 .sink
                 .emit(AgentEvent::PlanDecision {
                     selected_tools: p.atomic_calls.clone(),
                     selected_skills: p.sub_queries.clone(),
-                    selected_writing_styles: vec![],
-                    behavior_mode: None,
+                    selected_writing_styles: p.writing_styles.clone(),
+                    behavior_mode: p.behavior_mode.clone(),
                     reasoning: p.intent_summary.clone(),
                 })
                 .await;
@@ -1373,12 +1375,25 @@ fn parse_search_plan(raw: &str) -> Option<SearchPlan> {
         })
         .unwrap_or_default();
 
+    let writing_styles: Vec<String> = value
+        .get("writing_styles")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+
+    let behavior_mode = value
+        .get("behavior_mode")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
     Some(SearchPlan {
         sub_queries,
         intent_summary,
         needs_clarification,
         preferred_vertical,
         atomic_calls,
+        writing_styles,
+        behavior_mode,
     })
 }
 
@@ -1586,6 +1601,8 @@ pub struct SearchPlan {
     pub needs_clarification: bool,
     pub preferred_vertical: Option<String>,
     pub atomic_calls: Vec<common::ToolCall>,
+    pub writing_styles: Vec<String>,
+    pub behavior_mode: Option<String>,
 }
 
 /// Output of a search answer synthesis call.

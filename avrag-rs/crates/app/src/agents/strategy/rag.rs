@@ -348,8 +348,13 @@ impl RagStrategy {
         ));
         ctx.request_count += 1;
 
+        // Extract writing_styles and behavior_mode from planner output
+        let (writing_styles, behavior_mode) = extract_rag_plan_metadata(&plan_response.content);
+
         match crate::rag_prompts::parse_rag_plan_decision(&plan_response.content, &ctx.chat_req) {
             Some((crate::rag_prompts::RagPlanDecision::Clarify(message), _)) => {
+                ctx.selected_writing_styles = writing_styles;
+                ctx.behavior_mode = behavior_mode;
                 Ok(StepOutcome::Terminate(AgentRunResult {
                     answer: message.clone(),
                     final_decision: Some(FinalDecision::Clarified { question: message }),
@@ -360,13 +365,15 @@ impl RagStrategy {
                 ctx.current_plan_strategy = Some(strategy.clone());
                 ctx.current_plan_calls = None;
                 ctx.selected_skills = skills.clone();
+                ctx.selected_writing_styles = writing_styles.clone();
+                ctx.behavior_mode = behavior_mode.clone();
                 let _ = ctx
                     .sink
                     .emit(AgentEvent::PlanDecision {
                         selected_tools: vec![],
                         selected_skills: skills,
-                        selected_writing_styles: vec![],
-                        behavior_mode: None,
+                        selected_writing_styles: writing_styles.clone(),
+                        behavior_mode: behavior_mode.clone(),
                         reasoning: format!("plan strategy: {:?}", strategy),
                     })
                     .await;
@@ -376,13 +383,15 @@ impl RagStrategy {
                 ctx.current_plan_strategy = None;
                 ctx.current_plan_calls = Some(calls.clone());
                 ctx.selected_skills = skills.clone();
+                ctx.selected_writing_styles = writing_styles.clone();
+                ctx.behavior_mode = behavior_mode.clone();
                 let _ = ctx
                     .sink
                     .emit(AgentEvent::PlanDecision {
                         selected_tools: calls.clone(),
                         selected_skills: skills,
-                        selected_writing_styles: vec![],
-                        behavior_mode: None,
+                        selected_writing_styles: writing_styles.clone(),
+                        behavior_mode: behavior_mode.clone(),
                         reasoning: format!("plan selected {} tool call(s)", calls.len()),
                     })
                     .await;
@@ -1308,6 +1317,31 @@ fn is_rag_tool(name: &str) -> bool {
     crate::agents::progressive::rag_tool_catalog_cached()
         .iter()
         .any(|t| t.spec().name == name)
+}
+
+/// Extract writing_styles and behavior_mode from planner JSON output.
+fn extract_rag_plan_metadata(raw: &str) -> (Vec<String>, Option<String>) {
+    let json = raw.trim();
+    let start = json.find('{');
+    let end = json.rfind('}');
+    let json_str = match (start, end) {
+        (Some(s), Some(e)) if s <= e => &json[s..=e],
+        _ => json,
+    };
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(json_str) {
+        let writing_styles = value
+            .get("writing_styles")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+        let behavior_mode = value
+            .get("behavior_mode")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        (writing_styles, behavior_mode)
+    } else {
+        (Vec::new(), None)
+    }
 }
 
 fn detect_format_skills(query: &str) -> Vec<&'static str> {

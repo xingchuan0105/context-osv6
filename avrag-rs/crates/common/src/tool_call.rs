@@ -88,6 +88,12 @@ pub struct RetrievalPlannerOutput {
     /// Optional output-format skills selected by the planner for the Answer phase.
     #[serde(default)]
     pub skills: Vec<String>,
+    /// Writing styles selected by the planner for the Answer phase.
+    #[serde(default)]
+    pub writing_styles: Vec<String>,
+    /// Behavior mode selected by the planner for the Answer phase.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub behavior_mode: Option<String>,
 }
 
 /// Optional merge strategy for the external `/runtime/execute` endpoint.
