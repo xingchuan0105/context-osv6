@@ -558,16 +558,9 @@ fn build_chat_messages_with_system(
     }
 
     let mut messages = vec![avrag_llm::ChatMessage::system(system)];
-    for message in &request.messages {
-        match message.role.as_str() {
-            "assistant" => messages.push(avrag_llm::ChatMessage::assistant(&message.content,
-            )),
-            _ => messages.push(avrag_llm::ChatMessage::user(&message.content,
-            )),
-        }
-    }
-    messages.push(avrag_llm::ChatMessage::user(&request.query,
-    ));
+    // History is loaded on-demand via conversation_history_load tool.
+    // Only inject the current turn's user message.
+    messages.push(avrag_llm::ChatMessage::user(&request.query));
     messages
 }
 

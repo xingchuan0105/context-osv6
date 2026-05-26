@@ -44,6 +44,17 @@ pub fn build_plan_system_prompt(
         parts.push(format!("## Available Tools\n\n{tool_catalog}"));
     }
 
+    // Conversation memory hint
+    parts.push(
+        "## Conversation Memory\n\n\
+        You have access to the conversation history via `conversation_history_load`.\n\
+        - Call it without tags to load all messages for analysis and tagging.\n\
+        - Call it with specific tags to recall relevant past discussions.\n\
+        - After loading, use `conversation_history_tag` to label messages with specific, distinguishable tags.\n\
+        - Every loaded message should receive at least one tag."
+            .to_string(),
+    );
+
     if parts.len() == 1 {
         parts.into_iter().next().unwrap()
     } else {

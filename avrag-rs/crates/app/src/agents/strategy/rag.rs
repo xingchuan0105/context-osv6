@@ -183,10 +183,8 @@ impl RagContext {
             }
             history.push(avrag_llm::ChatMessage::system(system));
         }
-        history.extend(request.messages.iter().map(|turn| match turn.role.as_str() {
-            "assistant" => avrag_llm::ChatMessage::assistant(&turn.content),
-            _ => avrag_llm::ChatMessage::user(&turn.content),
-        }));
+        // History is loaded on-demand via conversation_history_load tool.
+        // Do not inject request.messages here.
 
         let chat_req = ChatRequest {
             query: request.query.clone(),
