@@ -131,6 +131,26 @@ impl CapabilityRegistry {
             .filter(|s| s.applicable_strategies.iter().any(|s| s == &strategy))
             .collect()
     }
+
+    /// Answer 阶段：返回写作风格技能目录
+    pub fn answer_writing_styles(&self, strategy: &str) -> Vec<&SkillMetadata> {
+        let strategy = strategy.to_string();
+        self.skills
+            .values()
+            .filter(|s| s.category == "writing-style")
+            .filter(|s| s.applicable_strategies.iter().any(|s| s == &strategy))
+            .collect()
+    }
+
+    /// Answer 阶段：返回行为模式技能目录（目前只有 brainstorming）
+    pub fn answer_behavior_modes(&self, strategy: &str) -> Vec<&SkillMetadata> {
+        let strategy = strategy.to_string();
+        self.skills
+            .values()
+            .filter(|s| s.category == "behavior")
+            .filter(|s| s.applicable_strategies.iter().any(|s| s == &strategy))
+            .collect()
+    }
 }
 
 // ---------------------------------------------------------------------------
