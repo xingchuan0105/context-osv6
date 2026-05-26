@@ -11,4 +11,5 @@ include!("lib_impl/repository_assets.rs");
 include!("lib_impl/repository_document_ir.rs");
 include!("lib_impl/repository_retrieval.rs");
 include!("lib_impl/repository_sessions_jobs.rs");
+include!("lib_impl/repository_conversation_memory.rs");
 include!("lib_impl/tests.rs");
