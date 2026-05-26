@@ -905,12 +905,18 @@ impl SearchStrategy {
     ) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
-        let system_prompt = crate::agents::strategy::prompts::build_answer_system_prompt(
+        let mut system_prompt = crate::agents::strategy::prompts::build_answer_system_prompt(
             crate::agents::strategy::prompts::search::ANSWER_SKILL_ID,
             "search",
             &[],
             &ctx.selected_writing_styles,
         );
+
+        // Inject behavior mode skill if active
+        if let Some(behavior_skill) = crate::agents::strategy::prompts::load_behavior_mode_skill(ctx.behavior_mode.as_deref()) {
+            system_prompt.push_str("\n\n---\n\n");
+            system_prompt.push_str(&behavior_skill);
+        }
 
         if ctx.accumulated_search_results.is_empty() {
             return self.finalize_degrade(ctx, DegradeReason::NoResultsAfterAllFallbacks)

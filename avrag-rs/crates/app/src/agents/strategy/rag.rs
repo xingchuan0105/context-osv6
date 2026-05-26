@@ -861,12 +861,18 @@ impl RagStrategy {
         } else {
             detect_format_skills(&ctx.request.query).iter().map(|s| s.to_string()).collect()
         };
-        let system_prompt = crate::agents::strategy::prompts::build_answer_system_prompt(
+        let mut system_prompt = crate::agents::strategy::prompts::build_answer_system_prompt(
             crate::agents::strategy::prompts::rag::ANSWER_SKILL_ID,
             "rag",
             &selected_format_skills,
             &ctx.selected_writing_styles,
         );
+
+        // Inject behavior mode skill if active
+        if let Some(behavior_skill) = crate::agents::strategy::prompts::load_behavior_mode_skill(ctx.behavior_mode.as_deref()) {
+            system_prompt.push_str("\n\n---\n\n");
+            system_prompt.push_str(&behavior_skill);
+        }
 
         if !helpers::has_evidence(&ctx.all_tool_results) {
             return self.finalize_degrade(ctx, DegradeReason::NoResultsAfterAllFallbacks)

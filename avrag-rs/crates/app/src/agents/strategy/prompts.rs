@@ -107,6 +107,13 @@ pub fn build_answer_system_prompt(
     parts.join("\n\n---\n\n")
 }
 
+/// Load a behavior mode skill body into the system prompt if active.
+pub fn load_behavior_mode_skill(behavior_mode: Option<&str>) -> Option<String> {
+    let mode = behavior_mode?;
+    let registry = PromptRegistry::standard_cached();
+    registry.skill(mode).map(|s| s.system_prompt().to_string())
+}
+
 /// Format tool input_schema properties as a human-readable parameter list.
 fn format_tool_params(input_schema: &serde_json::Value) -> String {
     let Some(properties) = input_schema.get("properties").and_then(|p| p.as_object()) else {
