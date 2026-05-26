@@ -30,14 +30,19 @@ pub async fn run(
         return super::error_result("doc_summary", "no valid doc_ids provided".to_string());
     }
 
-    let pg_repo = match runtime.config.pg_repo.as_ref() {
-        Some(repo) => repo,
-        None => {
-            return super::error_result(
-                "doc_summary",
-                "pg_repo is not configured".to_string(),
-            );
-        }
+    let Some(pg_repo) = runtime.config.pg_repo.as_ref() else {
+        return ToolResult {
+            tool: "doc_summary".to_string(),
+            version: "1.0".to_string(),
+            status: ToolStatus::Ok,
+            data: Some(serde_json::Value::Array(Vec::new())),
+            trace: Some(ToolTrace {
+                elapsed_ms: Some(0),
+                raw_hit_count: Some(0),
+                hydrated_hit_count: Some(0),
+                degrade_reason: Some("pg_repo not configured — returning empty".to_string()),
+            }),
+        };
     };
 
     let started = std::time::Instant::now();

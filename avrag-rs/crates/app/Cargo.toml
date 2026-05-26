@@ -20,6 +20,7 @@ avrag-search = { path = "../search" }
 avrag-chatmemory = { path = "../chatmemory" }
 avrag-llm = { path = "../llm" }
 avrag-rag-core = { path = "../rag-core" }
+avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
 avrag-cache-redis = { path = "../cache-redis" }
 avrag-guardrails = { path = "../guardrails" }
 telemetry = { path = "../telemetry" }

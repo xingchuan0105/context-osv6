@@ -19,7 +19,6 @@ pub(crate) async fn execute_brave_llm_context(
         .post(endpoint)
         .header("X-Subscription-Token", api_key)
         .header("Accept", "application/json")
-        .header("Accept-Encoding", "gzip")
         .json(&BraveLlmContextRequest::new(query, config))
         .send()
         .await?;
@@ -118,7 +117,6 @@ pub(crate) async fn execute_brave_news(
         .get(endpoint)
         .header("X-Subscription-Token", api_key)
         .header("Accept", "application/json")
-        .header("Accept-Encoding", "gzip")
         .query(&[("q", query), ("count", &config.max_results.clamp(1, 50).to_string())]);
 
     if let Some(lang) = config.search_lang.as_deref() {

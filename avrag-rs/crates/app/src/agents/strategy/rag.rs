@@ -444,6 +444,31 @@ impl RagStrategy {
             })
             .collect();
 
+        // Fallback: if planner produced no core retrieval calls, auto-inject
+        // a default dense_retrieval so the pipeline always attempts evidence
+        // gathering (prevents silent degrade when pg_repo is unavailable).
+        let has_core_retrieval = rag_calls.iter().any(|call| {
+            matches!(
+                call.tool.as_str(),
+                "dense_retrieval" | "lexical_retrieval" | "graph_retrieval" | "index_lookup"
+            )
+        });
+        let mut rag_calls = rag_calls;
+        if !has_core_retrieval && !ctx.request.doc_scope.is_empty() {
+            tracing::info!(
+                "planner produced no core retrieval calls — injecting default dense_retrieval"
+            );
+            rag_calls.push(common::ToolCall {
+                tool: "dense_retrieval".to_string(),
+                version: "1.0".to_string(),
+                args: serde_json::json!({
+                    "queries": vec![ctx.chat_req.query.clone()],
+                    "modality": "text",
+                    "top_k": 10,
+                }),
+            });
+        }
+
         let n_calls = rag_calls.len() as u32;
         let plan_snapshot =
             serde_json::to_value(&rag_calls).unwrap_or(serde_json::Value::Null);

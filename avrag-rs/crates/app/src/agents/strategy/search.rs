@@ -324,6 +324,14 @@ impl SearchStrategy {
         ctx.check_cancelled()?;
 
         // Take the plan and execute all sub-queries in parallel.
+        //
+        // NOTE: All sub-queries are fired simultaneously via `join_all` inside
+        // `dispatch_atomic_tools_with_enforcement`. For providers with strict
+        // rate limits (e.g. Brave Search Free tier = 1 QPS), this can trigger
+        // 429 errors when multiple sub-queries are planned. The retry policy
+        // in `execute_with_retry` handles transient 429s for idempotent tools,
+        // but sustained bursts may still degrade. Consider client-side
+        // throttling if you routinely hit provider QPS ceilings.
         let Some(plan) = ctx.current_plan.take() else {
             // No plan available — fall back to single search with current_query.
             return self.step_single_search(ctx).await;
@@ -441,6 +449,14 @@ impl SearchStrategy {
             .await;
 
         ctx.all_sub_queries.extend(all_sub_queries);
+        ctx.budget.tick();
+        let _ = ctx
+            .sink
+            .emit(AgentEvent::BudgetTick {
+                current: ctx.budget.current,
+                max: ctx.budget.max_iterations,
+            })
+            .await;
 
         // Store raw results for the Aggregate phase.
         ctx.current_search_response = Some(SearchResponse {

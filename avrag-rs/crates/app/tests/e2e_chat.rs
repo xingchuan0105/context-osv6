@@ -63,6 +63,12 @@ fn chat_request(query: &str) -> AgentRequest {
 #[ignore = "requires staging environment (E2E_LLM_BASE_URL, E2E_LLM_API_KEY, E2E_LLM_MODEL)"]
 async fn chat_simple_conversation_state_machine() {
     let config = E2EConfig::from_env().expect("E2E config not set — set E2E_LLM_* env vars");
+    if let Err(missing) = config.validate_for_chat() {
+        panic!(
+            "Chat E2E missing environment variables: {}",
+            missing.join(", ")
+        );
+    }
     let llm_client = config.llm_client();
 
     // Wrap real LLM in recording provider
@@ -133,13 +139,20 @@ async fn chat_simple_conversation_state_machine() {
 #[ignore = "requires staging environment (E2E_LLM_BASE_URL, E2E_LLM_API_KEY, E2E_LLM_MODEL)"]
 async fn chat_with_tool_call_state_machine() {
     let config = E2EConfig::from_env().expect("E2E config not set");
+    if let Err(missing) = config.validate_for_chat() {
+        panic!(
+            "Chat E2E missing environment variables: {}",
+            missing.join(", ")
+        );
+    }
     let llm_client = config.llm_client();
 
     let recording = RecordingLlmProvider::new(Arc::new(llm_client.clone()));
     let recording_arc = Arc::new(recording);
 
-    // Use preferred_tools to nudge Plan toward calculator
-    let mut request = chat_request("What is 2 + 2?");
+    // Use preferred_tools to nudge Plan toward calculator.
+    // Expression is complex enough that the LLM will not compute it mentally.
+    let mut request = chat_request("What is 1583 * 47 + sqrt(1024) - pow(2, 8)?");
     request.preferred_tools = vec!["calculator".to_string()];
 
     let ctx = ChatContext::from_request(
@@ -195,4 +208,61 @@ async fn chat_with_tool_call_state_machine() {
     let answer_call = calls.last().unwrap();
     assertions::assert_prompt_contains_skill(&answer_call.system_prompt, "chat");
     assertions::assert_prompt_has_format_skills(&answer_call.system_prompt);
+}
+
+/// Test: Chat with PPT format hint — answer prompt contains the FULL BODY
+/// of the ppt-generation skill, not just the skill ID string.
+#[tokio::test]
+#[ignore = "requires staging environment (E2E_LLM_BASE_URL, E2E_LLM_API_KEY, E2E_LLM_MODEL)"]
+async fn chat_ppt_format_skill_injected() {
+    let config = E2EConfig::from_env().expect("E2E config not set — set E2E_LLM_* env vars");
+    if let Err(missing) = config.validate_for_chat() {
+        panic!(
+            "Chat E2E missing environment variables: {}",
+            missing.join(", ")
+        );
+    }
+    let llm_client = config.llm_client();
+
+    let recording = RecordingLlmProvider::new(Arc::new(llm_client.clone()));
+    let recording_arc = Arc::new(recording);
+
+    let mut request = chat_request("make a ppt about Rust");
+    request.format_hint = Some("ppt".to_string());
+
+    let ctx = ChatContext::from_request(
+        request,
+        "test-chat-ppt-format".to_string(),
+        LoopBudget::chat(UserTier::Pro),
+        Box::new(CollectingSink::new()),
+        tokio_util::sync::CancellationToken::new(),
+    )
+    .unwrap();
+
+    let strategy = app::agents::strategy::chat::ChatStrategy {
+        llm: recording_arc.clone(),
+        llm_client: Some(llm_client),
+        temperature: None,
+    };
+
+    let executor = app::agents::strategy::executor::StrategyExecutor;
+    let result = executor.run(&strategy, ctx).await.unwrap();
+
+    // --- State machine assertions ---
+    let schema = app::agents::strategy::chat::ChatStrategy::schema();
+    let history = result.state_history.as_ref().expect("state_history missing");
+    assertions::assert_valid_transitions(&schema, history);
+    assertions::assert_state_kinds(history);
+
+    // --- Format skill body injection ---
+    let calls = recording_arc.calls();
+    assert!(
+        calls.len() >= 2,
+        "Expected at least 2 LLM calls (plan + answer), got {}",
+        calls.len()
+    );
+
+    // Answer prompt must contain the FULL BODY of ppt-generation skill
+    let answer_call = calls.last().unwrap();
+    assertions::assert_prompt_contains_skill_body(&answer_call.system_prompt, "ppt-generation");
 }

@@ -2,14 +2,20 @@
 
 /// Configuration loaded from environment variables.
 ///
-/// Required: `E2E_LLM_BASE_URL`, `E2E_LLM_API_KEY`, `E2E_LLM_MODEL`.
-/// Optional: `E2E_BRAVE_API_KEY`, `E2E_VECTOR_DB_URL`.
+/// Required for all tests: `E2E_LLM_BASE_URL`, `E2E_LLM_API_KEY`, `E2E_LLM_MODEL`.
+/// Required for Search: `E2E_BRAVE_API_KEY`.
+/// Required for RAG: `E2E_EMBEDDING_BASE_URL`, `E2E_EMBEDDING_API_KEY`,
+///   `E2E_MILVUS_URL`.
 pub struct E2EConfig {
     pub llm_base_url: String,
     pub llm_api_key: String,
     pub llm_model: String,
     pub brave_api_key: Option<String>,
-    pub vector_db_url: Option<String>,
+    pub embedding_base_url: Option<String>,
+    pub embedding_api_key: Option<String>,
+    pub embedding_model: Option<String>,
+    pub milvus_url: Option<String>,
+    pub milvus_token: Option<String>,
 }
 
 impl E2EConfig {
@@ -25,8 +31,70 @@ impl E2EConfig {
             llm_api_key,
             llm_model,
             brave_api_key: std::env::var("E2E_BRAVE_API_KEY").ok(),
-            vector_db_url: std::env::var("E2E_VECTOR_DB_URL").ok(),
+            embedding_base_url: std::env::var("E2E_EMBEDDING_BASE_URL").ok(),
+            embedding_api_key: std::env::var("E2E_EMBEDDING_API_KEY").ok(),
+            embedding_model: std::env::var("E2E_EMBEDDING_MODEL").ok(),
+            milvus_url: std::env::var("E2E_MILVUS_URL").ok(),
+            milvus_token: std::env::var("E2E_MILVUS_TOKEN").ok(),
         })
+    }
+
+    /// Validate that all variables required for Chat tests are present.
+    /// Returns Ok(()) on success, or Err with a list of missing variables.
+    pub fn validate_for_chat(&self) -> Result<(), Vec<String>> {
+        let mut missing = Vec::new();
+        if self.llm_base_url.is_empty() {
+            missing.push("E2E_LLM_BASE_URL".to_string());
+        }
+        if self.llm_api_key.is_empty() {
+            missing.push("E2E_LLM_API_KEY".to_string());
+        }
+        if self.llm_model.is_empty() {
+            missing.push("E2E_LLM_MODEL".to_string());
+        }
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(missing)
+        }
+    }
+
+    /// Validate that all variables required for Search tests are present.
+    pub fn validate_for_search(&self) -> Result<(), Vec<String>> {
+        let mut missing = Vec::new();
+        if let Err(m) = self.validate_for_chat() {
+            missing.extend(m);
+        }
+        if self.brave_api_key.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+            missing.push("E2E_BRAVE_API_KEY".to_string());
+        }
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(missing)
+        }
+    }
+
+    /// Validate that all variables required for RAG tests are present.
+    pub fn validate_for_rag(&self) -> Result<(), Vec<String>> {
+        let mut missing = Vec::new();
+        if let Err(m) = self.validate_for_chat() {
+            missing.extend(m);
+        }
+        if self.embedding_base_url.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+            missing.push("E2E_EMBEDDING_BASE_URL".to_string());
+        }
+        if self.embedding_api_key.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+            missing.push("E2E_EMBEDDING_API_KEY".to_string());
+        }
+        if self.milvus_url.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+            missing.push("E2E_MILVUS_URL".to_string());
+        }
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(missing)
+        }
     }
 
     /// Build an LlmClient from this config.
@@ -40,6 +108,29 @@ impl E2EConfig {
             timeout_ms: 30_000,
             api_style: Some(avrag_llm::ApiStyle::OpenAi),
             dimensions: None,
+            enable_thinking: None,
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        })
+    }
+
+    /// Build an EmbeddingClient from this config (RAG tests).
+    /// Panics if embedding config is incomplete — call `validate_for_rag()` first.
+    pub fn embedding_client(&self) -> avrag_llm::EmbeddingClient {
+        let base_url = self
+            .embedding_base_url
+            .as_ref()
+            .expect("validate_for_rag() not called")
+            .trim_end_matches('/')
+            .to_string();
+        avrag_llm::EmbeddingClient::new(avrag_llm::ModelProviderConfig {
+            base_url,
+            api_key: self.embedding_api_key.clone().unwrap_or_default(),
+            model: self.embedding_model.clone().unwrap_or_else(|| "text-embedding-v4".to_string()),
+            timeout_ms: 30_000,
+            api_style: Some(avrag_llm::ApiStyle::OpenAi),
+            dimensions: Some(1024),
             enable_thinking: None,
             enable_cache: None,
             rpm_limit: None,
