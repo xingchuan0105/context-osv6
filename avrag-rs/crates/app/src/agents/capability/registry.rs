@@ -201,6 +201,12 @@ fn skill_to_metadata(skill: &super::super::progressive::Skill) -> SkillMetadata 
         .and_then(|s| parse_activation_phase(s))
         .unwrap_or_else(|| infer_skill_activation_phase(skill.id()));
 
+    // Parse category from frontmatter if present
+    let category = md
+        .get("category")
+        .cloned()
+        .unwrap_or_else(|| "standard".to_string());
+
     SkillMetadata {
         id: skill.id().to_string(),
         version: skill.version().to_string(),
@@ -214,6 +220,7 @@ fn skill_to_metadata(skill: &super::super::progressive::Skill) -> SkillMetadata 
         risk_level,
         deprecation: None,
         activation_phase,
+        category,
     }
 }
 

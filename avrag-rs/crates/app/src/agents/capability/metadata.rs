@@ -89,6 +89,7 @@ pub struct SkillMetadata {
     pub risk_level: RiskLevel,
     pub deprecation: Option<Deprecation>,
     pub activation_phase: ActivationPhase,
+    pub category: String,
 }
 
 /// 工具/技能在策略哪个阶段可见
