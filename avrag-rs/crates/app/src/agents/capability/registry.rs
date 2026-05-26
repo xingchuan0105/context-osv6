@@ -114,19 +114,21 @@ impl CapabilityRegistry {
 
     /// Plan/Evaluate 阶段：返回指定策略可用的工具目录
     pub fn plan_tools(&self, strategy: &str) -> Vec<&ToolMetadata> {
+        let strategy = strategy.to_string();
         self.tools
             .values()
             .filter(|t| t.activation_phase == ActivationPhase::PlanAndEvaluate)
-            .filter(|t| t.applicable_strategies.contains(&strategy.to_string()))
+            .filter(|t| t.applicable_strategies.iter().any(|s| s == &strategy))
             .collect()
     }
 
     /// Answer 阶段：返回 format 技能目录
     pub fn answer_format_skills(&self, strategy: &str) -> Vec<&SkillMetadata> {
+        let strategy = strategy.to_string();
         self.skills
             .values()
             .filter(|s| s.activation_phase == ActivationPhase::Answer)
-            .filter(|s| s.applicable_strategies.contains(&strategy.to_string()))
+            .filter(|s| s.applicable_strategies.iter().any(|s| s == &strategy))
             .collect()
     }
 }
