@@ -57,6 +57,7 @@ pub fn build_answer_system_prompt(
     answer_skill_id: &str,
     strategy: &str,
     selected_format_skills: &[String],
+    selected_writing_styles: &[String],
 ) -> String {
     let registry = PromptRegistry::standard_cached();
     let mut parts = Vec::new();
@@ -80,6 +81,24 @@ pub fn build_answer_system_prompt(
 
     // 3. 选中的 format skill 全文（Load tier）
     for skill_id in selected_format_skills {
+        if let Some(skill) = registry.skill(skill_id.as_str()) {
+            parts.push(skill.system_prompt().to_string());
+        }
+    }
+
+    // 4. 写作风格目录（Index tier）
+    let writing_styles = cap_registry.answer_writing_styles(strategy);
+    if !writing_styles.is_empty() {
+        let catalog = writing_styles
+            .iter()
+            .map(|s| format!("- {} (v{}): {}", s.id, s.version, s.description))
+            .collect::<Vec<_>>()
+            .join("\n");
+        parts.push(format!("## Available Writing Styles\n\n{catalog}"));
+    }
+
+    // 5. 选中的 writing style 全文（Load tier）
+    for skill_id in selected_writing_styles {
         if let Some(skill) = registry.skill(skill_id.as_str()) {
             parts.push(skill.system_prompt().to_string());
         }
@@ -178,7 +197,7 @@ mod tests {
 
     #[test]
     fn chat_answer_prompt_is_not_empty() {
-        let prompt = build_answer_system_prompt(chat::ANSWER_SKILL_ID, "chat", &[]);
+        let prompt = build_answer_system_prompt(chat::ANSWER_SKILL_ID, "chat", &[], &[]);
         assert!(!prompt.is_empty());
         // Answer prompt should contain format skills catalog
         assert!(prompt.contains("Available Output Formats"));

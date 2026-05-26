@@ -82,6 +82,8 @@ pub struct ChatContext {
     pub request_count: u64,
     /// Degrade trace from content guard sanitization (R3/R6).
     pub content_guard_trace: Vec<common::DegradeTraceItem>,
+    pub selected_writing_styles: Vec<String>,
+    pub behavior_mode: Option<String>,
 }
 
 impl StrategyContext for ChatContext {
@@ -144,6 +146,8 @@ impl ChatContext {
             aggregated_usage: None,
             request_count: 0,
             content_guard_trace: Vec::new(),
+            selected_writing_styles: Vec::new(),
+            behavior_mode: None,
         })
     }
 }
@@ -251,12 +255,16 @@ impl ChatStrategy {
         // Parse plan decision.
         let decision = parse_chat_plan_decision(&plan_response.content);
         ctx.plan_decision_action = Some(decision.action.clone());
+        ctx.selected_writing_styles = decision.writing_styles.clone();
+        ctx.behavior_mode = decision.behavior_mode.clone();
 
         let _ = ctx
             .sink
             .emit(AgentEvent::PlanDecision {
                 selected_tools: decision.calls.clone(),
                 selected_skills: vec![],
+                selected_writing_styles: decision.writing_styles.clone(),
+                behavior_mode: decision.behavior_mode.clone(),
                 reasoning: format!("plan action: {}", decision.action),
             })
             .await;
@@ -379,6 +387,7 @@ impl ChatStrategy {
             crate::agents::strategy::prompts::chat::ANSWER_SKILL_ID,
             "chat",
             &[],
+            &ctx.selected_writing_styles,
         );
 
         let mut messages = build_chat_messages_with_system(&ctx.request, &system_prompt);
@@ -561,6 +570,8 @@ struct ChatPlanDecision {
     action: String,
     clarification_message: String,
     calls: Vec<ToolCall>,
+    writing_styles: Vec<String>,
+    behavior_mode: Option<String>,
 }
 
 fn parse_chat_plan_decision(raw: &str) -> ChatPlanDecision {
@@ -611,10 +622,23 @@ fn parse_chat_plan_decision(raw: &str) -> ChatPlanDecision {
         })
         .unwrap_or_default();
 
+    let writing_styles: Vec<String> = value
+        .get("writing_styles")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+
+    let behavior_mode = value
+        .get("behavior_mode")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
     ChatPlanDecision {
         action,
         clarification_message,
         calls,
+        writing_styles,
+        behavior_mode,
     }
 }
 
@@ -683,5 +707,21 @@ mod tests {
         let decision = parse_chat_plan_decision(raw);
         assert_eq!(decision.action, "answer");
         assert!(decision.calls.is_empty());
+    }
+
+    #[test]
+    fn parse_chat_plan_decision_with_writing_styles() {
+        let raw = r#"{"action": "answer", "calls": [], "writing_styles": ["concise-writing"]}"#;
+        let decision = parse_chat_plan_decision(raw);
+        assert_eq!(decision.action, "answer");
+        assert_eq!(decision.writing_styles, vec!["concise-writing"]);
+    }
+
+    #[test]
+    fn parse_chat_plan_decision_with_behavior_mode() {
+        let raw = r#"{"action": "answer", "calls": [], "behavior_mode": "brainstorming"}"#;
+        let decision = parse_chat_plan_decision(raw);
+        assert_eq!(decision.action, "answer");
+        assert_eq!(decision.behavior_mode, Some("brainstorming".to_string()));
     }
 }

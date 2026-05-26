@@ -64,6 +64,10 @@ pub enum AgentEvent {
         selected_tools: Vec<common::ToolCall>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         selected_skills: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        selected_writing_styles: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        behavior_mode: Option<String>,
         #[serde(default, skip_serializing_if = "String::is_empty")]
         reasoning: String,
     },
@@ -315,6 +319,8 @@ mod tests {
                     args: serde_json::json!({"query": "test"}),
                 }],
                 selected_skills: vec!["rag-plan".to_string()],
+                selected_writing_styles: vec![],
+                behavior_mode: None,
                 reasoning: "selected based on query type".to_string(),
             },
             AgentEvent::ToolResult {

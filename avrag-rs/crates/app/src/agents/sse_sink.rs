@@ -207,6 +207,8 @@ impl SseSink {
             AgentEvent::PlanDecision {
                 selected_tools,
                 selected_skills,
+                selected_writing_styles,
+                behavior_mode,
                 reasoning,
             } => ChatEvent::Trace {
                 request_id: self.request_id.clone(),
@@ -215,6 +217,8 @@ impl SseSink {
                 detail: Some(serde_json::json!({
                     "selected_tools": selected_tools,
                     "selected_skills": selected_skills,
+                    "selected_writing_styles": selected_writing_styles,
+                    "behavior_mode": behavior_mode,
                     "reasoning": reasoning,
                 })),
             },

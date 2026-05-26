@@ -110,6 +110,8 @@ pub struct RagContext {
     pub current_plan_calls: Option<Vec<ToolCall>>,
     pub current_plan_strategy: Option<crate::rag_prompts::PlanStrategy>,
     pub selected_skills: Vec<String>,
+    pub selected_writing_styles: Vec<String>,
+    pub behavior_mode: Option<String>,
     pub iterations: Vec<IterationRecord>,
 
     // Accumulated
@@ -218,6 +220,8 @@ impl RagContext {
             current_plan_calls: None,
             current_plan_strategy: None,
             selected_skills: Vec::new(),
+            selected_writing_styles: Vec::new(),
+            behavior_mode: None,
             iterations: Vec::new(),
             aggregated_usage: None,
             request_count: 0,
@@ -361,6 +365,8 @@ impl RagStrategy {
                     .emit(AgentEvent::PlanDecision {
                         selected_tools: vec![],
                         selected_skills: skills,
+                        selected_writing_styles: vec![],
+                        behavior_mode: None,
                         reasoning: format!("plan strategy: {:?}", strategy),
                     })
                     .await;
@@ -375,6 +381,8 @@ impl RagStrategy {
                     .emit(AgentEvent::PlanDecision {
                         selected_tools: calls.clone(),
                         selected_skills: skills,
+                        selected_writing_styles: vec![],
+                        behavior_mode: None,
                         reasoning: format!("plan selected {} tool call(s)", calls.len()),
                     })
                     .await;
@@ -857,6 +865,7 @@ impl RagStrategy {
             crate::agents::strategy::prompts::rag::ANSWER_SKILL_ID,
             "rag",
             &selected_format_skills,
+            &ctx.selected_writing_styles,
         );
 
         if !helpers::has_evidence(&ctx.all_tool_results) {

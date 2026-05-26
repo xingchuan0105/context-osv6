@@ -112,6 +112,8 @@ pub struct SearchContext {
     pub content_guard_trace: Vec<DegradeTraceItem>,
     /// Tool call records for white-box reporting.
     pub tool_call_records: Vec<crate::agents::runtime::ToolCallRecord>,
+    pub selected_writing_styles: Vec<String>,
+    pub behavior_mode: Option<String>,
 }
 
 impl StrategyContext for SearchContext {
@@ -182,6 +184,8 @@ impl SearchContext {
             all_tool_results: Vec::new(),
             content_guard_trace: Vec::new(),
             tool_call_records: Vec::new(),
+            selected_writing_styles: Vec::new(),
+            behavior_mode: None,
         })
     }
 }
@@ -298,6 +302,8 @@ impl SearchStrategy {
                 .emit(AgentEvent::PlanDecision {
                     selected_tools: p.atomic_calls.clone(),
                     selected_skills: p.sub_queries.clone(),
+                    selected_writing_styles: vec![],
+                    behavior_mode: None,
                     reasoning: p.intent_summary.clone(),
                 })
                 .await;
@@ -903,6 +909,7 @@ impl SearchStrategy {
             crate::agents::strategy::prompts::search::ANSWER_SKILL_ID,
             "search",
             &[],
+            &ctx.selected_writing_styles,
         );
 
         if ctx.accumulated_search_results.is_empty() {
