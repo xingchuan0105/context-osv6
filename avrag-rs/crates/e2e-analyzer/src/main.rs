@@ -1,5 +1,6 @@
 //! e2e-analyzer — CLI tool for analyzing E2E test artifacts.
 
+mod baseline;
 mod cli;
 mod loader;
 mod models;
