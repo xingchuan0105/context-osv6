@@ -102,9 +102,11 @@ impl CapabilityRegistry {
         self.strategies.get(id)
     }
 
-    /// List all registered strategies.
+    /// List all registered strategies (按 ID 排序).
     pub fn list_strategies(&self) -> Vec<&super::StrategySchema> {
-        self.strategies.values().collect()
+        let mut strategies: Vec<_> = self.strategies.values().collect();
+        strategies.sort_by_key(|s| &s.id);
+        strategies
     }
 
     /// Count of registered strategies.
@@ -112,44 +114,56 @@ impl CapabilityRegistry {
         self.strategies.len()
     }
 
-    /// Plan/Evaluate 阶段：返回指定策略可用的工具目录
+    /// Plan/Evaluate 阶段：返回指定策略可用的工具目录（按 ID 排序，确保 prompt 确定性）
     pub fn plan_tools(&self, strategy: &str) -> Vec<&ToolMetadata> {
         let strategy = strategy.to_string();
-        self.tools
+        let mut tools: Vec<_> = self
+            .tools
             .values()
             .filter(|t| t.activation_phase == ActivationPhase::PlanAndEvaluate)
             .filter(|t| t.applicable_strategies.iter().any(|s| s == &strategy))
-            .collect()
+            .collect();
+        tools.sort_by_key(|t| &t.id);
+        tools
     }
 
-    /// Answer 阶段：返回 format 技能目录
+    /// Answer 阶段：返回 format 技能目录（按 ID 排序，确保 prompt 确定性）
     pub fn answer_format_skills(&self, strategy: &str) -> Vec<&SkillMetadata> {
         let strategy = strategy.to_string();
-        self.skills
+        let mut skills: Vec<_> = self
+            .skills
             .values()
             .filter(|s| s.activation_phase == ActivationPhase::Answer)
             .filter(|s| s.applicable_strategies.iter().any(|s| s == &strategy))
-            .collect()
+            .collect();
+        skills.sort_by_key(|s| &s.id);
+        skills
     }
 
-    /// Answer 阶段：返回写作风格技能目录
+    /// Answer 阶段：返回写作风格技能目录（按 ID 排序，确保 prompt 确定性）
     pub fn answer_writing_styles(&self, strategy: &str) -> Vec<&SkillMetadata> {
         let strategy = strategy.to_string();
-        self.skills
+        let mut skills: Vec<_> = self
+            .skills
             .values()
             .filter(|s| s.category == "writing-style")
             .filter(|s| s.applicable_strategies.iter().any(|s| s == &strategy))
-            .collect()
+            .collect();
+        skills.sort_by_key(|s| &s.id);
+        skills
     }
 
-    /// Answer 阶段：返回行为模式技能目录（目前只有 brainstorming）
+    /// Answer 阶段：返回行为模式技能目录（目前只有 brainstorming，按 ID 排序）
     pub fn answer_behavior_modes(&self, strategy: &str) -> Vec<&SkillMetadata> {
         let strategy = strategy.to_string();
-        self.skills
+        let mut skills: Vec<_> = self
+            .skills
             .values()
             .filter(|s| s.category == "behavior")
             .filter(|s| s.applicable_strategies.iter().any(|s| s == &strategy))
-            .collect()
+            .collect();
+        skills.sort_by_key(|s| &s.id);
+        skills
     }
 }
 

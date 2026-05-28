@@ -148,7 +148,7 @@ pub fn find_latest_run_on_branch(output_dir: &Path, branch: &str) -> Option<Path
         let meta = load_run_metadata(run_dir);
         let branch_matches = meta
             .as_ref()
-            .and_then(|m| m.git_branch.as_deref())
+            .and_then(|m| m.git_branch_from_anywhere())
             == Some(branch);
 
         if !branch_matches {

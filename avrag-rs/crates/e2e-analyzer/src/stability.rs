@@ -2,7 +2,6 @@
 
 use crate::models::{
     CategorySnapshot, PerfRegression, PerfTrend, StabilityRecord, TestResult, TestStatus,
-    TokenUsage,
 };
 
 // ---------------------------------------------------------------------------
@@ -267,6 +266,7 @@ fn compute_linear_slope(values: &[(String, f64)]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::TokenUsage;
 
     fn make_result(test_name: &str, status: TestStatus, duration_ms: u64, tokens: Option<TokenUsage>) -> TestResult {
         TestResult {

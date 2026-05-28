@@ -35,21 +35,28 @@ pub struct TestResult {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
 pub enum TestStatus {
+    #[serde(alias = "passed")]
     Passed,
+    #[serde(alias = "failed")]
     Failed,
+    #[serde(alias = "skipped")]
     Skipped,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
 pub enum TestFailureKind {
+    #[serde(alias = "dependency_missing")]
     DependencyMissing,
+    #[serde(alias = "setup_failed")]
     SetupFailed,
+    #[serde(alias = "execution_failed")]
     ExecutionFailed,
+    #[serde(alias = "assertion_failed")]
     AssertionFailed,
+    #[serde(alias = "cleanup_failed")]
     CleanupFailed,
+    #[serde(alias = "timeout")]
     Timeout,
 }
 
@@ -89,15 +96,39 @@ pub struct RenderDiagnostics {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RunMetadata {
     pub run_id: String,
-    pub started_at: DateTime<Utc>,
+    pub started_at: Option<DateTime<Utc>>,
     pub finished_at: Option<DateTime<Utc>>,
     pub git_sha: Option<String>,
     pub git_branch: Option<String>,
-    pub environment: String,
-    pub total_tests: usize,
-    pub passed: usize,
-    pub failed: usize,
-    pub skipped: usize,
+    pub environment: Option<serde_json::Value>,
+    pub total_tests: Option<usize>,
+    pub passed: Option<usize>,
+    pub failed: Option<usize>,
+    pub skipped: Option<usize>,
+    pub timestamp: Option<String>,
+    pub git_commit: Option<String>,
+}
+
+impl RunMetadata {
+    /// Extract git_branch from either the top-level field or nested inside
+    /// the `environment` JSON object (actual E2E artifact format).
+    pub fn git_branch_from_anywhere(&self) -> Option<&str> {
+        self.git_branch.as_deref().or_else(|| {
+            self.environment.as_ref().and_then(|env| {
+                env.get("git_branch").and_then(|v| v.as_str())
+            })
+        })
+    }
+
+    /// Extract git_commit from either the top-level field or nested inside
+    /// the `environment` JSON object.
+    pub fn git_commit_from_anywhere(&self) -> Option<&str> {
+        self.git_commit.as_deref().or_else(|| {
+            self.environment.as_ref().and_then(|env| {
+                env.get("git_commit").and_then(|v| v.as_str())
+            })
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -30,6 +30,11 @@ pub fn compare_status(test_name: &str, baseline: &TestResult, current: &TestResu
         return Vec::new();
     }
 
+    // Skipped -> Passed is an improvement, not a regression.
+    if baseline.status == TestStatus::Skipped && current.status == TestStatus::Passed {
+        return Vec::new();
+    }
+
     let (severity, category) = if baseline.status == TestStatus::Passed && current.status != TestStatus::Passed {
         (DiffSeverity::Critical, DiffCategory::Regression)
     } else {
@@ -52,7 +57,9 @@ pub fn compare_status(test_name: &str, baseline: &TestResult, current: &TestResu
 // ---------------------------------------------------------------------------
 
 pub fn compare_duration(test_name: &str, baseline: &TestResult, current: &TestResult) -> Vec<DiffEntry> {
-    if baseline.duration_ms == 0 {
+    // Skip duration comparison when baseline was skipped — the baseline
+    // duration is just setup/teardown time, not meaningful for comparison.
+    if baseline.duration_ms == 0 || baseline.status == TestStatus::Skipped {
         return Vec::new();
     }
 
@@ -338,6 +345,23 @@ mod tests {
         assert_eq!(diffs[0].category, DiffCategory::Regression);
         assert!(diffs[0].description.contains("Passed"));
         assert!(diffs[0].description.contains("Failed"));
+    }
+
+    #[test]
+    fn status_skipped_to_passed_is_not_a_regression() {
+        let baseline = minimal_result(TestStatus::Skipped, 1000);
+        let current = minimal_result(TestStatus::Passed, 1000);
+        let diffs = compare_status("test", &baseline, &current);
+        assert_eq!(diffs.len(), 0, "Skipped -> Passed should not produce a diff");
+    }
+
+    #[test]
+    fn duration_skipped_baseline_is_ignored() {
+        let baseline = minimal_result(TestStatus::Skipped, 917);
+        let mut current = minimal_result(TestStatus::Passed, 137_594);
+        current.duration_ms = 137_594;
+        let diffs = compare_duration("test", &baseline, &current);
+        assert_eq!(diffs.len(), 0, "Duration diff should be skipped when baseline was Skipped");
     }
 
     #[test]

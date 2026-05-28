@@ -57,7 +57,7 @@ pub fn resolve_baseline(
 
     // Tier 3: latest successful run on the same branch
     let meta = crate::loader::load_run_metadata(current_run_dir);
-    if let Some(branch) = meta.and_then(|m| m.git_branch) {
+    if let Some(branch) = meta.and_then(|m| m.git_branch_from_anywhere().map(String::from)) {
         if let Some(dir) = crate::loader::find_latest_run_on_branch(output_dir, &branch) {
             // A run should not be its own baseline.
             if dir != current_run_dir {
