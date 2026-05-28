@@ -1,5 +1,6 @@
 [package]
 name = "e2e-analyzer"
+description = "Cross-run E2E test analysis framework for regression detection, failure attribution, coverage governance, and stability trending."
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true

@@ -3,11 +3,13 @@
 mod attribution;
 mod baseline;
 mod cli;
+mod coverage;
 mod diff;
 mod fingerprint;
 mod loader;
 mod models;
 mod report;
+mod stability;
 
 use clap::Parser;
 use cli::{Cli, Commands, ReportFormat};
@@ -293,12 +295,21 @@ fn main() -> anyhow::Result<()> {
         }
 
         Commands::Coverage { runs, output } => {
-            println!("coverage: not yet implemented (P1)");
-            if !runs.is_empty() {
-                println!("  runs: {:?}", runs);
-            }
+            let output_dir = if runs.is_empty() {
+                std::path::PathBuf::from("crates/app/tests/e2e_output")
+            } else {
+                runs[0].parent().unwrap_or(Path::new(".")).to_path_buf()
+            };
+            let all_runs = loader::discover_runs(&output_dir);
+            let recent: Vec<_> = all_runs.iter().rev().take(runs.len().max(30)).cloned().collect();
+            let results: Vec<_> = recent.iter().map(|d| loader::load_run_results(d)).collect();
+            let matrix = coverage::build_coverage_matrix(&results);
+            let gaps = matrix.gaps();
+            let report = coverage::generate_coverage_report(&gaps);
+            println!("{}", report);
             if let Some(out) = output {
-                println!("  output: {}", out.display());
+                fs::write(&out, &report)?;
+                println!("Report written to {}", out.display());
             }
         }
 
@@ -307,12 +318,45 @@ fn main() -> anyhow::Result<()> {
             output,
             limit,
         } => {
-            println!("trends: not yet implemented (P2)");
-            println!("  history: {}", history.display());
-            if let Some(out) = output {
-                println!("  output: {}", out.display());
+            let all_runs = loader::discover_runs(&history);
+            let recent: Vec<_> = all_runs.iter().rev().take(limit).cloned().collect();
+            let run_results: Vec<_> = recent
+                .iter()
+                .map(|d| {
+                    let run_id = d.file_name().unwrap().to_string_lossy().to_string();
+                    (run_id, loader::load_run_results(d))
+                })
+                .collect();
+
+            // Find all unique test names across runs
+            let mut test_names = std::collections::HashSet::new();
+            for (_, results) in &run_results {
+                for r in results {
+                    test_names.insert(r.test_name.clone());
+                }
             }
-            println!("  limit: {}", limit);
+
+            let mut all_reports = Vec::new();
+            for test_name in test_names {
+                if let Some(record) = stability::analyze_stability(&test_name, &run_results) {
+                    all_reports.push(stability::generate_stability_report(&record));
+                }
+            }
+
+            if all_reports.is_empty() {
+                println!("Not enough data for stability analysis.");
+            } else {
+                for report in &all_reports {
+                    println!("{}", report);
+                    println!("---\n");
+                }
+            }
+
+            if let Some(out) = output {
+                let combined = all_reports.join("\n---\n");
+                fs::write(&out, combined)?;
+                println!("Report written to {}", out.display());
+            }
         }
     }
 
