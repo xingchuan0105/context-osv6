@@ -117,6 +117,11 @@ pub struct RagContext {
     // Accumulated
     pub aggregated_usage: Option<avrag_llm::LlmUsage>,
     pub request_count: u64,
+
+    /// Tracks `accumulated.unique_chunk_count()` at the last evaluate step.
+    /// Used to detect stalled retrieval loops where the evaluator keeps
+    /// returning `insufficient` but no new chunks are being accumulated.
+    pub last_eval_accumulated_count: usize,
 }
 
 impl StrategyContext for RagContext {
@@ -223,6 +228,7 @@ impl RagContext {
             iterations: Vec::new(),
             aggregated_usage: None,
             request_count: 0,
+            last_eval_accumulated_count: 0,
         })
     }
 }
@@ -731,7 +737,7 @@ impl RagStrategy {
         let _ = ctx
             .sink
             .emit(AgentEvent::Evaluation {
-                signals: eval_signals,
+                signals: eval_signals.clone(),
                 decision: decision_str.clone(),
                 reasoning: llm_eval_json.as_ref()
                     .and_then(|v| v.get("reasoning").and_then(|r| r.as_str().map(|s| s.to_string())))
@@ -751,6 +757,23 @@ impl RagStrategy {
                         .map(StepOutcome::Terminate)
                 }
                 crate::rag_prompts::EvalDecision::Insufficient => {
+                    // Guard: if the evaluator keeps returning insufficient but
+                    // accumulated chunks are not growing, force termination to
+                    // prevent infinite loops.
+                    let current_count = ctx.accumulated.unique_chunk_count();
+                    if current_count == ctx.last_eval_accumulated_count && !ctx.accumulated.is_empty() {
+                        let _ = ctx
+                            .sink
+                            .emit(AgentEvent::Evaluation {
+                                signals: eval_signals.clone(),
+                                decision: "sufficient".to_string(),
+                                reasoning: "accumulated chunks stalled — forcing sufficient to break loop".to_string(),
+                            })
+                            .await;
+                        return Ok(StepOutcome::Next(Box::new(RagState::Answer)));
+                    }
+                    ctx.last_eval_accumulated_count = current_count;
+
                     // Convert next_actions directly to tool calls — skip Plan LLM.
                     let mut calls: Vec<ToolCall> = Vec::new();
                     for action in &eval.next_actions {

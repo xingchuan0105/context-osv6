@@ -71,6 +71,12 @@ Decision rules:
 - Use "insufficient" when one or more major dimensions are missing or weak.
 - Use "give_up" when retrieval has been attempted multiple times with no improvement and budget is nearly exhausted.
 
+Document boundary constraint (CRITICAL):
+- Base your judgment ONLY on the actual retrieved result metadata and document scope provided in the context.
+- If the source documents themselves are limited in scope or depth, do NOT expect them to cover every dimension that might exist in the world on this topic.
+- Do NOT penalize coverage for being "incomplete" relative to external encyclopedic knowledge. If the retrieved content directly addresses the user's core question with the material that is actually available, mark it as sufficient.
+- When the user asks for a summary or overview and the retrieval has returned relevant content from the scoped documents, prefer "sufficient" over chasing exhaustive coverage.
+
 Next actions rules:
 - Only provide `next_actions` when decision is "insufficient".
 - Use {"type": "sub_query", "query": "..."} for new queries targeting missing dimensions.
@@ -84,6 +90,7 @@ Dimension rules:
 - For multi-step or causal questions, dimensions often include each required step, factor, or dependency.
 - For scoped questions, include required constraints such as time range, location, version, document target, or entity target when they are essential.
 - Prefer fewer, essential dimensions over many tiny fragments.
+- When the available documents are narrow or shallow, define dimensions conservatively based on what the documents can realistically cover, rather than what an expert would expect on the open web.
 
 Strict prohibitions:
 - Do not read or judge chunk text.
