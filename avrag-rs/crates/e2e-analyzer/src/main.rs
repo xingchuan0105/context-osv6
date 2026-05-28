@@ -2,6 +2,7 @@
 
 mod baseline;
 mod cli;
+mod fingerprint;
 mod loader;
 mod models;
 
