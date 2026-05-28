@@ -316,6 +316,18 @@ pub struct SeveritySummary {
     pub info: usize,
 }
 
+impl SeveritySummary {
+    pub fn to_gate_status(&self) -> GateStatus {
+        if self.critical > 0 {
+            GateStatus::Fail
+        } else if self.major > 0 {
+            GateStatus::Warn
+        } else {
+            GateStatus::Pass
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GateStatus {

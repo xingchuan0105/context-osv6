@@ -6,6 +6,7 @@ mod diff;
 mod fingerprint;
 mod loader;
 mod models;
+mod report;
 
 use clap::Parser;
 use cli::{Cli, Commands};
