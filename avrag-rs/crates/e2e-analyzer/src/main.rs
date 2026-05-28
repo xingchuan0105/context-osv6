@@ -1,6 +1,7 @@
 //! e2e-analyzer — CLI tool for analyzing E2E test artifacts.
 
 mod cli;
+mod loader;
 mod models;
 
 use clap::Parser;
