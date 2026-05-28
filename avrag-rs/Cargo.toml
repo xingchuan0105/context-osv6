@@ -26,6 +26,7 @@ members = [
   "crates/transport-http",
   "crates/web-ui",
   "crates/test-kit",
+  "crates/e2e-analyzer",
   "tests/rag_quality",
 ]
 
