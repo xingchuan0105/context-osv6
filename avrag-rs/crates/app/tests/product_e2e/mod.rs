@@ -13,8 +13,10 @@ pub mod integration;
 pub mod failure;
 pub mod tenants;
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use axum::{routing::post, Json, Router};
+use axum::{response::IntoResponse, routing::post, Json, Router};
 use serde_json::json;
 
 // ---------------------------------------------------------------------------
@@ -91,6 +93,7 @@ pub struct TestContext {
     mock_llm_abort: Option<tokio::sync::oneshot::Sender<()>>,
     mock_embedding_abort: Option<tokio::sync::oneshot::Sender<()>>,
     mock_search_abort: Option<tokio::sync::oneshot::Sender<()>>,
+    search_should_429: Option<Arc<AtomicBool>>,
 }
 
 /// Default auth headers for test requests.
@@ -135,7 +138,7 @@ impl TestContext {
         let (mock_llm_url, mock_llm_abort) = start_mock_llm_server().await;
 
         // 5. Start mock Search (always — needed by Search tests)
-        let (mock_search_url, mock_search_abort) = start_mock_search_server().await;
+        let (mock_search_url, mock_search_abort, search_should_429) = start_mock_search_server().await;
 
         // 6. Start mock Embedding if RAG enabled
         let (mock_embedding_url, mock_embedding_abort) = if enable_rag {
@@ -265,6 +268,7 @@ impl TestContext {
             mock_llm_abort: Some(mock_llm_abort),
             mock_embedding_abort,
             mock_search_abort: Some(mock_search_abort),
+            search_should_429: Some(search_should_429),
         }
     }
 
@@ -437,6 +441,13 @@ impl TestContext {
     // Failure artifact capture
     // -----------------------------------------------------------------------
 
+    /// Toggle mock search server to return 429 (rate limit).
+    pub fn set_search_429(&self, value: bool) {
+        if let Some(ref flag) = self.search_should_429 {
+            flag.store(value, Ordering::SeqCst);
+        }
+    }
+
     /// Save debugging artifacts on test failure.
     pub fn save_failure_artifacts(&self, _test_name: &str) {
         // TODO(Phase 4): implement
@@ -584,9 +595,16 @@ async fn mock_embedding_handler(Json(req): Json<serde_json::Value>) -> Json<serd
 }
 
 /// Start a mock Brave Search HTTP server on an ephemeral port.
-async fn start_mock_search_server() -> (String, tokio::sync::oneshot::Sender<()>) {
+///
+/// Returns (base_url, abort_sender, search_should_429_flag).
+async fn start_mock_search_server() -> (String, tokio::sync::oneshot::Sender<()>, Arc<AtomicBool>) {
+    let search_should_429 = Arc::new(AtomicBool::new(false));
+    let flag = search_should_429.clone();
+
+    let flag2 = flag.clone();
     let app = Router::new()
-        .route("/res/v1/llm/context", post(mock_search_handler));
+        .route("/res/v1/llm/context", post(move |req| mock_search_handler(req, flag.clone())))
+        .route("/res/v1/news/search", post(move |req| mock_search_handler(req, flag2.clone())));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind mock search");
     let port = listener.local_addr().unwrap().port();
@@ -601,10 +619,21 @@ async fn start_mock_search_server() -> (String, tokio::sync::oneshot::Sender<()>
         }
     });
 
-    (base_url, abort_tx)
+    (base_url, abort_tx, search_should_429)
 }
 
-async fn mock_search_handler(Json(req): Json<serde_json::Value>) -> Json<serde_json::Value> {
+async fn mock_search_handler(
+    Json(req): Json<serde_json::Value>,
+    search_should_429: Arc<AtomicBool>,
+) -> axum::response::Response {
+    if search_should_429.load(Ordering::SeqCst) {
+        return (
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({ "error": "rate limit exceeded" })),
+        )
+            .into_response();
+    }
+
     let _query = req["q"].as_str().unwrap_or("unknown");
     Json(json!({
         "grounding": {
@@ -624,4 +653,5 @@ async fn mock_search_handler(Json(req): Json<serde_json::Value>) -> Json<serde_j
             }
         }
     }))
+    .into_response()
 }
