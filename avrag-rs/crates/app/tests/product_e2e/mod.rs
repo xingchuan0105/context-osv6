@@ -14,6 +14,8 @@ pub mod failure;
 pub mod tenants;
 
 use std::time::Duration;
+use axum::{routing::post, Json, Router};
+use serde_json::json;
 
 // ---------------------------------------------------------------------------
 // HTTP raw response (protocol layer)
@@ -51,6 +53,7 @@ pub use common::{ChatResponse, Citation, DegradeTraceItem, DocumentStatus};
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct UploadResponse {
     pub document_id: String,
+    pub notebook_id: String,
     pub upload_url: String,
     #[serde(default)]
     pub status: u16,
@@ -74,16 +77,19 @@ pub struct NotebookInner {
 
 /// Per-test execution context.
 ///
-/// Created via `TestContext::new_smoke().await`.
-/// Automatically cleans up on drop (containers, temp dirs, worker process, HTTP server).
+/// Created via `TestContext::new_smoke().await` or `new_smoke_with_rag().await`.
+/// Automatically cleans up on drop (containers, temp dirs, worker process, HTTP server, mock servers).
 pub struct TestContext {
     pub http_client: reqwest::Client,
     pub base_url: String,
     pg_container_name: String,
+    milvus_container_name: Option<String>,
     worker: Option<tokio::process::Child>,
     server_abort: Option<tokio::sync::oneshot::Sender<()>>,
     #[allow(dead_code)]
     object_store_dir: tempfile::TempDir,
+    mock_llm_abort: Option<tokio::sync::oneshot::Sender<()>>,
+    mock_embedding_abort: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 /// Default auth headers for test requests.
@@ -95,34 +101,84 @@ fn test_auth_headers() -> reqwest::header::HeaderMap {
 }
 
 impl TestContext {
-    /// Create a Smoke E2E context.
-    ///
-    /// - Real PG (docker container)
-    /// - Real local Object Store (TempDir)
-    /// - LLM/Search/Embedding pointed at local stubs (TODO: implement mock server)
-    /// - HTTP server on ephemeral port
-    /// - Worker process polling for ingestion tasks
+    /// Create a Smoke E2E context (no RAG).
     pub async fn new_smoke() -> Self {
+        Self::build_smoke(false).await
+    }
+
+    /// Create a Smoke E2E context with RAG enabled (Milvus + mock embedding/LLM).
+    pub async fn new_smoke_with_rag() -> Self {
+        Self::build_smoke(true).await
+    }
+
+    async fn build_smoke(enable_rag: bool) -> Self {
         // 1. Start Postgres
         let pg_url = setup::start_postgres().await.expect("start postgres");
         let pg_container_name = format!("avrag-test-pg-{}", pg_url.rsplit(':').next().unwrap());
 
-        // 2. Temp object store
+        // 2. Start Milvus if RAG enabled
+        let (milvus_url, milvus_container_name) = if enable_rag {
+            let url = setup::start_milvus().await.expect("start milvus");
+            let name = format!("avrag-test-milvus-{}", url.rsplit(':').next().unwrap());
+            (Some(url), Some(name))
+        } else {
+            (None, None)
+        };
+
+        // 3. Temp object store
         let object_store_dir = setup::create_temp_object_store();
         let object_root = object_store_dir.path().to_string_lossy().to_string();
 
-        // 3. Set env vars for AppConfig
+        // 4. Start mock servers if RAG enabled
+        let (mock_llm_url, mock_llm_abort) = if enable_rag {
+            let (url, abort) = start_mock_llm_server().await;
+            (Some(url), Some(abort))
+        } else {
+            (None, None)
+        };
+        let (mock_embedding_url, mock_embedding_abort) = if enable_rag {
+            let (url, abort) = start_mock_embedding_server().await;
+            (Some(url), Some(abort))
+        } else {
+            (None, None)
+        };
+
+        // 5. Set env vars for AppConfig
         unsafe {
             std::env::set_var("DATABASE_URL", &pg_url);
             std::env::set_var("AVRAG_RUN_MIGRATIONS", "true");
             std::env::set_var("AVRAG_OBJECT_ROOT", &object_root);
-            std::env::set_var("AVRAG_ENABLE_RAG", "false");
+            std::env::set_var("AVRAG_ENABLE_RAG", if enable_rag { "true" } else { "false" });
             std::env::set_var("REDIS_URL", ""); // disable Redis
             std::env::set_var("AVRAG_PUBLIC_BASE_URL", "http://127.0.0.1:8080");
-        }
-        // TODO: point LLM/Search/Embedding at mock server once implemented
 
-        // 4. Bootstrap AppState and start HTTP server
+            if let Some(ref url) = milvus_url {
+                std::env::set_var("MILVUS_URL", url);
+                std::env::set_var("MILVUS_TOKEN", "");
+                std::env::set_var("MILVUS_DATABASE", "default");
+                // Fixed prefix for reproducible debugging
+                let prefix = "avrag_e2e_test".to_string();
+                std::env::set_var("MILVUS_COLLECTION_PREFIX", &prefix);
+            }
+            if let Some(ref url) = mock_llm_url {
+                std::env::set_var("AGENT_LLM_BASE_URL", url);
+                std::env::set_var("AGENT_LLM_API_KEY", "mock");
+                std::env::set_var("AGENT_LLM_MODEL", "mock-llm");
+                std::env::set_var("MEMORY_LLM_BASE_URL", url);
+                std::env::set_var("MEMORY_LLM_API_KEY", "mock");
+                std::env::set_var("MEMORY_LLM_MODEL", "mock-llm");
+                std::env::set_var("INGESTION_LLM_BASE_URL", url);
+                std::env::set_var("INGESTION_LLM_API_KEY", "mock");
+                std::env::set_var("INGESTION_LLM_MODEL", "mock-llm");
+            }
+            if let Some(ref url) = mock_embedding_url {
+                std::env::set_var("EMBEDDING_BASE_URL", url);
+                std::env::set_var("EMBEDDING_API_KEY", "mock");
+                std::env::set_var("EMBEDDING_MODEL", "mock-embedding");
+            }
+        }
+
+        // 6. Bootstrap AppState and start HTTP server
         let config = app::AppConfig::from_env();
         let state = app::AppState::bootstrap(config.clone()).await.expect("bootstrap AppState");
 
@@ -139,22 +195,45 @@ impl TestContext {
             }
         });
 
-        // 5. Start worker process
+        // 7. Start worker process
         let worker_binary = setup::find_worker_binary().await.expect("find worker binary");
-        let worker = tokio::process::Command::new(&worker_binary)
-            .env("DATABASE_URL", &pg_url)
-            .env("AVRAG_RUN_MIGRATIONS", "false") // already migrated by bootstrap
+        let mut cmd = tokio::process::Command::new(&worker_binary);
+        cmd.env("DATABASE_URL", &pg_url)
+            .env("AVRAG_RUN_MIGRATIONS", "false")
             .env("AVRAG_OBJECT_ROOT", &object_root)
-            .env("AVRAG_ENABLE_RAG", "false")
+            .env("AVRAG_ENABLE_RAG", if enable_rag { "true" } else { "false" })
             .env("REDIS_URL", "")
             .env("AVRAG_PUBLIC_BASE_URL", &base_url)
             .env("AVRAG_WORKER_ID", "test-worker")
             .env("AVRAG_WORKER_POLL_SECS", "1")
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .expect("spawn worker");
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .kill_on_drop(true);
+
+        if let Some(ref url) = milvus_url {
+            cmd.env("MILVUS_URL", url)
+               .env("MILVUS_TOKEN", "")
+               .env("MILVUS_DATABASE", "default")
+               .env("MILVUS_COLLECTION_PREFIX", std::env::var("MILVUS_COLLECTION_PREFIX").unwrap_or_default());
+        }
+        if let Some(ref url) = mock_llm_url {
+            cmd.env("AGENT_LLM_BASE_URL", url)
+               .env("AGENT_LLM_API_KEY", "mock")
+               .env("AGENT_LLM_MODEL", "mock-llm")
+               .env("MEMORY_LLM_BASE_URL", url)
+               .env("MEMORY_LLM_API_KEY", "mock")
+               .env("MEMORY_LLM_MODEL", "mock-llm")
+               .env("INGESTION_LLM_BASE_URL", url)
+               .env("INGESTION_LLM_API_KEY", "mock")
+               .env("INGESTION_LLM_MODEL", "mock-llm");
+        }
+        if let Some(ref url) = mock_embedding_url {
+            cmd.env("EMBEDDING_BASE_URL", url)
+               .env("EMBEDDING_API_KEY", "mock")
+               .env("EMBEDDING_MODEL", "mock-embedding");
+        }
+
+        let worker = cmd.spawn().expect("spawn worker");
 
         // Give worker a moment to start
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -169,9 +248,12 @@ impl TestContext {
             http_client: client,
             base_url,
             pg_container_name,
+            milvus_container_name,
             worker: Some(worker),
             server_abort: Some(abort_tx),
             object_store_dir,
+            mock_llm_abort,
+            mock_embedding_abort,
         }
     }
 
@@ -247,6 +329,7 @@ impl TestContext {
 
         Ok(UploadResponse {
             document_id,
+            notebook_id: notebook.id,
             upload_url: String::new(),
             status: 202,
         })
@@ -288,6 +371,7 @@ impl TestContext {
     pub async fn chat(
         &self,
         query: &str,
+        notebook_id: &str,
         doc_scope: &[String],
     ) -> anyhow::Result<HttpResponse> {
         let resp = self
@@ -296,6 +380,7 @@ impl TestContext {
             .json(&serde_json::json!({
                 "query": query,
                 "agent_type": "rag",
+                "notebook_id": notebook_id,
                 "doc_scope": doc_scope,
                 "stream": false,
             }))
@@ -326,6 +411,13 @@ impl Drop for TestContext {
         if let Some(tx) = self.server_abort.take() {
             let _ = tx.send(());
         }
+        // Stop mock servers
+        if let Some(tx) = self.mock_llm_abort.take() {
+            let _ = tx.send(());
+        }
+        if let Some(tx) = self.mock_embedding_abort.take() {
+            let _ = tx.send(());
+        }
         // Stop Postgres container — fire-and-forget
         let container = self.pg_container_name.clone();
         let _ = std::thread::spawn(move || {
@@ -334,5 +426,104 @@ impl Drop for TestContext {
                 setup::stop_postgres(&container).await;
             });
         });
+        // Stop Milvus container — fire-and-forget
+        if let Some(ref container) = self.milvus_container_name {
+            let c = container.clone();
+            let _ = std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async {
+                    setup::stop_milvus(&c).await;
+                });
+            });
+        }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Mock servers
+// ---------------------------------------------------------------------------
+
+/// Start a mock LLM HTTP server on an ephemeral port.
+///
+/// Returns (base_url, abort_sender).
+async fn start_mock_llm_server() -> (String, tokio::sync::oneshot::Sender<()>) {
+    let app = Router::new()
+        .route("/chat/completions", post(mock_llm_handler));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind mock llm");
+    let port = listener.local_addr().unwrap().port();
+    let base_url = format!("http://127.0.0.1:{port}");
+
+    let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
+    tokio::spawn(async move {
+        let server = axum::serve(listener, app);
+        tokio::select! {
+            _ = server => {},
+            _ = abort_rx => {},
+        }
+    });
+
+    (base_url, abort_tx)
+}
+
+/// Start a mock Embedding HTTP server on an ephemeral port.
+///
+/// Returns (base_url, abort_sender).
+async fn start_mock_embedding_server() -> (String, tokio::sync::oneshot::Sender<()>) {
+    let app = Router::new()
+        .route("/embeddings", post(mock_embedding_handler));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind mock embedding");
+    let port = listener.local_addr().unwrap().port();
+    let base_url = format!("http://127.0.0.1:{port}");
+
+    let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
+    tokio::spawn(async move {
+        let server = axum::serve(listener, app);
+        tokio::select! {
+            _ = server => {},
+            _ = abort_rx => {},
+        }
+    });
+
+    (base_url, abort_tx)
+}
+
+async fn mock_llm_handler(Json(req): Json<serde_json::Value>) -> Json<serde_json::Value> {
+    let system_prompt = req["messages"]
+        .as_array()
+        .and_then(|msgs| msgs.first())
+        .and_then(|m| m["content"].as_str())
+        .unwrap_or("");
+
+    let content = if system_prompt.contains("Context OS RAG retrieval planner") {
+        r#"{"calls": [{"tool": "dense_retrieval", "version": "1.0", "args": {"queries": ["antifragility Taleb summary"], "modality": "text", "top_k": 10}}], "next_step": "answer"}"#
+    } else if system_prompt.contains("Context OS retrieval coverage evaluator") {
+        r#"{"decision": "sufficient", "dimensions": [{"name": "coverage", "attempted": true, "covered": true, "retrieved_count": 3, "query_ids": ["q1"], "status": "covered_strong"}], "next_actions": [], "reasoning": "good"}"#
+    } else if system_prompt.contains("Context OS RAG answer agent") {
+        "Based on the document, antifragility is a property of systems that increase in capability, resilience, or robustness as a result of stressors, shocks, volatility, noise, mistakes, faults, attacks, or failures. The concept was developed by Nassim Nicholas Taleb."
+    } else {
+        // Summary generation fallback
+        "This document discusses antifragility, a concept by Nassim Nicholas Taleb describing systems that benefit from shock and disorder."
+    };
+
+    Json(json!({
+        "choices": [{"message": {"role": "assistant", "content": content}}],
+        "usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+        "model": "mock-llm"
+    }))
+}
+
+async fn mock_embedding_handler(Json(req): Json<serde_json::Value>) -> Json<serde_json::Value> {
+    let texts = req["input"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    let dim = req["dimensions"].as_u64().unwrap_or(1024) as usize;
+    // All vectors identical so dense retrieval always returns high similarity.
+    let vec: Vec<f32> = (0..dim).map(|j| 0.1_f32 + (j % 10) as f32 * 0.01).collect();
+    let data: Vec<serde_json::Value> = texts.iter().map(|_| json!({"embedding": vec})).collect();
+
+    Json(json!({ "data": data, "model": "mock-embedding" }))
 }

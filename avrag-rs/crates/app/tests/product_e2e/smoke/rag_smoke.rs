@@ -5,9 +5,8 @@ use std::time::Duration;
 use crate::product_e2e::{assertions::*, ChatResponse, DocumentStatus, HttpResponse, TestContext};
 
 #[tokio::test]
-#[ignore = "Phase 1 — requires TestContext::chat + working RAG pipeline"]
 async fn rag_document_qa_returns_citation() {
-    let ctx = TestContext::new_smoke().await;
+    let ctx = TestContext::new_smoke_with_rag().await;
 
     // 1. Upload document
     let upload = ctx.upload_document("antifragile.txt").await.unwrap();
@@ -15,14 +14,14 @@ async fn rag_document_qa_returns_citation() {
 
     // 2. Wait for ingestion
     let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(30))
+        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
         .await
         .unwrap();
     assert_eq!(status, DocumentStatus::Completed);
 
     // 3. Chat — returns HttpResponse (protocol layer)
     let http_resp: HttpResponse = ctx
-        .chat("What is antifragility?", &[upload.document_id.clone()])
+        .chat("What is antifragility?", &upload.notebook_id, &[upload.document_id.clone()])
         .await
         .unwrap();
 

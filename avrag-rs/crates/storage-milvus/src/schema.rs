@@ -415,21 +415,45 @@ pub fn schema_fields(schema: &Value) -> Option<&Vec<Value>> {
 }
 
 pub fn describe_schema_fields(response: &Value) -> Option<&Vec<Value>> {
-    response["data"]["schema"]["fields"].as_array()
+    // Milvus v2.4: data.schema.fields
+    // Milvus v2.6+: data.fields
+    response["data"]["schema"]["fields"]
+        .as_array()
+        .or_else(|| response["data"]["fields"].as_array())
 }
 
 pub fn field_name(field: &Value) -> Option<&str> {
-    field["fieldName"].as_str()
+    // Milvus v2.4: fieldName
+    // Milvus v2.6+: name
+    field["fieldName"].as_str().or_else(|| field["name"].as_str())
 }
 
 pub fn field_data_type(field: &Value) -> Option<String> {
-    field["dataType"].as_str().map(|s| s.to_string())
+    // Milvus v2.4: dataType
+    // Milvus v2.6+: type
+    field["dataType"]
+        .as_str()
+        .or_else(|| field["type"].as_str())
+        .map(|s| s.to_string())
 }
 
 pub fn field_dim(field: &Value) -> Option<usize> {
+    // Milvus v2.4: elementTypeParams.dim (object)
+    // Milvus v2.6+: params array [{"key":"dim","value":"1024"}]
     field["elementTypeParams"]["dim"]
         .as_i64()
         .or_else(|| field["elementTypeParams"]["max_length"].as_i64())
+        .or_else(|| {
+            field["params"].as_array().and_then(|arr| {
+                arr.iter().find_map(|p| {
+                    if p["key"].as_str()? == "dim" || p["key"].as_str()? == "max_length" {
+                        p["value"].as_str()?.parse::<i64>().ok()
+                    } else {
+                        None
+                    }
+                })
+            })
+        })
         .map(|v| v as usize)
 }
 
