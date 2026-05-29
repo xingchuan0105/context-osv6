@@ -80,16 +80,15 @@ pub fn assert_answer_has_doc_citation(resp: &ChatResponse) {
     );
 }
 
-/// Assert at least one citation has doc_id == "web" (web search citation).
+/// Assert at least one citation comes from web search (layer == "search").
 ///
-/// TODO: production Citation schema may need a `source_type` field.
-/// Until then, this assertion uses a convention: web citations use doc_id "web".
+/// Search mode sets `Citation.layer` to `"search"` and `doc_id` to the source URL.
 pub fn assert_answer_has_web_citation(resp: &ChatResponse) {
-    let has_web = resp.citations.iter().any(|c| c.doc_id == "web");
+    let has_web = resp.citations.iter().any(|c| c.layer.as_deref() == Some("search"));
     assert!(
         has_web,
-        "expected at least one web citation, got doc_ids: {:?}",
-        resp.citations.iter().map(|c| &c.doc_id).collect::<Vec<_>>()
+        "expected at least one web citation (layer == 'search'), got citations: {:?}",
+        resp.citations
     );
 }
 

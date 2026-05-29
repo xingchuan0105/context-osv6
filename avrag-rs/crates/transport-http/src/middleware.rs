@@ -343,6 +343,12 @@ fn auth_from_proxy_headers(headers: &HeaderMap) -> Option<AuthContext> {
     if let Some(actor) = user_id {
         ctx = ctx.with_actor_id(actor);
     }
+    // Support x-permissions header for testing and internal routing.
+    if let Some(perms) = headers.get("x-permissions").and_then(|v| v.to_str().ok()) {
+        for perm in perms.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            ctx = ctx.grant(perm);
+        }
+    }
     Some(ctx)
 }
 

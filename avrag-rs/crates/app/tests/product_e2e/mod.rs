@@ -90,6 +90,7 @@ pub struct TestContext {
     object_store_dir: tempfile::TempDir,
     mock_llm_abort: Option<tokio::sync::oneshot::Sender<()>>,
     mock_embedding_abort: Option<tokio::sync::oneshot::Sender<()>>,
+    mock_search_abort: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 /// Default auth headers for test requests.
@@ -97,6 +98,7 @@ fn test_auth_headers() -> reqwest::header::HeaderMap {
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert("x-org-id", "00000000-0000-0000-0000-000000000001".parse().unwrap());
     headers.insert("x-user-id", "00000000-0000-0000-0000-000000000001".parse().unwrap());
+    headers.insert("x-permissions", "external_network".parse().unwrap());
     headers
 }
 
@@ -129,13 +131,13 @@ impl TestContext {
         let object_store_dir = setup::create_temp_object_store();
         let object_root = object_store_dir.path().to_string_lossy().to_string();
 
-        // 4. Start mock servers if RAG enabled
-        let (mock_llm_url, mock_llm_abort) = if enable_rag {
-            let (url, abort) = start_mock_llm_server().await;
-            (Some(url), Some(abort))
-        } else {
-            (None, None)
-        };
+        // 4. Start mock LLM (always — needed by Search and RAG)
+        let (mock_llm_url, mock_llm_abort) = start_mock_llm_server().await;
+
+        // 5. Start mock Search (always — needed by Search tests)
+        let (mock_search_url, mock_search_abort) = start_mock_search_server().await;
+
+        // 6. Start mock Embedding if RAG enabled
         let (mock_embedding_url, mock_embedding_abort) = if enable_rag {
             let (url, abort) = start_mock_embedding_server().await;
             (Some(url), Some(abort))
@@ -160,17 +162,22 @@ impl TestContext {
                 let prefix = "avrag_e2e_test".to_string();
                 std::env::set_var("MILVUS_COLLECTION_PREFIX", &prefix);
             }
-            if let Some(ref url) = mock_llm_url {
-                std::env::set_var("AGENT_LLM_BASE_URL", url);
-                std::env::set_var("AGENT_LLM_API_KEY", "mock");
-                std::env::set_var("AGENT_LLM_MODEL", "mock-llm");
-                std::env::set_var("MEMORY_LLM_BASE_URL", url);
-                std::env::set_var("MEMORY_LLM_API_KEY", "mock");
-                std::env::set_var("MEMORY_LLM_MODEL", "mock-llm");
-                std::env::set_var("INGESTION_LLM_BASE_URL", url);
-                std::env::set_var("INGESTION_LLM_API_KEY", "mock");
-                std::env::set_var("INGESTION_LLM_MODEL", "mock-llm");
-            }
+            // LLM config (always)
+            std::env::set_var("AGENT_LLM_BASE_URL", &mock_llm_url);
+            std::env::set_var("AGENT_LLM_API_KEY", "mock");
+            std::env::set_var("AGENT_LLM_MODEL", "mock-llm");
+            std::env::set_var("MEMORY_LLM_BASE_URL", &mock_llm_url);
+            std::env::set_var("MEMORY_LLM_API_KEY", "mock");
+            std::env::set_var("MEMORY_LLM_MODEL", "mock-llm");
+            std::env::set_var("INGESTION_LLM_BASE_URL", &mock_llm_url);
+            std::env::set_var("INGESTION_LLM_API_KEY", "mock");
+            std::env::set_var("INGESTION_LLM_MODEL", "mock-llm");
+
+            // Search config (always)
+            std::env::set_var("SEARCH_PROVIDER", "brave_llm_context");
+            std::env::set_var("SEARCH_BASE_URL", &mock_search_url);
+            std::env::set_var("SEARCH_API_KEY", "mock");
+
             if let Some(ref url) = mock_embedding_url {
                 std::env::set_var("EMBEDDING_BASE_URL", url);
                 std::env::set_var("EMBEDDING_API_KEY", "mock");
@@ -216,17 +223,20 @@ impl TestContext {
                .env("MILVUS_DATABASE", "default")
                .env("MILVUS_COLLECTION_PREFIX", std::env::var("MILVUS_COLLECTION_PREFIX").unwrap_or_default());
         }
-        if let Some(ref url) = mock_llm_url {
-            cmd.env("AGENT_LLM_BASE_URL", url)
-               .env("AGENT_LLM_API_KEY", "mock")
-               .env("AGENT_LLM_MODEL", "mock-llm")
-               .env("MEMORY_LLM_BASE_URL", url)
-               .env("MEMORY_LLM_API_KEY", "mock")
-               .env("MEMORY_LLM_MODEL", "mock-llm")
-               .env("INGESTION_LLM_BASE_URL", url)
-               .env("INGESTION_LLM_API_KEY", "mock")
-               .env("INGESTION_LLM_MODEL", "mock-llm");
-        }
+        // Worker always gets LLM + Search env vars
+        cmd.env("AGENT_LLM_BASE_URL", &mock_llm_url)
+           .env("AGENT_LLM_API_KEY", "mock")
+           .env("AGENT_LLM_MODEL", "mock-llm")
+           .env("MEMORY_LLM_BASE_URL", &mock_llm_url)
+           .env("MEMORY_LLM_API_KEY", "mock")
+           .env("MEMORY_LLM_MODEL", "mock-llm")
+           .env("INGESTION_LLM_BASE_URL", &mock_llm_url)
+           .env("INGESTION_LLM_API_KEY", "mock")
+           .env("INGESTION_LLM_MODEL", "mock-llm")
+           .env("SEARCH_PROVIDER", "brave_llm_context")
+           .env("SEARCH_BASE_URL", &mock_search_url)
+           .env("SEARCH_API_KEY", "mock");
+
         if let Some(ref url) = mock_embedding_url {
             cmd.env("EMBEDDING_BASE_URL", url)
                .env("EMBEDDING_API_KEY", "mock")
@@ -252,8 +262,9 @@ impl TestContext {
             worker: Some(worker),
             server_abort: Some(abort_tx),
             object_store_dir,
-            mock_llm_abort,
+            mock_llm_abort: Some(mock_llm_abort),
             mock_embedding_abort,
+            mock_search_abort: Some(mock_search_abort),
         }
     }
 
@@ -367,7 +378,7 @@ impl TestContext {
         }
     }
 
-    /// Send a chat query and return the raw HTTP response.
+    /// Send a RAG chat query and return the raw HTTP response.
     pub async fn chat(
         &self,
         query: &str,
@@ -382,6 +393,29 @@ impl TestContext {
                 "agent_type": "rag",
                 "notebook_id": notebook_id,
                 "doc_scope": doc_scope,
+                "stream": false,
+            }))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body_json = resp.json().await?;
+        Ok(HttpResponse { status, body_json })
+    }
+
+    /// Send a Search query and return the raw HTTP response.
+    pub async fn search(
+        &self,
+        query: &str,
+        notebook_id: &str,
+    ) -> anyhow::Result<HttpResponse> {
+        let resp = self
+            .http_client
+            .post(format!("{}/api/v1/chat", self.base_url))
+            .json(&serde_json::json!({
+                "query": query,
+                "agent_type": "search",
+                "notebook_id": notebook_id,
+                "doc_scope": Vec::<String>::new(),
                 "stream": false,
             }))
             .send()
@@ -416,6 +450,9 @@ impl Drop for TestContext {
             let _ = tx.send(());
         }
         if let Some(tx) = self.mock_embedding_abort.take() {
+            let _ = tx.send(());
+        }
+        if let Some(tx) = self.mock_search_abort.take() {
             let _ = tx.send(());
         }
         // Stop Postgres container — fire-and-forget
@@ -490,9 +527,13 @@ async fn start_mock_embedding_server() -> (String, tokio::sync::oneshot::Sender<
 }
 
 async fn mock_llm_handler(Json(req): Json<serde_json::Value>) -> Json<serde_json::Value> {
-    let system_prompt = req["messages"]
-        .as_array()
-        .and_then(|msgs| msgs.first())
+    let messages = req["messages"].as_array().cloned().unwrap_or_default();
+    let system_prompt = messages
+        .first()
+        .and_then(|m| m["content"].as_str())
+        .unwrap_or("");
+    let user_prompt = messages
+        .get(1)
         .and_then(|m| m["content"].as_str())
         .unwrap_or("");
 
@@ -502,6 +543,12 @@ async fn mock_llm_handler(Json(req): Json<serde_json::Value>) -> Json<serde_json
         r#"{"decision": "sufficient", "dimensions": [{"name": "coverage", "attempted": true, "covered": true, "retrieved_count": 3, "query_ids": ["q1"], "status": "covered_strong"}], "next_actions": [], "reasoning": "good"}"#
     } else if system_prompt.contains("Context OS RAG answer agent") {
         "Based on the document, antifragility is a property of systems that increase in capability, resilience, or robustness as a result of stressors, shocks, volatility, noise, mistakes, faults, attacks, or failures. The concept was developed by Nassim Nicholas Taleb."
+    } else if system_prompt.contains("Context OS Web Search planner") {
+        r#"{"sub_queries": ["Tokyo weather today"], "intent_summary": "The user wants to know the current weather in Tokyo.", "needs_clarification": false}"#
+    } else if system_prompt.contains("Context OS web-search coverage evaluator") {
+        r#"{"decision": "sufficient", "dimensions": [{"name": "coverage", "attempted": true, "covered": true, "retrieved_count": 1, "query_ids": ["q1"], "status": "covered_strong"}], "next_actions": [], "reasoning": "good"}"#
+    } else if system_prompt.contains("Answer the user's original web-search question") || user_prompt.contains("Search results:") {
+        "The weather in Tokyo today is sunny with a high of 25°C [[1]]."
     } else {
         // Summary generation fallback
         "This document discusses antifragility, a concept by Nassim Nicholas Taleb describing systems that benefit from shock and disorder."
@@ -526,4 +573,47 @@ async fn mock_embedding_handler(Json(req): Json<serde_json::Value>) -> Json<serd
     let data: Vec<serde_json::Value> = texts.iter().map(|_| json!({"embedding": vec})).collect();
 
     Json(json!({ "data": data, "model": "mock-embedding" }))
+}
+
+/// Start a mock Brave Search HTTP server on an ephemeral port.
+async fn start_mock_search_server() -> (String, tokio::sync::oneshot::Sender<()>) {
+    let app = Router::new()
+        .route("/res/v1/llm/context", post(mock_search_handler));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind mock search");
+    let port = listener.local_addr().unwrap().port();
+    let base_url = format!("http://127.0.0.1:{port}");
+
+    let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
+    tokio::spawn(async move {
+        let server = axum::serve(listener, app);
+        tokio::select! {
+            _ = server => {},
+            _ = abort_rx => {},
+        }
+    });
+
+    (base_url, abort_tx)
+}
+
+async fn mock_search_handler(Json(req): Json<serde_json::Value>) -> Json<serde_json::Value> {
+    let _query = req["q"].as_str().unwrap_or("unknown");
+    Json(json!({
+        "grounding": {
+            "generic": [
+                {
+                    "url": "https://example.com/weather-tokyo",
+                    "title": "Tokyo Weather Today",
+                    "snippets": ["Sunny with a high of 25°C in Tokyo today."]
+                }
+            ],
+            "map": []
+        },
+        "sources": {
+            "https://example.com/weather-tokyo": {
+                "title": "Tokyo Weather Today",
+                "hostname": "example.com"
+            }
+        }
+    }))
 }

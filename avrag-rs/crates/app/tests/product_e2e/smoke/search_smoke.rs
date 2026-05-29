@@ -3,14 +3,12 @@
 use crate::product_e2e::{assertions::*, ChatResponse, HttpResponse, TestContext};
 
 #[tokio::test]
-#[ignore = "Phase 1 — requires Mock Search provider injection + working Search strategy"]
 async fn open_query_returns_web_citation() {
     let ctx = TestContext::new_smoke().await;
 
-    // Query with empty doc_scope forces Search path (no documents to RAG over)
     let notebook = ctx.create_notebook("test-notebook").await.unwrap();
     let http_resp: HttpResponse = ctx
-        .chat("What is the weather in Tokyo today?", &notebook.id, &[])
+        .search("What is the weather in Tokyo today?", &notebook.id)
         .await
         .unwrap();
 
