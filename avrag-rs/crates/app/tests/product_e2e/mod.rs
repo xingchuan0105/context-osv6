@@ -17,6 +17,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use axum::{response::IntoResponse, routing::post, Json, Router};
+use tokio::io::AsyncBufReadExt;
+use tokio::io::AsyncWriteExt;
 use serde_json::json;
 
 // ---------------------------------------------------------------------------
@@ -94,6 +96,7 @@ pub struct TestContext {
     mock_embedding_abort: Option<tokio::sync::oneshot::Sender<()>>,
     mock_search_abort: Option<tokio::sync::oneshot::Sender<()>>,
     search_should_429: Option<Arc<AtomicBool>>,
+    worker_log_path: Option<std::path::PathBuf>,
 }
 
 /// Default auth headers for test requests.
@@ -207,6 +210,7 @@ impl TestContext {
 
         // 7. Start worker process
         let worker_binary = setup::find_worker_binary().await.expect("find worker binary");
+        let worker_log_path = object_store_dir.path().join("worker.log");
         let mut cmd = tokio::process::Command::new(&worker_binary);
         cmd.env("DATABASE_URL", &pg_url)
             .env("AVRAG_RUN_MIGRATIONS", "false")
@@ -216,8 +220,8 @@ impl TestContext {
             .env("AVRAG_PUBLIC_BASE_URL", &base_url)
             .env("AVRAG_WORKER_ID", "test-worker")
             .env("AVRAG_WORKER_POLL_SECS", "1")
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
 
         if let Some(ref url) = milvus_url {
@@ -246,7 +250,37 @@ impl TestContext {
                .env("EMBEDDING_MODEL", "mock-embedding");
         }
 
-        let worker = cmd.spawn().expect("spawn worker");
+        let mut worker = cmd.spawn().expect("spawn worker");
+
+        // Drain worker stdout/stderr into a log file for failure artifact capture.
+        let log_path = worker_log_path.clone();
+        if let Some(stdout) = worker.stdout.take() {
+            let mut reader = tokio::io::BufReader::new(stdout).lines();
+            tokio::spawn(async move {
+                let mut file = match tokio::fs::File::create(&log_path).await {
+                    Ok(f) => f,
+                    Err(_) => return,
+                };
+                while let Ok(Some(line)) = reader.next_line().await {
+                    let _ = file.write_all(line.as_bytes()).await;
+                    let _ = file.write_all(b"\n").await;
+                }
+            });
+        }
+        if let Some(stderr) = worker.stderr.take() {
+            let log_path = worker_log_path.clone();
+            let mut reader = tokio::io::BufReader::new(stderr).lines();
+            tokio::spawn(async move {
+                let mut file = match tokio::fs::OpenOptions::new().append(true).create(true).open(&log_path).await {
+                    Ok(f) => f,
+                    Err(_) => return,
+                };
+                while let Ok(Some(line)) = reader.next_line().await {
+                    let _ = file.write_all(line.as_bytes()).await;
+                    let _ = file.write_all(b"\n").await;
+                }
+            });
+        }
 
         // Give worker a moment to start
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -269,6 +303,7 @@ impl TestContext {
             mock_embedding_abort,
             mock_search_abort: Some(mock_search_abort),
             search_should_429: Some(search_should_429),
+            worker_log_path: Some(worker_log_path),
         }
     }
 
@@ -449,8 +484,34 @@ impl TestContext {
     }
 
     /// Save debugging artifacts on test failure.
-    pub fn save_failure_artifacts(&self, _test_name: &str) {
-        // TODO(Phase 4): implement
+    pub fn save_failure_artifacts(
+        &self,
+        test_name: &str,
+        response_json: Option<&serde_json::Value>,
+    ) {
+        let now = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+        let short_commit = option_env!("GITHUB_SHA")
+            .map(|s| &s[..s.len().min(8)])
+            .unwrap_or("local");
+        let run_id = format!("e2e_{now}_{short_commit}");
+        let out_dir = std::path::PathBuf::from(
+            env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("e2e_output")
+            .join(&run_id)
+            .join(test_name);
+
+        let _ = std::fs::create_dir_all(&out_dir);
+
+        if let Some(body) = response_json {
+            let _ = std::fs::write(out_dir.join("response_body.json"), serde_json::to_string_pretty(body).unwrap_or_default());
+        }
+
+        if let Some(ref log_path) = self.worker_log_path {
+            if log_path.exists() {
+                let _ = std::fs::copy(log_path, out_dir.join("worker_logs.txt"));
+            }
+        }
     }
 }
 
