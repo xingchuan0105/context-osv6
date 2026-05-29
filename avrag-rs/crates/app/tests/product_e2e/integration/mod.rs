@@ -3,5 +3,6 @@
 pub mod bad_file;
 pub mod concurrent_query;
 pub mod duplicate_upload;
+pub mod format_output;
 pub mod ingestion_full;
 pub mod multi_doc;
