@@ -493,9 +493,37 @@ async fn search_429_returns_degraded_answer() {
 
 ---
 
-## 10. 下一步行动
+## 10. 实现注记（冻结后首批代码评审关注项）
 
-1. **评审本文档** — 确认分层矩阵、验收标准、用例范围
+### 10.1 `degrade_trace.reason` 枚举化
+
+文档定义了 `reason: String`，但实现时**必须**使用强类型枚举，避免字符串拼写漂移：
+
+```rust
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DegradeReason {
+    EmptyDocument,
+    Search429,
+    SearchTimeout,
+    EmbeddingUnavailable,
+    LexicalFallback,
+    // ... 新增原因需同步更新此枚举和文档
+}
+```
+
+### 10.2 Search 路由触发条件稳定化
+
+Smoke P0-3（Search 问答）依赖 query 能稳定触发 Search 策略。实现时要求：
+- 要么通过 `doc_scope: []`（无文档范围）强制走 Search 路径
+- 要么在 Mock LLM 的 prompt 响应中固定返回 `"needs_search": true`
+- **禁止**依赖自然语言路由判定（如 query 含"天气""新闻"等关键词），避免 LLM 抖动导致偶发漂移
+
+---
+
+## 11. 下一步行动
+
+1. ~~**评审本文档** — 已完成~~
 2. **创建 GitHub Issue** — 按 Phase 拆解任务，标记 `good first issue`
 3. **Phase 0 开工** — 目录结构 + TestContext + MockRegistry
 4. **现有测试更名** — `e2e_*.rs` → `agent_strategy_*.rs`（避免混淆）
