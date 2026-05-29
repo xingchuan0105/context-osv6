@@ -49,3 +49,4 @@ axum = { version = "0.8", features = ["macros"] }
 tempfile = "3"
 tokio = { workspace = true, features = ["process"] }
 transport-http = { path = "../transport-http" }
+sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio"] }

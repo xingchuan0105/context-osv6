@@ -17,6 +17,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use axum::{response::IntoResponse, routing::post, Json, Router};
+use uuid::Uuid;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::AsyncWriteExt;
 use serde_json::json;
@@ -92,6 +93,7 @@ pub struct TestContext {
     server_abort: Option<tokio::sync::oneshot::Sender<()>>,
     #[allow(dead_code)]
     object_store_dir: tempfile::TempDir,
+    pg_url: String,
     mock_llm_abort: Option<tokio::sync::oneshot::Sender<()>>,
     mock_embedding_abort: Option<tokio::sync::oneshot::Sender<()>>,
     mock_search_abort: Option<tokio::sync::oneshot::Sender<()>>,
@@ -299,6 +301,7 @@ impl TestContext {
             worker: Some(worker),
             server_abort: Some(abort_tx),
             object_store_dir,
+            pg_url,
             mock_llm_abort: Some(mock_llm_abort),
             mock_embedding_abort,
             mock_search_abort: Some(mock_search_abort),
@@ -475,6 +478,33 @@ impl TestContext {
     // -----------------------------------------------------------------------
     // Failure artifact capture
     // -----------------------------------------------------------------------
+
+    /// Override the ingestion task max_attempts for a document.
+    ///
+    /// Useful in failure-scenario tests where we want a parser error to
+    /// dead-letter immediately instead of waiting through the full retry
+    /// backoff chain (≈ 7.5 min with default max_attempts=5).
+    pub async fn set_ingestion_max_attempts(
+        &self,
+        document_id: &str,
+        max_attempts: i32,
+    ) -> anyhow::Result<()> {
+        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
+        let doc_id = Uuid::parse_str(document_id)?;
+        sqlx::query(
+            r#"
+            update ingestion_tasks
+            set max_attempts = $1,
+                updated_at = now()
+            where document_id = $2
+            "#,
+        )
+        .bind(max_attempts.max(1))
+        .bind(doc_id)
+        .execute(&pool)
+        .await?;
+        Ok(())
+    }
 
     /// Toggle mock search server to return 429 (rate limit).
     pub fn set_search_429(&self, value: bool) {
