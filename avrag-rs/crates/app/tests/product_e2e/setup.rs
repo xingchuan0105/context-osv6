@@ -1,33 +1,84 @@
-//! Testcontainers orchestration for Product E2E.
+//! Test infrastructure setup — Docker-based Postgres + ephemeral HTTP server + worker spawn.
 //!
-//! Smoke and Integration both use real infrastructure:
-//! - PostgreSQL (Testcontainers)
-//! - Milvus Standalone (Testcontainers)
-//! - Local filesystem object store (TempDir via ObjectStore trait)
-//!
-//! TODO(Phase 2): implement container lifecycle.
+//! Design: minimal external dependencies (no testcontainers crate), uses docker CLI directly.
 
 use std::path::Path;
+use std::process::Stdio;
+use std::time::Duration;
 
-/// Start PostgreSQL container and return connection URL.
+/// Start a Postgres container via docker and return its connection URL.
+///
+/// Container is named `avrag-test-pg-{port}` and auto-removed on stop.
 pub async fn start_postgres() -> anyhow::Result<String> {
-    // TODO(Phase 2): use testcontainers::postgres
-    Ok("postgres://test:test@localhost:5432/test".to_string())
+    let port = find_ephemeral_port()?;
+    let container_name = format!("avrag-test-pg-{port}");
+
+    let output = tokio::process::Command::new("docker")
+        .args([
+            "run",
+            "-d",
+            "--rm",
+            "--name",
+            &container_name,
+            "-e",
+            "POSTGRES_USER=test",
+            "-e",
+            "POSTGRES_PASSWORD=test",
+            "-e",
+            "POSTGRES_DB=test",
+            "-p",
+            &format!("{port}:5432"),
+            "postgres:16-alpine",
+        ])
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("docker run postgres failed: {stderr}");
+    }
+
+    let url = format!("postgres://test:test@127.0.0.1:{port}/test");
+    wait_for_postgres(&url, &container_name).await?;
+    Ok(url)
 }
 
-/// Start Milvus standalone container and return gRPC/HTTP URLs.
-pub async fn start_milvus() -> anyhow::Result<MilvusEndpoints> {
-    // TODO(Phase 2): use testcontainers::generic_image for milvus
-    Ok(MilvusEndpoints {
-        grpc: "localhost:19530".to_string(),
-        http: "http://localhost:19530".to_string(),
-    })
+/// Stop a Postgres container by name.
+pub async fn stop_postgres(container_name: &str) {
+    let _ = tokio::process::Command::new("docker")
+        .args(["stop", "-t", "3", container_name])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .await;
 }
 
-/// Milvus connection endpoints.
-pub struct MilvusEndpoints {
-    pub grpc: String,
-    pub http: String,
+async fn wait_for_postgres(url: &str, container_name: &str) -> anyhow::Result<()> {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        match avrag_storage_pg::PgAppRepository::connect(url).await {
+            Ok(repo) => {
+                if repo.ping().await.is_ok() {
+                    return Ok(());
+                }
+            }
+            Err(_) if tokio::time::Instant::now() < deadline => {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+            Err(e) => {
+                let _ = stop_postgres(container_name).await;
+                anyhow::bail!("postgres did not become ready in 30s: {e}");
+            }
+        }
+    }
+}
+
+fn find_ephemeral_port() -> anyhow::Result<u16> {
+    use std::net::TcpListener;
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    let port = listener.local_addr()?.port();
+    drop(listener);
+    Ok(port)
 }
 
 /// Create a temporary object store directory.
@@ -42,4 +93,40 @@ pub fn load_fixture(name: &str) -> anyhow::Result<String> {
         .join(name);
     std::fs::read_to_string(&path)
         .map_err(|e| anyhow::anyhow!("failed to read fixture {}: {}", path.display(), e))
+}
+
+/// Find the compiled worker binary path.
+///
+/// Tries `target/debug/avrag-worker` first, then falls back to `cargo build -p avrag-worker`.
+pub async fn find_worker_binary() -> anyhow::Result<std::path::PathBuf> {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let candidate = manifest_dir
+        .join("../../../target/debug/avrag-worker");
+    if candidate.exists() {
+        return Ok(candidate);
+    }
+    let candidate2 = manifest_dir
+        .join("../../target/debug/avrag-worker");
+    if candidate2.exists() {
+        return Ok(candidate2);
+    }
+
+    // Build it
+    let status = tokio::process::Command::new("cargo")
+        .args(["build", "-p", "avrag-worker"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .await?;
+    if !status.success() {
+        anyhow::bail!("cargo build -p avrag-worker failed");
+    }
+
+    if candidate.exists() {
+        Ok(candidate)
+    } else if candidate2.exists() {
+        Ok(candidate2)
+    } else {
+        anyhow::bail!("avrag-worker binary not found after build");
+    }
 }

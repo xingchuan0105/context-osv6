@@ -45,3 +45,7 @@ evalexpr.workspace = true
 avrag-code-interpreter = { path = "../code-interpreter" }
 
 [dev-dependencies]
+axum = { version = "0.8", features = ["macros"] }
+tempfile = "3"
+tokio = { workspace = true, features = ["process"] }
+transport-http = { path = "../transport-http" }

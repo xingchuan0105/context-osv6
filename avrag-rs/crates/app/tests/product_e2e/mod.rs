@@ -2,7 +2,7 @@
 //!
 //! Design principles:
 //! - HTTP black-box entry only — no direct Strategy/Runtime calls.
-//! - Smoke uses real PG + Milvus + local Object Store, mocks LLM/Search/Embedding.
+//! - Smoke uses real PG + local Object Store, mocks LLM/Search/Embedding via HTTP-level stubs.
 //! - Protocol assertions first, then deserialize to business types.
 
 pub mod assertions;
@@ -56,49 +56,127 @@ pub struct UploadResponse {
     pub status: u16,
 }
 
+/// Notebook creation response wrapper.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct NotebookResponse {
+    pub notebook: NotebookInner,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct NotebookInner {
+    pub id: String,
+    pub title: String,
+}
+
 // ---------------------------------------------------------------------------
-// TestContext skeleton
+// TestContext
 // ---------------------------------------------------------------------------
 
 /// Per-test execution context.
 ///
-/// Created via `TestContext::new_smoke().await` or `new_integration().await`.
-/// Automatically cleans up on drop (containers, temp dirs, worker process).
+/// Created via `TestContext::new_smoke().await`.
+/// Automatically cleans up on drop (containers, temp dirs, worker process, HTTP server).
 pub struct TestContext {
     pub http_client: reqwest::Client,
     pub base_url: String,
-    // TODO(Phase 1): add AppState, worker handle, mock registry
-    // TODO(Phase 2): add TestcontainerHandle for PG + Milvus
+    pg_container_name: String,
+    worker: Option<tokio::process::Child>,
+    server_abort: Option<tokio::sync::oneshot::Sender<()>>,
+    #[allow(dead_code)]
+    object_store_dir: tempfile::TempDir,
+}
+
+/// Default auth headers for test requests.
+fn test_auth_headers() -> reqwest::header::HeaderMap {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("x-org-id", "00000000-0000-0000-0000-000000000001".parse().unwrap());
+    headers.insert("x-user-id", "00000000-0000-0000-0000-000000000001".parse().unwrap());
+    headers
 }
 
 impl TestContext {
     /// Create a Smoke E2E context.
     ///
-    /// - Real PG (Testcontainers)
-    /// - Real Milvus (Testcontainers)
+    /// - Real PG (docker container)
     /// - Real local Object Store (TempDir)
-    /// - Mock LLM / Search / Embedding
+    /// - LLM/Search/Embedding pointed at local stubs (TODO: implement mock server)
+    /// - HTTP server on ephemeral port
+    /// - Worker process polling for ingestion tasks
     pub async fn new_smoke() -> Self {
+        // 1. Start Postgres
+        let pg_url = setup::start_postgres().await.expect("start postgres");
+        let pg_container_name = format!("avrag-test-pg-{}", pg_url.rsplit(':').next().unwrap());
+
+        // 2. Temp object store
+        let object_store_dir = setup::create_temp_object_store();
+        let object_root = object_store_dir.path().to_string_lossy().to_string();
+
+        // 3. Set env vars for AppConfig
+        unsafe {
+            std::env::set_var("DATABASE_URL", &pg_url);
+            std::env::set_var("AVRAG_RUN_MIGRATIONS", "true");
+            std::env::set_var("AVRAG_OBJECT_ROOT", &object_root);
+            std::env::set_var("AVRAG_ENABLE_RAG", "false");
+            std::env::set_var("REDIS_URL", ""); // disable Redis
+            std::env::set_var("AVRAG_PUBLIC_BASE_URL", "http://127.0.0.1:8080");
+        }
+        // TODO: point LLM/Search/Embedding at mock server once implemented
+
+        // 4. Bootstrap AppState and start HTTP server
+        let config = app::AppConfig::from_env();
+        let state = app::AppState::bootstrap(config.clone()).await.expect("bootstrap AppState");
+
+        let router = transport_http::build_router(state);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+
+        let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
+        tokio::spawn(async move {
+            let server = axum::serve(listener, router);
+            tokio::select! {
+                _ = server => {},
+                _ = abort_rx => {},
+            }
+        });
+
+        // 5. Start worker process
+        let worker_binary = setup::find_worker_binary().await.expect("find worker binary");
+        let worker = tokio::process::Command::new(&worker_binary)
+            .env("DATABASE_URL", &pg_url)
+            .env("AVRAG_RUN_MIGRATIONS", "false") // already migrated by bootstrap
+            .env("AVRAG_OBJECT_ROOT", &object_root)
+            .env("AVRAG_ENABLE_RAG", "false")
+            .env("REDIS_URL", "")
+            .env("AVRAG_PUBLIC_BASE_URL", &base_url)
+            .env("AVRAG_WORKER_ID", "test-worker")
+            .env("AVRAG_WORKER_POLL_SECS", "1")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .expect("spawn worker");
+
+        // Give worker a moment to start
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
+            .default_headers(test_auth_headers())
             .build()
             .expect("reqwest client build");
-
-        // TODO(Phase 0): start HTTP server on ephemeral port
-        // TODO(Phase 1): wire AppState with mock providers
-        let base_url = "http://127.0.0.1:0".to_string();
 
         Self {
             http_client: client,
             base_url,
+            pg_container_name,
+            worker: Some(worker),
+            server_abort: Some(abort_tx),
+            object_store_dir,
         }
     }
 
     /// Create an Integration context.
-    ///
-    /// Same infrastructure as Smoke, but may use semi-real LLM.
     pub async fn new_integration() -> Self {
-        // TODO(Phase 2): differentiate from smoke if needed
         Self::new_smoke().await
     }
 
@@ -106,30 +184,126 @@ impl TestContext {
     // HTTP helpers
     // -----------------------------------------------------------------------
 
-    /// Upload a fixture file and return the document ID.
-    pub async fn upload_document(&self, _fixture: &str) -> anyhow::Result<UploadResponse> {
-        // TODO(Phase 1): implement
-        todo!("upload_document")
+    /// Create a notebook and return its inner data.
+    pub async fn create_notebook(&self, name: &str) -> anyhow::Result<NotebookInner> {
+        let resp = self
+            .http_client
+            .post(format!("{}/api/v1/notebooks", self.base_url))
+            .json(&serde_json::json!({ "name": name, "description": "" }))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body = resp.json::<serde_json::Value>().await?;
+        if status != 201 {
+            anyhow::bail!("create notebook failed: HTTP {status}, body: {body}");
+        }
+        let wrapper: NotebookResponse = serde_json::from_value(body)?;
+        Ok(wrapper.notebook)
     }
 
-    /// Poll ingestion status until completed or timeout.
+    /// Upload a fixture file and return the document ID.
+    pub async fn upload_document(&self, fixture: &str) -> anyhow::Result<UploadResponse> {
+        let notebook = self.create_notebook("test-notebook").await?;
+
+        let content = setup::load_fixture(fixture)?;
+        let bytes = content.into_bytes();
+
+        let resp = self
+            .http_client
+            .post(format!(
+                "{}/api/v1/notebooks/{}/documents",
+                self.base_url, notebook.id
+            ))
+            .json(&serde_json::json!({
+                "filename": fixture,
+                "file_size": bytes.len(),
+                "mime_type": "text/plain",
+            }))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body = resp.json::<serde_json::Value>().await?;
+        if status != 202 && status != 201 {
+            anyhow::bail!("upload document failed: HTTP {status}, body: {body}");
+        }
+
+        let document_id = body["document_id"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("missing document_id in upload response: {body}"))?
+            .to_string();
+
+        // PUT the file bytes
+        let upload_resp = self
+            .http_client
+            .put(format!("{}/dev-upload/{document_id}", self.base_url))
+            .body(bytes)
+            .send()
+            .await?;
+        if !upload_resp.status().is_success() {
+            let status = upload_resp.status().as_u16();
+            let body = upload_resp.text().await.unwrap_or_default();
+            anyhow::bail!("upload PUT failed: HTTP {status}, body: {body}");
+        }
+
+        Ok(UploadResponse {
+            document_id,
+            upload_url: String::new(),
+            status: 202,
+        })
+    }
+
+    /// Poll ingestion status until completed, failed, or timeout.
     pub async fn wait_for_ingestion(
         &self,
-        _doc_id: &str,
-        _timeout: Duration,
+        doc_id: &str,
+        timeout: Duration,
     ) -> anyhow::Result<DocumentStatus> {
-        // TODO(Phase 1): implement
-        todo!("wait_for_ingestion")
+        let deadline = tokio::time::Instant::now() + timeout;
+        let mut last_status = String::new();
+        loop {
+            let resp = self
+                .http_client
+                .get(format!("{}/api/v1/documents/{doc_id}/status", self.base_url))
+                .send()
+                .await?;
+            let body = resp.json::<serde_json::Value>().await?;
+            let status = body["status"].as_str().unwrap_or("unknown").to_string();
+            if status != last_status {
+                eprintln!("[wait_for_ingestion] doc={doc_id} status={status}");
+                last_status = status.clone();
+            }
+            match status.as_str() {
+                "completed" | "ready" => return Ok(DocumentStatus::Completed),
+                "failed" | "error" => return Ok(DocumentStatus::Failed),
+                _ => {}
+            }
+            if tokio::time::Instant::now() > deadline {
+                anyhow::bail!("wait_for_ingestion timed out after {timeout:?}, last status={last_status}");
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
     }
 
     /// Send a chat query and return the raw HTTP response.
     pub async fn chat(
         &self,
-        _query: &str,
-        _doc_scope: &[String],
+        query: &str,
+        doc_scope: &[String],
     ) -> anyhow::Result<HttpResponse> {
-        // TODO(Phase 1): implement
-        todo!("chat")
+        let resp = self
+            .http_client
+            .post(format!("{}/api/v1/chat", self.base_url))
+            .json(&serde_json::json!({
+                "query": query,
+                "agent_type": "rag",
+                "doc_scope": doc_scope,
+                "stream": false,
+            }))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body_json = resp.json().await?;
+        Ok(HttpResponse { status, body_json })
     }
 
     // -----------------------------------------------------------------------
@@ -144,6 +318,21 @@ impl TestContext {
 
 impl Drop for TestContext {
     fn drop(&mut self) {
-        // TODO(Phase 0): stop HTTP server, drop containers, clean temp dirs
+        // Stop worker — fire-and-forget SIGKILL, don't wait
+        if let Some(mut worker) = self.worker.take() {
+            let _ = worker.start_kill();
+        }
+        // Stop HTTP server
+        if let Some(tx) = self.server_abort.take() {
+            let _ = tx.send(());
+        }
+        // Stop Postgres container — fire-and-forget
+        let container = self.pg_container_name.clone();
+        let _ = std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async {
+                setup::stop_postgres(&container).await;
+            });
+        });
     }
 }

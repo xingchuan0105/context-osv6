@@ -5,7 +5,7 @@
 //! - Product: business rules (citation types, doc_id matching, degrade traces)
 //! - Quality: NOT here — only for nightly / offline evaluation
 
-use crate::product_e2e::{ChatResponse, Citation, DegradeTraceItem, HttpResponse};
+use crate::product_e2e::{ChatResponse, HttpResponse};
 
 // ---------------------------------------------------------------------------
 // Protocol layer assertions

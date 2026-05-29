@@ -1259,6 +1259,9 @@ fn url_to_filename(url: &str) -> String {
 async fn build_worker_retrieval_data_plane(
     config: &AppConfig,
 ) -> Result<Option<Arc<dyn RetrievalDataPlane>>> {
+    if !config.enable_rag {
+        return Ok(None);
+    }
     let milvus_config = StorageMilvusConfig {
         url: config.milvus.url.clone(),
         token: Some(config.milvus.token.clone()).filter(|token| !token.trim().is_empty()),

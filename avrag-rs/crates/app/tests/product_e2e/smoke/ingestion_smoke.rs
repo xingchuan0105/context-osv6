@@ -2,10 +2,9 @@
 
 use std::time::Duration;
 
-use crate::product_e2e::{assertions::*, DocumentStatus, TestContext};
+use crate::product_e2e::{DocumentStatus, TestContext};
 
 #[tokio::test]
-#[ignore = "Phase 1 — requires TestContext::upload_document + worker"]
 async fn upload_document_completes_ingestion() {
     let ctx = TestContext::new_smoke().await;
 
@@ -15,7 +14,7 @@ async fn upload_document_completes_ingestion() {
 
     // 2. Wait for ingestion
     let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(30))
+        .wait_for_ingestion(&upload.document_id, Duration::from_secs(60))
         .await
         .unwrap();
     assert_eq!(status, DocumentStatus::Completed);

@@ -31,7 +31,10 @@ async fn upload_state_for_document(
     let object_path = row
         .try_get::<String, _>("object_path")
         .map_err(|error| common::AppError::internal(error.to_string()))?;
-    let auth = avrag_auth::AuthContext::new(org_id.into(), avrag_auth::SubjectKind::System);
+    let mut auth = avrag_auth::AuthContext::new(org_id.into(), avrag_auth::SubjectKind::System);
+    if let Some(actor) = state.auth().actor_id() {
+        auth = auth.with_actor_id(actor);
+    }
 
     Ok((state.with_auth(auth), Some(object_path)))
 }
