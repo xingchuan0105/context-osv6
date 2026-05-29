@@ -26,15 +26,15 @@
 
 | 测试层 | 触发时机 | 外部依赖 | 目标 | 时长预算 | 通过门槛 |
 |--------|---------|---------|------|---------|---------|
-| **Smoke E2E** | 每个 PR | Mock LLM、Mock Search、Mock Embedding、Testcontainers PG+Milvus | 验证 HTTP/鉴权/上传/worker 编排/响应结构 | ≤ 5 min | 通过率 > 95%，重跑 2 次结果一致 |
+| **Smoke E2E** | 每个 PR | Mock LLM、Mock Search、Mock Embedding、**真实 PG + 真实 Milvus + 真实本地 Object Store** | 验证 HTTP/鉴权/上传/worker 编排/响应结构 | ≤ 5 min | 通过率 > 95%，重跑 2 次结果一致 |
 | **Product Integration** | 主干合并后 | 真 PG + 真对象存储 + 真向量库，LLM 可半 Mock | 验证 ingestion 与检索主链路 | ≤ 10 min | 零 P0 用例失败 |
 | **Nightly E2E** | 每晚 | 真实 LLM + 真实 Search | 验证真实回答质量与外部集成 | ≤ 30 min | 失败自动归因（provider/infra/product） |
 | **Release Gate** | 发布前 | 受控真实依赖 | 少量高价值用例门禁 | ≤ 15 min | 100% P0 通过 |
 
 **强约束**：
-- Smoke E2E 不允许调用真实 LLM/Search/Embedding
-- 只有 Nightly 和 Release Gate 允许真实外部依赖
-- 所有层共享同一套用例代码，通过 feature flag 切换依赖真假
+- Smoke E2E 不允许调用真实 LLM/Search/Embedding；但基础设施（PG/Milvus/Object Store）必须真实
+- 只有 Nightly 和 Release Gate 允许真实 LLM/Search
+- 所有层共享同一套 **场景 DSL 和 helper**；同一用例在不同层允许不同断言集，避免 `if smoke / if integration` 分支污染用例代码
 
 ---
 
@@ -42,31 +42,32 @@
 
 ### 3.1 P0 用例（PR 级 Smoke）
 
-| # | 场景 | 验收标准 | 判定方式 |
-|---|------|---------|---------|
-| 1 | 用户上传文档，worker 完成 ingestion | HTTP 200 → 轮询状态为 `completed` → PG 中存在 summary + TOC + chunks | 结构化 API 响应字段 + PG 查询 |
-| 2 | 用户问文档相关问题，系统返回 RAG 回答 | HTTP 200 → 响应 `citations` 数组非空 → `citations[].doc_id` 匹配上传文档 | 响应 JSON 字段断言 |
-| 3 | 用户问开放问题，系统返回 Search 回答 | HTTP 200 → 响应 `citations` 数组非空 → `citations[].source_type == "web"` | 响应 JSON 字段断言 |
+| # | 场景 | 验收标准 | 判定方式 | 唯一失败归因 |
+|---|------|---------|---------|-------------|
+| 1 | 用户上传文档，worker 完成 ingestion | HTTP 200 → 轮询状态为 `completed` → PG 中存在 summary + TOC + chunks | 结构化 API 响应字段 + PG 查询 | infra: PG/Milvus 不可用；product: worker 未启动/崩溃；test: fixture 路径错误 |
+| 2 | 用户问文档相关问题，系统返回 RAG 回答 | HTTP 200 → 响应 `citations` 数组非空 → `citations[].doc_id` 匹配上传文档 | 响应 JSON 字段断言 | infra: Milvus 空；product: evaluator 死循环/策略路由错误；test: doc_id 传递错误 |
+| 3 | 用户问开放问题，系统返回 Search 回答 | HTTP 200 → 响应 `citations` 数组非空 → `citations[].source_type == "web"` | 响应 JSON 字段断言 | infra: Search mock 未注入；product: 策略路由到 Chat 而非 Search；test: query 不含搜索触发词 |
 
 ### 3.2 P1 用例（主干合并后）
 
-| # | 场景 | 验收标准 |
-|---|------|---------|
-| 4 | Chat + presentation-html | 响应含 `format_output` → `format_output.type == "presentation-html"` → 内容可解析为有效 HTML |
-| 5 | Chat + html-renderer | 同上，格式为 `html-renderer` |
-| 6 | 多文档 RAG | `citations` 包含 ≥2 个不同 `doc_id` |
-| 7 | 空文档上传 | HTTP 200 → 状态 `completed` → 回答"文档内容为空"类降级文案 |
+| # | 场景 | 验收标准 | 唯一失败归因 |
+|---|------|---------|-------------|
+| 4 | Chat + presentation-html | 响应含 `format_output` → `format_output.type == "presentation-html"` → 内容可解析为有效 HTML | product: format skill 未触发；test: HTML 解析器变更 |
+| 5 | Chat + html-renderer | 同上，格式为 `html-renderer` | 同上 |
+| 6 | 多文档 RAG | `citations` 包含 ≥2 个不同 `doc_id` | product: 检索仅命中单文档；test: doc_scope 只传了一个 |
+| 7 | 空文档上传 | HTTP 200 → 状态 `completed` → PG 中 chunk_count == 0 → 回答含 `degrade_trace` 或降级标识字段 | product: 空文档未正常完成解析；test: fixture 非空 |
 
 ### 3.3 失败场景（P2 — 主干合并后）
 
-| # | 场景 | 验收标准 |
-|---|------|---------|
-| 8 | 损坏文件上传 | HTTP 4xx/5xx 或状态 `failed` → 有可读错误信息 |
-| 9 | Worker 处理中超时 | 状态最终为 `failed` 或 `timeout`，不无限挂起 |
-| 10 | Search provider 429 | 降级为内部知识或返回"搜索暂不可用"，不 panic |
-| 11 | Embedding 服务不可用 | RAG 降级为 lexical_retrieval 或返回降级文案 |
-| 12 | 重复上传同文件 | 幂等，不创建重复文档 |
-| 13 | 并发查询同一文档 | 不互相干扰，各自返回正确 citation |
+| # | 场景 | 验收标准 | 唯一失败归因 |
+|---|------|---------|-------------|
+| 8 | 损坏文件上传 | HTTP 4xx/5xx 或状态 `failed` → 响应/日志含可读错误码 | product: parser panic 未捕获；test: fixture 不够损坏 |
+| 9 | Worker 处理中超时 | 状态最终为 `failed` 或 `timeout`，不无限挂起 | infra: worker 未运行；product: 超时阈值配置错误 |
+| 10 | Search provider 429 | 降级为内部知识或返回降级文案；HTTP 200；`degrade_trace` 非空 | product: 降级路径未实现；test: mock 行为注入失败 |
+| 11 | Embedding 服务不可用 | RAG 降级为 lexical_retrieval 或返回降级文案；`degrade_trace` 含 `embedding_unavailable` | product: 降级路径未实现 |
+| 12 | 重复上传同文件 | 第二次上传返回相同 `document_id`；PG 中该文件只存在一条记录 | product: 幂等逻辑缺失；test: 未等待首次 ingestion 完成 |
+| 13 | 并发查询同一文档 | 两查询各自 HTTP 200；`citations` 独立且正确；无交叉污染 | infra: 连接池耗尽；product: session 状态共享 bug |
+| 14 | 多租户文档隔离 | 用户 A 上传文档 → 用户 B 查询相同内容 → 用户 B 的 citation 不含用户 A 的 `doc_id` | product: 鉴权/scope 过滤失效；test: auth context 构造错误 |
 
 ---
 
@@ -198,7 +199,7 @@ impl Drop for TestContext {
 ### 5.3 Mock 设计（Smoke 层专用）
 
 ```rust
-// MockRegistry 控制所有外部依赖
+// MockRegistry 控制所有外部依赖；基础设施（PG/Milvus/Object Store）始终真实
 pub struct MockRegistry {
     pub llm: MockLlmProvider,        // 固定响应，无网络
     pub search: MockSearchProvider,  // 固定搜索结果
@@ -212,6 +213,12 @@ impl MockEmbedding {
     }
 }
 ```
+
+**Smoke 层基础设施强约束**：
+- PG: Testcontainers PostgreSQL（真实进程）
+- Milvus: Testcontainers Milvus Standalone（真实进程）
+- Object Store: 临时本地目录（通过 `AppConfig.object_storage.base_path` 指向 `TempDir`）
+- 禁止对基础设施使用任何 stub/mock
 
 ### 5.4 失败可观测性（所有层强制）
 
