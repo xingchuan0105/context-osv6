@@ -3,11 +3,11 @@
 //! These tests require a staging environment with real LLM, vector DB, and web search.
 //! Run with: cargo test --ignored -p app --test e2e
 
-#[path = "e2e/config.rs"]
+#[path = "strategy_e2e/config.rs"]
 pub mod config;
-#[path = "e2e/recording_llm.rs"]
+#[path = "strategy_e2e/recording_llm.rs"]
 pub mod recording_llm;
-#[path = "e2e/assertions.rs"]
+#[path = "strategy_e2e/assertions.rs"]
 pub mod assertions;
 
 #[allow(unused_imports)]

@@ -1,6 +1,6 @@
 //! E2E tests for RAG strategy state machine + progressive disclosure.
 //!
-//! Run with: cargo test --ignored -p app --test e2e_rag
+//! Run with: cargo test --ignored -p app --test strategy_rag
 //! Requires full staging environment: E2E_LLM_*, E2E_EMBEDDING_*, E2E_MILVUS_*.
 //!
 //! These tests verify:
@@ -8,11 +8,11 @@
 //! 2. Progressive disclosure (rag-plan skill body + tool catalog + format skills)
 //! 3. Replan optimization (Evaluate → ExecuteRetrieve skips Plan LLM call)
 
-#[path = "e2e/config.rs"]
+#[path = "strategy_e2e/config.rs"]
 mod config;
-#[path = "e2e/recording_llm.rs"]
+#[path = "strategy_e2e/recording_llm.rs"]
 mod recording_llm;
-#[path = "e2e/assertions.rs"]
+#[path = "strategy_e2e/assertions.rs"]
 mod assertions;
 
 use app::agents::events::CollectingSink;

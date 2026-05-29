@@ -2,13 +2,13 @@
 //!
 //! Run after e2e_format_output and e2e_ingestion_answer to produce report.md.
 //!
-//! Run with: cargo test --ignored -p app --test e2e_regression_report
+//! Run with: cargo test --ignored -p app --test strategy_regression_report
 
-#[path = "e2e/recording_llm.rs"]
+#[path = "strategy_e2e/recording_llm.rs"]
 mod recording_llm;
-#[path = "e2e/playwright_helper.rs"]
+#[path = "strategy_e2e/playwright_helper.rs"]
 mod playwright_helper;
-#[path = "e2e/result_serializer.rs"]
+#[path = "strategy_e2e/result_serializer.rs"]
 mod result_serializer;
 
 #[tokio::test]

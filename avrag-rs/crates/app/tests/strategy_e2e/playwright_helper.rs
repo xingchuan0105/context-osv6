@@ -112,7 +112,7 @@ async fn run_screenshot(
     tokio::fs::write(&input_path, html_content).await?;
 
     let script_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/e2e/playwright/screenshot.js");
+        .join("tests/strategy_e2e/playwright/screenshot.js");
 
     let viewport_str = format!("{}x{}", viewport.width, viewport.height);
 

@@ -1,6 +1,6 @@
 //! E2E tests for Search strategy state machine + progressive disclosure.
 //!
-//! Run with: cargo test --ignored -p app --test e2e_search
+//! Run with: cargo test --ignored -p app --test strategy_search
 //! Requires: E2E_LLM_* + E2E_BRAVE_API_KEY env vars.
 //!
 //! Mock mode: set E2E_BRAVE_API_KEY=mock to use MockSearchProvider (fast,
@@ -18,11 +18,11 @@
 //! If your key is on the Free tier, running multiple tests concurrently will
 //! trigger HTTP 429. Use `--test-threads=1` for stable Free-tier runs.
 
-#[path = "e2e/config.rs"]
+#[path = "strategy_e2e/config.rs"]
 mod config;
-#[path = "e2e/recording_llm.rs"]
+#[path = "strategy_e2e/recording_llm.rs"]
 mod recording_llm;
-#[path = "e2e/assertions.rs"]
+#[path = "strategy_e2e/assertions.rs"]
 mod assertions;
 
 use app::agents::events::CollectingSink;

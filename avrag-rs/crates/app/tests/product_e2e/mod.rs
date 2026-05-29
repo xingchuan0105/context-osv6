@@ -98,6 +98,7 @@ pub struct TestContext {
     mock_embedding_abort: Option<tokio::sync::oneshot::Sender<()>>,
     mock_search_abort: Option<tokio::sync::oneshot::Sender<()>>,
     search_should_429: Option<Arc<AtomicBool>>,
+    embedding_should_503: Option<Arc<AtomicBool>>,
     worker_log_path: Option<std::path::PathBuf>,
 }
 
@@ -146,11 +147,11 @@ impl TestContext {
         let (mock_search_url, mock_search_abort, search_should_429) = start_mock_search_server().await;
 
         // 6. Start mock Embedding if RAG enabled
-        let (mock_embedding_url, mock_embedding_abort) = if enable_rag {
-            let (url, abort) = start_mock_embedding_server().await;
-            (Some(url), Some(abort))
+        let (mock_embedding_url, mock_embedding_abort, embedding_should_503) = if enable_rag {
+            let (url, abort, flag) = start_mock_embedding_server().await;
+            (Some(url), Some(abort), Some(flag))
         } else {
-            (None, None)
+            (None, None, None)
         };
 
         // 5. Set env vars for AppConfig
@@ -306,6 +307,7 @@ impl TestContext {
             mock_embedding_abort,
             mock_search_abort: Some(mock_search_abort),
             search_should_429: Some(search_should_429),
+            embedding_should_503,
             worker_log_path: Some(worker_log_path),
         }
     }
@@ -513,6 +515,13 @@ impl TestContext {
         }
     }
 
+    /// Toggle mock embedding server to return 503 (service unavailable).
+    pub fn set_embedding_503(&self, value: bool) {
+        if let Some(ref flag) = self.embedding_should_503 {
+            flag.store(value, Ordering::SeqCst);
+        }
+    }
+
     /// Save debugging artifacts on test failure.
     pub fn save_failure_artifacts(
         &self,
@@ -615,10 +624,13 @@ async fn start_mock_llm_server() -> (String, tokio::sync::oneshot::Sender<()>) {
 
 /// Start a mock Embedding HTTP server on an ephemeral port.
 ///
-/// Returns (base_url, abort_sender).
-async fn start_mock_embedding_server() -> (String, tokio::sync::oneshot::Sender<()>) {
+/// Returns (base_url, abort_sender, embedding_should_503_flag).
+async fn start_mock_embedding_server() -> (String, tokio::sync::oneshot::Sender<()>, Arc<AtomicBool>) {
+    let embedding_should_503 = Arc::new(AtomicBool::new(false));
+    let flag = embedding_should_503.clone();
+
     let app = Router::new()
-        .route("/embeddings", post(mock_embedding_handler));
+        .route("/embeddings", post(move |req| mock_embedding_handler(req, flag.clone())));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind mock embedding");
     let port = listener.local_addr().unwrap().port();
@@ -633,7 +645,7 @@ async fn start_mock_embedding_server() -> (String, tokio::sync::oneshot::Sender<
         }
     });
 
-    (base_url, abort_tx)
+    (base_url, abort_tx, embedding_should_503)
 }
 
 async fn mock_llm_handler(Json(req): Json<serde_json::Value>) -> Json<serde_json::Value> {
@@ -671,7 +683,18 @@ async fn mock_llm_handler(Json(req): Json<serde_json::Value>) -> Json<serde_json
     }))
 }
 
-async fn mock_embedding_handler(Json(req): Json<serde_json::Value>) -> Json<serde_json::Value> {
+async fn mock_embedding_handler(
+    Json(req): Json<serde_json::Value>,
+    embedding_should_503: Arc<AtomicBool>,
+) -> axum::response::Response {
+    if embedding_should_503.load(Ordering::SeqCst) {
+        return (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({ "error": "embedding service unavailable" })),
+        )
+            .into_response();
+    }
+
     let texts = req["input"]
         .as_array()
         .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
@@ -682,7 +705,7 @@ async fn mock_embedding_handler(Json(req): Json<serde_json::Value>) -> Json<serd
     let vec: Vec<f32> = (0..dim).map(|j| 0.1_f32 + (j % 10) as f32 * 0.01).collect();
     let data: Vec<serde_json::Value> = texts.iter().map(|_| json!({"embedding": vec})).collect();
 
-    Json(json!({ "data": data, "model": "mock-embedding" }))
+    Json(json!({ "data": data, "model": "mock-embedding" })).into_response()
 }
 
 /// Start a mock Brave Search HTTP server on an ephemeral port.

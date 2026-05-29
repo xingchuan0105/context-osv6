@@ -1,12 +1,12 @@
 //! E2E tests for Chat strategy state machine + progressive disclosure.
 //!
-//! Run with: cargo test --ignored -p app --test e2e_chat
+//! Run with: cargo test --ignored -p app --test strategy_chat
 
-#[path = "e2e/config.rs"]
+#[path = "strategy_e2e/config.rs"]
 mod config;
-#[path = "e2e/recording_llm.rs"]
+#[path = "strategy_e2e/recording_llm.rs"]
 mod recording_llm;
-#[path = "e2e/assertions.rs"]
+#[path = "strategy_e2e/assertions.rs"]
 mod assertions;
 
 use app::agents::events::CollectingSink;

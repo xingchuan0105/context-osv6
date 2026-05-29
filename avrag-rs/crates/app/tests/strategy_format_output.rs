@@ -1,16 +1,16 @@
 //! E2E tests for format output across strategies and format skills.
 //!
-//! Run with: cargo test --ignored -p app --test e2e_format_output
+//! Run with: cargo test --ignored -p app --test strategy_format_output
 
-#[path = "e2e/config.rs"]
+#[path = "strategy_e2e/config.rs"]
 mod config;
-#[path = "e2e/recording_llm.rs"]
+#[path = "strategy_e2e/recording_llm.rs"]
 mod recording_llm;
-#[path = "e2e/assertions.rs"]
+#[path = "strategy_e2e/assertions.rs"]
 mod assertions;
-#[path = "e2e/playwright_helper.rs"]
+#[path = "strategy_e2e/playwright_helper.rs"]
 mod playwright_helper;
-#[path = "e2e/result_serializer.rs"]
+#[path = "strategy_e2e/result_serializer.rs"]
 mod result_serializer;
 
 use app::agents::events::CollectingSink;
