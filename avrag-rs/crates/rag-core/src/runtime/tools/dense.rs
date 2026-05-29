@@ -29,7 +29,7 @@ pub async fn run(
         agent_type: "chat".to_string(),
         source_type: None,
         source_token: None,
-        doc_scope: Vec::new(),
+        doc_scope: args.doc_scope.clone(),
         messages: Vec::new(),
         stream: false,
         language: None,

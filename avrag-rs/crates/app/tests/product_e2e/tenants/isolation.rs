@@ -8,7 +8,6 @@ use std::time::Duration;
 use crate::product_e2e::{assertions::*, ChatResponse, DocumentStatus, HttpResponse, TestContext};
 
 #[tokio::test]
-#[ignore = "requires per-org Milvus isolation + dynamic auth switching in TestContext"]
 async fn cross_org_rag_does_not_leak_documents() {
     let ctx = TestContext::new_smoke_with_rag().await;
 

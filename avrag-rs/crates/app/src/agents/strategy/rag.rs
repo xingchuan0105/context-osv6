@@ -490,6 +490,20 @@ impl RagStrategy {
             });
         }
 
+        // Inject doc_scope into retrieval tool calls so the runtime can filter
+        // by document IDs instead of searching the entire org.
+        let doc_scope = ctx.chat_req.doc_scope.clone();
+        for call in &mut rag_calls {
+            if matches!(call.tool.as_str(), "dense_retrieval" | "lexical_retrieval" | "graph_retrieval") {
+                if let Ok(mut obj) = serde_json::from_value::<serde_json::Map<String, serde_json::Value>>(call.args.clone()) {
+                    if !obj.contains_key("doc_scope") {
+                        obj.insert("doc_scope".to_string(), serde_json::to_value(&doc_scope).unwrap_or_default());
+                        call.args = serde_json::Value::Object(obj);
+                    }
+                }
+            }
+        }
+
         let n_calls = rag_calls.len() as u32;
         let plan_snapshot =
             serde_json::to_value(&rag_calls).unwrap_or(serde_json::Value::Null);
