@@ -1,0 +1,36 @@
+The Lindy Effect
+
+By Nassim Nicholas Taleb
+
+Definition
+
+The Lindy Effect is a theorized phenomenon by which the future life expectancy of some non-perishable things, like a technology or an idea, is proportional to their current age. Every additional period of survival implies a longer remaining life expectancy.
+
+Key Principles
+
+1. Time as a Filter
+   - What has survived long has proven its robustness against randomness and change.
+   - The longer a book has been in print, the longer it is likely to remain in print.
+
+2. Perishable vs. Non-Perishable
+   - Perishable things (humans, animals) have an expected lifespan that decreases with age.
+   - Non-perishable things (technologies, ideas, books) have an expected lifespan that increases with age.
+
+3. Antifragility Connection
+   - Things that have survived shocks and stresses become more robust over time.
+   - The Lindy Effect is a manifestation of antifragility in the information domain.
+
+Examples
+
+- Books: Works by Seneca, Marcus Aurelius, and Shakespeare continue to be read centuries after publication.
+- Technologies: The wheel, the lever, and written language have persisted for millennia.
+- Cuisine: Traditional recipes that have survived generations are likely to continue.
+
+Counter-Examples
+
+- Fads and trends that emerge quickly often disappear just as fast.
+- Technologies that solve temporary problems may not persist.
+
+Conclusion
+
+When evaluating the longevity of ideas, technologies, or cultural artifacts, look to their age as a predictor of their future survival. Time is the ultimate stressor, and only the robust and antifragile survive its test.

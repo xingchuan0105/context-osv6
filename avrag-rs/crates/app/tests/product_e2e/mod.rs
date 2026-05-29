@@ -297,7 +297,15 @@ impl TestContext {
     /// Upload a fixture file and return the document ID.
     pub async fn upload_document(&self, fixture: &str) -> anyhow::Result<UploadResponse> {
         let notebook = self.create_notebook("test-notebook").await?;
+        self.upload_document_to_notebook(fixture, &notebook.id).await
+    }
 
+    /// Upload a fixture file to an existing notebook.
+    pub async fn upload_document_to_notebook(
+        &self,
+        fixture: &str,
+        notebook_id: &str,
+    ) -> anyhow::Result<UploadResponse> {
         let content = setup::load_fixture(fixture)?;
         let bytes = content.into_bytes();
 
@@ -305,7 +313,7 @@ impl TestContext {
             .http_client
             .post(format!(
                 "{}/api/v1/notebooks/{}/documents",
-                self.base_url, notebook.id
+                self.base_url, notebook_id
             ))
             .json(&serde_json::json!({
                 "filename": fixture,
@@ -340,7 +348,7 @@ impl TestContext {
 
         Ok(UploadResponse {
             document_id,
-            notebook_id: notebook.id,
+            notebook_id: notebook_id.to_string(),
             upload_url: String::new(),
             status: 202,
         })
