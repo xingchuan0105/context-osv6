@@ -36,6 +36,11 @@
 - 只有 Nightly 和 Release Gate 允许真实 LLM/Search
 - 所有层共享同一套 **场景 DSL 和 helper**；同一用例在不同层允许不同断言集，避免 `if smoke / if integration` 分支污染用例代码
 
+**层级职责硬规则**：
+- Smoke 只验证"**平台编排和最小业务闭环**"：上传能成功、ingestion 能完成、查询能返回结构化响应。用例数量控制在 3-5 个，不覆盖降级/多文档/格式输出。
+- Integration 验证"**完整链路 + 产品规则**"：覆盖所有 P1 用例（格式输出、多文档）和部分 P2 用例（空文档、损坏文件、并发查询）。
+- 两层在基础设施层面接近（都使用真实 PG/Milvus/Object Store），差异在于**断言深度和用例范围**。
+
 ---
 
 ## 3. 可量化验收标准
@@ -118,6 +123,25 @@ fn quality_score_answer(answer: &str, query: &str, context: &str) -> f32 {
 ```
 
 **关键规则**：PR 级测试只用**协议层 + 产品层**断言；质量层只用于 nightly 报告。
+
+### 4.4 `degrade_trace` Schema（降级可观测性）
+
+空文档、Search 429、Embedding 不可用等场景依赖 `degrade_trace` 字段做自动归因。其最小 schema：
+
+```rust
+#[derive(Debug, serde::Deserialize)]
+struct DegradeTraceItem {
+    pub reason: String,            // 降级原因编码："empty_document" / "search_429" / "embedding_unavailable" / ...
+    pub fallback_path: String,     // 降级后的执行路径："lexical_retrieval" / "direct_answer" / "reject"
+    pub source_component: String,  // 触发降级的组件："ingestion_worker" / "rag_strategy" / "search_provider"
+    pub timestamp: String,         // ISO 8601
+}
+```
+
+**使用约定**：
+- 任何降级路径必须在 `degrade_trace` 中留下至少一条记录
+- 测试断言通过 `reason` 编码匹配（而非文本包含），保证跨版本稳定
+- 未实现降级 trace 的产品代码视为测试阻塞项
 
 ---
 
@@ -218,6 +242,7 @@ impl MockEmbedding {
 - PG: Testcontainers PostgreSQL（真实进程）
 - Milvus: Testcontainers Milvus Standalone（真实进程）
 - Object Store: 临时本地目录（通过 `AppConfig.object_storage.base_path` 指向 `TempDir`）
+  - **接口一致性要求**：本地目录的读写接口（路径拼接、元数据保存、文件名规则）必须与生产对象存储保持一致，使用同一 `ObjectStore` trait 实现，禁止测试特例
 - 禁止对基础设施使用任何 stub/mock
 
 ### 5.4 失败可观测性（所有层强制）
@@ -225,19 +250,25 @@ impl MockEmbedding {
 测试失败时自动收集并保存：
 
 ```
-tests/e2e_output/
+crates/app/tests/e2e_output/
 └── {run_id}/
     └── {test_name}/
         ├── request.json          # HTTP 请求体
-        ├── response.json         # HTTP 响应体
+        ├── response_body.json    # HTTP 响应体（完整 JSON）
         ├── trace_id.txt          # 分布式 trace ID
-        ├── worker_logs/          # worker 日志（最后 500 行）
+        ├── worker_logs.txt       # worker 日志（最后 500 行）
         ├── retrieval_results.json # 检索结果快照
         ├── model_routing.json    # LLM 路由决策
         └── screenshot.png        # Playwright 截图（如有 HTML）
 ```
 
-通过 `TestContext::save_failure_artifacts()` 统一实现。
+通过 `TestContext::save_failure_artifacts()` 统一实现。所有 CI workflow 的 artifact upload 路径统一为 `crates/app/tests/e2e_output/**/**`。
+
+**路径规范（最终版）**：
+- 根目录：`crates/app/tests/e2e_output/`
+- 运行目录：`{run_id}/`（格式：`e2e_{timestamp}_{short_commit}`）
+- 测试目录：`{test_name}/`（Rust 测试函数名）
+- 产物命名：固定上表 7 个文件名，不再使用 `failed-*` 前缀区分
 
 ---
 
@@ -308,7 +339,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-failure-artifacts
-          path: crates/app/tests/e2e_output/*/failed-*
+          path: crates/app/tests/e2e_output/**/**
 ```
 
 ### 7.2 GitHub Actions — Product Integration（主干合并）
@@ -379,6 +410,8 @@ jobs:
 
 ```rust
 // tests/product_e2e/smoke/rag_smoke.rs
+use product_e2e::{HttpResponse, ChatResponse, assertions::*};
+
 #[tokio::test]
 async fn rag_document_qa_returns_citation() {
     let ctx = TestContext::new_smoke().await;
@@ -391,15 +424,19 @@ async fn rag_document_qa_returns_citation() {
     let status = ctx.wait_for_ingestion(&upload.document_id, Duration::from_secs(30)).await.unwrap();
     assert_eq!(status, DocumentStatus::Completed);
 
-    // 3. 发起 RAG 查询
-    let resp = ctx.chat("What is antifragility?", &[upload.document_id]).await.unwrap();
+    // 3. 发起 RAG 查询 → 返回 HTTP 原始响应
+    let http_resp: HttpResponse = ctx.chat("What is antifragility?", &[upload.document_id]).await.unwrap();
 
-    // 4. 协议层断言
-    assert_http_ok(&resp);
+    // 4. 协议层断言（只验 HTTP 契约，不依赖业务字段）
+    assert_http_ok(&http_resp);                      // status == 200
+    assert_schema_valid(&http_resp.body_json, &CHAT_RESPONSE_SCHEMA);
+
+    // 5. 反序列化为业务对象 → 后续所有产品层断言用它
+    let resp: ChatResponse = serde_json::from_value(http_resp.body_json).unwrap();
+
+    // 6. 产品层断言（验业务规则，不依赖 LLM 措辞）
     assert_has_citations(&resp);
     assert_citation_doc_id(&resp, &upload.document_id);
-
-    // 5. 产品层断言
     assert_answer_has_doc_citation(&resp);
     assert!(resp.answer.len() > 50, "answer should be substantive");
 }
@@ -409,20 +446,29 @@ async fn rag_document_qa_returns_citation() {
 
 ```rust
 // tests/product_e2e/failure/provider_down.rs
+use product_e2e::{HttpResponse, ChatResponse, assertions::*};
+
 #[tokio::test]
 async fn search_429_returns_degraded_answer() {
     let mut ctx = TestContext::new_smoke().await;
     ctx.mocks.search.set_behavior(MockBehavior::Return429);
 
-    let resp = ctx.chat("What is the weather in Tokyo?", &[]).await.unwrap();
+    // 3. 发起查询 → HTTP 原始响应
+    let http_resp: HttpResponse = ctx.chat("What is the weather in Tokyo?", &[]).await.unwrap();
 
-    // 协议层：仍然 HTTP 200（不暴露内部错误）
-    assert_http_ok(&resp);
+    // 4. 协议层：仍然 HTTP 200（不暴露内部错误）
+    assert_http_ok(&http_resp);
 
-    // 产品层：没有 web citation，但有降级文案
+    // 5. 反序列化为业务对象
+    let resp: ChatResponse = serde_json::from_value(http_resp.body_json).unwrap();
+
+    // 6. 产品层：没有 web citation，但有降级标识
     let has_web = resp.citations.iter().any(|c| c.source_type == "web");
     assert!(!has_web, "should not have web citation when search is down");
-    assert!(resp.answer.contains("暂无法搜索") || resp.answer.contains("search unavailable"));
+    assert!(
+        resp.degrade_trace.iter().any(|d| d.reason == "search_429"),
+        "expected degrade_trace to record search_429 fallback"
+    );
 }
 ```
 
