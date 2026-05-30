@@ -33,6 +33,7 @@ pub async fn run(
         messages: Vec::new(),
         stream: false,
         language: None,
+    format_hint: None,
     };
 
     let items: Vec<RagPlanItem> = args

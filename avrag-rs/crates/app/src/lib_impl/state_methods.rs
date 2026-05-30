@@ -404,7 +404,7 @@ impl AppState {
             cancellation_token: None,
             guard_pipeline: None,
             preferred_tools: vec![],
-            format_hint: None,
+            format_hint: req.format_hint.clone(),
             max_iterations: None,
         }
     }

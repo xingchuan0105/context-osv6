@@ -33,6 +33,7 @@ mod tests {
             messages: vec![],
             stream: false,
             language: None,
+        format_hint: None,
         }
     }
 

@@ -202,6 +202,7 @@ impl RagContext {
             messages: request.messages.clone(),
             stream: request.stream,
             language: request.language.clone(),
+        format_hint: None,
         };
 
         Ok(Self {

@@ -114,15 +114,20 @@ fn test_auth_headers() -> reqwest::header::HeaderMap {
 impl TestContext {
     /// Create a Smoke E2E context (no RAG).
     pub async fn new_smoke() -> Self {
-        Self::build_smoke(false).await
+        Self::build_smoke(false, 300).await
     }
 
     /// Create a Smoke E2E context with RAG enabled (Milvus + mock embedding/LLM).
     pub async fn new_smoke_with_rag() -> Self {
-        Self::build_smoke(true).await
+        Self::build_smoke(true, 300).await
     }
 
-    async fn build_smoke(enable_rag: bool) -> Self {
+    /// Create a Smoke E2E context with RAG and a custom worker per-task timeout.
+    pub async fn new_smoke_with_rag_and_timeout(worker_timeout_secs: u64) -> Self {
+        Self::build_smoke(true, worker_timeout_secs).await
+    }
+
+    async fn build_smoke(enable_rag: bool, worker_timeout_secs: u64) -> Self {
         // 1. Start Postgres
         let pg_url = setup::start_postgres().await.expect("start postgres");
         let pg_container_name = format!("avrag-test-pg-{}", pg_url.rsplit(':').next().unwrap());
@@ -223,6 +228,7 @@ impl TestContext {
             .env("AVRAG_PUBLIC_BASE_URL", &base_url)
             .env("AVRAG_WORKER_ID", "test-worker")
             .env("AVRAG_WORKER_POLL_SECS", "1")
+            .env("AVRAG_INGESTION_TASK_TIMEOUT_SECS", worker_timeout_secs.to_string())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
