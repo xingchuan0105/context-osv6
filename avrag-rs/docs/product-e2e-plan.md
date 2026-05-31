@@ -521,9 +521,23 @@ Smoke P0-3（Search 问答）依赖 query 能稳定触发 Search 策略。实现
 
 ---
 
-## 11. 下一步行动
+## 11. 实施状态（已完工）
 
-1. ~~**评审本文档** — 已完成~~
-2. **创建 GitHub Issue** — 按 Phase 拆解任务，标记 `good first issue`
-3. **Phase 0 开工** — 目录结构 + TestContext + MockRegistry
-4. **现有测试更名** — `e2e_*.rs` → `agent_strategy_*.rs`（避免混淆）
+| Phase | 内容 | 状态 |  commit |
+|-------|------|:----:|:-------:|
+| Phase 0 | 目录结构 + TestContext + MockRegistry + CI workflow 草案 | ✅ | `46ecf70` |
+| Phase 1 | P0 Smoke（Ingestion / RAG / Search） | ✅ | `1febe3d` / `8c53a7d` / `37984f6` |
+| Phase 2 | Integration（多文档、空文档、并发、重复上传、format_output） | ✅ | `70bb523` / `9abd8b4` |
+| Phase 3 | Failure + Tenant（Search 429、Embedding 503、Worker 超时、损坏文件、跨组织隔离） | ✅ | `e3351d5` / `0583713` / `04b34d3` |
+| Phase 4 | 失败产物收集 + CI Workflow | ✅ | `7fc06b1` |
+| 边界修复 | `doc_scope` 传播到 retrieval tools | ✅ | `53188bc` |
+
+**最终套件结果**：
+```
+14 passed, 0 failed, 0 ignored, finished in ~165s
+```
+
+**遗留缺口（非阻塞）**：
+- `degrade_trace.reason` 强枚举化（产品代码仍用自由字符串）
+- Nightly/Release Gate（需真实 LLM/Search provider + LLM-as-judge 质量层）
+- `ChatResponse.format_output` 独立字段（当前 format 内容在 `answer` 字符串中返回）
