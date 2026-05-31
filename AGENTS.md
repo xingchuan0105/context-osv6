@@ -97,3 +97,12 @@ These guidelines override your default tendency to be overly helpful, overly ver
 * 3\. Optionally use `semble find-related` with a promising result's `file\_path` and `line` to discover related implementations.
 * 4\. Use grep only when you need exhaustive literal matches or quick confirmation of an exact string.
 
+## 6\. External Service Configuration Persistence
+
+**Never ask the user for API keys, base URLs, or model names that are already configured.**
+
+* Before requesting any external service credential (LLM, Search, Embedding, Milvus, SMTP, MinIO, etc.), **always read** the project root `.env` file (`/home/chuan/context-osv6/avrag-rs/.env`) and `.env.example` first.
+* If the required variable already exists in `.env`, **reuse it silently**. Do **not** ask the user to confirm or re-provide it.
+* If the user supplies a **new or updated value** during the conversation, **incrementally write it to `.env`** (and update `.env.example` comments if the key is new) so subsequent sessions persist the configuration.
+* If a test or script expects a differently-prefixed variable (e.g. `E2E_LLM_*` vs `AGENT_LLM_*`) but the production value is already in `.env`, map or alias it rather than asking again.
+
