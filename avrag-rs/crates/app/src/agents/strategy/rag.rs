@@ -202,7 +202,7 @@ impl RagContext {
             messages: request.messages.clone(),
             stream: request.stream,
             language: request.language.clone(),
-        format_hint: None,
+            format_hint: request.format_hint.clone(),
         };
 
         Ok(Self {
@@ -900,9 +900,11 @@ impl RagStrategy {
     async fn step_answer(&self, ctx: &mut RagContext) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
-        // Compute selected format skills: prefer explicit selection, fall back to keyword detection
+        // Compute selected format skills: prefer explicit selection, then format_hint, then keyword detection
         let selected_format_skills: Vec<String> = if !ctx.selected_skills.is_empty() {
             ctx.selected_skills.clone()
+        } else if let Some(ref hint) = ctx.request.format_hint {
+            detect_format_skills(hint).iter().map(|s| s.to_string()).collect()
         } else {
             detect_format_skills(&ctx.request.query).iter().map(|s| s.to_string()).collect()
         };

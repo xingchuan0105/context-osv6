@@ -443,16 +443,31 @@ impl TestContext {
         notebook_id: &str,
         doc_scope: &[String],
     ) -> anyhow::Result<HttpResponse> {
+        self.chat_with_format_hint(query, notebook_id, doc_scope, None).await
+    }
+
+    /// Send a RAG chat query with an optional format_hint.
+    pub async fn chat_with_format_hint(
+        &self,
+        query: &str,
+        notebook_id: &str,
+        doc_scope: &[String],
+        format_hint: Option<&str>,
+    ) -> anyhow::Result<HttpResponse> {
+        let mut body = serde_json::json!({
+            "query": query,
+            "agent_type": "rag",
+            "notebook_id": notebook_id,
+            "doc_scope": doc_scope,
+            "stream": false,
+        });
+        if let Some(hint) = format_hint {
+            body["format_hint"] = serde_json::json!(hint);
+        }
         let resp = self
             .http_client
             .post(format!("{}/api/v1/chat", self.base_url))
-            .json(&serde_json::json!({
-                "query": query,
-                "agent_type": "rag",
-                "notebook_id": notebook_id,
-                "doc_scope": doc_scope,
-                "stream": false,
-            }))
+            .json(&body)
             .send()
             .await?;
         let status = resp.status().as_u16();
@@ -669,6 +684,13 @@ async fn mock_llm_handler(Json(req): Json<serde_json::Value>) -> Json<serde_json
         r#"{"calls": [{"tool": "dense_retrieval", "version": "1.0", "args": {"queries": ["antifragility Taleb summary"], "modality": "text", "top_k": 10}}], "next_step": "answer"}"#
     } else if system_prompt.contains("Context OS retrieval coverage evaluator") {
         r#"{"decision": "sufficient", "dimensions": [{"name": "coverage", "attempted": true, "covered": true, "retrieved_count": 3, "query_ids": ["q1"], "status": "covered_strong"}], "next_actions": [], "reasoning": "good"}"#
+    } else if system_prompt.contains("ppt-generation") || system_prompt.contains("html-renderer") {
+        // Format skill answer: return content with the expected markers
+        if system_prompt.contains("ppt-generation") {
+            "<html><body><div class=\"slide\"><h1>Slide 1</h1><p>Summary of antifragility</p></div><div class=\"slide\"><h1>Slide 2</h1><p>Key concepts</p></div></body></html>"
+        } else {
+            "<html><body><h1>Antifragility</h1><p>Antifragility is a property of systems that benefit from stress.</p></body></html>"
+        }
     } else if system_prompt.contains("Context OS RAG answer agent") {
         "Based on the document, antifragility is a property of systems that increase in capability, resilience, or robustness as a result of stressors, shocks, volatility, noise, mistakes, faults, attacks, or failures. The concept was developed by Nassim Nicholas Taleb."
     } else if system_prompt.contains("Context OS Web Search planner") {
