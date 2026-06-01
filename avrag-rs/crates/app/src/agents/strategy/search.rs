@@ -1,13 +1,19 @@
-//! SearchStrategy — v5 state machine for Search mode.
+//! SearchStrategy — v6 state machine for Search mode.
 //!
-//! Search is multi-iteration with web search, evaluation, and optional broaden:
-//!   Decompose → ParallelSearch → Aggregate → Evaluate → Answer
-//!                               ↑            │
-//!                               └────────────┘ (broaden/escalate_vertical/replan)
+//! Search is multi-iteration with web search and (optional) replan/broaden:
+//!   Decompose → ParallelSearch → Aggregate → Answer
+//!                               ↑              │
+//!                               └──────────────┘ (replan/broaden, max 2 search rounds)
 //!
 //! Decompose runs once at the start to generate sub-queries.
 //! ParallelSearch executes web_search in parallel for all sub-queries.
-//! Aggregate collects and deduplicates results from parallel searches.
+//! Aggregate collects and deduplicates results AND runs the Evidence
+//! Gate (Step 1) to decide Answer vs Degrade.
+//!
+//! Step 3 changes:
+//! - Removed standalone `Evaluate` state (merged into `Aggregate`).
+//! - Hard 2-round search stop-loss via `LoopBudget::max_search_rounds`.
+//! - Evidence Gate (pure-code) replaces the LLM-driven eval call.
 
 use super::{State, StateKind, StepOutcome, Strategy, StrategyContext};
 use crate::agents::error_kind::AgentErrorKind;
@@ -19,6 +25,7 @@ use crate::agents::runtime::{AgentRequest, AgentRunResult, FinalDecision, Iterat
 use crate::agents::unified::helpers;
 use avrag_llm::LlmUsage;
 use avrag_llm::ChatMessage as LlmChatMessage;
+use avrag_rag_core::{DegradeKind, DefaultEvidenceGate, EvidenceGate, EvidenceGateInput, EvidenceGateOutcome};
 use avrag_search::{SearchResponse, SearchResult};
 use common::{AppError, DegradeTraceItem};
 use std::collections::HashSet;
@@ -35,10 +42,8 @@ pub enum SearchState {
     Decompose,
     /// ParallelSearch: execute web_search in parallel for all sub-queries.
     ParallelSearch { queries: Vec<String> },
-    /// Aggregate: collect and deduplicate results from parallel searches.
+    /// Aggregate: collect and deduplicate results, run Evidence Gate.
     Aggregate,
-    /// Evaluate: assess search quality and decide next action.
-    Evaluate,
     /// Answer: synthesize final response from accumulated results.
     Answer,
 }
@@ -49,7 +54,6 @@ impl State for SearchState {
             SearchState::Decompose => "decompose",
             SearchState::ParallelSearch { .. } => "parallel_search",
             SearchState::Aggregate => "aggregate",
-            SearchState::Evaluate => "evaluate",
             SearchState::Answer => "answer",
         }
     }
@@ -59,7 +63,6 @@ impl State for SearchState {
             SearchState::Decompose => StateKind::Plan,
             SearchState::ParallelSearch { .. } => StateKind::Execute,
             SearchState::Aggregate => StateKind::Control,
-            SearchState::Evaluate => StateKind::Evaluate,
             SearchState::Answer => StateKind::Answer,
         }
     }
@@ -69,7 +72,6 @@ impl State for SearchState {
             SearchState::Decompose => serde_json::json!({"state": "decompose"}),
             SearchState::ParallelSearch { queries } => serde_json::json!({"state": "parallel_search", "queries": queries}),
             SearchState::Aggregate => serde_json::json!({"state": "aggregate"}),
-            SearchState::Evaluate => serde_json::json!({"state": "evaluate"}),
             SearchState::Answer => serde_json::json!({"state": "answer"}),
         }
     }
@@ -114,6 +116,7 @@ pub struct SearchContext {
     pub tool_call_records: Vec<crate::agents::runtime::ToolCallRecord>,
     pub selected_writing_styles: Vec<String>,
     pub behavior_mode: Option<String>,
+    pub repository: Option<Arc<avrag_storage_pg::PgAppRepository>>,
 }
 
 impl StrategyContext for SearchContext {
@@ -186,7 +189,13 @@ impl SearchContext {
             tool_call_records: Vec::new(),
             selected_writing_styles: Vec::new(),
             behavior_mode: None,
+            repository: None,
         })
+    }
+
+    pub fn with_repository(mut self, repository: Option<Arc<avrag_storage_pg::PgAppRepository>>) -> Self {
+        self.repository = repository;
+        self
     }
 }
 
@@ -230,7 +239,6 @@ impl Strategy for SearchStrategy {
             SearchState::Decompose => self.step_decompose(ctx).await,
             SearchState::ParallelSearch { .. } => self.step_parallel_search(ctx).await,
             SearchState::Aggregate => self.step_aggregate(ctx).await,
-            SearchState::Evaluate => self.step_evaluate(ctx).await,
             SearchState::Answer => self.step_answer(ctx).await,
         }
     }
@@ -284,7 +292,7 @@ impl SearchStrategy {
         ctx.check_cancelled()?;
 
         let system_prompt = crate::agents::strategy::prompts::build_plan_system_prompt(
-            "search-plan",
+            "web-search-planner",
             "search",
         );
 
@@ -375,10 +383,17 @@ impl SearchStrategy {
         // Save calls for white-box reporting before they are consumed.
         let calls_for_records = all_calls.clone();
 
-        let tool_results = crate::agents::unified::atomic_tools::dispatch_atomic_tools_with_enforcement(
+        let session_id = ctx
+            .request
+            .session_id
+            .as_ref()
+            .and_then(|s| uuid::Uuid::parse_str(s).ok());
+        let tool_results = crate::agents::unified::helpers::dispatch_tools_with_history_interception(
             all_calls,
+            &ctx.auth,
+            session_id,
+            ctx.repository.as_ref().map(|r| r.as_ref()),
             Some(self.search_executor.as_ref()),
-            Some(&ctx.auth),
         )
         .await;
 
@@ -475,6 +490,9 @@ impl SearchStrategy {
             llm_usage: ctx.aggregated_usage.clone(),
         });
 
+        // Step 3: count this as one search round (initial phase).
+        ctx.budget.tick_search_round();
+
         Ok(StepOutcome::Next(Box::new(SearchState::Aggregate)))
     }
 
@@ -482,12 +500,77 @@ impl SearchStrategy {
 
     async fn step_aggregate(
         &self,
-        _ctx: &mut SearchContext,
+        ctx: &mut SearchContext,
     ) -> Result<StepOutcome, AgentErrorKind> {
-        // Aggregation is already done during ParallelSearch (dedup via seen_urls,
-        // accumulation into accumulated_search_results). This state serves as an
-        // explicit control point in the state machine.
-        Ok(StepOutcome::Next(Box::new(SearchState::Evaluate)))
+        ctx.check_cancelled()?;
+
+        // --- Step 3: Evidence Gate + 2-round stop-loss ---
+        // Aggregation itself is already done during ParallelSearch (dedup
+        // via seen_urls, accumulation into accumulated_search_results).
+        // Here we run the pure-code Evidence Gate to decide between
+        // Answer and Degrade, AND enforce the hard 2-round search budget.
+        let results = &ctx.accumulated_search_results;
+        let top_score: f32 = results
+            .iter()
+            .enumerate()
+            .map(|(i, _)| search_result_score_proxy(i))
+            .fold(0.0_f32, f32::max);
+        let chunk_count = results.len();
+        let score_variance = compute_search_score_variance(results);
+        let context_usage_ratio = estimate_search_context_usage_ratio(ctx);
+
+        let gate_input = EvidenceGateInput {
+            chunk_count,
+            top_score,
+            score_variance,
+            context_usage_ratio,
+            doc_metadata_themes: Vec::new(),
+            query_themes: extract_search_query_themes(&ctx.current_query),
+        };
+
+        let gate = DefaultEvidenceGate::default();
+        let gate_decision = gate.check(&gate_input);
+        let gate_label = match &gate_decision {
+            EvidenceGateOutcome::Pass => "pass",
+            EvidenceGateOutcome::NeedsFocus { .. } => "needs_focus",
+            EvidenceGateOutcome::Degrade(_) => "degrade",
+        };
+        let _ = ctx
+            .sink
+            .emit(AgentEvent::Evaluation {
+                signals: Some(serde_json::json!({
+                    "recall_count": chunk_count,
+                    "max_score": top_score,
+                })),
+                decision: gate_label.to_string(),
+                reasoning: format!("search_evidence_gate: {:?}", gate_decision),
+            })
+            .await;
+
+        // 2-round stop-loss: if we have already burned through
+        // max_search_rounds and still don't have enough, fall through to
+        // Answer with whatever we have instead of re-entering search.
+        let rounds_left = ctx.budget.max_search_rounds.saturating_sub(
+            ctx.budget.current_search_rounds,
+        );
+        if rounds_left == 0 && !matches!(gate_decision, EvidenceGateOutcome::Pass) {
+            tracing::warn!(
+                current_rounds = ctx.budget.current_search_rounds,
+                max_rounds = ctx.budget.max_search_rounds,
+                "search rounds exhausted — forcing Answer with current evidence"
+            );
+            return Ok(StepOutcome::Next(Box::new(SearchState::Answer)));
+        }
+
+        match gate_decision {
+            EvidenceGateOutcome::Pass | EvidenceGateOutcome::NeedsFocus { .. } => {
+                Ok(StepOutcome::Next(Box::new(SearchState::Answer)))
+            }
+            EvidenceGateOutcome::Degrade(kind) => {
+                let reason = search_gate_kind_to_degrade_reason(&kind);
+                self.finalize_degrade(ctx, reason).await.map(StepOutcome::Terminate)
+            }
+        }
     }
 
     // --- Single search (follow-up iteration, shared by Evaluate→ParallelSearch loop) ---
@@ -531,10 +614,12 @@ impl SearchStrategy {
             _ = ctx.cancel.cancelled() => {
                 return Err(AgentErrorKind::Unknown("cancelled".to_string()));
             }
-            results = crate::agents::unified::atomic_tools::dispatch_atomic_tools_with_enforcement(
+            results = crate::agents::unified::helpers::dispatch_tools_with_history_interception(
                 vec![search_call],
+                &ctx.auth,
+                ctx.request.session_id.as_ref().and_then(|s| uuid::Uuid::parse_str(s).ok()),
+                ctx.repository.as_ref().map(|r| r.as_ref()),
                 Some(self.search_executor.as_ref()),
-                Some(&ctx.auth),
             ) => {
                 let iteration_idx = ctx.iterations.len() as u8;
                 let mut results_iter = results.into_iter();
@@ -670,233 +755,12 @@ impl SearchStrategy {
             .await;
         ctx.is_phase1 = false;
 
+        // Step 3: count this follow-up as an additional search round.
+        ctx.budget.tick_search_round();
+
         // v5 fix: single_search must transition through Aggregate to keep
-        // the state machine consistent (ParallelSearch → Aggregate → Evaluate).
+        // the state machine consistent (ParallelSearch → Aggregate → Answer).
         Ok(StepOutcome::Next(Box::new(SearchState::Aggregate)))
-    }
-
-    // --- Evaluate step ---
-
-    async fn step_evaluate(
-        &self,
-        ctx: &mut SearchContext,
-    ) -> Result<StepOutcome, AgentErrorKind> {
-        ctx.check_cancelled()?;
-
-        let original_query = ctx.request.query.clone();
-        let iteration_idx = ctx.budget.current;
-
-        let response = ctx.current_search_response.clone().unwrap_or_else(|| SearchResponse {
-            query_type: "brave".to_string(),
-            sub_queries: vec![ctx.current_query.clone()],
-            results: Vec::new(),
-            synthesized_answer: String::new(),
-            llm_usage: None,
-        });
-
-        let snippet_texts: Vec<&str> = response.results.iter().map(|r| r.snippet.as_str()).collect();
-        let signals = EvaluationSignals {
-            recall_count: response.results.len(),
-            max_score: 0.0,
-            term_coverage: EvaluationSignals::compute_term_coverage(
-                &original_query,
-                &snippet_texts,
-            ),
-            zero_hits_per_subquery: Vec::new(),
-        };
-
-        // Hard constraint: budget exhausted (only for Phase 2+).
-        if !ctx.is_phase1 && ctx.budget.exhausted() {
-            telemetry::prometheus::observe_agent_budget_exhausted("SearchStrategy");
-            let decision = if ctx.accumulated_search_results.is_empty() {
-                "degrade".to_string()
-            } else {
-                "synthesize".to_string()
-            };
-            ctx.iterations.push(IterationRecord {
-                iteration: iteration_idx,
-                plan: serde_json::json!({
-                    "query": ctx.current_query,
-                    "vertical": ctx.current_vertical,
-                    "sub_queries": response.sub_queries,
-                    "query_type": response.query_type,
-                    "result_count": response.results.len(),
-                }),
-                signals: signals.clone(),
-                decision: decision.clone(),
-                elapsed_ms: 0,
-                llm_evaluation: None,
-                usage: helpers::build_run_usage(ctx.aggregated_usage.as_ref(), ctx.request_count),
-            });
-            let eval_signals = serde_json::to_value(&signals).ok();
-            let _ = ctx
-                .sink
-                .emit(AgentEvent::Evaluation {
-                    signals: eval_signals,
-                    decision: decision.clone(),
-                    reasoning: "budget exhausted — forced decision".to_string(),
-                })
-                .await;
-            if ctx.accumulated_search_results.is_empty() {
-                return self.finalize_degrade(ctx, DegradeReason::NoResultsAfterAllFallbacks)
-                    .await
-                    .map(StepOutcome::Terminate);
-            }
-            return Ok(StepOutcome::Next(Box::new(SearchState::Answer)));
-        }
-
-        // LLM strategy evaluation.
-        let eval_system = build_eval_system_prompt("search");
-        let strategy_eval = self
-            .evaluate_search_strategy(
-                ctx,
-                &original_query,
-                &response,
-                if ctx.is_phase1 { 0 } else { iteration_idx },
-                &eval_system,
-            )
-            .await;
-        let llm_suggested = strategy_eval
-            .as_ref()
-            .map(|(e, _)| {
-                e.next_actions
-                    .iter()
-                    .filter_map(|a| match a {
-                        crate::rag_prompts::NextAction::SubQuery { query } => Some(query.clone()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-
-        if let Some((_, eval_usage)) = &strategy_eval {
-            ctx.aggregated_usage = Some(helpers::merge_usage(
-                ctx.aggregated_usage.as_ref(),
-                eval_usage,
-            ));
-            ctx.request_count += 1;
-        }
-
-        let (advice, llm_eval_json) = match &strategy_eval {
-            Some((eval, _)) => {
-                let mapped = map_search_strategy_to_advice(
-                    eval,
-                    ctx.current_vertical.as_deref(),
-                );
-                let json = serde_json::to_value(eval).ok();
-                (mapped, json)
-            }
-            None => {
-                let code_advice = evaluate_search_iteration(
-                    &signals,
-                    &ctx.budget,
-                    &response.results,
-                );
-                (code_advice, None)
-            }
-        };
-
-        let decision_str = decision_label(&advice).to_string();
-
-        let mut iter_usage = response.llm_usage.clone();
-        if let Some((_, eval_u)) = &strategy_eval {
-            iter_usage = Some(helpers::merge_usage(iter_usage.as_ref(), eval_u));
-        }
-        let iter_agent_usage = helpers::build_run_usage(iter_usage.as_ref(), 0);
-
-        ctx.iterations.push(IterationRecord {
-            iteration: if ctx.is_phase1 { 0 } else { iteration_idx },
-            plan: serde_json::json!({
-                "query": ctx.current_query,
-                "vertical": ctx.current_vertical,
-                "sub_queries": response.sub_queries,
-                "query_type": response.query_type,
-                "result_count": response.results.len(),
-            }),
-            signals: signals.clone(),
-            decision: decision_str.clone(),
-            elapsed_ms: 0,
-            llm_evaluation: llm_eval_json.clone(),
-            usage: iter_agent_usage,
-        });
-
-        let eval_signals = serde_json::to_value(&signals).ok();
-        let _ = ctx
-            .sink
-            .emit(AgentEvent::Evaluation {
-                signals: eval_signals,
-                decision: decision_str,
-                reasoning: llm_eval_json
-                    .and_then(|v| v.get("reason").and_then(|r| r.as_str().map(|s| s.to_string())))
-                    .unwrap_or_default(),
-            })
-            .await;
-
-        match advice {
-            EvalAdvice::Synthesize => Ok(StepOutcome::Next(Box::new(SearchState::Answer))),
-            EvalAdvice::Clarify { .. } => {
-                Ok(StepOutcome::Next(Box::new(SearchState::Answer)))
-            }
-            EvalAdvice::Degrade { reason } => {
-                self.finalize_degrade(ctx, reason)
-                    .await
-                    .map(StepOutcome::Terminate)
-            }
-            EvalAdvice::EscalateVertical { reason: _ } => {
-                let Some(next_vertical) = next_vertical_step(ctx.current_vertical.as_deref()) else {
-                    return self.finalize_degrade(ctx, DegradeReason::NoResultsAfterAllFallbacks)
-                        .await
-                        .map(StepOutcome::Terminate);
-                };
-                ctx.current_vertical = Some(next_vertical);
-                ctx.current_query = if llm_suggested.is_empty() {
-                    original_query.clone()
-                } else {
-                    llm_suggested[0].clone()
-                };
-                Ok(StepOutcome::Next(Box::new(SearchState::ParallelSearch {
-                    queries: vec![ctx.current_query.clone()],
-                })))
-            }
-            EvalAdvice::BroadenQuery { reason } => {
-                ctx.current_query = if llm_suggested.is_empty() {
-                    helpers::broaden_query(&ctx.current_query)
-                } else {
-                    llm_suggested[0].clone()
-                };
-                let _ = ctx
-                    .sink
-                    .emit(AgentEvent::Activity {
-                        stage: "search".to_string(),
-                        message: format!("Broaden: {reason}"),
-                    })
-                    .await;
-                Ok(StepOutcome::Next(Box::new(SearchState::ParallelSearch {
-                    queries: vec![ctx.current_query.clone()],
-                })))
-            }
-            EvalAdvice::Replan { reason } => {
-                ctx.current_query = if llm_suggested.is_empty() {
-                    helpers::broaden_query(&original_query)
-                } else {
-                    llm_suggested[0].clone()
-                };
-                ctx.current_vertical = None;
-                let _ = ctx
-                    .sink
-                    .emit(AgentEvent::Activity {
-                        stage: "search".to_string(),
-                        message: format!("Replan: {reason}"),
-                    })
-                    .await;
-                Ok(StepOutcome::Next(Box::new(SearchState::ParallelSearch {
-                    queries: vec![ctx.current_query.clone()],
-                })))
-            }
-            EvalAdvice::FetchFullPage { .. } | EvalAdvice::EscalateToSearch { .. } => {
-                Ok(StepOutcome::Next(Box::new(SearchState::Answer)))
-            }
-        }
     }
 
     // --- Answer step ---
@@ -907,10 +771,25 @@ impl SearchStrategy {
     ) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
+        // Detect format skills from query (same heuristic as RagStrategy)
+        let mut detected_formats = crate::agents::strategy::prompts::detect_format_skills(&ctx.request.query);
+        // Always honor explicit format_hint regardless of query detection
+        if let Some(ref hint) = ctx.request.format_hint {
+            let lower = hint.to_lowercase();
+            if lower.contains("html") || lower.contains("web") {
+                detected_formats.push("html-renderer");
+            } else if lower.contains("ppt") || lower.contains("slide") || lower.contains("presentation") {
+                detected_formats.push("presentation-html");
+            } else if lower.contains("teach") || lower.contains("tutorial") || lower.contains("step") {
+                detected_formats.push("step-by-step-tutor");
+            }
+        }
+        let format_skills: Vec<String> = detected_formats.iter().map(|s| s.to_string()).collect();
+
         let mut system_prompt = crate::agents::strategy::prompts::build_answer_system_prompt(
             crate::agents::strategy::prompts::search::ANSWER_SKILL_ID,
             "search",
-            &[],
+            &format_skills,
             &ctx.selected_writing_styles,
         );
 
@@ -919,6 +798,19 @@ impl SearchStrategy {
             system_prompt.push_str("\n\n---\n\n");
             system_prompt.push_str(&behavior_skill);
         }
+
+        // Emit debug trace for E2E validation of format skill injection
+        let _ = ctx
+            .sink
+            .emit(crate::agents::events::AgentEvent::DebugTrace {
+                kind: "answer.format_skills".to_string(),
+                payload: serde_json::json!({
+                    "selected_format_skills": format_skills,
+                    "system_prompt_len": system_prompt.len(),
+                    "contains_html_renderer": system_prompt.contains("html-renderer"),
+                }),
+            })
+            .await;
 
         if ctx.accumulated_search_results.is_empty() {
             return self.finalize_degrade(ctx, DegradeReason::NoResultsAfterAllFallbacks)
@@ -1279,9 +1171,13 @@ impl SearchStrategy {
 
 fn build_eval_system_prompt(strategy: &str) -> String {
     let registry = PromptRegistry::standard_cached();
-    let skill_body = registry
-        .skill("search-eval")
-        .map(|s| s.system_prompt().to_string())
+    let (skill_body, schema_ref) = registry
+        .skill("web-search-coverage-eval")
+        .map(|s| {
+            let body = s.system_prompt().to_string();
+            let schema = s.references().get("schema.md").cloned();
+            (body, schema)
+        })
         .unwrap_or_default();
 
     let cap_registry = crate::agents::capability::CapabilityRegistry::standard_cached();
@@ -1292,11 +1188,14 @@ fn build_eval_system_prompt(strategy: &str) -> String {
         .collect::<Vec<_>>()
         .join("\n");
 
-    if tool_catalog.is_empty() {
-        skill_body
-    } else {
-        format!("{skill_body}\n\n---\n\n## Available Tools for Replanning\n\n{tool_catalog}")
+    let mut parts = vec![skill_body];
+    if let Some(schema) = schema_ref {
+        parts.push(format!("## Output Schema\n\n{schema}"));
     }
+    if !tool_catalog.is_empty() {
+        parts.push(format!("## Available Tools for Replanning\n\n{tool_catalog}"));
+    }
+    parts.join("\n\n---\n\n")
 }
 
 
@@ -1441,6 +1340,77 @@ fn decision_label(advice: &EvalAdvice) -> &'static str {
         EvalAdvice::EscalateToSearch { .. } => "escalate_to_search",
         EvalAdvice::FetchFullPage { .. } => "fetch_full_page",
     }
+}
+
+/// Map a SearchStrategy `DegradeKind` to the app's strong `DegradeReason` enum.
+/// Mirrors `evidence_gate_kind_to_degrade_reason` in rag.rs so Search and
+/// RAG share the same degrade vocabulary.
+fn search_gate_kind_to_degrade_reason(kind: &DegradeKind) -> DegradeReason {
+    match kind {
+        DegradeKind::NoResults => DegradeReason::NoResultsAfterAllFallbacks,
+        DegradeKind::ContextBudgetTight => DegradeReason::BudgetExhausted,
+        DegradeKind::LowRelevance => DegradeReason::NoResultsAfterAllFallbacks,
+        DegradeKind::TopicMismatch => {
+            DegradeReason::Other("search_evidence_topic_mismatch".to_string())
+        }
+    }
+}
+
+/// Score proxy for a SearchResult. We don't have a Brave relevance
+/// score in the API response, so use the citation_index as a proxy
+/// (lower index = higher relevance under Brave's default ordering).
+/// Returns 1.0 for the first result, 0.5 for the rest.
+fn search_result_score_proxy(idx: usize) -> f32 {
+    if idx == 0 {
+        1.0
+    } else {
+        0.5
+    }
+}
+
+/// Variance of accumulated web search result scores. Search results
+/// carry a `score` field on `SearchResult` (Brave relevance).
+fn compute_search_score_variance(results: &[SearchResult]) -> f32 {
+    if results.len() < 2 {
+        return 0.0;
+    }
+    let scores: Vec<f32> = results
+        .iter()
+        .enumerate()
+        .map(|(i, _)| search_result_score_proxy(i))
+        .collect();
+    let mean: f32 = scores.iter().sum::<f32>() / scores.len() as f32;
+    scores
+        .iter()
+        .map(|s| (s - mean).powi(2))
+        .sum::<f32>()
+        / scores.len() as f32
+}
+
+/// Estimate context usage ratio from accumulated search snippets.
+/// Same heuristic as RAG (1 char ≈ 0.25 token, 200k ceiling).
+fn estimate_search_context_usage_ratio(ctx: &SearchContext) -> f32 {
+    const CTX_CEILING_TOKENS: f32 = 200_000.0;
+    let chars: usize = ctx
+        .accumulated_search_results
+        .iter()
+        .map(|r| r.snippet.len() + r.title.len())
+        .sum();
+    let est_tokens = (chars as f32) * 0.25;
+    (est_tokens / CTX_CEILING_TOKENS).min(1.0)
+}
+
+/// Query themes for the Evidence Gate's topic-mismatch check.
+fn extract_search_query_themes(query: &str) -> Vec<String> {
+    query
+        .split_whitespace()
+        .map(|s| {
+            s.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase()
+        })
+        .filter(|s| s.len() >= 3)
+        .take(8)
+        .collect()
 }
 
 fn renumber_citation_indexes(results: &[SearchResult]) -> Vec<SearchResult> {
@@ -1682,7 +1652,6 @@ mod tests {
             "parallel_search"
         );
         assert_eq!(SearchState::Aggregate.state_id(), "aggregate");
-        assert_eq!(SearchState::Evaluate.state_id(), "evaluate");
         assert_eq!(SearchState::Answer.state_id(), "answer");
     }
 
@@ -1694,7 +1663,6 @@ mod tests {
             StateKind::Execute
         );
         assert_eq!(SearchState::Aggregate.state_kind(), StateKind::Control);
-        assert_eq!(SearchState::Evaluate.state_kind(), StateKind::Evaluate);
         assert_eq!(SearchState::Answer.state_kind(), StateKind::Answer);
     }
 

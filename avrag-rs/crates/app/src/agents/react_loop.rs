@@ -69,10 +69,24 @@ impl<'a> ReactContext<'a> {
 
 /// Iteration budget — see decision ④. Initial defaults: RAG = 3, Search = 2.
 /// Tier-based limits: free users get stricter budgets to control costs.
+///
+/// `max_search_rounds` / `current_search_rounds` (added Step 3) count
+/// search-API round trips separately from the LLM-side `current` /
+/// `max_iterations` counter. WebSearch uses this to enforce a hard
+/// 2-round stop-loss before the LLM evaluator can loop on empty
+/// results.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LoopBudget {
     pub max_iterations: u8,
     pub current: u8,
+    #[serde(default = "default_max_search_rounds")]
+    pub max_search_rounds: u8,
+    #[serde(default)]
+    pub current_search_rounds: u8,
+}
+
+fn default_max_search_rounds() -> u8 {
+    2
 }
 
 /// User tier for cost-controlled loop budgets.
@@ -88,6 +102,8 @@ impl LoopBudget {
         Self {
             max_iterations,
             current: 0,
+            max_search_rounds: 2,
+            current_search_rounds: 0,
         }
     }
 
@@ -126,6 +142,18 @@ impl LoopBudget {
     /// Advance the iteration counter. Saturates at `u8::MAX` to avoid panics.
     pub fn tick(&mut self) {
         self.current = self.current.saturating_add(1);
+    }
+
+    /// Advance the search-round counter. Saturates at `u8::MAX`.
+    pub fn tick_search_round(&mut self) {
+        self.current_search_rounds = self.current_search_rounds.saturating_add(1);
+    }
+
+    /// True once the search-round ceiling is reached. Use to
+    /// short-circuit a SearchStrategy run before the LLM evaluator
+    /// can loop on empty results.
+    pub fn search_rounds_exhausted(&self) -> bool {
+        self.current_search_rounds >= self.max_search_rounds
     }
 }
 
