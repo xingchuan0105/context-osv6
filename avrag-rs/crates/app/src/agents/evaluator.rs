@@ -207,6 +207,16 @@ impl AccumulatedRagResults {
             .fold(0.0_f32, f32::max)
     }
 
+    /// Borrow all chunk references currently in the accumulator.
+    pub fn all_chunks(&self) -> Vec<&AnswerContextChunk> {
+        self.chunks.values().map(|sc| &sc.chunk).collect()
+    }
+
+    /// Borrow all scores currently in the accumulator.
+    pub fn all_scores(&self) -> Vec<f32> {
+        self.chunks.values().map(|sc| sc.score).collect()
+    }
+
     /// Take the top-N scored chunks (sorted desc by score) and consume `self`.
     pub fn into_top_n(self, n: usize) -> Vec<AnswerContextChunk> {
         let mut v: Vec<ScoredChunk> = self.chunks.into_values().collect();

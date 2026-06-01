@@ -1,9 +1,15 @@
-//! RagStrategy — v5 state machine for RAG mode.
+//! RagStrategy — v6 state machine for RAG mode.
 //!
-//! RAG is multi-iteration with retrieval, evaluation, and optional replan:
-//!   Plan → ExecuteRetrieve → Evaluate → Answer
-//!                              ↓ replan/broaden, budget ok
-//!                         Plan (loop)
+//! RAG is multi-iteration with retrieval and (optional) replan:
+//!   Plan → ExecuteRetrieve → Answer
+//!            ↓ budget left, retriable
+//!         Plan (loop)
+//!
+//! The legacy standalone `Evaluate` state has been merged into
+//! `Answer` (now done by `Evidence Gate` as a pure-code check +
+//! `grounded-answer` as a single LLM call that internally assesses
+//! sufficiency). This avoids reading the same evidence twice and
+//! removes the LLM-evaluate / LLM-answer split-brain problem.
 
 use super::{AgentErrorKind, State, StateKind, StepOutcome, Strategy, StrategyContext};
 use crate::agents::evaluator::{
@@ -13,6 +19,9 @@ use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::progressive::PromptRegistry;
 use crate::agents::react_loop::{DegradeReason, LoopBudget};
 use crate::agents::runtime::{AgentRequest, AgentRunResult, FinalDecision, IterationRecord};
+use avrag_rag_core::{
+    DefaultEvidenceGate, DegradeKind, EvidenceGate, EvidenceGateInput, EvidenceGateOutcome,
+};
 use crate::agents::unified::helpers;
 use common::{AppError, ChatRequest, ToolCall, ToolResult, ToolStatus};
 use tokio_util::sync::CancellationToken;
@@ -28,9 +37,9 @@ pub enum RagState {
     Plan,
     /// ExecuteRetrieve: run RAG retrieval tools.
     ExecuteRetrieve,
-    /// Evaluate: assess retrieval quality and decide next action.
-    Evaluate,
-    /// Answer: synthesize final response from accumulated evidence.
+    /// Answer: synthesize final response from accumulated evidence
+    /// (with internal sufficiency check via `Evidence Gate` +
+    /// `grounded-answer` self-assessment).
     Answer,
 }
 
@@ -39,7 +48,6 @@ impl State for RagState {
         match self {
             RagState::Plan => "plan",
             RagState::ExecuteRetrieve => "execute_retrieve",
-            RagState::Evaluate => "evaluate",
             RagState::Answer => "answer",
         }
     }
@@ -48,7 +56,6 @@ impl State for RagState {
         match self {
             RagState::Plan => StateKind::Plan,
             RagState::ExecuteRetrieve => StateKind::Execute,
-            RagState::Evaluate => StateKind::Evaluate,
             RagState::Answer => StateKind::Answer,
         }
     }
@@ -57,7 +64,6 @@ impl State for RagState {
         match self {
             RagState::Plan => serde_json::json!({"state": "plan"}),
             RagState::ExecuteRetrieve => serde_json::json!({"state": "execute_retrieve"}),
-            RagState::Evaluate => serde_json::json!({"state": "evaluate"}),
             RagState::Answer => serde_json::json!({"state": "answer"}),
         }
     }
@@ -117,6 +123,7 @@ pub struct RagContext {
     // Accumulated
     pub aggregated_usage: Option<avrag_llm::LlmUsage>,
     pub request_count: u64,
+    pub repository: Option<std::sync::Arc<avrag_storage_pg::PgAppRepository>>,
 }
 
 impl StrategyContext for RagContext {
@@ -186,8 +193,9 @@ impl RagContext {
         // History is loaded on-demand via conversation_history_load tool.
         // Do not inject request.messages here.
 
+        let query = request.query.clone();
         let chat_req = ChatRequest {
-            query: request.query.clone(),
+            query: query.clone(),
             notebook_id: request.notebook_id.clone(),
             session_id: request.session_id.clone(),
             agent_type: "rag".to_string(),
@@ -214,7 +222,11 @@ impl RagContext {
             total_tool_calls: 0,
             content_guard_trace: Vec::new(),
             tool_call_records: Vec::new(),
-            iteration_params: RagIterationParams::default(),
+            iteration_params: RagIterationParams {
+                query,
+                directive: None,
+                suggested_queries: Vec::new(),
+            },
             current_plan_calls: None,
             current_plan_strategy: None,
             selected_skills: Vec::new(),
@@ -223,7 +235,13 @@ impl RagContext {
             iterations: Vec::new(),
             aggregated_usage: None,
             request_count: 0,
+            repository: None,
         })
+    }
+
+    pub fn with_repository(mut self, repository: Option<std::sync::Arc<avrag_storage_pg::PgAppRepository>>) -> Self {
+        self.repository = repository;
+        self
     }
 }
 
@@ -268,6 +286,10 @@ impl Strategy for RagStrategy {
                     to: "Evaluate".to_string(),
                 },
                 crate::agents::capability::TransitionSchema {
+                    from: "ExecuteRetrieve".to_string(),
+                    to: "Answer".to_string(),
+                },
+                crate::agents::capability::TransitionSchema {
                     from: "Evaluate".to_string(),
                     to: "Answer".to_string(),
                 },
@@ -302,7 +324,6 @@ impl Strategy for RagStrategy {
         match rag_state {
             RagState::Plan => self.step_plan(ctx).await,
             RagState::ExecuteRetrieve => self.step_execute(ctx).await,
-            RagState::Evaluate => self.step_evaluate(ctx).await,
             RagState::Answer => self.step_answer(ctx).await,
         }
     }
@@ -470,7 +491,7 @@ impl RagStrategy {
         });
         let mut rag_calls = rag_calls;
         if !has_core_retrieval && !ctx.request.doc_scope.is_empty() {
-            tracing::info!(
+            tracing::warn!(
                 "planner produced no core retrieval calls — injecting default dense_retrieval"
             );
             rag_calls.push(common::ToolCall {
@@ -603,7 +624,7 @@ impl RagStrategy {
             .await;
         let elapsed_ms = iteration_started.elapsed().as_millis() as u64;
 
-        // Budget exhausted: short-circuit to Answer.
+        // Budget exhausted: short-circuit to Answer or Degrade.
         if ctx.budget.exhausted() {
             telemetry::prometheus::observe_agent_budget_exhausted("RagStrategy");
             let decision = if ctx.accumulated.is_empty() {
@@ -625,7 +646,7 @@ impl RagStrategy {
                 .sink
                 .emit(AgentEvent::Evaluation {
                     signals: eval_signals,
-                    decision,
+                    decision: decision.clone(),
                     reasoning: "budget exhausted — forced decision".to_string(),
                 })
                 .await;
@@ -636,223 +657,68 @@ impl RagStrategy {
             return Ok(StepOutcome::Next(Box::new(RagState::Answer)));
         }
 
-        // Store partial iteration record for evaluate.
+        // --- Evidence Gate (Step 1) ---
+        // Pure-code check on retrieval metadata. Replaces the legacy
+        // LLM-driven `Evaluate` state. The grounded-answer prompt will
+        // perform its own internal sufficiency assessment on the same
+        // evidence, but this gate is a fast first-pass for structural
+        // problems (zero recall, context overflow, score floor, topic
+        // mismatch).
+        let top_score = signals.max_score;
+        let chunk_count = signals.recall_count;
+        let score_variance = compute_score_variance(&ctx.accumulated);
+        let context_usage_ratio = estimate_context_usage_ratio(ctx);
+
+        let gate_input = EvidenceGateInput {
+            chunk_count,
+            top_score,
+            score_variance,
+            context_usage_ratio,
+            doc_metadata_themes: Vec::new(), // TODO: wire from doc_metadata tool
+            query_themes: extract_query_themes(&ctx.iteration_params.query),
+        };
+
+        let gate = DefaultEvidenceGate::default();
+        let gate_decision = gate.check(&gate_input);
+        let gate_label = match &gate_decision {
+            EvidenceGateOutcome::Pass => "pass",
+            EvidenceGateOutcome::NeedsFocus { .. } => "needs_focus",
+            EvidenceGateOutcome::Degrade(_) => "degrade",
+        };
+        let _ = ctx
+            .sink
+            .emit(AgentEvent::Evaluation {
+                signals: serde_json::to_value(&signals).ok(),
+                decision: gate_label.to_string(),
+                reasoning: format!("evidence_gate: {:?}", gate_decision),
+            })
+            .await;
+
+        // Commit iteration record with the gate decision.
+        let decision = gate_label.to_string();
         ctx.iterations.push(IterationRecord {
             iteration: iteration_idx,
             plan: plan_snapshot,
             signals: signals.clone(),
-            decision: "pending".to_string(),
+            decision: decision.clone(),
             elapsed_ms,
-            llm_evaluation: None,
+            llm_evaluation: Some(serde_json::to_value(&gate_decision).unwrap_or(serde_json::Value::Null)),
             usage: None,
         });
 
-        Ok(StepOutcome::Next(Box::new(RagState::Evaluate)))
-    }
-
-    // --- Evaluate step ---
-
-    async fn step_evaluate(&self, ctx: &mut RagContext) -> Result<StepOutcome, AgentErrorKind> {
-        ctx.check_cancelled()?;
-
-        let iteration_idx = ctx.budget.current;
-        let original_query = ctx.chat_req.query.clone();
-        let plan_calls = ctx.current_plan_calls.clone().unwrap_or_default();
-        let tool_results = ctx.all_tool_results.clone();
-
-        // Short-circuit: zero recall with no accumulated results → degrade immediately.
-        // Prevents LLM from entering pointless replan loops on empty collections.
-        if let Some(last_record) = ctx.iterations.last() {
-            if last_record.signals.recall_count == 0 && ctx.accumulated.is_empty() {
-                let _ = ctx
-                    .sink
-                    .emit(AgentEvent::Evaluation {
-                        signals: serde_json::to_value(&last_record.signals).ok(),
-                        decision: "degrade".to_string(),
-                        reasoning: "zero recall and no accumulated results — skipping LLM evaluation".to_string(),
-                    })
-                    .await;
-                if let Some(last) = ctx.iterations.last_mut() {
-                    last.decision = "degrade".to_string();
-                }
-                return self.finalize_degrade(ctx, DegradeReason::NoResultsAfterAllFallbacks)
-                    .await
-                    .map(StepOutcome::Terminate);
+        match gate_decision {
+            EvidenceGateOutcome::Pass
+            | EvidenceGateOutcome::NeedsFocus { .. } => {
+                // Pass: proceed to grounded answer with current evidence.
+                // NeedsFocus: focus-mode compression is a Step-4 concern;
+                // for now we surface the signal but still proceed to
+                // Answer (Step 4 will gate this path on focus-mode
+                // availability).
+                Ok(StepOutcome::Next(Box::new(RagState::Answer)))
             }
-        }
-
-        let eval_system = build_eval_system_prompt("rag");
-        let strategy_advice = self
-            .evaluate_retrieval_strategy(
-                ctx,
-                &original_query,
-                &plan_calls,
-                &tool_results,
-                iteration_idx,
-                &eval_system,
-            )
-            .await;
-
-        if let Some((_, eval_usage)) = &strategy_advice {
-            ctx.aggregated_usage = Some(helpers::merge_usage(
-                ctx.aggregated_usage.as_ref(),
-                eval_usage,
-            ));
-            ctx.request_count += 1;
-        }
-
-        let (decision_str, llm_eval_json) = match &strategy_advice {
-            Some((eval, _)) => {
-                let label = match eval.decision {
-                    crate::rag_prompts::EvalDecision::Sufficient => "sufficient".to_string(),
-                    crate::rag_prompts::EvalDecision::Insufficient => "insufficient".to_string(),
-                    crate::rag_prompts::EvalDecision::GiveUp => "give_up".to_string(),
-                };
-                let json = serde_json::to_value(eval).ok();
-                (label, json)
-            }
-            None => {
-                let last_record = ctx.iterations.last().unwrap();
-                let advice = evaluate_rag_iteration(
-                    &last_record.signals,
-                    &ctx.budget,
-                    &ctx.accumulated,
-                );
-                (decision_label(&advice).to_string(), None)
-            }
-        };
-
-        if let Some(last) = ctx.iterations.last_mut() {
-            last.decision = decision_str.clone();
-            last.llm_evaluation = llm_eval_json.clone();
-        }
-
-        let eval_signals = ctx.iterations.last().and_then(|it| serde_json::to_value(&it.signals).ok());
-        let _ = ctx
-            .sink
-            .emit(AgentEvent::Evaluation {
-                signals: eval_signals,
-                decision: decision_str.clone(),
-                reasoning: llm_eval_json.as_ref()
-                    .and_then(|v| v.get("reasoning").and_then(|r| r.as_str().map(|s| s.to_string())))
-                    .or_else(|| llm_eval_json.as_ref().and_then(|v| v.get("reason").and_then(|r| r.as_str().map(|s| s.to_string()))))
-                    .unwrap_or_default(),
-            })
-            .await;
-
-        match strategy_advice {
-            Some((eval, _)) => match eval.decision {
-                crate::rag_prompts::EvalDecision::Sufficient => {
-                    Ok(StepOutcome::Next(Box::new(RagState::Answer)))
-                }
-                crate::rag_prompts::EvalDecision::GiveUp => {
-                    self.finalize_degrade(ctx, DegradeReason::NoResultsAfterAllFallbacks)
-                        .await
-                        .map(StepOutcome::Terminate)
-                }
-                crate::rag_prompts::EvalDecision::Insufficient => {
-                    // Convert next_actions directly to tool calls — skip Plan LLM.
-                    let mut calls: Vec<ToolCall> = Vec::new();
-                    for action in &eval.next_actions {
-                        match action {
-                            crate::rag_prompts::NextAction::SubQuery { query } => {
-                                calls.push(ToolCall {
-                                    tool: "dense_retrieval".to_string(),
-                                    version: "1.0".to_string(),
-                                    args: serde_json::json!({
-                                        "queries": [query],
-                                        "modality": "text",
-                                        "top_k": 10,
-                                    }),
-                                });
-                            }
-                            crate::rag_prompts::NextAction::ToolCall { tool, args, reason: _ } => {
-                                calls.push(ToolCall {
-                                    tool: tool.clone(),
-                                    version: "1.0".to_string(),
-                                    args: args.clone(),
-                                });
-                            }
-                        }
-                    }
-
-                    if calls.is_empty() {
-                        // No actionable next actions — broaden as fallback
-                        ctx.iteration_params = RagIterationParams {
-                            query: helpers::broaden_query(&original_query),
-                            directive: Some(format!("broaden: {}", eval.reasoning)),
-                            suggested_queries: Vec::new(),
-                        };
-                        return Ok(StepOutcome::Next(Box::new(RagState::Plan)));
-                    }
-
-                    // Store calls for step_execute to dispatch directly
-                    ctx.current_plan_calls = Some(calls);
-                    ctx.iteration_params = RagIterationParams {
-                        query: original_query.clone(),
-                        directive: Some(format!("evaluate: {}", eval.reasoning)),
-                        suggested_queries: Vec::new(),
-                    };
-                    Ok(StepOutcome::Next(Box::new(RagState::ExecuteRetrieve)))
-                }
-            },
-            None => {
-                let last_record = ctx.iterations.last().unwrap();
-                let advice = evaluate_rag_iteration(
-                    &last_record.signals,
-                    &ctx.budget,
-                    &ctx.accumulated,
-                );
-                match advice {
-                    EvalAdvice::Synthesize => {
-                        Ok(StepOutcome::Next(Box::new(RagState::Answer)))
-                    }
-                    EvalAdvice::Clarify { question } => {
-                        Ok(StepOutcome::Terminate(AgentRunResult {
-                            answer: question.clone(),
-                            final_decision: Some(FinalDecision::Clarified { question }),
-                            ..Default::default()
-                        }))
-                    }
-                    EvalAdvice::Degrade { reason } => {
-                        self.finalize_degrade(ctx, reason).await
-                            .map(StepOutcome::Terminate)
-                    }
-                    EvalAdvice::Replan { reason } => {
-                        let directive = if let Some(hint) =
-                            build_doc_index_directive_hint(&tool_results)
-                        {
-                            Some(format!("replan: {}\n\n{}", reason, hint))
-                        } else {
-                            Some(format!("replan: {reason}"))
-                        };
-                        ctx.iteration_params = RagIterationParams {
-                            query: original_query.clone(),
-                            directive,
-                            suggested_queries: Vec::new(),
-                        };
-                        Ok(StepOutcome::Next(Box::new(RagState::Plan)))
-                    }
-                    EvalAdvice::BroadenQuery { reason } => {
-                        ctx.iteration_params = RagIterationParams {
-                            query: helpers::broaden_query(&ctx.iteration_params.query),
-                            directive: Some(format!("broaden: {reason}")),
-                            suggested_queries: Vec::new(),
-                        };
-                        Ok(StepOutcome::Next(Box::new(RagState::Plan)))
-                    }
-                    EvalAdvice::EscalateToSearch { reason } => {
-                        self.finalize_degrade(
-                            ctx,
-                            DegradeReason::Other(format!("escalate_to_search: {reason}")),
-                        )
-                        .await
-                        .map(StepOutcome::Terminate)
-                    }
-                    EvalAdvice::EscalateVertical { .. } | EvalAdvice::FetchFullPage { .. } => {
-                        Ok(StepOutcome::Next(Box::new(RagState::Answer)))
-                    }
-                }
+            EvidenceGateOutcome::Degrade(kind) => {
+                let reason = evidence_gate_kind_to_degrade_reason(&kind);
+                self.finalize_degrade(ctx, reason).await.map(StepOutcome::Terminate)
             }
         }
     }
@@ -863,11 +729,33 @@ impl RagStrategy {
         ctx.check_cancelled()?;
 
         // Compute selected format skills: prefer explicit selection, fall back to keyword detection
-        let selected_format_skills: Vec<String> = if !ctx.selected_skills.is_empty() {
+        let mut selected_format_skills: Vec<String> = if !ctx.selected_skills.is_empty() {
             ctx.selected_skills.clone()
         } else {
-            detect_format_skills(&ctx.request.query).iter().map(|s| s.to_string()).collect()
+            crate::agents::strategy::prompts::detect_format_skills(&ctx.request.query)
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
         };
+        // Always honor explicit format_hint regardless of planner output
+        if let Some(ref hint) = ctx.request.format_hint {
+            let lower = hint.to_lowercase();
+            let skill = if lower.contains("html") || lower.contains("web") {
+                Some("html-renderer")
+            } else if lower.contains("ppt") || lower.contains("slide") || lower.contains("presentation") {
+                Some("presentation-html")
+            } else if lower.contains("teach") || lower.contains("tutorial") || lower.contains("step") {
+                Some("step-by-step-tutor")
+            } else {
+                None
+            };
+            if let Some(s) = skill {
+                let s = s.to_string();
+                if !selected_format_skills.contains(&s) {
+                    selected_format_skills.push(s);
+                }
+            }
+        }
         let mut system_prompt = crate::agents::strategy::prompts::build_answer_system_prompt(
             crate::agents::strategy::prompts::rag::ANSWER_SKILL_ID,
             "rag",
@@ -880,6 +768,19 @@ impl RagStrategy {
             system_prompt.push_str("\n\n---\n\n");
             system_prompt.push_str(&behavior_skill);
         }
+
+        // Emit debug trace for E2E validation of format skill injection
+        let _ = ctx
+            .sink
+            .emit(crate::agents::events::AgentEvent::DebugTrace {
+                kind: "answer.format_skills".to_string(),
+                payload: serde_json::json!({
+                    "selected_format_skills": selected_format_skills,
+                    "system_prompt_len": system_prompt.len(),
+                    "contains_html_renderer": system_prompt.contains("html-renderer"),
+                }),
+            })
+            .await;
 
         if !helpers::has_evidence(&ctx.all_tool_results) {
             return self.finalize_degrade(ctx, DegradeReason::NoResultsAfterAllFallbacks)
@@ -1171,11 +1072,22 @@ impl RagStrategy {
 // System prompt builders
 // ---------------------------------------------------------------------------
 
+/// **Deprecated** since Step 2 (2026-06). The legacy LLM-driven
+/// `evaluate` state was removed in favour of the pure-code
+/// `Evidence Gate` (see `avrag_rag_core::evidence_gate`). This
+/// function is retained for unit-test coverage of the
+/// `retrieval-coverage-eval` skill body and the RAG tool catalog.
+/// New code should not call it.
+#[allow(dead_code)]
 fn build_eval_system_prompt(strategy: &str) -> String {
     let registry = PromptRegistry::standard_cached();
-    let skill_body = registry
-        .skill("rag-eval")
-        .map(|s| s.system_prompt().to_string())
+    let (skill_body, schema_ref) = registry
+        .skill("retrieval-coverage-eval")
+        .map(|s| {
+            let body = s.system_prompt().to_string();
+            let schema = s.references().get("schema.md").cloned();
+            (body, schema)
+        })
         .unwrap_or_default();
 
     let cap_registry = crate::agents::capability::CapabilityRegistry::standard_cached();
@@ -1186,11 +1098,14 @@ fn build_eval_system_prompt(strategy: &str) -> String {
         .collect::<Vec<_>>()
         .join("\n");
 
-    if tool_catalog.is_empty() {
-        skill_body
-    } else {
-        format!("{skill_body}\n\n---\n\n## Available Tools for Replanning\n\n{tool_catalog}")
+    let mut parts = vec![skill_body];
+    if let Some(schema) = schema_ref {
+        parts.push(format!("## Output Schema\n\n{schema}"));
     }
+    if !tool_catalog.is_empty() {
+        parts.push(format!("## Available Tools for Replanning\n\n{tool_catalog}"));
+    }
+    parts.join("\n\n---\n\n")
 }
 
 
@@ -1311,6 +1226,69 @@ fn decision_label(advice: &EvalAdvice) -> &'static str {
     }
 }
 
+/// Map an `Evidence Gate` `DegradeKind` to the app's strong `DegradeReason` enum.
+///
+/// The mapping prefers existing concrete variants. `TopicMismatch` and
+/// `LowRelevance` fall back to `Other(_)` for now; they will get their
+/// own dedicated variants in a follow-up cleanup.
+fn evidence_gate_kind_to_degrade_reason(kind: &DegradeKind) -> DegradeReason {
+    match kind {
+        DegradeKind::NoResults => DegradeReason::NoResultsAfterAllFallbacks,
+        DegradeKind::ContextBudgetTight => DegradeReason::BudgetExhausted,
+        DegradeKind::LowRelevance => DegradeReason::NoResultsAfterAllFallbacks,
+        DegradeKind::TopicMismatch => {
+            DegradeReason::Other("evidence_topic_mismatch".to_string())
+        }
+    }
+}
+
+/// Compute variance of accumulated chunk scores.
+///
+/// Returns 0.0 when there is fewer than two chunks (variance undefined).
+pub fn compute_score_variance(accumulated: &AccumulatedRagResults) -> f32 {
+    // AccumulatedRagResults keeps a flat list of (chunk, score) pairs.
+    let scores = accumulated.all_scores();
+    if scores.len() < 2 {
+        return 0.0;
+    }
+    let mean: f32 = scores.iter().sum::<f32>() / scores.len() as f32;
+    let var: f32 = scores
+        .iter()
+        .map(|s| (s - mean).powi(2))
+        .sum::<f32>()
+        / scores.len() as f32;
+    var
+}
+
+/// Estimate context usage ratio in `[0.0, 1.0]` from accumulated evidence.
+///
+/// Heuristic: 1 char ≈ 0.25 token; a 200k-token context is the LLM ceiling.
+pub fn estimate_context_usage_ratio(ctx: &RagContext) -> f32 {
+    const CTX_CEILING_TOKENS: f32 = 200_000.0;
+    let chars: usize = ctx
+        .accumulated
+        .all_chunks()
+        .iter()
+        .map(|c| c.text.len())
+        .sum();
+    let est_tokens = (chars as f32) * 0.25;
+    (est_tokens / CTX_CEILING_TOKENS).min(1.0)
+}
+
+/// Extract query themes (lowercased, non-trivial tokens) for the
+/// Evidence Gate's topic-mismatch check.
+pub fn extract_query_themes(query: &str) -> Vec<String> {
+    query
+        .split_whitespace()
+        .map(|s| {
+            s.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase()
+        })
+        .filter(|s| s.len() >= 3)
+        .take(8)
+        .collect()
+}
+
 fn is_rag_tool(name: &str) -> bool {
     crate::agents::progressive::rag_tool_catalog_cached()
         .iter()
@@ -1342,21 +1320,6 @@ fn extract_rag_plan_metadata(raw: &str) -> (Vec<String>, Option<String>) {
     }
 }
 
-fn detect_format_skills(query: &str) -> Vec<&'static str> {
-    let mut skills = Vec::new();
-    let lower = query.to_lowercase();
-    if lower.contains("ppt") || lower.contains("slide") || lower.contains("presentation") {
-        skills.push("ppt-generation");
-    }
-    if lower.contains("html") || lower.contains("web page") || lower.contains("网页") {
-        skills.push("html-renderer");
-    }
-    if lower.contains("teach") || lower.contains("explain") || lower.contains("tutorial") {
-        skills.push("teaching");
-    }
-    skills
-}
-
 fn extract_chunks_from_tool_results(
     tool_results: &[common::ToolResult],
 ) -> Vec<common::RetrievedChunk> {
@@ -1385,7 +1348,6 @@ mod tests {
     fn rag_state_ids() {
         assert_eq!(RagState::Plan.state_id(), "plan");
         assert_eq!(RagState::ExecuteRetrieve.state_id(), "execute_retrieve");
-        assert_eq!(RagState::Evaluate.state_id(), "evaluate");
         assert_eq!(RagState::Answer.state_id(), "answer");
     }
 
@@ -1393,7 +1355,6 @@ mod tests {
     fn rag_state_kinds() {
         assert_eq!(RagState::Plan.state_kind(), StateKind::Plan);
         assert_eq!(RagState::ExecuteRetrieve.state_kind(), StateKind::Execute);
-        assert_eq!(RagState::Evaluate.state_kind(), StateKind::Evaluate);
         assert_eq!(RagState::Answer.state_kind(), StateKind::Answer);
     }
 
@@ -1417,21 +1378,6 @@ mod tests {
     }
 
     #[test]
-    fn detect_format_skills_ppt() {
-        assert!(detect_format_skills("make a ppt").contains(&"ppt-generation"));
-    }
-
-    #[test]
-    fn detect_format_skills_html() {
-        assert!(detect_format_skills("render html").contains(&"html-renderer"));
-    }
-
-    #[test]
-    fn detect_format_skills_teaching() {
-        assert!(detect_format_skills("teach me rust").contains(&"teaching"));
-    }
-
-    #[test]
     fn is_rag_tool_true_for_dense() {
         assert!(is_rag_tool("dense_retrieval"));
     }
@@ -1447,5 +1393,18 @@ mod tests {
         assert!(prompt.contains("Available Tools for Replanning"));
         // RAG strategy should have at least one tool
         assert!(!prompt.is_empty());
+    }
+
+    #[test]
+    fn rag_eval_prompt_contains_schema() {
+        let prompt = super::build_eval_system_prompt("rag");
+        assert!(
+            prompt.contains("## Output Schema"),
+            "RAG eval prompt should inject reference/schema.md"
+        );
+        assert!(
+            prompt.contains("dimensions"),
+            "Schema content should be present"
+        );
     }
 }
