@@ -21,6 +21,7 @@ use crate::agents::react_loop::{DegradeReason, LoopBudget};
 use crate::agents::runtime::{AgentRequest, AgentRunResult, FinalDecision, IterationRecord};
 use avrag_rag_core::{
     DefaultEvidenceGate, DegradeKind, EvidenceGate, EvidenceGateInput, EvidenceGateOutcome,
+    FocusMode, ScoreBasedFocusMode,
 };
 use crate::agents::unified::helpers;
 use common::{AppError, ChatRequest, ToolCall, ToolResult, ToolStatus};
@@ -707,13 +708,42 @@ impl RagStrategy {
         });
 
         match gate_decision {
-            EvidenceGateOutcome::Pass
-            | EvidenceGateOutcome::NeedsFocus { .. } => {
+            EvidenceGateOutcome::Pass => {
                 // Pass: proceed to grounded answer with current evidence.
-                // NeedsFocus: focus-mode compression is a Step-4 concern;
-                // for now we surface the signal but still proceed to
-                // Answer (Step 4 will gate this path on focus-mode
-                // availability).
+                Ok(StepOutcome::Next(Box::new(RagState::Answer)))
+            }
+            EvidenceGateOutcome::NeedsFocus { .. } => {
+                // Step 4: focus-mode compression. Trim/cap the accumulated
+                // chunks before they enter the Answer phase.
+                let mut items: Vec<(common::AnswerContextChunk, f32)> = Vec::new();
+                let chunk_refs = ctx.accumulated.all_chunks();
+                let scores = ctx.accumulated.all_scores();
+                for (chunk, score) in chunk_refs.into_iter().zip(scores.into_iter()) {
+                    items.push((chunk.clone(), score));
+                }
+                let focus = ScoreBasedFocusMode::default();
+                if let Ok(compressed) = focus.compress(
+                    &items,
+                    &ctx.iteration_params.query,
+                    ctx.accumulated.unique_chunk_count(),
+                ) {
+                    tracing::info!(
+                        original = ctx.accumulated.unique_chunk_count(),
+                        kept = compressed.len(),
+                        trimmed = compressed.iter().filter(|c| c.trimmed).count(),
+                        "focus mode compressed evidence"
+                    );
+                    // Replace accumulated evidence with focused version.
+                    ctx.accumulated.clear();
+                    for c in &compressed {
+                        ctx.accumulated.merge_iteration(
+                            std::iter::once((c.chunk.clone(), c.score)),
+                            iteration_idx,
+                        );
+                    }
+                } else {
+                    tracing::warn!("focus mode compression failed; using raw evidence");
+                }
                 Ok(StepOutcome::Next(Box::new(RagState::Answer)))
             }
             EvidenceGateOutcome::Degrade(kind) => {

@@ -25,7 +25,7 @@ use crate::agents::runtime::{AgentRequest, AgentRunResult, FinalDecision, Iterat
 use crate::agents::unified::helpers;
 use avrag_llm::LlmUsage;
 use avrag_llm::ChatMessage as LlmChatMessage;
-use avrag_rag_core::{DegradeKind, DefaultEvidenceGate, EvidenceGate, EvidenceGateInput, EvidenceGateOutcome};
+use avrag_rag_core::{DegradeKind, DefaultEvidenceGate, EvidenceGate, EvidenceGateInput, EvidenceGateOutcome, FocusMode, ScoreBasedFocusMode};
 use avrag_search::{SearchResponse, SearchResult};
 use common::{AppError, DegradeTraceItem};
 use std::collections::HashSet;
@@ -563,7 +563,54 @@ impl SearchStrategy {
         }
 
         match gate_decision {
-            EvidenceGateOutcome::Pass | EvidenceGateOutcome::NeedsFocus { .. } => {
+            EvidenceGateOutcome::Pass => {
+                Ok(StepOutcome::Next(Box::new(SearchState::Answer)))
+            }
+            EvidenceGateOutcome::NeedsFocus { .. } => {
+                // Step 4: focus-mode compression for Search.
+                // Convert SearchResult → AnswerContextChunk, run focus,
+                // then re-emit SearchResult with trimmed snippets.
+                let items: Vec<(common::AnswerContextChunk, f32)> = ctx
+                    .accumulated_search_results
+                    .iter()
+                    .enumerate()
+                    .map(|(i, r)| {
+                        let chunk = common::AnswerContextChunk {
+                            chunk_id: r.url.clone(),
+                            doc_id: Some(r.url.clone()),
+                            chunk_type: "web_snippet".to_string(),
+                            page: None,
+                            text: format!("{}\n{}", r.title, r.snippet),
+                            asset_id: None,
+                            caption: None,
+                            image_url: None,
+                            parser_backend: None,
+                            source_locator: None,
+                        };
+                        (chunk, search_result_score_proxy(i))
+                    })
+                    .collect();
+                let focus = avrag_rag_core::ScoreBasedFocusMode::default();
+                if let Ok(compressed) =
+                    focus.compress(&items, &ctx.current_query, items.len())
+                {
+                    tracing::info!(
+                        original = ctx.accumulated_search_results.len(),
+                        kept = compressed.len(),
+                        trimmed = compressed.iter().filter(|c| c.trimmed).count(),
+                        "search focus mode compressed"
+                    );
+                    // Replace accumulated results with the focused set
+                    // (matched by chunk_id which we set to the URL).
+                    let mut by_url: std::collections::HashMap<String, common::AnswerContextChunk> =
+                        compressed
+                            .into_iter()
+                            .map(|c| (c.chunk.chunk_id.clone(), c.chunk))
+                            .collect();
+                    ctx.accumulated_search_results.retain(|r| by_url.remove(&r.url).is_some());
+                } else {
+                    tracing::warn!("search focus mode compression failed; using raw results");
+                }
                 Ok(StepOutcome::Next(Box::new(SearchState::Answer)))
             }
             EvidenceGateOutcome::Degrade(kind) => {

@@ -200,6 +200,12 @@ impl AccumulatedRagResults {
         self.chunks.is_empty()
     }
 
+    /// Drop all accumulated evidence. Use to replace accumulator
+    /// contents wholesale (e.g. after focus-mode compression).
+    pub fn clear(&mut self) {
+        self.chunks.clear();
+    }
+
     pub fn max_score(&self) -> f32 {
         self.chunks
             .values()
