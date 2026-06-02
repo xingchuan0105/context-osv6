@@ -1,0 +1,101 @@
+{
+  "version": "0.3.0-fixtures",
+  "created_at": "2026-06-02T00:00:00Z",
+  "description": "Small in-memory golden set built on the product_e2e fixture corpus (antifragile.txt + lindy.txt). Used by the quality_runner binary to get a real Recall@15 / Citation Accuracy / Hallucination Rate number against the live LLM + embedding pipeline. The full sample golden set (golden_set.sample.json) is the production target; this file is the smoke test.",
+  "subsets": [
+    {
+      "name": "antifragility",
+      "description": "Retrieval + generation over antifragile.txt",
+      "examples": [
+        {
+          "query": "Who developed the concept of antifragility?",
+          "expected_answer": "Nassim Nicholas Taleb",
+          "source_chunks": [
+            { "type": "substring", "text": "Nassim Nicholas Taleb" }
+          ],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Single-fact lookup (author attribution)"
+        },
+        {
+          "query": "What is the Triad in the document about?",
+          "expected_answer": "Fragile, Robust, Antifragile",
+          "source_chunks": [
+            { "type": "substring", "text": "Fragile, Robust, Antifragile" }
+          ],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Concept lookup (Triad of vulnerability levels)"
+        },
+        {
+          "query": "According to the document, what is the Lindy Effect?",
+          "expected_answer": "Future life expectancy is proportional to current age",
+          "source_chunks": [
+            { "type": "substring", "text": "Lindy Effect" }
+          ],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Cross-chunk concept (mentioned in both fixtures)"
+        },
+        {
+          "query": "Give an example of something antifragile mentioned in the document.",
+          "expected_answer": "muscles, immune system, evolution",
+          "source_chunks": [
+            { "type": "substring", "text": "Antifragile: Benefits from stress" }
+          ],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Examples listed in the document"
+        }
+      ]
+    },
+    {
+      "name": "lindy",
+      "description": "Retrieval + generation over lindy.txt",
+      "examples": [
+        {
+          "query": "What is the Lindy Effect as theorized in the document?",
+          "expected_answer": "Future life expectancy proportional to current age for non-perishable things",
+          "source_chunks": [
+            { "type": "substring", "text": "future life expectancy" }
+          ],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Definition extraction"
+        },
+        {
+          "query": "Which famous works are cited as examples of the Lindy Effect?",
+          "expected_answer": "Seneca, Marcus Aurelius, Shakespeare",
+          "source_chunks": [
+            { "type": "substring", "text": "Seneca, Marcus Aurelius, and Shakespeare" }
+          ],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "List extraction from document"
+        }
+      ]
+    },
+    {
+      "name": "adversarial",
+      "description": "Queries that are NOT directly answerable from the corpus. Used to detect hallucination: the answer should refuse or qualify, not invent facts.",
+      "examples": [
+        {
+          "query": "What is the dollar value of the antifragility portfolio Taleb recommends?",
+          "expected_answer": "Not mentioned in the document",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "description": "Adversarial: question references a specific number the corpus doesn't contain"
+        },
+        {
+          "query": "When was the Lindy Effect first empirically tested?",
+          "expected_answer": "Not mentioned in the document",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "description": "Adversarial: question references a specific date the corpus doesn't contain"
+        }
+      ]
+    }
+  ]
+}
