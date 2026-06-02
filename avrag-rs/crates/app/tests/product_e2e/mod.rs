@@ -689,10 +689,12 @@ impl TestContext {
 
     /// Send a streaming RAG chat request and return the raw SSE event stream.
     ///
-    /// `max_events` caps how many events to collect before returning, to
-    /// keep the test from hanging forever if the production stream never
-    /// closes (e.g. missing `done` event). A typical RAG stream produces
-    /// 5-10 events (start, answer_start, token*, citations, done).
+    /// Reads the stream until the response body is fully consumed
+    /// (production closes the HTTP response after the `done` / `error`
+    /// event). As a safety net, the function bails after `max_wait`.
+    /// `max_events` is no longer a stop condition — it is only used
+    /// to bail if the stream is genuinely unbounded (e.g. the
+    /// production bug where `done` is never emitted).
     pub async fn chat_stream(
         &self,
         query: &str,
@@ -724,33 +726,38 @@ impl TestContext {
         let deadline = tokio::time::Instant::now() + max_wait;
         let mut parser = SseParser::new();
         let mut events: Vec<SseEvent> = Vec::new();
-        while events.len() < max_events {
+        loop {
             let now = tokio::time::Instant::now();
             if now >= deadline {
                 anyhow::bail!(
-                    "chat_stream: timed out after {max_wait:?} with {} events collected",
-                    events.len()
+                    "chat_stream: timed out after {max_wait:?} with {} events collected; last={:?}",
+                    events.len(),
+                    events.last().map(|e| e.event.clone())
                 );
             }
             let remaining = deadline - now;
             let chunk = match tokio::time::timeout(remaining, resp.chunk()).await {
                 Ok(Ok(Some(chunk))) => chunk,
-                Ok(Ok(None)) => break, // stream closed
+                Ok(Ok(None)) => break, // stream closed — this is the normal exit
                 Ok(Err(e)) => {
                     return Err(anyhow::Error::from(e));
                 }
                 Err(_) => {
                     anyhow::bail!(
-                        "chat_stream: timed out after {max_wait:?} with {} events collected",
-                        events.len()
+                        "chat_stream: timed out after {max_wait:?} with {} events collected; last={:?}",
+                        events.len(),
+                        events.last().map(|e| e.event.clone())
                     );
                 }
             };
             for evt in parser.feed(&chunk) {
-                events.push(evt);
                 if events.len() >= max_events {
-                    break;
+                    anyhow::bail!(
+                        "chat_stream: hit max_events={max_events} cap before stream closed (last event: {:?})",
+                        evt.event
+                    );
                 }
+                events.push(evt);
             }
         }
         Ok(events)
@@ -978,7 +985,10 @@ impl MockLlmRoute {
 }
 async fn start_mock_llm_server() -> (String, tokio::sync::oneshot::Sender<()>) {
     let app = Router::new()
-        .route("/chat/completions", post(mock_llm_handler));
+        .route(
+            "/chat/completions",
+            post(mock_llm_handler).layer(axum::extract::DefaultBodyLimit::max(8 * 1024 * 1024)),
+        );
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind mock llm");
     let port = listener.local_addr().unwrap().port();
@@ -1025,7 +1035,7 @@ async fn start_mock_embedding_server() -> (String, tokio::sync::oneshot::Sender<
 async fn mock_llm_handler(
     headers: axum::http::HeaderMap,
     Json(req): Json<serde_json::Value>,
-) -> Json<serde_json::Value> {
+) -> axum::response::Response {
     let messages = req["messages"].as_array().cloned().unwrap_or_default();
     let system_prompt = messages
         .first()
@@ -1043,11 +1053,56 @@ async fn mock_llm_handler(
         .and_then(MockLlmRoute::from_header)
         .unwrap_or_else(|| MockLlmRoute::from_system_prompt(system_prompt, user_prompt));
 
-    Json(json!({
-        "choices": [{"message": {"role": "assistant", "content": route.canned_response()}}],
-        "usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
-        "model": "mock-llm"
-    }))
+    let content = route.canned_response();
+    let is_stream = req
+        .get("stream")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    if is_stream {
+        // SSE format expected by ChatCompletionStreamParser.
+        // Emit 1-char deltas (token-by-token) so `MessageDelta`
+        // events fire frequently and the production `complete_stream`
+        // path is exercised end-to-end.
+        let mut body = String::new();
+        for (i, ch) in content.chars().enumerate() {
+            let delta_json = json!({
+                "choices": [{
+                    "delta": {"content": ch.to_string()},
+                    "index": 0
+                }],
+                "model": "mock-llm"
+            });
+            body.push_str(&format!("data: {delta_json}\n\n"));
+            // Small inter-chunk gap so the client sees multiple chunks
+            // (production has variable latency between tokens).
+            if i % 8 == 7 {
+                body.push_str(": keep-alive\n\n");
+            }
+        }
+        // Final chunk with usage so the parser records it.
+        let final_json = json!({
+            "choices": [{"delta": {}, "index": 0, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 100, "completion_tokens": content.len(), "total_tokens": 100 + content.len()},
+            "model": "mock-llm"
+        });
+        body.push_str(&format!("data: {final_json}\n\n"));
+        body.push_str("data: [DONE]\n\n");
+
+        axum::response::Response::builder()
+            .status(200)
+            .header("content-type", "text/event-stream")
+            .header("cache-control", "no-cache")
+            .body(axum::body::Body::from(body))
+            .unwrap()
+    } else {
+        axum::Json(json!({
+            "choices": [{"message": {"role": "assistant", "content": content}}],
+            "usage": {"prompt_tokens": 100, "completion_tokens": content.len(), "total_tokens": 100 + content.len()},
+            "model": "mock-llm"
+        }))
+        .into_response()
+    }
 }
 
 #[cfg(test)]

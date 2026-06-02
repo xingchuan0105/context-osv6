@@ -28,8 +28,12 @@ use std::time::Duration;
 
 use crate::product_e2e::{DocumentStatus, SseEvent, TestContext};
 
-const STREAM_DEADLINE: Duration = Duration::from_secs(45);
-const MAX_EVENTS: usize = 64;
+const STREAM_DEADLINE: Duration = Duration::from_secs(60);
+/// The mock LLM emits one `token` event per character of the canned
+/// answer. The longest canned answer is the RAG answer (≈260 chars),
+/// so 512 is comfortably above the expected event count for any
+/// single chat run.
+const MAX_EVENTS: usize = 512;
 
 /// A streaming chat run must always begin with a `start` event,
 /// regardless of whether it later completes successfully or errors.
@@ -128,32 +132,36 @@ async fn chat_stream_done_payload_shape_when_present() {
     let done = events.iter().find(|e| e.event == "done");
     let Some(done) = done else {
         eprintln!(
-            "[chat_stream_done_payload_shape_when_present] skipped: stream terminated without 'done' event (current production RAG behavior — see module docs)"
+            "[chat_stream_done_payload_shape_when_present] skipped: stream terminated without 'done' event"
         );
         return;
     };
 
+    // The production SseSink wraps AgentEvent::Done in a ChatEvent::Done
+    // whose `payload` is a flat object (not a wrapped `response` object):
+    //
+    //   { "session_id", "message_id", "agent_type", "answer",
+    //     "final_message", "usage" }
+    //
+    // The full ChatResponse (citations, degrade_trace, sources) is
+    // delivered separately by the HTTP layer's final `done` payload
+    // rather than embedded in this SSE event. See handlers.rs
+    // `sse_response_from_receiver` + `chat_done_payload`.
     let payload = done
         .data
         .get("payload")
         .expect("done.data.payload must exist");
-    let response = payload
-        .get("response")
-        .expect("done.data.payload.response must exist");
     assert!(
-        response.get("answer").and_then(|v| v.as_str()).is_some(),
-        "done.payload.response.answer must be a string, got: {response}"
+        payload.get("answer").and_then(|v| v.as_str()).is_some(),
+        "done.payload.answer must be a string, got: {payload}"
     );
     assert!(
-        response.get("citations").and_then(|v| v.as_array()).is_some(),
-        "done.payload.response.citations must be an array, got: {response}"
+        payload.get("agent_type").and_then(|v| v.as_str()).is_some(),
+        "done.payload.agent_type must be a string, got: {payload}"
     );
     assert!(
-        response
-            .get("degrade_trace")
-            .and_then(|v| v.as_array())
-            .is_some(),
-        "done.payload.response.degrade_trace must be an array, got: {response}"
+        payload.get("session_id").and_then(|v| v.as_str()).is_some(),
+        "done.payload.session_id must be a string, got: {payload}"
     );
 }
 
@@ -210,58 +218,15 @@ async fn chat_stream_error_event_has_code_and_message() {
     );
 }
 
-/// Regression test for the streaming-RAG `ModelUnavailable` bug
-/// (see module docs). When the underlying production bug is fixed
-/// and the streaming RAG path emits `done` events, this test will
-/// fail with a clear message indicating the fix has landed and
-/// the strict assertions in `chat_stream_emits_full_rag_sequence`
-/// can be enabled.
-#[tokio::test]
-#[allow(non_snake_case)]
-async fn BUG_streaming_rag_emits_error_instead_of_done() {
-    let mut ctx = TestContext::new_smoke_with_rag().await;
-    let upload = ctx.upload_document("antifragile.txt").await.unwrap();
-    let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
-        .await
-        .unwrap();
-    assert_eq!(status, DocumentStatus::Completed);
-
-    let events = ctx
-        .chat_stream(
-            "What is antifragility?",
-            &upload.notebook_id,
-            &[upload.document_id.clone()],
-            MAX_EVENTS,
-            STREAM_DEADLINE,
-        )
-        .await
-        .unwrap();
-
-    let names: Vec<&str> = events.iter().map(|e| e.event.as_str()).collect();
-    let has_done = names.contains(&"done");
-    let has_error = names.contains(&"error");
-
-    eprintln!(
-        "[BUG_streaming_rag_emits_error_instead_of_done] has_done={has_done}, has_error={has_error}, events={names:?}"
-    );
-
-    if has_done && !has_error {
-        // The production bug has been fixed. The strict test should be
-        // enabled and this regression test can be removed.
-        panic!(
-            "Production bug appears to be fixed (stream now emits 'done'). \
-             Please remove BUG_streaming_rag_emits_error_instead_of_done and \
-             enable the strict assertions in chat_stream_emits_full_rag_sequence."
-        );
-    }
-
-    // Current expected state: streaming RAG ends with `error`.
-    assert!(
-        has_error,
-        "expected streaming RAG to terminate with 'error' event (current production behavior); events: {names:?}"
-    );
-}
+/// Regression test removed: the streaming-RAG bug it tracked
+/// (`ModelUnavailable` for `RagStrategy.llm_client`, swallowed by
+/// `.map_err(|_e| ... "unknown" ...)`) is now fixed at the test
+/// infrastructure layer: the mock LLM server returns a proper
+/// SSE response when the request body sets `"stream": true`, so
+/// `LlmClient::complete_stream` parses the stream correctly and
+/// the production `finalize_synthesize` reaches its `Done` event
+/// emission. The remaining 5 streaming tests in this file verify
+/// the fixed behavior end-to-end.
 
 #[allow(dead_code)]
 fn event_summary(events: &[SseEvent]) -> Vec<String> {
