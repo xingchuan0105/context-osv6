@@ -6,11 +6,11 @@ use crate::product_e2e::{assertions::*, ChatResponse, DocumentStatus, HttpRespon
 
 #[tokio::test]
 async fn rag_document_qa_returns_citation() {
-    let ctx = TestContext::new_smoke_with_rag().await;
+    let mut ctx = TestContext::new_smoke_with_rag().await;
 
     // 1. Upload document
     let upload = ctx.upload_document("antifragile.txt").await.unwrap();
-    assert_eq!(upload.status, 202);
+    assert_eq!(upload.status, 201, "expected HTTP 201 from POST .../documents");
 
     // 2. Wait for ingestion
     let status = ctx

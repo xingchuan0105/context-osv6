@@ -103,12 +103,24 @@ pub fn load_fixture(name: &str) -> anyhow::Result<String> {
 // Milvus (standalone)
 // ---------------------------------------------------------------------------
 
+/// Handle to a running Milvus instance.
+///
+/// `is_external == true` means we did not start the container and must not
+/// stop it in `Drop` (it may be a developer's local instance or a leftover
+/// from a prior test run that we cannot safely kill).
+pub struct MilvusInstance {
+    pub url: String,
+    pub container_name: Option<String>,
+    pub is_external: bool,
+}
+
 /// Reuse an existing Milvus instance or start a standalone container.
 ///
 /// First probes `127.0.0.1:19530` via TCP connect. If a Milvus is already
-/// running (e.g. from docker-compose), returns its URL directly.
-/// Otherwise starts a temporary standalone container.
-pub async fn start_milvus() -> anyhow::Result<String> {
+/// running (e.g. from docker-compose), returns its URL directly with
+/// `is_external = true`. Otherwise starts a temporary standalone container
+/// with `is_external = false`.
+pub async fn start_milvus() -> anyhow::Result<MilvusInstance> {
     let url = "http://127.0.0.1:19530";
     // Fast-path: check if port 19530 is open
     if std::net::TcpStream::connect_timeout(
@@ -117,7 +129,11 @@ pub async fn start_milvus() -> anyhow::Result<String> {
     )
     .is_ok()
     {
-        return Ok(url.to_string());
+        return Ok(MilvusInstance {
+            url: url.to_string(),
+            container_name: None,
+            is_external: true,
+        });
     }
 
     let grpc_port = find_ephemeral_port()?;
@@ -147,7 +163,11 @@ pub async fn start_milvus() -> anyhow::Result<String> {
 
     let url = format!("http://127.0.0.1:{grpc_port}");
     wait_for_milvus(&url, &container_name).await?;
-    Ok(url)
+    Ok(MilvusInstance {
+        url,
+        container_name: Some(container_name),
+        is_external: false,
+    })
 }
 
 /// Stop a Milvus container by name.
@@ -219,4 +239,41 @@ pub async fn find_worker_binary() -> anyhow::Result<std::path::PathBuf> {
     } else {
         anyhow::bail!("avrag-worker binary not found after build");
     }
+}
+
+// ---------------------------------------------------------------------------
+// Orphan cleanup
+// ---------------------------------------------------------------------------
+
+/// Remove any leftover `avrag-test-pg-*` / `avrag-test-milvus-*` containers
+/// from previous test runs that did not clean up (CI flakes, SIGKILL, OOM).
+///
+/// Idempotent. Logs a single line per removed container.
+pub async fn cleanup_orphaned_test_containers() -> anyhow::Result<usize> {
+    let mut removed = 0usize;
+    for prefix in ["avrag-test-pg-", "avrag-test-milvus-"] {
+        let output = tokio::process::Command::new("docker")
+            .args(["ps", "-a", "--filter", &format!("name={prefix}"), "--format", "{{.Names}}"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .output()
+            .await?;
+        if !output.status.success() {
+            continue;
+        }
+        let names = String::from_utf8_lossy(&output.stdout);
+        for name in names.lines().filter(|s| !s.trim().is_empty()) {
+            let status = tokio::process::Command::new("docker")
+                .args(["rm", "-f", name.trim()])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await?;
+            if status.success() {
+                eprintln!("[product_e2e] cleaned up orphan container: {name}");
+                removed += 1;
+            }
+        }
+    }
+    Ok(removed)
 }

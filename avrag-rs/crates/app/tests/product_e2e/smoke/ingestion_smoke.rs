@@ -6,11 +6,15 @@ use crate::product_e2e::{DocumentStatus, TestContext};
 
 #[tokio::test]
 async fn upload_document_completes_ingestion() {
-    let ctx = TestContext::new_smoke().await;
+    let mut ctx = TestContext::new_smoke().await;
 
     // 1. Upload document
     let upload = ctx.upload_document("antifragile.txt").await.unwrap();
-    assert_eq!(upload.status, 202);
+    // Production `create_document_upload_handler` returns 201 CREATED.
+    // If this assertion ever fires, either the API contract changed
+    // (intentional) or the helper is no longer threading through the
+    // real status code (regression).
+    assert_eq!(upload.status, 201, "expected HTTP 201 from POST .../documents");
 
     // 2. Wait for ingestion
     let status = ctx

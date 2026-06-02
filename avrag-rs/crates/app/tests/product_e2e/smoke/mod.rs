@@ -4,6 +4,7 @@
 //! - rag_smoke.rs: upload → RAG query → verify doc citation
 //! - search_smoke.rs: open query → verify web citation
 
+pub mod auth_boundary;
 pub mod ingestion_smoke;
 pub mod rag_smoke;
 pub mod search_smoke;

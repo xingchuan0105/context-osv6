@@ -6,7 +6,7 @@ use crate::product_e2e::{assertions::*, ChatResponse, DocumentStatus, HttpRespon
 
 #[tokio::test]
 async fn concurrent_rag_queries_return_independent_citations() {
-    let ctx = TestContext::new_smoke_with_rag().await;
+    let mut ctx = TestContext::new_smoke_with_rag().await;
 
     // 1. Upload document
     let upload = ctx.upload_document("antifragile.txt").await.unwrap();

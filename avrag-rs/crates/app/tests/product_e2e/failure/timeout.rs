@@ -10,7 +10,7 @@ use crate::product_e2e::{DocumentStatus, TestContext};
 
 #[tokio::test]
 async fn worker_processing_timeout_marks_document_failed() {
-    let ctx = TestContext::new_smoke_with_rag_and_timeout(1).await;
+    let mut ctx = TestContext::new_smoke_with_rag_and_timeout(1).await;
 
     // 1. Upload a document.
     let upload = ctx.upload_document("antifragile.txt").await.unwrap();

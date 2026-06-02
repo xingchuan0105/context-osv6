@@ -6,7 +6,7 @@ use crate::product_e2e::{DocumentStatus, TestContext};
 
 #[tokio::test]
 async fn duplicate_upload_returns_same_document_id() {
-    let ctx = TestContext::new_smoke().await;
+    let mut ctx = TestContext::new_smoke().await;
 
     // 1. First upload
     let upload1 = ctx.upload_document("antifragile.txt").await.unwrap();

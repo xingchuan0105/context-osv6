@@ -6,7 +6,7 @@ use crate::product_e2e::{assertions::*, ChatResponse, DocumentStatus, TestContex
 
 #[tokio::test]
 async fn chat_presentation_html_returns_structured_slides() {
-    let ctx = TestContext::new_smoke_with_rag().await;
+    let mut ctx = TestContext::new_smoke_with_rag().await;
 
     // 1. Upload and ingest a document.
     let upload = ctx.upload_document("antifragile.txt").await.unwrap();
@@ -47,7 +47,7 @@ async fn chat_presentation_html_returns_structured_slides() {
 
 #[tokio::test]
 async fn chat_html_renderer_returns_valid_html() {
-    let ctx = TestContext::new_smoke_with_rag().await;
+    let mut ctx = TestContext::new_smoke_with_rag().await;
 
     // 1. Upload and ingest a document.
     let upload = ctx.upload_document("antifragile.txt").await.unwrap();

@@ -64,18 +64,18 @@ pub fn assert_citation_doc_id(resp: &ChatResponse, expected_doc_id: &str) {
     );
 }
 
-/// Assert at least one citation has source_type == "document".
+/// Assert at least one citation comes from a document (not web search).
+///
+/// Uses `Citation.layer`: web citations have `layer == Some("search")`,
+/// document citations have any other value (typically `None`).
 pub fn assert_answer_has_doc_citation(resp: &ChatResponse) {
-    // Note: production Citation does not have `source_type` field today.
-    // This assertion will need a field addition or inference heuristic.
-    // For now, assert that doc_id is non-empty (all doc citations have doc_id).
     let has_doc = resp
         .citations
         .iter()
-        .any(|c| !c.doc_id.is_empty() && c.doc_id != "web");
+        .any(|c| c.layer.as_deref() != Some("search"));
     assert!(
         has_doc,
-        "expected at least one document citation, got: {:?}",
+        "expected at least one document citation (layer != 'search'), got: {:?}",
         resp.citations
     );
 }
@@ -95,47 +95,17 @@ pub fn assert_answer_has_web_citation(resp: &ChatResponse) {
 // ---------------------------------------------------------------------------
 // Product layer assertions — degrade trace
 // ---------------------------------------------------------------------------
-
-/// Assert degrade_trace contains at least one entry with the expected reason.
-pub fn assert_degrade_reason(resp: &ChatResponse, expected_reason: &str) {
-    let reasons: Vec<&str> = resp
-        .degrade_trace
-        .iter()
-        .map(|d| d.reason.as_str())
-        .collect();
-    assert!(
-        reasons.iter().any(|r| *r == expected_reason),
-        "expected degrade_trace reason '{}', got: {:?}",
-        expected_reason,
-        reasons
-    );
-}
-
-/// Assert degrade_trace is non-empty (any fallback occurred).
-pub fn assert_has_degrade_trace(resp: &ChatResponse) {
-    assert!(
-        !resp.degrade_trace.is_empty(),
-        "expected non-empty degrade_trace, but got none"
-    );
-}
-
+// (Previously had `assert_degrade_reason` and `assert_has_degrade_trace` helpers
+// here; removed because they had no callers. Use `!resp.degrade_trace.is_empty()`
+// inline or assert specific reasons via a dedicated helper once a use case arises.)
+//
 // ---------------------------------------------------------------------------
 // Product layer assertions — format output
 // ---------------------------------------------------------------------------
-
-/// Assert response contains a format_output block with the expected type.
-///
-/// TODO: ChatResponse does not currently have `format_output` field.
-/// This will be enabled when the field is added to the production schema.
-pub fn assert_format_output_type(resp: &ChatResponse, expected_type: &str) {
-    // Placeholder — will scan answer_blocks or a future format_output field.
-    let _ = expected_type;
-    assert!(
-        !resp.answer_blocks.is_empty() || !resp.answer.is_empty(),
-        "expected formatted output, got empty answer. response: {:?}",
-        resp
-    );
-}
+// (Previously had `assert_format_output_type` placeholder here; removed —
+// `ChatResponse` has no `format_output` field yet. Re-introduce when the
+// production schema gains one and write a real structural assertion.)
+//
 
 // ---------------------------------------------------------------------------
 // Product layer assertions — answer substance

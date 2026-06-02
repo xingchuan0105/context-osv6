@@ -6,7 +6,7 @@ use crate::product_e2e::{assertions::*, ChatResponse, DocumentStatus, TestContex
 
 #[tokio::test]
 async fn embedding_503_returns_degraded_answer_with_lexical_fallback() {
-    let ctx = TestContext::new_smoke_with_rag().await;
+    let mut ctx = TestContext::new_smoke_with_rag().await;
 
     // 1. Upload and ingest a document while embedding is healthy.
     let upload = ctx.upload_document("antifragile.txt").await.unwrap();

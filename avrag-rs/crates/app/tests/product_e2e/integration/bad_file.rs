@@ -6,7 +6,7 @@ use crate::product_e2e::{DocumentStatus, TestContext};
 
 #[tokio::test]
 async fn corrupted_file_upload_returns_failed_status() {
-    let ctx = TestContext::new_smoke().await;
+    let mut ctx = TestContext::new_smoke().await;
 
     // 1. Upload a file named .pdf with MIME application/pdf, but the body
     //    is actually a PNG image.  ParseRouter accepts extension↔MIME, but

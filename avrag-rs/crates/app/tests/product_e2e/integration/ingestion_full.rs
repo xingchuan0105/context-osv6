@@ -6,11 +6,11 @@ use crate::product_e2e::{assertions::*, ChatResponse, DocumentStatus, HttpRespon
 
 #[tokio::test]
 async fn empty_document_ingests_with_zero_chunks_and_degrades() {
-    let ctx = TestContext::new_smoke_with_rag().await;
+    let mut ctx = TestContext::new_smoke_with_rag().await;
 
     // 1. Upload empty document
     let upload = ctx.upload_document("empty.txt").await.unwrap();
-    assert_eq!(upload.status, 202);
+    assert_eq!(upload.status, 201, "expected HTTP 201 from POST .../documents");
 
     // 2. Wait for ingestion — should still complete (not hang/fail)
     let status = ctx

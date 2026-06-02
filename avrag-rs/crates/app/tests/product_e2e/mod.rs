@@ -14,6 +14,7 @@ pub mod failure;
 pub mod tenants;
 
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use axum::{response::IntoResponse, routing::post, Json, Router};
@@ -23,8 +24,27 @@ use tokio::io::AsyncWriteExt;
 use serde_json::json;
 
 // ---------------------------------------------------------------------------
-// HTTP raw response (protocol layer)
+// Process-wide helpers
 // ---------------------------------------------------------------------------
+
+/// Ensures `cleanup_orphaned_test_containers` runs at most once per test binary.
+///
+/// Parallel `TestContext::new_*` calls used to trigger cleanup concurrently,
+/// which could remove a Postgres container that another in-flight test was
+/// actively using (since there is no shared registry of "owned" containers
+/// between test processes). Running it exactly once, at the start of the
+/// first context that gets created, removes that race.
+async fn run_orphan_cleanup_once() {
+    static DONE: OnceLock<()> = OnceLock::new();
+    if DONE.get().is_none() {
+        if let Err(e) = setup::cleanup_orphaned_test_containers().await {
+            eprintln!("[product_e2e] orphan cleanup failed: {e}");
+        }
+        let _ = DONE.set(());
+    }
+}
+
+
 
 /// Raw HTTP response from the test client.
 ///
@@ -41,6 +61,78 @@ impl HttpResponse {
     /// Deserialize the JSON body into a typed business response.
     pub fn into_business<T: serde::de::DeserializeOwned>(self) -> Result<T, serde_json::Error> {
         serde_json::from_value(self.body_json)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Server-Sent Events (SSE) parsing
+// ---------------------------------------------------------------------------
+
+/// A single SSE event parsed from a streaming chat response.
+#[derive(Debug, Clone)]
+pub struct SseEvent {
+    /// Event name from the `event: <name>` line.
+    pub event: String,
+    /// JSON body from the `data: <json>` line.
+    pub data: serde_json::Value,
+}
+
+/// Minimal SSE parser. Feed it raw response bytes via [`SseParser::feed`];
+/// it returns any complete events it finds. Handles `event:` / `data:`
+/// lines, blank-line event terminators, and `:` comment lines.
+pub struct SseParser {
+    buf: String,
+    current_event: Option<String>,
+    current_data: Option<String>,
+}
+
+impl SseParser {
+    pub fn new() -> Self {
+        Self {
+            buf: String::new(),
+            current_event: None,
+            current_data: None,
+        }
+    }
+
+    /// Feed a chunk of bytes; return any complete events parsed from it.
+    pub fn feed(&mut self, chunk: &[u8]) -> Vec<SseEvent> {
+        use std::str::from_utf8;
+        let s = match from_utf8(chunk) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        self.buf.push_str(s);
+        let mut out = Vec::new();
+        while let Some(idx) = self.buf.find('\n') {
+            let line: String = self.buf.drain(..=idx).collect();
+            let line = line.trim_end_matches(&['\r', '\n'][..]).to_string();
+            if line.is_empty() {
+                // Event terminator: emit if we have data
+                if let (Some(event), Some(data)) = (self.current_event.take(), self.current_data.take()) {
+                    let parsed = serde_json::from_str(&data)
+                        .unwrap_or(serde_json::Value::String(data));
+                    out.push(SseEvent { event, data: parsed });
+                }
+            } else if let Some(rest) = line.strip_prefix("event:") {
+                self.current_event = Some(rest.trim().to_string());
+            } else if let Some(rest) = line.strip_prefix("data:") {
+                // Spec: concatenate multiple data: lines with \n
+                let piece = rest.trim_start();
+                match &mut self.current_data {
+                    Some(d) => {
+                        d.push('\n');
+                        d.push_str(piece);
+                    }
+                    None => {
+                        self.current_data = Some(piece.to_string());
+                    }
+                }
+            } else if line.starts_with(':') {
+                // Comment / keep-alive; ignore
+            }
+        }
+        out
     }
 }
 
@@ -89,6 +181,8 @@ pub struct TestContext {
     pub base_url: String,
     pg_container_name: String,
     milvus_container_name: Option<String>,
+    /// True when Milvus is an external (non-test-owned) instance and must NOT be stopped in `Drop`.
+    milvus_is_external: bool,
     worker: Option<tokio::process::Child>,
     server_abort: Option<tokio::sync::oneshot::Sender<()>>,
     #[allow(dead_code)]
@@ -102,11 +196,33 @@ pub struct TestContext {
     worker_log_path: Option<std::path::PathBuf>,
 }
 
-/// Default auth headers for test requests.
-fn test_auth_headers() -> reqwest::header::HeaderMap {
+/// Default test org/user IDs.
+///
+/// Kept as public constants for tests that need a stable, well-known
+/// identity (e.g. checking that the production auth path correctly
+/// handles a specific UUID format). New tests that do not need a fixed
+/// identity should use [`unique_test_identity`] instead, so that
+/// parallel tests do not share the same rate-limit bucket.
+pub const DEFAULT_TEST_ORG_ID: &str = "00000000-0000-0000-0000-000000000001";
+pub const DEFAULT_TEST_USER_ID: &str = "00000000-0000-0000-0000-000000000001";
+
+/// Generate a unique `(org_id, user_id)` pair for a test context so that
+/// each test gets its own rate-limit bucket and does not collide with
+/// other tests running in parallel.
+pub fn unique_test_identity() -> (String, String) {
+    use uuid::Uuid;
+    (
+        Uuid::new_v4().to_string(),
+        Uuid::new_v4().to_string(),
+    )
+}
+
+/// Auth headers for a specific org/user (used by `build_smoke` and by
+/// multi-tenant isolation tests).
+fn test_auth_headers_for(org_id: &str, user_id: &str) -> reqwest::header::HeaderMap {
     let mut headers = reqwest::header::HeaderMap::new();
-    headers.insert("x-org-id", "00000000-0000-0000-0000-000000000001".parse().unwrap());
-    headers.insert("x-user-id", "00000000-0000-0000-0000-000000000001".parse().unwrap());
+    headers.insert("x-org-id", org_id.parse().unwrap());
+    headers.insert("x-user-id", user_id.parse().unwrap());
     headers.insert("x-permissions", "external_network".parse().unwrap());
     headers
 }
@@ -114,31 +230,56 @@ fn test_auth_headers() -> reqwest::header::HeaderMap {
 impl TestContext {
     /// Create a Smoke E2E context (no RAG).
     pub async fn new_smoke() -> Self {
-        Self::build_smoke(false, 300).await
+        Self::build_smoke(false, 300, None).await
     }
 
     /// Create a Smoke E2E context with RAG enabled (Milvus + mock embedding/LLM).
     pub async fn new_smoke_with_rag() -> Self {
-        Self::build_smoke(true, 300).await
+        Self::build_smoke(true, 300, None).await
     }
 
     /// Create a Smoke E2E context with RAG and a custom worker per-task timeout.
     pub async fn new_smoke_with_rag_and_timeout(worker_timeout_secs: u64) -> Self {
-        Self::build_smoke(true, worker_timeout_secs).await
+        Self::build_smoke(true, worker_timeout_secs, None).await
     }
 
-    async fn build_smoke(enable_rag: bool, worker_timeout_secs: u64) -> Self {
+    /// Create a Smoke E2E context with RAG and a specific org/user identity.
+    ///
+    /// Used by multi-tenant isolation tests to construct a second client
+    /// in a different org and verify that one org cannot read another org's data.
+    pub async fn new_smoke_with_rag_and_org(org_id: &str, user_id: &str) -> Self {
+        let identity = Some((org_id.to_string(), user_id.to_string()));
+        Self::build_smoke(true, 300, identity).await
+    }
+
+    async fn build_smoke(
+        enable_rag: bool,
+        worker_timeout_secs: u64,
+        identity: Option<(String, String)>,
+    ) -> Self {
+        // 0. Best-effort: clean up orphan containers from previous test runs.
+        //    Run at most once per process to avoid races where parallel tests
+        //    remove each other's still-in-use containers.
+        //    Failures are non-fatal — log and continue.
+        run_orphan_cleanup_once().await;
+
+        // Each context gets a unique (org, user) pair by default so that
+        // parallel tests do not share the same rate-limit bucket and
+        // trigger 429s. Tests that want to share a bucket (e.g. the
+        // cross-org isolation test) pass an explicit `identity`.
+        let identity = identity.or_else(|| Some(unique_test_identity()));
+
         // 1. Start Postgres
         let pg_url = setup::start_postgres().await.expect("start postgres");
         let pg_container_name = format!("avrag-test-pg-{}", pg_url.rsplit(':').next().unwrap());
 
         // 2. Start Milvus if RAG enabled
-        let (milvus_url, milvus_container_name) = if enable_rag {
-            let url = setup::start_milvus().await.expect("start milvus");
-            let name = format!("avrag-test-milvus-{}", url.rsplit(':').next().unwrap());
-            (Some(url), Some(name))
+        let (milvus_url, milvus_container_name, milvus_is_external) = if enable_rag {
+            let inst = setup::start_milvus().await.expect("start milvus");
+            let name = inst.container_name.clone();
+            (Some(inst.url), name, inst.is_external)
         } else {
-            (None, None)
+            (None, None, false)
         };
 
         // 3. Temp object store
@@ -296,7 +437,10 @@ impl TestContext {
 
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
-            .default_headers(test_auth_headers())
+            .default_headers(match &identity {
+                Some((org, user)) => test_auth_headers_for(org, user),
+                None => unreachable!("identity is always Some after .or_else above"),
+            })
             .build()
             .expect("reqwest client build");
 
@@ -305,6 +449,7 @@ impl TestContext {
             base_url,
             pg_container_name,
             milvus_container_name,
+            milvus_is_external,
             worker: Some(worker),
             server_abort: Some(abort_tx),
             object_store_dir,
@@ -316,11 +461,6 @@ impl TestContext {
             embedding_should_503,
             worker_log_path: Some(worker_log_path),
         }
-    }
-
-    /// Create an Integration context.
-    pub async fn new_integration() -> Self {
-        Self::new_smoke().await
     }
 
     // -----------------------------------------------------------------------
@@ -374,7 +514,7 @@ impl TestContext {
             .await?;
         let status = resp.status().as_u16();
         let body = resp.json::<serde_json::Value>().await?;
-        if status != 202 && status != 201 {
+        if !(200..300).contains(&status) {
             anyhow::bail!("upload document failed: HTTP {status}, body: {body}");
         }
 
@@ -400,33 +540,47 @@ impl TestContext {
             document_id,
             notebook_id: notebook_id.to_string(),
             upload_url: String::new(),
-            status: 202,
+            status,
         })
     }
 
     /// Poll ingestion status until completed, failed, or timeout.
+    ///
+    /// On transient errors (network blip, 5xx from server, JSON parse failure)
+    /// the call retries up to 3 times with 200ms backoff before propagating.
+    /// On `4xx` (e.g. document not found) the error is returned immediately.
+    /// If the worker process exits during polling, the call fails fast
+    /// instead of waiting for the full timeout.
+    ///
+    /// Takes `&mut self` so it can call `Child::try_wait` on the worker
+    /// handle to detect early worker death. Callers should not hold any
+    /// other reference to `ctx` across the `.await`.
     pub async fn wait_for_ingestion(
-        &self,
+        &mut self,
         doc_id: &str,
         timeout: Duration,
     ) -> anyhow::Result<DocumentStatus> {
         let deadline = tokio::time::Instant::now() + timeout;
         let mut last_status = String::new();
         loop {
-            let resp = self
-                .http_client
-                .get(format!("{}/api/v1/documents/{doc_id}/status", self.base_url))
-                .send()
-                .await?;
-            let body = resp.json::<serde_json::Value>().await?;
+            // Fail fast if the worker died (avoids hanging until timeout).
+            if let Some(worker) = self.worker.as_mut()
+                && let Ok(Some(status)) = worker.try_wait()
+            {
+                anyhow::bail!(
+                    "worker process exited unexpectedly (status={status:?}) while waiting on doc={doc_id}, last status={last_status}"
+                );
+            }
+
+            let body = self.fetch_status_with_retry(doc_id).await?;
             let status = body["status"].as_str().unwrap_or("unknown").to_string();
             if status != last_status {
                 eprintln!("[wait_for_ingestion] doc={doc_id} status={status}");
                 last_status = status.clone();
             }
             match status.as_str() {
-                "completed" | "ready" => return Ok(DocumentStatus::Completed),
-                "failed" | "error" => return Ok(DocumentStatus::Failed),
+                "completed" => return Ok(DocumentStatus::Completed),
+                "failed" => return Ok(DocumentStatus::Failed),
                 _ => {}
             }
             if tokio::time::Instant::now() > deadline {
@@ -434,6 +588,41 @@ impl TestContext {
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
+    }
+
+    /// GET the document status with up to 3 retries on transient errors.
+    /// Returns the parsed JSON body on success.
+    async fn fetch_status_with_retry(
+        &self,
+        doc_id: &str,
+    ) -> anyhow::Result<serde_json::Value> {
+        const MAX_ATTEMPTS: u32 = 3;
+        let url = format!("{}/api/v1/documents/{doc_id}/status", self.base_url);
+        let mut last_err: Option<anyhow::Error> = None;
+        for attempt in 1..=MAX_ATTEMPTS {
+            match self.http_client.get(&url).send().await {
+                Ok(resp) => {
+                    let status = resp.status();
+                    if status.is_server_error() {
+                        last_err = Some(anyhow::anyhow!("server error HTTP {status}"));
+                    } else if status.is_client_error() {
+                        let body = resp.text().await.unwrap_or_default();
+                        return Err(anyhow::anyhow!(
+                            "client error fetching status: HTTP {status}, body: {body}"
+                        ));
+                    } else {
+                        return Ok(resp.json::<serde_json::Value>().await?);
+                    }
+                }
+                Err(e) => {
+                    last_err = Some(anyhow::Error::from(e));
+                }
+            }
+            if attempt < MAX_ATTEMPTS {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
+        }
+        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("fetch_status exhausted retries")))
     }
 
     /// Send a RAG chat query and return the raw HTTP response.
@@ -496,6 +685,75 @@ impl TestContext {
         let status = resp.status().as_u16();
         let body_json = resp.json().await?;
         Ok(HttpResponse { status, body_json })
+    }
+
+    /// Send a streaming RAG chat request and return the raw SSE event stream.
+    ///
+    /// `max_events` caps how many events to collect before returning, to
+    /// keep the test from hanging forever if the production stream never
+    /// closes (e.g. missing `done` event). A typical RAG stream produces
+    /// 5-10 events (start, answer_start, token*, citations, done).
+    pub async fn chat_stream(
+        &self,
+        query: &str,
+        notebook_id: &str,
+        doc_scope: &[String],
+        max_events: usize,
+        max_wait: Duration,
+    ) -> anyhow::Result<Vec<SseEvent>> {
+        let resp = self
+            .http_client
+            .post(format!("{}/api/v1/chat", self.base_url))
+            .header(reqwest::header::ACCEPT, "text/event-stream")
+            .json(&serde_json::json!({
+                "query": query,
+                "agent_type": "rag",
+                "notebook_id": notebook_id,
+                "doc_scope": doc_scope,
+                "stream": true,
+            }))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        if status != 200 {
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("chat_stream: HTTP {status}, body: {body}");
+        }
+
+        let mut resp = resp;
+        let deadline = tokio::time::Instant::now() + max_wait;
+        let mut parser = SseParser::new();
+        let mut events: Vec<SseEvent> = Vec::new();
+        while events.len() < max_events {
+            let now = tokio::time::Instant::now();
+            if now >= deadline {
+                anyhow::bail!(
+                    "chat_stream: timed out after {max_wait:?} with {} events collected",
+                    events.len()
+                );
+            }
+            let remaining = deadline - now;
+            let chunk = match tokio::time::timeout(remaining, resp.chunk()).await {
+                Ok(Ok(Some(chunk))) => chunk,
+                Ok(Ok(None)) => break, // stream closed
+                Ok(Err(e)) => {
+                    return Err(anyhow::Error::from(e));
+                }
+                Err(_) => {
+                    anyhow::bail!(
+                        "chat_stream: timed out after {max_wait:?} with {} events collected",
+                        events.len()
+                    );
+                }
+            };
+            for evt in parser.feed(&chunk) {
+                events.push(evt);
+                if events.len() >= max_events {
+                    break;
+                }
+            }
+        }
+        Ok(events)
     }
 
     // -----------------------------------------------------------------------
@@ -603,8 +861,10 @@ impl Drop for TestContext {
                 setup::stop_postgres(&container).await;
             });
         });
-        // Stop Milvus container — fire-and-forget
-        if let Some(ref container) = self.milvus_container_name {
+        // Stop Milvus container — fire-and-forget, but only if we started it.
+        if !self.milvus_is_external
+            && let Some(ref container) = self.milvus_container_name
+        {
             let c = container.clone();
             let _ = std::thread::spawn(move || {
                 let rt = tokio::runtime::Runtime::new().unwrap();
@@ -620,9 +880,102 @@ impl Drop for TestContext {
 // Mock servers
 // ---------------------------------------------------------------------------
 
-/// Start a mock LLM HTTP server on an ephemeral port.
+/// Names of the canned LLM responses served by [`mock_llm_handler`].
 ///
-/// Returns (base_url, abort_sender).
+/// Tests can pin a call to a specific route by sending the
+/// `X-Mock-Route` request header (the production LLM client never
+/// sets this header, so production calls always fall through to
+/// system-prompt matching).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MockLlmRoute {
+    RagPlanner,
+    RagCoverageEvaluator,
+    RagAnswer,
+    SearchPlanner,
+    SearchCoverageEvaluator,
+    SearchAnswer,
+    FormatSkillPpt,
+    FormatSkillHtml,
+    Fallback,
+}
+
+impl MockLlmRoute {
+    /// Return the canned response body for this route.
+    fn canned_response(self) -> &'static str {
+        match self {
+            Self::RagPlanner => r#"{"calls": [{"tool": "dense_retrieval", "version": "1.0", "args": {"queries": ["antifragility Taleb summary"], "modality": "text", "top_k": 10}}], "next_step": "answer"}"#,
+            Self::RagCoverageEvaluator => r#"{"decision": "sufficient", "dimensions": [{"name": "coverage", "attempted": true, "covered": true, "retrieved_count": 3, "query_ids": ["q1"], "status": "covered_strong"}], "next_actions": [], "reasoning": "good"}"#,
+            Self::RagAnswer => "Based on the document, antifragility is a property of systems that increase in capability, resilience, or robustness as a result of stressors, shocks, volatility, noise, mistakes, faults, attacks, or failures. The concept was developed by Nassim Nicholas Taleb.",
+            Self::SearchPlanner => r#"{"sub_queries": ["Tokyo weather today"], "intent_summary": "The user wants to know the current weather in Tokyo.", "needs_clarification": false}"#,
+            Self::SearchCoverageEvaluator => r#"{"decision": "sufficient", "dimensions": [{"name": "coverage", "attempted": true, "covered": true, "retrieved_count": 1, "query_ids": ["q1"], "status": "covered_strong"}], "next_actions": [], "reasoning": "good"}"#,
+            Self::SearchAnswer => "The weather in Tokyo today is sunny with a high of 25°C [[1]].",
+            Self::FormatSkillPpt => "<html><body><div class=\"slide\"><h1>Slide 1</h1><p>Summary of antifragility</p></div><div class=\"slide\"><h1>Slide 2</h1><p>Key concepts</p></div></body></html>",
+            Self::FormatSkillHtml => "<html><body><h1>Antifragility</h1><p>Antifragility is a property of systems that benefit from stress.</p></body></html>",
+            Self::Fallback => "This document discusses antifragility, a concept by Nassim Nicholas Taleb describing systems that benefit from shock and disorder.",
+        }
+    }
+
+    /// Resolve a route from the optional `X-Mock-Route` header value.
+    /// Returns `None` if the header is missing or has an unknown value.
+    fn from_header(value: &str) -> Option<Self> {
+        match value.trim() {
+            "rag-planner" => Some(Self::RagPlanner),
+            "rag-eval" => Some(Self::RagCoverageEvaluator),
+            "rag-answer" => Some(Self::RagAnswer),
+            "search-planner" => Some(Self::SearchPlanner),
+            "search-eval" => Some(Self::SearchCoverageEvaluator),
+            "search-answer" => Some(Self::SearchAnswer),
+            "format-ppt" => Some(Self::FormatSkillPpt),
+            "format-html" => Some(Self::FormatSkillHtml),
+            "fallback" => Some(Self::Fallback),
+            _ => None,
+        }
+    }
+
+    /// Resolve a route by inspecting the system prompt text. This is the
+    /// fallback path used by the production LLM client (which does NOT
+    /// set `X-Mock-Route`).
+    ///
+    /// ## Order matters
+    ///
+    /// The format-skill catalog (`- ppt-generation (v1.0): ...`,
+    /// `- html-renderer (v1.0): ...`) is appended to **every** RAG
+    /// answer-phase system prompt, so the format-skill checks must
+    /// come BEFORE the generic RAG answer check. Same logic for the
+    /// search answer: the user prompt template always includes a
+    /// `Search results:` line, so the search-answer check must be
+    /// early enough to not be masked by later fallbacks.
+    fn from_system_prompt(system_prompt: &str, user_prompt: &str) -> Self {
+        // 1. RAG planner
+        if system_prompt.contains("Context OS RAG retrieval planner") {
+            Self::RagPlanner
+        // 2. RAG coverage evaluator
+        } else if system_prompt.contains("Context OS retrieval coverage evaluator") {
+            Self::RagCoverageEvaluator
+        // 3. Format skills (must come before RAG answer — the catalog
+        //    line is appended to every RAG answer prompt).
+        } else if system_prompt.contains("ppt-generation") {
+            Self::FormatSkillPpt
+        } else if system_prompt.contains("html-renderer") {
+            Self::FormatSkillHtml
+        // 4. RAG answer (default for the answer phase)
+        } else if system_prompt.contains("Context OS RAG answer agent") {
+            Self::RagAnswer
+        // 5. Search pipeline
+        } else if system_prompt.contains("Context OS Web Search planner") {
+            Self::SearchPlanner
+        } else if system_prompt.contains("Context OS web-search coverage evaluator") {
+            Self::SearchCoverageEvaluator
+        } else if system_prompt.contains("Answer the user's original web-search question")
+            || user_prompt.contains("Search results:")
+        {
+            Self::SearchAnswer
+        // 6. Fallback (e.g. summary generation)
+        } else {
+            Self::Fallback
+        }
+    }
+}
 async fn start_mock_llm_server() -> (String, tokio::sync::oneshot::Sender<()>) {
     let app = Router::new()
         .route("/chat/completions", post(mock_llm_handler));
@@ -669,7 +1022,10 @@ async fn start_mock_embedding_server() -> (String, tokio::sync::oneshot::Sender<
     (base_url, abort_tx, embedding_should_503)
 }
 
-async fn mock_llm_handler(Json(req): Json<serde_json::Value>) -> Json<serde_json::Value> {
+async fn mock_llm_handler(
+    headers: axum::http::HeaderMap,
+    Json(req): Json<serde_json::Value>,
+) -> Json<serde_json::Value> {
     let messages = req["messages"].as_array().cloned().unwrap_or_default();
     let system_prompt = messages
         .first()
@@ -680,35 +1036,98 @@ async fn mock_llm_handler(Json(req): Json<serde_json::Value>) -> Json<serde_json
         .and_then(|m| m["content"].as_str())
         .unwrap_or("");
 
-    let content = if system_prompt.contains("Context OS RAG retrieval planner") {
-        r#"{"calls": [{"tool": "dense_retrieval", "version": "1.0", "args": {"queries": ["antifragility Taleb summary"], "modality": "text", "top_k": 10}}], "next_step": "answer"}"#
-    } else if system_prompt.contains("Context OS retrieval coverage evaluator") {
-        r#"{"decision": "sufficient", "dimensions": [{"name": "coverage", "attempted": true, "covered": true, "retrieved_count": 3, "query_ids": ["q1"], "status": "covered_strong"}], "next_actions": [], "reasoning": "good"}"#
-    } else if system_prompt.contains("ppt-generation") || system_prompt.contains("html-renderer") {
-        // Format skill answer: return content with the expected markers
-        if system_prompt.contains("ppt-generation") {
-            "<html><body><div class=\"slide\"><h1>Slide 1</h1><p>Summary of antifragility</p></div><div class=\"slide\"><h1>Slide 2</h1><p>Key concepts</p></div></body></html>"
-        } else {
-            "<html><body><h1>Antifragility</h1><p>Antifragility is a property of systems that benefit from stress.</p></body></html>"
-        }
-    } else if system_prompt.contains("Context OS RAG answer agent") {
-        "Based on the document, antifragility is a property of systems that increase in capability, resilience, or robustness as a result of stressors, shocks, volatility, noise, mistakes, faults, attacks, or failures. The concept was developed by Nassim Nicholas Taleb."
-    } else if system_prompt.contains("Context OS Web Search planner") {
-        r#"{"sub_queries": ["Tokyo weather today"], "intent_summary": "The user wants to know the current weather in Tokyo.", "needs_clarification": false}"#
-    } else if system_prompt.contains("Context OS web-search coverage evaluator") {
-        r#"{"decision": "sufficient", "dimensions": [{"name": "coverage", "attempted": true, "covered": true, "retrieved_count": 1, "query_ids": ["q1"], "status": "covered_strong"}], "next_actions": [], "reasoning": "good"}"#
-    } else if system_prompt.contains("Answer the user's original web-search question") || user_prompt.contains("Search results:") {
-        "The weather in Tokyo today is sunny with a high of 25°C [[1]]."
-    } else {
-        // Summary generation fallback
-        "This document discusses antifragility, a concept by Nassim Nicholas Taleb describing systems that benefit from shock and disorder."
-    };
+    // 1. Header-based routing (explicit, takes priority).
+    let route = headers
+        .get("x-mock-route")
+        .and_then(|v| v.to_str().ok())
+        .and_then(MockLlmRoute::from_header)
+        .unwrap_or_else(|| MockLlmRoute::from_system_prompt(system_prompt, user_prompt));
 
     Json(json!({
-        "choices": [{"message": {"role": "assistant", "content": content}}],
+        "choices": [{"message": {"role": "assistant", "content": route.canned_response()}}],
         "usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
         "model": "mock-llm"
     }))
+}
+
+#[cfg(test)]
+mod mock_routing_tests {
+    use super::MockLlmRoute;
+
+    #[test]
+    fn header_routing_recognizes_all_known_routes() {
+        for value in [
+            "rag-planner",
+            "rag-eval",
+            "rag-answer",
+            "search-planner",
+            "search-eval",
+            "search-answer",
+            "format-ppt",
+            "format-html",
+            "fallback",
+        ] {
+            assert!(
+                MockLlmRoute::from_header(value).is_some(),
+                "header value '{value}' should map to a route"
+            );
+        }
+    }
+
+    #[test]
+    fn header_routing_returns_none_for_unknown_value() {
+        assert_eq!(MockLlmRoute::from_header(""), None);
+        assert_eq!(MockLlmRoute::from_header("garbage"), None);
+        assert_eq!(MockLlmRoute::from_header("RAG-PLANNER"), None); // case-sensitive
+    }
+
+    #[test]
+    fn system_prompt_routing_orders_format_skills_before_rag_answer() {
+        // The RAG answer phase appends the format-skill catalog to the
+        // system prompt, so the system prompt contains BOTH the RAG
+        // answer marker AND the format-skill IDs. The format skill
+        // must win; if we ever re-order and put RAG answer first, the
+        // format_output integration tests will start failing with
+        // 'expected slide in formatted answer'.
+        let prompt = "\
+You are the Context OS RAG answer agent.
+
+## Available Output Formats
+
+- ppt-generation (v1.0): Load when the user requests a slide deck
+- html-renderer (v1.0): Load when the user asks for HTML
+
+## Selected Format Skills
+
+You are the Context OS presentation generation assistant.
+When the user asks for a presentation, output structured JSON.
+";
+        let route = MockLlmRoute::from_system_prompt(prompt, "");
+        assert_eq!(
+            route,
+            MockLlmRoute::FormatSkillPpt,
+            "format-skill catalog in RAG answer prompt must route to PPT, not generic RAG answer"
+        );
+    }
+
+    #[test]
+    fn system_prompt_routing_picks_rag_planner_for_planner_marker() {
+        let prompt = "You are the Context OS RAG retrieval planner. Given a query, decompose it into tool calls.";
+        assert_eq!(
+            MockLlmRoute::from_system_prompt(prompt, ""),
+            MockLlmRoute::RagPlanner
+        );
+    }
+
+    #[test]
+    fn system_prompt_routing_falls_back_when_no_marker_matches() {
+        let prompt = "You are a generic helpful assistant.";
+        let user = "Hello";
+        assert_eq!(
+            MockLlmRoute::from_system_prompt(prompt, user),
+            MockLlmRoute::Fallback
+        );
+    }
 }
 
 async fn mock_embedding_handler(
