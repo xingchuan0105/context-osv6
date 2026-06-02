@@ -238,7 +238,10 @@ impl RagEvaluator for DashScopeRagEvaluator {
     ) -> Pin<Box<dyn Future<Output = Result<Vec<String>>> + Send + '_>> {
         let embed = self.embed.clone();
         let chunks = self.chunks.clone();
-        let top_k = k.min(self.top_k);
+        // Always return at least `k` chunks so the harness can compute
+        // Recall@K correctly. The LLM context budget is capped at
+        // `self.top_k` chunks in `synthesize` (a separate concern).
+        let n = k.max(self.top_k);
         let query = query.to_string();
         Box::pin(async move {
             let q_emb = embed.embed(&query).await?;
@@ -251,7 +254,7 @@ impl RagEvaluator for DashScopeRagEvaluator {
             scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             let top: Vec<String> = scored
                 .into_iter()
-                .take(top_k)
+                .take(n)
                 .map(|(i, _)| chunks[i].text.clone())
                 .collect();
             Ok(top)
@@ -265,7 +268,10 @@ impl RagEvaluator for DashScopeRagEvaluator {
     ) -> Pin<Box<dyn Future<Output = Result<String>> + Send + '_>> {
         let llm = self.llm.clone();
         let query = query.to_string();
-        let chunks = chunks.to_vec();
+        // Only pass the top-K chunks to the LLM (LLM context budget);
+        // the harness gets all retrieved chunks for recall eval, so
+        // the synthesis step is not the bottleneck for recall.
+        let chunks: Vec<String> = chunks.iter().take(self.top_k).cloned().collect();
         Box::pin(async move {
             let system = "You are a helpful assistant. Answer using ONLY the provided context. \
                 If the context does not contain the answer, say exactly: \
