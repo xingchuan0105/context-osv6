@@ -122,7 +122,7 @@ async fn search_without_executor_returns_error() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn chat_emits_routing_decision_debug_trace() {
+async fn chat_emits_routing_decision_event() {
     let agent = UnifiedAgent::new(Some(dummy_llm()), None);
     let sink = CollectingSink::new();
     let req = base_request(AgentKind::Chat);
@@ -132,8 +132,8 @@ async fn chat_emits_routing_decision_debug_trace() {
 
     let events = sink.events();
     assert!(
-        events.iter().any(|e| matches!(e, AgentEvent::DebugTrace { kind, .. } if kind == "routing.decision")),
-        "expected routing.decision debug trace, got events: {:?}",
+        events.iter().any(|e| matches!(e, AgentEvent::RoutingDecision { strategy_id, .. } if strategy_id == "chat")),
+        "expected RoutingDecision event for chat strategy, got events: {:?}",
         events
     );
 }
