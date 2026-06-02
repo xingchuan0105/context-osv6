@@ -274,7 +274,6 @@ impl Strategy for RagStrategy {
             states: vec![
                 "Plan".to_string(),
                 "ExecuteRetrieve".to_string(),
-                "Evaluate".to_string(),
                 "Answer".to_string(),
             ],
             transitions: vec![
@@ -282,25 +281,12 @@ impl Strategy for RagStrategy {
                     from: "Plan".to_string(),
                     to: "ExecuteRetrieve".to_string(),
                 },
-                crate::agents::capability::TransitionSchema {
-                    from: "ExecuteRetrieve".to_string(),
-                    to: "Evaluate".to_string(),
-                },
+                // Step 2: Evidence Gate now decides ExecuteRetrieve -> Answer
+                // (Pass / NeedsFocus) vs finalize_degrade (Degrade) inside
+                // the ExecuteRetrieve step.
                 crate::agents::capability::TransitionSchema {
                     from: "ExecuteRetrieve".to_string(),
                     to: "Answer".to_string(),
-                },
-                crate::agents::capability::TransitionSchema {
-                    from: "Evaluate".to_string(),
-                    to: "Answer".to_string(),
-                },
-                crate::agents::capability::TransitionSchema {
-                    from: "Evaluate".to_string(),
-                    to: "ExecuteRetrieve".to_string(),
-                },
-                crate::agents::capability::TransitionSchema {
-                    from: "Evaluate".to_string(),
-                    to: "Plan".to_string(),
                 },
             ],
             external_tools_used: vec![],

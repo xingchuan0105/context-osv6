@@ -250,7 +250,6 @@ impl Strategy for SearchStrategy {
                 "Decompose".to_string(),
                 "ParallelSearch".to_string(),
                 "Aggregate".to_string(),
-                "Evaluate".to_string(),
                 "Answer".to_string(),
             ],
             transitions: vec![
@@ -262,17 +261,11 @@ impl Strategy for SearchStrategy {
                     from: "ParallelSearch".to_string(),
                     to: "Aggregate".to_string(),
                 },
+                // Step 3: Evidence Gate now decides Aggregate -> Answer
+                // vs Aggregate -> Degrade inside the Aggregate step.
                 crate::agents::capability::TransitionSchema {
                     from: "Aggregate".to_string(),
-                    to: "Evaluate".to_string(),
-                },
-                crate::agents::capability::TransitionSchema {
-                    from: "Evaluate".to_string(),
                     to: "Answer".to_string(),
-                },
-                crate::agents::capability::TransitionSchema {
-                    from: "Evaluate".to_string(),
-                    to: "ParallelSearch".to_string(),
                 },
             ],
             external_tools_used: vec!["web_search".to_string()],

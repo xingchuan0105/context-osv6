@@ -263,22 +263,25 @@ async fn rag_single_pass_sufficient_state_machine() {
     assertions::assert_valid_transitions(&schema, history);
     assertions::assert_state_kinds(history);
 
-    // Two valid outcomes:
-    // 1) Sufficient: Plan → ExecuteRetrieve → Evaluate → Answer (≥4 states)
-    // 2) No data:    Plan → ExecuteRetrieve → Evaluate → Degrade (3 states)
+    // Two valid outcomes under the Step-2 state machine:
+    // 1) Sufficient: Plan → ExecuteRetrieve → Answer (3 states, Answer path)
+    // 2) Degrade:    Plan → ExecuteRetrieve → finalize_degrade (1 iteration record,
+    //    no Answer state; final_decision = Degraded)
     let last_state = history.last().unwrap().state_id.as_str();
-    let has_data = history.len() >= 4 && last_state == "answer";
+    let has_data = last_state == "answer" && history.len() >= 3;
 
     if has_data {
-        // Sufficient path — verify no unexpected replan loops
-        if history.len() > 4 {
-            assert!(
-                history.windows(2).any(|w| {
-                    w[0].state_id == "evaluate" && w[1].state_id == "execute_retrieve"
-                }),
-                "Expected at least one Evaluate → ExecuteRetrieve replan transition"
-            );
-        }
+        // Sufficient path — the state machine is now strictly 3 states
+        // (Plan → ExecuteRetrieve → Answer). Replan loops are no longer
+        // possible because the Evidence Gate is a one-shot check inside
+        // ExecuteRetrieve; a Degrade outcome finalizes without entering
+        // Answer.
+        assert!(
+            history.len() >= 3 && history.len() <= 4,
+            "Expected 3-4 states on sufficient path, got {}: {:?}",
+            history.len(),
+            history.iter().map(|s| &s.state_id).collect::<Vec<_>>()
+        );
     } else {
         // Degrade path — verify we degraded gracefully (not a crash)
         assert!(
