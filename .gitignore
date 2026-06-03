@@ -40,6 +40,7 @@ __pycache__/
 .playwright-cli/
 test-results/
 playwright-report/
+playwright/.auth/
 
 # =====================
 # Claude Code / AI worktrees

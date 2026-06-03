@@ -1,0 +1,65 @@
+name: E2E Cross-Browser Weekly
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'  # 每周日
+  workflow_dispatch:
+
+jobs:
+  cross-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            avrag-rs/target/
+          key: ${{ runner.os }}-cargo-e2e-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-e2e-
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - name: Install frontend dependencies
+        working-directory: frontend_next
+        run: pnpm install
+
+      - name: Install Playwright browsers
+        working-directory: frontend_next
+        run: npx playwright install firefox webkit
+
+      - name: Run Frontend E2E (cross-browser)
+        working-directory: frontend_next
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+          E2E_TEST_USER_EMAIL: e2e-test@example.com
+          E2E_TEST_USER_PASSWORD: ${{ secrets.E2E_TEST_USER_PASSWORD }}
+          E2E_RESET_SECRET: ${{ secrets.E2E_RESET_SECRET }}
+        run: npx playwright test --project=cross-browser-firefox --project=cross-browser-webkit
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-cross-browser-report
+          path: frontend_next/playwright-report/
+          retention-days: 7

@@ -12,17 +12,15 @@ concurrency:
 
 jobs:
   e2e-tests:
-    name: E2E State Machine + Progressive Disclosure
+    name: E2E Full Suite
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -37,7 +35,25 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-e2e-
 
-      - name: Run E2E tests (ignored)
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - name: Install frontend dependencies
+        working-directory: frontend_next
+        run: pnpm install
+
+      - name: Install Playwright browsers
+        working-directory: frontend_next
+        run: npx playwright install chromium
+
+      - name: Run Rust Strategy E2E
         working-directory: avrag-rs
         env:
           E2E_LLM_BASE_URL: ${{ secrets.E2E_LLM_BASE_URL }}
@@ -49,9 +65,30 @@ jobs:
           E2E_EMBEDDING_BASE_URL: ${{ secrets.E2E_EMBEDDING_BASE_URL }}
           E2E_EMBEDDING_API_KEY: ${{ secrets.E2E_EMBEDDING_API_KEY }}
           E2E_EMBEDDING_MODEL: text-embedding-3-small
-        run: cargo test --ignored -p app --test e2e_chat --test e2e_rag --test e2e_search -- --test-threads=1
+        run: |
+          cargo test --ignored -p app \
+            --test e2e_chat --test e2e_rag --test e2e_search \
+            --test e2e_format_output --test e2e_ingestion_answer \
+            -- --test-threads=1
 
-      - name: Upload test output
+      - name: Run Frontend E2E
+        working-directory: frontend_next
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+          E2E_TEST_USER_EMAIL: e2e-test@example.com
+          E2E_TEST_USER_PASSWORD: ${{ secrets.E2E_TEST_USER_PASSWORD }}
+          E2E_RESET_SECRET: ${{ secrets.E2E_RESET_SECRET }}
+        run: npx playwright test --project=functional --project=auth
+
+      - name: Upload frontend test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend_next/playwright-report/
+          retention-days: 7
+
+      - name: Upload Rust test output
         if: failure()
         uses: actions/upload-artifact@v4
         with:
