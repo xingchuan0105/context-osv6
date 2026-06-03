@@ -3,19 +3,17 @@ import { type Page, expect } from "@playwright/test";
 export class DashboardPage {
   constructor(private page: Page) {}
 
-  async createNotebook(name: string) {
-    await this.page.getByRole("button", { name: /新建/ }).click();
-    await this.page.getByPlaceholder(/名称/).fill(name);
-    await this.page.getByRole("button", { name: /确认/ }).click();
-    await expect(this.page.locator("text=" + name)).toBeVisible();
+  async createWorkspace() {
+    await this.page.getByRole("button", { name: /新建工作区|New workspace/i }).click();
+    await this.page.waitForURL(/\/dashboard\/[^/]+$/);
   }
 
-  async openNotebook(name: string) {
+  async openWorkspace(name: string) {
     await this.page.locator("text=" + name).first().click();
     await this.page.waitForURL(/\/dashboard\/[^/]+$/);
   }
 
-  getNotebookList() {
+  getWorkspaceList() {
     return this.page.locator("[data-testid='notebook-list']");
   }
 }

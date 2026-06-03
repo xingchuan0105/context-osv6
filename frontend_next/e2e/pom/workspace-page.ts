@@ -4,7 +4,7 @@ export class WorkspacePage {
   constructor(private page: Page) {}
 
   async sendMessage(text: string) {
-    const input = this.page.getByPlaceholder(/围绕当前资料继续研究|Ask a question/);
+    const input = this.page.getByPlaceholder(/输入 \/ 选择模式|Type \/ to choose/);
     await input.fill(text);
     await this.page.getByRole("button", { name: /发送|Send/ }).click();
   }
@@ -23,12 +23,15 @@ export class WorkspacePage {
   }
 
   async switchToWebSearchMode() {
-    await this.page.getByRole("button", { name: /联网搜索|Web Search/ }).click();
-    await expect(this.page.locator("[data-testid='mode-indicator']")).toContainText(/search|联网/i);
+    // 点击模式按钮展开菜单
+    await this.page.getByRole("button", { name: /对话模式|Chat mode/i }).click();
+    // 选择网络搜索模式
+    await this.page.getByRole("button", { name: /网络搜索|web_search/i }).click();
   }
 
   async switchToHistoryTab() {
-    await this.page.getByRole("button", { name: /历史|History/ }).click();
+    // 桌面端 history rail 默认显示，无需点击切换
+    await this.page.waitForSelector("[data-testid='desktop-history-rail']", { state: "visible" });
   }
 
   async uploadFile(filePath: string) {

@@ -1,25 +1,23 @@
 import { test, expect } from "../fixtures/run-context";
 import { DashboardPage } from "../pom/dashboard-page";
 import { WorkspacePage } from "../pom/workspace-page";
-import { resetTestUserData, runScopedName } from "../utils/api-helpers";
+import { resetTestUserData } from "../utils/api-helpers";
 
 test.describe("Workspace Chat Journey", () => {
   test.beforeAll(async ({ request }) => {
     await resetTestUserData(request);
   });
 
-  test("user can create notebook, chat in general mode, and view history", async ({ page, runId }) => {
+  test("user can create workspace, chat in general mode, and view history", async ({ page, runId }) => {
     const dashboard = new DashboardPage(page);
     const workspace = new WorkspacePage(page);
 
     await page.goto("/dashboard");
+    await dashboard.createWorkspace();
 
-    const notebookName = runScopedName("E2E Chat", runId);
-    await dashboard.createNotebook(notebookName);
-    await dashboard.openNotebook(notebookName);
-
-    // General chat
-    await workspace.sendMessage("What is the capital of France?");
+    // General chat — 消息中包含 runId 以便历史记录识别
+    const messageText = `E2E ${runId}: What is the capital of France?`;
+    await workspace.sendMessage(messageText);
     await workspace.waitForResponse();
 
     // 结构性断言（优先）：消息完成标记存在、消息非空
@@ -27,7 +25,7 @@ test.describe("Workspace Chat Journey", () => {
     await expect(lastMessage).toBeVisible();
     await expect(lastMessage).not.toBeEmpty();
 
-    // Verify history persisted — 断言包含当前runId前缀的条目存在
+    // Verify history persisted — 断言包含当前 runId 的条目存在
     await workspace.switchToHistoryTab();
     await expect(page.locator(`[data-testid='history-item']:has-text("${runId}")`)).toBeVisible();
   });
@@ -37,23 +35,22 @@ test.describe("Workspace Chat Journey", () => {
     const workspace = new WorkspacePage(page);
 
     await page.goto("/dashboard");
-
-    const notebookName = runScopedName("E2E WebSearch", runId);
-    await dashboard.createNotebook(notebookName);
-    await dashboard.openNotebook(notebookName);
+    await dashboard.createWorkspace();
 
     await workspace.switchToWebSearchMode();
 
     // 结构性断言（优先）：mode indicator显示正确模式
     await expect(page.locator("[data-testid='mode-indicator']")).toContainText(/search|联网/i);
 
-    await workspace.sendMessage("What is the latest Rust release?");
+    const messageText = `E2E ${runId}: What is the latest Rust release?`;
+    await workspace.sendMessage(messageText);
     await workspace.waitForResponse();
 
-    // 结构性断言（优先）：消息完成、消息非空、citation按钮可见
+    // 结构性断言（优先）：消息完成、消息非空、mode-indicator显示search、citation按钮可见
     const lastMessage = workspace.getLastMessage();
     await expect(lastMessage).toBeVisible();
     await expect(lastMessage).not.toBeEmpty();
+    await expect(page.locator("[data-testid='mode-indicator']")).toContainText(/search|联网/i);
 
     const citationButton = workspace.getCitationButton();
     await expect(citationButton).toBeVisible();
