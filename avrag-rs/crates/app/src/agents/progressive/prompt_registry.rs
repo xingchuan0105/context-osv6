@@ -197,6 +197,32 @@ mod tests {
     }
 
     #[test]
+    fn atomic_retrieval_skills_loaded_with_kebab_names() {
+        // Regression guard: the 7 atomic retrieval tools must be
+        // registered as their kebab-case skill names (not the
+        // snake_case tool names they correspond to).
+        let registry = PromptRegistry::standard_cached();
+        for name in &[
+            "dense-retrieval",
+            "lexical-retrieval",
+            "graph-retrieval",
+            "doc-summary",
+            "doc-index",
+            "doc-metadata",
+            "index-lookup",
+        ] {
+            let skill = registry
+                .skill(name)
+                .unwrap_or_else(|| panic!("atomic retrieval skill '{name}' not registered"));
+            assert_eq!(skill.id(), *name);
+            assert!(
+                !skill.description().is_empty(),
+                "skill '{name}' has empty description"
+            );
+        }
+    }
+
+    #[test]
     fn dependency_validation_detects_missing_dependency() {
         let mut skills = std::collections::HashMap::new();
         skills.insert(
