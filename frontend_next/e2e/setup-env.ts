@@ -9,13 +9,29 @@ import { resetTestUserData } from "./utils/api-helpers";
  * 设计理由：这一步完全不需要浏览器。如果 runId 生成或 reset 失败，
  * 失败原因明确归为"环境/后端"问题，而不是"登录流程"问题。
  */
+const RUN_ID_MAX_AGE_MS = 10 * 60 * 1000; // 10 分钟
+
 export default async function setupEnv() {
   const runId = `r${Date.now()}`;
+  const authDir = "playwright/.auth";
+  const runIdPath = `${authDir}/run-id.txt`;
 
   const fs = await import("fs");
-  fs.mkdirSync("playwright/.auth", { recursive: true });
-  fs.writeFileSync("playwright/.auth/run-id.txt", runId);
+  fs.mkdirSync(authDir, { recursive: true });
 
+  // P1: 检测已有 runId，若存在且非 stale（< 10 分钟）则覆盖并警告
+  if (fs.existsSync(runIdPath)) {
+    const existing = fs.readFileSync(runIdPath, "utf-8").trim();
+    const existingTs = parseInt(existing.slice(1), 10);
+    const ageMs = Date.now() - existingTs;
+    if (ageMs < RUN_ID_MAX_AGE_MS) {
+      console.warn(
+        `[setup-env] existing runId ${existing} is only ${(ageMs / 1000).toFixed(1)}s old, overwriting`
+      );
+    }
+  }
+
+  fs.writeFileSync(runIdPath, runId);
   console.log(`[setup-env] runId generated: ${runId}`);
 
   // 使用 Playwright 的 request 对象（无需浏览器）调用 reset API

@@ -570,7 +570,7 @@ export function WorkspaceHistoryPane({
 
             return (
               <Fragment key={session.id}>
-                <article className={itemClassName}>
+                <article className={itemClassName} data-testid="history-item" data-session-id={session.id}>
                   <button className={styles.historySelectButton} type="button" onClick={() => handleSelectSession(session.id)}>
                     <div className={styles.historyItemHeader}>
                       <div className={styles.historyItemTitle}>{title}</div>

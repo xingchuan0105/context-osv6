@@ -10,7 +10,8 @@ export class WorkspacePage {
   }
 
   async waitForResponse(timeout = 30_000) {
-    await this.page.waitForSelector("[data-testid='message-done']", { timeout });
+    // 等待最后一条 assistant 消息完成（pending=false）
+    await this.page.waitForSelector('[data-testid="chat-message"][data-role="assistant"][data-pending="false"]', { timeout });
   }
 
   getMessages() {
@@ -33,11 +34,14 @@ export class WorkspacePage {
   async uploadFile(filePath: string) {
     const input = this.page.locator("input[type='file']");
     await input.setInputFiles(filePath);
-    await expect(this.page.locator("[data-testid='upload-done']")).toBeVisible({ timeout: 10_000 });
+    // 上传完成后 source item 会出现在列表中，由后续 waitForIngestionComplete 验证
   }
 
-  async waitForIngestionComplete(timeout = 60_000) {
-    await expect(this.page.locator("[data-testid='ingestion-status']")).toHaveText(/completed|已完成/, { timeout });
+  async waitForIngestionComplete(timeout?: number) {
+    // P2: timeout 从环境变量读取，CI 中可覆盖
+    const effectiveTimeout = timeout ?? parseInt(process.env.E2E_INGESTION_TIMEOUT || "60000", 10);
+    // 等待任意 source item 的 data-status 变为 completed
+    await this.page.waitForSelector('[data-testid="ingestion-status"][data-status="completed"]', { timeout: effectiveTimeout });
   }
 
   getCitationButton() {

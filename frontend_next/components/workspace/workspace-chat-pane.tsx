@@ -2157,6 +2157,9 @@ function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
                 ]
                   .filter(Boolean)
                   .join(" ")}
+                data-testid="chat-message"
+                data-pending={message.pending}
+                data-role={message.role}
                 key={message.id}
               >
                 <div
@@ -2179,6 +2182,8 @@ function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
                       ]
                         .filter(Boolean)
                         .join(" ")}
+                      data-testid="mode-indicator"
+                      data-mode={message.mode ?? "chat"}
                     >
                       <span>{getModeLabel(locale, message.mode ?? "chat")}</span>
                       <span className={styles.modeBubbleTagCode}>{getModeCode(message.mode ?? "chat")}</span>
@@ -2228,6 +2233,7 @@ function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
                           return (
                             <button
                               className={styles.webSourceButton}
+                              data-testid="citation-button"
                               onClick={() =>
                                 onOpenWebSources?.({ sources: webSources })
                               }

@@ -12,12 +12,17 @@ export default defineConfig({
   reporter: "list",
 
   webServer: [
-    {
-      command: "cd ../avrag-rs && cargo run --bin avrag-api",
-      url: "http://127.0.0.1:8080/health",
-      timeout: 120_000,
-      reuseExistingServer: !process.env.CI,
-    },
+    // 本地测试 auth-flow 等纯前端场景时，可通过 SKIP_BACKEND=1 跳过 Rust 后端启动
+    ...(process.env.SKIP_BACKEND
+      ? []
+      : [
+          {
+            command: "cd ../avrag-rs && cargo run --bin avrag-api",
+            url: "http://127.0.0.1:8080/health",
+            timeout: 120_000,
+            reuseExistingServer: !process.env.CI,
+          },
+        ]),
     {
       // 统一由 Playwright webServer 启动前端；CI用 build+start，本地用 dev
       command: process.env.CI ? "pnpm build && pnpm start" : "pnpm dev",

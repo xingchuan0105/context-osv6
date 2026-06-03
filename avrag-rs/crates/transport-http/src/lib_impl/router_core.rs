@@ -219,6 +219,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(routes::infra::router())
         .nest("/api/auth", routes::auth::public_router().merge(protected_auth))
         .nest("/api/v1", protected_api_v1)
+        .nest("/api/e2e", routes::e2e::router())
         .merge(protected_chat_compat)
         .with_state(state)
         .layer(axum::middleware::from_fn(middleware::observability_middleware))

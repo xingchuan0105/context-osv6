@@ -2,6 +2,7 @@ pub mod admin;
 pub mod auth;
 pub mod billing;
 pub mod chat;
+pub mod e2e;
 pub mod infra;
 pub mod notebooks;
 pub mod rag;
