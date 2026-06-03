@@ -3,6 +3,25 @@
 //! Wires a real RAG pipeline (DashScope LLM + text-embedding-v4) into
 //! the `RagEvaluator` trait and runs the small in-memory golden set
 //! (`fixtures_golden.json`) built on the product_e2e fixture corpus.
+//!
+//! ⚠️ BEFORE DRAWING PRODUCT-QUALITY CONCLUSIONS FROM THIS RUNNER,
+//! READ `tests/rag_quality/GOTCHAS.md`. Short version:
+//!
+//! - This is a SMOKE TEST, not a production benchmark. The
+//!   retrieval here is single-pass flat-cosine, NOT the
+//!   `RagRuntime` with planner / RRF / re-rank that production
+//!   uses. Numbers like "100% recall" or "30% halluc" reflect
+//!   this simplified pipeline, not the product.
+//! - The hallucination heuristic is word-overlap; manual audit
+//!   of the latest run showed 0% true hallucination but 15-30%
+//!   heuristic false positives. Replace with NLI for real signal.
+//! - The `mode` field on each golden example is the only thing
+//!   that picks the system prompt; set it correctly when adding
+//!   new examples.
+//!
+//! For a real production-quality number today, write a
+//! `ProductionRagEvaluator` that calls `RagRuntime::execute()`
+//! and replaces the heuristic with an NLI judge.
 //! Prints the three PRD §13.2 release-gate metrics:
 //!
 //! - **Recall@15** (retrieval quality; gate: not regressing more than 3%)
