@@ -84,16 +84,32 @@ async fn load_corpus(
     Ok(chunks)
 }
 
-/// Split text into paragraph-sized chunks.
+/// Split text into paragraph-sized chunks, matching the production
+/// chunker in `crates/ingestion/src/chunker.rs` (which uses a
+/// `min_chars` policy and merges sub-threshold chunks into the
+/// previous one rather than dropping them). The production default
+/// is `min_chars = 32`; we use 40 here for slightly more aggressive
+/// merging that prevents the byline-style "By X Y Z" 1-liner chunks
+/// (which the cosine retriever would rank below substantive content)
+/// from being lost.
+///
+/// Two things matter for retrieval quality:
+/// 1. A short chunk like "By Nassim Nicholas Taleb" can contain
+///    the answer to "Who developed the concept?" — dropping it
+///    kills recall for that query.
+/// 2. If we keep it as a standalone chunk, it ranks below
+///    content-heavy chunks on cosine similarity and never gets
+///    retrieved. Merging it INTO the first content paragraph keeps
+///    the answer reachable.
 fn split_paragraphs(text: &str) -> Vec<String> {
-    let mut out = Vec::new();
+    const MIN_CHARS: usize = 40;
+    const MAX_CHARS: usize = 800;
+    let mut out: Vec<String> = Vec::new();
     let mut current = String::new();
     for line in text.lines() {
         if line.trim().is_empty() {
-            if current.len() >= 80 {
+            if !current.is_empty() {
                 out.push(std::mem::take(&mut current));
-            } else {
-                current.clear();
             }
             continue;
         }
@@ -101,14 +117,36 @@ fn split_paragraphs(text: &str) -> Vec<String> {
             current.push(' ');
         }
         current.push_str(line.trim());
-        if current.len() >= 800 {
+        if current.len() >= MAX_CHARS {
             out.push(std::mem::take(&mut current));
         }
     }
-    if !current.is_empty() && current.len() >= 80 {
+    if !current.is_empty() {
         out.push(current);
     }
-    out
+    // Production-style merge pass: any sub-MIN_CHARS chunk gets
+    // appended to the previous one. If the first chunk itself is
+    // short, merge it forward into the next.
+    let mut merged: Vec<String> = Vec::with_capacity(out.len());
+    for chunk in out {
+        if chunk.len() < MIN_CHARS {
+            if let Some(last) = merged.last_mut() {
+                last.push_str("\n\n");
+                last.push_str(&chunk);
+            } else {
+                merged.push(chunk);
+            }
+        } else {
+            merged.push(chunk);
+        }
+    }
+    // If the FIRST chunk is still too short (no previous to merge
+    // into), merge forward into the next one.
+    if merged.len() >= 2 && merged[0].len() < MIN_CHARS {
+        let head = merged.remove(0);
+        merged[0] = format!("{head}\n\n{}", merged[0]);
+    }
+    merged
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +240,36 @@ impl LlmClient {
 }
 
 // ---------------------------------------------------------------------------
+// Mode-specific system prompts
+// ---------------------------------------------------------------------------
+
+/// RAG-mode prompt: strict, citation-bearing, "context only" framing.
+const RAG_SYSTEM_PROMPT: &str = "\
+You are a helpful research assistant. Answer the user's question \
+using ONLY the provided context blocks. If the context does not \
+contain the answer, reply with exactly: \
+'Not mentioned in the provided context.' \
+Cite AT MOST ONE source — the single most relevant one — using the \
+EXACT marker format [citation:N] (with the brackets and colon) \
+where N is the 1-based index of the context block. \
+Example: 'Antifragility was developed by Taleb [citation:1].'";
+
+/// Chat-mode prompt: conversational, no document grounding.
+const CHAT_SYSTEM_PROMPT: &str = "\
+You are a friendly, knowledgeable AI assistant. Answer the user's \
+question naturally and concisely using your own knowledge. Do not \
+fabricate citations to documents — there are none in this \
+conversation.";
+
+/// Search-mode prompt: open-ended, web-search flavored.
+const SEARCH_SYSTEM_PROMPT: &str = "\
+You are a search assistant. The user has asked an open-ended question \
+that would normally be answered with a web search. There are no \
+context documents provided in this evaluation. Answer using your \
+own knowledge, briefly. If the answer requires real-time data you \
+do not have access to, say so plainly.";
+
+// ---------------------------------------------------------------------------
 // Cosine similarity (single-threaded reference impl — fine for ~hundreds of chunks)
 // ---------------------------------------------------------------------------
 
@@ -228,6 +296,10 @@ struct DashScopeRagEvaluator {
     llm: LlmClient,
     embed: EmbeddingClient,
     top_k: usize,
+    /// Maps query string -> mode ("chat" / "rag" / "search"). Built
+    /// at construction from the full golden set so `synthesize` can
+    /// pick the right system prompt without changing the trait.
+    query_mode_map: std::collections::HashMap<String, String>,
 }
 
 impl RagEvaluator for DashScopeRagEvaluator {
@@ -243,6 +315,20 @@ impl RagEvaluator for DashScopeRagEvaluator {
         // `self.top_k` chunks in `synthesize` (a separate concern).
         let n = k.max(self.top_k);
         let query = query.to_string();
+        // Chat and search modes do NOT retrieve — the question is
+        // answered from parametric knowledge (or "I don't have access
+        // to real-time data" for search). Returning empty chunks
+        // matches production: production also skips retrieval for
+        // these modes, and the hallucination heuristic correctly
+        // skips when retrieved_chunks is empty.
+        let mode = self
+            .query_mode_map
+            .get(&query)
+            .cloned()
+            .unwrap_or_else(|| "rag".to_string());
+        if mode != "rag" {
+            return Box::pin(async move { Ok(Vec::new()) });
+        }
         Box::pin(async move {
             let q_emb = embed.embed(&query).await?;
             // Single-threaded cosine — fine for small corpora.
@@ -272,23 +358,38 @@ impl RagEvaluator for DashScopeRagEvaluator {
         // the harness gets all retrieved chunks for recall eval, so
         // the synthesis step is not the bottleneck for recall.
         let chunks: Vec<String> = chunks.iter().take(self.top_k).cloned().collect();
+        // Look up the example's mode in the pre-built map; default
+        // to "rag" if not found (which should not happen in
+        // practice — the map is built from the full golden set).
+        let mode = self
+            .query_mode_map
+            .get(&query)
+            .cloned()
+            .unwrap_or_else(|| "rag".to_string());
         Box::pin(async move {
-            let system = "You are a helpful assistant. Answer using ONLY the provided context. \
-                If the context does not contain the answer, say exactly: \
-                'Not mentioned in the provided context.' \
-                Cite the sources inline using the EXACT marker format [citation:N] \
-                (with the brackets and colon) where N is the 1-based index of the context block. \
-                Example: 'Antifragility was developed by Taleb [citation:1].";
-            let context = chunks
-                .iter()
-                .enumerate()
-                .map(|(i, c)| format!("[{}]\n{}", i + 1, c))
-                .collect::<Vec<_>>()
-                .join("\n\n");
-            let user = format!("Question: {query}\n\nContext:\n{context}");
+            let system = match mode.as_str() {
+                "chat" => CHAT_SYSTEM_PROMPT,
+                "search" => SEARCH_SYSTEM_PROMPT,
+                _ => RAG_SYSTEM_PROMPT,
+            };
+            let context = if mode == "chat" {
+                String::new()
+            } else {
+                chunks
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| format!("[{}]\n{}", i + 1, c))
+                    .collect::<Vec<_>>()
+                    .join("\n\n")
+            };
+            let user = if mode == "chat" {
+                query.clone()
+            } else {
+                format!("Question: {query}\n\nContext:\n{context}")
+            };
             let answer = llm.complete(system, &user).await?;
             eprintln!(
-                "[quality_runner] Q: {query}\n[quality_runner] A: {answer}"
+                "[quality_runner] mode={mode} Q: {query}\n[quality_runner] A: {answer}"
             );
             Ok(answer)
         })
@@ -391,11 +492,19 @@ async fn main() -> Result<()> {
     let dataset = GoldenDataset::load(&args.golden)?;
     info!(version = %dataset.version, examples = dataset.len(), "golden set loaded");
 
+    // Build the query -> mode map so the evaluator can pick the
+    // right system prompt per example without changing the trait.
+    let mut query_mode_map = std::collections::HashMap::new();
+    for example in dataset.all_examples() {
+        query_mode_map.insert(example.query.clone(), example.mode.clone());
+    }
+
     let evaluator = DashScopeRagEvaluator {
         chunks,
         llm: LlmClient::new(api_key),
         embed,
         top_k: args.top_k,
+        query_mode_map,
     };
     let config = HarnessConfig {
         recall_k: 15,
