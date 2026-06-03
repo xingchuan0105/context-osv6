@@ -18,16 +18,11 @@ test.describe("Auth Flow", () => {
     await page.goto("/register");
     await page.locator("#register-email").fill(email);
     await page.locator("#register-password").fill("E2eTest123!");
+    await page.locator("#register-password-confirm").fill("E2eTest123!");
     await page.locator("#register-name").fill("E2E User");
-    await page.getByRole("button", { name: /注册/ }).click();
-    await page.waitForURL(/\/login$/, { timeout: 15_000 });
-
-    // Login
-    const login = new LoginPage(page);
-    await login.login(email, "E2eTest123!");
-
-    // Verify
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await page.getByRole("button", { name: /创建账号|Create account/i }).click();
+    // 注册成功后前端自动完成登录并跳转到 dashboard
+    await page.waitForURL(/\/dashboard$/, { timeout: 15_000 });
   });
 
   test("login page does not submit before hydration", async ({ browser }) => {

@@ -28,7 +28,7 @@ pub(crate) struct ResetUserDataResponse {
 }
 
 pub(crate) fn router() -> axum::Router<AppState> {
-    axum::Router::new().route("/e2e/reset-user-data", axum::routing::post(reset_user_data_handler))
+    axum::Router::new().route("/reset-user-data", axum::routing::post(reset_user_data_handler))
 }
 
 async fn reset_user_data_handler(
@@ -127,9 +127,13 @@ async fn reset_user_data_handler(
     let user_id = match user_id {
         Some(id) => id,
         None => {
+            // 用户不存在 = 环境已干净，视为成功
             return (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "error": "user not found" })),
+                StatusCode::OK,
+                Json(ResetUserDataResponse {
+                    success: true,
+                    message: "user not found, nothing to reset".to_string(),
+                }),
             )
                 .into_response();
         }

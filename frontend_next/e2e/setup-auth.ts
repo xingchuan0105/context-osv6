@@ -19,7 +19,24 @@ export default async function setupAuth() {
     await page.locator("#login-email").fill(TEST_USER.email);
     await page.locator("#login-password").fill(TEST_USER.password);
     await page.getByRole("button", { name: /继续登录/ }).click();
-    await page.waitForURL(/\/dashboard$/, { timeout: 15_000 });
+
+    // 如果登录失败（账号不存在），自动注册
+    try {
+      await page.waitForURL(/\/dashboard$/, { timeout: 5_000 });
+    } catch {
+      const stillOnLogin = await page.locator("#login-email").isVisible().catch(() => false);
+      if (stillOnLogin) {
+        console.log("[setup-auth] login failed, auto-registering test user...");
+        await page.goto("/register");
+        await page.locator("#register-email").fill(TEST_USER.email);
+        await page.locator("#register-password").fill(TEST_USER.password);
+        await page.locator("#register-password-confirm").fill(TEST_USER.password);
+        await page.locator("#register-name").fill(TEST_USER.fullName);
+        await page.getByRole("button", { name: /创建账号|Create account/i }).click();
+        // 注册成功后前端自动完成登录并跳转到 dashboard
+        await page.waitForURL(/\/dashboard$/, { timeout: 15_000 });
+      }
+    }
 
     await page.context().storageState({ path: "playwright/.auth/user.json" });
     console.log("[setup-auth] login succeeded, storageState saved");
