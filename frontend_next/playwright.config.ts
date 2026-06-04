@@ -77,6 +77,7 @@ export default defineConfig({
       name: "visual-desktop",
       testMatch: [/visual\/.*\.spec\.ts/],
       use: {
+        baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
         browserName: "chromium",
         viewport: { width: 1440, height: 900 },
         storageState: "playwright/.auth/user.json",
@@ -89,6 +90,7 @@ export default defineConfig({
       name: "visual-mobile",
       testMatch: [/visual\/.*\.spec\.ts/],
       use: {
+        baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
         ...devices["Pixel 5"],
         storageState: "playwright/.auth/user.json",
         trace: "off",
