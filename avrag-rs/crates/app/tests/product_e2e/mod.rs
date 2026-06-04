@@ -12,6 +12,7 @@ pub mod smoke;
 pub mod integration;
 pub mod failure;
 pub mod tenants;
+pub mod llm_real;
 
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -230,17 +231,17 @@ fn test_auth_headers_for(org_id: &str, user_id: &str) -> reqwest::header::Header
 impl TestContext {
     /// Create a Smoke E2E context (no RAG).
     pub async fn new_smoke() -> Self {
-        Self::build_smoke(false, 300, None).await
+        Self::build_smoke(false, 300, None, false).await
     }
 
     /// Create a Smoke E2E context with RAG enabled (Milvus + mock embedding/LLM).
     pub async fn new_smoke_with_rag() -> Self {
-        Self::build_smoke(true, 300, None).await
+        Self::build_smoke(true, 300, None, false).await
     }
 
     /// Create a Smoke E2E context with RAG and a custom worker per-task timeout.
     pub async fn new_smoke_with_rag_and_timeout(worker_timeout_secs: u64) -> Self {
-        Self::build_smoke(true, worker_timeout_secs, None).await
+        Self::build_smoke(true, worker_timeout_secs, None, false).await
     }
 
     /// Create a Smoke E2E context with RAG and a specific org/user identity.
@@ -249,13 +250,14 @@ impl TestContext {
     /// in a different org and verify that one org cannot read another org's data.
     pub async fn new_smoke_with_rag_and_org(org_id: &str, user_id: &str) -> Self {
         let identity = Some((org_id.to_string(), user_id.to_string()));
-        Self::build_smoke(true, 300, identity).await
+        Self::build_smoke(true, 300, identity, false).await
     }
 
     async fn build_smoke(
         enable_rag: bool,
         worker_timeout_secs: u64,
         identity: Option<(String, String)>,
+        use_real_llm: bool,
     ) -> Self {
         // 0. Best-effort: clean up orphan containers from previous test runs.
         //    Run at most once per process to avoid races where parallel tests
@@ -286,14 +288,19 @@ impl TestContext {
         let object_store_dir = setup::create_temp_object_store();
         let object_root = object_store_dir.path().to_string_lossy().to_string();
 
-        // 4. Start mock LLM (always — needed by Search and RAG)
-        let (mock_llm_url, mock_llm_abort) = start_mock_llm_server().await;
+        // 4. Start mock LLM unless we're using a real LLM.
+        let (mock_llm_url, mock_llm_abort) = if use_real_llm {
+            (String::new(), None)
+        } else {
+            let (url, abort) = start_mock_llm_server().await;
+            (url, Some(abort))
+        };
 
         // 5. Start mock Search (always — needed by Search tests)
         let (mock_search_url, mock_search_abort, search_should_429) = start_mock_search_server().await;
 
-        // 6. Start mock Embedding if RAG enabled
-        let (mock_embedding_url, mock_embedding_abort, embedding_should_503) = if enable_rag {
+        // 6. Start mock Embedding if RAG enabled and not using real LLM.
+        let (mock_embedding_url, mock_embedding_abort, embedding_should_503) = if enable_rag && !use_real_llm {
             let (url, abort, flag) = start_mock_embedding_server().await;
             (Some(url), Some(abort), Some(flag))
         } else {
@@ -317,16 +324,18 @@ impl TestContext {
                 let prefix = "avrag_e2e_test".to_string();
                 std::env::set_var("MILVUS_COLLECTION_PREFIX", &prefix);
             }
-            // LLM config (always)
-            std::env::set_var("AGENT_LLM_BASE_URL", &mock_llm_url);
-            std::env::set_var("AGENT_LLM_API_KEY", "mock");
-            std::env::set_var("AGENT_LLM_MODEL", "mock-llm");
-            std::env::set_var("MEMORY_LLM_BASE_URL", &mock_llm_url);
-            std::env::set_var("MEMORY_LLM_API_KEY", "mock");
-            std::env::set_var("MEMORY_LLM_MODEL", "mock-llm");
-            std::env::set_var("INGESTION_LLM_BASE_URL", &mock_llm_url);
-            std::env::set_var("INGESTION_LLM_API_KEY", "mock");
-            std::env::set_var("INGESTION_LLM_MODEL", "mock-llm");
+            // LLM config: keep real values when use_real_llm is set; otherwise inject mocks.
+            if !use_real_llm {
+                std::env::set_var("AGENT_LLM_BASE_URL", &mock_llm_url);
+                std::env::set_var("AGENT_LLM_API_KEY", "mock");
+                std::env::set_var("AGENT_LLM_MODEL", "mock-llm");
+                std::env::set_var("MEMORY_LLM_BASE_URL", &mock_llm_url);
+                std::env::set_var("MEMORY_LLM_API_KEY", "mock");
+                std::env::set_var("MEMORY_LLM_MODEL", "mock-llm");
+                std::env::set_var("INGESTION_LLM_BASE_URL", &mock_llm_url);
+                std::env::set_var("INGESTION_LLM_API_KEY", "mock");
+                std::env::set_var("INGESTION_LLM_MODEL", "mock-llm");
+            }
 
             // Search config (always)
             std::env::set_var("SEARCH_PROVIDER", "brave_llm_context");
@@ -338,6 +347,7 @@ impl TestContext {
                 std::env::set_var("EMBEDDING_API_KEY", "mock");
                 std::env::set_var("EMBEDDING_MODEL", "mock-embedding");
             }
+            // When use_real_llm is true, EMBEDDING_* is already set from .env above.
         }
 
         // 6. Bootstrap AppState and start HTTP server
@@ -380,25 +390,42 @@ impl TestContext {
                .env("MILVUS_DATABASE", "default")
                .env("MILVUS_COLLECTION_PREFIX", std::env::var("MILVUS_COLLECTION_PREFIX").unwrap_or_default());
         }
-        // Worker always gets LLM + Search env vars
-        cmd.env("AGENT_LLM_BASE_URL", &mock_llm_url)
-           .env("AGENT_LLM_API_KEY", "mock")
-           .env("AGENT_LLM_MODEL", "mock-llm")
-           .env("MEMORY_LLM_BASE_URL", &mock_llm_url)
-           .env("MEMORY_LLM_API_KEY", "mock")
-           .env("MEMORY_LLM_MODEL", "mock-llm")
-           .env("INGESTION_LLM_BASE_URL", &mock_llm_url)
-           .env("INGESTION_LLM_API_KEY", "mock")
-           .env("INGESTION_LLM_MODEL", "mock-llm")
-           .env("SEARCH_PROVIDER", "brave_llm_context")
+        // Worker LLM env: real or mock depending on mode.
+        if use_real_llm {
+            for key in ["AGENT_LLM_BASE_URL", "AGENT_LLM_API_KEY", "AGENT_LLM_MODEL",
+                        "MEMORY_LLM_BASE_URL", "MEMORY_LLM_API_KEY", "MEMORY_LLM_MODEL",
+                        "INGESTION_LLM_BASE_URL", "INGESTION_LLM_API_KEY", "INGESTION_LLM_MODEL"] {
+                if let Ok(v) = std::env::var(key) {
+                    cmd.env(key, v);
+                }
+            }
+            for key in ["EMBEDDING_BASE_URL", "EMBEDDING_API_KEY", "EMBEDDING_MODEL"] {
+                if let Ok(v) = std::env::var(key) {
+                    cmd.env(key, v);
+                }
+            }
+        } else {
+            cmd.env("AGENT_LLM_BASE_URL", &mock_llm_url)
+               .env("AGENT_LLM_API_KEY", "mock")
+               .env("AGENT_LLM_MODEL", "mock-llm")
+               .env("MEMORY_LLM_BASE_URL", &mock_llm_url)
+               .env("MEMORY_LLM_API_KEY", "mock")
+               .env("MEMORY_LLM_MODEL", "mock-llm")
+               .env("INGESTION_LLM_BASE_URL", &mock_llm_url)
+               .env("INGESTION_LLM_API_KEY", "mock")
+               .env("INGESTION_LLM_MODEL", "mock-llm");
+
+            if let Some(ref url) = mock_embedding_url {
+                cmd.env("EMBEDDING_BASE_URL", url)
+                   .env("EMBEDDING_API_KEY", "mock")
+                   .env("EMBEDDING_MODEL", "mock-embedding");
+            }
+        }
+
+        // Worker always gets Search env vars (mock for smoke tests).
+        cmd.env("SEARCH_PROVIDER", "brave_llm_context")
            .env("SEARCH_BASE_URL", &mock_search_url)
            .env("SEARCH_API_KEY", "mock");
-
-        if let Some(ref url) = mock_embedding_url {
-            cmd.env("EMBEDDING_BASE_URL", url)
-               .env("EMBEDDING_API_KEY", "mock")
-               .env("EMBEDDING_MODEL", "mock-embedding");
-        }
 
         let mut worker = cmd.spawn().expect("spawn worker");
 
@@ -454,7 +481,7 @@ impl TestContext {
             server_abort: Some(abort_tx),
             object_store_dir,
             pg_url,
-            mock_llm_abort: Some(mock_llm_abort),
+            mock_llm_abort,
             mock_embedding_abort,
             mock_search_abort: Some(mock_search_abort),
             search_should_429: Some(search_should_429),

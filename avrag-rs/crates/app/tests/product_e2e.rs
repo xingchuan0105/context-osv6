@@ -10,3 +10,7 @@
 pub mod product_e2e;
 
 pub use product_e2e::*;
+
+// Re-export the real-LLM sub-modules so their #[test] functions are
+// discovered by the test runner under the `llm_real` namespace.
+pub use product_e2e::llm_real;
