@@ -113,6 +113,7 @@ function mapTranscriptMessage(message: WorkspaceChatMessage): PaneMessage {
     degradeTrace: [],
     guarded: false,
     messageId: message.id,
+    pending: false,
     sessionId: message.session_id,
     toolResults: message.tool_results ?? [],
   };

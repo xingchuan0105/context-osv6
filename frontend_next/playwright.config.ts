@@ -1,4 +1,18 @@
 import { defineConfig, devices } from "@playwright/test";
+import { readFileSync } from "fs";
+
+// Load .env so env vars are available in globalSetup / specs
+for (const envFile of [".env.local", ".env"]) {
+  try {
+    const content = readFileSync(envFile, "utf-8");
+    for (const line of content.split("\n")) {
+      const m = line.match(/^([A-Za-z_]\w*)=(.*)$/);
+      if (m && process.env[m[1]] === undefined) {
+        process.env[m[1]] = m[2].replace(/^["'](.*)["']$/, "$1");
+      }
+    }
+  } catch { /* file missing, skip */ }
+}
 
 export default defineConfig({
   testDir: "./e2e",
