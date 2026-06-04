@@ -1,0 +1,19 @@
+Context-OS 是一个面向知识工作者的智能工作空间平台。
+
+核心功能：
+1. Notebook（工作区）：用户创建的知识组织单元，可上传文档、进行对话、记录笔记。
+2. RAG（检索增强生成）：基于用户上传的文档进行智能问答，答案附带引用来源。
+3. Web Search（网络搜索）：基于互联网实时信息的问答模式。
+4. Agent 系统：支持多 agent 协作，包括 planner、retriever、synthesizer 等角色。
+
+技术架构：
+- 前端：Next.js + React + TypeScript
+- 后端：Rust（axum + sqlx + tokio）
+- 向量数据库：Milvus
+- 关系数据库：PostgreSQL
+- 缓存：Redis
+- 对象存储：MinIO
+- LLM：DeepSeek / OpenAI / 其他兼容 OpenAI API 的模型
+
+E2E 测试：
+使用 Playwright 进行端到端测试，覆盖用户核心旅程：注册登录、创建 workspace、上传文档、RAG 问答、网络搜索、分享协作等。
