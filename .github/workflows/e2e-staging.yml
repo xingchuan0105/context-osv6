@@ -5,6 +5,13 @@ on:
   schedule:
     # Daily at 2:17 AM UTC (off the :00 mark to avoid thundering herd)
     - cron: '17 2 * * *'
+  push:
+    branches: [master]
+    paths:
+      - 'frontend_next/e2e/**'
+      - 'frontend_next/playwright.config.ts'
+      - 'avrag-rs/crates/transport-http/src/routes/e2e.rs'
+      - '.github/workflows/e2e-staging.yml'
 
 concurrency:
   group: e2e-staging
@@ -16,8 +23,77 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: avrag
+          POSTGRES_PASSWORD: avrag
+          POSTGRES_DB: avrag_rs
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
+
+      - name: Start Milvus
+        working-directory: avrag-rs
+        run: |
+          docker compose -f docker-compose.milvus.yml up -d
+
+      - name: Start MinIO
+        run: |
+          docker run -d \
+            --name e2e-minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_SECRET=minioadmin \
+            minio/minio:RELEASE.2023-03-20T20-16-18Z \
+            server /data --console-address ":9001"
+
+      - name: Wait for services
+        run: |
+          echo "Waiting for PostgreSQL..."
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 && break
+            sleep 1
+          done
+
+          echo "Waiting for Redis..."
+          for i in $(seq 1 30); do
+            redis-cli -h localhost -p 6379 ping && break
+            sleep 1
+          done
+
+          echo "Waiting for MinIO..."
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:9000/minio/health/live && break
+            sleep 1
+          done
+
+          echo "Waiting for Milvus..."
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:19530/healthz >/dev/null 2>&1 && break
+            echo -n "."
+            sleep 2
+          done
+          echo ""
+          echo "All services ready"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -53,9 +129,44 @@ jobs:
         working-directory: frontend_next
         run: npx playwright install chromium
 
+      - name: Configure avrag-rs environment
+        working-directory: avrag-rs
+        run: |
+          cat > .env <<EOF
+          DATABASE_URL=postgres://avrag:avrag@localhost:5432/avrag_rs
+          REDIS_URL=redis://localhost:6379
+          MINIO_ENDPOINT=http://127.0.0.1:9000
+          MINIO_ACCESS_KEY=minioadmin
+          MINIO_SECRET_KEY=minioadmin
+          MILVUS_URL=http://127.0.0.1:19530
+          MILVUS_TOKEN=
+          MILVUS_DATABASE=default
+          MILVUS_COLLECTION_PREFIX=avrag
+          AGENT_LLM_BASE_URL=${{ secrets.E2E_LLM_BASE_URL }}
+          AGENT_LLM_API_KEY=${{ secrets.E2E_LLM_API_KEY }}
+          AGENT_LLM_MODEL=gpt-4o-mini
+          AGENT_LLM_TIMEOUT_MS=180000
+          MEMORY_LLM_BASE_URL=${{ secrets.E2E_LLM_BASE_URL }}
+          MEMORY_LLM_API_KEY=${{ secrets.E2E_LLM_API_KEY }}
+          MEMORY_LLM_MODEL=gpt-4o-mini
+          EMBEDDING_BASE_URL=${{ secrets.E2E_EMBEDDING_BASE_URL }}
+          EMBEDDING_API_KEY=${{ secrets.E2E_EMBEDDING_API_KEY }}
+          EMBEDDING_MODEL=text-embedding-3-small
+          E2E_ENABLED=true
+          E2E_RESET_SECRET=${{ secrets.E2E_RESET_SECRET }}
+          SEARCH_API_KEY=${{ secrets.E2E_BRAVE_API_KEY }}
+          EOF
+
+      - name: Build avrag-api
+        working-directory: avrag-rs
+        run: cargo build --bin avrag-api --release
+
       - name: Run Rust Strategy E2E
         working-directory: avrag-rs
         env:
+          DATABASE_URL: postgres://avrag:avrag@localhost:5432/avrag_rs
+          REDIS_URL: redis://localhost:6379
+          MILVUS_URL: http://localhost:19530
           E2E_LLM_BASE_URL: ${{ secrets.E2E_LLM_BASE_URL }}
           E2E_LLM_API_KEY: ${{ secrets.E2E_LLM_API_KEY }}
           E2E_LLM_MODEL: gpt-4o-mini
@@ -78,6 +189,7 @@ jobs:
           E2E_TEST_USER_EMAIL: e2e-test@example.com
           E2E_TEST_USER_PASSWORD: ${{ secrets.E2E_TEST_USER_PASSWORD }}
           E2E_RESET_SECRET: ${{ secrets.E2E_RESET_SECRET }}
+          CI: true
         run: npx playwright test --project=functional --project=auth
 
       - name: Upload frontend test results
