@@ -41,7 +41,15 @@ jobs:
       - name: Start Milvus
         working-directory: avrag-rs
         run: |
-          docker compose -f docker-compose.milvus.yml up -d
+          echo "Docker compose version:"
+          docker compose version || docker-compose version || echo "docker compose not found"
+          echo "Starting Milvus..."
+          docker compose -f docker-compose.milvus.yml up -d 2>&1 || {
+            echo "docker compose failed, trying docker-compose..."
+            docker-compose -f docker-compose.milvus.yml up -d 2>&1
+          }
+          echo "Milvus containers:"
+          docker ps | grep milvus || true
 
       - name: Start MinIO
         run: |
@@ -80,6 +88,11 @@ jobs:
             sleep 2
           done
           echo ""
+          if ! curl -fsS http://localhost:19530/healthz >/dev/null 2>&1; then
+            echo "Milvus health check failed"
+            docker logs milvus-standalone 2>&1 | tail -30 || true
+            exit 1
+          fi
           echo "All services ready"
 
       - name: Install Rust
