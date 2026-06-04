@@ -29,15 +29,10 @@ impl CapabilityRegistry {
         let mut tools = HashMap::new();
         let mut skills = HashMap::new();
 
-        // --- Ingest tools from v4 atomic/search catalogs ---
-        for tool in super::super::progressive::atomic_tool_catalog_cached() {
-            let meta = tool_to_metadata(tool, ToolSource::AtomicToolCatalog);
-            tools.insert(meta.id.clone(), meta);
-        }
-        for tool in super::super::progressive::search_specific_tools_cached() {
-            let meta = tool_to_metadata(tool, ToolSource::SearchSpecific);
-            tools.insert(meta.id.clone(), meta);
-        }
+        // NOTE: v4 hard-coded tool catalogs (rag_tool_catalog, atomic_tool_catalog,
+        // search_specific_tools) have been migrated to declarative SKILL.md.
+        // All tool metadata now flows from PromptRegistry → skills map →
+        // dual-flavor registration (skills + tools) above.
 
         // --- Ingest skills from v4 PromptRegistry ---
         let prompt_registry = super::super::progressive::PromptRegistry::standard_cached();
@@ -52,6 +47,11 @@ impl CapabilityRegistry {
             // dispatch names (e.g. dense-retrieval → dense_retrieval).
             if meta.input_schema.is_some() {
                 let tool_id = meta.id.replace('-', "_");
+                let permissions = match tool_id.as_str() {
+                    "web_search" => vec![super::Permission::ExternalNetwork],
+                    "code_interpreter" => vec![super::Permission::CodeExecution],
+                    _ => Vec::new(),
+                };
                 let tool_meta = ToolMetadata {
                     id: tool_id,
                     version: meta.version.clone(),
@@ -60,7 +60,7 @@ impl CapabilityRegistry {
                     input_schema: meta.input_schema.clone().unwrap_or(serde_json::Value::Null),
                     output_schema: meta.output_schema.clone().unwrap_or(serde_json::Value::Null),
                     risk_level: meta.risk_level,
-                    permissions: Vec::new(),
+                    permissions,
                     external_deps: Vec::new(),
                     deprecation: meta.deprecation.clone(),
                     retry_policy: super::RetryPolicy::default(),
@@ -192,41 +192,6 @@ impl CapabilityRegistry {
 // Helpers: convert v4 types into v5 metadata
 // ---------------------------------------------------------------------------
 
-/// Source of tool registration, used to determine applicable strategies.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ToolSource {
-    AtomicToolCatalog,
-    SearchSpecific,
-}
-
-fn tool_to_metadata(
-    tool: &super::super::progressive::Tool,
-    source: ToolSource,
-) -> ToolMetadata {
-    let spec = tool.spec();
-    let applicable_strategies = match source {
-        ToolSource::AtomicToolCatalog => {
-            vec!["chat".to_string(), "rag".to_string(), "search".to_string()]
-        }
-        ToolSource::SearchSpecific => vec!["search".to_string()],
-    };
-    ToolMetadata {
-        id: spec.name.clone(),
-        version: spec.version.clone(),
-        owner: "context-os".to_string(),
-        description: spec.description.clone(),
-        input_schema: spec.input_schema.clone(),
-        output_schema: spec.output_schema.clone(),
-        risk_level: infer_tool_risk_level(&spec.name),
-        permissions: infer_tool_permissions(&spec.name),
-        external_deps: infer_tool_external_deps(&spec.name),
-        deprecation: None,
-        retry_policy: infer_tool_retry_policy(&spec.name),
-        activation_phase: ActivationPhase::PlanAndEvaluate,
-        applicable_strategies,
-    }
-}
-
 fn skill_to_metadata(skill: &super::super::progressive::Skill) -> SkillMetadata {
     let md = skill.metadata();
 
@@ -313,43 +278,6 @@ fn parse_risk_level(s: &str) -> Option<super::RiskLevel> {
         "high" => Some(super::RiskLevel::High),
         "critical" => Some(super::RiskLevel::Critical),
         _ => None,
-    }
-}
-
-fn infer_tool_risk_level(name: &str) -> super::RiskLevel {
-    match name {
-        "web_search" => super::RiskLevel::High,       // external network
-        "code_interpreter" => super::RiskLevel::High, // code execution
-        "weather_query" => super::RiskLevel::Medium,  // external API
-        _ => super::RiskLevel::Low,                    // internal retrieval
-    }
-}
-
-fn infer_tool_permissions(name: &str) -> Vec<super::Permission> {
-    match name {
-        "web_search" => vec![super::Permission::ExternalNetwork],
-        "code_interpreter" => vec![super::Permission::CodeExecution],
-        _ => vec![super::Permission::User],
-    }
-}
-
-fn infer_tool_external_deps(name: &str) -> Vec<String> {
-    match name {
-        "web_search" => vec!["search-provider".to_string()],
-        "weather_query" => vec!["weather-api".to_string()],
-        _ => Vec::new(),
-    }
-}
-
-fn infer_tool_retry_policy(name: &str) -> super::RetryPolicy {
-    match name {
-        "web_search" => super::RetryPolicy {
-            max_retries: 2,
-            backoff_ms: 500,
-            idempotent: true,
-            ..super::RetryPolicy::default()
-        },
-        _ => super::RetryPolicy::default(),
     }
 }
 
