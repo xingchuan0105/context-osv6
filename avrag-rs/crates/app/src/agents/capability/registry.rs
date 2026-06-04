@@ -29,11 +29,7 @@ impl CapabilityRegistry {
         let mut tools = HashMap::new();
         let mut skills = HashMap::new();
 
-        // --- Ingest tools from v4 tool catalogs ---
-        for tool in super::super::progressive::rag_tool_catalog_cached() {
-            let meta = tool_to_metadata(tool, ToolSource::RagToolCatalog);
-            tools.insert(meta.id.clone(), meta);
-        }
+        // --- Ingest tools from v4 atomic/search catalogs ---
         for tool in super::super::progressive::atomic_tool_catalog_cached() {
             let meta = tool_to_metadata(tool, ToolSource::AtomicToolCatalog);
             tools.insert(meta.id.clone(), meta);
@@ -47,7 +43,32 @@ impl CapabilityRegistry {
         let prompt_registry = super::super::progressive::PromptRegistry::standard_cached();
         for skill in prompt_registry.iter_skills() {
             let meta = skill_to_metadata(skill);
-            skills.insert(meta.id.clone(), meta);
+            skills.insert(meta.id.clone(), meta.clone());
+
+            // NEW: skills that carry an input_schema are also registered as
+            // tools so that plan_tools(strategy) can discover them alongside
+            // legacy v4 hard-coded tools.  The tool id is the skill id with
+            // kebab-case converted to snake_case so it matches the runtime
+            // dispatch names (e.g. dense-retrieval → dense_retrieval).
+            if meta.input_schema.is_some() {
+                let tool_id = meta.id.replace('-', "_");
+                let tool_meta = ToolMetadata {
+                    id: tool_id,
+                    version: meta.version.clone(),
+                    owner: meta.owner.clone(),
+                    description: meta.description.clone(),
+                    input_schema: meta.input_schema.clone().unwrap_or(serde_json::Value::Null),
+                    output_schema: meta.output_schema.clone().unwrap_or(serde_json::Value::Null),
+                    risk_level: meta.risk_level,
+                    permissions: Vec::new(),
+                    external_deps: Vec::new(),
+                    deprecation: meta.deprecation.clone(),
+                    retry_policy: super::RetryPolicy::default(),
+                    activation_phase: meta.activation_phase,
+                    applicable_strategies: meta.applicable_strategies.clone(),
+                };
+                tools.insert(tool_meta.id.clone(), tool_meta);
+            }
         }
 
         // --- Ingest strategy schemas from v5 Strategy implementations ---
@@ -174,7 +195,6 @@ impl CapabilityRegistry {
 /// Source of tool registration, used to determine applicable strategies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ToolSource {
-    RagToolCatalog,
     AtomicToolCatalog,
     SearchSpecific,
 }
@@ -185,7 +205,6 @@ fn tool_to_metadata(
 ) -> ToolMetadata {
     let spec = tool.spec();
     let applicable_strategies = match source {
-        ToolSource::RagToolCatalog => vec!["rag".to_string()],
         ToolSource::AtomicToolCatalog => {
             vec!["chat".to_string(), "rag".to_string(), "search".to_string()]
         }
@@ -241,6 +260,14 @@ fn skill_to_metadata(skill: &super::super::progressive::Skill) -> SkillMetadata 
         .cloned()
         .unwrap_or_else(|| "standard".to_string());
 
+    // Parse JSON schemas from the skill's declarative schema files.
+    let input_schema = skill
+        .input_schema()
+        .and_then(|s| serde_json::from_str(s).ok());
+    let output_schema = skill
+        .output_schema()
+        .and_then(|s| serde_json::from_str(s).ok());
+
     SkillMetadata {
         id: skill.id().to_string(),
         version: skill.version().to_string(),
@@ -255,6 +282,8 @@ fn skill_to_metadata(skill: &super::super::progressive::Skill) -> SkillMetadata 
         deprecation: None,
         activation_phase,
         category,
+        input_schema,
+        output_schema,
     }
 }
 
@@ -560,6 +589,20 @@ mod tests {
         let registry = CapabilityRegistry::standard();
         let strategies = registry.list_strategies();
         assert_eq!(strategies.len(), 3);
+    }
+
+    #[test]
+    fn plan_tools_includes_skills_with_input_schema() {
+        let registry = CapabilityRegistry::standard();
+        let plan_tools = registry.plan_tools("rag");
+        // 7 atomic tool skills (with input_schema) should appear as tools
+        assert!(plan_tools.iter().any(|t| t.id == "dense_retrieval"), "dense_retrieval from skill should be in plan_tools");
+        assert!(plan_tools.iter().any(|t| t.id == "lexical_retrieval"), "lexical_retrieval from skill should be in plan_tools");
+        assert!(plan_tools.iter().any(|t| t.id == "graph_retrieval"), "graph_retrieval from skill should be in plan_tools");
+        assert!(plan_tools.iter().any(|t| t.id == "doc_index"), "doc_index from skill should be in plan_tools");
+        assert!(plan_tools.iter().any(|t| t.id == "index_lookup"), "index_lookup from skill should be in plan_tools");
+        assert!(plan_tools.iter().any(|t| t.id == "doc_summary"), "doc_summary from skill should be in plan_tools");
+        assert!(plan_tools.iter().any(|t| t.id == "doc_metadata"), "doc_metadata from skill should be in plan_tools");
     }
 
     #[test]

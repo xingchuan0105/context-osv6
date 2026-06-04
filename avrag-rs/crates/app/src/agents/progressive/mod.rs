@@ -17,7 +17,6 @@ pub use tool::Tool;
 pub use tool_catalog::{
     atomic_tool_catalog, atomic_tool_catalog_cached,
     evaluate_calculator_expression,
-    rag_tool_catalog, rag_tool_catalog_cached,
     search_specific_tools, search_specific_tools_cached,
 };
 
@@ -72,27 +71,6 @@ mod tests {
         assert!(registry.skill("search-eval").is_some());
         assert!(registry.skill("chat-plan").is_some());
         assert!(registry.skill("chat").is_some());
-    }
-
-    #[test]
-    fn rag_tool_catalog_cached_has_seven_tools() {
-        let tools = rag_tool_catalog_cached();
-        assert_eq!(tools.len(), 7);
-        let names: Vec<&str> = tools.iter().map(|t| t.spec().name.as_str()).collect();
-        assert!(names.contains(&"dense_retrieval"));
-        assert!(names.contains(&"lexical_retrieval"));
-        assert!(names.contains(&"graph_retrieval"));
-        assert!(names.contains(&"index_lookup"));
-        assert!(names.contains(&"doc_index"));
-        assert!(names.contains(&"doc_summary"));
-        assert!(names.contains(&"doc_metadata"));
-    }
-
-    #[test]
-    fn rag_tool_catalog_cached_is_lazy() {
-        let c1 = rag_tool_catalog_cached();
-        let c2 = rag_tool_catalog_cached();
-        assert!(std::ptr::eq(c1.as_ptr(), c2.as_ptr()));
     }
 
     #[test]

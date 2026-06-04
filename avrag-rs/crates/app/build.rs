@@ -63,15 +63,40 @@ fn main() {
             Vec::new()
         };
 
-        // Scan references/
-        let refs_dir = path.join("references");
-        let ref_files = if refs_dir.exists() {
-            collect_text_files(&refs_dir)
+        // Scan reference/ (singular, matching the actual directory name)
+        let ref_dir = path.join("reference");
+        let ref_files = if ref_dir.exists() {
+            collect_text_files(&ref_dir)
         } else {
             Vec::new()
         };
 
-        skill_entries.push((skill_name, content, asset_files, ref_files));
+        // Extract JSON schemas from reference/args-schema.md and reference/output-schema.md
+        let input_schema = if ref_dir.exists() {
+            let args_schema_path = ref_dir.join("args-schema.md");
+            if args_schema_path.exists() {
+                let schema_md = fs::read_to_string(&args_schema_path).expect("read args-schema.md");
+                extract_json_code_block(&schema_md)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let output_schema = if ref_dir.exists() {
+            let output_schema_path = ref_dir.join("output-schema.md");
+            if output_schema_path.exists() {
+                let schema_md = fs::read_to_string(&output_schema_path).expect("read output-schema.md");
+                extract_json_code_block(&schema_md)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        skill_entries.push((skill_name, content, asset_files, ref_files, input_schema, output_schema));
     }
 
     // Sort for deterministic output
@@ -79,9 +104,9 @@ fn main() {
 
     // Generate registration code
     generated.push_str("{\n");
-    generated.push_str("    let mut register = |id: &str, content: &str, assets: std::collections::HashMap<String, String>, references: std::collections::HashMap<String, String>| {\n");
+    generated.push_str("    let mut register = |id: &str, content: &str, assets: std::collections::HashMap<String, String>, references: std::collections::HashMap<String, String>, input_schema: Option<&str>, output_schema: Option<&str>| {\n");
     generated.push_str("        let (frontmatter, body) = super::skill_frontmatter::parse_skill_file(content);\n");
-    generated.push_str("        let skill = match frontmatter {\n");
+    generated.push_str("        let mut skill = match frontmatter {\n");
     generated.push_str("            Some(fm) => super::Skill::with_meta(\n");
     generated.push_str("                &fm.name,\n");
     generated.push_str("                &fm.description,\n");
@@ -89,17 +114,20 @@ fn main() {
     generated.push_str("                &fm.version,\n");
     generated.push_str("                fm.depends,\n");
     generated.push_str("                fm.metadata,\n");
-    generated.push_str("            )\n");
-    generated.push_str("            .with_assets(assets)\n");
-    generated.push_str("            .with_references(references),\n");
-    generated.push_str("            None => super::Skill::new(id, \"\", body)\n");
-    generated.push_str("            .with_assets(assets)\n");
-    generated.push_str("            .with_references(references),\n");
+    generated.push_str("            ),\n");
+    generated.push_str("            None => super::Skill::new(id, \"\", body),\n");
     generated.push_str("        };\n");
+    generated.push_str("        skill = skill.with_assets(assets).with_references(references);\n");
+    generated.push_str("        if let Some(schema) = input_schema {\n");
+    generated.push_str("            skill = skill.with_input_schema(schema);\n");
+    generated.push_str("        }\n");
+    generated.push_str("        if let Some(schema) = output_schema {\n");
+    generated.push_str("            skill = skill.with_output_schema(schema);\n");
+    generated.push_str("        }\n");
     generated.push_str("        skills.insert(id.to_string(), skill);\n");
     generated.push_str("    };\n\n");
 
-    for (skill_name, content, assets, refs) in &skill_entries {
+    for (skill_name, content, assets, refs, input_schema, output_schema) in &skill_entries {
         let content_literal = raw_string_literal(content);
 
         // Generate assets HashMap
@@ -134,9 +162,18 @@ fn main() {
             code
         };
 
+        let input_schema_literal = match input_schema {
+            Some(s) => format!("Some({})", raw_string_literal(s)),
+            None => "None".to_string(),
+        };
+        let output_schema_literal = match output_schema {
+            Some(s) => format!("Some({})", raw_string_literal(s)),
+            None => "None".to_string(),
+        };
+
         generated.push_str(&format!(
-            "    register(\"{}\", {}, {}, {});\n",
-            skill_name, content_literal, assets_code, refs_code
+            "    register(\"{}\", {}, {}, {}, {}, {});\n",
+            skill_name, content_literal, assets_code, refs_code, input_schema_literal, output_schema_literal
         ));
     }
 
@@ -275,4 +312,26 @@ fn collect_text_files(dir: &Path) -> Vec<(String, String)> {
     }
     files.sort_by(|a, b| a.0.cmp(&b.0));
     files
+}
+
+/// Extract the first ```json ... ``` code block from a markdown file.
+/// Returns the JSON content (without fences) or None if no JSON block found.
+fn extract_json_code_block(content: &str) -> Option<String> {
+    let mut in_json = false;
+    let mut result = String::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```json") {
+            in_json = true;
+            continue;
+        }
+        if trimmed == "```" && in_json {
+            return Some(result.trim().to_string());
+        }
+        if in_json {
+            result.push_str(line);
+            result.push('\n');
+        }
+    }
+    None
 }

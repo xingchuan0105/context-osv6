@@ -20,6 +20,10 @@ pub struct Skill {
     assets: HashMap<String, String>,
     /// Runtime-tier: references/ directory contents (file_name → content).
     references: HashMap<String, String>,
+    /// JSON Schema for tool arguments, extracted from reference/args-schema.md.
+    input_schema: Option<String>,
+    /// JSON Schema for tool output, extracted from reference/output-schema.md.
+    output_schema: Option<String>,
 }
 
 impl Skill {
@@ -34,6 +38,8 @@ impl Skill {
             metadata: HashMap::new(),
             assets: HashMap::new(),
             references: HashMap::new(),
+            input_schema: None,
+            output_schema: None,
         }
     }
 
@@ -55,6 +61,8 @@ impl Skill {
             metadata,
             assets: HashMap::new(),
             references: HashMap::new(),
+            input_schema: None,
+            output_schema: None,
         }
     }
 
@@ -67,6 +75,16 @@ impl Skill {
     /// Attach runtime references (build-time loaded from references/ directory).
     pub fn with_references(mut self, references: HashMap<String, String>) -> Self {
         self.references = references;
+        self
+    }
+
+    pub fn with_input_schema(mut self, schema: impl Into<String>) -> Self {
+        self.input_schema = Some(schema.into());
+        self
+    }
+
+    pub fn with_output_schema(mut self, schema: impl Into<String>) -> Self {
+        self.output_schema = Some(schema.into());
         self
     }
 
@@ -109,6 +127,14 @@ impl Skill {
 
     pub fn references(&self) -> &HashMap<String, String> {
         &self.references
+    }
+
+    pub fn input_schema(&self) -> Option<&str> {
+        self.input_schema.as_deref()
+    }
+
+    pub fn output_schema(&self) -> Option<&str> {
+        self.output_schema.as_deref()
     }
 
     /// Render at the Load tier: full system prompt.

@@ -90,6 +90,8 @@ pub struct SkillMetadata {
     pub deprecation: Option<Deprecation>,
     pub activation_phase: ActivationPhase,
     pub category: String,
+    pub input_schema: Option<serde_json::Value>,
+    pub output_schema: Option<serde_json::Value>,
 }
 
 /// 工具/技能在策略哪个阶段可见

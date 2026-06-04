@@ -1352,9 +1352,11 @@ fn decision_label(advice: &EvalAdvice) -> &'static str {
 }
 
 fn is_rag_tool(name: &str) -> bool {
-    crate::agents::progressive::rag_tool_catalog_cached()
-        .iter()
-        .any(|t| t.spec().name == name)
+    matches!(
+        name,
+        "dense_retrieval" | "lexical_retrieval" | "graph_retrieval"
+            | "doc_index" | "index_lookup" | "doc_summary" | "doc_metadata"
+    )
 }
 
 /// Extract writing_styles and behavior_mode from planner JSON output.
