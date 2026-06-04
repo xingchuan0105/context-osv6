@@ -180,6 +180,50 @@ pub async fn stop_milvus(container_name: &str) {
         .await;
 }
 
+/// Drop all collections belonging to a given prefix via the Milvus REST API.
+///
+/// This prevents test vectors from accumulating across runs and polluting
+/// similarity-search results for subsequent tests.
+pub async fn drop_milvus_collections(prefix: &str) {
+    let milvus_url = std::env::var("MILVUS_URL").unwrap_or_else(|_| "http://127.0.0.1:19530".to_string());
+    let client = reqwest::Client::new();
+    let collections = [
+        format!("{prefix}_rag_text_chunks"),
+        format!("{prefix}_rag_multimodal_chunks"),
+        format!("{prefix}_rag_kg_entities"),
+        format!("{prefix}_rag_kg_relations"),
+        format!("{prefix}_rag_graph_passages"),
+    ];
+    for name in &collections {
+        let body = serde_json::json!({
+            "dbName": std::env::var("MILVUS_DATABASE").unwrap_or_else(|_| "default".to_string()),
+            "collectionName": name,
+        });
+        let res = client
+            .post(format!("{milvus_url}/v2/vectordb/collections/drop"))
+            .json(&body)
+            .send()
+            .await;
+        match res {
+            Ok(r) => {
+                let status = r.status();
+                if status.is_success() {
+                    eprintln!("[product_e2e] dropped Milvus collection: {name}");
+                } else {
+                    let text = r.text().await.unwrap_or_default();
+                    // 400 = collection not found is fine (already clean)
+                    if status.as_u16() != 400 || !text.contains("not found") {
+                        eprintln!("[product_e2e] drop collection {name} returned HTTP {status}: {text}");
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("[product_e2e] failed to drop collection {name}: {e}");
+            }
+        }
+    }
+}
+
 async fn wait_for_milvus(url: &str, container_name: &str) -> anyhow::Result<()> {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(180);
     loop {

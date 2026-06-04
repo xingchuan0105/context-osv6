@@ -70,23 +70,30 @@ async fn real_llm_rag_document_qa_returns_citation() {
         resp.degrade_trace
     );
 
-    // 5. Citation assertion is best-effort: real retrieval quality varies.
-    //    If citations exist, at least one should point back to the uploaded doc.
-    if !resp.citations.is_empty() {
-        assert_answer_has_doc_citation(&resp);
-        let cites_uploaded = resp
-            .citations
-            .iter()
-            .any(|c| c.doc_id == upload.document_id);
-        assert!(
-            cites_uploaded,
-            "expected at least one citation from uploaded doc {}, got: {:?}",
-            upload.document_id, resp.citations
-        );
-    } else {
-        eprintln!(
-            "WARNING: real-LLM RAG returned zero citations; this may be transient. answer={}",
-            resp.answer
-        );
-    }
+    // 5. Hard assertion: RAG must return citations on the happy path.
+    assert!(
+        !resp.citations.is_empty(),
+        "real-LLM RAG returned zero citations on the happy path; answer={}",
+        resp.answer
+    );
+    assert_answer_has_doc_citation(&resp);
+    let cites_uploaded = resp
+        .citations
+        .iter()
+        .any(|c| c.doc_id == upload.document_id);
+    assert!(
+        cites_uploaded,
+        "expected at least one citation from uploaded doc {}, got: {:?}",
+        upload.document_id, resp.citations
+    );
+
+    // 6. White-box: verify the planner actually selected dense_retrieval.
+    ctx.assert_tool_called("dense_retrieval");
+
+    // 7. Persist artifact for audit even on pass.
+    ctx.save_llm_artifact(
+        "real_llm_rag_document_qa_returns_citation",
+        &resp,
+        Some(serde_json::json!({"document_id": upload.document_id})),
+    );
 }

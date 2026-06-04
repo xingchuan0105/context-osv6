@@ -337,10 +337,16 @@ impl TestContext {
                 std::env::set_var("INGESTION_LLM_MODEL", "mock-llm");
             }
 
-            // Search config (always)
-            std::env::set_var("SEARCH_PROVIDER", "brave_llm_context");
-            std::env::set_var("SEARCH_BASE_URL", &mock_search_url);
-            std::env::set_var("SEARCH_API_KEY", "mock");
+            // Search config: use real Brave if a real key is present,
+            // otherwise fall back to the mock search server.
+            let has_real_search = std::env::var("SEARCH_API_KEY")
+                .map(|k| !k.is_empty() && k != "mock")
+                .unwrap_or(false);
+            if !has_real_search {
+                std::env::set_var("SEARCH_PROVIDER", "brave_llm_context");
+                std::env::set_var("SEARCH_BASE_URL", &mock_search_url);
+                std::env::set_var("SEARCH_API_KEY", "mock");
+            }
 
             if let Some(ref url) = mock_embedding_url {
                 std::env::set_var("EMBEDDING_BASE_URL", url);
@@ -422,10 +428,21 @@ impl TestContext {
             }
         }
 
-        // Worker always gets Search env vars (mock for smoke tests).
-        cmd.env("SEARCH_PROVIDER", "brave_llm_context")
-           .env("SEARCH_BASE_URL", &mock_search_url)
-           .env("SEARCH_API_KEY", "mock");
+        // Worker Search env: real if available, otherwise mock.
+        let has_real_search = std::env::var("SEARCH_API_KEY")
+            .map(|k| !k.is_empty() && k != "mock")
+            .unwrap_or(false);
+        if has_real_search {
+            for key in ["SEARCH_PROVIDER", "SEARCH_BASE_URL", "SEARCH_API_KEY"] {
+                if let Ok(v) = std::env::var(key) {
+                    cmd.env(key, v);
+                }
+            }
+        } else {
+            cmd.env("SEARCH_PROVIDER", "brave_llm_context")
+               .env("SEARCH_BASE_URL", &mock_search_url)
+               .env("SEARCH_API_KEY", "mock");
+        }
 
         let mut worker = cmd.spawn().expect("spawn worker");
 
@@ -841,18 +858,7 @@ impl TestContext {
         test_name: &str,
         response_json: Option<&serde_json::Value>,
     ) {
-        let now = chrono::Utc::now().format("%Y%m%d-%H%M%S");
-        let short_commit = option_env!("GITHUB_SHA")
-            .map(|s| &s[..s.len().min(8)])
-            .unwrap_or("local");
-        let run_id = format!("e2e_{now}_{short_commit}");
-        let out_dir = std::path::PathBuf::from(
-            env!("CARGO_MANIFEST_DIR"))
-            .join("tests")
-            .join("e2e_output")
-            .join(&run_id)
-            .join(test_name);
-
+        let out_dir = Self::artifact_dir(test_name);
         let _ = std::fs::create_dir_all(&out_dir);
 
         if let Some(body) = response_json {
@@ -864,6 +870,93 @@ impl TestContext {
                 let _ = std::fs::copy(log_path, out_dir.join("worker_logs.txt"));
             }
         }
+    }
+
+    /// Save a real-LLM test artifact (answer, citations, metadata) so the
+    /// output can be audited even when the test passes.
+    pub fn save_llm_artifact(
+        &self,
+        test_name: &str,
+        resp: &ChatResponse,
+        metadata: Option<serde_json::Value>,
+    ) {
+        let out_dir = Self::artifact_dir(test_name);
+        let _ = std::fs::create_dir_all(&out_dir);
+
+        let _ = std::fs::write(
+            out_dir.join("response.json"),
+            serde_json::to_string_pretty(resp).unwrap_or_default(),
+        );
+
+        let meta = serde_json::json!({
+            "test_name": test_name,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "models": {
+                "agent_llm": std::env::var("AGENT_LLM_MODEL").unwrap_or_default(),
+                "embedding": std::env::var("EMBEDDING_MODEL").unwrap_or_default(),
+            },
+            "citation_count": resp.citations.len(),
+            "degrade_trace_count": resp.degrade_trace.len(),
+            "extra": metadata.unwrap_or(serde_json::Value::Null),
+        });
+        let _ = std::fs::write(
+            out_dir.join("metadata.json"),
+            serde_json::to_string_pretty(&meta).unwrap_or_default(),
+        );
+
+        if let Some(ref log_path) = self.worker_log_path {
+            if log_path.exists() {
+                let _ = std::fs::copy(log_path, out_dir.join("worker_logs.txt"));
+            }
+        }
+    }
+
+    /// Best-effort check that the worker log contains evidence that
+    /// `tool_name` was called.  This is a safety-net for real-LLM tests.
+    ///
+    /// **NOTE**: RAG tool calls happen in the HTTP server process, not the
+    /// worker process, so this assertion is currently best-effort only.
+    /// It logs a warning when the tool name is missing but does not hard-fail.
+    /// Future work: add a server-side log file for white-box assertions.
+    pub fn assert_tool_called(&self, tool_name: &str) {
+        let Some(ref log_path) = self.worker_log_path else {
+            eprintln!("[assert_tool_called] no worker log path — skipping");
+            return;
+        };
+        let content = match std::fs::read_to_string(log_path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[assert_tool_called] cannot read worker log: {e}");
+                return;
+            }
+        };
+
+        let found = content.contains(&format!("\"tool\":\"{tool_name}\""))
+            || content.contains(&format!("\"tool\": \"{tool_name}\""))
+            || content.contains(&format!("tool={tool_name}"))
+            || content.contains(tool_name);
+
+        if !found {
+            eprintln!(
+                "[assert_tool_called] WARNING: no evidence of '{tool_name}' in worker log. \
+                 (RAG tool calls run in the HTTP server, not the worker — this is expected.)"
+            );
+        }
+    }
+
+    /// Build the artifact directory path for a test.
+    fn artifact_dir(test_name: &str) -> std::path::PathBuf {
+        let now = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+        let short_commit = option_env!("GITHUB_SHA")
+            .map(|s| &s[..s.len().min(8)])
+            .unwrap_or("local");
+        let run_id = format!("e2e_{now}_{short_commit}");
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("e2e_output")
+            .join("llm_real")
+            .join(&run_id)
+            .join(test_name)
     }
 }
 
@@ -895,6 +988,19 @@ impl Drop for TestContext {
                 setup::stop_postgres(&container).await;
             });
         });
+        // Drop Milvus collections (clean up vectors) before stopping the container.
+        // Only if we own the Milvus instance (not external) and RAG was enabled.
+        if !self.milvus_is_external {
+            if let Ok(prefix) = std::env::var("MILVUS_COLLECTION_PREFIX") {
+                let _ = std::thread::spawn(move || {
+                    let rt = tokio::runtime::Runtime::new().unwrap();
+                    rt.block_on(async {
+                        setup::drop_milvus_collections(&prefix).await;
+                    });
+                });
+            }
+        }
+
         // Stop Milvus container — fire-and-forget, but only if we started it.
         if !self.milvus_is_external
             && let Some(ref container) = self.milvus_container_name

@@ -52,13 +52,18 @@ async fn real_llm_search_open_query_returns_web_citation() {
         resp.degrade_trace
     );
 
-    // Web citation is best-effort under a real provider.
-    if resp.citations.is_empty() {
-        eprintln!(
-            "WARNING: real search returned zero citations; this may be transient. answer={}",
-            resp.answer
-        );
-    } else {
-        assert_answer_has_web_citation(&resp);
-    }
+    // Hard assertion: search must return citations on the happy path.
+    assert!(
+        !resp.citations.is_empty(),
+        "real-LLM search returned zero citations on the happy path; answer={}",
+        resp.answer
+    );
+    assert_answer_has_web_citation(&resp);
+
+    // Persist artifact for audit even on pass.
+    ctx.save_llm_artifact(
+        "real_llm_search_open_query_returns_web_citation",
+        &resp,
+        None,
+    );
 }
