@@ -8,6 +8,9 @@ function fallbackAuthError(locale: UiLocale) {
 
 export function describeAuthError(fallback: string, error: unknown, locale: UiLocale = DEFAULT_LOCALE) {
   if (!(error instanceof ApiError)) {
+    if (error instanceof Error) {
+      return error.message.trim() || fallback;
+    }
     return fallback;
   }
 
