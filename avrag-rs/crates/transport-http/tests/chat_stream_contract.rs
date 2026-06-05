@@ -100,8 +100,6 @@ impl Agent for ScriptedAgent {
 fn test_agent_service() -> UnifiedAgentService {
     UnifiedAgentService::new(
         Box::new(ScriptedAgent),
-        Box::new(ScriptedAgent),
-        Box::new(ScriptedAgent),
     )
 }
 

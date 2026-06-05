@@ -188,6 +188,21 @@ pub mod search {
     pub const EVAL_SKILL_ID: &str = "search-eval";
     pub const ANSWER_SKILL_ID: &str = "search-answer";
 }
+/// Detect format skills from query based on keywords.
+pub fn detect_format_skills(query: &str) -> Vec<&'static str> {
+    let mut skills = Vec::new();
+    let lower = query.to_lowercase();
+    if lower.contains("ppt") || lower.contains("slide") || lower.contains("presentation") {
+        skills.push("presentation-html");
+    }
+    if lower.contains("html") || lower.contains("web page") || lower.contains("网页") {
+        skills.push("html-renderer");
+    }
+    if lower.contains("teach") || lower.contains("explain") || lower.contains("tutorial") {
+        skills.push("step-by-step-tutor");
+    }
+    skills
+}
 
 #[cfg(test)]
 mod tests {

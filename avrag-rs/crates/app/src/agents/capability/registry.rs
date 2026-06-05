@@ -29,25 +29,46 @@ impl CapabilityRegistry {
         let mut tools = HashMap::new();
         let mut skills = HashMap::new();
 
-        // --- Ingest tools from v4 tool catalogs ---
-        for tool in super::super::progressive::rag_tool_catalog_cached() {
-            let meta = tool_to_metadata(tool, ToolSource::RagToolCatalog);
-            tools.insert(meta.id.clone(), meta);
-        }
-        for tool in super::super::progressive::atomic_tool_catalog_cached() {
-            let meta = tool_to_metadata(tool, ToolSource::AtomicToolCatalog);
-            tools.insert(meta.id.clone(), meta);
-        }
-        for tool in super::super::progressive::search_specific_tools_cached() {
-            let meta = tool_to_metadata(tool, ToolSource::SearchSpecific);
-            tools.insert(meta.id.clone(), meta);
-        }
+        // NOTE: v4 hard-coded tool catalogs (rag_tool_catalog, atomic_tool_catalog,
+        // search_specific_tools) have been migrated to declarative SKILL.md.
+        // All tool metadata now flows from PromptRegistry → skills map →
+        // dual-flavor registration (skills + tools) above.
 
         // --- Ingest skills from v4 PromptRegistry ---
         let prompt_registry = super::super::progressive::PromptRegistry::standard_cached();
         for skill in prompt_registry.iter_skills() {
             let meta = skill_to_metadata(skill);
-            skills.insert(meta.id.clone(), meta);
+            skills.insert(meta.id.clone(), meta.clone());
+
+            // NEW: skills that carry an input_schema are also registered as
+            // tools so that plan_tools(strategy) can discover them alongside
+            // legacy v4 hard-coded tools.  The tool id is the skill id with
+            // kebab-case converted to snake_case so it matches the runtime
+            // dispatch names (e.g. dense-retrieval → dense_retrieval).
+            if meta.input_schema.is_some() {
+                let tool_id = meta.id.replace('-', "_");
+                let permissions = match tool_id.as_str() {
+                    "web_search" => vec![super::Permission::ExternalNetwork],
+                    "code_interpreter" => vec![super::Permission::CodeExecution],
+                    _ => Vec::new(),
+                };
+                let tool_meta = ToolMetadata {
+                    id: tool_id,
+                    version: meta.version.clone(),
+                    owner: meta.owner.clone(),
+                    description: meta.description.clone(),
+                    input_schema: meta.input_schema.clone().unwrap_or(serde_json::Value::Null),
+                    output_schema: meta.output_schema.clone().unwrap_or(serde_json::Value::Null),
+                    risk_level: meta.risk_level,
+                    permissions,
+                    external_deps: Vec::new(),
+                    deprecation: meta.deprecation.clone(),
+                    retry_policy: super::RetryPolicy::default(),
+                    activation_phase: meta.activation_phase,
+                    applicable_strategies: meta.applicable_strategies.clone(),
+                };
+                tools.insert(tool_meta.id.clone(), tool_meta);
+            }
         }
 
         // --- Ingest strategy schemas from v5 Strategy implementations ---
@@ -102,9 +123,11 @@ impl CapabilityRegistry {
         self.strategies.get(id)
     }
 
-    /// List all registered strategies.
+    /// List all registered strategies (按 ID 排序).
     pub fn list_strategies(&self) -> Vec<&super::StrategySchema> {
-        self.strategies.values().collect()
+        let mut strategies: Vec<_> = self.strategies.values().collect();
+        strategies.sort_by_key(|s| &s.id);
+        strategies
     }
 
     /// Count of registered strategies.
@@ -112,87 +135,62 @@ impl CapabilityRegistry {
         self.strategies.len()
     }
 
-    /// Plan/Evaluate 阶段：返回指定策略可用的工具目录
+    /// Plan/Evaluate 阶段：返回指定策略可用的工具目录（按 ID 排序，确保 prompt 确定性）
     pub fn plan_tools(&self, strategy: &str) -> Vec<&ToolMetadata> {
         let strategy = strategy.to_string();
-        self.tools
+        let mut tools: Vec<_> = self
+            .tools
             .values()
             .filter(|t| t.activation_phase == ActivationPhase::PlanAndEvaluate)
             .filter(|t| t.applicable_strategies.iter().any(|s| s == &strategy))
-            .collect()
+            .collect();
+        tools.sort_by_key(|t| &t.id);
+        tools
     }
 
-    /// Answer 阶段：返回 format 技能目录
+    /// Answer 阶段：返回 format 技能目录（按 ID 排序，确保 prompt 确定性）
     pub fn answer_format_skills(&self, strategy: &str) -> Vec<&SkillMetadata> {
         let strategy = strategy.to_string();
-        self.skills
+        let mut skills: Vec<_> = self
+            .skills
             .values()
             .filter(|s| s.activation_phase == ActivationPhase::Answer)
             .filter(|s| s.applicable_strategies.iter().any(|s| s == &strategy))
-            .collect()
+            .collect();
+        skills.sort_by_key(|s| &s.id);
+        skills
     }
 
-    /// Answer 阶段：返回写作风格技能目录
+    /// Answer 阶段：返回写作风格技能目录（按 ID 排序，确保 prompt 确定性）
     pub fn answer_writing_styles(&self, strategy: &str) -> Vec<&SkillMetadata> {
         let strategy = strategy.to_string();
-        self.skills
+        let mut skills: Vec<_> = self
+            .skills
             .values()
             .filter(|s| s.category == "writing-style")
             .filter(|s| s.applicable_strategies.iter().any(|s| s == &strategy))
-            .collect()
+            .collect();
+        skills.sort_by_key(|s| &s.id);
+        skills
     }
 
-    /// Answer 阶段：返回行为模式技能目录（目前只有 brainstorming）
+    /// Answer 阶段：返回行为模式技能目录（目前只有 brainstorming，按 ID 排序）
     pub fn answer_behavior_modes(&self, strategy: &str) -> Vec<&SkillMetadata> {
         let strategy = strategy.to_string();
-        self.skills
+        let mut skills: Vec<_> = self
+            .skills
             .values()
             .filter(|s| s.category == "behavior")
             .filter(|s| s.applicable_strategies.iter().any(|s| s == &strategy))
-            .collect()
+            .collect();
+        skills.sort_by_key(|s| &s.id);
+        skills
     }
 }
 
 // ---------------------------------------------------------------------------
 // Helpers: convert v4 types into v5 metadata
 // ---------------------------------------------------------------------------
-
-/// Source of tool registration, used to determine applicable strategies.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ToolSource {
-    RagToolCatalog,
-    AtomicToolCatalog,
-    SearchSpecific,
-}
-
-fn tool_to_metadata(
-    tool: &super::super::progressive::Tool,
-    source: ToolSource,
-) -> ToolMetadata {
-    let spec = tool.spec();
-    let applicable_strategies = match source {
-        ToolSource::RagToolCatalog => vec!["rag".to_string()],
-        ToolSource::AtomicToolCatalog => {
-            vec!["chat".to_string(), "rag".to_string(), "search".to_string()]
-        }
-        ToolSource::SearchSpecific => vec!["search".to_string()],
-    };
-    ToolMetadata {
-        id: spec.name.clone(),
-        version: spec.version.clone(),
-        owner: "context-os".to_string(),
-        description: spec.description.clone(),
-        input_schema: spec.input_schema.clone(),
-        output_schema: spec.output_schema.clone(),
-        risk_level: infer_tool_risk_level(&spec.name),
-        permissions: infer_tool_permissions(&spec.name),
-        external_deps: infer_tool_external_deps(&spec.name),
-        deprecation: None,
-        retry_policy: infer_tool_retry_policy(&spec.name),
-        activation_phase: ActivationPhase::PlanAndEvaluate,
-        applicable_strategies,
-    }
-}
 
 fn skill_to_metadata(skill: &super::super::progressive::Skill) -> SkillMetadata {
     let md = skill.metadata();
@@ -227,6 +225,14 @@ fn skill_to_metadata(skill: &super::super::progressive::Skill) -> SkillMetadata 
         .cloned()
         .unwrap_or_else(|| "standard".to_string());
 
+    // Parse JSON schemas from the skill's declarative schema files.
+    let input_schema = skill
+        .input_schema()
+        .and_then(|s| serde_json::from_str(s).ok());
+    let output_schema = skill
+        .output_schema()
+        .and_then(|s| serde_json::from_str(s).ok());
+
     SkillMetadata {
         id: skill.id().to_string(),
         version: skill.version().to_string(),
@@ -241,6 +247,8 @@ fn skill_to_metadata(skill: &super::super::progressive::Skill) -> SkillMetadata 
         deprecation: None,
         activation_phase,
         category,
+        input_schema,
+        output_schema,
     }
 }
 
@@ -270,43 +278,6 @@ fn parse_risk_level(s: &str) -> Option<super::RiskLevel> {
         "high" => Some(super::RiskLevel::High),
         "critical" => Some(super::RiskLevel::Critical),
         _ => None,
-    }
-}
-
-fn infer_tool_risk_level(name: &str) -> super::RiskLevel {
-    match name {
-        "web_search" => super::RiskLevel::High,       // external network
-        "code_interpreter" => super::RiskLevel::High, // code execution
-        "weather_query" => super::RiskLevel::Medium,  // external API
-        _ => super::RiskLevel::Low,                    // internal retrieval
-    }
-}
-
-fn infer_tool_permissions(name: &str) -> Vec<super::Permission> {
-    match name {
-        "web_search" => vec![super::Permission::ExternalNetwork],
-        "code_interpreter" => vec![super::Permission::CodeExecution],
-        _ => vec![super::Permission::User],
-    }
-}
-
-fn infer_tool_external_deps(name: &str) -> Vec<String> {
-    match name {
-        "web_search" => vec!["search-provider".to_string()],
-        "weather_query" => vec!["weather-api".to_string()],
-        _ => Vec::new(),
-    }
-}
-
-fn infer_tool_retry_policy(name: &str) -> super::RetryPolicy {
-    match name {
-        "web_search" => super::RetryPolicy {
-            max_retries: 2,
-            backoff_ms: 500,
-            idempotent: true,
-            ..super::RetryPolicy::default()
-        },
-        _ => super::RetryPolicy::default(),
     }
 }
 
@@ -546,6 +517,20 @@ mod tests {
         let registry = CapabilityRegistry::standard();
         let strategies = registry.list_strategies();
         assert_eq!(strategies.len(), 3);
+    }
+
+    #[test]
+    fn plan_tools_includes_skills_with_input_schema() {
+        let registry = CapabilityRegistry::standard();
+        let plan_tools = registry.plan_tools("rag");
+        // 7 atomic tool skills (with input_schema) should appear as tools
+        assert!(plan_tools.iter().any(|t| t.id == "dense_retrieval"), "dense_retrieval from skill should be in plan_tools");
+        assert!(plan_tools.iter().any(|t| t.id == "lexical_retrieval"), "lexical_retrieval from skill should be in plan_tools");
+        assert!(plan_tools.iter().any(|t| t.id == "graph_retrieval"), "graph_retrieval from skill should be in plan_tools");
+        assert!(plan_tools.iter().any(|t| t.id == "doc_index"), "doc_index from skill should be in plan_tools");
+        assert!(plan_tools.iter().any(|t| t.id == "index_lookup"), "index_lookup from skill should be in plan_tools");
+        assert!(plan_tools.iter().any(|t| t.id == "doc_summary"), "doc_summary from skill should be in plan_tools");
+        assert!(plan_tools.iter().any(|t| t.id == "doc_metadata"), "doc_metadata from skill should be in plan_tools");
     }
 
     #[test]

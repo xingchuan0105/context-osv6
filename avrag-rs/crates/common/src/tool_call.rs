@@ -132,6 +132,10 @@ pub struct DenseRetrievalArgs {
     pub modality: DenseRetrievalModality,
     #[serde(default = "default_top_k")]
     pub top_k: usize,
+    /// Document IDs to restrict the search scope.
+    /// When empty, the search is unrestricted (org-wide).
+    #[serde(default)]
+    pub doc_scope: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -149,6 +153,10 @@ pub struct LexicalRetrievalArgs {
     pub terms: Vec<String>,
     #[serde(default = "default_top_k")]
     pub top_k: usize,
+    /// Document IDs to restrict the search scope.
+    /// When empty, the search is unrestricted (org-wide).
+    #[serde(default)]
+    pub doc_scope: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,6 +177,10 @@ pub struct GraphRetrievalArgs {
     /// Optional original user query for reranking relation paths.
     #[serde(default)]
     pub query: Option<String>,
+    /// Document IDs to restrict the search scope.
+    /// When empty, the search is unrestricted (org-wide).
+    #[serde(default)]
+    pub doc_scope: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -350,6 +362,7 @@ mod tests {
                 queries: queries.into_iter().map(ToOwned::to_owned).collect(),
                 modality: DenseRetrievalModality::Text,
                 top_k: 10,
+                doc_scope: Vec::new(),
             })
             .unwrap(),
         }
@@ -362,6 +375,7 @@ mod tests {
             args: serde_json::to_value(LexicalRetrievalArgs {
                 terms: terms.into_iter().map(ToOwned::to_owned).collect(),
                 top_k: 10,
+                doc_scope: Vec::new(),
             })
             .unwrap(),
         }
@@ -379,6 +393,7 @@ mod tests {
                 hop_limit: 1,
                 fan_out_limit: 10,
                 query: None,
+                doc_scope: Vec::new(),
             })
             .unwrap(),
         }

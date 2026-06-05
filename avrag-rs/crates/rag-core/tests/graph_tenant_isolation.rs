@@ -102,6 +102,7 @@ async fn graph_retrieval_rejects_cross_tenant_access() {
         hop_limit: 2,
         fan_out_limit: 10,
         query: None,
+        doc_scope: Vec::new(),
     })
     .unwrap();
 
@@ -150,6 +151,7 @@ async fn graph_retrieval_allows_same_tenant_access() {
         hop_limit: 2,
         fan_out_limit: 10,
         query: None,
+        doc_scope: Vec::new(),
     })
     .unwrap();
 

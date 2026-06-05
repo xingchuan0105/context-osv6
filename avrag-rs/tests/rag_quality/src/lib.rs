@@ -23,5 +23,5 @@ pub mod harness;
 pub mod metrics;
 
 pub use golden_set::{GoldenDataset, GoldenExample, GoldenSubset};
-pub use harness::{EvaluationHarness, RagEvaluator};
+pub use harness::{EvaluationHarness, HarnessConfig, RagEvaluator};
 pub use metrics::{CitationAccuracyResult, EvaluationMetrics, HallucinationResult, RecallResult};

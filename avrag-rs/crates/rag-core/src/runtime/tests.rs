@@ -33,6 +33,7 @@ fn make_request(query: &str, agent_type: &str) -> ChatRequest {
         messages: Vec::new(),
         stream: false,
         language: None,
+    format_hint: None,
     }
 }
 

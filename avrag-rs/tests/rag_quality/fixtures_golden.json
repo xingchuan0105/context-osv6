@@ -1,0 +1,223 @@
+{
+  "version": "0.4.0-fixtures-expanded",
+  "created_at": "2026-06-02T00:00:00Z",
+  "description": "Expanded in-memory golden set built on the product_e2e fixture corpus. Each subset maps to one of the three production agents (chat, rag, search) plus an adversarial category. The 'mode' field on each example matches what would be sent to /api/v1/chat (agent_type). The harness runs all examples in one pass; the per-subset breakdown shows per-agent numbers.",
+  "subsets": [
+    {
+      "name": "rag",
+      "description": "RAG agent queries: must retrieve from corpus (antifragile.txt + lindy.txt). Tests dense retrieval, chunking, citation grounding.",
+      "examples": [
+        {
+          "query": "Who developed the concept of antifragility?",
+          "expected_answer": "Nassim Nicholas Taleb",
+          "source_chunks": [{ "type": "substring", "text": "Nassim Nicholas Taleb" }],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Single-fact lookup (author attribution)"
+        },
+        {
+          "query": "What is the Triad in the document about?",
+          "expected_answer": "Fragile, Robust, Antifragile",
+          "source_chunks": [{ "type": "substring", "text": "Fragile, Robust, Antifragile" }],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Concept lookup (Triad of vulnerability levels)"
+        },
+        {
+          "query": "According to the document, what is the Lindy Effect?",
+          "expected_answer": "Future life expectancy proportional to current age",
+          "source_chunks": [{ "type": "substring", "text": "Lindy Effect" }],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Cross-chunk concept (mentioned in both fixtures)"
+        },
+        {
+          "query": "Give an example of something antifragile mentioned in the document.",
+          "expected_answer": "muscles, immune system, evolution",
+          "source_chunks": [{ "type": "substring", "text": "Antifragile: Benefits from stress" }],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Examples listed in the document"
+        },
+        {
+          "query": "What is Via Negativa?",
+          "expected_answer": "Subtraction / removing obstacles is more effective than addition",
+          "source_chunks": [{ "type": "substring", "text": "Via Negativa" }],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Concept definition extraction"
+        },
+        {
+          "query": "What is the Barbell strategy in finance?",
+          "expected_answer": "Extreme safety plus extreme risk, nothing in the middle",
+          "source_chunks": [{ "type": "substring", "text": "Barbell strategy" }],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Domain-specific example (finance)"
+        },
+        {
+          "query": "What does the document say about Skin in the Game?",
+          "expected_answer": "People should bear the consequences of their decisions",
+          "source_chunks": [{ "type": "substring", "text": "Skin in the Game" }],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Concept with multi-line definition"
+        },
+        {
+          "query": "How does Taleb describe iatrogenics?",
+          "expected_answer": "Harm caused by the healer; first do no harm",
+          "source_chunks": [{ "type": "substring", "text": "Iatrogenics" }],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Domain-specific example (medicine)"
+        },
+        {
+          "query": "What is the relationship between the Lindy Effect and Antifragility?",
+          "expected_answer": "Lindy Effect is a manifestation of antifragility in the information domain",
+          "source_chunks": [{ "type": "substring", "text": "Lindy Effect" }, { "type": "substring", "text": "antifragility" }],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Multi-chunk synthesis"
+        },
+        {
+          "query": "What are counter-examples of the Lindy Effect?",
+          "expected_answer": "Fads and trends that emerge quickly and disappear just as fast",
+          "source_chunks": [{ "type": "substring", "text": "Fads and trends" }],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "List extraction from a specific section"
+        },
+        {
+          "query": "According to the document, how do perishable things differ from non-perishable ones?",
+          "expected_answer": "Perishable things have decreasing expected lifespan with age; non-perishable have increasing",
+          "source_chunks": [{ "type": "substring", "text": "Perishable" }],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Comparison / contrast"
+        },
+        {
+          "query": "What example technologies does the document give as Lindy?",
+          "expected_answer": "The wheel, the lever, and written language",
+          "source_chunks": [{ "type": "substring", "text": "wheel" }],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "List of technologies"
+        },
+        {
+          "query": "Paraphrase Taleb's definition of antifragility.",
+          "expected_answer": "Things that gain from disorder, stressors, volatility",
+          "source_chunks": [{ "type": "substring", "text": "benefit from shocks" }],
+          "expected_citations": [1],
+          "mode": "rag",
+          "description": "Paraphrase (semantic variant of the first query)"
+        }
+      ]
+    },
+    {
+      "name": "chat",
+      "description": "Chat agent queries: no document retrieval required. Tests general conversation quality. The runner treats these as no-context (empty chunk list) and grades purely on the LLM answer.",
+      "examples": [
+        {
+          "query": "Hello, who are you?",
+          "expected_answer": "An AI assistant",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "chat",
+          "description": "Greeting / self-introduction"
+        },
+        {
+          "query": "What is 2+2?",
+          "expected_answer": "4",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "chat",
+          "description": "Simple arithmetic"
+        },
+        {
+          "query": "Write a haiku about uncertainty.",
+          "expected_answer": "A three-line poem with 5-7-5 syllable structure",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "chat",
+          "description": "Creative generation"
+        },
+        {
+          "query": "Explain recursion in one sentence.",
+          "expected_answer": "A function that calls itself with a smaller subproblem",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "chat",
+          "description": "Explanation / pedagogy"
+        }
+      ]
+    },
+    {
+      "name": "search",
+      "description": "Search agent queries: open-ended questions where the LLM would normally call a web search tool. With our in-memory runner (no real web), the LLM just answers from its parametric knowledge. Tests that the search-mode prompt + answer path doesn't crash and produces a citation if needed.",
+      "examples": [
+        {
+          "query": "What is the current weather in Tokyo?",
+          "expected_answer": "Real-time weather (would need web search)",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "search",
+          "description": "Real-time query (search-mode intent, corpus has no answer)"
+        },
+        {
+          "query": "Who is the current CEO of OpenAI?",
+          "expected_answer": "Real-time fact (would need web search)",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "search",
+          "description": "Real-time fact lookup"
+        }
+      ]
+    },
+    {
+      "name": "adversarial",
+      "description": "Queries designed to elicit hallucination: questions that have NO answer in the corpus and require the LLM to refuse. A correct answer is 'Not mentioned in the provided context.' (or similar). The harness currently mis-flags this refusal as hallucination — see runner docs.",
+      "examples": [
+        {
+          "query": "What is the dollar value of the antifragility portfolio Taleb recommends?",
+          "expected_answer": "Not mentioned in the document",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "description": "Fabricated specific number"
+        },
+        {
+          "query": "When was the Lindy Effect first empirically tested?",
+          "expected_answer": "Not mentioned in the document",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "description": "Fabricated specific date"
+        },
+        {
+          "query": "What is the average length of an antifragile book chapter in pages?",
+          "expected_answer": "Not mentioned in the document",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "description": "Fabricated specific metric"
+        },
+        {
+          "query": "How many citations did the Lindy Effect paper get in 2020?",
+          "expected_answer": "Not mentioned in the document",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "description": "Fabricated specific count"
+        },
+        {
+          "query": "What was the price of Bitcoin on the day antifragility was published?",
+          "expected_answer": "Not mentioned in the document",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "description": "Cross-domain fabrication"
+        }
+      ]
+    }
+  ]
+}

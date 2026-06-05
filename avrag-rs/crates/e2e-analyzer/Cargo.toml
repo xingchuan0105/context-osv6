@@ -1,0 +1,23 @@
+[package]
+name = "e2e-analyzer"
+description = "Cross-run E2E test analysis framework for regression detection, failure attribution, coverage governance, and stability trending."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "e2e-analyzer"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+chrono.workspace = true
+walkdir = "2.5"
+anyhow.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

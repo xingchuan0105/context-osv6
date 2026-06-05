@@ -22,6 +22,8 @@ pub struct ChatRequest {
     pub stream: bool,
     #[serde(default)]
     pub language: Option<String>,
+    #[serde(default)]
+    pub format_hint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

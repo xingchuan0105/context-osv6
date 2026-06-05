@@ -27,6 +27,9 @@ pub struct AppConfig {
     pub usage_limit: UsageLimitConfig,
     /// Maximum allowed file size for a single upload in bytes (default: 100 MB).
     pub max_upload_file_size_bytes: u64,
+    /// Whether to enable RAG / Milvus retrieval pipeline.
+    /// When false, PG-backed ingestion still runs but vectors are not indexed.
+    pub enable_rag: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -261,6 +264,7 @@ impl Default for AppConfig {
                 enforcement_phase: "shadow".to_string(),
             },
             max_upload_file_size_bytes: 100 * 1024 * 1024,
+            enable_rag: true,
         }
     }
 }
@@ -393,6 +397,7 @@ impl AppConfig {
             "AVRAG_MAX_UPLOAD_FILE_SIZE_BYTES",
             config.max_upload_file_size_bytes,
         );
+        config.enable_rag = env_bool("AVRAG_ENABLE_RAG", config.enable_rag);
 
         config
     }

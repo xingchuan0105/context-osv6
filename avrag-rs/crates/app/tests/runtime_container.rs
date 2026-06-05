@@ -19,6 +19,7 @@ async fn runtime_new_memory_requires_configured_chat_agent() {
             messages: Vec::new(),
             stream: false,
             language: None,
+        format_hint: None,
         })
         .await
         .unwrap_err();

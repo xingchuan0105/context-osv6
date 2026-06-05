@@ -26,7 +26,23 @@ impl MilvusDataPlane {
         let response = self
             .post_json("/v2/vectordb/entities/search", body)
             .await?;
-        Ok(response["data"].as_array().cloned().unwrap_or_default())
+        let rows = response["data"].as_array().cloned().unwrap_or_default();
+        // Milvus v2.6+ nests output fields under "entity"; flatten for compatibility.
+        let flattened: Vec<Value> = rows.into_iter().map(|mut row| {
+            if let Some(entity) = row.as_object_mut().and_then(|obj| obj.remove("entity")) {
+                if let Some(entity_obj) = entity.as_object() {
+                    if let Some(obj) = row.as_object_mut() {
+                        for (k, v) in entity_obj {
+                            if !obj.contains_key(k) {
+                                obj.insert(k.clone(), v.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            row
+        }).collect();
+        Ok(flattened)
     }
 
     pub async fn search_text_dense(
@@ -36,12 +52,13 @@ impl MilvusDataPlane {
         if request.query_vector.is_empty() || request.doc_ids.as_ref().is_some_and(Vec::is_empty) {
             return Ok(Vec::new());
         }
+        let filter = doc_filter(&request.auth, request.doc_ids.as_deref());
         let rows = self
             .search_entities(
                 &self.config.collection_names().text_chunks,
                 "text_dense",
                 json!([request.query_vector]),
-                doc_filter(&request.auth, request.doc_ids.as_deref()),
+                filter,
                 request.limit,
                 &TEXT_OUTPUT_FIELDS,
             )
@@ -129,9 +146,13 @@ impl MilvusDataPlane {
 }
 
 pub(crate) fn scored_text_chunk(row: Value, channel: &str) -> anyhow::Result<ScoredChunk> {
+    let chunk_id = uuid_field(&row, "chunk_id")
+        .map_err(|e| anyhow::anyhow!("scored_text_chunk chunk_id error on row {}: {}", row, e))?;
+    let doc_id = uuid_field(&row, "doc_id")
+        .map_err(|e| anyhow::anyhow!("scored_text_chunk doc_id error on row {}: {}", row, e))?;
     Ok(ScoredChunk {
-        chunk_id: uuid_field(&row, "chunk_id")?,
-        doc_id: uuid_field(&row, "doc_id")?,
+        chunk_id,
+        doc_id,
         content: string_field(&row, "text").unwrap_or_default(),
         score: score_field(&row),
         source: channel.to_string(),

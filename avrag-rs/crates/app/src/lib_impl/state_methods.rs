@@ -119,8 +119,9 @@ impl AppState {
                 .map(Arc::new)
         };
 
-        // Create RAG components if pg and embedding are available
-        let rag_runtime = if let Some(ref pg_repo) = pg {
+        // Create RAG components if pg, embedding, and enable_rag are all available
+        let rag_runtime = if config.enable_rag && pg.is_some() {
+            let pg_repo = pg.as_ref().unwrap();
             let embedding = make_embedding_client(&config.embedding, cache_store.clone());
             let mm_embedding = make_embedding_client(&config.mm_embedding, cache_store.clone());
             let planner = make_planner(&config.agent_llm, cache_store.clone());
@@ -403,7 +404,7 @@ impl AppState {
             cancellation_token: None,
             guard_pipeline: None,
             preferred_tools: vec![],
-            format_hint: None,
+            format_hint: req.format_hint.clone(),
             max_iterations: None,
         }
     }

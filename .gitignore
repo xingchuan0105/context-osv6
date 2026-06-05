@@ -75,3 +75,4 @@ playwright/.auth/
 # Playwright working directory
 /.playwright-cli/
 .gitnexus
+e2e_output/

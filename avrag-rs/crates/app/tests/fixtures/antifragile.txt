@@ -1,0 +1,19 @@
+Antifragility: A Property of Systems That Thrive on Disorder
+
+The term "antifragility" was coined by Nassim Nicholas Taleb, a former options trader turned philosopher and statistician. In his 2012 book "Antifragile: Things That Gain from Disorder," Taleb introduced the concept as the exact opposite of fragility. While fragility describes things that break under stress, and robustness describes things that resist stress, antifragility describes things that actually improve because of stress, shocks, volatility, and disorder.
+
+Taleb defines antifragility formally: a system is antifragile if it benefits from randomness, uncertainty, and variation. This is not merely resilience or toughness. A resilient system withstands shocks and remains the same. An antifragile system gets better when exposed to shocks.
+
+Consider the human immune system. When exposed to pathogens, it does not merely resist infection; it learns from the encounter and builds antibodies, becoming stronger than before. This is antifragility in action. Similarly, muscle tissue grows stronger when subjected to stress through exercise. The stress causes micro-tears in the muscle fibers, and the body's repair process makes them thicker and stronger than they were originally.
+
+In economic systems, free markets with healthy competition demonstrate antifragility. When small businesses fail, their resources are reallocated to more efficient competitors. The market as a whole becomes more robust and innovative. However, Taleb warns that interventions that prevent small failures can make systems more fragile by allowing hidden risks to accumulate.
+
+Evolution is perhaps the ultimate example of antifragility. Random mutations create variation, and environmental pressures select for beneficial traits. Without stressors and shocks, evolution would stagnate. The very mechanism that makes individual organisms fragile (death of the unfit) makes the species antifragile (adaptation and improvement over generations).
+
+Taleb applies antifragility to domains beyond biology and economics. In education, he argues that students who encounter difficult problems and even occasional failure develop deeper understanding than those who follow smooth, predetermined curricula. In technology, systems designed with redundancy and decentralized components can absorb failures and become more reliable over time.
+
+The concept has important implications for risk management. Traditional risk management seeks to eliminate volatility and uncertainty. Taleb argues this approach is fundamentally flawed because it creates hidden fragility. Instead, he advocates for strategies that embrace small, contained risks while protecting against catastrophic ones. This is the barbell strategy: avoid the middle ground of moderate risk, and instead combine extreme safety with speculative exposure.
+
+Antifragility also has ethical dimensions. Taleb criticizes systems that transfer fragility from one party to another. When bankers take risks with other people's money and are bailed out by taxpayers when things go wrong, they become antifragile at the expense of making the public more fragile. True antifragility, Taleb argues, requires skin in the game — those who make decisions must bear the consequences.
+
+In summary, antifragility is a powerful lens for understanding how systems respond to stress and uncertainty. Rather than seeking to eliminate volatility, we should design systems that can harness it for improvement.

@@ -261,6 +261,7 @@ struct PgTaskProcessor {
     usage_limit: Option<avrag_billing::usage_limit::UsageLimitService>,
     mineru_client: Option<MineruClient>,
     office_parser_client: Option<OfficeParserServiceClient>,
+    task_timeout_secs: u64,
 }
 
 #[async_trait::async_trait]
@@ -276,10 +277,12 @@ impl TaskProcessor for PgTaskProcessor {
                 lock_token.clone(),
             )
         });
-        let result = async {
-            let context = task_context(task);
-            let document_id = Uuid::parse_str(&task.document_id)
-                .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+        let timeout_result = tokio::time::timeout(
+            Duration::from_secs(self.task_timeout_secs),
+            async {
+                let context = task_context(task);
+                let document_id = Uuid::parse_str(&task.document_id)
+                    .map_err(|error| IngestionError::StateSink(error.to_string()))?;
 
             let _lock_guard = if let Some(ref lock) = self.redis_lock {
                 match lock.try_acquire(document_id).await {
@@ -601,9 +604,17 @@ impl TaskProcessor for PgTaskProcessor {
                         info!(document_id = %document_id, error = %error, "failed to record embedding analytics event");
                     }
                 }
-            Ok(())
-        }
+                Ok(())
+            }
+        )
         .await;
+        let result = match timeout_result {
+            Ok(inner) => inner,
+            Err(_) => Err(IngestionError::StateSink(format!(
+                "document ingestion timed out after {} seconds",
+                self.task_timeout_secs
+            ))),
+        };
         stop_ingestion_task_lock_heartbeat(lock_heartbeat).await;
         telemetry::prometheus::observe_worker_task_completed(
             task_kind,
@@ -1015,6 +1026,10 @@ async fn main() -> Result<()> {
         .unwrap_or(5);
     let worker_id =
         std::env::var("AVRAG_WORKER_ID").unwrap_or_else(|_| format!("worker-{}", common::new_id()));
+    let task_timeout_secs = std::env::var("AVRAG_INGESTION_TASK_TIMEOUT_SECS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(300);
     let mut poll_interval = interval(Duration::from_secs(poll_secs));
     let mut heartbeat_interval = interval(Duration::from_secs(heartbeat_secs));
 
@@ -1103,6 +1118,7 @@ async fn main() -> Result<()> {
                 mineru_client: MineruConfig::from_env().map(MineruClient::new),
                 office_parser_client: OfficeParserServiceConfig::from_env()
                     .map(OfficeParserServiceClient::new),
+                task_timeout_secs,
             },
         );
 
@@ -1259,6 +1275,9 @@ fn url_to_filename(url: &str) -> String {
 async fn build_worker_retrieval_data_plane(
     config: &AppConfig,
 ) -> Result<Option<Arc<dyn RetrievalDataPlane>>> {
+    if !config.enable_rag {
+        return Ok(None);
+    }
     let milvus_config = StorageMilvusConfig {
         url: config.milvus.url.clone(),
         token: Some(config.milvus.token.clone()).filter(|token| !token.trim().is_empty()),

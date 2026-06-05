@@ -206,6 +206,7 @@ impl RagContext {
             messages: request.messages.clone(),
             stream: request.stream,
             language: request.language.clone(),
+            format_hint: request.format_hint.clone(),
         };
 
         Ok(Self {
@@ -1306,9 +1307,15 @@ pub fn extract_query_themes(query: &str) -> Vec<String> {
 }
 
 fn is_rag_tool(name: &str) -> bool {
-    crate::agents::progressive::rag_tool_catalog_cached()
-        .iter()
-        .any(|t| t.spec().name == name)
+    matches!(
+        name,
+        "dense_retrieval"
+            | "lexical_retrieval"
+            | "graph_retrieval"
+            | "index_lookup"
+            | "doc_summary"
+            | "doc_metadata"
+    )
 }
 
 /// Extract writing_styles and behavior_mode from planner JSON output.

@@ -358,3 +358,170 @@ mod tests {
         assert_eq!(broaden_query(""), "");
     }
 }
+
+pub async fn dispatch_tools_with_history_interception(
+    calls: Vec<common::ToolCall>,
+    auth: &avrag_auth::AuthContext,
+    session_id: Option<uuid::Uuid>,
+    repository: Option<&avrag_storage_pg::PgAppRepository>,
+    search_provider: Option<&dyn avrag_search::SearchProvider>,
+) -> Vec<ToolResult> {
+    let mut out = Vec::new();
+    let mut normal_calls = Vec::new();
+    let mut indices = Vec::new();
+
+    for (idx, call) in calls.into_iter().enumerate() {
+        if call.tool == "conversation_history_load" && session_id.is_some() && repository.is_some() {
+            let session_id = session_id.unwrap();
+            let repo = repository.unwrap();
+            
+            // Parse arguments
+            let tags: Option<Vec<String>> = call.args
+                .get("tags")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                });
+            let limit = call.args
+                .get("limit")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(20);
+
+            let res = repo.load_history_by_tags(auth, session_id, tags.clone(), limit).await;
+            let result = match res {
+                Ok(messages) => {
+                    let msg_json: Vec<serde_json::Value> = messages
+                        .into_iter()
+                        .map(|m| {
+                            serde_json::json!({
+                                "message_id": m.message_id,
+                                "role": m.role,
+                                "content": m.content,
+                                "tags": m.tags,
+                                "created_at": m.created_at.to_rfc3339(),
+                            })
+                        })
+                        .collect();
+                    ToolResult {
+                        tool: call.tool.clone(),
+                        version: call.version.clone(),
+                        status: ToolStatus::Ok,
+                        data: Some(serde_json::json!({
+                            "tags": tags,
+                            "limit": limit,
+                            "message_count": msg_json.len(),
+                            "messages": msg_json,
+                        })),
+                        trace: None,
+                    }
+                }
+                Err(e) => ToolResult {
+                    tool: call.tool.clone(),
+                    version: call.version.clone(),
+                    status: ToolStatus::Error,
+                    data: Some(serde_json::json!({ "error": e.to_string() })),
+                    trace: None,
+                }
+            };
+            out.push((idx, result));
+        } else if call.tool == "conversation_history_tag" && repository.is_some() {
+            let repo = repository.unwrap();
+            
+            // Parse arguments
+            let ops_val = call.args.get("operations").and_then(|v| v.as_array());
+            let result = match ops_val {
+                Some(arr) => {
+                    let mut tag_ops = Vec::new();
+                    let mut valid = true;
+                    for op_val in arr {
+                        let msg_id = op_val.get("message_id").and_then(|v| v.as_i64());
+                        let action = op_val.get("action").and_then(|v| v.as_str());
+                        let tags: Option<Vec<String>> = op_val.get("tags")
+                            .and_then(|v| v.as_array())
+                            .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect());
+
+                        if let (Some(mid), Some(act), Some(t)) = (msg_id, action, tags) {
+                            match act {
+                                "add" => {
+                                    for tag in t {
+                                        tag_ops.push(avrag_storage_pg::TagOperation::AddTag { message_id: mid, tag });
+                                    }
+                                }
+                                "remove" => {
+                                    for tag in t {
+                                        tag_ops.push(avrag_storage_pg::TagOperation::RemoveTag { message_id: mid, tag });
+                                    }
+                                }
+                                "replace" => {
+                                    tag_ops.push(avrag_storage_pg::TagOperation::ReplaceTags { message_id: mid, tags: t });
+                                }
+                                _ => { valid = false; break; }
+                            }
+                        } else {
+                            valid = false;
+                            break;
+                        }
+                    }
+
+                    if valid {
+                        match repo.apply_tag_operations(auth, tag_ops).await {
+                            Ok(()) => ToolResult {
+                                tool: call.tool.clone(),
+                                version: call.version.clone(),
+                                status: ToolStatus::Ok,
+                                data: Some(serde_json::json!({
+                                    "operation_count": arr.len(),
+                                })),
+                                trace: None,
+                            },
+                            Err(e) => ToolResult {
+                                tool: call.tool.clone(),
+                                version: call.version.clone(),
+                                status: ToolStatus::Error,
+                                data: Some(serde_json::json!({ "error": e.to_string() })),
+                                trace: None,
+                            }
+                        }
+                    } else {
+                        ToolResult {
+                            tool: call.tool.clone(),
+                            version: call.version.clone(),
+                            status: ToolStatus::Error,
+                            data: Some(serde_json::json!({ "error": "Invalid operations schema" })),
+                            trace: None,
+                        }
+                    }
+                }
+                None => ToolResult {
+                    tool: call.tool.clone(),
+                    version: call.version.clone(),
+                    status: ToolStatus::Error,
+                    data: Some(serde_json::json!({ "error": "Missing operations argument" })),
+                    trace: None,
+                }
+            };
+            out.push((idx, result));
+        } else {
+            normal_calls.push(call);
+            indices.push(idx);
+        }
+    }
+
+    if !normal_calls.is_empty() {
+        let normal_results = crate::agents::unified::atomic_tools::dispatch_atomic_tools_with_enforcement(
+            normal_calls,
+            search_provider,
+            Some(auth),
+        )
+        .await;
+
+        for (idx, res) in indices.into_iter().zip(normal_results.into_iter()) {
+            out.push((idx, res));
+        }
+    }
+
+    out.sort_by_key(|(idx, _)| *idx);
+    out.into_iter().map(|(_, res)| res).collect()
+}

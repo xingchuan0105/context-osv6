@@ -3,6 +3,7 @@ use avrag_retrieval_data_plane::GraphSearchRequest;
 use common::{
     GraphRetrievalArgs, ToolResult, ToolStatus, ToolTrace,
 };
+use uuid::Uuid;
 
 use crate::RagRuntime;
 
@@ -42,12 +43,23 @@ pub async fn run(
         }))
         .collect();
 
+    let doc_ids = if args.doc_scope.is_empty() {
+        None
+    } else {
+        Some(
+            args.doc_scope
+                .iter()
+                .filter_map(|id| Uuid::parse_str(id).ok())
+                .collect(),
+        )
+    };
+
     let started = std::time::Instant::now();
     match runtime
         .data_plane
         .search_graph(GraphSearchRequest {
             auth: auth.clone(),
-            doc_ids: None,
+            doc_ids,
             entity_names,
             relation_hints,
             relation_limit: args.relation_limit,
