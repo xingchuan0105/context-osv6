@@ -1099,9 +1099,13 @@ function AssistantAnswerContent({
     const label = getCitationLabel(citation, resolvedIndex);
     const pageText = getCitationPageText(locale, citation.page);
     const preview = citation.preview?.trim() || citation.content?.trim() || "";
-    const hoverTitle = pageText
+    const url = getCitationUrl(citation);
+    let hoverTitle = pageText
       ? `${label} (${pageText})\n${preview}`
       : `${label}\n${preview}`;
+    if (url) {
+      hoverTitle += `\n${url}`;
+    }
 
     return (
       <button
@@ -1165,6 +1169,12 @@ function AssistantAnswerContent({
         message.citations,
         locale,
       );
+      // Fallback: if the LLM did not insert [[N]] markers into the text but
+      // citations were returned separately, render them as a trailing group.
+      const trailingCitations =
+        richMarkdown.citationTokens.length === 0 && message.citations.length > 0
+          ? dedupeCitations(message.citations)
+          : [];
 
       return (
         <>
@@ -1194,6 +1204,13 @@ function AssistantAnswerContent({
               __html: richMarkdown.html,
             }}
           />
+          {trailingCitations.length > 0 ? (
+            <div className={styles.inlineCitationGroup} style={{ marginTop: "0.5rem" }}>
+              {trailingCitations.map((citation, idx) =>
+                renderCitationButton(citation, `trailing-${idx}`),
+              )}
+            </div>
+          ) : null}
           <ToolResultsPanel locale={locale} results={message.toolResults} />
         </>
       );
@@ -1248,76 +1265,125 @@ function AssistantAnswerContent({
   }
 
   if (hasRenderedCitationMarkup(message.content)) {
-    return (
-      <>
-        <div className={styles.answerBlockStack}>
-          {message.content.split("\n").map((line, lineIndex) => {
-            const trimmedLine = line.trim();
+    let inlineCitationsRendered = 0;
 
-            if (!trimmedLine) {
-              return <div aria-hidden="true" className={styles.answerSpacer} key={`spacer-${lineIndex}`} />;
-            }
+    const renderedLines = message.content.split("\n").map((line, lineIndex) => {
+      const trimmedLine = line.trim();
 
-            const tokens = tokenizeRenderedAnswerLine(line);
+      if (!trimmedLine) {
+        return <div aria-hidden="true" className={styles.answerSpacer} key={`spacer-${lineIndex}`} />;
+      }
 
-            if (tokens.length === 1 && tokens[0]?.type === "image") {
-              const citation = findCitationByDisplayId(message.citations, tokens[0].displayId);
+      const tokens = tokenizeRenderedAnswerLine(line);
 
-              if (!citation) {
+      if (tokens.length === 1 && tokens[0]?.type === "image") {
+        const citation = findCitationByDisplayId(message.citations, tokens[0].displayId);
+
+        if (!citation) {
+          return null;
+        }
+
+        inlineCitationsRendered += 1;
+        return renderImageCard(citation, `rendered-image-${lineIndex}`);
+      }
+
+      return (
+        <p className={styles.answerTextBlock} key={`line-${lineIndex}`}>
+          {tokens.map((token, tokenIndex) => {
+            if (token.type === "text") {
+              if (!token.text) {
                 return null;
               }
 
-              return renderImageCard(citation, `rendered-image-${lineIndex}`);
+              return (
+                <span
+                  dangerouslySetInnerHTML={{
+                    __html: markdownToInlineHtml(token.text),
+                  }}
+                  key={`text-${lineIndex}-${tokenIndex}`}
+                />
+              );
             }
 
-            return (
-              <p className={styles.answerTextBlock} key={`line-${lineIndex}`}>
-                {tokens.map((token, tokenIndex) => {
-                  if (token.type === "text") {
-                    if (!token.text) {
-                      return null;
-                    }
+            if (token.type === "citation") {
+              const citation = findCitationByDisplayId(message.citations, token.displayId);
 
-                    return (
-                      <span
-                        dangerouslySetInnerHTML={{
-                          __html: markdownToInlineHtml(token.text),
-                        }}
-                        key={`text-${lineIndex}-${tokenIndex}`}
-                      />
-                    );
-                  }
+              if (!citation) {
+                return (
+                  <span className={styles.inlineCitationFallback} key={`fallback-${lineIndex}-${tokenIndex}`}>
+                    [{token.displayId}]
+                  </span>
+                );
+              }
 
-                  if (token.type === "citation") {
-                    const citation = findCitationByDisplayId(message.citations, token.displayId);
+              inlineCitationsRendered += 1;
+              return renderCitationButton(citation, `inline-${lineIndex}-${tokenIndex}`);
+            }
 
-                    if (!citation) {
-                      return (
-                        <span className={styles.inlineCitationFallback} key={`fallback-${lineIndex}-${tokenIndex}`}>
-                          [{token.displayId}]
-                        </span>
-                      );
-                    }
+            const citation = findCitationByDisplayId(message.citations, token.displayId);
 
-                    return renderCitationButton(citation, `inline-${lineIndex}-${tokenIndex}`);
-                  }
+            if (!citation) {
+              return (
+                <span className={styles.inlineCitationFallback} key={`image-fallback-${lineIndex}-${tokenIndex}`}>
+                  [image {token.displayId}]
+                </span>
+              );
+            }
 
-                  const citation = findCitationByDisplayId(message.citations, token.displayId);
-
-                  if (!citation) {
-                    return (
-                      <span className={styles.inlineCitationFallback} key={`image-fallback-${lineIndex}-${tokenIndex}`}>
-                        [image {token.displayId}]
-                      </span>
-                    );
-                  }
-
-                  return renderCitationButton(citation, `image-inline-${lineIndex}-${tokenIndex}`);
-                })}
-              </p>
-            );
+            inlineCitationsRendered += 1;
+            return renderCitationButton(citation, `image-inline-${lineIndex}-${tokenIndex}`);
           })}
-        </div>
+        </p>
+      );
+    });
+
+    // Fallback: if inline citation markup was detected but no matching citations
+    // were found (e.g., LLM hallucinated wrong indices), render trailing buttons.
+    const trailingCitationsMarkup =
+      inlineCitationsRendered === 0 && message.citations.length > 0
+        ? dedupeCitations(message.citations)
+        : [];
+
+    return (
+      <>
+        <div className={styles.answerBlockStack}>{renderedLines}</div>
+        {trailingCitationsMarkup.length > 0 ? (
+          <div className={styles.inlineCitationGroup} style={{ marginTop: "0.5rem" }}>
+            {trailingCitationsMarkup.map((citation, idx) =>
+              renderCitationButton(citation, `trailing-${idx}`),
+            )}
+          </div>
+        ) : null}
+        <ToolResultsPanel locale={locale} results={message.toolResults} />
+      </>
+    );
+  }
+
+  // HTML format output: if the raw answer looks like a complete HTML document,
+  // render it directly instead of running it through the markdown parser (which
+  // would escape the tags and wrap it in <pre><code>).
+  const rawContent = message.content || (message.pending ? "..." : "");
+  const looksLikeHtml = /^\s*<(!doctype\s+html|html)/iu.test(rawContent);
+
+  // Search and other plain-text modes may return citations without answerBlocks.
+  // Render them as a trailing group when no inline markup was detected.
+  const trailingCitationsFallback =
+    message.citations.length > 0 ? dedupeCitations(message.citations) : [];
+
+  if (looksLikeHtml) {
+    return (
+      <>
+        <div
+          className={styles.markdownContent}
+          dangerouslySetInnerHTML={{ __html: rawContent }}
+        />
+        {trailingCitationsFallback.length > 0 ? (
+          <div className={styles.inlineCitationGroup} style={{ marginTop: "0.5rem" }}>
+            {trailingCitationsFallback.map((citation, idx) =>
+              renderCitationButton(citation, `trailing-${idx}`),
+            )}
+          </div>
+        ) : null}
         <ToolResultsPanel locale={locale} results={message.toolResults} />
       </>
     );
@@ -1328,9 +1394,16 @@ function AssistantAnswerContent({
       <div
         className={styles.markdownContent}
         dangerouslySetInnerHTML={{
-          __html: markdownToRichTextHtml(message.content || (message.pending ? "..." : "")),
+          __html: markdownToRichTextHtml(rawContent),
         }}
       />
+      {trailingCitationsFallback.length > 0 ? (
+        <div className={styles.inlineCitationGroup} style={{ marginTop: "0.5rem" }}>
+          {trailingCitationsFallback.map((citation, idx) =>
+            renderCitationButton(citation, `trailing-${idx}`),
+          )}
+        </div>
+      ) : null}
       <ToolResultsPanel locale={locale} results={message.toolResults} />
     </>
   );
