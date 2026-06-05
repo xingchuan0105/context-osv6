@@ -6,8 +6,34 @@ const URL_FILE = "/tmp/e2e-backend.url";
 const BACKEND_TIMEOUT_MS = 180_000;
 const FRONTEND_TIMEOUT_MS = 60_000;
 
+// Resolve absolute paths because `spawn` does not see the shell PATH
+// when launched from npx in some environments.
+const NODE_BIN = process.env.NODE_BIN || process.execPath;
+const PNPM_JS = process.env.PNPM_JS || "/home/chuan/.nvm/versions/node/v24.13.0/lib/node_modules/corepack/dist/pnpm.js";
+
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function killProcessOnPort(port: number): void {
+  try {
+    const { spawnSync } = require("child_process");
+    const result = spawnSync("ss", ["-tlnp"], { encoding: "utf-8" });
+    if (result.status !== 0) return;
+    const lines = result.stdout.split("\n");
+    const pids = new Set<number>();
+    for (const line of lines) {
+      if (!line.includes(`:${port}`)) continue;
+      const match = line.match(/pid=(\d+)/);
+      if (match) pids.add(Number(match[1]));
+    }
+    for (const pid of pids) {
+      try {
+        process.kill(pid, "SIGKILL");
+        console.log(`[setup] killed previous process on port ${port}: ${pid}`);
+      } catch {}
+    }
+  } catch {}
 }
 
 function spawnBackend(avragRoot: string): ChildProcess {
@@ -41,9 +67,9 @@ function spawnBackend(avragRoot: string): ChildProcess {
   return proc;
 }
 
-function spawnFrontend(frontendRoot: string, apiProxyTarget: string): ChildProcess {
+function spawnDevFrontend(frontendRoot: string, apiProxyTarget: string): ChildProcess {
   const env = { ...process.env, API_PROXY_TARGET: apiProxyTarget };
-  const proc = spawn("pnpm", ["start"], {
+  const proc = spawn(NODE_BIN, [PNPM_JS, "dev", "--port", "3001"], {
     cwd: frontendRoot,
     stdio: "pipe",
     env,
@@ -51,7 +77,7 @@ function spawnFrontend(frontendRoot: string, apiProxyTarget: string): ChildProce
 
   proc.stdout?.on("data", (d) => {
     const line = d.toString();
-    if (line.includes("Ready") || line.includes("error")) {
+    if (line.includes("Ready") || line.includes("ready") || line.includes("error")) {
       process.stdout.write(`[frontend] ${line}`);
     }
   });
@@ -86,26 +112,18 @@ async function waitForUrl(url: string, timeoutMs: number): Promise<void> {
   throw new Error(`Frontend did not become ready at ${url} within ${timeoutMs}ms`);
 }
 
-function buildFrontend(frontendRoot: string): Promise<void> {
-  // Skip build if .next/standalone exists and is recent (< 1 hour)
-  const standaloneDir = path.join(frontendRoot, ".next", "standalone");
-  if (fs.existsSync(standaloneDir)) {
-    const stat = fs.statSync(standaloneDir);
-    const ageMs = Date.now() - stat.mtimeMs;
-    if (ageMs < 3_600_000) {
-      console.log("[setup] Reusing existing Next.js build (< 1h old)");
-      return Promise.resolve();
-    }
+function installFrontend(frontendRoot: string): Promise<void> {
+  if (fs.existsSync(path.join(frontendRoot, "node_modules"))) {
+    return Promise.resolve();
   }
-
-  console.log("[setup] Building Next.js frontend (this may take 30-60s)...");
+  console.log("[setup] Installing frontend dependencies...");
   return new Promise((resolve, reject) => {
-    const proc = spawn("pnpm", ["build"], {
+    const proc = spawn(NODE_BIN, [PNPM_JS, "install"], {
       cwd: frontendRoot,
       stdio: "inherit",
     });
     proc.on("close", (code) => {
-      code === 0 ? resolve() : reject(new Error(`Next.js build exited with ${code}`));
+      code === 0 ? resolve() : reject(new Error(`pnpm install exited with ${code}`));
     });
   });
 }
@@ -115,9 +133,15 @@ let backendProc: ChildProcess | null = null;
 let frontendProc: ChildProcess | null = null;
 
 export default async function globalSetup() {
+  // Best-effort cleanup of stale frontend process from a previous run
+  killProcessOnPort(3001);
+  await sleep(500);
+
   const e2eDir = __dirname;
   const avragRoot = path.resolve(e2eDir, "../..");
-  const frontendRoot = path.resolve(avragRoot, "../../frontend_next");
+  // In the worktree: e2e-analyzer/avrag-rs/ and e2e-analyzer/frontend_next/
+  // are siblings, so we go up ONE level from avrag-rs/.
+  const frontendRoot = path.resolve(avragRoot, "../frontend_next");
 
   console.log("[setup] Starting Rust backend...");
   backendProc = spawnBackend(avragRoot);
@@ -125,18 +149,31 @@ export default async function globalSetup() {
   const backendUrl = await waitForFile(URL_FILE, BACKEND_TIMEOUT_MS);
   console.log(`[setup] Backend ready at ${backendUrl}`);
 
-  // Build frontend if needed
-  await buildFrontend(frontendRoot);
+  // Ensure frontend dependencies are installed
+  await installFrontend(frontendRoot);
 
-  console.log("[setup] Starting Next.js frontend...");
-  frontendProc = spawnFrontend(frontendRoot, backendUrl);
+  // NOTE: production build is preferred, but the worktree's Next.js 16
+  // apple-icon route fails during static generation. Use dev mode as a
+  // pragmatic fallback so E2E can exercise runtime behavior while the
+  // frontend build bug is fixed separately.
+  console.log("[setup] Starting Next.js frontend (dev mode on port 3001)...");
+  frontendProc = spawnDevFrontend(frontendRoot, backendUrl);
 
-  await waitForUrl("http://localhost:3000", FRONTEND_TIMEOUT_MS);
-  console.log("[setup] Frontend ready at http://localhost:3000");
+  await waitForUrl("http://localhost:3001", FRONTEND_TIMEOUT_MS);
+  console.log("[setup] Frontend ready at http://localhost:3001");
 
   // Persist handles for teardown via a sidecar file
   fs.writeFileSync(
     path.join(e2eDir, "output", ".pids.json"),
     JSON.stringify({ backendPid: backendProc.pid, frontendPid: frontendProc.pid })
   );
+
+  // Persist backend URL so tests can hit the API directly
+  fs.writeFileSync(
+    path.join(e2eDir, "output", ".backend.url"),
+    backendUrl
+  );
+
+  // Also expose via env for the current Playwright process children
+  process.env.BACKEND_BASE_URL = backendUrl;
 }

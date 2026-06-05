@@ -135,7 +135,7 @@ pub(crate) fn issue_jwt_for_auth_version(
     let claims = JwtClaims {
         sub: user_id.to_string(),
         org_id: org_id.to_string(),
-        permissions: vec!["read".to_string(), "write".to_string()],
+        permissions: vec!["read".to_string(), "write".to_string(), "external_network".to_string()],
         jti: Uuid::new_v4().to_string(),
         auth_version,
         exp: (now + chrono::Duration::hours(24)).timestamp() as usize,

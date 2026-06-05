@@ -3,6 +3,23 @@
  * to score an answer against a golden-set criterion.
  */
 
+import { config as dotenvConfig } from "dotenv";
+import fs from "fs";
+import path from "path";
+
+// Load .env from worktree or main repo
+const envCandidates = [
+  path.resolve(__dirname, "../../../.env"),          // worktree avrag-rs/.env
+  path.resolve(__dirname, "../../../../../../../.env"), // main repo avrag-rs/.env
+  "/home/chuan/context-osv6/avrag-rs/.env",
+];
+for (const p of envCandidates) {
+  if (fs.existsSync(p)) {
+    dotenvConfig({ path: p });
+    break;
+  }
+}
+
 export interface JudgeResult {
   score: number;
   dimensions?: Record<string, number>;
@@ -25,8 +42,12 @@ export async function judgeAnswer(
   model = "qwen-plus"
 ): Promise<JudgeResult> {
   const apiKey = process.env.DASHSCOPE_API_KEY ?? "";
-  const baseUrl =
-    process.env.AGENT_LLM_BASE_URL ?? "https://dashscope.aliyuncs.com/compatible-mode/v1";
+  // Judge always calls DashScope (not the agent LLM endpoint which may be DeepSeek)
+  const baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+
+  if (!apiKey) {
+    throw new Error("DASHSCOPE_API_KEY is not set.  Please provide it in the .env file or environment.");
+  }
 
   const body = {
     model,

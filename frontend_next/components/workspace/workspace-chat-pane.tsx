@@ -1107,6 +1107,7 @@ function AssistantAnswerContent({
       <button
         aria-label={getInlineCitationAriaLabel(locale, citation, resolvedIndex)}
         className={styles.inlineCitationButton}
+        data-testid="workspace-citation"
         key={key}
         onClick={(event) => {
           handleCitationClick(citation, event.currentTarget);
@@ -2157,6 +2158,8 @@ function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
                 ]
                   .filter(Boolean)
                   .join(" ")}
+                data-testid="workspace-message"
+                data-role={message.role}
                 key={message.id}
               >
                 <div
@@ -2202,6 +2205,7 @@ function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
                     ]
                       .filter(Boolean)
                       .join(" ")}
+                    data-testid="workspace-answer-bubble"
                   >
                     {message.role === "assistant" ? (
                       <AssistantAnswerContent
@@ -2350,6 +2354,7 @@ function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
               aria-expanded={showModeMenu}
               aria-label={formatUiMessage(locale, "workspaceChatModeLabel")}
               className={`${styles.modeTag}${showModeMenu ? ` ${styles.modeTagOpen}` : ""}`}
+              data-testid="workspace-chat-mode-button"
               onClick={() => {
                 if (showModeMenu) {
                   setShowModeMenu(false);
@@ -2371,6 +2376,7 @@ function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
                 {CHAT_MODE_ORDER.map((mode, index) => (
                   <button
                     className={`${styles.modeMenuItem}${index === modeMenuActiveIndex ? ` ${styles.modeMenuItemActive}` : ""}`}
+                    data-testid={`workspace-chat-mode-${mode}`}
                     key={mode}
                     onClick={() => applyModeSelection(mode)}
                     type="button"
@@ -2385,6 +2391,7 @@ function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
 
           <textarea
             className={styles.textarea}
+            data-testid="workspace-chat-composer"
             id={`workspace-chat-composer-${workspaceId}`}
             onChange={(event) => {
               const nextDraft = event.target.value;
@@ -2409,6 +2416,7 @@ function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
             <button
               aria-label={isStreaming ? formatUiMessage(locale, "workspaceSending") : formatUiMessage(locale, "workspaceSend")}
               className={styles.sendButton}
+              data-testid="workspace-chat-send"
               disabled={isStreaming || draft.trim().length === 0}
               type="submit"
             >

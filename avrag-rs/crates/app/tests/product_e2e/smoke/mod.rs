@@ -20,7 +20,7 @@ use crate::product_e2e::TestContext;
 #[tokio::test]
 #[ignore = "blocking backend launcher for frontend e2e"]
 async fn backend_launcher() {
-    let ctx = TestContext::new_smoke_with_rag().await;
+    let ctx = TestContext::new_with_real_llm().await;
     let url = ctx.base_url.clone();
     std::fs::write("/tmp/e2e-backend.url", &url).expect("write backend url");
     eprintln!("[backend_launcher] backend ready at {url}");

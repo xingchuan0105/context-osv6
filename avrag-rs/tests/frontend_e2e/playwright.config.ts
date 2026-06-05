@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 import path from "path";
+import { config as dotenvConfig } from "dotenv";
+
+dotenvConfig({ path: path.resolve(__dirname, "../../.env") });
 
 /**
  * Frontend E2E configuration — full-stack, real LLM, production build.
@@ -14,6 +17,8 @@ import path from "path";
 export default defineConfig({
   testDir: "./specs",
   outputDir: "./output/artifacts",
+  /* Real LLM tests can take 30-60s per request */
+  timeout: 120_000,
 
   /* Serial execution — real LLM rate limits prevent parallelism */
   fullyParallel: false,
