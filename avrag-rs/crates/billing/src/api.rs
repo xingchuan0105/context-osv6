@@ -10,10 +10,13 @@ use hmac::Mac;
 use crate::core::{
     build_plan_payloads, current_metric_usage, ensure_customer,
     get_current_subscription, load_customer_id, load_plan_quotas, load_quota_limit, load_usage,
-    load_usage_history, load_usage_window, process_webhook_event, seconds_until_next_month,
-    claim_webhook_with_lease, update_webhook_lease_status,
+    load_usage_forecast, load_usage_history, load_usage_window, process_webhook_event,
+    seconds_until_next_month, claim_webhook_with_lease, update_webhook_lease_status,
 };
-use crate::types::{PLAN_FREE, PLAN_PRO, PLAN_PLUS, BillingProvider, UsageHistoryResponse, UsageWindowResponse};
+use crate::types::{
+    PLAN_FREE, PLAN_PRO, PLAN_PLUS, BillingProvider, UsageForecastResponse, UsageHistoryResponse,
+    UsageWindowResponse,
+};
 use crate::{BillingConfig, StripeClient, Subscription, CreemClient, AlipayClient};
 
 #[derive(Deserialize)]
@@ -134,6 +137,16 @@ pub async fn handle_get_usage_history(
     match load_usage_history(repo, user_id, days).await {
         Ok(history) => ApiResponse::ok(history),
         Err(error) => ApiResponse::err("billing_usage_history_failed", &error.to_string()),
+    }
+}
+
+pub async fn handle_get_usage_forecast(
+    repo: Arc<PgAppRepository>,
+    user_id: UserId,
+) -> ApiResponse<UsageForecastResponse> {
+    match load_usage_forecast(repo, user_id).await {
+        Ok(forecast) => ApiResponse::ok(forecast),
+        Err(error) => ApiResponse::err("billing_usage_forecast_failed", &error.to_string()),
     }
 }
 

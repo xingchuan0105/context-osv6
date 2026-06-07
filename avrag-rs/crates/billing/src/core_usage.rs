@@ -454,3 +454,64 @@ pub(crate) async fn load_usage_history(
 
     Ok(UsageHistoryResponse { daily })
 }
+
+pub(crate) async fn load_usage_forecast(
+    repo: Arc<PgAppRepository>,
+    user_id: UserId,
+) -> Result<UsageForecastResponse> {
+    // Project a 30-day average against the user's current 7d plan limit.
+    // The "avg" field is total / 30 (per day) so the frontend can render
+    // either "you use ~8K tokens/day" or "you used 240K this month".
+    let user_uuid = user_id.into_uuid();
+    let plan_id = load_user_plan_id(repo.clone(), user_id).await?;
+
+    // Plan-level 7d cap (0 = unlimited, same convention as usage_limit/service.rs).
+    let policy_row = sqlx::query(
+        r#"
+        select rolling_7d_limit_units
+        from usage_limit_plan_policies
+        where plan_id = $1
+        "#,
+    )
+    .bind(&plan_id)
+    .fetch_optional(repo.raw())
+    .await?;
+    let current_limit_7d = policy_row
+        .map(|row| row.try_get::<i64, _>("rolling_7d_limit_units").unwrap_or(0))
+        .unwrap_or(0);
+
+    let now = Utc::now();
+    let cutoff_30d = now - Duration::days(30);
+    let total_30d = sum_usage_units_window(repo, user_uuid, cutoff_30d).await?;
+    let avg_30d_tokens = total_30d / 30;
+    let projected_30d_tokens = avg_30d_tokens * 30;
+
+    let usage_pct_of_limit = if current_limit_7d > 0 {
+        (projected_30d_tokens as f64 / current_limit_7d as f64) * 100.0
+    } else {
+        0.0
+    };
+    let upgrade_recommended = usage_pct_of_limit >= 80.0;
+
+    let suggestion_zh = if upgrade_recommended {
+        "按当前用量，本月建议升级到 Plus（7d 限额 4M）".to_string()
+    } else {
+        "按当前用量，本月无需升级".to_string()
+    };
+    let suggestion_en = if upgrade_recommended {
+        "Based on current usage, upgrading to Plus is recommended this month (7d limit: 4M)"
+            .to_string()
+    } else {
+        "Based on current usage, no upgrade needed this month".to_string()
+    };
+
+    Ok(UsageForecastResponse {
+        current_plan: plan_id,
+        avg_30d_tokens,
+        projected_30d_tokens,
+        current_limit_7d,
+        upgrade_recommended,
+        suggestion_zh,
+        suggestion_en,
+    })
+}

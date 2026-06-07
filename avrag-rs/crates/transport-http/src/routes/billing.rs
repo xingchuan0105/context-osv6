@@ -12,6 +12,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/billing/usage", get(get_usage))
         .route("/billing/usage/window", get(get_usage_window))
         .route("/billing/usage/history", get(get_usage_history))
+        .route("/billing/usage/forecast", get(get_usage_forecast))
         .route(
             "/billing/checkout-session",
             axum::routing::post(create_checkout),
@@ -178,4 +179,22 @@ async fn get_usage_history(
         )
         .await,
     )
+}
+
+async fn get_usage_forecast(
+    Extension(RequestState(state)): Extension<RequestState>,
+) -> Json<ApiResponse<avrag_billing::UsageForecastResponse>> {
+    let Some(repo) = state.pg() else {
+        return Json(ApiResponse::err(
+            "postgres_not_configured",
+            "postgres backend is not configured",
+        ));
+    };
+    let Some(actor_id) = state.auth().actor_id() else {
+        return Json(ApiResponse::err(
+            "authenticated_user_required",
+            "authenticated user required",
+        ));
+    };
+    Json(avrag_billing::handle_get_usage_forecast(repo, UserId::from(actor_id.into_uuid())).await)
 }

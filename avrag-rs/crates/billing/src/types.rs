@@ -254,6 +254,17 @@ pub struct UsageHistoryResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageForecastResponse {
+    pub current_plan: String,
+    pub avg_30d_tokens: i64,
+    pub projected_30d_tokens: i64,
+    pub current_limit_7d: i64,
+    pub upgrade_recommended: bool,
+    pub suggestion_zh: String,
+    pub suggestion_en: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BillingPlan {
     pub plan_id: String,
     pub name: String,

@@ -12,7 +12,8 @@ use crate::types::{
     ADMIN_ROLE_SUPER, BillingConfig, BillingProvider, DailyUsage, ExistingSubscriptionFields,
     LimitHits, PLAN_FREE, PLAN_PLUS, PLAN_PRO, STATUS_ACTIVE, STATUS_CANCELED, STATUS_PAST_DUE,
     STATUS_UNPAID, StripeSubscriptionSnapshot, Subscription, SubscriptionStatus,
-    UsageHistoryResponse, UsageWindowBucket, UsageWindowResponse, WebhookClaim,
+    UsageForecastResponse, UsageHistoryResponse, UsageWindowBucket, UsageWindowResponse,
+    WebhookClaim,
 };
 
 include!("core_usage.rs");
