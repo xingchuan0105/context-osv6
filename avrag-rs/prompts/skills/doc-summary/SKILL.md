@@ -17,8 +17,10 @@ When to call:
   contain the answer before doing chunk-level retrieval.
 - The user asks "what does this document cover" / "give me an
   overview" / "summarize the doc".
-- The planner wants to follow up with `index_lookup` for
-  specific chunk IDs and needs the section structure first.
+- The planner needs a lightweight structural map (TOC) of the
+  document before deciding which sections to read. Use
+  `level: "section"`. Note: this returns titles, not chunk IDs;
+  for chunk IDs use `doc-index`.
 
 When NOT to call (use a different tool instead):
 - The planner already knows the exact chunk ID → `index_lookup`.
@@ -33,9 +35,10 @@ When NOT to call (use a different tool instead):
   read summaries for.
 - `level` (optional, `"doc"` | `"section"`, default `"doc"`):
   - `"doc"` — full-document narrative summary.
-  - `"section"` — section-level TOC entries (title, heading_level,
-    page), one entry per section. Use this when the planner needs
-    the structural map to plan a precise `index_lookup` next.
+  - `"section"` — section-level TOC entries (`section_title`,
+    `heading_level`, `page`), one entry per section. Use this when
+    the planner needs the structural map to plan a precise read
+    next (for chunk IDs, follow with `doc-index`).
 
 ## Output
 

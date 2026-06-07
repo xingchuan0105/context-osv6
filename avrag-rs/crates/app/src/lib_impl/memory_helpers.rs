@@ -1,9 +1,7 @@
 use common::{
-    ChatMessage, ChatRequest,
-    Citation, DegradeTraceItem, DocumentStatus,
-    ModeDebug, ParsedPreviewItem, PlannerOutput,
-    RagModeDebug, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary,
-    SourceRef, SummaryInjectionTrace,
+    ChatMessage, ChatRequest, Citation, DegradeTraceItem, DocumentStatus, ModeDebug,
+    ParsedPreviewItem, PlannerOutput, RagModeDebug, RagPlan, RagPlanItem, RagTraceItem,
+    RagTraceSummary, SourceRef, SummaryInjectionTrace,
 };
 
 use crate::lib_impl::*;

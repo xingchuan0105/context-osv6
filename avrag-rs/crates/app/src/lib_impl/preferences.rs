@@ -1,24 +1,20 @@
-use common::{
-    AppError, new_id,
-    now_rfc3339,
-};
+use common::{AppError, new_id, now_rfc3339};
 use contracts::UserPreferences;
 use uuid::Uuid;
 
 use crate::lib_impl::*;
 
 impl AppState {
-    pub async fn load_user_preferences(
-        &self,
-        user_id: Uuid,
-    ) -> Result<UserPreferences, AppError> {
+    pub async fn load_user_preferences(&self, user_id: Uuid) -> Result<UserPreferences, AppError> {
         if let Some(pg) = &self.pg {
             let profile = pg
                 .get_user_profile(&self.auth, user_id)
                 .await
                 .map_err(map_pg_error)?;
             let preferences = profile
-                .and_then(|row| serde_json::from_value::<UserPreferences>(row.custom_preferences).ok())
+                .and_then(|row| {
+                    serde_json::from_value::<UserPreferences>(row.custom_preferences).ok()
+                })
                 .unwrap_or_default();
             return Ok(preferences);
         }
@@ -121,11 +117,14 @@ impl AppState {
             .iter()
             .any(|blocked| blocked.id == removed.id)
         {
-            preferences.agent_memory.blocked.push(common::BlockedAgentPreference {
-                id: removed.id,
-                text: removed.text,
-                blocked_at: now_rfc3339(),
-            });
+            preferences
+                .agent_memory
+                .blocked
+                .push(common::BlockedAgentPreference {
+                    id: removed.id,
+                    text: removed.text,
+                    blocked_at: now_rfc3339(),
+                });
         }
 
         let saved = self.save_current_user_preferences(&preferences).await?;
@@ -164,15 +163,18 @@ impl AppState {
         {
             existing.updated_at = now;
         } else {
-            preferences.agent_memory.active.push(common::AgentPreference {
-                id: new_id(),
-                text,
-                category: "interaction".to_string(),
-                scope: "global".to_string(),
-                confidence: "explicit".to_string(),
-                source: "explicit_user_turn".to_string(),
-                updated_at: now.clone(),
-            });
+            preferences
+                .agent_memory
+                .active
+                .push(common::AgentPreference {
+                    id: new_id(),
+                    text,
+                    category: "interaction".to_string(),
+                    scope: "global".to_string(),
+                    confidence: "explicit".to_string(),
+                    source: "explicit_user_turn".to_string(),
+                    updated_at: now.clone(),
+                });
             let date = now.split('T').next().unwrap_or(&now).to_string();
             if let Some(log) = preferences
                 .agent_memory
@@ -182,11 +184,14 @@ impl AppState {
             {
                 log.added.push(normalized);
             } else {
-                preferences.agent_memory.daily_log.push(common::DailyPreferenceLog {
-                    date,
-                    added: vec![normalized],
-                    no_change: Vec::new(),
-                });
+                preferences
+                    .agent_memory
+                    .daily_log
+                    .push(common::DailyPreferenceLog {
+                        date,
+                        added: vec![normalized],
+                        no_change: Vec::new(),
+                    });
             }
         }
 

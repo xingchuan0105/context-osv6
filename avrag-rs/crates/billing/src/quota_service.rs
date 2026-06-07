@@ -57,7 +57,7 @@ impl QuotaManager {
         }
 
         // 2. Check monthly limit
-        let monthly = check_monthly_quota(self.repo.clone(), common::OrgId::new(org_id), metric_type, requested).await?;
+        let monthly = check_monthly_quota(self.repo.clone(), common::UserId::from(user_id), metric_type, requested).await?;
         if !monthly.allowed {
             return Ok(UnifiedQuotaDecision {
                 allowed: false,

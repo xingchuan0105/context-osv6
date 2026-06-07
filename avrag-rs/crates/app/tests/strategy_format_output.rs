@@ -2,21 +2,21 @@
 //!
 //! Run with: cargo test --ignored -p app --test strategy_format_output
 
-#[path = "strategy_e2e/config.rs"]
-mod config;
-#[path = "strategy_e2e/recording_llm.rs"]
-mod recording_llm;
 #[path = "strategy_e2e/assertions.rs"]
 mod assertions;
+#[path = "strategy_e2e/config.rs"]
+mod config;
 #[path = "strategy_e2e/playwright_helper.rs"]
 mod playwright_helper;
+#[path = "strategy_e2e/recording_llm.rs"]
+mod recording_llm;
 #[path = "strategy_e2e/result_serializer.rs"]
 mod result_serializer;
 
+use app::agents::AgentKind;
 use app::agents::events::CollectingSink;
 use app::agents::react_loop::{LoopBudget, UserTier};
 use app::agents::runtime::AgentRequest;
-use app::agents::AgentKind;
 use common::ChatTurnInput;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -41,13 +41,13 @@ struct FormatScenario {
 const SCENARIOS: &[FormatScenario] = &[
     FormatScenario {
         strategy: StrategyKind::Chat,
-        format_skill: "presentation-html",
+        format_skill: "ppt-generation",
         query: "生成一个 PPT 总结 Rust 所有权机制",
         expected_markers: &["slide", "presentation"],
     },
     FormatScenario {
         strategy: StrategyKind::Rag,
-        format_skill: "presentation-html",
+        format_skill: "ppt-generation",
         query: "根据文档，生成一个 PPT 总结其核心观点",
         expected_markers: &["slide", "presentation"],
     },
@@ -59,7 +59,7 @@ const SCENARIOS: &[FormatScenario] = &[
     },
     FormatScenario {
         strategy: StrategyKind::Chat,
-        format_skill: "step-by-step-tutor",
+        format_skill: "teaching",
         query: "教我理解 Rust 生命周期",
         expected_markers: &["Step", "step", "第一步", "## 1.", "## 2.", "##"],
     },
@@ -71,7 +71,7 @@ const SCENARIOS: &[FormatScenario] = &[
     },
     FormatScenario {
         strategy: StrategyKind::Search,
-        format_skill: "presentation-html",
+        format_skill: "ppt-generation",
         query: "生成一个 PPT 总结 Rust 所有权机制",
         expected_markers: &["slide", "presentation"],
     },
@@ -119,8 +119,8 @@ async fn run_format_scenario(
     run_id: &str,
     output_dir: &std::path::Path,
 ) -> result_serializer::TestResult {
-    use result_serializer::*;
     use playwright_helper::*;
+    use result_serializer::*;
 
     let start = std::time::Instant::now();
     let test_name = format!(
@@ -233,7 +233,9 @@ async fn run_format_scenario(
                 components.data_plane.as_ref(),
                 &components.embedding_client,
                 chunks,
-            ).await {
+            )
+            .await
+            {
                 Ok(id) => id,
                 Err(e) => {
                     result.error_message = Some(format!("Ingestion failed: {}", e));
@@ -281,9 +283,12 @@ async fn run_format_scenario(
             executor.run(&strategy, ctx).await
         }
         StrategyKind::Search => {
-            let search_executor: Arc<dyn avrag_search::SearchProvider> = Arc::new(SimpleMockSearchProvider);
+            let search_executor: Arc<dyn avrag_search::SearchProvider> =
+                Arc::new(SimpleMockSearchProvider);
             let llm_for_synth: Arc<dyn avrag_llm::LlmProvider> = recording_arc.clone();
-            let search_synthesizer: Option<Arc<dyn app::agents::strategy::search::SearchAnswerSynthesizer>> = Some(Arc::new(
+            let search_synthesizer: Option<
+                Arc<dyn app::agents::strategy::search::SearchAnswerSynthesizer>,
+            > = Some(Arc::new(
                 app::agents::strategy::search::LlmSearchAnswerSynthesizer {
                     llm: llm_for_synth,
                     llm_client: Some(config.llm_client()),
@@ -330,7 +335,10 @@ async fn run_format_scenario(
 
                         // Assert HTML markers (non-panicking) — any marker matches
                         let html_lower = run_result.answer.to_lowercase();
-                        let has_marker = scenario.expected_markers.iter().any(|m| html_lower.contains(&m.to_lowercase()));
+                        let has_marker = scenario
+                            .expected_markers
+                            .iter()
+                            .any(|m| html_lower.contains(&m.to_lowercase()));
                         if !has_marker {
                             result.error_message = Some(format!(
                                 "HTML missing expected markers: {:?}",
@@ -378,7 +386,13 @@ async fn run_format_scenario(
 
 fn sanitize_filename(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_alphanumeric() || c == ' ' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == ' ' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect::<String>()
         .replace(' ', "_")
         .to_lowercase()
@@ -430,8 +444,7 @@ async fn build_rag_components(config: &E2EConfig) -> Option<RagComponents> {
         multimodal_vector_dim: 1024,
         metric_type: "COSINE".to_string(),
     };
-    let data_plane: Arc<dyn RetrievalDataPlane> =
-        Arc::new(MilvusDataPlane::new(milvus_config));
+    let data_plane: Arc<dyn RetrievalDataPlane> = Arc::new(MilvusDataPlane::new(milvus_config));
 
     // Ensure Milvus collections exist
     if let Err(e) = data_plane.ensure_schema().await {
@@ -439,11 +452,11 @@ async fn build_rag_components(config: &E2EConfig) -> Option<RagComponents> {
         return None;
     }
 
-    let rag_config =
-        avrag_rag_core::RagConfig::new_for_data_plane(embedding_client.clone(), None);
-    let rag_runtime = Arc::new(
-        avrag_rag_core::RagRuntime::with_data_plane(rag_config, data_plane.clone()),
-    );
+    let rag_config = avrag_rag_core::RagConfig::new_for_data_plane(embedding_client.clone(), None);
+    let rag_runtime = Arc::new(avrag_rag_core::RagRuntime::with_data_plane(
+        rag_config,
+        data_plane.clone(),
+    ));
 
     Some(RagComponents {
         rag_runtime,

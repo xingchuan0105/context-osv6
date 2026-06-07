@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::product_e2e::{assertions::*, ChatResponse, DocumentStatus, HttpResponse, TestContext};
+use crate::product_e2e::{ChatResponse, DocumentStatus, HttpResponse, TestContext, assertions::*};
 
 #[tokio::test]
 async fn empty_document_ingests_with_zero_chunks_and_degrades() {
@@ -10,7 +10,10 @@ async fn empty_document_ingests_with_zero_chunks_and_degrades() {
 
     // 1. Upload empty document
     let upload = ctx.upload_document("empty.txt").await.unwrap();
-    assert_eq!(upload.status, 201, "expected HTTP 201 from POST .../documents");
+    assert_eq!(
+        upload.status, 201,
+        "expected HTTP 201 from POST .../documents"
+    );
 
     // 2. Wait for ingestion — should still complete (not hang/fail)
     let status = ctx

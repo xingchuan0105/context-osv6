@@ -165,9 +165,18 @@ pub fn generate_markdown_report(
     let mut md = String::new();
     md.push_str("# E2E Regression Report\n\n");
 
-    let passed = results.iter().filter(|r| r.status == TestStatus::Passed).count();
-    let failed = results.iter().filter(|r| r.status == TestStatus::Failed).count();
-    let skipped = results.iter().filter(|r| r.status == TestStatus::Skipped).count();
+    let passed = results
+        .iter()
+        .filter(|r| r.status == TestStatus::Passed)
+        .count();
+    let failed = results
+        .iter()
+        .filter(|r| r.status == TestStatus::Failed)
+        .count();
+    let skipped = results
+        .iter()
+        .filter(|r| r.status == TestStatus::Skipped)
+        .count();
 
     md.push_str(&format!(
         "**Summary:** {} passed, {} failed, {} skipped\n\n",
@@ -196,7 +205,10 @@ pub fn generate_markdown_report(
         ));
     }
 
-    let failures: Vec<_> = results.iter().filter(|r| r.status == TestStatus::Failed).collect();
+    let failures: Vec<_> = results
+        .iter()
+        .filter(|r| r.status == TestStatus::Failed)
+        .collect();
     if !failures.is_empty() {
         md.push_str("\n## Failures\n\n");
         for f in failures {
@@ -209,7 +221,10 @@ pub fn generate_markdown_report(
         }
     }
 
-    let skips: Vec<_> = results.iter().filter(|r| r.status == TestStatus::Skipped).collect();
+    let skips: Vec<_> = results
+        .iter()
+        .filter(|r| r.status == TestStatus::Skipped)
+        .collect();
     if !skips.is_empty() {
         md.push_str("\n## Skipped\n\n");
         for s in skips {

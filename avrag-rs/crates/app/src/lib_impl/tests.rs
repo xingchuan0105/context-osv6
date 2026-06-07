@@ -5,14 +5,13 @@ mod tests {
         ChatMessage, CreateDocumentRequest, CreateDocumentUploadResponse, CreateNotebookRequest,
         DocumentStatus, Notebook, UpdateDocumentRequest,
     };
-    
-    
+
     use uuid::Uuid;
-    
+
+    use avrag_storage_pg::PgAppRepository;
+    use reqwest::Url;
     use std::sync::Arc;
     use tokio::fs;
-    use reqwest::Url;
-    use avrag_storage_pg::PgAppRepository;
 
     #[test]
     fn build_docscope_metadata_dedupes_known_profile_values() {
@@ -452,9 +451,9 @@ mod tests {
         let mut config = AppConfig::default();
         config.agent_llm.api_key = "test-key".to_string();
         let mut state = AppState::new(config);
-        state.set_agent_service(crate::agents::service::UnifiedAgentService::new(
-            Box::new(ScriptedAgent),
-        ));
+        state.set_agent_service(crate::agents::service::UnifiedAgentService::new(Box::new(
+            ScriptedAgent,
+        )));
         let notebook = state
             .create_notebook(CreateNotebookRequest {
                 name: "chat".to_string(),
@@ -477,7 +476,7 @@ mod tests {
                     messages: Vec::new(),
                     stream: true,
                     language: None,
-                format_hint: None,
+                    format_hint: None,
                 },
                 "req-agent-chat".to_string(),
                 tx,
@@ -508,9 +507,11 @@ mod tests {
             .filter(|event| matches!(event, contracts::chat::ChatEvent::Done { .. }))
             .count();
         assert_eq!(done_events, 1);
-        assert!(matches!(events.last(), Some(contracts::chat::ChatEvent::Done { payload, .. })
+        assert!(
+            matches!(events.last(), Some(contracts::chat::ChatEvent::Done { payload, .. })
             if payload.get("agent_type").and_then(|value| value.as_str()) == Some("chat")
-                && payload.get("answer").and_then(|value| value.as_str()) == Some("agent answer")));
+                && payload.get("answer").and_then(|value| value.as_str()) == Some("agent answer"))
+        );
     }
 
     #[tokio::test]
@@ -518,9 +519,9 @@ mod tests {
         let mut config = AppConfig::default();
         config.agent_llm.api_key = "test-key".to_string();
         let mut state = AppState::new(config);
-        state.set_agent_service(crate::agents::service::UnifiedAgentService::new(
-            Box::new(BufferedOnlyAgent),
-        ));
+        state.set_agent_service(crate::agents::service::UnifiedAgentService::new(Box::new(
+            BufferedOnlyAgent,
+        )));
         let notebook = state
             .create_notebook(CreateNotebookRequest {
                 name: "chat".to_string(),
@@ -543,7 +544,7 @@ mod tests {
                     messages: Vec::new(),
                     stream: true,
                     language: None,
-                format_hint: None,
+                    format_hint: None,
                 },
                 "req-agent-buffered-chat".to_string(),
                 tx,
@@ -579,9 +580,9 @@ mod tests {
     #[tokio::test]
     async fn search_stream_emits_buffered_agent_answer_when_no_delta_arrives() {
         let mut state = AppState::new(AppConfig::default());
-        state.set_agent_service(crate::agents::service::UnifiedAgentService::new(
-            Box::new(BufferedOnlyAgent),
-        ));
+        state.set_agent_service(crate::agents::service::UnifiedAgentService::new(Box::new(
+            BufferedOnlyAgent,
+        )));
         let notebook = state
             .create_notebook(CreateNotebookRequest {
                 name: "search".to_string(),
@@ -604,7 +605,7 @@ mod tests {
                     messages: Vec::new(),
                     stream: true,
                     language: None,
-                format_hint: None,
+                    format_hint: None,
                 },
                 "req-agent-buffered-search".to_string(),
                 tx,
@@ -761,8 +762,7 @@ mod tests {
             return;
         };
         let body = b"hello world".to_vec();
-        let (notebook, upload) =
-            create_upload(&state, "valid-upload.txt", body.len() as u64).await;
+        let (notebook, upload) = create_upload(&state, "valid-upload.txt", body.len() as u64).await;
         state
             .put_uploaded_document(&upload.document_id, body)
             .await

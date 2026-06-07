@@ -208,7 +208,10 @@ mod tests {
         let provider = FakeSearchProvider;
         let ctx = ExecutionContext::new(Some(&provider));
         let result = skill
-            .execute(&serde_json::json!({"query": "news", "vertical": "news"}), &ctx)
+            .execute(
+                &serde_json::json!({"query": "news", "vertical": "news"}),
+                &ctx,
+            )
             .await;
         assert_eq!(result.status, ToolStatus::Ok);
     }

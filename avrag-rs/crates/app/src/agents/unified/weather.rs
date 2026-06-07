@@ -28,10 +28,7 @@ pub struct WeatherData {
 ///
 /// `location` can be a city name (e.g. "Beijing") or "lat,lon" coordinates.
 /// `units` should be "metric" (Celsius) or "imperial" (Fahrenheit).
-pub async fn query_weather(
-    location: &str,
-    units: &str,
-) -> Result<WeatherData, AppError> {
+pub async fn query_weather(location: &str, units: &str) -> Result<WeatherData, AppError> {
     let api_key = std::env::var("OPENWEATHER_API_KEY")
         .map_err(|_| AppError::internal("OPENWEATHER_API_KEY is not set"))?;
 
@@ -39,11 +36,18 @@ pub async fn query_weather(
     let url = if is_coords {
         let parts: Vec<&str> = location.split(',').map(|s| s.trim()).collect();
         if parts.len() != 2 {
-            return Err(AppError::validation("invalid_coords", "Expected 'lat,lon' format"));
+            return Err(AppError::validation(
+                "invalid_coords",
+                "Expected 'lat,lon' format",
+            ));
         }
         format!(
             "{}/weather?lat={}&lon={}&units={}&appid={}",
-            openweather_base(), parts[0], parts[1], units, api_key
+            openweather_base(),
+            parts[0],
+            parts[1],
+            units,
+            api_key
         )
     } else {
         format!(
@@ -66,7 +70,9 @@ pub async fn query_weather(
     if !resp.status().is_success() {
         let status = resp.status().as_u16();
         let body = resp.text().await.unwrap_or_default();
-        return Err(AppError::internal(format!("weather API returned {status}: {body}")));
+        return Err(AppError::internal(format!(
+            "weather API returned {status}: {body}"
+        )));
     }
 
     let raw: OpenWeatherResponse = resp
@@ -139,6 +145,9 @@ struct OpenWeatherWind {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_urlencoding_space() {
@@ -168,25 +177,27 @@ mod tests {
     }
 
     async fn serve_mock_response(listener: tokio::net::TcpListener, response_body: String) {
-        let (mut socket, _) = listener
-            .accept()
-            .await
-            .expect("mock server accept");
+        let socket_res = tokio::time::timeout(std::time::Duration::from_secs(5), listener.accept()).await;
+        let (mut socket, _) = match socket_res {
+            Ok(Ok(s)) => s,
+            _ => return,
+        };
 
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             response_body.len(),
             response_body
         );
-        tokio::io::AsyncWriteExt::write_all(&mut socket, response.as_bytes())
-            .await
-            .expect("mock server write");
+        let _ = tokio::io::AsyncWriteExt::write_all(&mut socket, response.as_bytes()).await;
     }
 
     #[tokio::test]
     async fn test_query_weather_city_name() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         let api_key = "test-api-key-123";
-        unsafe { std::env::set_var("OPENWEATHER_API_KEY", api_key); }
+        unsafe {
+            std::env::set_var("OPENWEATHER_API_KEY", api_key);
+        }
 
         let body = serde_json::json!({
             "name": "Beijing",
@@ -197,7 +208,9 @@ mod tests {
         .to_string();
 
         let (listener, port) = mock_server_bind().await;
-        unsafe { std::env::set_var("OPENWEATHER_BASE", format!("http://127.0.0.1:{}", port)); }
+        unsafe {
+            std::env::set_var("OPENWEATHER_BASE", format!("http://127.0.0.1:{}", port));
+        }
 
         let server = serve_mock_response(listener, body);
         let query = query_weather("Beijing", "metric");
@@ -217,8 +230,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_query_weather_coords() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         let api_key = "test-api-key-456";
-        unsafe { std::env::set_var("OPENWEATHER_API_KEY", api_key); }
+        unsafe {
+            std::env::set_var("OPENWEATHER_API_KEY", api_key);
+        }
 
         let body = serde_json::json!({
             "name": "Tokyo",
@@ -229,7 +245,9 @@ mod tests {
         .to_string();
 
         let (listener, port) = mock_server_bind().await;
-        unsafe { std::env::set_var("OPENWEATHER_BASE", format!("http://127.0.0.1:{}", port)); }
+        unsafe {
+            std::env::set_var("OPENWEATHER_BASE", format!("http://127.0.0.1:{}", port));
+        }
 
         let server = serve_mock_response(listener, body);
         let query = query_weather("35.6762,139.6503", "imperial");
@@ -244,20 +262,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_query_weather_api_error() {
-        unsafe { std::env::set_var("OPENWEATHER_API_KEY", "test-key"); }
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe {
+            std::env::set_var("OPENWEATHER_API_KEY", "test-key");
+        }
 
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
-        unsafe { std::env::set_var("OPENWEATHER_BASE", format!("http://127.0.0.1:{}", port)); }
+        unsafe {
+            std::env::set_var("OPENWEATHER_BASE", format!("http://127.0.0.1:{}", port));
+        }
 
         let server = async {
-            let (mut socket, _) = listener.accept().await.unwrap();
-            let response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-            tokio::io::AsyncWriteExt::write_all(&mut socket, response.as_bytes())
-                .await
-                .unwrap();
+            let socket_res = tokio::time::timeout(std::time::Duration::from_secs(5), listener.accept()).await;
+            if let Ok(Ok((mut socket, _))) = socket_res {
+                let response =
+                    "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+                let _ = tokio::io::AsyncWriteExt::write_all(&mut socket, response.as_bytes()).await;
+            }
         };
 
         let query = query_weather("Nowhere", "metric");

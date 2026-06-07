@@ -1,16 +1,13 @@
 use avrag_storage_pg::{
-    DocumentDeletionOutcome,
-    DocumentUploadMutationOutcome, DocumentUploadQueueOutcome,
+    DocumentDeletionOutcome, DocumentUploadMutationOutcome, DocumentUploadQueueOutcome,
     ObjectStoreHeadError,
 };
 use common::{
-    AppError, CreateDocumentRequest, CreateDocumentUploadResponse, Document, DocumentContentResponse, DocumentStatus, ParsedPreviewResponse, StatusOnlyResponse,
-    UpdateDocumentRequest, new_id,
-    now_rfc3339,
+    AppError, CreateDocumentRequest, CreateDocumentUploadResponse, Document,
+    DocumentContentResponse, DocumentStatus, ParsedPreviewResponse, StatusOnlyResponse,
+    UpdateDocumentRequest, new_id, now_rfc3339,
 };
-use ingestion::{
-    AuditAction, IngestDocumentPayload, build_ingest_task, task_audit,
-};
+use ingestion::{AuditAction, IngestDocumentPayload, build_ingest_task, task_audit};
 use tokio::time::{Duration, sleep};
 use tracing::info;
 use uuid::Uuid;
@@ -288,7 +285,11 @@ impl AppState {
         stream: S,
     ) -> Result<StatusOnlyResponse, AppError>
     where
-        S: futures::Stream<Item = std::result::Result<bytes::Bytes, E>> + Send + Sync + Unpin + 'static,
+        S: futures::Stream<Item = std::result::Result<bytes::Bytes, E>>
+            + Send
+            + Sync
+            + Unpin
+            + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
         if let Some(pg) = &self.pg {
@@ -341,7 +342,9 @@ impl AppState {
 
             let object_metadata = match self.object_store.head(&seed.object_path).await {
                 Ok(metadata) => metadata,
-                Err(ObjectStoreHeadError::NotFound { .. } | ObjectStoreHeadError::NotFile { .. }) => {
+                Err(
+                    ObjectStoreHeadError::NotFound { .. } | ObjectStoreHeadError::NotFile { .. },
+                ) => {
                     let detail = format!("object missing or invalid for {}", seed.object_path);
                     handle_upload_invalid_outcome(
                         pg.set_document_upload_invalid(&self.auth, document_uuid, &detail)
@@ -669,14 +672,20 @@ impl AppState {
                 .map_err(map_pg_error)?
                 .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
             if document_is_deleting_or_deleted(&seed.status) {
-                return Err(AppError::not_found("document_not_found", "document not found"));
+                return Err(AppError::not_found(
+                    "document_not_found",
+                    "document not found",
+                ));
             }
             let updated = pg
                 .set_document_status(&self.auth, document_id, DocumentStatus::Queued)
                 .await
                 .map_err(map_pg_error)?;
             if !updated {
-                return Err(AppError::not_found("document_not_found", "document not found"));
+                return Err(AppError::not_found(
+                    "document_not_found",
+                    "document not found",
+                ));
             }
             let notebook_id = Uuid::parse_str(&seed.notebook_id).ok();
             let metadata = serde_json::json!({
@@ -803,7 +812,6 @@ impl AppState {
             summary: stored.summary.clone(),
         })
     }
-
 }
 
 fn document_upload_status_is_mutable_for_app(status: &DocumentStatus) -> bool {
@@ -844,7 +852,6 @@ fn upload_status_conflict_error(status: &DocumentStatus) -> AppError {
         ),
     )
 }
-
 
 fn handle_upload_invalid_outcome(outcome: DocumentUploadMutationOutcome) -> Result<(), AppError> {
     match outcome {

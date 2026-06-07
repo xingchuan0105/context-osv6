@@ -24,13 +24,13 @@ test.describe("Format Output Skill Availability", () => {
     await chat.waitForAnswer();
 
     // Availability: response contains HTML tags
-    const raw = await chat.lastAnswerRawText();
-    expect(raw.toLowerCase()).toContain("<html");
+    const html = await chat.lastAnswerHtml();
+    expect(html.toLowerCase()).toContain("<html");
 
     // Quality judge (non-blocking report)
     if (process.env.RUN_QUALITY_JUDGE) {
       const { judgeAnswer } = await import("../../utils/judge");
-      const result = await judgeAnswer(raw, entry);
+      const result = await judgeAnswer(html, entry);
       test.info().attach("judge-result", { body: JSON.stringify(result) });
     }
   });

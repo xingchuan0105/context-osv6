@@ -1,6 +1,6 @@
 //! P0-3: Open query returns Search citation with source_type == "web".
 
-use crate::product_e2e::{assertions::*, ChatResponse, HttpResponse, TestContext};
+use crate::product_e2e::{ChatResponse, HttpResponse, TestContext, assertions::*};
 
 #[tokio::test]
 async fn open_query_returns_web_citation() {

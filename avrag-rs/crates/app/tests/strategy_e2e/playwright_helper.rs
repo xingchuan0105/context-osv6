@@ -144,7 +144,9 @@ async fn run_screenshot(
     let status = cmd.status().await?;
 
     let result = if !status.success() {
-        let diag_text = tokio::fs::read_to_string(&diagnostics_path).await.unwrap_or_default();
+        let diag_text = tokio::fs::read_to_string(&diagnostics_path)
+            .await
+            .unwrap_or_default();
         Err(PlaywrightError::ScreenshotFailed(format!(
             "Node script exited with failure. diagnostics: {}",
             diag_text
@@ -152,7 +154,9 @@ async fn run_screenshot(
     } else {
         let png_bytes = tokio::fs::read(&output_path).await?;
         let diagnostics: RenderDiagnostics = {
-            let text = tokio::fs::read_to_string(&diagnostics_path).await.unwrap_or_default();
+            let text = tokio::fs::read_to_string(&diagnostics_path)
+                .await
+                .unwrap_or_default();
             serde_json::from_str(&text).unwrap_or_default()
         };
 
@@ -193,9 +197,7 @@ pub async fn screenshot_presentation(
     run_screenshot(html_content, viewport, true).await
 }
 
-pub async fn screenshot_webpage(
-    html_content: &str,
-) -> Result<ScreenshotArtifact, PlaywrightError> {
+pub async fn screenshot_webpage(html_content: &str) -> Result<ScreenshotArtifact, PlaywrightError> {
     let viewport = ViewportConfig {
         width: 1280,
         height: 720,

@@ -8,6 +8,7 @@ pub mod calculator;
 pub mod code_interpreter;
 pub mod conversation_history;
 pub mod weather_query;
+pub mod web_fetch;
 pub mod web_search;
 
 use super::SkillRegistry;
@@ -19,5 +20,6 @@ pub fn register_all(registry: &mut SkillRegistry) {
     registry.register(Box::new(conversation_history::ConversationHistoryLoad));
     registry.register(Box::new(conversation_history::ConversationHistoryTag));
     registry.register(Box::new(weather_query::WeatherQuerySkill));
+    registry.register(Box::new(web_fetch::WebFetchSkill));
     registry.register(Box::new(web_search::WebSearchSkill));
 }

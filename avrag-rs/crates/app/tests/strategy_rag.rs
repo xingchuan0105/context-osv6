@@ -8,19 +8,19 @@
 //! 2. Progressive disclosure (retrieval-planner skill body + tool catalog + format skills)
 //! 3. Replan optimization (Evaluate → ExecuteRetrieve skips Plan LLM call)
 
+#[path = "strategy_e2e/assertions.rs"]
+mod assertions;
 #[path = "strategy_e2e/config.rs"]
 mod config;
 #[path = "strategy_e2e/recording_llm.rs"]
 mod recording_llm;
-#[path = "strategy_e2e/assertions.rs"]
-mod assertions;
 
+use app::agents::AgentKind;
 use app::agents::events::CollectingSink;
 use app::agents::react_loop::{LoopBudget, UserTier};
 use app::agents::runtime::AgentRequest;
-use app::agents::strategy::rag::{RagContext, RagStrategy};
 use app::agents::strategy::Strategy;
-use app::agents::AgentKind;
+use app::agents::strategy::rag::{RagContext, RagStrategy};
 use common::ChatTurnInput;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -43,7 +43,8 @@ fn rag_request(query: &str, doc_scope: Vec<String>) -> AgentRequest {
             .map(|id| common::SummaryMetadata {
                 doc_id: id.clone(),
                 filename: "antifragile.pdf".to_string(),
-                docname: "Antifragile: Things That Gain from Disorder by Nassim Nicholas Taleb".to_string(),
+                docname: "Antifragile: Things That Gain from Disorder by Nassim Nicholas Taleb"
+                    .to_string(),
                 language: "en".to_string(),
                 domain: common::Domain::Business,
                 genre: common::Genre::Book,
@@ -131,14 +132,13 @@ fn build_staging_rag_components(config: &E2EConfig) -> Option<RagStagingComponen
         multimodal_vector_dim: 1024,
         metric_type: "COSINE".to_string(),
     };
-    let data_plane: Arc<dyn RetrievalDataPlane> =
-        Arc::new(MilvusDataPlane::new(milvus_config));
+    let data_plane: Arc<dyn RetrievalDataPlane> = Arc::new(MilvusDataPlane::new(milvus_config));
 
-    let rag_config =
-        avrag_rag_core::RagConfig::new_for_data_plane(embedding_client.clone(), None);
-    let rag_runtime = Arc::new(
-        avrag_rag_core::RagRuntime::with_data_plane(rag_config, data_plane.clone()),
-    );
+    let rag_config = avrag_rag_core::RagConfig::new_for_data_plane(embedding_client.clone(), None);
+    let rag_runtime = Arc::new(avrag_rag_core::RagRuntime::with_data_plane(
+        rag_config,
+        data_plane.clone(),
+    ));
 
     Some(RagStagingComponents {
         rag_runtime,
@@ -162,7 +162,9 @@ async fn ingest_test_document(
     use avrag_retrieval_data_plane::{DocumentIndexBatch, TextChunkIndexRecord};
 
     let doc_id = uuid::Uuid::new_v4();
-    let org_id = avrag_auth::OrgId::from(uuid::Uuid::parse_str("00000000-0000-0000-0000-000000000001")?);
+    let org_id = avrag_auth::OrgId::from(uuid::Uuid::parse_str(
+        "00000000-0000-0000-0000-000000000001",
+    )?);
     let parse_run_id = uuid::Uuid::new_v4();
 
     // Generate embeddings
@@ -259,7 +261,10 @@ async fn rag_single_pass_sufficient_state_machine() {
     let result = executor.run(&strategy, ctx).await.unwrap();
 
     let schema = RagStrategy::schema();
-    let history = result.state_history.as_ref().expect("state_history missing");
+    let history = result
+        .state_history
+        .as_ref()
+        .expect("state_history missing");
     assertions::assert_valid_transitions(&schema, history);
     assertions::assert_state_kinds(history);
 
@@ -285,7 +290,10 @@ async fn rag_single_pass_sufficient_state_machine() {
     } else {
         // Degrade path — verify we degraded gracefully (not a crash)
         assert!(
-            matches!(result.final_decision, Some(app::agents::runtime::FinalDecision::Degraded { .. })),
+            matches!(
+                result.final_decision,
+                Some(app::agents::runtime::FinalDecision::Degraded { .. })
+            ),
             "Expected Degraded when no data in collection, got {:?}",
             result.final_decision
         );
@@ -303,9 +311,15 @@ async fn rag_single_pass_sufficient_state_machine() {
     assertions::assert_prompt_contains_skill(&calls[0].system_prompt, "retrieval-planner");
     assertions::assert_prompt_has_tool_catalog(&calls[0].system_prompt, "rag");
 
-    // Evaluate: retrieval-coverage-eval skill (may be present if evaluator ran)
-    if let Some(eval_call) = calls.iter().find(|c| c.system_prompt.contains("retrieval-coverage-eval")) {
-        assertions::assert_prompt_contains_skill(&eval_call.system_prompt, "retrieval-coverage-eval");
+    // Evaluate: rag-eval skill (may be present if evaluator ran)
+    if let Some(eval_call) = calls
+        .iter()
+        .find(|c| c.system_prompt.contains("rag-eval"))
+    {
+        assertions::assert_prompt_contains_skill(
+            &eval_call.system_prompt,
+            "rag-eval",
+        );
     }
 
     // Budget: within max (4)
@@ -370,14 +384,17 @@ async fn rag_replan_insufficient_state_machine() {
     let result = executor.run(&strategy, ctx).await.unwrap();
 
     let schema = RagStrategy::schema();
-    let history = result.state_history.as_ref().expect("state_history missing");
+    let history = result
+        .state_history
+        .as_ref()
+        .expect("state_history missing");
     assertions::assert_valid_transitions(&schema, history);
     assertions::assert_state_kinds(history);
 
     // Check if replan occurred
-    let has_re_execute = history.windows(2).any(|w| {
-        w[0].state_id == "evaluate" && w[1].state_id == "execute_retrieve"
-    });
+    let has_re_execute = history
+        .windows(2)
+        .any(|w| w[0].state_id == "evaluate" && w[1].state_id == "execute_retrieve");
 
     if has_re_execute {
         // KEY v5 ASSERTION: replan does NOT re-invoke Plan LLM.
@@ -465,7 +482,10 @@ async fn rag_html_format_skill_injected() {
     let result = executor.run(&strategy, ctx).await.unwrap();
 
     let schema = RagStrategy::schema();
-    let history = result.state_history.as_ref().expect("state_history missing");
+    let history = result
+        .state_history
+        .as_ref()
+        .expect("state_history missing");
     assertions::assert_valid_transitions(&schema, history);
     assertions::assert_state_kinds(history);
 
@@ -585,9 +605,10 @@ async fn rag_content_guard_redacts_injection() {
 
     // Degrade trace should contain guard or untrusted_input records
     if !result.degrade_trace.is_empty() {
-        let has_guard_trace = result.degrade_trace.iter().any(|d|
-            d.stage.contains("input_guard") || d.stage.contains("untrusted_input")
-        );
+        let has_guard_trace = result
+            .degrade_trace
+            .iter()
+            .any(|d| d.stage.contains("input_guard") || d.stage.contains("untrusted_input"));
         assert!(
             has_guard_trace,
             "Expected content_guard or untrusted_input trace in degrade_trace, got {:?}",
@@ -666,7 +687,10 @@ async fn rag_empty_document_degrades_gracefully() {
         Some(app::agents::runtime::FinalDecision::Synthesized) => {
             // Real LLM may mention the retrieved docs in a disclaimer;
             // the only invariant is that the system did not crash.
-            assert!(!result.answer.is_empty(), "Synthesized answer should not be empty");
+            assert!(
+                !result.answer.is_empty(),
+                "Synthesized answer should not be empty"
+            );
         }
         other => panic!(
             "Expected Synthesized or Degraded when document is irrelevant to query, got {:?}",
@@ -676,7 +700,10 @@ async fn rag_empty_document_degrades_gracefully() {
 
     // State history should be valid even on degrade path.
     let schema = RagStrategy::schema();
-    let history = result.state_history.as_ref().expect("state_history missing");
+    let history = result
+        .state_history
+        .as_ref()
+        .expect("state_history missing");
     if history.len() >= 2 {
         assertions::assert_valid_transitions(&schema, history);
     }

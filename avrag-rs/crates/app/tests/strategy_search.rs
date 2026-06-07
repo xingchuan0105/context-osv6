@@ -18,21 +18,21 @@
 //! If your key is on the Free tier, running multiple tests concurrently will
 //! trigger HTTP 429. Use `--test-threads=1` for stable Free-tier runs.
 
+#[path = "strategy_e2e/assertions.rs"]
+mod assertions;
 #[path = "strategy_e2e/config.rs"]
 mod config;
 #[path = "strategy_e2e/recording_llm.rs"]
 mod recording_llm;
-#[path = "strategy_e2e/assertions.rs"]
-mod assertions;
 
+use app::agents::AgentKind;
 use app::agents::events::CollectingSink;
 use app::agents::react_loop::{LoopBudget, UserTier};
 use app::agents::runtime::AgentRequest;
+use app::agents::strategy::Strategy;
 use app::agents::strategy::search::{
     LlmSearchAnswerSynthesizer, SearchAnswerSynthesizer, SearchContext, SearchStrategy,
 };
-use app::agents::strategy::Strategy;
-use app::agents::AgentKind;
 use common::ChatTurnInput;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -121,14 +121,12 @@ impl MockSearchProvider {
                         },
                     ]
                 } else {
-                    vec![
-                        avrag_search::SearchResult {
-                            title: "Search Results".to_string(),
-                            url: "https://example.com".to_string(),
-                            snippet: format!("Information related to: {}", query),
-                            citation_index: Some(1),
-                        },
-                    ]
+                    vec![avrag_search::SearchResult {
+                        title: "Search Results".to_string(),
+                        url: "https://example.com".to_string(),
+                        snippet: format!("Information related to: {}", query),
+                        citation_index: Some(1),
+                    }]
                 }
             }
         }
@@ -325,19 +323,21 @@ async fn search_single_pass_state_machine() {
         );
     }
     let llm_client = config.llm_client();
-    let brave_api_key = config.brave_api_key.as_deref().expect("E2E_BRAVE_API_KEY not set");
+    let brave_api_key = config
+        .brave_api_key
+        .as_deref()
+        .expect("E2E_BRAVE_API_KEY not set");
 
     let recording = RecordingLlmProvider::new(Arc::new(llm_client.clone()));
     let recording_arc = Arc::new(recording);
 
     let search_executor = build_search_executor(brave_api_key);
     let llm: Arc<dyn avrag_llm::LlmProvider> = recording_arc.clone();
-    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> = Some(Arc::new(
-        LlmSearchAnswerSynthesizer {
+    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> =
+        Some(Arc::new(LlmSearchAnswerSynthesizer {
             llm,
             llm_client: Some(llm_client.clone()),
-        },
-    ));
+        }));
 
     let ctx = SearchContext::from_request(
         search_request("What is the latest Rust release?"),
@@ -361,7 +361,10 @@ async fn search_single_pass_state_machine() {
 
     // --- State machine assertions ---
     let schema = SearchStrategy::schema();
-    let history = result.state_history.as_ref().expect("state_history missing");
+    let history = result
+        .state_history
+        .as_ref()
+        .expect("state_history missing");
     assertions::assert_valid_transitions(&schema, history);
     assertions::assert_state_kinds(history);
 
@@ -396,41 +399,44 @@ async fn search_single_pass_state_machine() {
         calls.len()
     );
 
-    // Decompose (Plan) call: web-search-planner skill + web_search tool catalog
-    assertions::assert_prompt_contains_skill(&calls[0].system_prompt, "web-search-planner");
+    // Decompose (Plan) call: search-plan skill + web_search tool catalog
+    assertions::assert_prompt_contains_skill(&calls[0].system_prompt, "search-plan");
     assertions::assert_prompt_has_tool_catalog(&calls[0].system_prompt, "search");
 
     // Evaluate call: may be present (LLM eval) or absent (code-based eval for sufficient results)
-    if let Some(eval_call) = calls
-        .iter()
-        .find(|c| {
-            c.user_messages
-                .iter()
-                .any(|m| m.content.contains("evaluate") || m.content.contains("Evaluate"))
-        })
-    {
-        assertions::assert_prompt_contains_skill(&eval_call.system_prompt, "web-search-coverage-eval");
+    if let Some(eval_call) = calls.iter().find(|c| {
+        c.user_messages
+            .iter()
+            .any(|m| m.content.contains("evaluate") || m.content.contains("Evaluate"))
+    }) {
+        assertions::assert_prompt_contains_skill(&eval_call.system_prompt, "search-eval");
     }
 
     // Answer call: only when final decision is Synthesized (Degraded skips synthesis).
     // Search evaluator may trigger replan before Answer, so the last call is not
     // guaranteed to be Answer. Find any call that carries the answer skill body.
-    if matches!(result.final_decision, Some(app::agents::runtime::FinalDecision::Synthesized)) {
-        let answer_calls: Vec<_> = calls.iter().filter(|c| {
-            let registry = app::agents::progressive::PromptRegistry::standard_cached();
-            let skill_body = registry
-                .skill("web-grounded-answer")
-                .map(|s| s.system_prompt().to_string())
-                .unwrap_or_default();
-            c.system_prompt.contains(&skill_body)
-        }).collect();
+    if matches!(
+        result.final_decision,
+        Some(app::agents::runtime::FinalDecision::Synthesized)
+    ) {
+        let answer_calls: Vec<_> = calls
+            .iter()
+            .filter(|c| {
+                let registry = app::agents::progressive::PromptRegistry::standard_cached();
+                let skill_body = registry
+                    .skill("search-answer")
+                    .map(|s| s.system_prompt().to_string())
+                    .unwrap_or_default();
+                c.system_prompt.contains(&skill_body)
+            })
+            .collect();
         assert!(
             !answer_calls.is_empty(),
-            "No LLM call contains web-grounded-answer skill body. Calls: {}",
+            "No LLM call contains search-answer skill body. Calls: {}",
             calls.len()
         );
         let answer_call = answer_calls.last().unwrap();
-        assertions::assert_prompt_contains_skill(&answer_call.system_prompt, "web-grounded-answer");
+        assertions::assert_prompt_contains_skill(&answer_call.system_prompt, "search-answer");
         assertions::assert_prompt_has_format_skills(&answer_call.system_prompt);
     }
 
@@ -455,7 +461,10 @@ async fn search_vertical_escalation_state_machine() {
         );
     }
     let llm_client = config.llm_client();
-    let _brave_api_key = config.brave_api_key.as_deref().expect("E2E_BRAVE_API_KEY not set");
+    let _brave_api_key = config
+        .brave_api_key
+        .as_deref()
+        .expect("E2E_BRAVE_API_KEY not set");
 
     let recording = RecordingLlmProvider::new(Arc::new(llm_client.clone()));
     let recording_arc = Arc::new(recording);
@@ -463,15 +472,15 @@ async fn search_vertical_escalation_state_machine() {
     // Use MockSearchProvider wrapped with FirstCallEmptySearchProvider:
     // first batch returns empty (forces vertical escalation),
     // second batch delegates to Mock which returns news-flavoured results.
-    let search_executor: Arc<dyn avrag_search::SearchProvider> =
-        Arc::new(FirstCallEmptySearchProvider::new(Arc::new(MockSearchProvider)));
+    let search_executor: Arc<dyn avrag_search::SearchProvider> = Arc::new(
+        FirstCallEmptySearchProvider::new(Arc::new(MockSearchProvider)),
+    );
     let llm: Arc<dyn avrag_llm::LlmProvider> = recording_arc.clone();
-    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> = Some(Arc::new(
-        LlmSearchAnswerSynthesizer {
+    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> =
+        Some(Arc::new(LlmSearchAnswerSynthesizer {
             llm,
             llm_client: Some(llm_client.clone()),
-        },
-    ));
+        }));
 
     // Time-sensitive query more likely to trigger vertical escalation
     let ctx = SearchContext::from_request(
@@ -496,7 +505,10 @@ async fn search_vertical_escalation_state_machine() {
 
     // --- State machine assertions ---
     let schema = SearchStrategy::schema();
-    let history = result.state_history.as_ref().expect("state_history missing");
+    let history = result
+        .state_history
+        .as_ref()
+        .expect("state_history missing");
     assertions::assert_valid_transitions(&schema, history);
     assertions::assert_state_kinds(history);
 
@@ -556,7 +568,10 @@ async fn search_vertical_escalation_state_machine() {
 async fn search_html_format_skill_injected() {
     let config = E2EConfig::from_env().expect("E2E config not set");
     if let Err(missing) = config.validate_for_chat() {
-        panic!("Search format E2E missing environment variables: {}", missing.join(", "));
+        panic!(
+            "Search format E2E missing environment variables: {}",
+            missing.join(", ")
+        );
     }
     let llm_client = config.llm_client();
     let recording = RecordingLlmProvider::new(Arc::new(llm_client.clone()));
@@ -564,12 +579,11 @@ async fn search_html_format_skill_injected() {
 
     let search_executor: Arc<dyn avrag_search::SearchProvider> = Arc::new(MockSearchProvider);
     let llm: Arc<dyn avrag_llm::LlmProvider> = recording_arc.clone();
-    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> = Some(Arc::new(
-        LlmSearchAnswerSynthesizer {
+    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> =
+        Some(Arc::new(LlmSearchAnswerSynthesizer {
             llm,
             llm_client: Some(llm_client.clone()),
-        },
-    ));
+        }));
 
     let mut request = search_request("What is the latest Rust release?");
     request.format_hint = Some("html".to_string());
@@ -607,16 +621,22 @@ async fn search_html_format_skill_injected() {
     );
 
     // Real LLM may not emit DebugTrace events; verify via RecordingLlmProvider instead.
-    if matches!(result.final_decision, Some(app::agents::runtime::FinalDecision::Synthesized)) {
+    if matches!(
+        result.final_decision,
+        Some(app::agents::runtime::FinalDecision::Synthesized)
+    ) {
         let all_calls = recording_arc.calls();
-        let answer_calls: Vec<_> = all_calls.iter().filter(|c| {
-            let registry = app::agents::progressive::PromptRegistry::standard_cached();
-            let skill_body = registry
-                .skill("html-renderer")
-                .map(|s| s.system_prompt().to_string())
-                .unwrap_or_default();
-            c.system_prompt.contains(&skill_body)
-        }).collect();
+        let answer_calls: Vec<_> = all_calls
+            .iter()
+            .filter(|c| {
+                let registry = app::agents::progressive::PromptRegistry::standard_cached();
+                let skill_body = registry
+                    .skill("html-renderer")
+                    .map(|s| s.system_prompt().to_string())
+                    .unwrap_or_default();
+                c.system_prompt.contains(&skill_body)
+            })
+            .collect();
         assert!(
             !answer_calls.is_empty(),
             "No LLM call contains html-renderer skill body"
@@ -625,13 +645,16 @@ async fn search_html_format_skill_injected() {
 }
 
 /// Test: Search with PPT format hint — answer prompt contains the FULL BODY
-/// of the presentation-html skill.
+/// of the ppt-generation skill.
 #[tokio::test]
 #[ignore = "requires staging: E2E_LLM_*"]
 async fn search_ppt_format_skill_injected() {
     let config = E2EConfig::from_env().expect("E2E config not set");
     if let Err(missing) = config.validate_for_chat() {
-        panic!("Search format E2E missing environment variables: {}", missing.join(", "));
+        panic!(
+            "Search format E2E missing environment variables: {}",
+            missing.join(", ")
+        );
     }
     let llm_client = config.llm_client();
     let recording = RecordingLlmProvider::new(Arc::new(llm_client.clone()));
@@ -639,12 +662,11 @@ async fn search_ppt_format_skill_injected() {
 
     let search_executor: Arc<dyn avrag_search::SearchProvider> = Arc::new(MockSearchProvider);
     let llm: Arc<dyn avrag_llm::LlmProvider> = recording_arc.clone();
-    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> = Some(Arc::new(
-        LlmSearchAnswerSynthesizer {
+    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> =
+        Some(Arc::new(LlmSearchAnswerSynthesizer {
             llm,
             llm_client: Some(llm_client.clone()),
-        },
-    ));
+        }));
 
     let mut request = search_request("Summarize AI news in a presentation");
     request.format_hint = Some("ppt".to_string());
@@ -684,13 +706,16 @@ async fn search_ppt_format_skill_injected() {
 }
 
 /// Test: Search with teaching style query — answer prompt contains the FULL BODY
-/// of the step-by-step-tutor skill (detected from query keywords).
+/// of the teaching skill (detected from query keywords).
 #[tokio::test]
 #[ignore = "requires staging: E2E_LLM_*"]
 async fn search_teach_format_skill_injected() {
     let config = E2EConfig::from_env().expect("E2E config not set");
     if let Err(missing) = config.validate_for_chat() {
-        panic!("Search format E2E missing environment variables: {}", missing.join(", "));
+        panic!(
+            "Search format E2E missing environment variables: {}",
+            missing.join(", ")
+        );
     }
     let llm_client = config.llm_client();
     let recording = RecordingLlmProvider::new(Arc::new(llm_client.clone()));
@@ -698,14 +723,13 @@ async fn search_teach_format_skill_injected() {
 
     let search_executor: Arc<dyn avrag_search::SearchProvider> = Arc::new(MockSearchProvider);
     let llm: Arc<dyn avrag_llm::LlmProvider> = recording_arc.clone();
-    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> = Some(Arc::new(
-        LlmSearchAnswerSynthesizer {
+    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> =
+        Some(Arc::new(LlmSearchAnswerSynthesizer {
             llm,
             llm_client: Some(llm_client.clone()),
-        },
-    ));
+        }));
 
-    // Query contains "teach" → detect_format_skills returns "step-by-step-tutor"
+    // Query contains "teach" → detect_format_skills returns "teaching"
     let request = search_request("Teach me about Rust programming");
 
     let sink = CollectingSink::new();
@@ -752,20 +776,23 @@ async fn search_teach_format_skill_injected() {
 async fn search_content_guard_redacts_injection() {
     let config = E2EConfig::from_env().expect("E2E config not set");
     if let Err(missing) = config.validate_for_chat() {
-        panic!("Search security E2E missing environment variables: {}", missing.join(", "));
+        panic!(
+            "Search security E2E missing environment variables: {}",
+            missing.join(", ")
+        );
     }
     let llm_client = config.llm_client();
     let recording = RecordingLlmProvider::new(Arc::new(llm_client.clone()));
     let recording_arc = Arc::new(recording);
 
-    let search_executor: Arc<dyn avrag_search::SearchProvider> = Arc::new(InjectionMockSearchProvider);
+    let search_executor: Arc<dyn avrag_search::SearchProvider> =
+        Arc::new(InjectionMockSearchProvider);
     let llm: Arc<dyn avrag_llm::LlmProvider> = recording_arc.clone();
-    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> = Some(Arc::new(
-        LlmSearchAnswerSynthesizer {
+    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> =
+        Some(Arc::new(LlmSearchAnswerSynthesizer {
             llm,
             llm_client: Some(llm_client.clone()),
-        },
-    ));
+        }));
 
     let mut request = search_request("What is Rust programming language?");
     request.guard_pipeline = Some(Arc::new(avrag_guardrails::GuardPipeline::new()));
@@ -813,12 +840,14 @@ async fn search_content_guard_redacts_injection() {
     // With real LLM the run may degrade for budget_exhausted before guard runs;
     // accept that as long as the injection payload never reached the answer.
     if !result.degrade_trace.is_empty() {
-        let has_guard_trace = result.degrade_trace.iter().any(|d|
-            d.stage.contains("input_guard") || d.stage.contains("untrusted_input")
-        );
-        let is_budget_exhausted = result.degrade_trace.iter().any(|d|
-            d.reason.contains("budget_exhausted")
-        );
+        let has_guard_trace = result
+            .degrade_trace
+            .iter()
+            .any(|d| d.stage.contains("input_guard") || d.stage.contains("untrusted_input"));
+        let is_budget_exhausted = result
+            .degrade_trace
+            .iter()
+            .any(|d| d.reason.contains("budget_exhausted"));
         assert!(
             has_guard_trace || is_budget_exhausted,
             "Expected content_guard/untrusted_input or budget_exhausted trace in degrade_trace, got {:?}",
@@ -856,20 +885,23 @@ impl avrag_search::SearchProvider for AlwaysEmptySearchProvider {
 async fn search_budget_exhaustion_degrades() {
     let config = E2EConfig::from_env().expect("E2E config not set");
     if let Err(missing) = config.validate_for_chat() {
-        panic!("Search budget E2E missing environment variables: {}", missing.join(", "));
+        panic!(
+            "Search budget E2E missing environment variables: {}",
+            missing.join(", ")
+        );
     }
     let llm_client = config.llm_client();
     let recording = RecordingLlmProvider::new(Arc::new(llm_client.clone()));
     let recording_arc = Arc::new(recording);
 
-    let search_executor: Arc<dyn avrag_search::SearchProvider> = Arc::new(AlwaysEmptySearchProvider);
+    let search_executor: Arc<dyn avrag_search::SearchProvider> =
+        Arc::new(AlwaysEmptySearchProvider);
     let llm: Arc<dyn avrag_llm::LlmProvider> = recording_arc.clone();
-    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> = Some(Arc::new(
-        LlmSearchAnswerSynthesizer {
+    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> =
+        Some(Arc::new(LlmSearchAnswerSynthesizer {
             llm,
             llm_client: Some(llm_client.clone()),
-        },
-    ));
+        }));
 
     let ctx = SearchContext::from_request(
         search_request("What is the latest Rust release?"),
@@ -894,14 +926,20 @@ async fn search_budget_exhaustion_degrades() {
 
     // Must degrade gracefully, not crash.
     assert!(
-        matches!(result.final_decision, Some(app::agents::runtime::FinalDecision::Degraded { .. })),
+        matches!(
+            result.final_decision,
+            Some(app::agents::runtime::FinalDecision::Degraded { .. })
+        ),
         "Expected Degraded when budget exhausted with no results, got {:?}",
         result.final_decision
     );
 
     // State history may be minimal with real LLM (planner can degrade immediately
     // without an explicit evaluate step). Just verify it is non-empty.
-    let history = result.state_history.as_ref().expect("state_history missing");
+    let history = result
+        .state_history
+        .as_ref()
+        .expect("state_history missing");
     assert!(!history.is_empty(), "Expected non-empty state history");
 }
 
@@ -912,7 +950,10 @@ async fn search_budget_exhaustion_degrades() {
 async fn search_cancellation_terminates_gracefully() {
     let config = E2EConfig::from_env().expect("E2E config not set");
     if let Err(missing) = config.validate_for_chat() {
-        panic!("Search cancel E2E missing environment variables: {}", missing.join(", "));
+        panic!(
+            "Search cancel E2E missing environment variables: {}",
+            missing.join(", ")
+        );
     }
     let llm_client = config.llm_client();
     let recording = RecordingLlmProvider::new(Arc::new(llm_client.clone()));
@@ -921,12 +962,11 @@ async fn search_cancellation_terminates_gracefully() {
     // Use MockSearchProvider but cancel after a short delay to hit mid-run.
     let search_executor: Arc<dyn avrag_search::SearchProvider> = Arc::new(MockSearchProvider);
     let llm: Arc<dyn avrag_llm::LlmProvider> = recording_arc.clone();
-    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> = Some(Arc::new(
-        LlmSearchAnswerSynthesizer {
+    let search_synthesizer: Option<Arc<dyn SearchAnswerSynthesizer>> =
+        Some(Arc::new(LlmSearchAnswerSynthesizer {
             llm,
             llm_client: Some(llm_client.clone()),
-        },
-    ));
+        }));
 
     let cancel = tokio_util::sync::CancellationToken::new();
     let cancel_clone = cancel.clone();

@@ -18,7 +18,7 @@ pub struct Skill {
     /// Runtime-tier: assets/ directory contents (file_name → content).
     /// Loaded at build time via include_str!.
     assets: HashMap<String, String>,
-    /// Runtime-tier: references/ directory contents (file_name → content).
+    /// Runtime-tier: reference/ directory contents (file_name → content).
     references: HashMap<String, String>,
     /// JSON Schema for tool arguments, extracted from reference/args-schema.md.
     input_schema: Option<String>,
@@ -28,7 +28,11 @@ pub struct Skill {
 
 impl Skill {
     /// Legacy constructor for tests and fallback.
-    pub fn new(id: impl Into<String>, description: impl Into<String>, system_prompt: impl Into<String>) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        description: impl Into<String>,
+        system_prompt: impl Into<String>,
+    ) -> Self {
         Self {
             id: id.into(),
             description: description.into(),
@@ -72,7 +76,7 @@ impl Skill {
         self
     }
 
-    /// Attach runtime references (build-time loaded from references/ directory).
+    /// Attach runtime references (build-time loaded from reference/ directory).
     pub fn with_references(mut self, references: HashMap<String, String>) -> Self {
         self.references = references;
         self

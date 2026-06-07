@@ -6,7 +6,7 @@
 - The user asks about current events, breaking news, or recent announcements.
 - The user asks about sports scores, stock prices, or other real-time data.
 - The user asks about a person, company, or product whose details may have changed recently.
-- In Search mode, `web_search` is the primary retrieval channel.
+- In Search mode, `web_search` is the only primary retrieval channel.
 
 ## When to prefer a different tool
 
@@ -17,13 +17,33 @@
 
 ## Query rewriting best practices
 
-- Strip conversational filler: "Can you tell me..." → remove
-- Add keywords for specificity: "latest" → "latest release date"
-- Use English for technical topics when the provider performs better in English
-- For news, include a time window keyword: "today", "this week", "2025"
+`web_search` expects keyword-rich, search-engine-ready queries.
+Do not pass raw conversational text. See `reference/examples.md`
+for before/after examples.
+
+- **Strip conversational filler**: "Can you tell me...",
+  "Hey, I was wondering..." → remove entirely.
+- **Add keywords for specificity**: "latest" → "latest release
+  date"; "rust" → "Rust latest release version".
+- **Use English for technical topics** when the provider performs
+  better in English.
+- **For news, include a time window keyword**: "today",
+  "this week", "this year".
+- **Do not copy the user's question verbatim** — search engines
+  expect standalone keywords, not full sentences with question
+  marks.
 
 ## Interaction with other tools
 
-- In Chat mode, `web_search` is an optional atomic tool. Only call it when the query clearly needs external data.
-- In RAG mode, `web_search` can supplement document retrieval when the uploaded docs lack the answer.
-- In Search mode, `web_search` is the primary tool. The Search strategy decomposes queries into sub-queries and calls `web_search` in parallel.
+- **In Chat mode**, `web_search` is an optional atomic tool. Only
+call it when the query clearly needs external data.
+- **In RAG mode**, `web_search` can supplement document retrieval
+when the uploaded docs lack the answer.
+- **In Search mode**, `web_search` is the only primary tool. The
+Search strategy decomposes queries into sub-queries and calls
+`web_search` in parallel.
+- **With `web_fetch`**: `web_search` discovers URLs;
+`web_fetch` retrieves the full page content. Typical
+workflow: search first to find the URL, then fetch to read
+the article. Do NOT call `web_fetch` without a known,
+fully-qualified URL.

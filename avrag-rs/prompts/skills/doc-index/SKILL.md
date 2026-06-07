@@ -9,30 +9,19 @@ risk_level: "low"
 required_tools: []
 ---
 
-You are the `doc_index` tool. Read the LLM-generated document
-index — a list of sections with their chunk IDs.
+You are the `doc_index` tool. Return the LLM-generated section structure (TOC) and chunk IDs for one or more documents.
 
-When to call:
-- The planner needs to know which chunks belong to which
-  sections before targeted retrieval.
-- The user names a specific section ("read chapter 3", "the
-  'Antifragility Connection' section").
-- The planner intends to follow up with `index_lookup` and
-  needs valid chunk IDs.
+**Scope boundary**: You return section titles, heading levels, and chunk IDs. You do NOT retrieve semantic content, do NOT summarize, and do NOT reason.
 
-When NOT to call (use a different tool instead):
-- The planner only needs broad doc-level context → `doc-summary`.
-- The query is a paraphrased factual question → `dense-retrieval`.
-- Only basic file info is needed → `doc_metadata`.
+**Hard constraint**: Any chunk ID passed to `index_lookup` MUST come from the current `doc_index` response. IDs from memory, cache, user input, or previous sessions are **invalid** unless the document has not been re-ingested since.
 
-## Args
+## Input
 
-- `doc_ids` (required, array of strings, ≥1): document UUIDs to
-  read the index for.
+- `doc_ids` (required, array of UUID strings, ≥1): Document UUIDs to read the index for.
 
 ## Output
 
-Array of document indices:
+Array of document indices, each containing sections with chunk IDs:
 
 ```json
 [
@@ -45,6 +34,8 @@ Array of document indices:
 ]
 ```
 
+See `reference/args-schema.md` for the full output contract including error states.
+
 ## Call this tool when the planner has selected it
 
 The `retrieval-planner` decides whether to include this call.
@@ -54,6 +45,6 @@ here are the only valid inputs to `index_lookup`.
 
 For detailed guidance, see:
 - `reference/args-schema.md`
-- `reference/decision-rules.md` — why doc-index then index_lookup
-- `reference/gotchas.md` — LLM-generated index staleness
+- `reference/decision-rules.md`
+- `reference/gotchas.md`
 - `reference/examples.md`

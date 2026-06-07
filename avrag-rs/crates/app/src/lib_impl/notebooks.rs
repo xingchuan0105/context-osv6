@@ -1,6 +1,5 @@
 use common::{
-    AppError,
-    CreateNotebookRequest, Notebook, StatusOnlyResponse, UpdateNotebookRequest, new_id,
+    AppError, CreateNotebookRequest, Notebook, StatusOnlyResponse, UpdateNotebookRequest, new_id,
     now_rfc3339,
 };
 use uuid::Uuid;
@@ -190,5 +189,4 @@ impl AppState {
             status: "deleted".to_string(),
         })
     }
-
 }

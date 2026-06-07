@@ -18,15 +18,18 @@ pub fn sanitize_tool_results(
             continue;
         };
         for item in data {
-            let Some(text_val) = item.get_mut("text") else { continue };
-            let Some(text) = text_val.as_str() else { continue };
+            let Some(text_val) = item.get_mut("text") else {
+                continue;
+            };
+            let Some(text) = text_val.as_str() else {
+                continue;
+            };
 
             let guard_result = match guard.check_content(text, trace_id.clone()) {
                 Some(result) => result,
                 None => continue,
             };
-            if !guard_result.passed
-            {
+            if !guard_result.passed {
                 *text_val = serde_json::json!(REDACTED_PLACEHOLDER);
                 degrade_trace.push(DegradeTraceItem {
                     stage: "input_guard:content_sanitizer".into(),
@@ -57,8 +60,7 @@ pub fn sanitize_search_results(
             Some(result) => result,
             None => continue,
         };
-        if !guard_result.passed
-        {
+        if !guard_result.passed {
             result.snippet = REDACTED_PLACEHOLDER.to_string();
             degrade_trace.push(DegradeTraceItem {
                 stage: "input_guard:content_sanitizer".into(),

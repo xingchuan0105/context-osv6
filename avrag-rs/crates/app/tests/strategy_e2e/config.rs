@@ -65,7 +65,12 @@ impl E2EConfig {
         if let Err(m) = self.validate_for_chat() {
             missing.extend(m);
         }
-        if self.brave_api_key.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+        if self
+            .brave_api_key
+            .as_ref()
+            .map(|s| s.is_empty())
+            .unwrap_or(true)
+        {
             missing.push("E2E_BRAVE_API_KEY".to_string());
         }
         if missing.is_empty() {
@@ -81,13 +86,28 @@ impl E2EConfig {
         if let Err(m) = self.validate_for_chat() {
             missing.extend(m);
         }
-        if self.embedding_base_url.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+        if self
+            .embedding_base_url
+            .as_ref()
+            .map(|s| s.is_empty())
+            .unwrap_or(true)
+        {
             missing.push("E2E_EMBEDDING_BASE_URL".to_string());
         }
-        if self.embedding_api_key.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+        if self
+            .embedding_api_key
+            .as_ref()
+            .map(|s| s.is_empty())
+            .unwrap_or(true)
+        {
             missing.push("E2E_EMBEDDING_API_KEY".to_string());
         }
-        if self.milvus_url.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+        if self
+            .milvus_url
+            .as_ref()
+            .map(|s| s.is_empty())
+            .unwrap_or(true)
+        {
             missing.push("E2E_MILVUS_URL".to_string());
         }
         if missing.is_empty() {
@@ -127,7 +147,10 @@ impl E2EConfig {
         avrag_llm::EmbeddingClient::new(avrag_llm::ModelProviderConfig {
             base_url,
             api_key: self.embedding_api_key.clone().unwrap_or_default(),
-            model: self.embedding_model.clone().unwrap_or_else(|| "text-embedding-v4".to_string()),
+            model: self
+                .embedding_model
+                .clone()
+                .unwrap_or_else(|| "text-embedding-v4".to_string()),
             timeout_ms: 30_000,
             api_style: Some(avrag_llm::ApiStyle::OpenAi),
             dimensions: Some(1024),
@@ -183,4 +206,3 @@ fn run_shell_command(cmd: &str) -> String {
         .trim()
         .to_string()
 }
-

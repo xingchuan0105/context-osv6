@@ -1,7 +1,9 @@
-use tokio_util::sync::CancellationToken;
-use crate::services::secure_services::{EmbeddingService, LlmService, SearchResult, SearchService, StorageService};
+use crate::services::secure_services::{
+    EmbeddingService, LlmService, SearchResult, SearchService, StorageService,
+};
 use avrag_llm::{ChatMessage, LlmClient, LlmResponse};
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
 /// 安全的 LLM 服务实现
 /// 内部持有 LlmClient（包含 API key），但不暴露
@@ -62,7 +64,10 @@ impl EmbeddingService for SecureEmbeddingService {
         let text = text.to_string();
         async move {
             let results = inner.embed(&[&text]).await?;
-            results.into_iter().next().ok_or_else(|| anyhow::anyhow!("empty embedding result"))
+            results
+                .into_iter()
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("empty embedding result"))
         }
     }
 

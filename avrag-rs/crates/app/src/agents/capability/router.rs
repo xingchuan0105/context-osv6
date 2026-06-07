@@ -7,10 +7,10 @@
 //! `RoutingDecision` for telemetry.  Future work: auto-routing when
 //! `request.kind` is optional / absent.
 
+use super::RiskLevel;
 use crate::agents::AgentKind;
 use crate::agents::runtime::AgentRequest;
 use serde::{Deserialize, Serialize};
-use super::RiskLevel;
 
 /// Classification of user query intent for auto-routing.
 ///
@@ -352,7 +352,11 @@ mod tests {
         // Simulate a request without explicit kind (would need Optional kind in future).
         // For now we test the auto-rag rule by using Chat kind + doc_scope + factual query.
         let policy = standard_policy();
-        let req = dummy_request(AgentKind::Chat, "what does the pdf say", vec!["doc1".to_string()]);
+        let req = dummy_request(
+            AgentKind::Chat,
+            "what does the pdf say",
+            vec!["doc1".to_string()],
+        );
         let decision = policy.resolve(&req);
         // user-chat has priority 100, so it overrides auto-rag (70).
         assert_eq!(decision.strategy_id, "chat");
@@ -454,7 +458,11 @@ mod tests {
         // query "this is a very long query with many words" ~ 40 chars ~ 10 tokens
         let req_short = dummy_request(AgentKind::Chat, "hi", vec![]);
         assert!(!cond.evaluate(&req_short));
-        let req_long = dummy_request(AgentKind::Chat, "this is a very long query with many words exceeding ten tokens", vec![]);
+        let req_long = dummy_request(
+            AgentKind::Chat,
+            "this is a very long query with many words exceeding ten tokens",
+            vec![],
+        );
         assert!(cond.evaluate(&req_long));
     }
 

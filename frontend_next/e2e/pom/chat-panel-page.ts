@@ -64,12 +64,17 @@ export class ChatPanelPage {
     return this.page.locator("[data-testid='chat-message']").last();
   }
 
+  /**
+   * 返回去除 HTML 标签的纯文本答案。
+   * ⚠️ 测试 format-output（HTML/PPT）时，应使用 lastAnswerHtml() 获取原始 HTML。
+   */
   async lastAnswerText(): Promise<string> {
-    const raw = await this.lastAnswerRawText();
-    return raw.replace(/<\/?[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const text = await this.lastAnswerRenderedText();
+    return text.trim();
   }
 
-  async lastAnswerRawText(): Promise<string> {
+  /** 返回浏览器渲染后的可见文本（不含 HTML 标签） */
+  async lastAnswerRenderedText(): Promise<string> {
     const bubble = this.page.locator(
       '[data-testid="chat-message"][data-role="assistant"] [data-testid="workspace-answer-bubble"]'
     ).last();

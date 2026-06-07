@@ -33,23 +33,6 @@ The Python code to execute. Must be self-contained — the sandbox has no persis
 - Code that attempts file system operations outside the sandbox
 - Infinite loops (will be killed by timeout)
 
-## Output schema
+## Output
 
-```json
-{
-  "type": "object",
-  "properties": {
-    "stdout": { "type": "string", "description": "Printed output." },
-    "stderr": { "type": "string", "description": "Error output / exceptions." },
-    "result": { "type": "string", "description": "Last expression value (if any)." },
-    "success": { "type": "boolean", "description": "Always true in current sandbox." },
-    "exit_code": { "type": "integer", "description": "Process exit code." },
-    "killed": { "type": "boolean", "description": "Whether terminated for resource limits." }
-  }
-}
-```
-
-## Important: `result` vs `stdout`
-
-- The `result` field is only populated when the **last statement is an expression** (not an assignment).
-- Use `print()` to guarantee output appears in `stdout`.
+See `reference/output-schema.md` for the complete success/error contract, including `result` semantics and `executed` field behavior.

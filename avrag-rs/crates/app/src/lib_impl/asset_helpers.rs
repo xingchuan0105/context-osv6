@@ -2,7 +2,9 @@ use avrag_storage_pg::DocumentAssetRow;
 
 use crate::lib_impl::*;
 
-pub(crate) fn build_docscope_metadata(metadata: Vec<common::SummaryMetadata>) -> common::DocScopeMetadata {
+pub(crate) fn build_docscope_metadata(
+    metadata: Vec<common::SummaryMetadata>,
+) -> common::DocScopeMetadata {
     let mut languages = Vec::new();
     let mut domains = Vec::new();
     let mut genres = Vec::new();
@@ -44,7 +46,10 @@ pub(crate) fn build_docscope_metadata(metadata: Vec<common::SummaryMetadata>) ->
 }
 
 impl AppState {
-    pub(crate) async fn resolve_citation_asset_url(&self, asset: &DocumentAssetRow) -> Option<String> {
+    pub(crate) async fn resolve_citation_asset_url(
+        &self,
+        asset: &DocumentAssetRow,
+    ) -> Option<String> {
         let storage_path = asset.storage_path.as_deref()?;
         if is_remote_asset_reference(storage_path) {
             return Some(storage_path.to_string());
@@ -52,10 +57,7 @@ impl AppState {
 
         match self
             .object_store
-            .presigned_get_url(
-                storage_path,
-                self.object_storage_download_expire_sec,
-            )
+            .presigned_get_url(storage_path, self.object_storage_download_expire_sec)
             .await
         {
             Ok(url) if !url.starts_with("file://") => Some(url),

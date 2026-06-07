@@ -1,4 +1,4 @@
-use crate::core::subscription_snapshot_from_event;
+use crate::core::{build_plan_payloads, subscription_snapshot_from_event};
 use crate::stripe_client::StripeClient;
 use crate::types::{BillingConfig, HmacSha256, PLAN_PRO, STATUS_ACTIVE};
 use hmac::Mac;
@@ -205,4 +205,75 @@ fn alipay_real_key_loads_and_signs() {
     let mut verify_params = params.clone();
     verify_params.push(("sign".to_string(), sign.clone()));
     assert!(client.verify_signature(&verify_params, &sign).is_ok());
+}
+
+// =====================================================================
+// Task 3: dual-currency price labels on the /plans endpoint payload.
+// =====================================================================
+
+#[test]
+fn plans_endpoint_emits_dual_currency_price_labels_for_plus_and_pro() {
+    let _guard = ENV_MUTEX.lock().unwrap();
+    // Drop env overrides so we observe the hard-coded Task-3 fallbacks.
+    remove_env("BILLING_PRICE_LABEL_PRO");
+    remove_env("BILLING_PRICE_LABEL_PLUS");
+    let config = BillingConfig::from_env();
+
+    let plans = build_plan_payloads(&config, "free", &Default::default());
+
+    assert_eq!(plans.len(), 3, "expected 3 tiers (free/pro/plus), got {}", plans.len());
+
+    let plus = plans
+        .iter()
+        .find(|p| p.get("plan_id").and_then(|v| v.as_str()) == Some("plus"))
+        .expect("plus plan present");
+    assert_eq!(
+        plus.get("price_label_cny").and_then(|v| v.as_str()),
+        Some("¥49 / 月"),
+        "plus plan should carry the CNY price label (¥49 / 月)"
+    );
+    assert_eq!(
+        plus.get("price_label_usd").and_then(|v| v.as_str()),
+        Some("$9 / 月"),
+        "plus plan should carry the USD price label ($9 / 月)"
+    );
+
+    let pro = plans
+        .iter()
+        .find(|p| p.get("plan_id").and_then(|v| v.as_str()) == Some("pro"))
+        .expect("pro plan present");
+    assert_eq!(
+        pro.get("price_label_cny").and_then(|v| v.as_str()),
+        Some("¥129 / 月"),
+    );
+    assert_eq!(
+        pro.get("price_label_usd").and_then(|v| v.as_str()),
+        Some("$19 / 月"),
+    );
+}
+
+#[test]
+fn plans_endpoint_marks_current_user_plan() {
+    let _guard = ENV_MUTEX.lock().unwrap();
+    remove_env("BILLING_PRICE_LABEL_PRO");
+    remove_env("BILLING_PRICE_LABEL_PLUS");
+    let config = BillingConfig::from_env();
+
+    let plans = build_plan_payloads(&config, "plus", &Default::default());
+
+    let plus_current = plans
+        .iter()
+        .find(|p| p.get("plan_id").and_then(|v| v.as_str()) == Some("plus"))
+        .and_then(|p| p.get("current"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    assert!(plus_current, "plus plan should be marked current when current_plan_id == \"plus\"");
+
+    let free_current = plans
+        .iter()
+        .find(|p| p.get("plan_id").and_then(|v| v.as_str()) == Some("free"))
+        .and_then(|p| p.get("current"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    assert!(!free_current, "free plan must not be current when user is on plus");
 }

@@ -92,9 +92,18 @@ pub fn default_scenarios() -> Vec<Scenario> {
             session_summary: None,
             user_preferences: None,
             search_results: vec![
-                ("Tokio vs async-std", "Tokio is the most widely used async runtime in Rust..."),
-                ("Rust Async Book", "The async book covers the fundamentals of async/await in Rust..."),
-                ("Comparing Rust Runtimes", "A detailed benchmark comparing Tokio, async-std, and smol..."),
+                (
+                    "Tokio vs async-std",
+                    "Tokio is the most widely used async runtime in Rust...",
+                ),
+                (
+                    "Rust Async Book",
+                    "The async book covers the fundamentals of async/await in Rust...",
+                ),
+                (
+                    "Comparing Rust Runtimes",
+                    "A detailed benchmark comparing Tokio, async-std, and smol...",
+                ),
             ],
             rag_chunks: vec![],
         },
@@ -106,11 +115,26 @@ pub fn default_scenarios() -> Vec<Scenario> {
             session_summary: Some("User works on LLM inference optimization."),
             user_preferences: Some(serde_json::json!({"style": "detailed", "language": "zh"})),
             search_results: vec![
-                ("DeepSeek V4 推理优化", "DeepSeek V4 introduces speculative decoding with tree attention..."),
-                ("Qwen3 技术报告", "Qwen3 employs a mixture-of-experts architecture with 128 experts..."),
-                ("Gemini 3.5 Flash 架构", "Gemini 3.5 Flash uses a novel attention mechanism called multi-query..."),
-                ("LLM 推理优化综述 2026", "A comprehensive survey covering quantization, pruning, distillation..."),
-                ("Speculative Decoding Survey", "Speculative decoding has become the standard for latency reduction..."),
+                (
+                    "DeepSeek V4 推理优化",
+                    "DeepSeek V4 introduces speculative decoding with tree attention...",
+                ),
+                (
+                    "Qwen3 技术报告",
+                    "Qwen3 employs a mixture-of-experts architecture with 128 experts...",
+                ),
+                (
+                    "Gemini 3.5 Flash 架构",
+                    "Gemini 3.5 Flash uses a novel attention mechanism called multi-query...",
+                ),
+                (
+                    "LLM 推理优化综述 2026",
+                    "A comprehensive survey covering quantization, pruning, distillation...",
+                ),
+                (
+                    "Speculative Decoding Survey",
+                    "Speculative decoding has become the standard for latency reduction...",
+                ),
             ],
             rag_chunks: vec![],
         },
@@ -135,10 +159,15 @@ pub fn default_scenarios() -> Vec<Scenario> {
             query: "分析这份技术方案中数据库架构的风险点，并提出优化建议。重点关注高可用性、数据一致性和扩展性。",
             history: vec![
                 ("user", "请先概述整体架构"),
-                ("assistant", "该方案采用微服务架构，数据库层使用 PostgreSQL 主从复制..."),
+                (
+                    "assistant",
+                    "该方案采用微服务架构，数据库层使用 PostgreSQL 主从复制...",
+                ),
             ],
             session_summary: Some("User is reviewing a technical architecture document."),
-            user_preferences: Some(serde_json::json!({"style": "structured", "expertise": "senior engineer"})),
+            user_preferences: Some(
+                serde_json::json!({"style": "structured", "expertise": "senior engineer"}),
+            ),
             search_results: vec![],
             rag_chunks: vec![
                 "数据库架构设计\n本文档描述了一套基于 PostgreSQL 的高可用数据库架构。",
@@ -237,7 +266,11 @@ fn simulate_search(scenario: &Scenario) -> SimulationResult {
     //   - evaluator (per iteration)
     //   - final synthesizer
 
-    let iterations: u8 = if scenario.search_results.len() > 3 { 2 } else { 1 };
+    let iterations: u8 = if scenario.search_results.len() > 3 {
+        2
+    } else {
+        1
+    };
 
     for iter in 0..iterations {
         // Evaluator prompt: system + query + sub_queries + result metadata
@@ -274,7 +307,10 @@ fn simulate_search(scenario: &Scenario) -> SimulationResult {
             snippet
         ));
     }
-    let synth_prompt = format!("Question:\n{}\n\nBrave LLM Context evidence:\n{}", scenario.query, evidence);
+    let synth_prompt = format!(
+        "Question:\n{}\n\nBrave LLM Context evidence:\n{}",
+        scenario.query, evidence
+    );
     let synth_prompt_tokens = count_tokens(synth_system) + count_tokens(&synth_prompt);
     let synth_completion_tokens = estimate_completion_for_query(scenario.query);
 
@@ -438,7 +474,10 @@ pub fn print_report(results: &[SimulationResult]) {
     for r in results {
         println!("Scenario: {:<30} | Mode: {:<8}", r.scenario_name, r.mode);
         println!("  Total prompt:     {:>6} tokens", r.total_prompt_tokens);
-        println!("  Total completion: {:>6} tokens", r.total_completion_tokens);
+        println!(
+            "  Total completion: {:>6} tokens",
+            r.total_completion_tokens
+        );
         println!("  Total:            {:>6} tokens", r.total_tokens);
         println!("  Breakdown:");
         for s in &r.stages {
@@ -459,7 +498,10 @@ pub fn print_report(results: &[SimulationResult]) {
 
     // Summary table
     println!("{:-^80}", " Summary ");
-    println!("{:<25} {:>10} {:>10} {:>10}", "Scenario", "Prompt", "Completion", "Total");
+    println!(
+        "{:<25} {:>10} {:>10} {:>10}",
+        "Scenario", "Prompt", "Completion", "Total"
+    );
     println!("{}", "-".repeat(60));
     for r in results {
         println!(
@@ -481,7 +523,10 @@ mod tests {
     #[test]
     fn simulate_chat_simple() {
         let scenarios = default_scenarios();
-        let chat = scenarios.iter().find(|s| s.name == "chat_simple_cn").unwrap();
+        let chat = scenarios
+            .iter()
+            .find(|s| s.name == "chat_simple_cn")
+            .unwrap();
         let result = simulate_scenario(chat);
         assert_eq!(result.mode, "chat");
         assert!(result.total_prompt_tokens > 0);
@@ -492,7 +537,10 @@ mod tests {
     #[test]
     fn simulate_search_with_memory() {
         let scenarios = default_scenarios();
-        let search = scenarios.iter().find(|s| s.name == "search_complex").unwrap();
+        let search = scenarios
+            .iter()
+            .find(|s| s.name == "search_complex")
+            .unwrap();
         let result = simulate_scenario(search);
         assert_eq!(result.mode, "search");
         // evaluator (2 iterations) + synthesizer = 3 stages
@@ -516,7 +564,11 @@ mod tests {
         let results = simulate_all();
         assert_eq!(results.len(), default_scenarios().len());
         for r in &results {
-            assert!(r.total_tokens > 0, "{} should have >0 tokens", r.scenario_name);
+            assert!(
+                r.total_tokens > 0,
+                "{} should have >0 tokens",
+                r.scenario_name
+            );
         }
     }
 
@@ -529,8 +581,14 @@ mod tests {
     #[test]
     fn rag_is_most_expensive() {
         let results = simulate_all();
-        let rag_complex = results.iter().find(|r| r.scenario_name == "rag_complex").unwrap();
-        let chat_simple = results.iter().find(|r| r.scenario_name == "chat_simple_cn").unwrap();
+        let rag_complex = results
+            .iter()
+            .find(|r| r.scenario_name == "rag_complex")
+            .unwrap();
+        let chat_simple = results
+            .iter()
+            .find(|r| r.scenario_name == "chat_simple_cn")
+            .unwrap();
         assert!(
             rag_complex.total_tokens > chat_simple.total_tokens * 5,
             "RAG complex should be much more expensive than simple chat"
@@ -563,7 +621,8 @@ mod tests {
         // Memory
         let typical_summary = "User is reviewing legal contracts. Prefers concise answers.";
         let typical_prefs = serde_json::json!({"style": "concise", "language": "zh"});
-        let memory_tokens = count_tokens(typical_summary) + count_tokens(&typical_prefs.to_string());
+        let memory_tokens =
+            count_tokens(typical_summary) + count_tokens(&typical_prefs.to_string());
 
         // RAG chunks: 8 chunks, ~300 tokens each
         let chunks_count = 8;
@@ -576,10 +635,8 @@ mod tests {
         let search_evidence_tokens = search_results_count * search_result_tokens;
 
         // --- Chat estimate ---
-        let chat_prompt = chat_system_tokens
-            + memory_tokens
-            + typical_history_tokens
-            + typical_query_tokens;
+        let chat_prompt =
+            chat_system_tokens + memory_tokens + typical_history_tokens + typical_query_tokens;
         let chat_completion = estimate_completion_for_query(typical_query);
         let chat_total = chat_prompt + chat_completion;
 
@@ -601,10 +658,8 @@ mod tests {
 
         // --- RAG estimate (3 iterations) ---
         // Planner (per iteration): system + query + history + iteration annotation
-        let rag_plan_prompt_per_iter = rag_plan_sys_tokens
-            + typical_query_tokens
-            + typical_history_tokens
-            + 50; // iteration annotation
+        let rag_plan_prompt_per_iter =
+            rag_plan_sys_tokens + typical_query_tokens + typical_history_tokens + 50; // iteration annotation
         let rag_plan_completion_per_iter = 200;
 
         // Evaluator (per iteration): system + query + sub_queries + chunk stats
@@ -623,9 +678,11 @@ mod tests {
         let rag_synth_completion = 800;
 
         let rag_iterations = 3;
-        let rag_total_prompt = rag_iterations * (rag_plan_prompt_per_iter + rag_eval_prompt_per_iter)
+        let rag_total_prompt = rag_iterations
+            * (rag_plan_prompt_per_iter + rag_eval_prompt_per_iter)
             + rag_synth_prompt;
-        let rag_total_completion = rag_iterations * (rag_plan_completion_per_iter + rag_eval_completion_per_iter)
+        let rag_total_completion = rag_iterations
+            * (rag_plan_completion_per_iter + rag_eval_completion_per_iter)
             + rag_synth_completion;
         let rag_total = rag_total_prompt + rag_total_completion;
 
@@ -633,11 +690,26 @@ mod tests {
         println!("\n{:=^70}", " Typical Single-Session Token Estimate ");
         println!();
         println!("Assumptions:");
-        println!("  - Query: \"{}\" ({} tokens)", typical_query, typical_query_tokens);
-        println!("  - History: {} turns (~{} tokens each)", history_turns, history_tokens_per_turn);
-        println!("  - Memory: summary + preferences = {} tokens", memory_tokens);
-        println!("  - RAG chunks: {} chunks @ {} tokens each", chunks_count, chunk_tokens);
-        println!("  - Search results: {} results @ {} tokens each", search_results_count, search_result_tokens);
+        println!(
+            "  - Query: \"{}\" ({} tokens)",
+            typical_query, typical_query_tokens
+        );
+        println!(
+            "  - History: {} turns (~{} tokens each)",
+            history_turns, history_tokens_per_turn
+        );
+        println!(
+            "  - Memory: summary + preferences = {} tokens",
+            memory_tokens
+        );
+        println!(
+            "  - RAG chunks: {} chunks @ {} tokens each",
+            chunks_count, chunk_tokens
+        );
+        println!(
+            "  - Search results: {} results @ {} tokens each",
+            search_results_count, search_result_tokens
+        );
         println!("  - RAG ReAct iterations: {}", rag_iterations);
         println!();
         println!("System prompt sizes (measured with tiktoken):");
@@ -648,41 +720,95 @@ mod tests {
         println!();
 
         println!("{:-^70}", " Chat Mode ");
-        println!("  Prompt:      {:>6} tokens  (system {} + memory {} + history {} + query {})",
-            chat_prompt, chat_system_tokens, memory_tokens, typical_history_tokens, typical_query_tokens);
+        println!(
+            "  Prompt:      {:>6} tokens  (system {} + memory {} + history {} + query {})",
+            chat_prompt,
+            chat_system_tokens,
+            memory_tokens,
+            typical_history_tokens,
+            typical_query_tokens
+        );
         println!("  Completion:  {:>6} tokens", chat_completion);
         println!("  Total:       {:>6} tokens", chat_total);
         println!();
 
         println!("{:-^70}", " Search Mode ");
-        println!("  Evaluator prompt:   {:>6} tokens  (system {} + query/metadata {})",
-            search_eval_prompt, search_eval_sys_tokens, search_eval_prompt - search_eval_sys_tokens);
-        println!("  Evaluator completion: {:>4} tokens", search_eval_completion);
-        println!("  Synthesizer prompt: {:>6} tokens  (system {} + query {} + evidence {})",
-            search_synth_prompt, 50, typical_query_tokens, search_evidence_tokens);
-        println!("  Synthesizer completion: {:>2} tokens", search_synth_completion);
+        println!(
+            "  Evaluator prompt:   {:>6} tokens  (system {} + query/metadata {})",
+            search_eval_prompt,
+            search_eval_sys_tokens,
+            search_eval_prompt - search_eval_sys_tokens
+        );
+        println!(
+            "  Evaluator completion: {:>4} tokens",
+            search_eval_completion
+        );
+        println!(
+            "  Synthesizer prompt: {:>6} tokens  (system {} + query {} + evidence {})",
+            search_synth_prompt, 50, typical_query_tokens, search_evidence_tokens
+        );
+        println!(
+            "  Synthesizer completion: {:>2} tokens",
+            search_synth_completion
+        );
         println!("  Total prompt:       {:>6} tokens", search_total_prompt);
-        println!("  Total completion:   {:>6} tokens", search_total_completion);
+        println!(
+            "  Total completion:   {:>6} tokens",
+            search_total_completion
+        );
         println!("  Total:              {:>6} tokens", search_total);
         println!();
 
         println!("{:-^70}", " RAG Mode (3 iterations) ");
-        println!("  Per-iteration planner prompt:   {:>6} tokens", rag_plan_prompt_per_iter);
-        println!("  Per-iteration planner completion: {:>4} tokens", rag_plan_completion_per_iter);
-        println!("  Per-iteration evaluator prompt: {:>6} tokens", rag_eval_prompt_per_iter);
-        println!("  Per-iteration evaluator completion: {:>2} tokens", rag_eval_completion_per_iter);
-        println!("  Synthesizer prompt:             {:>6} tokens  (query/history {} + chunks {})",
-            rag_synth_prompt, typical_query_tokens + typical_history_tokens, retrieval_tokens);
-        println!("  Synthesizer completion:         {:>6} tokens", rag_synth_completion);
-        println!("  Total prompt:                   {:>6} tokens", rag_total_prompt);
-        println!("  Total completion:               {:>6} tokens", rag_total_completion);
+        println!(
+            "  Per-iteration planner prompt:   {:>6} tokens",
+            rag_plan_prompt_per_iter
+        );
+        println!(
+            "  Per-iteration planner completion: {:>4} tokens",
+            rag_plan_completion_per_iter
+        );
+        println!(
+            "  Per-iteration evaluator prompt: {:>6} tokens",
+            rag_eval_prompt_per_iter
+        );
+        println!(
+            "  Per-iteration evaluator completion: {:>2} tokens",
+            rag_eval_completion_per_iter
+        );
+        println!(
+            "  Synthesizer prompt:             {:>6} tokens  (query/history {} + chunks {})",
+            rag_synth_prompt,
+            typical_query_tokens + typical_history_tokens,
+            retrieval_tokens
+        );
+        println!(
+            "  Synthesizer completion:         {:>6} tokens",
+            rag_synth_completion
+        );
+        println!(
+            "  Total prompt:                   {:>6} tokens",
+            rag_total_prompt
+        );
+        println!(
+            "  Total completion:               {:>6} tokens",
+            rag_total_completion
+        );
         println!("  Total:                          {:>6} tokens", rag_total);
         println!();
 
         println!("{:-^70}", " Cost Comparison (relative to Chat) ");
         println!("  Chat:   {:>6} tokens  (1.0x baseline)", chat_total);
-        println!("  Search: {:>6} tokens  ({:.1}x)", search_total, search_total as f64 / chat_total as f64);
-        println!("  RAG:    {:>6} tokens  ({:.1}x)", rag_total, rag_total as f64 / chat_total as f64);
+        println!(
+            "  Search: {:>6} tokens  ({:.1}x)",
+            search_total,
+            search_total as f64 / chat_total as f64
+        );
+        println!(
+            "  RAG:    {:>6} tokens  ({:.1}x)",
+            rag_total,
+            rag_total as f64 / chat_total as f64
+        );
         println!();
 
         // Sanity assertions

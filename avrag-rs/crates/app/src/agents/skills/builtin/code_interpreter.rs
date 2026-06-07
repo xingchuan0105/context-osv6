@@ -144,7 +144,9 @@ mod tests {
     #[tokio::test]
     async fn test_code_interpreter_simple() {
         let skill = CodeInterpreterSkill;
-        let result = skill.execute(&serde_json::json!({"code": "print(1 + 2)"}), &ctx()).await;
+        let result = skill
+            .execute(&serde_json::json!({"code": "print(1 + 2)"}), &ctx())
+            .await;
         assert_eq!(result.status, ToolStatus::Ok);
         let data = result.data.unwrap();
         assert!(data["stdout"].as_str().unwrap().contains("3"));
@@ -165,7 +167,10 @@ mod tests {
         // The sandbox always returns success=True; exceptions are captured in stderr.
         let skill = CodeInterpreterSkill;
         let result = skill
-            .execute(&serde_json::json!({"code": "raise ValueError('error')"}), &ctx())
+            .execute(
+                &serde_json::json!({"code": "raise ValueError('error')"}),
+                &ctx(),
+            )
             .await;
         assert_eq!(result.status, ToolStatus::Ok);
         let data = result.data.unwrap();
@@ -177,17 +182,26 @@ mod tests {
     async fn test_code_interpreter_exception() {
         // Exceptions are caught by the sandbox wrapper and printed to stderr.
         let skill = CodeInterpreterSkill;
-        let result = skill.execute(&serde_json::json!({"code": "1/0"}), &ctx()).await;
+        let result = skill
+            .execute(&serde_json::json!({"code": "1/0"}), &ctx())
+            .await;
         assert_eq!(result.status, ToolStatus::Ok);
         let data = result.data.unwrap();
-        assert!(data["stderr"].as_str().unwrap().contains("ZeroDivisionError"));
+        assert!(
+            data["stderr"]
+                .as_str()
+                .unwrap()
+                .contains("ZeroDivisionError")
+        );
         assert!(data["success"].as_bool().unwrap());
     }
 
     #[tokio::test]
     async fn test_code_interpreter_result_field() {
         let skill = CodeInterpreterSkill;
-        let result = skill.execute(&serde_json::json!({"code": "x = 42"}), &ctx()).await;
+        let result = skill
+            .execute(&serde_json::json!({"code": "x = 42"}), &ctx())
+            .await;
         assert_eq!(result.status, ToolStatus::Ok);
         let data = result.data.unwrap();
         // _result is only set if the last statement is an expression, not an assignment.

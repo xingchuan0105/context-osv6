@@ -27,6 +27,18 @@ pub trait LlmProvider: Send + Sync {
         messages: &[ChatMessage],
         temperature: Option<f32>,
     ) -> anyhow::Result<LlmResponse>;
+
+    async fn complete_with_tools(
+        &self,
+        messages: &[ChatMessage],
+        tools: &[common::ToolSpec],
+        temperature: Option<f32>,
+    ) -> anyhow::Result<LlmResponse> {
+        let _ = messages;
+        let _ = tools;
+        let _ = temperature;
+        anyhow::bail!("Native tool calls not supported")
+    }
 }
 
 /// Zero-cost wrapper: implement LlmProvider for LlmClient.
@@ -38,6 +50,15 @@ impl LlmProvider for LlmClient {
         temperature: Option<f32>,
     ) -> anyhow::Result<LlmResponse> {
         self.complete(messages, temperature).await
+    }
+
+    async fn complete_with_tools(
+        &self,
+        messages: &[ChatMessage],
+        tools: &[common::ToolSpec],
+        temperature: Option<f32>,
+    ) -> anyhow::Result<LlmResponse> {
+        self.complete_with_tools(messages, tools, temperature).await
     }
 }
 

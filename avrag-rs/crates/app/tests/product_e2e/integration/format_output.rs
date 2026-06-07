@@ -1,8 +1,8 @@
-//! P1-4 / P1-5: Format output — presentation-html and html-renderer.
+//! P1-4 / P1-5: Format output — ppt-generation and html-renderer.
 
 use std::time::Duration;
 
-use crate::product_e2e::{assertions::*, ChatResponse, DocumentStatus, TestContext};
+use crate::product_e2e::{ChatResponse, DocumentStatus, TestContext, assertions::*};
 
 #[tokio::test]
 async fn chat_presentation_html_returns_structured_slides() {
@@ -16,13 +16,13 @@ async fn chat_presentation_html_returns_structured_slides() {
         .unwrap();
     assert_eq!(status, DocumentStatus::Completed);
 
-    // 2. Ask a RAG question with format_hint="presentation-html".
+    // 2. Ask a RAG question with format_hint="ppt-generation".
     let http_resp = ctx
         .chat_with_format_hint(
             "Summarise the core ideas of the document as a presentation",
             &upload.notebook_id,
             &[upload.document_id],
-            Some("presentation-html"),
+            Some("ppt-generation"),
         )
         .await
         .unwrap();

@@ -6,7 +6,9 @@ use avrag_llm::LlmClient;
 use avrag_rag_core::RagRuntime;
 use avrag_storage_pg::{ObjectStoreHandle, PgAppRepository};
 use common::key_vault::KeyVault;
-use common::{ApiKeyRow, ChatMessage, ChatSession, Document, NotificationRow, Notebook, ParsedPreviewItem};
+use common::{
+    ApiKeyRow, ChatMessage, ChatSession, Document, Notebook, NotificationRow, ParsedPreviewItem,
+};
 use contracts::UserPreferences;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::RwLock;

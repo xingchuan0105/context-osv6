@@ -106,13 +106,16 @@ pub fn load_dataset<P: AsRef<Path>>(path: P) -> Result<RedTeamDataset, common::A
 }
 
 /// Load all red-team datasets from a directory.
-pub fn load_datasets_from_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<RedTeamDataset>, common::AppError> {
+pub fn load_datasets_from_dir<P: AsRef<Path>>(
+    dir: P,
+) -> Result<Vec<RedTeamDataset>, common::AppError> {
     let mut datasets = Vec::new();
     let entries = std::fs::read_dir(dir.as_ref())
         .map_err(|e| common::AppError::internal(format!("Failed to read redteam dir: {e}")))?;
 
     for entry in entries {
-        let entry = entry.map_err(|e| common::AppError::internal(format!("Dir entry error: {e}")))?;
+        let entry =
+            entry.map_err(|e| common::AppError::internal(format!("Dir entry error: {e}")))?;
         let path = entry.path();
         if path.extension().and_then(|s| s.to_str()) == Some("jsonl") {
             datasets.push(load_dataset(&path)?);

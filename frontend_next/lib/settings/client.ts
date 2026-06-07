@@ -346,3 +346,30 @@ export async function createPortalSession(token: string) {
     "Failed to create billing portal",
   );
 }
+
+export type CheckoutRequest = {
+  plan_id?: string;
+  provider?: "stripe" | "creem" | "alipay";
+};
+
+export type CheckoutResponse = {
+  url: string;
+  session_id: string;
+  qr_code?: string | null;
+  order_id?: string | null;
+};
+
+export async function createCheckoutSession(token: string, requestPayload: CheckoutRequest) {
+  return unwrapApiData(
+    await request<ApiEnvelope<CheckoutResponse>>(
+      "/api/v1/billing/checkout-session",
+      {
+        method: "POST",
+        body: JSON.stringify(requestPayload),
+      },
+      token,
+    ),
+    "Failed to create checkout session",
+  );
+}
+

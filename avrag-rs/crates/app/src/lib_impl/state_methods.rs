@@ -1,16 +1,18 @@
-use crate::lib_impl::*;
 use crate::agents::service::UnifiedAgentService;
+use crate::lib_impl::*;
 use anyhow::Result as AnyResult;
 use avrag_auth::AuthContext;
 use avrag_chatmemory::ChatMemory;
 use avrag_guardrails::GuardPipeline;
 use avrag_llm::EmbeddingClient;
-use avrag_rag_core::{RagConfig, RagRuntime, RetrievalDataPlane, context::SessionContext as RagSessionContext};
+use avrag_rag_core::{
+    RagConfig, RagRuntime, RetrievalDataPlane, context::SessionContext as RagSessionContext,
+};
 use avrag_search::SearchExecutor;
 use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
 use avrag_storage_pg::{ObjectStoreHandle, PgAppRepository};
-use common::key_vault::EnvKeyVault;
 use common::AppError;
+use common::key_vault::EnvKeyVault;
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -22,7 +24,10 @@ fn build_key_vault_from_config(config: &AppConfig) -> Arc<dyn common::key_vault:
         .with_entry("embedding_api_key", config.embedding.api_key.clone())
         .with_entry("mm_embedding_api_key", config.mm_embedding.api_key.clone())
         .with_entry("search_api_key", config.search.api_key.clone())
-        .with_entry("ingestion_llm_api_key", config.ingestion_llm.api_key.clone());
+        .with_entry(
+            "ingestion_llm_api_key",
+            config.ingestion_llm.api_key.clone(),
+        );
     Arc::new(vault)
 }
 
@@ -128,18 +133,19 @@ impl AppState {
             let reranker = make_reranker(&config.rerank);
             let mm_reranker = make_reranker(&config.mm_rerank);
 
-            let fallback_embedding = Arc::new(EmbeddingClient::new(avrag_llm::ModelProviderConfig {
-                base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
-                api_key: String::new(),
-                model: "text-embedding-v4".to_string(),
-                timeout_ms: 15000,
-                api_style: None,
-                dimensions: Some(1024),
-                enable_thinking: None,
-                enable_cache: None,
-                rpm_limit: None,
-                tpm_limit: None,
-            }));
+            let fallback_embedding =
+                Arc::new(EmbeddingClient::new(avrag_llm::ModelProviderConfig {
+                    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
+                    api_key: String::new(),
+                    model: "text-embedding-v4".to_string(),
+                    timeout_ms: 15000,
+                    api_style: None,
+                    dimensions: Some(1024),
+                    enable_thinking: None,
+                    enable_cache: None,
+                    rpm_limit: None,
+                    tpm_limit: None,
+                }));
             let embedding_for_config = embedding.unwrap_or(fallback_embedding);
             let attach_rag_components = |mut rag_config: RagConfig| {
                 if let Some(p) = planner.clone() {
@@ -371,9 +377,7 @@ impl AppState {
 
         let memory_context = if let (Some(sid), Some(cm)) = (&session_id, &self.chatmemory) {
             if let Ok(session_uuid) = uuid::Uuid::parse_str(sid) {
-                cm.load(&self.auth, session_uuid)
-                    .await
-                    .ok()
+                cm.load(&self.auth, session_uuid).await.ok()
             } else {
                 None
             }
@@ -398,7 +402,8 @@ impl AppState {
             debug: false,
             stream,
             language: req.language.clone(),
-            auth_context: serde_json::to_value(&self.auth).unwrap_or_else(|_| serde_json::json!({})),
+            auth_context: serde_json::to_value(&self.auth)
+                .unwrap_or_else(|_| serde_json::json!({})),
             docscope_metadata: None,
             metadata: std::collections::BTreeMap::new(),
             cancellation_token: None,
@@ -420,8 +425,9 @@ impl AppState {
         );
         general_debug.insert(
             "memory_loaded".to_string(),
-            serde_json::json!(agent_request.session_summary.is_some()
-                || agent_request.user_preferences.is_some()),
+            serde_json::json!(
+                agent_request.session_summary.is_some() || agent_request.user_preferences.is_some()
+            ),
         );
         general_debug.insert("summary_updated".to_string(), serde_json::json!(false));
         general_debug.insert(
@@ -620,10 +626,9 @@ fn agent_user_preferences_json(profile: &avrag_chatmemory::Layer3Profile) -> ser
         "custom_preferences": profile.custom_preferences.clone(),
         "inference_version": profile.inference_version.clone(),
     });
-    if let (Some(base_obj), Some(profile_obj)) = (
-        base.as_object_mut(),
-        profile.structured_profile.as_object(),
-    ) {
+    if let (Some(base_obj), Some(profile_obj)) =
+        (base.as_object_mut(), profile.structured_profile.as_object())
+    {
         for (key, value) in profile_obj {
             // Structured profile fields take precedence over legacy fields.
             base_obj.insert(key.clone(), value.clone());
@@ -631,5 +636,3 @@ fn agent_user_preferences_json(profile: &avrag_chatmemory::Layer3Profile) -> ser
     }
     base
 }
-
-

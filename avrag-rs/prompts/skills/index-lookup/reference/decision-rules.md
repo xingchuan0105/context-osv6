@@ -23,14 +23,31 @@
 
 ## Sequencing rules
 
-- `index-lookup` **MUST be preceded by `doc-index`** in the same
-  plan. The planner is responsible for sequencing.
+- **Default**: `index-lookup` is preceded by `doc-index` in the
+  same plan. The chunk IDs returned by `doc-index` are the only
+  safe source.
+- **Cache hit**: if chunk IDs are from session state AND the
+  document has not been re-ingested since, you may skip
+  `doc-index` and call `index-lookup` directly.
+- **Stale cache**: if a re-ingest may have happened, you MUST
+  re-call `doc-index` first; old IDs silently return empty.
 - `doc-index` and `index-lookup` for the same document can be in
   the same plan; the runtime executes them in order.
-- Do not interleave `index-lookup` with `dense-retrieval` for
-  the same document unless you have a specific reason
-  (e.g. "the section I want is in chunk 14, but let me also
-  semantic-search the rest").
+
+## Pairing with other tools
+
+`index-lookup` is a **surgical** tool — you call it when you
+know what you want. Pairing with `dense-retrieval` or
+`graph-retrieval` in the same plan is valid and common, e.g.:
+
+- `graph-retrieval` returns supporting chunk IDs →
+  `index-lookup` fetches the actual text (see `examples.md`).
+- `dense-retrieval` surfaces a region of interest →
+  `doc-index` for the surrounding section map →
+  `index-lookup` for the precise chunks in that section.
+
+Avoid calling `index-lookup` in a tight loop against the same
+document; batch the IDs into one call to amortize the overhead.
 
 ## Why `index-lookup` is the most precise tool
 

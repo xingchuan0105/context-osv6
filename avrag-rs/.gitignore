@@ -19,3 +19,4 @@ Cargo.lock
 # Legacy frontend (Leptos 0.7 skeleton) — superseded by frontend_rust/
 /crates/web-ui/
 /crates/web-sdk/
+volumes/

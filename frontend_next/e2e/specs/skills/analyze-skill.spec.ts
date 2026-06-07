@@ -25,11 +25,9 @@ test.describe("Analyze Skill", () => {
     const answer = await chat.lastAnswerText();
     expect(answer.length).toBeGreaterThan(30);
 
-    // Skills 层基线：回答应体现分析特征（关键词非阻塞，仅警告）
+    // Availability: answer must show analysis characteristics
     const hasAnalysisSignal = /趋势|数据|分析|insight|pattern|summary/i.test(answer);
-    if (!hasAnalysisSignal) {
-      console.warn(`[skills] analyze-skill: answer lacks analysis keywords`);
-    }
+    expect(hasAnalysisSignal).toBe(true);
 
     // TODO: 待 UI 补充 data-testid="analyze-chart" 后，添加图表可见性断言
   });

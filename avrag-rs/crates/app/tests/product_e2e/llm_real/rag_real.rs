@@ -9,8 +9,8 @@
 use std::time::Duration;
 
 use crate::product_e2e::{
-    assertions::{assert_answer_has_doc_citation, assert_http_ok},
     ChatResponse, DocumentStatus, HttpResponse, TestContext,
+    assertions::{assert_answer_has_doc_citation, assert_http_ok},
 };
 
 /// P0: Basic RAG document Q&A returns a substantive answer with at least

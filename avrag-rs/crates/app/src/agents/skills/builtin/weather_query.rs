@@ -151,10 +151,16 @@ mod tests {
         // Without an API key the call will error, but the error must NOT be "missing location".
         let skill = WeatherQuerySkill;
         let result = skill
-            .execute(&serde_json::json!({"location": "Beijing", "units": "imperial"}), &ctx())
+            .execute(
+                &serde_json::json!({"location": "Beijing", "units": "imperial"}),
+                &ctx(),
+            )
             .await;
         let data = result.data.unwrap();
         let err = data["error"].as_str().unwrap_or("");
-        assert!(!err.contains("missing location"), "skill should read location and proceed to API call");
+        assert!(
+            !err.contains("missing location"),
+            "skill should read location and proceed to API call"
+        );
     }
 }

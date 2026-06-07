@@ -23,7 +23,26 @@ Good call signatures for `dense-retrieval`.
 Two paraphrased queries, each standalone. `top_k: 10` is the
 default — explicit for clarity.
 
-## Example 2: Multimodal query
+## Example 2: Short phrase input (narrow lookup)
+
+**Context**: User asks "Barbell strategy"
+
+```json
+{
+  "tool": "dense_retrieval",
+  "version": "1.0",
+  "args": {
+    "queries": ["Barbell strategy"],
+    "top_k": 3
+  }
+}
+```
+
+A short precise phrase is valid when the intent is narrow and
+unambiguous. `top_k: 3` because the user wants a specific
+definition, not broad context.
+
+## Example 3: Multimodal query
 
 **Context**: User asks "what does the architecture diagram on page 8
 show?"
@@ -43,7 +62,7 @@ show?"
 `modality: "mm"` surfaces image-bearing chunks. Low `top_k: 5`
 because the user wants a specific figure, not the top-10.
 
-## Example 3: Hybrid with lexical
+## Example 4: Hybrid with lexical
 
 **Context**: User asks "what does E-2047 say about session timeouts?"
 
@@ -72,7 +91,7 @@ Two parallel calls in the same plan. The merger combines via
 RRF. The dense call catches the paraphrased "behavior"
 context; the lexical call anchors on the exact "E-2047" string.
 
-## Example 4: Pre-summary scoping
+## Example 5: Pre-summary scoping
 
 **Context**: User asks "what does the compliance manual say about
 auditing?"
@@ -102,20 +121,28 @@ auditing?"
 retrieval. `top_k: 15` (above default) because compliance docs
 are large and the user asked an open-ended question.
 
-## Example 5: Narrow lookup, single answer expected
+## Example 6: Empty results after re-index
 
-**Context**: User asks "what is the Barbell strategy?"
+**Context**: User asks "what is the refund policy?" A document was
+re-ingested 30 seconds ago.
 
 ```json
 {
   "tool": "dense_retrieval",
   "version": "1.0",
   "args": {
-    "queries": ["Barbell investment strategy extreme safety extreme risk"],
-    "top_k": 3
+    "queries": ["refund policy and conditions"],
+    "top_k": 10
   }
 }
 ```
 
-`top_k: 3` because the user wants a specific definition, not
-the top-10. Lower `top_k` reduces noise in the answer synthesis.
+Result: `[]` (empty array)
+
+**Triage**: Empty result after a recent re-ingest may indicate
+stale index state, not semantic mismatch. The caller should:
+1. Retry the same query after a short delay (index may still be updating).
+2. If still empty, fall back to `lexical-retrieval` or `doc-summary`
+   as a safety net.
+3. Check worker logs for embedding/indexing failures before concluding
+   the topic is absent from the corpus.

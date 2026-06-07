@@ -46,7 +46,10 @@ pub enum AgentErrorKind {
     /// Prompt exceeded the model's context window.
     ModelContextExceeded { used_tokens: u64, max_tokens: u64 },
     /// Model output did not conform to the expected format.
-    ModelOutputInvalid { expected_schema: String, got: String },
+    ModelOutputInvalid {
+        expected_schema: String,
+        got: String,
+    },
     /// Model output failed JSON schema validation.
     ModelOutputSchemaMismatch {
         expected: String,
@@ -61,7 +64,10 @@ pub enum AgentErrorKind {
 
     // ---------- Permission — non-retriable ----------
     /// Caller lacks permission to invoke the tool.
-    PermissionDenied { tool: String, required: Vec<Permission> },
+    PermissionDenied {
+        tool: String,
+        required: Vec<Permission>,
+    },
 
     // ---------- External dependency — retriable ----------
     /// An external service (search, weather, etc.) failed.
@@ -195,7 +201,10 @@ impl AgentErrorKind {
                 format!("model '{}' on provider '{}' unavailable", model, provider)
             }
             AgentErrorKind::ModelRateLimited => "model rate limited".to_string(),
-            AgentErrorKind::ModelContextExceeded { used_tokens, max_tokens } => {
+            AgentErrorKind::ModelContextExceeded {
+                used_tokens,
+                max_tokens,
+            } => {
                 format!("context exceeded: {} / {} tokens", used_tokens, max_tokens)
             }
             AgentErrorKind::ModelOutputInvalid { .. } => "model output invalid".to_string(),
@@ -238,10 +247,7 @@ impl From<common::AppError> for AgentErrorKind {
             "rate_limited" | "model_rate_limited" | "tool_rate_limited" => {
                 AgentErrorKind::ModelRateLimited
             }
-            "budget_exhausted" => AgentErrorKind::BudgetExhausted {
-                current: 0,
-                max: 0,
-            },
+            "budget_exhausted" => AgentErrorKind::BudgetExhausted { current: 0, max: 0 },
             "tool_error" => AgentErrorKind::ToolExecutionFailed {
                 tool: "unknown".to_string(),
                 reason: err.message().to_string(),

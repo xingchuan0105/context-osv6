@@ -13,7 +13,18 @@ echo "  Context-OS E2E 本地运行脚本"
 echo "═══════════════════════════════════════════════════"
 
 # ── 检查必需服务 ──────────────────────────────────
-check_service() {
+check_tcp() {
+  local name=$1 host=$2 port=$3
+  if nc -z "$host" "$port" >/dev/null 2>&1; then
+    echo -e "${GREEN}✓${NC} $name"
+    return 0
+  else
+    echo -e "${RED}✗${NC} $name (未运行)"
+    return 1
+  fi
+}
+
+check_http() {
   local name=$1 url=$2
   if curl -fsS "$url" >/dev/null 2>&1; then
     echo -e "${GREEN}✓${NC} $name"
@@ -25,11 +36,11 @@ check_service() {
 }
 
 missing=0
-check_service "PostgreSQL (5432)"  "http://127.0.0.1:5432"  || missing=1
-check_service "Redis (6379)"       "http://127.0.0.1:6379"  || missing=1
-check_service "Milvus (19530)"     "http://127.0.0.1:19530/healthz" || missing=1
-check_service "MinIO (9000)"       "http://127.0.0.1:9000/minio/health/live" || missing=1
-check_service "avrag-api (8080)"   "http://127.0.0.1:8080/health" || missing=1
+check_tcp  "PostgreSQL (5432)" "127.0.0.1" 5432 || missing=1
+check_tcp  "Redis (6379)"      "127.0.0.1" 6379 || missing=1
+check_tcp  "Milvus (19530)"    "127.0.0.1" 19530 || missing=1
+check_http "MinIO (9000)"       "http://127.0.0.1:9000/minio/health/live" || missing=1
+check_http "avrag-api (8080)"   "http://127.0.0.1:8080/health" || missing=1
 
 if [[ $missing -eq 1 ]]; then
   echo ""

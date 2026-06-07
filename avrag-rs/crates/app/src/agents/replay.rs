@@ -378,7 +378,9 @@ pub fn check_replay_compatibility(
                 };
             }
         }
-        ReplayCompatibility::PatchLevel | ReplayCompatibility::MinorLevel | ReplayCompatibility::BestEffort { .. } => {
+        ReplayCompatibility::PatchLevel
+        | ReplayCompatibility::MinorLevel
+        | ReplayCompatibility::BestEffort { .. } => {
             // For patch level, we would parse semver and compare major.minor.
             // For simplicity, we do exact match here and leave semver parsing
             // as a future enhancement.
@@ -397,7 +399,9 @@ pub fn check_replay_compatibility(
     if !snapshot.is_replayable {
         return ReplayResultTag::BestEffort {
             confidence: 0.5,
-            notes: vec!["snapshot marked non-replayable (e.g. due to non-replayable tools)".to_string()],
+            notes: vec![
+                "snapshot marked non-replayable (e.g. due to non-replayable tools)".to_string(),
+            ],
         };
     }
 
@@ -483,7 +487,11 @@ pub fn replay(
             .map(crate::agents::runtime::AgentRunResult::from),
     };
 
-    ReplayResult { tag, result, environment_diff: None }
+    ReplayResult {
+        tag,
+        result,
+        environment_diff: None,
+    }
 }
 
 // ---------------------------------------------------------------------------

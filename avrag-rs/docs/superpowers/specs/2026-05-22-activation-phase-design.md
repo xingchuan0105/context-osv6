@@ -92,7 +92,7 @@ pub struct SkillMetadata {
 | web_search | Tool | PlanAndEvaluate | search |
 | calculator, code_interpreter, weather_query | Tool | PlanAndEvaluate | chat |
 | html-renderer, ppt-generation, teaching | Skill | Answer | rag, search, chat |
-| framework-extraction | Skill | Answer | rag |
+| framework-extraction | Skill | Answer | rag, search, chat |
 | rag-plan, chat-plan, search-plan | Skill | — (不参与目录) | 各自 |
 | rag-eval, search-eval | Skill | — (不参与目录) | 各自 |
 | rag-answer, chat-answer, search-answer | Skill | — (不参与目录) | 各自 |

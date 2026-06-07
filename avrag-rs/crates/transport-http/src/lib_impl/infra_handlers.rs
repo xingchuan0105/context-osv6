@@ -206,6 +206,7 @@ async fn signed_upload_handler(
 }
 
 async fn billing_webhook_handler(
+    Path(provider_str): Path<String>,
     State(state): State<AppState>,
     headers: HeaderMap,
     body: Bytes,
@@ -224,11 +225,27 @@ async fn billing_webhook_handler(
             .into_response();
     };
 
-    let signature = headers
-        .get("stripe-signature")
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default();
-    let result = avrag_billing::handle_webhook(repo, signature, body.as_ref()).await;
+    let provider = match provider_str.parse::<avrag_billing::BillingProvider>() {
+        Ok(p) => p,
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+
+    let signature = match provider {
+        avrag_billing::BillingProvider::Stripe => headers
+            .get("stripe-signature")
+            .and_then(|value| value.to_str().ok()),
+        avrag_billing::BillingProvider::Creem => headers
+            .get("creem-signature")
+            .and_then(|value| value.to_str().ok()),
+        avrag_billing::BillingProvider::Alipay => None,
+    };
+
+    let result = avrag_billing::handle_webhook(repo, provider, signature, body.as_ref()).await;
+
+    if provider == avrag_billing::BillingProvider::Alipay && result.ok {
+        return (StatusCode::OK, "success").into_response();
+    }
+
     let status = if result.ok {
         StatusCode::OK
     } else {

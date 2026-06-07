@@ -8,21 +8,21 @@
 pub mod assertions;
 pub mod setup;
 
-pub mod smoke;
-pub mod integration;
 pub mod failure;
-pub mod tenants;
+pub mod integration;
 pub mod llm_real;
+pub mod smoke;
+pub mod tenants;
 
+use axum::{Json, Router, response::IntoResponse, routing::post};
+use serde_json::json;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use axum::{response::IntoResponse, routing::post, Json, Router};
-use uuid::Uuid;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::AsyncWriteExt;
-use serde_json::json;
+use uuid::Uuid;
 
 // ---------------------------------------------------------------------------
 // Process-wide helpers
@@ -44,8 +44,6 @@ async fn run_orphan_cleanup_once() {
         let _ = DONE.set(());
     }
 }
-
-
 
 /// Raw HTTP response from the test client.
 ///
@@ -110,10 +108,15 @@ impl SseParser {
             let line = line.trim_end_matches(&['\r', '\n'][..]).to_string();
             if line.is_empty() {
                 // Event terminator: emit if we have data
-                if let (Some(event), Some(data)) = (self.current_event.take(), self.current_data.take()) {
-                    let parsed = serde_json::from_str(&data)
-                        .unwrap_or(serde_json::Value::String(data));
-                    out.push(SseEvent { event, data: parsed });
+                if let (Some(event), Some(data)) =
+                    (self.current_event.take(), self.current_data.take())
+                {
+                    let parsed =
+                        serde_json::from_str(&data).unwrap_or(serde_json::Value::String(data));
+                    out.push(SseEvent {
+                        event,
+                        data: parsed,
+                    });
                 }
             } else if let Some(rest) = line.strip_prefix("event:") {
                 self.current_event = Some(rest.trim().to_string());
@@ -212,10 +215,7 @@ pub const DEFAULT_TEST_USER_ID: &str = "00000000-0000-0000-0000-000000000001";
 /// other tests running in parallel.
 pub fn unique_test_identity() -> (String, String) {
     use uuid::Uuid;
-    (
-        Uuid::new_v4().to_string(),
-        Uuid::new_v4().to_string(),
-    )
+    (Uuid::new_v4().to_string(), Uuid::new_v4().to_string())
 }
 
 /// Auth headers for a specific org/user (used by `build_smoke` and by
@@ -297,22 +297,27 @@ impl TestContext {
         };
 
         // 5. Start mock Search (always — needed by Search tests)
-        let (mock_search_url, mock_search_abort, search_should_429) = start_mock_search_server().await;
+        let (mock_search_url, mock_search_abort, search_should_429) =
+            start_mock_search_server().await;
 
         // 6. Start mock Embedding if RAG enabled and not using real LLM.
-        let (mock_embedding_url, mock_embedding_abort, embedding_should_503) = if enable_rag && !use_real_llm {
-            let (url, abort, flag) = start_mock_embedding_server().await;
-            (Some(url), Some(abort), Some(flag))
-        } else {
-            (None, None, None)
-        };
+        let (mock_embedding_url, mock_embedding_abort, embedding_should_503) =
+            if enable_rag && !use_real_llm {
+                let (url, abort, flag) = start_mock_embedding_server().await;
+                (Some(url), Some(abort), Some(flag))
+            } else {
+                (None, None, None)
+            };
 
         // 5. Set env vars for AppConfig
         unsafe {
             std::env::set_var("DATABASE_URL", &pg_url);
             std::env::set_var("AVRAG_RUN_MIGRATIONS", "true");
             std::env::set_var("AVRAG_OBJECT_ROOT", &object_root);
-            std::env::set_var("AVRAG_ENABLE_RAG", if enable_rag { "true" } else { "false" });
+            std::env::set_var(
+                "AVRAG_ENABLE_RAG",
+                if enable_rag { "true" } else { "false" },
+            );
             std::env::set_var("REDIS_URL", ""); // disable Redis
             std::env::set_var("AVRAG_PUBLIC_BASE_URL", "http://127.0.0.1:8080");
 
@@ -358,10 +363,14 @@ impl TestContext {
 
         // 6. Bootstrap AppState and start HTTP server
         let config = app::AppConfig::from_env();
-        let state = app::AppState::bootstrap(config.clone()).await.expect("bootstrap AppState");
+        let state = app::AppState::bootstrap(config.clone())
+            .await
+            .expect("bootstrap AppState");
 
         let router = transport_http::build_router(state);
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
         let base_url = format!("http://{}", listener.local_addr().unwrap());
 
         let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
@@ -374,33 +383,52 @@ impl TestContext {
         });
 
         // 7. Start worker process
-        let worker_binary = setup::find_worker_binary().await.expect("find worker binary");
+        let worker_binary = setup::find_worker_binary()
+            .await
+            .expect("find worker binary");
         let worker_log_path = object_store_dir.path().join("worker.log");
         let mut cmd = tokio::process::Command::new(&worker_binary);
         cmd.env("DATABASE_URL", &pg_url)
             .env("AVRAG_RUN_MIGRATIONS", "false")
             .env("AVRAG_OBJECT_ROOT", &object_root)
-            .env("AVRAG_ENABLE_RAG", if enable_rag { "true" } else { "false" })
+            .env(
+                "AVRAG_ENABLE_RAG",
+                if enable_rag { "true" } else { "false" },
+            )
             .env("REDIS_URL", "")
             .env("AVRAG_PUBLIC_BASE_URL", &base_url)
             .env("AVRAG_WORKER_ID", "test-worker")
             .env("AVRAG_WORKER_POLL_SECS", "1")
-            .env("AVRAG_INGESTION_TASK_TIMEOUT_SECS", worker_timeout_secs.to_string())
+            .env(
+                "AVRAG_INGESTION_TASK_TIMEOUT_SECS",
+                worker_timeout_secs.to_string(),
+            )
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
 
         if let Some(ref url) = milvus_url {
             cmd.env("MILVUS_URL", url)
-               .env("MILVUS_TOKEN", "")
-               .env("MILVUS_DATABASE", "default")
-               .env("MILVUS_COLLECTION_PREFIX", std::env::var("MILVUS_COLLECTION_PREFIX").unwrap_or_default());
+                .env("MILVUS_TOKEN", "")
+                .env("MILVUS_DATABASE", "default")
+                .env(
+                    "MILVUS_COLLECTION_PREFIX",
+                    std::env::var("MILVUS_COLLECTION_PREFIX").unwrap_or_default(),
+                );
         }
         // Worker LLM env: real or mock depending on mode.
         if use_real_llm {
-            for key in ["AGENT_LLM_BASE_URL", "AGENT_LLM_API_KEY", "AGENT_LLM_MODEL",
-                        "MEMORY_LLM_BASE_URL", "MEMORY_LLM_API_KEY", "MEMORY_LLM_MODEL",
-                        "INGESTION_LLM_BASE_URL", "INGESTION_LLM_API_KEY", "INGESTION_LLM_MODEL"] {
+            for key in [
+                "AGENT_LLM_BASE_URL",
+                "AGENT_LLM_API_KEY",
+                "AGENT_LLM_MODEL",
+                "MEMORY_LLM_BASE_URL",
+                "MEMORY_LLM_API_KEY",
+                "MEMORY_LLM_MODEL",
+                "INGESTION_LLM_BASE_URL",
+                "INGESTION_LLM_API_KEY",
+                "INGESTION_LLM_MODEL",
+            ] {
                 if let Ok(v) = std::env::var(key) {
                     cmd.env(key, v);
                 }
@@ -412,19 +440,19 @@ impl TestContext {
             }
         } else {
             cmd.env("AGENT_LLM_BASE_URL", &mock_llm_url)
-               .env("AGENT_LLM_API_KEY", "mock")
-               .env("AGENT_LLM_MODEL", "mock-llm")
-               .env("MEMORY_LLM_BASE_URL", &mock_llm_url)
-               .env("MEMORY_LLM_API_KEY", "mock")
-               .env("MEMORY_LLM_MODEL", "mock-llm")
-               .env("INGESTION_LLM_BASE_URL", &mock_llm_url)
-               .env("INGESTION_LLM_API_KEY", "mock")
-               .env("INGESTION_LLM_MODEL", "mock-llm");
+                .env("AGENT_LLM_API_KEY", "mock")
+                .env("AGENT_LLM_MODEL", "mock-llm")
+                .env("MEMORY_LLM_BASE_URL", &mock_llm_url)
+                .env("MEMORY_LLM_API_KEY", "mock")
+                .env("MEMORY_LLM_MODEL", "mock-llm")
+                .env("INGESTION_LLM_BASE_URL", &mock_llm_url)
+                .env("INGESTION_LLM_API_KEY", "mock")
+                .env("INGESTION_LLM_MODEL", "mock-llm");
 
             if let Some(ref url) = mock_embedding_url {
                 cmd.env("EMBEDDING_BASE_URL", url)
-                   .env("EMBEDDING_API_KEY", "mock")
-                   .env("EMBEDDING_MODEL", "mock-embedding");
+                    .env("EMBEDDING_API_KEY", "mock")
+                    .env("EMBEDDING_MODEL", "mock-embedding");
             }
         }
 
@@ -440,8 +468,8 @@ impl TestContext {
             }
         } else {
             cmd.env("SEARCH_PROVIDER", "brave_llm_context")
-               .env("SEARCH_BASE_URL", &mock_search_url)
-               .env("SEARCH_API_KEY", "mock");
+                .env("SEARCH_BASE_URL", &mock_search_url)
+                .env("SEARCH_API_KEY", "mock");
         }
 
         let mut worker = cmd.spawn().expect("spawn worker");
@@ -465,7 +493,12 @@ impl TestContext {
             let log_path = worker_log_path.clone();
             let mut reader = tokio::io::BufReader::new(stderr).lines();
             tokio::spawn(async move {
-                let mut file = match tokio::fs::OpenOptions::new().append(true).create(true).open(&log_path).await {
+                let mut file = match tokio::fs::OpenOptions::new()
+                    .append(true)
+                    .create(true)
+                    .open(&log_path)
+                    .await
+                {
                     Ok(f) => f,
                     Err(_) => return,
                 };
@@ -531,7 +564,8 @@ impl TestContext {
     /// Upload a fixture file and return the document ID.
     pub async fn upload_document(&self, fixture: &str) -> anyhow::Result<UploadResponse> {
         let notebook = self.create_notebook("test-notebook").await?;
-        self.upload_document_to_notebook(fixture, &notebook.id).await
+        self.upload_document_to_notebook(fixture, &notebook.id)
+            .await
     }
 
     /// Upload a fixture file to an existing notebook.
@@ -628,7 +662,9 @@ impl TestContext {
                 _ => {}
             }
             if tokio::time::Instant::now() > deadline {
-                anyhow::bail!("wait_for_ingestion timed out after {timeout:?}, last status={last_status}");
+                anyhow::bail!(
+                    "wait_for_ingestion timed out after {timeout:?}, last status={last_status}"
+                );
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
@@ -636,10 +672,7 @@ impl TestContext {
 
     /// GET the document status with up to 3 retries on transient errors.
     /// Returns the parsed JSON body on success.
-    async fn fetch_status_with_retry(
-        &self,
-        doc_id: &str,
-    ) -> anyhow::Result<serde_json::Value> {
+    async fn fetch_status_with_retry(&self, doc_id: &str) -> anyhow::Result<serde_json::Value> {
         const MAX_ATTEMPTS: u32 = 3;
         let url = format!("{}/api/v1/documents/{doc_id}/status", self.base_url);
         let mut last_err: Option<anyhow::Error> = None;
@@ -676,7 +709,8 @@ impl TestContext {
         notebook_id: &str,
         doc_scope: &[String],
     ) -> anyhow::Result<HttpResponse> {
-        self.chat_with_format_hint(query, notebook_id, doc_scope, None).await
+        self.chat_with_format_hint(query, notebook_id, doc_scope, None)
+            .await
     }
 
     /// Send a RAG chat query with an optional format_hint.
@@ -709,11 +743,7 @@ impl TestContext {
     }
 
     /// Send a Search query and return the raw HTTP response.
-    pub async fn search(
-        &self,
-        query: &str,
-        notebook_id: &str,
-    ) -> anyhow::Result<HttpResponse> {
+    pub async fn search(&self, query: &str, notebook_id: &str) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
             .post(format!("{}/api/v1/chat", self.base_url))
@@ -862,7 +892,10 @@ impl TestContext {
         let _ = std::fs::create_dir_all(&out_dir);
 
         if let Some(body) = response_json {
-            let _ = std::fs::write(out_dir.join("response_body.json"), serde_json::to_string_pretty(body).unwrap_or_default());
+            let _ = std::fs::write(
+                out_dir.join("response_body.json"),
+                serde_json::to_string_pretty(body).unwrap_or_default(),
+            );
         }
 
         if let Some(ref log_path) = self.worker_log_path {
@@ -1043,15 +1076,31 @@ impl MockLlmRoute {
     /// Return the canned response body for this route.
     fn canned_response(self) -> &'static str {
         match self {
-            Self::RagPlanner => r#"{"calls": [{"tool": "dense_retrieval", "version": "1.0", "args": {"queries": ["antifragility Taleb summary"], "modality": "text", "top_k": 10}}], "next_step": "answer"}"#,
-            Self::RagCoverageEvaluator => r#"{"decision": "sufficient", "dimensions": [{"name": "coverage", "attempted": true, "covered": true, "retrieved_count": 3, "query_ids": ["q1"], "status": "covered_strong"}], "next_actions": [], "reasoning": "good"}"#,
-            Self::RagAnswer => "Based on the document, antifragility is a property of systems that increase in capability, resilience, or robustness as a result of stressors, shocks, volatility, noise, mistakes, faults, attacks, or failures. The concept was developed by Nassim Nicholas Taleb.",
-            Self::SearchPlanner => r#"{"sub_queries": ["Tokyo weather today"], "intent_summary": "The user wants to know the current weather in Tokyo.", "needs_clarification": false}"#,
-            Self::SearchCoverageEvaluator => r#"{"decision": "sufficient", "dimensions": [{"name": "coverage", "attempted": true, "covered": true, "retrieved_count": 1, "query_ids": ["q1"], "status": "covered_strong"}], "next_actions": [], "reasoning": "good"}"#,
+            Self::RagPlanner => {
+                r#"{"calls": [{"tool": "dense_retrieval", "version": "1.0", "args": {"queries": ["antifragility Taleb summary"], "modality": "text", "top_k": 10}}], "next_step": "answer"}"#
+            }
+            Self::RagCoverageEvaluator => {
+                r#"{"decision": "sufficient", "dimensions": [{"name": "coverage", "attempted": true, "covered": true, "retrieved_count": 3, "query_ids": ["q1"], "status": "covered_strong"}], "next_actions": [], "reasoning": "good"}"#
+            }
+            Self::RagAnswer => {
+                "Based on the document, antifragility is a property of systems that increase in capability, resilience, or robustness as a result of stressors, shocks, volatility, noise, mistakes, faults, attacks, or failures. The concept was developed by Nassim Nicholas Taleb."
+            }
+            Self::SearchPlanner => {
+                r#"{"sub_queries": ["Tokyo weather today"], "intent_summary": "The user wants to know the current weather in Tokyo.", "needs_clarification": false}"#
+            }
+            Self::SearchCoverageEvaluator => {
+                r#"{"decision": "sufficient", "dimensions": [{"name": "coverage", "attempted": true, "covered": true, "retrieved_count": 1, "query_ids": ["q1"], "status": "covered_strong"}], "next_actions": [], "reasoning": "good"}"#
+            }
             Self::SearchAnswer => "The weather in Tokyo today is sunny with a high of 25°C [[1]].",
-            Self::FormatSkillPpt => "<html><body><div class=\"slide\"><h1>Slide 1</h1><p>Summary of antifragility</p></div><div class=\"slide\"><h1>Slide 2</h1><p>Key concepts</p></div></body></html>",
-            Self::FormatSkillHtml => "<html><body><h1>Antifragility</h1><p>Antifragility is a property of systems that benefit from stress.</p></body></html>",
-            Self::Fallback => "This document discusses antifragility, a concept by Nassim Nicholas Taleb describing systems that benefit from shock and disorder.",
+            Self::FormatSkillPpt => {
+                "<html><body><div class=\"slide\"><h1>Slide 1</h1><p>Summary of antifragility</p></div><div class=\"slide\"><h1>Slide 2</h1><p>Key concepts</p></div></body></html>"
+            }
+            Self::FormatSkillHtml => {
+                "<html><body><h1>Antifragility</h1><p>Antifragility is a property of systems that benefit from stress.</p></body></html>"
+            }
+            Self::Fallback => {
+                "This document discusses antifragility, a concept by Nassim Nicholas Taleb describing systems that benefit from shock and disorder."
+            }
         }
     }
 
@@ -1117,13 +1166,14 @@ impl MockLlmRoute {
     }
 }
 async fn start_mock_llm_server() -> (String, tokio::sync::oneshot::Sender<()>) {
-    let app = Router::new()
-        .route(
-            "/chat/completions",
-            post(mock_llm_handler).layer(axum::extract::DefaultBodyLimit::max(8 * 1024 * 1024)),
-        );
+    let app = Router::new().route(
+        "/chat/completions",
+        post(mock_llm_handler).layer(axum::extract::DefaultBodyLimit::max(8 * 1024 * 1024)),
+    );
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind mock llm");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock llm");
     let port = listener.local_addr().unwrap().port();
     let base_url = format!("http://127.0.0.1:{port}");
 
@@ -1142,14 +1192,19 @@ async fn start_mock_llm_server() -> (String, tokio::sync::oneshot::Sender<()>) {
 /// Start a mock Embedding HTTP server on an ephemeral port.
 ///
 /// Returns (base_url, abort_sender, embedding_should_503_flag).
-async fn start_mock_embedding_server() -> (String, tokio::sync::oneshot::Sender<()>, Arc<AtomicBool>) {
+async fn start_mock_embedding_server() -> (String, tokio::sync::oneshot::Sender<()>, Arc<AtomicBool>)
+{
     let embedding_should_503 = Arc::new(AtomicBool::new(false));
     let flag = embedding_should_503.clone();
 
-    let app = Router::new()
-        .route("/embeddings", post(move |req| mock_embedding_handler(req, flag.clone())));
+    let app = Router::new().route(
+        "/embeddings",
+        post(move |req| mock_embedding_handler(req, flag.clone())),
+    );
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind mock embedding");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock embedding");
     let port = listener.local_addr().unwrap().port();
     let base_url = format!("http://127.0.0.1:{port}");
 
@@ -1187,10 +1242,7 @@ async fn mock_llm_handler(
         .unwrap_or_else(|| MockLlmRoute::from_system_prompt(system_prompt, user_prompt));
 
     let content = route.canned_response();
-    let is_stream = req
-        .get("stream")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let is_stream = req.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
 
     if is_stream {
         // SSE format expected by ChatCompletionStreamParser.
@@ -1352,10 +1404,18 @@ async fn start_mock_search_server() -> (String, tokio::sync::oneshot::Sender<()>
 
     let flag2 = flag.clone();
     let app = Router::new()
-        .route("/res/v1/llm/context", post(move |req| mock_search_handler(req, flag.clone())))
-        .route("/res/v1/news/search", post(move |req| mock_search_handler(req, flag2.clone())));
+        .route(
+            "/res/v1/llm/context",
+            post(move |req| mock_search_handler(req, flag.clone())),
+        )
+        .route(
+            "/res/v1/news/search",
+            post(move |req| mock_search_handler(req, flag2.clone())),
+        );
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind mock search");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock search");
     let port = listener.local_addr().unwrap().port();
     let base_url = format!("http://127.0.0.1:{port}");
 

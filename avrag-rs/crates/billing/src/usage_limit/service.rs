@@ -115,7 +115,7 @@ impl UsageLimitService {
         })
     }
 
-    async fn load_effective_policy(&self, org_id: Uuid, user_id: Uuid) -> Result<UsageLimitPolicy> {
+    async fn load_effective_policy(&self, _org_id: Uuid, user_id: Uuid) -> Result<UsageLimitPolicy> {
         // 1. Check user override
         let override_row = sqlx::query(
             r#"
@@ -150,7 +150,7 @@ impl UsageLimitService {
         }
 
         // 2. Determine plan from subscriptions table
-        let plan_id = self.get_user_plan(org_id).await?;
+        let plan_id = self.get_user_plan(user_id).await?;
 
         // 3. Load plan defaults
         let plan_row = sqlx::query(
@@ -191,15 +191,15 @@ impl UsageLimitService {
         })
     }
 
-    async fn get_user_plan(&self, org_id: Uuid) -> Result<String> {
+    async fn get_user_plan(&self, user_id: Uuid) -> Result<String> {
         let row = sqlx::query(
             r#"
             SELECT plan_id FROM subscriptions
-            WHERE org_id = $1 AND status = 'active'
+            WHERE user_id = $1 AND status = 'active'
             ORDER BY updated_at DESC LIMIT 1
             "#,
         )
-        .bind(org_id)
+        .bind(user_id)
         .fetch_optional(&self.pool)
         .await?;
 

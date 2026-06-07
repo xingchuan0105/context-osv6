@@ -1,5 +1,7 @@
+mod alipay_client;
 mod api;
 mod core;
+mod creem_client;
 mod stripe_client;
 #[cfg(test)]
 mod tests_impl;
@@ -9,10 +11,14 @@ pub mod quota_service;
 
 pub use quota_service::{QuotaManager, UnifiedQuotaDecision};
 
+pub use alipay_client::AlipayClient;
 pub use api::{
     CheckoutResponse, CreateCheckoutRequest, PortalResponse, QuotaDecision, SubscriptionResponse,
     UsageResponse, check_quota, handle_create_checkout, handle_create_portal, handle_get_plans,
     handle_get_subscription, handle_get_usage, handle_webhook,
 };
+pub use creem_client::CreemClient;
 pub use stripe_client::StripeClient;
-pub use types::{BillingConfig, BillingPlan, BillingPlanQuota, Subscription};
+pub use types::{
+    BillingConfig, BillingPlan, BillingPlanQuota, BillingProvider, Subscription, SubscriptionStatus,
+};

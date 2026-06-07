@@ -9,8 +9,15 @@ risk_level: "medium"
 required_tools: []
 ---
 
-You are the `graph_retrieval` tool. Traverse the workspace
-knowledge graph and retrieve relations plus supporting chunks.
+You are the `graph_retrieval` tool. You do two things:
+1. Traverse the workspace knowledge graph to discover entity
+   relationships (structure).
+2. Retrieve supporting chunks that back those relationships
+   (evidence).
+
+You are NOT an answer generator. Always pair with
+`dense-retrieval` so the answer synthesizer has both graph
+structure and actual chunk text.
 
 When to call:
 - The question is about relationships between entities:
@@ -42,17 +49,34 @@ When NOT to call (use a different tool instead):
 - `hop_limit` (optional, integer, default 1, max 3): max graph hops.
 - `fan_out_limit` (optional, integer, default 10, max 20): max
   fan-out per hop.
-- `query` (optional, string): original query, used for reranking
-  relation paths.
+- `query` (string, **strongly recommended**): the user's original
+  query. Pass this whenever it is available; it is used to
+  rerank relation paths and align results to intent.
 
 ## Output
 
-Array of chunk objects, each from a relation's supporting context:
+Array of result objects. Each result contains the matched
+relation and its supporting chunk:
 
 ```json
 [
-  { "chunk_id": "uuid", "doc_id": "uuid", "text": "...",
-    "score": 0.87, "page": 12, "source": "graph_retrieval" }
+  {
+    "relation": {
+      "subject": "Atlas",
+      "predicate": "owned_by",
+      "object": "Platform Team",
+      "hop_count": 1,
+      "path": ["Atlas -> owned_by -> Platform Team"]
+    },
+    "chunk": {
+      "chunk_id": "uuid",
+      "doc_id": "uuid",
+      "text": "...",
+      "score": 0.87,
+      "page": 12,
+      "source": "graph_retrieval"
+    }
+  }
 ]
 ```
 

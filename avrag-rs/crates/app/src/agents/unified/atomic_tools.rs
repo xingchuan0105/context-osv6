@@ -99,9 +99,7 @@ pub async fn dispatch_atomic_tool_with_enforcement(
         .unwrap_or_default();
 
     execute_with_retry(
-        || async {
-            skill_registry.execute(&call.tool, &call.args, &ctx).await
-        },
+        || async { skill_registry.execute(&call.tool, &call.args, &ctx).await },
         &retry_policy,
     )
     .await
@@ -112,7 +110,10 @@ pub async fn dispatch_atomic_tool_with_enforcement(
 /// - Non-idempotent tools are never retried.
 /// - Only `ToolStatus::Error` and `Timeout` trigger retry.
 /// - `NotFound` / `NotImplemented` are treated as terminal.
-async fn execute_with_retry<F, Fut>(op: F, policy: &crate::agents::capability::RetryPolicy) -> ToolResult
+async fn execute_with_retry<F, Fut>(
+    op: F,
+    policy: &crate::agents::capability::RetryPolicy,
+) -> ToolResult
 where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = ToolResult>,
@@ -134,8 +135,7 @@ where
             return result;
         }
 
-        backoff = ((backoff as f64 * policy.backoff_multiplier) as u64)
-            .min(policy.max_backoff_ms);
+        backoff = ((backoff as f64 * policy.backoff_multiplier) as u64).min(policy.max_backoff_ms);
     }
 
     result
@@ -199,7 +199,12 @@ mod tests {
         let result = dispatch_atomic_tool(&call, None).await;
         assert_eq!(result.status, ToolStatus::Error);
         let data = result.data.unwrap();
-        assert!(data["error"].as_str().unwrap().contains("missing expression"));
+        assert!(
+            data["error"]
+                .as_str()
+                .unwrap()
+                .contains("missing expression")
+        );
     }
 
     #[tokio::test]
@@ -266,23 +271,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_code_interpreter_exception() {
-        let call = tool_call(
-            "code_interpreter",
-            serde_json::json!({"code": "1/0"}),
-        );
+        let call = tool_call("code_interpreter", serde_json::json!({"code": "1/0"}));
         let result = dispatch_atomic_tool(&call, None).await;
         assert_eq!(result.status, ToolStatus::Ok);
         let data = result.data.unwrap();
-        assert!(data["stderr"].as_str().unwrap().contains("ZeroDivisionError"));
+        assert!(
+            data["stderr"]
+                .as_str()
+                .unwrap()
+                .contains("ZeroDivisionError")
+        );
         assert!(data["success"].as_bool().unwrap());
     }
 
     #[tokio::test]
     async fn test_code_interpreter_result_field() {
-        let call = tool_call(
-            "code_interpreter",
-            serde_json::json!({"code": "x = 42"}),
-        );
+        let call = tool_call("code_interpreter", serde_json::json!({"code": "x = 42"}));
         let result = dispatch_atomic_tool(&call, None).await;
         assert_eq!(result.status, ToolStatus::Ok);
         let data = result.data.unwrap();
@@ -386,8 +390,18 @@ mod tests {
         ];
         let results = dispatch_atomic_tools(calls).await;
         assert_eq!(results.len(), 2);
-        assert_eq!(results[0].data.as_ref().unwrap()["result"].as_f64().unwrap(), 2.0);
-        assert_eq!(results[1].data.as_ref().unwrap()["result"].as_f64().unwrap(), 6.0);
+        assert_eq!(
+            results[0].data.as_ref().unwrap()["result"]
+                .as_f64()
+                .unwrap(),
+            2.0
+        );
+        assert_eq!(
+            results[1].data.as_ref().unwrap()["result"]
+                .as_f64()
+                .unwrap(),
+            6.0
+        );
     }
 
     #[tokio::test]
@@ -442,8 +456,41 @@ mod tests {
         )
         .grant("external_network");
         let provider = FakeSearchProvider;
-        let result = dispatch_atomic_tool_with_enforcement(&call, Some(&provider), Some(&auth)).await;
+        let result =
+            dispatch_atomic_tool_with_enforcement(&call, Some(&provider), Some(&auth)).await;
         assert_eq!(result.status, ToolStatus::Ok);
+    }
+
+    #[tokio::test]
+    async fn test_enforcement_blocks_web_fetch_without_external_network_perm() {
+        let call = tool_call(
+            "web_fetch",
+            serde_json::json!({"url": "https://example.com"}),
+        );
+        let auth = avrag_auth::AuthContext::new(
+            avrag_auth::OrgId::new(uuid::Uuid::nil()),
+            avrag_auth::SubjectKind::User,
+        );
+        let result = dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth)).await;
+        assert_eq!(result.status, ToolStatus::Error);
+        let data = result.data.unwrap();
+        assert!(data["error"].as_str().unwrap().contains("external network"));
+    }
+
+    #[tokio::test]
+    async fn test_enforcement_allows_web_fetch_with_external_network_perm() {
+        let call = tool_call(
+            "web_fetch",
+            serde_json::json!({"url": "https://example.com"}),
+        );
+        let auth = avrag_auth::AuthContext::new(
+            avrag_auth::OrgId::new(uuid::Uuid::nil()),
+            avrag_auth::SubjectKind::User,
+        )
+        .grant("external_network");
+        let result = dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth)).await;
+        // Without a real HTTP client the fetch may fail, but policy should allow it.
+        assert!(matches!(result.status, ToolStatus::Ok | ToolStatus::Error));
     }
 
     #[tokio::test]

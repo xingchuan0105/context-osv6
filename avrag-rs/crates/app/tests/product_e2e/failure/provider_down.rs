@@ -1,6 +1,6 @@
 //! P2-10: Search provider 429 → degrade gracefully.
 
-use crate::product_e2e::{assertions::*, ChatResponse, HttpResponse, TestContext};
+use crate::product_e2e::{ChatResponse, HttpResponse, TestContext, assertions::*};
 
 #[tokio::test]
 async fn search_429_returns_degraded_answer() {
@@ -20,7 +20,10 @@ async fn search_429_returns_degraded_answer() {
 
     // 3. Business: no web citations, degrade trace present
     let resp: ChatResponse = http_resp.into_business().unwrap();
-    let has_web = resp.citations.iter().any(|c| c.layer.as_deref() == Some("search"));
+    let has_web = resp
+        .citations
+        .iter()
+        .any(|c| c.layer.as_deref() == Some("search"));
     assert!(!has_web, "should not have web citation when search is 429");
     assert!(
         !resp.degrade_trace.is_empty(),

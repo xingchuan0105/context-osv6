@@ -26,6 +26,4 @@ mod pipeline_tests;
 pub(crate) use pipeline::{
     ChatExecution, ChatPreflight, execute_chat_pipeline, execute_chat_pipeline_stream,
 };
-pub(crate) use service::{
-    BuildChatExecutionParams, build_chat_execution_from_result,
-};
+pub(crate) use service::{BuildChatExecutionParams, build_chat_execution_from_result};

@@ -3,8 +3,8 @@
 ## When `lexical-retrieval` is the right tool
 
 - The query contains a literal string the user expects to find
-  verbatim: filename, document title, error code, ticket number,
-  version string, acronym, exact product / API / class name.
+  verbatim in chunk text: error code, ticket number, version
+  string, acronym, exact product / API / class / identifier name.
 - The user types a specific phrase and means that phrase
   ("find the section that mentions 'AUTH_SESSION_VERSION'").
 - You want to anchor on a specific term AND combine with semantic
@@ -19,7 +19,9 @@
 - **Relationship / multi-hop** → `graph-retrieval`.
 - **Surgical read of known chunks** (you have chunk IDs from
   `doc-index`) → `index_lookup`.
-- **Don't know which doc to target** → `doc-summary` first.
+- **Don't know which doc to target** → `doc-summary` first to
+  discover the right doc, then `dense-retrieval` (or
+  `lexical-retrieval` for literals) against the workspace.
 
 ## Combine with other tools
 
@@ -31,14 +33,46 @@
 
 ## Term-selection rules
 
-- Keep terms compact (1-3 words each). Whole phrases beat single
-  common words.
+`terms` is a **bag of independent tokens**, not phrase queries.
+The runtime applies BM25 over the bag; the order of `terms` in
+the array does not matter, and multi-word entries are tokenized
+into independent words.
+
+- Keep terms compact (1-3 tokens each). Whole phrases beat
+  single common words.
+- **"rollback checklist"** as a single string matches any chunk
+  that contains BOTH `rollback` AND `checklist` (in any order,
+  with any words between). It does NOT require the two words
+  to be adjacent. If you need adjacent-phrase matching, no
+  current retrieval tool supports it — use `index_lookup` after
+  `doc-index` to fetch a known section's text.
+- Multiple entries in `terms` are **OR-combined** (any term
+  matches), then re-weighted by IDF. Add synonyms to broaden
+  recall; add nothing to narrow.
 - Include the most specific form: "Atlas" beats "atlas" beats
   "atlas system".
-- For code/identifier search, include the exact case-sensitive
-  form. BM25 lowercases by default; if case matters, you'll
-  need to post-filter.
+- For code/identifier search, include the exact case-insensitive
+  form. Case is normalized, so don't burn slots on case
+  variants — see "Case is NOT a problem" in `gotchas.md`.
 - Don't pre-stem or pluralize — pass the form the user typed.
-- For multi-word terms, BM25 tokenizes but does not require
-  contiguity. A phrase like "rollback checklist" is found in
-  any chunk containing both words, in either order.
+  Light stemming is applied by the runtime.
+
+## Interpreting scores
+
+BM25 scores are unbounded positive numbers (typically 0-30+).
+Do not treat them like cosine similarities (e.g. 0.87) — the
+example value in the schema is illustrative only. If you see
+scores < 1, the merger has likely already normalized them via
+RRF; that's a post-merge signal, not raw BM25.
+
+Don't compare scores across tools or across calls against
+different corpora. Trust the merged top-k instead.
+
+## `top_k` selection
+
+| Query type | `top_k` | Rationale |
+|------------|---------|-----------|
+| Narrow, single answer expected | 3-5 | Reduces noise in synthesis |
+| Standard literal search | 10 (default) | Balanced coverage |
+| Broad scan before `doc-index` + `index-lookup` | 20-30 | More candidates to filter down |
+| Need even more | Issue a second narrower call | Avoid >50 latency degradation |

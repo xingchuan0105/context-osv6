@@ -1,0 +1,67 @@
+name: Frontend Journey E2E
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'frontend_next/**'
+      - 'avrag-rs/**'
+      - '.github/workflows/frontend-journey.yml'
+  workflow_dispatch:
+
+env:
+  CI: true
+
+jobs:
+  journey-e2e:
+    name: Frontend Journey E2E
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend_next
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          cache-dependency-path: frontend_next/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            avrag-rs/target
+          key: ${{ runner.os }}-cargo-journey-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
+
+      - name: Run journey E2E
+        run: pnpm exec playwright test --project=journey
+        env:
+          E2E_RESET_SECRET: ${{ secrets.E2E_RESET_SECRET }}
+        timeout-minutes: 45
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-journey-report
+          path: frontend_next/playwright-report/
+          retention-days: 7

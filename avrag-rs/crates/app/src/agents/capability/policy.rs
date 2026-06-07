@@ -86,29 +86,32 @@ impl PolicyEnforcer {
         // 1. Explicit Deny rules take precedence.
         for rule in &self.rules {
             if rule.condition.evaluate(tool, auth)
-                && let EnforcementAction::Deny { reason } = &rule.action {
-                    return EnforcementAction::Deny {
-                        reason: reason.clone(),
-                    };
-                }
+                && let EnforcementAction::Deny { reason } = &rule.action
+            {
+                return EnforcementAction::Deny {
+                    reason: reason.clone(),
+                };
+            }
         }
 
         // 2. RequireApproval rules (interrupt flow but don't deny).
         for rule in &self.rules {
             if rule.condition.evaluate(tool, auth)
-                && let EnforcementAction::RequireApproval { reason } = &rule.action {
-                    return EnforcementAction::RequireApproval {
-                        reason: reason.clone(),
-                    };
-                }
+                && let EnforcementAction::RequireApproval { reason } = &rule.action
+            {
+                return EnforcementAction::RequireApproval {
+                    reason: reason.clone(),
+                };
+            }
         }
 
         // 3. Allow rules.
         for rule in &self.rules {
             if rule.condition.evaluate(tool, auth)
-                && let EnforcementAction::Allow = &rule.action {
-                    return EnforcementAction::Allow;
-                }
+                && let EnforcementAction::Allow = &rule.action
+            {
+                return EnforcementAction::Allow;
+            }
         }
 
         // 4. LogOnly / MaskOutput rules.
@@ -130,22 +133,14 @@ impl PolicyEnforcer {
     }
 
     /// Convenience: evaluate and return true only if the result is Allow.
-    pub fn is_allowed(
-        &self,
-        tool: &ToolMetadata,
-        auth: Option<&avrag_auth::AuthContext>,
-    ) -> bool {
+    pub fn is_allowed(&self, tool: &ToolMetadata, auth: Option<&avrag_auth::AuthContext>) -> bool {
         matches!(self.evaluate(tool, auth), EnforcementAction::Allow)
     }
 }
 
 impl EnforcementCondition {
     /// Check whether this condition matches the given tool and auth context.
-    pub fn evaluate(
-        &self,
-        tool: &ToolMetadata,
-        auth: Option<&avrag_auth::AuthContext>,
-    ) -> bool {
+    pub fn evaluate(&self, tool: &ToolMetadata, auth: Option<&avrag_auth::AuthContext>) -> bool {
         match self {
             EnforcementCondition::RiskLevelExceeds(threshold) => {
                 risk_level_value(tool.risk_level) >= risk_level_value(*threshold)
@@ -160,16 +155,10 @@ impl EnforcementCondition {
                 auth.is_none_or(|a| !a.has_permission(&permission_string(perm)))
             }
             EnforcementCondition::ExternalNetworkAccess => !tool.external_deps.is_empty(),
-            EnforcementCondition::ToolNotInAllowlist(allowed) => {
-                !allowed.contains(&tool.id)
-            }
+            EnforcementCondition::ToolNotInAllowlist(allowed) => !allowed.contains(&tool.id),
             EnforcementCondition::ToolIsOneOf(ids) => ids.contains(&tool.id),
-            EnforcementCondition::All(conds) => {
-                conds.iter().all(|c| c.evaluate(tool, auth))
-            }
-            EnforcementCondition::Any(conds) => {
-                conds.iter().any(|c| c.evaluate(tool, auth))
-            }
+            EnforcementCondition::All(conds) => conds.iter().all(|c| c.evaluate(tool, auth)),
+            EnforcementCondition::Any(conds) => conds.iter().any(|c| c.evaluate(tool, auth)),
             EnforcementCondition::Always => true,
         }
     }
@@ -206,22 +195,28 @@ pub fn standard_rules() -> Vec<EnforcementRule> {
             ]),
             action: EnforcementAction::Allow,
         },
-        // Rule: deny web_search when auth lacks ExternalNetwork permission.
+        // Rule: deny web_search / web_fetch when auth lacks ExternalNetwork permission.
         EnforcementRule {
             name: "deny-external-network-without-permission".to_string(),
             condition: EnforcementCondition::All(vec![
-                EnforcementCondition::ToolIsOneOf(vec!["web_search".to_string()]),
+                EnforcementCondition::ToolIsOneOf(vec![
+                    "web_search".to_string(),
+                    "web_fetch".to_string(),
+                ]),
                 EnforcementCondition::MissingPermission(Permission::ExternalNetwork),
             ]),
             action: EnforcementAction::Deny {
                 reason: "external network access requires ExternalNetwork permission".to_string(),
             },
         },
-        // Rule: allow web_search when auth has ExternalNetwork permission.
+        // Rule: allow web_search / web_fetch when auth has ExternalNetwork permission.
         EnforcementRule {
             name: "allow-external-network-with-permission".to_string(),
             condition: EnforcementCondition::All(vec![
-                EnforcementCondition::ToolIsOneOf(vec!["web_search".to_string()]),
+                EnforcementCondition::ToolIsOneOf(vec![
+                    "web_search".to_string(),
+                    "web_fetch".to_string(),
+                ]),
                 EnforcementCondition::RequiresPermission(Permission::ExternalNetwork),
             ]),
             action: EnforcementAction::Allow,
@@ -353,7 +348,10 @@ mod tests {
             deprecation: None,
             retry_policy: super::super::RetryPolicy::default(),
             activation_phase: super::super::ActivationPhase::default(),
-            applicable_strategies: applicable_strategies.iter().map(|s| s.to_string()).collect(),
+            applicable_strategies: applicable_strategies
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
         }
     }
 
@@ -368,7 +366,13 @@ mod tests {
     #[test]
     fn default_deny_blocks_unknown_tool() {
         let enforcer = PolicyEnforcer::default();
-        let tool = dummy_tool("unknown", RiskLevel::Low, &[], &[], &["chat", "rag", "search"]);
+        let tool = dummy_tool(
+            "unknown",
+            RiskLevel::Low,
+            &[],
+            &[],
+            &["chat", "rag", "search"],
+        );
         let action = enforcer.evaluate(&tool, None);
         assert!(
             matches!(action, EnforcementAction::Deny { reason } if reason.contains("default deny"))
@@ -378,7 +382,13 @@ mod tests {
     #[test]
     fn allow_rule_matches_low_risk() {
         let enforcer = PolicyEnforcer::new(standard_rules());
-        let tool = dummy_tool("calculator", RiskLevel::Low, &[], &[], &["chat", "rag", "search"]);
+        let tool = dummy_tool(
+            "calculator",
+            RiskLevel::Low,
+            &[],
+            &[],
+            &["chat", "rag", "search"],
+        );
         let action = enforcer.evaluate(&tool, None);
         assert_eq!(action, EnforcementAction::Allow);
     }
@@ -386,7 +396,13 @@ mod tests {
     #[test]
     fn web_search_denied_without_external_network_perm() {
         let enforcer = PolicyEnforcer::new(standard_rules());
-        let tool = dummy_tool("web_search", RiskLevel::High, &[Permission::ExternalNetwork], &["search-provider"], &["chat", "rag", "search"]);
+        let tool = dummy_tool(
+            "web_search",
+            RiskLevel::High,
+            &[Permission::ExternalNetwork],
+            &["search-provider"],
+            &["chat", "rag", "search"],
+        );
         let action = enforcer.evaluate(&tool, None);
         assert!(
             matches!(action, EnforcementAction::Deny { reason } if reason.contains("external network"))
@@ -396,7 +412,13 @@ mod tests {
     #[test]
     fn web_search_denied_even_with_wrong_perm() {
         let enforcer = PolicyEnforcer::new(standard_rules());
-        let tool = dummy_tool("web_search", RiskLevel::High, &[Permission::ExternalNetwork], &["search-provider"], &["chat", "rag", "search"]);
+        let tool = dummy_tool(
+            "web_search",
+            RiskLevel::High,
+            &[Permission::ExternalNetwork],
+            &["search-provider"],
+            &["chat", "rag", "search"],
+        );
         let auth = auth_with("user"); // wrong permission
         let action = enforcer.evaluate(&tool, Some(&auth));
         assert!(
@@ -407,7 +429,13 @@ mod tests {
     #[test]
     fn code_interpreter_denied_without_code_execution_perm() {
         let enforcer = PolicyEnforcer::new(standard_rules());
-        let tool = dummy_tool("code_interpreter", RiskLevel::High, &[Permission::CodeExecution], &[], &["chat", "rag", "search"]);
+        let tool = dummy_tool(
+            "code_interpreter",
+            RiskLevel::High,
+            &[Permission::CodeExecution],
+            &[],
+            &["chat", "rag", "search"],
+        );
         let auth = auth_with("user");
         let action = enforcer.evaluate(&tool, Some(&auth));
         assert!(
@@ -418,14 +446,26 @@ mod tests {
     #[test]
     fn permissive_allows_everything() {
         let enforcer = permissive();
-        let tool = dummy_tool("anything", RiskLevel::Critical, &[], &[], &["chat", "rag", "search"]);
+        let tool = dummy_tool(
+            "anything",
+            RiskLevel::Critical,
+            &[],
+            &[],
+            &["chat", "rag", "search"],
+        );
         assert!(enforcer.is_allowed(&tool, None));
     }
 
     #[test]
     fn strict_denies_high_risk() {
         let enforcer = strict();
-        let tool = dummy_tool("dangerous", RiskLevel::High, &[], &[], &["chat", "rag", "search"]);
+        let tool = dummy_tool(
+            "dangerous",
+            RiskLevel::High,
+            &[],
+            &[],
+            &["chat", "rag", "search"],
+        );
         let action = enforcer.evaluate(&tool, None);
         assert!(
             matches!(action, EnforcementAction::Deny { reason } if reason.contains("high risk"))
@@ -445,7 +485,9 @@ mod tests {
             EnforcementRule {
                 name: "deny-calculator".to_string(),
                 condition: EnforcementCondition::ToolIsOneOf(vec!["calculator".to_string()]),
-                action: EnforcementAction::Deny { reason: "banned".to_string() },
+                action: EnforcementAction::Deny {
+                    reason: "banned".to_string(),
+                },
             },
             EnforcementRule {
                 name: "allow-all-low".to_string(),
@@ -454,17 +496,27 @@ mod tests {
             },
         ];
         let enforcer = PolicyEnforcer::new(rules);
-        let tool = dummy_tool("calculator", RiskLevel::Low, &[], &[], &["chat", "rag", "search"]);
-        let action = enforcer.evaluate(&tool, None);
-        assert!(
-            matches!(action, EnforcementAction::Deny { reason } if reason == "banned")
+        let tool = dummy_tool(
+            "calculator",
+            RiskLevel::Low,
+            &[],
+            &[],
+            &["chat", "rag", "search"],
         );
+        let action = enforcer.evaluate(&tool, None);
+        assert!(matches!(action, EnforcementAction::Deny { reason } if reason == "banned"));
     }
 
     #[test]
     fn external_network_condition_matches() {
         let cond = EnforcementCondition::ExternalNetworkAccess;
-        let tool_with = dummy_tool("a", RiskLevel::Low, &[], &["external"], &["chat", "rag", "search"]);
+        let tool_with = dummy_tool(
+            "a",
+            RiskLevel::Low,
+            &[],
+            &["external"],
+            &["chat", "rag", "search"],
+        );
         let tool_without = dummy_tool("b", RiskLevel::Low, &[], &[], &["chat", "rag", "search"]);
         assert!(cond.evaluate(&tool_with, None));
         assert!(!cond.evaluate(&tool_without, None));
@@ -490,7 +542,9 @@ mod tests {
             EnforcementRule {
                 name: "approve-high-risk".to_string(),
                 condition: EnforcementCondition::RiskLevelExceeds(RiskLevel::Medium),
-                action: EnforcementAction::RequireApproval { reason: "high risk tool".to_string() },
+                action: EnforcementAction::RequireApproval {
+                    reason: "high risk tool".to_string(),
+                },
             },
             EnforcementRule {
                 name: "allow-all".to_string(),
@@ -499,7 +553,13 @@ mod tests {
             },
         ];
         let enforcer = PolicyEnforcer::new(rules);
-        let tool = dummy_tool("dangerous", RiskLevel::High, &[], &[], &["chat", "rag", "search"]);
+        let tool = dummy_tool(
+            "dangerous",
+            RiskLevel::High,
+            &[],
+            &[],
+            &["chat", "rag", "search"],
+        );
         let action = enforcer.evaluate(&tool, None);
         assert!(
             matches!(action, EnforcementAction::RequireApproval { reason } if reason == "high risk tool")
@@ -512,20 +572,28 @@ mod tests {
             EnforcementRule {
                 name: "deny-banned".to_string(),
                 condition: EnforcementCondition::ToolIsOneOf(vec!["banned".to_string()]),
-                action: EnforcementAction::Deny { reason: "banned".to_string() },
+                action: EnforcementAction::Deny {
+                    reason: "banned".to_string(),
+                },
             },
             EnforcementRule {
                 name: "approve-high-risk".to_string(),
                 condition: EnforcementCondition::RiskLevelExceeds(RiskLevel::Medium),
-                action: EnforcementAction::RequireApproval { reason: "high risk".to_string() },
+                action: EnforcementAction::RequireApproval {
+                    reason: "high risk".to_string(),
+                },
             },
         ];
         let enforcer = PolicyEnforcer::new(rules);
-        let tool = dummy_tool("banned", RiskLevel::High, &[], &[], &["chat", "rag", "search"]);
-        let action = enforcer.evaluate(&tool, None);
-        assert!(
-            matches!(action, EnforcementAction::Deny { reason } if reason == "banned")
+        let tool = dummy_tool(
+            "banned",
+            RiskLevel::High,
+            &[],
+            &[],
+            &["chat", "rag", "search"],
         );
+        let action = enforcer.evaluate(&tool, None);
+        assert!(matches!(action, EnforcementAction::Deny { reason } if reason == "banned"));
     }
 
     #[test]
@@ -534,7 +602,9 @@ mod tests {
             EnforcementRule {
                 name: "approve-high-risk".to_string(),
                 condition: EnforcementCondition::RiskLevelExceeds(RiskLevel::Medium),
-                action: EnforcementAction::RequireApproval { reason: "high risk".to_string() },
+                action: EnforcementAction::RequireApproval {
+                    reason: "high risk".to_string(),
+                },
             },
             EnforcementRule {
                 name: "allow-all".to_string(),
@@ -543,7 +613,13 @@ mod tests {
             },
         ];
         let enforcer = PolicyEnforcer::new(rules);
-        let tool = dummy_tool("dangerous", RiskLevel::High, &[], &[], &["chat", "rag", "search"]);
+        let tool = dummy_tool(
+            "dangerous",
+            RiskLevel::High,
+            &[],
+            &[],
+            &["chat", "rag", "search"],
+        );
         let action = enforcer.evaluate(&tool, None);
         assert!(
             matches!(action, EnforcementAction::RequireApproval { reason } if reason == "high risk")

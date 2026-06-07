@@ -44,7 +44,10 @@ pub(crate) async fn execute_chat_pipeline(
     state: AppState,
     request: ChatRequest,
 ) -> Result<ChatResponse, AppError> {
-    info!(orchestrator = "pipeline", "executing chat with linear pipeline");
+    info!(
+        orchestrator = "pipeline",
+        "executing chat with linear pipeline"
+    );
     run_pipeline(state, request, None).await
 }
 
@@ -64,7 +67,9 @@ pub(crate) async fn execute_chat_pipeline_stream(
         orchestrator = "pipeline",
         "executing streaming chat with linear pipeline"
     );
-    run_pipeline(state, request, Some(stream_config)).await.map(|_| ())
+    run_pipeline(state, request, Some(stream_config))
+        .await
+        .map(|_| ())
 }
 
 async fn run_pipeline(
@@ -82,9 +87,13 @@ async fn run_pipeline(
         });
     }
 
-    let mut execution =
-        crate::chat::pipeline_steps::dispatch_mode(&state, &request, &session, stream_config.as_ref())
-            .await?;
+    let mut execution = crate::chat::pipeline_steps::dispatch_mode(
+        &state,
+        &request,
+        &session,
+        stream_config.as_ref(),
+    )
+    .await?;
 
     let audit_action = match execution.mode.as_str() {
         "search" => AuditAction::SearchRequest,

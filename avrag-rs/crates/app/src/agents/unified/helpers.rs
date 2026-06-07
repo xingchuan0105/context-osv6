@@ -83,7 +83,10 @@ pub fn extract_chunks_with_scores(tool_results: &[ToolResult]) -> Vec<(AnswerCon
             else {
                 continue;
             };
-            let doc_id = item.get("doc_id").and_then(|v| v.as_str()).map(str::to_owned);
+            let doc_id = item
+                .get("doc_id")
+                .and_then(|v| v.as_str())
+                .map(str::to_owned);
             let text = item
                 .get("text")
                 .and_then(|v| v.as_str())
@@ -146,7 +149,10 @@ pub fn build_citations_from_tool_results(tool_results: &[ToolResult]) -> Vec<Cit
                 .and_then(|v| v.as_str())
                 .map(str::to_owned)
                 .unwrap_or_default();
-            let page = item.get("page").and_then(|v| v.as_i64()).map(|p| p as usize);
+            let page = item
+                .get("page")
+                .and_then(|v| v.as_i64())
+                .map(|p| p as usize);
             let score = item.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
 
             citations.push(Citation {
@@ -196,12 +202,18 @@ pub fn build_sources_from_tool_results(tool_results: &[ToolResult]) -> Vec<Sourc
             if !seen.insert(chunk_id.clone()) {
                 continue;
             }
-            let doc_id = item.get("doc_id").and_then(|v| v.as_str()).map(str::to_owned);
+            let doc_id = item
+                .get("doc_id")
+                .and_then(|v| v.as_str())
+                .map(str::to_owned);
             let text = item
                 .get("text")
                 .and_then(|v| v.as_str())
                 .map(|s| s.chars().take(200).collect::<String>());
-            let page = item.get("page").and_then(|v| v.as_i64()).map(|p| p as usize);
+            let page = item
+                .get("page")
+                .and_then(|v| v.as_i64())
+                .map(|p| p as usize);
 
             sources.push(SourceRef {
                 id: chunk_id.clone(),
@@ -285,7 +297,11 @@ mod tests {
 
     #[test]
     fn test_has_evidence_true_when_non_empty_array() {
-        let results = vec![tr("t", ToolStatus::Ok, Some(serde_json::json!([{"chunk_id": "c1"}])))];
+        let results = vec![tr(
+            "t",
+            ToolStatus::Ok,
+            Some(serde_json::json!([{"chunk_id": "c1"}])),
+        )];
         assert!(has_evidence(&results));
     }
 
@@ -304,10 +320,18 @@ mod tests {
     #[test]
     fn test_extract_chunks_with_scores_filters_ok_and_array() {
         let results = vec![
-            tr("dense", ToolStatus::Ok, Some(serde_json::json!([
-                {"chunk_id": "c1", "text": "hello", "score": 0.9}
-            ]))),
-            tr("fail", ToolStatus::Error, Some(serde_json::json!([{"chunk_id": "c2"}]))),
+            tr(
+                "dense",
+                ToolStatus::Ok,
+                Some(serde_json::json!([
+                    {"chunk_id": "c1", "text": "hello", "score": 0.9}
+                ])),
+            ),
+            tr(
+                "fail",
+                ToolStatus::Error,
+                Some(serde_json::json!([{"chunk_id": "c2"}])),
+            ),
         ];
         let chunks = extract_chunks_with_scores(&results);
         assert_eq!(chunks.len(), 1);
@@ -318,16 +342,24 @@ mod tests {
 
     #[test]
     fn test_extract_chunks_skips_missing_chunk_id() {
-        let results = vec![tr("t", ToolStatus::Ok, Some(serde_json::json!([{"text": "no id"}])))];
+        let results = vec![tr(
+            "t",
+            ToolStatus::Ok,
+            Some(serde_json::json!([{"text": "no id"}])),
+        )];
         assert!(extract_chunks_with_scores(&results).is_empty());
     }
 
     #[test]
     fn test_build_citations_dedupes_by_chunk_id() {
-        let results = vec![tr("dense", ToolStatus::Ok, Some(serde_json::json!([
-            {"chunk_id": "c1", "doc_id": "d1", "text": "text1", "score": 0.8},
-            {"chunk_id": "c1", "doc_id": "d1", "text": "text1", "score": 0.8}
-        ])))];
+        let results = vec![tr(
+            "dense",
+            ToolStatus::Ok,
+            Some(serde_json::json!([
+                {"chunk_id": "c1", "doc_id": "d1", "text": "text1", "score": 0.8},
+                {"chunk_id": "c1", "doc_id": "d1", "text": "text1", "score": 0.8}
+            ])),
+        )];
         let citations = build_citations_from_tool_results(&results);
         assert_eq!(citations.len(), 1);
         assert_eq!(citations[0].citation_id, 1);
@@ -335,10 +367,14 @@ mod tests {
 
     #[test]
     fn test_build_sources_dedupes_by_chunk_id() {
-        let results = vec![tr("t", ToolStatus::Ok, Some(serde_json::json!([
-            {"chunk_id": "c1", "doc_id": "d1"},
-            {"chunk_id": "c1", "doc_id": "d1"}
-        ])))];
+        let results = vec![tr(
+            "t",
+            ToolStatus::Ok,
+            Some(serde_json::json!([
+                {"chunk_id": "c1", "doc_id": "d1"},
+                {"chunk_id": "c1", "doc_id": "d1"}
+            ])),
+        )];
         let sources = build_sources_from_tool_results(&results);
         assert_eq!(sources.len(), 1);
     }
@@ -371,25 +407,27 @@ pub async fn dispatch_tools_with_history_interception(
     let mut indices = Vec::new();
 
     for (idx, call) in calls.into_iter().enumerate() {
-        if call.tool == "conversation_history_load" && session_id.is_some() && repository.is_some() {
+        if call.tool == "conversation_history_load" && session_id.is_some() && repository.is_some()
+        {
             let session_id = session_id.unwrap();
             let repo = repository.unwrap();
-            
+
             // Parse arguments
-            let tags: Option<Vec<String>> = call.args
-                .get("tags")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
+            let tags: Option<Vec<String>> =
+                call.args.get("tags").and_then(|v| v.as_array()).map(|arr| {
                     arr.iter()
                         .filter_map(|v| v.as_str().map(String::from))
                         .collect()
                 });
-            let limit = call.args
+            let limit = call
+                .args
                 .get("limit")
                 .and_then(|v| v.as_i64())
                 .unwrap_or(20);
 
-            let res = repo.load_history_by_tags(auth, session_id, tags.clone(), limit).await;
+            let res = repo
+                .load_history_by_tags(auth, session_id, tags.clone(), limit)
+                .await;
             let result = match res {
                 Ok(messages) => {
                     let msg_json: Vec<serde_json::Value> = messages
@@ -423,12 +461,12 @@ pub async fn dispatch_tools_with_history_interception(
                     status: ToolStatus::Error,
                     data: Some(serde_json::json!({ "error": e.to_string() })),
                     trace: None,
-                }
+                },
             };
             out.push((idx, result));
         } else if call.tool == "conversation_history_tag" && repository.is_some() {
             let repo = repository.unwrap();
-            
+
             // Parse arguments
             let ops_val = call.args.get("operations").and_then(|v| v.as_array());
             let result = match ops_val {
@@ -438,26 +476,41 @@ pub async fn dispatch_tools_with_history_interception(
                     for op_val in arr {
                         let msg_id = op_val.get("message_id").and_then(|v| v.as_i64());
                         let action = op_val.get("action").and_then(|v| v.as_str());
-                        let tags: Option<Vec<String>> = op_val.get("tags")
-                            .and_then(|v| v.as_array())
-                            .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect());
+                        let tags: Option<Vec<String>> =
+                            op_val.get("tags").and_then(|v| v.as_array()).map(|a| {
+                                a.iter()
+                                    .filter_map(|x| x.as_str().map(String::from))
+                                    .collect()
+                            });
 
                         if let (Some(mid), Some(act), Some(t)) = (msg_id, action, tags) {
                             match act {
                                 "add" => {
                                     for tag in t {
-                                        tag_ops.push(avrag_storage_pg::TagOperation::AddTag { message_id: mid, tag });
+                                        tag_ops.push(avrag_storage_pg::TagOperation::AddTag {
+                                            message_id: mid,
+                                            tag,
+                                        });
                                     }
                                 }
                                 "remove" => {
                                     for tag in t {
-                                        tag_ops.push(avrag_storage_pg::TagOperation::RemoveTag { message_id: mid, tag });
+                                        tag_ops.push(avrag_storage_pg::TagOperation::RemoveTag {
+                                            message_id: mid,
+                                            tag,
+                                        });
                                     }
                                 }
                                 "replace" => {
-                                    tag_ops.push(avrag_storage_pg::TagOperation::ReplaceTags { message_id: mid, tags: t });
+                                    tag_ops.push(avrag_storage_pg::TagOperation::ReplaceTags {
+                                        message_id: mid,
+                                        tags: t,
+                                    });
                                 }
-                                _ => { valid = false; break; }
+                                _ => {
+                                    valid = false;
+                                    break;
+                                }
                             }
                         } else {
                             valid = false;
@@ -482,7 +535,7 @@ pub async fn dispatch_tools_with_history_interception(
                                 status: ToolStatus::Error,
                                 data: Some(serde_json::json!({ "error": e.to_string() })),
                                 trace: None,
-                            }
+                            },
                         }
                     } else {
                         ToolResult {
@@ -500,7 +553,7 @@ pub async fn dispatch_tools_with_history_interception(
                     status: ToolStatus::Error,
                     data: Some(serde_json::json!({ "error": "Missing operations argument" })),
                     trace: None,
-                }
+                },
             };
             out.push((idx, result));
         } else {
@@ -510,12 +563,13 @@ pub async fn dispatch_tools_with_history_interception(
     }
 
     if !normal_calls.is_empty() {
-        let normal_results = crate::agents::unified::atomic_tools::dispatch_atomic_tools_with_enforcement(
-            normal_calls,
-            search_provider,
-            Some(auth),
-        )
-        .await;
+        let normal_results =
+            crate::agents::unified::atomic_tools::dispatch_atomic_tools_with_enforcement(
+                normal_calls,
+                search_provider,
+                Some(auth),
+            )
+            .await;
 
         for (idx, res) in indices.into_iter().zip(normal_results.into_iter()) {
             out.push((idx, res));

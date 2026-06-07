@@ -91,7 +91,11 @@ pub fn assert_prompt_has_tool_catalog(prompt: &str, strategy: &str) {
         );
 
         // Tier 3: Schema — parameters
-        if let Some(props) = tool.input_schema.get("properties").and_then(|p| p.as_object()) {
+        if let Some(props) = tool
+            .input_schema
+            .get("properties")
+            .and_then(|p| p.as_object())
+        {
             assert!(
                 prompt.contains("Parameters:"),
                 "Prompt missing 'Parameters:' section for tool '{}'",
@@ -118,7 +122,12 @@ pub fn assert_prompt_has_format_skills(prompt: &str) {
         prompt.contains("## Available Output Formats"),
         "Prompt missing '## Available Output Formats' section"
     );
-    for skill_id in ["ppt-generation", "html-renderer", "teaching", "framework-extraction"] {
+    for skill_id in [
+        "ppt-generation",
+        "html-renderer",
+        "teaching",
+        "framework-extraction",
+    ] {
         assert!(
             prompt.contains(skill_id),
             "Prompt missing format skill '{}'",
@@ -157,13 +166,12 @@ pub fn assert_budget_usage(budget_used: u8, max_expected: u8) {
 }
 
 /// Find LLM call for a specific state (by matching user message content).
-pub fn find_llm_call_for_state<'a>(
-    calls: &'a [LlmCall],
-    state_hint: &str,
-) -> Option<&'a LlmCall> {
-    calls
-        .iter()
-        .find(|c| c.user_messages.iter().any(|m| m.content.contains(state_hint)))
+pub fn find_llm_call_for_state<'a>(calls: &'a [LlmCall], state_hint: &str) -> Option<&'a LlmCall> {
+    calls.iter().find(|c| {
+        c.user_messages
+            .iter()
+            .any(|m| m.content.contains(state_hint))
+    })
 }
 
 /// Assert that a strategy's skill body does NOT appear in calls for other strategies.

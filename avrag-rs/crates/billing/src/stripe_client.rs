@@ -1,6 +1,6 @@
 use crate::types::{BillingConfig, HmacSha256};
 use anyhow::{Result, anyhow, bail};
-use common::OrgId;
+use common::UserId;
 use hmac::Mac;
 
 pub struct StripeClient {
@@ -24,8 +24,8 @@ impl StripeClient {
 
     pub async fn create_customer(
         &self,
-        org_id: OrgId,
-        org_name: &str,
+        user_id: UserId,
+        name: &str,
         email: &str,
     ) -> Result<String> {
         if !self.config.stripe_enabled() {
@@ -35,9 +35,9 @@ impl StripeClient {
         let response = self
             .auth_request(reqwest::Method::POST, "/v1/customers")
             .form(&[
-                ("name", org_name.to_string()),
+                ("name", name.to_string()),
                 ("email", email.to_string()),
-                ("metadata[org_id]", org_id.to_string()),
+                ("metadata[user_id]", user_id.to_string()),
             ])
             .send()
             .await?;
@@ -57,7 +57,7 @@ impl StripeClient {
         &self,
         customer_id: &str,
         price_id: &str,
-        org_id: OrgId,
+        user_id: UserId,
         plan_id: &str,
     ) -> Result<(String, String)> {
         if !self.config.stripe_enabled() {
@@ -81,9 +81,9 @@ impl StripeClient {
                 ("cancel_url", cancel_url),
                 ("line_items[0][price]", price_id.to_string()),
                 ("line_items[0][quantity]", "1".to_string()),
-                ("metadata[org_id]", org_id.to_string()),
+                ("metadata[user_id]", user_id.to_string()),
                 ("metadata[plan_id]", plan_id.to_string()),
-                ("subscription_data[metadata][org_id]", org_id.to_string()),
+                ("subscription_data[metadata][user_id]", user_id.to_string()),
                 ("subscription_data[metadata][plan_id]", plan_id.to_string()),
             ])
             .send()

@@ -15,7 +15,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/openapi.json", get(crate::openapi_handler))
         .route("/dev-upload/{document_id}", put(crate::dev_upload_handler))
         .route("/uploads/{document_id}", put(crate::signed_upload_handler))
-        .route("/webhooks/stripe", post(crate::billing_webhook_handler))
+        .route("/webhooks/{provider}", post(crate::billing_webhook_handler))
         .route("/webhooks/object-storage", post(crate::object_storage_webhook_handler))
         .route(
             "/api/v1/share/validate/{token}",

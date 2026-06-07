@@ -19,7 +19,7 @@ The full JSON Schema for `calculator` args, as enforced by the runtime at the ca
 
 ### `expression` (required, string)
 
-The mathematical expression to evaluate. Must use valid calculator syntax.
+A single mathematical expression. The parser does **not** accept scientific notation, implicit multiplication, variable assignment, or multiple statements.
 
 **Supported operators**:
 - `+` addition
@@ -27,7 +27,7 @@ The mathematical expression to evaluate. Must use valid calculator syntax.
 - `*` multiplication
 - `/` division
 - `%` modulo
-- `^` exponentiation
+- `^` exponentiation (same as `pow(a, b)`)
 
 **Supported functions** (all take one argument unless noted):
 - `sin`, `cos`, `tan` — trigonometric (radians)
@@ -37,9 +37,9 @@ The mathematical expression to evaluate. Must use valid calculator syntax.
 - `ln` — natural logarithm
 - `log2`, `log10` — base-2 and base-10 logarithms
 - `floor`, `ceil`, `round` — rounding
-- `pow(a, b)` — a raised to power b (two arguments)
-- `min(a, b, ...)` — minimum of all arguments (variadic)
-- `max(a, b, ...)` — maximum of all arguments (variadic)
+- `pow(a, b)` — a raised to power b (exactly 2 arguments)
+- `min(a, b, ...)` — minimum of all arguments (variadic, 2+)
+- `max(a, b, ...)` — maximum of all arguments (variadic, 2+)
 
 **Constants**:
 - `pi` ≈ 3.14159...
@@ -51,10 +51,19 @@ The mathematical expression to evaluate. Must use valid calculator syntax.
 - `"sqrt(16) + pow(2, 3)"` → 12
 - `"min(3, 1, 2)"` → 1
 
-**Bad** (runtime error):
-- `""` — empty expression
-- `"1 +"` — incomplete syntax
-- `"log(100)"` — no single-arg `log`; use `log2` or `log10`
+## Common invalid expressions
+
+These are **runtime errors**:
+
+| Expression | Why it fails | Correct form |
+|------------|--------------|--------------|
+| `"1e3"` | Scientific notation is **not supported** | `"1000"` |
+| `"2.5e-4"` | Scientific notation is **not supported** | `"0.00025"` |
+| `"2(3+4)"` | Implicit multiplication is **not supported** | `"2 * (3 + 4)"` |
+| `"x = 5; x + 1"` | Variable assignment and multiple statements are **not supported** | Use `code_interpreter` |
+| `"log(100)"` | No single-argument `log` function. Only `ln`, `log2`, `log10` are supported. | `"log10(100)"` |
+| `""` | Empty expression | Provide a valid expression |
+| `"1 +"` | Incomplete syntax | Complete the expression |
 
 ## Output schema
 

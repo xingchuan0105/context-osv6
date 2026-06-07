@@ -14,7 +14,10 @@ async fn upload_document_completes_ingestion() {
     // If this assertion ever fires, either the API contract changed
     // (intentional) or the helper is no longer threading through the
     // real status code (regression).
-    assert_eq!(upload.status, 201, "expected HTTP 201 from POST .../documents");
+    assert_eq!(
+        upload.status, 201,
+        "expected HTTP 201 from POST .../documents"
+    );
 
     // 2. Wait for ingestion
     let status = ctx

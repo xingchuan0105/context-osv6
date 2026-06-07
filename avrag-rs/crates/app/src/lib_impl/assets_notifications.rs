@@ -1,6 +1,6 @@
 use common::{
-    ApiKeyRow, AppError, CitationLookupResponse, CreateApiKeyRequest, CreateApiKeyResponse, NotificationRow, ShareTokenResponse, StatusOnlyResponse, new_id,
-    now_rfc3339,
+    ApiKeyRow, AppError, CitationLookupResponse, CreateApiKeyRequest, CreateApiKeyResponse,
+    NotificationRow, ShareTokenResponse, StatusOnlyResponse, new_id, now_rfc3339,
 };
 use std::collections::BTreeMap;
 
@@ -279,8 +279,7 @@ impl AppState {
         };
         {
             let mut keys = self.api_keys.write().await;
-            keys
-                .entry(notebook_id.to_string())
+            keys.entry(notebook_id.to_string())
                 .or_default()
                 .push(row.clone());
         }
@@ -426,5 +425,4 @@ impl AppState {
             share_token: format!("share_{}", new_id()),
         })
     }
-
 }

@@ -28,9 +28,9 @@ fn map_stripe_status_to_local(status: &str) -> String {
     }
 }
 
-async fn set_current_org(conn: &mut sqlx::PgConnection, org_id: &str) -> Result<()> {
-    sqlx::query("select set_config('app.current_org', $1, true)")
-        .bind(org_id)
+async fn set_current_user(conn: &mut sqlx::PgConnection, user_id: &str) -> Result<()> {
+    sqlx::query("select set_config('app.current_user', $1, true)")
+        .bind(user_id)
         .execute(conn)
         .await?;
     Ok(())
@@ -49,18 +49,28 @@ fn map_subscription(row: sqlx::postgres::PgRow) -> Result<Subscription> {
     let updated_at: Option<DateTime<Utc>> = row.try_get("updated_at").ok();
     let period_start: Option<DateTime<Utc>> = row.try_get("current_period_start").ok();
     let period_end: Option<DateTime<Utc>> = row.try_get("current_period_end").ok();
+
+    let billing_provider_str: String = row.try_get("billing_provider")?;
+    let billing_provider: BillingProvider = billing_provider_str.parse()?;
+
+    let status_str: String = row.try_get("status")?;
+    let status: SubscriptionStatus = status_str.parse()?;
+
     Ok(Subscription {
         id: row.try_get::<Uuid, _>("id")?.to_string(),
-        org_id: row.try_get::<Uuid, _>("org_id")?.to_string(),
+        user_id: row.try_get::<Uuid, _>("user_id")?.to_string(),
         stripe_subscription_id: row.try_get("stripe_subscription_id").ok(),
         stripe_price_id: row.try_get("stripe_price_id").ok(),
+        billing_provider,
+        provider_subscription_id: row.try_get("provider_subscription_id").ok(),
+        provider_price_id: row.try_get("provider_price_id").ok(),
         plan_id: row.try_get("plan_id")?,
-        status: row.try_get("status")?,
-        current_period_start: period_start.map(|dt| dt.to_rfc3339()),
-        current_period_end: period_end.map(|dt| dt.to_rfc3339()),
+        status,
+        current_period_start: period_start,
+        current_period_end: period_end,
         cancel_at_period_end: row.try_get("cancel_at_period_end")?,
-        created_at: created_at.map(|dt| dt.to_rfc3339()),
-        updated_at: updated_at.map(|dt| dt.to_rfc3339()),
+        created_at,
+        updated_at,
     })
 }
 
@@ -84,3 +94,38 @@ pub(crate) fn seconds_until_next_month() -> u64 {
         .expect("valid next month start");
     next.signed_duration_since(now).num_seconds().max(1) as u64
 }
+
+async fn get_org_id_by_user_id(
+    repo: Arc<PgAppRepository>,
+    user_id: Uuid,
+) -> Result<Uuid> {
+    if user_id.is_nil() {
+        return Ok(Uuid::nil());
+    }
+    let mut tx = repo.raw().begin().await?;
+    set_current_role(tx.as_mut(), ADMIN_ROLE_SUPER).await?;
+    let org_id = sqlx::query_scalar::<_, Uuid>("select org_id from users where id = $1")
+        .bind(user_id)
+        .fetch_one(tx.as_mut())
+        .await?;
+    tx.commit().await?;
+    Ok(org_id)
+}
+
+async fn get_stripe_customer_id_by_user_id(
+    repo: Arc<PgAppRepository>,
+    user_id: Uuid,
+) -> Result<Option<String>> {
+    if user_id.is_nil() {
+        return Ok(None);
+    }
+    let mut tx = repo.raw().begin().await?;
+    set_current_role(tx.as_mut(), ADMIN_ROLE_SUPER).await?;
+    let row = sqlx::query("select stripe_customer_id from users where id = $1")
+        .bind(user_id)
+        .fetch_optional(tx.as_mut())
+        .await?;
+    tx.commit().await?;
+    Ok(row.and_then(|r| r.try_get::<Option<String>, _>("stripe_customer_id").ok().flatten()))
+}
+

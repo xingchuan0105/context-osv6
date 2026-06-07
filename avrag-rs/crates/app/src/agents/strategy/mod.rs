@@ -1,10 +1,15 @@
 //! Strategy Layer — v5 independent state machines for each agent mode.
 //!
+//! **DEPRECATED**: Replaced by unified ReActLoop in ADR-0006.
+//! This module is retained only for:
+//! 1. `schema()` methods used by `CapabilityRegistry` until schemas are migrated.
+//! 2. Existing integration tests that have not yet been ported to loop-based tests.
+//!
+//! Do not add new code here. New agent behavior should go into `crate::agents::loop`.
+//!
 //! Each mode (Chat/RAG/Search) implements the [`Strategy`] trait, defining
 //! its own states and transitions. A generic [`StrategyExecutor`] drives any
 //! state machine until termination.
-//!
-//! This replaces the v4 `ProgressiveLoop` + `LoopAdapter` fixed-phase architecture.
 
 pub mod chat;
 pub mod executor;
@@ -104,10 +109,7 @@ pub trait Strategy: Send + Sync {
     type Context: StrategyContext;
 
     /// Initialize the state machine and return the first state.
-    async fn init(
-        &self,
-        ctx: &mut Self::Context,
-    ) -> Result<Box<dyn State>, AppError>;
+    async fn init(&self, ctx: &mut Self::Context) -> Result<Box<dyn State>, AppError>;
 
     /// Execute one state, returning the next state or a terminal result.
     async fn step(

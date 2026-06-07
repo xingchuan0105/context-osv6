@@ -40,8 +40,15 @@ is allowed to read.
   `section_title`, `heading_level`, `page`). The `summary`
   field is empty; sections are listed in `section_title` etc.
 
+Strict union semantics:
+- When `level` is `"doc"`, `section_title`, `heading_level`, and `page`
+  MUST be omitted or empty.
+- When `level` is `"section"`, `summary` MUST be omitted or empty.
+
 The output schema differs by level. The runtime always returns
-the union; the planner/agent picks the relevant fields.
+the union; the planner/agent picks the relevant fields. To avoid
+downstream validation ambiguity, fields that do not apply to the
+chosen level MUST be omitted or set to empty.
 
 ## Output schema
 

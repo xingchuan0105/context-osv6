@@ -115,7 +115,9 @@ pub enum EvalDecision {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum NextAction {
-    SubQuery { query: String },
+    SubQuery {
+        query: String,
+    },
     ToolCall {
         tool: String,
         args: serde_json::Value,
@@ -253,8 +255,8 @@ pub(crate) fn build_rag_plan_user_prompt(
         .filter_map(|r| r.data.as_ref())
         .collect();
     if !doc_index_results.is_empty() {
-        let index_json = serde_json::to_string_pretty(&doc_index_results)
-            .unwrap_or_else(|_| "[]".to_string());
+        let index_json =
+            serde_json::to_string_pretty(&doc_index_results).unwrap_or_else(|_| "[]".to_string());
         authoritative.push_str(&format!(
             "\n\nDocument index already retrieved (from prior iteration):\n{}\n\n\
              Based on this index, call index_lookup for the sections needed to answer the user.",
@@ -280,7 +282,10 @@ pub(crate) fn build_rag_plan_user_prompt(
     })
 }
 
-pub(crate) fn parse_rag_plan_decision(raw: &str, request: &ChatRequest) -> Option<(RagPlanDecision, Vec<String>)> {
+pub(crate) fn parse_rag_plan_decision(
+    raw: &str,
+    request: &ChatRequest,
+) -> Option<(RagPlanDecision, Vec<String>)> {
     let json = extract_json_object(raw).unwrap_or_else(|| raw.trim().to_string());
 
     // 1. Clarification object (either format)
@@ -289,45 +294,50 @@ pub(crate) fn parse_rag_plan_decision(raw: &str, request: &ChatRequest) -> Optio
             .get("action")
             .and_then(serde_json::Value::as_str)
             .is_some_and(|action| action.eq_ignore_ascii_case("clarify"))
-        {
-            let message = value
-                .get("message")
-                .and_then(serde_json::Value::as_str)
-                .map(str::trim)
-                .filter(|message| !message.is_empty())?;
-            // v5: fallback to default retrieval strategy when query and doc_scope are valid.
-            // Prevents over-eager clarify from models that default to asking questions.
-            if !request.query.trim().is_empty() && !request.doc_scope.is_empty() {
-                return Some((
-                    RagPlanDecision::Strategy(PlanStrategy {
-                        strategy: vec![PlanStrategyItem {
-                            tool: "dense_retrieval".to_string(),
-                            params: serde_json::json!({
-                                "queries": vec![request.query.clone()],
-                                "modality": "text",
-                                "top_k": 10,
-                            }),
-                        }],
-                        next_step: "answer".to_string(),
-                    }),
-                    Vec::new(),
-                ));
-            }
-            return Some((RagPlanDecision::Clarify(message.to_string()), Vec::new()));
+    {
+        let message = value
+            .get("message")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|message| !message.is_empty())?;
+        // v5: fallback to default retrieval strategy when query and doc_scope are valid.
+        // Prevents over-eager clarify from models that default to asking questions.
+        if !request.query.trim().is_empty() && !request.doc_scope.is_empty() {
+            return Some((
+                RagPlanDecision::Strategy(PlanStrategy {
+                    strategy: vec![PlanStrategyItem {
+                        tool: "dense_retrieval".to_string(),
+                        params: serde_json::json!({
+                            "queries": vec![request.query.clone()],
+                            "modality": "text",
+                            "top_k": 10,
+                        }),
+                    }],
+                    next_step: "answer".to_string(),
+                }),
+                Vec::new(),
+            ));
         }
+        return Some((RagPlanDecision::Clarify(message.to_string()), Vec::new()));
+    }
 
     // 2. P4 format: PlanStrategy (plan-only, no schema-compliant args yet)
     if let Ok(strategy) = serde_json::from_str::<PlanStrategy>(&json)
-        && !strategy.strategy.is_empty() {
-            return Some((RagPlanDecision::Strategy(strategy), Vec::new()));
-        }
+        && !strategy.strategy.is_empty()
+    {
+        return Some((RagPlanDecision::Strategy(strategy), Vec::new()));
+    }
 
     // 3. Phase-3c format: RetrievalPlannerOutput (ToolCall[])
     if let Ok(planner_output) = serde_json::from_str::<RetrievalPlannerOutput>(&json)
-        && !planner_output.calls.is_empty() {
-            // Phase-3c: bypass adapter — return raw ToolCalls for the dispatcher
-            return Some((RagPlanDecision::ToolCalls(planner_output.calls), planner_output.skills));
-        }
+        && !planner_output.calls.is_empty()
+    {
+        // Phase-3c: bypass adapter — return raw ToolCalls for the dispatcher
+        return Some((
+            RagPlanDecision::ToolCalls(planner_output.calls),
+            planner_output.skills,
+        ));
+    }
 
     // 4. Legacy format: ExecutePlanRequest (backward compatibility)
     let plan = serde_json::from_str::<ExecutePlanRequest>(&json).ok()?;
@@ -335,11 +345,17 @@ pub(crate) fn parse_rag_plan_decision(raw: &str, request: &ChatRequest) -> Optio
         return None;
     }
     match normalize_execute_plan_request(plan, request) {
-        Some(plan) => Some((RagPlanDecision::ToolCalls(execute_plan_request_to_tool_calls(plan)), Vec::new())),
-        None => Some((RagPlanDecision::Clarify(
-            crate::chat::i18n::clarify::need_query_or_doc_scope(request.language.as_deref())
-                .to_string(),
-        ), Vec::new())),
+        Some(plan) => Some((
+            RagPlanDecision::ToolCalls(execute_plan_request_to_tool_calls(plan)),
+            Vec::new(),
+        )),
+        None => Some((
+            RagPlanDecision::Clarify(
+                crate::chat::i18n::clarify::need_query_or_doc_scope(request.language.as_deref())
+                    .to_string(),
+            ),
+            Vec::new(),
+        )),
     }
 }
 
@@ -649,7 +665,10 @@ fn build_chunk_id_reference_table(
         ));
     }
     if answer_context.len() > 20 {
-        lines.push(format!("  ... and {} more chunks", answer_context.len() - 20));
+        lines.push(format!(
+            "  ... and {} more chunks",
+            answer_context.len() - 20
+        ));
     }
     lines.push("".to_string());
     lines.push("Citation syntax:".to_string());
@@ -673,13 +692,15 @@ pub(crate) fn build_rag_strategy_evaluation_prompt(
                 .get(item.tool_index)
                 .and_then(|r| r.data.as_ref().and_then(|d| d.as_array()).map(|a| a.len()))
                 .unwrap_or(0);
-            let status = tool_results.get(item.tool_index).map_or("unknown".to_string(), |r| {
-                if r.status == common::ToolStatus::Ok {
-                    format!("{} results", count)
-                } else {
-                    format!("{:?}", r.status)
-                }
-            });
+            let status = tool_results
+                .get(item.tool_index)
+                .map_or("unknown".to_string(), |r| {
+                    if r.status == common::ToolStatus::Ok {
+                        format!("{} results", count)
+                    } else {
+                        format!("{:?}", r.status)
+                    }
+                });
             format!("- {}: \"{}\" -> {}", item.id, item.text, status)
         })
         .collect();
@@ -858,7 +879,7 @@ mod tests {
             messages: Vec::new(),
             stream: false,
             language: None,
-        format_hint: None,
+            format_hint: None,
         }
     }
 
@@ -1357,19 +1378,17 @@ mod tests {
     #[test]
     fn build_rag_strategy_evaluation_prompt_maps_multi_query_tool_correctly() {
         // One dense_retrieval call with 2 queries → both map to tool_index 0
-        let tool_results = vec![
-            common::ToolResult {
-                tool: "dense_retrieval".to_string(),
-                version: "1.0".to_string(),
-                status: common::ToolStatus::Ok,
-                data: Some(serde_json::json!([
-                    {"chunk_id": "c1", "text": "alpha"},
-                    {"chunk_id": "c2", "text": "beta"},
-                    {"chunk_id": "c3", "text": "gamma"},
-                ])),
-                trace: None,
-            },
-        ];
+        let tool_results = vec![common::ToolResult {
+            tool: "dense_retrieval".to_string(),
+            version: "1.0".to_string(),
+            status: common::ToolStatus::Ok,
+            data: Some(serde_json::json!([
+                {"chunk_id": "c1", "text": "alpha"},
+                {"chunk_id": "c2", "text": "beta"},
+                {"chunk_id": "c3", "text": "gamma"},
+            ])),
+            trace: None,
+        }];
 
         let sub_queries = vec![
             SubQueryItem {
@@ -1411,12 +1430,24 @@ mod tests {
         assert!(eval.dimensions[0].covered);
         assert_eq!(eval.dimensions[0].retrieved_count, 3);
         assert_eq!(eval.dimensions[0].query_ids, vec!["q1"]);
-        assert!(matches!(eval.dimensions[0].status, DimensionStatus::CoveredStrong));
+        assert!(matches!(
+            eval.dimensions[0].status,
+            DimensionStatus::CoveredStrong
+        ));
         assert_eq!(eval.missing_dimensions, vec!["memory model"]);
         assert!(eval.weak_dimensions.is_empty());
-        assert!(matches!(eval.recommendation, Some(StrategyRecommendation::Replan)));
-        assert_eq!(eval.reason.as_deref(), Some("missing memory model dimension"));
-        assert_eq!(eval.suggested_followup_queries, vec!["memory model async rust"]);
+        assert!(matches!(
+            eval.recommendation,
+            Some(StrategyRecommendation::Replan)
+        ));
+        assert_eq!(
+            eval.reason.as_deref(),
+            Some("missing memory model dimension")
+        );
+        assert_eq!(
+            eval.suggested_followup_queries,
+            vec!["memory model async rust"]
+        );
     }
 
     #[test]
@@ -1426,15 +1457,21 @@ mod tests {
         let broaden = r#"{"recommendation": "broaden", "reason": "too few", "status": "covered_weak", "decision": "insufficient"}"#;
 
         assert!(matches!(
-            parse_rag_strategy_evaluation(synthesize).unwrap().recommendation,
+            parse_rag_strategy_evaluation(synthesize)
+                .unwrap()
+                .recommendation,
             Some(StrategyRecommendation::Synthesize)
         ));
         assert!(matches!(
-            parse_rag_strategy_evaluation(replan).unwrap().recommendation,
+            parse_rag_strategy_evaluation(replan)
+                .unwrap()
+                .recommendation,
             Some(StrategyRecommendation::Replan)
         ));
         assert!(matches!(
-            parse_rag_strategy_evaluation(broaden).unwrap().recommendation,
+            parse_rag_strategy_evaluation(broaden)
+                .unwrap()
+                .recommendation,
             Some(StrategyRecommendation::Broaden)
         ));
     }
@@ -1447,9 +1484,18 @@ mod tests {
             {"name": "c", "status": "missing"}
         ], "recommendation": "synthesize", "reason": "ok", "decision": "sufficient"}"#;
         let eval = parse_rag_strategy_evaluation(raw).unwrap();
-        assert!(matches!(eval.dimensions[0].status, DimensionStatus::CoveredStrong));
-        assert!(matches!(eval.dimensions[1].status, DimensionStatus::CoveredWeak));
-        assert!(matches!(eval.dimensions[2].status, DimensionStatus::Missing));
+        assert!(matches!(
+            eval.dimensions[0].status,
+            DimensionStatus::CoveredStrong
+        ));
+        assert!(matches!(
+            eval.dimensions[1].status,
+            DimensionStatus::CoveredWeak
+        ));
+        assert!(matches!(
+            eval.dimensions[2].status,
+            DimensionStatus::Missing
+        ));
     }
 
     #[test]
@@ -1459,7 +1505,10 @@ mod tests {
 {"dimensions": [], "missing_dimensions": [], "weak_dimensions": [], "recommendation": "synthesize", "reason": "complete", "suggested_followup_queries": [], "decision": "sufficient"}
 ```"#;
         let eval = parse_rag_strategy_evaluation(raw).unwrap();
-        assert!(matches!(eval.recommendation, Some(StrategyRecommendation::Synthesize)));
+        assert!(matches!(
+            eval.recommendation,
+            Some(StrategyRecommendation::Synthesize)
+        ));
         assert_eq!(eval.reason.as_deref(), Some("complete"));
     }
 
@@ -1517,14 +1566,12 @@ mod tests {
 
     #[test]
     fn build_search_strategy_evaluation_prompt_omits_vertical_when_none() {
-        let results = vec![
-            SearchResult {
-                title: "Test".to_string(),
-                url: "https://test.com".to_string(),
-                snippet: "Test snippet".to_string(),
-                citation_index: None,
-            },
-        ];
+        let results = vec![SearchResult {
+            title: "Test".to_string(),
+            url: "https://test.com".to_string(),
+            snippet: "Test snippet".to_string(),
+            citation_index: None,
+        }];
 
         let prompt = build_search_strategy_evaluation_prompt(
             "test",
@@ -1547,30 +1594,47 @@ mod tests {
         assert_eq!(eval.dimensions.len(), 1);
         assert_eq!(eval.dimensions[0].name, "latest news");
         assert!(eval.dimensions[0].attempted);
-        assert!(matches!(eval.dimensions[0].status, DimensionStatus::CoveredStrong));
+        assert!(matches!(
+            eval.dimensions[0].status,
+            DimensionStatus::CoveredStrong
+        ));
         assert_eq!(eval.missing_dimensions, vec!["opinions"]);
         assert!(eval.weak_dimensions.is_empty());
-        assert!(matches!(eval.recommendation, Some(SearchStrategyRecommendation::EscalateVertical)));
+        assert!(matches!(
+            eval.recommendation,
+            Some(SearchStrategyRecommendation::EscalateVertical)
+        ));
         assert_eq!(eval.reason.as_deref(), Some("need discussions vertical"));
-        assert_eq!(eval.suggested_followup_queries, vec!["rust async opinions reddit"]);
+        assert_eq!(
+            eval.suggested_followup_queries,
+            vec!["rust async opinions reddit"]
+        );
     }
 
     #[test]
     fn parse_search_strategy_evaluation_parses_all_recommendations() {
-        let synthesize = r#"{"recommendation": "synthesize", "reason": "done", "decision": "sufficient"}"#;
-        let broaden = r#"{"recommendation": "broaden", "reason": "too few", "decision": "insufficient"}"#;
+        let synthesize =
+            r#"{"recommendation": "synthesize", "reason": "done", "decision": "sufficient"}"#;
+        let broaden =
+            r#"{"recommendation": "broaden", "reason": "too few", "decision": "insufficient"}"#;
         let escalate = r#"{"recommendation": "escalate_vertical", "reason": "need news", "decision": "insufficient"}"#;
 
         assert!(matches!(
-            parse_search_strategy_evaluation(synthesize).unwrap().recommendation,
+            parse_search_strategy_evaluation(synthesize)
+                .unwrap()
+                .recommendation,
             Some(SearchStrategyRecommendation::Synthesize)
         ));
         assert!(matches!(
-            parse_search_strategy_evaluation(broaden).unwrap().recommendation,
+            parse_search_strategy_evaluation(broaden)
+                .unwrap()
+                .recommendation,
             Some(SearchStrategyRecommendation::Broaden)
         ));
         assert!(matches!(
-            parse_search_strategy_evaluation(escalate).unwrap().recommendation,
+            parse_search_strategy_evaluation(escalate)
+                .unwrap()
+                .recommendation,
             Some(SearchStrategyRecommendation::EscalateVertical)
         ));
     }
@@ -1592,7 +1656,9 @@ mod tests {
 
     #[test]
     fn next_action_sub_query_serializes() {
-        let a = NextAction::SubQuery { query: "test query".to_string() };
+        let a = NextAction::SubQuery {
+            query: "test query".to_string(),
+        };
         let json = serde_json::to_value(&a).unwrap();
         assert_eq!(json["type"], "sub_query");
         assert_eq!(json["query"], "test query");
@@ -1613,7 +1679,8 @@ mod tests {
 
     #[test]
     fn rag_strategy_evaluation_has_decision_and_next_actions() {
-        let eval: RagStrategyEvaluation = serde_json::from_str(r#"{
+        let eval: RagStrategyEvaluation = serde_json::from_str(
+            r#"{
             "decision": "insufficient",
             "next_actions": [
                 {"type": "sub_query", "query": "new query"}
@@ -1622,7 +1689,9 @@ mod tests {
             "dimensions": [],
             "missing_dimensions": [],
             "weak_dimensions": []
-        }"#).unwrap();
+        }"#,
+        )
+        .unwrap();
         assert!(matches!(eval.decision, EvalDecision::Insufficient));
         assert_eq!(eval.next_actions.len(), 1);
         assert_eq!(eval.reasoning, "missing dimension");
@@ -1630,7 +1699,8 @@ mod tests {
 
     #[test]
     fn rag_strategy_evaluation_backwards_compat_with_recommendation() {
-        let eval: RagStrategyEvaluation = serde_json::from_str(r#"{
+        let eval: RagStrategyEvaluation = serde_json::from_str(
+            r#"{
             "decision": "sufficient",
             "next_actions": [],
             "reasoning": "all covered",
@@ -1638,19 +1708,27 @@ mod tests {
             "dimensions": [],
             "missing_dimensions": [],
             "weak_dimensions": []
-        }"#).unwrap();
-        assert!(matches!(eval.recommendation, Some(StrategyRecommendation::Synthesize)));
+        }"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            eval.recommendation,
+            Some(StrategyRecommendation::Synthesize)
+        ));
     }
 
     #[test]
     fn search_strategy_evaluation_has_decision_and_next_actions() {
-        let eval: SearchStrategyEvaluation = serde_json::from_str(r#"{
+        let eval: SearchStrategyEvaluation = serde_json::from_str(
+            r#"{
             "decision": "insufficient",
             "next_actions": [
                 {"type": "tool_call", "tool": "web_search", "args": {}, "reason": "try news"}
             ],
             "reasoning": "need vertical escalation"
-        }"#).unwrap();
+        }"#,
+        )
+        .unwrap();
         assert!(matches!(eval.decision, EvalDecision::Insufficient));
         assert_eq!(eval.next_actions.len(), 1);
     }

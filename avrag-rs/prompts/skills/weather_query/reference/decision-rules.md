@@ -16,4 +16,13 @@
 ## Interaction with other tools
 
 - `weather_query` + `web_search`: Use `web_search` for severe weather alerts or breaking weather news; use `weather_query` for basic current conditions.
-- In RAG mode, weather is almost never answered from documents. Prefer `weather_query` directly unless the user is asking about weather described in a specific uploaded document.
+- `weather_query` + `calculator`: when the user wants a derived
+  metric (e.g. Beaufort wind scale, heat index in Fahrenheit),
+  fetch conditions with `weather_query` then call `calculator`
+  on the extracted values.
+- In RAG mode, weather queries **bypass document retrieval
+  entirely** — always call `weather_query` directly. The
+  only exception is when the user explicitly references an
+  uploaded document for the answer (e.g. "what does the
+  2024 climate report say about Beijing's rainfall"), in
+  which case use RAG tools against that document.

@@ -25,6 +25,12 @@ export default defineConfig({
   globalSetup: "./e2e/global-setup.ts",
   reporter: "list",
 
+  // 共享配置：所有 project 继承，project 可覆盖
+  use: {
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
+    locale: "zh-CN",
+  },
+
   webServer: [
     // 本地测试 auth-flow 等纯前端场景时，可通过 SKIP_BACKEND=1 跳过 Rust 后端启动
     ...(process.env.SKIP_BACKEND
@@ -53,8 +59,6 @@ export default defineConfig({
       testMatch: [/specs\/smoke\/[^/]*\.spec\.ts/],
       testIgnore: [/auth.*\.spec\.ts/],
       use: {
-        baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
-        locale: "zh-CN",
         trace: "retain-on-failure",
         screenshot: "only-on-failure",
         video: "retain-on-failure",
@@ -65,8 +69,6 @@ export default defineConfig({
       name: "auth",
       testMatch: [/specs\/smoke\/auth.*\.spec\.ts/],
       use: {
-        baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
-        locale: "zh-CN",
         trace: "retain-on-failure",
         screenshot: "only-on-failure",
         video: "retain-on-failure",
@@ -77,7 +79,6 @@ export default defineConfig({
       name: "visual-desktop",
       testMatch: [/visual\/.*\.spec\.ts/],
       use: {
-        baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
         browserName: "chromium",
         viewport: { width: 1440, height: 900 },
         storageState: "playwright/.auth/user.json",
@@ -90,7 +91,6 @@ export default defineConfig({
       name: "visual-mobile",
       testMatch: [/visual\/.*\.spec\.ts/],
       use: {
-        baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
         ...devices["Pixel 5"],
         storageState: "playwright/.auth/user.json",
         trace: "off",
@@ -102,8 +102,6 @@ export default defineConfig({
       name: "journey",
       testMatch: [/specs\/journey\/[^/]*\.spec\.ts/],
       use: {
-        baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
-        locale: "zh-CN",
         trace: "retain-on-failure",
         screenshot: "only-on-failure",
         video: "retain-on-failure",
@@ -138,8 +136,6 @@ export default defineConfig({
       testMatch: [/specs\/skills\/.*\.spec\.ts/],
       retries: 1,
       use: {
-        baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
-        locale: "zh-CN",
         trace: "on-first-retry",
         video: "on-first-retry",
         screenshot: "only-on-failure",

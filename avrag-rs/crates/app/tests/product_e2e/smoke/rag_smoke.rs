@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::product_e2e::{assertions::*, ChatResponse, DocumentStatus, HttpResponse, TestContext};
+use crate::product_e2e::{ChatResponse, DocumentStatus, HttpResponse, TestContext, assertions::*};
 
 #[tokio::test]
 async fn rag_document_qa_returns_citation() {
@@ -10,7 +10,10 @@ async fn rag_document_qa_returns_citation() {
 
     // 1. Upload document
     let upload = ctx.upload_document("antifragile.txt").await.unwrap();
-    assert_eq!(upload.status, 201, "expected HTTP 201 from POST .../documents");
+    assert_eq!(
+        upload.status, 201,
+        "expected HTTP 201 from POST .../documents"
+    );
 
     // 2. Wait for ingestion
     let status = ctx
@@ -21,7 +24,11 @@ async fn rag_document_qa_returns_citation() {
 
     // 3. Chat — returns HttpResponse (protocol layer)
     let http_resp: HttpResponse = ctx
-        .chat("What is antifragility?", &upload.notebook_id, &[upload.document_id.clone()])
+        .chat(
+            "What is antifragility?",
+            &upload.notebook_id,
+            &[upload.document_id.clone()],
+        )
         .await
         .unwrap();
 

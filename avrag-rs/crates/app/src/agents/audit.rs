@@ -90,12 +90,7 @@ pub trait AuditStorage: Send + Sync {
     async fn store(&self, record: &AuditRecord) -> Result<(), String>;
 
     /// Query audit records by org_id and time range (unix timestamps in seconds).
-    async fn query(
-        &self,
-        org_id: &str,
-        start: u64,
-        end: u64,
-    ) -> Result<Vec<AuditRecord>, String>;
+    async fn query(&self, org_id: &str, start: u64, end: u64) -> Result<Vec<AuditRecord>, String>;
 }
 
 // ---------------------------------------------------------------------------
@@ -129,12 +124,7 @@ impl AuditStorage for InMemoryAuditStorage {
         Ok(())
     }
 
-    async fn query(
-        &self,
-        org_id: &str,
-        start: u64,
-        end: u64,
-    ) -> Result<Vec<AuditRecord>, String> {
+    async fn query(&self, org_id: &str, start: u64, end: u64) -> Result<Vec<AuditRecord>, String> {
         let guard = self.records.lock().map_err(|e| e.to_string())?;
         let filtered: Vec<AuditRecord> = guard
             .iter()
@@ -375,7 +365,8 @@ impl AuditSinkAdapter {
     }
 
     /// Convert a policy deny event into an audit record.
-    pub fn on_policy_deny(&self,
+    pub fn on_policy_deny(
+        &self,
         resource_type: &str,
         resource_id: &str,
         reason: &str,
@@ -393,7 +384,8 @@ impl AuditSinkAdapter {
     }
 
     /// Convert a budget-exhausted event into an audit record.
-    pub fn on_budget_exhausted(&self,
+    pub fn on_budget_exhausted(
+        &self,
         budget_current: u8,
         budget_max: u8,
         strategy: &str,
@@ -494,7 +486,8 @@ mod tests {
 
     #[test]
     fn degrade_event_record_builds() {
-        let record = degrade_event_record("org-1", None, "trace-4", "retrieve", "timeout", "skipped");
+        let record =
+            degrade_event_record("org-1", None, "trace-4", "retrieve", "timeout", "skipped");
         assert_eq!(record.action, AuditAction::DegradeEvent);
         let payload = record.payload.as_object().unwrap();
         assert_eq!(payload["stage"], "retrieve");

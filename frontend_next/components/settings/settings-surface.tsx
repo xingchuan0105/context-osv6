@@ -23,6 +23,7 @@ import { useAuth } from "../../lib/auth/context";
 import { formatSettingsShareMessage } from "../../lib/settings-share-messages";
 import {
   createPortalSession,
+  createCheckoutSession,
   defaultNotificationPreferences,
   getSubscription,
   getUsage,
@@ -414,10 +415,128 @@ function UsageLimitPanel() {
   );
 }
 
+const TRANSLATIONS: Record<string, {
+  selectProvider: string;
+  payWithStripe: string;
+  payWithCreem: string;
+  payWithAlipay: string;
+  subscribeBtn: string;
+  subscribing: string;
+  scanToPay: string;
+  alipayWait: string;
+  cancelPay: string;
+}> = {
+  "zh-CN": {
+    selectProvider: "选择支付方式",
+    payWithStripe: "Stripe (信用卡)",
+    payWithCreem: "Creem (国际支付)",
+    payWithAlipay: "支付宝 (Alipay)",
+    subscribeBtn: "订阅",
+    subscribing: "正在处理...",
+    scanToPay: "请使用支付宝扫码支付",
+    alipayWait: "等待支付中，请在手机上完成付款...",
+    cancelPay: "取消支付",
+  },
+  en: {
+    selectProvider: "Select Payment Method",
+    payWithStripe: "Stripe (Credit Card)",
+    payWithCreem: "Creem (Global Pay)",
+    payWithAlipay: "Alipay",
+    subscribeBtn: "Subscribe",
+    subscribing: "Processing...",
+    scanToPay: "Please scan with Alipay to pay",
+    alipayWait: "Waiting for payment, please complete on your phone...",
+    cancelPay: "Cancel",
+  }
+};
+
 function BillingPanel() {
   const { token } = useAuth();
   const { locale } = useUiPreferences();
   const [actionError, setActionError] = useState("");
+  const [selectedProviders, setSelectedProviders] = useState<Record<string, "stripe" | "creem" | "alipay">>({});
+  const [alipayQr, setAlipayQr] = useState<string | null>(null);
+  const [alipayOrderId, setAlipayOrderId] = useState<string | null>(null);
+  const [pendingPlanId, setPendingPlanId] = useState<string | null>(null);
+  const [checkoutPendingPlan, setCheckoutPendingPlan] = useState<string | null>(null);
+  
+  const queryClient = useQueryClient();
+  const t = TRANSLATIONS[locale === "zh-CN" ? "zh-CN" : "en"];
+
+  useEffect(() => {
+    if (!alipayQr || !alipayOrderId || !pendingPlanId || !token) {
+      return;
+    }
+
+    let active = true;
+    let timer: NodeJS.Timeout;
+
+    async function poll() {
+      try {
+        const sub = await getSubscription(token as string);
+        if (sub && sub.plan_id === pendingPlanId && sub.status === "active") {
+          setAlipayQr(null);
+          setAlipayOrderId(null);
+          setPendingPlanId(null);
+          await queryClient.invalidateQueries({ queryKey: settingsKeys.billing(token) });
+          return;
+        }
+      } catch (err) {
+        console.error("Failed to poll subscription status", err);
+      }
+
+      if (active) {
+        timer = setTimeout(poll, 3000);
+      }
+    }
+
+    timer = setTimeout(poll, 3000);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [alipayQr, alipayOrderId, pendingPlanId, token, queryClient]);
+
+  async function handleCheckout(planId: string) {
+    if (!token) return;
+    setActionError("");
+    setCheckoutPendingPlan(planId);
+    
+    const provider = selectedProviders[planId] || "stripe";
+    
+    try {
+      const response = await createCheckoutSession(token, {
+        plan_id: planId,
+        provider: provider
+      });
+      
+      if (provider === "alipay") {
+        if (response.qr_code) {
+          setAlipayQr(response.qr_code);
+          setAlipayOrderId(response.order_id ?? null);
+          setPendingPlanId(planId);
+        } else {
+          throw new Error("No QR code returned from Alipay checkout");
+        }
+      } else {
+        if (response.url) {
+          window.location.assign(response.url);
+        } else {
+          throw new Error("No URL returned from checkout session");
+        }
+      }
+    } catch (error) {
+      setActionError(
+        describeAuthError(
+          formatSettingsShareMessage(locale, "settings.saveError"),
+          error,
+        ),
+      );
+    } finally {
+      setCheckoutPendingPlan(null);
+    }
+  }
   const billingQuery = useQuery({
     queryKey: settingsKeys.billing(token),
     enabled: Boolean(token),
@@ -509,6 +628,31 @@ function BillingPanel() {
 
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
+      {alipayQr ? (
+        <section className="app-inline-surface" style={{ display: "grid", gap: "1rem", border: "2px solid hsl(var(--ring))", padding: "1.5rem", justifyItems: "center", textAlign: "center" }}>
+          <h3 style={{ margin: 0, color: "hsl(var(--foreground))" }}>{t.scanToPay}</h3>
+          <div style={{ background: "#fff", padding: "1rem", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(alipayQr)}`}
+              alt="Alipay QR Code"
+              style={{ display: "block", width: "200px", height: "200px" }}
+            />
+          </div>
+          <p style={{ margin: 0, fontSize: "0.9rem", color: "hsl(var(--muted-foreground))" }}>
+            {t.alipayWait}
+          </p>
+          <button
+            className="app-button-secondary"
+            onClick={() => {
+              setAlipayQr(null);
+              setAlipayOrderId(null);
+              setPendingPlanId(null);
+            }}
+          >
+            {t.cancelPay}
+          </button>
+        </section>
+      ) : null}
       <section className="app-inline-surface" style={{ display: "grid", gap: "0.75rem" }}>
         <div className="app-inline-row" style={{ marginBottom: 0, alignItems: "start" }}>
           <div style={{ display: "grid", gap: "0.35rem" }}>
@@ -662,6 +806,54 @@ function BillingPanel() {
                       </div>
                     ))}
                   </div>
+                  {plan.id !== "free" && !isCurrentPlan ? (
+                    <div style={{ display: "grid", gap: "0.6rem", marginTop: "auto", paddingTop: "0.8rem", borderTop: "1px solid hsl(var(--border))" }}>
+                      <div style={{ fontSize: "0.85rem", fontWeight: "600", color: "hsl(var(--muted-foreground))" }}>
+                        {t.selectProvider}
+                      </div>
+                      <div style={{ display: "grid", gap: "0.45rem" }}>
+                        {([
+                          ["stripe", t.payWithStripe],
+                          ["creem", t.payWithCreem],
+                          ["alipay", t.payWithAlipay]
+                        ] as const).map(([prov, label]) => {
+                          const currentProvider = selectedProviders[plan.id] || "stripe";
+                          return (
+                            <label
+                              key={prov}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.5rem",
+                                fontSize: "0.85rem",
+                                cursor: "pointer",
+                                padding: "0.3rem 0.5rem",
+                                borderRadius: "var(--radius)",
+                                background: currentProvider === prov ? "hsl(var(--accent))" : "transparent",
+                                transition: "background 0.2s"
+                              }}
+                            >
+                              <input
+                                type="radio"
+                                name={`provider-${plan.id}`}
+                                checked={currentProvider === prov}
+                                onChange={() => setSelectedProviders(prev => ({ ...prev, [plan.id]: prov }))}
+                              />
+                              <span>{label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <button
+                        className="app-button-primary"
+                        disabled={checkoutPendingPlan === plan.id}
+                        onClick={() => void handleCheckout(plan.id)}
+                        style={{ width: "100%", marginTop: "0.4rem" }}
+                      >
+                        {checkoutPendingPlan === plan.id ? t.subscribing : t.subscribeBtn}
+                      </button>
+                    </div>
+                  ) : null}
                 </section>
               );
             })}

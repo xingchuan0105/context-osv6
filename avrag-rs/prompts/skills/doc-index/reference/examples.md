@@ -106,6 +106,7 @@ section map. Cheap pre-flight.
 
 **Context**: Same session as a previous query that already called
 `doc-index`. The planner has cached chunk IDs in session state.
+The document has NOT been re-ingested.
 
 ```json
 {
@@ -118,6 +119,130 @@ section map. Cheap pre-flight.
 }
 ```
 
-If the planner already has chunk IDs in session state, skip
-`doc-index` and go directly to `index_lookup`. (The cache must
-be invalidated on re-ingestion.)
+If the planner already has chunk IDs in session state AND the
+document has not been re-ingested since, skip `doc-index` and
+go directly to `index_lookup`. **If the document was re-ingested,
+you MUST call `doc-index` again** — old chunk IDs are invalid.
+
+## Example 6: Stale chunk IDs after re-ingestion
+
+**Context**: A document was re-ingested between sessions. The
+planner attempts to use cached chunk IDs from the previous session.
+
+**Step 1** (wrong — old IDs):
+```json
+{
+  "tool": "index_lookup",
+  "version": "1.0",
+  "args": {
+    "doc_id": "<doc-uuid>",
+    "chunk_ids": ["<old-stale-id-1>", "<old-stale-id-2>"]
+  }
+}
+```
+Result: `[]` (empty — stale IDs no longer exist)
+
+**Step 2** (correct — re-index first):
+```json
+[
+  {
+    "tool": "doc_index",
+    "version": "1.0",
+    "args": {
+      "doc_ids": ["<doc-uuid>"]
+    }
+  },
+  {
+    "tool": "index_lookup",
+    "version": "1.0",
+    "args": {
+      "doc_id": "<doc-uuid>",
+      "chunk_ids": ["<new-id-1>", "<new-id-2>"]
+    }
+  }
+]
+```
+
+**Rule**: After re-ingestion, always re-call `doc_index` before
+`index_lookup`. Cached IDs are invalid.
+
+## Example 7: Error — document not found
+
+**Context**: The `doc_id` does not exist in the workspace.
+
+```json
+{
+  "tool": "doc_index",
+  "version": "1.0",
+  "args": {
+    "doc_ids": ["non-existent-uuid"]
+  }
+}
+```
+
+Result:
+```json
+[
+  {
+    "doc_id": "non-existent-uuid",
+    "error": {
+      "code": "DOC_NOT_FOUND",
+      "message": "Document not found in workspace"
+    }
+  }
+]
+```
+
+## Example 8: Error — access denied
+
+**Context**: The caller lacks read permission for the document.
+
+```json
+{
+  "tool": "doc_index",
+  "version": "1.0",
+  "args": {
+    "doc_ids": ["<restricted-doc-uuid>"]
+  }
+}
+```
+
+Result:
+```json
+[
+  {
+    "doc_id": "<restricted-doc-uuid>",
+    "error": {
+      "code": "ACCESS_DENIED",
+      "message": "Caller does not have read access to this document"
+    }
+  }
+]
+```
+
+## Example 9: Error — index empty (unparseable document)
+
+**Context**: A scanned PDF without OCR text.
+
+```json
+{
+  "tool": "doc_index",
+  "version": "1.0",
+  "args": {
+    "doc_ids": ["<scanned-pdf-uuid>"]
+  }
+}
+```
+
+Result:
+```json
+[
+  {
+    "doc_id": "<scanned-pdf-uuid>",
+    "error": {
+      "code": "INDEX_EMPTY",
+      "message": "Document has no extractable sections"
+    }
+  }
+]
+```

@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
-use crate::product_e2e::{assertions::*, ChatResponse, DocumentStatus, HttpResponse, TestContext};
+use crate::product_e2e::{ChatResponse, DocumentStatus, HttpResponse, TestContext, assertions::*};
 
 #[tokio::test]
 async fn multi_doc_rag_returns_citations_from_both_docs() {
@@ -48,8 +48,7 @@ async fn multi_doc_rag_returns_citations_from_both_docs() {
     assert_answer_substantive(&resp, 50);
 
     // 6. Multi-doc assertion: citations must come from ≥2 distinct doc_ids
-    let unique_doc_ids: HashSet<&str> =
-        resp.citations.iter().map(|c| c.doc_id.as_str()).collect();
+    let unique_doc_ids: HashSet<&str> = resp.citations.iter().map(|c| c.doc_id.as_str()).collect();
     assert!(
         unique_doc_ids.len() >= 2,
         "expected citations from >=2 distinct documents, got doc_ids: {:?}",

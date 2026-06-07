@@ -6,10 +6,10 @@
 //! - Emits the expected event stream via the sink
 //! - Handles cancellation and error paths correctly
 
+use app::agents::AgentKind;
 use app::agents::events::{AgentEvent, CollectingSink};
 use app::agents::runtime::{Agent, AgentRequest};
 use app::agents::unified::UnifiedAgent;
-use app::agents::AgentKind;
 use avrag_llm::LlmClient;
 use std::collections::BTreeMap;
 
@@ -68,7 +68,11 @@ async fn chat_without_llm_returns_error() {
     assert!(err.message().contains("LLM"));
 
     let events = sink.events();
-    assert!(events.iter().any(|e| matches!(e, AgentEvent::Error { code, .. } if code == "llm_unavailable")));
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::Error { code, .. } if code == "llm_unavailable"))
+    );
 }
 
 #[tokio::test]
@@ -83,7 +87,11 @@ async fn rag_without_doc_scope_returns_validation_error() {
     assert!(err.code().contains("missing_doc_scope") || err.message().contains("doc_scope"));
 
     let events = sink.events();
-    assert!(events.iter().any(|e| matches!(e, AgentEvent::Error { code, .. } if code == "missing_doc_scope")));
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::Error { code, .. } if code == "missing_doc_scope"))
+    );
 }
 
 #[tokio::test]
@@ -99,7 +107,11 @@ async fn rag_without_runtime_returns_error() {
     assert!(err.message().contains("RAG runtime"));
 
     let events = sink.events();
-    assert!(events.iter().any(|e| matches!(e, AgentEvent::Error { code, .. } if code == "rag_unavailable")));
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::Error { code, .. } if code == "rag_unavailable"))
+    );
 }
 
 #[tokio::test]
@@ -114,7 +126,11 @@ async fn search_without_executor_returns_error() {
     assert!(err.message().contains("Search executor"));
 
     let events = sink.events();
-    assert!(events.iter().any(|e| matches!(e, AgentEvent::Error { code, .. } if code == "search_unavailable")));
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::Error { code, .. } if code == "search_unavailable"))
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +179,9 @@ async fn chat_emits_activity_event() {
 
     let events = sink.events();
     assert!(
-        events.iter().any(|e| matches!(e, AgentEvent::Activity { stage, .. } if stage == "chat")),
+        events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::Activity { stage, .. } if stage == "chat")),
         "expected Activity event for chat stage"
     );
 }
@@ -186,8 +204,17 @@ async fn cancellation_aborts_run_promptly() {
     let result = agent.run(req, &sink).await;
     assert!(result.is_err());
     let err = result.unwrap_err();
-    println!("cancellation error: code={} message={}", err.code(), err.message());
-    assert!(err.message().contains("cancelled") || err.code().contains("cancelled"), "expected cancellation error, got code={} message={}", err.code(), err.message());
+    println!(
+        "cancellation error: code={} message={}",
+        err.code(),
+        err.message()
+    );
+    assert!(
+        err.message().contains("cancelled") || err.code().contains("cancelled"),
+        "expected cancellation error, got code={} message={}",
+        err.code(),
+        err.message()
+    );
 }
 
 // ---------------------------------------------------------------------------

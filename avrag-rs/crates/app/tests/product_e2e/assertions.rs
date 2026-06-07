@@ -16,8 +16,7 @@ pub fn assert_http_ok(resp: &HttpResponse) {
     assert_eq!(
         resp.status, 200,
         "expected HTTP 200, got {}. body: {}",
-        resp.status,
-        resp.body_json
+        resp.status, resp.body_json
     );
 }
 
@@ -84,7 +83,10 @@ pub fn assert_answer_has_doc_citation(resp: &ChatResponse) {
 ///
 /// Search mode sets `Citation.layer` to `"search"` and `doc_id` to the source URL.
 pub fn assert_answer_has_web_citation(resp: &ChatResponse) {
-    let has_web = resp.citations.iter().any(|c| c.layer.as_deref() == Some("search"));
+    let has_web = resp
+        .citations
+        .iter()
+        .any(|c| c.layer.as_deref() == Some("search"));
     assert!(
         has_web,
         "expected at least one web citation (layer == 'search'), got citations: {:?}",

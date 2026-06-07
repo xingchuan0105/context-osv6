@@ -34,7 +34,9 @@ impl Clone for SseSink {
             emit_done: self.emit_done,
             emit_debug_trace: self.emit_debug_trace,
             answer_started: AtomicBool::new(self.answer_started.load(Ordering::SeqCst)),
-            message_delta_emitted: AtomicBool::new(self.message_delta_emitted.load(Ordering::SeqCst)),
+            message_delta_emitted: AtomicBool::new(
+                self.message_delta_emitted.load(Ordering::SeqCst),
+            ),
         }
     }
 }
@@ -195,7 +197,12 @@ impl SseSink {
                 payload,
             } => ChatEvent::Trace {
                 request_id: self.request_id.clone(),
-                stage: format!("state_{}", serde_json::to_string(&transition_type).unwrap_or_default().trim_matches('"')),
+                stage: format!(
+                    "state_{}",
+                    serde_json::to_string(&transition_type)
+                        .unwrap_or_default()
+                        .trim_matches('"')
+                ),
                 status: "ok".to_string(),
                 detail: Some(serde_json::json!({
                     "state_id": state_id,
@@ -310,12 +317,14 @@ impl SseSink {
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_ok()
         {
-            self.sender.send(ChatEvent::AnswerStart {
-                request_id: self.request_id.clone(),
-                session_id: self.session_id.clone(),
-                message_id: self.message_id,
-                agent_type: self.agent_type.clone(),
-            }).map_err(|_| ())?;
+            self.sender
+                .send(ChatEvent::AnswerStart {
+                    request_id: self.request_id.clone(),
+                    session_id: self.session_id.clone(),
+                    message_id: self.message_id,
+                    agent_type: self.agent_type.clone(),
+                })
+                .map_err(|_| ())?;
         }
         Ok(())
     }
@@ -391,14 +400,18 @@ mod tests {
         .await;
         assert!(sink.has_message_delta());
 
-        let first = rx.try_recv().expect("answer_start should be sent before first delta");
+        let first = rx
+            .try_recv()
+            .expect("answer_start should be sent before first delta");
         assert!(
             matches!(first, ChatEvent::AnswerStart { request_id, session_id, message_id, agent_type }
                 if request_id == "req-1" && session_id == "sess-1" && message_id == 7 && agent_type == "chat"
             )
         );
 
-        let second = rx.try_recv().expect("token event should follow answer_start");
+        let second = rx
+            .try_recv()
+            .expect("token event should follow answer_start");
         assert!(
             matches!(second, ChatEvent::Token { request_id, message_id, content }
                 if request_id == "req-1" && message_id == 7 && content == "hello"
@@ -507,7 +520,9 @@ mod tests {
             kind: "search.execution".to_string(),
             payload: serde_json::json!({"internal": true}),
         });
-        let event = rx.try_recv().expect("debug trace event should be sent when enabled");
+        let event = rx
+            .try_recv()
+            .expect("debug trace event should be sent when enabled");
         assert!(matches!(event, ChatEvent::Trace { stage, status, .. }
             if stage == "search.execution" && status == "debug"));
     }

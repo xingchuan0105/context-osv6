@@ -4,9 +4,7 @@ use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
 use avrag_llm::{EmbeddingClient, LlmClient, RerankerClient, RetrievalPlanner};
 use avrag_rag_core::RagRuntime;
 use avrag_search::SearchExecutor;
-use avrag_storage_pg::{
-    ObjectStoreHandle, PgStorageError, S3ObjectStore,
-};
+use avrag_storage_pg::{ObjectStoreHandle, PgStorageError, S3ObjectStore};
 use common::AppError;
 use hmac::{Hmac, Mac};
 
@@ -17,10 +15,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::{
-    fs,
-    time::Duration,
-};
+use tokio::{fs, time::Duration};
 use uuid::Uuid;
 
 use crate::lib_impl::*;
@@ -67,8 +62,8 @@ pub(crate) fn build_unified_agent_service(
     rag_runtime: Option<Arc<RagRuntime>>,
     _prompts_dir: &str,
 ) -> Arc<UnifiedAgentService> {
-    let search_provider: Option<Arc<dyn avrag_search::SearchProvider>> = search_executor
-        .map(|executor| -> Arc<dyn avrag_search::SearchProvider> { executor });
+    let search_provider: Option<Arc<dyn avrag_search::SearchProvider>> =
+        search_executor.map(|executor| -> Arc<dyn avrag_search::SearchProvider> { executor });
 
     let agent = crate::agents::unified::UnifiedAgent::new(llm_client.clone(), temperature)
         .with_rag_runtime(rag_runtime)
@@ -338,7 +333,11 @@ pub(crate) fn looks_like_html(bytes: &[u8]) -> bool {
         || prefix.contains("<!doctype html")
 }
 
-pub(crate) fn build_url_source_filename(url: &Url, mime_type: &str, title_hint: Option<&str>) -> String {
+pub(crate) fn build_url_source_filename(
+    url: &Url,
+    mime_type: &str,
+    title_hint: Option<&str>,
+) -> String {
     let extension = match mime_type {
         "text/html" => "html",
         "application/json" => "json",
@@ -514,8 +513,7 @@ pub(crate) fn model_config_from_env(
             .or_else(|| inferred_embedding_dimensions(&model)),
         enable_thinking: env_bool_optional(&format!("{prefix}_ENABLE_THINKING"))
             .or(default.enable_thinking),
-        enable_cache: env_bool_optional(&format!("{prefix}_ENABLE_CACHE"))
-            .or(default.enable_cache),
+        enable_cache: env_bool_optional(&format!("{prefix}_ENABLE_CACHE")).or(default.enable_cache),
         rpm_limit: env_u32_optional(&format!("{prefix}_RPM_LIMIT"), default.rpm_limit),
         tpm_limit: env_u32_optional(&format!("{prefix}_TPM_LIMIT"), default.tpm_limit),
     }

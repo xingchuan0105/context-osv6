@@ -1,7 +1,7 @@
 use crate::lib_impl::*;
 use common::{
     AddUrlSourceRequest, AppError, CreateDocumentUploadResponse, Document, DocumentStatus,
-    SourceRow, now_rfc3339, new_id,
+    SourceRow, new_id, now_rfc3339,
 };
 use uuid::Uuid;
 
@@ -193,5 +193,4 @@ impl AppState {
     }
 
     // Search methods continue in the next fragment.
-
 }

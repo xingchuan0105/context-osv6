@@ -5,8 +5,8 @@ use crate::agents::react_loop::DegradeReason;
 use common::{ChatTurnInput, Citation, DegradeTraceItem};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use tokio_util::sync::CancellationToken;
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
 // ---------------------------------------------------------------------------
 // TraceSpan — distributed tracing structures
@@ -45,11 +45,7 @@ impl TraceSpan {
     }
 
     /// Set an attribute on the span.
-    pub fn set_attribute<K: Into<String>, V: Into<serde_json::Value>>(
-        &mut self,
-        key: K,
-        value: V,
-    ) {
+    pub fn set_attribute<K: Into<String>, V: Into<serde_json::Value>>(&mut self, key: K, value: V) {
         self.attributes.insert(key.into(), value.into());
     }
 
@@ -237,6 +233,7 @@ pub struct AgentRunResult {
     #[serde(default)]
     pub trace_id: Option<String>,
     /// Per-state execution history recorded by StrategyExecutor.
+    #[deprecated = "Replaced by iterations (ReActIterationRecord) in ADR-0006"]
     #[serde(default)]
     pub state_history: Option<Vec<StateRecord>>,
     /// Budget consumption snapshot at loop termination.
@@ -266,6 +263,7 @@ pub struct AgentRunResult {
 }
 
 /// A single state execution record in the v5 StrategyExecutor.
+#[deprecated = "Replaced by ReActIterationRecord in ADR-0006"]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StateRecord {
     pub state_id: String,
@@ -528,7 +526,11 @@ mod tests {
     fn recent_messages_returns_last_n_items() {
         let messages: Vec<ChatTurnInput> = (0..12)
             .map(|i| ChatTurnInput {
-                role: if i % 2 == 0 { "user".to_string() } else { "assistant".to_string() },
+                role: if i % 2 == 0 {
+                    "user".to_string()
+                } else {
+                    "assistant".to_string()
+                },
                 content: format!("msg-{i}"),
             })
             .collect();
@@ -616,7 +618,11 @@ mod tests {
         let mut span = TraceSpan::new("t", "agent.run", None);
         std::thread::sleep(std::time::Duration::from_millis(10));
         span.finish();
-        assert!(span.elapsed_ms >= 10, "elapsed_ms should be >= 10, got {}", span.elapsed_ms);
+        assert!(
+            span.elapsed_ms >= 10,
+            "elapsed_ms should be >= 10, got {}",
+            span.elapsed_ms
+        );
     }
 
     #[test]
@@ -635,7 +641,10 @@ mod tests {
         let json = serde_json::to_string(&span).unwrap();
         let parsed: TraceSpan = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.name, "agent.run");
-        assert_eq!(parsed.attributes.get("key"), Some(&serde_json::json!("value")));
+        assert_eq!(
+            parsed.attributes.get("key"),
+            Some(&serde_json::json!("value"))
+        );
     }
 
     #[test]

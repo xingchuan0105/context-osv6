@@ -3,10 +3,10 @@
 //! Wraps the redteam framework (dataset loading + scheduler + evaluator) into
 //! a service that can be invoked from admin endpoints or background jobs.
 
-use super::{RedTeamDataset, load_datasets_from_dir};
 use super::scheduler::RedTeamSchedule;
-use crate::agents::events::AgentEventSink;
+use super::{RedTeamDataset, load_datasets_from_dir};
 use crate::agents::eval_framework::EvalRun;
+use crate::agents::events::AgentEventSink;
 use crate::agents::runtime::Agent;
 use common::AppError;
 use std::path::PathBuf;
@@ -107,16 +107,22 @@ mod tests {
     async fn service_with_no_dataset_dir_returns_empty() {
         let svc = RedTeamService::new(Box::new(StubAgent));
         let sink = CollectingSink::new();
-        let runs = svc.run_evaluation(&RedTeamSchedule::Full, &sink).await.unwrap();
+        let runs = svc
+            .run_evaluation(&RedTeamSchedule::Full, &sink)
+            .await
+            .unwrap();
         assert!(runs.is_empty());
     }
 
     #[tokio::test]
     async fn service_with_missing_dataset_dir_returns_empty() {
-        let svc = RedTeamService::new(Box::new(StubAgent))
-            .with_dataset_dir("/nonexistent/redteam/dir");
+        let svc =
+            RedTeamService::new(Box::new(StubAgent)).with_dataset_dir("/nonexistent/redteam/dir");
         let sink = CollectingSink::new();
-        let runs = svc.run_evaluation(&RedTeamSchedule::Full, &sink).await.unwrap();
+        let runs = svc
+            .run_evaluation(&RedTeamSchedule::Full, &sink)
+            .await
+            .unwrap();
         assert!(runs.is_empty());
     }
 

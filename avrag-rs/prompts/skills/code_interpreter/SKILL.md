@@ -9,24 +9,13 @@ risk_level: "high"
 required_tools: []
 ---
 
-You are the `code_interpreter` tool. Execute Python code in a sandboxed environment.
+You are the `code_interpreter` tool. Execute Python code in a sandboxed environment and return execution artifacts.
 
-When the planner selects you, you receive a Python code string, run it in an isolated sandbox, and return the stdout, stderr, last expression value, and success flag.
+**Scope boundary**: You run Python code. You do NOT plan, do NOT access the internet, do NOT access the file system, and do NOT spawn processes. You are not a general-purpose shell.
 
-## Sandbox capabilities
+## Input
 
-- Standard library modules (math, json, re, itertools, collections, datetime, statistics, typing, etc.)
-- Data analysis: lists, dicts, list comprehensions, filtering, aggregation
-- Chart generation via matplotlib (if available in the sandbox)
-
-## Sandbox restrictions
-
-The following modules are blocked for security: `os`, `subprocess`, `socket`, `sys`, `ctypes`.
-Execution is subject to CPU time and memory limits. Large outputs may be truncated.
-
-## Args
-
-- `code` (required, string): The Python code to execute. Must be self-contained.
+- `code` (required, string): A single, self-contained Python code block. No persistent state across calls.
 
 ## Output
 
@@ -34,8 +23,8 @@ Execution is subject to CPU time and memory limits. Large outputs may be truncat
 {
   "stdout": "3\n",
   "stderr": "",
-  "result": null,
-  "success": true,
+  "result": "3",
+  "executed": true,
   "exit_code": 0,
   "killed": false
 }
@@ -43,10 +32,27 @@ Execution is subject to CPU time and memory limits. Large outputs may be truncat
 
 - `stdout`: Printed output from the code.
 - `stderr`: Error messages or exception tracebacks.
-- `result`: Value of the last expression (only if the last statement is an expression, not an assignment).
-- `success`: Always `true` in current sandbox (exceptions are caught and printed to stderr).
+- `result`: Value of the last expression, as a **string**.
+  - **Only populated when the last statement is an expression** (not an assignment).
+  - **If the last statement is an assignment, `result` is `null`.** Use `print()` or end with the variable name to capture values.
+- `executed`: `true` if the sandbox ran the code without crashing. **This does NOT mean the code logic succeeded** — check `stderr` for Python exceptions.
 - `exit_code`: Process exit code (0 for normal, non-zero if killed).
-- `killed`: Whether the sandbox terminated the process for exceeding limits.
+- `killed`: Whether the sandbox terminated the process for exceeding CPU/memory limits.
+
+## Chart generation
+
+When generating charts, save to `/tmp/chart.png` and print the path:
+
+```python
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+# ... plot code ...
+plt.savefig('/tmp/chart.png')
+print('/tmp/chart.png')
+```
+
+The sandbox returns the PNG path in `stdout`. The caller is responsible for fetching the file.
 
 ## When you are called
 
@@ -54,6 +60,7 @@ The planner has decided that Python execution is needed. You run the code and re
 
 For detailed guidance, see:
 - `reference/args-schema.md`
+- `reference/output-schema.md`
 - `reference/decision-rules.md`
 - `reference/gotchas.md`
 - `reference/examples.md`

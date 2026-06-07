@@ -73,4 +73,45 @@ impl LlmProvider for RecordingLlmProvider {
 
         Ok(response)
     }
+
+    async fn complete_with_tools(
+        &self,
+        messages: &[ChatMessage],
+        tools: &[common::ToolSpec],
+        temperature: Option<f32>,
+    ) -> anyhow::Result<LlmResponse> {
+        // Extract system prompt (first message with role "system")
+        let system_prompt = messages
+            .iter()
+            .find(|m| m.role == "system")
+            .map(|m| m.content.clone())
+            .unwrap_or_default();
+
+        // Extract user messages
+        let user_messages: Vec<ChatMessage> = messages
+            .iter()
+            .filter(|m| m.role != "system")
+            .cloned()
+            .collect();
+
+        // Delegate to real provider
+        let response = self
+            .inner
+            .complete_with_tools(messages, tools, temperature)
+            .await?;
+
+        // Record the call
+        let call = LlmCall {
+            system_prompt,
+            user_messages,
+            response_content: response.content.clone(),
+            timestamp_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64,
+        };
+        self.calls.lock().unwrap().push(call);
+
+        Ok(response)
+    }
 }

@@ -3,7 +3,7 @@ import { TEST_USER } from "../fixtures/test-user";
 
 /**
  * 重置预置测试账号的所有数据。
- * 仅用于 setup/teardown，不用于测试断言。
+ * 主要用于 globalSetup/teardown，也可在 spec 的 beforeAll 中使用。
  */
 export async function resetTestUserData(request: APIRequestContext) {
   const secret = process.env.E2E_RESET_SECRET;
@@ -13,6 +13,7 @@ export async function resetTestUserData(request: APIRequestContext) {
   const resp = await request.post("/api/e2e/reset-user-data", {
     headers: { "X-E2E-Secret": secret },
     data: { email: TEST_USER.email },
+    timeout: 30_000,
   });
   if (!resp.ok()) {
     throw new Error(`reset-user-data failed: ${resp.status()} ${await resp.text()}`);

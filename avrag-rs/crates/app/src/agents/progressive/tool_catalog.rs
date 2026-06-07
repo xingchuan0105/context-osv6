@@ -27,7 +27,11 @@ pub fn atomic_tool_catalog() -> Vec<Tool> {
                 .map(|g| {
                     g.lines()
                         .filter(|l| l.starts_with("- ") || l.starts_with("* "))
-                        .map(|l| l.trim_start_matches("- ").trim_start_matches("* ").to_string())
+                        .map(|l| {
+                            l.trim_start_matches("- ")
+                                .trim_start_matches("* ")
+                                .to_string()
+                        })
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
@@ -56,7 +60,9 @@ pub fn atomic_tool_catalog() -> Vec<Tool> {
 
 /// Return a lazily-initialised global singleton of the atomic tool catalog.
 pub fn atomic_tool_catalog_cached() -> &'static [Tool] {
-    ATOMIC_TOOL_CATALOG.get_or_init(atomic_tool_catalog).as_slice()
+    ATOMIC_TOOL_CATALOG
+        .get_or_init(atomic_tool_catalog)
+        .as_slice()
 }
 
 // ============================================================================
@@ -90,7 +96,11 @@ pub fn search_specific_tools() -> Vec<Tool> {
                 .map(|g| {
                     g.lines()
                         .filter(|l| l.starts_with("- ") || l.starts_with("* "))
-                        .map(|l| l.trim_start_matches("- ").trim_start_matches("* ").to_string())
+                        .map(|l| {
+                            l.trim_start_matches("- ")
+                                .trim_start_matches("* ")
+                                .to_string()
+                        })
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
@@ -121,7 +131,9 @@ pub fn search_specific_tools() -> Vec<Tool> {
 
 /// Return a lazily-initialised global singleton of the search-specific tool catalog.
 pub fn search_specific_tools_cached() -> &'static [Tool] {
-    SEARCH_SPECIFIC_CATALOG.get_or_init(search_specific_tools).as_slice()
+    SEARCH_SPECIFIC_CATALOG
+        .get_or_init(search_specific_tools)
+        .as_slice()
 }
 
 #[cfg(test)]
@@ -131,10 +143,17 @@ mod tests {
     #[test]
     fn test_atomic_tool_catalog_has_all_atomic_tools() {
         let tools = atomic_tool_catalog();
-        assert!(tools.len() >= 3, "expected at least 3 atomic tools, got {}", tools.len());
+        assert!(
+            tools.len() >= 3,
+            "expected at least 3 atomic tools, got {}",
+            tools.len()
+        );
         let names: Vec<&str> = tools.iter().map(|t| t.spec().name.as_str()).collect();
         assert!(names.contains(&"calculator"), "missing calculator");
-        assert!(names.contains(&"code_interpreter"), "missing code_interpreter");
+        assert!(
+            names.contains(&"code_interpreter"),
+            "missing code_interpreter"
+        );
         assert!(names.contains(&"weather_query"), "missing weather_query");
     }
 }

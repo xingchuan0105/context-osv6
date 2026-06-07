@@ -1,26 +1,26 @@
 # Decision Rules
 
-## When `dense-retrieval` is the right tool
+## When to call `dense-retrieval`
 
-- The user query is phrased differently than the source text
-  (paraphrase, conceptual question, "in plain English" request).
-- The answer is likely scattered across multiple chunks or
-  documents (semantic ranking helps).
-- Multilingual or cross-lingual retrieval is needed.
-- The user asks "similar to", "related to", "about X in general".
+Call this tool when the query is **meaning-driven** rather than literal.
 
-## When to prefer a different tool
+| Scenario | Why dense retrieval |
+|----------|---------------------|
+| Paraphrased or conceptual question | Semantic embedding captures meaning, not exact words |
+| Multilingual / cross-lingual query | Embedding model maps across languages |
+| "Similar to" / "related to" / "about X in general" | Semantic similarity ranking |
+| Answer scattered across multiple chunks | Semantic ranking surfaces distributed evidence |
 
-- **Exact-literal match needed** (filenames, IDs, error codes,
-  acronyms) → `lexical-retrieval`. BM25 anchors on the literal.
-- **Relationship / multi-hop question** ("who owns the service
-  that runs the job that depends on X") → `graph-retrieval`.
-- **Surgical read of known chunks** (you already have chunk IDs
-  from `doc-index`) → `index_lookup`.
-- **Broad doc-level context first** (you don't know which doc to
-  target) → `doc-summary` before `dense-retrieval`.
+## When NOT to call `dense-retrieval`
 
-## Combine with other tools in the same plan
+| Scenario | Why not | Use instead |
+|----------|---------|-------------|
+| Exact-literal match needed (IDs, error codes, filenames, acronyms) | BM25 anchors on literal string | `lexical-retrieval` |
+| Entity relationship / multi-hop reasoning ("who owns the service that depends on X") | Needs graph traversal, not vector similarity | `graph-retrieval` |
+| Surgical read of known chunks (you already have chunk IDs) | Direct lookup is faster | `index_lookup` |
+| Broad doc-level context, don't know which doc to target | Need doc overview first | `doc-summary` |
+
+## Combine with other tools
 
 - `dense-retrieval` + `lexical-retrieval` is the standard hybrid:
   semantic for meaning, BM25 for exact matches. The merger
@@ -31,9 +31,11 @@
 - `dense-retrieval` alone is the default. Do not add other tools
   unless they materially improve recall.
 
-## When to lower `top_k`
+## `top_k` selection
 
-- The query is narrow and you expect a single answer → `top_k: 5`.
-- The query is broad and you want more context → `top_k: 20`+
-  (but cap at 50 to avoid latency).
-- Default `top_k: 10` is the safe choice for most queries.
+| Query type | `top_k` | Rationale |
+|------------|---------|-----------|
+| Narrow, single answer expected | 3-5 | Reduces noise in synthesis |
+| Standard conceptual question | 10 (default) | Balanced coverage |
+| Broad, answer scattered | 20-30 | More context, capped at 50 |
+| Need even more | Issue a second narrower call | Avoid >50 latency degradation |

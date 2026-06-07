@@ -6,6 +6,26 @@
 
 ---
 
+## 实施变更说明（2026-06-07 实施后）
+
+以下为本设计与实际代码的已确认差异，后续维护以代码为准：
+
+| 设计原文 | 实际实现 | 原因 |
+|---------|---------|------|
+| "ChatPage 合并到 workspace-page.ts"（4.1 表格） | `chat-panel-page.ts` 为**独立 POM** | `workspace-page.ts` 保持容器级职责（导航/上传/切换 tab），Chat 交互方法独立到 `chat-panel-page.ts`，避免单文件膨胀 |
+| "notebook-crud 分阶段：Phase 2 API 方式，Phase 3 UI 流程" | `notebook-page.ts` 直接实现 UI 流程 | 实际一次性完成：create 通过 dashboard inline edit，rename/delete 通过 workspace title + action menu |
+| `projects: [{ name: "smoke" ... }]` | `projects: [{ name: "functional" ... }]` | 命名对齐 Playwright 社区惯例，functional = PR 级快速验证 |
+| cross-browser 默认启用 | cross-browser 通过 `RUN_CROSS_BROWSER=1` **opt-in** | 避免本地开发默认跑 3 套浏览器拖慢反馈，CI 中按需开启 |
+| `frontend-smoke.yml` / `frontend-journey.yml` / `frontend-skills.yml` | 已创建 `frontend_next/.github/workflows/frontend-journey.yml`；smoke/skills 的 workflow 待后续补充 | 先补齐缺失的 journey workflow，满足成功标准 #7 |
+| `golden_set.json` 中 `chat-session-01` 为扩展意图 | `chat-session.spec.ts` 已读取 golden_set 中的 turns | 消除死代码，多轮对话 query 从 golden_set 维护 |
+| `format-output.spec.ts` 用 `lastAnswerRawText()` | 改用 `lastAnswerHtml()` | `innerText()` 已剥离 HTML 标签，无法检测 `<html`；`innerHTML()` 才保留原始标签 |
+| `notebook-skill.spec.ts` 直接提问 | 先 `uploadFile(antifragile.txt)` 再提问 | 无文档时 LLM 无数据来源，回答空泛；上传后断言可检测文档名 |
+| `analyze-skill.spec.ts` 关键词仅 warn | 关键词检测提升为 **硬断言** | 与设计 6.3 "可用性断言（硬门槛）"目标一致 |
+
+---
+
+---
+
 ## 1. 背景与目标
 
 ### 1.1 现状问题

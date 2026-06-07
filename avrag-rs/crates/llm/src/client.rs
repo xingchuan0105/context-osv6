@@ -13,10 +13,22 @@ fn build_chat_completion_request_body(
         "model": config.model,
         "messages": messages
             .iter()
-            .map(|m| serde_json::json!({
-                "role": m.role,
-                "content": m.content
-            }))
+            .map(|m| {
+                let mut msg = serde_json::json!({
+                    "role": m.role,
+                    "content": m.content
+                });
+                if let Some(ref name) = m.name {
+                    msg["name"] = serde_json::json!(name);
+                }
+                if let Some(ref tool_call_id) = m.tool_call_id {
+                    msg["tool_call_id"] = serde_json::json!(tool_call_id);
+                }
+                if let Some(ref tool_calls) = m.tool_calls {
+                    msg["tool_calls"] = tool_calls.clone();
+                }
+                msg
+            })
             .collect::<Vec<_>>(),
     });
 
@@ -148,6 +160,7 @@ impl ChatCompletionStreamParser {
                 cached_tokens: 0,
             }),
             model: self.model,
+            tool_calls: None,
         })
     }
 
@@ -269,6 +282,202 @@ impl LlmClient {
         if let Some(limiter) = &self.rate_limiter {
             limiter.record_actual_usage(pre_deducted, actual_tokens);
         }
+    }
+
+    /// Send a chat completion request with tool specifications
+    pub async fn complete_with_tools(
+        &self,
+        messages: &[ChatMessage],
+        tools: &[common::ToolSpec],
+        temperature: Option<f32>,
+    ) -> anyhow::Result<LlmResponse> {
+        let started_at = std::time::Instant::now();
+        let provider = self.config.provider_name();
+        let configured_model = self.config.model.clone();
+        if !self.config.is_configured() {
+            telemetry::prometheus::observe_llm_call(
+                "generic",
+                &provider,
+                &configured_model,
+                "failure",
+                started_at.elapsed().as_secs_f64() * 1000.0,
+            );
+            anyhow::bail!("LLM not configured");
+        }
+
+        let mut request_body =
+            build_chat_completion_request_body(&self.config, messages, temperature, false);
+
+        if !tools.is_empty() {
+            let openai_tools = tools
+                .iter()
+                .map(|spec| {
+                    serde_json::json!({
+                        "type": "function",
+                        "function": {
+                            "name": spec.name,
+                            "description": spec.description,
+                            "parameters": spec.input_schema,
+                        }
+                    })
+                })
+                .collect::<Vec<_>>();
+            request_body["tools"] = serde_json::json!(openai_tools);
+        }
+
+        let estimated_tokens = self.estimate_input_tokens(messages);
+        let pre_deducted = self.check_rate_limit(estimated_tokens)?;
+
+        let response = self
+            .client
+            .post(format!("{}/chat/completions", self.config.base_url))
+            .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await;
+        let response = match response {
+            Ok(response) => response,
+            Err(error) => {
+                telemetry::prometheus::record_dependency_failure(&provider);
+                telemetry::prometheus::observe_llm_call(
+                    "generic",
+                    &provider,
+                    &configured_model,
+                    "failure",
+                    started_at.elapsed().as_secs_f64() * 1000.0,
+                );
+                return Err(error).context("Failed to send chat completion request");
+            }
+        };
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            telemetry::prometheus::record_dependency_failure(&provider);
+            telemetry::prometheus::observe_llm_call(
+                "generic",
+                &provider,
+                &configured_model,
+                "failure",
+                started_at.elapsed().as_secs_f64() * 1000.0,
+            );
+            anyhow::bail!("Chat completion API error {}: {}", status, body);
+        }
+
+        #[derive(serde::Deserialize)]
+        struct Choice {
+            message: ResponseMessage,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct ResponseMessage {
+            content: Option<String>,
+            #[serde(default)]
+            tool_calls: Option<Vec<OpenAiToolCall>>,
+        }
+
+        #[allow(dead_code)]
+        #[derive(serde::Deserialize)]
+        struct OpenAiToolCall {
+            id: String,
+            #[serde(rename = "type")]
+            call_type: String,
+            #[serde(default)]
+            function: Option<OpenAiFunctionCall>,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct OpenAiFunctionCall {
+            name: String,
+            arguments: String,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct Usage {
+            prompt_tokens: u32,
+            completion_tokens: u32,
+            total_tokens: u32,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct CompletionResponse {
+            choices: Vec<Choice>,
+            usage: Usage,
+            model: String,
+        }
+
+        let resp = response.json().await;
+        let resp: CompletionResponse = match resp {
+            Ok(resp) => resp,
+            Err(error) => {
+                telemetry::prometheus::record_dependency_failure(&provider);
+                telemetry::prometheus::observe_llm_call(
+                    "generic",
+                    &provider,
+                    &configured_model,
+                    "failure",
+                    started_at.elapsed().as_secs_f64() * 1000.0,
+                );
+                return Err(error).context("Failed to parse chat completion response");
+            }
+        };
+
+        let choice = resp.choices.first().context("No choices in response")?;
+        let content = choice.message.content.clone().unwrap_or_default();
+
+        let tool_calls = if let Some(ref calls) = choice.message.tool_calls {
+            let mut mapped_calls = Vec::new();
+            for call in calls {
+                if let Some(ref func) = call.function {
+                    let args = serde_json::from_str(&func.arguments)
+                        .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+                    mapped_calls.push(common::ToolCall {
+                        tool: func.name.clone(),
+                        version: "1.0".to_string(),
+                        args,
+                    });
+                }
+            }
+            if mapped_calls.is_empty() {
+                None
+            } else {
+                Some(mapped_calls)
+            }
+        } else {
+            None
+        };
+
+        telemetry::prometheus::observe_llm_call(
+            "generic",
+            &provider,
+            &resp.model,
+            "success",
+            started_at.elapsed().as_secs_f64() * 1000.0,
+        );
+        telemetry::prometheus::observe_llm_usage(
+            "generic",
+            &provider,
+            &resp.model,
+            resp.usage.prompt_tokens as u64,
+            resp.usage.completion_tokens as u64,
+        );
+
+        self.record_usage(pre_deducted, resp.usage.total_tokens as usize);
+
+        Ok(LlmResponse {
+            content,
+            usage: LlmUsage {
+                prompt_tokens: resp.usage.prompt_tokens,
+                completion_tokens: resp.usage.completion_tokens,
+                total_tokens: resp.usage.total_tokens,
+                provider: self.config.provider_name(),
+                model: resp.model.clone(),
+                cached_tokens: 0,
+            },
+            model: resp.model,
+            tool_calls,
+        })
     }
 
     /// Send a chat completion request
@@ -409,6 +618,7 @@ impl LlmClient {
                 cached_tokens: 0,
             },
             model: resp.model,
+            tool_calls: None,
         })
     }
 
@@ -523,6 +733,12 @@ impl LlmClient {
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<serde_json::Value>,
 }
 
 impl ChatMessage {
@@ -530,6 +746,9 @@ impl ChatMessage {
         Self {
             role: "user".to_string(),
             content: content.into(),
+            name: None,
+            tool_call_id: None,
+            tool_calls: None,
         }
     }
 
@@ -537,6 +756,9 @@ impl ChatMessage {
         Self {
             role: "system".to_string(),
             content: content.into(),
+            name: None,
+            tool_call_id: None,
+            tool_calls: None,
         }
     }
 
@@ -544,6 +766,9 @@ impl ChatMessage {
         Self {
             role: "assistant".to_string(),
             content: content.into(),
+            name: None,
+            tool_call_id: None,
+            tool_calls: None,
         }
     }
 }
@@ -553,6 +778,7 @@ pub struct LlmResponse {
     pub content: String,
     pub usage: LlmUsage,
     pub model: String,
+    pub tool_calls: Option<Vec<common::ToolCall>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -797,5 +1023,53 @@ data: [DONE]
             false,
         );
         assert!(body.get("prompt_cache").is_none());
+    }
+
+    #[test]
+    fn request_serializes_message_tool_fields() {
+        let config = test_config("https://api.openai.com", None);
+        let mut msg1 = ChatMessage::user("Hello");
+        msg1.name = Some("user_alice".to_string());
+        
+        let mut msg2 = ChatMessage::assistant("");
+        msg2.tool_calls = Some(serde_json::json!([{
+            "id": "call_123",
+            "type": "function",
+            "function": {
+                "name": "test_tool",
+                "arguments": "{}"
+            }
+        }]));
+
+        let msg3 = ChatMessage {
+            role: "tool".to_string(),
+            content: "success".to_string(),
+            name: Some("test_tool".to_string()),
+            tool_call_id: Some("call_123".to_string()),
+            tool_calls: None,
+        };
+
+        let body = build_chat_completion_request_body(
+            &config,
+            &[msg1, msg2, msg3],
+            None,
+            false,
+        );
+
+        let messages = body["messages"].as_array().unwrap();
+        assert_eq!(messages.len(), 3);
+
+        assert_eq!(messages[0]["role"], "user");
+        assert_eq!(messages[0]["content"], "Hello");
+        assert_eq!(messages[0]["name"], "user_alice");
+
+        assert_eq!(messages[1]["role"], "assistant");
+        assert_eq!(messages[1]["content"], "");
+        assert_eq!(messages[1]["tool_calls"][0]["id"], "call_123");
+
+        assert_eq!(messages[2]["role"], "tool");
+        assert_eq!(messages[2]["content"], "success");
+        assert_eq!(messages[2]["name"], "test_tool");
+        assert_eq!(messages[2]["tool_call_id"], "call_123");
     }
 }

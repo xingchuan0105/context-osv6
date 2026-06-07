@@ -17,15 +17,18 @@
 
 use super::{State, StateKind, StepOutcome, Strategy, StrategyContext};
 use crate::agents::error_kind::AgentErrorKind;
-use crate::agents::evaluator::{evaluate_search_iteration, EvalAdvice, EvaluationSignals};
+use crate::agents::evaluator::{EvalAdvice, EvaluationSignals, evaluate_search_iteration};
 use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::progressive::PromptRegistry;
 use crate::agents::react_loop::{DegradeReason, LoopBudget};
 use crate::agents::runtime::{AgentRequest, AgentRunResult, FinalDecision, IterationRecord};
 use crate::agents::unified::helpers;
-use avrag_llm::LlmUsage;
 use avrag_llm::ChatMessage as LlmChatMessage;
-use avrag_rag_core::{DegradeKind, DefaultEvidenceGate, EvidenceGate, EvidenceGateInput, EvidenceGateOutcome, FocusMode, ScoreBasedFocusMode};
+use avrag_llm::LlmUsage;
+use avrag_rag_core::{
+    DefaultEvidenceGate, DegradeKind, EvidenceGate, EvidenceGateInput, EvidenceGateOutcome,
+    FocusMode, ScoreBasedFocusMode,
+};
 use avrag_search::{SearchResponse, SearchResult};
 use common::{AppError, DegradeTraceItem};
 use std::collections::HashSet;
@@ -70,7 +73,9 @@ impl State for SearchState {
     fn to_observable(&self) -> serde_json::Value {
         match self {
             SearchState::Decompose => serde_json::json!({"state": "decompose"}),
-            SearchState::ParallelSearch { queries } => serde_json::json!({"state": "parallel_search", "queries": queries}),
+            SearchState::ParallelSearch { queries } => {
+                serde_json::json!({"state": "parallel_search", "queries": queries})
+            }
             SearchState::Aggregate => serde_json::json!({"state": "aggregate"}),
             SearchState::Answer => serde_json::json!({"state": "answer"}),
         }
@@ -162,8 +167,8 @@ impl SearchContext {
         sink: Box<dyn AgentEventSink>,
         cancel: CancellationToken,
     ) -> Result<Self, common::AppError> {
-        let auth: avrag_auth::AuthContext =
-            serde_json::from_value(request.auth_context.clone()).map_err(|error| {
+        let auth: avrag_auth::AuthContext = serde_json::from_value(request.auth_context.clone())
+            .map_err(|error| {
                 common::AppError::internal(format!("Failed to deserialize auth context: {error}"))
             })?;
         Ok(Self {
@@ -193,7 +198,10 @@ impl SearchContext {
         })
     }
 
-    pub fn with_repository(mut self, repository: Option<Arc<avrag_storage_pg::PgAppRepository>>) -> Self {
+    pub fn with_repository(
+        mut self,
+        repository: Option<Arc<avrag_storage_pg::PgAppRepository>>,
+    ) -> Self {
         self.repository = repository;
         self
     }
@@ -203,6 +211,7 @@ impl SearchContext {
 // SearchStrategy
 // ---------------------------------------------------------------------------
 
+#[deprecated = "Replaced by ReActLoop in ADR-0006"]
 pub struct SearchStrategy {
     pub llm: std::sync::Arc<dyn avrag_llm::LlmProvider>,
     pub llm_client: Option<avrag_llm::LlmClient>,
@@ -215,10 +224,7 @@ pub struct SearchStrategy {
 impl Strategy for SearchStrategy {
     type Context = SearchContext;
 
-    async fn init(
-        &self,
-        _ctx: &mut SearchContext,
-    ) -> Result<Box<dyn State>, AppError> {
+    async fn init(&self, _ctx: &mut SearchContext) -> Result<Box<dyn State>, AppError> {
         Ok(Box::new(SearchState::Decompose))
     }
 
@@ -278,14 +284,11 @@ impl Strategy for SearchStrategy {
 impl SearchStrategy {
     // --- Decompose step ---
 
-    async fn step_decompose(
-        &self,
-        ctx: &mut SearchContext,
-    ) -> Result<StepOutcome, AgentErrorKind> {
+    async fn step_decompose(&self, ctx: &mut SearchContext) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
         let system_prompt = crate::agents::strategy::prompts::build_plan_system_prompt(
-            "web-search-planner",
+            crate::agents::strategy::prompts::search::PLANNER_SKILL_ID,
             "search",
         );
 
@@ -321,7 +324,9 @@ impl SearchStrategy {
             .map(|p| p.sub_queries.clone())
             .unwrap_or_default();
 
-        Ok(StepOutcome::Next(Box::new(SearchState::ParallelSearch { queries })))
+        Ok(StepOutcome::Next(Box::new(SearchState::ParallelSearch {
+            queries,
+        })))
     }
 
     // --- ParallelSearch step ---
@@ -381,14 +386,15 @@ impl SearchStrategy {
             .session_id
             .as_ref()
             .and_then(|s| uuid::Uuid::parse_str(s).ok());
-        let tool_results = crate::agents::unified::helpers::dispatch_tools_with_history_interception(
-            all_calls,
-            &ctx.auth,
-            session_id,
-            ctx.repository.as_ref().map(|r| r.as_ref()),
-            Some(self.search_executor.as_ref()),
-        )
-        .await;
+        let tool_results =
+            crate::agents::unified::helpers::dispatch_tools_with_history_interception(
+                all_calls,
+                &ctx.auth,
+                session_id,
+                ctx.repository.as_ref().map(|r| r.as_ref()),
+                Some(self.search_executor.as_ref()),
+            )
+            .await;
 
         let mut all_new_results: Vec<SearchResult> = Vec::new();
         let mut all_sub_queries: Vec<String> = Vec::new();
@@ -396,14 +402,19 @@ impl SearchStrategy {
         // Record tool call details for white-box reporting.
         let iteration_idx = ctx.iterations.len() as u8;
         for (call, result) in calls_for_records.iter().zip(tool_results.iter()) {
-            let elapsed_ms = result.trace.as_ref().and_then(|t| t.elapsed_ms).unwrap_or(0);
-            ctx.tool_call_records.push(crate::agents::runtime::ToolCallRecord {
-                tool: call.tool.clone(),
-                iteration: iteration_idx,
-                args: call.args.clone(),
-                status: result.status,
-                elapsed_ms,
-            });
+            let elapsed_ms = result
+                .trace
+                .as_ref()
+                .and_then(|t| t.elapsed_ms)
+                .unwrap_or(0);
+            ctx.tool_call_records
+                .push(crate::agents::runtime::ToolCallRecord {
+                    tool: call.tool.clone(),
+                    iteration: iteration_idx,
+                    args: call.args.clone(),
+                    status: result.status,
+                    elapsed_ms,
+                });
             let _ = ctx
                 .sink
                 .emit(AgentEvent::ToolResult {
@@ -420,31 +431,33 @@ impl SearchStrategy {
                 "web_search" => {
                     if result.status == common::ToolStatus::Ok {
                         if let Some(data) = result.data
-                            && let Ok(response) = serde_json::from_value::<SearchResponse>(data) {
-                                for sub in &response.sub_queries {
-                                    if !all_sub_queries.contains(sub) {
-                                        all_sub_queries.push(sub.clone());
-                                    }
-                                }
-                                for r in &response.results {
-                                    if ctx.seen_urls.insert(r.url.clone()) {
-                                        let cloned = r.clone();
-                                        all_new_results.push(cloned.clone());
-                                        ctx.accumulated_search_results.push(cloned);
-                                    }
-                                }
-                                if let Some(usage) = response.llm_usage.as_ref() {
-                                    ctx.aggregated_usage = Some(helpers::merge_usage(
-                                        ctx.aggregated_usage.as_ref(),
-                                        usage,
-                                    ));
-                                    ctx.request_count += 1;
+                            && let Ok(response) = serde_json::from_value::<SearchResponse>(data)
+                        {
+                            for sub in &response.sub_queries {
+                                if !all_sub_queries.contains(sub) {
+                                    all_sub_queries.push(sub.clone());
                                 }
                             }
-                    } else if let Some(data) = result.data
-                        && let Some(error) = data.get("error").and_then(|v| v.as_str()) {
-                            tracing::warn!(error = %error, "web_search tool failed");
+                            for r in &response.results {
+                                if ctx.seen_urls.insert(r.url.clone()) {
+                                    let cloned = r.clone();
+                                    all_new_results.push(cloned.clone());
+                                    ctx.accumulated_search_results.push(cloned);
+                                }
+                            }
+                            if let Some(usage) = response.llm_usage.as_ref() {
+                                ctx.aggregated_usage = Some(helpers::merge_usage(
+                                    ctx.aggregated_usage.as_ref(),
+                                    usage,
+                                ));
+                                ctx.request_count += 1;
+                            }
                         }
+                    } else if let Some(data) = result.data
+                        && let Some(error) = data.get("error").and_then(|v| v.as_str())
+                    {
+                        tracing::warn!(error = %error, "web_search tool failed");
+                    }
                 }
                 _ => {
                     ctx.all_tool_results.push(result);
@@ -491,10 +504,7 @@ impl SearchStrategy {
 
     // --- Aggregate step ---
 
-    async fn step_aggregate(
-        &self,
-        ctx: &mut SearchContext,
-    ) -> Result<StepOutcome, AgentErrorKind> {
+    async fn step_aggregate(&self, ctx: &mut SearchContext) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
         // --- Step 3: Evidence Gate + 2-round stop-loss ---
@@ -503,13 +513,14 @@ impl SearchStrategy {
         // Here we run the pure-code Evidence Gate to decide between
         // Answer and Degrade, AND enforce the hard 2-round search budget.
         let results = &ctx.accumulated_search_results;
-        let top_score: f32 = results
+        let scores: Vec<f32> = results
             .iter()
             .enumerate()
             .map(|(i, _)| search_result_score_proxy(i))
-            .fold(0.0_f32, f32::max);
+            .collect();
+        let top_score = scores.iter().copied().fold(0.0_f32, f32::max);
         let chunk_count = results.len();
-        let score_variance = compute_search_score_variance(results);
+        let (_, score_variance) = compute_search_score_stats(&scores);
         let context_usage_ratio = estimate_search_context_usage_ratio(ctx);
 
         let gate_input = EvidenceGateInput {
@@ -543,9 +554,10 @@ impl SearchStrategy {
         // 2-round stop-loss: if we have already burned through
         // max_search_rounds and still don't have enough, fall through to
         // Answer with whatever we have instead of re-entering search.
-        let rounds_left = ctx.budget.max_search_rounds.saturating_sub(
-            ctx.budget.current_search_rounds,
-        );
+        let rounds_left = ctx
+            .budget
+            .max_search_rounds
+            .saturating_sub(ctx.budget.current_search_rounds);
         if rounds_left == 0 && !matches!(gate_decision, EvidenceGateOutcome::Pass) {
             tracing::warn!(
                 current_rounds = ctx.budget.current_search_rounds,
@@ -556,9 +568,7 @@ impl SearchStrategy {
         }
 
         match gate_decision {
-            EvidenceGateOutcome::Pass => {
-                Ok(StepOutcome::Next(Box::new(SearchState::Answer)))
-            }
+            EvidenceGateOutcome::Pass => Ok(StepOutcome::Next(Box::new(SearchState::Answer))),
             EvidenceGateOutcome::NeedsFocus { .. } => {
                 // Step 4: focus-mode compression for Search.
                 // Convert SearchResult → AnswerContextChunk, run focus,
@@ -584,9 +594,7 @@ impl SearchStrategy {
                     })
                     .collect();
                 let focus = avrag_rag_core::ScoreBasedFocusMode::default();
-                if let Ok(compressed) =
-                    focus.compress(&items, &ctx.current_query, items.len())
-                {
+                if let Ok(compressed) = focus.compress(&items, &ctx.current_query, items.len()) {
                     tracing::info!(
                         original = ctx.accumulated_search_results.len(),
                         kept = compressed.len(),
@@ -600,7 +608,8 @@ impl SearchStrategy {
                             .into_iter()
                             .map(|c| (c.chunk.chunk_id.clone(), c.chunk))
                             .collect();
-                    ctx.accumulated_search_results.retain(|r| by_url.remove(&r.url).is_some());
+                    ctx.accumulated_search_results
+                        .retain(|r| by_url.remove(&r.url).is_some());
                 } else {
                     tracing::warn!("search focus mode compression failed; using raw results");
                 }
@@ -608,7 +617,9 @@ impl SearchStrategy {
             }
             EvidenceGateOutcome::Degrade(kind) => {
                 let reason = search_gate_kind_to_degrade_reason(&kind);
-                self.finalize_degrade(ctx, reason).await.map(StepOutcome::Terminate)
+                self.finalize_degrade(ctx, reason)
+                    .await
+                    .map(StepOutcome::Terminate)
             }
         }
     }
@@ -761,8 +772,10 @@ impl SearchStrategy {
         }
 
         if let Some(provider_usage) = response.llm_usage.as_ref() {
-            ctx.aggregated_usage =
-                Some(helpers::merge_usage(ctx.aggregated_usage.as_ref(), provider_usage));
+            ctx.aggregated_usage = Some(helpers::merge_usage(
+                ctx.aggregated_usage.as_ref(),
+                provider_usage,
+            ));
             ctx.request_count += 1;
         }
 
@@ -777,10 +790,7 @@ impl SearchStrategy {
             .sink
             .emit(AgentEvent::Activity {
                 stage: "reading_sources".to_string(),
-                message: format!(
-                    "Collected {} new sources",
-                    response.results.len()
-                ),
+                message: format!("Collected {} new sources", response.results.len()),
             })
             .await;
 
@@ -805,23 +815,27 @@ impl SearchStrategy {
 
     // --- Answer step ---
 
-    async fn step_answer(
-        &self,
-        ctx: &mut SearchContext,
-    ) -> Result<StepOutcome, AgentErrorKind> {
+    async fn step_answer(&self, ctx: &mut SearchContext) -> Result<StepOutcome, AgentErrorKind> {
         ctx.check_cancelled()?;
 
         // Detect format skills from query (same heuristic as RagStrategy)
-        let mut detected_formats = crate::agents::strategy::prompts::detect_format_skills(&ctx.request.query);
+        let mut detected_formats =
+            crate::agents::strategy::prompts::detect_format_skills(&ctx.request.query);
         // Always honor explicit format_hint regardless of query detection
         if let Some(ref hint) = ctx.request.format_hint {
             let lower = hint.to_lowercase();
             if lower.contains("html") || lower.contains("web") {
                 detected_formats.push("html-renderer");
-            } else if lower.contains("ppt") || lower.contains("slide") || lower.contains("presentation") {
-                detected_formats.push("presentation-html");
-            } else if lower.contains("teach") || lower.contains("tutorial") || lower.contains("step") {
-                detected_formats.push("step-by-step-tutor");
+            } else if lower.contains("ppt")
+                || lower.contains("slide")
+                || lower.contains("presentation")
+            {
+                detected_formats.push("ppt-generation");
+            } else if lower.contains("teach")
+                || lower.contains("tutorial")
+                || lower.contains("step")
+            {
+                detected_formats.push("teaching");
             }
         }
         let format_skills: Vec<String> = detected_formats.iter().map(|s| s.to_string()).collect();
@@ -834,7 +848,9 @@ impl SearchStrategy {
         );
 
         // Inject behavior mode skill if active
-        if let Some(behavior_skill) = crate::agents::strategy::prompts::load_behavior_mode_skill(ctx.behavior_mode.as_deref()) {
+        if let Some(behavior_skill) =
+            crate::agents::strategy::prompts::load_behavior_mode_skill(ctx.behavior_mode.as_deref())
+        {
             system_prompt.push_str("\n\n---\n\n");
             system_prompt.push_str(&behavior_skill);
         }
@@ -853,7 +869,8 @@ impl SearchStrategy {
             .await;
 
         if ctx.accumulated_search_results.is_empty() {
-            return self.finalize_degrade(ctx, DegradeReason::NoResultsAfterAllFallbacks)
+            return self
+                .finalize_degrade(ctx, DegradeReason::NoResultsAfterAllFallbacks)
                 .await
                 .map(StepOutcome::Terminate);
         }
@@ -872,7 +889,10 @@ impl SearchStrategy {
         response: &SearchResponse,
         iteration_idx: u8,
         system_prompt: &str,
-    ) -> Option<(crate::rag_prompts::SearchStrategyEvaluation, avrag_llm::LlmUsage)> {
+    ) -> Option<(
+        crate::rag_prompts::SearchStrategyEvaluation,
+        avrag_llm::LlmUsage,
+    )> {
         let prompt = crate::rag_prompts::build_search_strategy_evaluation_prompt(
             original_query,
             ctx.current_vertical.as_deref(),
@@ -898,21 +918,24 @@ impl SearchStrategy {
     ) -> Result<AgentRunResult, AgentErrorKind> {
         let sink = ctx.sink.as_ref();
 
-        let _ = sink.emit(AgentEvent::Activity {
-            stage: "synthesizing".to_string(),
-            message: format!(
-                "Synthesizing answer from {} sources",
-                ctx.accumulated_search_results.len()
-            ),
-        })
-        .await;
+        let _ = sink
+            .emit(AgentEvent::Activity {
+                stage: "synthesizing".to_string(),
+                message: format!(
+                    "Synthesizing answer from {} sources",
+                    ctx.accumulated_search_results.len()
+                ),
+            })
+            .await;
 
         let renumbered = renumber_citation_indexes(&ctx.accumulated_search_results);
-        let last_query_type = ctx.current_search_response
+        let last_query_type = ctx
+            .current_search_response
             .as_ref()
             .map(|r| r.query_type.clone())
             .unwrap_or_else(|| "brave_llm_context".to_string());
-        let provider_synth_answer = ctx.current_search_response
+        let provider_synth_answer = ctx
+            .current_search_response
             .as_ref()
             .map(|r| r.synthesized_answer.clone())
             .unwrap_or_default();
@@ -949,25 +972,34 @@ impl SearchStrategy {
             }
         }
         if !rejected_reasons.is_empty() {
-            degrade_trace.extend(rejected_reasons.iter().map(|reason| common::DegradeTraceItem {
-                stage: "untrusted_input".to_string(),
-                reason: reason.clone(),
-                impact: format!("{} item(s) rejected before Answer phase", rejected_reasons.len()),
-            }));
-            let _ = sink.emit(crate::agents::events::AgentEvent::DebugTrace {
-                kind: "untrusted_input.rejected".to_string(),
-                payload: serde_json::json!({
-                    "tool": "web_search",
-                    "rejected_count": rejected_reasons.len(),
-                    "reasons": rejected_reasons,
-                }),
-            }).await;
+            degrade_trace.extend(
+                rejected_reasons
+                    .iter()
+                    .map(|reason| common::DegradeTraceItem {
+                        stage: "untrusted_input".to_string(),
+                        reason: reason.clone(),
+                        impact: format!(
+                            "{} item(s) rejected before Answer phase",
+                            rejected_reasons.len()
+                        ),
+                    }),
+            );
+            let _ = sink
+                .emit(crate::agents::events::AgentEvent::DebugTrace {
+                    kind: "untrusted_input.rejected".to_string(),
+                    payload: serde_json::json!({
+                        "tool": "web_search",
+                        "rejected_count": rejected_reasons.len(),
+                        "reasons": rejected_reasons,
+                    }),
+                })
+                .await;
         }
         let stream = ctx.request.stream;
         let cancel = ctx.cancel.clone();
 
-        let (answer, synth_usage): (String, Option<avrag_llm::LlmUsage>) =
-            match self.synthesize_brave_answer(
+        let (answer, synth_usage): (String, Option<avrag_llm::LlmUsage>) = match self
+            .synthesize_brave_answer(
                 SynthesizeBraveParams {
                     query: &ctx.request.query,
                     search_response: &synth_response,
@@ -985,23 +1017,25 @@ impl SearchStrategy {
                 sink,
             )
             .await
-            {
-                Ok((answer, usage)) => (answer, usage),
-                Err(error) => {
-                    degrade_trace.push(DegradeTraceItem {
-                        stage: "search.synthesize_answer".to_string(),
-                        reason: error.to_string(),
-                        impact: "Returning provider evidence without final answer synthesis".to_string(),
-                    });
-                    if stream && !provider_synth_answer.is_empty() {
-                        let _ = sink.emit(AgentEvent::MessageDelta {
+        {
+            Ok((answer, usage)) => (answer, usage),
+            Err(error) => {
+                degrade_trace.push(DegradeTraceItem {
+                    stage: "search.synthesize_answer".to_string(),
+                    reason: error.to_string(),
+                    impact: "Returning provider evidence without final answer synthesis"
+                        .to_string(),
+                });
+                if stream && !provider_synth_answer.is_empty() {
+                    let _ = sink
+                        .emit(AgentEvent::MessageDelta {
                             text: provider_synth_answer.clone(),
                         })
                         .await;
-                    }
-                    (provider_synth_answer.clone(), None)
                 }
-            };
+                (provider_synth_answer.clone(), None)
+            }
+        };
 
         if let Some(synth) = synth_usage.as_ref() {
             ctx.aggregated_usage = Some(helpers::merge_usage(ctx.aggregated_usage.as_ref(), synth));
@@ -1010,10 +1044,11 @@ impl SearchStrategy {
 
         let citations = build_citations(&renumbered);
         if !citations.is_empty() {
-            let _ = sink.emit(AgentEvent::Citations {
-                citations: citations.clone(),
-            })
-            .await;
+            let _ = sink
+                .emit(AgentEvent::Citations {
+                    citations: citations.clone(),
+                })
+                .await;
         }
 
         let run_usage = helpers::build_run_usage(ctx.aggregated_usage.as_ref(), ctx.request_count);
@@ -1022,11 +1057,12 @@ impl SearchStrategy {
         let debug_payload = build_debug_payload(ctx, &last_query_type);
         emit_search_debug_trace_if_requested(ctx.request.debug, sink, debug_payload.clone()).await;
 
-        let _ = sink.emit(AgentEvent::Done {
-            final_message: Some(answer.clone()),
-            usage: run_usage.as_ref().map(helpers::run_usage_to_agent_usage),
-        })
-        .await;
+        let _ = sink
+            .emit(AgentEvent::Done {
+                final_message: Some(answer.clone()),
+                usage: run_usage.as_ref().map(helpers::run_usage_to_agent_usage),
+            })
+            .await;
 
         let sources = build_sources(&renumbered);
 
@@ -1070,7 +1106,8 @@ impl SearchStrategy {
         reason: DegradeReason,
     ) -> Result<AgentRunResult, AgentErrorKind> {
         let sink = ctx.sink.as_ref();
-        let fallback = ctx.current_search_response
+        let fallback = ctx
+            .current_search_response
             .as_ref()
             .map(|r| r.synthesized_answer.clone())
             .filter(|s| !s.is_empty())
@@ -1081,26 +1118,29 @@ impl SearchStrategy {
                 .to_string()
             });
 
-        let _ = sink.emit(AgentEvent::MessageDelta {
-            text: fallback.clone(),
-        })
-        .await;
+        let _ = sink
+            .emit(AgentEvent::MessageDelta {
+                text: fallback.clone(),
+            })
+            .await;
 
         let run_usage = helpers::build_run_usage(ctx.aggregated_usage.as_ref(), ctx.request_count);
         helpers::emit_usage(sink, run_usage.as_ref()).await;
 
-        let last_query_type = ctx.current_search_response
+        let last_query_type = ctx
+            .current_search_response
             .as_ref()
             .map(|r| r.query_type.clone())
             .unwrap_or_else(|| "brave_llm_context".to_string());
         let debug_payload = build_debug_payload(ctx, &last_query_type);
         emit_search_debug_trace_if_requested(ctx.request.debug, sink, debug_payload.clone()).await;
 
-        let _ = sink.emit(AgentEvent::Done {
-            final_message: Some(fallback.clone()),
-            usage: run_usage.as_ref().map(helpers::run_usage_to_agent_usage),
-        })
-        .await;
+        let _ = sink
+            .emit(AgentEvent::Done {
+                final_message: Some(fallback.clone()),
+                usage: run_usage.as_ref().map(helpers::run_usage_to_agent_usage),
+            })
+            .await;
 
         let degrade_trace = vec![DegradeTraceItem {
             stage: reason.as_stage().to_string(),
@@ -1167,8 +1207,12 @@ impl SearchStrategy {
             let mut on_delta = move |delta: String| {
                 let _ = delta_tx.send(delta);
             };
-            let answer_stream =
-                synthesizer.synthesize_stream(&messages, self.temperature, token.clone(), &mut on_delta);
+            let answer_stream = synthesizer.synthesize_stream(
+                &messages,
+                self.temperature,
+                token.clone(),
+                &mut on_delta,
+            );
             tokio::pin!(answer_stream);
 
             let answer = loop {
@@ -1195,14 +1239,14 @@ impl SearchStrategy {
             Ok((answer.answer, answer.usage))
         } else {
             let answer = synthesizer.synthesize(&messages, self.temperature).await?;
-            let _ = sink.emit(AgentEvent::MessageDelta {
-                text: answer.answer.clone(),
-            })
-            .await;
+            let _ = sink
+                .emit(AgentEvent::MessageDelta {
+                    text: answer.answer.clone(),
+                })
+                .await;
             Ok((answer.answer, answer.usage))
         }
     }
-
 }
 
 // ---------------------------------------------------------------------------
@@ -1212,7 +1256,7 @@ impl SearchStrategy {
 fn build_eval_system_prompt(strategy: &str) -> String {
     let registry = PromptRegistry::standard_cached();
     let (skill_body, schema_ref) = registry
-        .skill("web-search-coverage-eval")
+        .skill(crate::agents::strategy::prompts::search::EVAL_SKILL_ID)
         .map(|s| {
             let body = s.system_prompt().to_string();
             let schema = s.references().get("schema.md").cloned();
@@ -1233,11 +1277,12 @@ fn build_eval_system_prompt(strategy: &str) -> String {
         parts.push(format!("## Output Schema\n\n{schema}"));
     }
     if !tool_catalog.is_empty() {
-        parts.push(format!("## Available Tools for Replanning\n\n{tool_catalog}"));
+        parts.push(format!(
+            "## Available Tools for Replanning\n\n{tool_catalog}"
+        ));
     }
     parts.join("\n\n---\n\n")
 }
-
 
 // ---------------------------------------------------------------------------
 // Helpers (migrated from mode_search.rs)
@@ -1317,7 +1362,11 @@ fn parse_search_plan(raw: &str) -> Option<SearchPlan> {
     let writing_styles: Vec<String> = value
         .get("writing_styles")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
 
     let behavior_mode = value
@@ -1401,30 +1450,22 @@ fn search_gate_kind_to_degrade_reason(kind: &DegradeKind) -> DegradeReason {
 /// (lower index = higher relevance under Brave's default ordering).
 /// Returns 1.0 for the first result, 0.5 for the rest.
 fn search_result_score_proxy(idx: usize) -> f32 {
-    if idx == 0 {
-        1.0
-    } else {
-        0.5
-    }
+    if idx == 0 { 1.0 } else { 0.5 }
 }
 
-/// Variance of accumulated web search result scores. Search results
-/// carry a `score` field on `SearchResult` (Brave relevance).
-fn compute_search_score_variance(results: &[SearchResult]) -> f32 {
-    if results.len() < 2 {
-        return 0.0;
+/// Compute mean and variance of a score slice.
+///
+/// Returns `(0.0, 0.0)` when empty; `(mean, 0.0)` when single element.
+fn compute_search_score_stats(scores: &[f32]) -> (f32, f32) {
+    if scores.is_empty() {
+        return (0.0, 0.0);
     }
-    let scores: Vec<f32> = results
-        .iter()
-        .enumerate()
-        .map(|(i, _)| search_result_score_proxy(i))
-        .collect();
-    let mean: f32 = scores.iter().sum::<f32>() / scores.len() as f32;
-    scores
-        .iter()
-        .map(|s| (s - mean).powi(2))
-        .sum::<f32>()
-        / scores.len() as f32
+    let mean = scores.iter().sum::<f32>() / scores.len() as f32;
+    if scores.len() < 2 {
+        return (mean, 0.0);
+    }
+    let var = scores.iter().map(|s| (s - mean).powi(2)).sum::<f32>() / scores.len() as f32;
+    (mean, var)
 }
 
 /// Estimate context usage ratio from accumulated search snippets.
@@ -1569,20 +1610,22 @@ fn build_search_answer_messages(
     context.push_str(query);
 
     if let Some(tools) = tool_results
-        && !tools.is_empty() {
-            context.push_str("\n\nTool results:\n");
-            for result in tools {
-                context.push_str(&format!("\n### {}\n", result.tool));
-                if result.status == common::ToolStatus::Ok {
-                    if let Some(data) = &result.data {
-                        context.push_str(&serde_json::to_string_pretty(data).unwrap_or_default());
-                    }
-                } else if let Some(data) = &result.data
-                    && let Some(error) = data.get("error").and_then(|v| v.as_str()) {
-                        context.push_str(&format!("Error: {error}"));
-                    }
+        && !tools.is_empty()
+    {
+        context.push_str("\n\nTool results:\n");
+        for result in tools {
+            context.push_str(&format!("\n### {}\n", result.tool));
+            if result.status == common::ToolStatus::Ok {
+                if let Some(data) = &result.data {
+                    context.push_str(&serde_json::to_string_pretty(data).unwrap_or_default());
+                }
+            } else if let Some(data) = &result.data
+                && let Some(error) = data.get("error").and_then(|v| v.as_str())
+            {
+                context.push_str(&format!("Error: {error}"));
             }
         }
+    }
 
     context.push_str("\n\nSearch results:\n");
     for (i, result) in results.iter().enumerate() {
@@ -1670,7 +1713,9 @@ impl SearchAnswerSynthesizer for LlmSearchAnswerSynthesizer {
             anyhow::anyhow!("LlmSearchAnswerSynthesizer: llm_client required for streaming")
         })?;
         let response = client
-            .complete_stream(messages, temperature, token, |delta| on_delta(delta.to_string()))
+            .complete_stream(messages, temperature, token, |delta| {
+                on_delta(delta.to_string())
+            })
             .await?;
         Ok(SynthesizedSearchAnswer {
             answer: response.content,
@@ -1777,16 +1822,29 @@ mod tests {
     fn decision_label_coverage() {
         assert_eq!(decision_label(&EvalAdvice::Synthesize), "synthesize");
         assert_eq!(
-            decision_label(&EvalAdvice::Clarify { question: "q".to_string() }),
+            decision_label(&EvalAdvice::Clarify {
+                question: "q".to_string()
+            }),
             "clarify"
         );
         assert_eq!(
-            decision_label(&EvalAdvice::Degrade { reason: DegradeReason::NoResultsAfterAllFallbacks }),
+            decision_label(&EvalAdvice::Degrade {
+                reason: DegradeReason::NoResultsAfterAllFallbacks
+            }),
             "degrade"
         );
-        assert_eq!(decision_label(&EvalAdvice::Replan { reason: "r" }), "replan");
-        assert_eq!(decision_label(&EvalAdvice::BroadenQuery { reason: "r" }), "broaden_query");
-        assert_eq!(decision_label(&EvalAdvice::EscalateVertical { reason: "r" }), "escalate_vertical");
+        assert_eq!(
+            decision_label(&EvalAdvice::Replan { reason: "r" }),
+            "replan"
+        );
+        assert_eq!(
+            decision_label(&EvalAdvice::BroadenQuery { reason: "r" }),
+            "broaden_query"
+        );
+        assert_eq!(
+            decision_label(&EvalAdvice::EscalateVertical { reason: "r" }),
+            "escalate_vertical"
+        );
     }
 
     #[test]

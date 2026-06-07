@@ -221,14 +221,14 @@ mod tests {
         let run_dir = tmp.path();
 
         // Create a test subdirectory with a minimal meta.json.
-        let test_dir = run_dir.join("chat__step-by-step-tutor__教我理解_rust_生命周期");
+        let test_dir = run_dir.join("chat__teaching__教我理解_rust_生命周期");
         fs::create_dir_all(&test_dir).unwrap();
 
         let meta = serde_json::json!({
             "run_id": "e2e_20260101_120000_abc123",
-            "test_name": "chat__step-by-step-tutor__教我理解_rust_生命周期",
+            "test_name": "chat__teaching__教我理解_rust_生命周期",
             "query": "教我理解 rust 生命周期",
-            "strategy": "step-by-step-tutor",
+            "strategy": "teaching",
             "format_skill": null,
             "status": "passed",
             "answer_text": "生命周期是 Rust 的核心概念...",
@@ -254,9 +254,9 @@ mod tests {
 
         let result = &results[0];
         assert_eq!(result.run_id, "e2e_20260101_120000_abc123");
-        assert_eq!(result.test_name, "chat__step-by-step-tutor__教我理解_rust_生命周期");
+        assert_eq!(result.test_name, "chat__teaching__教我理解_rust_生命周期");
         assert_eq!(result.query, "教我理解 rust 生命周期");
-        assert_eq!(result.strategy, "step-by-step-tutor");
+        assert_eq!(result.strategy, "teaching");
         assert_eq!(result.status, crate::models::TestStatus::Passed);
         assert_eq!(result.answer_text, "生命周期是 Rust 的核心概念...");
         assert_eq!(result.duration_ms, 1234);

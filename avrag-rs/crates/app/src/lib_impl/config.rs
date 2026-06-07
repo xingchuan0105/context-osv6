@@ -1,6 +1,4 @@
-use common::{
-    default_org_id, default_user_id,
-};
+use common::{default_org_id, default_user_id};
 
 use crate::lib_impl::*;
 

@@ -4,7 +4,7 @@
 //! module supplies the type-safe scaffolding for bounded ReAct iteration:
 //!
 //! - [`LoopBudget`]: enforces a tier-aware iteration ceiling. Free tier:
-//!   RAG = 2, Search = 1, Chat = 1. Pro/Enterprise: RAG = 4, Search = 3,
+//!   RAG = 2, Search = 2, Chat = 2. Pro/Enterprise: RAG = 4, Search = 3,
 //!   Chat = 3. See [`LoopBudget::rag`] / [`LoopBudget::search`] / [`LoopBudget::chat`].
 //! - [`LoopDecision`]: the only way to advance — `Continue` *requires* fresh
 //!   `new_params`, so a fallback that does not change inputs cannot type-check
@@ -79,8 +79,10 @@ impl<'a> ReactContext<'a> {
 pub struct LoopBudget {
     pub max_iterations: u8,
     pub current: u8,
+    #[deprecated = "Replaced by YAML budget.max_iterations in ADR-0006"]
     #[serde(default = "default_max_search_rounds")]
     pub max_search_rounds: u8,
+    #[deprecated = "Replaced by YAML budget.max_iterations in ADR-0006"]
     #[serde(default)]
     pub current_search_rounds: u8,
 }
@@ -115,18 +117,18 @@ impl LoopBudget {
         })
     }
 
-    /// Tier-based Search budget. Free = 1 (single shot), Pro/Enterprise = 3.
+    /// Tier-based Search budget. Free = 2 (to support action/synthesis), Pro/Enterprise = 3.
     pub fn search(tier: UserTier) -> Self {
         Self::new(match tier {
-            UserTier::Free => 1,
+            UserTier::Free => 2,
             UserTier::Pro | UserTier::Enterprise => 3,
         })
     }
 
-    /// Tier-based Chat budget. Free = 1, Pro/Enterprise = 3.
+    /// Tier-based Chat budget. Free = 2 (to support action/synthesis), Pro/Enterprise = 3.
     pub fn chat(tier: UserTier) -> Self {
         Self::new(match tier {
-            UserTier::Free => 1,
+            UserTier::Free => 2,
             UserTier::Pro | UserTier::Enterprise => 3,
         })
     }
@@ -145,6 +147,7 @@ impl LoopBudget {
     }
 
     /// Advance the search-round counter. Saturates at `u8::MAX`.
+    #[deprecated = "Replaced by YAML budget.max_iterations in ADR-0006"]
     pub fn tick_search_round(&mut self) {
         self.current_search_rounds = self.current_search_rounds.saturating_add(1);
     }
@@ -152,6 +155,7 @@ impl LoopBudget {
     /// True once the search-round ceiling is reached. Use to
     /// short-circuit a SearchStrategy run before the LLM evaluator
     /// can loop on empty results.
+    #[deprecated = "Replaced by YAML budget.max_iterations in ADR-0006"]
     pub fn search_rounds_exhausted(&self) -> bool {
         self.current_search_rounds >= self.max_search_rounds
     }
@@ -268,11 +272,8 @@ pub enum StepOutcome {
 /// for the case where Plan / Evaluate become reusable across RAG and Search.
 #[async_trait::async_trait]
 pub trait ReactStep<S>: Send + Sync {
-    async fn execute(
-        &self,
-        state: &mut S,
-        ctx: &ReactContext<'_>,
-    ) -> Result<StepOutcome, AppError>;
+    async fn execute(&self, state: &mut S, ctx: &ReactContext<'_>)
+    -> Result<StepOutcome, AppError>;
 }
 
 /// Emit a `retrying`-style activity event when the loop continues.
@@ -342,12 +343,18 @@ mod tests {
             NextStep::EscalateToSearch.activity_stage(),
             "escalating_to_search"
         );
-        assert_eq!(NextStep::FetchFullPage.activity_stage(), "fetching_full_page");
+        assert_eq!(
+            NextStep::FetchFullPage.activity_stage(),
+            "fetching_full_page"
+        );
     }
 
     #[test]
     fn degrade_reason_stage_strings_are_stable() {
-        assert_eq!(DegradeReason::BudgetExhausted.as_stage(), "budget_exhausted");
+        assert_eq!(
+            DegradeReason::BudgetExhausted.as_stage(),
+            "budget_exhausted"
+        );
         assert_eq!(
             DegradeReason::NoResultsAfterAllFallbacks.as_stage(),
             "no_results"

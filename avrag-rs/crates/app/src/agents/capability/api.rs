@@ -94,7 +94,11 @@ pub fn build_capabilities_response() -> CapabilitiesResponse {
             input_schema: Some(meta.input_schema.clone()),
             output_schema: Some(meta.output_schema.clone()),
             risk_level: format!("{:?}", meta.risk_level).to_lowercase(),
-            permissions: meta.permissions.iter().map(|p| format!("{:?}", p).to_lowercase()).collect(),
+            permissions: meta
+                .permissions
+                .iter()
+                .map(|p| format!("{:?}", p).to_lowercase())
+                .collect(),
             external_deps: meta.external_deps.clone(),
             deprecated: meta.deprecation.is_some(),
             deprecation_note: meta.deprecation.as_ref().map(|d| d.note.clone()),

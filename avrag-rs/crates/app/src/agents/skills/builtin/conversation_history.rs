@@ -75,10 +75,7 @@ impl SkillComponent for ConversationHistoryLoad {
             })
             .unwrap_or_default();
 
-        let limit = args
-            .get("limit")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(20) as usize;
+        let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
 
         ToolResult {
             tool: self.id().to_string(),

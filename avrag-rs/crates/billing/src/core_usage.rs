@@ -9,51 +9,58 @@ pub(crate) fn build_plan_payloads(
             "name": "Free",
             "description": "Starter plan for smaller personal notebooks and trial usage.",
             "price_label": config.price_label_for_plan(PLAN_FREE),
+            "price_label_cny": config.price_label_cny_for_plan(PLAN_FREE),
+            "price_label_usd": config.price_label_usd_for_plan(PLAN_FREE),
             "interval": "month",
             "checkout_available": false,
             "current": current_plan_id == PLAN_FREE,
             "quotas": quotas.get(PLAN_FREE).cloned().unwrap_or_default(),
         }),
         serde_json::json!({
+            "plan_id": PLAN_PLUS,
+            "name": "Plus",
+            "description": "Daily quotas for active document ingestion and chat workflows.",
+            "price_label": config.price_label_for_plan(PLAN_PLUS),
+            "price_label_cny": config.price_label_cny_for_plan(PLAN_PLUS),
+            "price_label_usd": config.price_label_usd_for_plan(PLAN_PLUS),
+            "interval": "month",
+            "checkout_available": config.checkout_available(PLAN_PLUS),
+            "current": current_plan_id == PLAN_PLUS,
+            "quotas": quotas.get(PLAN_PLUS).cloned().unwrap_or_default(),
+        }),
+        serde_json::json!({
             "plan_id": PLAN_PRO,
             "name": "Pro",
-            "description": "Higher monthly quotas for active document ingestion and chat workflows.",
+            "description": "Unlimited quota posture for heavier workloads.",
             "price_label": config.price_label_for_plan(PLAN_PRO),
+            "price_label_cny": config.price_label_cny_for_plan(PLAN_PRO),
+            "price_label_usd": config.price_label_usd_for_plan(PLAN_PRO),
             "interval": "month",
             "checkout_available": config.checkout_available(PLAN_PRO),
             "current": current_plan_id == PLAN_PRO,
             "quotas": quotas.get(PLAN_PRO).cloned().unwrap_or_default(),
-        }),
-        serde_json::json!({
-            "plan_id": PLAN_ENTERPRISE,
-            "name": "Enterprise",
-            "description": "Unlimited quota posture for larger teams and heavier workloads.",
-            "price_label": config.price_label_for_plan(PLAN_ENTERPRISE),
-            "interval": "month",
-            "checkout_available": config.checkout_available(PLAN_ENTERPRISE),
-            "current": current_plan_id == PLAN_ENTERPRISE,
-            "quotas": quotas.get(PLAN_ENTERPRISE).cloned().unwrap_or_default(),
         }),
     ]
 }
 
 pub(crate) async fn get_current_subscription(
     repo: Arc<PgAppRepository>,
-    org_id: OrgId,
+    user_id: UserId,
 ) -> Result<Subscription> {
     let mut tx = repo.raw().begin().await?;
-    set_current_org(tx.as_mut(), &org_id.to_string()).await?;
+    set_current_user(tx.as_mut(), &user_id.to_string()).await?;
     let row = sqlx::query(
         r#"
-        select id, org_id, stripe_subscription_id, stripe_price_id, plan_id, status,
+        select id, user_id, stripe_subscription_id, stripe_price_id, billing_provider,
+               provider_subscription_id, provider_price_id, plan_id, status,
                current_period_start, current_period_end, cancel_at_period_end, created_at, updated_at
         from subscriptions
-        where org_id = $1
+        where user_id = $1
         order by updated_at desc, created_at desc
         limit 1
         "#,
     )
-    .bind(org_id.into_uuid())
+    .bind(user_id.into_uuid())
     .fetch_optional(tx.as_mut())
     .await?;
     tx.commit().await?;
@@ -64,11 +71,14 @@ pub(crate) async fn get_current_subscription(
 
     Ok(Subscription {
         id: String::new(),
-        org_id: org_id.to_string(),
+        user_id: user_id.to_string(),
         stripe_subscription_id: None,
         stripe_price_id: None,
+        billing_provider: crate::types::BillingProvider::Stripe,
+        provider_subscription_id: None,
+        provider_price_id: None,
         plan_id: PLAN_FREE.to_string(),
-        status: STATUS_ACTIVE.to_string(),
+        status: SubscriptionStatus::Active,
         current_period_start: None,
         current_period_end: None,
         cancel_at_period_end: false,
@@ -101,20 +111,20 @@ pub(crate) async fn load_plan_quotas(
 
 pub(crate) async fn load_usage(
     repo: Arc<PgAppRepository>,
-    org_id: OrgId,
+    user_id: UserId,
 ) -> Result<HashMap<String, i64>> {
     let mut tx = repo.raw().begin().await?;
-    set_current_org(tx.as_mut(), &org_id.to_string()).await?;
+    set_current_user(tx.as_mut(), &user_id.to_string()).await?;
     let since = month_start();
     let rows = sqlx::query(
         r#"
         select metric_type, coalesce(sum(quantity), 0)::bigint as quantity
         from usage_events
-        where org_id = $1 and created_at >= $2
+        where user_id = $1 and created_at >= $2
         group by metric_type
         "#,
     )
-    .bind(org_id.into_uuid())
+    .bind(user_id.into_uuid())
     .bind(since)
     .fetch_all(tx.as_mut())
     .await?;
@@ -136,10 +146,10 @@ pub(crate) async fn load_usage(
         r#"
         select coalesce(sum(file_size), 0)::bigint as storage_bytes
         from documents
-        where org_id = $1
+        where user_id = $1
         "#,
     )
-    .bind(org_id.into_uuid())
+    .bind(user_id.into_uuid())
     .fetch_one(tx.as_mut())
     .await?
     .try_get::<i64, _>("storage_bytes")?;
@@ -150,20 +160,20 @@ pub(crate) async fn load_usage(
 
 pub(crate) async fn current_metric_usage(
     repo: Arc<PgAppRepository>,
-    org_id: OrgId,
+    user_id: UserId,
     metric_type: &str,
 ) -> Result<i64> {
     if metric_type == "storage_bytes" {
         let mut tx = repo.raw().begin().await?;
-        set_current_org(tx.as_mut(), &org_id.to_string()).await?;
+        set_current_user(tx.as_mut(), &user_id.to_string()).await?;
         let row = sqlx::query(
             r#"
             select coalesce(sum(file_size), 0)::bigint as quantity
             from documents
-            where org_id = $1
+            where user_id = $1
             "#,
         )
-        .bind(org_id.into_uuid())
+        .bind(user_id.into_uuid())
         .fetch_one(tx.as_mut())
         .await?;
         tx.commit().await?;
@@ -171,18 +181,18 @@ pub(crate) async fn current_metric_usage(
     }
 
     let mut tx = repo.raw().begin().await?;
-    set_current_org(tx.as_mut(), &org_id.to_string()).await?;
+    set_current_user(tx.as_mut(), &user_id.to_string()).await?;
     let since = month_start();
     let row = sqlx::query(
         r#"
         select coalesce(sum(quantity), 0)::bigint as quantity
         from usage_events
-        where org_id = $1
+        where user_id = $1
           and metric_type = $2
           and created_at >= $3
         "#,
     )
-    .bind(org_id.into_uuid())
+    .bind(user_id.into_uuid())
     .bind(metric_type)
     .bind(since)
     .fetch_one(tx.as_mut())
@@ -219,35 +229,32 @@ pub(crate) async fn load_quota_limit(
 pub(crate) async fn ensure_customer(
     repo: Arc<PgAppRepository>,
     client: &StripeClient,
-    org_id: OrgId,
     user_id: UserId,
 ) -> Result<String> {
-    if let Some(customer_id) = load_customer_id(repo.clone(), org_id).await? {
+    if let Some(customer_id) = load_customer_id(repo.clone(), user_id).await? {
         return Ok(customer_id);
     }
 
     let mut tx = repo.raw().begin().await?;
-    set_current_org(tx.as_mut(), &org_id.to_string()).await?;
+    set_current_user(tx.as_mut(), &user_id.to_string()).await?;
     let row = sqlx::query(
         r#"
-        select o.name, u.email
-        from organizations o
-        left join users u on u.id = $2 and u.org_id = o.id
-        where o.id = $1
+        select name, email
+        from users
+        where id = $1
         "#,
     )
-    .bind(org_id.into_uuid())
     .bind(user_id.into_uuid())
     .fetch_one(tx.as_mut())
     .await?;
 
-    let org_name = row.try_get::<String, _>("name")?;
+    let name = row.try_get::<String, _>("name")?;
     let email = row
         .try_get::<Option<String>, _>("email")?
         .unwrap_or_else(|| "billing@context.local".to_string());
-    let customer_id = client.create_customer(org_id, &org_name, &email).await?;
-    sqlx::query("update organizations set stripe_customer_id = $2 where id = $1")
-        .bind(org_id.into_uuid())
+    let customer_id = client.create_customer(user_id, &name, &email).await?;
+    sqlx::query("update users set stripe_customer_id = $2 where id = $1")
+        .bind(user_id.into_uuid())
         .bind(&customer_id)
         .execute(tx.as_mut())
         .await?;
@@ -257,10 +264,10 @@ pub(crate) async fn ensure_customer(
 
 pub(crate) async fn load_customer_id(
     repo: Arc<PgAppRepository>,
-    org_id: OrgId,
+    user_id: UserId,
 ) -> Result<Option<String>> {
-    let row = sqlx::query("select stripe_customer_id from organizations where id = $1")
-        .bind(org_id.into_uuid())
+    let row = sqlx::query("select stripe_customer_id from users where id = $1")
+        .bind(user_id.into_uuid())
         .fetch_optional(repo.raw())
         .await?;
     Ok(row.and_then(|row| {

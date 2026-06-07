@@ -27,9 +27,10 @@
 - `level: "doc"` — narrative summary of the whole document. Use
   when the planner needs a high-level "what's in here" before
   deciding what to retrieve.
-- `level: "section"` — TOC entries: each section with its title,
-  heading level, and page. Use when the planner needs to plan
-  `index_lookup` for a specific section.
+- `level: "section"` — lightweight TOC entries: each section with
+  `section_title`, heading level, and page. Use when the planner
+  needs to see structure. **Does NOT return chunk IDs** — for
+  chunk-level precision use `doc-index`.
 
 ## Combine with other tools
 
@@ -40,3 +41,6 @@
   → fetch the exact chunks.
 - Don't chain `doc-summary` → `doc-summary` — one level of
   summary is enough.
+- For coarse routing over a large corpus, filter with
+  `doc_metadata` first, then call `doc-summary` only on the
+  narrowed candidate set.

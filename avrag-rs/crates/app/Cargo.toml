@@ -43,6 +43,7 @@ thiserror.workspace = true
 tokio-util.workspace = true
 evalexpr.workspace = true
 avrag-code-interpreter = { path = "../code-interpreter" }
+serde_yaml = "0.9"
 
 [dev-dependencies]
 axum = { version = "0.8", features = ["macros"] }

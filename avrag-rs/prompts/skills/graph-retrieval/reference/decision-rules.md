@@ -1,5 +1,15 @@
 # Decision Rules
 
+## Decision tree
+
+| Question type | Right tool |
+|---------------|------------|
+| Single fact in a chunk | `dense-retrieval` or `lexical-retrieval` |
+| Document structure (chapters, TOC) | `doc-index` |
+| Broad doc-level overview | `doc-summary` |
+| **Entity relationships / multi-hop** | **`graph-retrieval`** |
+| Relations + need evidence text | `graph-retrieval` + `dense-retrieval` |
+
 ## When `graph-retrieval` is the right tool
 
 - The question is about **relations between entities**:

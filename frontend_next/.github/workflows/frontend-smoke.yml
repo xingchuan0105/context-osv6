@@ -1,0 +1,66 @@
+name: Frontend Smoke E2E
+
+on:
+  pull_request:
+    paths:
+      - 'frontend_next/**'
+      - 'avrag-rs/**'
+      - '.github/workflows/frontend-smoke.yml'
+  workflow_dispatch:
+
+env:
+  CI: true
+
+jobs:
+  smoke-e2e:
+    name: Frontend Smoke E2E
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend_next
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          cache-dependency-path: frontend_next/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            avrag-rs/target
+          key: ${{ runner.os }}-cargo-smoke-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
+
+      - name: Run smoke E2E
+        run: pnpm exec playwright test --project=functional --project=auth
+        env:
+          E2E_RESET_SECRET: ${{ secrets.E2E_RESET_SECRET }}
+        timeout-minutes: 15
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-smoke-report
+          path: frontend_next/playwright-report/
+          retention-days: 3

@@ -2,19 +2,19 @@
 //!
 //! Run with: cargo test --ignored -p app --test strategy_chat
 
+#[path = "strategy_e2e/assertions.rs"]
+mod assertions;
 #[path = "strategy_e2e/config.rs"]
 mod config;
 #[path = "strategy_e2e/recording_llm.rs"]
 mod recording_llm;
-#[path = "strategy_e2e/assertions.rs"]
-mod assertions;
 
+use app::agents::AgentKind;
 use app::agents::events::CollectingSink;
 use app::agents::react_loop::{LoopBudget, UserTier};
 use app::agents::runtime::AgentRequest;
-use app::agents::strategy::chat::ChatContext;
 use app::agents::strategy::Strategy;
-use app::agents::AgentKind;
+use app::agents::strategy::chat::ChatContext;
 use common::ChatTurnInput;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -98,7 +98,10 @@ async fn chat_simple_conversation_state_machine() {
 
     // --- State machine assertions ---
     let schema = app::agents::strategy::chat::ChatStrategy::schema();
-    let history = result.state_history.as_ref().expect("state_history missing");
+    let history = result
+        .state_history
+        .as_ref()
+        .expect("state_history missing");
     assertions::assert_valid_transitions(&schema, history);
     assertions::assert_state_kinds(history);
 
@@ -175,7 +178,10 @@ async fn chat_with_tool_call_state_machine() {
 
     // State machine: Plan → ExecuteAtomic → Answer
     let schema = app::agents::strategy::chat::ChatStrategy::schema();
-    let history = result.state_history.as_ref().expect("state_history missing");
+    let history = result
+        .state_history
+        .as_ref()
+        .expect("state_history missing");
     assertions::assert_valid_transitions(&schema, history);
     assertions::assert_state_kinds(history);
 
@@ -211,7 +217,7 @@ async fn chat_with_tool_call_state_machine() {
 }
 
 /// Test: Chat with PPT format hint — answer prompt contains the FULL BODY
-/// of the presentation-html skill, not just the skill ID string.
+/// of the ppt-generation skill, not just the skill ID string.
 #[tokio::test]
 #[ignore = "requires staging environment (E2E_LLM_BASE_URL, E2E_LLM_API_KEY, E2E_LLM_MODEL)"]
 async fn chat_ppt_format_skill_injected() {
@@ -249,7 +255,10 @@ async fn chat_ppt_format_skill_injected() {
     let result = executor.run(&strategy, ctx).await.unwrap();
 
     // --- State machine assertions ---
-    let history = result.state_history.as_ref().expect("state_history missing");
+    let history = result
+        .state_history
+        .as_ref()
+        .expect("state_history missing");
     // Real LLM may synthesize in a single step; only validate transitions when >1 state.
     if history.len() >= 2 {
         let schema = app::agents::strategy::chat::ChatStrategy::schema();
@@ -265,9 +274,9 @@ async fn chat_ppt_format_skill_injected() {
         calls.len()
     );
 
-    // Answer prompt must contain the FULL BODY of presentation-html skill
+    // Answer prompt must contain the FULL BODY of ppt-generation skill
     let answer_call = calls.last().unwrap();
-    assertions::assert_prompt_contains_skill(&answer_call.system_prompt, "presentation-html");
+    assertions::assert_prompt_contains_skill(&answer_call.system_prompt, "ppt-generation");
 }
 
 /// Mock search provider that returns injection payload for Chat security test.
@@ -362,9 +371,10 @@ async fn chat_content_guard_redacts_injection() {
 
     // Degrade trace should contain guard or untrusted_input records
     if !result.degrade_trace.is_empty() {
-        let has_guard_trace = result.degrade_trace.iter().any(|d|
-            d.stage.contains("input_guard") || d.stage.contains("untrusted_input")
-        );
+        let has_guard_trace = result
+            .degrade_trace
+            .iter()
+            .any(|d| d.stage.contains("input_guard") || d.stage.contains("untrusted_input"));
         assert!(
             has_guard_trace,
             "Expected content_guard or untrusted_input trace in degrade_trace, got {:?}",
@@ -417,22 +427,28 @@ async fn chat_conversation_history_load_end_to_end() {
 
     // Verify state machine traversed Plan → [ExecuteAtomic] → Answer
     let schema = app::agents::strategy::chat::ChatStrategy::schema();
-    let history = result.state_history.as_ref().expect("state_history missing");
+    let history = result
+        .state_history
+        .as_ref()
+        .expect("state_history missing");
     assertions::assert_valid_transitions(&schema, history);
     assertions::assert_state_kinds(history);
 
     // The planner should have seen the conversation_memory hint and
     // preferred_tools nudge.  We verify via tool_results rather than
     // requiring the LLM to always call it (planner behaviour is heuristic).
-    let has_history_load = result.tool_results.iter().any(|r|
-        r.tool == "conversation_history_load"
-    );
+    let has_history_load = result
+        .tool_results
+        .iter()
+        .any(|r| r.tool == "conversation_history_load");
 
     if has_history_load {
         // Tool executed successfully even without a repository (fallback path).
-        let load_record = result.tool_results.iter().find(|r|
-            r.tool == "conversation_history_load"
-        ).unwrap();
+        let load_record = result
+            .tool_results
+            .iter()
+            .find(|r| r.tool == "conversation_history_load")
+            .unwrap();
         assert_eq!(
             load_record.status,
             common::ToolStatus::Ok,

@@ -7,8 +7,8 @@
 //!   cargo test -p app --test product_e2e llm_real::search_real -- --ignored --test-threads=1 --nocapture
 
 use crate::product_e2e::{
-    assertions::{assert_answer_has_web_citation, assert_http_ok},
     ChatResponse, HttpResponse, TestContext,
+    assertions::{assert_answer_has_web_citation, assert_http_ok},
 };
 
 /// P0: Open-domain search query returns a substantive answer with at least

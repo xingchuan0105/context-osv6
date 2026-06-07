@@ -17,8 +17,10 @@ export class SharePage {
       // TODO: 待 UI 给 share URL 元素加 data-testid="share-link" 后替换为稳定 locator
       await this.page.waitForFunction(
         () => {
-          const urlEl = document.querySelector("[data-testid='share-link'], [style*='font-family: ui-monospace']");
-          return urlEl && urlEl.textContent && urlEl.textContent.includes("/shared/kb/");
+          const urlEl = Array.from(
+            document.querySelectorAll("[data-testid='share-link'], [style*='font-family: ui-monospace']")
+          ).find((el) => el.textContent?.includes("/shared/kb/"));
+          return !!urlEl;
         },
         { timeout: 10_000 }
       );

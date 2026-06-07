@@ -134,79 +134,117 @@ pub fn evaluate_calculator_expression(expression: &str) -> Result<f64, String> {
     }
 
     let mut ctx = HashMapContext::new();
-    ctx.set_function("sin".to_string(), Function::new(|arg| {
-        Ok(Value::Float(to_float(arg)?.sin()))
-    })).map_err(|e| format!("register sin: {e}"))?;
-    ctx.set_function("cos".to_string(), Function::new(|arg| {
-        Ok(Value::Float(to_float(arg)?.cos()))
-    })).map_err(|e| format!("register cos: {e}"))?;
-    ctx.set_function("tan".to_string(), Function::new(|arg| {
-        Ok(Value::Float(to_float(arg)?.tan()))
-    })).map_err(|e| format!("register tan: {e}"))?;
-    ctx.set_function("sqrt".to_string(), Function::new(|arg| {
-        Ok(Value::Float(to_float(arg)?.sqrt()))
-    })).map_err(|e| format!("register sqrt: {e}"))?;
-    ctx.set_function("abs".to_string(), Function::new(|arg| {
-        Ok(Value::Float(to_float(arg)?.abs()))
-    })).map_err(|e| format!("register abs: {e}"))?;
-    ctx.set_function("exp".to_string(), Function::new(|arg| {
-        Ok(Value::Float(to_float(arg)?.exp()))
-    })).map_err(|e| format!("register exp: {e}"))?;
-    ctx.set_function("ln".to_string(), Function::new(|arg| {
-        Ok(Value::Float(to_float(arg)?.ln()))
-    })).map_err(|e| format!("register ln: {e}"))?;
-    ctx.set_function("log2".to_string(), Function::new(|arg| {
-        Ok(Value::Float(to_float(arg)?.log2()))
-    })).map_err(|e| format!("register log2: {e}"))?;
-    ctx.set_function("log10".to_string(), Function::new(|arg| {
-        Ok(Value::Float(to_float(arg)?.log10()))
-    })).map_err(|e| format!("register log10: {e}"))?;
-    ctx.set_function("floor".to_string(), Function::new(|arg| {
-        Ok(Value::Float(to_float(arg)?.floor()))
-    })).map_err(|e| format!("register floor: {e}"))?;
-    ctx.set_function("ceil".to_string(), Function::new(|arg| {
-        Ok(Value::Float(to_float(arg)?.ceil()))
-    })).map_err(|e| format!("register ceil: {e}"))?;
-    ctx.set_function("round".to_string(), Function::new(|arg| {
-        Ok(Value::Float(to_float(arg)?.round()))
-    })).map_err(|e| format!("register round: {e}"))?;
-    ctx.set_function("pow".to_string(), Function::new(|arg| {
-        let tuple = arg.as_tuple()?;
-        if tuple.len() != 2 {
-            return Err(EvalexprError::WrongFunctionArgumentAmount {
-                expected: 2..=2,
-                actual: tuple.len(),
-            });
-        }
-        let a = to_float(&tuple[0])?;
-        let b = to_float(&tuple[1])?;
-        Ok(Value::Float(a.powf(b)))
-    })).map_err(|e| format!("register pow: {e}"))?;
-    ctx.set_function("min".to_string(), Function::new(|arg| {
-        let tuple = arg.as_tuple()?;
-        let min = tuple.iter()
-            .map(to_float)
-            .collect::<Result<Vec<f64>, _>>()?
-            .into_iter()
-            .fold(f64::INFINITY, f64::min);
-        Ok(Value::Float(min))
-    })).map_err(|e| format!("register min: {e}"))?;
-    ctx.set_function("max".to_string(), Function::new(|arg| {
-        let tuple = arg.as_tuple()?;
-        let max = tuple.iter()
-            .map(to_float)
-            .collect::<Result<Vec<f64>, _>>()?
-            .into_iter()
-            .fold(f64::NEG_INFINITY, f64::max);
-        Ok(Value::Float(max))
-    })).map_err(|e| format!("register max: {e}"))?;
+    ctx.set_function(
+        "sin".to_string(),
+        Function::new(|arg| Ok(Value::Float(to_float(arg)?.sin()))),
+    )
+    .map_err(|e| format!("register sin: {e}"))?;
+    ctx.set_function(
+        "cos".to_string(),
+        Function::new(|arg| Ok(Value::Float(to_float(arg)?.cos()))),
+    )
+    .map_err(|e| format!("register cos: {e}"))?;
+    ctx.set_function(
+        "tan".to_string(),
+        Function::new(|arg| Ok(Value::Float(to_float(arg)?.tan()))),
+    )
+    .map_err(|e| format!("register tan: {e}"))?;
+    ctx.set_function(
+        "sqrt".to_string(),
+        Function::new(|arg| Ok(Value::Float(to_float(arg)?.sqrt()))),
+    )
+    .map_err(|e| format!("register sqrt: {e}"))?;
+    ctx.set_function(
+        "abs".to_string(),
+        Function::new(|arg| Ok(Value::Float(to_float(arg)?.abs()))),
+    )
+    .map_err(|e| format!("register abs: {e}"))?;
+    ctx.set_function(
+        "exp".to_string(),
+        Function::new(|arg| Ok(Value::Float(to_float(arg)?.exp()))),
+    )
+    .map_err(|e| format!("register exp: {e}"))?;
+    ctx.set_function(
+        "ln".to_string(),
+        Function::new(|arg| Ok(Value::Float(to_float(arg)?.ln()))),
+    )
+    .map_err(|e| format!("register ln: {e}"))?;
+    ctx.set_function(
+        "log2".to_string(),
+        Function::new(|arg| Ok(Value::Float(to_float(arg)?.log2()))),
+    )
+    .map_err(|e| format!("register log2: {e}"))?;
+    ctx.set_function(
+        "log10".to_string(),
+        Function::new(|arg| Ok(Value::Float(to_float(arg)?.log10()))),
+    )
+    .map_err(|e| format!("register log10: {e}"))?;
+    ctx.set_function(
+        "floor".to_string(),
+        Function::new(|arg| Ok(Value::Float(to_float(arg)?.floor()))),
+    )
+    .map_err(|e| format!("register floor: {e}"))?;
+    ctx.set_function(
+        "ceil".to_string(),
+        Function::new(|arg| Ok(Value::Float(to_float(arg)?.ceil()))),
+    )
+    .map_err(|e| format!("register ceil: {e}"))?;
+    ctx.set_function(
+        "round".to_string(),
+        Function::new(|arg| Ok(Value::Float(to_float(arg)?.round()))),
+    )
+    .map_err(|e| format!("register round: {e}"))?;
+    ctx.set_function(
+        "pow".to_string(),
+        Function::new(|arg| {
+            let tuple = arg.as_tuple()?;
+            if tuple.len() != 2 {
+                return Err(EvalexprError::WrongFunctionArgumentAmount {
+                    expected: 2..=2,
+                    actual: tuple.len(),
+                });
+            }
+            let a = to_float(&tuple[0])?;
+            let b = to_float(&tuple[1])?;
+            Ok(Value::Float(a.powf(b)))
+        }),
+    )
+    .map_err(|e| format!("register pow: {e}"))?;
+    ctx.set_function(
+        "min".to_string(),
+        Function::new(|arg| {
+            let tuple = arg.as_tuple()?;
+            let min = tuple
+                .iter()
+                .map(to_float)
+                .collect::<Result<Vec<f64>, _>>()?
+                .into_iter()
+                .fold(f64::INFINITY, f64::min);
+            Ok(Value::Float(min))
+        }),
+    )
+    .map_err(|e| format!("register min: {e}"))?;
+    ctx.set_function(
+        "max".to_string(),
+        Function::new(|arg| {
+            let tuple = arg.as_tuple()?;
+            let max = tuple
+                .iter()
+                .map(to_float)
+                .collect::<Result<Vec<f64>, _>>()?
+                .into_iter()
+                .fold(f64::NEG_INFINITY, f64::max);
+            Ok(Value::Float(max))
+        }),
+    )
+    .map_err(|e| format!("register max: {e}"))?;
     ctx.set_value("pi".to_string(), Value::Float(std::f64::consts::PI))
         .map_err(|e| format!("register pi: {e}"))?;
     ctx.set_value("e".to_string(), Value::Float(std::f64::consts::E))
         .map_err(|e| format!("register e: {e}"))?;
 
-    let result = eval_with_context_mut(expression, &mut ctx)
-        .map_err(|e| format!("evalexpr error: {e}"))?;
+    let result =
+        eval_with_context_mut(expression, &mut ctx).map_err(|e| format!("evalexpr error: {e}"))?;
 
     match result {
         Value::Float(f) => Ok(f),
@@ -281,7 +319,9 @@ mod tests {
     async fn test_skill_basic_eval() {
         let skill = CalculatorSkill;
         let ctx = ExecutionContext::new(None);
-        let result = skill.execute(&serde_json::json!({"expression": "1 + 2 * 3"}), &ctx).await;
+        let result = skill
+            .execute(&serde_json::json!({"expression": "1 + 2 * 3"}), &ctx)
+            .await;
         assert_eq!(result.status, ToolStatus::Ok);
         let data = result.data.unwrap();
         assert_eq!(data["result"].as_f64().unwrap(), 7.0);

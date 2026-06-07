@@ -1,21 +1,26 @@
 use crate::lib_impl::*;
 use common::{
     AppError, ChatMessage, ChatRequest, ChatResponse, ChatSession, CreateChatSessionRequest,
-    Notebook, SourceRow, StatusOnlyResponse, UpdateChatSessionRequest,
-    new_id, now_rfc3339,
+    Notebook, SourceRow, StatusOnlyResponse, UpdateChatSessionRequest, new_id, now_rfc3339,
 };
 use uuid::Uuid;
 
 impl AppState {
-    pub async fn search(
-        &self,
-        pattern: &str,
-    ) -> (Vec<Notebook>, Vec<ChatSession>, Vec<SourceRow>) {
+    pub async fn search(&self, pattern: &str) -> (Vec<Notebook>, Vec<ChatSession>, Vec<SourceRow>) {
         let like_pattern = format!("%{}%", pattern);
         if let Some(pg) = &self.pg {
-            let nb = pg.search_notebooks(&self.auth, &like_pattern).await.unwrap_or_default();
-            let sess = pg.search_sessions(&self.auth, &like_pattern).await.unwrap_or_default();
-            let src = pg.search_sources(&self.auth, &like_pattern).await.unwrap_or_default();
+            let nb = pg
+                .search_notebooks(&self.auth, &like_pattern)
+                .await
+                .unwrap_or_default();
+            let sess = pg
+                .search_sessions(&self.auth, &like_pattern)
+                .await
+                .unwrap_or_default();
+            let src = pg
+                .search_sources(&self.auth, &like_pattern)
+                .await
+                .unwrap_or_default();
             (nb, sess, src)
         } else {
             let state = self.inner.read().await;
@@ -381,5 +386,4 @@ impl AppState {
             .execute(req)
             .await
     }
-
 }

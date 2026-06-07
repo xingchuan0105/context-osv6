@@ -129,8 +129,8 @@ impl ChatContext {
         sink: Box<dyn AgentEventSink>,
         cancel: CancellationToken,
     ) -> Result<Self, common::AppError> {
-        let auth: avrag_auth::AuthContext =
-            serde_json::from_value(request.auth_context.clone()).map_err(|error| {
+        let auth: avrag_auth::AuthContext = serde_json::from_value(request.auth_context.clone())
+            .map_err(|error| {
                 common::AppError::internal(format!("Failed to deserialize auth context: {error}"))
             })?;
         Ok(Self {
@@ -157,6 +157,7 @@ impl ChatContext {
 // ---------------------------------------------------------------------------
 
 /// Strategy implementation for Chat mode.
+#[deprecated = "Replaced by ReActLoop in ADR-0006"]
 pub struct ChatStrategy {
     pub llm: std::sync::Arc<dyn avrag_llm::LlmProvider>,
     pub llm_client: Option<avrag_llm::LlmClient>,
@@ -167,21 +168,31 @@ pub struct ChatStrategy {
 impl Strategy for ChatStrategy {
     type Context = ChatContext;
 
-    async fn init(
-        &self,
-        _ctx: &mut ChatContext,
-    ) -> Result<Box<dyn State>, AppError> {
+    async fn init(&self, _ctx: &mut ChatContext) -> Result<Box<dyn State>, AppError> {
         Ok(Box::new(ChatState::Plan))
     }
 
     fn schema() -> crate::agents::capability::StrategySchema {
         crate::agents::capability::StrategySchema {
             id: "chat".to_string(),
-            states: vec!["Plan".to_string(), "ExecuteAtomic".to_string(), "Answer".to_string()],
+            states: vec![
+                "Plan".to_string(),
+                "ExecuteAtomic".to_string(),
+                "Answer".to_string(),
+            ],
             transitions: vec![
-                crate::agents::capability::TransitionSchema { from: "Plan".to_string(), to: "ExecuteAtomic".to_string() },
-                crate::agents::capability::TransitionSchema { from: "Plan".to_string(), to: "Answer".to_string() },
-                crate::agents::capability::TransitionSchema { from: "ExecuteAtomic".to_string(), to: "Answer".to_string() },
+                crate::agents::capability::TransitionSchema {
+                    from: "Plan".to_string(),
+                    to: "ExecuteAtomic".to_string(),
+                },
+                crate::agents::capability::TransitionSchema {
+                    from: "Plan".to_string(),
+                    to: "Answer".to_string(),
+                },
+                crate::agents::capability::TransitionSchema {
+                    from: "ExecuteAtomic".to_string(),
+                    to: "Answer".to_string(),
+                },
             ],
             external_tools_used: vec![],
             requires_internet: false,
@@ -195,13 +206,12 @@ impl Strategy for ChatStrategy {
         ctx: &mut ChatContext,
     ) -> Result<StepOutcome, AgentErrorKind> {
         // Downcast to concrete ChatState.
-        let chat_state = state
-            .as_any()
-            .downcast_ref::<ChatState>()
-            .ok_or_else(|| AgentErrorKind::ModelOutputInvalid {
+        let chat_state = state.as_any().downcast_ref::<ChatState>().ok_or_else(|| {
+            AgentErrorKind::ModelOutputInvalid {
                 expected_schema: "ChatState".to_string(),
                 got: "unknown state type".to_string(),
-            })?;
+            }
+        })?;
 
         match chat_state {
             ChatState::Plan => self.step_plan(ctx).await,
@@ -353,14 +363,19 @@ impl ChatStrategy {
 
         // Record tool call details for white-box reporting.
         for (call, result) in calls.iter().zip(results.iter()) {
-            let elapsed_ms = result.trace.as_ref().and_then(|t| t.elapsed_ms).unwrap_or(0);
-            ctx.tool_call_records.push(crate::agents::runtime::ToolCallRecord {
-                tool: call.tool.clone(),
-                iteration: 0,
-                args: call.args.clone(),
-                status: result.status,
-                elapsed_ms,
-            });
+            let elapsed_ms = result
+                .trace
+                .as_ref()
+                .and_then(|t| t.elapsed_ms)
+                .unwrap_or(0);
+            ctx.tool_call_records
+                .push(crate::agents::runtime::ToolCallRecord {
+                    tool: call.tool.clone(),
+                    iteration: 0,
+                    args: call.args.clone(),
+                    status: result.status,
+                    elapsed_ms,
+                });
             let _ = ctx
                 .sink
                 .emit(AgentEvent::ToolResult {
@@ -391,7 +406,9 @@ impl ChatStrategy {
         );
 
         // Inject behavior mode skill if active
-        if let Some(behavior_skill) = crate::agents::strategy::prompts::load_behavior_mode_skill(ctx.behavior_mode.as_deref()) {
+        if let Some(behavior_skill) =
+            crate::agents::strategy::prompts::load_behavior_mode_skill(ctx.behavior_mode.as_deref())
+        {
             system_prompt.push_str("\n\n---\n\n");
             system_prompt.push_str(&behavior_skill);
         }
@@ -421,16 +438,19 @@ impl ChatStrategy {
 
         let response = if ctx.request.stream {
             let (delta_tx, mut delta_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-            let llm_client = self.llm_client.as_ref()
-                .ok_or_else(|| AgentErrorKind::ModelUnavailable {
-                    provider: "unknown".to_string(),
-                    model: "streaming requires LlmClient".to_string(),
-                })?;
-            let stream = llm_client.complete_stream(&messages, self.temperature, cancel, move |delta| {
-                if !delta.is_empty() {
-                    let _ = delta_tx.send(delta.to_string());
-                }
-            });
+            let llm_client =
+                self.llm_client
+                    .as_ref()
+                    .ok_or_else(|| AgentErrorKind::ModelUnavailable {
+                        provider: "unknown".to_string(),
+                        model: "streaming requires LlmClient".to_string(),
+                    })?;
+            let stream =
+                llm_client.complete_stream(&messages, self.temperature, cancel, move |delta| {
+                    if !delta.is_empty() {
+                        let _ = delta_tx.send(delta.to_string());
+                    }
+                });
             tokio::pin!(stream);
 
             let response = loop {
@@ -496,7 +516,9 @@ impl ChatStrategy {
         let _ = sink
             .emit(AgentEvent::Done {
                 final_message: Some(response.content.clone()),
-                usage: run_usage.as_ref().map(crate::agents::unified::helpers::run_usage_to_agent_usage),
+                usage: run_usage
+                    .as_ref()
+                    .map(crate::agents::unified::helpers::run_usage_to_agent_usage),
             })
             .await;
 
@@ -516,16 +538,24 @@ impl ChatStrategy {
             } else {
                 "plan decided to answer directly without tools".to_string()
             };
-            result.decisions.push(crate::agents::runtime::DecisionRecord {
-                phase: "plan".to_string(),
-                iteration: 0,
-                decision: action.clone(),
-                reasoning,
-                selected_tools: ctx.tool_call_records.iter().map(|r| r.tool.clone()).collect(),
-            });
+            result
+                .decisions
+                .push(crate::agents::runtime::DecisionRecord {
+                    phase: "plan".to_string(),
+                    iteration: 0,
+                    decision: action.clone(),
+                    reasoning,
+                    selected_tools: ctx
+                        .tool_call_records
+                        .iter()
+                        .map(|r| r.tool.clone())
+                        .collect(),
+                });
         }
         result.tool_calls = std::mem::take(&mut ctx.tool_call_records);
-        result.degrade_trace.extend(std::mem::take(&mut ctx.content_guard_trace));
+        result
+            .degrade_trace
+            .extend(std::mem::take(&mut ctx.content_guard_trace));
 
         Ok(StepOutcome::Terminate(result))
     }
@@ -587,7 +617,7 @@ fn parse_chat_plan_decision(raw: &str) -> ChatPlanDecision {
             return ChatPlanDecision {
                 action: "answer".to_string(),
                 ..ChatPlanDecision::default()
-            }
+            };
         }
     };
 
@@ -624,7 +654,11 @@ fn parse_chat_plan_decision(raw: &str) -> ChatPlanDecision {
     let writing_styles: Vec<String> = value
         .get("writing_styles")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
 
     let behavior_mode = value

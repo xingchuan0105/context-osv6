@@ -1,0 +1,122 @@
+<h2>E2E 测试升级 — 方案 B 架构</h2>
+<p class="subtitle">分层专用测试套件 + Playwright 截图 + 报告生成</p>
+
+<div class="section">
+  <h3>文件结构</h3>
+  <pre style="background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:8px;font-size:13px;line-height:1.6">
+crates/app/tests/
+├── e2e_chat.rs              ← 现有，不变（state machine + progressive disclosure）
+├── e2e_rag.rs               ← 现有，不变
+├── e2e_search.rs            ← 现有，不变
+│
+├── <b>e2e_format_output.rs</b>     ← 新增：策略 × format skill 笛卡尔积
+├── <b>e2e_ingestion_answer.rs</b>  ← 新增：文档上传 → 回答 完整链路
+├── <b>e2e_regression_report.rs</b> ← 新增：收集结果 → 生成对比报告
+│
+└── e2e/
+    ├── config.rs            ← 现有，扩展 Playwright 配置
+    ├── recording_llm.rs     ← 现有，不变
+    ├── assertions.rs        ← 现有，新增 format 断言
+    ├── <b>playwright_helper.rs</b>  ← 新增：Playwright 渲染 + 截图
+    └── <b>result_serializer.rs</b>  ← 新增：结果落盘 + 报告生成
+  </pre>
+</div>
+
+<div class="section">
+  <h3>三层职责划分</h3>
+  <div class="options">
+    <div class="option" data-choice="layer1" onclick="toggleSelect(this)">
+      <div class="letter">1</div>
+      <div class="content">
+        <h3>Format Output 层</h3>
+        <p>Chat/RAG/Search × presentation-html/html-renderer/step-by-step-tutor/framework-extraction</p>
+        <p>每个组合跑 agent → 截取最终 answer → Playwright 渲染 → 截图保存</p>
+      </div>
+    </div>
+    <div class="option" data-choice="layer2" onclick="toggleSelect(this)">
+      <div class="letter">2</div>
+      <div class="content">
+        <h3>Ingestion-Answer 层</h3>
+        <p>PDF 上传 → 解析/分块 → embedding → Milvus 入库 → RAG 检索 → answer</p>
+        <p>验证 ingestion 后的文档能被 retrieval 命中，answer 引用来源正确</p>
+      </div>
+    </div>
+    <div class="option" data-choice="layer3" onclick="toggleSelect(this)">
+      <div class="letter">3</div>
+      <div class="content">
+        <h3>Regression Report 层</h3>
+        <p>读取前两层的落盘结果 → 生成 Markdown/HTML 对比报告</p>
+        <p>同一 query 在不同 strategy/format 下的输出并排展示</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>结果落盘目录结构</h3>
+  <pre style="background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:8px;font-size:13px;line-height:1.6">
+tests/e2e_output/
+└── 2026-05-27-143052/
+    ├── metadata.json               ← 运行时间、环境信息、总用例数
+    │
+    ├── format_output/
+    │   ├── chat_presentation-html/
+    │   │   ├── query.txt
+    │   │   ├── answer.txt
+    │   │   ├── answer.html
+    │   │   ├── screenshot.png
+    │   │   ├── llm_calls.jsonl
+    │   │   └── tool_calls.jsonl
+    │   ├── rag_presentation-html/
+    │   │   └── ...
+    │   └── search_html-renderer/
+    │       └── ...
+    │
+    ├── ingestion_answer/
+    │   ├── antifragile_rag/
+    │   │   ├── query.txt
+    │   │   ├── answer.txt
+    │   │   ├── answer.html
+    │   │   ├── screenshot.png
+    │   │   ├── llm_calls.jsonl
+    │   │   └── tool_calls.jsonl
+    │   └── ...
+    │
+    └── report.md                   ← 汇总报告
+  </pre>
+</div>
+
+<div class="section">
+  <h3>数据流</h3>
+  <pre style="background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:8px;font-size:13px;line-height:1.6">
+Query → AgentRequest → StrategyExecutor
+                           │
+                           ├── LLM calls (recorded by RecordingLlmProvider)
+                           ├── Tool calls (recorded by CollectingSink)
+                           │
+                           ↓
+                      AgentRunResult
+                           │
+              ┌───────────┴───────────┐
+              ↓                       ↓
+        text answer             HTML answer
+              │                       │
+              ↓                       ↓
+         answer.txt            playwright_helper::render()
+                                   │
+                                   ↓
+                              screenshot.png
+                                   │
+                                   ↓
+                        result_serializer::save()
+                                   │
+                                   ↓
+              e2e_output/{timestamp}/{test_name}/
+                                   │
+                                   ↓
+              e2e_regression_report.rs 读取所有结果
+                                   │
+                                   ↓
+                              report.md
+  </pre>
+</div>

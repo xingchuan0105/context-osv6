@@ -187,6 +187,17 @@ impl AppState {
                 {
                     let trimmed = response.content.trim();
                     if !trimmed.is_empty() {
+                        // Run output guards before parsing; block prompt leaks and scrub PII
+                        // before any profile mutation.
+                        let (sanitized, guard_report) =
+                            self.guard_pipeline.check_output(trimmed, None);
+                        if guard_report.blocked {
+                            tracing::warn!(
+                                "dream layer output blocked by guard pipeline: {:?}",
+                                guard_report.degrade_trace
+                            );
+                            return serde_json::json!({});
+                        }
                         self.record_llm_usage_if_available(
                             avrag_billing::usage_limit::BillableFeature::Summary,
                             "dream_delta",
@@ -194,7 +205,7 @@ impl AppState {
                             "inline",
                         )
                         .await;
-                        return parse_structured_json_response(trimmed);
+                        return parse_structured_json_response(&sanitized);
                     }
                 }
         }
@@ -701,7 +712,16 @@ fn apply_profile_delta(
             .or_insert_with(|| serde_json::json!([]));
         if let Some(existing) = arr.as_array_mut() {
             for c in conflicts {
-                existing.push(c.clone());
+                // Dedupe by (field, old_view, new_view) triple to avoid accumulation
+                // of duplicate contradictions across dream runs.
+                let is_dup = existing.iter().any(|e| {
+                    e.get("field") == c.get("field")
+                        && e.get("old_view") == c.get("old_view")
+                        && e.get("new_view") == c.get("new_view")
+                });
+                if !is_dup {
+                    existing.push(c.clone());
+                }
             }
             // Keep last 10 conflicts
             if existing.len() > 10 {
@@ -713,6 +733,7 @@ fn apply_profile_delta(
     // ── global_summary ──
     if let Some(summary) = delta.get("global_summary").and_then(|v| v.as_str())
         && !summary.is_empty() {
+            let summary = truncate_text(summary, 400);
             profile
                 .as_object_mut()
                 .unwrap()
@@ -720,6 +741,43 @@ fn apply_profile_delta(
         }
 
     profile
+}
+
+const MAX_DESCRIPTION_LEN: usize = 200;
+const MAX_EVIDENCE_LEN: usize = 200;
+const MAX_EVIDENCE_ITEMS: usize = 5;
+const VALID_TOOL_TAGS: &[&str] = &["rag", "search", "chat"];
+const VALID_HINT_PRIORITIES: &[&str] = &["low", "medium", "high"];
+
+fn truncate_text(s: &str, max_len: usize) -> String {
+    if s.chars().count() > max_len {
+        s.chars().take(max_len).collect()
+    } else {
+        s.to_string()
+    }
+}
+
+fn normalize_evidence(evidence: &mut serde_json::Value) {
+    if let Some(arr) = evidence.as_array_mut() {
+        arr.truncate(MAX_EVIDENCE_ITEMS);
+        for item in arr.iter_mut() {
+            if let Some(s) = item.as_str() {
+                *item = serde_json::json!(truncate_text(s, MAX_EVIDENCE_LEN));
+            }
+        }
+    }
+}
+
+fn normalize_slot_update(update: &mut serde_json::Value) {
+    if let Some(desc) = update.get("description").and_then(|v| v.as_str()) {
+        update["description"] = serde_json::json!(truncate_text(desc, MAX_DESCRIPTION_LEN));
+    }
+    if let Some(reason) = update.get("reason").and_then(|v| v.as_str()) {
+        update["reason"] = serde_json::json!(truncate_text(reason, MAX_DESCRIPTION_LEN));
+    }
+    if let Some(evidence) = update.get_mut("evidence") {
+        normalize_evidence(evidence);
+    }
 }
 
 /// Merge slot-array updates (expertise_domains, tool_preferences, constraints).
@@ -730,11 +788,6 @@ fn apply_slot_updates(
     max_slots: usize,
     today: &str,
 ) {
-    let updates = match updates.and_then(|v| v.as_array()) {
-        Some(arr) if !arr.is_empty() => arr,
-        _ => return,
-    };
-
     let slots = profile
         .as_object_mut()
         .unwrap()
@@ -742,73 +795,83 @@ fn apply_slot_updates(
         .or_insert_with(|| serde_json::json!([]));
     let slot_arr = slots.as_array_mut().unwrap();
 
-    for update in updates {
-        let action = update.get("action").and_then(|v| v.as_str()).unwrap_or("none");
-        let tag = update
-            .get("tag")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        if tag.is_empty() {
-            continue;
-        }
+    if let Some(updates) = updates.and_then(|v| v.as_array()).filter(|a| !a.is_empty()) {
+        for update in updates {
+            let mut update = update.clone();
+            normalize_slot_update(&mut update);
 
-        let signal = update
-            .get("confidence_signal")
-            .and_then(|v| v.as_str())
-            .unwrap_or("weak");
-        let base_confidence = signal_to_confidence(signal);
+            let action = update.get("action").and_then(|v| v.as_str()).unwrap_or("none");
+            let tag = update
+                .get("tag")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if tag.is_empty() {
+                continue;
+            }
 
-        match action {
-            "add" => {
-                if slot_arr.iter().any(|s| s.get("tag") == Some(&serde_json::json!(tag))) {
-                    continue;
+            if key == "tool_preferences" && !VALID_TOOL_TAGS.contains(&tag.as_str()) {
+                tracing::warn!(tag, "ignoring invalid tool_preference tag");
+                continue;
+            }
+
+            let signal = update
+                .get("confidence_signal")
+                .and_then(|v| v.as_str())
+                .unwrap_or("weak");
+            let base_confidence = signal_to_confidence(signal);
+
+            match action {
+                "add" => {
+                    if slot_arr.iter().any(|s| s.get("tag") == Some(&serde_json::json!(tag))) {
+                        continue;
+                    }
+                    let mut slot = update.clone();
+                    slot["confidence"] = serde_json::json!(base_confidence);
+                    slot["since"] = serde_json::json!(today);
+                    slot["last_seen"] = serde_json::json!(today);
+                    slot_arr.push(slot);
                 }
-                let mut slot = update.clone();
-                slot["confidence"] = serde_json::json!(base_confidence);
-                slot["since"] = serde_json::json!(today);
-                slot["last_seen"] = serde_json::json!(today);
-                slot_arr.push(slot);
-            }
-            "reinforce" | "revise" => {
-                if let Some(existing) = slot_arr
-                    .iter_mut()
-                    .find(|s| s.get("tag") == Some(&serde_json::json!(tag)))
-                {
-                    let bump = if action == "reinforce" { 0.1 } else { 0.05 };
-                    let old_conf = existing
-                        .get("confidence")
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(0.5);
-                    existing["confidence"] = serde_json::json!((old_conf + bump).min(0.95));
-                    existing["last_seen"] = serde_json::json!(today);
-                    if let Some(desc) = update.get("description").and_then(|v| v.as_str())
-                        && !desc.is_empty() {
-                            existing["description"] = serde_json::json!(desc);
-                        }
+                "reinforce" | "revise" => {
+                    if let Some(existing) = slot_arr
+                        .iter_mut()
+                        .find(|s| s.get("tag") == Some(&serde_json::json!(tag)))
+                    {
+                        let bump = if action == "reinforce" { 0.1 } else { 0.05 };
+                        let old_conf = existing
+                            .get("confidence")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.5);
+                        existing["confidence"] = serde_json::json!((old_conf + bump).min(0.95));
+                        existing["last_seen"] = serde_json::json!(today);
+                        if let Some(desc) = update.get("description").and_then(|v| v.as_str())
+                            && !desc.is_empty() {
+                                existing["description"] = serde_json::json!(desc);
+                            }
+                    }
                 }
-            }
-            "weaken" => {
-                if let Some(existing) = slot_arr
-                    .iter_mut()
-                    .find(|s| s.get("tag") == Some(&serde_json::json!(tag)))
-                {
-                    let old_conf = existing
-                        .get("confidence")
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(0.5);
-                    existing["confidence"] = serde_json::json!((old_conf - 0.2).max(0.0));
-                    existing["last_seen"] = serde_json::json!(today);
+                "weaken" => {
+                    if let Some(existing) = slot_arr
+                        .iter_mut()
+                        .find(|s| s.get("tag") == Some(&serde_json::json!(tag)))
+                    {
+                        let old_conf = existing
+                            .get("confidence")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.5);
+                        existing["confidence"] = serde_json::json!((old_conf - 0.2).max(0.0));
+                        existing["last_seen"] = serde_json::json!(today);
+                    }
                 }
+                "remove" => {
+                    slot_arr.retain(|s| s.get("tag") != Some(&serde_json::json!(tag)));
+                }
+                _ => {}
             }
-            "remove" => {
-                slot_arr.retain(|s| s.get("tag") != Some(&serde_json::json!(tag)));
-            }
-            _ => {}
         }
     }
 
-    // Expire constraints
+    // Always run expiration and eviction, even if no new updates arrived.
     if key == "important_constraints" {
         slot_arr.retain(|s| {
             s.get("expires_at")
@@ -848,6 +911,13 @@ fn apply_singleton_update(
         Some(v) if !v.is_null() => v,
         _ => return,
     };
+    let mut update = update.clone();
+    if let Some(desc) = update.get("description").and_then(|v| v.as_str()) {
+        update["description"] = serde_json::json!(truncate_text(desc, MAX_DESCRIPTION_LEN));
+    }
+    if let Some(evidence) = update.get_mut("evidence") {
+        normalize_evidence(evidence);
+    }
     let action = update.get("action").and_then(|v| v.as_str()).unwrap_or("none");
     if action == "none" {
         return;
@@ -932,11 +1002,6 @@ fn apply_hint_updates(
     hints: Option<&serde_json::Value>,
     today: &str,
 ) {
-    let hints = match hints.and_then(|v| v.as_array()) {
-        Some(arr) if !arr.is_empty() => arr,
-        _ => return,
-    };
-
     let slot = profile
         .as_object_mut()
         .unwrap()
@@ -944,13 +1009,24 @@ fn apply_hint_updates(
         .or_insert_with(|| serde_json::json!([]));
     let slot_arr = slot.as_array_mut().unwrap();
 
-    for hint in hints {
-        let mut h = hint.clone();
-        h["created_at"] = serde_json::json!(today);
-        slot_arr.push(h);
+    if let Some(hints) = hints.and_then(|v| v.as_array()).filter(|a| !a.is_empty()) {
+        for hint in hints {
+            let mut h = hint.clone();
+            if let Some(priority) = h.get("priority").and_then(|v| v.as_str()) {
+                if !VALID_HINT_PRIORITIES.contains(&priority) {
+                    tracing::warn!(priority, "ignoring invalid session_continuity_hints priority");
+                    continue;
+                }
+            }
+            if let Some(text) = h.get("hint").and_then(|v| v.as_str()) {
+                h["hint"] = serde_json::json!(truncate_text(text, MAX_DESCRIPTION_LEN));
+            }
+            h["created_at"] = serde_json::json!(today);
+            slot_arr.push(h);
+        }
     }
 
-    // Expire hints older than 7 days
+    // Always run expiration and FIFO eviction, even if no new hints arrived.
     let cutoff = (chrono::Utc::now() - chrono::Duration::days(7))
         .format("%Y-%m-%d")
         .to_string();
@@ -961,7 +1037,6 @@ fn apply_hint_updates(
             .unwrap_or(true)
     });
 
-    // FIFO eviction
     if slot_arr.len() > 3 {
         slot_arr.truncate(3);
     }
@@ -972,5 +1047,322 @@ fn signal_to_confidence(signal: &str) -> f64 {
         "strong" => 0.9,
         "medium" => 0.7,
         _ => 0.4,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn slot(tag: &str, action: &str, signal: &str, confidence: f64) -> serde_json::Value {
+        serde_json::json!({
+            "tag": tag,
+            "action": action,
+            "description": "desc",
+            "evidence": ["ev"],
+            "confidence_signal": signal,
+            "confidence": confidence,
+            "since": "2026-01-01",
+            "last_seen": "2026-01-01"
+        })
+    }
+
+    #[test]
+    fn slot_add_creates_with_base_confidence() {
+        let mut profile = serde_json::json!({"expertise_domains": []});
+        let delta = serde_json::json!([{
+            "tag": "rust",
+            "action": "add",
+            "description": "desc",
+            "evidence": ["ev"],
+            "confidence_signal": "strong"
+        }]);
+        apply_slot_updates(&mut profile, "expertise_domains", Some(&delta), 5, "2026-06-06");
+        let arr = profile["expertise_domains"].as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["confidence"], 0.9);
+        assert_eq!(arr[0]["since"], "2026-06-06");
+    }
+
+    #[test]
+    fn slot_reinforce_bumps_confidence_by_01() {
+        let mut profile = serde_json::json!({"expertise_domains": [slot("rust", "add", "medium", 0.7)]});
+        let delta = serde_json::json!([{
+            "tag": "rust",
+            "action": "reinforce",
+            "description": "desc2",
+            "evidence": ["ev2"],
+            "confidence_signal": "medium"
+        }]);
+        apply_slot_updates(&mut profile, "expertise_domains", Some(&delta), 5, "2026-06-06");
+        let arr = profile["expertise_domains"].as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert!((arr[0]["confidence"].as_f64().unwrap() - 0.8).abs() < 0.001);
+        assert_eq!(arr[0]["description"], "desc2");
+    }
+
+    #[test]
+    fn slot_revise_bumps_confidence_by_005() {
+        let mut profile = serde_json::json!({"expertise_domains": [slot("rust", "add", "medium", 0.7)]});
+        let delta = serde_json::json!([{
+            "tag": "rust",
+            "action": "revise",
+            "description": "desc3",
+            "evidence": ["ev3"],
+            "confidence_signal": "medium"
+        }]);
+        apply_slot_updates(&mut profile, "expertise_domains", Some(&delta), 5, "2026-06-06");
+        let arr = profile["expertise_domains"].as_array().unwrap();
+        assert!((arr[0]["confidence"].as_f64().unwrap() - 0.75).abs() < 0.001);
+    }
+
+    #[test]
+    fn slot_weaken_drops_confidence_by_02() {
+        let mut profile = serde_json::json!({"expertise_domains": [slot("rust", "add", "medium", 0.7)]});
+        let delta = serde_json::json!([{
+            "tag": "rust",
+            "action": "weaken",
+            "evidence": ["ev"],
+            "confidence_signal": "weak"
+        }]);
+        apply_slot_updates(&mut profile, "expertise_domains", Some(&delta), 5, "2026-06-06");
+        let arr = profile["expertise_domains"].as_array().unwrap();
+        assert!((arr[0]["confidence"].as_f64().unwrap() - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn slot_evicts_below_03_threshold() {
+        let mut profile = serde_json::json!({"expertise_domains": [slot("rust", "add", "medium", 0.35)]});
+        let delta = serde_json::json!([{
+            "tag": "rust",
+            "action": "weaken",
+            "evidence": ["ev"],
+            "confidence_signal": "weak"
+        }]);
+        apply_slot_updates(&mut profile, "expertise_domains", Some(&delta), 5, "2026-06-06");
+        let arr = profile["expertise_domains"].as_array().unwrap();
+        assert!(arr.is_empty());
+    }
+
+    #[test]
+    fn slot_evicts_excess_by_confidence() {
+        let mut profile = serde_json::json!({
+            "expertise_domains": [
+                slot("a", "add", "weak", 0.4),
+                slot("b", "add", "weak", 0.5),
+                slot("c", "add", "weak", 0.6)
+            ]
+        });
+        let delta = serde_json::json!([{
+            "tag": "d",
+            "action": "add",
+            "description": "desc",
+            "evidence": ["ev"],
+            "confidence_signal": "strong"
+        }]);
+        apply_slot_updates(&mut profile, "expertise_domains", Some(&delta), 3, "2026-06-06");
+        let arr = profile["expertise_domains"].as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        let tags: Vec<&str> = arr.iter().map(|s| s["tag"].as_str().unwrap()).collect();
+        assert_eq!(tags, vec!["d", "c", "b"]);
+    }
+
+    #[test]
+    fn slot_expires_constraints_by_expires_at() {
+        let mut profile = serde_json::json!({
+            "important_constraints": [
+                serde_json::json!({
+                    "tag": "old",
+                    "description": "old",
+                    "confidence": 0.7,
+                    "since": "2026-01-01",
+                    "last_seen": "2026-01-01",
+                    "expires_at": "2026-01-01"
+                })
+            ]
+        });
+        let delta = serde_json::json!([]);
+        apply_slot_updates(&mut profile, "important_constraints", Some(&delta), 5, "2026-06-06");
+        let arr = profile["important_constraints"].as_array().unwrap();
+        assert!(arr.is_empty());
+    }
+
+    #[test]
+    fn slot_ignores_invalid_tool_tag() {
+        let mut profile = serde_json::json!({"tool_preferences": []});
+        let delta = serde_json::json!([{
+            "tag": "invalid_tool",
+            "action": "add",
+            "reason": "r",
+            "evidence": ["ev"],
+            "confidence_signal": "strong"
+        }]);
+        apply_slot_updates(&mut profile, "tool_preferences", Some(&delta), 3, "2026-06-06");
+        let arr = profile["tool_preferences"].as_array().unwrap();
+        assert!(arr.is_empty());
+    }
+
+    #[test]
+    fn slot_accepts_valid_tool_tag() {
+        let mut profile = serde_json::json!({"tool_preferences": []});
+        let delta = serde_json::json!([{
+            "tag": "rag",
+            "action": "add",
+            "reason": "r",
+            "evidence": ["ev"],
+            "confidence_signal": "strong"
+        }]);
+        apply_slot_updates(&mut profile, "tool_preferences", Some(&delta), 3, "2026-06-06");
+        let arr = profile["tool_preferences"].as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["tag"], "rag");
+    }
+
+    #[test]
+    fn slot_truncates_description_and_evidence() {
+        let mut profile = serde_json::json!({"expertise_domains": []});
+        let long = "x".repeat(500);
+        let delta = serde_json::json!([{
+            "tag": "rust",
+            "action": "add",
+            "description": &long,
+            "evidence": [&long, &long, &long, &long, &long, &long],
+            "confidence_signal": "strong"
+        }]);
+        apply_slot_updates(&mut profile, "expertise_domains", Some(&delta), 5, "2026-06-06");
+        let arr = profile["expertise_domains"].as_array().unwrap();
+        assert_eq!(arr[0]["description"].as_str().unwrap().chars().count(), MAX_DESCRIPTION_LEN);
+        let ev = arr[0]["evidence"].as_array().unwrap();
+        assert_eq!(ev.len(), MAX_EVIDENCE_ITEMS);
+        assert_eq!(ev[0].as_str().unwrap().chars().count(), MAX_EVIDENCE_LEN);
+    }
+
+    #[test]
+    fn singleton_set_creates_with_base_confidence() {
+        let mut profile = serde_json::json!({});
+        let delta = serde_json::json!({
+            "tag": "concise-writing",
+            "action": "set",
+            "description": "desc",
+            "evidence": ["ev"],
+            "confidence_signal": "strong"
+        });
+        apply_singleton_update(&mut profile, "preferred_answer_style", Some(&delta), "2026-06-06");
+        assert_eq!(profile["preferred_answer_style"]["confidence"], 0.9);
+        assert_eq!(profile["preferred_answer_style"]["tag"], "concise-writing");
+    }
+
+    #[test]
+    fn singleton_reinforce_bumps_by_01() {
+        let mut profile = serde_json::json!({
+            "preferred_answer_style": {
+                "tag": "concise-writing", "confidence": 0.7, "since": "2026-01-01"
+            }
+        });
+        let delta = serde_json::json!({
+            "action": "reinforce",
+            "evidence": ["ev"],
+            "confidence_signal": "medium"
+        });
+        apply_singleton_update(&mut profile, "preferred_answer_style", Some(&delta), "2026-06-06");
+        assert!((profile["preferred_answer_style"]["confidence"].as_f64().unwrap() - 0.8).abs() < 0.001);
+    }
+
+    #[test]
+    fn singleton_weaken_evicts_below_threshold() {
+        let mut profile = serde_json::json!({
+            "preferred_answer_style": {
+                "tag": "concise-writing", "confidence": 0.35, "since": "2026-01-01"
+            }
+        });
+        let delta = serde_json::json!({
+            "action": "weaken",
+            "evidence": ["ev"],
+            "confidence_signal": "weak"
+        });
+        apply_singleton_update(&mut profile, "preferred_answer_style", Some(&delta), "2026-06-06");
+        assert!(profile.as_object().unwrap().get("preferred_answer_style").is_none());
+    }
+
+    #[test]
+    fn hint_caps_at_three_fifo() {
+        let mut profile = serde_json::json!({"session_continuity_hints": []});
+        let delta = serde_json::json!([
+            {"hint": "first", "source_session_id": "s1", "priority": "low"},
+            {"hint": "second", "source_session_id": "s2", "priority": "medium"},
+            {"hint": "third", "source_session_id": "s3", "priority": "high"},
+            {"hint": "fourth", "source_session_id": "s4", "priority": "low"}
+        ]);
+        apply_hint_updates(&mut profile, Some(&delta), "2026-06-06");
+        let arr = profile["session_continuity_hints"].as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr[0]["hint"], "first");
+        assert_eq!(arr[2]["hint"], "third");
+    }
+
+    #[test]
+    fn hint_expires_after_seven_days() {
+        let mut profile = serde_json::json!({
+            "session_continuity_hints": [
+                {"hint": "old", "source_session_id": "s0", "priority": "low", "created_at": "2026-05-01"}
+            ]
+        });
+        let delta = serde_json::json!([]);
+        apply_hint_updates(&mut profile, Some(&delta), "2026-06-06");
+        let arr = profile["session_continuity_hints"].as_array().unwrap();
+        assert!(arr.is_empty());
+    }
+
+    #[test]
+    fn hint_ignores_invalid_priority() {
+        let mut profile = serde_json::json!({"session_continuity_hints": []});
+        let delta = serde_json::json!([
+            {"hint": "valid", "source_session_id": "s1", "priority": "urgent"}
+        ]);
+        apply_hint_updates(&mut profile, Some(&delta), "2026-06-06");
+        let arr = profile["session_continuity_hints"].as_array().unwrap();
+        assert!(arr.is_empty());
+    }
+
+    #[test]
+    fn profile_delta_dedupes_conflicts() {
+        let mut profile = serde_json::json!({
+            "expertise_domains": [],
+            "tool_preferences": [],
+            "important_constraints": [],
+            "session_continuity_hints": [],
+            "observed_conflicts": [{
+                "field": "preferred_language",
+                "old_view": "en",
+                "new_view": "zh",
+                "evidence": ["old"]
+            }]
+        });
+        let delta = serde_json::json!({
+            "expertise_domain_updates": [],
+            "preferred_answer_style_update": {"action": "none", "confidence_signal": "weak"},
+            "preferred_language_update": {"action": "none", "confidence_signal": "weak"},
+            "tool_preference_updates": [],
+            "important_constraint_updates": [],
+            "session_continuity_hints": [],
+            "observed_conflicts": [
+                {"field": "preferred_language", "old_view": "en", "new_view": "zh", "evidence": ["new"]},
+                {"field": "preferred_style", "old_view": "concise", "new_view": "detailed", "evidence": ["new2"]}
+            ],
+            "global_summary": "summary"
+        });
+        let merged = apply_profile_delta(profile, delta);
+        let conflicts = merged["observed_conflicts"].as_array().unwrap();
+        assert_eq!(conflicts.len(), 2);
+        assert_eq!(conflicts[0]["field"], "preferred_language");
+        assert_eq!(conflicts[1]["field"], "preferred_style");
+    }
+
+    #[test]
+    fn truncate_text_respects_char_boundaries() {
+        let s = "a".repeat(300);
+        assert_eq!(truncate_text(&s, 200).chars().count(), 200);
+        let short = "hello";
+        assert_eq!(truncate_text(short, 200), "hello");
     }
 }

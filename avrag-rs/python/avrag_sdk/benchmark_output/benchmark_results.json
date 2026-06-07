@@ -1,0 +1,797 @@
+{
+  "base_url": "http://127.0.0.1:19523",
+  "queries": [
+    {
+      "id": "Q1",
+      "text": "XX \u5ba2\u6237\u7684\u6ce8\u518c\u5730\u5740\u662f\u4ec0\u4e48\uff1f",
+      "complexity": "simple",
+      "category": "factual",
+      "description": "Single-fact lookup about a specific entity.",
+      "expected_winner": "tie"
+    },
+    {
+      "id": "Q2",
+      "text": "2024 \u5e74\u7b2c\u4e00\u5b63\u5ea6\u9500\u552e\u62a5\u544a\u7684\u5173\u952e\u6570\u5b57",
+      "complexity": "simple",
+      "category": "single-doc",
+      "description": "Single document summary with specific time scope.",
+      "expected_winner": "tie"
+    },
+    {
+      "id": "Q3",
+      "text": "XX \u5ba2\u6237\u8fc7\u53bb 12 \u4e2a\u6708\u7b7e\u8ba2\u7684\u6240\u6709\u5408\u540c\u5217\u8868",
+      "complexity": "medium",
+      "category": "cross-doc",
+      "description": "List of contracts for one entity across many docs.",
+      "expected_winner": "code-gen"
+    },
+    {
+      "id": "Q4",
+      "text": "2023-2024 \u5e74\u671f\u95f4\u6240\u6709\u6d89\u53ca\u91d1\u989d\u8d85\u8fc7 100 \u4e07\u7684\u5408\u540c\u7ea0\u7eb7",
+      "complexity": "complex",
+      "category": "time-aggregated",
+      "description": "Time-windowed + value-filtered aggregation. Requires metadata filtering on date and amount, plus cross-doc merge.",
+      "expected_winner": "code-gen"
+    },
+    {
+      "id": "Q5",
+      "text": "A \u4ea7\u54c1\u548c B \u4ea7\u54c1\u5728\u5ba2\u6237\u4f7f\u7528\u573a\u666f\u4e0a\u7684\u5dee\u5f02",
+      "complexity": "complex",
+      "category": "comparison",
+      "description": "Multi-entity comparison. Requires retrieving docs about two products and synthesizing a comparison. Cross-source correlation is helpful.",
+      "expected_winner": "code-gen"
+    }
+  ],
+  "results": [
+    {
+      "path": "baseline",
+      "query_id": "Q1",
+      "success": true,
+      "error": null,
+      "wall_clock_ms": 88,
+      "chunk_count": 10,
+      "source_diversity": 1,
+      "top_score": 0.9,
+      "mean_score": 0.675,
+      "sdk_calls": 1,
+      "estimated_cost_usd": 0.0001,
+      "chunks": [
+        {
+          "chunk_id": "d-0",
+          "doc_id": "doc-0",
+          "score": 0.9,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-1",
+          "doc_id": "doc-1",
+          "score": 0.85,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-2",
+          "doc_id": "doc-2",
+          "score": 0.8,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-3",
+          "doc_id": "doc-3",
+          "score": 0.75,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-4",
+          "doc_id": "doc-4",
+          "score": 0.7,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-5",
+          "doc_id": "doc-5",
+          "score": 0.65,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-6",
+          "doc_id": "doc-6",
+          "score": 0.6,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-7",
+          "doc_id": "doc-7",
+          "score": 0.55,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-8",
+          "doc_id": "doc-8",
+          "score": 0.5,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-9",
+          "doc_id": "doc-9",
+          "score": 0.45,
+          "source": "dense"
+        }
+      ]
+    },
+    {
+      "path": "code-gen",
+      "query_id": "Q1",
+      "success": true,
+      "error": null,
+      "wall_clock_ms": 8,
+      "chunk_count": 10,
+      "source_diversity": 1,
+      "top_score": 0.9500000000000001,
+      "mean_score": 0.725,
+      "sdk_calls": 3,
+      "estimated_cost_usd": 0.0011,
+      "chunks": [
+        {
+          "chunk_id": "d-0",
+          "doc_id": "doc-0",
+          "score": 0.9500000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-1",
+          "doc_id": "doc-1",
+          "score": 0.9,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-2",
+          "doc_id": "doc-2",
+          "score": 0.8500000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-3",
+          "doc_id": "doc-3",
+          "score": 0.8,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-4",
+          "doc_id": "doc-4",
+          "score": 0.75,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-5",
+          "doc_id": "doc-5",
+          "score": 0.7000000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-6",
+          "doc_id": "doc-6",
+          "score": 0.65,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-7",
+          "doc_id": "doc-7",
+          "score": 0.6000000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-8",
+          "doc_id": "doc-8",
+          "score": 0.55,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-9",
+          "doc_id": "doc-9",
+          "score": 0.5,
+          "source": "dense"
+        }
+      ]
+    },
+    {
+      "path": "baseline",
+      "query_id": "Q2",
+      "success": true,
+      "error": null,
+      "wall_clock_ms": 2,
+      "chunk_count": 10,
+      "source_diversity": 1,
+      "top_score": 0.9,
+      "mean_score": 0.675,
+      "sdk_calls": 1,
+      "estimated_cost_usd": 0.0001,
+      "chunks": [
+        {
+          "chunk_id": "d-0",
+          "doc_id": "doc-0",
+          "score": 0.9,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-1",
+          "doc_id": "doc-1",
+          "score": 0.85,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-2",
+          "doc_id": "doc-2",
+          "score": 0.8,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-3",
+          "doc_id": "doc-3",
+          "score": 0.75,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-4",
+          "doc_id": "doc-4",
+          "score": 0.7,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-5",
+          "doc_id": "doc-5",
+          "score": 0.65,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-6",
+          "doc_id": "doc-6",
+          "score": 0.6,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-7",
+          "doc_id": "doc-7",
+          "score": 0.55,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-8",
+          "doc_id": "doc-8",
+          "score": 0.5,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-9",
+          "doc_id": "doc-9",
+          "score": 0.45,
+          "source": "dense"
+        }
+      ]
+    },
+    {
+      "path": "code-gen",
+      "query_id": "Q2",
+      "success": true,
+      "error": null,
+      "wall_clock_ms": 8,
+      "chunk_count": 10,
+      "source_diversity": 1,
+      "top_score": 0.9500000000000001,
+      "mean_score": 0.725,
+      "sdk_calls": 3,
+      "estimated_cost_usd": 0.0011,
+      "chunks": [
+        {
+          "chunk_id": "d-0",
+          "doc_id": "doc-0",
+          "score": 0.9500000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-1",
+          "doc_id": "doc-1",
+          "score": 0.9,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-2",
+          "doc_id": "doc-2",
+          "score": 0.8500000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-3",
+          "doc_id": "doc-3",
+          "score": 0.8,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-4",
+          "doc_id": "doc-4",
+          "score": 0.75,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-5",
+          "doc_id": "doc-5",
+          "score": 0.7000000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-6",
+          "doc_id": "doc-6",
+          "score": 0.65,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-7",
+          "doc_id": "doc-7",
+          "score": 0.6000000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-8",
+          "doc_id": "doc-8",
+          "score": 0.55,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-9",
+          "doc_id": "doc-9",
+          "score": 0.5,
+          "source": "dense"
+        }
+      ]
+    },
+    {
+      "path": "baseline",
+      "query_id": "Q3",
+      "success": true,
+      "error": null,
+      "wall_clock_ms": 2,
+      "chunk_count": 10,
+      "source_diversity": 1,
+      "top_score": 0.9,
+      "mean_score": 0.675,
+      "sdk_calls": 1,
+      "estimated_cost_usd": 0.0001,
+      "chunks": [
+        {
+          "chunk_id": "d-0",
+          "doc_id": "doc-0",
+          "score": 0.9,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-1",
+          "doc_id": "doc-1",
+          "score": 0.85,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-2",
+          "doc_id": "doc-2",
+          "score": 0.8,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-3",
+          "doc_id": "doc-3",
+          "score": 0.75,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-4",
+          "doc_id": "doc-4",
+          "score": 0.7,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-5",
+          "doc_id": "doc-5",
+          "score": 0.65,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-6",
+          "doc_id": "doc-6",
+          "score": 0.6,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-7",
+          "doc_id": "doc-7",
+          "score": 0.55,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-8",
+          "doc_id": "doc-8",
+          "score": 0.5,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-9",
+          "doc_id": "doc-9",
+          "score": 0.45,
+          "source": "dense"
+        }
+      ]
+    },
+    {
+      "path": "code-gen",
+      "query_id": "Q3",
+      "success": true,
+      "error": null,
+      "wall_clock_ms": 9,
+      "chunk_count": 10,
+      "source_diversity": 1,
+      "top_score": 0.9500000000000001,
+      "mean_score": 0.725,
+      "sdk_calls": 3,
+      "estimated_cost_usd": 0.0011,
+      "chunks": [
+        {
+          "chunk_id": "d-0",
+          "doc_id": "doc-0",
+          "score": 0.9500000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-1",
+          "doc_id": "doc-1",
+          "score": 0.9,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-2",
+          "doc_id": "doc-2",
+          "score": 0.8500000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-3",
+          "doc_id": "doc-3",
+          "score": 0.8,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-4",
+          "doc_id": "doc-4",
+          "score": 0.75,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-5",
+          "doc_id": "doc-5",
+          "score": 0.7000000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-6",
+          "doc_id": "doc-6",
+          "score": 0.65,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-7",
+          "doc_id": "doc-7",
+          "score": 0.6000000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-8",
+          "doc_id": "doc-8",
+          "score": 0.55,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-9",
+          "doc_id": "doc-9",
+          "score": 0.5,
+          "source": "dense"
+        }
+      ]
+    },
+    {
+      "path": "baseline",
+      "query_id": "Q4",
+      "success": true,
+      "error": null,
+      "wall_clock_ms": 2,
+      "chunk_count": 10,
+      "source_diversity": 1,
+      "top_score": 0.9,
+      "mean_score": 0.675,
+      "sdk_calls": 1,
+      "estimated_cost_usd": 0.0001,
+      "chunks": [
+        {
+          "chunk_id": "d-0",
+          "doc_id": "doc-0",
+          "score": 0.9,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-1",
+          "doc_id": "doc-1",
+          "score": 0.85,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-2",
+          "doc_id": "doc-2",
+          "score": 0.8,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-3",
+          "doc_id": "doc-3",
+          "score": 0.75,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-4",
+          "doc_id": "doc-4",
+          "score": 0.7,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-5",
+          "doc_id": "doc-5",
+          "score": 0.65,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-6",
+          "doc_id": "doc-6",
+          "score": 0.6,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-7",
+          "doc_id": "doc-7",
+          "score": 0.55,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-8",
+          "doc_id": "doc-8",
+          "score": 0.5,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-9",
+          "doc_id": "doc-9",
+          "score": 0.45,
+          "source": "dense"
+        }
+      ]
+    },
+    {
+      "path": "code-gen",
+      "query_id": "Q4",
+      "success": true,
+      "error": null,
+      "wall_clock_ms": 8,
+      "chunk_count": 10,
+      "source_diversity": 1,
+      "top_score": 0.9500000000000001,
+      "mean_score": 0.725,
+      "sdk_calls": 3,
+      "estimated_cost_usd": 0.0011,
+      "chunks": [
+        {
+          "chunk_id": "d-0",
+          "doc_id": "doc-0",
+          "score": 0.9500000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-1",
+          "doc_id": "doc-1",
+          "score": 0.9,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-2",
+          "doc_id": "doc-2",
+          "score": 0.8500000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-3",
+          "doc_id": "doc-3",
+          "score": 0.8,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-4",
+          "doc_id": "doc-4",
+          "score": 0.75,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-5",
+          "doc_id": "doc-5",
+          "score": 0.7000000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-6",
+          "doc_id": "doc-6",
+          "score": 0.65,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-7",
+          "doc_id": "doc-7",
+          "score": 0.6000000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-8",
+          "doc_id": "doc-8",
+          "score": 0.55,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-9",
+          "doc_id": "doc-9",
+          "score": 0.5,
+          "source": "dense"
+        }
+      ]
+    },
+    {
+      "path": "baseline",
+      "query_id": "Q5",
+      "success": true,
+      "error": null,
+      "wall_clock_ms": 2,
+      "chunk_count": 10,
+      "source_diversity": 1,
+      "top_score": 0.9,
+      "mean_score": 0.675,
+      "sdk_calls": 1,
+      "estimated_cost_usd": 0.0001,
+      "chunks": [
+        {
+          "chunk_id": "d-0",
+          "doc_id": "doc-0",
+          "score": 0.9,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-1",
+          "doc_id": "doc-1",
+          "score": 0.85,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-2",
+          "doc_id": "doc-2",
+          "score": 0.8,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-3",
+          "doc_id": "doc-3",
+          "score": 0.75,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-4",
+          "doc_id": "doc-4",
+          "score": 0.7,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-5",
+          "doc_id": "doc-5",
+          "score": 0.65,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-6",
+          "doc_id": "doc-6",
+          "score": 0.6,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-7",
+          "doc_id": "doc-7",
+          "score": 0.55,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-8",
+          "doc_id": "doc-8",
+          "score": 0.5,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-9",
+          "doc_id": "doc-9",
+          "score": 0.45,
+          "source": "dense"
+        }
+      ]
+    },
+    {
+      "path": "code-gen",
+      "query_id": "Q5",
+      "success": true,
+      "error": null,
+      "wall_clock_ms": 8,
+      "chunk_count": 10,
+      "source_diversity": 1,
+      "top_score": 0.9500000000000001,
+      "mean_score": 0.725,
+      "sdk_calls": 3,
+      "estimated_cost_usd": 0.0011,
+      "chunks": [
+        {
+          "chunk_id": "d-0",
+          "doc_id": "doc-0",
+          "score": 0.9500000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-1",
+          "doc_id": "doc-1",
+          "score": 0.9,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-2",
+          "doc_id": "doc-2",
+          "score": 0.8500000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-3",
+          "doc_id": "doc-3",
+          "score": 0.8,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-4",
+          "doc_id": "doc-4",
+          "score": 0.75,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-5",
+          "doc_id": "doc-5",
+          "score": 0.7000000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-6",
+          "doc_id": "doc-6",
+          "score": 0.65,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-7",
+          "doc_id": "doc-7",
+          "score": 0.6000000000000001,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-8",
+          "doc_id": "doc-8",
+          "score": 0.55,
+          "source": "dense"
+        },
+        {
+          "chunk_id": "d-9",
+          "doc_id": "doc-9",
+          "score": 0.5,
+          "source": "dense"
+        }
+      ]
+    }
+  ]
+}

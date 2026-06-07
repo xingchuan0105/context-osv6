@@ -3,7 +3,7 @@
 //! Supports pre-release (full dataset) and post-release (random sample)
 //! execution schedules.
 
-use super::{RedTeamDataset, RedTeamCase};
+use super::{RedTeamCase, RedTeamDataset};
 use crate::agents::eval_framework::EvalRun;
 use common::AppError;
 
@@ -85,7 +85,9 @@ impl RedTeamScheduler {
         let cases = self.select_cases(dataset, schedule);
         let suffix = match schedule {
             RedTeamSchedule::Full => "full".to_string(),
-            RedTeamSchedule::RandomSample { count } => format!("sample-{}", (*count).min(cases.len())),
+            RedTeamSchedule::RandomSample { count } => {
+                format!("sample-{}", (*count).min(cases.len()))
+            }
             RedTeamSchedule::Tagged { tags } => format!("tagged-{}", tags.join(",")),
         };
         RedTeamDataset {
@@ -220,10 +222,8 @@ mod tests {
     fn scheduler_sample_selects_subset() {
         let dataset = dummy_dataset(10);
         let scheduler = RedTeamScheduler;
-        let selected = scheduler.select_cases(
-            &dataset,
-            &RedTeamSchedule::RandomSample { count: 5 },
-        );
+        let selected =
+            scheduler.select_cases(&dataset, &RedTeamSchedule::RandomSample { count: 5 });
         assert_eq!(selected.len(), 5);
     }
 
@@ -231,10 +231,8 @@ mod tests {
     fn scheduler_sample_respects_dataset_size() {
         let dataset = dummy_dataset(3);
         let scheduler = RedTeamScheduler;
-        let selected = scheduler.select_cases(
-            &dataset,
-            &RedTeamSchedule::RandomSample { count: 100 },
-        );
+        let selected =
+            scheduler.select_cases(&dataset, &RedTeamSchedule::RandomSample { count: 100 });
         assert_eq!(selected.len(), 3);
     }
 

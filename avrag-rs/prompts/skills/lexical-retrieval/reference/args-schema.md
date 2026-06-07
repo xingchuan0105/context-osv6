@@ -41,8 +41,8 @@ the user (or you) expect to find in the text.
 
 **Bad**:
 - "" (empty string) — runtime error
-- "atlas system" if the doc has "atlas" alone (BM25 tokenizes
-  but doesn't require contiguity; this works but is fragile)
+- "atlas system" if the doc has only "atlas" (both words
+  must appear; "atlas" alone is sufficient and less fragile)
 - "rollback" when the doc spells it "roll-back" — no match
 
 ### `top_k` (optional, default 10, range [1, 50])
@@ -73,3 +73,21 @@ score descending. The `source` field will be `"lexical_retrieval"`.
 ```
 
 Empty array if no terms match any chunk.
+
+## Error shapes
+
+Unlike `doc-index`, `lexical-retrieval` rarely errors at the
+tool level because it operates over the whole workspace index.
+Possible failure modes:
+
+| Failure | Symptom | Caller action |
+|---------|---------|---------------|
+| `terms` is empty array | Returned array is `[]` (treated as no match) | Fix caller: always pass ≥1 term. |
+| Index is rebuilding after bulk re-ingest | Returned array is `[]` for terms that should match | Wait a few seconds and retry once. |
+| Workspace is empty (no docs indexed) | Returned array is `[]` for any term | Fall back to `doc-summary` on a known doc to confirm corpus state. |
+| Caller lacks read access to the only matching docs | Returned array is `[]` (access-filtered silently) | Inform the user; not a tool bug. |
+
+The runtime does NOT return an error object for any of the
+above — `[]` is the only signal. Treat persistent `[]` on a
+high-confidence term as a corpus/access issue, not a "no
+results" answer.

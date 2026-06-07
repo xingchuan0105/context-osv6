@@ -1,7 +1,9 @@
 # Examples
 
-Good call signatures for `index-lookup`. Always preceded by
-`doc-index` (or a cached chunk-ID list from session state).
+Good call signatures for `index-lookup`. Default: preceded by
+`doc-index`. Exception: when chunk IDs come from session cache
+AND the doc has not been re-ingested since, `doc-index` may
+be skipped (see Example 3).
 
 ## Example 1: Fetch a specific section's chunks
 
@@ -120,3 +122,48 @@ relationship between X and Y."
 `graph-retrieval` returns relations + supporting chunks; the
 planner takes the supporting chunk IDs and passes them to
 `index_lookup` for the actual text.
+
+## Example 6: Stale chunk IDs (silent empty result)
+
+**Context**: Same `doc_id` as before, but the document was
+re-ingested 10 minutes ago. Cached IDs are stale.
+
+```json
+{
+  "tool": "index_lookup",
+  "version": "1.0",
+  "args": {
+    "doc_id": "<doc-uuid>",
+    "chunk_ids": ["<stale-id-1>", "<stale-id-2>"]
+  }
+}
+```
+
+Result: `[]` (silent — IDs no longer exist). Recovery: re-call
+`doc-index` to refresh IDs, then re-issue this call.
+
+## Example 7: Invalid doc_id format
+
+**Context**: Caller typo'd the UUID.
+
+```json
+{
+  "tool": "index_lookup",
+  "version": "1.0",
+  "args": {
+    "doc_id": "not-a-uuid",
+    "chunk_ids": ["<chunk-uuid>"]
+  }
+}
+```
+
+Result: error object, not an array:
+
+```json
+{
+  "error": {
+    "code": "INVALID_DOC_ID",
+    "message": "doc_id is not a valid UUID"
+  }
+}
+```

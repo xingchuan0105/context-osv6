@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::product_e2e::{assertions::*, ChatResponse, DocumentStatus, TestContext};
+use crate::product_e2e::{ChatResponse, DocumentStatus, TestContext, assertions::*};
 
 #[tokio::test]
 async fn embedding_503_returns_degraded_answer_with_lexical_fallback() {
@@ -31,8 +31,8 @@ async fn embedding_503_returns_degraded_answer_with_lexical_fallback() {
 
     assert_http_ok(&http_resp);
 
-    let resp: ChatResponse = serde_json::from_value(http_resp.body_json.clone())
-        .expect("valid ChatResponse schema");
+    let resp: ChatResponse =
+        serde_json::from_value(http_resp.body_json.clone()).expect("valid ChatResponse schema");
 
     // 4. Product-layer assertions:
     //    - HTTP 200 (system does not crash)

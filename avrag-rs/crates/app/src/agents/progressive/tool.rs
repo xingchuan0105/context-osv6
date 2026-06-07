@@ -78,17 +78,23 @@ fn schema_param_summary(schema: &serde_json::Value) -> String {
         let required: std::collections::HashSet<&str> = schema
             .get("required")
             .and_then(|r| r.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str())
-                    .collect()
-            })
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
             .unwrap_or_default();
         for (name, def) in props {
             let ty = def.get("type").and_then(|t| t.as_str()).unwrap_or("any");
-            let desc = def.get("description").and_then(|d| d.as_str()).unwrap_or("");
-            let req = if required.contains(name.as_str()) { " (required)" } else { "" };
-            let default = def.get("default").map(|d| format!(", default: {}", d)).unwrap_or_default();
+            let desc = def
+                .get("description")
+                .and_then(|d| d.as_str())
+                .unwrap_or("");
+            let req = if required.contains(name.as_str()) {
+                " (required)"
+            } else {
+                ""
+            };
+            let default = def
+                .get("default")
+                .map(|d| format!(", default: {}", d))
+                .unwrap_or_default();
             let line = format!("- `{}`: {}{}{} — {}", name, ty, req, default, desc);
             lines.push(line);
         }

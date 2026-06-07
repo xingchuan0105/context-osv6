@@ -36,9 +36,10 @@ Single literal term, narrow `top_k`. The user wants to FIND
 ```
 
 The user typed a multi-word phrase. Add the standalone `auth`
-term to broaden slightly (BM25 doesn't require contiguity, so
-"session version" matches in chunks containing both words
-separately).
+term to **also surface chunks that use the abbreviation alone**
+— multiple `terms` are OR-combined. (And note: "session
+version" as a single string already matches any chunk with
+both words, in any order — it is not a phrase query.)
 
 ## Example 3: Hybrid with dense (canonical pattern)
 
@@ -69,25 +70,50 @@ Dense for paraphrased context, lexical for exact matches on
 "Atlas" (proper noun) and "rollback checklist" (multi-word
 phrase). The merger combines via RRF.
 
-## Example 4: Pre-index_lookup validation
+## Example 4: Discover a section, then fetch precisely
 
-**Context**: Planner intends to call `index_lookup` next and
-needs to confirm chunk IDs are still valid.
+**Context**: User asks "show me the exact text about session
+timeouts in the Atlas doc." We don't yet have chunk IDs; we
+need to discover the section first.
 
 ```json
-{
-  "tool": "lexical_retrieval",
-  "version": "1.0",
-  "args": {
-    "terms": ["session timeout configuration"],
-    "top_k": 20
+[
+  {
+    "tool": "lexical_retrieval",
+    "version": "1.0",
+    "args": {
+      "terms": ["session timeout configuration"],
+      "top_k": 5
+    }
+  },
+  {
+    "tool": "doc_index",
+    "version": "1.0",
+    "args": {
+      "doc_ids": ["<doc-id-from-lexical-results>"]
+    }
+  },
+  {
+    "tool": "index_lookup",
+    "version": "1.0",
+    "args": {
+      "doc_id": "<doc-id>",
+      "chunk_ids": ["<chunk-ids-from-doc-index-for-timeout-section>"]
+    }
   }
-}
+]
 ```
 
-Higher `top_k: 20` for a broad scan. After getting the chunks,
-filter to the IDs you need, then issue `index_lookup` for
-precise fetch.
+Three-stage surgical fetch:
+1. `lexical-retrieval` discovers candidate chunks (and which
+   `doc_id` they belong to).
+2. `doc-index` returns the full section structure with valid
+   chunk IDs for that `doc_id` — these are the only IDs
+   `index-lookup` accepts.
+3. `index-lookup` fetches the exact text in deterministic order.
+
+**Do NOT skip step 2**: chunk IDs from `lexical-retrieval` are
+not a valid source for `index-lookup` per its skill contract.
 
 ## Example 5: Acronym expansion search
 
@@ -100,7 +126,7 @@ precise fetch.
     "version": "1.0",
     "args": {
       "terms": ["NLP", "natural language processing", "language model"],
-      "top_k": 10
+      "top_k": 5
     }
   }
 ]

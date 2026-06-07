@@ -49,9 +49,6 @@ of the system that runs on Atlas?"
     "args": {
       "graph_hints": [
         { "subject": "Atlas", "predicate": "runs_on", "object": "?" },
-        { "subject": "?", "predicate": "rollback_owned_by", "object": "?" }
-      ],
-      "placeholder_triplets": [
         { "subject": "?", "predicate": "rollback_owned_by", "object": "?team" }
       ],
       "hop_limit": 2,
@@ -69,9 +66,10 @@ of the system that runs on Atlas?"
 ]
 ```
 
-`hop_limit: 2` for the two-step chain. `?team` placeholder
-specifies the desired predicate target type. The dense call
-provides the actual chunk text for the answer synthesizer.
+`hop_limit: 2` for the two-step chain. Uses only `graph_hints`
+because both relation types (`runs_on`, `rollback_owned_by`)
+are known. The dense call provides the actual chunk text for
+the answer synthesizer.
 
 ## Example 3: Predicate-unknown lookup
 

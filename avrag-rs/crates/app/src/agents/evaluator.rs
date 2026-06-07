@@ -16,9 +16,9 @@
 //! Thresholds are surfaced as `pub const` so they can be flipped via tests
 //! today and via env vars later (Risk R1).
 
-use crate::agents::react_loop::{DegradeReason, LoopBudget};
 #[cfg(test)]
 use crate::agents::react_loop::UserTier;
+use crate::agents::react_loop::{DegradeReason, LoopBudget};
 use avrag_search::SearchResult;
 use common::AnswerContextChunk;
 use serde::{Deserialize, Serialize};
@@ -447,7 +447,10 @@ mod tests {
         };
         let budget = LoopBudget::rag(UserTier::Pro);
         let acc = AccumulatedRagResults::new();
-        assert_eq!(evaluate_rag_iteration(&signals, &budget, &acc), EvalAdvice::Synthesize);
+        assert_eq!(
+            evaluate_rag_iteration(&signals, &budget, &acc),
+            EvalAdvice::Synthesize
+        );
     }
 
     #[test]
@@ -516,7 +519,10 @@ mod tests {
         budget.tick();
         let mut acc = AccumulatedRagResults::new();
         acc.merge_iteration(vec![(make_chunk("c1", None, ""), 0.4)], 0);
-        assert_eq!(evaluate_rag_iteration(&signals, &budget, &acc), EvalAdvice::Synthesize);
+        assert_eq!(
+            evaluate_rag_iteration(&signals, &budget, &acc),
+            EvalAdvice::Synthesize
+        );
     }
 
     #[test]
@@ -639,14 +645,18 @@ mod tests {
     #[test]
     fn eval_advice_is_terminal_classification() {
         assert!(EvalAdvice::Synthesize.is_terminal());
-        assert!(EvalAdvice::Clarify {
-            question: "q".to_string()
-        }
-        .is_terminal());
-        assert!(EvalAdvice::Degrade {
-            reason: DegradeReason::AllToolsFailed
-        }
-        .is_terminal());
+        assert!(
+            EvalAdvice::Clarify {
+                question: "q".to_string()
+            }
+            .is_terminal()
+        );
+        assert!(
+            EvalAdvice::Degrade {
+                reason: DegradeReason::AllToolsFailed
+            }
+            .is_terminal()
+        );
         assert!(!EvalAdvice::Replan { reason: "x" }.is_terminal());
         assert!(!EvalAdvice::BroadenQuery { reason: "x" }.is_terminal());
     }

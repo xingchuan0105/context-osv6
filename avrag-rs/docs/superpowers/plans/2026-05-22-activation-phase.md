@@ -234,9 +234,9 @@ fn answer_format_skills_respects_strategy() {
     let rag_skills = registry.answer_format_skills("rag");
     let chat_skills = registry.answer_format_skills("chat");
     
-    // framework-extraction 只对 rag 适用
+    // framework-extraction 在所有策略都可用（format skill）
     assert!(rag_skills.iter().any(|s| s.id == "framework-extraction"));
-    assert!(!chat_skills.iter().any(|s| s.id == "framework-extraction"));
+    assert!(chat_skills.iter().any(|s| s.id == "framework-extraction"));
 }
 ```
 

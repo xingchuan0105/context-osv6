@@ -17,13 +17,22 @@ pub trait LlmService: Send + Sync {
 
 /// 安全的 Embedding 服务 trait
 pub trait EmbeddingService: Send + Sync {
-    fn embed(&self, text: &str) -> impl std::future::Future<Output = anyhow::Result<Vec<f32>>> + Send;
-    fn embed_batch(&self, texts: &[String]) -> impl std::future::Future<Output = anyhow::Result<Vec<Vec<f32>>>> + Send;
+    fn embed(
+        &self,
+        text: &str,
+    ) -> impl std::future::Future<Output = anyhow::Result<Vec<f32>>> + Send;
+    fn embed_batch(
+        &self,
+        texts: &[String],
+    ) -> impl std::future::Future<Output = anyhow::Result<Vec<Vec<f32>>>> + Send;
 }
 
 /// 安全的搜索服务 trait
 pub trait SearchService: Send + Sync {
-    fn search(&self, query: &str) -> impl std::future::Future<Output = anyhow::Result<Vec<SearchResult>>> + Send;
+    fn search(
+        &self,
+        query: &str,
+    ) -> impl std::future::Future<Output = anyhow::Result<Vec<SearchResult>>> + Send;
     fn provider(&self) -> String;
     fn mode(&self) -> String;
 }
@@ -37,8 +46,17 @@ pub struct SearchResult {
 
 /// 安全的存储服务 trait
 pub trait StorageService: Send + Sync {
-    fn generate_upload_url(&self, document_id: &str, object_path: &str, expires_secs: u64) -> impl std::future::Future<Output = anyhow::Result<String>> + Send;
-    fn generate_download_url(&self, object_path: &str, expires_secs: u64) -> impl std::future::Future<Output = anyhow::Result<String>> + Send;
+    fn generate_upload_url(
+        &self,
+        document_id: &str,
+        object_path: &str,
+        expires_secs: u64,
+    ) -> impl std::future::Future<Output = anyhow::Result<String>> + Send;
+    fn generate_download_url(
+        &self,
+        object_path: &str,
+        expires_secs: u64,
+    ) -> impl std::future::Future<Output = anyhow::Result<String>> + Send;
 }
 
 /// 服务配置（非敏感子集）

@@ -22,15 +22,21 @@ pub(crate) async fn dispatch_mode(
             .await;
     }
 
-    if matches!(agent_kind, Some(crate::agents::AgentKind::Rag))
-        && state.uses_memory_adapters()
-    {
+    if matches!(agent_kind, Some(crate::agents::AgentKind::Rag)) && state.uses_memory_adapters() {
         return state.execute_memory_chat_compat(request, session).await;
     }
 
     match agent_kind {
         Some(crate::agents::AgentKind::Chat) | None => {
-            run_general_mode(state, request, session, stream_config, crate::agents::AgentKind::Chat, "chat").await
+            run_general_mode(
+                state,
+                request,
+                session,
+                stream_config,
+                crate::agents::AgentKind::Chat,
+                "chat",
+            )
+            .await
         }
         Some(crate::agents::AgentKind::Search) => {
             run_search_mode(state, request, session, stream_config).await
@@ -53,9 +59,7 @@ async fn run_general_mode(
         return Err(AppError::internal("agent service is not configured"));
     };
 
-    let mut agent_request = state
-        .build_agent_request(request, kind)
-        .await;
+    let mut agent_request = state.build_agent_request(request, kind).await;
     if let Some(config) = stream_config {
         agent_request.stream = true;
         agent_request.cancellation_token = Some(config.token.clone());
@@ -292,9 +296,10 @@ async fn run_rag_mode(
         .await;
 
     if !request.doc_scope.is_empty()
-        && let Ok(metadata) = state.load_docscope_metadata(&request.doc_scope).await {
-            agent_request.docscope_metadata = Some(metadata);
-        }
+        && let Ok(metadata) = state.load_docscope_metadata(&request.doc_scope).await
+    {
+        agent_request.docscope_metadata = Some(metadata);
+    }
 
     if let Some(config) = stream_config {
         agent_request.stream = true;

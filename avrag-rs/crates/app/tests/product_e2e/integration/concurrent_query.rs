@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::product_e2e::{assertions::*, ChatResponse, DocumentStatus, HttpResponse, TestContext};
+use crate::product_e2e::{ChatResponse, DocumentStatus, HttpResponse, TestContext, assertions::*};
 
 #[tokio::test]
 async fn concurrent_rag_queries_return_independent_citations() {
@@ -19,7 +19,11 @@ async fn concurrent_rag_queries_return_independent_citations() {
     // 2. Fire two concurrent queries
     let doc_scope = vec![upload.document_id.clone()];
     let fut1 = ctx.chat("What is antifragility?", &upload.notebook_id, &doc_scope);
-    let fut2 = ctx.chat("Who wrote about antifragility?", &upload.notebook_id, &doc_scope);
+    let fut2 = ctx.chat(
+        "Who wrote about antifragility?",
+        &upload.notebook_id,
+        &doc_scope,
+    );
 
     let (resp1, resp2) = tokio::join!(fut1, fut2);
 

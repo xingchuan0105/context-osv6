@@ -908,9 +908,9 @@ mod tests {
             .await
             .unwrap();
         sqlx::query(
-            "insert into subscriptions (org_id, stripe_subscription_id, stripe_price_id, plan_id, status) values ($1, $2, 'price_test', 'pro', 'active')",
+            "insert into subscriptions (user_id, stripe_subscription_id, stripe_price_id, plan_id, status) values ($1, $2, 'price_test', 'pro', 'active')",
         )
-        .bind(org_id)
+        .bind(user_id)
         .bind(format!("sub_{}", Uuid::new_v4()))
         .execute(tx.as_mut())
         .await

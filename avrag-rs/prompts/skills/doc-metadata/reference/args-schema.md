@@ -16,7 +16,7 @@ The full JSON Schema for `doc-metadata` args.
       "type": "array",
       "items": { "type": "string" },
       "default": [],
-      "description": "Optional filter, e.g. ['name', 'mime_type']. Omit for all fields."
+      "description": "Optional filter. Omit or pass [] for all fields."
     }
   },
   "required": ["doc_ids"]
@@ -36,12 +36,15 @@ Filter restricting which keys are returned. Valid field names:
 
 - `name` — file name (e.g. `"antifragile.pdf"`)
 - `mime_type` — file MIME type (e.g. `"application/pdf"`)
-- `file_size` — file size in bytes
+- `file_size` — file size in bytes (format to human-readable for display)
 - `status` — processing status (`pending` | `processing` | `completed` | `failed`)
 - `chunk_count` — number of chunks (approximate during re-ingest)
 - `toc` — table of contents array (sections with title, heading_level, page, rank)
 
-Omit `fields` for the complete metadata object.
+**Semantics**:
+- Omit `fields` → returns the complete metadata object.
+- `fields: []` → equivalent to omitting `fields` (returns all fields).
+- `fields: ["name", "status"]` → returns only `name` and `status`.
 
 ## Output schema
 
@@ -54,9 +57,9 @@ Omit `fields` for the complete metadata object.
       "doc_id":       { "type": "string" },
       "name":         { "type": "string" },
       "mime_type":    { "type": "string" },
-      "file_size":    { "type": "integer" },
-      "status":       { "type": "string" },
-      "chunk_count":  { "type": "integer" },
+      "file_size":    { "type": "integer", "description": "Size in bytes. Format to human-readable (KB/MB) for user display." },
+      "status":       { "type": "string", "description": "pending | processing | completed | failed" },
+      "chunk_count":  { "type": "integer", "description": "Approximate during re-ingest." },
       "toc": {
         "type": "array",
         "items": {

@@ -72,7 +72,12 @@ impl SkillRegistry {
     }
 
     /// Execute a single tool call by looking up the registered skill.
-    pub async fn execute<'a>(&self, id: &str, args: &Value, ctx: &'a ExecutionContext<'a>) -> ToolResult {
+    pub async fn execute<'a>(
+        &self,
+        id: &str,
+        args: &Value,
+        ctx: &'a ExecutionContext<'a>,
+    ) -> ToolResult {
         match self.get(id) {
             Some(skill) => skill.execute(args, ctx).await,
             None => ToolResult {
@@ -207,5 +212,6 @@ mod tests {
         assert!(reg.contains("code_interpreter"));
         assert!(reg.contains("weather_query"));
         assert!(reg.contains("web_search"));
+        assert!(reg.contains("web_fetch"));
     }
 }

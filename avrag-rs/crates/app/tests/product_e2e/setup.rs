@@ -185,7 +185,8 @@ pub async fn stop_milvus(container_name: &str) {
 /// This prevents test vectors from accumulating across runs and polluting
 /// similarity-search results for subsequent tests.
 pub async fn drop_milvus_collections(prefix: &str) {
-    let milvus_url = std::env::var("MILVUS_URL").unwrap_or_else(|_| "http://127.0.0.1:19530".to_string());
+    let milvus_url =
+        std::env::var("MILVUS_URL").unwrap_or_else(|_| "http://127.0.0.1:19530".to_string());
     let client = reqwest::Client::new();
     let collections = [
         format!("{prefix}_rag_text_chunks"),
@@ -213,7 +214,9 @@ pub async fn drop_milvus_collections(prefix: &str) {
                     let text = r.text().await.unwrap_or_default();
                     // 400 = collection not found is fine (already clean)
                     if status.as_u16() != 400 || !text.contains("not found") {
-                        eprintln!("[product_e2e] drop collection {name} returned HTTP {status}: {text}");
+                        eprintln!(
+                            "[product_e2e] drop collection {name} returned HTTP {status}: {text}"
+                        );
                     }
                 }
             }
@@ -254,13 +257,11 @@ async fn wait_for_milvus(url: &str, container_name: &str) -> anyhow::Result<()> 
 /// Tries `target/debug/avrag-worker` first, then falls back to `cargo build -p avrag-worker`.
 pub async fn find_worker_binary() -> anyhow::Result<std::path::PathBuf> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let candidate = manifest_dir
-        .join("../../../target/debug/avrag-worker");
+    let candidate = manifest_dir.join("../../../target/debug/avrag-worker");
     if candidate.exists() {
         return Ok(candidate);
     }
-    let candidate2 = manifest_dir
-        .join("../../target/debug/avrag-worker");
+    let candidate2 = manifest_dir.join("../../target/debug/avrag-worker");
     if candidate2.exists() {
         return Ok(candidate2);
     }
@@ -297,7 +298,14 @@ pub async fn cleanup_orphaned_test_containers() -> anyhow::Result<usize> {
     let mut removed = 0usize;
     for prefix in ["avrag-test-pg-", "avrag-test-milvus-"] {
         let output = tokio::process::Command::new("docker")
-            .args(["ps", "-a", "--filter", &format!("name={prefix}"), "--format", "{{.Names}}"])
+            .args([
+                "ps",
+                "-a",
+                "--filter",
+                &format!("name={prefix}"),
+                "--format",
+                "{{.Names}}",
+            ])
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .output()

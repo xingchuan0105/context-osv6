@@ -69,7 +69,7 @@ guide" — planner needs the section's chunk IDs before
 ```
 
 Note: `doc-index` returns chunk IDs directly (level: "section" via
-`doc_summary` would only return section titles, not chunk IDs).
+`doc_summary` would only return `section_title` values, not chunk IDs).
 For chunk-precise reads, use `doc-index` not `doc-summary`.
 
 ## Example 3: Direct overview (user asks for a summary)
@@ -129,7 +129,7 @@ handbook have?"
 }
 ```
 
-`level: "section"` returns TOC entries (title, heading_level,
-page), one per section. The planner returns this as a list to
-the user, OR uses it to plan an `index_lookup` for a specific
-section.
+`level: "section"` returns TOC entries (`section_title`,
+`heading_level`, `page`), one per section. The planner returns
+this as a list to the user, OR uses it to plan a follow-up
+`doc-index` → `index_lookup` for a specific section.

@@ -277,7 +277,9 @@ pub enum EvalTrigger {
     /// Online sampling: evaluates a fraction of live traffic.
     OnlineSampling { rate: f64 },
     /// Red-team / adversarial probing.
-    RedTeam { attack_vectors: Vec<crate::agents::redteam::AttackVector> },
+    RedTeam {
+        attack_vectors: Vec<crate::agents::redteam::AttackVector>,
+    },
 }
 
 impl EvalTrigger {
@@ -471,10 +473,7 @@ impl EvalMetric {
 #[async_trait::async_trait]
 pub trait Evaluator: Send + Sync {
     /// Evaluate a single case and return a score.
-    async fn evaluate(
-        &self,
-        case: &EvalCase,
-    ) -> Result<EvalScore, common::AppError>;
+    async fn evaluate(&self, case: &EvalCase) -> Result<EvalScore, common::AppError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -486,14 +485,10 @@ pub struct ExactMatchEvaluator;
 
 #[async_trait::async_trait]
 impl Evaluator for ExactMatchEvaluator {
-    async fn evaluate(
-        &self,
-        case: &EvalCase,
-    ) -> Result<EvalScore, common::AppError> {
-        let ground = case
-            .ground_truth
-            .as_ref()
-            .ok_or_else(|| common::AppError::validation("missing_ground_truth", "ExactMatch requires ground_truth"))?;
+    async fn evaluate(&self, case: &EvalCase) -> Result<EvalScore, common::AppError> {
+        let ground = case.ground_truth.as_ref().ok_or_else(|| {
+            common::AppError::validation("missing_ground_truth", "ExactMatch requires ground_truth")
+        })?;
         let prediction = normalize(&case.result.answer);
         let reference = normalize(ground);
         let score = if prediction == reference { 1.0 } else { 0.0 };
@@ -515,14 +510,10 @@ pub struct F1Evaluator;
 
 #[async_trait::async_trait]
 impl Evaluator for F1Evaluator {
-    async fn evaluate(
-        &self,
-        case: &EvalCase,
-    ) -> Result<EvalScore, common::AppError> {
-        let ground = case
-            .ground_truth
-            .as_ref()
-            .ok_or_else(|| common::AppError::validation("missing_ground_truth", "F1 requires ground_truth"))?;
+    async fn evaluate(&self, case: &EvalCase) -> Result<EvalScore, common::AppError> {
+        let ground = case.ground_truth.as_ref().ok_or_else(|| {
+            common::AppError::validation("missing_ground_truth", "F1 requires ground_truth")
+        })?;
         let pred_tokens = tokenize(&case.result.answer);
         let ref_tokens = tokenize(ground);
         let score = compute_f1(&pred_tokens, &ref_tokens);
@@ -558,22 +549,19 @@ impl LlmAsJudgeEvaluator {
 
 #[async_trait::async_trait]
 impl Evaluator for LlmAsJudgeEvaluator {
-    async fn evaluate(
-        &self,
-        case: &EvalCase,
-    ) -> Result<EvalScore, common::AppError> {
+    async fn evaluate(&self, case: &EvalCase) -> Result<EvalScore, common::AppError> {
         let user_prompt = format!(
             "You are an expert evaluator. Evaluate the following answer based on this criterion:\n{}\n\n\
              Question: {}\nAnswer: {}\n\n\
              Provide a score between 0.0 and 1.0 and a brief explanation. \
              Respond in JSON format: {{\"score\": float, \"explanation\": string}}",
-            self.criteria,
-            case.request.query,
-            case.result.answer
+            self.criteria, case.request.query, case.result.answer
         );
 
         let messages = vec![
-            avrag_llm::ChatMessage::system("You are an objective evaluator. Respond only with valid JSON."),
+            avrag_llm::ChatMessage::system(
+                "You are an objective evaluator. Respond only with valid JSON.",
+            ),
             avrag_llm::ChatMessage::user(user_prompt),
         ];
 
@@ -614,8 +602,8 @@ fn parse_llm_judge_output(content: &str) -> Result<(f64, Option<String>), String
     let json_str = extract_first_json_object(content)
         .ok_or_else(|| "No JSON object found in response".to_string())?;
 
-    let value: serde_json::Value = serde_json::from_str(json_str)
-        .map_err(|e| format!("Invalid JSON: {e}"))?;
+    let value: serde_json::Value =
+        serde_json::from_str(json_str).map_err(|e| format!("Invalid JSON: {e}"))?;
 
     let score = value
         .get("score")
@@ -664,7 +652,9 @@ fn extract_first_json_object(text: &str) -> Option<&str> {
             '}' => {
                 if depth > 0 {
                     depth -= 1;
-                    if depth == 0 && let Some(s) = start {
+                    if depth == 0
+                        && let Some(s) = start
+                    {
                         return Some(&text[s..=i]);
                     }
                 }
@@ -706,9 +696,7 @@ pub async fn run_evaluation(
                     } else {
                         failed += 1;
                     }
-                    let entry = metric_sums
-                        .entry(score.metric.clone())
-                        .or_insert((0.0, 0));
+                    let entry = metric_sums.entry(score.metric.clone()).or_insert((0.0, 0));
                     entry.0 += score.score;
                     entry.1 += 1;
                     case.scores.push(score);
@@ -724,7 +712,12 @@ pub async fn run_evaluation(
 
     let metric_averages: BTreeMap<String, f64> = metric_sums
         .iter()
-        .map(|(k, (sum, count))| (k.clone(), if *count > 0 { sum / *count as f64 } else { 0.0 }))
+        .map(|(k, (sum, count))| {
+            (
+                k.clone(),
+                if *count > 0 { sum / *count as f64 } else { 0.0 },
+            )
+        })
         .collect();
 
     let overall_score = if metric_averages.is_empty() {
@@ -828,11 +821,7 @@ fn compute_metrics(run: &EvalRun) -> (Vec<MetricValue>, Vec<MetricValue>) {
     // ---- System metrics ----
 
     // ToolSuccessRate: from tool_calls status across all cases.
-    let total_tool_calls: usize = run
-        .cases
-        .iter()
-        .map(|c| c.result.tool_calls.len())
-        .sum();
+    let total_tool_calls: usize = run.cases.iter().map(|c| c.result.tool_calls.len()).sum();
     let ok_tool_calls: usize = run
         .cases
         .iter()
@@ -913,12 +902,7 @@ fn compute_metrics(run: &EvalRun) -> (Vec<MetricValue>, Vec<MetricValue>) {
     let replanned: usize = run
         .cases
         .iter()
-        .filter(|c| {
-            c.result
-                .iterations
-                .iter()
-                .any(|it| it.decision == "replan")
-        })
+        .filter(|c| c.result.iterations.iter().any(|it| it.decision == "replan"))
         .count();
     if total_cases > 0 {
         system.push(MetricValue {
@@ -1045,7 +1029,11 @@ pub async fn run_eval_with_trigger(
     let pass_rate = if total_cases == 0 {
         0.0
     } else {
-        let _failed_count = run.failures.iter().filter(|f| f.case_id != "__overall__").count();
+        let _failed_count = run
+            .failures
+            .iter()
+            .filter(|f| f.case_id != "__overall__")
+            .count();
         let unique_failed_cases: std::collections::HashSet<_> = run
             .failures
             .iter()
@@ -1227,10 +1215,8 @@ mod tests {
             dummy_case("hello world", Some("hello world")),
             dummy_case("foo bar", Some("foo baz")),
         ];
-        let evaluators: Vec<Box<dyn Evaluator>> = vec![
-            Box::new(ExactMatchEvaluator),
-            Box::new(F1Evaluator),
-        ];
+        let evaluators: Vec<Box<dyn Evaluator>> =
+            vec![Box::new(ExactMatchEvaluator), Box::new(F1Evaluator)];
         let run = run_evaluation("test", "ChatStrategy", "v1", cases, evaluators)
             .await
             .unwrap();
@@ -1298,16 +1284,8 @@ mod tests {
 
     #[test]
     fn comparison_detects_no_regression_when_improved() {
-        let baseline = make_run(
-            "base",
-            vec![case_with_score("c1", "exact_match", 0.5)],
-            0.5,
-        );
-        let candidate = make_run(
-            "cand",
-            vec![case_with_score("c1", "exact_match", 0.8)],
-            0.8,
-        );
+        let baseline = make_run("base", vec![case_with_score("c1", "exact_match", 0.5)], 0.5);
+        let candidate = make_run("cand", vec![case_with_score("c1", "exact_match", 0.8)], 0.8);
         let comp = compare_eval_runs(&baseline, &candidate, 0.05);
         assert!(comp.regressions.is_empty());
         assert!((comp.overall_delta - 0.3).abs() < 1e-6);
@@ -1315,19 +1293,15 @@ mod tests {
 
     #[test]
     fn comparison_detects_case_score_regression() {
-        let baseline = make_run(
-            "base",
-            vec![case_with_score("c1", "exact_match", 0.8)],
-            0.8,
-        );
-        let candidate = make_run(
-            "cand",
-            vec![case_with_score("c1", "exact_match", 0.6)],
-            0.6,
-        );
+        let baseline = make_run("base", vec![case_with_score("c1", "exact_match", 0.8)], 0.8);
+        let candidate = make_run("cand", vec![case_with_score("c1", "exact_match", 0.6)], 0.6);
         let comp = compare_eval_runs(&baseline, &candidate, 0.05);
         assert_eq!(comp.regressions.len(), 3); // case + metric average + overall
-        assert!(comp.regressions.iter().any(|r| r.kind == RegressionKind::CaseScoreDrop));
+        assert!(
+            comp.regressions
+                .iter()
+                .any(|r| r.kind == RegressionKind::CaseScoreDrop)
+        );
     }
 
     #[test]
@@ -1335,7 +1309,11 @@ mod tests {
         let baseline = make_run("base", vec![case_with_score("c1", "f1", 0.9)], 0.9);
         let candidate = make_run("cand", vec![case_with_score("c1", "f1", 0.7)], 0.7);
         let comp = compare_eval_runs(&baseline, &candidate, 0.05);
-        assert!(comp.regressions.iter().any(|r| r.kind == RegressionKind::OverallScoreDrop));
+        assert!(
+            comp.regressions
+                .iter()
+                .any(|r| r.kind == RegressionKind::OverallScoreDrop)
+        );
     }
 
     #[test]
@@ -1353,23 +1331,79 @@ mod tests {
 
     #[test]
     fn eval_trigger_default_sample_sizes() {
-        assert_eq!(EvalTrigger::PreMerge { dataset: "d".to_string(), sample_size: 20 }.default_sample_size(), 20);
-        assert_eq!(EvalTrigger::NightlyRegression { dataset: "d".to_string() }.default_sample_size(), 100);
-        assert_eq!(EvalTrigger::OnlineSampling { rate: 0.1 }.default_sample_size(), 50);
-        assert_eq!(EvalTrigger::RedTeam { attack_vectors: vec![] }.default_sample_size(), 30);
+        assert_eq!(
+            EvalTrigger::PreMerge {
+                dataset: "d".to_string(),
+                sample_size: 20
+            }
+            .default_sample_size(),
+            20
+        );
+        assert_eq!(
+            EvalTrigger::NightlyRegression {
+                dataset: "d".to_string()
+            }
+            .default_sample_size(),
+            100
+        );
+        assert_eq!(
+            EvalTrigger::OnlineSampling { rate: 0.1 }.default_sample_size(),
+            50
+        );
+        assert_eq!(
+            EvalTrigger::RedTeam {
+                attack_vectors: vec![]
+            }
+            .default_sample_size(),
+            30
+        );
     }
 
     #[test]
     fn eval_trigger_default_pass_thresholds() {
-        assert!((EvalTrigger::PreMerge { dataset: "d".to_string(), sample_size: 20 }.default_pass_threshold() - 0.75).abs() < 1e-6);
-        assert!((EvalTrigger::NightlyRegression { dataset: "d".to_string() }.default_pass_threshold() - 0.80).abs() < 1e-6);
-        assert!((EvalTrigger::OnlineSampling { rate: 0.1 }.default_pass_threshold() - 0.70).abs() < 1e-6);
-        assert!((EvalTrigger::RedTeam { attack_vectors: vec![] }.default_pass_threshold() - 0.60).abs() < 1e-6);
+        assert!(
+            (EvalTrigger::PreMerge {
+                dataset: "d".to_string(),
+                sample_size: 20
+            }
+            .default_pass_threshold()
+                - 0.75)
+                .abs()
+                < 1e-6
+        );
+        assert!(
+            (EvalTrigger::NightlyRegression {
+                dataset: "d".to_string()
+            }
+            .default_pass_threshold()
+                - 0.80)
+                .abs()
+                < 1e-6
+        );
+        assert!(
+            (EvalTrigger::OnlineSampling { rate: 0.1 }.default_pass_threshold() - 0.70).abs()
+                < 1e-6
+        );
+        assert!(
+            (EvalTrigger::RedTeam {
+                attack_vectors: vec![]
+            }
+            .default_pass_threshold()
+                - 0.60)
+                .abs()
+                < 1e-6
+        );
     }
 
     #[test]
     fn eval_trigger_config_builds_defaults() {
-        let config = EvalTriggerConfig::new(EvalTrigger::PreMerge { dataset: "chat_smoke".to_string(), sample_size: 20 }, "chat_smoke");
+        let config = EvalTriggerConfig::new(
+            EvalTrigger::PreMerge {
+                dataset: "chat_smoke".to_string(),
+                sample_size: 20,
+            },
+            "chat_smoke",
+        );
         assert_eq!(config.dataset.dataset_id, "chat_smoke");
         assert_eq!(config.dataset.sample_size, 20);
         assert!((config.pass_threshold - 0.75).abs() < 1e-6);
@@ -1382,12 +1416,13 @@ mod tests {
             dummy_case("hello world", Some("hello world")), // exact_match=1.0, f1=1.0
             dummy_case("foo bar", Some("foo baz")),         // exact_match=0.0, f1<1.0
         ];
-        let evaluators: Vec<Box<dyn Evaluator>> = vec![
-            Box::new(ExactMatchEvaluator),
-            Box::new(F1Evaluator),
-        ];
+        let evaluators: Vec<Box<dyn Evaluator>> =
+            vec![Box::new(ExactMatchEvaluator), Box::new(F1Evaluator)];
         let config = EvalTriggerConfig {
-            trigger: EvalTrigger::PreMerge { dataset: "test".to_string(), sample_size: 2 },
+            trigger: EvalTrigger::PreMerge {
+                dataset: "test".to_string(),
+                sample_size: 2,
+            },
             dataset: EvalDatasetSpec {
                 dataset_id: "test".to_string(),
                 sample_size: 2,
@@ -1396,14 +1431,30 @@ mod tests {
             pass_threshold: 0.75,
             metric_thresholds: BTreeMap::new(),
         };
-        let (run, result) = run_eval_with_trigger("t", "ChatStrategy", "v1", cases, evaluators, config, None)
-            .await
-            .unwrap();
-        assert_eq!(run.trigger, Some(EvalTrigger::PreMerge { dataset: "test".to_string(), sample_size: 2 }));
-        assert!(!run.failures.is_empty(), "expected some failures below 0.75 threshold");
+        let (run, result) =
+            run_eval_with_trigger("t", "ChatStrategy", "v1", cases, evaluators, config, None)
+                .await
+                .unwrap();
+        assert_eq!(
+            run.trigger,
+            Some(EvalTrigger::PreMerge {
+                dataset: "test".to_string(),
+                sample_size: 2
+            })
+        );
+        assert!(
+            !run.failures.is_empty(),
+            "expected some failures below 0.75 threshold"
+        );
         assert!(run.failures.iter().any(|f| f.metric == "exact_match"));
         assert!(run.failures.iter().any(|f| f.metric == "overall"));
-        assert_eq!(result.trigger, EvalTrigger::PreMerge { dataset: "test".to_string(), sample_size: 2 });
+        assert_eq!(
+            result.trigger,
+            EvalTrigger::PreMerge {
+                dataset: "test".to_string(),
+                sample_size: 2
+            }
+        );
         assert!(result.pass_rate >= 0.0 && result.pass_rate <= 1.0);
     }
 
@@ -1414,7 +1465,9 @@ mod tests {
         let mut metric_thresholds = BTreeMap::new();
         metric_thresholds.insert("exact_match".to_string(), 1.01); // impossible
         let config = EvalTriggerConfig {
-            trigger: EvalTrigger::NightlyRegression { dataset: "test".to_string() },
+            trigger: EvalTrigger::NightlyRegression {
+                dataset: "test".to_string(),
+            },
             dataset: EvalDatasetSpec {
                 dataset_id: "test".to_string(),
                 sample_size: 1,
@@ -1423,11 +1476,21 @@ mod tests {
             pass_threshold: 0.5,
             metric_thresholds,
         };
-        let (run, _result) = run_eval_with_trigger("t", "ChatStrategy", "v1", cases, evaluators, config, None)
-            .await
-            .unwrap();
-        assert_eq!(run.trigger, Some(EvalTrigger::NightlyRegression { dataset: "test".to_string() }));
-        assert!(run.failures.iter().any(|f| f.metric == "exact_match" && f.threshold == 1.01));
+        let (run, _result) =
+            run_eval_with_trigger("t", "ChatStrategy", "v1", cases, evaluators, config, None)
+                .await
+                .unwrap();
+        assert_eq!(
+            run.trigger,
+            Some(EvalTrigger::NightlyRegression {
+                dataset: "test".to_string()
+            })
+        );
+        assert!(
+            run.failures
+                .iter()
+                .any(|f| f.metric == "exact_match" && f.threshold == 1.01)
+        );
     }
 
     #[tokio::test]
@@ -1435,7 +1498,9 @@ mod tests {
         let cases = vec![dummy_case("hello world", Some("hello world"))];
         let evaluators: Vec<Box<dyn Evaluator>> = vec![Box::new(ExactMatchEvaluator)];
         let config = EvalTriggerConfig {
-            trigger: EvalTrigger::RedTeam { attack_vectors: vec![] },
+            trigger: EvalTrigger::RedTeam {
+                attack_vectors: vec![],
+            },
             dataset: EvalDatasetSpec {
                 dataset_id: "test".to_string(),
                 sample_size: 1,
@@ -1444,21 +1509,26 @@ mod tests {
             pass_threshold: 0.0, // everything passes
             metric_thresholds: BTreeMap::new(),
         };
-        let (run, result) = run_eval_with_trigger("t", "ChatStrategy", "v1", cases, evaluators, config, None)
-            .await
-            .unwrap();
-        assert!(run.failures.is_empty(), "expected no failures with threshold 0.0");
+        let (run, result) =
+            run_eval_with_trigger("t", "ChatStrategy", "v1", cases, evaluators, config, None)
+                .await
+                .unwrap();
+        assert!(
+            run.failures.is_empty(),
+            "expected no failures with threshold 0.0"
+        );
         assert_eq!(result.pass_rate, 1.0);
     }
 
     #[tokio::test]
     async fn run_eval_with_trigger_comparison_with_baseline() {
-        let cases = vec![
-            dummy_case("hello world", Some("hello world")),
-        ];
+        let cases = vec![dummy_case("hello world", Some("hello world"))];
         let evaluators: Vec<Box<dyn Evaluator>> = vec![Box::new(ExactMatchEvaluator)];
         let config = EvalTriggerConfig {
-            trigger: EvalTrigger::PreMerge { dataset: "test".to_string(), sample_size: 1 },
+            trigger: EvalTrigger::PreMerge {
+                dataset: "test".to_string(),
+                sample_size: 1,
+            },
             dataset: EvalDatasetSpec {
                 dataset_id: "test".to_string(),
                 sample_size: 1,
@@ -1471,15 +1541,32 @@ mod tests {
         // Build a baseline run with lower score.
         let baseline = make_run("base", vec![case_with_score("c1", "exact_match", 0.5)], 0.5);
 
-        let (_run, result) = run_eval_with_trigger("t", "ChatStrategy", "v1", cases, evaluators, config, Some(&baseline))
-            .await
-            .unwrap();
+        let (_run, result) = run_eval_with_trigger(
+            "t",
+            "ChatStrategy",
+            "v1",
+            cases,
+            evaluators,
+            config,
+            Some(&baseline),
+        )
+        .await
+        .unwrap();
 
-        assert!(result.comparison.is_some(), "expected comparison when baseline is provided");
+        assert!(
+            result.comparison.is_some(),
+            "expected comparison when baseline is provided"
+        );
         let comp = result.comparison.unwrap();
         assert_eq!(comp.baseline_run_id, "base");
-        assert!(comp.overall_delta > 0.0, "expected positive delta since candidate improved");
-        assert!(comp.regressions.is_empty(), "expected no regressions since candidate improved");
+        assert!(
+            comp.overall_delta > 0.0,
+            "expected positive delta since candidate improved"
+        );
+        assert!(
+            comp.regressions.is_empty(),
+            "expected no regressions since candidate improved"
+        );
     }
 
     // ---------------- parse_llm_judge_output ----------------

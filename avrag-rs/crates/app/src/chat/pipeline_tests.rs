@@ -33,7 +33,7 @@ mod tests {
             messages: vec![],
             stream: false,
             language: None,
-        format_hint: None,
+            format_hint: None,
         }
     }
 
@@ -57,7 +57,9 @@ mod tests {
         let request = request_with_mode("rag", vec![]);
         let session = session_for("rag");
 
-        let execution = dispatch_mode(&state, &request, &session, None).await.unwrap();
+        let execution = dispatch_mode(&state, &request, &session, None)
+            .await
+            .unwrap();
 
         // Clarify shortcut: no citations, no output guard, mode echoes agent_type.
         assert_eq!(execution.mode, "rag");
@@ -82,7 +84,9 @@ mod tests {
         let mut session = session_for("rag");
         session.notebook_id = notebook.id;
 
-        let execution = dispatch_mode(&state, &request, &session, None).await.unwrap();
+        let execution = dispatch_mode(&state, &request, &session, None)
+            .await
+            .unwrap();
 
         assert_eq!(execution.mode, "rag");
         assert_eq!(execution.response.session_id, session.id);

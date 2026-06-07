@@ -173,6 +173,30 @@ impl BillingConfig {
         }
     }
 
+    /// CNY-only price label for a plan (e.g. "¥49 / 月").
+    ///
+    /// Hard-coded per the Phase-1 spec (Task 3); environment overrides for
+    /// CNY labels are intentionally out of scope. The Free plan returns the
+    /// empty string so the UI can render "Free" without a currency glyph.
+    pub fn price_label_cny_for_plan(&self, plan_id: &str) -> String {
+        match plan_id.trim() {
+            PLAN_PLUS => "¥49 / 月".to_string(),
+            PLAN_PRO => "¥129 / 月".to_string(),
+            _ => String::new(),
+        }
+    }
+
+    /// USD-only price label for a plan (e.g. "$9 / 月").
+    ///
+    /// See [`Self::price_label_cny_for_plan`] for the rationale on hard-coding.
+    pub fn price_label_usd_for_plan(&self, plan_id: &str) -> String {
+        match plan_id.trim() {
+            PLAN_PLUS => "$9 / 月".to_string(),
+            PLAN_PRO => "$19 / 月".to_string(),
+            _ => String::new(),
+        }
+    }
+
     pub fn plan_id_by_price_id(&self, price_id: &str) -> Option<&'static str> {
         let price_id = price_id.trim();
         if price_id.is_empty() {
@@ -201,6 +225,8 @@ pub struct BillingPlan {
     pub name: String,
     pub description: String,
     pub price_label: String,
+    pub price_label_cny: String,
+    pub price_label_usd: String,
     pub interval: String,
     pub checkout_available: bool,
     pub current: bool,

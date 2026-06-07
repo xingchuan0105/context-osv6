@@ -2,22 +2,22 @@
 //!
 //! Run with: cargo test --ignored -p app --test strategy_ingestion_answer -- --test-threads=1
 
-#[path = "strategy_e2e/config.rs"]
-mod config;
-#[path = "strategy_e2e/recording_llm.rs"]
-mod recording_llm;
 #[path = "strategy_e2e/assertions.rs"]
 mod assertions;
+#[path = "strategy_e2e/config.rs"]
+mod config;
 #[path = "strategy_e2e/playwright_helper.rs"]
 mod playwright_helper;
+#[path = "strategy_e2e/recording_llm.rs"]
+mod recording_llm;
 #[path = "strategy_e2e/result_serializer.rs"]
 mod result_serializer;
 
+use app::agents::AgentKind;
 use app::agents::events::CollectingSink;
 use app::agents::react_loop::{LoopBudget, UserTier};
 use app::agents::runtime::AgentRequest;
 use app::agents::strategy::rag::{RagContext, RagStrategy};
-use app::agents::AgentKind;
 use common::ChatTurnInput;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -106,14 +106,13 @@ fn build_run_scoped_rag_components(
         multimodal_vector_dim: 1024,
         metric_type: "COSINE".to_string(),
     };
-    let data_plane: Arc<dyn RetrievalDataPlane> =
-        Arc::new(MilvusDataPlane::new(milvus_config));
+    let data_plane: Arc<dyn RetrievalDataPlane> = Arc::new(MilvusDataPlane::new(milvus_config));
 
-    let rag_config =
-        avrag_rag_core::RagConfig::new_for_data_plane(embedding_client.clone(), None);
-    let rag_runtime = Arc::new(
-        avrag_rag_core::RagRuntime::with_data_plane(rag_config, data_plane.clone()),
-    );
+    let rag_config = avrag_rag_core::RagConfig::new_for_data_plane(embedding_client.clone(), None);
+    let rag_runtime = Arc::new(avrag_rag_core::RagRuntime::with_data_plane(
+        rag_config,
+        data_plane.clone(),
+    ));
 
     Some((rag_runtime, data_plane, embedding_client))
 }
@@ -242,8 +241,9 @@ async fn ingestion_answer_pipeline() {
 
     let run_id = E2EConfig::generate_run_id();
     let collection_prefix = format!("e2e_ingestion_{}", &run_id[..16]).replace("-", "_");
-    let output_dir =
-        std::path::PathBuf::from("tests/e2e_output").join(&run_id).join("ingestion_answer");
+    let output_dir = std::path::PathBuf::from("tests/e2e_output")
+        .join(&run_id)
+        .join("ingestion_answer");
     std::fs::create_dir_all(&output_dir).unwrap();
 
     let _guard = MilvusTestGuard::new(collection_prefix.clone());

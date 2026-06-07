@@ -1148,6 +1148,14 @@ async fn main() -> Result<()> {
                         Ok(false) => info!("worker document cleanup poll completed with no tasks"),
                         Err(error) => info!(error = %error, "worker document cleanup poll failed"),
                     }
+
+                    let billing_repo = std::sync::Arc::new(cleanup_repo.clone());
+                    if let Err(error) = avrag_billing::expire_subscriptions(billing_repo.clone()).await {
+                        warn!(error = %error, "billing expire subscriptions job failed");
+                    }
+                    if let Err(error) = avrag_billing::process_outbox(billing_repo).await {
+                        warn!(error = %error, "billing process outbox job failed");
+                    }
                 }
                 _ = heartbeat_interval.tick() => {
                     if let Some(runner) = analytics_job_runner.as_mut()

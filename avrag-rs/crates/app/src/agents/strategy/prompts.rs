@@ -10,17 +10,41 @@ use crate::agents::progressive::PromptRegistry;
 // Plan-phase system prompt
 // ---------------------------------------------------------------------------
 
+fn collect_dependencies(
+    skill_id: &str,
+    registry: &PromptRegistry,
+    visited: &mut std::collections::HashSet<String>,
+    out: &mut Vec<String>,
+) {
+    if visited.contains(skill_id) {
+        return;
+    }
+    visited.insert(skill_id.to_string());
+
+    if let Some(skill) = registry.skill(skill_id) {
+        for dep in skill.dependencies() {
+            collect_dependencies(dep, registry, visited, out);
+        }
+        let body = skill.system_prompt().trim();
+        if !body.is_empty() {
+            out.push(body.to_string());
+        }
+    }
+}
+
+/// Recursively resolve a skill and all of its dependencies, joining them together.
+pub fn resolve_skill_prompt(skill_id: &str) -> String {
+    let registry = PromptRegistry::standard_cached();
+    let mut visited = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    collect_dependencies(skill_id, registry, &mut visited, &mut out);
+    out.join("\n\n---\n\n")
+}
+
 /// Build the Plan-phase system prompt: planner skill body + tool catalog.
 /// Tool catalog is queried from CapabilityRegistry by phase+strategy.
-pub fn build_plan_system_prompt(
-    planner_skill_id: &str,
-    strategy: &str,
-) -> String {
-    let registry = PromptRegistry::standard_cached();
-    let planner_body = registry
-        .skill(planner_skill_id)
-        .map(|s| s.system_prompt().to_string())
-        .unwrap_or_default();
+pub fn build_plan_system_prompt(planner_skill_id: &str, strategy: &str) -> String {
+    let planner_body = resolve_skill_prompt(planner_skill_id);
 
     // 从 Registry 按 phase+strategy 查询工具目录（含 input_schema 参数）
     let cap_registry = crate::agents::capability::CapabilityRegistry::standard_cached();
@@ -39,7 +63,10 @@ pub fn build_plan_system_prompt(
         .collect();
     let tool_catalog = tool_entries.join("\n\n");
 
-    let mut parts = vec![planner_body];
+    let mut parts = Vec::new();
+    if !planner_body.is_empty() {
+        parts.push(planner_body);
+    }
     if !tool_catalog.is_empty() {
         parts.push(format!("## Available Tools\n\n{tool_catalog}"));
     }
@@ -55,11 +82,7 @@ pub fn build_plan_system_prompt(
             .to_string(),
     );
 
-    if parts.len() == 1 {
-        parts.into_iter().next().unwrap()
-    } else {
-        parts.join("\n\n---\n\n")
-    }
+    parts.join("\n\n---\n\n")
 }
 
 /// Build the Answer-phase system prompt: answer skill body + format skills catalog +
@@ -70,12 +93,12 @@ pub fn build_answer_system_prompt(
     selected_format_skills: &[String],
     selected_writing_styles: &[String],
 ) -> String {
-    let registry = PromptRegistry::standard_cached();
     let mut parts = Vec::new();
 
-    // 1. answer skill 全文（基底）
-    if let Some(skill) = registry.skill(answer_skill_id) {
-        parts.push(skill.system_prompt().to_string());
+    // 1. answer skill 全文（基底，含依赖）
+    let answer_body = resolve_skill_prompt(answer_skill_id);
+    if !answer_body.is_empty() {
+        parts.push(answer_body);
     }
 
     // 2. format 技能目录（Index tier）
@@ -92,8 +115,9 @@ pub fn build_answer_system_prompt(
 
     // 3. 选中的 format skill 全文（Load tier）
     for skill_id in selected_format_skills {
-        if let Some(skill) = registry.skill(skill_id.as_str()) {
-            parts.push(skill.system_prompt().to_string());
+        let prompt = resolve_skill_prompt(skill_id);
+        if !prompt.is_empty() {
+            parts.push(prompt);
         }
     }
 
@@ -110,8 +134,9 @@ pub fn build_answer_system_prompt(
 
     // 5. 选中的 writing style 全文（Load tier）
     for skill_id in selected_writing_styles {
-        if let Some(skill) = registry.skill(skill_id.as_str()) {
-            parts.push(skill.system_prompt().to_string());
+        let prompt = resolve_skill_prompt(skill_id);
+        if !prompt.is_empty() {
+            parts.push(prompt);
         }
     }
 
@@ -121,8 +146,12 @@ pub fn build_answer_system_prompt(
 /// Load a behavior mode skill body into the system prompt if active.
 pub fn load_behavior_mode_skill(behavior_mode: Option<&str>) -> Option<String> {
     let mode = behavior_mode?;
-    let registry = PromptRegistry::standard_cached();
-    registry.skill(mode).map(|s| s.system_prompt().to_string())
+    let prompt = resolve_skill_prompt(mode);
+    if prompt.is_empty() {
+        None
+    } else {
+        Some(prompt)
+    }
 }
 
 /// Format tool input_schema properties as a human-readable parameter list.
@@ -193,13 +222,13 @@ pub fn detect_format_skills(query: &str) -> Vec<&'static str> {
     let mut skills = Vec::new();
     let lower = query.to_lowercase();
     if lower.contains("ppt") || lower.contains("slide") || lower.contains("presentation") {
-        skills.push("presentation-html");
+        skills.push("ppt-generation");
     }
     if lower.contains("html") || lower.contains("web page") || lower.contains("网页") {
         skills.push("html-renderer");
     }
     if lower.contains("teach") || lower.contains("explain") || lower.contains("tutorial") {
-        skills.push("step-by-step-tutor");
+        skills.push("teaching");
     }
     skills
 }

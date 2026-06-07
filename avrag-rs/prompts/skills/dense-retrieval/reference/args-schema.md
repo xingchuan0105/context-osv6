@@ -11,7 +11,7 @@ the runtime at the call boundary.
       "type": "array",
       "items": { "type": "string" },
       "minItems": 1,
-      "description": "One or more standalone semantic queries."
+      "description": "One or more semantic queries."
     },
     "modality": {
       "type": "string",
@@ -35,18 +35,24 @@ the runtime at the call boundary.
 
 ### `queries` (required, array of strings, ≥1)
 
-Each entry is a standalone sentence the embedding model will vectorize.
+Each entry is a query the embedding model will vectorize.
 The runtime does NOT combine them — each query produces its own ranked
 list, and the merger combines via Reciprocal Rank Fusion (RRF).
+
+**Query shaping guidance**:
+- **Prefer full sentences** for broad or conceptual questions: "What is the Barbell strategy in finance?"
+- **Short precise phrases are also valid** for narrow lookups: "Barbell strategy", "session timeout default"
+- **Avoid pure keyword lists** unless you understand the recall bias: "antifragility, taleb, finance" works but is usually suboptimal
+- **Avoid overly long paragraphs** — they waste tokens without improving recall
 
 **Good**:
 - "What is the Barbell strategy in finance?"
 - "Antifragility vs resilience"
 - "Why does Taleb criticize modern finance"
+- "Barbell strategy" (narrow, precise)
 
 **Bad** (caught at runtime or wastes recall):
 - "" (empty string) — runtime error
-- "antifragility, taleb, finance" (keyword list) — works but suboptimal
 - A 200-word paragraph — wastes tokens, no recall gain
 
 ### `modality` (optional, default `"text"`)
@@ -54,12 +60,18 @@ list, and the merger combines via Reciprocal Rank Fusion (RRF).
 - `"text"` (default): text chunks only.
 - `"mm"`: image-bearing chunks only (figures, tables with embedded
   images, OCR'd diagrams).
-- `"both"`: text + image chunks, fused by embedding model. Use
-  when the query might be answered by a figure ("what does the
-  table on page 14 show about channel budgets?").
+- `"both"`: text and image chunks retrieved together, with results
+  merged into a single ranked list via embedding-model fusion.
 
-If the workspace has no image-bearing chunks, `"mm"` and `"both"`
-degrade gracefully to `"text"`.
+**Fusion strategy for `"both"`**:
+- Text chunks and image chunks are embedded through their respective
+  vector spaces, then scores are normalized and merged into a unified
+  ranking. The returned list contains both text and image chunks
+  interleaved by relevance.
+- If the workspace has no image-bearing chunks, `"mm"` and `"both"`
+  degrade gracefully to `"text"`.
+- **Use `"both"` only when image-bearing chunks actually exist.**
+  If the corpus is text-only, `"both"` is equivalent to `"text"`.
 
 ### `top_k` (optional, default 10, range [1, 50])
 

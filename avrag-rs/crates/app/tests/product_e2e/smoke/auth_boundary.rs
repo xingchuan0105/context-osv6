@@ -105,10 +105,8 @@ async fn chat_with_valid_org_but_no_user_id_is_accepted() {
     // boundary. The chat handler may still 4xx for other reasons
     // (no doc_scope, etc.) — we just want to confirm it does NOT 500.
     let ctx = TestContext::new_smoke().await;
-    let bare = bare_client_with_headers(&[
-        ("x-org-id", ORG_ID),
-        ("x-permissions", "external_network"),
-    ]);
+    let bare =
+        bare_client_with_headers(&[("x-org-id", ORG_ID), ("x-permissions", "external_network")]);
 
     let resp = bare
         .post(format!("{}/api/v1/chat", ctx.base_url))
@@ -148,7 +146,10 @@ async fn create_notebook_under_one_org_then_read_under_another_org_returns_404_o
     // to attempt a GET on org-A's notebook.
     let resp = ctx_b
         .http_client
-        .get(format!("{}/api/v1/notebooks/{}", ctx_b.base_url, notebook.id))
+        .get(format!(
+            "{}/api/v1/notebooks/{}",
+            ctx_b.base_url, notebook.id
+        ))
         .send()
         .await
         .unwrap();

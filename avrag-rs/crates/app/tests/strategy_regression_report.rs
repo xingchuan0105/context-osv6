@@ -4,10 +4,10 @@
 //!
 //! Run with: cargo test --ignored -p app --test strategy_regression_report
 
-#[path = "strategy_e2e/recording_llm.rs"]
-mod recording_llm;
 #[path = "strategy_e2e/playwright_helper.rs"]
 mod playwright_helper;
+#[path = "strategy_e2e/recording_llm.rs"]
+mod recording_llm;
 #[path = "strategy_e2e/result_serializer.rs"]
 mod result_serializer;
 
@@ -26,9 +26,9 @@ async fn generate_regression_report() {
             return;
         }
     }
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_name().to_string_lossy().starts_with("e2e_"))
-        .collect();
+    .filter_map(|e| e.ok())
+    .filter(|e| e.file_name().to_string_lossy().starts_with("e2e_"))
+    .collect();
 
     runs.sort_by_key(|e| {
         e.metadata()

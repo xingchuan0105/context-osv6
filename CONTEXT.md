@@ -16,6 +16,12 @@ To maintain semantic consistency across the codebase, tests, and documentation, 
 | **frontend_next** | The main production frontend application built using Next.js 15+, React, TypeScript, Tailwind CSS, and `pnpm`. | Frontend (`frontend_next`) |
 | **RAG Ingestion** | The multi-stage process of converting uploaded documents (PDFs, Markdown, Office Docs) into chunked, normalized representations and indexing them into Milvus/PostgreSQL. | Pipeline (`crates/ingestion` & `bins/worker`) |
 | **E2E Throttling Bypass** | The mechanism where the HTTP rate-limiter is raised to 10,000 RPM when `E2E_ENABLED=true` is set, avoiding HTTP 429 errors during automated testing. | Middleware (`crates/transport-http`) |
+| **Free Tier** | The free billing tier, providing base quota limits for chat, RAG, and document storage. | Billing (`avrag-rs/crates/billing`) |
+| **Plus Tier** | The mid-level subscription tier (replacing the legacy Enterprise tier), offering higher usage quotas and advanced search features. | Billing (`avrag-rs/crates/billing`) |
+| **Pro Tier** | The highest subscription tier, offering maximum execution limits and priority resources. | Billing (`avrag-rs/crates/billing`) |
+| **Creem Provider** | B2C manual subscription billing provider via Creem checkout for global credit cards. | Billing (`avrag-rs/crates/billing`) |
+| **Alipay Provider** | B2C manual subscription billing provider via Alipay precreate QR scan-code for CNY payments. | Billing (`avrag-rs/crates/billing`) |
+| **Lazy Billing Downgrade** | Automatic check and state transition of expired user subscriptions to 'expired' and downgrade to the free tier upon access or API query. | Billing (`avrag-rs/crates/billing`) |
 
 ---
 

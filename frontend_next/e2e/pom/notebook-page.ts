@@ -49,13 +49,12 @@ export class NotebookPage {
     await this.page.waitForLoadState("networkidle");
 
     const targetName = this.lastCreatedName;
-    let cardLocator = this.page.locator(".dashboard-workspace-card").first();
-
-    if (targetName) {
-      cardLocator = this.page.locator(".dashboard-workspace-card", {
-        has: this.page.getByText(targetName),
-      });
+    if (!targetName) {
+      throw new Error("deleteNotebook called but no notebook was created in this test. Call createNotebook first.");
     }
+    const cardLocator = this.page.locator(".dashboard-workspace-card", {
+      has: this.page.getByText(targetName),
+    });
 
     // 打开 action menu（三点按钮）
     await cardLocator.locator(".dashboard-menu-trigger").click();

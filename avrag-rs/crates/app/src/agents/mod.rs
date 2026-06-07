@@ -48,6 +48,7 @@ pub mod eval_framework;
 pub mod evaluator;
 pub mod events;
 pub mod progressive;
+pub mod r#loop;
 pub mod react_loop;
 pub mod redteam;
 pub mod replay;

@@ -2,7 +2,6 @@
 /// per-phase disclosure of Tools and Skills.
 ///
 /// See `docs/agents/progressive-disclosure-framework.md` for architecture.
-
 mod disclosure_unit;
 mod prompt_registry;
 mod skill;
@@ -15,8 +14,7 @@ pub use prompt_registry::PromptRegistry;
 pub use skill::Skill;
 pub use tool::Tool;
 pub use tool_catalog::{
-    atomic_tool_catalog, atomic_tool_catalog_cached,
-    evaluate_calculator_expression,
+    atomic_tool_catalog, atomic_tool_catalog_cached, evaluate_calculator_expression,
     search_specific_tools, search_specific_tools_cached,
 };
 
@@ -49,15 +47,26 @@ mod tests {
         let rendered = tool.render(&ctx);
         assert!(rendered.contains("test_tool"), "missing name: {}", rendered);
         assert!(rendered.contains("2.0"), "missing version: {}", rendered);
-        assert!(rendered.contains("A test tool."), "missing description: {}", rendered);
-        assert!(rendered.contains("\"type\": \"object\""), "missing schema: {}", rendered);
+        assert!(
+            rendered.contains("A test tool."),
+            "missing description: {}",
+            rendered
+        );
+        assert!(
+            rendered.contains("\"type\": \"object\""),
+            "missing schema: {}",
+            rendered
+        );
     }
 
     #[test]
     fn prompt_registry_standard_cached_is_lazy() {
         let r1 = PromptRegistry::standard_cached();
         let r2 = PromptRegistry::standard_cached();
-        assert!(std::ptr::eq(r1, r2), "standard_cached should return the same instance");
+        assert!(
+            std::ptr::eq(r1, r2),
+            "standard_cached should return the same instance"
+        );
     }
 
     #[test]

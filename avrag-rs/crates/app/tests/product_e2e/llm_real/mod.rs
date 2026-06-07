@@ -121,7 +121,10 @@ async fn cost_report_from_artifacts() {
         .join("llm_real");
 
     if !base.exists() {
-        eprintln!("No artifact directory found at {}; no real-LLM tests have been run.", base.display());
+        eprintln!(
+            "No artifact directory found at {}; no real-LLM tests have been run.",
+            base.display()
+        );
         return;
     }
 
@@ -131,7 +134,8 @@ async fn cost_report_from_artifacts() {
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.is_file() && path.file_name() == Some(std::ffi::OsStr::new("metadata.json")) {
+                if path.is_file() && path.file_name() == Some(std::ffi::OsStr::new("metadata.json"))
+                {
                     out.push(path);
                 } else if path.is_dir() {
                     collect_metadata_files(&path, out);
@@ -162,7 +166,11 @@ async fn cost_report_from_artifacts() {
     println!("  Artifact files:     {}", files.len());
     println!("  Tests run:          {}", test_count);
     println!("  Est. cost/test:     ¥{:.4}", approx_cost_per_test);
-    println!("  Est. total cost:    ¥{:.4} ({:.4} USD @ 7.2)", total_cost_cny, total_cost_cny / 7.2);
+    println!(
+        "  Est. total cost:    ¥{:.4} ({:.4} USD @ 7.2)",
+        total_cost_cny,
+        total_cost_cny / 7.2
+    );
     println!("  NOTE: precise token counts not yet available in ChatResponse schema.");
 
     // Monthly budget threshold: ¥10 CNY (~$1.40 USD)

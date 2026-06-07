@@ -6,7 +6,11 @@
 /// 3. `{prompts_dir}/{base_name}.tmpl`
 ///
 /// Returns `None` if no readable non-empty file is found.
-pub async fn load_prompt_template(prompts_dir: &str, version: &str, base_name: &str) -> Option<String> {
+pub async fn load_prompt_template(
+    prompts_dir: &str,
+    version: &str,
+    base_name: &str,
+) -> Option<String> {
     let prompts_dir = std::path::PathBuf::from(prompts_dir.trim());
     let version = version.trim();
     let mut candidates = Vec::new();

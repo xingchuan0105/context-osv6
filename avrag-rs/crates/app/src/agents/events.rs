@@ -88,10 +88,7 @@ pub enum AgentEvent {
         reasoning: String,
     },
     /// Budget consumption tick (white-box observability).
-    BudgetTick {
-        current: u8,
-        max: u8,
-    },
+    BudgetTick { current: u8, max: u8 },
     /// Routing decision event (white-box observability).
     /// Emitted when the router resolves a strategy for the request.
     RoutingDecision {
@@ -115,9 +112,7 @@ pub enum AgentEvent {
     },
     /// Audit record emitted at key security/policy decision points.
     /// Collected by the orchestrator for persistence into the audit log.
-    Audit {
-        record: AuditRecord,
-    },
+    Audit { record: AuditRecord },
 }
 
 /// Classification of state-transition events for white-box observability.
@@ -334,10 +329,7 @@ mod tests {
                 decision: "synthesize".to_string(),
                 reasoning: "sufficient evidence".to_string(),
             },
-            AgentEvent::BudgetTick {
-                current: 1,
-                max: 3,
-            },
+            AgentEvent::BudgetTick { current: 1, max: 3 },
         ];
 
         for event in events {
@@ -351,25 +343,28 @@ mod tests {
     #[tokio::test]
     async fn test_noop_sink() {
         let sink = NoopSink;
-        let _ = sink.emit(AgentEvent::MessageDelta {
-            text: "hello".to_string(),
-        })
-        .await;
+        let _ = sink
+            .emit(AgentEvent::MessageDelta {
+                text: "hello".to_string(),
+            })
+            .await;
         // No panic, no collection.
     }
 
     #[tokio::test]
     async fn test_collecting_sink() {
         let sink = CollectingSink::new();
-        let _ = sink.emit(AgentEvent::Activity {
-            stage: "plan".to_string(),
-            message: "planning".to_string(),
-        })
-        .await;
-        let _ = sink.emit(AgentEvent::MessageDelta {
-            text: "answer".to_string(),
-        })
-        .await;
+        let _ = sink
+            .emit(AgentEvent::Activity {
+                stage: "plan".to_string(),
+                message: "planning".to_string(),
+            })
+            .await;
+        let _ = sink
+            .emit(AgentEvent::MessageDelta {
+                text: "answer".to_string(),
+            })
+            .await;
         let events = sink.events();
         assert_eq!(events.len(), 2);
         assert!(matches!(events[0], AgentEvent::Activity { .. }));

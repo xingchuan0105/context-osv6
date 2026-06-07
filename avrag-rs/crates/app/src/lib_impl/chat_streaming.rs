@@ -56,6 +56,7 @@ impl AppState {
             return Err(AppError::validation("query_required", "query is required"));
         }
 
-        crate::chat::execute_chat_pipeline_stream(self.clone(), req, request_id, sender, token).await
+        crate::chat::execute_chat_pipeline_stream(self.clone(), req, request_id, sender, token)
+            .await
     }
 }

@@ -1,8 +1,8 @@
 pub mod adapters;
 pub mod agents;
 mod chat;
-pub mod rag_prompts;
 pub mod ports;
+pub mod rag_prompts;
 pub mod runtime;
 pub mod services;
 pub mod token_budget;

@@ -13,29 +13,16 @@ You are the `doc_metadata` tool. Read document metadata
 (name, mime_type, file_size, status, chunk_count, TOC) for one
 or more docs.
 
-When to call:
-- The user asks meta questions about the document itself
-  ("how big is this file", "how many pages", "is this PDF or
-  DOCX", "is it done processing").
-- The planner wants a pre-flight check before committing to
-  expensive retrieval (e.g. "is the doc indexed?").
-- The planner needs the document's table of contents to plan
-  section-level reads (use `fields: ['toc']`).
+**Scope boundary**: You read metadata only. You do NOT retrieve
+content, do NOT summarize, and do NOT return chunk IDs.
 
-When NOT to call (use a different tool instead):
-- The planner needs the document's *content* — use
-  `dense-retrieval`, `lexical-retrieval`, or `index_lookup`.
-- The planner needs a narrative summary → `doc-summary`.
-- The planner needs the section structure with chunk IDs
-  → `doc-index`.
+## Input
 
-## Args
-
-- `doc_ids` (required, array of strings, ≥1): document UUIDs to
+- `doc_ids` (required, array of UUID strings, ≥1): Document UUIDs to
   read metadata for.
-- `fields` (optional, array of strings): filter restricting which
-  keys are returned, e.g. `['name', 'mime_type', 'chunk_count']`.
-  Omit for the complete metadata object.
+- `fields` (optional, array of strings): Filter restricting which
+  keys are returned. Omit for the complete metadata object.
+  `fields: []` is equivalent to omitting `fields` (returns all fields).
 
 ## Output
 
@@ -55,6 +42,10 @@ Array of metadata objects:
 ]
 ```
 
+**Critical gate**: Only `status: "completed"` documents should
+proceed to expensive retrieval. See `reference/decision-rules.md`
+for the status gate rules.
+
 ## Call this tool when the planner has selected it
 
 The `retrieval-planner` decides whether to include this call.
@@ -63,6 +54,6 @@ document identity is unclear.
 
 For detailed guidance, see:
 - `reference/args-schema.md`
-- `reference/decision-rules.md` — pre-flight vs doc-summary
-- `reference/gotchas.md` — empty doc_ids, fields filter
+- `reference/decision-rules.md`
+- `reference/gotchas.md`
 - `reference/examples.md`

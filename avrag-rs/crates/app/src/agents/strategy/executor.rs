@@ -214,10 +214,7 @@ impl StrategyExecutor {
                         .await;
 
                     // Emit run-level metric
-                    telemetry::prometheus::observe_agent_run(
-                        &strategy,
-                        total_elapsed_ms as f64,
-                    );
+                    telemetry::prometheus::observe_agent_run(&strategy, total_elapsed_ms as f64);
 
                     return Ok(result);
                 }
@@ -247,7 +244,9 @@ impl StrategyExecutor {
                             total_elapsed_ms: Some(total_elapsed_ms),
                             degrade_trace,
                             final_decision: Some(crate::agents::runtime::FinalDecision::Degraded {
-                                reason: crate::agents::react_loop::DegradeReason::Other(e.display_message()),
+                                reason: crate::agents::react_loop::DegradeReason::Other(
+                                    e.display_message(),
+                                ),
                             }),
                             ..Default::default()
                         };
@@ -270,10 +269,7 @@ impl StrategyExecutor {
                     // Emit error metric
                     telemetry::prometheus::observe_agent_error(&format!("{:?}", e));
                     // Emit run metric (failed)
-                    telemetry::prometheus::observe_agent_run(
-                        &strategy,
-                        total_elapsed_ms as f64,
-                    );
+                    telemetry::prometheus::observe_agent_run(&strategy, total_elapsed_ms as f64);
 
                     return Err(e.into());
                 }

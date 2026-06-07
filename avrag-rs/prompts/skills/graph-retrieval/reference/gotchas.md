@@ -15,7 +15,13 @@
   synthesizer will use both.
 - Triplet orientation matters: `subject-predicate-object` follows
   the direction of the edge in the workspace knowledge graph. A
-  reversed triplet returns no relations.
+  reversed triplet returns no relations. **An empty result does
+  not mean the relationship does not exist** — it may mean the
+  direction was reversed.
 - The `?` placeholder works for ONE unknown slot per triplet.
   For "find all X owned by Y", use `subject: "X"`, `object: "Y"`,
   `predicate: "?"` and let the graph resolve the relation type.
+- If a graph call is too slow or returns too much noise, tighten
+  limits in this order: (1) reduce `hop_limit`, (2) reduce
+  `fan_out_limit`, (3) reduce `relation_limit`. If it is still
+  too noisy, fall back to `dense-retrieval`.
