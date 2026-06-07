@@ -47,6 +47,18 @@
 | **Plus ⭐推荐** | 600,000 | 4,000,000 | 1 : 6.7 | 一周约 450 个问题，深度研究不卡 |
 | **Pro** | 2,500,000 | 15,000,000 | 1 : 6 | 一周约 1800 个问题，重度无忧 |
 
+**5h:7d 比值设计意图（显式说明）**：
+
+- **Free 1:4 偏紧周内**——故意让 Free 用户先撞 7d 墙（周内累计焦虑），再撞 5h 墙（短时爆发焦虑）。这创造"持续被卡"的体感，是 Free→Plus 转化的核心动力。
+- **Plus 1:6.7 更平衡**——付费后给到 5h 充裕感（鼓励深度集中研究），但周内依然有边界（防止滥用）。
+- **Pro 1:6 略偏 5h**——5h 跳变 (4.2×) > 7d 跳变 (3.75×) 是有意的：Pro 卖给"重 burst 用户"（连续几个小时的深度工作），不卖给"全周稳定跑"用户。
+
+**跳变不对称的设计意图**：
+
+- **Free→Plus**：7d 跳变 (10×) > 5h 跳变 (6×)——Plus 主打"周内焦虑消除"
+- **Plus→Pro**：5h 跳变 (4.2×) > 7d 跳变 (3.75×)——Pro 主打"重 burst 解放"
+- 两个升级路径方向**故意不同**：不同用户痛点对应不同升级叙事，避免"Plus/Pro 是同一档只是贵"的感觉。
+
 ### 2.2 价格表（双币种）
 
 | 档位 | CNY | USD | 定位语 |
@@ -98,7 +110,7 @@ GM = 1 − (月成本 ÷ 月收入) ≥ 0.70
 
 ### 4.1 价格对比页 `/pricing`
 
-**布局**（桌面 3 列并排，移动端横向滑动不堆叠）：
+**布局**（桌面 3 列并排，移动端**垂直堆叠 + Plus 卡片 sticky CTA**）：
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -127,7 +139,8 @@ GM = 1 − (月成本 ÷ 月收入) ≥ 0.70
 
 **关键设计点**：
 - Plus 卡片：青色发光边框 + 放大 1.03× + "推荐"角标
-- 三列等宽，移动端保持 3 列**等比缩小**（横向滑动），不堆叠
+- 桌面端：3 列等宽并排
+- 移动端（< 768px）：**垂直堆叠**（3 张卡顺序 Free → Plus → Pro），Plus 卡片底部 **sticky CTA**（"升级 Plus ¥49/月"按钮固定在 viewport 底部），便于用户**在浏览对比时一键升级**
 - 顶部"月付"切换器**仅展示**（hover tooltip "年付即将推出"）
 - 已有 design tokens（`--accent` 青色、`--radius-card`、`--shadow-glow`）可直接复用
 
@@ -192,6 +205,7 @@ GM = 1 − (月成本 ÷ 月收入) ≥ 0.70
 - **不打扰对话流**（不像顶栏常驻）
 - **到决策点才出现**（"决策点触达"原则）
 - toast 关闭状态在 localStorage 记录（同一窗口不再弹）
+- **localStorage 键名必须带 `user_id` 前缀**：`toast_dismissed_{user_id}_{window_type}_{threshold}`，例如 `toast_dismissed_user_abc_5h_80`。否则同一浏览器多账号切换时，A 账号关闭的 toast 会被 B 账号继承，造成混乱。
 
 ### 4.4 限流 Paywall `app/upgrade/paywall`
 
@@ -224,14 +238,15 @@ GM = 1 − (月成本 ÷ 月收入) ≥ 0.70
 - "继续 Free" 按钮**置于左侧次要位置**（不强制升级）
 - 显示**重置倒计时**（如果用户想等）
 - 升级按钮直接跳 Creem / Stripe / Alipay checkout（按 user.region 路由）
+- **复用 `<UsageMeter variant="compact" />`** 嵌入 paywall 顶部的"已用/限额"展示与倒计时，**不要单独维护一套倒计时逻辑**（避免状态不一致）
 
 ## 5. 关键组件清单
 
 | 组件 | 路径 | 复用 |
 |------|------|------|
-| `<UsageMeter variant="full" />` | `components/billing/UsageMeter.tsx` | 用于 4.2 仪表盘双卡 |
-| `<PricingCards currentPlan highlightTier />` | `components/billing/PricingCards.tsx` | 用于 4.1 价格页 + 4.4 paywall |
-| `<PaywallModal reason="5h|7d" />` | `components/billing/PaywallModal.tsx` | 用于 4.4 paywall |
+| `<UsageMeter variant="full\|compact" />` | `components/billing/UsageMeter.tsx` | full 用于 4.2 仪表盘双卡，compact 用于 4.4 paywall 顶部 |
+| `<PricingCards currentPlan highlightTier compact? />` | `components/billing/PricingCards.tsx` | full 用于 4.1 价格页，compact 用于 4.4 paywall |
+| `<PaywallModal reason="5h\|7d" />` | `components/billing/PaywallModal.tsx` | 用于 4.4 paywall |
 | `<UsageForecastCard />` | `components/billing/UsageForecastCard.tsx` | 用于 4.2 仪表盘底部 |
 | `<UsageWarningToast threshold={80\|95} />` | `components/billing/UsageWarningToast.tsx` | 用于 4.3 对话内 toast |
 | `<UsageTrendChart days={7} />` | `components/billing/UsageTrendChart.tsx` | 用于 4.2 折线图 |
@@ -307,9 +322,37 @@ impl BillingConfig {
 | 端点 | 方法 | 用途 |
 |------|------|------|
 | `/api/billing/plans` | GET | 返回三档完整定义（含 quotas、price_label）|
-| `/api/billing/usage/window` | GET | 返回当前用户 5h/7d 实时用量 + 限额 + 重置时间 |
+| `/api/billing/usage/window` | GET | 返回当前用户 5h/7d 实时用量 + 限额 + **`reset_at` 时间戳** |
 | `/api/billing/usage/history` | GET | 返回近 N 日每日 token 消耗（折线图数据）|
 | `/api/billing/usage/forecast` | GET | 返回"按当前用量，本月是否需要升级"建议 |
+
+**`/api/billing/usage/window` 返回结构契约**：
+
+```typescript
+type UsageWindow = {
+  plan_id: "free" | "plus" | "pro";
+  // 5h 滚动窗口
+  rolling_5h: {
+    used: number;          // 已用 token
+    limit: number;         // 限额
+    percentage: number;    // 0-100
+    reset_at: string;      // ISO 8601：基于窗口内最旧消耗点计算的"重置时间"
+    // 例："2026-06-07T18:23:00Z"
+  };
+  // 7d 滚动窗口
+  rolling_7d: {
+    used: number;
+    limit: number;
+    percentage: number;
+    reset_at: string;
+  };
+  // 软/硬限位标识（用于 toast 触发判断）
+  soft_limit_hit: { rolling_5h: boolean; rolling_7d: boolean };  // ≥80%
+  hard_limit_hit: { rolling_5h: boolean; rolling_7d: boolean };  // =100%
+};
+```
+
+> `reset_at` 由**后端**计算（基于窗口内最旧消耗事件的时间戳 + 窗口宽度），前端直接显示倒计时，避免在前端做时区/边界判断。前端只做 `Date(reset_at) - Date.now()` 的简单差值。
 
 > 详细 contract 见后续 writing-plans 阶段输出。
 
@@ -402,6 +445,8 @@ impl BillingConfig {
 - **动态定价**（基于地理/收入/使用模式）
 - **A/B 测试框架**
 
+**冷却期约定**：本设计上线后 **4 周内不启动任何上述排除项的讨论与设计**。原因：本设计的核心 KPI（Free→Plus 转化率）需要至少 4 周数据才能跑出统计显著性，在此期间并行启动新功能设计会分散注意力、污染实验数据。4 周后基于实际数据再评估。
+
 ## 10. 开放问题（需后续对齐）
 
 | 问题 | 备选 | 建议 |
@@ -410,7 +455,7 @@ impl BillingConfig {
 | Free 用户过 quota 后是否还能用"低质量"模式？ | A. 硬限（推荐）/ B. 降级到 V4 Flash-lite 仍可用 | 选 A，强化升级信号 |
 | Paywall 跳 Creem vs Stripe vs Alipay 路由逻辑 | A. 按 IP 地理位置 / B. 按用户上次支付渠道 / C. 用户手动选 | 选 A + 提供切换器 |
 | 现有 0035/0036 migration 是否需要合并重写？ | A. 追加 0037（推荐）/ B. 重写 0035 | 选 A，保持迁移单调 |
-| 用量历史折线图后端存储 | A. 新建表（推荐）/ B. 复用 llm_usage_events 聚合 | 选 A，简单 + 性能可控 |
+| 用量历史折线图后端存储 | A. 新建表（推荐）/ B. 复用 llm_usage_events 聚合 | **选 B（渐进策略）**：先按 `date_trunc('day', created_at)` 在 `llm_usage_events` 上聚合（有 `user_id + created_at` 索引时 100K 日活 < 10ms），上线后第一周监控 P99 latency；若 P99 > 200ms 再迁移到 A（新建预聚合表） |
 
 ## 11. 时间线（粗）
 
