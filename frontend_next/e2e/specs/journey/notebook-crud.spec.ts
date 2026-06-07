@@ -1,29 +1,40 @@
 import { test, expect } from "../../fixtures/run-context";
+import { NotebookPage } from "../../pom/notebook-page";
+import { DashboardPage } from "../../pom/dashboard-page";
+import { resetTestUserData } from "../../utils/api-helpers";
 
 test.describe("Notebook CRUD", () => {
-  test("create rename and delete notebook", async ({ page, runId }) => {
-    // Create
-    const createRes = await page.request.post("/api/v1/notebooks", {
-      data: { name: `crud-test ${runId}`, description: "" },
-    });
-    expect(createRes.status()).toBe(201);
-    const nb = (await createRes.json()).notebook;
+  test.beforeAll(async ({ request }) => {
+    await resetTestUserData(request);
+  });
 
-    // Rename
-    const renameRes = await page.request.patch(`/api/v1/notebooks/${nb.id}`, {
-      data: { name: `crud-test-renamed ${runId}` },
-    });
-    expect(renameRes.status()).toBe(200);
+  test("create rename and delete notebook via UI", async ({ page, runId }) => {
+    const notebook = new NotebookPage(page);
+    const dashboard = new DashboardPage(page);
 
-    // List and verify
-    const listRes = await page.request.get("/api/v1/notebooks");
-    const list = await listRes.json();
-    interface NotebookItem { id: string; name: string; }
-    const found = (list.notebooks as NotebookItem[]).find((n) => n.id === nb.id);
-    expect(found?.name).toBe(`crud-test-renamed ${runId}`);
+    const originalName = `crud-test ${runId}`;
+    const renamedName = `crud-test-renamed ${runId}`;
 
-    // Delete
-    const delRes = await page.request.delete(`/api/v1/notebooks/${nb.id}`);
-    expect(delRes.status()).toBe(200);
+    // Create via UI
+    await notebook.createNotebook(originalName);
+
+    // Verify creation on dashboard
+    await page.goto("/dashboard");
+    await expect(page.getByText(originalName)).toBeVisible();
+
+    // Rename via UI（workspace 内联标题编辑）
+    await notebook.renameNotebook(renamedName);
+
+    // Verify rename on dashboard
+    await page.goto("/dashboard");
+    await expect(page.getByText(renamedName)).toBeVisible();
+    await expect(page.getByText(originalName)).not.toBeVisible();
+
+    // Delete via UI（dashboard action menu）
+    await notebook.deleteNotebook();
+
+    // Verify deletion
+    await page.goto("/dashboard");
+    await expect(page.getByText(renamedName)).not.toBeVisible();
   });
 });
