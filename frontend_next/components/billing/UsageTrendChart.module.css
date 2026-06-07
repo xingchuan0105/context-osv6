@@ -1,0 +1,36 @@
+.chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.line {
+  stroke: hsl(var(--accent));
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dot {
+  fill: hsl(var(--accent));
+}
+
+.grid {
+  stroke: hsl(var(--border-whisper));
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+.yLabel,
+.xLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: hsl(var(--muted-foreground));
+}
+
+.empty {
+  padding: 2rem;
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-body);
+}
