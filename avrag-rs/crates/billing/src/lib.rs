@@ -2,6 +2,7 @@ mod alipay_client;
 mod api;
 mod core;
 mod creem_client;
+mod feature_flag;
 mod stripe_client;
 #[cfg(test)]
 mod tests_impl;
@@ -19,6 +20,7 @@ pub use api::{
     handle_get_usage_window, handle_webhook,
 };
 pub use creem_client::CreemClient;
+pub use feature_flag::PricingRevampFlag;
 pub use stripe_client::StripeClient;
 pub use types::{
     BillingConfig, BillingPlan, BillingPlanQuota, BillingProvider, DailyUsage, LimitHits,
