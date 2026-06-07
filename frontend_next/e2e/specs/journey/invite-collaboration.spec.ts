@@ -1,5 +1,6 @@
 import { test, expect } from "../../fixtures/run-context";
 import { DashboardPage } from "../../pom/dashboard-page";
+import { SharePage } from "../../pom/share-page";
 import { resetTestUserData } from "../../utils/api-helpers";
 
 test.describe("Invite Collaboration", () => {
@@ -10,9 +11,9 @@ test.describe("Invite Collaboration", () => {
   test("user A creates workspace and user B accesses via share link", async ({
     browser,
     page,
-    runId,
   }) => {
     const dashboard = new DashboardPage(page);
+    const share = new SharePage(page);
 
     await page.goto("/dashboard");
     await dashboard.createWorkspace();
@@ -23,18 +24,9 @@ test.describe("Invite Collaboration", () => {
     }
 
     // User A: 进入分享中心，开启公开分享，提取链接
-    await page.goto(`/dashboard/${workspaceId}/share`);
-    const shareToggle = page.getByRole("switch");
-    const isActive = await shareToggle.getAttribute("aria-checked");
-    if (isActive !== "true") {
-      await shareToggle.click();
-    }
-
-    const shareUrlLocator = page.locator("div", {
-      hasText: /\/shared\/kb\//,
-    });
-    await expect(shareUrlLocator).toBeVisible();
-    const shareUrl = (await shareUrlLocator.textContent())?.trim();
+    await share.goto(workspaceId);
+    await share.enableShare();
+    const shareUrl = await share.copyShareLink();
     if (!shareUrl) {
       throw new Error("Share URL not found in page");
     }

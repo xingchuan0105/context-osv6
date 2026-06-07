@@ -9,7 +9,7 @@ test.describe("Analyze Workflow", () => {
     await resetTestUserData(request);
   });
 
-  test("upload document and view analyze insights", async ({ page, runId }) => {
+  test("upload document and view analyze insights", async ({ page }) => {
     const dashboard = new DashboardPage(page);
     const workspace = new WorkspacePage(page);
     const analyze = new AnalyzePage(page);

@@ -5,6 +5,7 @@ export class AnalyzePage {
 
   async goto(workspaceId: string) {
     await this.page.goto(`/dashboard/${workspaceId}/analyze`);
+    // /analyze 实际会重定向到 /share#insights，等待重定向完成
     await this.page.waitForURL(/\/dashboard\/[^/]+\/share/);
   }
 

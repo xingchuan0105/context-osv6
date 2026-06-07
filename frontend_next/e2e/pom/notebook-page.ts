@@ -5,6 +5,7 @@ export class NotebookPage {
 
   constructor(private page: Page) {}
 
+  /** 从 /dashboard 创建 workspace 并通过 inline 编辑设置名称 */
   async createNotebook(name: string) {
     await this.page.goto("/dashboard");
     await this.page.waitForLoadState("networkidle");
@@ -29,6 +30,7 @@ export class NotebookPage {
     this.lastCreatedName = name;
   }
 
+  /** 要求在 workspace 页面（已定位到目标 workspace） */
   async renameNotebook(newName: string) {
     const titleTrigger = this.page.locator("#workspace-title");
     await titleTrigger.waitFor({ state: "visible", timeout: 10_000 });
@@ -41,6 +43,7 @@ export class NotebookPage {
     this.lastCreatedName = newName;
   }
 
+  /** 从 /dashboard 找到最近创建的 workspace 并删除 */
   async deleteNotebook() {
     await this.page.goto("/dashboard");
     await this.page.waitForLoadState("networkidle");

@@ -11,6 +11,7 @@ export class ApiAccessPage {
   async createApiKey(name: string) {
     await this.page.getByLabel(/密钥名称|Key name/i).fill(name);
     await this.page.getByRole("button", { name: /创建密钥/i }).click();
+    // TODO: 待 UI 补充 data-testid 后替换为精确 locator
     await expect(
       this.page.locator(".app-inline-surface").filter({ hasText: name })
     ).toBeVisible();

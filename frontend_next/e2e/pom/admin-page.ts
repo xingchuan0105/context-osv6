@@ -20,7 +20,7 @@ export class AdminPage {
   }
 
   async navigateToOrganizations() {
-    await this.page.getByRole("link", { name: /^组织|Organizations$/i }).first().click();
+    await this.page.getByRole("link", { name: /^(组织|Organizations)$/i }).first().click();
     await this.page.waitForURL(/\/admin\/?$/);
   }
 
