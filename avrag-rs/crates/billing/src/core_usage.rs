@@ -281,23 +281,12 @@ pub(crate) async fn load_user_plan_id(
     repo: Arc<PgAppRepository>,
     user_id: UserId,
 ) -> Result<String> {
-    // Most recent active subscription wins; fall back to "free" so the meter
-    // always renders something (matches get_current_subscription semantics).
-    let row = sqlx::query(
-        r#"
-        select plan_id
-        from subscriptions
-        where user_id = $1 and status = 'active'
-        order by updated_at desc, created_at desc
-        limit 1
-        "#,
-    )
-    .bind(user_id.into_uuid())
-    .fetch_optional(repo.raw())
-    .await?;
-    Ok(row
-        .and_then(|row| row.try_get::<String, _>("plan_id").ok())
-        .unwrap_or_else(|| PLAN_FREE.to_string()))
+    let subscription = get_current_subscription(repo, user_id).await?;
+    if subscription.status == SubscriptionStatus::Active {
+        Ok(subscription.plan_id)
+    } else {
+        Ok(PLAN_FREE.to_string())
+    }
 }
 
 pub(crate) async fn load_usage_window(
@@ -494,13 +483,24 @@ pub(crate) async fn load_usage_forecast(
     let upgrade_recommended = usage_pct_of_limit >= 80.0;
 
     let suggestion_zh = if upgrade_recommended {
-        "按当前用量，本月建议升级到 Plus（7d 限额 4M）".to_string()
+        match plan_id.as_str() {
+            PLAN_PLUS => "按当前用量，本月建议升级到 Pro（7d 无限制）".to_string(),
+            _ => "按当前用量，本月建议升级到 Plus（7d 限额 4M）".to_string(),
+        }
     } else {
         "按当前用量，本月无需升级".to_string()
     };
     let suggestion_en = if upgrade_recommended {
-        "Based on current usage, upgrading to Plus is recommended this month (7d limit: 4M)"
-            .to_string()
+        match plan_id.as_str() {
+            PLAN_PLUS => {
+                "Based on current usage, upgrading to Pro is recommended this month (7d unlimited)"
+                    .to_string()
+            }
+            _ => {
+                "Based on current usage, upgrading to Plus is recommended this month (7d limit: 4M)"
+                    .to_string()
+            }
+        }
     } else {
         "Based on current usage, no upgrade needed this month".to_string()
     };

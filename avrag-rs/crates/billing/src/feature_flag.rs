@@ -8,7 +8,7 @@ impl PricingRevampFlag {
             rollout_percentage: std::env::var("PRICING_REVAMP_ROLLOUT")
                 .ok()
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(100),
+                .unwrap_or(0),
         }
     }
 
@@ -42,5 +42,16 @@ mod tests {
             rollout_percentage: 100,
         };
         assert!(flag.is_enabled_for(uuid::Uuid::new_v4()));
+    }
+
+    #[test]
+    fn from_env_unset_defaults_to_disabled() {
+        // SAFETY: integration-test binary; no parallel env mutation in this file.
+        unsafe {
+            std::env::remove_var("PRICING_REVAMP_ROLLOUT");
+        }
+        let flag = PricingRevampFlag::from_env();
+        assert_eq!(flag.rollout_percentage, 0);
+        assert!(!flag.is_enabled_for(uuid::Uuid::new_v4()));
     }
 }
