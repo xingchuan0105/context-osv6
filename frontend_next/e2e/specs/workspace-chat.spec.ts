@@ -28,7 +28,7 @@ test.describe("Workspace Chat Journey", () => {
     await expect(lastMessage).not.toBeEmpty();
 
     // Verify history persisted — 断言包含当前 runId 的条目存在
-    await workspace.switchToHistoryTab();
+    await workspace.waitForHistoryTabVisible();
     await expect(page.locator(`[data-testid='history-item']:has-text("${runId}")`)).toBeVisible();
   });
 

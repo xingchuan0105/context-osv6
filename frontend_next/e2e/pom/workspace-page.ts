@@ -3,8 +3,8 @@ import { type Page } from "@playwright/test";
 export class WorkspacePage {
   constructor(private page: Page) {}
 
-  async switchToHistoryTab() {
-    // 桌面端 history rail 默认显示，无需点击切换
+  /** 桌面端 history rail 默认显示，只需等待其可见 */
+  async waitForHistoryTabVisible() {
     await this.page.waitForSelector("[data-testid='desktop-history-rail']", { state: "visible" });
   }
 

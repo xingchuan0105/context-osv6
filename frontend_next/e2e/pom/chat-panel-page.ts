@@ -1,12 +1,14 @@
-import { type Page, expect } from "@playwright/test";
+import { type Page, type Locator, expect } from "@playwright/test";
 
 export class ChatPanelPage {
   constructor(private page: Page) {}
 
+  /** 向后兼容的简写：不带模式参数的消息发送 */
   async sendMessage(text: string) {
     await this.ask(text);
   }
 
+  /** 完整消息发送：可选前置设置对话模式 */
   async ask(question: string, mode?: "rag" | "search" | "chat") {
     if (mode) {
       await this.setMode(mode);
@@ -26,6 +28,10 @@ export class ChatPanelPage {
     await this.setMode("search");
   }
 
+  /**
+   * 等待最后一条 assistant 消息的 data-pending 变为 false。
+   * 适用于需要快速确认消息已渲染的场景（timeout 较短）。
+   */
   async waitForResponse(timeout = 30_000) {
     await this.page.waitForSelector(
       '[data-testid="chat-message"][data-role="assistant"][data-pending="false"]',
@@ -33,6 +39,10 @@ export class ChatPanelPage {
     );
   }
 
+  /**
+   * 等待回答完整生成：先等 assistant 消息出现，再等 progress card 消失。
+   * 适用于需要确认流式生成已结束的场景（timeout 较长）。
+   */
   async waitForAnswer(timeoutMs = 120_000) {
     await this.page
       .locator('[data-testid="chat-message"][data-role="assistant"]')
@@ -46,11 +56,11 @@ export class ChatPanelPage {
     }
   }
 
-  getMessages() {
+  getMessages(): Promise<Locator[]> {
     return this.page.locator("[data-testid='chat-message']").all();
   }
 
-  getLastMessage() {
+  getLastMessage(): Locator {
     return this.page.locator("[data-testid='chat-message']").last();
   }
 
@@ -73,7 +83,7 @@ export class ChatPanelPage {
     return bubble.innerHTML();
   }
 
-  getCitationButton() {
+  getCitationButton(): Locator {
     return this.page.locator("[data-testid='citation-button']").first();
   }
 
