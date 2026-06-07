@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getLocale } from "next-intl/server";
+import { redirect } from "next/navigation";
 
+import { isPricingRevampEnabledSSR } from "../../../lib/billing/featureFlag";
 import { normalizeLocale } from "../../../lib/i18n/config";
 import { formatUiMessage } from "../../../lib/i18n/messages";
 import styles from "./success.module.css";
@@ -8,6 +10,9 @@ import styles from "./success.module.css";
 export const dynamic = "force-dynamic";
 
 export default async function UpgradeSuccessPage() {
+  if (!isPricingRevampEnabledSSR()) {
+    redirect("/dashboard");
+  }
   const locale = normalizeLocale(await getLocale());
 
   return (

@@ -68,3 +68,11 @@
   color: hsl(var(--foreground));
   margin: 0;
 }
+
+.errorBanner {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-card);
+  background: hsl(var(--destructive) / 0.1);
+  color: hsl(var(--destructive));
+}

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { isPricingRevampEnabled } from "../../../../lib/billing/featureFlag";
+import { isPricingRevampEnabledSSR } from "../../../../lib/billing/featureFlag";
 import { PaywallPageClient } from "./paywall-page-client";
 
 export const dynamic = "force-dynamic";
@@ -9,9 +9,9 @@ type PaywallPageProps = {
   searchParams: Promise<{ reason?: string }>;
 };
 
+/** Env-only SSR gate; bucket check runs client-side via isPricingRevampEnabled(). */
 export default async function PaywallPage({ searchParams }: PaywallPageProps) {
-  const enabled = await isPricingRevampEnabled();
-  if (!enabled) {
+  if (!isPricingRevampEnabledSSR()) {
     redirect("/dashboard");
   }
 

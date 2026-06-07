@@ -12,32 +12,100 @@ import type {
   UsageHistoryResponse,
   UsageWindowResponse,
 } from "../../../../lib/billing/api";
+import { ApiError } from "../../../../lib/auth/client";
+import {
+  isPricingRevampEnabled,
+  isPricingRevampEnabledSSR,
+  isPricingRevampFeatureDisabledError,
+} from "../../../../lib/billing/featureFlag";
 import { formatUiMessage } from "../../../../lib/i18n/messages";
 import { useUiPreferences } from "../../../../lib/ui-preferences";
 import styles from "./usage.module.css";
 
+type DashboardState =
+  | { kind: "loading" }
+  | { kind: "ready"; window: UsageWindowResponse; history: UsageHistoryResponse; forecast: UsageForecastResponse }
+  | { kind: "error"; messageKey: "usageErrorLoad" };
+
 export function UsageDashboardClient() {
   const router = useRouter();
   const { locale } = useUiPreferences();
-  const [window, setWindow] = useState<UsageWindowResponse | null>(null);
-  const [history, setHistory] = useState<UsageHistoryResponse | null>(null);
-  const [forecast, setForecast] = useState<UsageForecastResponse | null>(null);
+  const [state, setState] = useState<DashboardState>({ kind: "loading" });
 
   useEffect(() => {
-    void Promise.all([
-      billingApi.getUsageWindow(),
-      billingApi.getUsageHistory(7),
-      billingApi.getUsageForecast(),
-    ]).then(([windowData, historyData, forecastData]) => {
-      setWindow(windowData);
-      setHistory(historyData);
-      setForecast(forecastData);
-    });
-  }, []);
+    if (!isPricingRevampEnabledSSR()) {
+      router.replace("/settings");
+      return;
+    }
 
-  if (!window || !history || !forecast) {
+    let cancelled = false;
+
+    async function loadDashboard() {
+      const enabled = await isPricingRevampEnabled();
+      if (cancelled) {
+        return;
+      }
+      if (!enabled) {
+        router.replace("/settings");
+        return;
+      }
+
+      try {
+        const [windowData, historyData, forecastData] = await Promise.all([
+          billingApi.getUsageWindow(),
+          billingApi.getUsageHistory(7),
+          billingApi.getUsageForecast(),
+        ]);
+        if (cancelled) {
+          return;
+        }
+        setState({
+          kind: "ready",
+          window: windowData,
+          history: historyData,
+          forecast: forecastData,
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        if (
+          (error instanceof ApiError && error.code === "feature_disabled") ||
+          isPricingRevampFeatureDisabledError(error)
+        ) {
+          router.replace("/settings");
+          return;
+        }
+        setState({
+          kind: "error",
+          messageKey: "usageErrorLoad",
+        });
+      }
+    }
+
+    void loadDashboard();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  if (state.kind === "loading") {
     return <div className={styles.page}>{formatUiMessage(locale, "usageLoading")}</div>;
   }
+
+  if (state.kind === "error") {
+    return (
+      <div className={styles.page}>
+        <p className={styles.errorBanner}>{formatUiMessage(locale, state.messageKey)}</p>
+        <button type="button" className={styles.upgradeButton} onClick={() => router.push("/dashboard")}>
+          {formatUiMessage(locale, "usageErrorBackDashboard")}
+        </button>
+      </div>
+    );
+  }
+
+  const { window, history, forecast } = state;
 
   return (
     <div className={styles.page}>

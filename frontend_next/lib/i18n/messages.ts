@@ -2350,14 +2350,6 @@ export const UI_MESSAGES = {
     zh: "继续 Free",
     en: "Continue Free",
   },
-  toast5h80: {
-    zh: "5h 用量已用 80%",
-    en: "5h usage at 80%",
-  },
-  toast5h95: {
-    zh: "5h 用量已用 95%",
-    en: "5h usage at 95%",
-  },
   toastUpgradeCta: {
     zh: "升级 Plus 解锁 6× 用量 →",
     en: "Upgrade to Plus for 6× usage →",
@@ -2393,6 +2385,26 @@ export const UI_MESSAGES = {
   usageLoading: {
     zh: "加载中...",
     en: "Loading...",
+  },
+  usageErrorLoad: {
+    zh: "用量数据加载失败，请稍后重试。",
+    en: "Failed to load usage data. Please try again later.",
+  },
+  usageErrorBackDashboard: {
+    zh: "返回工作台",
+    en: "Back to dashboard",
+  },
+  paywallLoading: {
+    zh: "加载中...",
+    en: "Loading...",
+  },
+  paywallErrorLoad: {
+    zh: "无法加载升级信息，请稍后重试。",
+    en: "Unable to load upgrade details. Please try again later.",
+  },
+  paywallErrorBackDashboard: {
+    zh: "返回工作台",
+    en: "Back to dashboard",
   },
   usageCurrentPlanLabel: {
     zh: "当前套餐:",
