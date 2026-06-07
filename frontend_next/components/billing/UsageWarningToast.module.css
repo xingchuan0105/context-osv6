@@ -1,0 +1,59 @@
+.toast {
+  position: fixed;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-radius: var(--radius-control);
+  background: hsl(var(--warning-surface));
+  border: 1px solid hsl(var(--warning-border));
+  color: hsl(var(--warning-foreground));
+  font-size: var(--font-size-caption-strong);
+  box-shadow: var(--shadow-md);
+  max-width: 32rem;
+  width: calc(100% - 2rem);
+}
+
+.urgent {
+  background: hsl(var(--destructive-soft));
+  border-color: hsl(var(--destructive-border));
+  color: hsl(var(--destructive));
+}
+
+.body {
+  flex: 1;
+}
+
+.numbers {
+  font-family: var(--font-mono);
+}
+
+.subline {
+  margin-top: 0.25rem;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-caption);
+}
+
+.upgradeLink {
+  background: none;
+  border: none;
+  padding: 0;
+  color: hsl(var(--accent));
+  cursor: pointer;
+  text-decoration: underline;
+  font: inherit;
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  color: inherit;
+  padding: 0 0.25rem;
+  line-height: 1;
+}
