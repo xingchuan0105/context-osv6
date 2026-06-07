@@ -219,6 +219,29 @@ pub struct BillingPlanQuota {
     pub hard_limit: Option<i64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UsageWindowBucket {
+    pub used: i64,
+    pub limit: i64,
+    pub percentage: i32,
+    pub reset_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct LimitHits {
+    pub rolling_5h: bool,
+    pub rolling_7d: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageWindowResponse {
+    pub plan_id: String,
+    pub rolling_5h: UsageWindowBucket,
+    pub rolling_7d: UsageWindowBucket,
+    pub soft_limit_hit: LimitHits,
+    pub hard_limit_hit: LimitHits,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BillingPlan {
     pub plan_id: String,

@@ -9,6 +9,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/billing/plans", get(get_plans))
         .route("/billing/subscription", get(get_subscription))
         .route("/billing/usage", get(get_usage))
+        .route("/billing/usage/window", get(get_usage_window))
         .route(
             "/billing/checkout-session",
             axum::routing::post(create_checkout),
@@ -80,6 +81,26 @@ async fn get_usage(
         ));
     };
     Json(avrag_billing::handle_get_usage(repo, UserId::from(actor_id.into_uuid())).await)
+}
+
+async fn get_usage_window(
+    Extension(RequestState(state)): Extension<RequestState>,
+) -> Json<ApiResponse<avrag_billing::UsageWindowResponse>> {
+    let Some(repo) = state.pg() else {
+        return Json(ApiResponse::err(
+            "postgres_not_configured",
+            "postgres backend is not configured",
+        ));
+    };
+    let Some(actor_id) = state.auth().actor_id() else {
+        return Json(ApiResponse::err(
+            "authenticated_user_required",
+            "authenticated user required",
+        ));
+    };
+    Json(
+        avrag_billing::handle_get_usage_window(repo, UserId::from(actor_id.into_uuid())).await,
+    )
 }
 
 async fn create_checkout(

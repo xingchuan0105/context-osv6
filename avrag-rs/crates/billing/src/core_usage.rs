@@ -276,3 +276,140 @@ pub(crate) async fn load_customer_id(
             .flatten()
     }))
 }
+
+pub(crate) async fn load_user_plan_id(
+    repo: Arc<PgAppRepository>,
+    user_id: UserId,
+) -> Result<String> {
+    // Most recent active subscription wins; fall back to "free" so the meter
+    // always renders something (matches get_current_subscription semantics).
+    let row = sqlx::query(
+        r#"
+        select plan_id
+        from subscriptions
+        where user_id = $1 and status = 'active'
+        order by updated_at desc, created_at desc
+        limit 1
+        "#,
+    )
+    .bind(user_id.into_uuid())
+    .fetch_optional(repo.raw())
+    .await?;
+    Ok(row
+        .and_then(|row| row.try_get::<String, _>("plan_id").ok())
+        .unwrap_or_else(|| PLAN_FREE.to_string()))
+}
+
+pub(crate) async fn load_usage_window(
+    repo: Arc<PgAppRepository>,
+    user_id: UserId,
+) -> Result<UsageWindowResponse> {
+    let user_uuid = user_id.into_uuid();
+    let plan_id = load_user_plan_id(repo.clone(), user_id).await?;
+
+    // Plan-level 5h/7d caps (0/0 = unlimited, same convention as usage_limit/service.rs).
+    let policy_row = sqlx::query(
+        r#"
+        select rolling_5h_limit_units, rolling_7d_limit_units
+        from usage_limit_plan_policies
+        where plan_id = $1
+        "#,
+    )
+    .bind(&plan_id)
+    .fetch_optional(repo.raw())
+    .await?;
+    let (limit_5h, limit_7d) = policy_row
+        .map(|row| {
+            (
+                row.try_get::<i64, _>("rolling_5h_limit_units").unwrap_or(0),
+                row.try_get::<i64, _>("rolling_7d_limit_units").unwrap_or(0),
+            )
+        })
+        .unwrap_or((0, 0));
+
+    let now = Utc::now();
+    let cutoff_5h = now - Duration::hours(5);
+    let cutoff_7d = now - Duration::days(7);
+
+    let used_5h = sum_usage_units_window(repo.clone(), user_uuid, cutoff_5h).await?;
+    let used_7d = sum_usage_units_window(repo.clone(), user_uuid, cutoff_7d).await?;
+    let oldest_5h = oldest_event_in_window(repo.clone(), user_uuid, cutoff_5h).await?;
+    let oldest_7d = oldest_event_in_window(repo.clone(), user_uuid, cutoff_7d).await?;
+
+    let reset_5h = oldest_5h
+        .map(|t| t + Duration::hours(5))
+        .unwrap_or(now);
+    let reset_7d = oldest_7d
+        .map(|t| t + Duration::days(7))
+        .unwrap_or(now);
+
+    let bucket_5h = build_bucket(used_5h, limit_5h, reset_5h);
+    let bucket_7d = build_bucket(used_7d, limit_7d, reset_7d);
+
+    Ok(UsageWindowResponse {
+        plan_id,
+        rolling_5h: bucket_5h.clone(),
+        rolling_7d: bucket_7d.clone(),
+        soft_limit_hit: LimitHits {
+            rolling_5h: bucket_5h.percentage >= 80,
+            rolling_7d: bucket_7d.percentage >= 80,
+        },
+        hard_limit_hit: LimitHits {
+            rolling_5h: bucket_5h.percentage >= 100,
+            rolling_7d: bucket_7d.percentage >= 100,
+        },
+    })
+}
+
+fn build_bucket(used: i64, limit: i64, reset_at: DateTime<Utc>) -> UsageWindowBucket {
+    let raw = if limit > 0 {
+        (used as f64 / limit as f64) * 100.0
+    } else {
+        0.0
+    };
+    let percentage = raw.round().clamp(0.0, 100.0) as i32;
+    UsageWindowBucket {
+        used,
+        limit,
+        percentage,
+        reset_at,
+    }
+}
+
+async fn sum_usage_units_window(
+    repo: Arc<PgAppRepository>,
+    user_id: uuid::Uuid,
+    since: DateTime<Utc>,
+) -> Result<i64> {
+    let row = sqlx::query(
+        r#"
+        select coalesce(sum(usage_units), 0)::bigint as total
+        from llm_usage_events
+        where user_id = $1 and created_at >= $2
+        "#,
+    )
+    .bind(user_id)
+    .bind(since)
+    .fetch_one(repo.raw())
+    .await?;
+    Ok(row.try_get::<i64, _>("total")?)
+}
+
+async fn oldest_event_in_window(
+    repo: Arc<PgAppRepository>,
+    user_id: uuid::Uuid,
+    since: DateTime<Utc>,
+) -> Result<Option<DateTime<Utc>>> {
+    let row = sqlx::query(
+        r#"
+        select min(created_at) as oldest
+        from llm_usage_events
+        where user_id = $1 and created_at >= $2
+        "#,
+    )
+    .bind(user_id)
+    .bind(since)
+    .fetch_one(repo.raw())
+    .await?;
+    Ok(row.try_get::<Option<DateTime<Utc>>, _>("oldest")?)
+}
