@@ -142,5 +142,27 @@ export default defineConfig({
         storageState: "playwright/.auth/user.json",
       },
     },
+    {
+      name: "billing",
+      testMatch: [/specs\/billing\/(?!visual-regression).*\.spec\.ts/],
+      use: {
+        trace: "retain-on-failure",
+        screenshot: "only-on-failure",
+        video: "retain-on-failure",
+        storageState: "playwright/.auth/user.json",
+      },
+    },
+    {
+      name: "billing-visual",
+      testMatch: [/specs\/billing\/visual-regression\.spec\.ts/],
+      use: {
+        browserName: "chromium",
+        viewport: { width: 1280, height: 800 },
+        storageState: "playwright/.auth/user.json",
+        trace: "off",
+        screenshot: "off",
+        video: "off",
+      },
+    },
   ],
 });
