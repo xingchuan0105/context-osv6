@@ -18,7 +18,8 @@ test.describe("Notebook CRUD", () => {
     // List and verify
     const listRes = await page.request.get("/api/v1/notebooks");
     const list = await listRes.json();
-    const found = list.notebooks.find((n: any) => n.id === nb.id);
+    interface NotebookItem { id: string; name: string; }
+    const found = (list.notebooks as NotebookItem[]).find((n) => n.id === nb.id);
     expect(found?.name).toBe(`crud-test-renamed ${runId}`);
 
     // Delete

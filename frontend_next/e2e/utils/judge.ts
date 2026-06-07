@@ -59,7 +59,7 @@ export async function judgeAnswer(
       },
       {
         role: "user",
-        content: `Question: ${golden.query}\n\nAnswer: ${answer}\n\n${golden.judge_prompt}`,
+        content: `Question: ${golden.query ?? "N/A"}\n\nAnswer: ${answer}\n\n${golden.judge_prompt}`,
       },
     ],
     temperature: 0.0,
@@ -87,7 +87,12 @@ export async function judgeAnswer(
   const raw = jsonMatch ? jsonMatch[0] : content;
 
   try {
-    return JSON.parse(raw) as JudgeResult;
+    const parsed = JSON.parse(raw);
+    // Runtime guard: ensure minimal JudgeResult shape
+    if (typeof parsed.score !== "number" || typeof parsed.reasoning !== "string") {
+      return { score: 0, reasoning: `Judge returned invalid shape: ${content}` };
+    }
+    return parsed as JudgeResult;
   } catch {
     // Fallback: if the model didn't return valid JSON, treat the whole text as reasoning
     return { score: 0, reasoning: `Judge returned non-JSON: ${content}` };
