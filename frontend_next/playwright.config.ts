@@ -116,5 +116,18 @@ export default defineConfig({
         storageState: "playwright/.auth/user.json",
       },
     },
+    {
+      name: "skills",
+      testMatch: [/specs\/skills\/.*\.spec\.ts/],
+      retries: 1,
+      use: {
+        baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
+        locale: "zh-CN",
+        trace: "on-first-retry",
+        video: "on-first-retry",
+        screenshot: "only-on-failure",
+        storageState: "playwright/.auth/user.json",
+      },
+    },
   ],
 });
