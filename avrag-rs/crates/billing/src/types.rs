@@ -242,6 +242,17 @@ pub struct UsageWindowResponse {
     pub hard_limit_hit: LimitHits,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DailyUsage {
+    pub date: String,
+    pub tokens: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageHistoryResponse {
+    pub daily: Vec<DailyUsage>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BillingPlan {
     pub plan_id: String,

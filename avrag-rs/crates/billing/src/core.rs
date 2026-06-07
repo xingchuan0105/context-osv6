@@ -9,10 +9,10 @@ use uuid::Uuid;
 
 use crate::stripe_client::StripeClient;
 use crate::types::{
-    ADMIN_ROLE_SUPER, BillingConfig, BillingProvider, ExistingSubscriptionFields, LimitHits,
-    PLAN_FREE, PLAN_PLUS, PLAN_PRO, STATUS_ACTIVE, STATUS_CANCELED, STATUS_PAST_DUE,
+    ADMIN_ROLE_SUPER, BillingConfig, BillingProvider, DailyUsage, ExistingSubscriptionFields,
+    LimitHits, PLAN_FREE, PLAN_PLUS, PLAN_PRO, STATUS_ACTIVE, STATUS_CANCELED, STATUS_PAST_DUE,
     STATUS_UNPAID, StripeSubscriptionSnapshot, Subscription, SubscriptionStatus,
-    UsageWindowBucket, UsageWindowResponse, WebhookClaim,
+    UsageHistoryResponse, UsageWindowBucket, UsageWindowResponse, WebhookClaim,
 };
 
 include!("core_usage.rs");

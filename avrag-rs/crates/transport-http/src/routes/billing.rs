@@ -1,6 +1,7 @@
 use app::AppState;
-use axum::{Extension, Json, Router, routing::get};
+use axum::{Extension, Json, Router, extract::Query, routing::get};
 use common::{ApiResponse, UserId};
+use serde::Deserialize;
 
 use crate::RequestState;
 
@@ -10,6 +11,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/billing/subscription", get(get_subscription))
         .route("/billing/usage", get(get_usage))
         .route("/billing/usage/window", get(get_usage_window))
+        .route("/billing/usage/history", get(get_usage_history))
         .route(
             "/billing/checkout-session",
             axum::routing::post(create_checkout),
@@ -145,4 +147,35 @@ async fn create_portal(
         ));
     };
     Json(avrag_billing::handle_create_portal(repo, UserId::from(actor_id.into_uuid())).await)
+}
+
+#[derive(Deserialize)]
+struct HistoryParams {
+    days: Option<i32>,
+}
+
+async fn get_usage_history(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Query(params): Query<HistoryParams>,
+) -> Json<ApiResponse<avrag_billing::UsageHistoryResponse>> {
+    let Some(repo) = state.pg() else {
+        return Json(ApiResponse::err(
+            "postgres_not_configured",
+            "postgres backend is not configured",
+        ));
+    };
+    let Some(actor_id) = state.auth().actor_id() else {
+        return Json(ApiResponse::err(
+            "authenticated_user_required",
+            "authenticated user required",
+        ));
+    };
+    Json(
+        avrag_billing::handle_get_usage_history(
+            repo,
+            UserId::from(actor_id.into_uuid()),
+            params.days.unwrap_or(7),
+        )
+        .await,
+    )
 }

@@ -413,3 +413,44 @@ async fn oldest_event_in_window(
     .await?;
     Ok(row.try_get::<Option<DateTime<Utc>>, _>("oldest")?)
 }
+
+pub(crate) async fn load_usage_history(
+    repo: Arc<PgAppRepository>,
+    user_id: UserId,
+    days: i32,
+) -> Result<UsageHistoryResponse> {
+    // Bucket llm_usage_events by day for the last N days. Returns one row
+    // per day that had at least one event. Days with zero events are
+    // omitted — the frontend fills gaps client-side.
+    let user_uuid = user_id.into_uuid();
+    let days = days.clamp(1, 90);
+    let since = Utc::now() - Duration::days(days as i64);
+
+    let rows = sqlx::query(
+        r#"
+        select date_trunc('day', created_at)::date as day,
+               coalesce(sum(usage_units), 0)::bigint as tokens
+        from llm_usage_events
+        where user_id = $1 and created_at >= $2
+        group by day
+        order by day asc
+        "#,
+    )
+    .bind(user_uuid)
+    .bind(since)
+    .fetch_all(repo.raw())
+    .await?;
+
+    let daily = rows
+        .into_iter()
+        .map(|row| {
+            let day: chrono::NaiveDate = row.try_get("day")?;
+            Ok::<_, anyhow::Error>(DailyUsage {
+                date: day.format("%Y-%m-%d").to_string(),
+                tokens: row.try_get::<i64, _>("tokens")?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(UsageHistoryResponse { daily })
+}
