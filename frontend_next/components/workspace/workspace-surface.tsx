@@ -5,8 +5,10 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type Dispatch,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type SetStateAction,
   type TouchEvent as ReactTouchEvent,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -15,7 +17,7 @@ import { ApiError } from "../../lib/auth/client";
 import { useAuth } from "../../lib/auth/context";
 import { billingApi } from "../../lib/billing/api";
 import type { UsageWindowBucket, UsageWindowResponse } from "../../lib/billing/api";
-import { isPricingRevampEnabledClient } from "../../lib/billing/featureFlag";
+import { isPricingRevampEnabled, isPricingRevampEnabledSSR } from "../../lib/billing/featureFlag";
 import { createWorkspace } from "../../lib/dashboard/client";
 import {
   getDefaultWorkspaceTitle,
@@ -50,6 +52,60 @@ function usageWindowPressure(bucket: UsageWindowBucket): number {
     return 0;
   }
   return bucket.used / bucket.limit;
+}
+
+const USAGE_POLL_INTERVAL_MS = 5 * 60 * 1000;
+
+function pickLimitWindowType(
+  hits: { rolling_5h: boolean; rolling_7d: boolean },
+  rolling5h: UsageWindowBucket,
+  rolling7d: UsageWindowBucket,
+): "5h" | "7d" {
+  if (hits.rolling_5h && hits.rolling_7d) {
+    return usageWindowPressure(rolling5h) >= usageWindowPressure(rolling7d) ? "5h" : "7d";
+  }
+  return hits.rolling_5h ? "5h" : "7d";
+}
+
+function applyUsageWindowLimits(
+  usageWindow: UsageWindowResponse,
+  router: ReturnType<typeof useRouter>,
+  setUsageWarning: Dispatch<
+    SetStateAction<{
+      threshold: 80 | 95;
+      percentage: number;
+      windowType: "5h" | "7d";
+      data: UsageWindowResponse;
+    } | null>
+  >,
+) {
+  if (usageWindow.hard_limit_hit.rolling_5h || usageWindow.hard_limit_hit.rolling_7d) {
+    const reason = pickLimitWindowType(
+      usageWindow.hard_limit_hit,
+      usageWindow.rolling_5h,
+      usageWindow.rolling_7d,
+    );
+    router.push(`/upgrade/paywall?reason=${reason}`);
+    return;
+  }
+
+  if (usageWindow.soft_limit_hit.rolling_5h || usageWindow.soft_limit_hit.rolling_7d) {
+    const windowType = pickLimitWindowType(
+      usageWindow.soft_limit_hit,
+      usageWindow.rolling_5h,
+      usageWindow.rolling_7d,
+    );
+    const bucket = windowType === "5h" ? usageWindow.rolling_5h : usageWindow.rolling_7d;
+    setUsageWarning({
+      threshold: bucket.percentage >= 95 ? 95 : 80,
+      percentage: bucket.percentage,
+      windowType,
+      data: usageWindow,
+    });
+    return;
+  }
+
+  setUsageWarning(null);
 }
 
 function useIsMobile() {
@@ -121,6 +177,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     data: UsageWindowResponse;
   } | null>(null);
   const activeResizeCleanupRef = useRef<(() => void) | null>(null);
+  const recheckUsageRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!auth.initialized || !auth.token) {
@@ -161,59 +218,45 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
   }, [auth.initialized, auth.token, locale, workspaceId]);
 
   useEffect(() => {
-    if (!auth.initialized || !auth.token || !auth.user?.id || !isPricingRevampEnabledClient()) {
+    if (!auth.initialized || !auth.token || !auth.user?.id || !isPricingRevampEnabledSSR()) {
       return;
     }
 
     let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
 
-    void billingApi
-      .getUsageWindow()
-      .then((usageWindow) => {
+    async function checkUsage() {
+      const enabled = await isPricingRevampEnabled();
+      if (cancelled || !enabled) {
+        return;
+      }
+
+      try {
+        const usageWindow = await billingApi.getUsageWindow();
         if (cancelled) {
           return;
         }
-
-        if (usageWindow.hard_limit_hit.rolling_5h || usageWindow.hard_limit_hit.rolling_7d) {
-          let reason: "5h" | "7d";
-          if (usageWindow.hard_limit_hit.rolling_5h && usageWindow.hard_limit_hit.rolling_7d) {
-            reason =
-              usageWindowPressure(usageWindow.rolling_5h) >=
-              usageWindowPressure(usageWindow.rolling_7d)
-                ? "5h"
-                : "7d";
-          } else {
-            reason = usageWindow.hard_limit_hit.rolling_5h ? "5h" : "7d";
-          }
-          router.push(`/upgrade/paywall?reason=${reason}`);
-          return;
-        }
-
-        if (usageWindow.soft_limit_hit.rolling_5h) {
-          setUsageWarning({
-            threshold: usageWindow.rolling_5h.percentage >= 95 ? 95 : 80,
-            percentage: usageWindow.rolling_5h.percentage,
-            windowType: "5h",
-            data: usageWindow,
-          });
-          return;
-        }
-
-        if (usageWindow.soft_limit_hit.rolling_7d) {
-          setUsageWarning({
-            threshold: usageWindow.rolling_7d.percentage >= 95 ? 95 : 80,
-            percentage: usageWindow.rolling_7d.percentage,
-            windowType: "7d",
-            data: usageWindow,
-          });
-        }
-      })
-      .catch(() => {
+        applyUsageWindowLimits(usageWindow, router, setUsageWarning);
+      } catch {
         // Ignore transient billing probe failures; workspace remains usable.
-      });
+      }
+    }
+
+    recheckUsageRef.current = () => {
+      void checkUsage();
+    };
+
+    void checkUsage();
+    intervalId = setInterval(() => {
+      void checkUsage();
+    }, USAGE_POLL_INTERVAL_MS);
 
     return () => {
       cancelled = true;
+      recheckUsageRef.current = null;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
     };
   }, [auth.initialized, auth.token, auth.user?.id, router]);
 
@@ -566,7 +609,10 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
                 onSelectCitation={(request) => {
                   workspaceUi.setActiveCitation(request);
                 }}
-                onSessionActivity={() => void reloadSessions(activeSessionId)}
+                onSessionActivity={() => {
+                  recheckUsageRef.current?.();
+                  void reloadSessions(activeSessionId);
+                }}
                 onSessionChange={(sessionId) => {
                   setActiveSessionId(sessionId);
                   workspaceUi.setActiveCitation(null);

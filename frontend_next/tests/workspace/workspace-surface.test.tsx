@@ -96,7 +96,8 @@ vi.mock("../../lib/billing/api", () => ({
 }));
 
 vi.mock("../../lib/billing/featureFlag", () => ({
-  isPricingRevampEnabledClient: () => true,
+  isPricingRevampEnabledSSR: () => true,
+  isPricingRevampEnabled: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock("../../components/workspace/workspace-chat-pane", () => ({
@@ -671,5 +672,18 @@ describe("WorkspaceSurface", () => {
     await waitFor(() => {
       expect(mocks.pushMock).toHaveBeenCalledWith("/upgrade/paywall?reason=7d");
     });
+  });
+
+  it("prefers higher-pressure window when both soft limits hit", async () => {
+    mocks.getUsageWindowMock.mockResolvedValue({
+      plan_id: "free",
+      rolling_5h: { used: 85000, limit: 100000, percentage: 85, reset_at: "2099-01-01T00:00:00Z" },
+      rolling_7d: { used: 390000, limit: 400000, percentage: 97, reset_at: "2099-01-01T00:00:00Z" },
+      soft_limit_hit: { rolling_5h: true, rolling_7d: true },
+      hard_limit_hit: { rolling_5h: false, rolling_7d: false },
+    });
+
+    render(<WorkspaceSurface workspaceId="ws-1" />);
+    await waitFor(() => expect(screen.getByText(/7d 用量已用 97%/)).toBeTruthy());
   });
 });
