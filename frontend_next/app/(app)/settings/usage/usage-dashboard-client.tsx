@@ -3,15 +3,15 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { UsageMeter } from "../../../components/billing/UsageMeter";
-import { UsageTrendChart } from "../../../components/billing/UsageTrendChart";
-import { UsageForecastCard } from "../../../components/billing/UsageForecastCard";
-import { billingApi } from "../../../lib/billing/api";
+import { UsageMeter } from "../../../../components/billing/UsageMeter";
+import { UsageTrendChart } from "../../../../components/billing/UsageTrendChart";
+import { UsageForecastCard } from "../../../../components/billing/UsageForecastCard";
+import { billingApi } from "../../../../lib/billing/api";
 import type {
   UsageForecastResponse,
   UsageHistoryResponse,
   UsageWindowResponse,
-} from "../../../lib/billing/api";
+} from "../../../../lib/billing/api";
 import styles from "./usage.module.css";
 
 export function UsageDashboardClient() {

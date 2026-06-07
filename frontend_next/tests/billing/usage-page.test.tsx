@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 
-vi.mock("../../../lib/billing/api", () => ({
+vi.mock("../../lib/billing/api", () => ({
   billingApi: {
     getUsageWindow: vi.fn().mockResolvedValue({
       plan_id: "free",

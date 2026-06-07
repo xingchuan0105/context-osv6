@@ -1,6 +1,6 @@
 # Pricing Tiers Revamp Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 实施 `2026-06-07-pricing-tiers-revamp-design.md` 定义的三档定价重构（Free/Plus/Pro）+ 4 个前端展示界面（价格页、用量仪表盘、对话 toast、Paywall），5 周分阶段交付。
 
@@ -63,7 +63,7 @@
 - Create: `avrag-rs/migrations/0037_pricing_revamp.down.sql`
 - Test: `avrag-rs/crates/billing/tests/test_migration_0037.rs`
 
-- [ ] **Step 1: 编写失败的测试**
+- [x] **Step 1: 编写失败的测试**
 
 ```rust
 // crates/billing/tests/test_migration_0037.rs
@@ -94,12 +94,12 @@ async fn migration_0037_sets_pricing_revamp_quotas(pool: PgPool) {
 }
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 Run: `cd avrag-rs && cargo test --test test_migration_0037`
 Expected: FAIL with "table quota_limits not found" or "no rows" (migration 0037 not yet created)
 
-- [ ] **Step 3: 编写 up migration**
+- [x] **Step 3: 编写 up migration**
 
 ```sql
 -- migrations/0037_pricing_revamp.up.sql
@@ -131,7 +131,7 @@ SET rolling_5h_limit_units = EXCLUDED.rolling_5h_limit_units,
     rolling_7d_limit_units = EXCLUDED.rolling_7d_limit_units;
 ```
 
-- [ ] **Step 4: 编写 down migration（保证可回滚）**
+- [x] **Step 4: 编写 down migration（保证可回滚）**
 
 ```sql
 -- migrations/0037_pricing_revamp.down.sql
@@ -145,12 +145,12 @@ WHERE plan_id IN ('free', 'plus', 'pro');
 -- quota_limits 数值本就未实质变化，无需回滚
 ```
 
-- [ ] **Step 5: 运行测试验证通过**
+- [x] **Step 5: 运行测试验证通过**
 
 Run: `cd avrag-rs && cargo test --test test_migration_0037`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add avrag-rs/migrations/0037_pricing_revamp.up.sql \
@@ -174,7 +174,7 @@ git commit -m "feat(billing): add migration 0037 for pricing revamp quotas
 - Modify: `avrag-rs/crates/billing/src/types.rs:55-79, 76-79`
 - Test: `avrag-rs/crates/billing/tests/test_billing_config.rs`
 
-- [ ] **Step 1: 编写失败的测试**
+- [x] **Step 1: 编写失败的测试**
 
 ```rust
 // crates/billing/tests/test_billing_config.rs
@@ -197,12 +197,12 @@ fn billing_config_price_label_uses_dual_currency() {
 }
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 Run: `cd avrag-rs && cargo test --test test_billing_config`
 Expected: FAIL with "alipay_price_plus" not found or mismatch
 
-- [ ] **Step 3: 修改 BillingConfig**
+- [x] **Step 3: 修改 BillingConfig**
 
 修改 `crates/billing/src/types.rs`：
 
@@ -238,12 +238,12 @@ std::env::remove_var("ALIPAY_PRICE_PRO");
 let config = BillingConfig::from_env();
 ```
 
-- [ ] **Step 4: 运行测试验证通过**
+- [x] **Step 4: 运行测试验证通过**
 
 Run: `cd avrag-rs && cargo test --test test_billing_config`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add avrag-rs/crates/billing/src/types.rs \
@@ -266,7 +266,7 @@ git commit -m "feat(billing): dual-currency price labels for Plus/Pro
 - Modify: `avrag-rs/crates/billing/src/api.rs:handle_get_plans`
 - Test: `avrag-rs/crates/billing/tests/test_plans_endpoint.rs`
 
-- [ ] **Step 1: 编写失败的测试**
+- [x] **Step 1: 编写失败的测试**
 
 ```rust
 // crates/billing/tests/test_plans_endpoint.rs
@@ -296,12 +296,12 @@ async fn plans_endpoint_marks_current_user_plan() {
 
 > **mock 模式**：参考 `crates/billing/tests/` 已有测试的 mock pattern（如果有 test-kit crate 用法）。
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 Run: `cd avrag-rs && cargo test --test test_plans_endpoint`
 Expected: FAIL with assertion mismatch on price_label format
 
-- [ ] **Step 3: 修改 handle_get_plans**
+- [x] **Step 3: 修改 handle_get_plans**
 
 在 `crates/billing/src/api.rs` 中找到 `handle_get_plans` 函数。修改其组装 BillingPlan 的部分：
 
@@ -344,12 +344,12 @@ pub struct BillingPlan {
 }
 ```
 
-- [ ] **Step 4: 运行测试验证通过**
+- [x] **Step 4: 运行测试验证通过**
 
 Run: `cd avrag-rs && cargo test --test test_plans_endpoint`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add avrag-rs/crates/billing/src/api.rs \
@@ -371,7 +371,7 @@ git commit -m "feat(billing): expose dual-currency price labels in plans endpoin
 - Modify: `avrag-rs/crates/transport-http/src/routes/billing.rs:7-13`
 - Test: `avrag-rs/crates/billing/tests/test_usage_window_endpoint.rs`
 
-- [ ] **Step 1: 编写失败的测试**
+- [x] **Step 1: 编写失败的测试**
 
 ```rust
 // crates/billing/tests/test_usage_window_endpoint.rs
@@ -408,12 +408,12 @@ async fn usage_window_reset_at_uses_oldest_event_in_window() {
 }
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 Run: `cd avrag-rs && cargo test --test test_usage_window_endpoint`
 Expected: FAIL with "UsageWindowResponse not found" 或 "handle_get_usage_window not found"
 
-- [ ] **Step 3: 定义响应类型**
+- [x] **Step 3: 定义响应类型**
 
 在 `crates/billing/src/types.rs` 追加：
 
@@ -444,7 +444,7 @@ pub struct UsageWindowResponse {
 }
 ```
 
-- [ ] **Step 4: 实现 handler**
+- [x] **Step 4: 实现 handler**
 
 在 `crates/billing/src/core_usage.rs` 追加：
 
@@ -504,7 +504,7 @@ pub async fn handle_get_usage_window<R: BillingRepo>(
 
 > `BillingRepo` trait 需新增方法：`get_user_plan_id`, `get_usage_policy`, `sum_usage_in_window`, `oldest_usage_in_window`。参考现有 `crates/billing/src/core_usage.rs` 中的 repository 方法添加。
 
-- [ ] **Step 5: 在 lib.rs 导出**
+- [x] **Step 5: 在 lib.rs 导出**
 
 ```rust
 // crates/billing/src/lib.rs
@@ -512,7 +512,7 @@ pub use core_usage::handle_get_usage_window;
 pub use types::{UsageWindowResponse, UsageWindowBucket, LimitHits};
 ```
 
-- [ ] **Step 6: 在路由表添加**
+- [x] **Step 6: 在路由表添加**
 
 修改 `crates/transport-http/src/routes/billing.rs`：
 
@@ -548,12 +548,12 @@ async fn get_usage_window(
 }
 ```
 
-- [ ] **Step 7: 运行测试验证通过**
+- [x] **Step 7: 运行测试验证通过**
 
 Run: `cd avrag-rs && cargo test --test test_usage_window_endpoint`
 Expected: PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add avrag-rs/crates/billing/src/core_usage.rs \
@@ -577,7 +577,7 @@ git commit -m "feat(billing): add /api/v1/billing/usage/window endpoint
 - Modify: `avrag-rs/crates/transport-http/src/routes/billing.rs`
 - Test: `avrag-rs/crates/billing/tests/test_usage_history_endpoint.rs`
 
-- [ ] **Step 1: 编写失败的测试**
+- [x] **Step 1: 编写失败的测试**
 
 ```rust
 // crates/billing/tests/test_usage_history_endpoint.rs
@@ -593,12 +593,12 @@ async fn usage_history_aggregates_daily_token_usage_from_llm_usage_events() {
 }
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 Run: `cd avrag-rs && cargo test --test test_usage_history_endpoint`
 Expected: FAIL
 
-- [ ] **Step 3: 定义响应类型 + handler**
+- [x] **Step 3: 定义响应类型 + handler**
 
 在 `types.rs` 追加：
 
@@ -643,16 +643,16 @@ async fn daily_token_usage(&self, user_id: UserId, days: i32) -> Result<Vec<Dail
 }
 ```
 
-- [ ] **Step 4: 注册路由 + handler**
+- [x] **Step 4: 注册路由 + handler**
 
 参考 Task 4 Step 6 的模式添加 `get_usage_history` 路由 + handler。
 
-- [ ] **Step 5: 运行测试验证通过**
+- [x] **Step 5: 运行测试验证通过**
 
 Run: `cd avrag-rs && cargo test --test test_usage_history_endpoint`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add avrag-rs/crates/billing/src/core_usage.rs \
@@ -675,7 +675,7 @@ git commit -m "feat(billing): add /api/v1/billing/usage/history endpoint
 - Modify: `avrag-rs/crates/transport-http/src/routes/billing.rs`
 - Test: `avrag-rs/crates/billing/tests/test_usage_forecast_endpoint.rs`
 
-- [ ] **Step 1: 编写失败的测试**
+- [x] **Step 1: 编写失败的测试**
 
 ```rust
 // crates/billing/tests/test_usage_forecast_endpoint.rs
@@ -697,7 +697,7 @@ async fn usage_forecast_says_no_upgrade_needed_when_under_50pct() {
 }
 ```
 
-- [ ] **Step 2-5: 实现（与 Task 5 同模式）**
+- [x] **Step 2-5: 实现（与 Task 5 同模式）**
 
 类型 + handler：
 
@@ -754,7 +754,7 @@ pub async fn handle_get_usage_forecast<R: BillingRepo>(
 }
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add avrag-rs/crates/billing/src/core_usage.rs \
@@ -780,7 +780,7 @@ git commit -m "feat(billing): add /api/v1/billing/usage/forecast endpoint
 - Test: `frontend_next/lib/billing/api.test.ts`
 - Test: `frontend_next/lib/billing/format.test.ts`
 
-- [ ] **Step 1: 编写 format.ts**
+- [x] **Step 1: 编写 format.ts**
 
 ```typescript
 // lib/billing/format.ts
@@ -818,7 +818,7 @@ export function formatPct(pct: number): string {
 }
 ```
 
-- [ ] **Step 2: 编写失败的测试**
+- [x] **Step 2: 编写失败的测试**
 
 ```typescript
 // lib/billing/format.test.ts
@@ -842,12 +842,12 @@ describe("formatCountdown", () => {
 });
 ```
 
-- [ ] **Step 3: 运行测试验证失败**
+- [x] **Step 3: 运行测试验证失败**
 
 Run: `cd frontend_next && pnpm test lib/billing/format.test.ts`
 Expected: FAIL (file not found)
 
-- [ ] **Step 4: 编写 api.ts**
+- [x] **Step 4: 编写 api.ts**
 
 ```typescript
 // lib/billing/api.ts
@@ -923,7 +923,7 @@ export const billingApi = {
 };
 ```
 
-- [ ] **Step 5: 编写失败的 api 测试**
+- [x] **Step 5: 编写失败的 api 测试**
 
 ```typescript
 // lib/billing/api.test.ts
@@ -961,17 +961,17 @@ describe("billingApi.getUsageWindow", () => {
 });
 ```
 
-- [ ] **Step 6: 运行测试验证失败**
+- [x] **Step 6: 运行测试验证失败**
 
 Run: `cd frontend_next && pnpm test lib/billing/format.test.ts lib/billing/api.test.ts`
 Expected: PASS for format, FAIL for api (file not found)
 
-- [ ] **Step 7: 运行测试验证全部通过**
+- [x] **Step 7: 运行测试验证全部通过**
 
 Run: `cd frontend_next && pnpm test lib/billing/format.test.ts lib/billing/api.test.ts`
 Expected: PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add frontend_next/lib/billing/format.ts \
@@ -995,7 +995,7 @@ git commit -m "feat(frontend): add billing API client and formatters
 - Create: `frontend_next/components/billing/UsageMeter.module.css`
 - Test: `frontend_next/components/billing/UsageMeter.test.tsx`
 
-- [ ] **Step 1: 编写失败的测试**
+- [x] **Step 1: 编写失败的测试**
 
 ```tsx
 // components/billing/UsageMeter.test.tsx
@@ -1051,12 +1051,12 @@ describe("UsageMeter", () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试验证失败**
+- [x] **Step 2: 运行测试验证失败**
 
 Run: `cd frontend_next && pnpm test components/billing/UsageMeter.test.tsx`
 Expected: FAIL
 
-- [ ] **Step 3: 编写 CSS Module**
+- [x] **Step 3: 编写 CSS Module**
 
 ```css
 /* components/billing/UsageMeter.module.css */
@@ -1133,7 +1133,7 @@ Expected: FAIL
 .compact .numbers { font-size: var(--font-size-control); }
 ```
 
-- [ ] **Step 4: 编写组件**
+- [x] **Step 4: 编写组件**
 
 ```tsx
 // components/billing/UsageMeter.tsx
@@ -1228,12 +1228,12 @@ export function UsageMeter({ variant, planId, rolling5h, rolling7d, softLimitHit
 }
 ```
 
-- [ ] **Step 5: 运行测试验证通过**
+- [x] **Step 5: 运行测试验证通过**
 
 Run: `cd frontend_next && pnpm test components/billing/UsageMeter.test.tsx`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend_next/components/billing/UsageMeter.tsx \
@@ -1257,7 +1257,7 @@ git commit -m "feat(frontend): add UsageMeter component (full/compact variants)
 - Create: `frontend_next/components/billing/PricingCards.module.css`
 - Test: `frontend_next/components/billing/PricingCards.test.tsx`
 
-- [ ] **Step 1: 编写失败的测试**
+- [x] **Step 1: 编写失败的测试**
 
 ```tsx
 // components/billing/PricingCards.test.tsx
@@ -1301,7 +1301,7 @@ describe("PricingCards", () => {
 });
 ```
 
-- [ ] **Step 2: 编写组件**
+- [x] **Step 2: 编写组件**
 
 ```tsx
 // components/billing/PricingCards.tsx
@@ -1352,7 +1352,7 @@ export function PricingCards({ plans, highlightTier, onSelect, compact = false }
 }
 ```
 
-- [ ] **Step 3: 编写 CSS**
+- [x] **Step 3: 编写 CSS**
 
 ```css
 /* components/billing/PricingCards.module.css */
@@ -1474,12 +1474,12 @@ export function PricingCards({ plans, highlightTier, onSelect, compact = false }
 }
 ```
 
-- [ ] **Step 4: 运行测试验证通过**
+- [x] **Step 4: 运行测试验证通过**
 
 Run: `cd frontend_next && pnpm test components/billing/PricingCards.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend_next/components/billing/PricingCards.tsx \
@@ -1503,7 +1503,7 @@ git commit -m "feat(frontend): add PricingCards component (full/compact variants
 - Create: `frontend_next/components/billing/UsageWarningToast.module.css`
 - Test: `frontend_next/components/billing/UsageWarningToast.test.tsx`
 
-- [ ] **Step 1: 编写失败的测试**
+- [x] **Step 1: 编写失败的测试**
 
 ```tsx
 // components/billing/UsageWarningToast.test.tsx
@@ -1569,7 +1569,7 @@ describe("UsageWarningToast", () => {
 });
 ```
 
-- [ ] **Step 2: 编写组件**
+- [x] **Step 2: 编写组件**
 
 ```tsx
 // components/billing/UsageWarningToast.tsx
@@ -1647,7 +1647,7 @@ export function UsageWarningToast({ threshold, windowType, userId, used, limit, 
 }
 ```
 
-- [ ] **Step 3: 编写 CSS**
+- [x] **Step 3: 编写 CSS**
 
 ```css
 /* components/billing/UsageWarningToast.module.css */
@@ -1712,7 +1712,7 @@ export function UsageWarningToast({ threshold, windowType, userId, used, limit, 
 }
 ```
 
-- [ ] **Step 4: 运行测试 + Commit**
+- [x] **Step 4: 运行测试 + Commit**
 
 Run: `cd frontend_next && pnpm test components/billing/UsageWarningToast.test.tsx`
 Expected: PASS
@@ -1738,7 +1738,7 @@ git commit -m "feat(frontend): add UsageWarningToast (80%/95% thresholds)
 - Create: `frontend_next/components/billing/UsageForecastCard.module.css`
 - Test: `frontend_next/components/billing/UsageForecastCard.test.tsx`
 
-- [ ] **Step 1: 编写失败的测试**
+- [x] **Step 1: 编写失败的测试**
 
 ```tsx
 // components/billing/UsageForecastCard.test.tsx
@@ -1775,7 +1775,7 @@ describe("UsageForecastCard", () => {
 });
 ```
 
-- [ ] **Step 2: 编写组件**
+- [x] **Step 2: 编写组件**
 
 ```tsx
 // components/billing/UsageForecastCard.tsx
@@ -1810,7 +1810,7 @@ export function UsageForecastCard({ suggestion_zh, suggestion_en, upgrade_recomm
 }
 ```
 
-- [ ] **Step 3: 编写 CSS**
+- [x] **Step 3: 编写 CSS**
 
 ```css
 /* components/billing/UsageForecastCard.module.css */
@@ -1833,7 +1833,7 @@ export function UsageForecastCard({ suggestion_zh, suggestion_en, upgrade_recomm
 .detail { margin: 0; font-size: var(--font-size-caption); color: hsl(var(--muted-foreground)); font-family: var(--font-mono); }
 ```
 
-- [ ] **Step 4: 运行测试 + Commit**
+- [x] **Step 4: 运行测试 + Commit**
 
 Run: `cd frontend_next && pnpm test components/billing/UsageForecastCard.test.tsx`
 Expected: PASS
@@ -1854,7 +1854,7 @@ git commit -m "feat(frontend): add UsageForecastCard (upgrade recommendation)"
 - Create: `frontend_next/components/billing/UsageTrendChart.module.css`
 - Test: `frontend_next/components/billing/UsageTrendChart.test.tsx`
 
-- [ ] **Step 1: 编写失败的测试**
+- [x] **Step 1: 编写失败的测试**
 
 ```tsx
 // components/billing/UsageTrendChart.test.tsx
@@ -1885,7 +1885,7 @@ describe("UsageTrendChart", () => {
 });
 ```
 
-- [ ] **Step 2: 编写组件**
+- [x] **Step 2: 编写组件**
 
 ```tsx
 // components/billing/UsageTrendChart.tsx
@@ -1952,7 +1952,7 @@ export function UsageTrendChart({ daily, width = 600, height = 200 }: UsageTrend
 }
 ```
 
-- [ ] **Step 3: 编写 CSS**
+- [x] **Step 3: 编写 CSS**
 
 ```css
 /* components/billing/UsageTrendChart.module.css */
@@ -1993,7 +1993,7 @@ export function UsageTrendChart({ daily, width = 600, height = 200 }: UsageTrend
 }
 ```
 
-- [ ] **Step 4: 运行测试 + Commit**
+- [x] **Step 4: 运行测试 + Commit**
 
 Run: `cd frontend_next && pnpm test components/billing/UsageTrendChart.test.tsx`
 Expected: PASS
@@ -2014,7 +2014,7 @@ git commit -m "feat(frontend): add UsageTrendChart (pure SVG line chart, 7-day d
 - Create: `frontend_next/components/billing/PaywallModal.module.css`
 - Test: `frontend_next/components/billing/PaywallModal.test.tsx`
 
-- [ ] **Step 1: 编写失败的测试**
+- [x] **Step 1: 编写失败的测试**
 
 ```tsx
 // components/billing/PaywallModal.test.tsx
@@ -2051,7 +2051,7 @@ describe("PaywallModal", () => {
 });
 ```
 
-- [ ] **Step 2: 编写组件**
+- [x] **Step 2: 编写组件**
 
 ```tsx
 // components/billing/PaywallModal.tsx
@@ -2104,7 +2104,7 @@ export function PaywallModal({ reason, plans, rolling5h, rolling7d, onSelect, on
 }
 ```
 
-- [ ] **Step 3: 编写 CSS**
+- [x] **Step 3: 编写 CSS**
 
 ```css
 /* components/billing/PaywallModal.module.css */
@@ -2176,7 +2176,7 @@ export function PaywallModal({ reason, plans, rolling5h, rolling7d, onSelect, on
 }
 ```
 
-- [ ] **Step 4: 运行测试 + Commit**
+- [x] **Step 4: 运行测试 + Commit**
 
 Run: `cd frontend_next && pnpm test components/billing/PaywallModal.test.tsx`
 Expected: PASS
@@ -2204,7 +2204,7 @@ git commit -m "feat(frontend): add PaywallModal (reuses UsageMeter compact + Pri
 - Create: `frontend_next/app/(marketing)/pricing/pricing.module.css`
 - Test: `frontend_next/app/(marketing)/pricing/page.test.tsx`
 
-- [ ] **Step 1: 编写失败的测试**
+- [x] **Step 1: 编写失败的测试**
 
 ```tsx
 // app/(marketing)/pricing/page.test.tsx
@@ -2234,7 +2234,7 @@ describe("PricingPage", () => {
 });
 ```
 
-- [ ] **Step 2: 编写 page.tsx**
+- [x] **Step 2: 编写 page.tsx**
 
 ```tsx
 // app/(marketing)/pricing/page.tsx
@@ -2298,7 +2298,7 @@ export default async function PricingPage() {
 }
 ```
 
-- [ ] **Step 3: 编写 CSS**
+- [x] **Step 3: 编写 CSS**
 
 ```css
 /* app/(marketing)/pricing/pricing.module.css */
@@ -2390,7 +2390,7 @@ export default async function PricingPage() {
 }
 ```
 
-- [ ] **Step 4: 运行测试 + Commit**
+- [x] **Step 4: 运行测试 + Commit**
 
 Run: `cd frontend_next && pnpm test app/\(marketing\)/pricing/page.test.tsx`
 Expected: PASS
@@ -2414,7 +2414,7 @@ git commit -m "feat(frontend): add /pricing page with 3-tier cards + FAQ
 - Create: `frontend_next/app/settings/usage/usage.module.css`
 - Test: `frontend_next/app/settings/usage/page.test.tsx`
 
-- [ ] **Step 1: 编写失败的测试**
+- [x] **Step 1: 编写失败的测试**
 
 ```tsx
 // app/settings/usage/page.test.tsx
@@ -2463,7 +2463,7 @@ describe("UsagePage", () => {
 });
 ```
 
-- [ ] **Step 2: 编写 page.tsx**
+- [x] **Step 2: 编写 page.tsx**
 
 ```tsx
 // app/settings/usage/page.tsx
@@ -2536,7 +2536,7 @@ export default async function UsagePage() {
 }
 ```
 
-- [ ] **Step 3: 编写 CSS**
+- [x] **Step 3: 编写 CSS**
 
 ```css
 /* app/settings/usage/usage.module.css */
@@ -2602,7 +2602,7 @@ export default async function UsagePage() {
 }
 ```
 
-- [ ] **Step 4: 运行测试 + Commit**
+- [x] **Step 4: 运行测试 + Commit**
 
 Run: `cd frontend_next && pnpm test app/settings/usage/page.test.tsx`
 Expected: PASS
@@ -2624,7 +2624,7 @@ git commit -m "feat(frontend): add /settings/usage dashboard
 - Create: `frontend_next/app/upgrade/paywall/page.tsx`
 - Create: `frontend_next/app/upgrade/paywall/paywall.module.css`
 
-- [ ] **Step 1: 编写 page.tsx**
+- [x] **Step 1: 编写 page.tsx**
 
 ```tsx
 // app/upgrade/paywall/page.tsx
@@ -2672,7 +2672,7 @@ export default async function PaywallPage({ searchParams }: { searchParams: Prom
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend_next/app/upgrade/paywall/
@@ -2691,7 +2691,7 @@ git commit -m "feat(frontend): add /upgrade/paywall page (full-screen paywall)
 - Create: `frontend_next/app/upgrade/success/page.tsx`
 - Create: `frontend_next/app/upgrade/success/success.module.css`
 
-- [ ] **Step 1: 编写 page.tsx**
+- [x] **Step 1: 编写 page.tsx**
 
 ```tsx
 // app/upgrade/success/page.tsx
@@ -2718,7 +2718,7 @@ export default function UpgradeSuccessPage() {
 }
 ```
 
-- [ ] **Step 2: 编写 CSS**
+- [x] **Step 2: 编写 CSS**
 
 ```css
 /* app/upgrade/success/success.module.css */
@@ -2738,7 +2738,7 @@ export default function UpgradeSuccessPage() {
 .secondaryButton { background: hsl(var(--secondary)); color: hsl(var(--secondary-foreground)); border: 1px solid hsl(var(--border)); }
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend_next/app/upgrade/success/
@@ -2754,7 +2754,7 @@ git commit -m "feat(frontend): add /upgrade/success post-checkout landing page"
 **Files:**
 - Modify: `frontend_next/lib/i18n/messages.ts`
 
-- [ ] **Step 1: 在 UI_MESSAGES 中追加以下条目**
+- [x] **Step 1: 在 UI_MESSAGES 中追加以下条目**
 
 ```typescript
 // 追加到 lib/i18n/messages.ts 的 UI_MESSAGES 对象内
@@ -2796,12 +2796,12 @@ toastClose: { zh: "关闭", en: "Close" },
 toastResetsIn: { zh: "还有 {time} 重置", en: "Resets in {time}" },
 ```
 
-- [ ] **Step 2: 验证 i18n 完整覆盖**
+- [x] **Step 2: 验证 i18n 完整覆盖**
 
 Run: `cd frontend_next && pnpm tsc --noEmit 2>&1 | head -20`
 Expected: 0 errors
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend_next/lib/i18n/messages.ts
@@ -2820,7 +2820,7 @@ git commit -m "feat(frontend): add i18n entries for pricing/usage/paywall/toast
 - Modify: `frontend_next/components/workspace/workspace-shell.tsx`（或 chat 组件，找到合适位置）
 - Test: `frontend_next/components/workspace/workspace-shell.test.tsx`（新建或追加）
 
-- [ ] **Step 1: 定位 workspace shell**
+- [x] **Step 1: 定位 workspace shell**
 
 ```bash
 cd frontend_next && grep -rln "useChat\|ChatPanel\|workspace-shell" components/ | head -5
@@ -2828,7 +2828,7 @@ cd frontend_next && grep -rln "useChat\|ChatPanel\|workspace-shell" components/ 
 
 确认 `workspace-shell.tsx` 或类似文件存在。
 
-- [ ] **Step 2: 添加 toast 渲染逻辑**
+- [x] **Step 2: 添加 toast 渲染逻辑**
 
 在 workspace shell 的 layout 中追加：
 
@@ -2882,7 +2882,7 @@ return (
 
 > **注意**：若项目已有 user/session 获取方式（context），复用它，**不要**另起一次 `/api/v1/auth/me` 请求。
 
-- [ ] **Step 3: 写测试**
+- [x] **Step 3: 写测试**
 
 ```tsx
 // components/workspace/workspace-shell.test.tsx
@@ -2913,7 +2913,7 @@ describe("WorkspaceShell toast integration", () => {
 
 > 测试具体根据现有 shell 的 props 调整。
 
-- [ ] **Step 4: 跑测试 + Commit**
+- [x] **Step 4: 跑测试 + Commit**
 
 ```bash
 cd frontend_next && pnpm test components/workspace/workspace-shell.test.tsx
@@ -2935,7 +2935,7 @@ git commit -m "feat(workspace): show 80%/95% usage warning toast
 **Files:**
 - Create: `frontend_next/e2e/pom/BillingPage.ts`
 
-- [ ] **Step 1: 编写 POM**
+- [x] **Step 1: 编写 POM**
 
 ```typescript
 // e2e/pom/BillingPage.ts
@@ -2987,7 +2987,7 @@ export class PaywallPage {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend_next/e2e/pom/BillingPage.ts
@@ -3003,7 +3003,7 @@ git commit -m "test(e2e): add BillingPage POM (PricingPage/UsagePage/PaywallPage
 - Create: `frontend_next/e2e/specs/billing/usage-dashboard.spec.ts`
 - Create: `frontend_next/e2e/specs/billing/paywall-flow.spec.ts`
 
-- [ ] **Step 1: 编写价格页 E2E**
+- [x] **Step 1: 编写价格页 E2E**
 
 ```typescript
 // e2e/specs/billing/pricing-page.spec.ts
@@ -3038,7 +3038,7 @@ test.describe("Pricing page", () => {
 });
 ```
 
-- [ ] **Step 2: 编写用量仪表盘 E2E**
+- [x] **Step 2: 编写用量仪表盘 E2E**
 
 ```typescript
 // e2e/specs/billing/usage-dashboard.spec.ts
@@ -3076,7 +3076,7 @@ test.describe("Usage dashboard", () => {
 });
 ```
 
-- [ ] **Step 3: 编写 paywall E2E**
+- [x] **Step 3: 编写 paywall E2E**
 
 ```typescript
 // e2e/specs/billing/paywall-flow.spec.ts
@@ -3100,12 +3100,12 @@ test.describe("Paywall flow", () => {
 });
 ```
 
-- [ ] **Step 4: 运行 E2E**
+- [x] **Step 4: 运行 E2E**
 
 Run: `cd frontend_next && pnpm playwright test e2e/specs/billing/`
 Expected: all pass (with backend running and seeded data)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend_next/e2e/specs/billing/ frontend_next/e2e/pom/BillingPage.ts
@@ -3124,7 +3124,7 @@ git commit -m "test(e2e): add billing E2E for pricing/usage/paywall
 - Create: `frontend_next/e2e/specs/billing/dark-mode.spec.ts`
 - Create: `frontend_next/e2e/specs/billing/visual-regression.spec.ts`（可选）
 
-- [ ] **Step 1: 暗色模式 E2E**
+- [x] **Step 1: 暗色模式 E2E**
 
 ```typescript
 // e2e/specs/billing/dark-mode.spec.ts
@@ -3160,7 +3160,7 @@ test.describe("Dark mode", () => {
 });
 ```
 
-- [ ] **Step 2: 视觉回归（用 Playwright snapshot diff）**
+- [x] **Step 2: 视觉回归（用 Playwright snapshot diff）**
 
 ```typescript
 // e2e/specs/billing/visual-regression.spec.ts
@@ -3196,7 +3196,7 @@ for (const vp of VIEWPORTS) {
 }
 ```
 
-- [ ] **Step 3: 跑测试 + Commit**
+- [x] **Step 3: 跑测试 + Commit**
 
 Run: `cd frontend_next && pnpm playwright test e2e/specs/billing/dark-mode.spec.ts e2e/specs/billing/visual-regression.spec.ts`
 
@@ -3221,7 +3221,7 @@ git commit -m "test(e2e): dark mode + visual regression for billing pages
 - Modify: `avrag-rs/crates/transport-http/src/routes/billing.rs`（按 flag 决定路由）
 - Create: `frontend_next/lib/billing/featureFlag.ts`
 
-- [ ] **Step 1: 后端 feature flag**
+- [x] **Step 1: 后端 feature flag**
 
 ```rust
 // crates/billing/src/feature_flag.rs
@@ -3247,7 +3247,7 @@ impl PricingRevampFlag {
 }
 ```
 
-- [ ] **Step 2: 路由层 gate**
+- [x] **Step 2: 路由层 gate**
 
 在 `routes/billing.rs`：
 
@@ -3264,7 +3264,7 @@ async fn get_usage_window(...) -> ... {
 }
 ```
 
-- [ ] **Step 3: 前端 fallback**
+- [x] **Step 3: 前端 fallback**
 
 ```typescript
 // lib/billing/featureFlag.ts
@@ -3288,7 +3288,7 @@ if (!enabled) {
 }
 ```
 
-- [ ] **Step 4: 灰度执行 SOP（文档）**
+- [x] **Step 4: 灰度执行 SOP（文档）**
 
 在 `docs/ops/2026-06-14-pricing-revamp-rollout.md` 记录：
 
@@ -3313,7 +3313,7 @@ if (!enabled) {
 - 旧 UI 自动接管
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add avrag-rs/crates/billing/src/feature_flag.rs \

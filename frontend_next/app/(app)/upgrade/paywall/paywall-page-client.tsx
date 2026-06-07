@@ -3,11 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { PaywallModal } from "../../../components/billing/PaywallModal";
-import { billingApi } from "../../../lib/billing/api";
-import type { BillingPlan, UsageWindowResponse } from "../../../lib/billing/api";
-import { createCheckoutSession } from "../../../lib/settings/client";
-import { useAuth } from "../../../lib/auth/context";
+import { PaywallModal } from "../../../../components/billing/PaywallModal";
+import { billingApi } from "../../../../lib/billing/api";
+import type { BillingPlan, UsageWindowResponse } from "../../../../lib/billing/api";
+import { createCheckoutSession } from "../../../../lib/settings/client";
+import { useAuth } from "../../../../lib/auth/context";
 
 export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
   const auth = useAuth();

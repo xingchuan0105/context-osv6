@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { isPricingRevampEnabled } from "../../../lib/billing/featureFlag";
+import { isPricingRevampEnabled } from "../../../../lib/billing/featureFlag";
 import { PaywallPageClient } from "./paywall-page-client";
 
 export const dynamic = "force-dynamic";
