@@ -1,0 +1,70 @@
+.page {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-bold);
+  color: hsl(var(--foreground));
+  margin: 0;
+}
+
+.upgradeButton {
+  background: hsl(var(--cta-background));
+  color: hsl(var(--cta-foreground));
+  border: none;
+  border-radius: var(--radius-button);
+  padding: 0.5rem 1rem;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+.upgradeButton:hover {
+  background: hsl(var(--cta-background-hover));
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.currentPlan {
+  margin: 0;
+  font-size: var(--font-size-body);
+  color: hsl(var(--muted-foreground));
+}
+
+.upgradeHint {
+  color: hsl(var(--accent));
+  font-weight: var(--font-weight-semibold);
+}
+
+.meters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+@media (max-width: 768px) {
+  .meters {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sectionTitle {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-section-title);
+  color: hsl(var(--foreground));
+  margin: 0;
+}
