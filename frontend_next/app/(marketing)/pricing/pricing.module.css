@@ -1,0 +1,86 @@
+.page {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+.header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-size: clamp(1.875rem, 4vw, 2.5rem);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-title);
+  color: hsl(var(--foreground));
+  margin: 0;
+}
+
+.billingToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: var(--font-size-caption-strong);
+}
+
+.toggleButton {
+  background: hsl(var(--secondary));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-button);
+  padding: 0.5rem 1rem;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.toggleActive {
+  background: hsl(var(--cta-background));
+  color: hsl(var(--cta-foreground));
+  border-color: hsl(var(--cta-background));
+}
+
+.toggleHint {
+  color: hsl(var(--subtle-foreground));
+  font-size: var(--font-size-caption);
+}
+
+.faq {
+  max-width: 48rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.faqTitle {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-title-sm);
+  color: hsl(var(--foreground));
+  margin: 0 0 0.5rem;
+}
+
+.faqItem {
+  border: 1px solid hsl(var(--border-whisper));
+  border-radius: var(--radius-control);
+  padding: 0.75rem 1rem;
+  background: hsl(var(--card));
+}
+
+.faqItem summary {
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  color: hsl(var(--foreground));
+}
+
+.faqItem p {
+  margin: 0.5rem 0 0;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-body);
+}
