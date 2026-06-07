@@ -25,6 +25,14 @@ export function formatCountdown(ms: number): string {
   return `${m}m`;
 }
 
+/** Compact token count; limit <= 0 means unlimited (Pro tier). */
+export function formatLimitToken(n: number, unlimitedLabel: string): string {
+  if (n <= 0) {
+    return unlimitedLabel;
+  }
+  return formatCompactToken(n);
+}
+
 /** 百分比保留 0 位小数 */
 export function formatPct(pct: number): string {
   return `${Math.round(pct)}%`;

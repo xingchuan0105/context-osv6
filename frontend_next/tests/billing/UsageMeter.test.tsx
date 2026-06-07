@@ -7,12 +7,13 @@ describe("UsageMeter", () => {
     render(
       <UsageMeter
         variant="full"
+        locale="zh-CN"
         planId="free"
         rolling5h={{ used: 80000, limit: 100000, percentage: 80, reset_at: "2026-06-07T20:00:00Z" }}
         rolling7d={{ used: 200000, limit: 400000, percentage: 50, reset_at: "2026-06-10T00:00:00Z" }}
         softLimitHit={{ rolling_5h: true, rolling_7d: false }}
         hardLimitHit={{ rolling_5h: false, rolling_7d: false }}
-      />
+      />,
     );
     expect(screen.getByText(/5 小时窗口/)).toBeTruthy();
     expect(screen.getByText(/7 天窗口/)).toBeTruthy();
@@ -23,28 +24,45 @@ describe("UsageMeter", () => {
     render(
       <UsageMeter
         variant="compact"
+        locale="zh-CN"
         planId="free"
         rolling5h={{ used: 100000, limit: 100000, percentage: 100, reset_at: "2026-06-07T20:00:00Z" }}
         rolling7d={{ used: 100000, limit: 400000, percentage: 25, reset_at: "2026-06-10T00:00:00Z" }}
         softLimitHit={{ rolling_5h: true, rolling_7d: false }}
         hardLimitHit={{ rolling_5h: true, rolling_7d: false }}
-      />
+      />,
     );
     expect(screen.queryByText(/5 小时窗口/)).toBeNull();
-    expect(screen.getAllByRole("progressbar").length).toBe(2);  // 5h + 7d
+    expect(screen.getAllByRole("progressbar").length).toBe(2);
   });
 
   it("shows warning text when soft limit hit", () => {
     render(
       <UsageMeter
         variant="full"
+        locale="zh-CN"
         planId="free"
         rolling5h={{ used: 80000, limit: 100000, percentage: 80, reset_at: "2026-06-07T20:00:00Z" }}
         rolling7d={{ used: 100000, limit: 400000, percentage: 25, reset_at: "2026-06-10T00:00:00Z" }}
         softLimitHit={{ rolling_5h: true, rolling_7d: false }}
         hardLimitHit={{ rolling_5h: false, rolling_7d: false }}
-      />
+      />,
     );
     expect(screen.getByText(/已超过软上限/)).toBeTruthy();
+  });
+
+  it("shows unlimited label when limit is zero", () => {
+    render(
+      <UsageMeter
+        variant="full"
+        locale="zh-CN"
+        planId="pro"
+        rolling5h={{ used: 500000, limit: 0, percentage: 0, reset_at: "2026-06-07T20:00:00Z" }}
+        rolling7d={{ used: 2000000, limit: 0, percentage: 0, reset_at: "2026-06-10T00:00:00Z" }}
+        softLimitHit={{ rolling_5h: false, rolling_7d: false }}
+        hardLimitHit={{ rolling_5h: false, rolling_7d: false }}
+      />,
+    );
+    expect(screen.getAllByText("无限制").length).toBe(2);
   });
 });

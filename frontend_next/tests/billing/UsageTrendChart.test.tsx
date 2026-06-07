@@ -11,14 +11,14 @@ const daily = [
 
 describe("UsageTrendChart", () => {
   it("renders an SVG with one polyline per data point", () => {
-    const { container } = render(<UsageTrendChart daily={daily} />);
+    const { container } = render(<UsageTrendChart daily={daily} locale="zh-CN" />);
     const polyline = container.querySelector("polyline");
     expect(polyline).toBeTruthy();
     expect(polyline?.getAttribute("points")?.split(" ").length).toBe(4);
   });
 
   it("renders date labels on x-axis", () => {
-    render(<UsageTrendChart daily={daily} />);
+    render(<UsageTrendChart daily={daily} locale="zh-CN" />);
     expect(screen.getByText("06-01")).toBeTruthy();
     expect(screen.getByText("06-04")).toBeTruthy();
   });

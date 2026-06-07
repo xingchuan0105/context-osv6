@@ -2370,6 +2370,74 @@ export const UI_MESSAGES = {
     zh: "还有 {time} 重置",
     en: "Resets in {time}",
   },
+  toastUsageAt: {
+    zh: "{window} 用量已用 {pct}%",
+    en: "{window} usage at {pct}%",
+  },
+  pricingFaqTitle: {
+    zh: "❓ 常见问题",
+    en: "❓ FAQ",
+  },
+  pricingUpgradeTo: {
+    zh: "升级 {name}",
+    en: "Upgrade to {name}",
+  },
+  pricingMonthlyInterval: {
+    zh: "月付",
+    en: "Monthly billing",
+  },
+  paywallResetHint: {
+    zh: "限额自动重置，请关注使用节奏",
+    en: "Limits reset automatically — pace your usage",
+  },
+  usageLoading: {
+    zh: "加载中...",
+    en: "Loading...",
+  },
+  usageCurrentPlanLabel: {
+    zh: "当前套餐:",
+    en: "Current plan:",
+  },
+  usageFreeUpgradeHint: {
+    zh: "→ Free 升级 Plus 解锁 10× 用量",
+    en: "→ Upgrade Free to Plus for 10× usage",
+  },
+  usageUnlimited: {
+    zh: "无限制",
+    en: "Unlimited",
+  },
+  usageForecastDetail: {
+    zh: "预计 30 天用量 {projected} / 7d 限额 {limit}",
+    en: "Projected 30-day usage {projected} / 7d limit {limit}",
+  },
+  usageTrendEmpty: {
+    zh: "暂无用量数据",
+    en: "No usage data yet",
+  },
+  usageTrendAriaLabel: {
+    zh: "近 N 日用量趋势",
+    en: "Recent usage trend",
+  },
+  upgradeSuccessTitle: {
+    zh: "升级成功",
+    en: "Upgrade successful",
+  },
+  upgradeSuccessSubtitle: {
+    zh: "新档位已立即生效，祝你用得开心。",
+    en: "Your new plan is active. Enjoy!",
+  },
+  upgradeSuccessBack: {
+    zh: "返回工作区",
+    en: "Back to workspace",
+  },
+  upgradeSuccessViewUsage: {
+    zh: "查看用量",
+    en: "View usage",
+  },
+  usageUpgradeRecommendedPro: {
+    zh: "按当前用量，本月建议升级到 Pro",
+    en: "Based on usage, upgrading to Pro is recommended",
+  },
 } satisfies Record<string, UiMessageDescriptor>;
 
 export type UiMessageKey = keyof typeof UI_MESSAGES;

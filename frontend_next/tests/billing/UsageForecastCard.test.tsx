@@ -1,15 +1,12 @@
 import { render, screen } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { UsageForecastCard } from "../../components/billing/UsageForecastCard";
-
-vi.mock("next-intl", () => ({
-  useLocale: () => "zh-CN",
-}));
 
 describe("UsageForecastCard", () => {
   it("shows upgrade recommendation when flagged", () => {
     render(
       <UsageForecastCard
+        locale="zh-CN"
         suggestion_zh="按当前用量，本月建议升级到 Plus（7d 限额 4M）"
         suggestion_en="Based on current usage, upgrading to Plus is recommended"
         upgrade_recommended={true}
@@ -23,6 +20,7 @@ describe("UsageForecastCard", () => {
   it("shows no-upgrade message when under threshold", () => {
     render(
       <UsageForecastCard
+        locale="zh-CN"
         suggestion_zh="按当前用量，本月无需升级"
         suggestion_en="Based on current usage, no upgrade needed"
         upgrade_recommended={false}

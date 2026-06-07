@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import styles from "./UsageWarningToast.module.css";
-import { formatCompactToken, formatCountdown } from "../../lib/billing/format";
+import { formatCompactToken, formatCountdown, formatLimitToken } from "../../lib/billing/format";
+import { formatUiMessage, type UiLocale } from "../../lib/i18n/messages";
 
 export type UsageWarningToastProps = {
   threshold: 80 | 95;
+  percentage: number;
   windowType: "5h" | "7d";
+  locale: UiLocale;
   userId: string;
   used: number;
   limit: number;
@@ -29,7 +32,9 @@ function useCountdown(resetAt: string) {
 
 export function UsageWarningToast({
   threshold,
+  percentage,
   windowType,
+  locale,
   userId,
   used,
   limit,
@@ -58,27 +63,31 @@ export function UsageWarningToast({
   };
 
   const urgency = threshold === 95 ? styles.urgent : styles.elevated;
+  const unlimitedLabel = formatUiMessage(locale, "usageUnlimited");
 
   return (
     <div className={`${styles.toast} ${urgency}`} role="alert">
       <div className={styles.body}>
-        <strong>
-          {windowType} 用量已用 {threshold}%
-        </strong>
+        <strong>{formatUiMessage(locale, "toastUsageAt", { window: windowType, pct: percentage })}</strong>
         <span className={styles.numbers}>
           {" "}
-          ({formatCompactToken(used)} / {formatCompactToken(limit)})
+          ({formatCompactToken(used)} / {formatLimitToken(limit, unlimitedLabel)})
         </span>
         <div className={styles.subline}>
-          还有 {countdown} 重置。{" "}
+          {formatUiMessage(locale, "toastResetsIn", { time: countdown })}{" "}
           {onUpgradeClick && (
             <button type="button" className={styles.upgradeLink} onClick={onUpgradeClick}>
-              升级 Plus 解锁 6× 用量 →
+              {formatUiMessage(locale, "toastUpgradeCta")}
             </button>
           )}
         </div>
       </div>
-      <button type="button" className={styles.closeButton} aria-label="关闭" onClick={handleDismiss}>
+      <button
+        type="button"
+        className={styles.closeButton}
+        aria-label={formatUiMessage(locale, "toastClose")}
+        onClick={handleDismiss}
+      >
         ×
       </button>
     </div>

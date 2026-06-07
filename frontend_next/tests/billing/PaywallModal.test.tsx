@@ -60,6 +60,7 @@ describe("PaywallModal", () => {
     render(
       <PaywallModal
         reason="5h"
+        locale="zh-CN"
         plans={plans}
         rolling5h={window5h}
         rolling7d={window7d}
@@ -74,6 +75,7 @@ describe("PaywallModal", () => {
     render(
       <PaywallModal
         reason="5h"
+        locale="zh-CN"
         plans={plans}
         rolling5h={window5h}
         rolling7d={window7d}
@@ -89,6 +91,7 @@ describe("PaywallModal", () => {
     render(
       <PaywallModal
         reason="5h"
+        locale="zh-CN"
         plans={plans}
         rolling5h={window5h}
         rolling7d={window7d}

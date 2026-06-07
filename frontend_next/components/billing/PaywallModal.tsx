@@ -4,9 +4,11 @@ import styles from "./PaywallModal.module.css";
 import { UsageMeter } from "./UsageMeter";
 import { PricingCards } from "./PricingCards";
 import type { BillingPlan, UsageWindowBucket } from "../../lib/billing/api";
+import { formatUiMessage, type UiLocale } from "../../lib/i18n/messages";
 
 export type PaywallModalProps = {
   reason: "5h" | "7d";
+  locale: UiLocale;
   plans: BillingPlan[];
   rolling5h: UsageWindowBucket;
   rolling7d: UsageWindowBucket;
@@ -16,6 +18,7 @@ export type PaywallModalProps = {
 
 export function PaywallModal({
   reason,
+  locale,
   plans,
   rolling5h,
   rolling7d,
@@ -26,18 +29,19 @@ export function PaywallModal({
     <div className={styles.overlay}>
       <div className={styles.modal} role="dialog" aria-modal="true">
         <h1 className={styles.title}>
-          {reason === "5h" ? "5h 用量已达上限" : "7d 用量已达上限"}
+          {formatUiMessage(locale, reason === "5h" ? "paywallTitle5h" : "paywallTitle7d")}
         </h1>
         <UsageMeter
           variant="compact"
+          locale={locale}
           planId="free"
           rolling5h={rolling5h}
           rolling7d={rolling7d}
           softLimitHit={{ rolling_5h: true, rolling_7d: false }}
           hardLimitHit={{ rolling_5h: reason === "5h", rolling_7d: reason === "7d" }}
         />
-        <p className={styles.subtitle}>Free → Plus，解锁 10× 用量</p>
-        <PricingCards plans={plans} highlightTier="plus" onSelect={onSelect} compact />
+        <p className={styles.subtitle}>{formatUiMessage(locale, "paywallSubtitle")}</p>
+        <PricingCards plans={plans} highlightTier="plus" locale={locale} onSelect={onSelect} compact />
         <div className={styles.footer}>
           <button
             type="button"
@@ -45,9 +49,9 @@ export function PaywallModal({
             data-testid="paywall-continue-free"
             onClick={onContinueFree}
           >
-            继续 Free
+            {formatUiMessage(locale, "paywallContinueFree")}
           </button>
-          <span className={styles.resetHint}>限额自动重置，请关注使用节奏</span>
+          <span className={styles.resetHint}>{formatUiMessage(locale, "paywallResetHint")}</span>
         </div>
       </div>
     </div>

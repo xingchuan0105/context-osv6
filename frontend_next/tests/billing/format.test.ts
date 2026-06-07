@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { formatCompactToken, formatFullToken, formatCountdown, formatPct } from "../../lib/billing/format";
+import { formatCompactToken, formatFullToken, formatCountdown, formatLimitToken, formatPct } from "../../lib/billing/format";
 
 describe("formatCompactToken", () => {
   it("formats 100K / 1.5M / 200", () => {
@@ -40,6 +40,17 @@ describe("formatCountdown", () => {
 
   it("omits hours when day has no remainder", () => {
     expect(formatCountdown(2 * 86400_000)).toBe("2d");
+  });
+});
+
+describe("formatLimitToken", () => {
+  it("returns unlimited label when limit is zero or negative", () => {
+    expect(formatLimitToken(0, "无限制")).toBe("无限制");
+    expect(formatLimitToken(-1, "Unlimited")).toBe("Unlimited");
+  });
+
+  it("formats positive limits like compact tokens", () => {
+    expect(formatLimitToken(100_000, "无限制")).toBe("100K");
   });
 });
 

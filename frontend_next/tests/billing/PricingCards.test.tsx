@@ -44,7 +44,7 @@ const plans: BillingPlan[] = [
 
 describe("PricingCards", () => {
   it("renders three tier cards with prices", () => {
-    render(<PricingCards plans={plans} highlightTier="plus" onSelect={vi.fn()} />);
+    render(<PricingCards plans={plans} highlightTier="plus" locale="zh-CN" onSelect={vi.fn()} />);
     expect(screen.getByText("Free")).toBeTruthy();
     expect(screen.getByText("Plus")).toBeTruthy();
     expect(screen.getByText("Pro")).toBeTruthy();
@@ -53,19 +53,19 @@ describe("PricingCards", () => {
   });
 
   it("shows 推荐 badge on highlighted tier", () => {
-    render(<PricingCards plans={plans} highlightTier="plus" onSelect={vi.fn()} />);
+    render(<PricingCards plans={plans} highlightTier="plus" locale="zh-CN" onSelect={vi.fn()} />);
     expect(screen.getByText("推荐")).toBeTruthy();
   });
 
   it("marks current plan with disabled button", () => {
-    render(<PricingCards plans={plans} highlightTier="plus" onSelect={vi.fn()} />);
+    render(<PricingCards plans={plans} highlightTier="plus" locale="zh-CN" onSelect={vi.fn()} />);
     const plusButton = screen.getByRole("button", { name: /当前套餐/ }) as HTMLButtonElement;
     expect(plusButton.disabled).toBe(true);
   });
 
   it("calls onSelect with plan_id when clicking non-current tier", () => {
     const onSelect = vi.fn();
-    render(<PricingCards plans={plans} highlightTier="plus" onSelect={onSelect} />);
+    render(<PricingCards plans={plans} highlightTier="plus" locale="zh-CN" onSelect={onSelect} />);
     screen.getByRole("button", { name: /升级 Pro/ }).click();
     expect(onSelect).toHaveBeenCalledWith("pro");
   });

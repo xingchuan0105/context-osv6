@@ -12,20 +12,22 @@ afterEach(() => {
 });
 
 describe("UsageWarningToast", () => {
-  it("renders 80% threshold message with upgrade link", () => {
+  it("renders actual percentage with upgrade link", () => {
     render(
       <UsageWarningToast
         threshold={80}
+        percentage={85}
         windowType="5h"
+        locale="zh-CN"
         userId="user_123"
-        used={80000}
+        used={85000}
         limit={100000}
         resetAt="2026-06-07T20:00:00Z"
         onDismiss={() => {}}
         onUpgradeClick={() => {}}
       />,
     );
-    expect(screen.getByText(/80%/)).toBeTruthy();
+    expect(screen.getByText(/85%/)).toBeTruthy();
     expect(screen.getByText(/升级 Plus 解锁 6× 用量/)).toBeTruthy();
   });
 
@@ -34,9 +36,11 @@ describe("UsageWarningToast", () => {
     const { container } = render(
       <UsageWarningToast
         threshold={80}
+        percentage={85}
         windowType="5h"
+        locale="zh-CN"
         userId="user_123"
-        used={80000}
+        used={85000}
         limit={100000}
         resetAt="2026-06-07T20:00:00Z"
         onDismiss={() => {}}
@@ -50,9 +54,11 @@ describe("UsageWarningToast", () => {
     render(
       <UsageWarningToast
         threshold={80}
+        percentage={85}
         windowType="5h"
+        locale="zh-CN"
         userId="user_abc"
-        used={80000}
+        used={85000}
         limit={100000}
         resetAt="2026-06-07T20:00:00Z"
         onDismiss={onDismiss}

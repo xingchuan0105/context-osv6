@@ -32,8 +32,8 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
-vi.mock("next-intl", () => ({
-  useLocale: () => "zh-CN",
+vi.mock("../../lib/ui-preferences", () => ({
+  useUiPreferences: () => ({ locale: "zh-CN" as const }),
 }));
 
 import { UsageDashboardClient } from "../../app/(app)/settings/usage/usage-dashboard-client";

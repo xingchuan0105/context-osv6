@@ -8,10 +8,12 @@ import { billingApi } from "../../../../lib/billing/api";
 import type { BillingPlan, UsageWindowResponse } from "../../../../lib/billing/api";
 import { createCheckoutSession } from "../../../../lib/settings/client";
 import { useAuth } from "../../../../lib/auth/context";
+import { useUiPreferences } from "../../../../lib/ui-preferences";
 
 export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
   const auth = useAuth();
   const router = useRouter();
+  const { locale } = useUiPreferences();
   const [window, setWindow] = useState<UsageWindowResponse | null>(null);
   const [plans, setPlans] = useState<BillingPlan[]>([]);
 
@@ -45,6 +47,7 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
   return (
     <PaywallModal
       reason={reason}
+      locale={locale}
       plans={plans}
       rolling5h={window.rolling_5h}
       rolling7d={window.rolling_7d}

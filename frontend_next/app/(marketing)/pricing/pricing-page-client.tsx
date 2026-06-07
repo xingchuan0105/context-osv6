@@ -1,16 +1,30 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { PricingCards } from "../../../components/billing/PricingCards";
 import { createCheckoutSession } from "../../../lib/settings/client";
 import { useAuth } from "../../../lib/auth/context";
 import type { BillingPlan } from "../../../lib/billing/api";
+import { billingApi } from "../../../lib/billing/api";
+import { MARKETING_BILLING_PLANS } from "../../../lib/billing/publicPlans";
+import { formatUiMessage } from "../../../lib/i18n/messages";
+import { useUiPreferences } from "../../../lib/ui-preferences";
 import styles from "./pricing.module.css";
 
-export function PricingPageClient({ plans }: { plans: BillingPlan[] }) {
+export function PricingPageClient() {
   const auth = useAuth();
   const router = useRouter();
+  const { locale } = useUiPreferences();
+  const [plans, setPlans] = useState<BillingPlan[]>(MARKETING_BILLING_PLANS);
+
+  useEffect(() => {
+    void billingApi
+      .getPlans()
+      .then((response) => setPlans(response.plans))
+      .catch(() => setPlans(MARKETING_BILLING_PLANS));
+  }, []);
 
   async function handleSelect(planId: string) {
     if (planId === "free" || !auth.token) {
@@ -26,32 +40,32 @@ export function PricingPageClient({ plans }: { plans: BillingPlan[] }) {
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <h1 className={styles.title}>选择适合你的方案</h1>
+        <h1 className={styles.title}>{formatUiMessage(locale, "pricingTitle")}</h1>
         <div className={styles.billingToggle}>
           <button type="button" className={`${styles.toggleButton} ${styles.toggleActive}`}>
-            月付
+            {formatUiMessage(locale, "pricingMonthly")}
           </button>
-          <span className={styles.toggleHint} title="年付即将推出">
-            年付暂未开放
+          <span className={styles.toggleHint} title={formatUiMessage(locale, "pricingYearlySoon")}>
+            {formatUiMessage(locale, "pricingYearlySoon")}
           </span>
         </div>
       </header>
 
-      <PricingCards plans={plans} highlightTier="plus" onSelect={handleSelect} />
+      <PricingCards plans={plans} highlightTier="plus" locale={locale} onSelect={handleSelect} />
 
       <section className={styles.faq}>
-        <h2 className={styles.faqTitle}>❓ 常见问题</h2>
+        <h2 className={styles.faqTitle}>{formatUiMessage(locale, "pricingFaqTitle")}</h2>
         <details className={styles.faqItem}>
-          <summary>token 用量怎么算？</summary>
-          <p>输入 + 输出按 DeepSeek 公开计费标准累计。每次问题消耗 = (input tokens + output tokens)。</p>
+          <summary>{formatUiMessage(locale, "pricingFaqToken")}</summary>
+          <p>{formatUiMessage(locale, "pricingFaqTokenAnswer")}</p>
         </details>
         <details className={styles.faqItem}>
-          <summary>限额会重置吗？</summary>
-          <p>5 小时滚动窗口 + 7 天滚动窗口。窗口内最旧的消耗点过去后，限额自动释放。</p>
+          <summary>{formatUiMessage(locale, "pricingFaqReset")}</summary>
+          <p>{formatUiMessage(locale, "pricingFaqResetAnswer")}</p>
         </details>
         <details className={styles.faqItem}>
-          <summary>升级后立即生效吗？</summary>
-          <p>支付成功后立即生效。降级则在当前计费周期结束时生效。</p>
+          <summary>{formatUiMessage(locale, "pricingFaqUpgrade")}</summary>
+          <p>{formatUiMessage(locale, "pricingFaqUpgradeAnswer")}</p>
         </details>
       </section>
     </div>

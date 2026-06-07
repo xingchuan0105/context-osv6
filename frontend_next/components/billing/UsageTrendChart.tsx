@@ -4,14 +4,16 @@ import { useMemo } from "react";
 import styles from "./UsageTrendChart.module.css";
 import { formatCompactToken } from "../../lib/billing/format";
 import type { DailyUsage } from "../../lib/billing/api";
+import { formatUiMessage, type UiLocale } from "../../lib/i18n/messages";
 
 export type UsageTrendChartProps = {
   daily: DailyUsage[];
+  locale: UiLocale;
   width?: number;
   height?: number;
 };
 
-export function UsageTrendChart({ daily, width = 600, height = 200 }: UsageTrendChartProps) {
+export function UsageTrendChart({ daily, locale, width = 600, height = 200 }: UsageTrendChartProps) {
   const padding = { top: 16, right: 16, bottom: 28, left: 48 };
   const innerW = width - padding.left - padding.right;
   const innerH = height - padding.top - padding.bottom;
@@ -32,11 +34,16 @@ export function UsageTrendChart({ daily, width = 600, height = 200 }: UsageTrend
   }, [daily, innerW, innerH, padding.left, padding.top]);
 
   if (daily.length === 0) {
-    return <div className={styles.empty}>暂无用量数据</div>;
+    return <div className={styles.empty}>{formatUiMessage(locale, "usageTrendEmpty")}</div>;
   }
 
   return (
-    <svg className={styles.chart} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="近 N 日用量趋势">
+    <svg
+      className={styles.chart}
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label={formatUiMessage(locale, "usageTrendAriaLabel")}
+    >
       {yTicks.map((t, i) => (
         <g key={i}>
           <line

@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import styles from "./UsageMeter.module.css";
-import { formatCompactToken, formatCountdown } from "../../lib/billing/format";
+import { formatCompactToken, formatCountdown, formatLimitToken } from "../../lib/billing/format";
 import type { UsageWindowBucket, LimitHits } from "../../lib/billing/api";
+import { formatUiMessage, type UiLocale } from "../../lib/i18n/messages";
 
 export type UsageMeterProps = {
   variant: "full" | "compact";
+  locale: UiLocale;
   planId: "free" | "plus" | "pro";
   rolling5h: UsageWindowBucket;
   rolling7d: UsageWindowBucket;
@@ -30,24 +32,29 @@ function BucketCard({
   isSoftHit,
   isHardHit,
   compact,
+  locale,
 }: {
   title: string;
   bucket: UsageWindowBucket;
   isSoftHit: boolean;
   isHardHit: boolean;
   compact: boolean;
+  locale: UiLocale;
 }) {
   const countdown = useCountdown(bucket.reset_at);
-  const fillClass = isHardHit ? styles.barFill + " " + styles.danger
-                  : isSoftHit ? styles.barFill + " " + styles.warning
-                  : styles.barFill;
+  const unlimitedLabel = formatUiMessage(locale, "usageUnlimited");
+  const fillClass = isHardHit
+    ? styles.barFill + " " + styles.danger
+    : isSoftHit
+      ? styles.barFill + " " + styles.warning
+      : styles.barFill;
   return (
     <div className={`${styles.card} ${compact ? styles.compact : ""}`}>
       <h3 className={styles.title}>{title}</h3>
       <div className={styles.numbers}>
         <span className={styles.used}>{formatCompactToken(bucket.used)}</span>
         {" / "}
-        <span className={styles.limit}>{formatCompactToken(bucket.limit)}</span>
+        <span className={styles.limit}>{formatLimitToken(bucket.limit, unlimitedLabel)}</span>
       </div>
       <div
         className={styles.bar}
@@ -58,31 +65,43 @@ function BucketCard({
       >
         <div className={fillClass} style={{ width: `${bucket.percentage}%` }} />
       </div>
-      <div className={styles.resetText}>预计 {countdown} 后重置</div>
+      <div className={styles.resetText}>
+        {formatUiMessage(locale, "usageEstimatedReset", { time: countdown })}
+      </div>
       {isSoftHit && !compact && (
-        <div className={styles.warningText}>⚠️ 已超过软上限，建议控制节奏</div>
+        <div className={styles.warningText}>{formatUiMessage(locale, "usageSoftLimitWarning")}</div>
       )}
     </div>
   );
 }
 
-export function UsageMeter({ variant, planId, rolling5h, rolling7d, softLimitHit, hardLimitHit }: UsageMeterProps) {
+export function UsageMeter({
+  variant,
+  locale,
+  planId,
+  rolling5h,
+  rolling7d,
+  softLimitHit,
+  hardLimitHit,
+}: UsageMeterProps) {
   const compact = variant === "compact";
   return (
     <>
       <BucketCard
-        title={compact ? "5h" : "5 小时窗口"}
+        title={compact ? "5h" : formatUiMessage(locale, "usageWindow5h")}
         bucket={rolling5h}
         isSoftHit={softLimitHit.rolling_5h}
         isHardHit={hardLimitHit.rolling_5h}
         compact={compact}
+        locale={locale}
       />
       <BucketCard
-        title={compact ? "7d" : "7 天窗口"}
+        title={compact ? "7d" : formatUiMessage(locale, "usageWindow7d")}
         bucket={rolling7d}
         isSoftHit={softLimitHit.rolling_7d}
         isHardHit={hardLimitHit.rolling_7d}
         compact={compact}
+        locale={locale}
       />
     </>
   );

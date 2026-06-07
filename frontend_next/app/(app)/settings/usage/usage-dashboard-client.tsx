@@ -12,10 +12,13 @@ import type {
   UsageHistoryResponse,
   UsageWindowResponse,
 } from "../../../../lib/billing/api";
+import { formatUiMessage } from "../../../../lib/i18n/messages";
+import { useUiPreferences } from "../../../../lib/ui-preferences";
 import styles from "./usage.module.css";
 
 export function UsageDashboardClient() {
   const router = useRouter();
+  const { locale } = useUiPreferences();
   const [window, setWindow] = useState<UsageWindowResponse | null>(null);
   const [history, setHistory] = useState<UsageHistoryResponse | null>(null);
   const [forecast, setForecast] = useState<UsageForecastResponse | null>(null);
@@ -33,29 +36,30 @@ export function UsageDashboardClient() {
   }, []);
 
   if (!window || !history || !forecast) {
-    return <div className={styles.page}>加载中...</div>;
+    return <div className={styles.page}>{formatUiMessage(locale, "usageLoading")}</div>;
   }
 
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <h1 className={styles.title}>用量与套餐</h1>
+        <h1 className={styles.title}>{formatUiMessage(locale, "usageTitle")}</h1>
         {forecast.current_plan === "free" && (
           <button
             type="button"
             className={styles.upgradeButton}
             onClick={() => router.push("/upgrade/paywall?from=usage")}
           >
-            升级 Plus
+            {formatUiMessage(locale, "upgradeButton")}
           </button>
         )}
       </header>
 
       <section className={styles.section}>
         <p className={styles.currentPlan}>
-          当前套餐: <strong>{forecast.current_plan.toUpperCase()}</strong>
+          {formatUiMessage(locale, "usageCurrentPlanLabel")}{" "}
+          <strong>{forecast.current_plan.toUpperCase()}</strong>
           {forecast.current_plan === "free" && (
-            <span className={styles.upgradeHint}> → Free 升级 Plus 解锁 10× 用量</span>
+            <span className={styles.upgradeHint}>{formatUiMessage(locale, "usageFreeUpgradeHint")}</span>
           )}
         </p>
       </section>
@@ -63,6 +67,7 @@ export function UsageDashboardClient() {
       <section className={styles.meters}>
         <UsageMeter
           variant="full"
+          locale={locale}
           planId={window.plan_id}
           rolling5h={window.rolling_5h}
           rolling7d={window.rolling_7d}
@@ -72,11 +77,12 @@ export function UsageDashboardClient() {
       </section>
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>近 7 日用量趋势</h2>
-        <UsageTrendChart daily={history.daily} />
+        <h2 className={styles.sectionTitle}>{formatUiMessage(locale, "usageTrendTitle")}</h2>
+        <UsageTrendChart daily={history.daily} locale={locale} />
       </section>
 
       <UsageForecastCard
+        locale={locale}
         suggestion_zh={forecast.suggestion_zh}
         suggestion_en={forecast.suggestion_en}
         upgrade_recommended={forecast.upgrade_recommended}
