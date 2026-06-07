@@ -18,4 +18,10 @@
 ## 回滚
 
 - 立即将 PRICING_REVAMP_ROLLOUT 设为 0
+- 前端同步设置 `NEXT_PUBLIC_PRICING_REVAMP_ENABLED=0`
 - 旧 UI 自动接管
+
+## 相关文档
+
+- 设计与任务清单：[`docs/superpowers/plans/2026-06-07-pricing-tiers-revamp-plan.md`](../../../docs/superpowers/plans/2026-06-07-pricing-tiers-revamp-plan.md)
+- 规格说明：[`docs/superpowers/specs/2026-06-07-pricing-tiers-revamp-design.md`](../../../docs/superpowers/specs/2026-06-07-pricing-tiers-revamp-design.md)

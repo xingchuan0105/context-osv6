@@ -95,6 +95,10 @@ vi.mock("../../lib/billing/api", () => ({
   },
 }));
 
+vi.mock("../../lib/billing/featureFlag", () => ({
+  isPricingRevampEnabledClient: () => true,
+}));
+
 vi.mock("../../components/workspace/workspace-chat-pane", () => ({
   WorkspaceChatPane: (props: {
     workspaceId: string;
@@ -623,6 +627,49 @@ describe("WorkspaceSurface", () => {
     });
 
     render(<WorkspaceSurface workspaceId="ws-1" />);
-    await waitFor(() => expect(screen.getByText(/5h 用量已用 80%/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/5h 用量已用 85%/)).toBeTruthy());
+  });
+
+  it("renders warning toast at 95% tier on 7d window", async () => {
+    mocks.getUsageWindowMock.mockResolvedValue({
+      plan_id: "free",
+      rolling_5h: { used: 1000, limit: 100000, percentage: 1, reset_at: "2099-01-01T00:00:00Z" },
+      rolling_7d: { used: 390000, limit: 400000, percentage: 97, reset_at: "2099-01-01T00:00:00Z" },
+      soft_limit_hit: { rolling_5h: false, rolling_7d: true },
+      hard_limit_hit: { rolling_5h: false, rolling_7d: false },
+    });
+
+    render(<WorkspaceSurface workspaceId="ws-1" />);
+    await waitFor(() => expect(screen.getByText(/7d 用量已用 97%/)).toBeTruthy());
+  });
+
+  it("redirects to paywall when hard limit hit", async () => {
+    mocks.getUsageWindowMock.mockResolvedValue({
+      plan_id: "free",
+      rolling_5h: { used: 100000, limit: 100000, percentage: 100, reset_at: "2099-01-01T00:00:00Z" },
+      rolling_7d: { used: 200000, limit: 400000, percentage: 50, reset_at: "2099-01-01T00:00:00Z" },
+      soft_limit_hit: { rolling_5h: true, rolling_7d: false },
+      hard_limit_hit: { rolling_5h: true, rolling_7d: false },
+    });
+
+    render(<WorkspaceSurface workspaceId="ws-1" />);
+    await waitFor(() => {
+      expect(mocks.pushMock).toHaveBeenCalledWith("/upgrade/paywall?reason=5h");
+    });
+  });
+
+  it("prefers higher-pressure window when both hard limits hit", async () => {
+    mocks.getUsageWindowMock.mockResolvedValue({
+      plan_id: "free",
+      rolling_5h: { used: 100000, limit: 100000, percentage: 100, reset_at: "2099-01-01T00:00:00Z" },
+      rolling_7d: { used: 450000, limit: 400000, percentage: 100, reset_at: "2099-01-01T00:00:00Z" },
+      soft_limit_hit: { rolling_5h: true, rolling_7d: true },
+      hard_limit_hit: { rolling_5h: true, rolling_7d: true },
+    });
+
+    render(<WorkspaceSurface workspaceId="ws-1" />);
+    await waitFor(() => {
+      expect(mocks.pushMock).toHaveBeenCalledWith("/upgrade/paywall?reason=7d");
+    });
   });
 });

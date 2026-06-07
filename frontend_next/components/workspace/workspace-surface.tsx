@@ -14,7 +14,8 @@ import { useRouter } from "next/navigation";
 import { ApiError } from "../../lib/auth/client";
 import { useAuth } from "../../lib/auth/context";
 import { billingApi } from "../../lib/billing/api";
-import type { UsageWindowResponse } from "../../lib/billing/api";
+import type { UsageWindowBucket, UsageWindowResponse } from "../../lib/billing/api";
+import { isPricingRevampEnabledClient } from "../../lib/billing/featureFlag";
 import { createWorkspace } from "../../lib/dashboard/client";
 import {
   getDefaultWorkspaceTitle,
@@ -42,6 +43,13 @@ import { UsageWarningToast } from "../billing/UsageWarningToast";
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function usageWindowPressure(bucket: UsageWindowBucket): number {
+  if (bucket.limit <= 0) {
+    return 0;
+  }
+  return bucket.used / bucket.limit;
 }
 
 function useIsMobile() {
@@ -108,6 +116,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     useState<WorkspaceWebSourcesRequest | null>(null);
   const [usageWarning, setUsageWarning] = useState<{
     threshold: 80 | 95;
+    percentage: number;
     windowType: "5h" | "7d";
     data: UsageWindowResponse;
   } | null>(null);
@@ -152,40 +161,56 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
   }, [auth.initialized, auth.token, locale, workspaceId]);
 
   useEffect(() => {
-    if (!auth.initialized || !auth.token || !auth.user?.id) {
+    if (!auth.initialized || !auth.token || !auth.user?.id || !isPricingRevampEnabledClient()) {
       return;
     }
 
     let cancelled = false;
 
-    void billingApi.getUsageWindow().then((usageWindow) => {
-      if (cancelled) {
-        return;
-      }
+    void billingApi
+      .getUsageWindow()
+      .then((usageWindow) => {
+        if (cancelled) {
+          return;
+        }
 
-      if (usageWindow.hard_limit_hit.rolling_5h || usageWindow.hard_limit_hit.rolling_7d) {
-        const reason = usageWindow.hard_limit_hit.rolling_5h ? "5h" : "7d";
-        router.push(`/upgrade/paywall?reason=${reason}`);
-        return;
-      }
+        if (usageWindow.hard_limit_hit.rolling_5h || usageWindow.hard_limit_hit.rolling_7d) {
+          let reason: "5h" | "7d";
+          if (usageWindow.hard_limit_hit.rolling_5h && usageWindow.hard_limit_hit.rolling_7d) {
+            reason =
+              usageWindowPressure(usageWindow.rolling_5h) >=
+              usageWindowPressure(usageWindow.rolling_7d)
+                ? "5h"
+                : "7d";
+          } else {
+            reason = usageWindow.hard_limit_hit.rolling_5h ? "5h" : "7d";
+          }
+          router.push(`/upgrade/paywall?reason=${reason}`);
+          return;
+        }
 
-      if (usageWindow.soft_limit_hit.rolling_5h) {
-        setUsageWarning({
-          threshold: usageWindow.rolling_5h.percentage >= 95 ? 95 : 80,
-          windowType: "5h",
-          data: usageWindow,
-        });
-        return;
-      }
+        if (usageWindow.soft_limit_hit.rolling_5h) {
+          setUsageWarning({
+            threshold: usageWindow.rolling_5h.percentage >= 95 ? 95 : 80,
+            percentage: usageWindow.rolling_5h.percentage,
+            windowType: "5h",
+            data: usageWindow,
+          });
+          return;
+        }
 
-      if (usageWindow.soft_limit_hit.rolling_7d) {
-        setUsageWarning({
-          threshold: usageWindow.rolling_7d.percentage >= 95 ? 95 : 80,
-          windowType: "7d",
-          data: usageWindow,
-        });
-      }
-    });
+        if (usageWindow.soft_limit_hit.rolling_7d) {
+          setUsageWarning({
+            threshold: usageWindow.rolling_7d.percentage >= 95 ? 95 : 80,
+            percentage: usageWindow.rolling_7d.percentage,
+            windowType: "7d",
+            data: usageWindow,
+          });
+        }
+      })
+      .catch(() => {
+        // Ignore transient billing probe failures; workspace remains usable.
+      });
 
     return () => {
       cancelled = true;
@@ -661,7 +686,9 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
       {usageWarning && auth.user?.id ? (
         <UsageWarningToast
           threshold={usageWarning.threshold}
+          percentage={usageWarning.percentage}
           windowType={usageWarning.windowType}
+          locale={locale}
           userId={auth.user.id}
           used={
             usageWarning.windowType === "5h"
