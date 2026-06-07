@@ -9,10 +9,11 @@ fn config_with_clean_pricing_env() -> BillingConfig {
         "ALIPAY_PRICE_PRO",
         "ALIPAY_PRICE_PLUS",
     ] {
-        // SAFETY: tests in this file are the only writer/reader of these env vars;
-        // cargo test runs test functions on a single thread by default for the
-        // same integration-test binary unless --test-threads is set, and we do not
-        // touch other env vars here.
+        // SAFETY: each `tests/*.rs` file is its own integration-test binary (separate
+        // process), so env mutations here cannot race with `module_surface.rs` or
+        // `test_migration_0037.rs`. The two `#[test]` fns in this file do run in
+        // parallel within the same process, but both clear the same env vars before
+        // reading them, so the race is benign.
         unsafe {
             std::env::remove_var(key);
         }
