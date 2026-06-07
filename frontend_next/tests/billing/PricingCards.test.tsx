@@ -69,4 +69,12 @@ describe("PricingCards", () => {
     screen.getByRole("button", { name: /升级 Pro/ }).click();
     expect(onSelect).toHaveBeenCalledWith("pro");
   });
+
+  it("shows 5h/7d rolling limits per plan", () => {
+    render(<PricingCards plans={plans} highlightTier="plus" locale="zh-CN" onSelect={vi.fn()} />);
+    expect(screen.getByText(/5 小时窗口: 100K/)).toBeTruthy();
+    expect(screen.getByText(/7 天窗口: 400K/)).toBeTruthy();
+    expect(screen.getByText(/5 小时窗口: 600K/)).toBeTruthy();
+    expect(screen.getByText(/7 天窗口: 4\.0M/)).toBeTruthy();
+  });
 });

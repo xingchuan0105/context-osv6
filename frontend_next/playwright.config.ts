@@ -33,12 +33,19 @@ export default defineConfig({
 
   webServer: [
     // 本地测试 auth-flow 等纯前端场景时，可通过 SKIP_BACKEND=1 跳过 Rust 后端启动
+    // Billing E2E: set PRICING_REVAMP_ROLLOUT=100 on avrag-api so test users pass hash-bucket gate.
     ...(process.env.SKIP_BACKEND
       ? []
       : [
           {
             command: "cd ../avrag-rs && cargo run --bin avrag-api",
             url: "http://127.0.0.1:8080/health",
+            timeout: 120_000,
+            reuseExistingServer: !process.env.CI,
+          },
+          {
+            command: "cd ../avrag-rs && cargo run -p avrag-worker",
+            url: "http://127.0.0.1:8081/health",
             timeout: 120_000,
             reuseExistingServer: !process.env.CI,
           },

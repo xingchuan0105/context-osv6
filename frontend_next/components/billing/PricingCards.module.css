@@ -78,6 +78,18 @@
   min-height: 2.5rem;
 }
 
+.limits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-caption);
+  color: hsl(var(--foreground));
+}
+
 .interval {
   font-size: var(--font-size-caption);
   color: hsl(var(--subtle-foreground));

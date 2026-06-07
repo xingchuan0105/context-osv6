@@ -2,6 +2,8 @@
 
 import styles from "./PricingCards.module.css";
 import type { BillingPlan } from "../../lib/billing/api";
+import { formatCompactToken } from "../../lib/billing/format";
+import { getPlanRollingLimits } from "../../lib/billing/planLimits";
 import { formatUiMessage, type UiLocale } from "../../lib/i18n/messages";
 
 export type PricingCardsProps = {
@@ -18,6 +20,7 @@ export function PricingCards({ plans, highlightTier, locale, onSelect, compact =
       {plans.map((plan) => {
         const isHighlight = plan.plan_id === highlightTier;
         const isCurrent = plan.current;
+        const limits = getPlanRollingLimits(plan.plan_id);
         const buttonLabel = isCurrent
           ? formatUiMessage(locale, "currentPlan")
           : plan.plan_id === "free"
@@ -36,6 +39,16 @@ export function PricingCards({ plans, highlightTier, locale, onSelect, compact =
               <div className={styles.priceCny}>{plan.price_label_cny}</div>
               <div className={styles.priceUsd}>{plan.price_label_usd}</div>
             </div>
+            {limits && !compact && (
+              <ul className={styles.limits}>
+                <li>
+                  {formatUiMessage(locale, "usageWindow5h")}: {formatCompactToken(limits.rolling5h)}
+                </li>
+                <li>
+                  {formatUiMessage(locale, "usageWindow7d")}: {formatCompactToken(limits.rolling7d)}
+                </li>
+              </ul>
+            )}
             <div className={styles.description}>{plan.description}</div>
             {!compact && (
               <div className={styles.interval}>{formatUiMessage(locale, "pricingMonthlyInterval")}</div>
