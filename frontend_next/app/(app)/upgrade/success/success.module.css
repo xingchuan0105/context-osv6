@@ -1,0 +1,58 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+}
+
+.card {
+  max-width: 28rem;
+  text-align: center;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border-whisper));
+  border-radius: var(--radius-card);
+  padding: 3rem 2rem;
+  box-shadow: var(--shadow-md);
+}
+
+.icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-title);
+  color: hsl(var(--foreground));
+  margin: 0 0 0.5rem;
+}
+
+.subtitle {
+  color: hsl(var(--muted-foreground));
+  margin: 0 0 2rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.primaryButton,
+.secondaryButton {
+  padding: 0.625rem 1.25rem;
+  border-radius: var(--radius-button);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+.primaryButton {
+  background: hsl(var(--cta-background));
+  color: hsl(var(--cta-foreground));
+}
+
+.secondaryButton {
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border: 1px solid hsl(var(--border));
+}
