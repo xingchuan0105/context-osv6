@@ -5,7 +5,7 @@ use sha2::Sha256;
 
 pub(crate) const PLAN_FREE: &str = "free";
 pub(crate) const PLAN_PRO: &str = "pro";
-pub(crate) const PLAN_ENTERPRISE: &str = "enterprise";
+pub(crate) const PLAN_PLUS: &str = "plus";
 pub(crate) const STATUS_ACTIVE: &str = "active";
 pub(crate) const STATUS_CANCELED: &str = "canceled";
 pub(crate) const STATUS_PAST_DUE: &str = "past_due";
@@ -14,15 +14,32 @@ pub(crate) const ADMIN_ROLE_SUPER: &str = "super_admin";
 
 pub(crate) type HmacSha256 = Hmac<Sha256>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct BillingConfig {
     pub stripe_secret_key: String,
     pub stripe_webhook_secret: String,
     pub stripe_price_pro: String,
-    pub stripe_price_enterprise: String,
+    pub stripe_price_plus: String,
     pub billing_price_label_pro: String,
-    pub billing_price_label_enterprise: String,
+    pub billing_price_label_plus: String,
     pub public_app_base_url: String,
+
+    // Creem Config
+    pub creem_api_key: String,
+    pub creem_webhook_secret: String,
+    pub creem_price_pro: String,
+    pub creem_price_plus: String,
+    pub creem_product_pro: String,
+    pub creem_product_plus: String,
+
+    // Alipay Config
+    pub alipay_app_id: String,
+    pub alipay_private_key: String,
+    pub alipay_public_key: String,
+    pub alipay_gateway_url: String,
+    pub alipay_notify_url: Option<String>,
+    pub alipay_price_pro: String,
+    pub alipay_price_plus: String,
 }
 
 impl BillingConfig {
@@ -34,13 +51,40 @@ impl BillingConfig {
                 .or_else(|_| std::env::var("STRIPE_PRICE_PRO_MONTHLY"))
                 .or_else(|_| std::env::var("STRIPE_PRICE_ID"))
                 .unwrap_or_default(),
-            stripe_price_enterprise: std::env::var("STRIPE_PRICE_ENTERPRISE").unwrap_or_default(),
+            stripe_price_plus: std::env::var("STRIPE_PRICE_PLUS")
+                .or_else(|_| std::env::var("STRIPE_PRICE_ENTERPRISE"))
+                .unwrap_or_default(),
             billing_price_label_pro: std::env::var("BILLING_PRICE_LABEL_PRO")
-                .unwrap_or_else(|_| "$20/month".to_string()),
-            billing_price_label_enterprise: std::env::var("BILLING_PRICE_LABEL_ENTERPRISE")
-                .unwrap_or_else(|_| "Contact sales".to_string()),
+                .unwrap_or_else(|_| "¥129 / 月 · $19 / 月".to_string()),
+            billing_price_label_plus: std::env::var("BILLING_PRICE_LABEL_PLUS")
+                .or_else(|_| std::env::var("BILLING_PRICE_LABEL_ENTERPRISE"))
+                .unwrap_or_else(|_| "¥49 / 月 · $9 / 月".to_string()),
             public_app_base_url: std::env::var("PUBLIC_APP_BASE_URL")
                 .unwrap_or_else(|_| "http://127.0.0.1:3000".to_string()),
+
+            // Creem Config
+            creem_api_key: std::env::var("CREEM_API_KEY").unwrap_or_default(),
+            creem_webhook_secret: std::env::var("CREEM_WEBHOOK_SECRET").unwrap_or_default(),
+            creem_price_pro: std::env::var("CREEM_PRICE_PRO").unwrap_or_default(),
+            creem_price_plus: std::env::var("CREEM_PRICE_PLUS").unwrap_or_default(),
+            creem_product_pro: std::env::var("CREEM_PRODUCT_PRO")
+                .or_else(|_| std::env::var("CREEM_PRICE_PRO"))
+                .unwrap_or_default(),
+            creem_product_plus: std::env::var("CREEM_PRODUCT_PLUS")
+                .or_else(|_| std::env::var("CREEM_PRICE_PLUS"))
+                .unwrap_or_default(),
+
+            // Alipay Config
+            alipay_app_id: std::env::var("ALIPAY_APP_ID").unwrap_or_default(),
+            alipay_private_key: std::env::var("ALIPAY_PRIVATE_KEY").unwrap_or_default(),
+            alipay_public_key: std::env::var("ALIPAY_PUBLIC_KEY").unwrap_or_default(),
+            alipay_gateway_url: std::env::var("ALIPAY_GATEWAY_URL")
+                .unwrap_or_else(|_| "https://openapi-sandbox.dl.alipaydev.com/gateway.do".to_string()),
+            alipay_notify_url: std::env::var("ALIPAY_NOTIFY_URL").ok().filter(|s| !s.trim().is_empty()),
+            alipay_price_pro: std::env::var("ALIPAY_PRICE_PRO")
+                .unwrap_or_else(|_| "129.00".to_string()),
+            alipay_price_plus: std::env::var("ALIPAY_PRICE_PLUS")
+                .unwrap_or_else(|_| "49.00".to_string()),
         }
     }
 
@@ -52,13 +96,65 @@ impl BillingConfig {
         self.stripe_enabled() && !self.stripe_webhook_secret.trim().is_empty()
     }
 
+    pub fn creem_enabled(&self) -> bool {
+        !self.creem_api_key.trim().is_empty()
+    }
+
+    pub fn alipay_enabled(&self) -> bool {
+        !self.alipay_app_id.trim().is_empty()
+    }
+
+    pub fn alipay_price_plus(&self) -> &str {
+        &self.alipay_price_plus
+    }
+
+    pub fn alipay_price_pro(&self) -> &str {
+        &self.alipay_price_pro
+    }
+
+    pub fn creem_checkout_price_for_plan(&self, plan_id: &str) -> Option<&str> {
+        match plan_id.trim() {
+            PLAN_PRO if !self.creem_price_pro.trim().is_empty() => {
+                Some(self.creem_price_pro.as_str())
+            }
+            PLAN_PLUS if !self.creem_price_plus.trim().is_empty() => {
+                Some(self.creem_price_plus.as_str())
+            }
+            _ => None,
+        }
+    }
+
+    pub fn creem_checkout_product_for_plan(&self, plan_id: &str) -> Option<&str> {
+        match plan_id.trim() {
+            PLAN_PRO if !self.creem_product_pro.trim().is_empty() => {
+                Some(self.creem_product_pro.as_str())
+            }
+            PLAN_PLUS if !self.creem_product_plus.trim().is_empty() => {
+                Some(self.creem_product_plus.as_str())
+            }
+            _ => None,
+        }
+    }
+
+    pub fn alipay_checkout_price_for_plan(&self, plan_id: &str) -> Option<&str> {
+        match plan_id.trim() {
+            PLAN_PRO if !self.alipay_price_pro.trim().is_empty() => {
+                Some(self.alipay_price_pro.as_str())
+            }
+            PLAN_PLUS if !self.alipay_price_plus.trim().is_empty() => {
+                Some(self.alipay_price_plus.as_str())
+            }
+            _ => None,
+        }
+    }
+
     pub fn checkout_price_for_plan(&self, plan_id: &str) -> Option<&str> {
         match plan_id.trim() {
             PLAN_PRO if !self.stripe_price_pro.trim().is_empty() => {
                 Some(self.stripe_price_pro.as_str())
             }
-            PLAN_ENTERPRISE if !self.stripe_price_enterprise.trim().is_empty() => {
-                Some(self.stripe_price_enterprise.as_str())
+            PLAN_PLUS if !self.stripe_price_plus.trim().is_empty() => {
+                Some(self.stripe_price_plus.as_str())
             }
             _ => None,
         }
@@ -72,7 +168,7 @@ impl BillingConfig {
         match plan_id.trim() {
             PLAN_FREE => "Free".to_string(),
             PLAN_PRO => self.billing_price_label_pro.clone(),
-            PLAN_ENTERPRISE => self.billing_price_label_enterprise.clone(),
+            PLAN_PLUS => self.billing_price_label_plus.clone(),
             _ => String::new(),
         }
     }
@@ -85,8 +181,8 @@ impl BillingConfig {
         if price_id == self.stripe_price_pro.trim() {
             return Some(PLAN_PRO);
         }
-        if price_id == self.stripe_price_enterprise.trim() {
-            return Some(PLAN_ENTERPRISE);
+        if price_id == self.stripe_price_plus.trim() {
+            return Some(PLAN_PLUS);
         }
         None
     }
@@ -111,24 +207,143 @@ pub struct BillingPlan {
     pub quotas: Vec<BillingPlanQuota>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BillingProvider {
+    Stripe,
+    Creem,
+    Alipay,
+}
+
+impl std::fmt::Display for BillingProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Stripe => write!(f, "stripe"),
+            Self::Creem => write!(f, "creem"),
+            Self::Alipay => write!(f, "alipay"),
+        }
+    }
+}
+
+impl std::str::FromStr for BillingProvider {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_lowercase().as_str() {
+            "stripe" => Ok(Self::Stripe),
+            "creem" => Ok(Self::Creem),
+            "alipay" => Ok(Self::Alipay),
+            other => anyhow::bail!("invalid billing provider: {}", other),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubscriptionStatus {
+    Active,
+    Canceled,
+    PastDue,
+    Unpaid,
+    Expired,
+}
+
+impl std::fmt::Display for SubscriptionStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Active => write!(f, "active"),
+            Self::Canceled => write!(f, "canceled"),
+            Self::PastDue => write!(f, "past_due"),
+            Self::Unpaid => write!(f, "unpaid"),
+            Self::Expired => write!(f, "expired"),
+        }
+    }
+}
+
+impl std::str::FromStr for SubscriptionStatus {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_lowercase().as_str() {
+            "active" => Ok(Self::Active),
+            "canceled" | "cancelled" => Ok(Self::Canceled),
+            "past_due" => Ok(Self::PastDue),
+            "unpaid" => Ok(Self::Unpaid),
+            "expired" => Ok(Self::Expired),
+            other => anyhow::bail!("invalid subscription status: {}", other),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OrderStatus {
+    Pending,
+    Paid,
+    Failed,
+    Refunded,
+    Canceled,
+}
+
+impl std::fmt::Display for OrderStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Pending => write!(f, "pending"),
+            Self::Paid => write!(f, "paid"),
+            Self::Failed => write!(f, "failed"),
+            Self::Refunded => write!(f, "refunded"),
+            Self::Canceled => write!(f, "canceled"),
+        }
+    }
+}
+
+impl std::str::FromStr for OrderStatus {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_lowercase().as_str() {
+            "pending" => Ok(Self::Pending),
+            "paid" => Ok(Self::Paid),
+            "failed" => Ok(Self::Failed),
+            "refunded" => Ok(Self::Refunded),
+            "canceled" | "cancelled" => Ok(Self::Canceled),
+            other => anyhow::bail!("invalid order status: {}", other),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Subscription {
     pub id: String,
-    pub org_id: String,
+    pub user_id: String,
     pub stripe_subscription_id: Option<String>,
     pub stripe_price_id: Option<String>,
+    pub billing_provider: BillingProvider,
+    pub provider_subscription_id: Option<String>,
+    pub provider_price_id: Option<String>,
     pub plan_id: String,
-    pub status: String,
-    pub current_period_start: Option<String>,
-    pub current_period_end: Option<String>,
+    pub status: SubscriptionStatus,
+    pub current_period_start: Option<DateTime<Utc>>,
+    pub current_period_end: Option<DateTime<Utc>>,
     pub cancel_at_period_end: bool,
-    pub created_at: Option<String>,
-    pub updated_at: Option<String>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BillingOrder {
+    pub id: String,
+    pub user_id: String,
+    pub provider: BillingProvider,
+    pub provider_order_id: Option<String>,
+    pub plan_id: String,
+    pub status: OrderStatus,
+    pub amount_cents: i32,
+    pub currency: String,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct StripeSubscriptionSnapshot {
-    pub(crate) org_id: String,
+    pub(crate) user_id: String,
     pub(crate) stripe_customer_id: String,
     pub(crate) stripe_subscription_id: String,
     pub(crate) stripe_price_id: String,
@@ -141,8 +356,8 @@ pub(crate) struct StripeSubscriptionSnapshot {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ExistingSubscriptionFields {
-    pub(crate) org_id: String,
-    pub(crate) stripe_price_id: String,
+    pub(crate) user_id: String,
+    pub(crate) stripe_price_id: Option<String>,
     pub(crate) plan_id: String,
 }
 
@@ -150,4 +365,89 @@ pub(crate) struct ExistingSubscriptionFields {
 pub(crate) struct WebhookClaim {
     pub(crate) event_id: String,
     pub(crate) duplicate_processed: bool,
+}
+
+#[derive(Debug, Clone)]
+pub enum BillingEvent {
+    InvoicePaid {
+        new_period_end: Option<DateTime<Utc>>,
+    },
+    PaymentFailed,
+    Cancel,
+    Expire,
+    Created,
+    Updated {
+        new_status: SubscriptionStatus,
+    },
+}
+
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum TransitionError {
+    #[error("Invalid transition from {from:?} via event {event}: {reason}")]
+    InvalidTransition {
+        from: SubscriptionStatus,
+        event: String,
+        reason: String,
+    },
+}
+
+impl Subscription {
+    pub fn apply_transition(&self, event: &BillingEvent) -> Result<SubscriptionStatus, TransitionError> {
+        match event {
+            BillingEvent::InvoicePaid { new_period_end } => {
+                match self.status {
+                    SubscriptionStatus::Active 
+                    | SubscriptionStatus::PastDue 
+                    | SubscriptionStatus::Expired 
+                    | SubscriptionStatus::Canceled 
+                    | SubscriptionStatus::Unpaid => {
+                        match (new_period_end, self.current_period_end) {
+                            (Some(new_dt), Some(old_dt)) => {
+                                if new_dt < &old_dt {
+                                    return Err(TransitionError::InvalidTransition {
+                                        from: self.status,
+                                        event: "InvoicePaid".to_string(),
+                                        reason: "new_period_end cannot be earlier than current_period_end".to_string(),
+                                    });
+                                }
+                            }
+                            (None, Some(_)) => {
+                                return Err(TransitionError::InvalidTransition {
+                                    from: self.status,
+                                    event: "InvoicePaid".to_string(),
+                                    reason: "new_period_end cannot be None when current_period_end is set".to_string(),
+                                });
+                            }
+                            _ => {}
+                        }
+                        Ok(SubscriptionStatus::Active)
+                    }
+                }
+            }
+            BillingEvent::PaymentFailed => {
+                match self.status {
+                    SubscriptionStatus::Active => Ok(SubscriptionStatus::PastDue),
+                    SubscriptionStatus::PastDue => Ok(SubscriptionStatus::Unpaid),
+                    _ => Ok(self.status),
+                }
+            }
+            BillingEvent::Cancel => {
+                match self.status {
+                    SubscriptionStatus::Active | SubscriptionStatus::PastDue | SubscriptionStatus::Unpaid => {
+                        Ok(SubscriptionStatus::Canceled)
+                    }
+                    _ => Ok(self.status),
+                }
+            }
+            BillingEvent::Expire => {
+                Ok(SubscriptionStatus::Expired)
+            }
+            BillingEvent::Created => {
+                Ok(SubscriptionStatus::Active)
+            }
+            BillingEvent::Updated { new_status } => {
+                Ok(*new_status)
+            }
+        }
+    }
 }
