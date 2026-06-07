@@ -13,7 +13,11 @@ export class WorkspacePage {
     await this.page.getByRole("button", { name: /添加内容源|New source|上传文件/i }).click();
     const input = this.page.locator('input[type="file"]');
     await input.setInputFiles(filePath);
-    // 上传完成后 dialog 自动关闭，source item 出现在列表中
+    // 等待上传状态至少变为 pending/processing（避免空转 ingestion 等待）
+    await this.page.waitForSelector(
+      '[data-testid="ingestion-status"][data-status="pending"], [data-testid="ingestion-status"][data-status="processing"], [data-testid="ingestion-status"][data-status="completed"]',
+      { timeout: 30_000 }
+    );
   }
 
   async waitForIngestionComplete(timeout?: number) {

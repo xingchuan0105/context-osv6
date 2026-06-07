@@ -19,10 +19,18 @@ test.describe("Notebook Skill", () => {
     await chat.sendMessage(messageText);
     await chat.waitForResponse();
 
-    // TODO: 当前 UI 未暴露 notebook 引用专用的 data-testid。
-    // 先以消息可见非空作为基线断言，待后续 UI 补充 selector 后完善。
     const lastMessage = chat.getLastMessage();
     await expect(lastMessage).toBeVisible();
-    await expect(lastMessage).not.toBeEmpty();
+
+    const answer = await chat.lastAnswerText();
+    expect(answer.length).toBeGreaterThan(30);
+
+    // Skills 层基线：回答应体现 notebook/文档相关特征（关键词非阻塞，仅警告）
+    const hasNotebookSignal = /来源|文档|notebook|source|file|document/i.test(answer);
+    if (!hasNotebookSignal) {
+      console.warn(`[skills] notebook-skill: answer lacks notebook-related keywords`);
+    }
+
+    // TODO: 待 UI 补充 notebook 引用 data-testid 后，添加引用可见性断言
   });
 });

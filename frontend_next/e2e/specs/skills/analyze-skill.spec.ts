@@ -19,10 +19,18 @@ test.describe("Analyze Skill", () => {
     await chat.sendMessage(messageText);
     await chat.waitForResponse();
 
-    // TODO: 当前 UI 未暴露 data-testid="analyze-chart" 或稳定的分析结果区域 selector。
-    // 待 UI 侧补充后替换为精确的结构化断言。
     const lastMessage = chat.getLastMessage();
     await expect(lastMessage).toBeVisible();
-    await expect(lastMessage).not.toBeEmpty();
+
+    const answer = await chat.lastAnswerText();
+    expect(answer.length).toBeGreaterThan(30);
+
+    // Skills 层基线：回答应体现分析特征（关键词非阻塞，仅警告）
+    const hasAnalysisSignal = /趋势|数据|分析|insight|pattern|summary/i.test(answer);
+    if (!hasAnalysisSignal) {
+      console.warn(`[skills] analyze-skill: answer lacks analysis keywords`);
+    }
+
+    // TODO: 待 UI 补充 data-testid="analyze-chart" 后，添加图表可见性断言
   });
 });

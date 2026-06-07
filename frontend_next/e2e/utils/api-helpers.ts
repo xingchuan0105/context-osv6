@@ -6,8 +6,12 @@ import { TEST_USER } from "../fixtures/test-user";
  * 仅用于 setup/teardown，不用于测试断言。
  */
 export async function resetTestUserData(request: APIRequestContext) {
+  const secret = process.env.E2E_RESET_SECRET;
+  if (!secret) {
+    throw new Error("E2E_RESET_SECRET is required for globalSetup. Set it in .env or environment.");
+  }
   const resp = await request.post("/api/e2e/reset-user-data", {
-    headers: { "X-E2E-Secret": process.env.E2E_RESET_SECRET! },
+    headers: { "X-E2E-Secret": secret },
     data: { email: TEST_USER.email },
   });
   if (!resp.ok()) {

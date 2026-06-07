@@ -49,8 +49,8 @@ export default defineConfig({
   projects: [
     {
       name: "functional",
-      // 匹配 journey 和 smoke 子目录下的 spec（排除 auth）
-      testMatch: [/specs\/(journey|smoke)\/[^/]*\.spec\.ts/],
+      // PR 级：只跑 smoke（快速验证 UI 渲染和基础交互）
+      testMatch: [/specs\/smoke\/[^/]*\.spec\.ts/],
       testIgnore: [/auth.*\.spec\.ts/],
       use: {
         baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
@@ -99,23 +99,40 @@ export default defineConfig({
       },
     },
     {
-      name: "cross-browser-firefox",
+      name: "journey",
       testMatch: [/specs\/journey\/[^/]*\.spec\.ts/],
-      testIgnore: [/auth-flow\.spec\.ts/],
       use: {
-        browserName: "firefox",
+        baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
+        locale: "zh-CN",
+        trace: "retain-on-failure",
+        screenshot: "only-on-failure",
+        video: "retain-on-failure",
         storageState: "playwright/.auth/user.json",
       },
     },
-    {
-      name: "cross-browser-webkit",
-      testMatch: [/specs\/journey\/[^/]*\.spec\.ts/],
-      testIgnore: [/auth-flow\.spec\.ts/],
-      use: {
-        browserName: "webkit",
-        storageState: "playwright/.auth/user.json",
-      },
-    },
+    // Cross-browser: experimental, opt-in via RUN_CROSS_BROWSER=1
+    ...(process.env.RUN_CROSS_BROWSER
+      ? [
+          {
+            name: "cross-browser-firefox",
+            testMatch: [/specs\/journey\/[^/]*\.spec\.ts/],
+            testIgnore: [/auth-flow\.spec\.ts/],
+            use: {
+              browserName: "firefox" as const,
+              storageState: "playwright/.auth/user.json",
+            },
+          },
+          {
+            name: "cross-browser-webkit",
+            testMatch: [/specs\/journey\/[^/]*\.spec\.ts/],
+            testIgnore: [/auth-flow\.spec\.ts/],
+            use: {
+              browserName: "webkit" as const,
+              storageState: "playwright/.auth/user.json",
+            },
+          },
+        ]
+      : []),
     {
       name: "skills",
       testMatch: [/specs\/skills\/.*\.spec\.ts/],

@@ -14,9 +14,10 @@ export class SharePage {
     if (isChecked !== "true") {
       await toggle.click();
       // 等待 share token 生成（URL 从空变为有值）
+      // TODO: 待 UI 给 share URL 元素加 data-testid="share-link" 后替换为稳定 locator
       await this.page.waitForFunction(
         () => {
-          const urlEl = document.querySelector('[style*="font-family: ui-monospace"]');
+          const urlEl = document.querySelector("[data-testid='share-link'], [style*='font-family: ui-monospace']");
           return urlEl && urlEl.textContent && urlEl.textContent.includes("/shared/kb/");
         },
         { timeout: 10_000 }
@@ -26,7 +27,8 @@ export class SharePage {
 
   async copyShareLink(): Promise<string> {
     // 等待 share URL 出现
-    const urlLocator = this.page.locator('[style*="font-family: ui-monospace"]');
+    // TODO: 待 UI 给 share URL 元素加 data-testid="share-link" 后优先使用
+    const urlLocator = this.page.locator("[data-testid='share-link'], [style*='font-family: ui-monospace']");
     await urlLocator.waitFor({ timeout: 5_000 });
     const url = await urlLocator.textContent();
     return url?.trim() ?? "";
