@@ -1,33 +1,7 @@
-import { type Page, expect } from "@playwright/test";
+import { type Page } from "@playwright/test";
 
 export class WorkspacePage {
   constructor(private page: Page) {}
-
-  async sendMessage(text: string) {
-    const input = this.page.getByPlaceholder(/输入 \/ 选择模式|Type \/ to choose/);
-    await input.fill(text);
-    await this.page.getByRole("button", { name: /发送|Send/ }).click();
-  }
-
-  async waitForResponse(timeout = 30_000) {
-    // 等待最后一条 assistant 消息完成（pending=false）
-    await this.page.waitForSelector('[data-testid="chat-message"][data-role="assistant"][data-pending="false"]', { timeout });
-  }
-
-  getMessages() {
-    return this.page.locator("[data-testid='chat-message']").all();
-  }
-
-  getLastMessage() {
-    return this.page.locator("[data-testid='chat-message']").last();
-  }
-
-  async switchToWebSearchMode() {
-    // 点击模式按钮展开菜单
-    await this.page.getByRole("button", { name: /对话模式|Chat mode/i }).click();
-    // 选择网络搜索模式
-    await this.page.getByRole("button", { name: /网络搜索|web_search/i }).click();
-  }
 
   async switchToHistoryTab() {
     // 桌面端 history rail 默认显示，无需点击切换
@@ -50,9 +24,5 @@ export class WorkspacePage {
       '[data-testid="ingestion-status"][data-status="completed"], [data-testid="ingestion-status"][data-status="ready"]',
       { timeout: effectiveTimeout }
     );
-  }
-
-  getCitationButton() {
-    return this.page.locator("[data-testid='citation-button']").first();
   }
 }
