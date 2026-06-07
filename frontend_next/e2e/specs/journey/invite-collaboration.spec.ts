@@ -3,7 +3,9 @@ import { DashboardPage } from "../../pom/dashboard-page";
 import { SharePage } from "../../pom/share-page";
 import { resetTestUserData } from "../../utils/api-helpers";
 
-test.describe("Invite Collaboration", () => {
+// TODO: 当前测试验证的是 share-link 公开访问，不是 /invite/ 协作邀请。
+// 真正的 invite 流程（user A 发邀请 → user B 注册/登录 → 接受成为 member）待补充。
+test.describe("Share Collaboration", () => {
   test.beforeAll(async ({ request }) => {
     await resetTestUserData(request);
   });

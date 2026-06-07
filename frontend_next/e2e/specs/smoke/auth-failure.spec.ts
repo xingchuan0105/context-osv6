@@ -8,8 +8,8 @@ test.describe("Auth Failure Cases", () => {
     await page.locator("#login-password").fill("WrongPassword123!");
     await page.getByRole("button", { name: /继续登录|Sign in/i }).click();
 
-    // 期望看到错误提示（alert 或 banner）
-    await expect(page.locator(".app-notice-banner, [role='alert']")).toBeVisible();
+    // 期望看到错误提示（优先用 role='alert'，比 class 稳定）
+    await expect(page.locator("[role='alert']")).toBeVisible();
   });
 
   test("login prevents submit with empty fields", async ({ page }) => {

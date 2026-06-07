@@ -3,6 +3,7 @@ import { DashboardPage } from "../../pom/dashboard-page";
 import { WorkspacePage } from "../../pom/workspace-page";
 import { AnalyzePage } from "../../pom/analyze-page";
 import { resetTestUserData } from "../../utils/api-helpers";
+import path from "path";
 
 test.describe("Analyze Workflow", () => {
   test.beforeAll(async ({ request }) => {
@@ -22,7 +23,8 @@ test.describe("Analyze Workflow", () => {
       throw new Error("Failed to extract workspaceId from URL after creation");
     }
 
-    await workspace.uploadFile("e2e/fixtures/sample-document.txt");
+    const fixturePath = path.join(__dirname, "../../fixtures/sample-document.txt");
+    await workspace.uploadFile(fixturePath);
     await workspace.waitForIngestionComplete();
 
     await analyze.goto(workspaceId);
