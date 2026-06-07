@@ -2226,6 +2226,150 @@ export const UI_MESSAGES = {
     zh: "异常",
     en: "Unhealthy",
   },
+  pricingTitle: {
+    zh: "选择适合你的方案",
+    en: "Choose your plan",
+  },
+  pricingMonthly: {
+    zh: "月付",
+    en: "Monthly",
+  },
+  pricingYearlySoon: {
+    zh: "年付暂未开放",
+    en: "Yearly coming soon",
+  },
+  pricingTierFreeName: {
+    zh: "Free",
+    en: "Free",
+  },
+  pricingTierPlusName: {
+    zh: "Plus",
+    en: "Plus",
+  },
+  pricingTierProName: {
+    zh: "Pro",
+    en: "Pro",
+  },
+  pricingTierPlusBadge: {
+    zh: "推荐",
+    en: "Recommended",
+  },
+  pricingTierPlusTagline: {
+    zh: "深度研究首选",
+    en: "Best for deep research",
+  },
+  pricingTierProTagline: {
+    zh: "重度无忧",
+    en: "For power users",
+  },
+  pricingFaqToken: {
+    zh: "token 用量怎么算？",
+    en: "How is token usage counted?",
+  },
+  pricingFaqTokenAnswer: {
+    zh: "输入 + 输出按 DeepSeek 公开计费标准累计",
+    en: "Input + output per DeepSeek public pricing",
+  },
+  pricingFaqReset: {
+    zh: "限额会重置吗？",
+    en: "Do limits reset?",
+  },
+  pricingFaqResetAnswer: {
+    zh: "5h 滚动窗口 + 7d 滚动窗口，最旧消耗点过后自动释放",
+    en: "5h rolling + 7d rolling windows",
+  },
+  pricingFaqUpgrade: {
+    zh: "升级后立即生效吗？",
+    en: "Does upgrade take effect immediately?",
+  },
+  pricingFaqUpgradeAnswer: {
+    zh: "支付成功后立即生效。降级在当前计费周期结束时生效。",
+    en: "Effective immediately after payment. Downgrade at end of billing cycle.",
+  },
+  upgradeButton: {
+    zh: "升级 Plus",
+    en: "Upgrade Plus",
+  },
+  upgradeContinueFree: {
+    zh: "继续 Free",
+    en: "Continue Free",
+  },
+  currentPlan: {
+    zh: "当前套餐",
+    en: "Current plan",
+  },
+  usageTitle: {
+    zh: "用量与套餐",
+    en: "Usage & Plan",
+  },
+  usageWindow5h: {
+    zh: "5 小时窗口",
+    en: "5-hour window",
+  },
+  usageWindow7d: {
+    zh: "7 天窗口",
+    en: "7-day window",
+  },
+  usageEstimatedReset: {
+    zh: "预计 {time} 后重置",
+    en: "Resets in {time}",
+  },
+  usageSoftLimitWarning: {
+    zh: "已超过软上限，建议控制节奏",
+    en: "Soft limit reached, consider slowing down",
+  },
+  usageTrendTitle: {
+    zh: "近 7 日用量趋势",
+    en: "Last 7-day trend",
+  },
+  usageForecastTitle: {
+    zh: "智能建议",
+    en: "Smart suggestion",
+  },
+  usageNoUpgrade: {
+    zh: "按当前用量，本月无需升级",
+    en: "No upgrade needed this month",
+  },
+  usageUpgradeRecommended: {
+    zh: "按当前用量，本月建议升级到 Plus",
+    en: "Based on usage, upgrading to Plus is recommended",
+  },
+  paywallTitle5h: {
+    zh: "5h 用量已达上限",
+    en: "5h limit reached",
+  },
+  paywallTitle7d: {
+    zh: "7d 用量已达上限",
+    en: "7d limit reached",
+  },
+  paywallSubtitle: {
+    zh: "Free → Plus，解锁 10× 用量",
+    en: "Free → Plus, unlock 10× usage",
+  },
+  paywallContinueFree: {
+    zh: "继续 Free",
+    en: "Continue Free",
+  },
+  toast5h80: {
+    zh: "5h 用量已用 80%",
+    en: "5h usage at 80%",
+  },
+  toast5h95: {
+    zh: "5h 用量已用 95%",
+    en: "5h usage at 95%",
+  },
+  toastUpgradeCta: {
+    zh: "升级 Plus 解锁 6× 用量 →",
+    en: "Upgrade to Plus for 6× usage →",
+  },
+  toastClose: {
+    zh: "关闭",
+    en: "Close",
+  },
+  toastResetsIn: {
+    zh: "还有 {time} 重置",
+    en: "Resets in {time}",
+  },
 } satisfies Record<string, UiMessageDescriptor>;
 
 export type UiMessageKey = keyof typeof UI_MESSAGES;
