@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   lookupWorkspaceCitationMock: vi.fn(),
   chatPaneMock: vi.fn(),
   rightRailMock: vi.fn(),
+  getUsageWindowMock: vi.fn(),
 }));
 
 let mobileViewport = false;
@@ -86,6 +87,12 @@ vi.mock("../../lib/workspace/client", () => ({
   updateWorkspaceSession: mocks.updateWorkspaceSessionMock,
   deleteWorkspaceSession: mocks.deleteWorkspaceSessionMock,
   lookupWorkspaceCitation: mocks.lookupWorkspaceCitationMock,
+}));
+
+vi.mock("../../lib/billing/api", () => ({
+  billingApi: {
+    getUsageWindow: mocks.getUsageWindowMock,
+  },
 }));
 
 vi.mock("../../components/workspace/workspace-chat-pane", () => ({
@@ -263,6 +270,15 @@ beforeEach(() => {
   mocks.lookupWorkspaceCitationMock.mockReset();
   mocks.chatPaneMock.mockReset();
   mocks.rightRailMock.mockReset();
+  mocks.getUsageWindowMock.mockReset();
+
+  mocks.getUsageWindowMock.mockResolvedValue({
+    plan_id: "free",
+    rolling_5h: { used: 1000, limit: 100000, percentage: 1, reset_at: "2099-01-01T00:00:00Z" },
+    rolling_7d: { used: 5000, limit: 400000, percentage: 1, reset_at: "2099-01-01T00:00:00Z" },
+    soft_limit_hit: { rolling_5h: false, rolling_7d: false },
+    hard_limit_hit: { rolling_5h: false, rolling_7d: false },
+  });
 
   mocks.getWorkspaceMock.mockResolvedValue({
     workspace: {
@@ -595,5 +611,18 @@ describe("WorkspaceSurface", () => {
     fireEvent.touchEnd(window);
 
     expect(workspaceUiStore.getState().workspaces["ws-1"]?.historyRailWidth).toBe(320);
+  });
+
+  it("renders warning toast when soft limit hit on 5h", async () => {
+    mocks.getUsageWindowMock.mockResolvedValue({
+      plan_id: "free",
+      rolling_5h: { used: 85000, limit: 100000, percentage: 85, reset_at: "2099-01-01T00:00:00Z" },
+      rolling_7d: { used: 200000, limit: 400000, percentage: 50, reset_at: "2099-01-01T00:00:00Z" },
+      soft_limit_hit: { rolling_5h: true, rolling_7d: false },
+      hard_limit_hit: { rolling_5h: false, rolling_7d: false },
+    });
+
+    render(<WorkspaceSurface workspaceId="ws-1" />);
+    await waitFor(() => expect(screen.getByText(/5h 用量已用 80%/)).toBeTruthy());
   });
 });

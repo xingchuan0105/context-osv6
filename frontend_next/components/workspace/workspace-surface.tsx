@@ -13,6 +13,8 @@ import { useRouter } from "next/navigation";
 
 import { ApiError } from "../../lib/auth/client";
 import { useAuth } from "../../lib/auth/context";
+import { billingApi } from "../../lib/billing/api";
+import type { UsageWindowResponse } from "../../lib/billing/api";
 import { createWorkspace } from "../../lib/dashboard/client";
 import {
   getDefaultWorkspaceTitle,
@@ -36,6 +38,7 @@ import { WorkspaceCitationModal } from "./workspace-citation-modal";
 import { WorkspaceHistoryPane } from "./workspace-history-pane";
 import { WorkspaceRightRail } from "./workspace-right-rail";
 import { WorkspaceTopBar } from "./workspace-top-bar";
+import { UsageWarningToast } from "../billing/UsageWarningToast";
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -103,6 +106,11 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
   const [workspaceLoadError, setWorkspaceLoadError] = useState("");
   const [activeWebSources, setActiveWebSources] =
     useState<WorkspaceWebSourcesRequest | null>(null);
+  const [usageWarning, setUsageWarning] = useState<{
+    threshold: 80 | 95;
+    windowType: "5h" | "7d";
+    data: UsageWindowResponse;
+  } | null>(null);
   const activeResizeCleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -142,6 +150,47 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
       cancelled = true;
     };
   }, [auth.initialized, auth.token, locale, workspaceId]);
+
+  useEffect(() => {
+    if (!auth.initialized || !auth.token || !auth.user?.id) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void billingApi.getUsageWindow().then((usageWindow) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (usageWindow.hard_limit_hit.rolling_5h || usageWindow.hard_limit_hit.rolling_7d) {
+        const reason = usageWindow.hard_limit_hit.rolling_5h ? "5h" : "7d";
+        router.push(`/upgrade/paywall?reason=${reason}`);
+        return;
+      }
+
+      if (usageWindow.soft_limit_hit.rolling_5h) {
+        setUsageWarning({
+          threshold: usageWindow.rolling_5h.percentage >= 95 ? 95 : 80,
+          windowType: "5h",
+          data: usageWindow,
+        });
+        return;
+      }
+
+      if (usageWindow.soft_limit_hit.rolling_7d) {
+        setUsageWarning({
+          threshold: usageWindow.rolling_7d.percentage >= 95 ? 95 : 80,
+          windowType: "7d",
+          data: usageWindow,
+        });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.initialized, auth.token, auth.user?.id, router]);
 
   useEffect(() => {
     setRenameSessionTarget(null);
@@ -607,6 +656,31 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
             </form>
           </div>
         </div>
+      ) : null}
+
+      {usageWarning && auth.user?.id ? (
+        <UsageWarningToast
+          threshold={usageWarning.threshold}
+          windowType={usageWarning.windowType}
+          userId={auth.user.id}
+          used={
+            usageWarning.windowType === "5h"
+              ? usageWarning.data.rolling_5h.used
+              : usageWarning.data.rolling_7d.used
+          }
+          limit={
+            usageWarning.windowType === "5h"
+              ? usageWarning.data.rolling_5h.limit
+              : usageWarning.data.rolling_7d.limit
+          }
+          resetAt={
+            usageWarning.windowType === "5h"
+              ? usageWarning.data.rolling_5h.reset_at
+              : usageWarning.data.rolling_7d.reset_at
+          }
+          onDismiss={() => setUsageWarning(null)}
+          onUpgradeClick={() => router.push("/pricing")}
+        />
       ) : null}
     </main>
   );
