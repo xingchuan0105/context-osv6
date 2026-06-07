@@ -1,6 +1,6 @@
 # E2E 测试组件重构设计（适配 v6 架构）
 
-> 状态：已评审通过，待实施  
+> 状态：评审中  
 > 评审日期：2026-06-07  
 > 决策：方案 B（合并前端 E2E，按技术栈二分）+ 新增 Tool & Skill Availability 层
 
@@ -47,6 +47,20 @@
 
 **删除目标**：`avrag-rs/tests/frontend_e2e/` 整体迁移后删除。
 
+### 2.1 与既有测试的边界
+
+#### 与 `product_e2e/llm_real/` 的边界
+
+`avrag-rs/crates/app/tests/product_e2e/llm_real/` 已存在，职责是**后端到 LLM 的直接契约测试**：验证后端直接调用 LLM 时，响应结构、token 消耗、错误码符合预期。**不涉及前端 UI 和 HTTP 路由**。
+
+新的 `skills/` 层职责是**前端 UI 到工具调用的完整链路**：验证用户从浏览器发送 query → 后端路由 → 工具触发 → 前端渲染结果的全过程。**两者的测试入口和断言目标完全不同，不重叠**。
+
+#### 与 `2026-05-23-e2e-state-machine-prompt-validation-design.md` 的边界
+
+该设计使用 `RecordingLlmProvider` 捕获后端 Agent 的 prompt，验证**状态机转换和策略路由的正确性**（例如：什么 query 会触发什么 strategy、prompt 中是否包含正确上下文）。
+
+本次 `skills/` 层从**用户视角**验证工具可用性（发送 query → 看到 citation / format output / analyze chart），**不验证内部状态机或 prompt 内容**。夜间 CI 中两者可并行运行，互不阻塞。
+
 ---
 
 ## 3. 合并后的目录结构
@@ -66,9 +80,10 @@ frontend_next/e2e/
 ├── pom/                          # Page Object Model
 │   ├── login-page.ts             # ← 合并 avrag-rs 版本的方法
 │   ├── dashboard-page.ts
-│   ├── workspace-page.ts         # ← 吸收 ChatPage.ts 的方法
+│   ├── workspace-page.ts         # ← 导航/上传/切换 tab 等容器级方法
+│   ├── chat-panel-page.ts        # ← 从 ChatPage.ts 迁移：setMode / ask / waitForAnswer / lastAnswerHtml / citationCount
 │   ├── share-page.ts
-│   ├── notebook-page.ts          # ← 从 avrag-rs 迁移
+│   ├── notebook-page.ts          # ← 从 avrag-rs 迁移并适配
 │   ├── admin-page.ts             # 新增
 │   ├── analyze-page.ts           # 新增
 │   └── api-access-page.ts        # 新增
@@ -143,9 +158,9 @@ avrag-rs/tests/frontend_e2e/          # 整体删除
 |--------|---------|---------|
 | `fixtures/golden_set.json` | `frontend_next/e2e/fixtures/golden_set.json` | 直接复制，扩展新增 skill 条目 |
 | `fixtures/documents/antifragile.txt` | `frontend_next/e2e/fixtures/antifragile.txt` | 直接复制 |
-| `src/quality/judge.ts` | `frontend_next/e2e/utils/judge.ts` | 直接复制，更新 `.env` 加载路径 |
+| `src/quality/judge.ts` | `frontend_next/e2e/utils/judge.ts` | 直接复制，`.env` 加载路径改为 `path.resolve(__dirname, "../../../../")`（项目根目录） |
 | `src/pages/ChatPage.ts` | 与 `pom/workspace-page.ts` 合并 | **合并为新的 `WorkspacePage`**：吸收 `setMode`、`ask`、`waitForAnswer`、`lastAnswerHtml`、`citationCount` 等方法 |
-| `src/pages/NotebookPage.ts` | `frontend_next/e2e/pom/notebook-page.ts` | 新建 POM |
+| `src/pages/NotebookPage.ts` | `frontend_next/e2e/pom/notebook-page.ts` | 迁移并适配到前端项目 |
 | `src/setup/auth.ts` | 与 `setup-auth.ts` 合并 | 保留现有的 `storageState` 方案，吸收 `registerTestUser`、`injectAuth` 作为备用 |
 | `src/setup/backendUrl.ts` | `frontend_next/e2e/utils/backend-url.ts` | 直接迁移，统一后端地址获取 |
 
@@ -158,16 +173,16 @@ avrag-rs/tests/frontend_e2e/          # 整体删除
 | `02-rag-qa.spec.ts` | `specs/skills/rag-available.spec.ts` | 改造为 **工具可用性矩阵** 格式：验证 `rag` 模式可被触发且返回 citations |
 | `03-search-qa.spec.ts` | `specs/skills/search-available.spec.ts` | 同上，验证 `search` 模式可被触发且返回 web citations |
 | `04-chat-session.spec.ts` | `specs/journey/chat-session.spec.ts` | 保留为多轮对话场景 |
-| `05-notebook-crud.spec.ts` | `specs/journey/notebook-crud.spec.ts` | **关键改造**：从纯 API 调用改为 **UI 流程**（页面创建 notebook → 重命名 → 删除） |
+| `05-notebook-crud.spec.ts` | `specs/journey/notebook-crud.spec.ts` | **改造为 UI 流程**：原实现用 `request.post`/`request.patch`/`request.delete` 直接调后端 API（无浏览器交互）。改造后用 `page` 对象操作：① 点击"新建 Notebook"按钮 → 填写名称 → 提交；② 点击重命名 → 修改名称 → 确认；③ 点击删除 → 确认对话框。全程验证页面元素状态变化 |
 | `06-format-output.spec.ts` | `specs/skills/format-output.spec.ts` | 改造为可用性测试：验证 HTML/PPT 格式可被触发且返回结构化输出 |
 | `07-session-history.spec.ts` | `specs/journey/session-history.spec.ts` | 保留，验证历史记录持久化 |
-| `08-tenant-isolation.spec.ts` | `specs/journey/tenant-isolation.spec.ts` | 保留，通过两个 browser context 模拟跨用户访问 |
+| `08-tenant-isolation.spec.ts` | **不迁移到 journey/** | 租户隔离核心在数据层，UI 验证成本高、断言面窄，**仅在 `product_e2e/tenants/` 保留** |
 
 ### 4.3 前端现有测试调整
 
 | 现有文件 | 调整动作 | 原因 |
 |---------|---------|------|
-| `specs/workspace-chat.spec.ts` | 保留在 `specs/journey/`，**断言降级为结构性**（消息非空、citation 存在，不验证 LLM 措辞） | 真实 LLM 质量断言移到 `specs/skills/`；`journey/` 只验证业务闭环完整性 |
+| `specs/workspace-chat.spec.ts` | 保留在 `specs/journey/`，**仅验证消息流**（消息能发、能收、历史有记录） | `journey/` 不验证具体 tool 是否触发，此职责完全由 `skills/` 层承担 |
 | `specs/workspace-share.spec.ts` | 保留在 `specs/journey/` | 业务闭环，无需大改 |
 | `specs/auth-flow.spec.ts` | 保留在 `specs/smoke/` | 纯 UI 流程，定位不变 |
 | `specs/auth-failure.spec.ts` | 保留在 `specs/smoke/` | 纯 UI 流程，定位不变 |
@@ -227,7 +242,7 @@ projects: [
     },
   },
 
-  // ── 视觉回归（保留）
+  // ── 视觉回归（独立 tier，不属于 smoke/journey/skills）
   {
     name: "visual-desktop",
     testMatch: [/visual\/.*\.spec\.ts/],
@@ -291,7 +306,7 @@ webServer: [
 | `E2E_LLM_BASE_URL` | 真实 LLM endpoint | `skills` project |
 | `E2E_LLM_API_KEY` | 真实 LLM API Key | `skills` project |
 | `E2E_BRAVE_API_KEY` | Search provider | `skills` project (search-available) |
-| `SKIP_BACKEND` | 跳过 Rust 后端启动 | 纯前端开发 |
+| `SKIP_BACKEND` | 跳过 Rust 后端启动 | **仅本地纯前端开发调试用**；CI 中所有 project 都启动后端 |
 | `E2E_INGESTION_TIMEOUT` | Ingestion 等待超时 | `journey` project |
 
 ---
@@ -321,6 +336,8 @@ webServer: [
 | **Analyze** | `analyze-skill.spec.ts` | 进入 `/analyze` + 发送分析 query | 页面出现 `data-testid="analyze-chart"` 或 `data-testid="analyze-insight"` | judge: 洞察是否基于文档数据 |
 | **Notebook** | `notebook-skill.spec.ts` | query 触发 notebook 操作 | 页面出现 notebook 引用或 `data-testid="notebook-citation"` | judge: notebook 内容相关性 |
 
+**预估运行时长**：5 个 skills × (LLM 调用 10-30s + 可能的 ingestion 30-60s) ≈ **15–25 分钟**。若 RAG 类型 spec 复用已上传文档（见 6.5），可压缩至 **10–15 分钟**。
+
 ### 6.3 断言分层（关键设计）
 
 **可用性断言（硬门槛，必须 pass）：**
@@ -345,6 +362,14 @@ test("quality score meets baseline", async ({ page }) => {
   test.info().attach("judge-result", { body: JSON.stringify(result) });
 });
 ```
+
+### 6.5 Fixture Document 复用策略
+
+RAG 和 Analyze 类型的 skills 需要上传文档并等待 ingestion。为避免每个 spec 独立上传导致时长膨胀：
+
+- `journey/` 的 `workspace-upload-rag.spec.ts` 在 `test.beforeAll` 中上传 `antifragile.txt` 并等待 ingestion 完成。
+- `skills/` 的 `rag-available.spec.ts` 和 `analyze-skill.spec.ts` **复用同一 workspace 和文档**，不再重复上传。
+- 若 `skills` project 独立运行（不依赖 `journey` 前置），则在 `globalSetup` 或 `test.beforeAll` 中完成一次性的 fixture 上传。
 
 ### 6.4 Golden Set 扩展
 
@@ -381,9 +406,23 @@ test("quality score meets baseline", async ({ page }) => {
 
 | Phase | 内容 | 时长估算 |
 |-------|------|---------|
-| Phase 1 | POM 重构：合并 `ChatPage.ts` → `workspace-page.ts`，跑通现有测试 | 0.5 天 |
+| Phase 1 | POM 重构：`ChatPage.ts` → `chat-panel-page.ts`，`workspace-page.ts` 瘦身，跑通现有测试 | 0.5 天 |
 | Phase 2 | 迁移 `avrag-rs/tests/frontend_e2e/` 内容到 `frontend_next/e2e/`，建立 `journey/` 和 `skills/` 目录 | 1 天 |
 | Phase 3 | 补齐 v6 缺口：admin、analyze、api-access、invite POM + spec | 1 天 |
 | Phase 4 | 删除 `avrag-rs/tests/frontend_e2e/`，调整 CI workflow，端到端验证 | 0.5 天 |
 
 **总计：约 3 天。**
+
+---
+
+## 9. 成功标准
+
+实施完成需同时满足以下全部条件：
+
+1. **Phase 1–4 全部完成**：POM 重构、迁移、补齐、清理四阶段代码均已提交。
+2. **现有测试全绿**：`frontend_next/e2e/` 中原有 spec（auth-flow、auth-failure、workspace-chat、workspace-share、workspace-upload-rag、workspace-visual）在重构后全部通过。
+3. **新增 journey 测试可运行**：`notebook-crud`、`session-history`、`chat-session`、`analyze-workflow`、`invite-collaboration` 至少 5 个新增/迁移的 journey spec 在主干合并流程中通过。
+4. **skills  nightly 跑通**：`rag-available`、`search-available`、`format-output`、`analyze-skill`、`notebook-skill` 5 个 skills spec 在真实 LLM 环境下通过（允许 retries=1 后的通过）。
+5. **`avrag-rs/tests/frontend_e2e/` 完整删除**：原目录及所有文件已从仓库移除，无残留引用。
+6. **API E2E 不受影响**：`avrag-rs/crates/app/tests/product_e2e/` 的 14 个测试继续全绿，运行方式和结果无变化。
+7. **CI workflow 生效**：`frontend-smoke.yml`、`frontend-journey.yml`、`frontend-skills.yml`（或等效配置）在对应触发时机正常执行并产生报告。
