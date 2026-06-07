@@ -1,8 +1,8 @@
-import { test, expect } from "../fixtures/run-context";
-import { DashboardPage } from "../pom/dashboard-page";
-import { WorkspacePage } from "../pom/workspace-page";
-import { ChatPanelPage } from "../pom/chat-panel-page";
-import { resetTestUserData } from "../utils/api-helpers";
+import { test, expect } from "../../fixtures/run-context";
+import { DashboardPage } from "../../pom/dashboard-page";
+import { WorkspacePage } from "../../pom/workspace-page";
+import { ChatPanelPage } from "../../pom/chat-panel-page";
+import { resetTestUserData } from "../../utils/api-helpers";
 
 test.describe("Workspace Chat Journey", () => {
   test.beforeAll(async ({ request }) => {

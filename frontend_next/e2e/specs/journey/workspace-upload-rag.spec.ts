@@ -1,8 +1,8 @@
-import { test, expect } from "../fixtures/run-context";
-import { DashboardPage } from "../pom/dashboard-page";
-import { WorkspacePage } from "../pom/workspace-page";
-import { ChatPanelPage } from "../pom/chat-panel-page";
-import { resetTestUserData } from "../utils/api-helpers";
+import { test, expect } from "../../fixtures/run-context";
+import { DashboardPage } from "../../pom/dashboard-page";
+import { WorkspacePage } from "../../pom/workspace-page";
+import { ChatPanelPage } from "../../pom/chat-panel-page";
+import { resetTestUserData } from "../../utils/api-helpers";
 import path from "path";
 
 test.describe("Document Upload + RAG Journey", () => {
@@ -19,7 +19,7 @@ test.describe("Document Upload + RAG Journey", () => {
     await dashboard.createWorkspace();
 
     // 上传测试文档
-    const fixturePath = path.join(__dirname, "../fixtures/sample-document.txt");
+    const fixturePath = path.join(__dirname, "../../fixtures/sample-document.txt");
     await workspace.uploadFile(fixturePath);
 
     // 等待 ingestion 完成（CI 中可能较慢，用 test.slow 延长超时）

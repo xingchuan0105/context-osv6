@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
-import { DashboardPage } from "../pom/dashboard-page";
-import { SharePage } from "../pom/share-page";
-import { resetTestUserData } from "../utils/api-helpers";
+import { DashboardPage } from "../../pom/dashboard-page";
+import { SharePage } from "../../pom/share-page";
+import { resetTestUserData } from "../../utils/api-helpers";
 
 test.describe("Share & Collaboration Journey", () => {
   test.beforeAll(async ({ request }) => {

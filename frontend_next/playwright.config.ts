@@ -49,9 +49,9 @@ export default defineConfig({
   projects: [
     {
       name: "functional",
-      // 只匹配 specs/ 根目录下的 .spec.ts（不进入子目录），排除 auth-flow
-      testMatch: [/specs\/[^/]*\.spec\.ts/],
-      testIgnore: [/auth-flow\.spec\.ts/],
+      // 匹配 journey 和 smoke 子目录下的 spec（排除 auth）
+      testMatch: [/specs\/(journey|smoke)\/[^/]*\.spec\.ts/],
+      testIgnore: [/auth.*\.spec\.ts/],
       use: {
         baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
         locale: "zh-CN",
@@ -63,7 +63,7 @@ export default defineConfig({
     },
     {
       name: "auth",
-      testMatch: [/auth.*\.spec\.ts/],
+      testMatch: [/specs\/smoke\/auth.*\.spec\.ts/],
       use: {
         baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
         locale: "zh-CN",
@@ -100,7 +100,7 @@ export default defineConfig({
     },
     {
       name: "cross-browser-firefox",
-      testMatch: [/specs\/[^/]*\.spec\.ts/],
+      testMatch: [/specs\/journey\/[^/]*\.spec\.ts/],
       testIgnore: [/auth-flow\.spec\.ts/],
       use: {
         browserName: "firefox",
@@ -109,7 +109,7 @@ export default defineConfig({
     },
     {
       name: "cross-browser-webkit",
-      testMatch: [/specs\/[^/]*\.spec\.ts/],
+      testMatch: [/specs\/journey\/[^/]*\.spec\.ts/],
       testIgnore: [/auth-flow\.spec\.ts/],
       use: {
         browserName: "webkit",

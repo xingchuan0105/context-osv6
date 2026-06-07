@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { TEST_USER } from "../fixtures/test-user";
+import { TEST_USER } from "../../fixtures/test-user";
 
 test.describe("Auth Failure Cases", () => {
   test("login shows error for wrong password", async ({ page }) => {

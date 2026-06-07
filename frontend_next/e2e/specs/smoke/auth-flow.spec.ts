@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { LoginPage } from "../pom/login-page";
+import { LoginPage } from "../../pom/login-page";
 
 /**
  * auth-flow.spec.ts 职责：验证注册/登录/登出的业务功能。
