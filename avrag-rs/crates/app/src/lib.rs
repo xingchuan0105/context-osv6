@@ -1,3 +1,8 @@
+// rustc 1.94.0: suppress lints that ICE Cargo JSON annotate_snippets.
+#![allow(dead_code)]
+#![allow(deprecated)]
+#![allow(unused_mut)]
+
 pub mod adapters;
 pub mod agents;
 mod chat;

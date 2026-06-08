@@ -112,6 +112,7 @@ async fn get_org_id_by_user_id(
     Ok(org_id)
 }
 
+#[allow(dead_code)]
 async fn get_stripe_customer_id_by_user_id(
     repo: Arc<PgAppRepository>,
     user_id: Uuid,
