@@ -113,6 +113,31 @@ pub fn assert_answer_has_web_citation(resp: &ChatResponse) {
 // Product layer assertions — answer substance
 // ---------------------------------------------------------------------------
 
+/// Assert observability contract: non-empty answer on HTTP 200, core fields present.
+pub fn assert_observability_contract(resp: &ChatResponse) {
+    assert!(
+        !resp.answer.trim().is_empty(),
+        "observability contract: answer must be non-empty, got {:?}",
+        resp.answer
+    );
+    assert!(
+        !resp.agent_type.trim().is_empty(),
+        "observability contract: agent_type must be present"
+    );
+}
+
+/// Assert degrade_trace contains an expected reason substring (degraded paths).
+pub fn assert_degrade_reason(resp: &ChatResponse, expected_substr: &str) {
+    let needle = expected_substr.to_ascii_lowercase();
+    assert!(
+        resp.degrade_trace.iter().any(|item| {
+            item.reason.to_ascii_lowercase().contains(&needle)
+        }),
+        "expected degrade reason containing '{expected_substr}', got: {:?}",
+        resp.degrade_trace
+    );
+}
+
 /// Assert answer has minimum length (not empty / trivial).
 pub fn assert_answer_substantive(resp: &ChatResponse, min_len: usize) {
     assert!(
@@ -121,5 +146,30 @@ pub fn assert_answer_substantive(resp: &ChatResponse, min_len: usize) {
         resp.answer.len(),
         min_len,
         resp.answer
+    );
+}
+
+/// Soft check: answer references a citation marker or preview keyword (llm_real only).
+pub fn assert_citation_referenced_in_answer(resp: &ChatResponse) {
+    if resp.citations.is_empty() {
+        return;
+    }
+    let answer_lower = resp.answer.to_lowercase();
+    let has_marker = answer_lower.contains("[1]")
+        || answer_lower.contains("[[1]]")
+        || resp.citations.iter().any(|c| {
+            c.preview
+                .as_ref()
+                .map(|p| {
+                    let p = p.to_lowercase();
+                    p.len() >= 8 && answer_lower.contains(&p[..p.len().min(32)])
+                })
+                .unwrap_or(false)
+        });
+    assert!(
+        has_marker,
+        "expected answer to reference citation content or [1], answer={} citations={}",
+        resp.answer.chars().take(120).collect::<String>(),
+        resp.citations.len()
     );
 }
