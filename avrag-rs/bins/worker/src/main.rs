@@ -1008,10 +1008,49 @@ fn safe_relative_object_key(value: &str) -> bool {
     !Path::new(value).is_absolute()
 }
 
+fn worker_health_port() -> u16 {
+    std::env::var("AVRAG_WORKER_HEALTH_PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(8081)
+}
+
+fn spawn_health_listener(port: u16) {
+    tokio::spawn(async move {
+        let addr = format!("127.0.0.1:{port}");
+        let listener = match tokio::net::TcpListener::bind(&addr).await {
+            Ok(listener) => listener,
+            Err(error) => {
+                warn!(%error, %addr, "worker health listener failed to bind");
+                return;
+            }
+        };
+        info!(%addr, "worker health listener started");
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                continue;
+            };
+            tokio::spawn(async move {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let mut buf = [0u8; 1024];
+                let _ = stream.read(&mut buf).await;
+                let body = b"ok";
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+                let _ = stream.write_all(body).await;
+            });
+        }
+    });
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let _ = dotenvy::dotenv();
     telemetry::init("avrag-worker")?;
+    spawn_health_listener(worker_health_port());
     let config = AppConfig::from_env();
     let database_url = config.database_url.clone();
     let state = AppState::bootstrap(config.clone()).await?;

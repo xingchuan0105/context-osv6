@@ -1,7 +1,12 @@
 import { test, expect } from "../../fixtures/run-context";
 import { ChatPanelPage } from "../../pom/chat-panel-page";
+import { resetTestUserData } from "../../utils/api-helpers";
 
 test.describe("Session history", () => {
+  test.beforeAll(async ({ request }) => {
+    await resetTestUserData(request);
+  });
+
   test("messages survive page refresh", async ({ page, runId }) => {
     const notebookRes = await page.request.post("/api/v1/notebooks", {
       data: { name: `e2e-history-test ${runId}`, description: "" },

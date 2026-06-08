@@ -1,8 +1,13 @@
 import { test, expect } from "../../fixtures/run-context";
 import { ChatPanelPage } from "../../pom/chat-panel-page";
+import { resetTestUserData } from "../../utils/api-helpers";
 import goldenSet from "../../fixtures/golden_set.json";
 
 test.describe.serial("Chat multi-turn session", () => {
+  test.beforeAll(async ({ request }) => {
+    await resetTestUserData(request);
+  });
+
   const entry = goldenSet.entries.find((e) => e.id === "chat-session-01")!;
   if (!entry.turns || entry.turns.length < 2) {
     throw new Error("golden entry chat-session-01 missing turns");
