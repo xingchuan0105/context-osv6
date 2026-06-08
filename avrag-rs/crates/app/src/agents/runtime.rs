@@ -361,6 +361,8 @@ pub struct AgentRunUsage {
     pub completion_tokens: u64,
     pub total_tokens: u64,
     pub request_count: u64,
+    #[serde(default)]
+    pub cached_tokens: u64,
 }
 
 /// Trait for concrete agent implementations.

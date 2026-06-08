@@ -32,6 +32,7 @@ impl AppState {
                 message_id: None,
                 guard_report: None,
                 tool_results: Vec::new(),
+                usage: None,
             },
             llm_usage: None,
             debug_metadata: None,
@@ -135,6 +136,7 @@ impl AppState {
                 message_id: Some(assistant_message_id),
                 guard_report: None,
                 tool_results: Vec::new(),
+                usage: None,
             },
             llm_usage: None,
             debug_metadata: None,
@@ -171,7 +173,16 @@ pub(crate) fn build_chat_execution_from_result(
         total_tokens: usage.total_tokens.min(u32::MAX as u64) as u32,
         provider: usage.provider.clone(),
         model: usage.model.clone(),
-        cached_tokens: 0,
+        cached_tokens: usage.cached_tokens.min(u32::MAX as u64) as u32,
+    });
+
+    let response_usage = agent_result.usage.as_ref().map(|u| common::ChatTokenUsage {
+        prompt_tokens: u.prompt_tokens,
+        completion_tokens: u.completion_tokens,
+        total_tokens: u.total_tokens,
+        cached_tokens: u.cached_tokens,
+        provider: Some(u.provider.clone()),
+        model: Some(u.model.clone()),
     });
 
     ChatExecution {
@@ -205,6 +216,7 @@ pub(crate) fn build_chat_execution_from_result(
                 },
                 data: r.data.clone(),
             }).collect(),
+            usage: response_usage,
         },
         llm_usage,
         debug_metadata: params.debug_metadata,

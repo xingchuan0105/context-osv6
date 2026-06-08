@@ -75,6 +75,7 @@ impl RagExecutor for FakeRagExecutor {
             tool_results: Vec::new(),
             answer_blocks: Vec::new(),
             guard_report: None,
+            usage: None,
         })
     }
 }

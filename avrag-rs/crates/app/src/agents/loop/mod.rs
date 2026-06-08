@@ -23,6 +23,38 @@ use common::{AppError, ToolResult};
 
 
 
+fn merge_request_doc_scope(call: &mut common::ToolCall, doc_scope: &[String]) {
+    if doc_scope.is_empty() {
+        return;
+    }
+    let Some(args) = call.args.as_object_mut() else {
+        return;
+    };
+    let scope_empty = args
+        .get("doc_scope")
+        .and_then(|value| value.as_array())
+        .is_none_or(|items| items.is_empty());
+    if scope_empty {
+        args.insert(
+            "doc_scope".to_string(),
+            serde_json::json!(doc_scope),
+        );
+    }
+}
+
+async fn dispatch_rag_tool(
+    runtime: &avrag_rag_core::RagRuntime,
+    auth: &avrag_auth::AuthContext,
+    call: &common::ToolCall,
+    doc_scope: &[String],
+) -> ToolResult {
+    let mut call = call.clone();
+    if call.tool == "dense_retrieval" || call.tool == "lexical_retrieval" {
+        merge_request_doc_scope(&mut call, doc_scope);
+    }
+    avrag_rag_core::runtime::tools::dispatch(runtime, auth, &call).await
+}
+
 pub struct ReActLoop {
     llm: Arc<LlmClient>,
     skill_registry: Arc<CapabilityRegistry>,
@@ -179,9 +211,10 @@ impl ReActLoop {
                         let call_id = &call_ids[idx];
                         let tool_start = std::time::Instant::now();
                         let result = match call.tool.as_str() {
-                            "dense_retrieval" => {
+                            "dense_retrieval" | "lexical_retrieval" | "graph_retrieval"
+                            | "index_lookup" | "doc_summary" | "doc_metadata" => {
                                 if let Some(runtime) = &self.rag_runtime {
-                                    avrag_rag_core::runtime::tools::dispatch(runtime, &auth, call)
+                                    dispatch_rag_tool(runtime, &auth, call, &request.doc_scope)
                                         .await
                                 } else {
                                     common::ToolResult {
@@ -289,6 +322,7 @@ impl ReActLoop {
                             completion_tokens: llm_response.usage.completion_tokens as u64,
                             total_tokens: llm_response.usage.total_tokens as u64,
                             request_count: 1,
+                            cached_tokens: llm_response.usage.cached_tokens as u64,
                         }),
                         elapsed_ms: iter_start.elapsed().as_millis() as u64,
                     });
@@ -412,6 +446,7 @@ impl ReActLoop {
                             completion_tokens: llm_response.usage.completion_tokens as u64,
                             total_tokens: llm_response.usage.total_tokens as u64,
                             request_count: 1,
+                            cached_tokens: llm_response.usage.cached_tokens as u64,
                         }),
                         elapsed_ms,
                     });
@@ -440,6 +475,7 @@ impl ReActLoop {
                             completion_tokens: llm_response.usage.completion_tokens as u64,
                             total_tokens: llm_response.usage.total_tokens as u64,
                             request_count: 1,
+                            cached_tokens: llm_response.usage.cached_tokens as u64,
                         }),
                         elapsed_ms: iter_start.elapsed().as_millis() as u64,
                     });
@@ -482,18 +518,11 @@ impl ReActLoop {
                                     doc_scope: request.doc_scope.clone(),
                                 })
                                 .map_err(|e| AppError::internal(format!("serialize fallback args: {e}")))?;
-                                match fallback::inject_fallback_observation(
+                                let result = fallback::inject_fallback_observation(
                                     runtime, &auth, args, &fallback.tool_id, &mut messages,
                                 )
-                                .await
-                                {
-                                    Ok(()) => {}
-                                    Err(e) => {
-                                        messages.push(ChatMessage::system(format!(
-                                            "[fallback failed: {e}]"
-                                        )));
-                                    }
-                                }
+                                .await;
+                                collected_tool_results.push(result);
                             }
                         }
                         "lexical_retrieval" => {
@@ -504,18 +533,11 @@ impl ReActLoop {
                                     doc_scope: request.doc_scope.clone(),
                                 })
                                 .map_err(|e| AppError::internal(format!("serialize fallback args: {e}")))?;
-                                match fallback::inject_fallback_observation(
+                                let result = fallback::inject_fallback_observation(
                                     runtime, &auth, args, &fallback.tool_id, &mut messages,
                                 )
-                                .await
-                                {
-                                    Ok(()) => {}
-                                    Err(e) => {
-                                        messages.push(ChatMessage::system(format!(
-                                            "[fallback failed: {e}]"
-                                        )));
-                                    }
-                                }
+                                .await;
+                                collected_tool_results.push(result);
                             }
                         }
                         "graph_retrieval" => {
@@ -531,18 +553,11 @@ impl ReActLoop {
                                     doc_scope: request.doc_scope.clone(),
                                 })
                                 .map_err(|e| AppError::internal(format!("serialize fallback args: {e}")))?;
-                                match fallback::inject_fallback_observation(
+                                let result = fallback::inject_fallback_observation(
                                     runtime, &auth, args, &fallback.tool_id, &mut messages,
                                 )
-                                .await
-                                {
-                                    Ok(()) => {}
-                                    Err(e) => {
-                                        messages.push(ChatMessage::system(format!(
-                                            "[fallback failed: {e}]"
-                                        )));
-                                    }
-                                }
+                                .await;
+                                collected_tool_results.push(result);
                             }
                         }
                         "web_search" => {
@@ -625,6 +640,7 @@ impl ReActLoop {
                 completion_tokens: total_usage.completion_tokens as u64,
                 total_tokens: total_usage.total_tokens as u64,
                 request_count: telemetry_records.len() as u64,
+                cached_tokens: total_usage.cached_tokens as u64,
             }),
             debug_payload: None,
             message_id: None,

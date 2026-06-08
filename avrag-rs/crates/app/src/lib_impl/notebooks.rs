@@ -23,11 +23,12 @@ impl AppState {
     pub async fn get_notebook(&self, notebook_id: &str) -> Option<Notebook> {
         if let Some(pg) = &self.pg {
             let notebook_id = Uuid::parse_str(notebook_id).ok()?;
-            return pg
+            let notebook = pg
                 .get_notebook(&self.auth, notebook_id)
                 .await
                 .ok()
-                .flatten();
+                .flatten()?;
+            return (notebook.org_id == self.current_org_id()).then_some(notebook);
         }
         let state = self.inner.read().await;
         state

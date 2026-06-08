@@ -58,6 +58,6 @@ budget:
     enterprise: 4
 auto_fallback:
   enabled: true
-  tool_id: dense_retrieval
+  tool_id: lexical_retrieval
   top_k: 10
 temperature: 0.3

@@ -76,11 +76,50 @@ struct StreamChoice {
     delta: Option<StreamChoiceDelta>,
 }
 
-#[derive(Debug, Deserialize)]
-struct StreamUsage {
+#[derive(Debug, Deserialize, Default)]
+struct PromptTokensDetails {
+    #[serde(default)]
+    cached_tokens: u32,
+}
+
+/// Provider usage block (OpenAI-compatible + DeepSeek cache fields).
+#[derive(Debug, Deserialize, Default)]
+struct ApiUsageRaw {
     prompt_tokens: u32,
     completion_tokens: u32,
     total_tokens: u32,
+    #[serde(default)]
+    cached_tokens: u32,
+    #[serde(default)]
+    prompt_cache_hit_tokens: u32,
+    #[serde(default)]
+    prompt_tokens_details: Option<PromptTokensDetails>,
+}
+
+impl ApiUsageRaw {
+    fn cached_token_count(&self) -> u32 {
+        if self.cached_tokens > 0 {
+            self.cached_tokens
+        } else if self.prompt_cache_hit_tokens > 0 {
+            self.prompt_cache_hit_tokens
+        } else {
+            self.prompt_tokens_details
+                .as_ref()
+                .map(|d| d.cached_tokens)
+                .unwrap_or(0)
+        }
+    }
+
+    fn to_llm_usage(&self, provider: String, model: String) -> LlmUsage {
+        LlmUsage {
+            prompt_tokens: self.prompt_tokens,
+            completion_tokens: self.completion_tokens,
+            total_tokens: self.total_tokens,
+            provider,
+            model,
+            cached_tokens: self.cached_token_count(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -88,7 +127,7 @@ struct StreamChunk {
     #[serde(default)]
     choices: Vec<StreamChoice>,
     #[serde(default)]
-    usage: Option<StreamUsage>,
+    usage: Option<ApiUsageRaw>,
     #[serde(default)]
     model: Option<String>,
 }
@@ -205,14 +244,7 @@ impl ChatCompletionStreamParser {
         }
 
         if let Some(usage) = chunk.usage {
-            self.usage = Some(LlmUsage {
-                prompt_tokens: usage.prompt_tokens,
-                completion_tokens: usage.completion_tokens,
-                total_tokens: usage.total_tokens,
-                provider: self.provider.clone(),
-                model: self.model.clone(),
-                cached_tokens: 0,
-            });
+            self.usage = Some(usage.to_llm_usage(self.provider.clone(), self.model.clone()));
         }
 
         for choice in chunk.choices {
@@ -400,16 +432,9 @@ impl LlmClient {
         }
 
         #[derive(serde::Deserialize)]
-        struct Usage {
-            prompt_tokens: u32,
-            completion_tokens: u32,
-            total_tokens: u32,
-        }
-
-        #[derive(serde::Deserialize)]
         struct CompletionResponse {
             choices: Vec<Choice>,
-            usage: Usage,
+            usage: ApiUsageRaw,
             model: String,
         }
 
@@ -468,21 +493,19 @@ impl LlmClient {
             &resp.model,
             resp.usage.prompt_tokens as u64,
             resp.usage.completion_tokens as u64,
+            resp.usage.cached_token_count() as u64,
         );
 
         self.record_usage(pre_deducted, resp.usage.total_tokens as usize);
 
+        let llm_usage = resp
+            .usage
+            .to_llm_usage(self.config.provider_name(), resp.model.clone());
+
         Ok(LlmResponse {
             content,
             reasoning_content,
-            usage: LlmUsage {
-                prompt_tokens: resp.usage.prompt_tokens,
-                completion_tokens: resp.usage.completion_tokens,
-                total_tokens: resp.usage.total_tokens,
-                provider: self.config.provider_name(),
-                model: resp.model.clone(),
-                cached_tokens: 0,
-            },
+            usage: llm_usage,
             model: resp.model,
             tool_calls,
         })
@@ -565,16 +588,9 @@ impl LlmClient {
         }
 
         #[derive(serde::Deserialize)]
-        struct Usage {
-            prompt_tokens: u32,
-            completion_tokens: u32,
-            total_tokens: u32,
-        }
-
-        #[derive(serde::Deserialize)]
         struct CompletionResponse {
             choices: Vec<Choice>,
-            usage: Usage,
+            usage: ApiUsageRaw,
             model: String,
         }
 
@@ -610,21 +626,19 @@ impl LlmClient {
             &resp.model,
             resp.usage.prompt_tokens as u64,
             resp.usage.completion_tokens as u64,
+            resp.usage.cached_token_count() as u64,
         );
 
         self.record_usage(pre_deducted, resp.usage.total_tokens as usize);
 
+        let llm_usage = resp
+            .usage
+            .to_llm_usage(self.config.provider_name(), resp.model.clone());
+
         Ok(LlmResponse {
             content,
             reasoning_content,
-            usage: LlmUsage {
-                prompt_tokens: resp.usage.prompt_tokens,
-                completion_tokens: resp.usage.completion_tokens,
-                total_tokens: resp.usage.total_tokens,
-                provider: self.config.provider_name(),
-                model: resp.model.clone(),
-                cached_tokens: 0,
-            },
+            usage: llm_usage,
             model: resp.model,
             tool_calls: None,
         })
@@ -729,6 +743,7 @@ impl LlmClient {
             &parsed.model,
             parsed.usage.prompt_tokens as u64,
             parsed.usage.completion_tokens as u64,
+            parsed.usage.cached_tokens as u64,
         );
 
         self.record_usage(pre_deducted, parsed.usage.total_tokens as usize);
@@ -842,7 +857,8 @@ impl LlmUsage {
 #[cfg(test)]
 mod tests {
     use super::{
-        ChatCompletionStreamParser, ChatMessage, LlmUsage, build_chat_completion_request_body,
+        ApiUsageRaw, ChatCompletionStreamParser, ChatMessage, LlmUsage,
+        build_chat_completion_request_body,
     };
     use crate::ModelProviderConfig;
 
@@ -1016,6 +1032,24 @@ data: [DONE]
                 .to_string()
                 .contains("Chat completion stream finished without content")
         );
+    }
+
+    #[test]
+    fn usage_parses_cached_tokens_from_provider_fields() {
+        let raw: ApiUsageRaw = serde_json::from_str(
+            r#"{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"prompt_cache_hit_tokens":8}"#,
+        )
+        .unwrap();
+        assert_eq!(raw.cached_token_count(), 8);
+
+        let raw2: ApiUsageRaw = serde_json::from_str(
+            r#"{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":3}}"#,
+        )
+        .unwrap();
+        assert_eq!(raw2.cached_token_count(), 3);
+
+        let usage = raw.to_llm_usage("deepseek".to_string(), "model".to_string());
+        assert_eq!(usage.cached_tokens, 8);
     }
 
     #[test]

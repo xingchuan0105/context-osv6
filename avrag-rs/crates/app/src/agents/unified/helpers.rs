@@ -25,6 +25,7 @@ pub fn build_run_usage(usage: Option<&LlmUsage>, request_count: u64) -> Option<A
         completion_tokens: u.completion_tokens as u64,
         total_tokens: u.total_tokens as u64,
         request_count,
+        cached_tokens: u.cached_tokens as u64,
     })
 }
 
