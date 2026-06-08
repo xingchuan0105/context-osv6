@@ -86,7 +86,7 @@ export function UsageMeter({
 }: UsageMeterProps) {
   const compact = variant === "compact";
   return (
-    <>
+    <div data-testid="usage-meter" className={styles.meter}>
       <BucketCard
         title={compact ? "5h" : formatUiMessage(locale, "usageWindow5h")}
         bucket={rolling5h}
@@ -103,6 +103,6 @@ export function UsageMeter({
         compact={compact}
         locale={locale}
       />
-    </>
+    </div>
   );
 }

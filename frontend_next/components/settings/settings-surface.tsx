@@ -40,6 +40,8 @@ import {
   type UserPreferences,
 } from "../../lib/settings/client";
 import { useUiPreferences } from "../../lib/ui-preferences";
+import { UsageMeter } from "../billing/UsageMeter";
+import { usageLimitToMeterProps } from "../../lib/billing/usage-limit-adapter";
 import { SETTINGS_TABS, type SettingsTab } from "./settings-tabs";
 
 type ProfileFormValues = {
@@ -349,55 +351,7 @@ function UsageLimitPanel() {
               </p>
             ) : null}
           </div>
-          {[
-            {
-              label: formatSettingsShareMessage(locale, "settings.usage.window5h"),
-              window: usageLimitQuery.data.windows.rolling_5h,
-            },
-            {
-              label: formatSettingsShareMessage(locale, "settings.usage.window7d"),
-              window: usageLimitQuery.data.windows.rolling_7d,
-            },
-          ].map(({ label, window }) => (
-            <div className="app-inline-surface" key={label} style={{ display: "grid", gap: "0.6rem" }}>
-              <div className="app-inline-row" style={{ marginBottom: 0 }}>
-                <span>{label}</span>
-                <strong>
-                  {formatCompactNumber(window.used_units)} / {formatCompactNumber(window.limit_units)}
-                </strong>
-              </div>
-              <div style={progressTrackStyle()}>
-                <div style={progressBarStyle(window.percent_used)} />
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: "1rem",
-                  flexWrap: "wrap",
-                  color: "hsl(var(--muted-foreground))",
-                }}
-              >
-                <span>
-                  {formatSettingsShareMessage(locale, "settings.usage.remaining")}{" "}
-                  {formatCompactNumber(window.remaining_units)}
-                </span>
-                {window.next_relief_at ? (
-                  <span>
-                    {formatSettingsShareMessage(locale, "settings.usage.nextRelief")}{" "}
-                    {formatDate(
-                      window.next_relief_at,
-                      locale,
-                      formatSettingsShareMessage(locale, "settings.usage.notSet"),
-                    )}
-                  </span>
-                ) : null}
-                {window.blocked ? (
-                  <span>{formatSettingsShareMessage(locale, "settings.usage.blocked")}</span>
-                ) : null}
-              </div>
-            </div>
-          ))}
+          <UsageMeter {...usageLimitToMeterProps(usageLimitQuery.data, locale)} />
           {breakdown.length > 0 ? (
             <div className="app-inline-surface" style={{ display: "grid", gap: "0.5rem" }}>
               <strong>{formatSettingsShareMessage(locale, "settings.usage.breakdownTitle")}</strong>
