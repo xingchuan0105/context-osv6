@@ -16,6 +16,7 @@
 //!   INGESTION_LLM_BASE_URL, INGESTION_LLM_API_KEY, INGESTION_LLM_MODEL
 //!   EMBEDDING_BASE_URL, EMBEDDING_API_KEY, EMBEDDING_MODEL
 //!   SEARCH_PROVIDER, SEARCH_BASE_URL, SEARCH_API_KEY (search tests only)
+//!   SEARCH_REQUIRE_REAL=1 — fail instead of mock fallback when Brave unreachable (search_real sets this)
 
 use crate::product_e2e::TestContext;
 
@@ -183,6 +184,138 @@ pub async fn chat_with_retry(
     (http, resp)
 }
 
+/// Retry RAG chat with format_hint until HTTP 200 with non-empty answer.
+pub async fn chat_with_format_retry(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+    doc_scope: &[String],
+    format_hint: &str,
+) -> (crate::product_e2e::HttpResponse, crate::product_e2e::ChatResponse) {
+    use crate::product_e2e::assertions::assert_http_ok;
+
+    let mut last_http = None;
+    for attempt in 1..=REAL_LLM_MAX_ATTEMPTS {
+        let http_resp = ctx
+            .chat_with_format_hint(query, notebook_id, doc_scope, Some(format_hint))
+            .await
+            .expect("chat with format_hint request");
+        last_http = Some(http_resp.clone());
+
+        if http_resp.status != 200 {
+            eprintln!(
+                "[llm_real] format chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} HTTP {}; body={}",
+                http_resp.status, http_resp.body_json
+            );
+            if attempt < REAL_LLM_MAX_ATTEMPTS {
+                tokio::time::sleep(RETRY_DELAY).await;
+                continue;
+            }
+            assert_http_ok(&http_resp);
+        }
+
+        let resp: crate::product_e2e::ChatResponse = match http_resp.clone().into_business() {
+            Ok(resp) => resp,
+            Err(err) => {
+                eprintln!(
+                    "[llm_real] format chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} invalid body: {err}; body={}",
+                    http_resp.body_json
+                );
+                if attempt < REAL_LLM_MAX_ATTEMPTS {
+                    tokio::time::sleep(RETRY_DELAY).await;
+                    continue;
+                }
+                panic!("valid ChatResponse schema: {err}");
+            }
+        };
+
+        if !resp.answer.is_empty() {
+            return (http_resp, resp);
+        }
+
+        eprintln!(
+            "[llm_real] format chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} empty answer; retrying after {}s",
+            RETRY_DELAY.as_secs()
+        );
+        if attempt < REAL_LLM_MAX_ATTEMPTS {
+            tokio::time::sleep(RETRY_DELAY).await;
+        } else {
+            return (http_resp, resp);
+        }
+    }
+
+    let http = last_http.expect("format chat produced no response");
+    assert_http_ok(&http);
+    let resp = http.clone().into_business().expect("valid ChatResponse schema");
+    (http, resp)
+}
+
+/// Retry multi-turn RAG chat with an existing session_id.
+pub async fn chat_with_session_retry(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+    doc_scope: &[String],
+    session_id: &str,
+) -> (crate::product_e2e::HttpResponse, crate::product_e2e::ChatResponse) {
+    use crate::product_e2e::assertions::assert_http_ok;
+
+    let mut last_http = None;
+    for attempt in 1..=REAL_LLM_MAX_ATTEMPTS {
+        let http_resp = ctx
+            .chat_with_session(query, notebook_id, doc_scope, session_id)
+            .await
+            .expect("chat with session request");
+        last_http = Some(http_resp.clone());
+
+        if http_resp.status != 200 {
+            eprintln!(
+                "[llm_real] session chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} HTTP {}; body={}",
+                http_resp.status, http_resp.body_json
+            );
+            if attempt < REAL_LLM_MAX_ATTEMPTS {
+                tokio::time::sleep(RETRY_DELAY).await;
+                continue;
+            }
+            assert_http_ok(&http_resp);
+        }
+
+        let resp: crate::product_e2e::ChatResponse = match http_resp.clone().into_business() {
+            Ok(resp) => resp,
+            Err(err) => {
+                eprintln!(
+                    "[llm_real] session chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} invalid body: {err}; body={}",
+                    http_resp.body_json
+                );
+                if attempt < REAL_LLM_MAX_ATTEMPTS {
+                    tokio::time::sleep(RETRY_DELAY).await;
+                    continue;
+                }
+                panic!("valid ChatResponse schema: {err}");
+            }
+        };
+
+        if !resp.answer.is_empty() {
+            return (http_resp, resp);
+        }
+
+        eprintln!(
+            "[llm_real] session chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} empty answer; retrying after {}s",
+            RETRY_DELAY.as_secs()
+        );
+        if attempt < REAL_LLM_MAX_ATTEMPTS {
+            tokio::time::sleep(RETRY_DELAY).await;
+        } else {
+            return (http_resp, resp);
+        }
+    }
+
+    let http = last_http.expect("session chat produced no response");
+    assert_http_ok(&http);
+    let resp = http.clone().into_business().expect("valid ChatResponse schema");
+    (http, resp)
+}
+
 /// Retry search until HTTP 200 with a non-empty answer, or exhaust attempts.
 pub async fn search_with_retry(
     ctx: &TestContext,
@@ -265,6 +398,8 @@ fn require_real_llm_config() {
     }
 }
 
+pub mod format_real;
+pub mod multi_turn;
 pub mod rag_real;
 pub mod search_real;
 
@@ -283,7 +418,7 @@ impl TestContext {
         // - does not override AGENT_LLM_* / EMBEDDING_* with mock values
         // - does not start mock LLM/Embedding servers
         // - uses real Brave when credentials + connectivity allow, else mock search
-        Self::build_smoke(true, 300, None, true).await
+        Self::build_smoke(true, 300, None, true, None, false).await
     }
 }
 
@@ -310,8 +445,6 @@ async fn cost_report_from_artifacts() {
         return;
     }
 
-    let mut test_count = 0usize;
-
     fn collect_metadata_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
@@ -328,16 +461,28 @@ async fn cost_report_from_artifacts() {
     let mut files = Vec::new();
     collect_metadata_files(&base, &mut files);
 
+    let mut test_count = 0usize;
+    // Token counts are available in artifact metadata via ChatResponse.usage.
+    let mut total_prompt_tokens = 0u64;
+    let mut total_completion_tokens = 0u64;
+
     for path in &files {
         let raw = std::fs::read_to_string(path).unwrap_or_default();
-        let _meta: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        let meta: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        if let Some(usage) = meta.get("usage").and_then(|u| u.as_object()) {
+            total_prompt_tokens += usage
+                .get("prompt_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            total_completion_tokens += usage
+                .get("completion_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+        }
         test_count += 1;
     }
 
-    // NOTE: ChatResponse currently does not expose token counts, so
-    // precise cost calculation requires adding a `usage` field to the
-    // production response schema.  For now we report test count only.
-    // Approximate cost per test (RAG):
+    // Approximate cost when usage is missing from older artifacts.
     //   LLM: ~3K tokens × ¥0.001/1K = ¥0.003
     //   Embedding: ~1.5K tokens × ¥0.0005/1K = ¥0.00075
     //   ≈ ¥0.004 per test
@@ -347,13 +492,14 @@ async fn cost_report_from_artifacts() {
     println!("\n=== Real-LLM E2E Cost Report ===");
     println!("  Artifact files:     {}", files.len());
     println!("  Tests run:          {}", test_count);
+    println!("  Total prompt tok:   {total_prompt_tokens}");
+    println!("  Total completion:   {total_completion_tokens}");
     println!("  Est. cost/test:     ¥{:.4}", approx_cost_per_test);
     println!(
         "  Est. total cost:    ¥{:.4} ({:.4} USD @ 7.2)",
         total_cost_cny,
         total_cost_cny / 7.2
     );
-    println!("  NOTE: precise token counts not yet available in ChatResponse schema.");
 
     // Monthly budget threshold: ¥10 CNY (~$1.40 USD)
     const MONTHLY_BUDGET_CNY: f64 = 10.0;

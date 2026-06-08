@@ -11,8 +11,8 @@ use std::time::Duration;
 use crate::product_e2e::{
     DocumentStatus, TestContext,
     assertions::{
-        assert_answer_has_doc_citation, assert_answer_substantive, assert_citation_doc_id,
-        assert_has_citations,
+        assert_answer_has_doc_citation, assert_answer_substantive,
+        assert_citation_doc_id, assert_citation_referenced_in_answer, assert_has_citations,
     },
     llm_real::chat_with_retry,
 };
@@ -55,6 +55,7 @@ async fn real_llm_rag_document_qa_returns_citation() {
     assert_citation_doc_id(&resp, &upload.document_id);
     assert_answer_has_doc_citation(&resp);
     assert_answer_substantive(&resp, 50);
+    assert_citation_referenced_in_answer(&resp);
     assert!(
         resp.degrade_trace.is_empty(),
         "expected no degradation trace on the happy path, got: {:?}",
