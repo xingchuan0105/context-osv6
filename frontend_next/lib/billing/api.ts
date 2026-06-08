@@ -66,7 +66,7 @@ export type BillingPlansResponse = {
 type Envelope<T> = {
   ok?: boolean;
   data?: T;
-  error?: { message?: string } | null;
+  error?: { code?: string; message?: string } | null;
 };
 
 async function decodeError(response: Response): Promise<ApiError> {
@@ -104,11 +104,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
-function unwrap<T>(envelope: Envelope<T>, fallback: string): T {
+function unwrap<T>(envelope: Envelope<T>, fallback: string, status = 200): T {
   if (envelope.ok && envelope.data) {
     return envelope.data;
   }
-  throw new Error(envelope.error?.message ?? fallback);
+  const message = envelope.error?.message ?? fallback;
+  const code = envelope.error?.code ?? null;
+  throw new ApiError(status, code, message);
 }
 
 export const billingApi = {

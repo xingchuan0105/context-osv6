@@ -1,4 +1,4 @@
-import { buildApiUrl } from "../auth/client";
+import { ApiError, buildApiUrl } from "../auth/client";
 
 /**
  * Pricing revamp gate design (keep frontend aligned with backend PRICING_REVAMP_ROLLOUT):
@@ -54,6 +54,9 @@ export async function isPricingRevampEnabled(): Promise<boolean> {
 }
 
 export function isPricingRevampFeatureDisabledError(error: unknown): boolean {
+  if (error instanceof ApiError && error.code === "feature_disabled") {
+    return true;
+  }
   if (!(error instanceof Error)) {
     return false;
   }

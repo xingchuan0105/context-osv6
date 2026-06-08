@@ -96,7 +96,31 @@ describe("billingApi.getUsageWindow", () => {
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
     );
-    await expect(billingApi.getUsageWindow()).rejects.toThrow("no access");
+    await expect(billingApi.getUsageWindow()).rejects.toMatchObject({
+      name: "ApiError",
+      message: "no access",
+      code: null,
+      status: 200,
+    });
+  });
+
+  it("throws ApiError with feature_disabled code from envelope", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: false,
+          error: { code: "feature_disabled", message: "Pricing revamp not yet available" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await expect(billingApi.getUsageWindow()).rejects.toMatchObject({
+      name: "ApiError",
+      code: "feature_disabled",
+      message: "Pricing revamp not yet available",
+      status: 200,
+    });
   });
 });
 
