@@ -29,4 +29,19 @@ export class WorkspacePage {
       { timeout: effectiveTimeout }
     );
   }
+
+  /** 返回最近完成 ingest 的 document id（依赖 data-document-id） */
+  async getLatestCompletedDocumentId(): Promise<string> {
+    const row = this.page
+      .locator(
+        '[data-testid="ingestion-status"][data-status="completed"], [data-testid="ingestion-status"][data-status="ready"]',
+      )
+      .first();
+    await row.waitFor({ state: "visible", timeout: 30_000 });
+    const id = await row.getAttribute("data-document-id");
+    if (!id) {
+      throw new Error("ingestion row missing data-document-id");
+    }
+    return id;
+  }
 }

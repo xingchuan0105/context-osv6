@@ -30,7 +30,9 @@ test.describe("Search Skill Availability", () => {
     const lastMessage = chat.getLastMessage();
     await expect(lastMessage).toBeVisible();
     await expect(lastMessage).not.toBeEmpty();
-    await expect(page.locator("[data-testid='mode-indicator']")).toContainText(/search|联网/i);
+    await expect(lastMessage.locator("[data-testid='mode-indicator']")).toContainText(
+      /search|联网/i,
+    );
 
     const answer = await chat.lastAnswerText();
     expect(answer.length).toBeGreaterThan(20);

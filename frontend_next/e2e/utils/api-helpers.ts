@@ -152,3 +152,30 @@ export async function deleteNotebookViaAPI(
     headers: authHeaders(),
   });
 }
+
+/**
+ * 轮询文档 ingestion 状态直到 completed/ready（与 Rust wait_for_ingestion 对齐）。
+ */
+export async function waitForDocumentReady(
+  request: APIRequestContext,
+  documentId: string,
+  timeoutMs = 120_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  const terminal = new Set(["completed", "ready", "Completed", "Ready"]);
+
+  while (Date.now() < deadline) {
+    const resp = await request.get(`/api/v1/documents/${documentId}/status`, {
+      headers: authHeaders(),
+    });
+    if (resp.ok()) {
+      const body = (await resp.json()) as { status?: string };
+      if (body.status && terminal.has(body.status)) {
+        return;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+
+  throw new Error(`document ${documentId} not ready within ${timeoutMs}ms`);
+}
