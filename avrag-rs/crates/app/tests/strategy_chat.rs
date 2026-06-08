@@ -97,7 +97,7 @@ async fn chat_simple_conversation_state_machine() {
     let result = executor.run(&strategy, ctx).await.unwrap();
 
     // --- State machine assertions ---
-    let schema = app::agents::strategy::chat::ChatStrategy::schema();
+    let schema = app::agents::capability::chat_schema();
     let history = result
         .state_history
         .as_ref()
@@ -177,7 +177,7 @@ async fn chat_with_tool_call_state_machine() {
     let result = executor.run(&strategy, ctx).await.unwrap();
 
     // State machine: Plan → ExecuteAtomic → Answer
-    let schema = app::agents::strategy::chat::ChatStrategy::schema();
+    let schema = app::agents::capability::chat_schema();
     let history = result
         .state_history
         .as_ref()
@@ -261,7 +261,7 @@ async fn chat_ppt_format_skill_injected() {
         .expect("state_history missing");
     // Real LLM may synthesize in a single step; only validate transitions when >1 state.
     if history.len() >= 2 {
-        let schema = app::agents::strategy::chat::ChatStrategy::schema();
+        let schema = app::agents::capability::chat_schema();
         assertions::assert_valid_transitions(&schema, history);
     }
     assertions::assert_state_kinds(history);
@@ -426,7 +426,7 @@ async fn chat_conversation_history_load_end_to_end() {
     let result = executor.run(&strategy, ctx).await.unwrap();
 
     // Verify state machine traversed Plan → [ExecuteAtomic] → Answer
-    let schema = app::agents::strategy::chat::ChatStrategy::schema();
+    let schema = app::agents::capability::chat_schema();
     let history = result
         .state_history
         .as_ref()

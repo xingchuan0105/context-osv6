@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use super::{ActivationPhase, SkillMetadata, ToolMetadata};
-use crate::agents::strategy::Strategy;
 
 static STANDARD_REGISTRY: OnceLock<CapabilityRegistry> = OnceLock::new();
 
@@ -74,14 +73,11 @@ impl CapabilityRegistry {
             }
         }
 
-        // --- Ingest strategy schemas from v5 Strategy implementations ---
+        // --- Static strategy schemas (decoupled from strategy runtime) ---
         let mut strategies = HashMap::new();
-        let chat_schema = crate::agents::strategy::chat::ChatStrategy::schema();
-        strategies.insert(chat_schema.id.clone(), chat_schema);
-        let rag_schema = crate::agents::strategy::rag::RagStrategy::schema();
-        strategies.insert(rag_schema.id.clone(), rag_schema);
-        let search_schema = crate::agents::strategy::search::SearchStrategy::schema();
-        strategies.insert(search_schema.id.clone(), search_schema);
+        for schema in super::schemas::standard_strategy_schemas() {
+            strategies.insert(schema.id.clone(), schema);
+        }
 
         Self {
             tools,

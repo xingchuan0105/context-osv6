@@ -277,42 +277,7 @@ impl Strategy for RagStrategy {
     }
 
     fn schema() -> crate::agents::capability::StrategySchema {
-        crate::agents::capability::StrategySchema {
-            id: "rag".to_string(),
-            states: vec![
-                "Plan".to_string(),
-                "ExecuteRetrieve".to_string(),
-                "Answer".to_string(),
-            ],
-            transitions: vec![
-                // Slice 2: native tool calling — Plan always either calls
-                // tools (→ ExecuteRetrieve) or emits no tool_calls
-                // (→ Answer).  There is no XML-driven plan strategy.
-                crate::agents::capability::TransitionSchema {
-                    from: "Plan".to_string(),
-                    to: "ExecuteRetrieve".to_string(),
-                },
-                crate::agents::capability::TransitionSchema {
-                    from: "Plan".to_string(),
-                    to: "Answer".to_string(),
-                },
-                // Slice 2: Agent Loop.  Evidence Gate Pass / NeedsFocus
-                // hands control back to Plan so the LLM can self-assess
-                // and decide whether to call more tools or stop.  Degrade
-                // terminates immediately.
-                crate::agents::capability::TransitionSchema {
-                    from: "ExecuteRetrieve".to_string(),
-                    to: "Plan".to_string(),
-                },
-                crate::agents::capability::TransitionSchema {
-                    from: "ExecuteRetrieve".to_string(),
-                    to: "Answer".to_string(),
-                },
-            ],
-            external_tools_used: vec![],
-            requires_internet: false,
-            max_budget: 4,
-        }
+        crate::agents::capability::rag_schema()
     }
 
     async fn step(

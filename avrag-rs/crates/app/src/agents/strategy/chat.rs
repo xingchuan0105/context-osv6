@@ -173,31 +173,7 @@ impl Strategy for ChatStrategy {
     }
 
     fn schema() -> crate::agents::capability::StrategySchema {
-        crate::agents::capability::StrategySchema {
-            id: "chat".to_string(),
-            states: vec![
-                "Plan".to_string(),
-                "ExecuteAtomic".to_string(),
-                "Answer".to_string(),
-            ],
-            transitions: vec![
-                crate::agents::capability::TransitionSchema {
-                    from: "Plan".to_string(),
-                    to: "ExecuteAtomic".to_string(),
-                },
-                crate::agents::capability::TransitionSchema {
-                    from: "Plan".to_string(),
-                    to: "Answer".to_string(),
-                },
-                crate::agents::capability::TransitionSchema {
-                    from: "ExecuteAtomic".to_string(),
-                    to: "Answer".to_string(),
-                },
-            ],
-            external_tools_used: vec![],
-            requires_internet: false,
-            max_budget: 1,
-        }
+        crate::agents::capability::chat_schema()
     }
 
     async fn step(

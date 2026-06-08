@@ -9,6 +9,7 @@ mod metadata;
 mod policy;
 mod registry;
 mod router;
+mod schemas;
 
 pub use api::{
     CapabilitiesResponse, SkillCapability, StrategySchema, ToolCapability, TransitionSchema,
@@ -22,4 +23,5 @@ pub use policy::{
     permissive, standard_rules, strict,
 };
 pub use registry::CapabilityRegistry;
+pub use schemas::{chat_schema, rag_schema, search_schema, standard_strategy_schemas};
 pub use router::{RouterCondition, RouterPolicy, RouterRule, RoutingDecision, standard_policy};
