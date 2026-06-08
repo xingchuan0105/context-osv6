@@ -1,10 +1,19 @@
-//! Embedding Redis cache hit — second identical RAG query must not re-call mock embedding.
+//! Manual E2E gate for embedding cache via the full RAG path.
+//!
+//! **Provider vs app cache:** DashScope `text-embedding-v4` has no provider-level
+//! embedding cache. Production caching lives in Redis (`EmbeddingClient::with_cache`
+//! in `avrag-llm`). This test is `#[ignore]` because RAG may embed different
+//! query strings per turn, so call-count stability is not guaranteed.
+//!
+//! Prefer the unit test `embed_openai_compatible_text_caches_in_redis` in
+//! `avrag-llm/src/embedding.rs`, which asserts same-text → Redis hit → one HTTP call.
 
 use std::time::Duration;
 
 use crate::product_e2e::{DocumentStatus, TestContext, assertions::*};
 
 #[tokio::test]
+#[ignore = "manual gate: requires Redis docker; RAG embedding texts may differ per query"]
 async fn identical_rag_query_hits_embedding_cache() {
     let mut ctx = TestContext::new_embedding_cache().await;
 
