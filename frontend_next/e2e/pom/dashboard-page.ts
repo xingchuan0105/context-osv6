@@ -4,13 +4,17 @@ export class DashboardPage {
   constructor(private page: Page) {}
 
   async createWorkspace() {
-    await this.page.getByRole("button", { name: /新建工作区|New workspace/i }).click();
+    await this.page.locator('[data-testid="dashboard-create-workspace"]').click();
     await this.page.waitForURL(/\/dashboard\/[^/]+$/);
   }
 
   async openWorkspace(name: string) {
-    await this.page.locator("text=" + name).first().click();
+    const card = this.page.locator(".dashboard-workspace-card", {
+      has: this.page.getByText(name, { exact: true }),
+    });
+    await card.locator(".dashboard-workspace-card-link").click();
     await this.page.waitForURL(/\/dashboard\/[^/]+$/);
+    await this.page.locator("#workspace-title").waitFor({ state: "visible", timeout: 10_000 });
   }
 
   getWorkspaceList() {

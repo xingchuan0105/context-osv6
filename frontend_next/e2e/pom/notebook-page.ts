@@ -11,9 +11,7 @@ export class NotebookPage {
     await this.page.waitForLoadState("networkidle");
 
     // 点击 dashboard 上的新建按钮（自动创建并跳转到新 workspace）
-    await this.page
-      .getByRole("button", { name: /新建工作区|New workspace/i })
-      .click();
+    await this.page.locator('[data-testid="dashboard-create-workspace"]').click();
     await this.page.waitForURL(/\/dashboard\/[^/]+$/);
 
     // 等待顶部标题编辑触发器可见

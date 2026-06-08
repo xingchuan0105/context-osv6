@@ -14,7 +14,12 @@ pub mod llm_real;
 pub mod smoke;
 pub mod tenants;
 
-use axum::{Json, Router, response::IntoResponse, routing::post};
+use axum::{
+    Json, Router,
+    extract::Query,
+    response::IntoResponse,
+    routing::{get, post},
+};
 use serde_json::json;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -253,6 +258,79 @@ impl TestContext {
         Self::build_smoke(true, 300, identity, false).await
     }
 
+    /// Decide whether to wire real Brave Search or the local mock server.
+    ///
+    /// For real-LLM tests we probe connectivity first so flaky/offline networks
+    /// fall back to mock search instead of producing degrade traces.
+    async fn resolve_use_real_search(use_real_llm: bool) -> bool {
+        if !llm_real::has_real_search_credentials() {
+            return false;
+        }
+        llm_real::ensure_search_defaults();
+
+        if std::env::var("SEARCH_FORCE_MOCK")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+        {
+            eprintln!("[product_e2e] SEARCH_FORCE_MOCK set — using mock search");
+            return false;
+        }
+
+        if !use_real_llm {
+            return true;
+        }
+
+        // A prior test may have pointed SEARCH_BASE_URL at the local mock server.
+        llm_real::load_env_from_repo_dotenv();
+        avrag_search::sync_resolved_proxy_env();
+
+        let base = std::env::var("SEARCH_BASE_URL")
+            .unwrap_or_else(|_| "https://api.search.brave.com".to_string());
+        let api_key = std::env::var("SEARCH_API_KEY").unwrap_or_default();
+        let url = format!("{}/res/v1/llm/context", base.trim_end_matches('/'));
+
+        let mut client_builder = reqwest::Client::builder().timeout(Duration::from_secs(8));
+        if let Some(proxy_url) = avrag_search::resolved_proxy_url() {
+            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
+                client_builder = client_builder.proxy(proxy);
+            }
+        }
+        let client = match client_builder.build() {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[product_e2e] Brave Search probe client build failed: {e}");
+                return false;
+            }
+        };
+
+        let reachable = match client
+            .post(&url)
+            .header("X-Subscription-Token", &api_key)
+            .json(&serde_json::json!({ "q": "ping" }))
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                let status = resp.status();
+                status.is_success() || status.as_u16() == 401 || status.as_u16() == 403
+            }
+            Err(e) => {
+                eprintln!("[product_e2e] Brave Search probe failed: {e}");
+                false
+            }
+        };
+
+        if reachable {
+            eprintln!("[product_e2e] using real Brave Search at {base}");
+            true
+        } else {
+            eprintln!(
+                "[product_e2e] Brave Search unreachable — falling back to mock search for E2E stability"
+            );
+            false
+        }
+    }
+
     async fn build_smoke(
         enable_rag: bool,
         worker_timeout_secs: u64,
@@ -296,9 +374,11 @@ impl TestContext {
             (url, Some(abort))
         };
 
-        // 5. Start mock Search (always — needed by Search tests)
+        // 5. Start mock Search (always — used when real Brave is unavailable)
         let (mock_search_url, mock_search_abort, search_should_429) =
             start_mock_search_server().await;
+
+        let has_real_search = Self::resolve_use_real_search(use_real_llm).await;
 
         // 6. Start mock Embedding if RAG enabled and not using real LLM.
         let (mock_embedding_url, mock_embedding_abort, embedding_should_503) =
@@ -311,6 +391,7 @@ impl TestContext {
 
         // 5. Set env vars for AppConfig
         unsafe {
+            std::env::set_var("E2E_ENABLED", "true");
             std::env::set_var("DATABASE_URL", &pg_url);
             std::env::set_var("AVRAG_RUN_MIGRATIONS", "true");
             std::env::set_var("AVRAG_OBJECT_ROOT", &object_root);
@@ -342,11 +423,8 @@ impl TestContext {
                 std::env::set_var("INGESTION_LLM_MODEL", "mock-llm");
             }
 
-            // Search config: use real Brave if a real key is present,
+            // Search config: real Brave when credentials + connectivity allow,
             // otherwise fall back to the mock search server.
-            let has_real_search = std::env::var("SEARCH_API_KEY")
-                .map(|k| !k.is_empty() && k != "mock")
-                .unwrap_or(false);
             if !has_real_search {
                 std::env::set_var("SEARCH_PROVIDER", "brave_llm_context");
                 std::env::set_var("SEARCH_BASE_URL", &mock_search_url);
@@ -457,11 +535,17 @@ impl TestContext {
         }
 
         // Worker Search env: real if available, otherwise mock.
-        let has_real_search = std::env::var("SEARCH_API_KEY")
-            .map(|k| !k.is_empty() && k != "mock")
-            .unwrap_or(false);
         if has_real_search {
-            for key in ["SEARCH_PROVIDER", "SEARCH_BASE_URL", "SEARCH_API_KEY"] {
+            avrag_search::sync_resolved_proxy_env();
+            for key in [
+                "SEARCH_PROVIDER",
+                "SEARCH_BASE_URL",
+                "SEARCH_API_KEY",
+                "HTTPS_PROXY",
+                "https_proxy",
+                "HTTP_PROXY",
+                "http_proxy",
+            ] {
                 if let Ok(v) = std::env::var(key) {
                     cmd.env(key, v);
                 }
@@ -512,8 +596,10 @@ impl TestContext {
         // Give worker a moment to start
         tokio::time::sleep(Duration::from_secs(1)).await;
 
+        // Real LLM + thinking mode + web search can exceed the smoke default.
+        let http_timeout_secs = if use_real_llm { 180 } else { 60 };
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(60))
+            .timeout(Duration::from_secs(http_timeout_secs))
             .default_headers(match &identity {
                 Some((org, user)) => test_auth_headers_for(org, user),
                 None => unreachable!("identity is always Some after .or_else above"),
@@ -1143,9 +1229,13 @@ impl MockLlmRoute {
             Self::RagCoverageEvaluator
         // 3. Format skills (must come before RAG answer — the catalog
         //    line is appended to every RAG answer prompt).
-        } else if system_prompt.contains("ppt-generation") {
+        } else if system_prompt.contains("Context OS presentation generation assistant")
+            || system_prompt.contains("ppt-generation")
+        {
             Self::FormatSkillPpt
-        } else if system_prompt.contains("html-renderer") {
+        } else if system_prompt.contains("Context OS HTML rendering assistant")
+            || system_prompt.contains("html-renderer")
+        {
             Self::FormatSkillHtml
         // 4. RAG answer (default for the answer phase)
         } else if system_prompt.contains("Context OS RAG answer agent") {
@@ -1155,7 +1245,8 @@ impl MockLlmRoute {
             Self::SearchPlanner
         } else if system_prompt.contains("Context OS web-search coverage evaluator") {
             Self::SearchCoverageEvaluator
-        } else if system_prompt.contains("Answer the user's original web-search question")
+        } else if system_prompt.contains("Context OS Web Search answer agent")
+            || system_prompt.contains("Answer the user's original web-search question")
             || user_prompt.contains("Search results:")
         {
             Self::SearchAnswer
@@ -1220,29 +1311,153 @@ async fn start_mock_embedding_server() -> (String, tokio::sync::oneshot::Sender<
     (base_url, abort_tx, embedding_should_503)
 }
 
+fn mock_tool_names(req: &serde_json::Value) -> Vec<String> {
+    req.get("tools")
+        .and_then(|tools| tools.as_array())
+        .map(|tools| {
+            tools
+                .iter()
+                .filter_map(|tool| {
+                    tool.get("function")
+                        .and_then(|function| function.get("name"))
+                        .and_then(|name| name.as_str())
+                        .map(str::to_owned)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn mock_native_tool_call(tool_names: &[String], user_prompt: &str) -> Option<serde_json::Value> {
+    let query = user_prompt
+        .trim()
+        .trim_start_matches("[prior_user_query]")
+        .trim()
+    .to_string();
+    let query = if query.is_empty() {
+        "context os query".to_string()
+    } else {
+        query
+    };
+
+    if tool_names.iter().any(|name| name == "web_search") {
+        return Some(json!({
+            "id": "call_web_search_0",
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "arguments": serde_json::to_string(&json!({
+                    "query": query,
+                    "vertical": "web",
+                })).unwrap_or_else(|_| "{}".to_string()),
+            }
+        }));
+    }
+
+    if tool_names.iter().any(|name| name == "dense_retrieval") {
+        return Some(json!({
+            "id": "call_dense_retrieval_0",
+            "type": "function",
+            "function": {
+                "name": "dense_retrieval",
+                "arguments": serde_json::to_string(&json!({
+                    "queries": [query],
+                    "modality": "text",
+                    "top_k": 10,
+                    "doc_scope": [],
+                })).unwrap_or_else(|_| "{}".to_string()),
+            }
+        }));
+    }
+
+    None
+}
+
+fn detect_synthesis_route(system_prompt: &str, messages: &[serde_json::Value]) -> Option<MockLlmRoute> {
+    let transcript = messages
+        .iter()
+        .filter_map(|message| message.get("content").and_then(|content| content.as_str()))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if system_prompt.contains("ppt-generation") {
+        return Some(MockLlmRoute::FormatSkillPpt);
+    }
+    if system_prompt.contains("html-renderer") {
+        return Some(MockLlmRoute::FormatSkillHtml);
+    }
+    if transcript.contains("\"results\"")
+        && transcript.contains("\"url\"")
+        && (system_prompt.contains("搜索助手") || transcript.contains("web_search"))
+    {
+        return Some(MockLlmRoute::SearchAnswer);
+    }
+    if transcript.contains("\"chunk_id\"") || system_prompt.contains("RAG 助手") {
+        return Some(MockLlmRoute::RagAnswer);
+    }
+    None
+}
+
 async fn mock_llm_handler(
     headers: axum::http::HeaderMap,
     Json(req): Json<serde_json::Value>,
 ) -> axum::response::Response {
     let messages = req["messages"].as_array().cloned().unwrap_or_default();
     let system_prompt = messages
-        .first()
+        .iter()
+        .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("system"))
         .and_then(|m| m["content"].as_str())
         .unwrap_or("");
     let user_prompt = messages
-        .get(1)
+        .iter()
+        .rev()
+        .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
         .and_then(|m| m["content"].as_str())
         .unwrap_or("");
+
+    let is_stream = req.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
+    let tool_names = mock_tool_names(&req);
+    let has_tool_results = messages
+        .iter()
+        .any(|m| m.get("role").and_then(|r| r.as_str()) == Some("tool"));
+
+    // ReAct loop: first tools-enabled turn should emit native tool calls.
+    if !is_stream && !tool_names.is_empty() && !has_tool_results {
+        if let Some(tool_call) = mock_native_tool_call(&tool_names, user_prompt) {
+            return axum::Json(json!({
+                "choices": [{
+                    "message": {
+                        "role": "assistant",
+                        "content": "",
+                        "tool_calls": [tool_call],
+                    }
+                }],
+                "usage": {"prompt_tokens": 100, "completion_tokens": 1, "total_tokens": 101},
+                "model": "mock-llm"
+            }))
+            .into_response();
+        }
+    }
+
+    // ReAct loop: after tool results, stop iterating and proceed to synthesis.
+    if !is_stream && !tool_names.is_empty() && has_tool_results {
+        return axum::Json(json!({
+            "choices": [{"message": {"role": "assistant", "content": ""}}],
+            "usage": {"prompt_tokens": 50, "completion_tokens": 1, "total_tokens": 51},
+            "model": "mock-llm"
+        }))
+        .into_response();
+    }
 
     // 1. Header-based routing (explicit, takes priority).
     let route = headers
         .get("x-mock-route")
         .and_then(|v| v.to_str().ok())
         .and_then(MockLlmRoute::from_header)
+        .or_else(|| detect_synthesis_route(system_prompt, &messages))
         .unwrap_or_else(|| MockLlmRoute::from_system_prompt(system_prompt, user_prompt));
 
     let content = route.canned_response();
-    let is_stream = req.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
 
     if is_stream {
         // SSE format expected by ChatCompletionStreamParser.
@@ -1403,6 +1618,7 @@ async fn start_mock_search_server() -> (String, tokio::sync::oneshot::Sender<()>
     let flag = search_should_429.clone();
 
     let flag2 = flag.clone();
+    let flag3 = flag.clone();
     let app = Router::new()
         .route(
             "/res/v1/llm/context",
@@ -1410,7 +1626,10 @@ async fn start_mock_search_server() -> (String, tokio::sync::oneshot::Sender<()>
         )
         .route(
             "/res/v1/news/search",
-            post(move |req| mock_search_handler(req, flag2.clone())),
+            get(move |Query(params): Query<MockNewsQuery>| async move {
+                mock_news_search_handler(params, flag2.clone())
+            })
+            .post(move |req| mock_search_handler(req, flag3.clone())),
         );
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -1429,6 +1648,36 @@ async fn start_mock_search_server() -> (String, tokio::sync::oneshot::Sender<()>
     });
 
     (base_url, abort_tx, search_should_429)
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct MockNewsQuery {
+    q: Option<String>,
+}
+
+fn mock_news_search_handler(
+    params: MockNewsQuery,
+    search_should_429: Arc<AtomicBool>,
+) -> axum::response::Response {
+    if search_should_429.load(Ordering::SeqCst) {
+        return (
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({ "error": "rate limit exceeded" })),
+        )
+            .into_response();
+    }
+
+    let _query = params.q.as_deref().unwrap_or("unknown");
+    Json(json!({
+        "results": [
+            {
+                "title": "Tokyo Weather Today",
+                "url": "https://example.com/weather-tokyo",
+                "description": "Sunny with a high of 25°C in Tokyo today."
+            }
+        ]
+    }))
+    .into_response()
 }
 
 async fn mock_search_handler(

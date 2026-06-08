@@ -19,7 +19,7 @@ use crate::agents::runtime::{
 };
 use crate::agents::evaluator::EvaluationSignals;
 use avrag_llm::{ChatMessage, LlmClient, LlmUsage};
-use common::AppError;
+use common::{AppError, ToolResult};
 
 
 
@@ -105,6 +105,7 @@ impl ReActLoop {
         let mut telemetry_records: Vec<ReActIterationRecord> = vec![];
         let mut total_usage = LlmUsage::zeroed();
         let mut total_tool_calls: u32 = 0;
+        let mut collected_tool_results: Vec<ToolResult> = Vec::new();
 
         loop {
             if cancel.is_cancelled() {
@@ -259,12 +260,14 @@ impl ReActLoop {
                             &call.tool,
                             &result,
                         ));
+                        collected_tool_results.push(result);
                     }
 
                     messages.push(build_assistant_message_with_tool_calls(
                         &calls,
                         &call_ids,
                         &llm_response.content,
+                        llm_response.reasoning_content.clone(),
                     ));
 
                     for tm in tool_messages {
@@ -357,13 +360,26 @@ impl ReActLoop {
                     let elapsed_ms = code_start.elapsed().as_millis() as u64;
 
                     // Preserve the full LLM response (thought + code tags) for ReAct chain.
-                    messages.push(ChatMessage::assistant(llm_response.content.clone()));
                     messages.push(ChatMessage {
-                        role: "tool".to_string(),
-                        content: combined_result.clone(),
+                        role: "assistant".to_string(),
+                        content: llm_response.content.clone(),
                         name: None,
                         tool_call_id: None,
                         tool_calls: None,
+                        reasoning_content: llm_response.reasoning_content.clone(),
+                    });
+                    // Code interpreter observations are not OpenAI native tool
+                    // calls; use a user-role observation to avoid API 400 on
+                    // tool messages missing tool_call_id.
+                    messages.push(ChatMessage {
+                        role: "user".to_string(),
+                        content: format!(
+                            "<code_execution_result>\n{combined_result}\n</code_execution_result>"
+                        ),
+                        name: None,
+                        tool_call_id: None,
+                        tool_calls: None,
+                        reasoning_content: None,
                     });
 
                     if any_error {
@@ -403,7 +419,14 @@ impl ReActLoop {
                     iteration += 1;
                 }
                 LlmOutput::Content(content) => {
-                    messages.push(ChatMessage::assistant(content.clone()));
+                    messages.push(ChatMessage {
+                        role: "assistant".to_string(),
+                        content: content.clone(),
+                        name: None,
+                        tool_call_id: None,
+                        tool_calls: None,
+                        reasoning_content: llm_response.reasoning_content.clone(),
+                    });
 
                     telemetry_records.push(ReActIterationRecord {
                         iteration,
@@ -554,20 +577,39 @@ impl ReActLoop {
             }
         }
 
+        if let Some(format_hint) = request.format_hint.as_deref() {
+            if let Some(skill) = self.skill_registry.skill(format_hint) {
+                let already_disclosed = disclosed_skills.iter().any(|s| s.id == skill.id);
+                if !already_disclosed {
+                    disclosed_skills.push(skill.clone());
+                }
+            }
+        }
+
         let synthesis = SynthesisPhase;
         let final_answer = synthesis
             .run(&self.llm, &base_prompt, mode, &messages, &disclosed_skills, sink, &cancel)
             .await?;
 
         let total_elapsed_ms = start_time.elapsed().as_millis() as u64;
+        let citations =
+            crate::agents::unified::helpers::build_all_citations_from_tool_results(
+                &collected_tool_results,
+            );
+        let sources = crate::agents::unified::helpers::build_sources_from_tool_results(
+            &collected_tool_results,
+        );
+        let degrade_trace = crate::agents::unified::helpers::degrade_trace_from_tool_results(
+            &collected_tool_results,
+        );
 
         Ok(AgentRunResult {
             answer: final_answer,
             answer_blocks: Vec::new(),
-            citations: Vec::new(),
-            sources: Vec::new(),
+            citations,
+            sources,
             reasoning_summary: None,
-            degrade_trace: Vec::new(),
+            degrade_trace,
             usage: Some(AgentRunUsage {
                 provider: if total_usage.provider.is_empty() {
                     self.llm.config.provider_name()
@@ -603,7 +645,7 @@ impl ReActLoop {
                 })
                 .collect(),
             total_tool_calls,
-            tool_results: Vec::new(),
+            tool_results: collected_tool_results,
             final_decision: Some(FinalDecision::Synthesized),
             trace_id: request.session_id.clone(),
             state_history: None,
@@ -639,6 +681,7 @@ fn build_assistant_message_with_tool_calls(
     calls: &[common::ToolCall],
     call_ids: &[String],
     content: &str,
+    reasoning_content: Option<String>,
 ) -> ChatMessage {
     let openai_calls: Vec<serde_json::Value> = calls
         .iter()
@@ -662,6 +705,7 @@ fn build_assistant_message_with_tool_calls(
         name: None,
         tool_call_id: None,
         tool_calls: Some(serde_json::json!(openai_calls)),
+        reasoning_content,
     }
 }
 
@@ -683,6 +727,7 @@ fn build_tool_message(
         name: Some(tool_name.to_string()),
         tool_call_id: Some(call_id.to_string()),
         tool_calls: None,
+        reasoning_content: None,
     }
 }
 
@@ -701,10 +746,19 @@ mod tests {
             args: serde_json::json!({"query": "rust"}),
         }];
         let call_ids = vec!["call_0".to_string()];
-        let msg = build_assistant_message_with_tool_calls(&calls, &call_ids, "thinking...");
+        let msg = build_assistant_message_with_tool_calls(
+            &calls,
+            &call_ids,
+            "thinking...",
+            Some("internal reasoning".to_string()),
+        );
 
         assert_eq!(msg.role, "assistant");
         assert_eq!(msg.content, "thinking...");
+        assert_eq!(
+            msg.reasoning_content.as_deref(),
+            Some("internal reasoning")
+        );
         let tc = msg.tool_calls.unwrap();
         let arr = tc.as_array().unwrap();
         assert_eq!(arr.len(), 1);

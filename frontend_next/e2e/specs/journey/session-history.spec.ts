@@ -1,6 +1,6 @@
 import { test, expect } from "../../fixtures/run-context";
 import { ChatPanelPage } from "../../pom/chat-panel-page";
-import { resetTestUserData } from "../../utils/api-helpers";
+import { createNotebookViaAPI, resetTestUserData } from "../../utils/api-helpers";
 
 test.describe("Session history", () => {
   test.beforeAll(async ({ request }) => {
@@ -8,11 +8,7 @@ test.describe("Session history", () => {
   });
 
   test("messages survive page refresh", async ({ page, runId }) => {
-    const notebookRes = await page.request.post("/api/v1/notebooks", {
-      data: { name: `e2e-history-test ${runId}`, description: "" },
-    });
-    expect(notebookRes.status()).toBe(201);
-    const notebook = await notebookRes.json();
+    const notebook = await createNotebookViaAPI(page.request, `e2e-history-test ${runId}`);
 
     const chat = new ChatPanelPage(page);
     await page.goto(`/dashboard/${notebook.notebook.id}`);

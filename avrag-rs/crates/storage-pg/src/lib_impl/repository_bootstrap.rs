@@ -123,8 +123,8 @@ impl PgAppRepository {
         let document_id = Uuid::new_v4();
         let row = sqlx::query(
             r#"
-            insert into documents (id, org_id, notebook_id, file_name, mime_type, file_size, status, chunk_count, object_path)
-            values ($1, $2, $3, $4, $5, $6, 'pending', 0, $7)
+            insert into documents (id, org_id, notebook_id, file_name, mime_type, file_size, status, chunk_count, object_path, user_id)
+            values ($1, $2, $3, $4, $5, $6, 'pending', 0, $7, $8)
             returning id, org_id, notebook_id, file_name, mime_type, file_size, status, chunk_count, created_at, updated_at
             "#,
         )
@@ -135,6 +135,7 @@ impl PgAppRepository {
         .bind(mime_type)
         .bind(i64::try_from(file_size).unwrap_or(i64::MAX))
         .bind(build_object_path(context, notebook_id, document_id, filename))
+        .bind(context.actor_id().map(ActorId::into_uuid))
         .fetch_one(tx.inner())
         .await?;
         tx.commit().await?;

@@ -75,6 +75,7 @@ mod tests {
     fn response(content: &str) -> LlmResponse {
         LlmResponse {
             content: content.to_string(),
+            reasoning_content: None,
             tool_calls: None,
             usage: avrag_llm::LlmUsage::zeroed(),
             model: String::new(),

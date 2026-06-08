@@ -238,11 +238,12 @@ impl PgAppRepository {
         ensure_org_and_actor(tx.inner(), context).await?;
         sqlx::query(
             r#"
-            insert into usage_events (org_id, metric_type, quantity, source, created_at)
-            values ($1, $2, $3, $4, now())
+            insert into usage_events (org_id, user_id, metric_type, quantity, source, created_at)
+            values ($1, $2, $3, $4, $5, now())
             "#,
         )
         .bind(context.org_id().into_uuid())
+        .bind(context.actor_id().map(ActorId::into_uuid))
         .bind(metric_type)
         .bind(quantity)
         .bind(source)

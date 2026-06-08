@@ -1,7 +1,7 @@
 use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::runtime::AgentRunUsage;
 use avrag_llm::LlmUsage;
-use common::{AnswerContextChunk, Citation, SourceRef, ToolResult, ToolStatus};
+use common::{AnswerContextChunk, Citation, DegradeTraceItem, SourceRef, ToolResult, ToolStatus};
 
 pub fn merge_usage(existing: Option<&LlmUsage>, new: &LlmUsage) -> LlmUsage {
     match existing {
@@ -177,6 +177,95 @@ pub fn build_citations_from_tool_results(tool_results: &[ToolResult]) -> Vec<Cit
         }
     }
     citations
+}
+
+pub fn build_search_citations_from_tool_results(tool_results: &[ToolResult]) -> Vec<Citation> {
+    let mut citations = Vec::new();
+    let mut next_id: i64 = 1;
+
+    for result in tool_results {
+        if result.tool != "web_search" || result.status != ToolStatus::Ok {
+            continue;
+        }
+        let Some(data) = result.data.as_ref() else {
+            continue;
+        };
+        let Ok(response) = serde_json::from_value::<avrag_search::SearchResponse>(data.clone()) else {
+            continue;
+        };
+        for search_result in response.results {
+            let citation_id = search_result
+                .citation_index
+                .map(|index| index as i64)
+                .unwrap_or(next_id);
+            citations.push(Citation {
+                citation_id,
+                doc_id: search_result.url.clone(),
+                chunk_id: None,
+                page: None,
+                doc_name: search_result.title.clone(),
+                preview: Some(search_result.snippet.chars().take(200).collect()),
+                content: Some(search_result.snippet.clone()),
+                score: 1.0,
+                layer: Some("search".to_string()),
+                chunk_type: Some("web".to_string()),
+                asset_id: None,
+                caption: None,
+                image_url: None,
+                parser_backend: None,
+                source_locator: None,
+                parse_run_id: None,
+            });
+            next_id = citation_id + 1;
+        }
+    }
+    citations
+}
+
+pub fn build_all_citations_from_tool_results(tool_results: &[ToolResult]) -> Vec<Citation> {
+    let mut citations = build_citations_from_tool_results(tool_results);
+    let mut search_citations = build_search_citations_from_tool_results(tool_results);
+    let mut next_id = citations
+        .iter()
+        .map(|c| c.citation_id)
+        .max()
+        .unwrap_or(0)
+        + 1;
+    for citation in &mut search_citations {
+        citation.citation_id = next_id;
+        next_id += 1;
+    }
+    citations.extend(search_citations);
+    citations
+}
+
+pub fn degrade_trace_from_tool_results(tool_results: &[ToolResult]) -> Vec<DegradeTraceItem> {
+    let mut trace = Vec::new();
+    for result in tool_results {
+        if let Some(tool_trace) = result.trace.as_ref()
+            && let Some(reason) = tool_trace.degrade_reason.as_ref()
+        {
+            trace.push(DegradeTraceItem {
+                stage: result.tool.clone(),
+                reason: reason.clone(),
+                impact: format!("{} degraded", result.tool),
+            });
+        }
+        if result.status != ToolStatus::Ok {
+            let reason = result
+                .data
+                .as_ref()
+                .and_then(|data| data.get("error"))
+                .and_then(|error| error.as_str())
+                .unwrap_or("tool execution failed");
+            trace.push(DegradeTraceItem {
+                stage: result.tool.clone(),
+                reason: reason.to_string(),
+                impact: format!("{} unavailable", result.tool),
+            });
+        }
+    }
+    trace
 }
 
 pub fn build_sources_from_tool_results(tool_results: &[ToolResult]) -> Vec<SourceRef> {

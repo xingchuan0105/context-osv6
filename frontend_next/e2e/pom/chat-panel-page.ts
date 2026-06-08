@@ -32,11 +32,11 @@ export class ChatPanelPage {
    * 等待最后一条 assistant 消息的 data-pending 变为 false。
    * 适用于需要快速确认消息已渲染的场景（timeout 较短）。
    */
-  async waitForResponse(timeout = 30_000) {
-    await this.page.waitForSelector(
-      '[data-testid="chat-message"][data-role="assistant"][data-pending="false"]',
-      { timeout }
-    );
+  async waitForResponse(timeout = 120_000) {
+    await this.page
+      .locator('[data-testid="chat-message"][data-role="assistant"][data-pending="false"]')
+      .last()
+      .waitFor({ timeout });
   }
 
   /**
@@ -44,9 +44,10 @@ export class ChatPanelPage {
    * 适用于需要确认流式生成已结束的场景（timeout 较长）。
    */
   async waitForAnswer(timeoutMs = 120_000) {
-    await this.page
+    const assistantMessage = this.page
       .locator('[data-testid="chat-message"][data-role="assistant"]')
-      .waitFor({ timeout: timeoutMs });
+      .last();
+    await assistantMessage.waitFor({ timeout: timeoutMs });
     try {
       await this.page
         .locator('[data-testid="workspace-progress-card"]')

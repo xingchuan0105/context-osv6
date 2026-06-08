@@ -9,6 +9,8 @@ test.describe("Analyze Skill", () => {
   });
 
   test("analysis query triggers analyze result", async ({ page, runId }) => {
+    test.setTimeout(180_000);
+
     const dashboard = new DashboardPage(page);
     const chat = new ChatPanelPage(page);
 
@@ -17,7 +19,7 @@ test.describe("Analyze Skill", () => {
 
     const messageText = `E2E ${runId}: 请分析当前 workspace 的数据趋势`;
     await chat.sendMessage(messageText);
-    await chat.waitForResponse();
+    await chat.waitForAnswer(150_000);
 
     const lastMessage = chat.getLastMessage();
     await expect(lastMessage).toBeVisible();

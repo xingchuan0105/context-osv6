@@ -359,7 +359,7 @@ function DashboardToolbar({
           </button>
         </div>
         <DashboardSortMenu onChange={onSortChange} sortMode={sortMode} />
-        <button className="app-button-primary dashboard-create-button" disabled={creating} type="button" onClick={onCreate}>
+        <button className="app-button-primary dashboard-create-button" data-testid="dashboard-create-workspace" disabled={creating} type="button" onClick={onCreate}>
           <svg aria-hidden="true" className="dashboard-create-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" />
           </svg>

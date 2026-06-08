@@ -25,7 +25,7 @@ use crate::product_e2e::TestContext;
 ///
 /// Only sets variables that are **not** already present in the environment,
 /// so explicit exports take priority.
-fn load_env_from_repo_dotenv() {
+pub(crate) fn load_env_from_repo_dotenv() {
     // The worktree usually does not have its own `.env`.
     // Try the worktree location first, then fall back to the main repo copy.
     let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -62,10 +62,189 @@ fn load_env_from_repo_dotenv() {
         } else {
             raw_value
         };
-        if std::env::var(key).is_err() {
+        let should_set = match std::env::var(key) {
+            Err(_) => true,
+            // Allow .env to replace placeholder search credentials left in the shell.
+            Ok(existing)
+                if (key == "SEARCH_API_KEY" && (existing.is_empty() || existing == "mock"))
+                    || (key == "SEARCH_BASE_URL" && existing.starts_with("http://127.0.0.1")) =>
+            {
+                true
+            }
+            Ok(_) => false,
+        };
+        if should_set {
             unsafe { std::env::set_var(key, value) };
         }
     }
+}
+
+/// True when SEARCH_API_KEY (or E2E_BRAVE_API_KEY) is present and not the mock placeholder.
+pub fn has_real_search_credentials() -> bool {
+    fn valid_key(key: Result<String, std::env::VarError>) -> bool {
+        key.map(|k| !k.is_empty() && k != "mock").unwrap_or(false)
+    }
+    valid_key(std::env::var("SEARCH_API_KEY")) || valid_key(std::env::var("E2E_BRAVE_API_KEY"))
+}
+
+/// Ensure SEARCH_PROVIDER / SEARCH_BASE_URL defaults when using real Brave.
+pub fn ensure_search_defaults() {
+    if !std::env::var("SEARCH_API_KEY")
+        .map(|k| !k.is_empty() && k != "mock")
+        .unwrap_or(false)
+    {
+        if let Ok(key) = std::env::var("E2E_BRAVE_API_KEY") {
+            if !key.is_empty() {
+                unsafe { std::env::set_var("SEARCH_API_KEY", key) };
+            }
+        }
+    }
+    if !std::env::var("SEARCH_PROVIDER")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+    {
+        unsafe { std::env::set_var("SEARCH_PROVIDER", "brave_llm_context") };
+    }
+    if !std::env::var("SEARCH_BASE_URL")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+    {
+        unsafe { std::env::set_var("SEARCH_BASE_URL", "https://api.search.brave.com") };
+    }
+}
+
+/// Max attempts for non-deterministic real-LLM chat/search calls.
+pub const REAL_LLM_MAX_ATTEMPTS: usize = 2;
+
+const RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Retry chat until HTTP 200 with a non-empty answer, or exhaust attempts.
+pub async fn chat_with_retry(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+    doc_scope: &[String],
+) -> (crate::product_e2e::HttpResponse, crate::product_e2e::ChatResponse) {
+    use crate::product_e2e::assertions::assert_http_ok;
+
+    let mut last_http = None;
+    for attempt in 1..=REAL_LLM_MAX_ATTEMPTS {
+        let http_resp = ctx
+            .chat(query, notebook_id, doc_scope)
+            .await
+            .expect("chat request");
+        last_http = Some(http_resp.clone());
+
+        if http_resp.status != 200 {
+            eprintln!(
+                "[llm_real] chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} HTTP {}; body={}",
+                http_resp.status, http_resp.body_json
+            );
+            if attempt < REAL_LLM_MAX_ATTEMPTS {
+                tokio::time::sleep(RETRY_DELAY).await;
+                continue;
+            }
+            assert_http_ok(&http_resp);
+        }
+
+        let resp: crate::product_e2e::ChatResponse = match http_resp.clone().into_business() {
+            Ok(resp) => resp,
+            Err(err) => {
+                eprintln!(
+                    "[llm_real] chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} invalid body: {err}; body={}",
+                    http_resp.body_json
+                );
+                if attempt < REAL_LLM_MAX_ATTEMPTS {
+                    tokio::time::sleep(RETRY_DELAY).await;
+                    continue;
+                }
+                panic!("valid ChatResponse schema: {err}");
+            }
+        };
+
+        if !resp.answer.is_empty() {
+            return (http_resp, resp);
+        }
+
+        eprintln!(
+            "[llm_real] chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} empty answer; retrying after {}s",
+            RETRY_DELAY.as_secs()
+        );
+        if attempt < REAL_LLM_MAX_ATTEMPTS {
+            tokio::time::sleep(RETRY_DELAY).await;
+        } else {
+            return (http_resp, resp);
+        }
+    }
+
+    let http = last_http.expect("chat produced no response");
+    assert_http_ok(&http);
+    let resp = http.clone().into_business().expect("valid ChatResponse schema");
+    (http, resp)
+}
+
+/// Retry search until HTTP 200 with a non-empty answer, or exhaust attempts.
+pub async fn search_with_retry(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+) -> (crate::product_e2e::HttpResponse, crate::product_e2e::ChatResponse) {
+    use crate::product_e2e::assertions::assert_http_ok;
+
+    let mut last_http = None;
+    for attempt in 1..=REAL_LLM_MAX_ATTEMPTS {
+        let http_resp = ctx.search(query, notebook_id).await.expect("search request");
+        last_http = Some(http_resp.clone());
+
+        if http_resp.status != 200 {
+            eprintln!(
+                "[llm_real] search attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} HTTP {}; body={}",
+                http_resp.status, http_resp.body_json
+            );
+            if attempt < REAL_LLM_MAX_ATTEMPTS {
+                tokio::time::sleep(RETRY_DELAY).await;
+                continue;
+            }
+            assert_http_ok(&http_resp);
+        }
+
+        let resp: crate::product_e2e::ChatResponse = match http_resp.clone().into_business() {
+            Ok(resp) => resp,
+            Err(err) => {
+                eprintln!(
+                    "[llm_real] search attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} invalid body: {err}; body={}",
+                    http_resp.body_json
+                );
+                if attempt < REAL_LLM_MAX_ATTEMPTS {
+                    tokio::time::sleep(RETRY_DELAY).await;
+                    continue;
+                }
+                panic!("valid ChatResponse schema: {err}");
+            }
+        };
+
+        if !resp.answer.is_empty() && resp.degrade_trace.is_empty() {
+            return (http_resp, resp);
+        }
+
+        eprintln!(
+            "[llm_real] search attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} not ready \
+             (answer_len={}, degrade={:?}); retrying after {}s",
+            resp.answer.len(),
+            resp.degrade_trace,
+            RETRY_DELAY.as_secs()
+        );
+        if attempt < REAL_LLM_MAX_ATTEMPTS {
+            tokio::time::sleep(RETRY_DELAY).await;
+        } else {
+            return (http_resp, resp);
+        }
+    }
+
+    let http = last_http.expect("search produced no response");
+    assert_http_ok(&http);
+    let resp = http.clone().into_business().expect("valid ChatResponse schema");
+    (http, resp)
 }
 
 /// Guard that fails fast if a required real-LLM credential is missing.
@@ -91,16 +270,19 @@ pub mod search_real;
 
 impl TestContext {
     /// Create a TestContext that uses the **real** production LLM and embedding
-    /// providers.  Mock search is still used unless SEARCH_API_KEY is present,
-    /// because Brave Search is not the focus of V5 migration validation.
+    /// providers.  Uses real Brave Search when SEARCH_API_KEY is configured
+    /// and reachable; otherwise falls back to the local mock search server.
     pub async fn new_with_real_llm() -> Self {
         load_env_from_repo_dotenv();
         require_real_llm_config();
+        if has_real_search_credentials() {
+            ensure_search_defaults();
+        }
 
         // build_smoke with use_real_llm=true:
         // - does not override AGENT_LLM_* / EMBEDDING_* with mock values
         // - does not start mock LLM/Embedding servers
-        // - still starts mock search server (Brave is not the V5 focus)
+        // - uses real Brave when credentials + connectivity allow, else mock search
         Self::build_smoke(true, 300, None, true).await
     }
 }

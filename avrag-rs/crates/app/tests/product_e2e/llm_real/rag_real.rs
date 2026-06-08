@@ -9,8 +9,12 @@
 use std::time::Duration;
 
 use crate::product_e2e::{
-    ChatResponse, DocumentStatus, HttpResponse, TestContext,
-    assertions::{assert_answer_has_doc_citation, assert_http_ok},
+    DocumentStatus, TestContext,
+    assertions::{
+        assert_answer_has_doc_citation, assert_answer_substantive, assert_citation_doc_id,
+        assert_has_citations,
+    },
+    llm_real::chat_with_retry,
 };
 
 /// P0: Basic RAG document Q&A returns a substantive answer with at least
@@ -37,54 +41,24 @@ async fn real_llm_rag_document_qa_returns_citation() {
         .expect("ingest document");
     assert_eq!(status, DocumentStatus::Completed);
 
-    // 3. Ask a question that requires reading the document.
-    let http_resp: HttpResponse = ctx
-        .chat(
-            "What is antifragility?",
-            &upload.notebook_id,
-            &[upload.document_id.clone()],
-        )
-        .await
-        .expect("chat request");
+    // 3. Ask a question that requires reading the document (retry for transient LLM errors).
+    let (_http_resp, resp) = chat_with_retry(
+        &ctx,
+        "What is antifragility?",
+        &upload.notebook_id,
+        &[upload.document_id.clone()],
+    )
+    .await;
 
-    // 4. Protocol + product assertions (loose, because LLM output is non-deterministic).
-    assert_http_ok(&http_resp);
-
-    let resp: ChatResponse = http_resp
-        .into_business()
-        .expect("valid ChatResponse schema");
-
-    assert!(
-        !resp.answer.is_empty(),
-        "real LLM should produce a non-empty answer"
-    );
-    assert!(
-        resp.answer.to_lowercase().contains("antifragil")
-            || resp.answer.to_lowercase().contains("taleb"),
-        "answer should mention the topic or author; got: {}",
-        resp.answer
-    );
+    // 4. Product assertions — align with smoke/rag_smoke: citations + substance, not keywords.
+    assert_has_citations(&resp);
+    assert_citation_doc_id(&resp, &upload.document_id);
+    assert_answer_has_doc_citation(&resp);
+    assert_answer_substantive(&resp, 50);
     assert!(
         resp.degrade_trace.is_empty(),
         "expected no degradation trace on the happy path, got: {:?}",
         resp.degrade_trace
-    );
-
-    // 5. Hard assertion: RAG must return citations on the happy path.
-    assert!(
-        !resp.citations.is_empty(),
-        "real-LLM RAG returned zero citations on the happy path; answer={}",
-        resp.answer
-    );
-    assert_answer_has_doc_citation(&resp);
-    let cites_uploaded = resp
-        .citations
-        .iter()
-        .any(|c| c.doc_id == upload.document_id);
-    assert!(
-        cites_uploaded,
-        "expected at least one citation from uploaded doc {}, got: {:?}",
-        upload.document_id, resp.citations
     );
 
     // 6. White-box: verify the planner actually selected dense_retrieval.

@@ -7,8 +7,9 @@
 //!   cargo test -p app --test product_e2e llm_real::search_real -- --ignored --test-threads=1 --nocapture
 
 use crate::product_e2e::{
-    ChatResponse, HttpResponse, TestContext,
-    assertions::{assert_answer_has_web_citation, assert_http_ok},
+    TestContext,
+    assertions::{assert_answer_has_web_citation, assert_answer_substantive, assert_has_citations},
+    llm_real::search_with_retry,
 };
 
 /// P0: Open-domain search query returns a substantive answer with at least
@@ -23,42 +24,22 @@ async fn real_llm_search_open_query_returns_web_citation() {
         .await
         .expect("create notebook");
 
-    let http_resp: HttpResponse = ctx
-        .search("What is the current weather in Tokyo today?", &notebook.id)
-        .await
-        .expect("search request");
+    let (_http_resp, resp) = search_with_retry(
+        &ctx,
+        "What is the current weather in Tokyo today?",
+        &notebook.id,
+    )
+    .await;
 
-    assert_http_ok(&http_resp);
-
-    let resp: ChatResponse = http_resp
-        .into_business()
-        .expect("valid ChatResponse schema");
-
-    assert!(
-        !resp.answer.is_empty(),
-        "real search LLM should produce a non-empty answer"
-    );
-    assert!(
-        resp.answer.to_lowercase().contains("tokyo")
-            || resp.answer.to_lowercase().contains("weather")
-            || resp.answer.to_lowercase().contains("°c")
-            || resp.answer.to_lowercase().contains("temperature"),
-        "answer should mention Tokyo or weather; got: {}",
-        resp.answer
-    );
+    // Product assertions — align with smoke/search_smoke: web citations + substance.
+    assert_has_citations(&resp);
+    assert_answer_has_web_citation(&resp);
+    assert_answer_substantive(&resp, 30);
     assert!(
         resp.degrade_trace.is_empty(),
         "expected no degradation trace on the happy path, got: {:?}",
         resp.degrade_trace
     );
-
-    // Hard assertion: search must return citations on the happy path.
-    assert!(
-        !resp.citations.is_empty(),
-        "real-LLM search returned zero citations on the happy path; answer={}",
-        resp.answer
-    );
-    assert_answer_has_web_citation(&resp);
 
     // Persist artifact for audit even on pass.
     ctx.save_llm_artifact(

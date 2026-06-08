@@ -1,5 +1,6 @@
-import { chromium } from "@playwright/test";
+import { chromium, request } from "@playwright/test";
 import { TEST_USER } from "./fixtures/test-user";
+import { ensureTestUserAccount } from "./utils/api-helpers";
 
 /**
  * setup-auth 职责：仅负责浏览器登录，生成 storageState。
@@ -9,10 +10,17 @@ import { TEST_USER } from "./fixtures/test-user";
  * 两者完全解耦，避免"登录失败"与"业务测试失败"相互混淆。
  */
 export default async function setupAuth() {
+  const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000";
+  const reqCtx = await request.newContext({ baseURL });
+  try {
+    await ensureTestUserAccount(reqCtx);
+    console.log("[setup-auth] test user ready with admin role");
+  } finally {
+    await reqCtx.dispose();
+  }
+
   const browser = await chromium.launch();
-  const page = await browser.newPage({
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
-  });
+  const page = await browser.newPage({ baseURL });
 
   try {
     await page.goto("/login");

@@ -22,7 +22,8 @@ test.describe("Notebook CRUD", () => {
     await page.goto("/dashboard");
     await expect(page.getByText(originalName)).toBeVisible();
 
-    // Rename via UI（workspace 内联标题编辑）
+    // Rename via UI（须先回到 workspace 页面）
+    await dashboard.openWorkspace(originalName);
     await notebook.renameNotebook(renamedName);
 
     // Verify rename on dashboard

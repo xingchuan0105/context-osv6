@@ -27,6 +27,9 @@ fn build_chat_completion_request_body(
                 if let Some(ref tool_calls) = m.tool_calls {
                     msg["tool_calls"] = tool_calls.clone();
                 }
+                if let Some(ref reasoning_content) = m.reasoning_content {
+                    msg["reasoning_content"] = serde_json::json!(reasoning_content);
+                }
                 msg
             })
             .collect::<Vec<_>>(),
@@ -151,6 +154,7 @@ impl ChatCompletionStreamParser {
 
         Ok(LlmResponse {
             content: self.accumulated_content,
+            reasoning_content: None,
             usage: self.usage.unwrap_or_else(|| LlmUsage {
                 prompt_tokens: 0,
                 completion_tokens: 0,
@@ -374,6 +378,8 @@ impl LlmClient {
         struct ResponseMessage {
             content: Option<String>,
             #[serde(default)]
+            reasoning_content: Option<String>,
+            #[serde(default)]
             tool_calls: Option<Vec<OpenAiToolCall>>,
         }
 
@@ -425,6 +431,7 @@ impl LlmClient {
 
         let choice = resp.choices.first().context("No choices in response")?;
         let content = choice.message.content.clone().unwrap_or_default();
+        let reasoning_content = choice.message.reasoning_content.clone();
 
         let tool_calls = if let Some(ref calls) = choice.message.tool_calls {
             let mut mapped_calls = Vec::new();
@@ -467,6 +474,7 @@ impl LlmClient {
 
         Ok(LlmResponse {
             content,
+            reasoning_content,
             usage: LlmUsage {
                 prompt_tokens: resp.usage.prompt_tokens,
                 completion_tokens: resp.usage.completion_tokens,
@@ -550,7 +558,10 @@ impl LlmClient {
 
         #[derive(serde::Deserialize)]
         struct ResponseMessage {
-            content: String,
+            #[serde(default)]
+            content: Option<String>,
+            #[serde(default)]
+            reasoning_content: Option<String>,
         }
 
         #[derive(serde::Deserialize)]
@@ -583,13 +594,9 @@ impl LlmClient {
             }
         };
 
-        let content = resp
-            .choices
-            .first()
-            .context("No choices in response")?
-            .message
-            .content
-            .clone();
+        let choice = resp.choices.first().context("No choices in response")?;
+        let content = choice.message.content.clone().unwrap_or_default();
+        let reasoning_content = choice.message.reasoning_content.clone();
         telemetry::prometheus::observe_llm_call(
             "generic",
             &provider,
@@ -609,6 +616,7 @@ impl LlmClient {
 
         Ok(LlmResponse {
             content,
+            reasoning_content,
             usage: LlmUsage {
                 prompt_tokens: resp.usage.prompt_tokens,
                 completion_tokens: resp.usage.completion_tokens,
@@ -739,6 +747,10 @@ pub struct ChatMessage {
     pub tool_call_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<serde_json::Value>,
+    /// Chain-of-thought from thinking-mode models (e.g. DeepSeek); must be
+    /// echoed back on subsequent turns when thinking is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
 }
 
 impl ChatMessage {
@@ -749,6 +761,7 @@ impl ChatMessage {
             name: None,
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         }
     }
 
@@ -759,6 +772,7 @@ impl ChatMessage {
             name: None,
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         }
     }
 
@@ -769,6 +783,7 @@ impl ChatMessage {
             name: None,
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         }
     }
 }
@@ -776,6 +791,9 @@ impl ChatMessage {
 #[derive(Debug, Clone)]
 pub struct LlmResponse {
     pub content: String,
+    /// Reasoning tokens from thinking-mode responses; carry into the next
+    /// assistant message when multi-turn tool calling continues.
+    pub reasoning_content: Option<String>,
     pub usage: LlmUsage,
     pub model: String,
     pub tool_calls: Option<Vec<common::ToolCall>>,
@@ -1047,6 +1065,7 @@ data: [DONE]
             name: Some("test_tool".to_string()),
             tool_call_id: Some("call_123".to_string()),
             tool_calls: None,
+            reasoning_content: None,
         };
 
         let body = build_chat_completion_request_body(
@@ -1071,5 +1090,38 @@ data: [DONE]
         assert_eq!(messages[2]["content"], "success");
         assert_eq!(messages[2]["name"], "test_tool");
         assert_eq!(messages[2]["tool_call_id"], "call_123");
+    }
+
+    #[test]
+    fn request_serializes_assistant_reasoning_content_for_thinking_mode() {
+        let config = test_config("https://api.deepseek.com", Some(true));
+        let assistant = ChatMessage {
+            role: "assistant".to_string(),
+            content: String::new(),
+            name: None,
+            tool_call_id: None,
+            tool_calls: Some(serde_json::json!([{
+                "id": "call_0",
+                "type": "function",
+                "function": {
+                    "name": "dense_retrieval",
+                    "arguments": r#"{"query":"rust"}"#
+                }
+            }])),
+            reasoning_content: Some("Let me search the knowledge base.".to_string()),
+        };
+
+        let body = build_chat_completion_request_body(
+            &config,
+            &[ChatMessage::user("hello"), assistant],
+            None,
+            false,
+        );
+
+        let messages = body["messages"].as_array().unwrap();
+        assert_eq!(
+            messages[1]["reasoning_content"],
+            "Let me search the knowledge base."
+        );
     }
 }
