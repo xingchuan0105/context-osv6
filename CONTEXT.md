@@ -42,8 +42,8 @@ The repository's git worktree structure has been consolidated and cleaned up:
 
 The project is currently in **Phase 5 (Unified Agent Integration & End-to-End Hardening)** with active **pricing-tier revamp** work on branch `feat/pricing-tiers-revamp`.
 
-- **Backend Status**: All Rust unit tests and contract integration tests pass. The migration from legacy graph flows to the `UnifiedAgentService` is complete. Billing exposes rolling-window usage (`/billing/usage/window`) and structured quota denial reasons (`QuotaDenyReason`). Strategy capability schemas are decoupled from the deprecated strategy runtime via `capability/schemas.rs`. The system relies on Postgres, Redis, Milvus, and MinIO.
-- **Frontend Status**: The production frontend (`frontend_next`) is fully updated. Settings billing tab wires `UsageMeter` (5h/7d rolling windows) with `data-testid` hooks (`usage-meter`, `plan-display`). Dynamic routing parameters support Next.js 15's promise-based architecture. Vitest covers billing format/API/UsageMeter components.
+- **Backend Status**: All Rust unit tests and contract integration tests pass. The migration from legacy graph flows to the `UnifiedAgentService` is complete. Billing exposes rolling-window usage (`/billing/usage/window`) and structured quota denial reasons (`QuotaDenyReason`). Strategy capability schemas live in `capability/schemas.rs`; the deprecated `agents/strategy/` runtime layer has been removed in favor of `ReActLoop` + `UnifiedAgent`. The system relies on Postgres, Redis, Milvus, and MinIO.
+- **Frontend Status**: The production frontend (`frontend_next`) is fully updated. Settings billing tab and the dashboard header wire `UsageMeter` (5h/7d rolling windows, compact variant on dashboard) with `data-testid` hooks (`usage-meter`, `plan-display`). Dynamic routing parameters support Next.js 15's promise-based architecture. Vitest covers billing format/API/UsageMeter components.
 - **E2E Test Architecture**: Playwright runs `smoke`, `journey`, `skills`, `billing`, and `visual` suites. Journey specs use isolated run contexts; `avrag-worker` is in the Playwright `webServer` lifecycle with a TCP health check on port `8081` for ingestion polling. Billing E2E asserts usage meter and plan display on `/settings?tab=billing`.
 
 ---
@@ -52,8 +52,7 @@ The project is currently in **Phase 5 (Unified Agent Integration & End-to-End Ha
 
 ### Gaps
 1. **Document Ingestion Worker Latency in E2E**: Background tasks processed via `avrag-worker` are asynchronous. Ingestion specs must keep robust polling with sensible timeouts for worker status updates.
-2. **Strategy Layer Deprecation (Phase C)**: `agents/strategy/` runtime remains for execution; static schemas moved to `capability/schemas/`. Full strategy test migration and `strategy/` deletion deferred.
-3. **Environment Configuration Safety**: Local testing relies on Milvus, MinIO, Redis, and Postgres. CI needs containerized service bindings or mocks.
+2. **Environment Configuration Safety**: Local testing relies on Milvus, MinIO, Redis, and Postgres. CI needs containerized service bindings or mocks.
 
 ### Goals
 1. **Complete E2E Verification**: Run and stabilize all Playwright specs including billing (`usage-settings`, `usage-meter`) and journey suites.

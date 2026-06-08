@@ -449,6 +449,20 @@ textarea {
   flex-wrap: wrap;
 }
 
+.dashboard-header-usage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+@media (max-width: 960px) {
+  .dashboard-header-usage {
+    display: none;
+  }
+}
+
 .dashboard-header-settings {
   display: inline-flex;
   align-items: center;

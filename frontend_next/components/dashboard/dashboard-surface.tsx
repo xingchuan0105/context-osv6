@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
+import { UsageMeter } from "../billing/UsageMeter";
 import { ContextOsMark } from "../context-os-mark";
 import { useAuth } from "../../lib/auth/context";
+import { usageLimitToMeterProps } from "../../lib/billing/usage-limit-adapter";
 import {
   createWorkspace,
   deleteWorkspace,
@@ -26,6 +29,7 @@ import {
   updateFavoriteWorkspaceIds,
 } from "../../lib/dashboard/preferences";
 import { formatUiMessage } from "../../lib/i18n/messages";
+import { getUsageLimit } from "../../lib/settings/client";
 import { useUiPreferences } from "../../lib/ui-preferences";
 
 type DashboardViewMode = "list" | "card";
@@ -96,6 +100,28 @@ function formatWorkspaceSourceCount(locale: DashboardLocale, documentCount: numb
   return `${documentCount} source${documentCount === 1 ? "" : "s"}`;
 }
 
+function DashboardHeaderUsage() {
+  const { token } = useAuth();
+  const { locale } = useUiPreferences();
+  const usageLimitQuery = useQuery({
+    queryKey: ["dashboard", "usage-limit", token],
+    enabled: Boolean(token),
+    queryFn: () => getUsageLimit(token as string),
+  });
+
+  if (!token || usageLimitQuery.isLoading || !usageLimitQuery.data) {
+    return null;
+  }
+
+  return (
+    <div className="dashboard-header-usage">
+      <UsageMeter
+        {...usageLimitToMeterProps(usageLimitQuery.data, locale, { variant: "compact" })}
+      />
+    </div>
+  );
+}
+
 function DashboardHeader({
   avatarInitial,
   locale,
@@ -112,6 +138,7 @@ function DashboardHeader({
           <div className="dashboard-brand-subtitle">{formatUiMessage(locale, "dashboardBrandSubtitle")}</div>
         </div>
       </div>
+      <DashboardHeaderUsage />
       <div className="dashboard-header-links">
         <Link
           aria-label={formatUiMessage(locale, "dashboardSettingsLink")}
