@@ -42,12 +42,19 @@ export default defineConfig({
             url: "http://127.0.0.1:8080/health",
             timeout: 120_000,
             reuseExistingServer: !process.env.CI,
+            env: {
+              ...process.env,
+              PRICING_REVAMP_ROLLOUT: "100",
+            },
           },
           {
             command: "cd ../avrag-rs && cargo run -p avrag-worker",
             url: "http://127.0.0.1:8081/health",
             timeout: 120_000,
             reuseExistingServer: !process.env.CI,
+            env: {
+              ...process.env,
+            },
           },
         ]),
     {
@@ -56,6 +63,10 @@ export default defineConfig({
       url: "http://127.0.0.1:3000",
       timeout: 60_000,
       reuseExistingServer: !process.env.CI,
+      env: {
+        ...process.env,
+        NEXT_PUBLIC_PRICING_REVAMP_ENABLED: "1",
+      },
     },
   ],
 
