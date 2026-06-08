@@ -4,16 +4,105 @@
 
 use std::path::Path;
 use std::process::Stdio;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 // ---------------------------------------------------------------------------
 // Postgres
 // ---------------------------------------------------------------------------
 
-/// Start a Postgres container via docker and return its connection URL.
+/// Process-wide shared Postgres for product E2E tests.
 ///
-/// Container is named `avrag-test-pg-{port}` and auto-removed on stop.
-pub async fn start_postgres() -> anyhow::Result<String> {
+/// One container per test binary; reference-counted so only the last
+/// [`TestContext`] drop stops it.
+pub struct SharedPostgres {
+    pub url: String,
+    pub container_name: String,
+    refs: AtomicUsize,
+}
+
+static SHARED_PG: OnceLock<Mutex<Option<Arc<SharedPostgres>>>> = OnceLock::new();
+
+fn shared_pg_slot() -> &'static Mutex<Option<Arc<SharedPostgres>>> {
+    SHARED_PG.get_or_init(|| Mutex::new(None))
+}
+
+async fn postgres_is_ready(url: &str) -> bool {
+    match avrag_storage_pg::PgAppRepository::connect(url).await {
+        Ok(repo) => repo.ping().await.is_ok(),
+        Err(_) => false,
+    }
+}
+
+/// Acquire a reference to the shared Postgres container, creating it on first use.
+pub async fn acquire_shared_postgres() -> anyhow::Result<(String, Arc<SharedPostgres>)> {
+    let mut slot = shared_pg_slot()
+        .lock()
+        .map_err(|_| anyhow::anyhow!("shared postgres lock poisoned"))?;
+
+    if let Some(pg) = slot.as_ref() {
+        if postgres_is_ready(&pg.url).await {
+            pg.refs.fetch_add(1, Ordering::SeqCst);
+            return Ok((pg.url.clone(), pg.clone()));
+        }
+        let stale_name = pg.container_name.clone();
+        let _ = stop_postgres(&stale_name).await;
+        *slot = None;
+    }
+
+    let (url, container_name) = start_postgres().await?;
+    let pg = Arc::new(SharedPostgres {
+        url: url.clone(),
+        container_name,
+        refs: AtomicUsize::new(1),
+    });
+    *slot = Some(pg.clone());
+    Ok((url, pg))
+}
+
+/// Release a shared Postgres reference; stops the container when the last ref drops.
+pub fn release_shared_postgres(pg: &Arc<SharedPostgres>) {
+    let prev = pg.refs.fetch_sub(1, Ordering::SeqCst);
+    if prev == 1 {
+        let container_name = pg.container_name.clone();
+        block_on_with_timeout(async move {
+            stop_postgres(&container_name).await;
+        });
+        if let Ok(mut slot) = shared_pg_slot().lock() {
+            if slot.as_ref().is_some_and(|shared| Arc::ptr_eq(shared, pg)) {
+                *slot = None;
+            }
+        }
+    }
+}
+
+/// Start a Postgres container via docker and return `(url, container_name)`.
+///
+/// Retries up to 3 times with a fresh ephemeral port on bind/forward failures.
+pub async fn start_postgres() -> anyhow::Result<(String, String)> {
+    const MAX_ATTEMPTS: u32 = 3;
+    let mut last_err = None;
+
+    for attempt in 1..=MAX_ATTEMPTS {
+        match start_postgres_once().await {
+            Ok(pair) => return Ok(pair),
+            Err(e) => {
+                eprintln!(
+                    "[product_e2e] start_postgres attempt {attempt}/{MAX_ATTEMPTS} failed: {e}"
+                );
+                last_err = Some(e);
+                if attempt < MAX_ATTEMPTS {
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                }
+            }
+        }
+    }
+
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("start_postgres failed")))
+}
+
+async fn start_postgres_once() -> anyhow::Result<(String, String)> {
     let port = find_ephemeral_port()?;
     let container_name = format!("avrag-test-pg-{port}");
 
@@ -39,12 +128,51 @@ pub async fn start_postgres() -> anyhow::Result<String> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        let _ = tokio::process::Command::new("docker")
+            .args(["rm", "-f", &container_name])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await;
         anyhow::bail!("docker run postgres failed: {stderr}");
     }
 
     let url = format!("postgres://test:test@127.0.0.1:{port}/test");
     wait_for_postgres(&url, &container_name).await?;
-    Ok(url)
+    Ok((url, container_name))
+}
+
+fn block_on_with_timeout(fut: impl std::future::Future<Output = ()> + Send + 'static) {
+    std::thread::Builder::new()
+        .name("product-e2e-teardown".into())
+        .spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("tokio runtime for sync teardown")
+                .block_on(async {
+                    let _ = tokio::time::timeout(Duration::from_secs(10), fut).await;
+                });
+        })
+        .expect("spawn teardown thread")
+        .join()
+        .expect("join teardown thread");
+}
+
+/// Synchronously stop a Milvus container (10s timeout) for test teardown.
+pub fn sync_stop_milvus(container_name: &str) {
+    let name = container_name.to_string();
+    block_on_with_timeout(async move {
+        stop_milvus(&name).await;
+    });
+}
+
+/// Synchronously drop Milvus collections (10s timeout) for test teardown.
+pub fn sync_drop_milvus_collections(prefix: &str) {
+    let prefix = prefix.to_string();
+    block_on_with_timeout(async move {
+        drop_milvus_collections(&prefix).await;
+    });
 }
 
 /// Stop a Postgres container by name.
@@ -114,23 +242,17 @@ pub struct MilvusInstance {
     pub is_external: bool,
 }
 
-/// Reuse an existing Milvus instance or start a standalone container.
+/// Start or reuse a Milvus instance for product E2E.
 ///
-/// First probes `127.0.0.1:19530` via TCP connect. If a Milvus is already
-/// running (e.g. from docker-compose), returns its URL directly with
-/// `is_external = true`. Otherwise starts a temporary standalone container
-/// with `is_external = false`.
+/// Prefers a healthy external instance on 19530 (fast, already warmed).
+/// Falls back to an ephemeral container when no external Milvus is reachable.
+/// Collection isolation relies on per-context `MILVUS_COLLECTION_PREFIX` +
+/// teardown drops, not on dedicated Milvus processes.
 pub async fn start_milvus() -> anyhow::Result<MilvusInstance> {
-    let url = "http://127.0.0.1:19530";
-    // Fast-path: check if port 19530 is open
-    if std::net::TcpStream::connect_timeout(
-        &"127.0.0.1:19530".parse().unwrap(),
-        std::time::Duration::from_secs(2),
-    )
-    .is_ok()
-    {
+    let external_url = "http://127.0.0.1:19530";
+    if milvus_api_ready(external_url).await {
         return Ok(MilvusInstance {
-            url: url.to_string(),
+            url: external_url.to_string(),
             container_name: None,
             is_external: true,
         });
@@ -227,16 +349,29 @@ pub async fn drop_milvus_collections(prefix: &str) {
     }
 }
 
+async fn milvus_api_ready(url: &str) -> bool {
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+    else {
+        return false;
+    };
+    let body = serde_json::json!({ "dbName": "default" });
+    let Ok(res) = client
+        .post(format!("{url}/v2/vectordb/collections/list"))
+        .json(&body)
+        .send()
+        .await
+    else {
+        return false;
+    };
+    res.status().is_success()
+}
+
 async fn wait_for_milvus(url: &str, container_name: &str) -> anyhow::Result<()> {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(180);
     loop {
-        let port = url.rsplit(':').next().unwrap_or("19530");
-        if std::net::TcpStream::connect_timeout(
-            &format!("127.0.0.1:{port}").parse().unwrap(),
-            std::time::Duration::from_secs(2),
-        )
-        .is_ok()
-        {
+        if milvus_api_ready(url).await {
             return Ok(());
         }
         if tokio::time::Instant::now() < deadline {
@@ -246,6 +381,86 @@ async fn wait_for_milvus(url: &str, container_name: &str) -> anyhow::Result<()> 
             anyhow::bail!("milvus did not become ready in 180s");
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Redis (embedding cache tests)
+// ---------------------------------------------------------------------------
+
+/// Start a Redis container via docker and return `(url, container_name)`.
+pub async fn start_redis() -> anyhow::Result<(String, String)> {
+    let port = find_ephemeral_port()?;
+    let container_name = format!("avrag-test-redis-{port}");
+
+    let output = tokio::process::Command::new("docker")
+        .args([
+            "run",
+            "-d",
+            "--rm",
+            "--name",
+            &container_name,
+            "-p",
+            &format!("{port}:6379"),
+            "redis:7-alpine",
+        ])
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("docker run redis failed: {stderr}");
+    }
+
+    let url = format!("redis://127.0.0.1:{port}");
+    wait_for_redis(&url, &container_name).await?;
+    Ok((url, container_name))
+}
+
+/// Synchronously stop a Redis container (10s timeout) for test teardown.
+pub fn sync_stop_redis(container_name: &str) {
+    let name = container_name.to_string();
+    block_on_with_timeout(async move {
+        stop_redis(&name).await;
+    });
+}
+
+/// Stop a Redis container by name.
+pub async fn stop_redis(container_name: &str) {
+    let _ = tokio::process::Command::new("docker")
+        .args(["stop", "-t", "3", container_name])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .await;
+}
+
+async fn wait_for_redis(url: &str, container_name: &str) -> anyhow::Result<()> {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        if redis_ping(url).await {
+            return Ok(());
+        }
+        if tokio::time::Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        } else {
+            let _ = stop_redis(container_name).await;
+            anyhow::bail!("redis did not become ready in 30s");
+        }
+    }
+}
+
+pub async fn redis_ping(url: &str) -> bool {
+    let client = match redis::Client::open(url) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let Ok(mut conn) = client.get_multiplexed_async_connection().await else {
+        return false;
+    };
+    redis::cmd("PING")
+        .query_async::<String>(&mut conn)
+        .await
+        .is_ok()
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +511,7 @@ pub async fn find_worker_binary() -> anyhow::Result<std::path::PathBuf> {
 /// Idempotent. Logs a single line per removed container.
 pub async fn cleanup_orphaned_test_containers() -> anyhow::Result<usize> {
     let mut removed = 0usize;
-    for prefix in ["avrag-test-pg-", "avrag-test-milvus-"] {
+    for prefix in ["avrag-test-pg-", "avrag-test-milvus-", "avrag-test-redis-"] {
         let output = tokio::process::Command::new("docker")
             .args([
                 "ps",
