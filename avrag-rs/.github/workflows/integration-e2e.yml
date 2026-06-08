@@ -1,22 +1,25 @@
-name: Smoke E2E
+name: Integration E2E
 
 on:
-  pull_request:
+  push:
+    branches:
+      - main
     paths:
       - 'crates/**'
       - 'bins/**'
       - 'prompts/**'
       - 'contracts/**'
-      - '.github/workflows/smoke-e2e.yml'
+      - '.github/workflows/integration-e2e.yml'
   workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  smoke-e2e:
-    name: Product Smoke E2E
+  integration-e2e:
+    name: Product Integration E2E (full suite)
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -39,21 +42,21 @@ jobs:
         uses: actions/cache@v4
         with:
           path: target
-          key: ${{ runner.os }}-cargo-build-smoke-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-build-integration-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Compile tests
         run: cargo test --no-run --test product_e2e -p app
 
-      - name: Run Smoke E2E
-        run: cargo test --test product_e2e -p app smoke:: auth_boundary product_e2e:: -- --test-threads=1 --nocapture
+      - name: Run full Product E2E suite
+        run: cargo test --test product_e2e -p app -- --test-threads=1 --nocapture
         env:
-          E2E_MODE: smoke
-        timeout-minutes: 10
+          E2E_MODE: integration
+        timeout-minutes: 40
 
       - name: Upload failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-failure-artifacts
+          name: integration-e2e-failure-${{ github.run_id }}
           path: crates/app/tests/e2e_output/**/**
-          retention-days: 7
+          retention-days: 14

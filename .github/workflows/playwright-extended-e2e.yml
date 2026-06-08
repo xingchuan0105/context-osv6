@@ -1,0 +1,97 @@
+name: Playwright Extended E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: 'Suite to run'
+        required: true
+        default: billing
+        type: choice
+        options:
+          - billing
+          - visual
+          - cross-browser
+          - all
+
+env:
+  CI: true
+
+jobs:
+  extended-e2e:
+    name: Extended Playwright (${{ inputs.suite }})
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend_next
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend_next/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: |
+          if [ "${{ inputs.suite }}" = "cross-browser" ] || [ "${{ inputs.suite }}" = "all" ]; then
+            pnpm exec playwright install --with-deps chromium firefox webkit
+          else
+            pnpm exec playwright install --with-deps chromium
+          fi
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            avrag-rs/target
+          key: ${{ runner.os }}-cargo-extended-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
+
+      - name: Run billing E2E
+        if: inputs.suite == 'billing' || inputs.suite == 'all'
+        run: pnpm exec playwright test --project=billing --project=billing-visual
+        env:
+          E2E_RESET_SECRET: ${{ secrets.E2E_RESET_SECRET }}
+          PRICING_REVAMP_ROLLOUT: '100'
+          NEXT_PUBLIC_PRICING_REVAMP_ENABLED: '1'
+        timeout-minutes: 30
+
+      - name: Run visual regression
+        if: inputs.suite == 'visual' || inputs.suite == 'all'
+        run: pnpm exec playwright test --project=visual-desktop --project=visual-mobile
+        env:
+          E2E_RESET_SECRET: ${{ secrets.E2E_RESET_SECRET }}
+        timeout-minutes: 30
+
+      - name: Run cross-browser journey
+        if: inputs.suite == 'cross-browser' || inputs.suite == 'all'
+        run: pnpm exec playwright test --project=journey
+        env:
+          RUN_CROSS_BROWSER: '1'
+          E2E_RESET_SECRET: ${{ secrets.E2E_RESET_SECRET }}
+        timeout-minutes: 45
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-extended-${{ inputs.suite }}-${{ github.run_id }}
+          path: |
+            frontend_next/playwright-report/
+            frontend_next/test-results/
+          retention-days: 30
