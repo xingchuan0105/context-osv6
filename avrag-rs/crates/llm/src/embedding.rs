@@ -424,4 +424,78 @@ mod tests {
         });
         assert!(client.uses_dashscope_multimodal_embedding());
     }
+
+    /// Same input text → Redis cache hit → mock embedding HTTP called once.
+    ///
+    /// Skips when Redis is unavailable (no `TEST_REDIS_URL` / local docker).
+    #[tokio::test]
+    async fn embed_openai_compatible_text_caches_in_redis() {
+        use axum::{Json, Router, routing::post};
+        use serde_json::json;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let redis_url = std::env::var("TEST_REDIS_URL")
+            .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+        let cache = match avrag_cache_redis::CacheStore::new(&redis_url) {
+            Ok(cache) => Arc::new(cache),
+            Err(error) => {
+                eprintln!("skip embed_openai_compatible_text_caches_in_redis: redis unavailable: {error}");
+                return;
+            }
+        };
+
+        let http_calls = Arc::new(AtomicUsize::new(0));
+        let call_counter = http_calls.clone();
+        let app = Router::new().route(
+            "/embeddings",
+            post(move |Json(req): Json<serde_json::Value>| {
+                call_counter.fetch_add(1, Ordering::SeqCst);
+                let texts = req["input"]
+                    .as_array()
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
+                    .unwrap_or_default();
+                let dim = req["dimensions"].as_u64().unwrap_or(8) as usize;
+                let vector: Vec<f32> = (0..dim).map(|i| 0.1 + i as f32 * 0.01).collect();
+                let data: Vec<serde_json::Value> = texts
+                    .iter()
+                    .map(|_| json!({"embedding": vector}))
+                    .collect();
+                async move { Json(json!({ "data": data })) }
+            }),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock embedding listener");
+        let port = listener.local_addr().unwrap().port();
+        let base_url = format!("http://127.0.0.1:{port}");
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let client = EmbeddingClient::new(ModelProviderConfig {
+            base_url: base_url.clone(),
+            api_key: "sk-test".to_string(),
+            model: "mock-embedding".to_string(),
+            timeout_ms: 5_000,
+            api_style: None,
+            dimensions: Some(8),
+            enable_thinking: None,
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        })
+        .with_cache(cache);
+
+        let text = "cache-me-once";
+        let first = client.embed(&[text]).await.expect("first embed");
+        let second = client.embed(&[text]).await.expect("second embed");
+        assert_eq!(first, second);
+        assert_eq!(
+            http_calls.load(Ordering::SeqCst),
+            1,
+            "second identical embed should hit Redis, not call HTTP again"
+        );
+    }
 }
