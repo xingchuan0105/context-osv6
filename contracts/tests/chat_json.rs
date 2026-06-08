@@ -172,6 +172,8 @@ fn chat_response_roundtrips_shared_nested_types() {
         mode_debug: None,
         message_id: Some(7),
         guard_report: None,
+        tool_results: Vec::new(),
+        usage: None,
     };
 
     let json = serde_json::to_value(&response).expect("response should serialize");
@@ -203,6 +205,8 @@ fn done_payload_exposes_terminal_response_fields() {
             mode_debug: None,
             message_id: Some(7),
             guard_report: None,
+            tool_results: Vec::new(),
+            usage: None,
         },
     };
 

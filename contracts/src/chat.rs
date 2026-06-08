@@ -377,6 +377,19 @@ pub struct ToolResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatTokenUsage {
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub total_tokens: u64,
+    #[serde(default)]
+    pub cached_tokens: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatResponse {
     pub answer: String,
     #[serde(default)]
@@ -397,6 +410,8 @@ pub struct ChatResponse {
     pub guard_report: Option<GuardReport>,
     #[serde(default)]
     pub tool_results: Vec<ToolResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<ChatTokenUsage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
