@@ -6,8 +6,8 @@
 //! YAML `ModeConfig` files (`modes/chat.yaml`, `modes/rag.yaml`, `modes/search.yaml`)
 //! rather than independent Strategy state machines.
 //!
-//! The old v5 StrategyExecutor and state-machine traits in `crate::agents::strategy`
-//! are deprecated and retained only for backward-compatible schema registration.
+//! Static strategy metadata lives in `crate::agents::capability::schemas` for API
+//! discovery; execution no longer uses the removed v5 strategy state machines.
 
 use crate::agents::audit;
 use crate::agents::events::{AgentEvent, AgentEventSink};

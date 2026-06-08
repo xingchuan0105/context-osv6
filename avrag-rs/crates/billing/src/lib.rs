@@ -1,3 +1,8 @@
+//! Billing crate — checkout, subscriptions, rolling-window usage quotas, and quota enforcement.
+//!
+//! Public surface: HTTP handlers in `api`, subscription lifecycle in `core`,
+//! rolling limits in `usage_limit`, and unified quota decisions in `quota_service`.
+
 mod alipay_client;
 mod api;
 mod core;
