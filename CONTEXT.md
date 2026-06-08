@@ -40,21 +40,22 @@ The repository's git worktree structure has been consolidated and cleaned up:
 
 ## 3. Development Stage Assessment
 
-The project is currently in **Phase 5 (Unified Agent Integration & End-to-End Hardening)**.
+The project is currently in **Phase 5 (Unified Agent Integration & End-to-End Hardening)** with active **pricing-tier revamp** work on branch `feat/pricing-tiers-revamp`.
 
-- **Backend Status**: All Rust unit tests and contract integration tests pass. The migration from legacy graph flows to the `UnifiedAgentService` is complete. The system relies on Postgres, Redis, Milvus, and MinIO.
-- **Frontend Status**: The production frontend (`frontend_next`) is fully updated. Dynamic routing parameters (e.g., `params.token`) have been updated to support Next.js 15's promise-based architecture. Unit tests (Vitest) are fully passing.
-- **E2E Test Architecture**: Playwright is configured to run integration suites (`auth` and `functional`). The `avrag-worker` has been added to the Playwright `webServer` lifecycle with a dedicated TCP health check listener (on port `8081`) to automatically process background tasks like document parsing during tests.
+- **Backend Status**: All Rust unit tests and contract integration tests pass. The migration from legacy graph flows to the `UnifiedAgentService` is complete. Billing exposes rolling-window usage (`/billing/usage/window`) and structured quota denial reasons (`QuotaDenyReason`). Strategy capability schemas are decoupled from the deprecated strategy runtime via `capability/schemas.rs`. The system relies on Postgres, Redis, Milvus, and MinIO.
+- **Frontend Status**: The production frontend (`frontend_next`) is fully updated. Settings billing tab wires `UsageMeter` (5h/7d rolling windows) with `data-testid` hooks (`usage-meter`, `plan-display`). Dynamic routing parameters support Next.js 15's promise-based architecture. Vitest covers billing format/API/UsageMeter components.
+- **E2E Test Architecture**: Playwright runs `smoke`, `journey`, `skills`, `billing`, and `visual` suites. Journey specs use isolated run contexts; `avrag-worker` is in the Playwright `webServer` lifecycle with a TCP health check on port `8081` for ingestion polling. Billing E2E asserts usage meter and plan display on `/settings?tab=billing`.
 
 ---
 
 ## 4. Remaining Gaps & Goals
 
 ### Gaps
-1. **Document Ingestion Worker Latency in E2E**: Background tasks processed via `avrag-worker` are asynchronous. Ingestion specs in E2E tests must implement robust polling with sensible timeouts to wait for worker status updates.
-2. **Environment Configuration Safety**: Local testing relies heavily on the presence of Milvus, MinIO, Redis, and Postgres. CI environments need mock configurations or containerized service bindings to prevent failures.
+1. **Document Ingestion Worker Latency in E2E**: Background tasks processed via `avrag-worker` are asynchronous. Ingestion specs must keep robust polling with sensible timeouts for worker status updates.
+2. **Strategy Layer Deprecation (Phase C)**: `agents/strategy/` runtime remains for execution; static schemas moved to `capability/schemas/`. Full strategy test migration and `strategy/` deletion deferred.
+3. **Environment Configuration Safety**: Local testing relies on Milvus, MinIO, Redis, and Postgres. CI needs containerized service bindings or mocks.
 
 ### Goals
-1. **Complete E2E Verification**: Ensure all 12+ functional and auth Playwright specifications execute and pass.
-2. **Incremental Commit**: Commit the consolidated codebase to `master` to preserve the fixed middleware rate-limits, promise-based Next.js page modifications, and test suite improvements.
-3. **Clean Root Hygiene**: Keep the workspace root clean, storing all design blueprints, checklists, and specs inside `docs/`.
+1. **Complete E2E Verification**: Run and stabilize all Playwright specs including billing (`usage-settings`, `usage-meter`) and journey suites.
+2. **Pricing Revamp Rollout**: Merge tier quota changes (migration 0037), remove dead feature flags, and land structured billing UX.
+3. **Clean Root Hygiene**: Keep design blueprints, checklists, and specs inside `docs/`.

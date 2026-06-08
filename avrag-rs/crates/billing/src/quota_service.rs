@@ -1,14 +1,36 @@
 use anyhow::Result;
+use std::fmt;
 use std::sync::Arc;
 use uuid::Uuid;
+use serde::{Deserialize, Serialize};
 use crate::usage_limit::{UsageLimitService, QuotaCheckResult as RollingQuotaResult};
 use crate::api::{check_quota as check_monthly_quota, QuotaDecision as MonthlyQuotaDecision};
 use avrag_storage_pg::PgAppRepository;
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum QuotaDenyReason {
+    RollingWindow5h,
+    RollingWindow7d,
+    MonthlyLimit { metric_type: String },
+}
+
+impl fmt::Display for QuotaDenyReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RollingWindow5h => write!(f, "Rolling 5h window limit exceeded"),
+            Self::RollingWindow7d => write!(f, "Rolling 7d window limit exceeded"),
+            Self::MonthlyLimit { metric_type } => {
+                write!(f, "Monthly limit exceeded for {}", metric_type)
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct UnifiedQuotaDecision {
     pub allowed: bool,
-    pub reason: Option<String>,
+    pub reason: Option<QuotaDenyReason>,
     pub retry_after_secs: u64,
     pub rolling_result: Option<RollingQuotaResult>,
     pub monthly_decision: Option<MonthlyQuotaDecision>,
@@ -35,13 +57,12 @@ impl QuotaManager {
         requested: i64,
     ) -> Result<UnifiedQuotaDecision> {
         // 1. Check rolling window (LLM units)
-        // Only if it's an LLM related metric, but for now we always check if we have the user context
         let rolling = self.rolling_svc.check_quota(org_id, user_id).await?;
         if rolling.blocked_5h || rolling.blocked_7d {
-            let (period, until) = if rolling.blocked_5h {
-                ("5h", rolling.blocked_until_5h)
+            let (reason, until) = if rolling.blocked_5h {
+                (QuotaDenyReason::RollingWindow5h, rolling.blocked_until_5h)
             } else {
-                ("7d", rolling.blocked_until_7d)
+                (QuotaDenyReason::RollingWindow7d, rolling.blocked_until_7d)
             };
             let retry_after = until
                 .map(|dt| (dt - chrono::Utc::now()).num_seconds().max(1) as u64)
@@ -49,7 +70,7 @@ impl QuotaManager {
 
             return Ok(UnifiedQuotaDecision {
                 allowed: false,
-                reason: Some(format!("Rolling {} window limit exceeded", period)),
+                reason: Some(reason),
                 retry_after_secs: retry_after,
                 rolling_result: Some(rolling),
                 monthly_decision: None,
@@ -61,7 +82,9 @@ impl QuotaManager {
         if !monthly.allowed {
             return Ok(UnifiedQuotaDecision {
                 allowed: false,
-                reason: Some(format!("Monthly limit exceeded for {}", metric_type)),
+                reason: Some(QuotaDenyReason::MonthlyLimit {
+                    metric_type: metric_type.to_string(),
+                }),
                 retry_after_secs: monthly.retry_after_secs,
                 rolling_result: Some(rolling),
                 monthly_decision: Some(monthly),

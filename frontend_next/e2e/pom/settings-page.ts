@@ -32,4 +32,14 @@ export class SettingsPage {
       this.page.getByText(/正在加载账单信息|Loading billing information/i),
     ).toHaveCount(0);
   }
+
+  async expectUsageMeterVisible() {
+    await expect(this.page.getByTestId("usage-meter")).toBeVisible();
+    await expect(this.page.getByRole("progressbar").first()).toBeVisible();
+  }
+
+  async expectPlanDisplayVisible() {
+    await expect(this.page.getByTestId("plan-display")).toBeVisible();
+    await expect(this.page.getByText(/当前计划|Current plan/i).first()).toBeVisible();
+  }
 }

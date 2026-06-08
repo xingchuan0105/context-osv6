@@ -423,11 +423,11 @@ impl AppState {
             return Ok(());
         }
 
-        let error_message = if let Some(reason) = &decision.reason {
-            reason.clone()
-        } else {
-            format!("quota exceeded for {}", metric_type)
-        };
+        let error_message = decision
+            .reason
+            .as_ref()
+            .map(|reason| reason.to_string())
+            .unwrap_or_else(|| format!("quota exceeded for {}", metric_type));
 
         Err(AppError::rate_limited(
             "quota_exceeded",

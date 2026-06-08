@@ -9,7 +9,7 @@ mod types;
 pub mod usage_limit;
 pub mod quota_service;
 
-pub use quota_service::{QuotaManager, UnifiedQuotaDecision};
+pub use quota_service::{QuotaDenyReason, QuotaManager, UnifiedQuotaDecision};
 
 pub use alipay_client::AlipayClient;
 pub use api::{
