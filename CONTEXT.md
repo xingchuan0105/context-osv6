@@ -22,6 +22,14 @@ To maintain semantic consistency across the codebase, tests, and documentation, 
 | **Creem Provider** | B2C manual subscription billing provider via Creem checkout for global credit cards. | Billing (`avrag-rs/crates/billing`) |
 | **Alipay Provider** | B2C manual subscription billing provider via Alipay precreate QR scan-code for CNY payments. | Billing (`avrag-rs/crates/billing`) |
 | **Lazy Billing Downgrade** | Automatic check and state transition of expired user subscriptions to 'expired' and downgrade to the free tier upon access or API query. | Billing (`avrag-rs/crates/billing`) |
+| **LoopOptimizer** | ReActLoop 的参谋模块。基于跨迭代信号（重复 chunk、budget 余量）向 LLM 上下文注入优化提示，不替代 LLM 决策权。 | Agent Loop (`avrag-rs/crates/app/src/agents/loop/optimizer.rs`) |
+| **IterationProgress** | LoopOptimizer 的跨轮状态追踪器。仅记录 chunk_id 的首次出现轮次，不存储评分或原文。 | Agent Loop (`avrag-rs/crates/app/src/agents/loop/optimizer.rs`) |
+| **ContextAdjustment** | LoopOptimizer 的输出：可能是重复 chunk 提示、budget 预警，或无需干预。 | Agent Loop (`avrag-rs/crates/app/src/agents/loop/optimizer.rs`) |
+| **ModeSchema** | ReAct loop 执行模式的静态元数据（id、requires_internet、external_tools_used）。原名 `StrategySchema`，已删除虚假的状态转移描述。 | Capability API (`avrag-rs/crates/app/src/agents/capability/schemas.rs`) |
+| **Messenger Model** | Agent 决策模式：LLM 是最终决策者，代码负责传递上下文和执行 tool。`ReActLoop` 采用此模式。 | Agent Architecture |
+| **Commander Model** | Agent 决策模式：代码基于信号评估强制改变 LLM 的检索策略。`evaluator.rs` 原设计采用此模式，已废弃。 | Agent Architecture (deprecated) |
+| **AgentKind** / **AgentMode** | 同义词，指代 chat/rag/search 三种 ReAct loop 执行模式。`AgentKind` 是 enum 名，`ModeConfig.id` / `ModeSchema.id` 是字符串标识。 | Agent Architecture |
+| **Subagents** | 未来的 auto mode 架构方向：由 Orchestrator Agent 将任务委派给多个 Specialist Subagent，各自独立执行。与规则引擎有本质区别。 | Agent Architecture (future) |
 
 ---
 
@@ -42,7 +50,8 @@ The repository's git worktree structure has been consolidated and cleaned up:
 
 The project is currently in **Phase 5 (Unified Agent Integration & End-to-End Hardening)** with active **pricing-tier revamp** work on branch `feat/pricing-tiers-revamp`.
 
-- **Backend Status**: All Rust unit tests and contract integration tests pass. The migration from legacy graph flows to the `UnifiedAgentService` is complete. Billing exposes rolling-window usage (`/billing/usage/window`) and structured quota denial reasons (`QuotaDenyReason`). Strategy capability schemas live in `capability/schemas.rs`; the deprecated `agents/strategy/` runtime layer has been removed in favor of `ReActLoop` + `UnifiedAgent`. The system relies on Postgres, Redis, Milvus, and MinIO.
+- **Backend Status**: All Rust unit tests and contract integration tests pass. The migration from legacy graph flows to the `UnifiedAgentService` is complete. Billing exposes rolling-window usage (`/billing/usage/window`) and structured quota denial reasons (`QuotaDenyReason`). The system relies on Postgres, Redis, Milvus, and MinIO.
+- **Agent Architecture Cleanup (In Progress)**: Architecture review completed. Six design documents produced for post-migration cleanup: `LoopOptimizer` replaces the unused `evaluator.rs` (commander model → messenger model), `RouterPolicy` removal (telemetry-only pass-through), `ModeSchema` alignment (removing false state-machine semantics from `StrategySchema`), v5 state-machine residue cleanup (`StateRecord`, `StateTransition`, search-round counters, `rig_adapter.rs`), frontend `useChatSession` hook extraction from the 2514-line `WorkspaceChatPane` god component, and `RawWorkspace*` mapping layer removal. See `docs/agents/*.md`.
 - **Frontend Status**: The production frontend (`frontend_next`) is fully updated. Settings billing tab and the dashboard header wire `UsageMeter` (5h/7d rolling windows, compact variant on dashboard) with `data-testid` hooks (`usage-meter`, `plan-display`). Dynamic routing parameters support Next.js 15's promise-based architecture. Vitest covers billing format/API/UsageMeter components.
 - **E2E Test Architecture**: Playwright runs `smoke`, `journey`, `skills`, `billing`, and `visual` suites. Journey specs use isolated run contexts; `avrag-worker` is in the Playwright `webServer` lifecycle with a TCP health check on port `8081` for ingestion polling. Billing E2E asserts usage meter and plan display on `/settings?tab=billing`.
 
@@ -58,3 +67,4 @@ The project is currently in **Phase 5 (Unified Agent Integration & End-to-End Ha
 1. **Complete E2E Verification**: Run and stabilize all Playwright specs including billing (`usage-settings`, `usage-meter`) and journey suites.
 2. **Pricing Revamp Rollout**: Merge tier quota changes (migration 0037), remove dead feature flags, and land structured billing UX.
 3. **Clean Root Hygiene**: Keep design blueprints, checklists, and specs inside `docs/`.
+4. **Agent Architecture Cleanup Implementation**: Execute the six design documents in `docs/agents/` — `LoopOptimizer`, `RouterPolicy` removal, `ModeSchema` alignment, v5 residue cleanup, frontend `useChatSession` hook, and mapping layer removal.

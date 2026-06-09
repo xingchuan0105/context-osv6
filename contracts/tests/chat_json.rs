@@ -25,13 +25,25 @@ fn chat_request_deserializes_with_minimal_defaults_and_no_request_id_field() {
             "source_token": null,
             "doc_scope": [],
             "messages": [],
-            "stream": false
+            "stream": false,
+            "debug": false
         })
     );
     assert!(
         serialized.get("request_id").is_none(),
         "request_id should not be part of the shared contract"
     );
+}
+
+#[test]
+fn chat_request_deserializes_debug_flag() {
+    let json = serde_json::json!({
+        "query": "hello",
+        "debug": true
+    });
+
+    let request: ChatRequest = serde_json::from_value(json).expect("request should deserialize");
+    assert!(request.debug);
 }
 
 #[test]

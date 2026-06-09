@@ -20,6 +20,9 @@ pub struct ChatRequest {
     pub messages: Vec<ChatTurnInput>,
     #[serde(default)]
     pub stream: bool,
+    /// When true, emit debug trace events (e.g. prompt snapshots) in SSE streams.
+    #[serde(default)]
+    pub debug: bool,
     #[serde(default)]
     pub language: Option<String>,
     #[serde(default)]
@@ -30,6 +33,9 @@ pub struct ChatRequest {
 pub struct ChatTurnInput {
     pub role: String,
     pub content: String,
+    /// Prior-turn resolved query from PG `turn_metadata` when available.
+    #[serde(default)]
+    pub resolved_query: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +56,8 @@ pub struct ChatMessage {
     pub citations: Vec<Citation>,
     #[serde(default)]
     pub tool_results: Vec<ToolResult>,
+    #[serde(default)]
+    pub turn_metadata: Option<serde_json::Value>,
     pub created_at: String,
 }
 
