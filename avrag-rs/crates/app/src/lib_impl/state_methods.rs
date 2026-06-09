@@ -12,7 +12,7 @@ use avrag_search::SearchExecutor;
 use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
 use avrag_storage_pg::{ObjectStoreHandle, PgAppRepository};
 use common::AppError;
-use common::key_vault::EnvKeyVault;
+use common::{ChatTurnInput, key_vault::EnvKeyVault};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -363,6 +363,56 @@ impl AppState {
         self.key_vault.clone()
     }
 
+    /// Resolve conversation history for agent prompts.
+    /// Client-supplied `messages` take precedence; otherwise load prior user turns from PG.
+    pub async fn resolve_agent_messages(&self, req: &common::ChatRequest) -> Vec<ChatTurnInput> {
+        if !req.messages.is_empty() {
+            return req.messages.clone();
+        }
+
+        let Some(session_id) = req.session_id.as_ref() else {
+            return Vec::new();
+        };
+        let Ok(session_uuid) = Uuid::parse_str(session_id) else {
+            return Vec::new();
+        };
+        let Some(pg) = &self.pg else {
+            return Vec::new();
+        };
+
+        let Ok(stored) = pg.list_messages(&self.auth, session_uuid).await else {
+            return Vec::new();
+        };
+
+        let current_query = req.query.trim();
+        let history: Vec<ChatTurnInput> = stored
+            .into_iter()
+            .filter(|message| message.role == "user")
+            .filter(|message| !message.content.trim().is_empty())
+            .filter(|message| message.content.trim() != current_query)
+            .map(|message| {
+                let resolved_query = message
+                    .turn_metadata
+                    .as_ref()
+                    .and_then(|meta| meta.get("query_resolution"))
+                    .and_then(|qr| qr.get("resolved_query"))
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                ChatTurnInput {
+                    role: message.role,
+                    content: message.content,
+                    resolved_query,
+                }
+            })
+            .collect();
+
+        crate::agents::runtime::recent_messages(
+            &history,
+            crate::agents::runtime::MAX_PROMPT_HISTORY_TURNS,
+        )
+        .to_vec()
+    }
+
     /// Build an `AgentRequest` from chat request and memory context.
     /// This is the single conversion point from legacy `ChatRequest` to new agent protocol.
     pub async fn build_agent_request(
@@ -384,22 +434,22 @@ impl AppState {
         } else {
             None
         };
-        let session_summary = memory_context
-            .as_ref()
-            .and_then(|memory| memory.layer2.as_ref().map(|layer2| layer2.summary.clone()));
         let user_preferences = memory_context
             .as_ref()
             .and_then(|memory| memory.layer3.as_ref().map(agent_user_preferences_json));
+        let messages = self.resolve_agent_messages(req).await;
         crate::agents::runtime::AgentRequest {
             kind,
             query: req.query.clone(),
+            resolved_query: req.query.clone(),
+            query_resolution: None,
             notebook_id,
             session_id,
             doc_scope,
-            messages: req.messages.clone(),
-            session_summary,
+            messages,
+            session_summary: None,
             user_preferences,
-            debug: false,
+            debug: req.debug,
             stream,
             language: req.language.clone(),
             auth_context: serde_json::to_value(&self.auth)
@@ -426,7 +476,7 @@ impl AppState {
         general_debug.insert(
             "memory_loaded".to_string(),
             serde_json::json!(
-                agent_request.session_summary.is_some() || agent_request.user_preferences.is_some()
+                !agent_request.messages.is_empty() || agent_request.user_preferences.is_some()
             ),
         );
         general_debug.insert("summary_updated".to_string(), serde_json::json!(false));

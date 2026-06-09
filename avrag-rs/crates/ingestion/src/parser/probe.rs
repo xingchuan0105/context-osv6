@@ -93,9 +93,7 @@ impl ParseProbe {
         match extension.as_str() {
             "pdf" => Self::probe_pdf(bytes, &extension, &mime_type, config),
             "ppt" | "pptx" => Self::probe_presentation(bytes, &extension, &mime_type),
-            "doc" | "docx" | "xls" | "xlsx" => {
-                Self::probe_office(bytes, &extension, &mime_type)
-            }
+            "doc" | "docx" | "xls" | "xlsx" => Self::probe_office(bytes, &extension, &mime_type),
             "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" => {
                 Self::probe_image(bytes, &extension, &mime_type)
             }
@@ -145,16 +143,14 @@ impl ParseProbe {
                 .unwrap_or(0);
 
             // --- Real image detection via XObject dictionary ---
-            let page_image_count =
-                Self::count_image_xobjects(&doc, *page_object_id).unwrap_or(0);
+            let page_image_count = Self::count_image_xobjects(&doc, *page_object_id).unwrap_or(0);
 
             // --- Real table detection via content-stream analysis ---
-            let page_table_count =
-                Self::count_table_structures(&doc, *page_object_id).unwrap_or(0);
+            let page_table_count = Self::count_table_structures(&doc, *page_object_id).unwrap_or(0);
 
             // --- Presentation detection via aspect ratio ---
-            let is_presentation_page = Self::is_presentation_page(&doc, *page_object_id)
-                .unwrap_or(false);
+            let is_presentation_page =
+                Self::is_presentation_page(&doc, *page_object_id).unwrap_or(false);
             if is_presentation_page {
                 presentation_page_hits += 1;
             }
@@ -196,28 +192,28 @@ impl ParseProbe {
 
     /// Count actual Image XObjects in the page's Resources dictionary.
     fn count_image_xobjects(doc: &Document, page_object_id: lopdf::ObjectId) -> Result<usize> {
-        let page_obj = doc.get_object(page_object_id).map_err(|_| {
-            anyhow::anyhow!("Page object not found")
-        })?;
-        let page_dict = page_obj.as_dict().map_err(|_| {
-            anyhow::anyhow!("Page object is not a dictionary")
-        })?;
+        let page_obj = doc
+            .get_object(page_object_id)
+            .map_err(|_| anyhow::anyhow!("Page object not found"))?;
+        let page_dict = page_obj
+            .as_dict()
+            .map_err(|_| anyhow::anyhow!("Page object is not a dictionary"))?;
 
         let resources = match page_dict.get(b"Resources") {
             Ok(r) => r,
             Err(_) => return Ok(0),
         };
-        let res_dict = resources.as_dict().map_err(|_| {
-            anyhow::anyhow!("Resources is not a dictionary")
-        })?;
+        let res_dict = resources
+            .as_dict()
+            .map_err(|_| anyhow::anyhow!("Resources is not a dictionary"))?;
 
         let xobjects = match res_dict.get(b"XObject") {
             Ok(x) => x,
             Err(_) => return Ok(0),
         };
-        let xobj_dict = xobjects.as_dict().map_err(|_| {
-            anyhow::anyhow!("XObject is not a dictionary")
-        })?;
+        let xobj_dict = xobjects
+            .as_dict()
+            .map_err(|_| anyhow::anyhow!("XObject is not a dictionary"))?;
 
         let mut image_count = 0;
         for (_, obj_ref) in xobj_dict.iter() {
@@ -247,20 +243,20 @@ impl ParseProbe {
 
     /// Detect table structures by analysing drawing commands in the page content stream.
     fn count_table_structures(doc: &Document, page_object_id: lopdf::ObjectId) -> Result<usize> {
-        let page_obj = doc.get_object(page_object_id).map_err(|_| {
-            anyhow::anyhow!("Page object not found")
-        })?;
-        let page_dict = page_obj.as_dict().map_err(|_| {
-            anyhow::anyhow!("Page object is not a dictionary")
-        })?;
+        let page_obj = doc
+            .get_object(page_object_id)
+            .map_err(|_| anyhow::anyhow!("Page object not found"))?;
+        let page_dict = page_obj
+            .as_dict()
+            .map_err(|_| anyhow::anyhow!("Page object is not a dictionary"))?;
 
         let resources = match page_dict.get(b"Resources") {
             Ok(r) => r,
             Err(_) => return Ok(0),
         };
-        let res_dict = resources.as_dict().map_err(|_| {
-            anyhow::anyhow!("Resources is not a dictionary")
-        })?;
+        let res_dict = resources
+            .as_dict()
+            .map_err(|_| anyhow::anyhow!("Resources is not a dictionary"))?;
 
         // Count fonts as a proxy for structured text regions
         let font_count: usize = match res_dict.get(b"Font") {
@@ -273,33 +269,32 @@ impl ParseProbe {
 
         // Heuristic: multiple consecutive lines with pipe/tab delimiters
         let pipe_lines = text.lines().filter(|l| l.contains('|')).count();
-        let tab_aligned_lines = text
-            .lines()
-            .filter(|l| l.split('\t').count() >= 3)
-            .count();
+        let tab_aligned_lines = text.lines().filter(|l| l.split('\t').count() >= 3).count();
 
         // Combine structural signals: font diversity + delimiter patterns
-        let table_score = font_count.saturating_add(pipe_lines).saturating_add(tab_aligned_lines);
+        let table_score = font_count
+            .saturating_add(pipe_lines)
+            .saturating_add(tab_aligned_lines);
 
         Ok(table_score)
     }
 
     /// Detect presentation-like pages via aspect-ratio analysis.
     fn is_presentation_page(doc: &Document, page_object_id: lopdf::ObjectId) -> Result<bool> {
-        let page_obj = doc.get_object(page_object_id).map_err(|_| {
-            anyhow::anyhow!("Page object not found")
-        })?;
-        let page_dict = page_obj.as_dict().map_err(|_| {
-            anyhow::anyhow!("Page object is not a dictionary")
-        })?;
+        let page_obj = doc
+            .get_object(page_object_id)
+            .map_err(|_| anyhow::anyhow!("Page object not found"))?;
+        let page_dict = page_obj
+            .as_dict()
+            .map_err(|_| anyhow::anyhow!("Page object is not a dictionary"))?;
 
         let mediabox = match page_dict.get(b"MediaBox") {
             Ok(m) => m,
             Err(_) => return Ok(false),
         };
-        let arr = mediabox.as_array().map_err(|_| {
-            anyhow::anyhow!("MediaBox is not an array")
-        })?;
+        let arr = mediabox
+            .as_array()
+            .map_err(|_| anyhow::anyhow!("MediaBox is not an array"))?;
         if arr.len() < 4 {
             return Ok(false);
         }
@@ -359,11 +354,7 @@ impl ParseProbe {
         Ok(result)
     }
 
-    fn probe_office(
-        bytes: &[u8],
-        extension: &str,
-        mime_type: &str,
-    ) -> Result<ParseProbeResult> {
+    fn probe_office(bytes: &[u8], extension: &str, mime_type: &str) -> Result<ParseProbeResult> {
         let mut result = ParseProbeResult::new(mime_type.to_string(), extension.to_string());
         result.likely_presentation = extension == "pptx";
 
@@ -383,10 +374,8 @@ impl ParseProbe {
         extension: &str,
         _mime_type: &str,
     ) -> Result<ParseProbeResult> {
-        let mut result = ParseProbeResult::new(
-            Self::guess_mime_type(extension),
-            extension.to_string(),
-        );
+        let mut result =
+            ParseProbeResult::new(Self::guess_mime_type(extension), extension.to_string());
 
         let cursor = Cursor::new(bytes);
         let mut archive = zip::ZipArchive::new(cursor)
@@ -437,9 +426,7 @@ impl ParseProbe {
                     for i in 0..archive.len() {
                         if let Ok(mut file) = archive.by_index(i) {
                             let name = file.name();
-                            if name.starts_with("xl/worksheets/sheet")
-                                && name.ends_with(".xml")
-                            {
+                            if name.starts_with("xl/worksheets/sheet") && name.ends_with(".xml") {
                                 let mut sheet_text = String::new();
                                 if file.read_to_string(&mut sheet_text).is_ok() {
                                     text.push_str(&sheet_text);

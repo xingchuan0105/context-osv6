@@ -88,6 +88,12 @@ pub enum Commands {
         format: ReportFormat,
     },
 
+    /// Summarize llm_real observability artifacts.
+    LlmReal {
+        #[command(subcommand)]
+        command: LlmRealCommands,
+    },
+
     /// Set or update a baseline run.
     Baseline {
         /// Path to the run directory to use as baseline.
@@ -101,6 +107,31 @@ pub enum Commands {
         /// Path to the baseline storage directory.
         #[arg(long)]
         store: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum LlmRealCommands {
+    /// List llm_real runs under e2e_output.
+    List {
+        /// Base e2e_output directory (default: crates/app/tests/e2e_output).
+        #[arg(long, default_value = "crates/app/tests/e2e_output")]
+        output: PathBuf,
+
+        /// Max runs to print (newest last).
+        #[arg(long, default_value = "20")]
+        limit: usize,
+    },
+
+    /// Print reasoning/prompt capture stats for one llm_real run.
+    Summary {
+        /// Path to run directory or run id under e2e_output.
+        #[arg(long)]
+        run: PathBuf,
+
+        /// Optional output path (default: stdout).
+        #[arg(long)]
+        output: Option<PathBuf>,
     },
 }
 

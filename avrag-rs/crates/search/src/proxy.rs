@@ -19,9 +19,7 @@ pub fn sync_resolved_proxy_env() {
     for key in ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"] {
         match std::env::var(key) {
             Ok(current) if current == resolved => {}
-            Ok(current)
-                if current.contains("127.0.0.1") || current.contains("localhost") =>
-            {
+            Ok(current) if current.contains("127.0.0.1") || current.contains("localhost") => {
                 unsafe { std::env::set_var(key, &resolved) };
             }
             Err(_) => {}

@@ -76,15 +76,14 @@ impl Agent for UnifiedAgent {
             .clone()
             .unwrap_or_else(|| "unified-agent".to_string());
 
-        // v5: RouterPolicy produces an observable routing decision.
-        let router_policy = crate::agents::capability::standard_policy();
-        let routing_decision = router_policy.resolve(&request);
+        // Emit observable routing decision (user explicitly selected mode).
+        let mode_id = request.kind.as_canonical_str().to_string();
         let _ = sink
             .emit(AgentEvent::RoutingDecision {
-                strategy_id: routing_decision.strategy_id.clone(),
-                matched_rule: routing_decision.matched_rule.clone(),
-                confidence: routing_decision.confidence,
-                explanation: routing_decision.explanation.clone(),
+                mode_id: mode_id.clone(),
+                matched_rule: format!("user-{}", mode_id),
+                confidence: 1.0,
+                explanation: format!("user explicitly selected {:?} mode", request.kind),
             })
             .await;
 
@@ -102,10 +101,10 @@ impl Agent for UnifiedAgent {
             org_id,
             actor_id,
             &trace_id,
-            &routing_decision.strategy_id,
-            &routing_decision.matched_rule,
-            routing_decision.confidence,
-            &routing_decision.explanation,
+            &mode_id,
+            "user_explicit",
+            1.0,
+            &format!("user explicitly selected {:?} mode", request.kind),
         );
         let _ = sink
             .emit(AgentEvent::Audit {
@@ -146,12 +145,11 @@ impl Agent for UnifiedAgent {
                         return Err(AppError::internal("LLM client is not configured"));
                     }
                 };
-                let skill_registry = Arc::new(
-                    crate::agents::capability::CapabilityRegistry::standard()
-                );
+                let skill_registry =
+                    Arc::new(crate::agents::capability::CapabilityRegistry::standard());
                 let loop_agent = crate::agents::r#loop::ReActLoop::new(llm, skill_registry);
                 let mut result = loop_agent.run(&mode, request, sink).await?;
-                result.routing_decision = Some(routing_decision.clone());
+                result.routing_decision = Some(mode_id.clone());
                 Ok(result)
             }
             crate::agents::AgentKind::Rag => {
@@ -210,7 +208,7 @@ impl Agent for UnifiedAgent {
                 let loop_agent = crate::agents::r#loop::ReActLoop::new(llm, skill_registry)
                     .with_rag_runtime(Some(rag));
                 let mut result = loop_agent.run(&mode, request, sink).await?;
-                result.routing_decision = Some(routing_decision.clone());
+                result.routing_decision = Some(mode_id.clone());
                 Ok(result)
             }
             crate::agents::AgentKind::Search => {
@@ -251,13 +249,12 @@ impl Agent for UnifiedAgent {
                         return Err(AppError::internal("LLM client is not configured"));
                     }
                 };
-                let skill_registry = Arc::new(
-                    crate::agents::capability::CapabilityRegistry::standard()
-                );
+                let skill_registry =
+                    Arc::new(crate::agents::capability::CapabilityRegistry::standard());
                 let loop_agent = crate::agents::r#loop::ReActLoop::new(llm, skill_registry)
                     .with_search_executor(Some(search_executor));
                 let mut result = loop_agent.run(&mode, request, sink).await?;
-                result.routing_decision = Some(routing_decision.clone());
+                result.routing_decision = Some(mode_id.clone());
                 Ok(result)
             }
         }

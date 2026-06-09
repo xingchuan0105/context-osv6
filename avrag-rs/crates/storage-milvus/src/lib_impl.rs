@@ -1,7 +1,7 @@
+use crate::config::MilvusConfig;
+use crate::types::{MilvusStorageError, Result};
 use reqwest::Client;
 use serde_json::{Value, json};
-use crate::types::{MilvusStorageError, Result};
-use crate::config::MilvusConfig;
 
 #[derive(Debug, Clone)]
 pub struct MilvusDataPlane {

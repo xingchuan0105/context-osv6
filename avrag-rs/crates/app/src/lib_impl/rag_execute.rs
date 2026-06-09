@@ -58,8 +58,14 @@ impl AppState {
             ));
         }
 
-        let doc_ids = req
-            .doc_scope
+        self.validate_rag_doc_scope(&req.doc_scope).await
+    }
+
+    pub(crate) async fn validate_rag_doc_scope(
+        &self,
+        doc_scope: &[String],
+    ) -> Result<(), AppError> {
+        let doc_ids = doc_scope
             .iter()
             .map(|id| {
                 Uuid::parse_str(id).map_err(|_| {
@@ -103,7 +109,7 @@ impl AppState {
         }
 
         let state = self.inner.read().await;
-        for doc_id in &req.doc_scope {
+        for doc_id in doc_scope {
             let Some(stored) = state.documents.get(doc_id) else {
                 return Err(AppError::validation(
                     "invalid_doc_scope",

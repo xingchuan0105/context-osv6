@@ -1,8 +1,13 @@
 # ADR-0006-revised: 统一 AgentLoop — ReAct 循环 + 原生 Tool/Skill 分层
 
+> **⚠️ 部分废止（2026-06-08）**  
+> ReAct+Synthesis 循环骨架、三 mode 分工动机**仍有效**。  
+> **以下以 [ADR-0007](0007-react-phased-context-disclosure.md) 为准**：`native_tools`、`disclosure` 轮次、skill 披露、citation 位置、`session_summary`、`format_hint` 机制、planner skill。  
+> 归档索引：[ARCHIVE-superseded-by-adr-0007.md](../agents/ARCHIVE-superseded-by-adr-0007.md)
+
 | 项目 | 内容 |
 |---|---|
-| 状态 | 已采纳（替代 ADR-0005 / 0005-revised / 0006） |
+| 状态 | 已采纳；披露细节由 ADR-0007 承接 |
 | 决策日期 | 2026-06-07 |
 | 提出者 | AI 助手（与用户共同决策） |
 | 影响范围 | `crates/app/src/agents/unified/`（新建）、`crates/app/src/agents/strategy/`（废弃）、`prompts/skills/`（扩展）、`modes/`（新建） |

@@ -53,9 +53,10 @@ impl InputGuardPipeline {
     pub fn run(&self, ctx: &InputGuardContext<'_>) -> Option<GuardResult> {
         for guard in &self.guards {
             if let Some(result) = guard.check(ctx)
-                && !result.passed {
-                    return Some(result);
-                }
+                && !result.passed
+            {
+                return Some(result);
+            }
         }
         None
     }

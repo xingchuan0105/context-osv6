@@ -113,9 +113,8 @@ impl CodeInterpreter {
     pub fn execute(&self, code: &str) -> Result<ExecutionResult, InterpreterError> {
         let sandbox_code = build_sandbox_wrapper(code, self.memory_limit_mb, self.cpu_limit_secs);
 
-        let temp_dir = tempfile::TempDir::new().map_err(|e| {
-            InterpreterError::Io(std::io::Error::other(format!("temp dir: {e}")))
-        })?;
+        let temp_dir = tempfile::TempDir::new()
+            .map_err(|e| InterpreterError::Io(std::io::Error::other(format!("temp dir: {e}"))))?;
 
         let mut child = Command::new(&self.python_path)
             .arg("-c")
@@ -160,26 +159,22 @@ impl CodeInterpreter {
                         }
                         Ok(result)
                     }
-                    Err(_) => {
-                        Ok(ExecutionResult {
-                            stdout,
-                            stderr,
-                            result: None,
-                            success: status.success(),
-                            exit_code: status.code(),
-                            killed: false,
-                        })
-                    }
+                    Err(_) => Ok(ExecutionResult {
+                        stdout,
+                        stderr,
+                        result: None,
+                        success: status.success(),
+                        exit_code: status.code(),
+                        killed: false,
+                    }),
                 }
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 Err(InterpreterError::Timeout(self.timeout_secs))
             }
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                Err(InterpreterError::Io(std::io::Error::other(
-                    "child process communication channel disconnected",
-                )))
-            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(InterpreterError::Io(
+                std::io::Error::other("child process communication channel disconnected"),
+            )),
         }
     }
 }
@@ -203,9 +198,21 @@ fn read_pipe<R: Read>(stream: &mut Option<R>) -> Result<String, InterpreterError
 /// 4. Returns a JSON-serialized `ExecutionResult`
 fn build_sandbox_wrapper(user_code: &str, memory_mb: u64, _cpu_secs: u64) -> String {
     let blocked_modules = [
-        "os", "subprocess", "socket", "sys", "ctypes", "shutil",
-        "posix", "fcntl", "pty", "pwd", "grp", "resource",
-        "signal", "multiprocessing", "threading",
+        "os",
+        "subprocess",
+        "socket",
+        "sys",
+        "ctypes",
+        "shutil",
+        "posix",
+        "fcntl",
+        "pty",
+        "pwd",
+        "grp",
+        "resource",
+        "signal",
+        "multiprocessing",
+        "threading",
     ];
 
     let blocked_list = blocked_modules
@@ -295,14 +302,22 @@ mod tests {
     fn test_error_capture() {
         let interpreter = CodeInterpreter::new().with_timeout(10);
         let result = interpreter.execute("raise ValueError('boom')").unwrap();
-        assert!(result.stderr.contains("ValueError"), "stderr: {}", result.stderr);
+        assert!(
+            result.stderr.contains("ValueError"),
+            "stderr: {}",
+            result.stderr
+        );
     }
 
     #[test]
     fn test_blocked_os_import() {
         let interpreter = CodeInterpreter::new().with_timeout(10);
         let result = interpreter.execute("import os").unwrap();
-        assert!(!result.stderr.is_empty(), "stderr should contain error: {}", result.stderr);
+        assert!(
+            !result.stderr.is_empty(),
+            "stderr should contain error: {}",
+            result.stderr
+        );
         assert!(result.stderr.contains("blocked") || result.stderr.contains("ImportError"));
     }
 
@@ -316,7 +331,9 @@ mod tests {
     #[test]
     fn test_list_comprehension() {
         let interpreter = CodeInterpreter::new().with_timeout(10);
-        let result = interpreter.execute("print(sum([i*i for i in range(10)]))").unwrap();
+        let result = interpreter
+            .execute("print(sum([i*i for i in range(10)]))")
+            .unwrap();
         assert!(result.stdout.contains("285"));
     }
 
@@ -333,5 +350,4 @@ print(json.dumps({'mean': mean, 'std': round(std, 2)}))";
         assert!(result.stdout.contains("3.0"), "stdout: {}", result.stdout);
         assert!(result.stdout.contains("1.41"), "stdout: {}", result.stdout);
     }
-
 }

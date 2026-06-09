@@ -130,12 +130,26 @@ pub fn assert_observability_contract(resp: &ChatResponse) {
 pub fn assert_degrade_reason(resp: &ChatResponse, expected_substr: &str) {
     let needle = expected_substr.to_ascii_lowercase();
     assert!(
-        resp.degrade_trace.iter().any(|item| {
-            item.reason.to_ascii_lowercase().contains(&needle)
-        }),
+        resp.degrade_trace
+            .iter()
+            .any(|item| { item.reason.to_ascii_lowercase().contains(&needle) }),
         "expected degrade reason containing '{expected_substr}', got: {:?}",
         resp.degrade_trace
     );
+}
+
+/// Assert answer does NOT contain any of the forbidden keywords (case-insensitive).
+pub fn assert_answer_excludes_keywords(resp: &ChatResponse, forbidden: &[&str]) {
+    let answer_lower = resp.answer.to_lowercase();
+    for kw in forbidden {
+        let kw_lower = kw.to_lowercase();
+        assert!(
+            !answer_lower.contains(&kw_lower),
+            "answer unexpectedly contains forbidden keyword '{}'. answer preview: {}",
+            kw,
+            resp.answer.chars().take(200).collect::<String>()
+        );
+    }
 }
 
 /// Assert answer has minimum length (not empty / trivial).
@@ -149,27 +163,40 @@ pub fn assert_answer_substantive(resp: &ChatResponse, min_len: usize) {
     );
 }
 
-/// Soft check: answer references a citation marker or preview keyword (llm_real only).
+/// Assert answer explicitly references at least one citation chunk via `[[cite:CHUNK_ID]]`.
 pub fn assert_citation_referenced_in_answer(resp: &ChatResponse) {
     if resp.citations.is_empty() {
         return;
     }
-    let answer_lower = resp.answer.to_lowercase();
-    let has_marker = answer_lower.contains("[1]")
-        || answer_lower.contains("[[1]]")
-        || resp.citations.iter().any(|c| {
-            c.preview
-                .as_ref()
-                .map(|p| {
-                    let p = p.to_lowercase();
-                    p.len() >= 8 && answer_lower.contains(&p[..p.len().min(32)])
-                })
-                .unwrap_or(false)
-        });
+    let cited_chunk_ids = extract_answer_cited_chunk_ids(&resp.answer);
     assert!(
-        has_marker,
-        "expected answer to reference citation content or [1], answer={} citations={}",
+        resp.citations.iter().any(|citation| {
+            citation
+                .chunk_id
+                .as_ref()
+                .is_some_and(|id| cited_chunk_ids.contains(id))
+        }),
+        "expected answer to reference a citation chunk_id via [[cite:...]], answer={} citations={}",
         resp.answer.chars().take(120).collect::<String>(),
         resp.citations.len()
     );
+}
+
+fn extract_answer_cited_chunk_ids(answer: &str) -> std::collections::HashSet<String> {
+    let mut remaining = answer;
+    let mut ids = std::collections::HashSet::new();
+    while let Some(start) = remaining.find("[[") {
+        let after_start = &remaining[start + 2..];
+        let Some(end) = after_start.find("]]") else {
+            break;
+        };
+        let token = after_start[..end].trim();
+        if let Some(chunk_id) = token.strip_prefix("cite:").map(str::trim) {
+            if !chunk_id.is_empty() {
+                ids.insert(chunk_id.to_string());
+            }
+        }
+        remaining = &after_start[end + 2..];
+    }
+    ids
 }

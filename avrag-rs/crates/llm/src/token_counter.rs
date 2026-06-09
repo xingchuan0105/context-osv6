@@ -43,7 +43,10 @@ mod tests {
     fn count_tokens_chinese() {
         let text = "你好，这是一个测试句子。";
         let n = count_tokens(text);
-        assert!(n >= 8 && n <= 18, "expected ~12 tokens for Chinese, got {n}");
+        assert!(
+            n >= 8 && n <= 18,
+            "expected ~12 tokens for Chinese, got {n}"
+        );
     }
 
     #[test]

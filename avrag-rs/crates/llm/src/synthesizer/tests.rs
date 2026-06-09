@@ -175,7 +175,11 @@ fn test_parse_synthesis_output_falls_back_to_plain_text() {
 // Tool-result → synthesis context tests
 // ---------------------------------------------------------------------------
 
-fn mock_tool_result(tool: &str, status: common::ToolStatus, chunks: Vec<serde_json::Value>) -> common::ToolResult {
+fn mock_tool_result(
+    tool: &str,
+    status: common::ToolStatus,
+    chunks: Vec<serde_json::Value>,
+) -> common::ToolResult {
     common::ToolResult {
         tool: tool.to_string(),
         version: "1.0".to_string(),

@@ -7,12 +7,12 @@ mod alipay_client;
 mod api;
 mod core;
 mod creem_client;
+pub mod quota_service;
 mod stripe_client;
 #[cfg(test)]
 mod tests_impl;
 mod types;
 pub mod usage_limit;
-pub mod quota_service;
 
 pub use quota_service::{QuotaDenyReason, QuotaManager, UnifiedQuotaDecision};
 

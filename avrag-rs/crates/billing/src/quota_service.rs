@@ -1,11 +1,11 @@
+use crate::api::{QuotaDecision as MonthlyQuotaDecision, check_quota as check_monthly_quota};
+use crate::usage_limit::{QuotaCheckResult as RollingQuotaResult, UsageLimitService};
 use anyhow::Result;
+use avrag_storage_pg::PgAppRepository;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
 use uuid::Uuid;
-use serde::{Deserialize, Serialize};
-use crate::usage_limit::{UsageLimitService, QuotaCheckResult as RollingQuotaResult};
-use crate::api::{check_quota as check_monthly_quota, QuotaDecision as MonthlyQuotaDecision};
-use avrag_storage_pg::PgAppRepository;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -78,7 +78,13 @@ impl QuotaManager {
         }
 
         // 2. Check monthly limit
-        let monthly = check_monthly_quota(self.repo.clone(), common::UserId::from(user_id), metric_type, requested).await?;
+        let monthly = check_monthly_quota(
+            self.repo.clone(),
+            common::UserId::from(user_id),
+            metric_type,
+            requested,
+        )
+        .await?;
         if !monthly.allowed {
             return Ok(UnifiedQuotaDecision {
                 allowed: false,

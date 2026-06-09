@@ -100,7 +100,7 @@ impl OrphanObjectJobRunner {
 
     async fn fetch_document_object_paths(&self) -> Result<Vec<String>> {
         let rows = sqlx::query_as::<_, (String,)>(
-            "select object_path from documents where object_path is not null and object_path != ''"
+            "select object_path from documents where object_path is not null and object_path != ''",
         )
         .fetch_all(&self.pool)
         .await?;

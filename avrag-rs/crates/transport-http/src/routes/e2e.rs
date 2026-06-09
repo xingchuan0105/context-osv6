@@ -1,8 +1,8 @@
 use axum::{
+    Json,
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -29,14 +29,17 @@ pub(crate) struct ResetUserDataResponse {
 
 pub(crate) fn router() -> axum::Router<AppState> {
     axum::Router::new()
-        .route("/reset-user-data", axum::routing::post(reset_user_data_handler))
-        .route("/grant-admin-role", axum::routing::post(grant_admin_role_handler))
+        .route(
+            "/reset-user-data",
+            axum::routing::post(reset_user_data_handler),
+        )
+        .route(
+            "/grant-admin-role",
+            axum::routing::post(grant_admin_role_handler),
+        )
 }
 
-fn validate_e2e_request(
-    headers: &axum::http::HeaderMap,
-    email: &str,
-) -> Result<String, Response> {
+fn validate_e2e_request(headers: &axum::http::HeaderMap, email: &str) -> Result<String, Response> {
     let node_env = env::var("NODE_ENV").unwrap_or_default();
     let e2e_enabled = env::var("E2E_ENABLED").unwrap_or_default();
     if node_env == "production" || e2e_enabled != "true" {
@@ -116,24 +119,23 @@ async fn reset_user_data_handler(
     };
 
     // 通过 email 查找 user_id
-    let user_id: Option<Uuid> = match sqlx::query_as::<_, (Option<Uuid>,)>(
-        "select id from users where email = $1 limit 1"
-    )
-    .bind(&email)
-    .fetch_optional(repo.raw())
-    .await
-    {
-        Ok(Some((Some(id),))) => Some(id),
-        Ok(Some((None,))) | Ok(None) => None,
-        Err(e) => {
-            warn!(error = %e, "e2e reset: failed to lookup user by email");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "database error during user lookup" })),
-            )
-                .into_response();
-        }
-    };
+    let user_id: Option<Uuid> =
+        match sqlx::query_as::<_, (Option<Uuid>,)>("select id from users where email = $1 limit 1")
+            .bind(&email)
+            .fetch_optional(repo.raw())
+            .await
+        {
+            Ok(Some((Some(id),))) => Some(id),
+            Ok(Some((None,))) | Ok(None) => None,
+            Err(e) => {
+                warn!(error = %e, "e2e reset: failed to lookup user by email");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "database error during user lookup" })),
+                )
+                    .into_response();
+            }
+        };
 
     let user_id = match user_id {
         Some(id) => id,
@@ -258,11 +260,12 @@ async fn grant_admin_role_handler(
         }
     };
 
-    if let Err(e) = sqlx::query("update users set role = 'super_admin' where id = $1 and org_id = $2")
-        .bind(user_id)
-        .bind(org_id)
-        .execute(tx.as_mut())
-        .await
+    if let Err(e) =
+        sqlx::query("update users set role = 'super_admin' where id = $1 and org_id = $2")
+            .bind(user_id)
+            .bind(org_id)
+            .execute(tx.as_mut())
+            .await
     {
         warn!(error = %e, user_id = %user_id, "e2e grant-admin-role: update failed");
         return (

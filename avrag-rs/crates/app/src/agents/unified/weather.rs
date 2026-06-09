@@ -177,7 +177,8 @@ mod tests {
     }
 
     async fn serve_mock_response(listener: tokio::net::TcpListener, response_body: String) {
-        let socket_res = tokio::time::timeout(std::time::Duration::from_secs(5), listener.accept()).await;
+        let socket_res =
+            tokio::time::timeout(std::time::Duration::from_secs(5), listener.accept()).await;
         let (mut socket, _) = match socket_res {
             Ok(Ok(s)) => s,
             _ => return,
@@ -274,7 +275,8 @@ mod tests {
         }
 
         let server = async {
-            let socket_res = tokio::time::timeout(std::time::Duration::from_secs(5), listener.accept()).await;
+            let socket_res =
+                tokio::time::timeout(std::time::Duration::from_secs(5), listener.accept()).await;
             if let Ok(Ok((mut socket, _))) = socket_res {
                 let response =
                     "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";

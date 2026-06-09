@@ -8,7 +8,7 @@ use std::time::Duration;
 use crate::product_e2e::{
     DocumentStatus, TestContext,
     assertions::assert_answer_substantive,
-    llm_real::chat_with_format_retry,
+    llm_real::{chat_with_format_retry, merge_llm_real_extra},
 };
 
 /// Real LLM + html-renderer format skill returns HTTP 200 with HTML content.
@@ -29,7 +29,7 @@ async fn real_llm_format_html_renderer_returns_html() {
         .expect("ingest document");
     assert_eq!(status, DocumentStatus::Completed);
 
-    let (_http_resp, resp) = chat_with_format_retry(
+    let result = chat_with_format_retry(
         &ctx,
         "Render the document content as an HTML page",
         &upload.notebook_id,
@@ -37,6 +37,7 @@ async fn real_llm_format_html_renderer_returns_html() {
         "html-renderer",
     )
     .await;
+    let resp = &result.resp;
 
     let answer_lower = resp.answer.to_lowercase();
     assert!(
@@ -49,7 +50,7 @@ async fn real_llm_format_html_renderer_returns_html() {
         "expected '<body' in formatted answer, got: {}",
         resp.answer.chars().take(200).collect::<String>()
     );
-    assert_answer_substantive(&resp, 30);
+    assert_answer_substantive(resp, 30);
     assert!(
         resp.degrade_trace.is_empty(),
         "expected no degradation trace on the happy path, got: {:?}",
@@ -58,10 +59,14 @@ async fn real_llm_format_html_renderer_returns_html() {
 
     ctx.save_llm_artifact(
         "real_llm_format_html_renderer_returns_html",
-        &resp,
-        Some(serde_json::json!({
-            "document_id": upload.document_id,
-            "format_hint": "html-renderer",
-        })),
+        resp,
+        merge_llm_real_extra(
+            &result,
+            Some(serde_json::json!({
+                "document_id": upload.document_id,
+                "format_hint": "html-renderer",
+            })),
+        ),
+        Some(result.reasoning),
     );
 }

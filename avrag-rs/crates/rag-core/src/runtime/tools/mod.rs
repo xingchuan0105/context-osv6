@@ -1,4 +1,5 @@
 pub mod dense;
+pub mod doc_index;
 pub mod doc_metadata;
 pub mod doc_summary;
 pub mod graph;
@@ -12,16 +13,13 @@ use common::{ToolCall, ToolResult, ToolStatus};
 use crate::RagRuntime;
 
 /// Dispatch a single ToolCall to its pipeline.
-pub async fn dispatch(
-    runtime: &RagRuntime,
-    auth: &AuthContext,
-    call: &ToolCall,
-) -> ToolResult {
+pub async fn dispatch(runtime: &RagRuntime, auth: &AuthContext, call: &ToolCall) -> ToolResult {
     match call.tool.as_str() {
         "dense_retrieval" => dense::run(runtime, auth, &call.args).await,
         "lexical_retrieval" => lexical::run(runtime, auth, &call.args).await,
         "graph_retrieval" => graph::run(runtime, auth, &call.args).await,
         "index_lookup" => index_lookup::run(runtime, auth, &call.args).await,
+        "doc_index" => doc_index::run(runtime, auth, &call.args).await,
         "doc_summary" => doc_summary::run(runtime, auth, &call.args).await,
         "doc_metadata" => doc_metadata::run(runtime, auth, &call.args).await,
         other => ToolResult {
@@ -42,9 +40,7 @@ pub async fn dispatch_all(
 ) -> Vec<ToolResult> {
     let futures = calls
         .into_iter()
-        .map(|call| {
-            async move { dispatch(runtime, auth, &call).await }
-        })
+        .map(|call| async move { dispatch(runtime, auth, &call).await })
         .collect::<Vec<_>>();
 
     futures_util::future::join_all(futures).await

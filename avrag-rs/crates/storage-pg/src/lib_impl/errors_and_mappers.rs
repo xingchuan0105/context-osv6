@@ -236,6 +236,15 @@ fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
         row.try_get("tool_results").unwrap_or_else(|_| json!([]));
     let tool_results = serde_json::from_value::<Vec<common::ToolResult>>(tool_results_value)
         .unwrap_or_default();
+    let turn_metadata_value: serde_json::Value =
+        row.try_get("turn_metadata").unwrap_or_else(|_| json!({}));
+    let turn_metadata = if turn_metadata_value.is_null()
+        || turn_metadata_value.as_object().is_some_and(|m| m.is_empty())
+    {
+        None
+    } else {
+        Some(turn_metadata_value)
+    };
     Ok(ChatMessage {
         id: row.try_get("id")?,
         session_id: session_id.to_string(),
@@ -247,6 +256,7 @@ fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
         agent_icon: row.try_get("agent_icon").ok(),
         citations,
         tool_results,
+        turn_metadata,
         created_at: created_at.to_rfc3339(),
     })
 }

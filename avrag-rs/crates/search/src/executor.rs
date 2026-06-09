@@ -112,4 +112,3 @@ impl SearchProvider for SearchExecutor {
         SearchExecutor::execute_search(self, query, vertical).await
     }
 }
-

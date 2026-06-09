@@ -34,6 +34,9 @@ impl AppState {
                 "Please select at least one document before using RAG.",
             ));
         }
+        if req.agent_type == "rag" && !req.doc_scope.is_empty() {
+            self.validate_rag_doc_scope(&req.doc_scope).await?;
+        }
         execute_chat_pipeline(self.clone(), req).await
     }
 

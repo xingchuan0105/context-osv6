@@ -1,8 +1,6 @@
 //! Diff engine — compare two `TestResult` values dimension by dimension.
 
-use crate::models::{
-    DiffCategory, DiffDimension, DiffEntry, DiffSeverity, TestResult, TestStatus,
-};
+use crate::models::{DiffCategory, DiffDimension, DiffEntry, DiffSeverity, TestResult, TestStatus};
 use sha2::{Digest, Sha256};
 
 // ---------------------------------------------------------------------------
@@ -10,7 +8,11 @@ use sha2::{Digest, Sha256};
 // ---------------------------------------------------------------------------
 
 /// Compare two test results and produce all diff entries.
-pub fn compare_results(test_name: &str, baseline: &TestResult, current: &TestResult) -> Vec<DiffEntry> {
+pub fn compare_results(
+    test_name: &str,
+    baseline: &TestResult,
+    current: &TestResult,
+) -> Vec<DiffEntry> {
     let mut diffs = Vec::new();
     diffs.extend(compare_status(test_name, baseline, current));
     diffs.extend(compare_duration(test_name, baseline, current));
@@ -25,7 +27,11 @@ pub fn compare_results(test_name: &str, baseline: &TestResult, current: &TestRes
 // Status
 // ---------------------------------------------------------------------------
 
-pub fn compare_status(test_name: &str, baseline: &TestResult, current: &TestResult) -> Vec<DiffEntry> {
+pub fn compare_status(
+    test_name: &str,
+    baseline: &TestResult,
+    current: &TestResult,
+) -> Vec<DiffEntry> {
     if baseline.status == current.status {
         return Vec::new();
     }
@@ -35,11 +41,12 @@ pub fn compare_status(test_name: &str, baseline: &TestResult, current: &TestResu
         return Vec::new();
     }
 
-    let (severity, category) = if baseline.status == TestStatus::Passed && current.status != TestStatus::Passed {
-        (DiffSeverity::Critical, DiffCategory::Regression)
-    } else {
-        (DiffSeverity::Major, DiffCategory::Regression)
-    };
+    let (severity, category) =
+        if baseline.status == TestStatus::Passed && current.status != TestStatus::Passed {
+            (DiffSeverity::Critical, DiffCategory::Regression)
+        } else {
+            (DiffSeverity::Major, DiffCategory::Regression)
+        };
 
     vec![DiffEntry {
         test_name: test_name.to_string(),
@@ -56,14 +63,19 @@ pub fn compare_status(test_name: &str, baseline: &TestResult, current: &TestResu
 // Duration
 // ---------------------------------------------------------------------------
 
-pub fn compare_duration(test_name: &str, baseline: &TestResult, current: &TestResult) -> Vec<DiffEntry> {
+pub fn compare_duration(
+    test_name: &str,
+    baseline: &TestResult,
+    current: &TestResult,
+) -> Vec<DiffEntry> {
     // Skip duration comparison when baseline was skipped — the baseline
     // duration is just setup/teardown time, not meaningful for comparison.
     if baseline.duration_ms == 0 || baseline.status == TestStatus::Skipped {
         return Vec::new();
     }
 
-    let relative_change = (current.duration_ms as f64 - baseline.duration_ms as f64) / baseline.duration_ms as f64;
+    let relative_change =
+        (current.duration_ms as f64 - baseline.duration_ms as f64) / baseline.duration_ms as f64;
 
     if relative_change > 0.30 || current.duration_ms > 20_000 {
         let pct = (relative_change * 100.0).round() as i64;
@@ -74,7 +86,10 @@ pub fn compare_duration(test_name: &str, baseline: &TestResult, current: &TestRe
             category: DiffCategory::Regression,
             baseline_value: baseline.duration_ms.to_string(),
             current_value: current.duration_ms.to_string(),
-            description: format!("duration_ms: {} -> {} ({}%)", baseline.duration_ms, current.duration_ms, pct),
+            description: format!(
+                "duration_ms: {} -> {} ({}%)",
+                baseline.duration_ms, current.duration_ms, pct
+            ),
         }]
     } else {
         Vec::new()
@@ -85,7 +100,11 @@ pub fn compare_duration(test_name: &str, baseline: &TestResult, current: &TestRe
 // Token usage
 // ---------------------------------------------------------------------------
 
-pub fn compare_token_usage(test_name: &str, baseline: &TestResult, current: &TestResult) -> Vec<DiffEntry> {
+pub fn compare_token_usage(
+    test_name: &str,
+    baseline: &TestResult,
+    current: &TestResult,
+) -> Vec<DiffEntry> {
     let (b_tu, c_tu) = match (&baseline.token_usage, &current.token_usage) {
         (Some(b), Some(c)) => (b, c),
         _ => return Vec::new(),
@@ -95,7 +114,8 @@ pub fn compare_token_usage(test_name: &str, baseline: &TestResult, current: &Tes
 
     // Prompt tokens
     if b_tu.prompt_tokens > 0 {
-        let rel = (c_tu.prompt_tokens as f64 - b_tu.prompt_tokens as f64) / b_tu.prompt_tokens as f64;
+        let rel =
+            (c_tu.prompt_tokens as f64 - b_tu.prompt_tokens as f64) / b_tu.prompt_tokens as f64;
         let abs_delta = c_tu.prompt_tokens.saturating_sub(b_tu.prompt_tokens);
         if rel > 0.30 || abs_delta > 20_000 {
             diffs.push(DiffEntry {
@@ -119,7 +139,9 @@ pub fn compare_token_usage(test_name: &str, baseline: &TestResult, current: &Tes
     if b_tu.completion_tokens > 0 {
         let rel = (c_tu.completion_tokens as f64 - b_tu.completion_tokens as f64)
             / b_tu.completion_tokens as f64;
-        let abs_delta = c_tu.completion_tokens.saturating_sub(b_tu.completion_tokens);
+        let abs_delta = c_tu
+            .completion_tokens
+            .saturating_sub(b_tu.completion_tokens);
         if rel > 0.30 || abs_delta > 10_000 {
             diffs.push(DiffEntry {
                 test_name: test_name.to_string(),
@@ -151,11 +173,16 @@ fn sha256_hex(input: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-pub fn compare_llm_calls(test_name: &str, baseline: &TestResult, current: &TestResult) -> Vec<DiffEntry> {
+pub fn compare_llm_calls(
+    test_name: &str,
+    baseline: &TestResult,
+    current: &TestResult,
+) -> Vec<DiffEntry> {
     let mut diffs = Vec::new();
 
     // System prompt hash of first LLM call
-    if let (Some(b_first), Some(c_first)) = (baseline.llm_calls.first(), current.llm_calls.first()) {
+    if let (Some(b_first), Some(c_first)) = (baseline.llm_calls.first(), current.llm_calls.first())
+    {
         let b_hash = sha256_hex(&b_first.system_prompt);
         let c_hash = sha256_hex(&c_first.system_prompt);
         if b_hash != c_hash {
@@ -205,11 +232,23 @@ pub fn compare_llm_calls(test_name: &str, baseline: &TestResult, current: &TestR
 // Tool calls
 // ---------------------------------------------------------------------------
 
-pub fn compare_tool_calls(test_name: &str, baseline: &TestResult, current: &TestResult) -> Vec<DiffEntry> {
+pub fn compare_tool_calls(
+    test_name: &str,
+    baseline: &TestResult,
+    current: &TestResult,
+) -> Vec<DiffEntry> {
     let mut diffs = Vec::new();
 
-    let b_tools: std::collections::HashSet<&str> = baseline.tool_calls.iter().map(|t| t.tool_id.as_str()).collect();
-    let c_tools: std::collections::HashSet<&str> = current.tool_calls.iter().map(|t| t.tool_id.as_str()).collect();
+    let b_tools: std::collections::HashSet<&str> = baseline
+        .tool_calls
+        .iter()
+        .map(|t| t.tool_id.as_str())
+        .collect();
+    let c_tools: std::collections::HashSet<&str> = current
+        .tool_calls
+        .iter()
+        .map(|t| t.tool_id.as_str())
+        .collect();
 
     // Missing tools in current
     let missing: Vec<&str> = b_tools.difference(&c_tools).copied().collect();
@@ -255,7 +294,11 @@ pub fn compare_tool_calls(test_name: &str, baseline: &TestResult, current: &Test
 // Answer text
 // ---------------------------------------------------------------------------
 
-pub fn compare_answer_text(test_name: &str, baseline: &TestResult, current: &TestResult) -> Vec<DiffEntry> {
+pub fn compare_answer_text(
+    test_name: &str,
+    baseline: &TestResult,
+    current: &TestResult,
+) -> Vec<DiffEntry> {
     let mut diffs = Vec::new();
 
     // Text length delta > 50%
@@ -352,7 +395,11 @@ mod tests {
         let baseline = minimal_result(TestStatus::Skipped, 1000);
         let current = minimal_result(TestStatus::Passed, 1000);
         let diffs = compare_status("test", &baseline, &current);
-        assert_eq!(diffs.len(), 0, "Skipped -> Passed should not produce a diff");
+        assert_eq!(
+            diffs.len(),
+            0,
+            "Skipped -> Passed should not produce a diff"
+        );
     }
 
     #[test]
@@ -361,7 +408,11 @@ mod tests {
         let mut current = minimal_result(TestStatus::Passed, 137_594);
         current.duration_ms = 137_594;
         let diffs = compare_duration("test", &baseline, &current);
-        assert_eq!(diffs.len(), 0, "Duration diff should be skipped when baseline was Skipped");
+        assert_eq!(
+            diffs.len(),
+            0,
+            "Duration diff should be skipped when baseline was Skipped"
+        );
     }
 
     #[test]

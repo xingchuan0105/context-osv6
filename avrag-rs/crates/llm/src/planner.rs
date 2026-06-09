@@ -5,8 +5,10 @@ use common::RagPlan;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
-// Prompts are externalized to avrag-rs/prompts/ for version control and tuning.
-const PLANNER_SYSTEM_PROMPT: &str = include_str!("../../../prompts/rag_planner_system.txt");
+const PLANNER_SYSTEM_PROMPT: &str = r#"You are a legacy RAG retrieval planner.
+Return exactly one JSON object matching the RagPlan schema.
+Prefer a single query item for simple requests. Use docscope metadata only to scope retrieval, not to answer.
+"#;
 const PLANNER_CACHE_TTL_SECS: u64 = 60 * 60; // 1 hour
 
 fn sha256_hex(input: &str) -> String {
@@ -15,7 +17,12 @@ fn sha256_hex(input: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
-fn planner_cache_key(model: &str, query: &str, docscope: Option<&common::DocScopeMetadata>, session_context: Option<&str>) -> String {
+fn planner_cache_key(
+    model: &str,
+    query: &str,
+    docscope: Option<&common::DocScopeMetadata>,
+    session_context: Option<&str>,
+) -> String {
     let query_hash = sha256_hex(query);
     let mut hasher = Sha256::new();
     if let Some(ctx) = session_context {
@@ -141,14 +148,14 @@ impl RetrievalPlanner {
         })?;
 
         if let Some(cache) = &self.cache {
-            let _ = cache.set_json(&cache_key, &plan, PLANNER_CACHE_TTL_SECS).await;
+            let _ = cache
+                .set_json(&cache_key, &plan, PLANNER_CACHE_TTL_SECS)
+                .await;
         }
 
         Ok((plan, response.usage))
     }
-
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -211,5 +218,4 @@ mod tests {
         assert!(!prompt.contains("Session conversation history:"));
         assert_eq!(prompt, "Latest user request:\nhow to roll back?");
     }
-
 }

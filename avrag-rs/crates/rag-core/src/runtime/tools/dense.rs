@@ -18,10 +18,7 @@ pub(crate) fn lexical_args_from_dense(args: &DenseRetrievalArgs) -> serde_json::
         .queries
         .iter()
         .flat_map(|query| {
-            let words: Vec<String> = query
-                .split_whitespace()
-                .map(ToOwned::to_owned)
-                .collect();
+            let words: Vec<String> = query.split_whitespace().map(ToOwned::to_owned).collect();
             if words.is_empty() {
                 vec![query.clone()]
             } else {
@@ -38,11 +35,7 @@ pub(crate) fn lexical_args_from_dense(args: &DenseRetrievalArgs) -> serde_json::
     .unwrap_or_default()
 }
 
-pub async fn run(
-    runtime: &RagRuntime,
-    auth: &AuthContext,
-    args: &serde_json::Value,
-) -> ToolResult {
+pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Value) -> ToolResult {
     let args: DenseRetrievalArgs = match serde_json::from_value(args.clone()) {
         Ok(a) => a,
         Err(e) => {
@@ -65,6 +58,7 @@ pub async fn run(
         doc_scope: args.doc_scope.clone(),
         messages: Vec::new(),
         stream: false,
+        debug: false,
         language: None,
         format_hint: None,
     };
@@ -128,9 +122,8 @@ pub async fn run(
                                     chunk_id.parse().unwrap_or_default(),
                                     doc_id.parse().unwrap_or_default(),
                                     text.to_string(),
-                                    item.get("score")
-                                        .and_then(|v| v.as_f64())
-                                        .unwrap_or(0.0) as f32,
+                                    item.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0)
+                                        as f32,
                                     item.get("source")
                                         .and_then(|v| v.as_str())
                                         .unwrap_or("")

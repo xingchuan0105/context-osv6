@@ -19,6 +19,8 @@ pub struct ChatTurn<'a> {
     pub agent_type: &'a str,
     pub citations: &'a [common::Citation],
     pub tool_results: &'a [common::ToolResult],
+    /// Metadata for the user message row (e.g. query_resolution per ADR-0008).
+    pub user_turn_metadata: Option<serde_json::Value>,
 }
 
 impl PgAppRepository {
@@ -185,15 +187,20 @@ impl PgAppRepository {
         ensure_org_and_actor(tx.inner(), context).await?;
         let answer_blocks_value =
             serde_json::to_value(turn.assistant_answer_blocks).unwrap_or_else(|_| json!([]));
+        let user_turn_metadata = turn
+            .user_turn_metadata
+            .clone()
+            .unwrap_or_else(|| json!({}));
         sqlx::query(
             r#"
-            insert into chat_messages (org_id, session_id, role, content, citations)
-            values ($1, $2, 'user', $3, '[]'::jsonb)
+            insert into chat_messages (org_id, session_id, role, content, citations, turn_metadata)
+            values ($1, $2, 'user', $3, '[]'::jsonb, $4)
             "#,
         )
         .bind(context.org_id().into_uuid())
         .bind(session_id)
         .bind(turn.user_content)
+        .bind(user_turn_metadata)
         .execute(tx.inner())
         .await?;
 

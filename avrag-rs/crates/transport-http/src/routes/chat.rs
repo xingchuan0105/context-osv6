@@ -36,7 +36,10 @@ pub(crate) fn router() -> Router<AppState> {
             get(handlers::citation_asset_handler),
         )
         .route("/search", get(handlers::search_handler))
-        .route("/agent/capabilities", get(handlers::agent_capabilities_handler))
+        .route(
+            "/agent/capabilities",
+            get(handlers::agent_capabilities_handler),
+        )
 }
 
 pub(crate) fn compat_router() -> Router<AppState> {

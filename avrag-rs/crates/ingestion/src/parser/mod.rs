@@ -196,36 +196,37 @@ pub fn normalize_parsed_document(doc: &ParsedDocument, parser_backend: &str) -> 
         .collect::<Vec<_>>();
 
     if let Some(images_json) = doc.metadata.get("embedded_images_json")
-        && let Ok(images) = serde_json::from_str::<Vec<EmbeddedImageMeta>>(images_json) {
-            let base_context = doc
-                .pages
-                .first()
-                .map(|page| page.content.chars().take(400).collect::<String>());
-            for image in images {
-                let caption = image.alt.clone();
-                let context = base_context.clone();
-                let text = [
-                    caption.clone().unwrap_or_default(),
-                    context.clone().unwrap_or_default(),
-                ]
-                .into_iter()
-                .filter(|value| !value.trim().is_empty())
-                .collect::<Vec<_>>()
-                .join("\n\n");
-                units.push(ParsedUnit::new_image_with_context(
-                    1,
-                    if text.is_empty() {
-                        image.src.clone()
-                    } else {
-                        text
-                    },
-                    image.src,
-                    caption,
-                    context,
-                    parser_backend.to_string(),
-                ));
-            }
+        && let Ok(images) = serde_json::from_str::<Vec<EmbeddedImageMeta>>(images_json)
+    {
+        let base_context = doc
+            .pages
+            .first()
+            .map(|page| page.content.chars().take(400).collect::<String>());
+        for image in images {
+            let caption = image.alt.clone();
+            let context = base_context.clone();
+            let text = [
+                caption.clone().unwrap_or_default(),
+                context.clone().unwrap_or_default(),
+            ]
+            .into_iter()
+            .filter(|value| !value.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+            units.push(ParsedUnit::new_image_with_context(
+                1,
+                if text.is_empty() {
+                    image.src.clone()
+                } else {
+                    text
+                },
+                image.src,
+                caption,
+                context,
+                parser_backend.to_string(),
+            ));
         }
+    }
 
     NormalizedDocument {
         title: doc.title.clone(),

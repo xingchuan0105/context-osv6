@@ -318,10 +318,7 @@ fn build_pdf_parse_plan(
     PdfParsePlan { pages }
 }
 
-fn build_pdf_page_plan(
-    page_probe: &PdfPageProbeResult,
-    config: &ParseProbeConfig,
-) -> PdfPagePlan {
+fn build_pdf_page_plan(page_probe: &PdfPageProbeResult, config: &ParseProbeConfig) -> PdfPagePlan {
     let (backend, reason) = if page_probe.likely_scanned {
         (PdfPageBackend::MineruOcr, RouteReason::ScannedPdf)
     } else if page_probe.image_hint_count > config.image_heavy_threshold

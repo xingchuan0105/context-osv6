@@ -6,9 +6,9 @@ use serde_json::json;
 use std::collections::{BTreeSet, HashSet};
 use tokio_util::sync::CancellationToken;
 
-const SYNTHESIZER_SYSTEM_PROMPT: &str = include_str!("../../../prompts/skills/rag-answer/SKILL.md");
+const SYNTHESIZER_SYSTEM_PROMPT: &str = include_str!("../../../prompts/synthesis/rag-answer.md");
 const DEFAULT_SYNTHESIZER_USER_TEMPLATE: &str =
-    include_str!("../../../prompts/synthesizer_user.tmpl");
+    include_str!("../../../prompts/templates/synthesizer-user.tmpl");
 
 #[derive(Debug, Clone)]
 pub struct SynthesisOutput {
@@ -573,7 +573,7 @@ impl AnswerSynthesizer {
         )));
 
         self.llm
-            .complete_stream(&messages, Some(0.7), params.token, on_delta)
+            .complete_stream(&messages, Some(0.7), params.token, on_delta, |_| {})
             .await
             .context("Failed to stream synthesizer response")
     }
@@ -598,8 +598,7 @@ impl AnswerSynthesizer {
         }
 
         let context_chunks = tool_results_to_context_chunks(tool_results);
-        let index_section =
-            build_tool_result_index(query, tool_results, context_chunks.len());
+        let index_section = build_tool_result_index(query, tool_results, context_chunks.len());
         let context_section = build_tool_result_context_section(tool_results);
         messages.push(ChatMessage::user(build_synthesis_request(
             query,
@@ -634,8 +633,7 @@ impl AnswerSynthesizer {
         }
 
         let context_chunks = tool_results_to_context_chunks(tool_results);
-        let index_section =
-            build_tool_result_index(query, tool_results, context_chunks.len());
+        let index_section = build_tool_result_index(query, tool_results, context_chunks.len());
         let context_section = build_tool_result_context_section(tool_results);
         messages.push(ChatMessage::user(build_synthesis_request(
             query,
@@ -644,7 +642,7 @@ impl AnswerSynthesizer {
         )));
 
         self.llm
-            .complete_stream(&messages, Some(0.7), token, on_delta)
+            .complete_stream(&messages, Some(0.7), token, on_delta, |_| {})
             .await
             .context("Failed to stream synthesizer response")
     }

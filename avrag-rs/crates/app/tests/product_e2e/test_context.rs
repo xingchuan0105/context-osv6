@@ -11,9 +11,7 @@ use uuid::Uuid;
 use super::{
     ChatResponse, DocumentStatus, HttpResponse, NotebookInner, NotebookResponse, SseEvent,
     SseParser, UploadResponse,
-    mock_servers::{
-        start_mock_embedding_server, start_mock_llm_server, start_mock_search_server,
-    },
+    mock_servers::{start_mock_embedding_server, start_mock_llm_server, start_mock_search_server},
     setup,
 };
 
@@ -38,6 +36,18 @@ async fn run_orphan_cleanup_once() {
 // TestContext
 // ---------------------------------------------------------------------------
 
+/// Parameters for a streaming chat request.
+pub struct ChatStreamParams<'a> {
+    pub query: &'a str,
+    pub agent_type: &'a str,
+    pub notebook_id: &'a str,
+    pub doc_scope: &'a [String],
+    pub session_id: Option<&'a str>,
+    pub format_hint: Option<&'a str>,
+    /// When true, enables `DebugTrace` events (e.g. `prompt_snapshot`) in the SSE stream.
+    pub debug: bool,
+}
+
 /// Per-test execution context.
 ///
 /// Created via `TestContext::new_smoke().await` or `new_smoke_with_rag().await`.
@@ -46,9 +56,8 @@ pub struct TestContext {
     pub http_client: reqwest::Client,
     pub base_url: String,
     shared_pg: Option<Arc<setup::SharedPostgres>>,
-    milvus_container_name: Option<String>,
-    /// True when Milvus is an external (non-test-owned) instance and must NOT be stopped in `Drop`.
-    milvus_is_external: bool,
+    shared_milvus: Option<Arc<setup::SharedMilvus>>,
+    milvus_collection_prefix: Option<String>,
     worker: Option<tokio::process::Child>,
     server_abort: Option<tokio::sync::oneshot::Sender<()>>,
     #[allow(dead_code)]
@@ -62,6 +71,8 @@ pub struct TestContext {
     embedding_call_count: Option<Arc<AtomicUsize>>,
     redis_container_name: Option<String>,
     worker_log_path: Option<std::path::PathBuf>,
+    /// Fixed per-`TestContext` run id so observability and llm_real artifacts share one directory prefix.
+    artifact_run_id: String,
 }
 
 /// Default test org/user IDs.
@@ -80,6 +91,16 @@ pub const DEFAULT_TEST_USER_ID: &str = "00000000-0000-0000-0000-000000000001";
 pub fn unique_test_identity() -> (String, String) {
     use uuid::Uuid;
     (Uuid::new_v4().to_string(), Uuid::new_v4().to_string())
+}
+
+fn milvus_collection_prefix_for_identity(org_id: &str, _user_id: &str) -> String {
+    let suffix = org_id
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .take(8)
+        .collect::<String>()
+        .to_ascii_lowercase();
+    format!("avrag_e2e_{suffix}")
 }
 
 /// Auth headers for a specific org/user (used by `build_smoke` and by
@@ -241,6 +262,11 @@ impl TestContext {
         // trigger 429s. Tests that want to share a bucket (e.g. the
         // cross-org isolation test) pass an explicit `identity`.
         let identity = identity.or_else(|| Some(unique_test_identity()));
+        let (org_id, user_id) = identity
+            .as_ref()
+            .expect("identity is always Some after .or_else above");
+        let milvus_collection_prefix =
+            enable_rag.then(|| milvus_collection_prefix_for_identity(org_id, user_id));
 
         // 1. Acquire shared Postgres (one container per test binary).
         let (pg_url, shared_pg) = setup::acquire_shared_postgres()
@@ -248,12 +274,13 @@ impl TestContext {
             .expect("start shared postgres");
 
         // 2. Start Milvus if RAG enabled
-        let (milvus_url, milvus_container_name, milvus_is_external) = if enable_rag {
-            let inst = setup::start_milvus().await.expect("start milvus");
-            let name = inst.container_name.clone();
-            (Some(inst.url), name, inst.is_external)
+        let (milvus_url, shared_milvus) = if enable_rag {
+            let (url, shared) = setup::acquire_shared_milvus()
+                .await
+                .expect("start shared milvus");
+            (Some(url), Some(shared))
         } else {
-            (None, None, false)
+            (None, None)
         };
 
         // 3. Temp object store
@@ -303,9 +330,10 @@ impl TestContext {
                 std::env::set_var("MILVUS_URL", url);
                 std::env::set_var("MILVUS_TOKEN", "");
                 std::env::set_var("MILVUS_DATABASE", "default");
-                // Fixed prefix for reproducible debugging
-                let prefix = "avrag_e2e_test".to_string();
-                std::env::set_var("MILVUS_COLLECTION_PREFIX", &prefix);
+                let prefix = milvus_collection_prefix
+                    .as_ref()
+                    .expect("RAG contexts must have a Milvus prefix");
+                std::env::set_var("MILVUS_COLLECTION_PREFIX", prefix);
             }
             // LLM config: keep real values when use_real_llm is set; otherwise inject mocks.
             if !use_real_llm {
@@ -372,9 +400,7 @@ impl TestContext {
             )
             .env(
                 "REDIS_URL",
-                redis_url
-                    .as_deref()
-                    .unwrap_or("redis://127.0.0.1:1"),
+                redis_url.as_deref().unwrap_or("redis://127.0.0.1:1"),
             )
             .env("AVRAG_PUBLIC_BASE_URL", &base_url)
             .env("AVRAG_WORKER_ID", "test-worker")
@@ -388,13 +414,11 @@ impl TestContext {
             .kill_on_drop(true);
 
         if let Some(ref url) = milvus_url {
+            let prefix = milvus_collection_prefix.clone().unwrap_or_default();
             cmd.env("MILVUS_URL", url)
                 .env("MILVUS_TOKEN", "")
                 .env("MILVUS_DATABASE", "default")
-                .env(
-                    "MILVUS_COLLECTION_PREFIX",
-                    std::env::var("MILVUS_COLLECTION_PREFIX").unwrap_or_default(),
-                );
+                .env("MILVUS_COLLECTION_PREFIX", prefix);
         }
         // Worker LLM env: real or mock depending on mode.
         if use_real_llm {
@@ -509,12 +533,18 @@ impl TestContext {
             .build()
             .expect("reqwest client build");
 
+        let now = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+        let short_commit = option_env!("GITHUB_SHA")
+            .map(|s| &s[..s.len().min(8)])
+            .unwrap_or("local");
+        let artifact_run_id = format!("e2e_{now}_{short_commit}_{}", Uuid::new_v4().simple());
+
         Self {
             http_client: client,
             base_url,
             shared_pg: Some(shared_pg),
-            milvus_container_name,
-            milvus_is_external,
+            shared_milvus,
+            milvus_collection_prefix,
             worker: Some(worker),
             server_abort: Some(abort_tx),
             object_store_dir,
@@ -527,6 +557,7 @@ impl TestContext {
             embedding_call_count,
             redis_container_name,
             worker_log_path: Some(worker_log_path),
+            artifact_run_id,
         }
     }
 
@@ -760,7 +791,11 @@ impl TestContext {
     }
 
     /// Send a general/chat agent query and return the raw HTTP response.
-    pub async fn chat_general(&self, query: &str, notebook_id: &str) -> anyhow::Result<HttpResponse> {
+    pub async fn chat_general(
+        &self,
+        query: &str,
+        notebook_id: &str,
+    ) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
             .post(format!("{}/api/v1/chat", self.base_url))
@@ -853,33 +888,40 @@ impl TestContext {
         Ok(HttpResponse { status, body_json })
     }
 
-    /// Send a streaming RAG chat request and return the raw SSE event stream.
+    /// Send a streaming chat request and return the raw SSE event stream.
     ///
     /// Reads the stream until the response body is fully consumed
     /// (production closes the HTTP response after the `done` / `error`
     /// event). As a safety net, the function bails after `max_wait`.
-    /// `max_events` is no longer a stop condition — it is only used
-    /// to bail if the stream is genuinely unbounded (e.g. the
-    /// production bug where `done` is never emitted).
-    pub async fn chat_stream(
+    /// `max_events` is only used to bail if the stream is genuinely unbounded.
+    pub async fn chat_stream_with_params(
         &self,
-        query: &str,
-        notebook_id: &str,
-        doc_scope: &[String],
+        params: ChatStreamParams<'_>,
         max_events: usize,
         max_wait: Duration,
     ) -> anyhow::Result<Vec<SseEvent>> {
+        let mut body = serde_json::json!({
+            "query": params.query,
+            "agent_type": params.agent_type,
+            "notebook_id": params.notebook_id,
+            "doc_scope": params.doc_scope,
+            "stream": true,
+        });
+        if let Some(session_id) = params.session_id {
+            body["session_id"] = serde_json::json!(session_id);
+        }
+        if let Some(hint) = params.format_hint {
+            body["format_hint"] = serde_json::json!(hint);
+        }
+        if params.debug {
+            body["debug"] = serde_json::json!(true);
+        }
+
         let resp = self
             .http_client
             .post(format!("{}/api/v1/chat", self.base_url))
             .header(reqwest::header::ACCEPT, "text/event-stream")
-            .json(&serde_json::json!({
-                "query": query,
-                "agent_type": "rag",
-                "notebook_id": notebook_id,
-                "doc_scope": doc_scope,
-                "stream": true,
-            }))
+            .json(&body)
             .send()
             .await?;
         let status = resp.status().as_u16();
@@ -904,7 +946,7 @@ impl TestContext {
             let remaining = deadline - now;
             let chunk = match tokio::time::timeout(remaining, resp.chunk()).await {
                 Ok(Ok(Some(chunk))) => chunk,
-                Ok(Ok(None)) => break, // stream closed — this is the normal exit
+                Ok(Ok(None)) => break,
                 Ok(Err(e)) => {
                     return Err(anyhow::Error::from(e));
                 }
@@ -929,9 +971,45 @@ impl TestContext {
         Ok(events)
     }
 
+    /// Streaming RAG chat (backward-compatible wrapper).
+    pub async fn chat_stream(
+        &self,
+        query: &str,
+        notebook_id: &str,
+        doc_scope: &[String],
+        max_events: usize,
+        max_wait: Duration,
+    ) -> anyhow::Result<Vec<SseEvent>> {
+        self.chat_stream_with_params(
+            ChatStreamParams {
+                query,
+                agent_type: "rag",
+                notebook_id,
+                doc_scope,
+                session_id: None,
+                format_hint: None,
+                debug: false,
+            },
+            max_events,
+            max_wait,
+        )
+        .await
+    }
+
     // -----------------------------------------------------------------------
     // Failure artifact capture
     // -----------------------------------------------------------------------
+
+    /// Query the chunk_count stored in PG for a completed document.
+    pub async fn query_document_chunk_count(&self, document_id: &str) -> anyhow::Result<usize> {
+        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
+        let doc_id = Uuid::parse_str(document_id)?;
+        let row: (i32,) = sqlx::query_as("SELECT chunk_count FROM documents WHERE id = $1")
+            .bind(doc_id)
+            .fetch_one(&pool)
+            .await?;
+        Ok(row.0 as usize)
+    }
 
     /// Override the ingestion task max_attempts for a document.
     ///
@@ -974,13 +1052,18 @@ impl TestContext {
         }
     }
 
+    /// Directory for llm_real artifacts for a given test name.
+    pub fn llm_real_artifact_dir(&self, test_name: &str) -> std::path::PathBuf {
+        self.artifact_dir(test_name, "llm_real")
+    }
+
     /// Save debugging artifacts on test failure.
     pub fn save_failure_artifacts(
         &self,
         test_name: &str,
         response_json: Option<&serde_json::Value>,
     ) {
-        let out_dir = Self::artifact_dir(test_name, "failures");
+        let out_dir = self.artifact_dir(test_name, "failures");
         let _ = std::fs::create_dir_all(&out_dir);
 
         if let Some(body) = response_json {
@@ -997,9 +1080,37 @@ impl TestContext {
         }
     }
 
-    /// Save observability artifacts for a typed ChatResponse (failures + llm_real).
-    pub fn save_observability_artifact(&self, test_name: &str, resp: &ChatResponse) {
-        let out_dir = Self::artifact_dir(test_name, "observability");
+    fn write_reasoning_capture_files(
+        out_dir: &std::path::Path,
+        capture: &super::StreamReasoningCapture,
+    ) {
+        let _ = std::fs::write(out_dir.join("reasoning_summary.txt"), &capture.summary);
+
+        let trace_lines: String = capture
+            .trace_reasoning
+            .iter()
+            .filter_map(|rec| serde_json::to_string(rec).ok())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let _ = std::fs::write(out_dir.join("trace_reasoning.jsonl"), trace_lines);
+
+        let _ = std::fs::write(
+            out_dir.join("prompt_snapshots.json"),
+            serde_json::to_string_pretty(&capture.prompt_snapshots).unwrap_or_default(),
+        );
+    }
+
+    /// Save observability artifacts for a typed ChatResponse.
+    ///
+    /// When `capture` is provided, also writes reasoning files (same layout as `llm_real`).
+    pub fn save_observability_artifact(
+        &self,
+        test_name: &str,
+        resp: &ChatResponse,
+        capture: Option<&super::StreamReasoningCapture>,
+        extra: Option<&serde_json::Value>,
+    ) {
+        let out_dir = self.artifact_dir(test_name, "observability");
         let _ = std::fs::create_dir_all(&out_dir);
 
         let _ = std::fs::write(
@@ -1007,8 +1118,18 @@ impl TestContext {
             serde_json::to_string_pretty(resp).unwrap_or_default(),
         );
 
-        let metadata = serde_json::json!({
+        if let Some(capture) = capture {
+            Self::write_reasoning_capture_files(&out_dir, capture);
+        }
+
+        let stream_error_with_done = extra
+            .and_then(|v| v.get("stream_error_with_done"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let mut metadata = serde_json::json!({
             "test_name": test_name,
+            "run_id": self.artifact_run_id,
             "timestamp": chrono::Utc::now().to_rfc3339(),
             "degrade_trace_count": resp.degrade_trace.len(),
             "usage": resp.usage,
@@ -1016,7 +1137,22 @@ impl TestContext {
             "agent_type": resp.agent_type,
             "session_id": resp.session_id,
             "message_id": resp.message_id,
+            "stream_error_with_done": stream_error_with_done,
+            "extra": extra.cloned().unwrap_or(serde_json::Value::Null),
         });
+
+        if let Some(capture) = capture {
+            let reasoning_empty_warning =
+                capture.summary.is_empty() && capture.trace_reasoning.is_empty();
+            metadata["reasoning_delta_count"] = serde_json::json!(capture.delta_count);
+            metadata["reasoning_summary_chars"] =
+                serde_json::json!(capture.summary.chars().count());
+            metadata["reasoning_summary_present"] = serde_json::json!(!capture.summary.is_empty());
+            metadata["trace_reasoning_count"] = serde_json::json!(capture.trace_reasoning.len());
+            metadata["prompt_snapshot_count"] = serde_json::json!(capture.prompt_snapshots.len());
+            metadata["reasoning_empty_warning"] = serde_json::json!(reasoning_empty_warning);
+        }
+
         let _ = std::fs::write(
             out_dir.join("metadata.json"),
             serde_json::to_string_pretty(&metadata).unwrap_or_default(),
@@ -1031,27 +1167,75 @@ impl TestContext {
 
     /// Save a real-LLM test artifact (answer, citations, metadata) so the
     /// output can be audited even when the test passes.
+    ///
+    /// Writes a complete artifact set under `llm_real/<run_id>/<test_name>/`:
+    /// `response.json`, `reasoning_summary.txt`, `trace_reasoning.jsonl`,
+    /// `prompt_snapshots.json`, and `metadata.json`.
     pub fn save_llm_artifact(
         &self,
         test_name: &str,
         resp: &ChatResponse,
-        metadata: Option<serde_json::Value>,
+        extra: Option<serde_json::Value>,
+        capture: Option<super::StreamReasoningCapture>,
     ) {
-        self.save_observability_artifact(test_name, resp);
-        if let Some(extra) = metadata {
-            let out_dir = Self::artifact_dir(test_name, "llm_real");
-            let path = out_dir.join("metadata.json");
-            if let Ok(existing) = std::fs::read_to_string(&path) {
-                if let Ok(mut meta) = serde_json::from_str::<serde_json::Value>(&existing) {
-                    if let Some(obj) = meta.as_object_mut() {
-                        obj.insert("models".into(), serde_json::json!({
-                            "agent_llm": std::env::var("AGENT_LLM_MODEL").unwrap_or_default(),
-                            "embedding": std::env::var("EMBEDDING_MODEL").unwrap_or_default(),
-                        }));
-                        obj.insert("extra".into(), extra);
-                        let _ = std::fs::write(path, serde_json::to_string_pretty(&meta).unwrap_or_default());
-                    }
-                }
+        let capture = capture.unwrap_or(super::StreamReasoningCapture {
+            summary: String::new(),
+            delta_count: 0,
+            trace_reasoning: Vec::new(),
+            prompt_snapshots: Vec::new(),
+        });
+
+        let extra_value = extra.unwrap_or(serde_json::Value::Null);
+        self.save_observability_artifact(test_name, resp, Some(&capture), Some(&extra_value));
+
+        let out_dir = self.llm_real_artifact_dir(test_name);
+        let _ = std::fs::create_dir_all(&out_dir);
+
+        let _ = std::fs::write(
+            out_dir.join("response.json"),
+            serde_json::to_string_pretty(resp).unwrap_or_default(),
+        );
+
+        Self::write_reasoning_capture_files(&out_dir, &capture);
+
+        let reasoning_empty_warning =
+            capture.summary.is_empty() && capture.trace_reasoning.is_empty();
+        let stream_error_with_done = extra_value
+            .get("stream_error_with_done")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let metadata = serde_json::json!({
+            "test_name": test_name,
+            "run_id": self.artifact_run_id,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "usage": resp.usage,
+            "degrade_trace_count": resp.degrade_trace.len(),
+            "citation_count": resp.citations.len(),
+            "agent_type": resp.agent_type,
+            "session_id": resp.session_id,
+            "message_id": resp.message_id,
+            "reasoning_delta_count": capture.delta_count,
+            "reasoning_summary_chars": capture.summary.chars().count(),
+            "reasoning_summary_present": !capture.summary.is_empty(),
+            "trace_reasoning_count": capture.trace_reasoning.len(),
+            "prompt_snapshot_count": capture.prompt_snapshots.len(),
+            "reasoning_empty_warning": reasoning_empty_warning,
+            "stream_error_with_done": stream_error_with_done,
+            "models": {
+                "agent_llm": std::env::var("AGENT_LLM_MODEL").unwrap_or_default(),
+                "embedding": std::env::var("EMBEDDING_MODEL").unwrap_or_default(),
+            },
+            "extra": extra_value,
+        });
+        let _ = std::fs::write(
+            out_dir.join("metadata.json"),
+            serde_json::to_string_pretty(&metadata).unwrap_or_default(),
+        );
+
+        if let Some(ref log_path) = self.worker_log_path {
+            if log_path.exists() {
+                let _ = std::fs::copy(log_path, out_dir.join("worker_logs.txt"));
             }
         }
     }
@@ -1089,18 +1273,13 @@ impl TestContext {
         }
     }
 
-    /// Build the artifact directory path for a test.
-    fn artifact_dir(test_name: &str, bucket: &str) -> std::path::PathBuf {
-        let now = chrono::Utc::now().format("%Y%m%d-%H%M%S");
-        let short_commit = option_env!("GITHUB_SHA")
-            .map(|s| &s[..s.len().min(8)])
-            .unwrap_or("local");
-        let run_id = format!("e2e_{now}_{short_commit}");
+    /// Build the artifact directory path for a test (uses fixed `artifact_run_id`).
+    fn artifact_dir(&self, test_name: &str, bucket: &str) -> std::path::PathBuf {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("tests")
             .join("e2e_output")
             .join(bucket)
-            .join(&run_id)
+            .join(&self.artifact_run_id)
             .join(test_name)
     }
 }
@@ -1129,21 +1308,32 @@ impl Drop for TestContext {
         if let Some(pg) = self.shared_pg.take() {
             setup::release_shared_postgres(&pg);
         }
-        // Drop Milvus collections before stopping the container (sync, 10s timeout).
-        if !self.milvus_is_external {
-            if let Ok(prefix) = std::env::var("MILVUS_COLLECTION_PREFIX") {
-                setup::sync_drop_milvus_collections(&prefix);
-            }
+        // Drop Milvus collections before releasing the shared instance.
+        if let Some(ref prefix) = self.milvus_collection_prefix {
+            setup::sync_drop_milvus_collections(prefix);
         }
-        // Stop Milvus container synchronously when we started it.
-        if !self.milvus_is_external
-            && let Some(ref container) = self.milvus_container_name
-        {
-            setup::sync_stop_milvus(container);
+        // Release shared Milvus; last context stops only test-owned containers.
+        if let Some(milvus) = self.shared_milvus.take() {
+            setup::release_shared_milvus(&milvus);
         }
         // Stop Redis container when started for embedding-cache profile.
         if let Some(ref container) = self.redis_container_name {
             setup::sync_stop_redis(container);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn milvus_collection_prefix_uses_context_identity_suffix() {
+        let prefix = milvus_collection_prefix_for_identity(
+            "12345678-aaaa-bbbb-cccc-dddddddddddd",
+            "ignored-user",
+        );
+
+        assert_eq!(prefix, "avrag_e2e_12345678");
     }
 }

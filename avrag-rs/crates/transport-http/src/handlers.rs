@@ -13,9 +13,8 @@ use axum::{
 use common::{
     AddUrlSourceRequest, AppError, ChatRequest, CitationLookupRequest, CreateChatSessionRequest,
     CreateDocumentRequest, CreateNotebookNoteRequest, CreateNotebookRequest, ExecutePlanRequest,
-    NotebookListResponse, NotebookResponse,
-    RuntimeExecuteRequest, UpdateChatSessionRequest, UpdateDocumentRequest,
-    UpdateNotebookNoteRequest, UpdateNotebookRequest,
+    NotebookListResponse, NotebookResponse, RuntimeExecuteRequest, UpdateChatSessionRequest,
+    UpdateDocumentRequest, UpdateNotebookNoteRequest, UpdateNotebookRequest,
 };
 use contracts::chat::ChatEvent;
 use std::{convert::Infallible, time::Duration};
@@ -43,10 +42,9 @@ pub(crate) fn app_error_response(e: AppError) -> Response {
     let mut response = (status, Json(body)).into_response();
     if status == StatusCode::TOO_MANY_REQUESTS {
         if let Some(secs) = retry_after {
-            response.headers_mut().insert(
-                header::RETRY_AFTER,
-                HeaderValue::from(secs as u64),
-            );
+            response
+                .headers_mut()
+                .insert(header::RETRY_AFTER, HeaderValue::from(secs as u64));
         }
     }
     response

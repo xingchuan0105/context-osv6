@@ -1,13 +1,18 @@
 use crate::types::BillingConfig;
-use anyhow::{Result, bail, anyhow};
-use rsa::{RsaPrivateKey, RsaPublicKey, pkcs1::DecodeRsaPrivateKey, pkcs8::{DecodePrivateKey, DecodePublicKey}};
-use rsa::pkcs1v15::{SigningKey, VerifyingKey};
-use rsa::signature::{Signer, Verifier, SignatureEncoding};
-use sha2::Sha256;
+use anyhow::{Result, anyhow, bail};
 use base64::Engine;
+use rsa::pkcs1v15::{SigningKey, VerifyingKey};
+use rsa::signature::{SignatureEncoding, Signer, Verifier};
+use rsa::{
+    RsaPrivateKey, RsaPublicKey,
+    pkcs1::DecodeRsaPrivateKey,
+    pkcs8::{DecodePrivateKey, DecodePublicKey},
+};
+use sha2::Sha256;
 
 fn normalize_key_input(raw: &str) -> String {
-    let cleaned: String = raw.chars()
+    let cleaned: String = raw
+        .chars()
         .filter(|c| c.is_ascii_alphanumeric() || *c == '+' || *c == '/' || *c == '=')
         .collect();
     cleaned
@@ -45,8 +50,12 @@ fn load_private_key(raw: &str) -> Result<RsaPrivateKey> {
         "-----BEGIN RSA PRIVATE KEY-----\n{}\n-----END RSA PRIVATE KEY-----",
         wrapped
     );
-    RsaPrivateKey::from_pkcs1_pem(&pkcs1_pem)
-        .map_err(|e| anyhow!("invalid alipay private key (tried PKCS#8 and PKCS#1): {}", e))
+    RsaPrivateKey::from_pkcs1_pem(&pkcs1_pem).map_err(|e| {
+        anyhow!(
+            "invalid alipay private key (tried PKCS#8 and PKCS#1): {}",
+            e
+        )
+    })
 }
 
 fn load_public_key(raw: &str) -> Result<RsaPublicKey> {
@@ -61,8 +70,7 @@ fn load_public_key(raw: &str) -> Result<RsaPublicKey> {
         "-----BEGIN PUBLIC KEY-----\n{}\n-----END PUBLIC KEY-----",
         wrapped
     );
-    RsaPublicKey::from_public_key_pem(&pem)
-        .map_err(|e| anyhow!("invalid alipay public key: {}", e))
+    RsaPublicKey::from_public_key_pem(&pem).map_err(|e| anyhow!("invalid alipay public key: {}", e))
 }
 
 pub struct AlipayClient {
@@ -81,7 +89,8 @@ impl AlipayClient {
     pub fn sign(&self, params: &[(String, String)]) -> Result<String> {
         let mut sorted = params.to_vec();
         sorted.sort_by(|a, b| a.0.cmp(&b.0));
-        let data_to_sign = sorted.iter()
+        let data_to_sign = sorted
+            .iter()
             .filter(|(k, _)| k != "sign" && k != "sign_type")
             .map(|(k, v)| format!("{}={}", k, v))
             .collect::<Vec<_>>()
@@ -93,10 +102,15 @@ impl AlipayClient {
         Ok(base64::engine::general_purpose::STANDARD.encode(signature.to_bytes()))
     }
 
-    pub fn verify_signature(&self, params: &[(String, String)], signature_base64: &str) -> Result<()> {
+    pub fn verify_signature(
+        &self,
+        params: &[(String, String)],
+        signature_base64: &str,
+    ) -> Result<()> {
         let mut sorted = params.to_vec();
         sorted.sort_by(|a, b| a.0.cmp(&b.0));
-        let data_to_sign = sorted.iter()
+        let data_to_sign = sorted
+            .iter()
             .filter(|(k, _)| k != "sign" && k != "sign_type")
             .map(|(k, v)| format!("{}={}", k, v))
             .collect::<Vec<_>>()
@@ -105,12 +119,14 @@ impl AlipayClient {
         let pub_key = load_public_key(&self.config.alipay_public_key)?;
         let verifying_key = VerifyingKey::<Sha256>::new(pub_key);
 
-        let sig_bytes = base64::engine::general_purpose::STANDARD.decode(signature_base64)
+        let sig_bytes = base64::engine::general_purpose::STANDARD
+            .decode(signature_base64)
             .map_err(|e| anyhow!("invalid signature base64: {}", e))?;
         let sig = rsa::pkcs1v15::Signature::try_from(sig_bytes.as_slice())
             .map_err(|e| anyhow!("invalid signature bytes: {}", e))?;
-        
-        verifying_key.verify(data_to_sign.as_bytes(), &sig)
+
+        verifying_key
+            .verify(data_to_sign.as_bytes(), &sig)
             .map_err(|e| anyhow!("alipay signature verification failed: {}", e))
     }
 
@@ -129,7 +145,8 @@ impl AlipayClient {
             "out_trade_no": order_id,
             "total_amount": amount,
             "subject": subject,
-        }).to_string();
+        })
+        .to_string();
 
         let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
@@ -147,7 +164,8 @@ impl AlipayClient {
         let sign = self.sign(&params)?;
         params.push(("sign".to_string(), sign));
 
-        let response = self.http
+        let response = self
+            .http
             .post(&self.config.alipay_gateway_url)
             .form(&params)
             .send()
@@ -160,7 +178,8 @@ impl AlipayClient {
         }
 
         let json: serde_json::Value = serde_json::from_str(&body)?;
-        let resp = json.get("alipay_trade_precreate_response")
+        let resp = json
+            .get("alipay_trade_precreate_response")
             .ok_or_else(|| anyhow!("alipay response missing precreate response: {}", body))?;
 
         let code = resp.get("code").and_then(|c| c.as_str()).unwrap_or("");
@@ -169,7 +188,8 @@ impl AlipayClient {
             bail!("alipay precreate failed: {}", sub_msg);
         }
 
-        let qr_code = resp.get("qr_code")
+        let qr_code = resp
+            .get("qr_code")
             .and_then(|q| q.as_str())
             .ok_or_else(|| anyhow!("alipay response missing qr_code"))?
             .to_string();

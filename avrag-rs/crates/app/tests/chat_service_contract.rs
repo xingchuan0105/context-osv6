@@ -100,6 +100,7 @@ async fn chat_service_executes_against_ports() {
             doc_scope: Vec::new(),
             messages: Vec::new(),
             stream: false,
+            debug: false,
             language: None,
             format_hint: None,
         })

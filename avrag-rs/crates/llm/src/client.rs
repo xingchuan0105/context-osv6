@@ -68,6 +68,8 @@ fn build_chat_completion_request_body(
 struct StreamChoiceDelta {
     #[serde(default)]
     content: Option<String>,
+    #[serde(default)]
+    reasoning_content: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,6 +139,7 @@ struct ChatCompletionStreamParser {
     buffer: Vec<u8>,
     data_lines: Vec<String>,
     accumulated_content: String,
+    accumulated_reasoning: String,
     usage: Option<LlmUsage>,
     model: String,
     provider: String,
@@ -148,18 +151,24 @@ impl ChatCompletionStreamParser {
             buffer: Vec::new(),
             data_lines: Vec::new(),
             accumulated_content: String::new(),
+            accumulated_reasoning: String::new(),
             usage: None,
             model: configured_model,
             provider,
         }
     }
 
-    fn feed_chunk(&mut self, chunk: &[u8], on_delta: &mut impl FnMut(&str)) -> anyhow::Result<()> {
+    fn feed_chunk(
+        &mut self,
+        chunk: &[u8],
+        on_content_delta: &mut impl FnMut(&str),
+        on_reasoning_delta: &mut impl FnMut(&str),
+    ) -> anyhow::Result<()> {
         self.buffer.extend_from_slice(chunk);
 
         while let Some(line) = self.take_line()? {
             if line.is_empty() {
-                self.flush_event(on_delta)?;
+                self.flush_event(on_content_delta, on_reasoning_delta)?;
                 continue;
             }
 
@@ -175,7 +184,11 @@ impl ChatCompletionStreamParser {
         Ok(())
     }
 
-    fn finish(mut self, on_delta: &mut impl FnMut(&str)) -> anyhow::Result<LlmResponse> {
+    fn finish(
+        mut self,
+        on_content_delta: &mut impl FnMut(&str),
+        on_reasoning_delta: &mut impl FnMut(&str),
+    ) -> anyhow::Result<LlmResponse> {
         if !self.buffer.is_empty() {
             let line = String::from_utf8(std::mem::take(&mut self.buffer))
                 .context("Failed to decode trailing chat completion stream line")?;
@@ -185,15 +198,24 @@ impl ChatCompletionStreamParser {
             }
         }
 
-        self.flush_event(on_delta)?;
+        self.flush_event(on_content_delta, on_reasoning_delta)?;
 
         if self.accumulated_content.is_empty() {
-            anyhow::bail!("Chat completion stream finished without content");
+            if self.accumulated_reasoning.is_empty() {
+                anyhow::bail!("Chat completion stream finished without content");
+            }
+            self.accumulated_content = self.accumulated_reasoning.clone();
         }
+
+        let reasoning_content = if self.accumulated_reasoning.is_empty() {
+            None
+        } else {
+            Some(self.accumulated_reasoning.clone())
+        };
 
         Ok(LlmResponse {
             content: self.accumulated_content,
-            reasoning_content: None,
+            reasoning_content,
             usage: self.usage.unwrap_or_else(|| LlmUsage {
                 prompt_tokens: 0,
                 completion_tokens: 0,
@@ -223,7 +245,11 @@ impl ChatCompletionStreamParser {
         Ok(Some(line))
     }
 
-    fn flush_event(&mut self, on_delta: &mut impl FnMut(&str)) -> anyhow::Result<()> {
+    fn flush_event(
+        &mut self,
+        on_content_delta: &mut impl FnMut(&str),
+        on_reasoning_delta: &mut impl FnMut(&str),
+    ) -> anyhow::Result<()> {
         if self.data_lines.is_empty() {
             return Ok(());
         }
@@ -251,6 +277,12 @@ impl ChatCompletionStreamParser {
             let Some(delta) = choice.delta else {
                 continue;
             };
+            if let Some(reasoning) = delta.reasoning_content {
+                if !reasoning.is_empty() {
+                    self.accumulated_reasoning.push_str(&reasoning);
+                    on_reasoning_delta(&reasoning);
+                }
+            }
             let Some(content) = delta.content else {
                 continue;
             };
@@ -260,7 +292,7 @@ impl ChatCompletionStreamParser {
             }
 
             self.accumulated_content.push_str(&content);
-            on_delta(&content);
+            on_content_delta(&content);
         }
 
         Ok(())
@@ -649,7 +681,8 @@ impl LlmClient {
         messages: &[ChatMessage],
         temperature: Option<f32>,
         token: CancellationToken,
-        mut on_delta: impl FnMut(&str),
+        mut on_content_delta: impl FnMut(&str),
+        mut on_reasoning_delta: impl FnMut(&str),
     ) -> anyhow::Result<LlmResponse> {
         let started_at = std::time::Instant::now();
         let provider = self.config.provider_name();
@@ -695,7 +728,8 @@ impl LlmClient {
                     "failure",
                     started_at.elapsed().as_secs_f64() * 1000.0,
                 );
-                return Err(anyhow::Error::new(error)).context("Failed to send chat completion stream request");
+                return Err(anyhow::Error::new(error))
+                    .context("Failed to send chat completion stream request");
             }
         };
 
@@ -725,10 +759,10 @@ impl LlmClient {
                 break;
             };
 
-            parser.feed_chunk(&chunk, &mut on_delta)?;
+            parser.feed_chunk(&chunk, &mut on_content_delta, &mut on_reasoning_delta)?;
         }
 
-        let parsed = parser.finish(&mut on_delta)?;
+        let parsed = parser.finish(&mut on_content_delta, &mut on_reasoning_delta)?;
 
         telemetry::prometheus::observe_llm_call(
             "generic",
@@ -951,6 +985,7 @@ mod tests {
 
 "#,
                 &mut |delta| observed.push_str(delta),
+                &mut |_| {},
             )
             .unwrap();
         parser
@@ -963,11 +998,12 @@ data: [DONE]
 
 "#,
                 &mut |delta| observed.push_str(delta),
+                &mut |_| {},
             )
             .unwrap();
 
         let response = parser
-            .finish(&mut |delta| observed.push_str(delta))
+            .finish(&mut |delta| observed.push_str(delta), &mut |_| {})
             .unwrap();
 
         assert_eq!(observed, "Hello");
@@ -989,6 +1025,7 @@ data: [DONE]
             .feed_chunk(
                 br#"data: {"choices":[{"delta":{"content":"A"#,
                 &mut |delta| observed.push_str(delta),
+                &mut |_| {},
             )
             .unwrap();
         parser
@@ -999,11 +1036,12 @@ data: [DONE]
 
 "#,
                 &mut |delta| observed.push_str(delta),
+                &mut |_| {},
             )
             .unwrap();
 
         let response = parser
-            .finish(&mut |delta| observed.push_str(delta))
+            .finish(&mut |delta| observed.push_str(delta), &mut |_| {})
             .unwrap();
         assert_eq!(observed, "AB");
         assert_eq!(response.content, "AB");
@@ -1022,15 +1060,47 @@ data: [DONE]
 
 "#,
                 &mut |_delta| {},
+                &mut |_| {},
             )
             .unwrap();
 
-        let error = parser.finish(&mut |_delta| {}).unwrap_err();
+        let error = parser.finish(&mut |_delta| {}, &mut |_| {}).unwrap_err();
 
         assert!(
             error
                 .to_string()
                 .contains("Chat completion stream finished without content")
+        );
+    }
+
+    #[test]
+    fn chat_completion_stream_parser_falls_back_to_reasoning_when_content_empty() {
+        let mut parser =
+            ChatCompletionStreamParser::new("deepseek".to_string(), "deepseek-chat".to_string());
+
+        let mut reasoning_observed = String::new();
+        parser
+            .feed_chunk(
+                br#"data: {"choices":[{"delta":{"reasoning_content":"Final answer from reasoning."}}]}
+
+data: [DONE]
+
+"#,
+                &mut |_delta| {},
+                &mut |delta| reasoning_observed.push_str(delta),
+            )
+            .unwrap();
+
+        let response = parser
+            .finish(&mut |_delta| {}, &mut |delta| {
+                reasoning_observed.push_str(delta)
+            })
+            .unwrap();
+        assert_eq!(reasoning_observed, "Final answer from reasoning.");
+        assert_eq!(response.content, "Final answer from reasoning.");
+        assert_eq!(
+            response.reasoning_content.as_deref(),
+            Some("Final answer from reasoning.")
         );
     }
 
@@ -1056,24 +1126,16 @@ data: [DONE]
     fn request_includes_prompt_cache_when_enable_cache_is_true() {
         let mut config = test_config("https://api.deepseek.com", None);
         config.enable_cache = Some(true);
-        let body = build_chat_completion_request_body(
-            &config,
-            &[ChatMessage::user("hello")],
-            None,
-            false,
-        );
+        let body =
+            build_chat_completion_request_body(&config, &[ChatMessage::user("hello")], None, false);
         assert_eq!(body["prompt_cache"], true);
     }
 
     #[test]
     fn request_omits_prompt_cache_when_enable_cache_is_none() {
         let config = test_config("https://api.deepseek.com", None);
-        let body = build_chat_completion_request_body(
-            &config,
-            &[ChatMessage::user("hello")],
-            None,
-            false,
-        );
+        let body =
+            build_chat_completion_request_body(&config, &[ChatMessage::user("hello")], None, false);
         assert!(body.get("prompt_cache").is_none());
     }
 
@@ -1082,7 +1144,7 @@ data: [DONE]
         let config = test_config("https://api.openai.com", None);
         let mut msg1 = ChatMessage::user("Hello");
         msg1.name = Some("user_alice".to_string());
-        
+
         let mut msg2 = ChatMessage::assistant("");
         msg2.tool_calls = Some(serde_json::json!([{
             "id": "call_123",
@@ -1102,12 +1164,7 @@ data: [DONE]
             reasoning_content: None,
         };
 
-        let body = build_chat_completion_request_body(
-            &config,
-            &[msg1, msg2, msg3],
-            None,
-            false,
-        );
+        let body = build_chat_completion_request_body(&config, &[msg1, msg2, msg3], None, false);
 
         let messages = body["messages"].as_array().unwrap();
         assert_eq!(messages.len(), 3);

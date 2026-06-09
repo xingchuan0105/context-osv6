@@ -1,10 +1,6 @@
 use avrag_rag_core::context::SessionContext as RagSessionContext;
-use avrag_storage_pg::{
-    DocumentTaskSeed, NotificationCreateParams, PgAppRepository,
-};
-use common::{
-    AppError, ChatMessage, ChatSession, DocumentStatus,
-};
+use avrag_storage_pg::{DocumentTaskSeed, NotificationCreateParams, PgAppRepository};
+use common::{AppError, ChatMessage, ChatSession, DocumentStatus};
 use ingestion::{
     AuditAction, IngestDocumentPayload, ReindexDocumentPayload, ReindexReason, build_ingest_task,
     build_reindex_task, task_audit,
@@ -98,8 +94,7 @@ impl AppState {
 
         let should_dream = match &existing_profile {
             Some(profile) => {
-                let since_last =
-                    chrono::Utc::now().signed_duration_since(profile.inferred_at);
+                let since_last = chrono::Utc::now().signed_duration_since(profile.inferred_at);
                 since_last.num_hours() >= 24
             }
             None => true,
@@ -160,7 +155,7 @@ impl AppState {
         existing_profile: &serde_json::Value,
     ) -> serde_json::Value {
         const DREAM_SYSTEM_PROMPT: &str =
-            include_str!("../../../../prompts/skills/user-profile-extraction/SKILL.md");
+            include_str!("../../../../prompts/pipeline/user-profile-extraction.system.md");
         let system_prompt = DREAM_SYSTEM_PROMPT.trim();
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
         let user_prompt = format!(
@@ -184,36 +179,36 @@ impl AppState {
                         temperature,
                     )
                     .await
-                {
-                    let trimmed = response.content.trim();
-                    if !trimmed.is_empty() {
-                        // Run output guards before parsing; block prompt leaks and scrub PII
-                        // before any profile mutation.
-                        let (sanitized, guard_report) =
-                            self.guard_pipeline.check_output(trimmed, None);
-                        if guard_report.blocked {
-                            tracing::warn!(
-                                "dream layer output blocked by guard pipeline: {:?}",
-                                guard_report.degrade_trace
-                            );
-                            return serde_json::json!({});
-                        }
-                        self.record_llm_usage_if_available(
-                            avrag_billing::usage_limit::BillableFeature::Summary,
-                            "dream_delta",
-                            &response.usage,
-                            "inline",
-                        )
-                        .await;
-                        return parse_structured_json_response(&sanitized);
+            {
+                let trimmed = response.content.trim();
+                if !trimmed.is_empty() {
+                    // Run output guards before parsing; block prompt leaks and scrub PII
+                    // before any profile mutation.
+                    let (sanitized, guard_report) = self.guard_pipeline.check_output(trimmed, None);
+                    if guard_report.blocked {
+                        tracing::warn!(
+                            "dream layer output blocked by guard pipeline: {:?}",
+                            guard_report.degrade_trace
+                        );
+                        return serde_json::json!({});
                     }
+                    self.record_llm_usage_if_available(
+                        avrag_billing::usage_limit::BillableFeature::Summary,
+                        "dream_delta",
+                        &response.usage,
+                        "inline",
+                    )
+                    .await;
+                    return parse_structured_json_response(&sanitized);
                 }
+            }
         }
         serde_json::json!({})
     }
 
     pub(crate) async fn build_session_summary(&self, messages: &[ChatMessage]) -> String {
-        const SESSION_SUMMARY_SYSTEM_PROMPT: &str = include_str!("../../../../prompts/skills/session-summary/SKILL.md");
+        const SESSION_SUMMARY_SYSTEM_PROMPT: &str =
+            include_str!("../../../../prompts/pipeline/session-summary.system.md");
         let summary_prompt = SESSION_SUMMARY_SYSTEM_PROMPT.trim();
         let prompt = messages
             .iter()
@@ -225,14 +220,8 @@ impl AppState {
             .join("\n");
 
         for (llm, temperature) in [
-            (
-                &self.memory_llm_client,
-                self.memory_llm_temperature(),
-            ),
-            (
-                &self.llm_client,
-                self.agent_llm_temperature(),
-            ),
+            (&self.memory_llm_client, self.memory_llm_temperature()),
+            (&self.llm_client, self.agent_llm_temperature()),
         ] {
             if let Some(client) = llm
                 && let Ok(response) = client
@@ -244,19 +233,19 @@ impl AppState {
                         temperature,
                     )
                     .await
-                {
-                    let trimmed = response.content.trim();
-                    if !trimmed.is_empty() {
-                        self.record_llm_usage_if_available(
-                            avrag_billing::usage_limit::BillableFeature::Summary,
-                            "session_summary",
-                            &response.usage,
-                            "inline",
-                        )
-                        .await;
-                        return extract_summary_from_structured_response(trimmed);
-                    }
+            {
+                let trimmed = response.content.trim();
+                if !trimmed.is_empty() {
+                    self.record_llm_usage_if_available(
+                        avrag_billing::usage_limit::BillableFeature::Summary,
+                        "session_summary",
+                        &response.usage,
+                        "inline",
+                    )
+                    .await;
+                    return extract_summary_from_structured_response(trimmed);
                 }
+            }
         }
 
         messages
@@ -342,20 +331,18 @@ impl AppState {
                 )
                 .await;
         }
-        self.record_cost_event_if_available(
-            crate::lib_impl::state_methods::CostEventRecord {
-                event_name: analytics::CostEventName::LlmUsageMetered,
-                feature: feature.as_str(),
-                session_id: None,
-                notebook_id: None,
-                usage,
-                source,
-                metadata: serde_json::json!({
-                    "stage": stage,
-                    "feature": feature.as_str(),
-                }),
-            },
-        )
+        self.record_cost_event_if_available(crate::lib_impl::state_methods::CostEventRecord {
+            event_name: analytics::CostEventName::LlmUsageMetered,
+            feature: feature.as_str(),
+            session_id: None,
+            notebook_id: None,
+            usage,
+            source,
+            metadata: serde_json::json!({
+                "stage": stage,
+                "feature": feature.as_str(),
+            }),
+        })
         .await;
     }
 
@@ -397,7 +384,11 @@ impl AppState {
             .map_err(|e| AppError::internal(format!("usage limit check failed: {}", e)))
     }
 
-    pub(crate) async fn ensure_metric_quota(&self, metric_type: &str, requested: i64) -> Result<(), AppError> {
+    pub(crate) async fn ensure_metric_quota(
+        &self,
+        metric_type: &str,
+        requested: i64,
+    ) -> Result<(), AppError> {
         if requested <= 0 {
             return Ok(());
         }
@@ -560,7 +551,10 @@ impl AppState {
         Ok(())
     }
 
-    pub(crate) async fn enqueue_reindex_task(&self, seed: DocumentTaskSeed) -> Result<(), AppError> {
+    pub(crate) async fn enqueue_reindex_task(
+        &self,
+        seed: DocumentTaskSeed,
+    ) -> Result<(), AppError> {
         let Some(pg) = &self.pg else {
             return Ok(());
         };
@@ -595,14 +589,17 @@ impl AppState {
         Ok(())
     }
 
-    pub(crate) fn memory_session_visible(&self, state: &MemoryState, session: &ChatSession) -> bool {
+    pub(crate) fn memory_session_visible(
+        &self,
+        state: &MemoryState,
+        session: &ChatSession,
+    ) -> bool {
         state
             .notebooks
             .get(&session.notebook_id)
             .map(|notebook| notebook.org_id == self.current_org_id())
             .unwrap_or(false)
     }
-
 }
 
 /// Parse a structured JSON session summary response and extract the prose summary field.
@@ -646,10 +643,7 @@ fn parse_structured_json_response(text: &str) -> serde_json::Value {
 
 /// Apply a semantic delta to the existing profile using deterministic merge rules.
 /// This is the runtime merge layer — no LLM involved.
-fn apply_profile_delta(
-    existing: serde_json::Value,
-    delta: serde_json::Value,
-) -> serde_json::Value {
+fn apply_profile_delta(existing: serde_json::Value, delta: serde_json::Value) -> serde_json::Value {
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let mut profile = if existing.is_object() {
         existing
@@ -732,13 +726,14 @@ fn apply_profile_delta(
 
     // ── global_summary ──
     if let Some(summary) = delta.get("global_summary").and_then(|v| v.as_str())
-        && !summary.is_empty() {
-            let summary = truncate_text(summary, 400);
-            profile
-                .as_object_mut()
-                .unwrap()
-                .insert("global_summary".to_string(), serde_json::json!(summary));
-        }
+        && !summary.is_empty()
+    {
+        let summary = truncate_text(summary, 400);
+        profile
+            .as_object_mut()
+            .unwrap()
+            .insert("global_summary".to_string(), serde_json::json!(summary));
+    }
 
     profile
 }
@@ -800,7 +795,10 @@ fn apply_slot_updates(
             let mut update = update.clone();
             normalize_slot_update(&mut update);
 
-            let action = update.get("action").and_then(|v| v.as_str()).unwrap_or("none");
+            let action = update
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("none");
             let tag = update
                 .get("tag")
                 .and_then(|v| v.as_str())
@@ -823,7 +821,10 @@ fn apply_slot_updates(
 
             match action {
                 "add" => {
-                    if slot_arr.iter().any(|s| s.get("tag") == Some(&serde_json::json!(tag))) {
+                    if slot_arr
+                        .iter()
+                        .any(|s| s.get("tag") == Some(&serde_json::json!(tag)))
+                    {
                         continue;
                     }
                     let mut slot = update.clone();
@@ -845,9 +846,10 @@ fn apply_slot_updates(
                         existing["confidence"] = serde_json::json!((old_conf + bump).min(0.95));
                         existing["last_seen"] = serde_json::json!(today);
                         if let Some(desc) = update.get("description").and_then(|v| v.as_str())
-                            && !desc.is_empty() {
-                                existing["description"] = serde_json::json!(desc);
-                            }
+                            && !desc.is_empty()
+                        {
+                            existing["description"] = serde_json::json!(desc);
+                        }
                     }
                 }
                 "weaken" => {
@@ -918,7 +920,10 @@ fn apply_singleton_update(
     if let Some(evidence) = update.get_mut("evidence") {
         normalize_evidence(evidence);
     }
-    let action = update.get("action").and_then(|v| v.as_str()).unwrap_or("none");
+    let action = update
+        .get("action")
+        .and_then(|v| v.as_str())
+        .unwrap_or("none");
     if action == "none" {
         return;
     }
@@ -949,9 +954,10 @@ fn apply_singleton_update(
                 .unwrap_or(0.5);
             existing["confidence"] = serde_json::json!((old_conf + 0.1).min(0.95));
             if let Some(desc) = update.get("description").and_then(|v| v.as_str())
-                && !desc.is_empty() {
-                    existing["description"] = serde_json::json!(desc);
-                }
+                && !desc.is_empty()
+            {
+                existing["description"] = serde_json::json!(desc);
+            }
         }
         "revise" => {
             let old_conf = existing
@@ -960,13 +966,15 @@ fn apply_singleton_update(
                 .unwrap_or(0.5);
             existing["confidence"] = serde_json::json!((old_conf + 0.05).min(0.95));
             if let Some(desc) = update.get("description").and_then(|v| v.as_str())
-                && !desc.is_empty() {
-                    existing["description"] = serde_json::json!(desc);
-                }
+                && !desc.is_empty()
+            {
+                existing["description"] = serde_json::json!(desc);
+            }
             if let Some(tag) = update.get("tag").and_then(|v| v.as_str())
-                && !tag.is_empty() {
-                    existing["tag"] = serde_json::json!(tag);
-                }
+                && !tag.is_empty()
+            {
+                existing["tag"] = serde_json::json!(tag);
+            }
             if let Some(val) = update.get("value") {
                 existing["value"] = val.clone();
             }
@@ -1014,7 +1022,10 @@ fn apply_hint_updates(
             let mut h = hint.clone();
             if let Some(priority) = h.get("priority").and_then(|v| v.as_str()) {
                 if !VALID_HINT_PRIORITIES.contains(&priority) {
-                    tracing::warn!(priority, "ignoring invalid session_continuity_hints priority");
+                    tracing::warn!(
+                        priority,
+                        "ignoring invalid session_continuity_hints priority"
+                    );
                     continue;
                 }
             }
@@ -1077,7 +1088,13 @@ mod tests {
             "evidence": ["ev"],
             "confidence_signal": "strong"
         }]);
-        apply_slot_updates(&mut profile, "expertise_domains", Some(&delta), 5, "2026-06-06");
+        apply_slot_updates(
+            &mut profile,
+            "expertise_domains",
+            Some(&delta),
+            5,
+            "2026-06-06",
+        );
         let arr = profile["expertise_domains"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["confidence"], 0.9);
@@ -1086,7 +1103,8 @@ mod tests {
 
     #[test]
     fn slot_reinforce_bumps_confidence_by_01() {
-        let mut profile = serde_json::json!({"expertise_domains": [slot("rust", "add", "medium", 0.7)]});
+        let mut profile =
+            serde_json::json!({"expertise_domains": [slot("rust", "add", "medium", 0.7)]});
         let delta = serde_json::json!([{
             "tag": "rust",
             "action": "reinforce",
@@ -1094,7 +1112,13 @@ mod tests {
             "evidence": ["ev2"],
             "confidence_signal": "medium"
         }]);
-        apply_slot_updates(&mut profile, "expertise_domains", Some(&delta), 5, "2026-06-06");
+        apply_slot_updates(
+            &mut profile,
+            "expertise_domains",
+            Some(&delta),
+            5,
+            "2026-06-06",
+        );
         let arr = profile["expertise_domains"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
         assert!((arr[0]["confidence"].as_f64().unwrap() - 0.8).abs() < 0.001);
@@ -1103,7 +1127,8 @@ mod tests {
 
     #[test]
     fn slot_revise_bumps_confidence_by_005() {
-        let mut profile = serde_json::json!({"expertise_domains": [slot("rust", "add", "medium", 0.7)]});
+        let mut profile =
+            serde_json::json!({"expertise_domains": [slot("rust", "add", "medium", 0.7)]});
         let delta = serde_json::json!([{
             "tag": "rust",
             "action": "revise",
@@ -1111,35 +1136,55 @@ mod tests {
             "evidence": ["ev3"],
             "confidence_signal": "medium"
         }]);
-        apply_slot_updates(&mut profile, "expertise_domains", Some(&delta), 5, "2026-06-06");
+        apply_slot_updates(
+            &mut profile,
+            "expertise_domains",
+            Some(&delta),
+            5,
+            "2026-06-06",
+        );
         let arr = profile["expertise_domains"].as_array().unwrap();
         assert!((arr[0]["confidence"].as_f64().unwrap() - 0.75).abs() < 0.001);
     }
 
     #[test]
     fn slot_weaken_drops_confidence_by_02() {
-        let mut profile = serde_json::json!({"expertise_domains": [slot("rust", "add", "medium", 0.7)]});
+        let mut profile =
+            serde_json::json!({"expertise_domains": [slot("rust", "add", "medium", 0.7)]});
         let delta = serde_json::json!([{
             "tag": "rust",
             "action": "weaken",
             "evidence": ["ev"],
             "confidence_signal": "weak"
         }]);
-        apply_slot_updates(&mut profile, "expertise_domains", Some(&delta), 5, "2026-06-06");
+        apply_slot_updates(
+            &mut profile,
+            "expertise_domains",
+            Some(&delta),
+            5,
+            "2026-06-06",
+        );
         let arr = profile["expertise_domains"].as_array().unwrap();
         assert!((arr[0]["confidence"].as_f64().unwrap() - 0.5).abs() < 0.001);
     }
 
     #[test]
     fn slot_evicts_below_03_threshold() {
-        let mut profile = serde_json::json!({"expertise_domains": [slot("rust", "add", "medium", 0.35)]});
+        let mut profile =
+            serde_json::json!({"expertise_domains": [slot("rust", "add", "medium", 0.35)]});
         let delta = serde_json::json!([{
             "tag": "rust",
             "action": "weaken",
             "evidence": ["ev"],
             "confidence_signal": "weak"
         }]);
-        apply_slot_updates(&mut profile, "expertise_domains", Some(&delta), 5, "2026-06-06");
+        apply_slot_updates(
+            &mut profile,
+            "expertise_domains",
+            Some(&delta),
+            5,
+            "2026-06-06",
+        );
         let arr = profile["expertise_domains"].as_array().unwrap();
         assert!(arr.is_empty());
     }
@@ -1160,7 +1205,13 @@ mod tests {
             "evidence": ["ev"],
             "confidence_signal": "strong"
         }]);
-        apply_slot_updates(&mut profile, "expertise_domains", Some(&delta), 3, "2026-06-06");
+        apply_slot_updates(
+            &mut profile,
+            "expertise_domains",
+            Some(&delta),
+            3,
+            "2026-06-06",
+        );
         let arr = profile["expertise_domains"].as_array().unwrap();
         assert_eq!(arr.len(), 3);
         let tags: Vec<&str> = arr.iter().map(|s| s["tag"].as_str().unwrap()).collect();
@@ -1182,7 +1233,13 @@ mod tests {
             ]
         });
         let delta = serde_json::json!([]);
-        apply_slot_updates(&mut profile, "important_constraints", Some(&delta), 5, "2026-06-06");
+        apply_slot_updates(
+            &mut profile,
+            "important_constraints",
+            Some(&delta),
+            5,
+            "2026-06-06",
+        );
         let arr = profile["important_constraints"].as_array().unwrap();
         assert!(arr.is_empty());
     }
@@ -1197,7 +1254,13 @@ mod tests {
             "evidence": ["ev"],
             "confidence_signal": "strong"
         }]);
-        apply_slot_updates(&mut profile, "tool_preferences", Some(&delta), 3, "2026-06-06");
+        apply_slot_updates(
+            &mut profile,
+            "tool_preferences",
+            Some(&delta),
+            3,
+            "2026-06-06",
+        );
         let arr = profile["tool_preferences"].as_array().unwrap();
         assert!(arr.is_empty());
     }
@@ -1212,7 +1275,13 @@ mod tests {
             "evidence": ["ev"],
             "confidence_signal": "strong"
         }]);
-        apply_slot_updates(&mut profile, "tool_preferences", Some(&delta), 3, "2026-06-06");
+        apply_slot_updates(
+            &mut profile,
+            "tool_preferences",
+            Some(&delta),
+            3,
+            "2026-06-06",
+        );
         let arr = profile["tool_preferences"].as_array().unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["tag"], "rag");
@@ -1229,9 +1298,18 @@ mod tests {
             "evidence": [&long, &long, &long, &long, &long, &long],
             "confidence_signal": "strong"
         }]);
-        apply_slot_updates(&mut profile, "expertise_domains", Some(&delta), 5, "2026-06-06");
+        apply_slot_updates(
+            &mut profile,
+            "expertise_domains",
+            Some(&delta),
+            5,
+            "2026-06-06",
+        );
         let arr = profile["expertise_domains"].as_array().unwrap();
-        assert_eq!(arr[0]["description"].as_str().unwrap().chars().count(), MAX_DESCRIPTION_LEN);
+        assert_eq!(
+            arr[0]["description"].as_str().unwrap().chars().count(),
+            MAX_DESCRIPTION_LEN
+        );
         let ev = arr[0]["evidence"].as_array().unwrap();
         assert_eq!(ev.len(), MAX_EVIDENCE_ITEMS);
         assert_eq!(ev[0].as_str().unwrap().chars().count(), MAX_EVIDENCE_LEN);
@@ -1247,7 +1325,12 @@ mod tests {
             "evidence": ["ev"],
             "confidence_signal": "strong"
         });
-        apply_singleton_update(&mut profile, "preferred_answer_style", Some(&delta), "2026-06-06");
+        apply_singleton_update(
+            &mut profile,
+            "preferred_answer_style",
+            Some(&delta),
+            "2026-06-06",
+        );
         assert_eq!(profile["preferred_answer_style"]["confidence"], 0.9);
         assert_eq!(profile["preferred_answer_style"]["tag"], "concise-writing");
     }
@@ -1264,8 +1347,20 @@ mod tests {
             "evidence": ["ev"],
             "confidence_signal": "medium"
         });
-        apply_singleton_update(&mut profile, "preferred_answer_style", Some(&delta), "2026-06-06");
-        assert!((profile["preferred_answer_style"]["confidence"].as_f64().unwrap() - 0.8).abs() < 0.001);
+        apply_singleton_update(
+            &mut profile,
+            "preferred_answer_style",
+            Some(&delta),
+            "2026-06-06",
+        );
+        assert!(
+            (profile["preferred_answer_style"]["confidence"]
+                .as_f64()
+                .unwrap()
+                - 0.8)
+                .abs()
+                < 0.001
+        );
     }
 
     #[test]
@@ -1280,8 +1375,19 @@ mod tests {
             "evidence": ["ev"],
             "confidence_signal": "weak"
         });
-        apply_singleton_update(&mut profile, "preferred_answer_style", Some(&delta), "2026-06-06");
-        assert!(profile.as_object().unwrap().get("preferred_answer_style").is_none());
+        apply_singleton_update(
+            &mut profile,
+            "preferred_answer_style",
+            Some(&delta),
+            "2026-06-06",
+        );
+        assert!(
+            profile
+                .as_object()
+                .unwrap()
+                .get("preferred_answer_style")
+                .is_none()
+        );
     }
 
     #[test]

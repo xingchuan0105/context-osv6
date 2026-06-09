@@ -178,6 +178,9 @@ crates/app/tests/
 │   ├── assertions.rs
 │   └── ...                         # Agent 策略集成测试
 └── e2e_output/                     # 运行结果目录
+    ├── failures/{run_id}/{test_name}/
+    ├── llm_real/{run_id}/{test_name}/
+    └── observability/{run_id}/{test_name}/
 ```
 
 ### 5.2 TestContext 设计
@@ -251,24 +254,40 @@ impl MockEmbedding {
 
 ```
 crates/app/tests/e2e_output/
-└── {run_id}/
-    └── {test_name}/
-        ├── request.json          # HTTP 请求体
-        ├── response_body.json    # HTTP 响应体（完整 JSON）
-        ├── trace_id.txt          # 分布式 trace ID
-        ├── worker_logs.txt       # worker 日志（最后 500 行）
-        ├── retrieval_results.json # 检索结果快照
-        ├── model_routing.json    # LLM 路由决策
-        └── screenshot.png        # Playwright 截图（如有 HTML）
+└── {bucket}/                     # failures | llm_real | observability
+    └── {run_id}/
+        └── {test_name}/
+            ├── request.json          # HTTP 请求体（failures bucket）
+            ├── response_body.json    # HTTP 响应体（failures bucket）
+            ├── trace_id.txt          # 分布式 trace ID
+            ├── worker_logs.txt       # worker 日志（最后 500 行）
+            ├── retrieval_results.json # 检索结果快照
+            ├── model_routing.json    # LLM 路由决策
+            └── screenshot.png        # Playwright 截图（如有 HTML）
 ```
 
-通过 `TestContext::save_failure_artifacts()` 统一实现。所有 CI workflow 的 artifact upload 路径统一为 `crates/app/tests/e2e_output/**/**`。
+**llm_real / observability bucket**（`#[ignore]` 实跑 LLM 测试，`save_llm_artifact`）：
+
+```
+crates/app/tests/e2e_output/{llm_real|observability}/{run_id}/{test_name}/
+├── response.json
+├── reasoning_summary.txt
+├── trace_reasoning.jsonl
+├── prompt_snapshots.json
+└── metadata.json
+```
+
+- 失败快照：`TestContext::save_failure_artifacts()` → `failures/` bucket
+- 实跑 LLM 审计：`TestContext::save_llm_artifact()` → `llm_real/` + 镜像写入 `observability/`
+
+所有 CI workflow 的 artifact upload 路径统一为 `crates/app/tests/e2e_output/**/**`。
 
 **路径规范（最终版）**：
 - 根目录：`crates/app/tests/e2e_output/`
-- 运行目录：`{run_id}/`（格式：`e2e_{timestamp}_{short_commit}`）
+- Bucket：`failures`（失败快照）、`llm_real`（实跑 LLM 回归）、`observability`（同 run_id 的观测副本，含 reasoning 文件）
+- 运行目录：`{bucket}/{run_id}/`（格式：`e2e_{timestamp}_{short_commit}`）
 - 测试目录：`{test_name}/`（Rust 测试函数名）
-- 产物命名：固定上表 7 个文件名，不再使用 `failed-*` 前缀区分
+- 产物命名：failures 固定上表 7 个文件名；llm_real/observability 见上表 5+1 个文件名
 
 ---
 

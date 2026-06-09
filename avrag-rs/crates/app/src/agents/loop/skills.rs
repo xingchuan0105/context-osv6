@@ -35,6 +35,8 @@ impl SkillDisclosure {
                 .filter_map(|id| registry.skill(id))
                 .cloned()
                 .collect(),
+            super::config::DisclosureLoad::RetrieveClusterIndex
+            | super::config::DisclosureLoad::SkillFromRequest => vec![],
             super::config::DisclosureLoad::Auto => {
                 let last_user_msg = conversation
                     .iter()
@@ -45,7 +47,8 @@ impl SkillDisclosure {
 
                 let mut matched = Vec::new();
                 let lower = last_user_msg.to_lowercase();
-                let catalog_set: std::collections::HashSet<&str> = catalog.iter().map(|s| s.as_str()).collect();
+                let catalog_set: std::collections::HashSet<&str> =
+                    catalog.iter().map(|s| s.as_str()).collect();
 
                 let mut push_if_in_catalog = |id: &str| {
                     if catalog_set.contains(id) {
@@ -57,57 +60,28 @@ impl SkillDisclosure {
                     push_if_in_catalog("chat");
                 }
                 if contains_pronouns(&lower) {
-                    push_if_in_catalog("anaphora-resolution");
+                    push_if_in_catalog("memory");
                 }
                 if last_user_msg.len() > 50 || asks_writing_help(&lower) {
-                    push_if_in_catalog("tone-guidance");
+                    push_if_in_catalog("writing");
                 }
                 if lower.contains("search")
                     || lower.contains("retrieve")
                     || lower.contains("find")
                     || lower.contains("look up")
-                {
-                    push_if_in_catalog("rag-codegen-guide");
-                }
-                if lower.contains("search")
-                    || lower.contains("retrieve")
                     || lower.contains("dense")
                     || lower.contains("lexical")
                 {
-                    push_if_in_catalog("rag-retrieval-strategy");
+                    push_if_in_catalog("codegen");
                 }
-                if lower.contains("cite") || lower.contains("引用") || lower.contains("source") {
-                    push_if_in_catalog("rag-citation-format");
-                }
-                if lower.contains("remember") || lower.contains("recall") || lower.contains("previous")
+                if lower.contains("remember")
+                    || lower.contains("recall")
+                    || lower.contains("previous")
                 {
-                    push_if_in_catalog("rag-memory-mgmt");
+                    push_if_in_catalog("memory");
                 }
-                if lower.contains("summary")
-                    || lower.contains("summarize")
-                    || lower.contains("总结")
-                {
-                    push_if_in_catalog("rag-doc-summary-guide");
-                }
-                if lower.contains("search")
-                    || lower.contains("web")
-                    || lower.contains("news")
-                    || lower.contains("find")
-                {
-                    push_if_in_catalog("search-strategy");
-                }
-                if lower.contains("verify")
-                    || lower.contains("validate")
-                    || lower.contains("check")
-                {
-                    push_if_in_catalog("result-validation");
-                }
-                if lower.contains("cite")
-                    || lower.contains("url")
-                    || lower.contains("source")
-                    || lower.contains("link")
-                {
-                    push_if_in_catalog("url-citation-format");
+                if lower.contains("search") || lower.contains("web") || lower.contains("news") {
+                    push_if_in_catalog("search");
                 }
 
                 matched
@@ -138,6 +112,8 @@ fn contains_pronouns(text: &str) -> bool {
 }
 
 fn asks_writing_help(text: &str) -> bool {
-    let phrases = ["write", "draft", "compose", "essay", "letter", "email", "article"];
+    let phrases = [
+        "write", "draft", "compose", "essay", "letter", "email", "article",
+    ];
     phrases.iter().any(|&p| text.contains(p))
 }

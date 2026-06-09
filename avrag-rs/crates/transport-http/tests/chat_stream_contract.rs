@@ -98,9 +98,7 @@ impl Agent for ScriptedAgent {
 }
 
 fn test_agent_service() -> UnifiedAgentService {
-    UnifiedAgentService::new(
-        Box::new(ScriptedAgent),
-    )
+    UnifiedAgentService::new(Box::new(ScriptedAgent))
 }
 
 #[tokio::test]

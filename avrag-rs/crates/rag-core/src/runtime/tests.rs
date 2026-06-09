@@ -32,8 +32,9 @@ fn make_request(query: &str, agent_type: &str) -> ChatRequest {
         doc_scope: Vec::new(),
         messages: Vec::new(),
         stream: false,
+        debug: false,
         language: None,
-    format_hint: None,
+        format_hint: None,
     }
 }
 
@@ -71,6 +72,7 @@ fn make_session_context() -> SessionContext {
                 agent_icon: None,
                 citations: Vec::new(),
                 tool_results: Vec::new(),
+                turn_metadata: None,
                 created_at: "2026-03-22T00:00:00Z".to_string(),
             },
             ChatMessage {
@@ -84,6 +86,7 @@ fn make_session_context() -> SessionContext {
                 agent_icon: None,
                 citations: Vec::new(),
                 tool_results: Vec::new(),
+                turn_metadata: None,
                 created_at: "2026-03-22T00:01:00Z".to_string(),
             },
         ],

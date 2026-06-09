@@ -1012,6 +1012,7 @@ mod tests {
                     agent_type: "chat",
                     citations: &[],
                     tool_results: &tool_results,
+                    user_turn_metadata: None,
                 },
             )
             .await
@@ -1037,6 +1038,72 @@ mod tests {
             assistant_message.tool_results[1].data.as_ref().unwrap()["error"],
             "SyntaxError"
         );
+    }
+
+    #[tokio::test]
+    async fn chat_message_turn_metadata_roundtrip_when_database_available() {
+        let Some(database_url) = env::var("DATABASE_URL").ok() else {
+            return;
+        };
+        let repo = PgAppRepository::connect(&database_url).await.unwrap();
+        repo.migrate().await.unwrap();
+
+        let org_id = OrgId::from(Uuid::new_v4());
+        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+            .with_actor_id(ActorId::new(Uuid::new_v4()));
+
+        let notebook = repo
+            .create_notebook(&ctx, "turn-metadata-test", "turn metadata test")
+            .await
+            .unwrap();
+        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+        let session = repo
+            .create_session(&ctx, notebook_id, Some("meta-session"), "rag")
+            .await
+            .unwrap();
+        let session_id = Uuid::parse_str(&session.id).unwrap();
+
+        let metadata = serde_json::json!({
+            "query_resolution": {
+                "raw_query": "Who wrote it?",
+                "resolved_query": "Who wrote Antifragile?",
+                "slots": ["pronoun"],
+                "method": "heuristic"
+            }
+        });
+
+        let message_id = repo
+            .append_chat_turn(
+                &ctx,
+                session_id,
+                ChatTurn {
+                    user_content: "Who wrote it?",
+                    assistant_content: "Taleb.",
+                    assistant_answer_blocks: &[],
+                    agent_type: "rag",
+                    citations: &[],
+                    tool_results: &[],
+                    user_turn_metadata: Some(metadata),
+                },
+            )
+            .await
+            .unwrap();
+
+        let messages = repo.list_messages(&ctx, session_id).await.unwrap();
+        let user_row = messages
+            .iter()
+            .find(|m| m.role == "user")
+            .expect("user row");
+        assert_eq!(user_row.content, "Who wrote it?");
+        let stored_meta = user_row
+            .turn_metadata
+            .as_ref()
+            .expect("turn_metadata should roundtrip");
+        assert_eq!(
+            stored_meta["query_resolution"]["resolved_query"],
+            "Who wrote Antifragile?"
+        );
+        assert!(message_id > 0);
     }
 
     #[tokio::test]

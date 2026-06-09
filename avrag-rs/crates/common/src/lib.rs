@@ -13,10 +13,10 @@ pub mod tool_spec;
 pub mod util;
 
 pub use contracts::chat::{
-    AnswerBlock, ChatDonePayload, ChatRequest, ChatResponse, ChatTokenUsage, ChatTurnInput, Citation,
-    DegradeTraceItem, GeneralPlan, GuardAction, GuardReport, GuardResult, ModeDebug, PlannerOutput,
-    RagModeDebug, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary, RiskLevel, SearchPlan,
-    SourceRef, SummaryInjectionTrace, TraceInfo,
+    AnswerBlock, ChatDonePayload, ChatRequest, ChatResponse, ChatTokenUsage, ChatTurnInput,
+    Citation, DegradeTraceItem, GeneralPlan, GuardAction, GuardReport, GuardResult, ModeDebug,
+    PlannerOutput, RagModeDebug, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary, RiskLevel,
+    SearchPlan, SourceRef, SummaryInjectionTrace, TraceInfo,
 };
 pub use contracts::documents::{CreateDocumentUploadResponse, DocumentStatusResponse};
 pub use contracts::notebooks::{
@@ -38,7 +38,9 @@ pub use chat::{
     MessageFeedbackRequest, UpdateChatSessionRequest, answer_blocks_from_rendered_answer,
     answer_blocks_to_markup, plain_text_answer_blocks,
 };
-pub use docscope::{DocScopeMetadata, DocScopeProfile, Domain, Era, Genre, SummaryMetadata, SummaryOutput};
+pub use docscope::{
+    DocScopeMetadata, DocScopeProfile, Domain, Era, Genre, SummaryMetadata, SummaryOutput,
+};
 pub use documents::{
     AddUrlSourceRequest, CreateDocumentRequest, Document, DocumentContentResponse,
     DocumentMetadata, DocumentStatus, DocumentsResponse, ParsedPreviewItem, ParsedPreviewResponse,

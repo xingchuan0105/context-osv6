@@ -167,16 +167,20 @@ impl RagRuntime {
             ));
         }
 
-        let mut cited_chunk_ids = params.synthesis_output
+        let mut cited_chunk_ids = params
+            .synthesis_output
             .cited_chunk_ids
             .iter()
             .cloned()
             .collect::<HashSet<_>>();
-        cited_chunk_ids.extend(extract_referenced_chunk_ids(&params.synthesis_output.answer_text));
+        cited_chunk_ids.extend(extract_referenced_chunk_ids(
+            &params.synthesis_output.answer_text,
+        ));
         let ordered_chunks = if cited_chunk_ids.is_empty() {
             params.chunks.to_vec()
         } else {
-            let mut filtered = params.chunks
+            let mut filtered = params
+                .chunks
                 .iter()
                 .filter(|chunk| cited_chunk_ids.contains(&chunk.chunk_id.to_string()))
                 .cloned()
@@ -255,7 +259,8 @@ impl RagRuntime {
         Ok(ChatResponse {
             answer: materialize_answer_markup(&answer_text, &citations),
             answer_blocks,
-            session_id: params.resolved_session_id
+            session_id: params
+                .resolved_session_id
                 .map(str::to_string)
                 .or_else(|| params.request.session_id.clone())
                 .unwrap_or_else(|| Uuid::new_v4().to_string()),

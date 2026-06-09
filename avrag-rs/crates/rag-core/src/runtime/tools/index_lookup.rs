@@ -4,11 +4,7 @@ use uuid::Uuid;
 
 use crate::RagRuntime;
 
-pub async fn run(
-    runtime: &RagRuntime,
-    auth: &AuthContext,
-    args: &serde_json::Value,
-) -> ToolResult {
+pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Value) -> ToolResult {
     let args: IndexLookupArgs = match serde_json::from_value(args.clone()) {
         Ok(a) => a,
         Err(e) => {
@@ -40,10 +36,7 @@ pub async fn run(
     let pg_repo = match runtime.config.pg_repo.as_ref() {
         Some(repo) => repo,
         None => {
-            return super::error_result(
-                "index_lookup",
-                "pg_repo is not configured".to_string(),
-            );
+            return super::error_result("index_lookup", "pg_repo is not configured".to_string());
         }
     };
 

@@ -16,6 +16,7 @@ text-splitter = { workspace = true }
 tiktoken-rs = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
+uuid = { workspace = true }
 
 avrag-cache-redis = { path = "../cache-redis" }
 common = { path = "../common" }

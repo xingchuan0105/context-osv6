@@ -176,29 +176,29 @@ impl StateSink for PgStateSink {
                     .requested_by
                     .as_deref()
                     .and_then(|value| Uuid::parse_str(value).ok())
-                {
-                    let analytics = analytics::AnalyticsService::new(self.repo.raw().clone());
-                    let event = analytics::ProductEvent {
-                        event_id: Uuid::new_v4(),
-                        event_time: chrono::Utc::now(),
-                        user_id,
-                        session_id: None,
-                        notebook_id: Uuid::parse_str(&task.notebook_id).ok(),
-                        surface: analytics::Surface::Workspace,
-                        event_name: analytics::ProductEventName::DocumentUploadFailed,
-                        result: analytics::ResultTag::Failure,
-                        request_id: None,
-                        trace_id: None,
-                        client_platform: "worker".to_string(),
-                        metadata: serde_json::json!({
-                            "document_id": task.document_id.clone(),
-                            "task_id": task.task_id.clone(),
-                        }),
-                    };
-                    if let Err(error) = analytics.record_product_event(&event).await {
-                        info!(error = %error, document_id = task.document_id, "failed to record document upload failure event");
-                    }
+            {
+                let analytics = analytics::AnalyticsService::new(self.repo.raw().clone());
+                let event = analytics::ProductEvent {
+                    event_id: Uuid::new_v4(),
+                    event_time: chrono::Utc::now(),
+                    user_id,
+                    session_id: None,
+                    notebook_id: Uuid::parse_str(&task.notebook_id).ok(),
+                    surface: analytics::Surface::Workspace,
+                    event_name: analytics::ProductEventName::DocumentUploadFailed,
+                    result: analytics::ResultTag::Failure,
+                    request_id: None,
+                    trace_id: None,
+                    client_platform: "worker".to_string(),
+                    metadata: serde_json::json!({
+                        "document_id": task.document_id.clone(),
+                        "task_id": task.task_id.clone(),
+                    }),
+                };
+                if let Err(error) = analytics.record_product_event(&event).await {
+                    info!(error = %error, document_id = task.document_id, "failed to record document upload failure event");
                 }
+            }
             if let Some(user_id) = task
                 .requested_by
                 .as_deref()
@@ -256,6 +256,7 @@ struct PgTaskProcessor {
     asset_url_ttl_secs: u64,
     redis_lock: Option<DocumentLock>,
     summary_generator: Option<avrag_llm::SummaryGenerator>,
+    section_index_generator: Option<avrag_llm::SectionIndexGenerator>,
     triplet_llm: Option<Arc<avrag_llm::LlmClient>>,
     analytics: Option<analytics::AnalyticsService>,
     usage_limit: Option<avrag_billing::usage_limit::UsageLimitService>,
@@ -731,9 +732,10 @@ async fn stop_ingestion_task_lock_heartbeat(heartbeat: Option<tokio::task::JoinH
 
     heartbeat.abort();
     if let Err(error) = heartbeat.await
-        && !error.is_cancelled() {
-            warn!(error = %error, "ingestion task lock heartbeat ended unexpectedly");
-        }
+        && !error.is_cancelled()
+    {
+        warn!(error = %error, "ingestion task lock heartbeat ended unexpectedly");
+    }
 }
 
 fn spawn_document_cleanup_task_lock_heartbeat(
@@ -773,9 +775,10 @@ fn spawn_document_cleanup_task_lock_heartbeat(
 async fn stop_document_cleanup_task_lock_heartbeat(heartbeat: tokio::task::JoinHandle<()>) {
     heartbeat.abort();
     if let Err(error) = heartbeat.await
-        && !error.is_cancelled() {
-            warn!(error = %error, "document cleanup task lock heartbeat ended unexpectedly");
-        }
+        && !error.is_cancelled()
+    {
+        warn!(error = %error, "document cleanup task lock heartbeat ended unexpectedly");
+    }
 }
 
 async fn run_document_cleanup_once(
@@ -1095,11 +1098,10 @@ async fn main() -> Result<()> {
         let worker_object_store = build_worker_object_store(&config).await?;
         let cleanup_object_store = build_worker_object_store(&config).await?;
         let orphan_object_store = Arc::new(build_worker_object_store(&config).await?);
-        let mut orphan_object_job_runner =
-            orphan_object_jobs::OrphanObjectJobRunner::from_env(
-                repo.raw().clone(),
-                orphan_object_store,
-            );
+        let mut orphan_object_job_runner = orphan_object_jobs::OrphanObjectJobRunner::from_env(
+            repo.raw().clone(),
+            orphan_object_store,
+        );
         let retrieval_data_plane = build_worker_retrieval_data_plane(&config).await?;
         let cleanup_retrieval_data_plane = retrieval_data_plane.clone();
         let cleanup_repo = repo.clone();
@@ -1136,13 +1138,21 @@ async fn main() -> Result<()> {
                     let sc = &config.ingestion_llm;
                     if let Some(llm_config) = sc.to_llm_config() {
                         let mut generator = SummaryGenerator::new(llm_config);
-                        if let Some(template) =
-                            load_prompt_template(&config.prompts.dir, &config.prompts.summary_version, "summary_generation").await
+                        if let Some(template) = load_prompt_template(
+                            &config.prompts.dir,
+                            &config.prompts.summary_version,
+                            "summary-generation",
+                        )
+                        .await
                         {
                             generator = generator.with_prompt_template(template);
                         }
-                        if let Some(template) =
-                            load_prompt_template(&config.prompts.dir, &config.prompts.summary_version, "summary_generation_finalize").await
+                        if let Some(template) = load_prompt_template(
+                            &config.prompts.dir,
+                            &config.prompts.summary_version,
+                            "summary-generation-finalize",
+                        )
+                        .await
                         {
                             generator = generator.with_finalize_prompt_template(template);
                         }
@@ -1151,9 +1161,29 @@ async fn main() -> Result<()> {
                         None
                     }
                 },
+                section_index_generator: {
+                    let sc = &config.ingestion_llm;
+                    sc.to_llm_config().map(|cfg| {
+                        let mut section_gen = avrag_llm::SectionIndexGenerator::new(cfg);
+                        if let Ok(system) = std::fs::read_to_string(format!(
+                            "{}/pipeline/section-index.system.v1.md",
+                            config.prompts.dir.trim()
+                        )) {
+                            if let Ok(user) = std::fs::read_to_string(format!(
+                                "{}/templates/section-index-user.tmpl",
+                                config.prompts.dir.trim()
+                            )) {
+                                section_gen = section_gen.with_prompts(system, user);
+                            }
+                        }
+                        section_gen
+                    })
+                },
                 triplet_llm: build_worker_triplet_llm(&config),
                 analytics: Some(analytics::AnalyticsService::new(analytics_pool)),
-                usage_limit: Some(avrag_billing::usage_limit::UsageLimitService::new(usage_limit_pool)),
+                usage_limit: Some(avrag_billing::usage_limit::UsageLimitService::new(
+                    usage_limit_pool,
+                )),
                 mineru_client: MineruConfig::from_env().map(MineruClient::new),
                 office_parser_client: OfficeParserServiceConfig::from_env()
                     .map(OfficeParserServiceClient::new),
@@ -1583,7 +1613,9 @@ async fn run_document_pipeline(
         .map_err(|error| IngestionError::StateSink(error.to_string()))?;
     let processed_chunk_count = chunks.len().max(1);
 
-    let toc_entries = build_toc_entries(&document_ir, &chunks);
+    let mut toc_entries = build_toc_entries(&document_ir, &chunks);
+    toc_entries =
+        maybe_enrich_toc_with_llm(processor, &document_ir, &chunks, filename, toc_entries).await;
     if !toc_entries.is_empty() {
         ensure_ingestion_side_effects_allowed(
             &processor.repo,
@@ -2768,7 +2800,7 @@ fn build_triplet_extraction_batches(
 }
 
 const TRIPLET_EXTRACTION_SYSTEM_PROMPT: &str =
-    include_str!("../../../prompts/skills/triplet-extraction/SKILL.md");
+    include_str!("../../../prompts/pipeline/triplet-extraction.system.md");
 
 fn build_triplet_extraction_messages(batch: &TripletExtractionBatch) -> Vec<ChatMessage> {
     let valid_chunk_ids: Vec<String> = batch.chunk_ids.iter().map(|id| id.to_string()).collect();
@@ -3122,6 +3154,103 @@ async fn finalize_mirrored_asset_path(
 
 // load_prompt_template moved to avrag_app::lib_impl::prompt_loader
 
+// load_prompt_template moved to avrag_app::lib_impl::prompt_loader
+
+async fn maybe_enrich_toc_with_llm(
+    processor: &PgTaskProcessor,
+    document_ir: &ingestion::DocumentIr,
+    chunks: &[avrag_storage_pg::IndexedChunk],
+    filename: &str,
+    toc_entries: Vec<avrag_storage_pg::TocEntry>,
+) -> Vec<avrag_storage_pg::TocEntry> {
+    let heading_blocks = document_ir
+        .blocks
+        .iter()
+        .filter(|b| matches!(b.block_type, ingestion::BlockType::Heading))
+        .count();
+    let force_llm = std::env::var("INGESTION_LLM_SECTION_INDEX")
+        .ok()
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+    let sparse = toc_entries.is_empty() || heading_blocks == 0;
+    if !force_llm && !sparse {
+        return toc_entries;
+    }
+    let Some(generator) = processor.section_index_generator.as_ref() else {
+        return toc_entries;
+    };
+    let index_chunks: Vec<avrag_llm::SectionIndexChunk> = chunks
+        .iter()
+        .filter_map(|c| {
+            Uuid::parse_str(&c.chunk_id)
+                .ok()
+                .map(|chunk_id| avrag_llm::SectionIndexChunk {
+                    chunk_id,
+                    text: c.content.clone(),
+                })
+        })
+        .collect();
+    if index_chunks.is_empty() {
+        return toc_entries;
+    }
+    match generator
+        .generate(&document_ir.title, filename, &index_chunks)
+        .await
+    {
+        Ok(output) if !output.sections.is_empty() => {
+            info!(
+                sections = output.sections.len(),
+                "LLM section index generated for document"
+            );
+            toc_entries_from_llm_sections(&output)
+        }
+        Ok(_) => toc_entries,
+        Err(error) => {
+            info!(error = %error, "LLM section index failed; keeping heuristic toc");
+            toc_entries
+        }
+    }
+}
+
+fn toc_entries_from_llm_sections(
+    output: &avrag_llm::SectionIndexOutput,
+) -> Vec<avrag_storage_pg::TocEntry> {
+    let mut entries = Vec::new();
+    let mut heading_stack: Vec<(i32, Uuid)> = Vec::new();
+
+    for section in &output.sections {
+        let heading_level = section.heading_level.clamp(1, 6);
+        let entry_id = Uuid::new_v4();
+        let parent_id = {
+            while let Some(&(top_level, _)) = heading_stack.last() {
+                if top_level < heading_level {
+                    break;
+                }
+                heading_stack.pop();
+            }
+            heading_stack.last().map(|&(_, id)| id)
+        };
+
+        for chunk_id_str in &section.chunk_ids {
+            let Ok(chunk_id) = Uuid::parse_str(chunk_id_str) else {
+                continue;
+            };
+            entries.push(avrag_storage_pg::TocEntry {
+                id: Uuid::new_v4(),
+                parent_id,
+                title: section.title.clone(),
+                heading_level,
+                page: section.page,
+                chunk_id: Some(chunk_id),
+                rank: section.rank,
+            });
+        }
+
+        heading_stack.push((heading_level, entry_id));
+    }
+
+    entries
+}
+
 fn build_toc_entries(
     document_ir: &ingestion::DocumentIr,
     chunks: &[avrag_storage_pg::IndexedChunk],
@@ -3129,13 +3258,10 @@ fn build_toc_entries(
     let mut block_id_to_chunk_id = std::collections::HashMap::new();
     for chunk in chunks {
         if let Ok(chunk_uuid) = Uuid::parse_str(&chunk.chunk_id)
-            && let Some(block_id) = chunk
-                .metadata
-                .get("block_id")
-                .and_then(|v| v.as_str())
-            {
-                block_id_to_chunk_id.insert(block_id.to_string(), chunk_uuid);
-            }
+            && let Some(block_id) = chunk.metadata.get("block_id").and_then(|v| v.as_str())
+        {
+            block_id_to_chunk_id.insert(block_id.to_string(), chunk_uuid);
+        }
     }
 
     let mut entries = Vec::new();
@@ -3232,7 +3358,13 @@ mod tests {
         config.prompts.dir = temp_dir.to_string_lossy().to_string();
         config.prompts.summary_version = "v2".to_string();
 
-        let template = load_prompt_template(&config.prompts.dir, &config.prompts.summary_version, "summary_generation").await.unwrap();
+        let template = load_prompt_template(
+            &config.prompts.dir,
+            &config.prompts.summary_version,
+            "summary_generation",
+        )
+        .await
+        .unwrap();
         assert_eq!(template, "versioned {{title}}");
 
         let _ = fs::remove_dir_all(temp_dir);
@@ -3489,8 +3621,14 @@ mod tests {
 
     #[test]
     fn url_to_filename_extracts_last_path_segment_with_extension() {
-        assert_eq!(url_to_filename("https://example.com/article.html"), "article.html");
-        assert_eq!(url_to_filename("https://example.com/path/page.htm"), "page.htm");
+        assert_eq!(
+            url_to_filename("https://example.com/article.html"),
+            "article.html"
+        );
+        assert_eq!(
+            url_to_filename("https://example.com/path/page.htm"),
+            "page.htm"
+        );
     }
 
     #[test]

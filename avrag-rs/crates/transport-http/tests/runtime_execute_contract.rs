@@ -42,9 +42,7 @@ async fn post_runtime_execute_rejects_empty_calls() {
                 .uri("/api/v1/runtime/execute")
                 .header(header::CONTENT_TYPE, "application/json")
                 .header("x-org-id", Uuid::new_v4().to_string())
-                .body(Body::from(
-                    serde_json::json!({ "calls": [] }).to_string(),
-                ))
+                .body(Body::from(serde_json::json!({ "calls": [] }).to_string()))
                 .unwrap(),
         )
         .await

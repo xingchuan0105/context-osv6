@@ -24,29 +24,15 @@ pub fn fingerprint_match(a: &str, b: &str) -> bool {
 pub fn fingerprint_for_test(test_name: &str) -> Option<TestFingerprint> {
     let (source_file, strategy, format_skill) = match test_name {
         // e2e_chat.rs
-        "chat_simple_conversation_state_machine" => {
-            ("crates/app/tests/e2e_chat.rs", "chat", None)
-        }
-        "chat_with_tool_call_state_machine" => {
-            ("crates/app/tests/e2e_chat.rs", "chat", None)
-        }
-        "chat_ppt_format_skill_injected" => {
-            ("crates/app/tests/e2e_chat.rs", "chat", Some("ppt"))
-        }
+        "chat_simple_conversation_state_machine" => ("crates/app/tests/e2e_chat.rs", "chat", None),
+        "chat_with_tool_call_state_machine" => ("crates/app/tests/e2e_chat.rs", "chat", None),
+        "chat_ppt_format_skill_injected" => ("crates/app/tests/e2e_chat.rs", "chat", Some("ppt")),
         // e2e_rag.rs
-        "rag_single_pass_sufficient_state_machine" => {
-            ("crates/app/tests/e2e_rag.rs", "rag", None)
-        }
-        "rag_replan_insufficient_state_machine" => {
-            ("crates/app/tests/e2e_rag.rs", "rag", None)
-        }
-        "rag_html_format_skill_injected" => {
-            ("crates/app/tests/e2e_rag.rs", "rag", Some("html"))
-        }
+        "rag_single_pass_sufficient_state_machine" => ("crates/app/tests/e2e_rag.rs", "rag", None),
+        "rag_replan_insufficient_state_machine" => ("crates/app/tests/e2e_rag.rs", "rag", None),
+        "rag_html_format_skill_injected" => ("crates/app/tests/e2e_rag.rs", "rag", Some("html")),
         // e2e_search.rs
-        "search_single_pass_state_machine" => {
-            ("crates/app/tests/e2e_search.rs", "search", None)
-        }
+        "search_single_pass_state_machine" => ("crates/app/tests/e2e_search.rs", "search", None),
         "search_vertical_escalation_state_machine" => {
             ("crates/app/tests/e2e_search.rs", "search", None)
         }
@@ -55,9 +41,11 @@ pub fn fingerprint_for_test(test_name: &str) -> Option<TestFingerprint> {
             ("crates/app/tests/e2e_format_output.rs", "format", None)
         }
         // e2e_ingestion_answer.rs
-        "ingestion_answer_pipeline" => {
-            ("crates/app/tests/e2e_ingestion_answer.rs", "ingestion", None)
-        }
+        "ingestion_answer_pipeline" => (
+            "crates/app/tests/e2e_ingestion_answer.rs",
+            "ingestion",
+            None,
+        ),
         _ => return None,
     };
 
@@ -103,11 +91,23 @@ mod tests {
 
     #[test]
     fn test_fingerprint_match() {
-        assert!(fingerprint_match("abc123", "abc123"), "equal non-empty strings should match");
-        assert!(!fingerprint_match("abc123", "def456"), "different strings should not match");
+        assert!(
+            fingerprint_match("abc123", "abc123"),
+            "equal non-empty strings should match"
+        );
+        assert!(
+            !fingerprint_match("abc123", "def456"),
+            "different strings should not match"
+        );
         assert!(!fingerprint_match("", ""), "empty strings should not match");
-        assert!(!fingerprint_match("abc123", ""), "empty vs non-empty should not match");
-        assert!(!fingerprint_match("", "abc123"), "non-empty vs empty should not match");
+        assert!(
+            !fingerprint_match("abc123", ""),
+            "empty vs non-empty should not match"
+        );
+        assert!(
+            !fingerprint_match("", "abc123"),
+            "non-empty vs empty should not match"
+        );
     }
 
     #[test]
@@ -142,7 +142,11 @@ mod tests {
     fn test_compute_source_hash_empty_file() {
         let tmpfile = tempfile::NamedTempFile::new().unwrap();
         let hash = compute_source_hash(tmpfile.path());
-        assert_eq!(hash.len(), 64, "empty file should still produce 64-char hash");
+        assert_eq!(
+            hash.len(),
+            64,
+            "empty file should still produce 64-char hash"
+        );
         // SHA-256 of empty string
         assert_eq!(
             hash,

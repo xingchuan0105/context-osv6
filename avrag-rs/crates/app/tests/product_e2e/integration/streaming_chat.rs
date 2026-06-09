@@ -6,27 +6,16 @@
 //! (`start`, `activity`, `answer_start`, `trace`, `token`,
 //! `reasoning_summary_delta`, `citations`, `error`) untested.
 //!
-//! ## Known production gap (as of 2026-06-02)
-//!
-//! The streaming RAG path currently terminates with an `error` event
-//! (`code: "internal_error"`, `message: "model 'unknown' on provider..."`)
-//! instead of the expected sequence `start → answer_start → token* →
-//! citations → done`. The non-streaming RAG path works fine. Root cause
-//! is that `RagStrategy.llm_client` (a separate `Option<LlmClient>`
-//! distinct from the `llm: Arc<dyn LlmProvider>` trait object used by
-//! the non-streaming path) is not propagated through the bootstrap
-//! in `build_unified_agent_service` for the streaming code path.
-//!
-//! These tests are written to pass against the **current** behavior
-//! (i.e. they accept either a `done` or `error` terminal event) and
-//! also have a `BUG_streaming_rag_should_emit_done` regression test
-//! that will start failing when the underlying production bug is
-//! fixed — at which point the strict assertions in
-//! `chat_stream_emits_full_rag_sequence` can be enabled.
+//! The streaming RAG path now correctly emits `start → ... → done`.
+//! The mock LLM server supports SSE responses for `"stream": true`
+//! requests, so `LlmClient::complete_stream` works end-to-end.
 
 use std::time::Duration;
 
-use crate::product_e2e::{DocumentStatus, SseEvent, TestContext};
+use crate::product_e2e::{
+    ChatStreamParams, DocumentStatus, SseEvent, TestContext,
+    llm_real::collect_observability_from_events,
+};
 
 const STREAM_DEADLINE: Duration = Duration::from_secs(60);
 /// The mock LLM emits one `token` event per character of the canned
@@ -70,11 +59,7 @@ async fn chat_stream_emits_start_event_first() {
     );
 }
 
-/// A streaming chat run must terminate with exactly one of:
-/// - `done` event (full success)
-/// - `error` event (failure with structured error info)
-///
-/// The current production RAG stream emits `error` (see module docs).
+/// A streaming chat run must terminate with a `done` event.
 #[tokio::test]
 async fn chat_stream_terminates_with_done_or_error() {
     let mut ctx = TestContext::new_smoke_with_rag().await;
@@ -99,15 +84,13 @@ async fn chat_stream_terminates_with_done_or_error() {
     let names: Vec<&str> = events.iter().map(|e| e.event.as_str()).collect();
     let last = names.last().copied();
     assert!(
-        last == Some("done") || last == Some("error"),
-        "stream must terminate with 'done' or 'error', got last event: {last:?}, full: {names:?}"
+        last == Some("done"),
+        "stream must terminate with 'done', got last event: {last:?}, full: {names:?}"
     );
 }
 
-/// If a `done` event is present, its payload must contain the full
-/// `ChatResponse` shape that a non-streaming chat would return.
-/// This test is no-op for streams that terminate with `error` (the
-/// current production RAG behavior — see module docs).
+/// The `done` event payload must contain the full `ChatResponse` shape
+/// that a non-streaming chat would return.
 #[tokio::test]
 async fn chat_stream_done_payload_shape_when_present() {
     let mut ctx = TestContext::new_smoke_with_rag().await;
@@ -130,12 +113,12 @@ async fn chat_stream_done_payload_shape_when_present() {
         .unwrap();
 
     let done = events.iter().find(|e| e.event == "done");
-    let Some(done) = done else {
-        eprintln!(
-            "[chat_stream_done_payload_shape_when_present] skipped: stream terminated without 'done' event"
-        );
-        return;
-    };
+    assert!(
+        done.is_some(),
+        "stream must contain a 'done' event, got events: {:?}",
+        events.iter().map(|e| e.event.as_str()).collect::<Vec<_>>()
+    );
+    let done = done.unwrap();
 
     // The production SseSink wraps AgentEvent::Done in a ChatEvent::Done
     // whose `payload` is a flat object (not a wrapped `response` object):
@@ -165,9 +148,182 @@ async fn chat_stream_done_payload_shape_when_present() {
     );
 }
 
-/// When a streaming run terminates with an `error` event, the event
-/// must include structured `code` and `message` fields so the front-end
-/// can surface a useful error to the user.
+/// Mock LLM synthesis emits `reasoning_summary_delta` when the provider
+/// returns `reasoning_content`. RAG synthesis uses non-stream `complete()`;
+/// chat direct-answer skips synthesis, so we exercise the RAG path here.
+#[tokio::test]
+async fn chat_stream_collects_reasoning_delta_from_mock() {
+    let mut ctx = TestContext::new_smoke_with_rag().await;
+    let upload = ctx.upload_document("antifragile.txt").await.unwrap();
+    let status = ctx
+        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
+        .await
+        .unwrap();
+    assert_eq!(status, DocumentStatus::Completed);
+
+    let events = ctx
+        .chat_stream_with_params(
+            ChatStreamParams {
+                query: "What is antifragility?",
+                agent_type: "rag",
+                notebook_id: &upload.notebook_id,
+                doc_scope: &[upload.document_id.clone()],
+                session_id: None,
+                format_hint: None,
+                debug: false,
+            },
+            MAX_EVENTS,
+            STREAM_DEADLINE,
+        )
+        .await
+        .unwrap();
+
+    let capture = collect_observability_from_events(&events);
+    assert!(
+        capture.delta_count > 0 || !capture.summary.is_empty(),
+        "mock RAG synthesis should surface reasoning_summary_delta from non-stream reasoning_content"
+    );
+}
+
+/// Loop telemetry trace events (`plan_decision` / `evaluation`) are emitted
+/// without `debug: true`; only `prompt_snapshot` requires debug.
+#[tokio::test]
+async fn chat_stream_collects_trace_telemetry_without_debug() {
+    let mut ctx = TestContext::new_smoke_with_rag().await;
+    let upload = ctx.upload_document("antifragile.txt").await.unwrap();
+    let status = ctx
+        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
+        .await
+        .unwrap();
+    assert_eq!(status, DocumentStatus::Completed);
+
+    let events = ctx
+        .chat_stream_with_params(
+            ChatStreamParams {
+                query: "What is antifragility?",
+                agent_type: "rag",
+                notebook_id: &upload.notebook_id,
+                doc_scope: &[upload.document_id.clone()],
+                session_id: None,
+                format_hint: None,
+                debug: false,
+            },
+            MAX_EVENTS,
+            STREAM_DEADLINE,
+        )
+        .await
+        .unwrap();
+
+    let capture = collect_observability_from_events(&events);
+    assert!(
+        !capture.trace_reasoning.is_empty(),
+        "trace telemetry should not require debug, stages: {:?}",
+        events
+            .iter()
+            .filter(|e| e.event == "trace")
+            .map(|e| e.data.get("stage").and_then(|v| v.as_str()))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        capture.prompt_snapshots.is_empty(),
+        "prompt_snapshot must stay gated behind debug: true"
+    );
+}
+
+/// With `debug: true`, the stream must include loop telemetry trace events
+/// (`plan_decision` / `evaluation`) for offline trace_reasoning capture.
+#[tokio::test]
+async fn chat_stream_debug_collects_trace_telemetry() {
+    let mut ctx = TestContext::new_smoke_with_rag().await;
+    let upload = ctx.upload_document("antifragile.txt").await.unwrap();
+    let status = ctx
+        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
+        .await
+        .unwrap();
+    assert_eq!(status, DocumentStatus::Completed);
+
+    let events = ctx
+        .chat_stream_with_params(
+            ChatStreamParams {
+                query: "What is antifragility?",
+                agent_type: "rag",
+                notebook_id: &upload.notebook_id,
+                doc_scope: &[upload.document_id.clone()],
+                session_id: None,
+                format_hint: None,
+                debug: true,
+            },
+            MAX_EVENTS,
+            STREAM_DEADLINE,
+        )
+        .await
+        .unwrap();
+
+    let capture = collect_observability_from_events(&events);
+    assert!(
+        !capture.trace_reasoning.is_empty(),
+        "debug stream should emit plan_decision/evaluation trace reasoning, stages: {:?}",
+        events
+            .iter()
+            .filter(|e| e.event == "trace")
+            .map(|e| e.data.get("stage").and_then(|v| v.as_str()))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// With `debug: true`, the stream must include `prompt_snapshot` trace events
+/// for offline prompt-compliance analysis.
+#[tokio::test]
+async fn chat_stream_debug_emits_prompt_snapshot() {
+    let mut ctx = TestContext::new_smoke_with_rag().await;
+    let upload = ctx.upload_document("antifragile.txt").await.unwrap();
+    let status = ctx
+        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
+        .await
+        .unwrap();
+    assert_eq!(status, DocumentStatus::Completed);
+
+    let events = ctx
+        .chat_stream_with_params(
+            ChatStreamParams {
+                query: "What is antifragility?",
+                agent_type: "rag",
+                notebook_id: &upload.notebook_id,
+                doc_scope: &[upload.document_id.clone()],
+                session_id: None,
+                format_hint: None,
+                debug: true,
+            },
+            MAX_EVENTS,
+            STREAM_DEADLINE,
+        )
+        .await
+        .unwrap();
+
+    let capture = collect_observability_from_events(&events);
+    assert!(
+        !capture.prompt_snapshots.is_empty(),
+        "debug stream should emit prompt_snapshot traces, got events: {:?}",
+        events
+            .iter()
+            .filter(|e| e.event == "trace")
+            .map(|e| e.data.get("stage").and_then(|v| v.as_str()))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        capture.prompt_snapshots[0]
+            .get("system_content")
+            .and_then(|v| v.as_str())
+            .map(|s| !s.is_empty())
+            .unwrap_or(false),
+        "prompt_snapshot should include non-empty system_content"
+    );
+}
+
+/// If a streaming run produces an `error` event, the event must include
+/// structured `code` and `message` fields. This path is no longer the
+/// expected terminal state (streams should end with `done`), but if an
+/// error event does appear we validate its shape.
 #[tokio::test]
 async fn chat_stream_error_event_has_code_and_message() {
     let mut ctx = TestContext::new_smoke_with_rag().await;
@@ -217,16 +373,6 @@ async fn chat_stream_error_event_has_code_and_message() {
         error.data
     );
 }
-
-/// Regression test removed: the streaming-RAG bug it tracked
-/// (`ModelUnavailable` for `RagStrategy.llm_client`, swallowed by
-/// `.map_err(|_e| ... "unknown" ...)`) is now fixed at the test
-/// infrastructure layer: the mock LLM server returns a proper
-/// SSE response when the request body sets `"stream": true`, so
-/// `LlmClient::complete_stream` parses the stream correctly and
-/// the production `finalize_synthesize` reaches its `Done` event
-/// emission. The remaining 5 streaming tests in this file verify
-/// the fixed behavior end-to-end.
 
 #[allow(dead_code)]
 fn event_summary(events: &[SseEvent]) -> Vec<String> {

@@ -51,7 +51,11 @@ impl AuditLogJobRunner {
 
         let deleted = result.rows_affected();
         if deleted > 0 {
-            info!(deleted, retention_days = AUDIT_LOG_RETENTION_DAYS, "audit_log pruned");
+            info!(
+                deleted,
+                retention_days = AUDIT_LOG_RETENTION_DAYS,
+                "audit_log pruned"
+            );
         }
         Ok(())
     }

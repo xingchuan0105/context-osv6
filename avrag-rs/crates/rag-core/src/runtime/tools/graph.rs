@@ -1,17 +1,11 @@
 use avrag_auth::AuthContext;
 use avrag_retrieval_data_plane::GraphSearchRequest;
-use common::{
-    GraphRetrievalArgs, ToolResult, ToolStatus, ToolTrace,
-};
+use common::{GraphRetrievalArgs, ToolResult, ToolStatus, ToolTrace};
 use uuid::Uuid;
 
 use crate::RagRuntime;
 
-pub async fn run(
-    runtime: &RagRuntime,
-    auth: &AuthContext,
-    args: &serde_json::Value,
-) -> ToolResult {
+pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Value) -> ToolResult {
     let args: GraphRetrievalArgs = match serde_json::from_value(args.clone()) {
         Ok(a) => a,
         Err(e) => {
@@ -85,9 +79,21 @@ pub async fn run(
                         .map(|p| {
                             format!(
                                 "{} -{}-> {}",
-                                if p.subject.trim().is_empty() { "?" } else { &p.subject },
-                                if p.predicate.trim().is_empty() { "?" } else { &p.predicate },
-                                if p.object.trim().is_empty() { "?" } else { &p.object },
+                                if p.subject.trim().is_empty() {
+                                    "?"
+                                } else {
+                                    &p.subject
+                                },
+                                if p.predicate.trim().is_empty() {
+                                    "?"
+                                } else {
+                                    &p.predicate
+                                },
+                                if p.object.trim().is_empty() {
+                                    "?"
+                                } else {
+                                    &p.object
+                                },
                             )
                         })
                         .collect();
@@ -106,8 +112,7 @@ pub async fn run(
                                 .collect();
                             // Sort by rerank score descending.
                             scored_paths.sort_by(|a, b| {
-                                b.1.partial_cmp(&a.1)
-                                    .unwrap_or(std::cmp::Ordering::Equal)
+                                b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
                             });
                             // Take top relation_limit paths.
                             let top_paths: Vec<_> = scored_paths
@@ -137,7 +142,15 @@ pub async fn run(
                 tool: "graph_retrieval".to_string(),
                 version: "1.0".to_string(),
                 status: ToolStatus::Ok,
-                data: Some(serde_json::to_value(chunks.iter().map(super::scored_chunk_to_json).collect::<Vec<_>>()).unwrap_or_default()),
+                data: Some(
+                    serde_json::to_value(
+                        chunks
+                            .iter()
+                            .map(super::scored_chunk_to_json)
+                            .collect::<Vec<_>>(),
+                    )
+                    .unwrap_or_default(),
+                ),
                 trace: Some(ToolTrace {
                     elapsed_ms: Some(started.elapsed().as_millis() as u64),
                     raw_hit_count: Some(chunks.len()),

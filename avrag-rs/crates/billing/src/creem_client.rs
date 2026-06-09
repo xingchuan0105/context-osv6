@@ -1,7 +1,7 @@
 use crate::types::BillingConfig;
 use anyhow::{Result, bail};
 use common::UserId;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 pub struct CreemClient {
     config: BillingConfig,
@@ -61,7 +61,8 @@ impl CreemClient {
             },
         };
 
-        let response = self.http
+        let response = self
+            .http
             .post("https://api.creem.io/v1/checkouts")
             .header("x-api-key", &self.config.creem_api_key)
             .json(&req_body)

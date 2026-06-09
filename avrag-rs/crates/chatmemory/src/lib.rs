@@ -141,4 +141,3 @@ fn map_profile(row: UserProfileRow) -> Layer3Profile {
         inference_version: row.inference_version,
     }
 }
-

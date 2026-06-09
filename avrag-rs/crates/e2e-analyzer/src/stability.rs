@@ -48,7 +48,10 @@ pub fn analyze_stability(
     }
 
     // Duration stats
-    let durations: Vec<f64> = data_points.iter().map(|(_, r)| r.duration_ms as f64).collect();
+    let durations: Vec<f64> = data_points
+        .iter()
+        .map(|(_, r)| r.duration_ms as f64)
+        .collect();
     let avg_duration_ms = durations.iter().sum::<f64>() / durations.len() as f64;
     let variance = durations
         .iter()
@@ -107,7 +110,10 @@ pub fn analyze_stability(
                 Some(crate::models::DriftWarning {
                     window_size: token_points.len(),
                     stddev_multiplier: 1.0,
-                    detected_at_run_id: token_points.last().map(|(r, _)| r.clone()).unwrap_or_default(),
+                    detected_at_run_id: token_points
+                        .last()
+                        .map(|(r, _)| r.clone())
+                        .unwrap_or_default(),
                     description: format!("Token usage trending upward (slope ≈ {:.2})", slope),
                 })
             } else {
@@ -118,7 +124,10 @@ pub fn analyze_stability(
         None
     };
 
-    let last_status = data_points.last().map(|(_, r)| r.status).unwrap_or(TestStatus::Skipped);
+    let last_status = data_points
+        .last()
+        .map(|(_, r)| r.status)
+        .unwrap_or(TestStatus::Skipped);
 
     Some(StabilityRecord {
         test_name: test_name.to_string(),
@@ -136,7 +145,10 @@ pub fn generate_stability_report(record: &StabilityRecord) -> String {
     let mut report = String::new();
     report.push_str(&format!("# Stability Report: {}\n\n", record.test_name));
     report.push_str(&format!("- **Runs analyzed:** {}\n", record.runs));
-    report.push_str(&format!("- **Pass rate:** {:.1}%\n", record.pass_rate * 100.0));
+    report.push_str(&format!(
+        "- **Pass rate:** {:.1}%\n",
+        record.pass_rate * 100.0
+    ));
     report.push_str(&format!(
         "- **Avg duration:** {:.0} ms (stddev: {:.0} ms)\n",
         record.avg_duration_ms, record.stddev_duration_ms
@@ -268,7 +280,12 @@ mod tests {
     use super::*;
     use crate::models::TokenUsage;
 
-    fn make_result(test_name: &str, status: TestStatus, duration_ms: u64, tokens: Option<TokenUsage>) -> TestResult {
+    fn make_result(
+        test_name: &str,
+        status: TestStatus,
+        duration_ms: u64,
+        tokens: Option<TokenUsage>,
+    ) -> TestResult {
         TestResult {
             run_id: "r1".to_string(),
             test_name: test_name.to_string(),
@@ -322,8 +339,16 @@ mod tests {
         assert_eq!(record.pass_rate, 0.4); // 2 passed out of 5
 
         let report = generate_stability_report(&record);
-        assert!(report.contains("Flaky rate:** 60.0%"), "Report:\n{}", report);
-        assert!(report.contains("Consecutive failures:** 2"), "Report:\n{}", report);
+        assert!(
+            report.contains("Flaky rate:** 60.0%"),
+            "Report:\n{}",
+            report
+        );
+        assert!(
+            report.contains("Consecutive failures:** 2"),
+            "Report:\n{}",
+            report
+        );
     }
 
     #[test]
@@ -356,7 +381,11 @@ mod tests {
             ("r5".to_string(), 50.0),
         ];
         let slope = compute_linear_slope(&values);
-        assert!((slope - 10.0).abs() < 0.001, "Expected slope ≈ 10, got {}", slope);
+        assert!(
+            (slope - 10.0).abs() < 0.001,
+            "Expected slope ≈ 10, got {}",
+            slope
+        );
     }
 
     #[test]
@@ -465,6 +494,9 @@ mod tests {
             ),
         ];
         let result = analyze_stability("my_test", &runs);
-        assert!(result.is_none(), "Expected None when test not found in any run");
+        assert!(
+            result.is_none(),
+            "Expected None when test not found in any run"
+        );
     }
 }

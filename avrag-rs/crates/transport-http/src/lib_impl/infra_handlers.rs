@@ -369,8 +369,9 @@ async fn mcp_tool_call_handler(
         doc_scope,
         messages: vec![],
         stream: false,
+        debug: false,
         language: None,
-    format_hint: None,
+        format_hint: None,
     };
     if let Err(error) = expand_external_notebook_rag_scope(&state, &notebook_id, &mut req).await {
         return handlers::app_error_response(error);

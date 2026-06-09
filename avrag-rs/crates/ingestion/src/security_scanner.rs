@@ -67,7 +67,9 @@ pub async fn scan_upload(data: &[u8], filename: &str) -> anyhow::Result<ScanResu
 }
 
 fn looks_like_zip(data: &[u8]) -> bool {
-    data.starts_with(b"PK\x03\x04") || data.starts_with(b"PK\x05\x06") || data.starts_with(b"PK\x07\x08")
+    data.starts_with(b"PK\x03\x04")
+        || data.starts_with(b"PK\x05\x06")
+        || data.starts_with(b"PK\x07\x08")
 }
 
 fn zip_compression_ratio(data: &[u8]) -> anyhow::Result<Option<f64>> {
@@ -173,7 +175,9 @@ fn parse_clamav_response(response: &str) -> anyhow::Result<ScanResult> {
             .unwrap_or(prefix)
             .trim()
             .to_string();
-        return Ok(ScanResult::ThreatDetected { threat_name: threat });
+        return Ok(ScanResult::ThreatDetected {
+            threat_name: threat,
+        });
     }
     if trimmed.contains("ERROR") {
         return Err(anyhow::anyhow!("clamd returned error: {trimmed}"));

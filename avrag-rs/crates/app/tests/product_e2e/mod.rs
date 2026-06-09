@@ -118,6 +118,24 @@ impl SseParser {
 
 pub use common::{ChatResponse, Citation, DegradeTraceItem, DocumentStatus};
 
+/// A trace event record that carries reasoning text (plan_decision, evaluation, etc.).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct TraceReasoningRecord {
+    pub stage: String,
+    pub reasoning: serde_json::Value,
+    #[serde(skip_serializing_if = "serde_json::Value::is_null")]
+    pub detail: serde_json::Value,
+}
+
+/// Observability capture from an SSE chat stream (reasoning deltas + trace events).
+#[derive(Debug, Clone)]
+pub struct StreamReasoningCapture {
+    pub summary: String,
+    pub delta_count: usize,
+    pub trace_reasoning: Vec<TraceReasoningRecord>,
+    pub prompt_snapshots: Vec<serde_json::Value>,
+}
+
 // ---------------------------------------------------------------------------
 // Upload response (document upload)
 // ---------------------------------------------------------------------------
@@ -144,9 +162,8 @@ pub struct NotebookInner {
     pub title: String,
 }
 
-
 pub use test_context::{
-    TestContext, DEFAULT_TEST_ORG_ID, DEFAULT_TEST_USER_ID, unique_test_identity,
+    ChatStreamParams, DEFAULT_TEST_ORG_ID, DEFAULT_TEST_USER_ID, TestContext, unique_test_identity,
 };
 
 #[cfg(test)]
@@ -182,31 +199,24 @@ mod mock_routing_tests {
     }
 
     #[test]
-    fn system_prompt_routing_orders_format_skills_before_rag_answer() {
-        // The RAG answer phase appends the format-skill catalog to the
-        // system prompt, so the system prompt contains BOTH the RAG
-        // answer marker AND the format-skill IDs. The format skill
-        // must win; if we ever re-order and put RAG answer first, the
-        // format_output integration tests will start failing with
-        // 'expected slide in formatted answer'.
+    fn synthesis_contract_routes_before_format_skill_catalog() {
+        // Synthesis system prompts may include both internal_answer_v1 and
+        // format-skill catalog lines; contract detection must win so mock
+        // E2E returns JSON citations instead of HTML slides.
         let prompt = "\
 You are the Context OS RAG answer agent.
+Respond with ONLY a JSON object (no markdown fences):
+{\"schema_version\":\"internal_answer_v1\",\"answer_text\":\"...\",\"citations\":[]}
 
 ## Available Output Formats
 
 - ppt-generation (v1.0): Load when the user requests a slide deck
-- html-renderer (v1.0): Load when the user asks for HTML
-
-## Selected Format Skills
-
-You are the Context OS presentation generation assistant.
-When the user asks for a presentation, output structured JSON.
 ";
         let route = MockLlmRoute::from_system_prompt(prompt, "");
         assert_eq!(
             route,
-            MockLlmRoute::FormatSkillPpt,
-            "format-skill catalog in RAG answer prompt must route to PPT, not generic RAG answer"
+            MockLlmRoute::RagAnswer,
+            "internal_answer_v1 contract must route to RagAnswer, not format skills"
         );
     }
 

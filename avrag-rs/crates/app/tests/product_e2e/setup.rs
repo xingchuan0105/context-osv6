@@ -4,9 +4,10 @@
 
 use std::path::Path;
 use std::process::Stdio;
-use std::sync::{Arc, Mutex, OnceLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
+use uuid::Uuid;
 
 // ---------------------------------------------------------------------------
 // Postgres
@@ -26,6 +27,10 @@ static SHARED_PG: OnceLock<Mutex<Option<Arc<SharedPostgres>>>> = OnceLock::new()
 
 fn shared_pg_slot() -> &'static Mutex<Option<Arc<SharedPostgres>>> {
     SHARED_PG.get_or_init(|| Mutex::new(None))
+}
+
+fn short_docker_id() -> String {
+    Uuid::new_v4().to_string()[..8].to_string()
 }
 
 async fn postgres_is_ready(url: &str) -> bool {
@@ -103,8 +108,7 @@ pub async fn start_postgres() -> anyhow::Result<(String, String)> {
 }
 
 async fn start_postgres_once() -> anyhow::Result<(String, String)> {
-    let port = find_ephemeral_port()?;
-    let container_name = format!("avrag-test-pg-{port}");
+    let container_name = format!("avrag-test-pg-{}", short_docker_id());
 
     let output = tokio::process::Command::new("docker")
         .args([
@@ -120,7 +124,7 @@ async fn start_postgres_once() -> anyhow::Result<(String, String)> {
             "-e",
             "POSTGRES_DB=test",
             "-p",
-            &format!("{port}:5432"),
+            "0:5432",
             "postgres:16-alpine",
         ])
         .output()
@@ -137,6 +141,18 @@ async fn start_postgres_once() -> anyhow::Result<(String, String)> {
         anyhow::bail!("docker run postgres failed: {stderr}");
     }
 
+    let port = match docker_mapped_port(&container_name, 5432).await {
+        Ok(port) => port,
+        Err(e) => {
+            let _ = tokio::process::Command::new("docker")
+                .args(["rm", "-f", &container_name])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await;
+            return Err(e);
+        }
+    };
     let url = format!("postgres://test:test@127.0.0.1:{port}/test");
     wait_for_postgres(&url, &container_name).await?;
     Ok((url, container_name))
@@ -205,12 +221,40 @@ async fn wait_for_postgres(url: &str, container_name: &str) -> anyhow::Result<()
     }
 }
 
+#[allow(dead_code)]
 fn find_ephemeral_port() -> anyhow::Result<u16> {
     use std::net::TcpListener;
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let port = listener.local_addr()?.port();
     drop(listener);
     Ok(port)
+}
+
+fn parse_docker_port_output(output: &str) -> anyhow::Result<u16> {
+    for line in output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        if let Some(port) = line.rsplit(':').next().and_then(|part| part.parse().ok()) {
+            return Ok(port);
+        }
+    }
+    anyhow::bail!("missing docker port mapping in output: {output:?}")
+}
+
+async fn docker_mapped_port(container_name: &str, container_port: u16) -> anyhow::Result<u16> {
+    let output = tokio::process::Command::new("docker")
+        .args(["port", container_name, &format!("{container_port}/tcp")])
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("docker port {container_name} {container_port}/tcp failed: {stderr}");
+    }
+
+    parse_docker_port_output(&String::from_utf8_lossy(&output.stdout))
 }
 
 /// Create a temporary object store directory.
@@ -242,6 +286,73 @@ pub struct MilvusInstance {
     pub is_external: bool,
 }
 
+/// Process-wide shared Milvus for RAG product E2E tests.
+pub struct SharedMilvus {
+    pub url: String,
+    pub container_name: Option<String>,
+    pub is_external: bool,
+    refs: AtomicUsize,
+}
+
+static SHARED_MILVUS: OnceLock<Mutex<Option<Arc<SharedMilvus>>>> = OnceLock::new();
+
+fn shared_milvus_slot() -> &'static Mutex<Option<Arc<SharedMilvus>>> {
+    SHARED_MILVUS.get_or_init(|| Mutex::new(None))
+}
+
+/// Acquire a shared Milvus instance, creating it on first use.
+pub async fn acquire_shared_milvus() -> anyhow::Result<(String, Arc<SharedMilvus>)> {
+    let mut slot = shared_milvus_slot()
+        .lock()
+        .map_err(|_| anyhow::anyhow!("shared milvus lock poisoned"))?;
+
+    if let Some(milvus) = slot.as_ref() {
+        if milvus_api_ready(&milvus.url).await {
+            milvus.refs.fetch_add(1, Ordering::SeqCst);
+            return Ok((milvus.url.clone(), milvus.clone()));
+        }
+        if !milvus.is_external
+            && let Some(ref stale_name) = milvus.container_name
+        {
+            let _ = stop_milvus(stale_name).await;
+        }
+        *slot = None;
+    }
+
+    let inst = start_milvus().await?;
+    let milvus = Arc::new(SharedMilvus {
+        url: inst.url.clone(),
+        container_name: inst.container_name,
+        is_external: inst.is_external,
+        refs: AtomicUsize::new(1),
+    });
+    *slot = Some(milvus.clone());
+    Ok((inst.url, milvus))
+}
+
+/// Release a shared Milvus reference; stops only test-owned containers.
+pub fn release_shared_milvus(milvus: &Arc<SharedMilvus>) {
+    let prev = milvus.refs.fetch_sub(1, Ordering::SeqCst);
+    if prev == 1 {
+        if !milvus.is_external
+            && let Some(ref container_name) = milvus.container_name
+        {
+            let container_name = container_name.clone();
+            block_on_with_timeout(async move {
+                stop_milvus(&container_name).await;
+            });
+        }
+        if let Ok(mut slot) = shared_milvus_slot().lock() {
+            if slot
+                .as_ref()
+                .is_some_and(|shared| Arc::ptr_eq(shared, milvus))
+            {
+                *slot = None;
+            }
+        }
+    }
+}
+
 /// Start or reuse a Milvus instance for product E2E.
 ///
 /// Prefers a healthy external instance on 19530 (fast, already warmed).
@@ -258,8 +369,7 @@ pub async fn start_milvus() -> anyhow::Result<MilvusInstance> {
         });
     }
 
-    let grpc_port = find_ephemeral_port()?;
-    let container_name = format!("avrag-test-milvus-{grpc_port}");
+    let container_name = format!("avrag-test-milvus-{}", short_docker_id());
 
     let output = tokio::process::Command::new("docker")
         .args([
@@ -269,7 +379,7 @@ pub async fn start_milvus() -> anyhow::Result<MilvusInstance> {
             "--name",
             &container_name,
             "-p",
-            &format!("{grpc_port}:19530"),
+            "0:19530",
             "milvusdb/milvus:v2.4.5",
             "milvus",
             "run",
@@ -283,6 +393,18 @@ pub async fn start_milvus() -> anyhow::Result<MilvusInstance> {
         anyhow::bail!("docker run milvus failed: {stderr}");
     }
 
+    let grpc_port = match docker_mapped_port(&container_name, 19530).await {
+        Ok(port) => port,
+        Err(e) => {
+            let _ = tokio::process::Command::new("docker")
+                .args(["rm", "-f", &container_name])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await;
+            return Err(e);
+        }
+    };
     let url = format!("http://127.0.0.1:{grpc_port}");
     wait_for_milvus(&url, &container_name).await?;
     Ok(MilvusInstance {
@@ -389,8 +511,7 @@ async fn wait_for_milvus(url: &str, container_name: &str) -> anyhow::Result<()> 
 
 /// Start a Redis container via docker and return `(url, container_name)`.
 pub async fn start_redis() -> anyhow::Result<(String, String)> {
-    let port = find_ephemeral_port()?;
-    let container_name = format!("avrag-test-redis-{port}");
+    let container_name = format!("avrag-test-redis-{}", short_docker_id());
 
     let output = tokio::process::Command::new("docker")
         .args([
@@ -400,7 +521,7 @@ pub async fn start_redis() -> anyhow::Result<(String, String)> {
             "--name",
             &container_name,
             "-p",
-            &format!("{port}:6379"),
+            "0:6379",
             "redis:7-alpine",
         ])
         .output()
@@ -411,6 +532,18 @@ pub async fn start_redis() -> anyhow::Result<(String, String)> {
         anyhow::bail!("docker run redis failed: {stderr}");
     }
 
+    let port = match docker_mapped_port(&container_name, 6379).await {
+        Ok(port) => port,
+        Err(e) => {
+            let _ = tokio::process::Command::new("docker")
+                .args(["rm", "-f", &container_name])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await;
+            return Err(e);
+        }
+    };
     let url = format!("redis://127.0.0.1:{port}");
     wait_for_redis(&url, &container_name).await?;
     Ok((url, container_name))
@@ -543,4 +676,25 @@ pub async fn cleanup_orphaned_test_containers() -> anyhow::Result<usize> {
         }
     }
     Ok(removed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_docker_port_output_uses_ipv4_mapping() {
+        let output = "0.0.0.0:32771\n[::]:32771\n";
+
+        let port = parse_docker_port_output(output).unwrap();
+
+        assert_eq!(port, 32771);
+    }
+
+    #[test]
+    fn parse_docker_port_output_rejects_missing_mapping() {
+        let err = parse_docker_port_output("").unwrap_err();
+
+        assert!(err.to_string().contains("missing docker port mapping"));
+    }
 }

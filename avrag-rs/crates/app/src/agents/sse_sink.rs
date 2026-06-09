@@ -21,6 +21,7 @@ pub struct SseSink {
     emit_debug_trace: bool,
     answer_started: AtomicBool,
     message_delta_emitted: AtomicBool,
+    citations_emitted: AtomicBool,
 }
 
 impl Clone for SseSink {
@@ -37,6 +38,7 @@ impl Clone for SseSink {
             message_delta_emitted: AtomicBool::new(
                 self.message_delta_emitted.load(Ordering::SeqCst),
             ),
+            citations_emitted: AtomicBool::new(self.citations_emitted.load(Ordering::SeqCst)),
         }
     }
 }
@@ -74,6 +76,7 @@ impl SseSink {
             emit_debug_trace: false,
             answer_started: AtomicBool::new(false),
             message_delta_emitted: AtomicBool::new(false),
+            citations_emitted: AtomicBool::new(false),
         }
     }
 
@@ -91,6 +94,10 @@ impl SseSink {
         self.message_delta_emitted.load(Ordering::SeqCst)
     }
 
+    pub fn has_citations_emitted(&self) -> bool {
+        self.citations_emitted.load(Ordering::SeqCst)
+    }
+
     /// Send a single `AgentEvent` after mapping it to `ChatEvent`.
     pub fn send(&self, event: AgentEvent) {
         if matches!(event, AgentEvent::Done { .. }) && !self.emit_done {
@@ -102,6 +109,10 @@ impl SseSink {
         // Audit records are internal — never forwarded to the client SSE stream.
         if matches!(event, AgentEvent::Audit { .. }) {
             return;
+        }
+        if matches!(&event, AgentEvent::Citations { citations } if !citations.is_empty()) {
+            self.citations_emitted
+                .store(true, Ordering::SeqCst);
         }
         let chat_event = self.map_event(event);
         let _ = self.sender.send(chat_event);
@@ -188,29 +199,6 @@ impl SseSink {
                 status: "debug".to_string(),
                 detail: Some(payload),
             },
-            AgentEvent::StateTransition {
-                transition_type,
-                state_id,
-                state_kind,
-                elapsed_ms,
-                timestamp_ms: _,
-                payload,
-            } => ChatEvent::Trace {
-                request_id: self.request_id.clone(),
-                stage: format!(
-                    "state_{}",
-                    serde_json::to_string(&transition_type)
-                        .unwrap_or_default()
-                        .trim_matches('"')
-                ),
-                status: "ok".to_string(),
-                detail: Some(serde_json::json!({
-                    "state_id": state_id,
-                    "state_kind": state_kind,
-                    "elapsed_ms": elapsed_ms,
-                    "payload": payload,
-                })),
-            },
             AgentEvent::PlanDecision {
                 selected_tools,
                 selected_skills,
@@ -272,7 +260,7 @@ impl SseSink {
                 unreachable!("Audit events are filtered in on_event before map_event")
             }
             AgentEvent::RoutingDecision {
-                strategy_id,
+                mode_id,
                 matched_rule,
                 confidence,
                 explanation,
@@ -281,7 +269,7 @@ impl SseSink {
                 stage: "routing_decision".to_string(),
                 status: "ok".to_string(),
                 detail: Some(serde_json::json!({
-                    "strategy_id": strategy_id,
+                    "mode_id": mode_id,
                     "matched_rule": matched_rule,
                     "confidence": confidence,
                     "explanation": explanation,
@@ -307,6 +295,50 @@ impl SseSink {
                     "trace_id": trace_id,
                     "total_elapsed_ms": total_elapsed_ms,
                 })),
+            },
+            AgentEvent::TurnStart { iteration, phase } => ChatEvent::Trace {
+                request_id: self.request_id.clone(),
+                stage: "turn_start".to_string(),
+                status: "ok".to_string(),
+                detail: Some(serde_json::json!({
+                    "iteration": iteration,
+                    "phase": phase,
+                })),
+            },
+            AgentEvent::TurnEnd {
+                iteration,
+                exit_reason,
+            } => ChatEvent::Trace {
+                request_id: self.request_id.clone(),
+                stage: "turn_end".to_string(),
+                status: "ok".to_string(),
+                detail: Some(serde_json::json!({
+                    "iteration": iteration,
+                    "exit_reason": exit_reason,
+                })),
+            },
+            AgentEvent::QueryResolved {
+                raw,
+                resolved,
+                slots,
+            } => ChatEvent::Trace {
+                request_id: self.request_id.clone(),
+                stage: "query_resolved".to_string(),
+                status: "ok".to_string(),
+                detail: Some(serde_json::json!({
+                    "raw": raw,
+                    "resolved": resolved,
+                    "slots": slots,
+                })),
+            },
+            AgentEvent::SynthesisContract { schema_version } => ChatEvent::Activity {
+                request_id: self.request_id.clone(),
+                phase: "synthesis_contract".to_string(),
+                title: format!("Synthesis contract: {schema_version}"),
+                detail: None,
+                counts: BTreeMap::new(),
+                sources_preview: Vec::new(),
+                timestamp: Some(now_rfc3339()),
             },
         }
     }
@@ -525,6 +557,41 @@ mod tests {
             .expect("debug trace event should be sent when enabled");
         assert!(matches!(event, ChatEvent::Trace { stage, status, .. }
             if stage == "search.execution" && status == "debug"));
+    }
+
+    #[test]
+    fn test_sse_sink_tracks_citations_emitted() {
+        let (tx, mut rx) = unbounded_channel::<ChatEvent>();
+        let sink = SseSink::new(tx, "req-1".to_string(), "sess-1".to_string(), 1);
+        assert!(!sink.has_citations_emitted());
+
+        sink.send(AgentEvent::Citations {
+            citations: vec![Citation {
+                citation_id: 1,
+                doc_id: "d1".to_string(),
+                chunk_id: Some("chunk-a".to_string()),
+                page: None,
+                doc_name: "doc".to_string(),
+                preview: None,
+                content: None,
+                score: 1.0,
+                layer: None,
+                chunk_type: None,
+                asset_id: None,
+                caption: None,
+                image_url: None,
+                parser_backend: None,
+                source_locator: None,
+                parse_run_id: None,
+            }],
+        });
+        assert!(sink.has_citations_emitted());
+        let _ = rx.try_recv().expect("citations event should be sent");
+
+        sink.send(AgentEvent::Citations {
+            citations: vec![],
+        });
+        assert!(sink.has_citations_emitted(), "empty citations must not clear flag");
     }
 
     #[test]

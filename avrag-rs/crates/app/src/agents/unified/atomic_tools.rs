@@ -56,9 +56,10 @@ pub async fn dispatch_atomic_tool_with_enforcement(
     search_provider: Option<&dyn avrag_search::SearchProvider>,
     auth: Option<&avrag_auth::AuthContext>,
 ) -> ToolResult {
-    // 1. Policy check via CapabilityRegistry
+    // 1. Policy check via non-prompt runtime metadata.
     let registry = crate::agents::capability::CapabilityRegistry::standard_cached();
-    if let Some(meta) = registry.tool(&call.tool) {
+    let runtime_meta = runtime_tool_metadata(&call.tool);
+    if let Some(meta) = registry.tool(&call.tool).or_else(|| runtime_meta.as_ref()) {
         let enforcer = crate::agents::capability::PolicyEnforcer::new(
             crate::agents::capability::standard_rules(),
         );
@@ -95,6 +96,7 @@ pub async fn dispatch_atomic_tool_with_enforcement(
 
     let retry_policy = registry
         .tool(&call.tool)
+        .or_else(|| runtime_meta.as_ref())
         .map(|m| m.retry_policy.clone())
         .unwrap_or_default();
 
@@ -103,6 +105,53 @@ pub async fn dispatch_atomic_tool_with_enforcement(
         &retry_policy,
     )
     .await
+}
+
+fn runtime_tool_metadata(id: &str) -> Option<crate::agents::capability::ToolMetadata> {
+    use crate::agents::capability::{
+        ActivationPhase, Permission, RetryPolicy, RiskLevel, ToolMetadata,
+    };
+
+    let (description, risk_level, permissions) = match id {
+        "web_search" => (
+            "Search the public web",
+            RiskLevel::High,
+            vec![Permission::ExternalNetwork],
+        ),
+        "web_fetch" => (
+            "Fetch a public web page",
+            RiskLevel::High,
+            vec![Permission::ExternalNetwork],
+        ),
+        "code_interpreter" => (
+            "Execute code in a sandbox",
+            RiskLevel::High,
+            vec![Permission::CodeExecution],
+        ),
+        "calculator" => (
+            "Evaluate a mathematical expression",
+            RiskLevel::Low,
+            Vec::new(),
+        ),
+        "weather_query" => ("Query weather data", RiskLevel::Low, Vec::new()),
+        _ => return None,
+    };
+
+    Some(ToolMetadata {
+        id: id.to_string(),
+        version: "1.0.0".to_string(),
+        owner: "runtime".to_string(),
+        description: description.to_string(),
+        input_schema: serde_json::Value::Null,
+        output_schema: serde_json::Value::Null,
+        risk_level,
+        permissions,
+        external_deps: Vec::new(),
+        deprecation: None,
+        retry_policy: RetryPolicy::default(),
+        activation_phase: ActivationPhase::PlanAndEvaluate,
+        applicable_strategies: Vec::new(),
+    })
 }
 
 /// Execute an async operation with exponential-backoff retry.

@@ -101,9 +101,7 @@ async fn get_usage_window(
             "authenticated user required",
         ));
     };
-    Json(
-        avrag_billing::handle_get_usage_window(repo, UserId::from(actor_id.into_uuid())).await,
-    )
+    Json(avrag_billing::handle_get_usage_window(repo, UserId::from(actor_id.into_uuid())).await)
 }
 
 async fn create_checkout(
@@ -123,12 +121,7 @@ async fn create_checkout(
         ));
     };
     Json(
-        avrag_billing::handle_create_checkout(
-            repo,
-            UserId::from(actor_id.into_uuid()),
-            body,
-        )
-        .await,
+        avrag_billing::handle_create_checkout(repo, UserId::from(actor_id.into_uuid()), body).await,
     )
 }
 

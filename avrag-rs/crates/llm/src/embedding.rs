@@ -21,7 +21,11 @@ fn embedding_cache_key(model: &str, dimensions: Option<usize>, text_hash: &str) 
     }
 }
 
-fn mm_embedding_cache_key(model: &str, dimension: Option<usize>, input: &MultiModalEmbeddingInput) -> String {
+fn mm_embedding_cache_key(
+    model: &str,
+    dimension: Option<usize>,
+    input: &MultiModalEmbeddingInput,
+) -> String {
     let mut hasher = Sha256::new();
     if let Some(text) = input.text.as_deref() {
         hasher.update(b"text:");
@@ -145,7 +149,11 @@ impl EmbeddingClient {
 
         if let Some(cache) = &self.cache {
             for (index, text) in texts.iter().enumerate() {
-                let key = embedding_cache_key(&self.config.model, self.config.dimensions, &sha256_hex(text));
+                let key = embedding_cache_key(
+                    &self.config.model,
+                    self.config.dimensions,
+                    &sha256_hex(text),
+                );
                 match cache.get_json::<Vec<f32>>(&key).await {
                     Ok(Some(cached)) => vectors.push(cached),
                     _ => {
@@ -165,7 +173,11 @@ impl EmbeddingClient {
                 let batch_vectors = self.embed_openai_compatible_text(batch).await?;
                 if let Some(cache) = &self.cache {
                     for (text, vector) in batch.iter().zip(batch_vectors.iter()) {
-                        let key = embedding_cache_key(&self.config.model, self.config.dimensions, &sha256_hex(text));
+                        let key = embedding_cache_key(
+                            &self.config.model,
+                            self.config.dimensions,
+                            &sha256_hex(text),
+                        );
                         let _ = cache.set_json(&key, vector, EMBEDDING_CACHE_TTL_SECS).await;
                     }
                 }
@@ -295,7 +307,8 @@ impl EmbeddingClient {
             .await
             .context("Failed to parse DashScope multimodal embedding response")?;
 
-        let vector = resp.output
+        let vector = resp
+            .output
             .embeddings
             .into_iter()
             .next()
@@ -303,7 +316,9 @@ impl EmbeddingClient {
             .context("DashScope multimodal embedding response did not include any vectors")?;
 
         if let Some(cache) = &self.cache {
-            let _ = cache.set_json(&cache_key, &vector, EMBEDDING_CACHE_TTL_SECS).await;
+            let _ = cache
+                .set_json(&cache_key, &vector, EMBEDDING_CACHE_TTL_SECS)
+                .await;
         }
 
         Ok(vector)
@@ -440,7 +455,9 @@ mod tests {
         let cache = match avrag_cache_redis::CacheStore::new(&redis_url) {
             Ok(cache) => Arc::new(cache),
             Err(error) => {
-                eprintln!("skip embed_openai_compatible_text_caches_in_redis: redis unavailable: {error}");
+                eprintln!(
+                    "skip embed_openai_compatible_text_caches_in_redis: redis unavailable: {error}"
+                );
                 return;
             }
         };
@@ -457,10 +474,8 @@ mod tests {
                     .unwrap_or_default();
                 let dim = req["dimensions"].as_u64().unwrap_or(8) as usize;
                 let vector: Vec<f32> = (0..dim).map(|i| 0.1 + i as f32 * 0.01).collect();
-                let data: Vec<serde_json::Value> = texts
-                    .iter()
-                    .map(|_| json!({"embedding": vector}))
-                    .collect();
+                let data: Vec<serde_json::Value> =
+                    texts.iter().map(|_| json!({"embedding": vector})).collect();
                 async move { Json(json!({ "data": data })) }
             }),
         );

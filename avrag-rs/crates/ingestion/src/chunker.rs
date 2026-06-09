@@ -515,10 +515,7 @@ fn build_multimodal_summary_text(block: &crate::ir::BlockIr) -> String {
     [
         block.caption.clone().unwrap_or_default(),
         block.section_path.last().cloned().unwrap_or_default(),
-        block
-            .alt_text
-            .clone()
-            .unwrap_or_else(|| block.text.clone()),
+        block.alt_text.clone().unwrap_or_else(|| block.text.clone()),
     ]
     .into_iter()
     .filter(|value| !value.trim().is_empty())

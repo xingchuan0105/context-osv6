@@ -103,8 +103,19 @@ impl MockLlmRoute {
         // 2. RAG coverage evaluator
         } else if system_prompt.contains("Context OS retrieval coverage evaluator") {
             Self::RagCoverageEvaluator
-        // 3. Format skills (must come before RAG answer — the catalog
-        //    line is appended to every RAG answer prompt).
+        } else if system_prompt.contains("general chat assistant for Context OS") {
+            Self::ChatAnswer
+        // 3. Synthesis answer contracts (before format-skill catalog lines).
+        } else if system_prompt.contains("Context OS RAG answer agent")
+            || system_prompt.contains("internal_answer_v1")
+        {
+            Self::RagAnswer
+        } else if system_prompt.contains("Context OS Web Search answer agent")
+            || system_prompt.contains("internal_search_answer_v1")
+            || user_prompt.contains("Search results:")
+        {
+            Self::SearchAnswer
+        // 4. Format skills (catalog appears in synthesis system prompts).
         } else if system_prompt.contains("Context OS presentation generation assistant")
             || system_prompt.contains("ppt-generation")
         {
@@ -113,21 +124,11 @@ impl MockLlmRoute {
             || system_prompt.contains("html-renderer")
         {
             Self::FormatSkillHtml
-        } else if system_prompt.contains("general chat assistant for Context OS") {
-            Self::ChatAnswer
-        // 4. RAG answer (default for the answer phase)
-        } else if system_prompt.contains("Context OS RAG answer agent") {
-            Self::RagAnswer
-        // 5. Search pipeline
+        // 5. Search planner / evaluator
         } else if system_prompt.contains("Context OS Web Search planner") {
             Self::SearchPlanner
         } else if system_prompt.contains("Context OS web-search coverage evaluator") {
             Self::SearchCoverageEvaluator
-        } else if system_prompt.contains("Context OS Web Search answer agent")
-            || system_prompt.contains("Answer the user's original web-search question")
-            || user_prompt.contains("Search results:")
-        {
-            Self::SearchAnswer
         // 6. Fallback (e.g. summary generation)
         } else {
             Self::Fallback
@@ -192,7 +193,12 @@ pub(crate) async fn start_mock_embedding_server() -> (
         }
     });
 
-    (base_url, abort_tx, embedding_should_503, embedding_call_count)
+    (
+        base_url,
+        abort_tx,
+        embedding_should_503,
+        embedding_call_count,
+    )
 }
 
 fn mock_tool_names(req: &serde_json::Value) -> Vec<String> {
@@ -217,7 +223,7 @@ fn mock_native_tool_call(tool_names: &[String], user_prompt: &str) -> Option<ser
         .trim()
         .trim_start_matches("[prior_user_query]")
         .trim()
-    .to_string();
+        .to_string();
     let query = if query.is_empty() {
         "context os query".to_string()
     } else {
@@ -257,27 +263,190 @@ fn mock_native_tool_call(tool_names: &[String], user_prompt: &str) -> Option<ser
     None
 }
 
-fn detect_synthesis_route(system_prompt: &str, messages: &[serde_json::Value]) -> Option<MockLlmRoute> {
-    let transcript = messages
-        .iter()
-        .filter_map(|message| message.get("content").and_then(|content| content.as_str()))
-        .collect::<Vec<_>>()
-        .join("\n");
+fn is_placeholder_chunk_id(id: &str) -> bool {
+    let trimmed = id.trim().trim_matches('"');
+    if trimmed.is_empty() || trimmed == "null" {
+        return true;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    matches!(
+        lower.as_str(),
+        "..." | "chunk_id" | "uuid" | "mock-chunk-1" | "ch" | "chunk-uuid"
+    ) || lower.starts_with('<')
+        || trimmed.contains("...")
+        || trimmed.contains("CHUNK_ID")
+}
 
+fn looks_like_chunk_uuid(id: &str) -> bool {
+    let id = id.trim().trim_matches('"');
+    let parts: Vec<&str> = id.split('-').collect();
+    parts.len() == 5
+        && parts[0].len() == 8
+        && parts[1].len() == 4
+        && parts[2].len() == 4
+        && parts[3].len() == 4
+        && parts[4].len() == 12
+        && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+fn collect_chunk_ids_from_text(text: &str, out: &mut Vec<String>) {
+    let mut rest = text;
+    while let Some(start) = rest.find("chunk_id") {
+        let tail = &rest[start..];
+        let after_key = tail.strip_prefix("chunk_id").unwrap_or(tail);
+        let after_colon = after_key
+            .split_once(':')
+            .map(|(_, v)| v)
+            .unwrap_or(after_key);
+        let trimmed = after_colon.trim().trim_matches('"');
+        if !trimmed.is_empty() && trimmed.len() <= 128 {
+            let id = trimmed
+                .split(|c: char| c == '"' || c == ',' || c == '}' || c.is_whitespace())
+                .next()
+                .unwrap_or(trimmed);
+            if !id.is_empty() && !is_placeholder_chunk_id(id) {
+                out.push(id.to_string());
+            }
+        }
+        rest = &rest[start + 8..];
+    }
+}
+
+fn first_chunk_id_in_value(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::Array(items) => {
+            for item in items {
+                if let Some(id) = item
+                    .get("chunk_id")
+                    .and_then(|v| v.as_str())
+                    .filter(|id| !is_placeholder_chunk_id(id))
+                {
+                    return Some(id.to_string());
+                }
+            }
+        }
+        serde_json::Value::Object(map) => {
+            if let Some(chunks) = map.get("chunks") {
+                if let Some(id) = first_chunk_id_in_value(chunks) {
+                    return Some(id);
+                }
+            }
+            for v in map.values() {
+                if let Some(id) = first_chunk_id_in_value(v) {
+                    return Some(id);
+                }
+            }
+        }
+        _ => {}
+    }
+    None
+}
+
+fn extract_chunk_id_from_tool_results_block(transcript: &str) -> Option<String> {
+    let start = transcript.find("<tool_results>")?;
+    let after = &transcript[start + "<tool_results>".len()..];
+    let end = after.find("</tool_results>")?;
+    let inner = after[..end].trim();
+    let parsed = serde_json::from_str::<serde_json::Value>(inner).ok()?;
+    if let serde_json::Value::Array(tool_results) = parsed {
+        for result in tool_results {
+            if let Some(data) = result.get("data") {
+                if let Some(id) = first_chunk_id_in_value(data) {
+                    return Some(id);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn extract_retrieval_chunk_id(transcript: &str) -> Option<String> {
+    if let Some(id) = extract_chunk_id_from_tool_results_block(transcript) {
+        return Some(id);
+    }
+
+    let preferred_sections = [
+        "自动兜底检索结果:",
+        "自动兜底检索结果",
+        "<code_execution_result>",
+    ];
+    for marker in preferred_sections {
+        let Some(idx) = transcript.find(marker) else {
+            continue;
+        };
+        let mut ids = Vec::new();
+        collect_chunk_ids_from_text(&transcript[idx..], &mut ids);
+        if let Some(id) = ids.iter().find(|id| looks_like_chunk_uuid(id)) {
+            return Some(id.clone());
+        }
+        if let Some(id) = ids.into_iter().find(|id| !is_placeholder_chunk_id(id)) {
+            return Some(id);
+        }
+    }
+    None
+}
+
+fn mock_synthesis_json_rag(transcript: &str) -> String {
+    let chunk_id = extract_retrieval_chunk_id(transcript).unwrap_or_else(|| {
+        let preview: String = transcript.chars().take(500).collect();
+        panic!("mock RAG synthesis could not resolve chunk_id; transcript preview: {preview}")
+    });
+    let answer_text = format!(
+        "Based on the document, antifragility is a property of systems that benefit from stress and disorder [[cite:{chunk_id}]]. The concept was developed by Nassim Nicholas Taleb."
+    );
+    serde_json::json!({
+        "schema_version": "internal_answer_v1",
+        "answer_text": answer_text,
+        "citations": [{"chunk_id": chunk_id}],
+        "coverage": "full",
+        "refusal_reason": null
+    })
+    .to_string()
+}
+
+fn mock_synthesis_json_search() -> String {
+    serde_json::json!({
+        "schema_version": "internal_search_answer_v1",
+        "answer_text": "The weather in Tokyo today is sunny with a high of 25°C [[1]].",
+        "citations": [{"index": 1}],
+        "coverage": "full",
+        "refusal_reason": null
+    })
+    .to_string()
+}
+
+fn resolve_mock_content(route: MockLlmRoute, system_prompt: &str, transcript: &str) -> String {
+    match route {
+        MockLlmRoute::RagAnswer if system_prompt.contains("internal_answer_v1") => {
+            mock_synthesis_json_rag(transcript)
+        }
+        MockLlmRoute::SearchAnswer if system_prompt.contains("internal_search_answer_v1") => {
+            mock_synthesis_json_search()
+        }
+        _ => route.canned_response().to_string(),
+    }
+}
+
+fn detect_synthesis_route(
+    system_prompt: &str,
+    _messages: &[serde_json::Value],
+) -> Option<MockLlmRoute> {
+    // Synthesis contract must win over format-skill catalog lines in the same system prompt.
+    if system_prompt.contains("internal_search_answer_v1")
+        || system_prompt.contains("Context OS Web Search answer agent")
+    {
+        return Some(MockLlmRoute::SearchAnswer);
+    }
+    if system_prompt.contains("internal_answer_v1")
+        || system_prompt.contains("Context OS RAG answer agent")
+    {
+        return Some(MockLlmRoute::RagAnswer);
+    }
     if system_prompt.contains("ppt-generation") {
         return Some(MockLlmRoute::FormatSkillPpt);
     }
     if system_prompt.contains("html-renderer") {
         return Some(MockLlmRoute::FormatSkillHtml);
-    }
-    if transcript.contains("\"results\"")
-        && transcript.contains("\"url\"")
-        && (system_prompt.contains("搜索助手") || transcript.contains("web_search"))
-    {
-        return Some(MockLlmRoute::SearchAnswer);
-    }
-    if transcript.contains("\"chunk_id\"") || system_prompt.contains("RAG 助手") {
-        return Some(MockLlmRoute::RagAnswer);
     }
     None
 }
@@ -333,6 +502,23 @@ async fn mock_llm_handler(
         .into_response();
     }
 
+    let is_synthesis_contract = system_prompt.contains("internal_answer_v1")
+        || system_prompt.contains("internal_search_answer_v1");
+    // ReAct retrieve without native tools (RAG codegen / Search post-tool): end loop quickly.
+    if !is_stream
+        && tool_names.is_empty()
+        && !is_synthesis_contract
+        && (system_prompt.contains("检索 → 评估 → 合成")
+            || system_prompt.contains("搜索 → 验证 → 合成"))
+    {
+        return axum::Json(json!({
+            "choices": [{"message": {"role": "assistant", "content": ""}}],
+            "usage": {"prompt_tokens": 40, "completion_tokens": 1, "total_tokens": 41},
+            "model": "mock-llm"
+        }))
+        .into_response();
+    }
+
     // 1. Header-based routing (explicit, takes priority).
     let route = headers
         .get("x-mock-route")
@@ -341,7 +527,20 @@ async fn mock_llm_handler(
         .or_else(|| detect_synthesis_route(system_prompt, &messages))
         .unwrap_or_else(|| MockLlmRoute::from_system_prompt(system_prompt, user_prompt));
 
-    let content = route.canned_response();
+    let transcript = messages
+        .iter()
+        .filter_map(|message| message.get("content").and_then(|content| content.as_str()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let content = resolve_mock_content(route, system_prompt, &transcript);
+    let emit_mock_reasoning = matches!(
+        route,
+        MockLlmRoute::RagAnswer
+            | MockLlmRoute::SearchAnswer
+            | MockLlmRoute::ChatAnswer
+            | MockLlmRoute::FormatSkillHtml
+            | MockLlmRoute::FormatSkillPpt
+    );
 
     if is_stream {
         // SSE format expected by ChatCompletionStreamParser.
@@ -349,6 +548,18 @@ async fn mock_llm_handler(
         // events fire frequently and the production `complete_stream`
         // path is exercised end-to-end.
         let mut body = String::new();
+        if emit_mock_reasoning {
+            for ch in "Mock stream reasoning. ".chars() {
+                let delta_json = json!({
+                    "choices": [{
+                        "delta": {"reasoning_content": ch.to_string()},
+                        "index": 0
+                    }],
+                    "model": "mock-llm"
+                });
+                body.push_str(&format!("data: {delta_json}\n\n"));
+            }
+        }
         for (i, ch) in content.chars().enumerate() {
             let delta_json = json!({
                 "choices": [{
@@ -380,8 +591,12 @@ async fn mock_llm_handler(
             .body(axum::body::Body::from(body))
             .unwrap()
     } else {
+        let mut message = json!({"role": "assistant", "content": content});
+        if emit_mock_reasoning && !content.is_empty() {
+            message["reasoning_content"] = json!("Mock model reasoning for offline E2E.");
+        }
         axum::Json(json!({
-            "choices": [{"message": {"role": "assistant", "content": content}}],
+            "choices": [{"message": message}],
             "usage": {"prompt_tokens": 100, "completion_tokens": content.len(), "total_tokens": 100 + content.len()},
             "model": "mock-llm"
         }))
@@ -418,7 +633,8 @@ async fn mock_embedding_handler(
 /// Start a mock Brave Search HTTP server on an ephemeral port.
 ///
 /// Returns (base_url, abort_sender, search_should_429_flag).
-pub(crate) async fn start_mock_search_server() -> (String, tokio::sync::oneshot::Sender<()>, Arc<AtomicBool>) {
+pub(crate) async fn start_mock_search_server()
+-> (String, tokio::sync::oneshot::Sender<()>, Arc<AtomicBool>) {
     let search_should_429 = Arc::new(AtomicBool::new(false));
     let flag = search_should_429.clone();
 

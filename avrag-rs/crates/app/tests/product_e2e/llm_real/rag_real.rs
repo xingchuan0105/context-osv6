@@ -11,10 +11,10 @@ use std::time::Duration;
 use crate::product_e2e::{
     DocumentStatus, TestContext,
     assertions::{
-        assert_answer_has_doc_citation, assert_answer_substantive,
-        assert_citation_doc_id, assert_citation_referenced_in_answer, assert_has_citations,
+        assert_answer_has_doc_citation, assert_answer_substantive, assert_citation_doc_id,
+        assert_citation_referenced_in_answer, assert_has_citations,
     },
-    llm_real::chat_with_retry,
+    llm_real::{chat_with_retry, merge_llm_real_extra},
 };
 
 /// P0: Basic RAG document Q&A returns a substantive answer with at least
@@ -42,33 +42,38 @@ async fn real_llm_rag_document_qa_returns_citation() {
     assert_eq!(status, DocumentStatus::Completed);
 
     // 3. Ask a question that requires reading the document (retry for transient LLM errors).
-    let (_http_resp, resp) = chat_with_retry(
+    let result = chat_with_retry(
         &ctx,
         "What is antifragility?",
         &upload.notebook_id,
         &[upload.document_id.clone()],
     )
     .await;
+    let resp = &result.resp;
 
     // 4. Product assertions — align with smoke/rag_smoke: citations + substance, not keywords.
-    assert_has_citations(&resp);
-    assert_citation_doc_id(&resp, &upload.document_id);
-    assert_answer_has_doc_citation(&resp);
-    assert_answer_substantive(&resp, 50);
-    assert_citation_referenced_in_answer(&resp);
+    assert_has_citations(resp);
+    assert_citation_doc_id(resp, &upload.document_id);
+    assert_answer_has_doc_citation(resp);
+    assert_answer_substantive(resp, 50);
+    assert_citation_referenced_in_answer(resp);
     assert!(
         resp.degrade_trace.is_empty(),
         "expected no degradation trace on the happy path, got: {:?}",
         resp.degrade_trace
     );
 
-    // 6. White-box: verify the planner actually selected dense_retrieval.
-    ctx.assert_tool_called("dense_retrieval");
+    // 6. RAG retrieval is codegen/SDK-only (no native dense_retrieval tool_call).
+    // Evidence quality is covered by citation assertions above.
 
     // 7. Persist artifact for audit even on pass.
     ctx.save_llm_artifact(
         "real_llm_rag_document_qa_returns_citation",
-        &resp,
-        Some(serde_json::json!({"document_id": upload.document_id})),
+        resp,
+        merge_llm_real_extra(
+            &result,
+            Some(serde_json::json!({"document_id": upload.document_id})),
+        ),
+        Some(result.reasoning),
     );
 }

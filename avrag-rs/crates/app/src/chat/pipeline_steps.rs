@@ -105,7 +105,7 @@ async fn run_general_mode(
             },
         );
         execution.tokens_emitted = true;
-        execution.citations_emitted = true;
+        execution.citations_emitted = sink.has_citations_emitted();
         return Ok(execution);
     }
 
@@ -208,7 +208,7 @@ async fn run_search_mode(
             },
         );
         execution.tokens_emitted = true;
-        execution.citations_emitted = true;
+        execution.citations_emitted = sink.has_citations_emitted();
         return Ok(execution);
     }
 
@@ -331,7 +331,7 @@ async fn run_rag_mode(
             },
         );
         execution.tokens_emitted = true;
-        execution.citations_emitted = true;
+        execution.citations_emitted = sink.has_citations_emitted();
         return Ok(execution);
     }
 

@@ -414,7 +414,8 @@ impl ExecutePlanRequest {
             language: None,
             messages: Vec::new(),
             stream: false,
-        format_hint: None,
+            debug: false,
+            format_hint: None,
         }
     }
 

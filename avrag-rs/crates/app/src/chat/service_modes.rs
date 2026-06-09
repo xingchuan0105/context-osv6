@@ -38,6 +38,7 @@ impl AppState {
             debug_metadata: None,
             tokens_emitted: false,
             citations_emitted: false,
+            query_resolution: None,
         })
     }
 
@@ -95,6 +96,7 @@ impl AppState {
             agent_icon: None,
             citations: Vec::new(),
             tool_results: Vec::new(),
+            turn_metadata: None,
             created_at: now.clone(),
         });
         messages.push(ChatMessage {
@@ -108,6 +110,7 @@ impl AppState {
             agent_icon: Some(agent_icon(&req.agent_type).to_string()),
             citations: citations.clone(),
             tool_results: Vec::new(),
+            turn_metadata: None,
             created_at: now.clone(),
         });
 
@@ -142,6 +145,7 @@ impl AppState {
             debug_metadata: None,
             tokens_emitted: false,
             citations_emitted: false,
+            query_resolution: None,
         })
     }
 
@@ -222,5 +226,9 @@ pub(crate) fn build_chat_execution_from_result(
         debug_metadata: params.debug_metadata,
         tokens_emitted: false,
         citations_emitted: false,
+        query_resolution: agent_result
+            .query_resolution
+            .as_ref()
+            .and_then(|meta| serde_json::to_value(meta).ok()),
     }
 }

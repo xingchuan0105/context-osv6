@@ -22,6 +22,16 @@ async fn rag_document_qa_returns_citation() {
         .unwrap();
     assert_eq!(status, DocumentStatus::Completed);
 
+    // 2b. Verify PG recorded chunks
+    let chunk_count = ctx
+        .query_document_chunk_count(&upload.document_id)
+        .await
+        .unwrap();
+    assert!(
+        chunk_count > 0,
+        "expected chunk_count > 0 after successful ingestion, got {chunk_count}"
+    );
+
     // 3. Chat — returns HttpResponse (protocol layer)
     let http_resp: HttpResponse = ctx
         .chat(
@@ -41,6 +51,7 @@ async fn rag_document_qa_returns_citation() {
     // 6. Product assertions
     assert_has_citations(&resp);
     assert_citation_doc_id(&resp, &upload.document_id);
+    assert_citation_referenced_in_answer(&resp);
     assert_answer_has_doc_citation(&resp);
     assert_answer_substantive(&resp, 50);
 }

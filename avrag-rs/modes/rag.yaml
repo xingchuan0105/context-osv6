@@ -1,55 +1,19 @@
 mode: rag
-system_prompt_base: prompts/skills/rag-system/SKILL.md
-native_tools:
-  - name: dense_retrieval
-    version: "1.0"
-    description: "基于语义相似度检索文档片段。当需要查找与用户问题语义相关的文档内容时使用。"
-    input_schema:
-      type: object
-      properties:
-        queries:
-          type: array
-          items:
-            type: string
-          description: "检索查询列表，每个查询应包含用户问题的核心概念"
-        modality:
-          type: string
-          enum: [text, image]
-          default: text
-          description: "检索模态"
-        top_k:
-          type: integer
-          description: "返回最相关的 N 个片段"
-          default: 10
-          minimum: 1
-          maximum: 50
-        doc_scope:
-          type: array
-          items:
-            type: string
-          description: "限制检索范围的文档 ID 列表，空表示不限定"
-          default: []
-      required:
-        - queries
-    output_schema:
-      type: object
+system_prompt_base: prompts/orchestrators/rag-system.md
+tool_pool: []
 skill_catalog:
-  - rag-codegen-guide
-  - rag-retrieval-strategy
-  - rag-citation-format
-  - rag-memory-mgmt
-  - rag-doc-summary-guide
+  retrieve: [codegen, memory]
+  synthesis: [writing, format]
+  mandatory_synthesis: [rag-answer]
 disclosure:
   rounds:
     - round_idx: 0
-      load: Index
+      load: retrieve_cluster_index
     - round_idx: 1
-      load:
-        skills:
-          - rag-codegen-guide
-          - rag-retrieval-strategy
-    - round_idx: 2
-      load: Auto
+      load: skill_from_request
+  synthesis:
+    load: [skill_body_mandatory, writing_index, format_index, selected_skill_bodies]
+    tools: []
 budget:
   max_iterations: 4
   by_user_tier:
@@ -58,6 +22,16 @@ budget:
     enterprise: 4
 auto_fallback:
   enabled: true
-  tool_id: lexical_retrieval
+  tool_id: dense_retrieval
   top_k: 10
 temperature: 0.3
+query_normalization:
+  enabled: true
+  max_prior_turns: 6
+  llm_fallback: true
+loop_exit:
+  require_evidence: true
+  allow_content_early_stop: false
+  skip_synthesis_on_direct_answer: false
+synthesis_output:
+  contract: internal_answer_v1

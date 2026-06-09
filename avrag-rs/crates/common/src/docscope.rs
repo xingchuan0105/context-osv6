@@ -49,7 +49,12 @@ impl std::fmt::Display for Domain {
 
 impl From<&str> for Domain {
     fn from(value: &str) -> Self {
-        match value.trim().to_ascii_lowercase().replace([' ', '-'], "_").as_str() {
+        match value
+            .trim()
+            .to_ascii_lowercase()
+            .replace([' ', '-'], "_")
+            .as_str()
+        {
             "policy" => Self::Policy,
             "finance" => Self::Finance,
             "medical" | "medicine" | "healthcare" => Self::Medical,
@@ -119,7 +124,12 @@ impl std::fmt::Display for Genre {
 
 impl From<&str> for Genre {
     fn from(value: &str) -> Self {
-        match value.trim().to_ascii_lowercase().replace([' ', '-'], "_").as_str() {
+        match value
+            .trim()
+            .to_ascii_lowercase()
+            .replace([' ', '-'], "_")
+            .as_str()
+        {
             "regulation" | "regulatory" | "rule" => Self::Regulation,
             "report" => Self::Report,
             "research_paper" | "researchpaper" | "paper" | "academic_paper" => Self::ResearchPaper,
@@ -180,7 +190,12 @@ impl std::fmt::Display for Era {
 
 impl From<&str> for Era {
     fn from(value: &str) -> Self {
-        match value.trim().to_ascii_lowercase().replace([' ', '-'], "_").as_str() {
+        match value
+            .trim()
+            .to_ascii_lowercase()
+            .replace([' ', '-'], "_")
+            .as_str()
+        {
             "classical" => Self::Classical,
             "modern" => Self::Modern,
             "contemporary" => Self::Contemporary,

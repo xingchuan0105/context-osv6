@@ -1,5 +1,4 @@
 use super::AgentKind;
-use crate::agents::evaluator::EvaluationSignals;
 use crate::agents::events::AgentEventSink;
 use crate::agents::react_loop::DegradeReason;
 use common::{ChatTurnInput, Citation, DegradeTraceItem};
@@ -7,6 +6,44 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
+
+/// Objective signals computed from a single iteration's results.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct EvaluationSignals {
+    /// Total number of distinct results returned from this iteration.
+    pub recall_count: usize,
+    /// Highest retrieval score across results (0.0 if no results).
+    pub max_score: f32,
+    /// Fraction of significant query terms that appear in at least one hit.
+    /// Range: 0.0 (no overlap) to 1.0 (every term covered).
+    pub term_coverage: f32,
+    /// Subqueries that returned zero hits — useful for targeted broaden/replan.
+    pub zero_hits_per_subquery: Vec<String>,
+}
+
+impl EvaluationSignals {
+    /// Compute term coverage from a query and a list of result text snippets.
+    /// Lower-cases both sides; counts a term as covered if any snippet contains it.
+    /// Filters short stop-tokens (length < 3) so coverage isn't dominated by
+    /// articles and conjunctions.
+    pub fn compute_term_coverage(query: &str, result_texts: &[&str]) -> f32 {
+        let terms: Vec<String> = query
+            .split_whitespace()
+            .map(|t| t.to_lowercase())
+            .filter(|t| t.chars().count() >= 3)
+            .collect();
+        if terms.is_empty() {
+            return 1.0; // degenerate case — treat as fully covered.
+        }
+        let blob: String = result_texts
+            .iter()
+            .map(|t| t.to_lowercase())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let covered = terms.iter().filter(|t| blob.contains(t.as_str())).count();
+        covered as f32 / terms.len() as f32
+    }
+}
 
 // ---------------------------------------------------------------------------
 // TraceSpan — distributed tracing structures
@@ -124,6 +161,12 @@ pub struct AgentRequest {
     pub kind: AgentKind,
     /// User's natural language query.
     pub query: String,
+    /// Server-resolved query for retrieval/fallback (ADR-0008). Defaults to `query`.
+    #[serde(default)]
+    pub resolved_query: String,
+    /// Metadata from query normalization (ADR-0008).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_resolution: Option<crate::agents::r#loop::query_normalize::QueryResolutionMeta>,
     /// Notebook / workspace context.
     pub notebook_id: Option<String>,
     /// Session ID for continuity.
@@ -170,11 +213,41 @@ pub struct AgentRequest {
     pub guard_pipeline: Option<Arc<avrag_guardrails::GuardPipeline>>,
 }
 
+impl AgentRequest {
+    /// Query used for retrieval and server-side fallback.
+    pub fn effective_query(&self) -> &str {
+        if self.resolved_query.is_empty() {
+            &self.query
+        } else {
+            &self.resolved_query
+        }
+    }
+
+    pub fn with_resolved_query(
+        mut self,
+        resolved: String,
+        meta: Option<crate::agents::r#loop::query_normalize::QueryResolutionMeta>,
+    ) -> Self {
+        self.resolved_query = resolved;
+        self.query_resolution = meta;
+        self
+    }
+
+    /// Initialize `resolved_query` from `query` when unset.
+    pub fn ensure_resolved_query_defaults(&mut self) {
+        if self.resolved_query.is_empty() {
+            self.resolved_query = self.query.clone();
+        }
+    }
+}
+
 impl std::fmt::Debug for AgentRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AgentRequest")
             .field("kind", &self.kind)
             .field("query", &self.query)
+            .field("resolved_query", &self.resolved_query)
+            .field("query_resolution", &self.query_resolution)
             .field("notebook_id", &self.notebook_id)
             .field("session_id", &self.session_id)
             .field("doc_scope", &self.doc_scope)
@@ -227,15 +300,14 @@ pub struct AgentRunResult {
     /// Terminal decision of the loop. `None` for legacy single-shot agents.
     #[serde(default)]
     pub final_decision: Option<FinalDecision>,
+    /// Query normalization metadata from pre-loop normalizer (ADR-0008).
+    #[serde(default)]
+    pub query_resolution: Option<crate::agents::r#loop::query_normalize::QueryResolutionMeta>,
 
     // ===== v5 white-box fields (all serde(default) for backward compat) =====
     /// Trace ID for distributed tracing.
     #[serde(default)]
     pub trace_id: Option<String>,
-    /// Per-state execution history recorded by StrategyExecutor.
-    #[deprecated = "Replaced by iterations (ReActIterationRecord) in ADR-0006"]
-    #[serde(default)]
-    pub state_history: Option<Vec<StateRecord>>,
     /// Budget consumption snapshot at loop termination.
     #[serde(default)]
     pub budget_used: Option<BudgetUsage>,
@@ -256,21 +328,10 @@ pub struct AgentRunResult {
     pub tool_calls: Vec<ToolCallRecord>,
     /// Routing decision that selected this strategy (white-box observability).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub routing_decision: Option<crate::agents::capability::RoutingDecision>,
+    pub routing_decision: Option<String>,
     /// Evaluation summary synthesized across all iterations (white-box).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub eval_summary: Option<String>,
-}
-
-/// A single state execution record in the v5 StrategyExecutor.
-#[deprecated = "Replaced by ReActIterationRecord in ADR-0006"]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StateRecord {
-    pub state_id: String,
-    pub state_kind: String,
-    pub entered_at_ms: u64,
-    pub completed_at_ms: u64,
-    pub elapsed_ms: u64,
 }
 
 /// Budget consumption at a point in time.
@@ -347,6 +408,8 @@ pub struct IterationRecord {
 pub enum FinalDecision {
     /// Loop ended by handing accumulated context to the synthesizer.
     Synthesized,
+    /// Loop ended with a direct assistant answer, skipping synthesis (chat mode).
+    DirectAnswer,
     /// Loop ended by asking the user a clarifying question.
     Clarified { question: String },
     /// Loop ended by emitting a degrade trace and returning a partial answer.
@@ -388,6 +451,8 @@ mod tests {
         let req = AgentRequest {
             kind: AgentKind::Chat,
             query: "hello".to_string(),
+            resolved_query: "hello".to_string(),
+            query_resolution: None,
             notebook_id: Some("nb-1".to_string()),
             session_id: Some("sess-1".to_string()),
             doc_scope: vec!["doc-1".to_string()],
@@ -482,6 +547,14 @@ mod tests {
     }
 
     #[test]
+    fn test_final_decision_direct_answer_serde_tagged() {
+        let json = serde_json::to_string(&FinalDecision::DirectAnswer).unwrap();
+        assert_eq!(json, r#"{"kind":"direct_answer"}"#);
+        let parsed: FinalDecision = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, FinalDecision::DirectAnswer);
+    }
+
+    #[test]
     fn test_final_decision_clarified_carries_question() {
         let decision = FinalDecision::Clarified {
             question: "which dataset?".to_string(),
@@ -534,6 +607,7 @@ mod tests {
                     "assistant".to_string()
                 },
                 content: format!("msg-{i}"),
+                resolved_query: None,
             })
             .collect();
         let recent = super::recent_messages(&messages, super::MAX_PROMPT_HISTORY_TURNS);
@@ -548,6 +622,7 @@ mod tests {
             .map(|i| ChatTurnInput {
                 role: "user".to_string(),
                 content: format!("msg-{i}"),
+                resolved_query: None,
             })
             .collect();
         let recent = super::recent_messages(&messages, super::MAX_PROMPT_HISTORY_TURNS);
@@ -827,7 +902,6 @@ mod tests {
             "tool_results": [],
             "final_decision": null,
             "trace_id": null,
-            "state_history": null,
             "budget_used": null,
             "total_elapsed_ms": null,
             "trace": null,

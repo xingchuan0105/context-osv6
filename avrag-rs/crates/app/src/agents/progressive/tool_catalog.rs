@@ -9,10 +9,10 @@ static SEARCH_SPECIFIC_CATALOG: OnceLock<Vec<Tool>> = OnceLock::new();
 // Atomic tools (all modes)
 // ============================================================================
 
-/// Build the universal atomic tool catalog from declarative SKILL.md.
+/// Legacy compatibility catalog.
 ///
-/// Reads skills with `category: atomic-tool` from PromptRegistry and
-/// converts them to `Tool` instances for v4 compatibility.
+/// ADR-0007 keeps native tool schemas out of `PromptRegistry`, so this path
+/// now returns an empty catalog. Tool disclosure comes from mode config.
 ///
 /// For hot paths prefer [`atomic_tool_catalog_cached`].
 pub fn atomic_tool_catalog() -> Vec<Tool> {
@@ -81,9 +81,9 @@ pub fn evaluate_calculator_expression(expression: &str) -> Result<f64, String> {
 // Search-specific tools
 // ============================================================================
 
-/// Build the search-specific tool catalog from declarative SKILL.md.
+/// Legacy compatibility catalog.
 ///
-/// Reads the `web_search` skill from PromptRegistry.
+/// Search tool disclosure comes from `modes/search.yaml`, not PromptRegistry.
 /// For hot paths prefer [`search_specific_tools_cached`].
 pub fn search_specific_tools() -> Vec<Tool> {
     let prompt_registry = crate::agents::progressive::PromptRegistry::standard_cached();
@@ -141,19 +141,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_atomic_tool_catalog_has_all_atomic_tools() {
+    fn test_atomic_tool_catalog_is_empty_after_adr7_detach() {
         let tools = atomic_tool_catalog();
-        assert!(
-            tools.len() >= 3,
-            "expected at least 3 atomic tools, got {}",
-            tools.len()
-        );
-        let names: Vec<&str> = tools.iter().map(|t| t.spec().name.as_str()).collect();
-        assert!(names.contains(&"calculator"), "missing calculator");
-        assert!(
-            names.contains(&"code_interpreter"),
-            "missing code_interpreter"
-        );
-        assert!(names.contains(&"weather_query"), "missing weather_query");
+        assert!(tools.is_empty());
     }
 }

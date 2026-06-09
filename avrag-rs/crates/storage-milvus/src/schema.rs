@@ -1,6 +1,6 @@
-use serde_json::{Value, json};
 use crate::config::MilvusConfig;
 use avrag_auth::AuthContext;
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 pub const TEXT_OUTPUT_FIELDS: [&str; 11] = [
@@ -321,12 +321,13 @@ pub fn validate_existing_collection_schema(
     expected_schema: &Value,
     describe_response: &Value,
 ) -> crate::types::Result<()> {
-    let expected_fields =
-        schema_fields(expected_schema).ok_or_else(|| crate::types::MilvusStorageError::Backend {
+    let expected_fields = schema_fields(expected_schema).ok_or_else(|| {
+        crate::types::MilvusStorageError::Backend {
             message: format!(
                 "collection {collection_name} expected schema has no fields; cannot validate"
             ),
-        })?;
+        }
+    })?;
 
     let actual_fields =
         describe_schema_fields(describe_response).ok_or_else(|| crate::types::MilvusStorageError::Backend {
@@ -425,7 +426,9 @@ pub fn describe_schema_fields(response: &Value) -> Option<&Vec<Value>> {
 pub fn field_name(field: &Value) -> Option<&str> {
     // Milvus v2.4: fieldName
     // Milvus v2.6+: name
-    field["fieldName"].as_str().or_else(|| field["name"].as_str())
+    field["fieldName"]
+        .as_str()
+        .or_else(|| field["name"].as_str())
 }
 
 pub fn field_data_type(field: &Value) -> Option<String> {

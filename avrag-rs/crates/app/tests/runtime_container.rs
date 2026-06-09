@@ -18,6 +18,7 @@ async fn runtime_new_memory_requires_configured_chat_agent() {
             doc_scope: Vec::new(),
             messages: Vec::new(),
             stream: false,
+            debug: false,
             language: None,
             format_hint: None,
         })

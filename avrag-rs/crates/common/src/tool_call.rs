@@ -143,6 +143,7 @@ pub struct DenseRetrievalArgs {
 pub enum DenseRetrievalModality {
     #[default]
     Text,
+    #[serde(alias = "image")]
     Mm,
     Both,
 }
@@ -270,9 +271,10 @@ impl ExecutePlanRequest {
         for call in calls {
             match call.tool.as_str() {
                 "dense_retrieval" => {
-                    let args: DenseRetrievalArgs = serde_json::from_value(call.args).map_err(
-                        |e| ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string()),
-                    )?;
+                    let args: DenseRetrievalArgs =
+                        serde_json::from_value(call.args).map_err(|e| {
+                            ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string())
+                        })?;
                     for (idx, query) in args.queries.into_iter().enumerate() {
                         let priority = 1.0 - (idx as f32 * 0.1);
                         items.push(ExecutePlanItem {
@@ -283,9 +285,10 @@ impl ExecutePlanRequest {
                     }
                 }
                 "lexical_retrieval" => {
-                    let args: LexicalRetrievalArgs = serde_json::from_value(call.args).map_err(
-                        |e| ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string()),
-                    )?;
+                    let args: LexicalRetrievalArgs =
+                        serde_json::from_value(call.args).map_err(|e| {
+                            ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string())
+                        })?;
                     items.push(ExecutePlanItem {
                         priority: 1.0,
                         query: None,
@@ -293,16 +296,17 @@ impl ExecutePlanRequest {
                     });
                 }
                 "graph_retrieval" => {
-                    let args: GraphRetrievalArgs = serde_json::from_value(call.args).map_err(
-                        |e| ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string()),
-                    )?;
+                    let args: GraphRetrievalArgs =
+                        serde_json::from_value(call.args).map_err(|e| {
+                            ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string())
+                        })?;
                     graph_hints.extend(args.graph_hints);
                     placeholder_triplets.extend(args.placeholder_triplets);
                 }
                 "doc_summary" => {
-                    let args: DocSummaryArgs = serde_json::from_value(call.args).map_err(
-                        |e| ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string()),
-                    )?;
+                    let args: DocSummaryArgs = serde_json::from_value(call.args).map_err(|e| {
+                        ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string())
+                    })?;
                     summary_mode = match args.level {
                         DocSummaryLevel::Doc => ExecutePlanSummaryMode::All,
                         DocSummaryLevel::Section => ExecutePlanSummaryMode::Related,
@@ -320,9 +324,8 @@ impl ExecutePlanRequest {
             }
         }
 
-        let has_retrieval = !items.is_empty()
-            || !graph_hints.is_empty()
-            || !placeholder_triplets.is_empty();
+        let has_retrieval =
+            !items.is_empty() || !graph_hints.is_empty() || !placeholder_triplets.is_empty();
         let has_summary = summary_mode != ExecutePlanSummaryMode::None;
         if !has_retrieval && !has_summary {
             return Err(ToolCallAdapterError::EmptyCalls);
@@ -608,5 +611,15 @@ mod tests {
         .unwrap();
         assert_eq!(req.items.len(), 1);
         assert_eq!(req.graph_hints.len(), 1);
+    }
+
+    #[test]
+    fn dense_retrieval_modality_accepts_image_alias_for_mm() {
+        let args: DenseRetrievalArgs = serde_json::from_value(serde_json::json!({
+            "queries": ["test"],
+            "modality": "image",
+        }))
+        .unwrap();
+        assert_eq!(args.modality, DenseRetrievalModality::Mm);
     }
 }

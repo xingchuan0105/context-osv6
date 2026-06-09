@@ -2,8 +2,8 @@
 //!
 //! **Provider vs app cache:** DashScope `text-embedding-v4` has no provider-level
 //! embedding cache. Production caching lives in Redis (`EmbeddingClient::with_cache`
-//! in `avrag-llm`). This test is `#[ignore]` because RAG may embed different
-//! query strings per turn, so call-count stability is not guaranteed.
+//! in `avrag-llm`). This test uses the embedding-cache `TestContext` profile,
+//! which starts a dedicated Redis container for the full RAG path.
 //!
 //! Prefer the unit test `embed_openai_compatible_text_caches_in_redis` in
 //! `avrag-llm/src/embedding.rs`, which asserts same-text → Redis hit → one HTTP call.
@@ -13,7 +13,6 @@ use std::time::Duration;
 use crate::product_e2e::{DocumentStatus, TestContext, assertions::*};
 
 #[tokio::test]
-#[ignore = "manual gate: requires Redis docker; RAG embedding texts may differ per query"]
 async fn identical_rag_query_hits_embedding_cache() {
     let mut ctx = TestContext::new_embedding_cache().await;
 
@@ -28,10 +27,7 @@ async fn identical_rag_query_hits_embedding_cache() {
     let scope = [upload.document_id.clone()];
 
     let before = ctx.embedding_call_count();
-    let first = ctx
-        .chat(query, &upload.notebook_id, &scope)
-        .await
-        .unwrap();
+    let first = ctx.chat(query, &upload.notebook_id, &scope).await.unwrap();
     assert_http_ok(&first);
     let after_first = ctx.embedding_call_count();
     assert!(
@@ -39,10 +35,7 @@ async fn identical_rag_query_hits_embedding_cache() {
         "first query should call mock embedding at least once"
     );
 
-    let second = ctx
-        .chat(query, &upload.notebook_id, &scope)
-        .await
-        .unwrap();
+    let second = ctx.chat(query, &upload.notebook_id, &scope).await.unwrap();
     assert_http_ok(&second);
     let after_second = ctx.embedding_call_count();
     let delta_first = after_first.saturating_sub(before);

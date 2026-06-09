@@ -36,10 +36,12 @@ fn usage_forecast_response_shape_matches_spec() {
     assert_eq!(json["current_limit_7d"], 400000);
     assert_eq!(json["upgrade_recommended"], false);
     assert!(json["suggestion_zh"].as_str().unwrap().contains("无需升级"));
-    assert!(json["suggestion_en"]
-        .as_str()
-        .unwrap()
-        .contains("no upgrade needed"));
+    assert!(
+        json["suggestion_en"]
+            .as_str()
+            .unwrap()
+            .contains("no upgrade needed")
+    );
 }
 
 #[sqlx::test]
@@ -47,13 +49,12 @@ async fn usage_forecast_aggregates_30d_token_usage_from_llm_usage_events(pool: P
     sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
 
     // Seed user + org.
-    let org_id: Uuid = sqlx::query_scalar(
-        "insert into organizations (name) values ($1) returning id",
-    )
-    .bind(format!("org-{}", Uuid::new_v4()))
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let org_id: Uuid =
+        sqlx::query_scalar("insert into organizations (name) values ($1) returning id")
+            .bind(format!("org-{}", Uuid::new_v4()))
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
     let user_id: Uuid = sqlx::query_scalar(
         "insert into users (org_id, email, full_name) values ($1, $2, $3) returning id",

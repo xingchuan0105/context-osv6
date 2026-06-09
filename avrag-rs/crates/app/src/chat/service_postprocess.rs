@@ -88,6 +88,10 @@ impl AppState {
                 trace: None,
             }
         }).collect();
+        let user_turn_metadata = execution
+            .query_resolution
+            .clone()
+            .map(|meta| serde_json::json!({ "query_resolution": meta }));
         let assistant_message_id = pg
             .append_chat_turn(
                 &self.auth,
@@ -99,6 +103,7 @@ impl AppState {
                     agent_type: &req.agent_type,
                     citations: &execution.response.citations,
                     tool_results: &tool_results,
+                    user_turn_metadata,
                 },
             )
             .await

@@ -193,7 +193,9 @@ impl EvaluationHarness {
 
         // ─── GENERATION ────────────────────────────────────────────────────────
         let answer = if let Some(ref evaluator) = self.evaluator {
-            evaluator.synthesize(&example.query, &retrieved_chunks).await?
+            evaluator
+                .synthesize(&example.query, &retrieved_chunks)
+                .await?
         } else {
             String::new()
         };

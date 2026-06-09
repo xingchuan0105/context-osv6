@@ -9,4 +9,6 @@ pub struct ReActIterationRecord {
     pub observation_preview: String,
     pub llm_usage: Option<AgentRunUsage>,
     pub elapsed_ms: u64,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub exit_reason: String,
 }

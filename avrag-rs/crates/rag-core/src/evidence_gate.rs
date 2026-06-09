@@ -203,12 +203,22 @@ fn theme_overlap_ratio(query: &[String], doc: &[String]) -> f32 {
     let q: std::collections::HashSet<String> = query
         .iter()
         .map(|s| s.to_lowercase())
-        .flat_map(|lower| lower.split_whitespace().map(str::to_owned).collect::<Vec<_>>())
+        .flat_map(|lower| {
+            lower
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
         .collect();
     let d: std::collections::HashSet<String> = doc
         .iter()
         .map(|s| s.to_lowercase())
-        .flat_map(|lower| lower.split_whitespace().map(str::to_owned).collect::<Vec<_>>())
+        .flat_map(|lower| {
+            lower
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
         .collect();
     let intersection = q.intersection(&d).count() as f32;
     let union = q.union(&d).count() as f32;

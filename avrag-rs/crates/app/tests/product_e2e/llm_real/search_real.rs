@@ -9,7 +9,7 @@
 use crate::product_e2e::{
     TestContext,
     assertions::{assert_answer_has_web_citation, assert_answer_substantive, assert_has_citations},
-    llm_real::search_with_retry,
+    llm_real::{merge_llm_real_extra, search_with_retry},
 };
 
 /// P0: Open-domain search query returns a substantive answer with at least
@@ -27,17 +27,18 @@ async fn real_llm_search_open_query_returns_web_citation() {
         .await
         .expect("create notebook");
 
-    let (_http_resp, resp) = search_with_retry(
+    let result = search_with_retry(
         &ctx,
         "What is the current weather in Tokyo today?",
         &notebook.id,
     )
     .await;
+    let resp = &result.resp;
 
     // Product assertions — align with smoke/search_smoke: web citations + substance.
-    assert_has_citations(&resp);
-    assert_answer_has_web_citation(&resp);
-    assert_answer_substantive(&resp, 30);
+    assert_has_citations(resp);
+    assert_answer_has_web_citation(resp);
+    assert_answer_substantive(resp, 30);
     assert!(
         resp.degrade_trace.is_empty(),
         "expected no degradation trace on the happy path, got: {:?}",
@@ -47,7 +48,8 @@ async fn real_llm_search_open_query_returns_web_citation() {
     // Persist artifact for audit even on pass.
     ctx.save_llm_artifact(
         "real_llm_search_open_query_returns_web_citation",
-        &resp,
-        None,
+        resp,
+        merge_llm_real_extra(&result, None),
+        Some(result.reasoning),
     );
 }

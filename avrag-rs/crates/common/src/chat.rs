@@ -57,6 +57,8 @@ pub struct ChatMessage {
     pub citations: Vec<Citation>,
     #[serde(default)]
     pub tool_results: Vec<ToolResult>,
+    #[serde(default)]
+    pub turn_metadata: Option<serde_json::Value>,
     pub created_at: String,
 }
 

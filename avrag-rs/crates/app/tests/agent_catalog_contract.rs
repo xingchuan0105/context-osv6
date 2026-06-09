@@ -1,4 +1,4 @@
-//! Contract tests for capability catalog and strategy schemas (UnifiedAgent era).
+//! Contract tests for capability catalog and mode schemas (UnifiedAgent era).
 //!
 //! Replaces deprecated `strategy_*` integration tests that exercised the removed
 //! ChatStrategy / RagStrategy / SearchStrategy state machines.
@@ -19,15 +19,15 @@ fn chat_conversation_history_tools_in_catalog() {
 }
 
 #[test]
-fn static_strategy_schemas_match_capability_registry() {
+fn static_mode_schemas_match_capability_registry() {
     let registry = app::agents::capability::CapabilityRegistry::standard();
 
-    let chat = app::agents::capability::chat_schema();
-    assert_eq!(registry.strategy("chat").unwrap().states, chat.states);
+    let chat = app::agents::capability::chat_mode_schema();
+    assert_eq!(registry.mode("chat").unwrap(), &chat);
 
-    let rag = app::agents::capability::rag_schema();
-    assert_eq!(registry.strategy("rag").unwrap().states, rag.states);
+    let rag = app::agents::capability::rag_mode_schema();
+    assert_eq!(registry.mode("rag").unwrap(), &rag);
 
-    let search = app::agents::capability::search_schema();
-    assert_eq!(registry.strategy("search").unwrap().states, search.states);
+    let search = app::agents::capability::search_mode_schema();
+    assert_eq!(registry.mode("search").unwrap(), &search);
 }

@@ -878,6 +878,7 @@ mod tests {
             doc_scope: doc_scope.iter().map(|value| value.to_string()).collect(),
             messages: Vec::new(),
             stream: false,
+            debug: false,
             language: None,
             format_hint: None,
         }

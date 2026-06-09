@@ -10,6 +10,14 @@
 //! Run serially with:
 //!   cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1 --nocapture
 //!
+//! Artifacts: `crates/app/tests/e2e_output/llm_real/{run_id}/{test_name}/`
+//!   - `response.json`, `reasoning_summary.txt`, `trace_reasoning.jsonl`, `prompt_snapshots.json`, `metadata.json`
+//! Streaming requests use `debug: true` so prompt_snapshot trace events are emitted.
+//! `trace_reasoning.jsonl` comes from loop telemetry (PlanDecision / Evaluation), not LLM eval.
+//! `metadata.reasoning_empty_warning` is true only when both summary and trace_reasoning are empty
+//! (usually indicates dropped SSE traces, not a non-thinking model).
+//! `metadata.stream_error_with_done` flags final-attempt error+done coexistence.
+//!
 //! Required environment (loaded from the repository `.env` if not already set):
 //!   AGENT_LLM_BASE_URL, AGENT_LLM_API_KEY, AGENT_LLM_MODEL
 //!   MEMORY_LLM_BASE_URL, MEMORY_LLM_API_KEY, MEMORY_LLM_MODEL
@@ -18,7 +26,10 @@
 //!   SEARCH_PROVIDER, SEARCH_BASE_URL, SEARCH_API_KEY (search tests only)
 //!   SEARCH_REQUIRE_REAL=1 — fail instead of mock fallback when Brave unreachable (search_real sets this)
 
-use crate::product_e2e::TestContext;
+use crate::product_e2e::{
+    ChatResponse, ChatStreamParams, SseEvent, StreamReasoningCapture, TestContext,
+    TraceReasoningRecord,
+};
 
 /// Load key/value pairs from the repository `.env` file into the process
 /// environment.  This lets real-LLM tests discover credentials without
@@ -117,267 +128,342 @@ pub fn ensure_search_defaults() {
 /// Max attempts for non-deterministic real-LLM chat/search calls.
 pub const REAL_LLM_MAX_ATTEMPTS: usize = 2;
 
+/// Stream deadline for real-LLM runs (thinking models can be slow).
+pub const REAL_LLM_STREAM_DEADLINE: std::time::Duration = std::time::Duration::from_secs(180);
+
+/// Safety cap on SSE events (thinking models emit many small deltas).
+pub const REAL_LLM_STREAM_MAX_EVENTS: usize = 4096;
+
 const RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
 
-/// Retry chat until HTTP 200 with a non-empty answer, or exhaust attempts.
-pub async fn chat_with_retry(
-    ctx: &TestContext,
-    query: &str,
-    notebook_id: &str,
-    doc_scope: &[String],
-) -> (crate::product_e2e::HttpResponse, crate::product_e2e::ChatResponse) {
-    use crate::product_e2e::assertions::assert_http_ok;
+/// Real-LLM chat result with streamed reasoning capture for offline analysis.
+#[derive(Debug, Clone)]
+pub struct LlmRealChatResult {
+    pub resp: ChatResponse,
+    pub reasoning: StreamReasoningCapture,
+    /// True when the final attempt had both an SSE `error` event and a `done` payload.
+    pub stream_error_with_done: bool,
+}
 
-    let mut last_http = None;
-    for attempt in 1..=REAL_LLM_MAX_ATTEMPTS {
-        let http_resp = ctx
-            .chat(query, notebook_id, doc_scope)
-            .await
-            .expect("chat request");
-        last_http = Some(http_resp.clone());
+/// Collect reasoning deltas, trace reasoning, and prompt snapshots from SSE events.
+pub fn collect_observability_from_events(events: &[SseEvent]) -> StreamReasoningCapture {
+    let mut summary = String::new();
+    let mut delta_count = 0usize;
+    let mut trace_reasoning = Vec::new();
+    let mut prompt_snapshots = Vec::new();
 
-        if http_resp.status != 200 {
-            eprintln!(
-                "[llm_real] chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} HTTP {}; body={}",
-                http_resp.status, http_resp.body_json
-            );
-            if attempt < REAL_LLM_MAX_ATTEMPTS {
-                tokio::time::sleep(RETRY_DELAY).await;
-                continue;
+    for event in events {
+        match event.event.as_str() {
+            "reasoning_summary_delta" => {
+                if let Some(chunk) = event.data.get("content").and_then(|v| v.as_str()) {
+                    summary.push_str(chunk);
+                    delta_count += 1;
+                }
             }
-            assert_http_ok(&http_resp);
-        }
+            "trace" => {
+                let stage = event
+                    .data
+                    .get("stage")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let detail = event
+                    .data
+                    .get("detail")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
 
-        let resp: crate::product_e2e::ChatResponse = match http_resp.clone().into_business() {
-            Ok(resp) => resp,
+                if stage == "prompt_snapshot" {
+                    prompt_snapshots.push(detail.clone());
+                }
+
+                if let Some(reasoning) = detail.get("reasoning").and_then(|v| v.as_str()) {
+                    if !reasoning.is_empty() {
+                        trace_reasoning.push(TraceReasoningRecord {
+                            stage: stage.clone(),
+                            reasoning: serde_json::Value::String(reasoning.to_string()),
+                            detail: detail.clone(),
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    StreamReasoningCapture {
+        summary,
+        delta_count,
+        trace_reasoning,
+        prompt_snapshots,
+    }
+}
+
+/// Concatenate all `reasoning_summary_delta` chunks from an SSE event stream.
+pub fn collect_reasoning_summary_from_events(events: &[SseEvent]) -> StreamReasoningCapture {
+    collect_observability_from_events(events)
+}
+
+/// Merge per-test `extra` fields with stream observability warnings from the result.
+pub fn merge_llm_real_extra(
+    result: &LlmRealChatResult,
+    extra: Option<serde_json::Value>,
+) -> Option<serde_json::Value> {
+    let mut obj = extra
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+    if result.stream_error_with_done {
+        obj.insert("stream_error_with_done".into(), serde_json::json!(true));
+    }
+    if obj.is_empty() {
+        None
+    } else {
+        Some(serde_json::Value::Object(obj))
+    }
+}
+
+/// Parse the terminal `done` payload into a typed [`ChatResponse`].
+pub fn parse_chat_response_from_stream_events(events: &[SseEvent]) -> Option<ChatResponse> {
+    for event in events.iter().rev() {
+        if event.event != "done" {
+            continue;
+        }
+        let payload = event
+            .data
+            .get("payload")
+            .cloned()
+            .unwrap_or_else(|| event.data.clone());
+        if let Ok(resp) = serde_json::from_value::<ChatResponse>(payload) {
+            return Some(resp);
+        }
+    }
+    None
+}
+
+fn stream_had_error(events: &[SseEvent]) -> bool {
+    events.iter().any(|e| e.event == "error")
+}
+
+async fn chat_stream_once(
+    ctx: &TestContext,
+    params: &ChatStreamParams<'_>,
+) -> anyhow::Result<(Vec<SseEvent>, Option<ChatResponse>, StreamReasoningCapture)> {
+    let events = ctx
+        .chat_stream_with_params(
+            ChatStreamParams {
+                query: params.query,
+                agent_type: params.agent_type,
+                notebook_id: params.notebook_id,
+                doc_scope: params.doc_scope,
+                session_id: params.session_id,
+                format_hint: params.format_hint,
+                debug: params.debug,
+            },
+            REAL_LLM_STREAM_MAX_EVENTS,
+            REAL_LLM_STREAM_DEADLINE,
+        )
+        .await?;
+    let capture = collect_observability_from_events(&events);
+    let resp = parse_chat_response_from_stream_events(&events);
+    Ok((events, resp, capture))
+}
+
+async fn chat_stream_with_retry_inner(
+    ctx: &TestContext,
+    params: ChatStreamParams<'_>,
+    ready: impl Fn(&ChatResponse) -> bool,
+    label: &str,
+) -> LlmRealChatResult {
+    let mut last = None;
+    let mut last_stream_error_with_done = false;
+    for attempt in 1..=REAL_LLM_MAX_ATTEMPTS {
+        let (events, resp, reasoning) = match chat_stream_once(ctx, &params).await {
+            Ok(result) => result,
             Err(err) => {
                 eprintln!(
-                    "[llm_real] chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} invalid body: {err}; body={}",
-                    http_resp.body_json
+                    "[llm_real] {label} attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} stream error: {err}"
                 );
                 if attempt < REAL_LLM_MAX_ATTEMPTS {
                     tokio::time::sleep(RETRY_DELAY).await;
                     continue;
                 }
-                panic!("valid ChatResponse schema: {err}");
+                panic!("{label} stream failed: {err}");
             }
         };
 
-        if !resp.answer.is_empty() {
-            return (http_resp, resp);
+        let had_stream_error = stream_had_error(&events);
+        if had_stream_error {
+            eprintln!(
+                "[llm_real] {label} attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} stream error event; last={:?}",
+                events.last().map(|e| e.event.as_str())
+            );
+        }
+
+        let Some(resp) = resp else {
+            eprintln!(
+                "[llm_real] {label} attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} missing done payload; events={}",
+                events.len()
+            );
+            if attempt < REAL_LLM_MAX_ATTEMPTS {
+                tokio::time::sleep(RETRY_DELAY).await;
+                continue;
+            }
+            panic!("{label} stream missing terminal done payload");
+        };
+
+        if had_stream_error && attempt == REAL_LLM_MAX_ATTEMPTS {
+            eprintln!(
+                "[llm_real] {label} WARNING: final attempt had error event but also produced done payload"
+            );
+            last_stream_error_with_done = true;
+        }
+
+        if had_stream_error && attempt < REAL_LLM_MAX_ATTEMPTS && !ready(&resp) {
+            tokio::time::sleep(RETRY_DELAY).await;
+            continue;
+        }
+
+        if had_stream_error && attempt < REAL_LLM_MAX_ATTEMPTS && ready(&resp) {
+            eprintln!(
+                "[llm_real] {label} WARNING: accepting ready response on attempt {attempt} despite stream error event"
+            );
+        }
+
+        last = Some(LlmRealChatResult {
+            resp: resp.clone(),
+            reasoning: reasoning.clone(),
+            stream_error_with_done: last_stream_error_with_done,
+        });
+
+        if ready(&resp) {
+            return LlmRealChatResult {
+                resp,
+                reasoning,
+                stream_error_with_done: last_stream_error_with_done,
+            };
         }
 
         eprintln!(
-            "[llm_real] chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} empty answer; retrying after {}s",
+            "[llm_real] {label} attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} not ready \
+             (answer_len={}, degrade={:?}, reasoning_deltas={}); retrying after {}s",
+            resp.answer.len(),
+            resp.degrade_trace,
+            reasoning.delta_count,
             RETRY_DELAY.as_secs()
         );
         if attempt < REAL_LLM_MAX_ATTEMPTS {
             tokio::time::sleep(RETRY_DELAY).await;
-        } else {
-            return (http_resp, resp);
         }
     }
 
-    let http = last_http.expect("chat produced no response");
-    assert_http_ok(&http);
-    let resp = http.clone().into_business().expect("valid ChatResponse schema");
-    (http, resp)
+    let result = last.unwrap_or_else(|| panic!("{label} stream produced no usable response"));
+    if !ready(&result.resp) {
+        panic!(
+            "{label} stream produced response but readiness check failed on final attempt \
+             (answer_len={}, degrade={:?})",
+            result.resp.answer.len(),
+            result.resp.degrade_trace
+        );
+    }
+    result
 }
 
-/// Retry RAG chat with format_hint until HTTP 200 with non-empty answer.
+/// Retry streaming RAG chat until a non-empty answer, capturing reasoning deltas.
+pub async fn chat_with_retry(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+    doc_scope: &[String],
+) -> LlmRealChatResult {
+    chat_stream_with_retry_inner(
+        ctx,
+        ChatStreamParams {
+            query,
+            agent_type: "rag",
+            notebook_id,
+            doc_scope,
+            session_id: None,
+            format_hint: None,
+            debug: true,
+        },
+        |resp| !resp.answer.is_empty(),
+        "rag chat",
+    )
+    .await
+}
+
+/// Retry streaming RAG chat with format_hint until a non-empty answer.
 pub async fn chat_with_format_retry(
     ctx: &TestContext,
     query: &str,
     notebook_id: &str,
     doc_scope: &[String],
     format_hint: &str,
-) -> (crate::product_e2e::HttpResponse, crate::product_e2e::ChatResponse) {
-    use crate::product_e2e::assertions::assert_http_ok;
-
-    let mut last_http = None;
-    for attempt in 1..=REAL_LLM_MAX_ATTEMPTS {
-        let http_resp = ctx
-            .chat_with_format_hint(query, notebook_id, doc_scope, Some(format_hint))
-            .await
-            .expect("chat with format_hint request");
-        last_http = Some(http_resp.clone());
-
-        if http_resp.status != 200 {
-            eprintln!(
-                "[llm_real] format chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} HTTP {}; body={}",
-                http_resp.status, http_resp.body_json
-            );
-            if attempt < REAL_LLM_MAX_ATTEMPTS {
-                tokio::time::sleep(RETRY_DELAY).await;
-                continue;
-            }
-            assert_http_ok(&http_resp);
-        }
-
-        let resp: crate::product_e2e::ChatResponse = match http_resp.clone().into_business() {
-            Ok(resp) => resp,
-            Err(err) => {
-                eprintln!(
-                    "[llm_real] format chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} invalid body: {err}; body={}",
-                    http_resp.body_json
-                );
-                if attempt < REAL_LLM_MAX_ATTEMPTS {
-                    tokio::time::sleep(RETRY_DELAY).await;
-                    continue;
-                }
-                panic!("valid ChatResponse schema: {err}");
-            }
-        };
-
-        if !resp.answer.is_empty() {
-            return (http_resp, resp);
-        }
-
-        eprintln!(
-            "[llm_real] format chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} empty answer; retrying after {}s",
-            RETRY_DELAY.as_secs()
-        );
-        if attempt < REAL_LLM_MAX_ATTEMPTS {
-            tokio::time::sleep(RETRY_DELAY).await;
-        } else {
-            return (http_resp, resp);
-        }
-    }
-
-    let http = last_http.expect("format chat produced no response");
-    assert_http_ok(&http);
-    let resp = http.clone().into_business().expect("valid ChatResponse schema");
-    (http, resp)
+) -> LlmRealChatResult {
+    chat_stream_with_retry_inner(
+        ctx,
+        ChatStreamParams {
+            query,
+            agent_type: "rag",
+            notebook_id,
+            doc_scope,
+            session_id: None,
+            format_hint: Some(format_hint),
+            debug: true,
+        },
+        |resp| !resp.answer.is_empty(),
+        "format chat",
+    )
+    .await
 }
 
-/// Retry multi-turn RAG chat with an existing session_id.
+/// Retry streaming multi-turn RAG chat with an existing session_id.
 pub async fn chat_with_session_retry(
     ctx: &TestContext,
     query: &str,
     notebook_id: &str,
     doc_scope: &[String],
     session_id: &str,
-) -> (crate::product_e2e::HttpResponse, crate::product_e2e::ChatResponse) {
-    use crate::product_e2e::assertions::assert_http_ok;
-
-    let mut last_http = None;
-    for attempt in 1..=REAL_LLM_MAX_ATTEMPTS {
-        let http_resp = ctx
-            .chat_with_session(query, notebook_id, doc_scope, session_id)
-            .await
-            .expect("chat with session request");
-        last_http = Some(http_resp.clone());
-
-        if http_resp.status != 200 {
-            eprintln!(
-                "[llm_real] session chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} HTTP {}; body={}",
-                http_resp.status, http_resp.body_json
-            );
-            if attempt < REAL_LLM_MAX_ATTEMPTS {
-                tokio::time::sleep(RETRY_DELAY).await;
-                continue;
-            }
-            assert_http_ok(&http_resp);
-        }
-
-        let resp: crate::product_e2e::ChatResponse = match http_resp.clone().into_business() {
-            Ok(resp) => resp,
-            Err(err) => {
-                eprintln!(
-                    "[llm_real] session chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} invalid body: {err}; body={}",
-                    http_resp.body_json
-                );
-                if attempt < REAL_LLM_MAX_ATTEMPTS {
-                    tokio::time::sleep(RETRY_DELAY).await;
-                    continue;
-                }
-                panic!("valid ChatResponse schema: {err}");
-            }
-        };
-
-        if !resp.answer.is_empty() {
-            return (http_resp, resp);
-        }
-
-        eprintln!(
-            "[llm_real] session chat attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} empty answer; retrying after {}s",
-            RETRY_DELAY.as_secs()
-        );
-        if attempt < REAL_LLM_MAX_ATTEMPTS {
-            tokio::time::sleep(RETRY_DELAY).await;
-        } else {
-            return (http_resp, resp);
-        }
-    }
-
-    let http = last_http.expect("session chat produced no response");
-    assert_http_ok(&http);
-    let resp = http.clone().into_business().expect("valid ChatResponse schema");
-    (http, resp)
+) -> LlmRealChatResult {
+    chat_stream_with_retry_inner(
+        ctx,
+        ChatStreamParams {
+            query,
+            agent_type: "rag",
+            notebook_id,
+            doc_scope,
+            session_id: Some(session_id),
+            format_hint: None,
+            debug: true,
+        },
+        |resp| !resp.answer.is_empty(),
+        "session chat",
+    )
+    .await
 }
 
-/// Retry search until HTTP 200 with a non-empty answer, or exhaust attempts.
+/// Retry streaming search until a non-empty, non-degraded answer.
 pub async fn search_with_retry(
     ctx: &TestContext,
     query: &str,
     notebook_id: &str,
-) -> (crate::product_e2e::HttpResponse, crate::product_e2e::ChatResponse) {
-    use crate::product_e2e::assertions::assert_http_ok;
-
-    let mut last_http = None;
-    for attempt in 1..=REAL_LLM_MAX_ATTEMPTS {
-        let http_resp = ctx.search(query, notebook_id).await.expect("search request");
-        last_http = Some(http_resp.clone());
-
-        if http_resp.status != 200 {
-            eprintln!(
-                "[llm_real] search attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} HTTP {}; body={}",
-                http_resp.status, http_resp.body_json
-            );
-            if attempt < REAL_LLM_MAX_ATTEMPTS {
-                tokio::time::sleep(RETRY_DELAY).await;
-                continue;
-            }
-            assert_http_ok(&http_resp);
-        }
-
-        let resp: crate::product_e2e::ChatResponse = match http_resp.clone().into_business() {
-            Ok(resp) => resp,
-            Err(err) => {
-                eprintln!(
-                    "[llm_real] search attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} invalid body: {err}; body={}",
-                    http_resp.body_json
-                );
-                if attempt < REAL_LLM_MAX_ATTEMPTS {
-                    tokio::time::sleep(RETRY_DELAY).await;
-                    continue;
-                }
-                panic!("valid ChatResponse schema: {err}");
-            }
-        };
-
-        if !resp.answer.is_empty() && resp.degrade_trace.is_empty() {
-            return (http_resp, resp);
-        }
-
-        eprintln!(
-            "[llm_real] search attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} not ready \
-             (answer_len={}, degrade={:?}); retrying after {}s",
-            resp.answer.len(),
-            resp.degrade_trace,
-            RETRY_DELAY.as_secs()
-        );
-        if attempt < REAL_LLM_MAX_ATTEMPTS {
-            tokio::time::sleep(RETRY_DELAY).await;
-        } else {
-            return (http_resp, resp);
-        }
-    }
-
-    let http = last_http.expect("search produced no response");
-    assert_http_ok(&http);
-    let resp = http.clone().into_business().expect("valid ChatResponse schema");
-    (http, resp)
+) -> LlmRealChatResult {
+    let empty_scope: &[String] = &[];
+    chat_stream_with_retry_inner(
+        ctx,
+        ChatStreamParams {
+            query,
+            agent_type: "search",
+            notebook_id,
+            doc_scope: empty_scope,
+            session_id: None,
+            format_hint: None,
+            debug: true,
+        },
+        |resp| !resp.answer.is_empty() && resp.degrade_trace.is_empty(),
+        "search",
+    )
+    .await
 }
 
 /// Guard that fails fast if a required real-LLM credential is missing.
@@ -419,6 +505,139 @@ impl TestContext {
         // - does not start mock LLM/Embedding servers
         // - uses real Brave when credentials + connectivity allow, else mock search
         Self::build_smoke(true, 300, None, true, None, false).await
+    }
+}
+
+#[cfg(test)]
+mod stream_reasoning_tests {
+    use super::*;
+    use crate::product_e2e::SseEvent;
+
+    #[test]
+    fn collect_reasoning_summary_concatenates_deltas() {
+        let events = vec![
+            SseEvent {
+                event: "reasoning_summary_delta".to_string(),
+                data: serde_json::json!({"content": "Step 1. "}),
+            },
+            SseEvent {
+                event: "token".to_string(),
+                data: serde_json::json!({"content": "answer"}),
+            },
+            SseEvent {
+                event: "reasoning_summary_delta".to_string(),
+                data: serde_json::json!({"content": "Step 2."}),
+            },
+        ];
+        let capture = collect_observability_from_events(&events);
+        assert_eq!(capture.summary, "Step 1. Step 2.");
+        assert_eq!(capture.delta_count, 2);
+        assert!(capture.trace_reasoning.is_empty());
+        assert!(capture.prompt_snapshots.is_empty());
+    }
+
+    #[test]
+    fn collect_observability_parses_trace_reasoning() {
+        let events = vec![SseEvent {
+            event: "trace".to_string(),
+            data: serde_json::json!({
+                "stage": "plan_decision",
+                "status": "ok",
+                "detail": {
+                    "reasoning": "Need retrieval for document QA.",
+                    "selected_tools": ["dense_retrieval"]
+                }
+            }),
+        }];
+        let capture = collect_observability_from_events(&events);
+        assert_eq!(capture.trace_reasoning.len(), 1);
+        assert_eq!(capture.trace_reasoning[0].stage, "plan_decision");
+        assert_eq!(
+            capture.trace_reasoning[0].reasoning,
+            serde_json::json!("Need retrieval for document QA.")
+        );
+    }
+
+    #[test]
+    fn collect_observability_parses_evaluation_trace() {
+        let events = vec![SseEvent {
+            event: "trace".to_string(),
+            data: serde_json::json!({
+                "stage": "evaluation",
+                "status": "ok",
+                "detail": {
+                    "decision": "native_tool_call",
+                    "reasoning": "2 tool calls",
+                    "signals": { "iteration": 0 }
+                }
+            }),
+        }];
+        let capture = collect_observability_from_events(&events);
+        assert_eq!(capture.trace_reasoning.len(), 1);
+        assert_eq!(capture.trace_reasoning[0].stage, "evaluation");
+    }
+
+    #[test]
+    fn collect_observability_ignores_non_string_reasoning() {
+        let events = vec![SseEvent {
+            event: "trace".to_string(),
+            data: serde_json::json!({
+                "stage": "evaluation",
+                "detail": { "reasoning": { "nested": true } }
+            }),
+        }];
+        let capture = collect_observability_from_events(&events);
+        assert!(capture.trace_reasoning.is_empty());
+    }
+
+    #[test]
+    fn collect_observability_parses_prompt_snapshot() {
+        let events = vec![SseEvent {
+            event: "trace".to_string(),
+            data: serde_json::json!({
+                "stage": "prompt_snapshot",
+                "status": "debug",
+                "detail": {
+                    "phase": "retrieve",
+                    "iteration": 0,
+                    "system_content": "You are a RAG assistant."
+                }
+            }),
+        }];
+        let capture = collect_observability_from_events(&events);
+        assert_eq!(capture.prompt_snapshots.len(), 1);
+        assert_eq!(
+            capture.prompt_snapshots[0]
+                .get("phase")
+                .and_then(|v| v.as_str()),
+            Some("retrieve")
+        );
+    }
+
+    #[test]
+    fn parse_chat_response_uses_last_done_payload() {
+        let partial = serde_json::json!({
+            "event": "done",
+            "payload": {"answer": "partial", "session_id": "s1", "agent_type": "rag",
+                "sources": [], "citations": [], "trace": {"mode": "rag"}, "degrade_trace": []}
+        });
+        let full = serde_json::json!({
+            "event": "done",
+            "payload": {"answer": "final", "session_id": "s1", "agent_type": "rag",
+                "sources": [], "citations": [], "trace": {"mode": "rag"}, "degrade_trace": []}
+        });
+        let events = vec![
+            SseEvent {
+                event: "done".to_string(),
+                data: partial,
+            },
+            SseEvent {
+                event: "done".to_string(),
+                data: full,
+            },
+        ];
+        let resp = parse_chat_response_from_stream_events(&events).expect("parse done");
+        assert_eq!(resp.answer, "final");
     }
 }
 

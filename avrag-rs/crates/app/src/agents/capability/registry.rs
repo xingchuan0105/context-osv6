@@ -5,84 +5,44 @@ use super::{ActivationPhase, SkillMetadata, ToolMetadata};
 
 static STANDARD_REGISTRY: OnceLock<CapabilityRegistry> = OnceLock::new();
 
-/// Global capability registry that unifies tools and skills under a single
-/// query interface.
+/// Global capability registry for prompt skills and strategy metadata.
 ///
-/// v5 architecture: all capabilities are registered here; strategies query
-/// this registry at runtime to discover what tools and skills are available.
-/// This replaces the v4 `ModeBundle` hard-coded tool lists.
+/// ADR-0007 keeps LLM-facing native tool schemas out of the prompt registry.
+/// Mode configs own tool disclosure through `tool_pool` and inline
+/// `tool_definitions`.
 pub struct CapabilityRegistry {
     tools: HashMap<String, ToolMetadata>,
     skills: HashMap<String, SkillMetadata>,
-    strategies: HashMap<String, super::StrategySchema>,
+    modes: HashMap<String, super::ModeSchema>,
 }
 
 impl CapabilityRegistry {
-    /// Build the standard registry from the existing compile-time registries.
-    ///
-    /// This bridges v4's `PromptRegistry` + `tool_catalog` into v5's
-    /// `CapabilityRegistry`.  Tool/skill metadata is derived from the
-    /// existing definitions with sensible defaults for v5-specific fields
-    /// (risk_level, permissions, etc.).
+    /// Build the standard registry from prompt disclosure assets.
     pub fn standard() -> Self {
-        let mut tools = HashMap::new();
+        let tools = HashMap::new();
         let mut skills = HashMap::new();
 
-        // NOTE: v4 hard-coded tool catalogs (rag_tool_catalog, atomic_tool_catalog,
-        // search_specific_tools) have been migrated to declarative SKILL.md.
-        // All tool metadata now flows from PromptRegistry → skills map →
-        // dual-flavor registration (skills + tools) above.
-
-        // --- Ingest skills from v4 PromptRegistry ---
+        // Prompt skills stay skills. Native tool schemas are disclosed from
+        // ModeConfig::tool_definitions, not inferred from SKILL.md metadata.
         let prompt_registry = super::super::progressive::PromptRegistry::standard_cached();
         for skill in prompt_registry.iter_skills() {
             let meta = skill_to_metadata(skill);
-            skills.insert(meta.id.clone(), meta.clone());
-
-            // NEW: skills that carry an input_schema are also registered as
-            // tools so that plan_tools(strategy) can discover them alongside
-            // legacy v4 hard-coded tools.  The tool id is the skill id with
-            // kebab-case converted to snake_case so it matches the runtime
-            // dispatch names (e.g. dense-retrieval → dense_retrieval).
-            if meta.input_schema.is_some() {
-                let tool_id = meta.id.replace('-', "_");
-                let permissions = match tool_id.as_str() {
-                    "web_search" | "web_fetch" => vec![super::Permission::ExternalNetwork],
-                    "code_interpreter" => vec![super::Permission::CodeExecution],
-                    _ => Vec::new(),
-                };
-                let tool_meta = ToolMetadata {
-                    id: tool_id,
-                    version: meta.version.clone(),
-                    owner: meta.owner.clone(),
-                    description: meta.description.clone(),
-                    input_schema: meta.input_schema.clone().unwrap_or(serde_json::Value::Null),
-                    output_schema: meta
-                        .output_schema
-                        .clone()
-                        .unwrap_or(serde_json::Value::Null),
-                    risk_level: meta.risk_level,
-                    permissions,
-                    external_deps: Vec::new(),
-                    deprecation: meta.deprecation.clone(),
-                    retry_policy: super::RetryPolicy::default(),
-                    activation_phase: meta.activation_phase,
-                    applicable_strategies: meta.applicable_strategies.clone(),
-                };
-                tools.insert(tool_meta.id.clone(), tool_meta);
+            if meta.deprecation.is_some() || is_retired_skill(&meta.id) {
+                continue;
             }
+            skills.insert(meta.id.clone(), meta);
         }
 
-        // --- Static strategy schemas (decoupled from strategy runtime) ---
-        let mut strategies = HashMap::new();
-        for schema in super::schemas::standard_strategy_schemas() {
-            strategies.insert(schema.id.clone(), schema);
+        // --- Static mode schemas (decoupled from strategy runtime) ---
+        let mut modes = HashMap::new();
+        for schema in super::schemas::standard_mode_schemas() {
+            modes.insert(schema.id.clone(), schema);
         }
 
         Self {
             tools,
             skills,
-            strategies,
+            modes,
         }
     }
 
@@ -121,70 +81,70 @@ impl CapabilityRegistry {
         self.skills.len()
     }
 
-    /// Look up a strategy by id.
-    pub fn strategy(&self, id: &str) -> Option<&super::StrategySchema> {
-        self.strategies.get(id)
+    /// Look up a mode by id.
+    pub fn mode(&self, id: &str) -> Option<&super::ModeSchema> {
+        self.modes.get(id)
     }
 
-    /// List all registered strategies (按 ID 排序).
-    pub fn list_strategies(&self) -> Vec<&super::StrategySchema> {
-        let mut strategies: Vec<_> = self.strategies.values().collect();
-        strategies.sort_by_key(|s| &s.id);
-        strategies
+    /// List all registered modes (按 ID 排序).
+    pub fn list_modes(&self) -> Vec<&super::ModeSchema> {
+        let mut modes: Vec<_> = self.modes.values().collect();
+        modes.sort_by_key(|s| &s.id);
+        modes
     }
 
-    /// Count of registered strategies.
-    pub fn strategy_count(&self) -> usize {
-        self.strategies.len()
+    /// Count of registered modes.
+    pub fn mode_count(&self) -> usize {
+        self.modes.len()
     }
 
-    /// Plan/Evaluate 阶段：返回指定策略可用的工具目录（按 ID 排序，确保 prompt 确定性）
-    pub fn plan_tools(&self, strategy: &str) -> Vec<&ToolMetadata> {
-        let strategy = strategy.to_string();
+    /// Plan/Evaluate 阶段：返回指定模式可用的工具目录（按 ID 排序，确保 prompt 确定性）
+    pub fn plan_tools(&self, mode_id: &str) -> Vec<&ToolMetadata> {
+        let mode_id = mode_id.to_string();
         let mut tools: Vec<_> = self
             .tools
             .values()
             .filter(|t| t.activation_phase == ActivationPhase::PlanAndEvaluate)
-            .filter(|t| t.applicable_strategies.iter().any(|s| s == &strategy))
+            .filter(|t| t.applicable_strategies.iter().any(|s| s == &mode_id))
             .collect();
         tools.sort_by_key(|t| &t.id);
         tools
     }
 
     /// Answer 阶段：返回 format 技能目录（按 ID 排序，确保 prompt 确定性）
-    pub fn answer_format_skills(&self, strategy: &str) -> Vec<&SkillMetadata> {
-        let strategy = strategy.to_string();
+    pub fn answer_format_skills(&self, mode_id: &str) -> Vec<&SkillMetadata> {
+        let mode_id = mode_id.to_string();
         let mut skills: Vec<_> = self
             .skills
             .values()
             .filter(|s| s.activation_phase == ActivationPhase::Answer)
-            .filter(|s| s.applicable_strategies.iter().any(|s| s == &strategy))
+            .filter(|s| s.applicable_strategies.iter().any(|s| s == &mode_id))
             .collect();
         skills.sort_by_key(|s| &s.id);
         skills
     }
 
     /// Answer 阶段：返回写作风格技能目录（按 ID 排序，确保 prompt 确定性）
-    pub fn answer_writing_styles(&self, strategy: &str) -> Vec<&SkillMetadata> {
-        let strategy = strategy.to_string();
+    pub fn answer_writing_styles(&self, mode_id: &str) -> Vec<&SkillMetadata> {
+        let mode_id = mode_id.to_string();
         let mut skills: Vec<_> = self
             .skills
             .values()
             .filter(|s| s.category == "writing-style")
-            .filter(|s| s.applicable_strategies.iter().any(|s| s == &strategy))
+            .filter(|s| s.applicable_strategies.iter().any(|s| s == &mode_id))
             .collect();
         skills.sort_by_key(|s| &s.id);
         skills
     }
 
     /// Answer 阶段：返回行为模式技能目录（目前只有 brainstorming，按 ID 排序）
-    pub fn answer_behavior_modes(&self, strategy: &str) -> Vec<&SkillMetadata> {
-        let strategy = strategy.to_string();
+    pub fn answer_behavior_modes(&self, mode_id: &str) -> Vec<&SkillMetadata> {
+        let mode_id = mode_id.to_string();
         let mut skills: Vec<_> = self
             .skills
             .values()
             .filter(|s| s.category == "behavior")
-            .filter(|s| s.applicable_strategies.iter().any(|s| s == &strategy))
+            .filter(|s| s.applicable_strategies.iter().any(|s| s == &mode_id))
             .collect();
         skills.sort_by_key(|s| &s.id);
         skills
@@ -195,12 +155,41 @@ impl CapabilityRegistry {
 // Helpers: convert v4 types into v5 metadata
 // ---------------------------------------------------------------------------
 
+/// ADR-0007 §8.8 retired skills — excluded from default registry catalog.
+fn is_retired_skill(id: &str) -> bool {
+    matches!(
+        id,
+        "rag-plan"
+            | "search-plan"
+            | "chat-plan"
+            | "rag-eval"
+            | "search-eval"
+            | "rag-memory-mgmt"
+            | "session-summary"
+            | "rag-citation-format"
+            | "url-citation-format"
+            | "rag-codegen-guide"
+            | "rag-retrieval-strategy"
+            | "rag-doc-summary-guide"
+            | "concise-writing"
+            | "professional-writing"
+            | "academic-writing"
+            | "storytelling"
+            | "brainstorming"
+            | "html-renderer"
+            | "ppt-generation"
+            | "teaching"
+            | "framework-extraction"
+    )
+}
+
 fn skill_to_metadata(skill: &super::super::progressive::Skill) -> SkillMetadata {
     let md = skill.metadata();
 
-    // Parse applicable_strategies from frontmatter if present
+    // Parse applicable_strategies / applicable_modes from frontmatter if present
     let applicable_strategies = md
         .get("applicable_strategies")
+        .or_else(|| md.get("applicable_modes"))
         .map(|s| parse_string_list(s))
         .unwrap_or_else(|| infer_skill_strategies(skill.id()));
 
@@ -216,10 +205,17 @@ fn skill_to_metadata(skill: &super::super::progressive::Skill) -> SkillMetadata 
         .and_then(|s| parse_risk_level(s))
         .unwrap_or_else(|| infer_skill_risk_level(skill.id()));
 
-    // 新增：从 frontmatter 解析 activation_phase
+    // activation_phase: explicit frontmatter, else disclose_at (CDS clusters), else infer
     let activation_phase = md
         .get("activation_phase")
         .and_then(|s| parse_activation_phase(s))
+        .or_else(|| {
+            md.get("disclose_at").and_then(|s| match s.as_str() {
+                "synthesis" => Some(ActivationPhase::Answer),
+                "retrieve" => Some(ActivationPhase::PlanAndEvaluate),
+                _ => None,
+            })
+        })
         .unwrap_or_else(|| infer_skill_activation_phase(skill.id()));
 
     // Parse category from frontmatter if present
@@ -247,7 +243,11 @@ fn skill_to_metadata(skill: &super::super::progressive::Skill) -> SkillMetadata 
         applicable_strategies,
         required_tools,
         risk_level,
-        deprecation: None,
+        deprecation: md.get("deprecation").map(|_| super::Deprecation {
+            since_version: "adr-0007".to_string(),
+            note: "Retired per ADR-0007".to_string(),
+            replacement_id: None,
+        }),
         activation_phase,
         category,
         input_schema,
@@ -286,24 +286,14 @@ fn parse_risk_level(s: &str) -> Option<super::RiskLevel> {
 
 fn infer_skill_strategies(id: &str) -> Vec<String> {
     let all = || vec!["chat".to_string(), "rag".to_string(), "search".to_string()];
-    if id.starts_with("rag-") {
-        vec!["rag".to_string()]
-    } else if id.starts_with("search-") {
-        vec!["search".to_string()]
-    } else if id.starts_with("chat") || id == "session-summary" {
-        vec!["chat".to_string()]
-    } else if [
-        "ppt-generation",
-        "html-renderer",
-        "teaching",
-        "framework-extraction",
-    ]
-    .contains(&id)
-    {
-        // Format skills are output-agnostic — available to all strategies
-        all()
-    } else {
-        all()
+    match id {
+        "codegen" => vec!["rag".to_string()],
+        "search" => vec!["search".to_string()],
+        id if id.starts_with("rag-") => vec!["rag".to_string()],
+        id if id.starts_with("search-") => vec!["search".to_string()],
+        id if id.starts_with("chat") || id == "session-summary" => vec!["chat".to_string()],
+        "format" | "writing" | "memory" => all(),
+        _ => all(),
     }
 }
 
@@ -323,15 +313,14 @@ fn parse_activation_phase(s: &str) -> Option<ActivationPhase> {
 }
 
 fn infer_skill_activation_phase(skill_id: &str) -> ActivationPhase {
-    // format 技能默认 Answer，其他技能默认 PlanAndEvaluate
-    if skill_id == "html-renderer"
-        || skill_id == "ppt-generation"
-        || skill_id == "teaching"
-        || skill_id == "framework-extraction"
-    {
-        ActivationPhase::Answer
-    } else {
-        ActivationPhase::PlanAndEvaluate
+    match skill_id {
+        "format"
+        | "writing"
+        | "html-renderer"
+        | "ppt-generation"
+        | "teaching"
+        | "framework-extraction" => ActivationPhase::Answer,
+        _ => ActivationPhase::PlanAndEvaluate,
     }
 }
 
@@ -340,9 +329,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn standard_registry_loads_tools_and_skills() {
+    fn standard_registry_loads_prompt_skills_only() {
         let registry = CapabilityRegistry::standard();
-        assert!(registry.tool_count() > 0, "registry should contain tools");
+        assert_eq!(registry.tool_count(), 0, "mode configs own tool schemas");
         assert!(registry.skill_count() > 0, "registry should contain skills");
     }
 
@@ -357,64 +346,64 @@ mod tests {
     }
 
     #[test]
-    fn can_lookup_rag_tools() {
+    fn rag_retrieval_tools_are_not_llm_facing_registry_tools() {
         let registry = CapabilityRegistry::standard();
-        assert!(registry.tool("dense_retrieval").is_some());
-        assert!(registry.tool("lexical_retrieval").is_some());
-        assert!(registry.tool("graph_retrieval").is_some());
+        assert!(registry.tool("dense_retrieval").is_none());
+        assert!(registry.tool("lexical_retrieval").is_none());
+        assert!(registry.tool("graph_retrieval").is_none());
     }
 
     #[test]
-    fn can_lookup_atomic_tools() {
+    fn atomic_tools_are_not_registered_from_prompt_skills() {
         let registry = CapabilityRegistry::standard();
-        assert!(registry.tool("calculator").is_some());
-        assert!(registry.tool("code_interpreter").is_some());
-        assert!(registry.tool("weather_query").is_some());
-        assert!(registry.tool("web_fetch").is_some());
+        assert!(registry.tool("calculator").is_none());
+        assert!(registry.tool("code_interpreter").is_none());
+        assert!(registry.tool("weather_query").is_none());
     }
 
     #[test]
-    fn can_lookup_search_tool() {
+    fn search_tool_schema_comes_from_mode_config_not_capability_registry() {
         let registry = CapabilityRegistry::standard();
-        assert!(registry.tool("web_search").is_some());
+        assert!(registry.tool("web_search").is_none());
     }
 
     #[test]
     fn can_lookup_skills() {
         let registry = CapabilityRegistry::standard();
-        assert!(registry.skill("rag-plan").is_some());
         assert!(registry.skill("rag-answer").is_some());
         assert!(registry.skill("chat").is_some());
-        assert!(registry.skill("search-plan").is_some());
+        assert!(registry.skill("rag-system").is_some());
     }
 
     #[test]
-    fn web_search_has_high_risk() {
+    fn retired_skills_excluded_from_standard_registry() {
         let registry = CapabilityRegistry::standard();
-        let tool = registry.tool("web_search").unwrap();
-        assert_eq!(tool.risk_level, super::super::RiskLevel::High);
-        assert!(
-            tool.permissions
-                .contains(&super::super::Permission::ExternalNetwork)
-        );
+        for id in [
+            "rag-plan",
+            "search-plan",
+            "chat-plan",
+            "rag-eval",
+            "search-eval",
+            "rag-memory-mgmt",
+            "session-summary",
+            "rag-citation-format",
+            "url-citation-format",
+        ] {
+            assert!(
+                registry.skill(id).is_none(),
+                "retired skill {id} should not be in standard registry"
+            );
+        }
     }
 
     #[test]
-    fn web_fetch_has_high_risk() {
+    fn search_mode_resolves_tool_pool_from_yaml_definitions() {
         let registry = CapabilityRegistry::standard();
-        let tool = registry.tool("web_fetch").unwrap();
-        assert_eq!(tool.risk_level, super::super::RiskLevel::High);
-        assert!(
-            tool.permissions
-                .contains(&super::super::Permission::ExternalNetwork)
-        );
-    }
-
-    #[test]
-    fn rag_tools_are_low_risk() {
-        let registry = CapabilityRegistry::standard();
-        let tool = registry.tool("dense_retrieval").unwrap();
-        assert_eq!(tool.risk_level, super::super::RiskLevel::Low);
+        let mode = crate::agents::r#loop::config::load_mode_config("search")
+            .expect("search mode config should load");
+        let specs = mode.resolve_tool_specs(&registry, &mode.tool_pool);
+        let names: Vec<&str> = specs.iter().map(|spec| spec.name.as_str()).collect();
+        assert_eq!(names, vec!["web_search", "web_fetch"]);
     }
 
     #[test]
@@ -422,9 +411,8 @@ mod tests {
         let registry = CapabilityRegistry::standard();
         let tools = registry.list_tools();
         assert!(
-            tools.len() >= 12,
-            "expected at least 12 tools (7 rag + 4 atomic + 1 search), got {}",
-            tools.len()
+            tools.is_empty(),
+            "LLM-facing tool schemas come from mode tool_pool"
         );
     }
 
@@ -433,8 +421,8 @@ mod tests {
         let registry = CapabilityRegistry::standard();
         let skills = registry.list_skills();
         assert!(
-            skills.len() >= 15,
-            "expected at least 15 skills, got {}",
+            skills.len() >= 10,
+            "expected at least 10 prompt skills, got {}",
             skills.len()
         );
     }
@@ -452,41 +440,17 @@ mod tests {
     }
 
     #[test]
-    fn rag_plan_reads_frontmatter_strategies() {
+    fn rag_system_reads_frontmatter_strategies() {
         let registry = CapabilityRegistry::standard();
-        let skill = registry.skill("rag-plan").unwrap();
+        let skill = registry.skill("rag-system").unwrap();
         assert_eq!(skill.applicable_strategies, vec!["rag"]);
     }
 
     #[test]
-    fn rag_plan_reads_frontmatter_required_tools() {
+    fn codegen_cluster_is_registered() {
         let registry = CapabilityRegistry::standard();
-        let skill = registry.skill("rag-plan").unwrap();
-        assert!(
-            skill
-                .required_tools
-                .contains(&"dense_retrieval".to_string())
-        );
-        assert!(
-            skill
-                .required_tools
-                .contains(&"lexical_retrieval".to_string())
-        );
-        assert_eq!(skill.required_tools.len(), 7);
-    }
-
-    #[test]
-    fn chat_plan_reads_frontmatter_strategies() {
-        let registry = CapabilityRegistry::standard();
-        let skill = registry.skill("chat-plan").unwrap();
-        assert_eq!(skill.applicable_strategies, vec!["chat"]);
-    }
-
-    #[test]
-    fn search_plan_reads_frontmatter_strategies() {
-        let registry = CapabilityRegistry::standard();
-        let skill = registry.skill("search-plan").unwrap();
-        assert_eq!(skill.applicable_strategies, vec!["search"]);
+        let skill = registry.skill("codegen").unwrap();
+        assert_eq!(skill.applicable_strategies, vec!["rag"]);
     }
 
     #[test]
@@ -498,129 +462,50 @@ mod tests {
     }
 
     #[test]
-    fn registry_can_lookup_all_strategies() {
+    fn registry_can_lookup_all_modes() {
         let registry = CapabilityRegistry::standard();
-        assert_eq!(registry.strategy_count(), 3, "expected 3 strategies");
-        assert!(registry.strategy("chat").is_some());
-        assert!(registry.strategy("rag").is_some());
-        assert!(registry.strategy("search").is_some());
-        assert!(registry.strategy("nonexistent").is_none());
+        assert_eq!(registry.mode_count(), 3, "expected 3 modes");
+        assert!(registry.mode("chat").is_some());
+        assert!(registry.mode("rag").is_some());
+        assert!(registry.mode("search").is_some());
+        assert!(registry.mode("nonexistent").is_none());
     }
 
     #[test]
-    fn chat_strategy_schema_matches_state_machine() {
+    fn chat_mode_schema_has_expected_metadata() {
         let registry = CapabilityRegistry::standard();
-        let schema = registry.strategy("chat").unwrap();
+        let schema = registry.mode("chat").unwrap();
         assert_eq!(schema.id, "chat");
-        assert_eq!(schema.states, vec!["Plan", "ExecuteAtomic", "Answer"]);
-        assert_eq!(schema.max_budget, 1);
         assert!(!schema.requires_internet);
     }
 
     #[test]
-    fn rag_strategy_schema_matches_state_machine() {
+    fn rag_mode_schema_has_expected_metadata() {
         let registry = CapabilityRegistry::standard();
-        let schema = registry.strategy("rag").unwrap();
+        let schema = registry.mode("rag").unwrap();
         assert_eq!(schema.id, "rag");
-        // v6: Evaluate state merged into ExecuteRetrieve (Evidence Gate inside ExecuteRetrieve).
-        assert_eq!(schema.states, vec!["Plan", "ExecuteRetrieve", "Answer"]);
-        assert_eq!(schema.max_budget, 4);
-        let has_plan_to_exec = schema
-            .transitions
-            .iter()
-            .any(|t| t.from == "Plan" && t.to == "ExecuteRetrieve");
-        assert!(
-            has_plan_to_exec,
-            "RAG strategy should have Plan→ExecuteRetrieve transition"
-        );
-        let has_exec_to_answer = schema
-            .transitions
-            .iter()
-            .any(|t| t.from == "ExecuteRetrieve" && t.to == "Answer");
-        assert!(
-            has_exec_to_answer,
-            "RAG strategy should have ExecuteRetrieve→Answer transition"
-        );
     }
 
     #[test]
-    fn search_strategy_schema_matches_state_machine() {
+    fn search_mode_schema_has_expected_metadata() {
         let registry = CapabilityRegistry::standard();
-        let schema = registry.strategy("search").unwrap();
+        let schema = registry.mode("search").unwrap();
         assert_eq!(schema.id, "search");
-        // v6: Evaluate state merged into Aggregate (Evidence Gate inside Aggregate).
-        assert_eq!(
-            schema.states,
-            vec!["Decompose", "ParallelSearch", "Aggregate", "Answer"]
-        );
-        assert_eq!(schema.max_budget, 3);
         assert!(schema.requires_internet);
-        let has_decompose_to_search = schema
-            .transitions
-            .iter()
-            .any(|t| t.from == "Decompose" && t.to == "ParallelSearch");
-        assert!(
-            has_decompose_to_search,
-            "Search strategy should have Decompose→ParallelSearch transition"
-        );
-        let has_search_to_aggregate = schema
-            .transitions
-            .iter()
-            .any(|t| t.from == "ParallelSearch" && t.to == "Aggregate");
-        assert!(
-            has_search_to_aggregate,
-            "Search strategy should have ParallelSearch→Aggregate transition"
-        );
-        let has_aggregate_to_answer = schema
-            .transitions
-            .iter()
-            .any(|t| t.from == "Aggregate" && t.to == "Answer");
-        assert!(
-            has_aggregate_to_answer,
-            "Search strategy should have Aggregate→Answer transition"
-        );
     }
 
     #[test]
-    fn list_strategies_returns_all() {
+    fn list_modes_returns_all() {
         let registry = CapabilityRegistry::standard();
-        let strategies = registry.list_strategies();
-        assert_eq!(strategies.len(), 3);
+        let modes = registry.list_modes();
+        assert_eq!(modes.len(), 3);
     }
 
     #[test]
-    fn plan_tools_includes_skills_with_input_schema() {
+    fn rag_plan_tools_are_empty_under_codegen_only_contract() {
         let registry = CapabilityRegistry::standard();
         let plan_tools = registry.plan_tools("rag");
-        // 7 atomic tool skills (with input_schema) should appear as tools
-        assert!(
-            plan_tools.iter().any(|t| t.id == "dense_retrieval"),
-            "dense_retrieval from skill should be in plan_tools"
-        );
-        assert!(
-            plan_tools.iter().any(|t| t.id == "lexical_retrieval"),
-            "lexical_retrieval from skill should be in plan_tools"
-        );
-        assert!(
-            plan_tools.iter().any(|t| t.id == "graph_retrieval"),
-            "graph_retrieval from skill should be in plan_tools"
-        );
-        assert!(
-            plan_tools.iter().any(|t| t.id == "doc_index"),
-            "doc_index from skill should be in plan_tools"
-        );
-        assert!(
-            plan_tools.iter().any(|t| t.id == "index_lookup"),
-            "index_lookup from skill should be in plan_tools"
-        );
-        assert!(
-            plan_tools.iter().any(|t| t.id == "doc_summary"),
-            "doc_summary from skill should be in plan_tools"
-        );
-        assert!(
-            plan_tools.iter().any(|t| t.id == "doc_metadata"),
-            "doc_metadata from skill should be in plan_tools"
-        );
+        assert!(plan_tools.is_empty());
     }
 
     #[test]
@@ -636,8 +521,7 @@ mod tests {
             );
         }
 
-        // 应该包含 RAG 工具
-        assert!(plan_tools.iter().any(|t| t.id == "dense_retrieval"));
+        assert!(plan_tools.is_empty());
     }
 
     #[test]
@@ -653,31 +537,21 @@ mod tests {
             );
         }
 
-        // 应该包含 format 技能
-        assert!(answer_skills.iter().any(|s| s.id == "html-renderer"));
-        assert!(answer_skills.iter().any(|s| s.id == "ppt-generation"));
+        // CDS v1.1: format cluster replaces individual format leaf skills
+        assert!(answer_skills.iter().any(|s| s.id == "format"));
     }
 
     #[test]
-    fn answer_format_skills_universal_across_strategies() {
+    fn answer_format_skills_universal_across_modes() {
         let registry = CapabilityRegistry::standard();
 
-        let format_ids = [
-            "ppt-generation",
-            "html-renderer",
-            "teaching",
-            "framework-extraction",
-        ];
-
-        // Format skills are output-agnostic — available to all strategies
-        for strategy in ["chat", "rag", "search"] {
-            let skills = registry.answer_format_skills(strategy);
-            for id in &format_ids {
-                assert!(
-                    skills.iter().any(|s| s.id == *id),
-                    "format skill '{id}' should be available to strategy '{strategy}'"
-                );
-            }
+        // CDS v1.1: format cluster is output-agnostic — available to all modes
+        for mode in ["chat", "rag", "search"] {
+            let skills = registry.answer_format_skills(mode);
+            assert!(
+                skills.iter().any(|s| s.id == "format"),
+                "format cluster should be available to mode '{mode}'"
+            );
         }
     }
 }
