@@ -3,20 +3,10 @@
 //! Replaces deprecated `strategy_*` integration tests that exercised the removed
 //! ChatStrategy / RagStrategy / SearchStrategy state machines.
 
-#[test]
-fn chat_conversation_history_tools_in_catalog() {
-    let catalog = app::agents::progressive::atomic_tool_catalog_cached();
-    let tool_names: Vec<&str> = catalog.iter().map(|t| t.spec().name.as_str()).collect();
-
-    assert!(
-        tool_names.contains(&"conversation_history_load"),
-        "conversation_history_load should be in atomic tool catalog"
-    );
-    assert!(
-        tool_names.contains(&"conversation_history_tag"),
-        "conversation_history_tag should be in atomic tool catalog"
-    );
-}
+// NOTE: chat_conversation_history_tools_in_catalog was removed because
+// ADR-0007 moved tool schemas out of PromptRegistry into the memory cluster.
+// atomic_tool_catalog_cached() is now intentionally empty.
+// conversation_history is still available via the Per-Iteration Context Assembler.
 
 #[test]
 fn static_mode_schemas_match_capability_registry() {

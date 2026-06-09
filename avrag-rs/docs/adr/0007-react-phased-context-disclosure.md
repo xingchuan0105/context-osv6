@@ -7,6 +7,8 @@
 | 关联 | ADR-0006-revised、`docs/agents/progressive-disclosure-framework.md` |
 | 背景 | Product E2E `llm_real` 暴露：tool schema 常驻、Skill 仅注入一行 description、会话历史未接入 ReAct messages、format/citation 约束与检索阶段混在同一 cognitive frame |
 
+> **决策更新 2026-06-09（架构 grilling）**：§2.5 / §3 中按 `round_idx` 编号的披露配置（`disclosure.rounds`）**由「披露阶段（Retrieve/Synthesis）+ 触发（mandatory / skill_request）」模型取代**。理由：ReAct 检索轮数由 LLM 决定、不固定，`round_idx` 轴与可变轮数失配（实现中 assembler 已事实上把披露钉死在 `iteration==0`）。「首个检索轮」降为 assembler 内部状态而非配置键；mode 特例（RAG 开局强制 `codegen`、检索 query 注入）下沉为 `ModeConfig` 数据，assembler 去除 `mode.id==` 硬编码分支。本更新细化（非推翻）本 ADR 的数据驱动取向。详见 `docs/agents/cleanup-backlog-2026-06-09.md` 同期审查与对话记录。
+
 ---
 
 ## 1. 问题陈述
@@ -157,6 +159,8 @@ tool_pool: []                          # chat：默认无；可扩展
 | **禁止** | LLM `NativeToolCalls` 直调 `dense_retrieval`；orchestrator 写「调用 dense_retrieval 工具」 |
 
 简单问答（如「什么是反脆弱性？」）同样走 codegen：一行 `client.dense_search(...)`，或由 **服务端 `auto_fallback`** 在 budget/沙箱失败时代跑 `dense_retrieval`。
+
+**执行机制（ADR-0009）**：沙箱内不装 HTTP SDK、不解封 `socket`。宿主经 **Retrieval Bridge**（fd3/fd4 行式 JSON RPC）把 `client.dense_search` 等调用转发到同进程 `RagRuntime::tools::dispatch`，`doc_scope` 在 Rust 侧强制注入。
 
 **Orchestrator**：只写 codegen/SDK 契约与簇目录，**不**嵌入 tool JSON schema。
 

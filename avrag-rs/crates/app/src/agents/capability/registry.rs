@@ -1,15 +1,14 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use super::{ActivationPhase, SkillMetadata, ToolMetadata};
+use super::{ActivationPhase, Permission, RetryPolicy, SkillMetadata, ToolMetadata};
+use crate::agents::skills::SkillComponent;
 
 static STANDARD_REGISTRY: OnceLock<CapabilityRegistry> = OnceLock::new();
 
 /// Global capability registry for prompt skills and strategy metadata.
 ///
-/// ADR-0007 keeps LLM-facing native tool schemas out of the prompt registry.
-/// Mode configs own tool disclosure through `tool_pool` and inline
-/// `tool_definitions`.
+/// ADR-0007 D8: LLM-facing native tool schemas live here; modes disclose via `tool_pool`.
 pub struct CapabilityRegistry {
     tools: HashMap<String, ToolMetadata>,
     skills: HashMap<String, SkillMetadata>,
@@ -19,11 +18,11 @@ pub struct CapabilityRegistry {
 impl CapabilityRegistry {
     /// Build the standard registry from prompt disclosure assets.
     pub fn standard() -> Self {
-        let tools = HashMap::new();
+        let tools = register_llm_facing_tools();
         let mut skills = HashMap::new();
 
-        // Prompt skills stay skills. Native tool schemas are disclosed from
-        // ModeConfig::tool_definitions, not inferred from SKILL.md metadata.
+        // Prompt skills stay skills. Native tool schemas are disclosed via
+        // ModeConfig::tool_pool, not inferred from SKILL.md metadata.
         let prompt_registry = super::super::progressive::PromptRegistry::standard_cached();
         for skill in prompt_registry.iter_skills() {
             let meta = skill_to_metadata(skill);
@@ -183,6 +182,53 @@ fn is_retired_skill(id: &str) -> bool {
     )
 }
 
+fn register_llm_facing_tools() -> HashMap<String, ToolMetadata> {
+    use crate::agents::skills::builtin::{web_fetch::WebFetchSkill, web_search::WebSearchSkill};
+
+    let mut tools = HashMap::new();
+    let search = vec!["search".to_string()];
+    let perms = vec![Permission::ExternalNetwork];
+
+    insert_tool_from_skill(&mut tools, &WebSearchSkill, search.clone(), perms.clone());
+    insert_tool_from_skill(&mut tools, &WebFetchSkill, search, perms);
+    tools
+}
+
+fn insert_tool_from_skill<S: SkillComponent>(
+    tools: &mut HashMap<String, ToolMetadata>,
+    skill: &S,
+    applicable_strategies: Vec<String>,
+    permissions: Vec<Permission>,
+) {
+    let spec = skill.spec();
+    tools.insert(
+        spec.name.clone(),
+        tool_metadata_from_spec(&spec, applicable_strategies, permissions),
+    );
+}
+
+fn tool_metadata_from_spec(
+    spec: &common::ToolSpec,
+    applicable_strategies: Vec<String>,
+    permissions: Vec<Permission>,
+) -> ToolMetadata {
+    ToolMetadata {
+        id: spec.name.clone(),
+        version: spec.version.clone(),
+        owner: "builtin".to_string(),
+        description: spec.description.clone(),
+        input_schema: spec.input_schema.clone(),
+        output_schema: spec.output_schema.clone(),
+        risk_level: super::RiskLevel::High,
+        permissions,
+        external_deps: vec![],
+        deprecation: None,
+        retry_policy: RetryPolicy::default(),
+        activation_phase: ActivationPhase::PlanAndEvaluate,
+        applicable_strategies,
+    }
+}
+
 fn skill_to_metadata(skill: &super::super::progressive::Skill) -> SkillMetadata {
     let md = skill.metadata();
 
@@ -329,9 +375,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn standard_registry_loads_prompt_skills_only() {
+    fn standard_registry_loads_prompt_skills_and_search_tools() {
         let registry = CapabilityRegistry::standard();
-        assert_eq!(registry.tool_count(), 0, "mode configs own tool schemas");
+        assert_eq!(registry.tool_count(), 2, "search mode LLM-facing tools");
+        assert!(registry.tool("web_search").is_some());
+        assert!(registry.tool("web_fetch").is_some());
         assert!(registry.skill_count() > 0, "registry should contain skills");
     }
 
@@ -362,9 +410,11 @@ mod tests {
     }
 
     #[test]
-    fn search_tool_schema_comes_from_mode_config_not_capability_registry() {
+    fn search_tool_schema_comes_from_capability_registry() {
         let registry = CapabilityRegistry::standard();
-        assert!(registry.tool("web_search").is_none());
+        let meta = registry.tool("web_search").expect("web_search in registry");
+        assert!(meta.input_schema.get("properties").is_some());
+        assert_eq!(meta.applicable_strategies, vec!["search"]);
     }
 
     #[test]
@@ -397,23 +447,21 @@ mod tests {
     }
 
     #[test]
-    fn search_mode_resolves_tool_pool_from_yaml_definitions() {
+    fn search_mode_resolves_tool_pool_from_capability_registry() {
         let registry = CapabilityRegistry::standard();
         let mode = crate::agents::r#loop::config::load_mode_config("search")
             .expect("search mode config should load");
         let specs = mode.resolve_tool_specs(&registry, &mode.tool_pool);
         let names: Vec<&str> = specs.iter().map(|spec| spec.name.as_str()).collect();
         assert_eq!(names, vec!["web_search", "web_fetch"]);
+        assert!(specs[0].input_schema.get("properties").is_some());
     }
 
     #[test]
-    fn list_tools_returns_all() {
+    fn list_tools_returns_search_tools() {
         let registry = CapabilityRegistry::standard();
         let tools = registry.list_tools();
-        assert!(
-            tools.is_empty(),
-            "LLM-facing tool schemas come from mode tool_pool"
-        );
+        assert_eq!(tools.len(), 2);
     }
 
     #[test]

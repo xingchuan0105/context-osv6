@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use crate::product_e2e::{ChatResponse, DocumentStatus, TestContext, assertions::*};
+use crate::product_e2e::{ChatResponse, DegradeReason, DocumentStatus, TestContext, assertions::*};
 
 #[tokio::test]
 async fn embedding_503_returns_degraded_answer_with_lexical_fallback() {
@@ -42,14 +42,7 @@ async fn embedding_503_returns_degraded_answer_with_lexical_fallback() {
         "expected degrade_trace when embedding is unavailable, got: {:?}",
         resp.degrade_trace
     );
-    assert!(
-        resp.degrade_trace.iter().any(|item| {
-            let reason = item.reason.to_ascii_lowercase();
-            reason.contains("embedding_unavailable") || reason.contains("embedding failed")
-        }),
-        "expected embedding_unavailable or embedding failed in degrade_trace, got: {:?}",
-        resp.degrade_trace
-    );
+    assert_degrade_reason(&resp, DegradeReason::EmbeddingUnavailable);
     assert!(
         !resp.answer.trim().is_empty(),
         "expected non-empty answer even when embedding is down, got: {:?}",

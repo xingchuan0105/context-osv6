@@ -41,6 +41,12 @@ applicable_strategies: [search]
 | `search` | 搜索策略与结果验证（原子簇） |
 | `memory` | 跨轮指代消解 |
 
+**请求簇正文**：在 assistant 消息中输出唯一合法格式（纯 JSON）：
+
+```json
+{"skill_request": ["search"]}
+```
+
 **tool_pool**（按需暴露）：
 
 - `web_search` — 互联网搜索

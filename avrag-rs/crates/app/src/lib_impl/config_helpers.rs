@@ -57,7 +57,6 @@ pub(crate) fn make_llm_client(config: &ModelProviderConfig) -> Option<LlmClient>
 
 pub(crate) fn build_unified_agent_service(
     llm_client: Option<LlmClient>,
-    temperature: Option<f32>,
     search_executor: Option<Arc<SearchExecutor>>,
     rag_runtime: Option<Arc<RagRuntime>>,
     _prompts_dir: &str,
@@ -65,7 +64,7 @@ pub(crate) fn build_unified_agent_service(
     let search_provider: Option<Arc<dyn avrag_search::SearchProvider>> =
         search_executor.map(|executor| -> Arc<dyn avrag_search::SearchProvider> { executor });
 
-    let agent = crate::agents::unified::UnifiedAgent::new(llm_client.clone(), temperature)
+    let agent = crate::agents::unified::UnifiedAgent::new(llm_client.clone())
         .with_rag_runtime(rag_runtime)
         .with_search_executor(search_provider);
 

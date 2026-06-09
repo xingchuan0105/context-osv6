@@ -16,11 +16,16 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
         return super::error_result("index_lookup", "chunk_ids must not be empty".to_string());
     }
 
-    let doc_id_filter = match Uuid::parse_str(&args.doc_id) {
-        Ok(id) => id,
-        Err(e) => {
-            return super::error_result("index_lookup", format!("invalid doc_id: {e}"));
+    let filter_by_doc = !args.doc_id.trim().is_empty();
+    let doc_id_filter = if filter_by_doc {
+        match Uuid::parse_str(&args.doc_id) {
+            Ok(id) => id,
+            Err(e) => {
+                return super::error_result("index_lookup", format!("invalid doc_id: {e}"));
+            }
         }
+    } else {
+        Uuid::nil()
     };
 
     let chunk_uuids: Vec<Uuid> = args
@@ -46,26 +51,36 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
             let filtered: Vec<super::ScoredChunk> = chunks
                 .values()
                 .filter(|chunk| {
+                    if !filter_by_doc {
+                        return true;
+                    }
                     chunk
                         .doc_id
                         .parse::<Uuid>()
                         .map(|doc_id| doc_id == doc_id_filter)
                         .unwrap_or(false)
                 })
-                .map(|chunk| super::ScoredChunk {
-                    chunk_id: chunk.chunk_id.parse().unwrap_or_default(),
-                    doc_id: doc_id_filter,
-                    content: chunk.content.clone(),
-                    score: chunk.score.unwrap_or(1.0),
-                    source: "index_lookup".to_string(),
-                    page: chunk.page,
-                    chunk_type: "text".to_string(),
-                    asset_id: None,
-                    caption: None,
-                    image_path: None,
-                    parser_backend: None,
-                    source_locator: None,
-                    parse_run_id: None,
+                .map(|chunk| {
+                    let doc_id = if filter_by_doc {
+                        doc_id_filter
+                    } else {
+                        chunk.doc_id.parse().unwrap_or_default()
+                    };
+                    super::ScoredChunk {
+                        chunk_id: chunk.chunk_id.parse().unwrap_or_default(),
+                        doc_id,
+                        content: chunk.content.clone(),
+                        score: chunk.score.unwrap_or(1.0),
+                        source: "index_lookup".to_string(),
+                        page: chunk.page,
+                        chunk_type: "text".to_string(),
+                        asset_id: None,
+                        caption: None,
+                        image_path: None,
+                        parser_backend: None,
+                        source_locator: None,
+                        parse_run_id: None,
+                    }
                 })
                 .collect();
 

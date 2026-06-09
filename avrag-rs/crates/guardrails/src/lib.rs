@@ -10,7 +10,7 @@
 pub mod input;
 pub mod output;
 
-use common::{DegradeTraceItem, GuardReport, GuardResult};
+use common::{DegradeReason, DegradeTraceItem, GuardReport, GuardResult};
 use uuid::Uuid;
 
 /// Main guard pipeline — orchestrates input and output guards.
@@ -81,7 +81,7 @@ impl GuardPipeline {
         if !leak_result.passed {
             degrade_trace.push(DegradeTraceItem {
                 stage: "output_guard:prompt_leak".into(),
-                reason: leak_result.reason.clone(),
+                reason: DegradeReason::ContentGuard,
                 impact: leak_result.action.to_string(),
             });
             sanitized = "[Response blocked: system prompt may have leaked]".to_string();
@@ -98,7 +98,7 @@ impl GuardPipeline {
         {
             degrade_trace.push(DegradeTraceItem {
                 stage: "output_guard:pii_scrubber".into(),
-                reason: format!("{} PII instances redacted", redacted),
+                reason: DegradeReason::ContentGuard,
                 impact: "redact".into(),
             });
         }

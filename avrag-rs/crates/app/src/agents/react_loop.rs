@@ -160,47 +160,7 @@ impl NextStep {
     }
 }
 
-/// Reason recorded on a `Degrade` outcome — surfaced via `DegradeTraceItem`
-/// in `AgentRunResult` so the UI can explain partial answers.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "kind", content = "detail")]
-pub enum DegradeReason {
-    /// Iteration ceiling reached without success.
-    BudgetExhausted,
-    /// Recall remained zero across every variant attempted.
-    NoResultsAfterAllFallbacks,
-    /// Tool execution failed for all subqueries.
-    AllToolsFailed,
-    /// Provider returned a non-retryable error (rate limit, auth, outage).
-    ProviderUnavailable,
-    /// Custom reason carried for telemetry; prefer a concrete variant when possible.
-    Other(String),
-}
-
-impl DegradeReason {
-    /// Stable stage identifier used in `DegradeTraceItem.stage` and activity events.
-    pub fn as_stage(&self) -> &'static str {
-        match self {
-            DegradeReason::BudgetExhausted => "budget_exhausted",
-            DegradeReason::NoResultsAfterAllFallbacks => "no_results",
-            DegradeReason::AllToolsFailed => "all_tools_failed",
-            DegradeReason::ProviderUnavailable => "provider_unavailable",
-            DegradeReason::Other(_) => "other",
-        }
-    }
-
-    pub fn message(&self) -> String {
-        match self {
-            DegradeReason::BudgetExhausted => "iteration budget exhausted".to_string(),
-            DegradeReason::NoResultsAfterAllFallbacks => {
-                "no results after broadening query variants".to_string()
-            }
-            DegradeReason::AllToolsFailed => "all tool calls failed".to_string(),
-            DegradeReason::ProviderUnavailable => "provider unavailable".to_string(),
-            DegradeReason::Other(msg) => msg.clone(),
-        }
-    }
-}
+pub use common::DegradeReason;
 
 /// Outcome of a single ReAct iteration's evaluator.
 ///

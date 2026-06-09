@@ -7,6 +7,7 @@
 pub mod auth_boundary;
 pub mod chat_smoke;
 pub mod ingestion_smoke;
+pub mod rag_fallback_smoke;
 pub mod rag_smoke;
 pub mod search_smoke;
 pub mod share_boundary;

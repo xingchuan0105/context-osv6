@@ -116,7 +116,7 @@ impl SseParser {
 // Business response types (re-exported from production code)
 // ---------------------------------------------------------------------------
 
-pub use common::{ChatResponse, Citation, DegradeTraceItem, DocumentStatus};
+pub use common::{ChatResponse, Citation, DegradeReason, DegradeTraceItem, DocumentStatus};
 
 /// A trace event record that carries reasoning text (plan_decision, evaluation, etc.).
 #[derive(Debug, Clone, serde::Serialize)]
@@ -173,11 +173,7 @@ mod mock_routing_tests {
     #[test]
     fn header_routing_recognizes_all_known_routes() {
         for value in [
-            "rag-planner",
-            "rag-eval",
             "rag-answer",
-            "search-planner",
-            "search-eval",
             "search-answer",
             "format-ppt",
             "format-html",
@@ -221,12 +217,13 @@ Respond with ONLY a JSON object (no markdown fences):
     }
 
     #[test]
-    fn system_prompt_routing_picks_rag_planner_for_planner_marker() {
-        let prompt = "You are the Context OS RAG retrieval planner. Given a query, decompose it into tool calls.";
-        assert_eq!(
-            MockLlmRoute::from_system_prompt(prompt, ""),
-            MockLlmRoute::RagPlanner
+    fn rag_retrieve_round_codegen_before_synthesis() {
+        let codegen = super::mock_servers::format_mock_rag_codegen_response(
+            "00000000-0000-4000-8000-000000000001",
         );
+        assert!(codegen.contains("<code language=\"python\">"));
+        assert!(codegen.contains("client.dense_search"));
+        assert!(codegen.contains("json.dumps(chunks)"));
     }
 
     #[test]

@@ -26,30 +26,17 @@ pub mod weather;
 /// Unified agent that dispatches to Chat / RAG / Search based on `request.kind`.
 pub struct UnifiedAgent {
     llm_client: Option<LlmClient>,
-    llm_provider: Option<Arc<dyn avrag_llm::LlmProvider>>,
-    temperature: Option<f32>,
     rag_runtime: Option<Arc<avrag_rag_core::RagRuntime>>,
     search_executor: Option<Arc<dyn SearchProvider>>,
 }
 
 impl UnifiedAgent {
-    pub fn new(llm_client: Option<LlmClient>, temperature: Option<f32>) -> Self {
-        let llm_provider = llm_client
-            .clone()
-            .map(|c| Arc::new(c) as Arc<dyn avrag_llm::LlmProvider>);
+    pub fn new(llm_client: Option<LlmClient>) -> Self {
         Self {
             llm_client,
-            llm_provider,
-            temperature,
             rag_runtime: None,
             search_executor: None,
         }
-    }
-
-    /// Override the LLM provider (used by E2E tests to inject RecordingLlmProvider).
-    pub fn with_llm_provider(mut self, provider: Option<Arc<dyn avrag_llm::LlmProvider>>) -> Self {
-        self.llm_provider = provider;
-        self
     }
 
     pub fn with_rag_runtime(mut self, runtime: Option<Arc<avrag_rag_core::RagRuntime>>) -> Self {
@@ -283,11 +270,10 @@ mod tests {
     #[test]
     fn test_unified_agent_builder() {
         let llm = dummy_llm();
-        let agent = UnifiedAgent::new(Some(llm.clone()), Some(0.7))
+        let agent = UnifiedAgent::new(Some(llm.clone()))
             .with_rag_runtime(None)
             .with_search_executor(None);
         assert!(agent.llm_client.is_some());
-        assert_eq!(agent.temperature, Some(0.7));
         assert!(agent.rag_runtime.is_none());
         assert!(agent.search_executor.is_none());
     }

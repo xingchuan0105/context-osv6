@@ -1,6 +1,6 @@
 use contracts::chat::{
-    AnswerBlock, ChatDonePayload, ChatEvent, ChatRequest, ChatResponse, Citation, DegradeTraceItem,
-    SourceRef, TraceInfo,
+    AnswerBlock, ChatDonePayload, ChatEvent, ChatRequest, ChatResponse, Citation, DegradeReason,
+    DegradeTraceItem, SourceRef, TraceInfo,
 };
 
 #[test]
@@ -177,7 +177,7 @@ fn chat_response_roundtrips_shared_nested_types() {
         },
         degrade_trace: vec![DegradeTraceItem {
             stage: "planner".to_string(),
-            reason: "fallback".to_string(),
+            reason: DegradeReason::PlannerFailed,
             impact: "quality".to_string(),
         }],
         planner_output: None,

@@ -40,4 +40,4 @@ Templates: `templates/summary-user.tmpl`, `summary-finalize-user.tmpl`, `section
 
 `legacy/` holds retired planner text files. Root-level `*.v1.tmpl` copies are deprecated; prefer `pipeline/` + `templates/`.
 
-`atomic-tools/` is no longer part of prompt disclosure or `PromptRegistry`. Native tool schemas are owned by mode/runtime configuration (`tool_pool` plus `tool_definitions`), while RAG retrieval stays behind `codegen` SDK calls and server-side fallback.
+`atomic-tools/` is no longer part of prompt disclosure or `PromptRegistry`. Native tool schemas are registered in `CapabilityRegistry` and disclosed via mode `tool_pool`; RAG retrieval stays behind `codegen` SDK calls and server-side fallback.

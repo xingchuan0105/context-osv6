@@ -51,7 +51,6 @@ impl AppState {
         })));
         let agent_service = Some(build_unified_agent_service(
             llm_client.clone(),
-            config.agent_llm.temperature,
             search_executor.clone(),
             None,
             &config.prompts.dir,
@@ -199,7 +198,6 @@ impl AppState {
         let uses_memory_adapters = pg.is_none();
         let agent_service = Some(build_unified_agent_service(
             llm_client.clone(),
-            config.agent_llm.temperature,
             search_executor.clone(),
             rag_runtime.clone(),
             &config.prompts.dir,
@@ -447,7 +445,6 @@ impl AppState {
             session_id,
             doc_scope,
             messages,
-            session_summary: None,
             user_preferences,
             debug: req.debug,
             stream,

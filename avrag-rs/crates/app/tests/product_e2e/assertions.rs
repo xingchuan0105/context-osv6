@@ -5,7 +5,7 @@
 //! - Product: business rules (citation types, doc_id matching, degrade traces)
 //! - Quality: NOT here — only for nightly / offline evaluation
 
-use crate::product_e2e::{ChatResponse, HttpResponse};
+use crate::product_e2e::{ChatResponse, DegradeReason, HttpResponse};
 
 // ---------------------------------------------------------------------------
 // Protocol layer assertions
@@ -126,14 +126,11 @@ pub fn assert_observability_contract(resp: &ChatResponse) {
     );
 }
 
-/// Assert degrade_trace contains an expected reason substring (degraded paths).
-pub fn assert_degrade_reason(resp: &ChatResponse, expected_substr: &str) {
-    let needle = expected_substr.to_ascii_lowercase();
+/// Assert degrade_trace contains an expected reason (stable enum match).
+pub fn assert_degrade_reason(resp: &ChatResponse, expected: DegradeReason) {
     assert!(
-        resp.degrade_trace
-            .iter()
-            .any(|item| { item.reason.to_ascii_lowercase().contains(&needle) }),
-        "expected degrade reason containing '{expected_substr}', got: {:?}",
+        resp.degrade_trace.iter().any(|item| item.reason == expected),
+        "expected degrade reason {expected:?}, got: {:?}",
         resp.degrade_trace
     );
 }
@@ -199,4 +196,36 @@ fn extract_answer_cited_chunk_ids(answer: &str) -> std::collections::HashSet<Str
         remaining = &after_start[end + 2..];
     }
     ids
+}
+
+/// Assert codegen bridge captured a successful `dense_retrieval` tool result.
+pub fn assert_codegen_bridge_dense_retrieval(resp: &ChatResponse) {
+    let has_dense = resp.tool_results.iter().any(|result| {
+        result.tool == "dense_retrieval" && result.status == contracts::chat::ToolStatus::Ok
+    });
+    assert!(
+        has_dense,
+        "expected dense_retrieval from codegen bridge in tool_results, got: {:?}",
+        resp
+            .tool_results
+            .iter()
+            .map(|r| (&r.tool, &r.status))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// Assert cited chunk ids belong to the ingested document (proves bridge retrieval, not mock pin).
+pub fn assert_citations_use_document_chunks(resp: &ChatResponse, document_chunk_ids: &[String]) {
+    assert_has_citations(resp);
+    let allowed: std::collections::HashSet<&str> =
+        document_chunk_ids.iter().map(String::as_str).collect();
+    for citation in &resp.citations {
+        let Some(chunk_id) = citation.chunk_id.as_deref() else {
+            continue;
+        };
+        assert!(
+            allowed.contains(chunk_id),
+            "citation chunk_id {chunk_id} must be from ingested document chunks {document_chunk_ids:?}"
+        );
+    }
 }

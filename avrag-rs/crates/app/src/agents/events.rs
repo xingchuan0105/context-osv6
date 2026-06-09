@@ -83,7 +83,7 @@ pub enum AgentEvent {
         explanation: String,
     },
     /// Terminal decision event (white-box observability).
-    /// Emitted when the strategy reaches a final decision.
+    /// Emitted when the agent reaches a final decision.
     Terminal {
         decision: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -284,7 +284,7 @@ mod tests {
                     action: ingestion::AuditAction::RoutingDecision,
                     resource_type: "agent_request".to_string(),
                     resource_id: "r1".to_string(),
-                    payload: serde_json::json!({"strategy_id": "rag"}),
+                    payload: serde_json::json!({"mode_id": "rag"}),
                     created_at: "2024-01-01T00:00:00Z".to_string(),
                 },
             },

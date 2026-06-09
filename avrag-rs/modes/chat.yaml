@@ -1,20 +1,10 @@
 mode: chat
 system_prompt_base: prompts/orchestrators/chat-system.md
 tool_pool: []
-tool_definitions: []
 skill_catalog:
   retrieve: [memory]
   synthesis: [writing, format]
   mandatory_synthesis: [chat]
-disclosure:
-  rounds:
-    - round_idx: 0
-      load: retrieve_cluster_index
-    - round_idx: 1
-      load: skill_from_request
-  synthesis:
-    load: [skill_body_mandatory, writing_index, format_index, selected_skill_bodies]
-    tools: []
 budget:
   max_iterations: 2
   by_user_tier:

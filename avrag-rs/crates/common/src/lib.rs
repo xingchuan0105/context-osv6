@@ -14,7 +14,7 @@ pub mod util;
 
 pub use contracts::chat::{
     AnswerBlock, ChatDonePayload, ChatRequest, ChatResponse, ChatTokenUsage, ChatTurnInput,
-    Citation, DegradeTraceItem, GeneralPlan, GuardAction, GuardReport, GuardResult, ModeDebug,
+    Citation, DegradeReason, DegradeTraceItem, GeneralPlan, GuardAction, GuardReport, GuardResult, ModeDebug,
     PlannerOutput, RagModeDebug, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary, RiskLevel,
     SearchPlan, SourceRef, SummaryInjectionTrace, TraceInfo,
 };

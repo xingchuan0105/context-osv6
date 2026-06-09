@@ -5,13 +5,15 @@ pub struct ModeConfig {
     #[serde(alias = "mode")]
     pub id: String,
     pub system_prompt_base: String,
-    #[serde(default, alias = "native_tools")]
-    pub tool_definitions: Vec<common::ToolSpec>,
+    /// Tool ids disclosed to the LLM during retrieve. Schemas resolved from
+    /// [`CapabilityRegistry`](crate::agents::capability::CapabilityRegistry).
     #[serde(default)]
     pub tool_pool: Vec<String>,
     #[serde(default, deserialize_with = "deserialize_skill_catalog")]
     pub skill_catalog: SkillCatalogConfig,
-    pub disclosure: DisclosureConfig,
+    /// Inject retrieval/display query block during retrieve (and synthesis when true).
+    #[serde(default)]
+    pub inject_retrieval_query: bool,
     pub budget: BudgetConfig,
     pub auto_fallback: Option<AutoFallbackConfig>,
     #[serde(default)]
@@ -134,6 +136,9 @@ pub enum DiscloseAt {
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct MandatorySkills {
+    /// Clusters forced on the first retrieve round (e.g. RAG `codegen`).
+    #[serde(default)]
+    pub retrieve: Vec<String>,
     #[serde(default, alias = "mandatory_synthesis")]
     pub synthesis: Vec<String>,
 }
@@ -287,6 +292,9 @@ where
                     "mandatory" => {
                         mandatory = map.next_value()?;
                     }
+                    "mandatory_retrieve" => {
+                        mandatory.retrieve = map.next_value()?;
+                    }
                     "mandatory_synthesis" => {
                         mandatory.synthesis = map.next_value()?;
                     }
@@ -305,97 +313,6 @@ where
     }
 
     deserializer.deserialize_any(SkillCatalogVisitor)
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct DisclosureConfig {
-    pub rounds: Vec<DisclosureRound>,
-    #[serde(default)]
-    pub synthesis: Option<SynthesisDisclosureConfig>,
-}
-
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-pub struct SynthesisDisclosureConfig {
-    #[serde(default)]
-    pub load: Vec<String>,
-    #[serde(default)]
-    pub tools: Vec<String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct DisclosureRound {
-    pub round_idx: u8,
-    pub load: DisclosureLoad,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DisclosureLoad {
-    Index,
-    Skills(Vec<String>),
-    Auto,
-    RetrieveClusterIndex,
-    SkillFromRequest,
-}
-
-impl<'de> serde::Deserialize<'de> for DisclosureLoad {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct DisclosureLoadVisitor;
-        impl<'de> serde::de::Visitor<'de> for DisclosureLoadVisitor {
-            type Value = DisclosureLoad;
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter
-                    .write_str("a string load type, a map with 'skills', or a list of skill ids")
-            }
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                match value.to_lowercase().as_str() {
-                    "index" | "retrieve_cluster_index" => Ok(DisclosureLoad::RetrieveClusterIndex),
-                    "auto" => Ok(DisclosureLoad::Auto),
-                    "skill_from_request" | "skill_body_from_request" => {
-                        Ok(DisclosureLoad::SkillFromRequest)
-                    }
-                    _ => Err(serde::de::Error::custom(format!(
-                        "unknown load type: {}",
-                        value
-                    ))),
-                }
-            }
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::SeqAccess<'de>,
-            {
-                let mut skills = Vec::new();
-                while let Some(skill) = seq.next_element()? {
-                    skills.push(skill);
-                }
-                Ok(DisclosureLoad::Skills(skills))
-            }
-            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::MapAccess<'de>,
-            {
-                let mut skills = None;
-                while let Some(key) = map.next_key::<String>()? {
-                    if key == "skills" {
-                        skills = Some(map.next_value::<Vec<String>>()?);
-                    } else {
-                        let _: serde::de::IgnoredAny = map.next_value()?;
-                    }
-                }
-                match skills {
-                    Some(s) => Ok(DisclosureLoad::Skills(s)),
-                    None => Err(serde::de::Error::custom("missing field 'skills'")),
-                }
-            }
-        }
-        deserializer.deserialize_any(DisclosureLoadVisitor)
-    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -494,13 +411,6 @@ impl ModeConfig {
     }
 
     pub fn normalize(&mut self) {
-        if self.tool_pool.is_empty() && !self.tool_definitions.is_empty() {
-            self.tool_pool = self
-                .tool_definitions
-                .iter()
-                .map(|t| t.name.clone())
-                .collect();
-        }
         self.skill_catalog.hydrate_clusters();
     }
 
@@ -530,27 +440,16 @@ impl ModeConfig {
         ids: &[String],
     ) -> Vec<common::ToolSpec> {
         ids.iter()
-            .filter_map(|id| {
-                self.tool_definitions
-                    .iter()
-                    .find(|t| &t.name == id)
-                    .cloned()
-                    .or_else(|| registry.tool(id).map(tool_metadata_to_spec))
-            })
+            .filter_map(|id| registry.tool(id).map(tool_metadata_to_spec))
             .collect()
     }
 
+    /// Resolve tool specs for the retrieve phase from `tool_pool`.
     pub fn tools_for_retrieve(
         &self,
-        iteration: u8,
-        format_hint: Option<&str>,
         registry: &crate::agents::capability::CapabilityRegistry,
     ) -> Vec<common::ToolSpec> {
         if self.tool_pool.is_empty() {
-            return vec![];
-        }
-        // Format-heavy turns skip tools on round 0 to avoid dense modality degrade.
-        if iteration == 0 && format_hint.is_some() {
             return vec![];
         }
         self.resolve_tool_specs(registry, &self.tool_pool)
@@ -691,15 +590,34 @@ system_prompt_base: prompts/orchestrators/chat-system.md
 skill_catalog:
   - foo
   - bar
-disclosure:
-  rounds:
-    - round_idx: 0
-      load: index
 budget:
   max_iterations: 2
 "#;
         let mut config: ModeConfig = serde_yaml::from_str(yaml).unwrap();
         config.normalize();
         assert_eq!(config.skill_catalog.flat_skill_ids().len(), 2);
+    }
+
+    #[test]
+    fn rag_mode_has_mandatory_retrieve_codegen() {
+        let config = load_mode_config("rag").expect("rag mode should load");
+        assert!(config.inject_retrieval_query);
+        assert!(config
+            .skill_catalog
+            .mandatory
+            .retrieve
+            .contains(&"codegen".to_string()));
+    }
+
+    #[test]
+    fn search_mode_injects_retrieval_query() {
+        let config = load_mode_config("search").expect("search mode should load");
+        assert!(config.inject_retrieval_query);
+    }
+
+    #[test]
+    fn chat_mode_no_retrieval_query_injection() {
+        let config = load_mode_config("chat").expect("chat mode should load");
+        assert!(!config.inject_retrieval_query);
     }
 }

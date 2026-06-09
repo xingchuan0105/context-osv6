@@ -1,9 +1,9 @@
 //! Capability Registry — prompt skill and strategy metadata.
 //!
 //! ADR-0007 keeps LLM-facing native tool schemas out of PromptRegistry.
-//! Mode configs own tool disclosure through `tool_pool` and inline
-//! `tool_definitions`; runtime executors may keep their own non-prompt
-//! metadata for enforcement.
+//! Mode configs own tool disclosure through `tool_pool`; schemas are
+//! resolved from the capability registry at call time. Runtime executors
+//! may keep their own non-prompt metadata for enforcement.
 
 mod api;
 mod metadata;

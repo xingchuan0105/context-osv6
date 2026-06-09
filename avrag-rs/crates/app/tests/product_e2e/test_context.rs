@@ -11,7 +11,11 @@ use uuid::Uuid;
 use super::{
     ChatResponse, DocumentStatus, HttpResponse, NotebookInner, NotebookResponse, SseEvent,
     SseParser, UploadResponse,
-    mock_servers::{start_mock_embedding_server, start_mock_llm_server, start_mock_search_server},
+    mock_servers::{
+        reset_mock_rag_state, set_mock_rag_codegen_chunk_id, set_mock_rag_codegen_chunk_ids,
+        set_mock_rag_codegen_query, set_mock_rag_skip_codegen,
+        start_mock_embedding_server, start_mock_llm_server, start_mock_search_server,
+    },
     setup,
 };
 
@@ -291,6 +295,7 @@ impl TestContext {
         let (mock_llm_url, mock_llm_abort) = if use_real_llm {
             (String::new(), None)
         } else {
+            reset_mock_rag_state();
             let (url, abort) = start_mock_llm_server().await;
             (url, Some(abort))
         };
@@ -730,7 +735,18 @@ impl TestContext {
         notebook_id: &str,
         doc_scope: &[String],
     ) -> anyhow::Result<HttpResponse> {
-        self.chat_with_format_hint(query, notebook_id, doc_scope, None)
+        self.post_rag_chat(query, notebook_id, doc_scope, None, true)
+            .await
+    }
+
+    /// RAG chat without pinning mock synthesis chunk ids (exercises real bridge retrieval).
+    pub async fn chat_without_mock_chunk_pin(
+        &self,
+        query: &str,
+        notebook_id: &str,
+        doc_scope: &[String],
+    ) -> anyhow::Result<HttpResponse> {
+        self.post_rag_chat(query, notebook_id, doc_scope, None, false)
             .await
     }
 
@@ -742,6 +758,19 @@ impl TestContext {
         doc_scope: &[String],
         format_hint: Option<&str>,
     ) -> anyhow::Result<HttpResponse> {
+        self.post_rag_chat(query, notebook_id, doc_scope, format_hint, true)
+            .await
+    }
+
+    async fn post_rag_chat(
+        &self,
+        query: &str,
+        notebook_id: &str,
+        doc_scope: &[String],
+        format_hint: Option<&str>,
+        pin_mock_chunk_ids: bool,
+    ) -> anyhow::Result<HttpResponse> {
+        set_mock_rag_codegen_query(query);
         let mut body = serde_json::json!({
             "query": query,
             "agent_type": "rag",
@@ -751,6 +780,21 @@ impl TestContext {
         });
         if let Some(hint) = format_hint {
             body["format_hint"] = serde_json::json!(hint);
+        }
+        if pin_mock_chunk_ids && !doc_scope.is_empty() {
+            let mut chunk_ids = Vec::new();
+            for doc_id in doc_scope {
+                if let Ok(chunk_id) = self.query_first_chunk_id(doc_id).await {
+                    chunk_ids.push(chunk_id);
+                }
+            }
+            if !chunk_ids.is_empty() {
+                if chunk_ids.len() == 1 {
+                    set_mock_rag_codegen_chunk_id(chunk_ids.pop().unwrap());
+                } else {
+                    set_mock_rag_codegen_chunk_ids(chunk_ids);
+                }
+            }
         }
         let resp = self
             .http_client
@@ -771,6 +815,7 @@ impl TestContext {
         doc_scope: &[String],
         session_id: &str,
     ) -> anyhow::Result<HttpResponse> {
+        set_mock_rag_codegen_query(query);
         let body = serde_json::json!({
             "query": query,
             "agent_type": "rag",
@@ -779,6 +824,21 @@ impl TestContext {
             "session_id": session_id,
             "stream": false,
         });
+        if !doc_scope.is_empty() {
+            let mut chunk_ids = Vec::new();
+            for doc_id in doc_scope {
+                if let Ok(chunk_id) = self.query_first_chunk_id(doc_id).await {
+                    chunk_ids.push(chunk_id);
+                }
+            }
+            if !chunk_ids.is_empty() {
+                if chunk_ids.len() == 1 {
+                    set_mock_rag_codegen_chunk_id(chunk_ids.pop().unwrap());
+                } else {
+                    set_mock_rag_codegen_chunk_ids(chunk_ids);
+                }
+            }
+        }
         let resp = self
             .http_client
             .post(format!("{}/api/v1/chat", self.base_url))
@@ -916,6 +976,24 @@ impl TestContext {
         if params.debug {
             body["debug"] = serde_json::json!(true);
         }
+        if params.agent_type == "rag" {
+            set_mock_rag_codegen_query(params.query);
+        }
+        if params.agent_type == "rag" && !params.doc_scope.is_empty() {
+            let mut chunk_ids = Vec::new();
+            for doc_id in params.doc_scope {
+                if let Ok(chunk_id) = self.query_first_chunk_id(doc_id).await {
+                    chunk_ids.push(chunk_id);
+                }
+            }
+            if !chunk_ids.is_empty() {
+                if chunk_ids.len() == 1 {
+                    set_mock_rag_codegen_chunk_id(chunk_ids.pop().unwrap());
+                } else {
+                    set_mock_rag_codegen_chunk_ids(chunk_ids);
+                }
+            }
+        }
 
         let resp = self
             .http_client
@@ -1009,6 +1087,42 @@ impl TestContext {
             .fetch_one(&pool)
             .await?;
         Ok(row.0 as usize)
+    }
+
+    /// Return one chunk id from PG for mock codegen embedding.
+    pub async fn query_first_chunk_id(&self, document_id: &str) -> anyhow::Result<String> {
+        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
+        let doc_id = Uuid::parse_str(document_id)?;
+        let row: (Uuid,) =
+            sqlx::query_as("SELECT id FROM chunks WHERE document_id = $1 ORDER BY created_at LIMIT 1")
+                .bind(doc_id)
+                .fetch_one(&pool)
+                .await?;
+        Ok(row.0.to_string())
+    }
+
+    /// Return all chunk ids for a document (for bridge smoke assertions).
+    pub async fn query_document_chunk_ids(&self, document_id: &str) -> anyhow::Result<Vec<String>> {
+        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
+        let doc_id = Uuid::parse_str(document_id)?;
+        let rows: Vec<(Uuid,)> =
+            sqlx::query_as("SELECT id FROM chunks WHERE document_id = $1 ORDER BY created_at")
+                .bind(doc_id)
+                .fetch_all(&pool)
+                .await?;
+        Ok(rows.into_iter().map(|(id,)| id.to_string()).collect())
+    }
+
+    /// Pin chunk id for mock LLM codegen stdout (RAG smoke happy path).
+    pub fn set_mock_rag_chunk_id(&self, chunk_id: &str) {
+        let _ = self;
+        set_mock_rag_codegen_chunk_id(chunk_id);
+    }
+
+    /// Force mock LLM to skip codegen and exercise server auto_fallback.
+    pub fn set_mock_rag_skip_codegen(&self, skip: bool) {
+        let _ = self;
+        set_mock_rag_skip_codegen(skip);
     }
 
     /// Override the ingestion task max_attempts for a document.

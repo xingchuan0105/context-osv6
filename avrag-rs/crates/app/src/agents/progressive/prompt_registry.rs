@@ -182,6 +182,28 @@ mod tests {
     }
 
     #[test]
+    fn atomic_tools_directory_skills_are_not_in_prompt_registry() {
+        // build.rs scans clusters/ + synthesis/ + orchestrators/ only (ADR-0007).
+        // prompts/atomic-tools/* are legacy reference docs; runtime tools live in
+        // SkillComponent registry + mode tool_pool → CapabilityRegistry.
+        let registry = PromptRegistry::standard_cached();
+        for name in &[
+            "conversation-history-load",
+            "conversation-history-tag",
+            "web_search",
+            "web_fetch",
+            "calculator",
+            "code_interpreter",
+        ] {
+            assert!(
+                registry.skill(name).is_none(),
+                "atomic-tools/{name} must not load into PromptRegistry"
+            );
+        }
+        assert!(registry.skill("memory").is_some());
+    }
+
+    #[test]
     fn dependency_validation_detects_missing_dependency() {
         let mut skills = std::collections::HashMap::new();
         skills.insert(

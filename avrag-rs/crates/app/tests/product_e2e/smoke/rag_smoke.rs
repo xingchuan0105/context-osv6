@@ -1,4 +1,9 @@
 //! P0-2: Document Q&A returns structured citation.
+//!
+//! Bridge coverage: this smoke uses [`TestContext::chat_without_mock_chunk_pin`] so
+//! citations must come from real sandbox `dense_search` output, not mock-synthesis pin.
+//! End-to-end bridge plumbing is also covered by `interpreter_hits_runtime_bridge_end_to_end`
+//! in `rag-core`.
 
 use std::time::Duration;
 
@@ -32,9 +37,18 @@ async fn rag_document_qa_returns_citation() {
         "expected chunk_count > 0 after successful ingestion, got {chunk_count}"
     );
 
-    // 3. Chat — returns HttpResponse (protocol layer)
+    let document_chunk_ids = ctx
+        .query_document_chunk_ids(&upload.document_id)
+        .await
+        .unwrap();
+    assert!(
+        !document_chunk_ids.is_empty(),
+        "expected chunk ids in PG for bridge citation assertions"
+    );
+
+    // 3. Chat — no mock chunk pin; bridge must return real retrieval chunks
     let http_resp: HttpResponse = ctx
-        .chat(
+        .chat_without_mock_chunk_pin(
             "What is antifragility?",
             &upload.notebook_id,
             &[upload.document_id.clone()],
@@ -48,8 +62,15 @@ async fn rag_document_qa_returns_citation() {
     // 5. Deserialize to business object
     let resp: ChatResponse = http_resp.into_business().unwrap();
 
-    // 6. Product assertions
+    // 6. Product assertions (codegen main path — not auto_fallback)
+    assert!(
+        resp.degrade_trace.is_empty(),
+        "codegen happy path should not degrade: {:?}",
+        resp.degrade_trace
+    );
+    assert_codegen_bridge_dense_retrieval(&resp);
     assert_has_citations(&resp);
+    assert_citations_use_document_chunks(&resp, &document_chunk_ids);
     assert_citation_doc_id(&resp, &upload.document_id);
     assert_citation_referenced_in_answer(&resp);
     assert_answer_has_doc_citation(&resp);

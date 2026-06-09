@@ -1,19 +1,13 @@
 mode: rag
 system_prompt_base: prompts/orchestrators/rag-system.md
 tool_pool: []
+inject_retrieval_query: true
 skill_catalog:
   retrieve: [codegen, memory]
   synthesis: [writing, format]
-  mandatory_synthesis: [rag-answer]
-disclosure:
-  rounds:
-    - round_idx: 0
-      load: retrieve_cluster_index
-    - round_idx: 1
-      load: skill_from_request
-  synthesis:
-    load: [skill_body_mandatory, writing_index, format_index, selected_skill_bodies]
-    tools: []
+  mandatory:
+    retrieve: [codegen]
+    synthesis: [rag-answer]
 budget:
   max_iterations: 4
   by_user_tier:

@@ -1,15 +1,20 @@
 use avrag_auth::AuthContext;
 use common::{
-    ChatRequest, DegradeTraceItem, DenseRetrievalArgs, LexicalRetrievalArgs, RagPlan, RagPlanItem,
-    ToolResult, ToolStatus, ToolTrace,
+    ChatRequest, DegradeReason, DegradeTraceItem, DenseRetrievalArgs, LexicalRetrievalArgs, RagPlan,
+    RagPlanItem, ToolResult, ToolStatus, ToolTrace,
 };
 
 use crate::RagRuntime;
 
 pub(crate) fn embedding_failure_in_trace(degrade_trace: &[DegradeTraceItem]) -> bool {
     degrade_trace.iter().any(|item| {
-        let reason = item.reason.to_ascii_lowercase();
-        reason.contains("embedding failed") || reason.contains("embedding api error")
+        matches!(item.reason, DegradeReason::EmbeddingUnavailable)
+            || matches!(
+                &item.reason,
+                DegradeReason::Other(reason)
+                    if reason.to_ascii_lowercase().contains("embedding failed")
+                        || reason.to_ascii_lowercase().contains("embedding api error")
+            )
     })
 }
 
@@ -98,7 +103,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                 if embedding_failure_in_trace(&degrade_trace) {
                     degrade_trace.push(DegradeTraceItem {
                         stage: "dense_retrieval".to_string(),
-                        reason: "embedding_unavailable".to_string(),
+                        reason: DegradeReason::EmbeddingUnavailable,
                         impact: "falling back to lexical_retrieval".to_string(),
                     });
                 }
@@ -181,7 +186,9 @@ mod tests {
     fn embedding_failure_in_trace_detects_dense_embedding_errors() {
         let trace = vec![DegradeTraceItem {
             stage: "text_dense".to_string(),
-            reason: "Text dense embedding failed: Embedding API error 503".to_string(),
+            reason: DegradeReason::Other(
+                "Text dense embedding failed: Embedding API error 503".to_string(),
+            ),
             impact: "skip".to_string(),
         }];
         assert!(embedding_failure_in_trace(&trace));
@@ -191,7 +198,7 @@ mod tests {
     fn embedding_failure_in_trace_ignores_unrelated_degrade() {
         let trace = vec![DegradeTraceItem {
             stage: "bm25".to_string(),
-            reason: "BM25 channel failed".to_string(),
+            reason: DegradeReason::ChannelFailed,
             impact: "skip".to_string(),
         }];
         assert!(!embedding_failure_in_trace(&trace));

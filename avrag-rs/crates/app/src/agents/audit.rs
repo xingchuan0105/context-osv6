@@ -171,7 +171,7 @@ pub fn routing_decision_record(
     org_id: &str,
     actor_id: Option<&str>,
     trace_id: &str,
-    strategy_id: &str,
+    mode_id: &str,
     matched_rule: &str,
     confidence: f64,
     explanation: &str,
@@ -184,7 +184,7 @@ pub fn routing_decision_record(
         resource_type: "agent_request".to_string(),
         resource_id: trace_id.to_string(),
         payload: serde_json::json!({
-            "strategy_id": strategy_id,
+            "mode_id": mode_id,
             "matched_rule": matched_rule,
             "confidence": confidence,
             "explanation": explanation,
@@ -275,7 +275,7 @@ pub fn budget_exhausted_record(
     trace_id: &str,
     budget_current: u8,
     budget_max: u8,
-    strategy: &str,
+    mode: &str,
 ) -> AuditRecord {
     AuditRecord {
         audit_id: Uuid::new_v4().to_string(),
@@ -287,7 +287,7 @@ pub fn budget_exhausted_record(
         payload: serde_json::json!({
             "budget_current": budget_current,
             "budget_max": budget_max,
-            "strategy": strategy,
+            "mode": mode,
         }),
         created_at: common::now_rfc3339(),
     }
@@ -388,7 +388,7 @@ impl AuditSinkAdapter {
         &self,
         budget_current: u8,
         budget_max: u8,
-        strategy: &str,
+        mode: &str,
     ) -> AuditRecord {
         budget_exhausted_record(
             &self.org_id,
@@ -396,7 +396,7 @@ impl AuditSinkAdapter {
             &self.trace_id,
             budget_current,
             budget_max,
-            strategy,
+            mode,
         )
     }
 }
@@ -457,7 +457,7 @@ mod tests {
         assert_eq!(record.actor_id, Some("user-1".to_string()));
         assert_eq!(record.resource_id, "trace-1");
         let payload = record.payload.as_object().unwrap();
-        assert_eq!(payload["strategy_id"], "rag");
+        assert_eq!(payload["mode_id"], "rag");
         assert_eq!(payload["confidence"], 0.95);
     }
 

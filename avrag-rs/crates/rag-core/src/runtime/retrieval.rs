@@ -6,7 +6,7 @@ use avrag_llm::{MultiModalEmbeddingInput, MultiModalRerankDocument};
 use avrag_retrieval_data_plane::{
     Bm25SearchRequest, MultimodalSearchRequest, TextDenseSearchRequest, WeightedChunkList,
 };
-use common::{ChatRequest, DegradeTraceItem, RagPlan};
+use common::{ChatRequest, DegradeReason, DegradeTraceItem, RagPlan};
 
 use crate::merge::{cut_top_k, dual_threshold_cut, global_rrf_merge};
 use crate::retrieval::ScoredChunk;
@@ -115,8 +115,10 @@ impl RagRuntime {
                 Err(error) => {
                     degrade_trace.push(DegradeTraceItem {
                         stage: "text_dense".to_string(),
-                        reason: format!("Text dense embedding failed: {}", error),
-                        impact: "Skipping text dense retrieval for one query item".to_string(),
+                        reason: DegradeReason::EmbeddingUnavailable,
+                        impact: format!(
+                            "Skipping text dense retrieval for one query item: {error}"
+                        ),
                     });
                     None
                 }
@@ -142,7 +144,7 @@ impl RagRuntime {
                 }),
                 Err(error) => degrade_trace.push(DegradeTraceItem {
                     stage: "text_dense".to_string(),
-                    reason: format!("Text dense retrieval failed: {}", error),
+                    reason: DegradeReason::Other(format!("Text dense retrieval failed: {}", error)),
                     impact: "Skipping text dense retrieval for one query item".to_string(),
                 }),
             }
@@ -193,7 +195,7 @@ impl RagRuntime {
                     if let Some(reason) = output.trace.fallback_reason.as_ref() {
                         degrade_trace.push(DegradeTraceItem {
                             stage: "bm25".to_string(),
-                            reason: format!("Sparse retrieval fallback: {}", reason),
+                            reason: DegradeReason::Other(format!("Sparse retrieval fallback: {}", reason)),
                             impact: "Used a fallback sparse retrieval path for one lexical item"
                                 .to_string(),
                         });
@@ -211,7 +213,7 @@ impl RagRuntime {
                 }
                 Err(error) => degrade_trace.push(DegradeTraceItem {
                     stage: "bm25".to_string(),
-                    reason: format!("BM25 retrieval failed: {}", error),
+                    reason: DegradeReason::Other(format!("BM25 retrieval failed: {}", error)),
                     impact: "Skipping sparse retrieval for one lexical item".to_string(),
                 }),
             }
@@ -256,7 +258,7 @@ impl RagRuntime {
             if query_item_count > 0 {
                 degrade_trace.push(DegradeTraceItem {
                     stage: "multimodal_dense".to_string(),
-                    reason: "multimodal embedding client not configured".to_string(),
+                    reason: DegradeReason::EmbeddingUnavailable,
                     impact: "Skipping multimodal dense retrieval".to_string(),
                 });
             }
@@ -277,7 +279,7 @@ impl RagRuntime {
                 Err(error) => {
                     degrade_trace.push(DegradeTraceItem {
                         stage: "multimodal_dense".to_string(),
-                        reason: format!("Multimodal embedding failed: {}", error),
+                        reason: DegradeReason::Other(format!("Multimodal embedding failed: {}", error)),
                         impact: "Skipping multimodal dense retrieval for one query item"
                             .to_string(),
                     });
@@ -298,7 +300,7 @@ impl RagRuntime {
                 Ok(results) => chunks.extend(results),
                 Err(error) => degrade_trace.push(DegradeTraceItem {
                     stage: "multimodal_dense".to_string(),
-                    reason: format!("Multimodal dense retrieval failed: {}", error),
+                    reason: DegradeReason::Other(format!("Multimodal dense retrieval failed: {}", error)),
                     impact: "Skipping multimodal dense retrieval for one query item".to_string(),
                 }),
             }
@@ -365,7 +367,7 @@ impl RagRuntime {
                 Vec::new(),
                 vec![DegradeTraceItem {
                     stage: "retrieval".to_string(),
-                    reason: "no_valid_retrieval_results".to_string(),
+                    reason: DegradeReason::NoValidRetrievalResults,
                     impact: "Passing zero-recall context to answer synthesis".to_string(),
                 }],
             ));
@@ -441,7 +443,7 @@ impl RagRuntime {
                 Err(error) => {
                     degrade_trace.push(DegradeTraceItem {
                         stage: "mm_reranker".to_string(),
-                        reason: format!("Multimodal reranker call failed: {}", error),
+                        reason: DegradeReason::Other(format!("Multimodal reranker call failed: {}", error)),
                         impact: "Falling back to text rerank or pre-rerank ordering".to_string(),
                     });
                 }
@@ -475,7 +477,7 @@ impl RagRuntime {
                 Err(error) => {
                     degrade_trace.push(DegradeTraceItem {
                         stage: "reranker".to_string(),
-                        reason: format!("Reranker call failed: {}", error),
+                        reason: DegradeReason::Other(format!("Reranker call failed: {}", error)),
                         impact: "Using pre-rerank ordering".to_string(),
                     });
                 }

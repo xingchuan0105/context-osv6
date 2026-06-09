@@ -91,7 +91,7 @@ pub fn prior_user_turns(request: &AgentRequest, max_turns: u8) -> Vec<String> {
     turns
 }
 
-pub fn classify_self_contained(raw: &str, prior_turns: &[String]) -> SelfContainedStatus {
+fn classify_self_contained(raw: &str, prior_turns: &[String]) -> SelfContainedStatus {
     if prior_turns.is_empty() {
         return SelfContainedStatus::SelfContained;
     }
@@ -338,7 +338,6 @@ mod tests {
                     resolved_query: None,
                 },
             ],
-            session_summary: None,
             user_preferences: None,
             debug: false,
             stream: false,

@@ -143,6 +143,12 @@ export function WorkspaceChatPane({
         <span className={styles.modeChip}>{activeModeCode}</span>
       </header>
 
+      {chatSession.error && (
+        <p className={styles.error} role="alert">
+          {chatSession.error}
+        </p>
+      )}
+
       <ChatMessageList
         messages={chatSession.messages}
         progress={chatSession.progress}

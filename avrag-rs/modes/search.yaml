@@ -1,44 +1,11 @@
 mode: search
 system_prompt_base: prompts/orchestrators/search-system.md
 tool_pool: [web_search, web_fetch]
-tool_definitions:
-  - name: web_search
-    version: "1.0"
-    description: "搜索互联网获取实时信息"
-    input_schema:
-      type: object
-      properties:
-        query: { type: string }
-        vertical:
-          type: string
-          enum: [web, news]
-          default: web
-      required: ["query"]
-    output_schema:
-      type: object
-  - name: web_fetch
-    version: "1.0"
-    description: "抓取指定 URL 的页面正文"
-    input_schema:
-      type: object
-      properties:
-        url: { type: string }
-      required: ["url"]
-    output_schema:
-      type: object
+inject_retrieval_query: true
 skill_catalog:
   retrieve: [search, memory]
   synthesis: [writing, format]
   mandatory_synthesis: [search-answer]
-disclosure:
-  rounds:
-    - round_idx: 0
-      load: retrieve_cluster_index
-    - round_idx: 1
-      load: skill_from_request
-  synthesis:
-    load: [skill_body_mandatory, writing_index, format_index, selected_skill_bodies]
-    tools: []
 budget:
   max_iterations: 3
   by_user_tier:

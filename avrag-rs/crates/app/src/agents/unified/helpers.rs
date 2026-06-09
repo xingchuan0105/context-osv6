@@ -1,7 +1,7 @@
 use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::runtime::AgentRunUsage;
 use avrag_llm::LlmUsage;
-use common::{AnswerContextChunk, Citation, DegradeTraceItem, SourceRef, ToolResult, ToolStatus};
+use common::{AnswerContextChunk, Citation, DegradeReason, DegradeTraceItem, SourceRef, ToolResult, ToolStatus};
 
 pub fn merge_usage(existing: Option<&LlmUsage>, new: &LlmUsage) -> LlmUsage {
     match existing {
@@ -88,11 +88,7 @@ pub fn extract_chunks_with_scores(tool_results: &[ToolResult]) -> Vec<(AnswerCon
                 .get("doc_id")
                 .and_then(|v| v.as_str())
                 .map(str::to_owned);
-            let text = item
-                .get("text")
-                .and_then(|v| v.as_str())
-                .map(str::to_owned)
-                .unwrap_or_default();
+            let text = chunk_text_field(item).unwrap_or_default();
             let page = item.get("page").and_then(|v| v.as_i64());
             let score = item.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
 
@@ -114,6 +110,81 @@ pub fn extract_chunks_with_scores(tool_results: &[ToolResult]) -> Vec<(AnswerCon
         }
     }
     out
+}
+
+/// Parse sandbox stdout JSON into retrieval items for citation building.
+///
+/// Codegen observations use `content`; native tools use `text`. Both are normalized to `text`.
+pub fn tool_result_from_code_execution_observation(observation: &str) -> Option<ToolResult> {
+    let items = parse_retrieval_items_from_code_execution(observation)?;
+    if items.is_empty() {
+        return None;
+    }
+    Some(ToolResult {
+        tool: "dense_retrieval".to_string(),
+        version: "1.0".to_string(),
+        status: ToolStatus::Ok,
+        data: Some(serde_json::Value::Array(items)),
+        trace: None,
+    })
+}
+
+fn parse_retrieval_items_from_code_execution(observation: &str) -> Option<Vec<serde_json::Value>> {
+    let mut items = Vec::new();
+    for segment in observation.split("[block ") {
+        let Some(stdout_part) = segment.split_once("stdout:") else {
+            continue;
+        };
+        let after_stdout = stdout_part.1;
+        let stdout = after_stdout
+            .split_once("stderr:")
+            .map(|(stdout, _)| stdout)
+            .unwrap_or(after_stdout)
+            .trim();
+        if stdout.is_empty() {
+            continue;
+        }
+        let parsed = serde_json::from_str::<serde_json::Value>(stdout).ok()?;
+        match parsed {
+            serde_json::Value::Array(arr) => items.extend(normalize_retrieval_items(arr)),
+            serde_json::Value::Object(map) => {
+                if let Some(arr) = map.get("chunks").and_then(|v| v.as_array()) {
+                    items.extend(normalize_retrieval_items(arr.clone()));
+                }
+            }
+            _ => {}
+        }
+    }
+    if items.is_empty() {
+        None
+    } else {
+        Some(items)
+    }
+}
+
+fn normalize_retrieval_items(items: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+    items
+        .into_iter()
+        .filter_map(|mut item| {
+            let obj = item.as_object_mut()?;
+            if !obj.contains_key("text")
+                && let Some(content) = obj.get("content").and_then(|v| v.as_str())
+            {
+                obj.insert("text".to_string(), serde_json::Value::String(content.to_string()));
+            }
+            obj.get("chunk_id")
+                .and_then(|v| v.as_str())
+                .is_some_and(|id| !id.is_empty())
+                .then(|| item)
+        })
+        .collect()
+}
+
+fn chunk_text_field(item: &serde_json::Value) -> Option<String> {
+    item.get("text")
+        .or_else(|| item.get("content"))
+        .and_then(|v| v.as_str())
+        .map(str::to_owned)
 }
 
 pub fn build_citations_from_tool_results(tool_results: &[ToolResult]) -> Vec<Citation> {
@@ -145,11 +216,7 @@ pub fn build_citations_from_tool_results(tool_results: &[ToolResult]) -> Vec<Cit
                 .and_then(|v| v.as_str())
                 .map(str::to_owned)
                 .unwrap_or_default();
-            let text = item
-                .get("text")
-                .and_then(|v| v.as_str())
-                .map(str::to_owned)
-                .unwrap_or_default();
+            let text = chunk_text_field(item).unwrap_or_default();
             let page = item
                 .get("page")
                 .and_then(|v| v.as_i64())
@@ -311,25 +378,29 @@ pub fn degrade_trace_from_tool_results(tool_results: &[ToolResult]) -> Vec<Degra
         {
             trace.push(DegradeTraceItem {
                 stage: result.tool.clone(),
-                reason: reason.clone(),
+                reason: parse_tool_degrade_reason(reason),
                 impact: format!("{} degraded", result.tool),
             });
         }
         if result.status != ToolStatus::Ok {
-            let reason = result
-                .data
-                .as_ref()
-                .and_then(|data| data.get("error"))
-                .and_then(|error| error.as_str())
-                .unwrap_or("tool execution failed");
             trace.push(DegradeTraceItem {
                 stage: result.tool.clone(),
-                reason: reason.to_string(),
+                reason: DegradeReason::ToolUnavailable,
                 impact: format!("{} unavailable", result.tool),
             });
         }
     }
     trace
+}
+
+fn parse_tool_degrade_reason(raw: &str) -> DegradeReason {
+    for part in raw.split(';').map(str::trim).filter(|part| !part.is_empty()) {
+        let parsed = DegradeReason::from_str(part);
+        if part == parsed.as_str() {
+            return parsed;
+        }
+    }
+    DegradeReason::from_str(raw.trim())
 }
 
 pub fn build_sources_from_tool_results(tool_results: &[ToolResult]) -> Vec<SourceRef> {
@@ -359,10 +430,7 @@ pub fn build_sources_from_tool_results(tool_results: &[ToolResult]) -> Vec<Sourc
                 .get("doc_id")
                 .and_then(|v| v.as_str())
                 .map(str::to_owned);
-            let text = item
-                .get("text")
-                .and_then(|v| v.as_str())
-                .map(|s| s.chars().take(200).collect::<String>());
+            let text = chunk_text_field(item).map(|s| s.chars().take(200).collect::<String>());
             let page = item
                 .get("page")
                 .and_then(|v| v.as_i64())
@@ -501,6 +569,21 @@ mod tests {
             Some(serde_json::json!([{"text": "no id"}])),
         )];
         assert!(extract_chunks_with_scores(&results).is_empty());
+    }
+
+    #[test]
+    fn test_code_execution_observation_builds_dense_retrieval_tool_result() {
+        let observation = r#"[block 0] stdout: [{"chunk_id":"c1","doc_id":"d1","content":"hello","score":0.9}]
+stderr: 
+"#;
+        let result = tool_result_from_code_execution_observation(observation).unwrap();
+        assert_eq!(result.tool, "dense_retrieval");
+        let arr = result.data.as_ref().unwrap().as_array().unwrap();
+        assert_eq!(arr[0]["chunk_id"], "c1");
+        assert_eq!(arr[0]["text"], "hello");
+        let citations = build_citations_from_tool_results(std::slice::from_ref(&result));
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].chunk_id.as_deref(), Some("c1"));
     }
 
     #[test]

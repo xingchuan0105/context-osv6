@@ -39,7 +39,7 @@ pub struct ReplaySnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replay_note: Option<String>,
 
-    /// Captured run result for fast replay without re-executing the strategy.
+    /// Captured run result for fast replay without re-executing the mode.
     /// This is a post-hoc summary built from the AgentRunResult after the run completes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub captured_result: Option<CapturedRunResult>,
@@ -113,7 +113,7 @@ impl From<&CapturedRunResult> for crate::agents::runtime::AgentRunResult {
 /// Versions of all components at the time of the run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnvironmentSnapshot {
-    /// Strategy code version (e.g. git commit or semantic version).
+    /// Agent mode code version (e.g. git commit or semantic version).
     pub strategy_version: String,
     /// Capability registry version.
     pub registry_version: String,
@@ -182,12 +182,12 @@ impl From<&str> for SemVerReq {
 // Compatibility matrix
 // ---------------------------------------------------------------------------
 
-/// Compatibility matrix governing strategy dependencies and replay policy.
+/// Compatibility matrix governing mode dependencies and replay policy.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompatibilityMatrix {
-    /// Strategy -> tool_id -> SemVerReq
+    /// Mode -> tool_id -> SemVerReq
     pub strategy_tool_deps: HashMap<String, HashMap<String, SemVerReq>>,
-    /// Strategy -> skill_id -> SemVerReq
+    /// Mode -> skill_id -> SemVerReq
     pub strategy_skill_deps: HashMap<String, HashMap<String, SemVerReq>>,
     /// Maximum number of concurrent versions allowed.
     pub max_concurrent_versions: u32,
@@ -346,7 +346,7 @@ pub fn check_replay_compatibility(
 ) -> ReplayResultTag {
     use ReplayCompatibility::*;
 
-    // Major version check: strategy must match exactly.
+    // Major version check: mode version must match exactly.
     if snapshot.environment.strategy_version != current.strategy_version {
         return ReplayResultTag::NotReplayable {
             reason: format!(
@@ -415,7 +415,7 @@ pub fn check_replay_compatibility(
 /// Build an `EnvironmentSnapshot` representing the current runtime environment.
 ///
 /// This is a best-effort capture using available version information. In a
-/// production deployment the strategy_version should be pinned to the exact
+/// production deployment the mode_version should be pinned to the exact
 /// git commit or container image digest.
 pub fn current_environment() -> EnvironmentSnapshot {
     EnvironmentSnapshot {
@@ -465,7 +465,7 @@ pub async fn run_with_snapshot(
 /// Replay a snapshot, returning a `ReplayResult`.
 ///
 /// - If the snapshot contains a `captured_result`, the replay is *fast*:
-///   it reconstructs the `AgentRunResult` without executing any strategy.
+///   it reconstructs the `AgentRunResult` without executing any mode.
 /// - If the snapshot lacks a captured result, replay falls back to
 ///   `ReplayResultTag::NotReplayable`.
 ///
@@ -525,7 +525,6 @@ mod tests {
                 session_id: None,
                 doc_scope: vec![],
                 messages: vec![],
-                session_summary: None,
                 user_preferences: None,
                 debug: false,
                 stream: false,
@@ -607,7 +606,6 @@ mod tests {
                 session_id: None,
                 doc_scope: vec![],
                 messages: vec![],
-                session_summary: None,
                 user_preferences: None,
                 debug: false,
                 stream: false,

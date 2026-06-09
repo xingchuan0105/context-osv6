@@ -14,9 +14,9 @@ use std::collections::BTreeMap;
 pub struct EvalRun {
     pub run_id: String,
     pub run_name: String,
-    /// Strategy under evaluation (e.g. "ChatStrategy", "RagStrategy").
+    /// Mode under evaluation (e.g. "chat", "rag").
     pub strategy: String,
-    /// Version of the strategy code.
+    /// Version of the agent mode code.
     pub strategy_version: String,
     /// Timestamp when the run started (Unix millis).
     pub started_at_ms: u64,
@@ -930,7 +930,7 @@ pub struct EvalDatasetSpec {
     pub dataset_id: String,
     /// Max cases to sample (actual may be fewer if dataset is small).
     pub sample_size: usize,
-    /// Optional filter expression (e.g. "strategy == 'RagStrategy'").
+    /// Optional filter expression (e.g. "mode == 'rag'").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filter: Option<String>,
 }
@@ -1131,7 +1131,6 @@ mod tests {
                 session_id: None,
                 doc_scope: vec![],
                 messages: vec![],
-                session_summary: None,
                 user_preferences: None,
                 debug: false,
                 stream: false,

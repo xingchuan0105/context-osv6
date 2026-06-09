@@ -15,6 +15,10 @@
 //! expression (if it is not `None`).  Results are serialized as JSON and
 //! returned via the Rust `ExecutionResult` struct.
 
+mod bridge;
+
+pub use bridge::{bridge_shim_client_method_names, HostBridge};
+
 use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -56,6 +60,9 @@ pub enum InterpreterError {
 
     #[error("utf-8 error: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
+
+    #[error("bridge error: {0}")]
+    Bridge(String),
 }
 
 /// Sandboxed Python code interpreter.
@@ -177,6 +184,22 @@ impl CodeInterpreter {
             )),
         }
     }
+
+    /// Execute Python code with a host retrieval bridge (fd3/fd4 pipe RPC).
+    pub async fn execute_with_bridge<B: HostBridge + Send + Sync + 'static>(
+        &self,
+        code: &str,
+        bridge: std::sync::Arc<B>,
+    ) -> Result<ExecutionResult, InterpreterError> {
+        bridge::execute_with_bridge_arc(
+            &self.python_path,
+            self.timeout_secs,
+            self.memory_limit_mb,
+            code,
+            bridge,
+        )
+        .await
+    }
 }
 
 fn read_pipe<R: Read>(stream: &mut Option<R>) -> Result<String, InterpreterError> {
@@ -281,6 +304,61 @@ _real_stdout.write(json.dumps(output))
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use serde_json::json;
+
+    struct StubBridge;
+
+    #[async_trait]
+    impl HostBridge for StubBridge {
+        async fn call(&self, method: &str, _args: serde_json::Value) -> serde_json::Value {
+            match method {
+                "dense_search" => json!({
+                    "chunks": [{
+                        "chunk_id": "00000000-0000-4000-8000-000000000001",
+                        "doc_id": "00000000-0000-4000-8000-000000000010",
+                        "content": "hello from stub",
+                        "score": 0.9
+                    }]
+                }),
+                _ => json!({ "chunks": [] }),
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bridge_dense_search_returns_chunks_in_stdout() {
+        let interpreter = CodeInterpreter::new().with_timeout(10);
+        let code = r#"
+chunks = await client.dense_search(query="x", top_k=5)
+import json
+print(json.dumps(chunks))
+"#;
+        let result = interpreter
+            .execute_with_bridge(code, std::sync::Arc::new(StubBridge))
+            .await
+            .unwrap();
+        assert!(result.success, "stderr: {}", result.stderr);
+        assert!(
+            result.stdout.contains("00000000-0000-4000-8000-000000000001"),
+            "stdout: {}",
+            result.stdout
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bridge_blocks_socket_import() {
+        let interpreter = CodeInterpreter::new().with_timeout(10);
+        let result = interpreter
+            .execute_with_bridge("import socket", std::sync::Arc::new(StubBridge))
+            .await
+            .unwrap();
+        assert!(
+            !result.stderr.is_empty() || !result.success,
+            "stderr: {}",
+            result.stderr
+        );
+    }
 
     #[test]
     fn test_simple_expression() {

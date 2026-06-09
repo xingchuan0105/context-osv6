@@ -4,21 +4,21 @@
 
 ### 1.1 当前测试的真实定位
 
-`crates/app/tests/` 下的 E2E 测试本质是 **Agent 策略集成测试**，不是产品 E2E：
+`crates/app/tests/product_e2e/` 是 **HTTP 黑盒产品 E2E**，入口为 `POST /api/v1/chat`，被测系统为 **Unified Agent + ReActLoop**（检索 → 评估 → 合成，Messenger / LoopOptimizer 模型）：
 
-| 维度 | 当前测试 | 产品 E2E |
-|------|---------|---------|
-| 入口 | `RagContext::from_request` + `StrategyExecutor::run` | HTTP `POST /api/v1/chat` |
-| Ingestion | 手动 `ingest_test_document`（只写 Milvus chunks） | HTTP upload → worker pipeline → PG + Milvus |
-| Search | Mock 未运行，从未验证 | 真实/受控 SearchProvider |
-| 断言 | `"slide" 字符串包含` | 结构化字段 + 协议契约 |
+| 维度 | Product E2E（本套件） | 旧 Strategy/Commander 路径（已废弃） |
+|------|----------------------|--------------------------------------|
+| 入口 | HTTP `POST /api/v1/chat` | 直接 `RagContext` + `StrategyExecutor` |
+| RAG 检索 | Mock LLM 返回 `<code>` → `code_execution_result` 证据链；独立用例测 `auto_fallback` | planner/evaluator 独立 LLM 调用 + `dense_retrieval` native tool |
+| Ingestion | HTTP upload → worker → PG + Milvus | 手动 fixture 注入 |
+| 断言 | 协议层 + 结构化 `citations` / `DegradeReason` | 字符串 / 状态机 |
 
-### 1.2 历史运行结论
+### 1.2 历史运行结论（2026-06 对齐后）
 
-- 37 次运行，Search 策略**从未执行**
-- Chat 早期大量 provider 错误，后期稳定
-- RAG 间歇性 evaluator 死循环（145s budget 耗尽）
-- 最不稳定因素：LLM provider 抖动 + 字符串断言脆弱
+- Smoke mock 已对齐 ReActLoop：RAG happy path 走 **codegen 主路径**；`rag_fallback_smoke` 单独覆盖 **auto_fallback** 安全网
+- 已删除 mock 中永不命中的 planner/evaluator 路由（Commander 残留）
+- `degrade_trace.reason` 已强类型化为 `DegradeReason` 枚举（JSON 仍为 snake_case 字符串）
+- 最不稳定因素仍是 infra（PG/Milvus/worker）与 LLM provider 抖动（Nightly 层）
 
 ---
 
@@ -126,22 +126,19 @@ fn quality_score_answer(answer: &str, query: &str, context: &str) -> f32 {
 
 ### 4.4 `degrade_trace` Schema（降级可观测性）
 
-空文档、Search 429、Embedding 不可用等场景依赖 `degrade_trace` 字段做自动归因。其最小 schema：
-
 ```rust
 #[derive(Debug, serde::Deserialize)]
 struct DegradeTraceItem {
-    pub reason: String,            // 降级原因编码："empty_document" / "search_429" / "embedding_unavailable" / ...
-    pub fallback_path: String,     // 降级后的执行路径："lexical_retrieval" / "direct_answer" / "reject"
-    pub source_component: String,  // 触发降级的组件："ingestion_worker" / "rag_strategy" / "search_provider"
-    pub timestamp: String,         // ISO 8601
+    pub stage: String,           // 触发组件/阶段，如 "dense_retrieval" / "degraded_no_evidence"
+    pub reason: DegradeReason,   // 强枚举，JSON 序列化为 snake_case 字符串
+    pub impact: String,          // 对用户/链路的影响描述
 }
 ```
 
 **使用约定**：
 - 任何降级路径必须在 `degrade_trace` 中留下至少一条记录
-- 测试断言通过 `reason` 编码匹配（而非文本包含），保证跨版本稳定
-- 未实现降级 trace 的产品代码视为测试阻塞项
+- 测试断言通过 `DegradeReason` 枚举匹配（如 `EmbeddingUnavailable`、`Search429`），**禁止**子串匹配
+- 新增降级原因须同步扩展 `contracts::chat::DegradeReason`
 
 ---
 
@@ -496,40 +493,25 @@ async fn search_429_returns_degraded_answer() {
 ## 9. 与现有测试的关系
 
 ```
-产品 E2E（新增）          Agent 策略集成测试（保留，后续重命名）
-    │                           │
-    ├─ HTTP 黑盒入口            ├─ 直接调用 Strategy
-    ├─ Mock/真实分层            ├─ 固定 mock
-    ├─ 协议+产品断言            ├─ 字符串/状态机断言
-    ├─ 慢（5-30min）            ├─ 快（秒级）
-    └─ PR/主干/nightly          └─ 本地快速验证
+product_e2e/（本套件）              crates/app/tests/e2e/（旧集成，待重命名）
+    │                                      │
+    ├─ HTTP 黑盒入口                       ├─ 直接调用 runtime / 策略层
+    ├─ ReActLoop mock 对齐                 ├─ 历史 Strategy 契约
+    ├─ Mock LLM + 真 PG/Milvus/worker      ├─ 更快、更偏单元/集成
+    └─ Smoke / Integration / Failure       └─ 本地快速回归
 ```
 
-**保留现有测试**，后续改名为 `agent_strategy_integration_tests`，继续用于：
-- 策略层快速回归
-- LLM prompt 调优
-- 状态机 schema 验证
+本套件 **不** 再维护 Commander 模型的 planner/evaluator mock 路由；RAG mock 分两条路径：
+- **Happy path**：retrieve 轮返回 `<code>` → 沙箱 stdout → `<code_execution_result>`
+- **Fallback path**：`set_mock_rag_skip_codegen(true)` → 服务端 `auto_fallback`
 
 ---
 
 ## 10. 实现注记（冻结后首批代码评审关注项）
 
-### 10.1 `degrade_trace.reason` 枚举化
+### 10.1 `degrade_trace.reason` 枚举化 — ✅ 已实现
 
-文档定义了 `reason: String`，但实现时**必须**使用强类型枚举，避免字符串拼写漂移：
-
-```rust
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DegradeReason {
-    EmptyDocument,
-    Search429,
-    SearchTimeout,
-    EmbeddingUnavailable,
-    LexicalFallback,
-    // ... 新增原因需同步更新此枚举和文档
-}
-```
+`contracts::chat::DegradeReason` 已落地；`DegradeTraceItem.reason` 为强类型，JSON 仍为 snake_case 字符串（向后兼容）。E2E 使用 `assert_degrade_reason(resp, DegradeReason::…)`。
 
 ### 10.2 Search 路由触发条件稳定化
 
@@ -551,12 +533,12 @@ Smoke P0-3（Search 问答）依赖 query 能稳定触发 Search 策略。实现
 | Phase 4 | 失败产物收集 + CI Workflow | ✅ | `7fc06b1` |
 | 边界修复 | `doc_scope` 传播到 retrieval tools | ✅ | `53188bc` |
 
-**最终套件结果**：
+**最终套件结果**（2026-06 架构对齐后）：
 ```
-14 passed, 0 failed, 0 ignored, finished in ~165s
+15+ passed（含 rag_fallback_smoke），mock 路由单元测试同步更新
 ```
 
 **遗留缺口（非阻塞）**：
-- `degrade_trace.reason` 强枚举化（产品代码仍用自由字符串）
 - Nightly/Release Gate（需真实 LLM/Search provider + LLM-as-judge 质量层）
 - `ChatResponse.format_output` 独立字段（当前 format 内容在 `answer` 字符串中返回）
+- codegen SDK 真检索（沙箱 禁 socket；Smoke 用 stdout 模拟证据链，非 SDK HTTP）

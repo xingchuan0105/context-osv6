@@ -175,8 +175,6 @@ pub struct AgentRequest {
     pub doc_scope: Vec<String>,
     /// Recent message history.
     pub messages: Vec<ChatTurnInput>,
-    /// Optional session summary (layer-2 memory).
-    pub session_summary: Option<String>,
     /// User preference memory (layer-3 memory).
     pub user_preferences: Option<serde_json::Value>,
     /// Debug flag: when true, agents emit DebugTrace events.
@@ -252,7 +250,6 @@ impl std::fmt::Debug for AgentRequest {
             .field("session_id", &self.session_id)
             .field("doc_scope", &self.doc_scope)
             .field("messages", &self.messages)
-            .field("session_summary", &self.session_summary)
             .field("user_preferences", &self.user_preferences)
             .field("debug", &self.debug)
             .field("stream", &self.stream)
@@ -457,7 +454,6 @@ mod tests {
             session_id: Some("sess-1".to_string()),
             doc_scope: vec!["doc-1".to_string()],
             messages: vec![],
-            session_summary: None,
             user_preferences: None,
             debug: false,
             stream: false,

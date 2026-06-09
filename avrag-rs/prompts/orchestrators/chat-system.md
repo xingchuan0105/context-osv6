@@ -41,6 +41,12 @@ required_tools: []
 |----|------|
 | `memory` | 指代消解与对话连续性 |
 
+**请求簇正文**：在 assistant 消息中输出唯一合法格式（纯 JSON）：
+
+```json
+{"skill_request": ["memory"]}
+```
+
 **tool_pool**：无（默认不暴露工具 schema）。
 
 合成阶段披露 **`writing`**（语气、文体）与 **`format`**（HTML、幻灯片等）；`chat` 为 mandatory answer。

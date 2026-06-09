@@ -38,6 +38,14 @@ applicable_strategies: [rag]
 |----|------|
 | `memory` | 跨轮指代边界说明；消解由服务端完成 |
 
+**请求额外簇正文**：在 assistant 消息中输出唯一合法格式（纯 JSON，无其它文本）：
+
+```json
+{"skill_request": ["memory"]}
+```
+
+可一次请求多个簇 id。不要用自然语言或短语暗示；服务端只解析上述 JSON。
+
 **无 tool_pool**：不向 LLM 暴露检索 JSON schema。
 
 合成阶段（Synthesis）将披露 **`writing`** 与 **`format`** 簇，由你自选 0~1 个文体与 0~1 个输出形态；`rag-answer` 为 mandatory。

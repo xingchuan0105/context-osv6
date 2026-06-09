@@ -3,44 +3,44 @@ use std::sync::Arc;
 pub mod answer_contract;
 pub mod assembler;
 pub mod config;
+pub mod disclosure_plan;
 pub mod exit_policy;
 pub mod fallback;
 pub mod hooks;
+pub mod iteration;
 pub mod message_queue;
 pub mod optimizer;
 pub mod parse;
 pub mod query_normalize;
 pub mod reasoning_emit;
+pub mod skill_request;
 pub mod skills;
 pub mod synthesis;
 pub mod telemetry;
 
 use crate::agents::capability::CapabilityRegistry;
 use crate::agents::events::{AgentEvent, AgentEventSink};
-use crate::agents::r#loop::optimizer::{
-    build_budget_warning, build_duplicate_hint, extract_chunk_ids, ContextAdjustment,
-    IterationProgress, LoopOptimizer,
-};
+use crate::agents::react_loop::DegradeReason;
+use crate::agents::r#loop::optimizer::{IterationProgress, LoopOptimizer};
 use crate::agents::runtime::{
     AgentRequest, AgentRunResult, AgentRunUsage, BudgetUsage, EvaluationSignals, FinalDecision,
     IterationRecord,
 };
+use iteration::{IterationControl, IterationState};
 use assembler::{ContextAssembler, DisclosedState};
 use avrag_llm::{ChatMessage, LlmClient, LlmUsage};
 use common::{AppError, ToolResult};
 use config::ModeConfig;
 use exit_policy::{
     PostLoopAction, SynthesisGate, decide_synthesis_gate, degraded_no_evidence_answer,
-    has_retrieval_observation, post_fallback_gate, should_block_content_early_stop,
+    has_retrieval_observation, post_fallback_gate,
 };
 use hooks::{LoopContext, LoopHooks, StandardLoopHooks};
-use parse::{LlmOutput, parse_llm_output};
 use query_normalize::normalize_query;
-use reasoning_emit::record_reasoning;
 use synthesis::SynthesisPhase;
 use telemetry::ReActIterationRecord;
 
-fn merge_request_doc_scope(call: &mut common::ToolCall, doc_scope: &[String]) {
+pub(crate) fn merge_request_doc_scope(call: &mut common::ToolCall, doc_scope: &[String]) {
     if doc_scope.is_empty() {
         return;
     }
@@ -56,7 +56,7 @@ fn merge_request_doc_scope(call: &mut common::ToolCall, doc_scope: &[String]) {
     }
 }
 
-async fn dispatch_rag_tool(
+pub(crate) async fn dispatch_rag_tool(
     runtime: &avrag_rag_core::RagRuntime,
     auth: &avrag_auth::AuthContext,
     call: &common::ToolCall,
@@ -195,17 +195,20 @@ impl ReActLoop {
         let auth: avrag_auth::AuthContext = serde_json::from_value(request.auth_context.clone())
             .map_err(|e| AppError::internal(format!("invalid auth context: {e}")))?;
 
-        let mut disclosed_state = DisclosedState::default();
+        let mut state = IterationState {
+            messages,
+            disclosed: DisclosedState::default(),
+            tool_results: Vec::new(),
+            progress: IterationProgress::new(),
+            total_tool_calls: 0,
+            consecutive_sandbox_errors: 0,
+            reasoning_acc: String::new(),
+        };
         let mut iteration: u8 = 0;
-        let mut consecutive_sandbox_errors: u8 = 0;
         let mut telemetry_records: Vec<ReActIterationRecord> = vec![];
         let mut total_usage = LlmUsage::zeroed();
-        let mut total_tool_calls: u32 = 0;
-        let mut collected_tool_results: Vec<ToolResult> = Vec::new();
         let mut direct_answer: Option<String> = None;
-        let mut reasoning_summary_acc = String::new();
         let optimizer = LoopOptimizer::new();
-        let mut progress = IterationProgress::new();
 
         loop {
             if cancel.is_cancelled() {
@@ -213,7 +216,8 @@ impl ReActLoop {
             }
 
             if iteration >= max_iterations {
-                let disclosed_skills: Vec<String> = disclosed_state
+                let disclosed_skills: Vec<String> = state
+                    .disclosed
                     .disclosed_skill_ids
                     .iter()
                     .cloned()
@@ -236,13 +240,8 @@ impl ReActLoop {
                 break;
             }
 
-            let last_assistant_content = messages
-                .iter()
-                .rev()
-                .find(|m| m.role == "assistant")
-                .map(|m| m.content.as_str());
-
-            let has_evidence = has_retrieval_observation(&messages, &collected_tool_results, mode);
+            let has_evidence =
+                has_retrieval_observation(&state.messages, &state.tool_results, mode);
 
             let _ = sink
                 .emit(AgentEvent::TurnStart {
@@ -251,526 +250,58 @@ impl ReActLoop {
                 })
                 .await;
 
-            let assembled = ContextAssembler::assemble_retrieve(
-                iteration,
-                mode,
-                &request,
-                &self.skill_registry,
-                &mut disclosed_state,
-                last_assistant_content,
-            );
-            reasoning_emit::emit_prompt_snapshot(
-                sink,
-                "retrieve",
-                iteration,
-                &assembled,
-                &disclosed_state,
-            )
-            .await;
-            reasoning_emit::emit_plan_decision_telemetry(
-                sink,
-                "retrieve",
-                iteration,
-                &assembled,
-                &disclosed_state,
-            )
-            .await;
+            let outcome = self
+                .run_iteration(
+                    iteration,
+                    max_iterations,
+                    mode,
+                    &request,
+                    &auth,
+                    &loop_exit,
+                    &mut state,
+                    &mut total_usage,
+                    &optimizer,
+                    sink,
+                )
+                .await?;
 
-            let mut round_messages: Vec<ChatMessage> = Vec::new();
-            round_messages.push(ChatMessage::system(assembled.system_content));
-
-            // Append all non-system messages from conversation history.
-            for msg in &messages {
-                if msg.role != "system" {
-                    round_messages.push(msg.clone());
+            if !outcome.sandbox_break {
+                if let Some(record) = outcome.record {
+                    let exit_reason = record.exit_reason.clone();
+                    let observation_preview = record.observation_preview.clone();
+                    let disclosed_skills = record.disclosed_skills.clone();
+                    reasoning_emit::emit_evaluation_telemetry(
+                        sink,
+                        iteration,
+                        &exit_reason,
+                        &observation_preview,
+                        &disclosed_skills,
+                        &exit_reason,
+                    )
+                    .await;
+                    let _ = sink
+                        .emit(AgentEvent::TurnEnd {
+                            iteration,
+                            exit_reason,
+                        })
+                        .await;
+                    telemetry_records.push(record);
                 }
             }
 
-            let iter_start = std::time::Instant::now();
-            let temperature = mode.temperature.unwrap_or(0.7);
-            let llm_response = self
-                .llm
-                .complete_with_tools(&round_messages, &assembled.tools, Some(temperature))
-                .await
-                .map_err(|e| AppError::internal(format!("llm completion failed: {e}")))?;
-
-            total_usage.accumulate(&llm_response.usage);
-            record_reasoning(
-                sink,
-                &mut reasoning_summary_acc,
-                llm_response.reasoning_content.as_deref(),
-            )
-            .await;
-
-            let parsed = parse_llm_output(&llm_response);
-
-            match parsed {
-                LlmOutput::NativeToolCalls(calls) => {
-                    let call_ids: Vec<String> =
-                        (0..calls.len()).map(|i| format!("call_{}", i)).collect();
-
-                    let mut tool_messages: Vec<ChatMessage> = Vec::new();
-                    for (idx, call) in calls.iter().enumerate() {
-                        let call_id = &call_ids[idx];
-                        let tool_start = std::time::Instant::now();
-                        let result = match call.tool.as_str() {
-                            "dense_retrieval" | "lexical_retrieval" | "graph_retrieval"
-                            | "index_lookup" | "doc_summary" | "doc_metadata" => {
-                                if let Some(runtime) = &self.rag_runtime {
-                                    dispatch_rag_tool(runtime, &auth, call, &request.doc_scope)
-                                        .await
-                                } else {
-                                    common::ToolResult {
-                                        tool: call.tool.clone(),
-                                        version: call.version.clone(),
-                                        status: common::ToolStatus::NotImplemented,
-                                        data: Some(
-                                            serde_json::json!({"error": "rag runtime not configured"}),
-                                        ),
-                                        trace: None,
-                                    }
-                                }
-                            }
-                            "web_search" => {
-                                if let Some(executor) = &self.search_executor {
-                                    let query = call
-                                        .args
-                                        .get("query")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("");
-                                    let vertical =
-                                        call.args.get("vertical").and_then(|v| v.as_str());
-                                    let v = vertical.unwrap_or("web");
-                                    if v != "web" && v != "news" {
-                                        common::ToolResult {
-                                            tool: call.tool.clone(),
-                                            version: call.version.clone(),
-                                            status: common::ToolStatus::Error,
-                                            data: Some(
-                                                serde_json::json!({"error": format!("unsupported vertical: {v}. allowed: web, news")}),
-                                            ),
-                                            trace: None,
-                                        }
-                                    } else {
-                                        match executor.execute_search(query, Some(v)).await {
-                                            Ok(response) => common::ToolResult {
-                                                tool: call.tool.clone(),
-                                                version: call.version.clone(),
-                                                status: common::ToolStatus::Ok,
-                                                data: Some(
-                                                    serde_json::to_value(&response)
-                                                        .unwrap_or_default(),
-                                                ),
-                                                trace: None,
-                                            },
-                                            Err(e) => common::ToolResult {
-                                                tool: call.tool.clone(),
-                                                version: call.version.clone(),
-                                                status: common::ToolStatus::Error,
-                                                data: Some(
-                                                    serde_json::json!({"error": e.to_string()}),
-                                                ),
-                                                trace: None,
-                                            },
-                                        }
-                                    }
-                                } else {
-                                    common::ToolResult {
-                                        tool: call.tool.clone(),
-                                        version: call.version.clone(),
-                                        status: common::ToolStatus::NotImplemented,
-                                        data: Some(
-                                            serde_json::json!({"error": "search executor not configured"}),
-                                        ),
-                                        trace: None,
-                                    }
-                                }
-                            }
-                            _ => common::ToolResult {
-                                tool: call.tool.clone(),
-                                version: call.version.clone(),
-                                status: common::ToolStatus::NotImplemented,
-                                data: None,
-                                trace: None,
-                            },
-                        };
-                        let tool_elapsed_ms = tool_start.elapsed().as_millis() as u64;
-
-                        let _ = sink
-                            .emit(AgentEvent::ToolResult {
-                                tool: call.tool.clone(),
-                                status: result.status.clone(),
-                                data: result.data.clone(),
-                                elapsed_ms: tool_elapsed_ms,
-                            })
-                            .await;
-
-                        tool_messages.push(build_tool_message(call_id, &call.tool, &result));
-                        collected_tool_results.push(result);
-                    }
-
-                    messages.push(build_assistant_message_with_tool_calls(
-                        &calls,
-                        &call_ids,
-                        &llm_response.content,
-                        llm_response.reasoning_content.clone(),
-                    ));
-
-                    for tm in tool_messages {
-                        messages.push(tm);
-                    }
-
-                    // LoopOptimizer: cross-iteration signal analysis
-                    let current_chunk_ids = extract_chunk_ids(&collected_tool_results);
-                    progress.record_iteration(iteration, &current_chunk_ids);
-                    let remaining = max_iterations.saturating_sub(iteration + 1);
-                    let adjustment =
-                        optimizer.advise(&progress, &current_chunk_ids, remaining, max_iterations);
-                    match adjustment {
-                        ContextAdjustment::DuplicateChunksHint {
-                            chunk_ids,
-                            first_seen_at,
-                        } => {
-                            let hint = build_duplicate_hint(&chunk_ids, &first_seen_at);
-                            messages.push(ChatMessage::system(hint));
-                        }
-                        ContextAdjustment::BudgetWarning { remaining, max } => {
-                            let hint = build_budget_warning(remaining, max);
-                            messages.push(ChatMessage::system(hint));
-                        }
-                        ContextAdjustment::None => {}
-                    }
-
-                    total_tool_calls += calls.len() as u32;
-                    consecutive_sandbox_errors = 0;
-
-                    disclosed_state.last_skill_request =
-                        assembler::parse_skill_request(Some(&llm_response.content));
-
-                    let exit_reason = "native_tool_call".to_string();
-                    let observation_preview = format!("{} tool calls", calls.len());
-                    let disclosed_skills: Vec<String> = disclosed_state
-                        .disclosed_skill_ids
-                        .iter()
-                        .cloned()
-                        .collect();
-                    telemetry_records.push(ReActIterationRecord {
-                        iteration,
-                        disclosed_skills: disclosed_skills.clone(),
-                        action_type: exit_reason.clone(),
-                        observation_preview: observation_preview.clone(),
-                        llm_usage: Some(AgentRunUsage {
-                            provider: llm_response.usage.provider.clone(),
-                            model: llm_response.model.clone(),
-                            prompt_tokens: llm_response.usage.prompt_tokens as u64,
-                            completion_tokens: llm_response.usage.completion_tokens as u64,
-                            total_tokens: llm_response.usage.total_tokens as u64,
-                            request_count: 1,
-                            cached_tokens: llm_response.usage.cached_tokens as u64,
-                        }),
-                        elapsed_ms: iter_start.elapsed().as_millis() as u64,
-                        exit_reason: exit_reason.clone(),
-                    });
-                    reasoning_emit::emit_evaluation_telemetry(
-                        sink,
-                        iteration,
-                        &exit_reason,
-                        &observation_preview,
-                        &disclosed_skills,
-                        &exit_reason,
-                    )
-                    .await;
-
-                    let _ = sink
-                        .emit(AgentEvent::TurnEnd {
-                            iteration,
-                            exit_reason,
-                        })
-                        .await;
-
+            match outcome.control {
+                IterationControl::Continue => {
                     iteration += 1;
                 }
-                LlmOutput::CodeBlocks(codes) => {
-                    let code_start = std::time::Instant::now();
-                    let interpreter_lock = Arc::clone(&self.code_interpreter);
-                    let mut combined_result = String::new();
-                    let mut any_error = false;
-
-                    for (idx, code) in codes.iter().enumerate() {
-                        let exec_result = tokio::task::spawn_blocking({
-                            let code = code.clone();
-                            let interpreter_lock = Arc::clone(&interpreter_lock);
-                            move || {
-                                let mut guard =
-                                    interpreter_lock.lock().unwrap_or_else(|e| e.into_inner());
-                                if guard.is_none() {
-                                    *guard = Some(avrag_code_interpreter::CodeInterpreter::new());
-                                }
-                                guard.as_ref().unwrap().execute(&code)
-                            }
-                        })
-                        .await;
-
-                        let (block_status, block_text, is_err) = match exec_result {
-                            Ok(Ok(exec)) => {
-                                let is_err = !exec.success
-                                    || !exec.stderr.is_empty()
-                                    || exec.exit_code.unwrap_or(0) != 0;
-                                let status = if is_err {
-                                    common::ToolStatus::Error
-                                } else {
-                                    common::ToolStatus::Ok
-                                };
-                                let text = format!(
-                                    "[block {}] stdout: {}\nstderr: {}",
-                                    idx, exec.stdout, exec.stderr
-                                );
-                                (status, text, is_err)
-                            }
-                            Ok(Err(e)) => {
-                                let text = format!("[block {}] Execution failed: {e}", idx);
-                                (common::ToolStatus::Error, text, true)
-                            }
-                            Err(e) => {
-                                let text =
-                                    format!("[block {}] Interpreter task panicked: {e}", idx);
-                                (common::ToolStatus::Error, text, true)
-                            }
-                        };
-
-                        combined_result.push_str(&block_text);
-                        combined_result.push('\n');
-                        if is_err {
-                            any_error = true;
-                        }
-
-                        let _ = sink
-                            .emit(AgentEvent::ToolResult {
-                                tool: "code_gen".to_string(),
-                                status: block_status,
-                                data: Some(serde_json::json!({ "result": block_text })),
-                                elapsed_ms: code_start.elapsed().as_millis() as u64,
-                            })
-                            .await;
-                    }
-
-                    let elapsed_ms = code_start.elapsed().as_millis() as u64;
-
-                    // Preserve the full LLM response (thought + code tags) for ReAct chain.
-                    messages.push(ChatMessage {
-                        role: "assistant".to_string(),
-                        content: llm_response.content.clone(),
-                        name: None,
-                        tool_call_id: None,
-                        tool_calls: None,
-                        reasoning_content: llm_response.reasoning_content.clone(),
-                    });
-                    // Code interpreter observations are not OpenAI native tool
-                    // calls; use a user-role observation to avoid API 400 on
-                    // tool messages missing tool_call_id.
-                    messages.push(ChatMessage {
-                        role: "user".to_string(),
-                        content: format!(
-                            "<code_execution_result>\n{combined_result}\n</code_execution_result>"
-                        ),
-                        name: None,
-                        tool_call_id: None,
-                        tool_calls: None,
-                        reasoning_content: None,
-                    });
-
-                    if any_error {
-                        consecutive_sandbox_errors += 1;
-                        if consecutive_sandbox_errors >= 2 {
-                            let disclosed_skills: Vec<String> = disclosed_state
-                                .disclosed_skill_ids
-                                .iter()
-                                .cloned()
-                                .collect();
-                            reasoning_emit::emit_evaluation_telemetry(
-                                sink,
-                                iteration,
-                                "sandbox_break_to_synthesis",
-                                "consecutive sandbox errors, breaking to synthesis",
-                                &disclosed_skills,
-                                "sandbox_break_to_synthesis",
-                            )
-                            .await;
-                            let _ = sink
-                                .emit(AgentEvent::Activity {
-                                    stage: "sandbox_error".to_string(),
-                                    message: "consecutive sandbox errors, breaking to synthesis"
-                                        .to_string(),
-                                })
-                                .await;
-                            break;
-                        }
-                    } else {
-                        consecutive_sandbox_errors = 0;
-                    }
-
-                    total_tool_calls += codes.len() as u32;
-
-                    disclosed_state.last_skill_request =
-                        assembler::parse_skill_request(Some(&llm_response.content));
-
-                    let exit_reason = if any_error {
-                        "code_gen_error".to_string()
-                    } else {
-                        "code_gen".to_string()
-                    };
-                    let observation_preview = truncate_preview(&combined_result, 200);
-                    let disclosed_skills: Vec<String> = disclosed_state
-                        .disclosed_skill_ids
-                        .iter()
-                        .cloned()
-                        .collect();
-                    telemetry_records.push(ReActIterationRecord {
-                        iteration,
-                        disclosed_skills: disclosed_skills.clone(),
-                        action_type: exit_reason.clone(),
-                        observation_preview: observation_preview.clone(),
-                        llm_usage: Some(AgentRunUsage {
-                            provider: llm_response.usage.provider.clone(),
-                            model: llm_response.model.clone(),
-                            prompt_tokens: llm_response.usage.prompt_tokens as u64,
-                            completion_tokens: llm_response.usage.completion_tokens as u64,
-                            total_tokens: llm_response.usage.total_tokens as u64,
-                            request_count: 1,
-                            cached_tokens: llm_response.usage.cached_tokens as u64,
-                        }),
-                        elapsed_ms,
-                        exit_reason: exit_reason.clone(),
-                    });
-                    reasoning_emit::emit_evaluation_telemetry(
-                        sink,
-                        iteration,
-                        &exit_reason,
-                        &observation_preview,
-                        &disclosed_skills,
-                        &exit_reason,
-                    )
-                    .await;
-
-                    let _ = sink
-                        .emit(AgentEvent::TurnEnd {
-                            iteration,
-                            exit_reason,
-                        })
-                        .await;
-
-                    iteration += 1;
-                }
-                LlmOutput::Content(content) => {
-                    messages.push(ChatMessage {
-                        role: "assistant".to_string(),
-                        content: content.clone(),
-                        name: None,
-                        tool_call_id: None,
-                        tool_calls: None,
-                        reasoning_content: llm_response.reasoning_content.clone(),
-                    });
-
-                    disclosed_state.last_skill_request =
-                        assembler::parse_skill_request(Some(&content));
-
-                    let has_evidence_now =
-                        has_retrieval_observation(&messages, &collected_tool_results, mode);
-                    if should_block_content_early_stop(&loop_exit, has_evidence_now) {
-                        let exit_reason = "content_blocked_no_evidence".to_string();
-                        let observation_preview = truncate_preview(&content, 200);
-                        let disclosed_skills: Vec<String> = disclosed_state
-                            .disclosed_skill_ids
-                            .iter()
-                            .cloned()
-                            .collect();
-                        messages.push(ChatMessage::user(
-                            "You must retrieve evidence (code execution or tools) before answering. \
-                             Continue with retrieval — do not answer from memory alone.",
-                        ));
-                        telemetry_records.push(ReActIterationRecord {
-                            iteration,
-                            disclosed_skills: disclosed_skills.clone(),
-                            action_type: exit_reason.clone(),
-                            observation_preview: observation_preview.clone(),
-                            llm_usage: Some(AgentRunUsage {
-                                provider: llm_response.usage.provider.clone(),
-                                model: llm_response.model.clone(),
-                                prompt_tokens: llm_response.usage.prompt_tokens as u64,
-                                completion_tokens: llm_response.usage.completion_tokens as u64,
-                                total_tokens: llm_response.usage.total_tokens as u64,
-                                request_count: 1,
-                                cached_tokens: llm_response.usage.cached_tokens as u64,
-                            }),
-                            elapsed_ms: iter_start.elapsed().as_millis() as u64,
-                            exit_reason: exit_reason.clone(),
-                        });
-                        reasoning_emit::emit_evaluation_telemetry(
-                            sink,
-                            iteration,
-                            &exit_reason,
-                            &observation_preview,
-                            &disclosed_skills,
-                            &exit_reason,
-                        )
-                        .await;
-                        let _ = sink
-                            .emit(AgentEvent::TurnEnd {
-                                iteration,
-                                exit_reason,
-                            })
-                            .await;
-                        iteration += 1;
-                        continue;
-                    }
-
-                    let exit_reason = "direct_content".to_string();
-                    let observation_preview = truncate_preview(&content, 200);
-                    let disclosed_skills: Vec<String> = disclosed_state
-                        .disclosed_skill_ids
-                        .iter()
-                        .cloned()
-                        .collect();
-                    telemetry_records.push(ReActIterationRecord {
-                        iteration,
-                        disclosed_skills: disclosed_skills.clone(),
-                        action_type: exit_reason.clone(),
-                        observation_preview: observation_preview.clone(),
-                        llm_usage: Some(AgentRunUsage {
-                            provider: llm_response.usage.provider.clone(),
-                            model: llm_response.model.clone(),
-                            prompt_tokens: llm_response.usage.prompt_tokens as u64,
-                            completion_tokens: llm_response.usage.completion_tokens as u64,
-                            total_tokens: llm_response.usage.total_tokens as u64,
-                            request_count: 1,
-                            cached_tokens: llm_response.usage.cached_tokens as u64,
-                        }),
-                        elapsed_ms: iter_start.elapsed().as_millis() as u64,
-                        exit_reason: exit_reason.clone(),
-                    });
-                    reasoning_emit::emit_evaluation_telemetry(
-                        sink,
-                        iteration,
-                        &exit_reason,
-                        &observation_preview,
-                        &disclosed_skills,
-                        &exit_reason,
-                    )
-                    .await;
-                    let _ = sink
-                        .emit(AgentEvent::TurnEnd {
-                            iteration,
-                            exit_reason,
-                        })
-                        .await;
-
+                IterationControl::BreakToSynthesis { .. } => break,
+                IterationControl::DirectAnswer { content } => {
                     direct_answer = Some(content);
                     break;
                 }
             }
 
             hooks.transform_context(
-                &mut messages,
+                &mut state.messages,
                 &LoopContext {
                     mode,
                     request: &request,
@@ -788,6 +319,12 @@ impl ReActLoop {
                 })
                 .await;
         }
+
+        let mut messages = state.messages;
+        let mut disclosed_state = state.disclosed;
+        let mut collected_tool_results = state.tool_results;
+        let total_tool_calls = state.total_tool_calls;
+        let reasoning_summary_acc = state.reasoning_acc;
 
         if cancel.is_cancelled() {
             return Err(crate::agents::react_loop::cancellation_error());
@@ -906,7 +443,7 @@ impl ReActLoop {
                     );
                     result.degrade_trace.push(common::DegradeTraceItem {
                         stage: "degraded_no_evidence".to_string(),
-                        reason: "No retrieval evidence after loop and fallback".to_string(),
+                        reason: DegradeReason::NoRetrievalEvidence,
                         impact: "Answer withheld; synthesis skipped".to_string(),
                     });
                     self.emit_run_citations(sink, &result.citations).await;
@@ -1295,7 +832,7 @@ impl ReActLoop {
 }
 
 /// Safely truncate a string to at most `max_chars` characters (not bytes).
-fn truncate_preview(s: &str, max_chars: usize) -> String {
+pub(crate) fn truncate_preview(s: &str, max_chars: usize) -> String {
     if s.chars().count() <= max_chars {
         s.to_string()
     } else {
@@ -1307,7 +844,7 @@ fn truncate_preview(s: &str, max_chars: usize) -> String {
 /// `call_ids` must be parallel to `calls` (e.g. `call_0`, `call_1`, ...).
 /// If the LLM also emitted reasoning text in `content`, it is preserved so
 /// the next iteration can see the model's chain-of-thought.
-fn build_assistant_message_with_tool_calls(
+pub(crate) fn build_assistant_message_with_tool_calls(
     calls: &[common::ToolCall],
     call_ids: &[String],
     content: &str,
@@ -1341,7 +878,7 @@ fn build_assistant_message_with_tool_calls(
 
 /// Build a `tool` role message from a native tool result, keyed by the
 /// synthetic call id used in the assistant message.
-fn build_tool_message(call_id: &str, tool_name: &str, result: &common::ToolResult) -> ChatMessage {
+pub(crate) fn build_tool_message(call_id: &str, tool_name: &str, result: &common::ToolResult) -> ChatMessage {
     let body = serde_json::json!({
         "tool": tool_name,
         "status": result.status,

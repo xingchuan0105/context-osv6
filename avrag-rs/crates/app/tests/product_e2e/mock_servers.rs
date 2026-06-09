@@ -9,6 +9,81 @@ use axum::{
 use serde_json::json;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock};
+
+static MOCK_RAG_CODEGEN_CHUNK_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+static MOCK_RAG_CODEGEN_CHUNK_IDS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+static MOCK_RAG_CODEGEN_QUERY: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+static MOCK_RAG_SKIP_CODEGEN: OnceLock<AtomicBool> = OnceLock::new();
+
+fn mock_rag_chunk_id_cell() -> &'static Mutex<Option<String>> {
+    MOCK_RAG_CODEGEN_CHUNK_ID.get_or_init(|| Mutex::new(None))
+}
+
+fn mock_rag_chunk_ids_cell() -> &'static Mutex<Vec<String>> {
+    MOCK_RAG_CODEGEN_CHUNK_IDS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn mock_rag_codegen_query_cell() -> &'static Mutex<Option<String>> {
+    MOCK_RAG_CODEGEN_QUERY.get_or_init(|| Mutex::new(None))
+}
+
+fn mock_rag_skip_codegen_flag() -> &'static AtomicBool {
+    MOCK_RAG_SKIP_CODEGEN.get_or_init(|| AtomicBool::new(false))
+}
+
+/// Reset per-test mock RAG state (call from TestContext setup).
+pub fn reset_mock_rag_state() {
+    *mock_rag_chunk_id_cell().lock().unwrap() = None;
+    mock_rag_chunk_ids_cell().lock().unwrap().clear();
+    *mock_rag_codegen_query_cell().lock().unwrap() = None;
+    mock_rag_skip_codegen_flag().store(false, Ordering::SeqCst);
+}
+
+/// Pin the chunk id embedded in mock codegen stdout (RAG smoke happy path).
+pub fn set_mock_rag_codegen_chunk_id(id: impl Into<String>) {
+    let id = id.into();
+    *mock_rag_chunk_id_cell().lock().unwrap() = Some(id.clone());
+    *mock_rag_chunk_ids_cell().lock().unwrap() = vec![id];
+}
+
+/// Pin multiple chunk ids for multi-document mock synthesis.
+pub fn set_mock_rag_codegen_chunk_ids(ids: Vec<String>) {
+    if let Some(first) = ids.first() {
+        *mock_rag_chunk_id_cell().lock().unwrap() = Some(first.clone());
+    }
+    *mock_rag_chunk_ids_cell().lock().unwrap() = ids;
+}
+
+/// Force RAG retrieve rounds to return empty content (exercises auto_fallback).
+pub fn set_mock_rag_skip_codegen(skip: bool) {
+    mock_rag_skip_codegen_flag().store(skip, Ordering::SeqCst);
+}
+
+/// Pin the dense_search query embedded in mock codegen (defaults to `"antifragility"`).
+pub fn set_mock_rag_codegen_query(query: impl Into<String>) {
+    *mock_rag_codegen_query_cell().lock().unwrap() = Some(query.into());
+}
+
+/// Build mock codegen body that exercises the sandbox retrieval bridge.
+///
+/// The query defaults to `"antifragility"`, which matches the standard smoke fixture
+/// `antifragile.txt`. Override via [`set_mock_rag_codegen_query`] when using other fixtures.
+pub fn format_mock_rag_codegen_response(_chunk_id: &str) -> String {
+    let query = mock_rag_codegen_query_cell()
+        .lock()
+        .unwrap()
+        .clone()
+        .unwrap_or_else(|| "antifragility".to_string());
+    let query_json = serde_json::to_string(&query).unwrap_or_else(|_| "\"antifragility\"".to_string());
+    format!(
+        r#"<code language="python">
+chunks = await client.dense_search(query={query_json}, top_k=10)
+import json
+print(json.dumps(chunks))
+</code>"#
+    )
+}
 
 /// Names of the canned LLM responses served by [`mock_llm_handler`].
 ///
@@ -18,11 +93,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 /// system-prompt matching).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MockLlmRoute {
-    RagPlanner,
-    RagCoverageEvaluator,
     RagAnswer,
-    SearchPlanner,
-    SearchCoverageEvaluator,
     SearchAnswer,
     FormatSkillPpt,
     FormatSkillHtml,
@@ -34,20 +105,8 @@ impl MockLlmRoute {
     /// Return the canned response body for this route.
     fn canned_response(self) -> &'static str {
         match self {
-            Self::RagPlanner => {
-                r#"{"calls": [{"tool": "dense_retrieval", "version": "1.0", "args": {"queries": ["antifragility Taleb summary"], "modality": "text", "top_k": 10}}], "next_step": "answer"}"#
-            }
-            Self::RagCoverageEvaluator => {
-                r#"{"decision": "sufficient", "dimensions": [{"name": "coverage", "attempted": true, "covered": true, "retrieved_count": 3, "query_ids": ["q1"], "status": "covered_strong"}], "next_actions": [], "reasoning": "good"}"#
-            }
             Self::RagAnswer => {
                 "Based on the document, antifragility is a property of systems that increase in capability, resilience, or robustness as a result of stressors, shocks, volatility, noise, mistakes, faults, attacks, or failures. The concept was developed by Nassim Nicholas Taleb."
-            }
-            Self::SearchPlanner => {
-                r#"{"sub_queries": ["Tokyo weather today"], "intent_summary": "The user wants to know the current weather in Tokyo.", "needs_clarification": false}"#
-            }
-            Self::SearchCoverageEvaluator => {
-                r#"{"decision": "sufficient", "dimensions": [{"name": "coverage", "attempted": true, "covered": true, "retrieved_count": 1, "query_ids": ["q1"], "status": "covered_strong"}], "next_actions": [], "reasoning": "good"}"#
             }
             Self::SearchAnswer => "The weather in Tokyo today is sunny with a high of 25°C [[1]].",
             Self::FormatSkillPpt => {
@@ -69,11 +128,7 @@ impl MockLlmRoute {
     /// Returns `None` if the header is missing or has an unknown value.
     pub(crate) fn from_header(value: &str) -> Option<Self> {
         match value.trim() {
-            "rag-planner" => Some(Self::RagPlanner),
-            "rag-eval" => Some(Self::RagCoverageEvaluator),
             "rag-answer" => Some(Self::RagAnswer),
-            "search-planner" => Some(Self::SearchPlanner),
-            "search-eval" => Some(Self::SearchCoverageEvaluator),
             "search-answer" => Some(Self::SearchAnswer),
             "format-ppt" => Some(Self::FormatSkillPpt),
             "format-html" => Some(Self::FormatSkillHtml),
@@ -97,15 +152,9 @@ impl MockLlmRoute {
     /// `Search results:` line, so the search-answer check must be
     /// early enough to not be masked by later fallbacks.
     pub(crate) fn from_system_prompt(system_prompt: &str, user_prompt: &str) -> Self {
-        // 1. RAG planner
-        if system_prompt.contains("Context OS RAG retrieval planner") {
-            Self::RagPlanner
-        // 2. RAG coverage evaluator
-        } else if system_prompt.contains("Context OS retrieval coverage evaluator") {
-            Self::RagCoverageEvaluator
-        } else if system_prompt.contains("general chat assistant for Context OS") {
+        if system_prompt.contains("general chat assistant for Context OS") {
             Self::ChatAnswer
-        // 3. Synthesis answer contracts (before format-skill catalog lines).
+        // Synthesis answer contracts (before format-skill catalog lines).
         } else if system_prompt.contains("Context OS RAG answer agent")
             || system_prompt.contains("internal_answer_v1")
         {
@@ -115,21 +164,11 @@ impl MockLlmRoute {
             || user_prompt.contains("Search results:")
         {
             Self::SearchAnswer
-        // 4. Format skills (catalog appears in synthesis system prompts).
-        } else if system_prompt.contains("Context OS presentation generation assistant")
-            || system_prompt.contains("ppt-generation")
-        {
+        // Format skills (catalog appears in synthesis system prompts).
+        } else if system_prompt.contains("ppt-generation") {
             Self::FormatSkillPpt
-        } else if system_prompt.contains("Context OS HTML rendering assistant")
-            || system_prompt.contains("html-renderer")
-        {
+        } else if system_prompt.contains("html-renderer") {
             Self::FormatSkillHtml
-        // 5. Search planner / evaluator
-        } else if system_prompt.contains("Context OS Web Search planner") {
-            Self::SearchPlanner
-        } else if system_prompt.contains("Context OS web-search coverage evaluator") {
-            Self::SearchCoverageEvaluator
-        // 6. Fallback (e.g. summary generation)
         } else {
             Self::Fallback
         }
@@ -244,22 +283,6 @@ fn mock_native_tool_call(tool_names: &[String], user_prompt: &str) -> Option<ser
         }));
     }
 
-    if tool_names.iter().any(|name| name == "dense_retrieval") {
-        return Some(json!({
-            "id": "call_dense_retrieval_0",
-            "type": "function",
-            "function": {
-                "name": "dense_retrieval",
-                "arguments": serde_json::to_string(&json!({
-                    "queries": [query],
-                    "modality": "text",
-                    "top_k": 10,
-                    "doc_scope": [],
-                })).unwrap_or_else(|_| "{}".to_string()),
-            }
-        }));
-    }
-
     None
 }
 
@@ -360,17 +383,51 @@ fn extract_chunk_id_from_tool_results_block(transcript: &str) -> Option<String> 
     None
 }
 
+fn extract_chunk_id_from_code_execution_block(transcript: &str) -> Option<String> {
+    let start = transcript.find("<code_execution_result>")?;
+    let after = &transcript[start + "<code_execution_result>".len()..];
+    let end = after.find("</code_execution_result>")?;
+    let inner = &after[..end];
+
+    for segment in inner.split("[block ") {
+        let Some(stdout_part) = segment.split_once("stdout:") else {
+            continue;
+        };
+        let after_stdout = stdout_part.1;
+        let stdout = after_stdout
+            .split_once("stderr:")
+            .map(|(stdout, _)| stdout)
+            .unwrap_or(after_stdout)
+            .trim();
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(stdout) {
+            if let Some(id) = first_chunk_id_in_value(&parsed) {
+                return Some(id);
+            }
+        }
+        let mut ids = Vec::new();
+        collect_chunk_ids_from_text(segment, &mut ids);
+        if let Some(id) = ids.iter().find(|id| looks_like_chunk_uuid(id)) {
+            return Some(id.clone());
+        }
+        if let Some(id) = ids.into_iter().find(|id| !is_placeholder_chunk_id(id)) {
+            return Some(id);
+        }
+    }
+    None
+}
+
 fn extract_retrieval_chunk_id(transcript: &str) -> Option<String> {
+    // Primary path: ReAct codegen observation.
+    if let Some(id) = extract_chunk_id_from_code_execution_block(transcript) {
+        return Some(id);
+    }
     if let Some(id) = extract_chunk_id_from_tool_results_block(transcript) {
         return Some(id);
     }
 
-    let preferred_sections = [
-        "自动兜底检索结果:",
-        "自动兜底检索结果",
-        "<code_execution_result>",
-    ];
-    for marker in preferred_sections {
+    // Fallback safety net: server-side auto_fallback observation.
+    let fallback_markers = ["自动兜底检索结果:", "自动兜底检索结果"];
+    for marker in fallback_markers {
         let Some(idx) = transcript.find(marker) else {
             continue;
         };
@@ -386,18 +443,115 @@ fn extract_retrieval_chunk_id(transcript: &str) -> Option<String> {
     None
 }
 
-fn mock_synthesis_json_rag(transcript: &str) -> String {
-    let chunk_id = extract_retrieval_chunk_id(transcript).unwrap_or_else(|| {
-        let preview: String = transcript.chars().take(500).collect();
-        panic!("mock RAG synthesis could not resolve chunk_id; transcript preview: {preview}")
-    });
-    let answer_text = format!(
-        "Based on the document, antifragility is a property of systems that benefit from stress and disorder [[cite:{chunk_id}]]. The concept was developed by Nassim Nicholas Taleb."
-    );
+fn collect_unique_chunk_ids_from_transcript(transcript: &str) -> Vec<String> {
+    let mut ids = chunk_ids_one_per_doc_from_transcript(transcript);
+    if ids.is_empty() {
+        collect_chunk_ids_from_text(transcript, &mut ids);
+        let mut unique = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for id in ids {
+            if seen.insert(id.clone()) {
+                unique.push(id);
+            }
+        }
+        ids = unique;
+    }
+    ids
+}
+
+fn chunk_ids_one_per_doc_from_transcript(transcript: &str) -> Vec<String> {
+    let Some(start) = transcript.find("<tool_results>") else {
+        return Vec::new();
+    };
+    let after = &transcript[start + "<tool_results>".len()..];
+    let Some(end) = after.find("</tool_results>") else {
+        return Vec::new();
+    };
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(after[..end].trim()) else {
+        return Vec::new();
+    };
+    let serde_json::Value::Array(tool_results) = parsed else {
+        return Vec::new();
+    };
+
+    let mut by_doc = std::collections::BTreeMap::<String, String>::new();
+    for result in tool_results {
+        let Some(items) = result.get("data").and_then(|data| data.as_array()) else {
+            continue;
+        };
+        for item in items {
+            let (Some(chunk_id), Some(doc_id)) = (
+                item.get("chunk_id").and_then(|v| v.as_str()),
+                item.get("doc_id").and_then(|v| v.as_str()),
+            ) else {
+                continue;
+            };
+            if is_placeholder_chunk_id(chunk_id) || chunk_id.is_empty() || doc_id.is_empty() {
+                continue;
+            }
+            by_doc.entry(doc_id.to_string()).or_insert_with(|| chunk_id.to_string());
+        }
+    }
+    by_doc.into_values().collect()
+}
+
+fn mock_synthesis_json_rag(transcript: &str, system_prompt: &str) -> String {
+    let chunk_ids = collect_unique_chunk_ids_from_transcript(transcript);
+    let mut chunk_ids = if chunk_ids.is_empty() {
+        vec![extract_retrieval_chunk_id(transcript)
+            .or_else(|| mock_rag_chunk_id_cell().lock().unwrap().clone())
+            .unwrap_or_else(|| {
+                let preview: String = transcript.chars().take(500).collect();
+                panic!(
+                    "mock RAG synthesis could not resolve chunk_id; transcript preview: {preview}"
+                )
+            })]
+    } else {
+        chunk_ids
+    };
+    for pinned in mock_rag_chunk_ids_cell().lock().unwrap().iter() {
+        if !chunk_ids.contains(pinned) {
+            chunk_ids.push(pinned.clone());
+        }
+    }
+    let answer_text = if system_prompt.contains("User prefers format skill: ppt-generation") {
+        let cite = chunk_ids
+            .first()
+            .map(|id| format!(" [[cite:{id}]]"))
+            .unwrap_or_default();
+        format!(
+            "{}{}",
+            MockLlmRoute::FormatSkillPpt.canned_response(),
+            cite
+        )
+    } else if system_prompt.contains("User prefers format skill: html-renderer") {
+        let cite = chunk_ids
+            .first()
+            .map(|id| format!(" [[cite:{id}]]"))
+            .unwrap_or_default();
+        format!(
+            "{}{}",
+            MockLlmRoute::FormatSkillHtml.canned_response(),
+            cite
+        )
+    } else {
+        let cites = chunk_ids
+            .iter()
+            .map(|id| format!("[[cite:{id}]]"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!(
+            "Based on the document, antifragility is a property of systems that benefit from stress and disorder {cites}. The concept was developed by Nassim Nicholas Taleb."
+        )
+    };
+    let citations: Vec<serde_json::Value> = chunk_ids
+        .iter()
+        .map(|chunk_id| json!({"chunk_id": chunk_id}))
+        .collect();
     serde_json::json!({
         "schema_version": "internal_answer_v1",
         "answer_text": answer_text,
-        "citations": [{"chunk_id": chunk_id}],
+        "citations": citations,
         "coverage": "full",
         "refusal_reason": null
     })
@@ -418,7 +572,7 @@ fn mock_synthesis_json_search() -> String {
 fn resolve_mock_content(route: MockLlmRoute, system_prompt: &str, transcript: &str) -> String {
     match route {
         MockLlmRoute::RagAnswer if system_prompt.contains("internal_answer_v1") => {
-            mock_synthesis_json_rag(transcript)
+            mock_synthesis_json_rag(transcript, system_prompt)
         }
         MockLlmRoute::SearchAnswer if system_prompt.contains("internal_search_answer_v1") => {
             mock_synthesis_json_search()
@@ -449,6 +603,19 @@ fn detect_synthesis_route(
         return Some(MockLlmRoute::FormatSkillHtml);
     }
     None
+}
+
+fn messages_have_code_execution_result(messages: &[serde_json::Value]) -> bool {
+    messages.iter().any(|message| {
+        message
+            .get("content")
+            .and_then(|content| content.as_str())
+            .is_some_and(|content| content.contains("<code_execution_result>"))
+    })
+}
+
+fn mock_rag_codegen_response() -> String {
+    format_mock_rag_codegen_response("")
 }
 
 async fn mock_llm_handler(
@@ -504,12 +671,36 @@ async fn mock_llm_handler(
 
     let is_synthesis_contract = system_prompt.contains("internal_answer_v1")
         || system_prompt.contains("internal_search_answer_v1");
-    // ReAct retrieve without native tools (RAG codegen / Search post-tool): end loop quickly.
+    // ReAct retrieve without native tools: RAG codegen on first round, then end loop.
     if !is_stream
         && tool_names.is_empty()
         && !is_synthesis_contract
-        && (system_prompt.contains("检索 → 评估 → 合成")
-            || system_prompt.contains("搜索 → 验证 → 合成"))
+        && system_prompt.contains("检索 → 评估 → 合成")
+    {
+        if mock_rag_skip_codegen_flag().load(Ordering::SeqCst) {
+            return axum::Json(json!({
+                "choices": [{"message": {"role": "assistant", "content": ""}}],
+                "usage": {"prompt_tokens": 40, "completion_tokens": 1, "total_tokens": 41},
+                "model": "mock-llm"
+            }))
+            .into_response();
+        }
+        let content = if messages_have_code_execution_result(&messages) {
+            String::new()
+        } else {
+            mock_rag_codegen_response()
+        };
+        return axum::Json(json!({
+            "choices": [{"message": {"role": "assistant", "content": content}}],
+            "usage": {"prompt_tokens": 40, "completion_tokens": content.len().max(1), "total_tokens": 41},
+            "model": "mock-llm"
+        }))
+        .into_response();
+    }
+    if !is_stream
+        && tool_names.is_empty()
+        && !is_synthesis_contract
+        && system_prompt.contains("搜索 → 验证 → 合成")
     {
         return axum::Json(json!({
             "choices": [{"message": {"role": "assistant", "content": ""}}],

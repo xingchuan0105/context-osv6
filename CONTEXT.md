@@ -30,6 +30,11 @@ To maintain semantic consistency across the codebase, tests, and documentation, 
 | **Commander Model** | Agent 决策模式：代码基于信号评估强制改变 LLM 的检索策略。`evaluator.rs` 原设计采用此模式，已废弃。 | Agent Architecture (deprecated) |
 | **AgentKind** / **AgentMode** | 同义词，指代 chat/rag/search 三种 ReAct loop 执行模式。`AgentKind` 是 enum 名，`ModeConfig.id` / `ModeSchema.id` 是字符串标识。 | Agent Architecture |
 | **Subagents** | 未来的 auto mode 架构方向：由 Orchestrator Agent 将任务委派给多个 Specialist Subagent，各自独立执行。与规则引擎有本质区别。 | Agent Architecture (future) |
+| **ContextAssembler** | 每轮按「披露阶段 + 触发」组装 ReAct loop 的 system 上下文（orchestrator 全文 + 披露切片）。三种 mode 仅靠 `ModeConfig` 数据区分，不含 `mode.id==` 硬编码分支。 | Agent Loop (`loop/assembler.rs`) |
+| **Disclosure Phase（披露阶段）** | 渐进披露的轴：`Retrieve`（检索阶段）/ `Synthesis`（合成阶段）。**取代已废弃的 `round_idx` 轴**（ReAct 轮数由 LLM 决定、不固定，按轮号编号失配）。「首个检索轮」是 assembler 内部状态，非配置键。 | Agent Loop (`loop/assembler.rs`) |
+| **Disclosure Trigger（披露触发）** | 决定「何时递交 skill body」的事件：`mandatory`（首个检索轮强制项 / Synthesis 强制 answer）或 `skill_request`（LLM 主动请求能力簇）。 | Agent Loop (`loop/assembler.rs`) |
+| **ClusterIndex / SkillBody** | 渐进披露的两层：ClusterIndex 仅给 LLM「有哪些能力簇」（低 token）；SkillBody 是被请求簇后注入的完整 SKILL.md 正文。 | Agent Loop (`loop/assembler.rs`) |
+| **Retrieval Bridge** | 沙箱 codegen 与宿主 `RagRuntime` 之间的 fd 管道 JSON RPC（非网络）。模型写 `client.dense_search(...)` 时，宿主强制 `doc_scope` 并调用 `tools::dispatch`。见 ADR-0009。 | Code Interpreter + RAG (`code-interpreter/bridge.rs`, `rag-core/runtime/bridge.rs`) |
 
 ---
 

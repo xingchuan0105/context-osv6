@@ -60,7 +60,6 @@ export type UseChatSessionOptions = {
 export type UseChatSessionResult = {
   messages: ChatMessage[];
   isStreaming: boolean;
-  streamingMessageId: string | null;
   progress: {
     activities: ProgressEntry[];
     mode: WorkspaceChatMode | null;
@@ -70,9 +69,6 @@ export type UseChatSessionResult = {
   send: (query: string) => void;
   stop: () => void;
   toggleProgressCollapsed: () => void;
-  updateMessage: (messageId: string, updater: (msg: ChatMessage) => ChatMessage) => void;
-  loadSession: (sessionId: string) => Promise<void>;
-  reset: () => void;
 };
 
 type PendingDoneEvent = Extract<WorkspaceChatStreamEvent, { kind: "done" }>;
@@ -822,7 +818,6 @@ function useChatStream(
 
   return {
     isStreaming,
-    streamingMessageId,
     send,
     stop,
     resetStreamingTypewriter,
@@ -904,52 +899,13 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
 
   const toggleProgressCollapsed = progressTracker.toggleCollapsed;
 
-  const updateMessage = useCallback(
-    (messageId: string, updater: (msg: ChatMessage) => ChatMessage) => {
-      messageHistory.setMessages((current) =>
-        current.map((msg) => (msg.id === messageId ? updater(msg) : msg)),
-      );
-    },
-    [messageHistory.setMessages],
-  );
-
-  const loadSession = useCallback(
-    async (targetSessionId: string) => {
-      if (!token || !targetSessionId) {
-        messageHistory.reset();
-        return;
-      }
-      try {
-        const response = await listWorkspaceSessionMessages(token, targetSessionId);
-        messageHistory.setMessages(response.messages.map(mapTranscriptMessage));
-      } catch {
-        setError(formatUiMessage(locale, "workspaceChatLoadError"));
-      }
-    },
-    [token, locale, messageHistory],
-  );
-
-  const reset = useCallback(() => {
-    chatStream.resetStreamingTypewriter();
-    messageHistory.reset();
-    setError("");
-    progressTracker.hide();
-    setActiveSessionId(sessionId);
-    chatStream.streamingSessionIdRef.current = sessionId;
-    chatStream.streamingMessageIdRef.current = null;
-  }, [chatStream, messageHistory, progressTracker, sessionId]);
-
   return {
     messages: messageHistory.messages,
     isStreaming: chatStream.isStreaming,
-    streamingMessageId: chatStream.streamingMessageId,
     progress: progressTracker.progress,
     error: error || null,
     send: chatStream.send,
     stop: chatStream.stop,
     toggleProgressCollapsed,
-    updateMessage,
-    loadSession,
-    reset,
   };
 }

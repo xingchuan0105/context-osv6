@@ -9,7 +9,7 @@ use avrag_retrieval_data_plane::{
     GraphRelationHint, GraphSearchOutput, GraphSearchRequest, WeightedChunkList,
 };
 use common::{
-    BackendTrace, ChannelCoverage, ChannelTraceItem, Coverage, DegradeTraceItem,
+    BackendTrace, ChannelCoverage, ChannelTraceItem, Coverage, DegradeReason, DegradeTraceItem,
     ExecutePlanRequest, ExecutePlanResponse, PlaceholderTriplet, RelationPath, RetrievalBundle,
     RetrievedChunk,
 };
@@ -356,7 +356,7 @@ fn channel_trace(
 fn timeout_degrade(stage: &str) -> DegradeTraceItem {
     DegradeTraceItem {
         stage: stage.to_string(),
-        reason: format!("{stage} channel timed out"),
+        reason: DegradeReason::ChannelTimeout,
         impact: format!("Skipping {stage} retrieval channel"),
     }
 }
@@ -388,7 +388,7 @@ impl RagRuntime {
             Ok(Err(error)) => {
                 let degrade_trace = vec![DegradeTraceItem {
                     stage: "text_dense".to_string(),
-                    reason: format!("Text dense channel failed: {error}"),
+                    reason: DegradeReason::Other(format!("Text dense channel failed: {error}")),
                     impact: "Skipping text dense retrieval channel".to_string(),
                 }];
                 TextDenseChannelOutput {
@@ -434,7 +434,7 @@ impl RagRuntime {
             Ok(Err(error)) => {
                 let degrade_trace = vec![DegradeTraceItem {
                     stage: "bm25".to_string(),
-                    reason: format!("BM25 channel failed: {error}"),
+                    reason: DegradeReason::Other(format!("BM25 channel failed: {error}")),
                     impact: "Skipping BM25 retrieval channel".to_string(),
                 }];
                 Bm25ChannelOutput {
@@ -485,7 +485,7 @@ impl RagRuntime {
             Ok(Err(error)) => {
                 let degrade_trace = vec![DegradeTraceItem {
                     stage: "multimodal_dense".to_string(),
-                    reason: format!("Multimodal dense channel failed: {error}"),
+                    reason: DegradeReason::Other(format!("Multimodal dense channel failed: {error}")),
                     impact: "Skipping multimodal dense retrieval channel".to_string(),
                 }];
                 MultimodalChannelOutput {
@@ -553,8 +553,7 @@ impl RagRuntime {
             if relation_limit > 0 && supporting_chunk_limit > 0 {
                 degrade_trace.push(DegradeTraceItem {
                     stage: "graph".to_string(),
-                    reason: "graph channel requires graph_hints or placeholder_triplets"
-                        .to_string(),
+                    reason: DegradeReason::ChannelFailed,
                     impact: "Skipping graph retrieval without structured triplets".to_string(),
                 });
             }
@@ -614,7 +613,7 @@ impl RagRuntime {
                 let reason = format!("Graph retrieval failed: {error}");
                 degrade_trace.push(DegradeTraceItem {
                     stage: "graph".to_string(),
-                    reason: reason.clone(),
+                    reason: DegradeReason::Other(reason.clone()),
                     impact: "Skipping graph relation retrieval".to_string(),
                 });
                 GraphChannelOutput {
