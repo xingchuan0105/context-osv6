@@ -28,6 +28,7 @@ pub struct ToolCall {
 }
 
 /// Execution status for a single tool.
+/// Note: `PartialEq, Eq` are required for conversion to `contracts::chat::ToolStatus`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolStatus {
@@ -54,7 +55,6 @@ pub struct ToolTrace {
 
 /// Result returned by the runtime for one ToolCall.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct ToolResult {
     pub tool: String,
     pub version: String,
@@ -63,6 +63,58 @@ pub struct ToolResult {
     pub data: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trace: Option<ToolTrace>,
+}
+
+// ---------------------------------------------------------------------------
+// Bridge: common ↔ contracts ToolResult/ToolStatus conversions
+// Eliminates manual field-by-field mapping in service_modes / service_postprocess.
+// ---------------------------------------------------------------------------
+
+impl From<ToolResult> for contracts::chat::ToolResult {
+    fn from(r: ToolResult) -> Self {
+        contracts::chat::ToolResult {
+            tool: r.tool,
+            version: r.version,
+            status: r.status.into(),
+            data: r.data,
+        }
+    }
+}
+
+impl From<contracts::chat::ToolResult> for ToolResult {
+    fn from(r: contracts::chat::ToolResult) -> Self {
+        ToolResult {
+            tool: r.tool,
+            version: r.version,
+            status: r.status.into(),
+            data: r.data,
+            trace: None,
+        }
+    }
+}
+
+impl From<ToolStatus> for contracts::chat::ToolStatus {
+    fn from(s: ToolStatus) -> Self {
+        match s {
+            ToolStatus::Ok => contracts::chat::ToolStatus::Ok,
+            ToolStatus::Timeout => contracts::chat::ToolStatus::Timeout,
+            ToolStatus::Error => contracts::chat::ToolStatus::Error,
+            ToolStatus::NotFound => contracts::chat::ToolStatus::NotFound,
+            ToolStatus::NotImplemented => contracts::chat::ToolStatus::NotImplemented,
+        }
+    }
+}
+
+impl From<contracts::chat::ToolStatus> for ToolStatus {
+    fn from(s: contracts::chat::ToolStatus) -> Self {
+        match s {
+            contracts::chat::ToolStatus::Ok => ToolStatus::Ok,
+            contracts::chat::ToolStatus::Timeout => ToolStatus::Timeout,
+            contracts::chat::ToolStatus::Error => ToolStatus::Error,
+            contracts::chat::ToolStatus::NotFound => ToolStatus::NotFound,
+            contracts::chat::ToolStatus::NotImplemented => ToolStatus::NotImplemented,
+        }
+    }
 }
 
 /// Planner decides what to do after emitting calls.
@@ -210,6 +262,14 @@ pub enum DocSummaryLevel {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DocMetadataArgs {
+    pub doc_ids: Vec<String>,
+    #[serde(default)]
+    pub fields: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DocProfileArgs {
     pub doc_ids: Vec<String>,
     #[serde(default)]
     pub fields: Vec<String>,

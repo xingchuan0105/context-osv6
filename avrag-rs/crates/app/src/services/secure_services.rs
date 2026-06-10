@@ -37,12 +37,9 @@ pub trait SearchService: Send + Sync {
     fn mode(&self) -> String;
 }
 
-#[derive(Debug, Clone)]
-pub struct SearchResult {
-    pub title: String,
-    pub url: String,
-    pub snippet: String,
-}
+// Re-export from avrag_search to eliminate duplicate definition.
+// The canonical SearchResult includes `citation_index` (Option<usize>).
+pub use avrag_search::SearchResult;
 
 /// 安全的存储服务 trait
 pub trait StorageService: Send + Sync {

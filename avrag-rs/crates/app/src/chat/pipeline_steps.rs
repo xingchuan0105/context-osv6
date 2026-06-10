@@ -2,9 +2,20 @@ use std::collections::BTreeMap;
 
 use common::{AppError, ChatRequest, ChatSession, ModeDebug};
 
+use crate::agents::runtime::AgentRequest;
 use crate::AppState;
 
 use super::pipeline::{ChatExecution, StreamConfig};
+
+fn agent_request_with_resolved_session(
+    mut agent_request: AgentRequest,
+    session: &ChatSession,
+) -> AgentRequest {
+    if agent_request.session_id.is_none() {
+        agent_request.session_id = Some(session.id.clone());
+    }
+    agent_request
+}
 
 pub(crate) async fn dispatch_mode(
     state: &AppState,
@@ -59,7 +70,8 @@ async fn run_general_mode(
         return Err(AppError::internal("agent service is not configured"));
     };
 
-    let mut agent_request = state.build_agent_request(request, kind).await;
+    let mut agent_request =
+        agent_request_with_resolved_session(state.build_agent_request(request, kind, Some(session.id.clone())).await, session);
     if let Some(config) = stream_config {
         agent_request.stream = true;
         agent_request.cancellation_token = Some(config.token.clone());
@@ -136,21 +148,7 @@ async fn run_general_mode(
         },
     );
     if emit_debug_trace {
-        let debug_events: Vec<_> = sink
-            .events()
-            .into_iter()
-            .filter_map(|e| match e {
-                crate::agents::events::AgentEvent::DebugTrace { kind, payload } => {
-                    Some((kind, payload))
-                }
-                _ => None,
-            })
-            .collect();
-        if !debug_events.is_empty() {
-            execution.debug_metadata = Some(serde_json::json!({
-                "agent_debug_trace": debug_events,
-            }));
-        }
+        attach_debug_trace_from_sink(&mut execution, &sink);
     }
     Ok(execution)
 }
@@ -165,9 +163,12 @@ async fn run_search_mode(
         return Err(AppError::internal("agent service is not configured"));
     };
 
-    let mut agent_request = state
-        .build_agent_request(request, crate::agents::AgentKind::Search)
-        .await;
+    let mut agent_request = agent_request_with_resolved_session(
+        state
+            .build_agent_request(request, crate::agents::AgentKind::Search, Some(session.id.clone()))
+            .await,
+        session,
+    );
     if let Some(config) = stream_config {
         agent_request.stream = true;
         agent_request.cancellation_token = Some(config.token.clone());
@@ -234,21 +235,7 @@ async fn run_search_mode(
         },
     );
     if emit_debug_trace {
-        let debug_events: Vec<_> = sink
-            .events()
-            .into_iter()
-            .filter_map(|e| match e {
-                crate::agents::events::AgentEvent::DebugTrace { kind, payload } => {
-                    Some((kind, payload))
-                }
-                _ => None,
-            })
-            .collect();
-        if !debug_events.is_empty() {
-            execution.debug_metadata = Some(serde_json::json!({
-                "agent_debug_trace": debug_events,
-            }));
-        }
+        attach_debug_trace_from_sink(&mut execution, &sink);
     }
     Ok(execution)
 }
@@ -291,9 +278,12 @@ async fn run_rag_mode(
         return Err(AppError::internal("agent service is not configured"));
     };
 
-    let mut agent_request = state
-        .build_agent_request(request, crate::agents::AgentKind::Rag)
-        .await;
+    let mut agent_request = agent_request_with_resolved_session(
+        state
+            .build_agent_request(request, crate::agents::AgentKind::Rag, Some(session.id.clone()))
+            .await,
+        session,
+    );
 
     if !request.doc_scope.is_empty()
         && let Ok(metadata) = state.load_docscope_metadata(&request.doc_scope).await
@@ -351,6 +341,30 @@ async fn run_rag_mode(
         },
     );
     Ok(execution)
+}
+
+/// Extract `DebugTrace` events from a `CollectingSink` and attach them to
+/// `execution.debug_metadata` as `{"agent_debug_trace": [...]}`.
+/// Used by the non-streaming branches of general and search modes.
+fn attach_debug_trace_from_sink(
+    execution: &mut ChatExecution,
+    sink: &crate::agents::events::CollectingSink,
+) {
+    let debug_events: Vec<_> = sink
+        .events()
+        .into_iter()
+        .filter_map(|e| match e {
+            crate::agents::events::AgentEvent::DebugTrace { kind, payload } => {
+                Some((kind, payload))
+            }
+            _ => None,
+        })
+        .collect();
+    if !debug_events.is_empty() {
+        execution.debug_metadata = Some(serde_json::json!({
+            "agent_debug_trace": debug_events,
+        }));
+    }
 }
 
 pub(crate) fn emit_terminal_stream_events(

@@ -97,6 +97,7 @@ impl AppState {
             citations: Vec::new(),
             tool_results: Vec::new(),
             turn_metadata: None,
+            resolved_query: None,
             created_at: now.clone(),
         });
         messages.push(ChatMessage {
@@ -111,6 +112,7 @@ impl AppState {
             citations: citations.clone(),
             tool_results: Vec::new(),
             turn_metadata: None,
+            resolved_query: None,
             created_at: now.clone(),
         });
 
@@ -208,17 +210,8 @@ pub(crate) fn build_chat_execution_from_result(
             mode_debug: params.mode_debug,
             message_id: None,
             guard_report: None,
-            tool_results: agent_result.tool_results.iter().map(|r| contracts::chat::ToolResult {
-                tool: r.tool.clone(),
-                version: r.version.clone(),
-                status: match r.status {
-                    common::ToolStatus::Ok => contracts::chat::ToolStatus::Ok,
-                    common::ToolStatus::Timeout => contracts::chat::ToolStatus::Timeout,
-                    common::ToolStatus::Error => contracts::chat::ToolStatus::Error,
-                    common::ToolStatus::NotFound => contracts::chat::ToolStatus::NotFound,
-                    common::ToolStatus::NotImplemented => contracts::chat::ToolStatus::NotImplemented,
-                },
-                data: r.data.clone(),
+            tool_results: agent_result.tool_results.iter().map(|r| {
+                contracts::chat::ToolResult::from(r.clone())
             }).collect(),
             usage: response_usage,
         },

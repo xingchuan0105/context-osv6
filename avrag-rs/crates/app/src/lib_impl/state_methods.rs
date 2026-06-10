@@ -53,6 +53,7 @@ impl AppState {
             llm_client.clone(),
             search_executor.clone(),
             None,
+            None,
             &config.prompts.dir,
         ));
         let key_vault = build_key_vault_from_config(&config);
@@ -200,6 +201,7 @@ impl AppState {
             llm_client.clone(),
             search_executor.clone(),
             rag_runtime.clone(),
+            pg.clone(),
             &config.prompts.dir,
         ));
         let key_vault = build_key_vault_from_config(&config);
@@ -277,16 +279,7 @@ impl AppState {
             return Ok(None);
         }
 
-        let summary = if let Some(cm) = &self.chatmemory {
-            cm.load(&self.auth, session_uuid)
-                .await
-                .ok()
-                .and_then(|m| m.layer2.map(|l2| l2.summary))
-        } else {
-            None
-        };
-
-        Ok(Self::build_rag_session_context(messages, summary))
+        Ok(Self::build_rag_session_context(messages, None))
     }
 
     /// Returns the runtime mode identifier ("postgres" or "memory").
@@ -390,12 +383,18 @@ impl AppState {
             .filter(|message| message.content.trim() != current_query)
             .map(|message| {
                 let resolved_query = message
-                    .turn_metadata
-                    .as_ref()
-                    .and_then(|meta| meta.get("query_resolution"))
-                    .and_then(|qr| qr.get("resolved_query"))
-                    .and_then(|v| v.as_str())
-                    .map(str::to_string);
+                    .resolved_query
+                    .clone()
+                    .filter(|q| !q.trim().is_empty())
+                    .or_else(|| {
+                        message
+                            .turn_metadata
+                            .as_ref()
+                            .and_then(|meta| meta.get("query_resolution"))
+                            .and_then(|qr| qr.get("resolved_query"))
+                            .and_then(|v| v.as_str())
+                            .map(str::to_string)
+                    });
                 ChatTurnInput {
                     role: message.role,
                     content: message.content,
@@ -413,13 +412,18 @@ impl AppState {
 
     /// Build an `AgentRequest` from chat request and memory context.
     /// This is the single conversion point from legacy `ChatRequest` to new agent protocol.
+    ///
+    /// `session_id_override` allows callers to inject the resolved session ID
+    /// *before* memory loading, fixing the first-turn bug where `req.session_id`
+    /// is `None` but the session object already exists.
     pub async fn build_agent_request(
         &self,
         req: &common::ChatRequest,
         kind: crate::agents::AgentKind,
+        session_id_override: Option<String>,
     ) -> crate::agents::runtime::AgentRequest {
         let notebook_id = req.notebook_id.clone();
-        let session_id = req.session_id.clone();
+        let session_id = session_id_override.or_else(|| req.session_id.clone());
         let doc_scope = req.doc_scope.clone();
         let stream = req.stream;
 

@@ -50,10 +50,15 @@ impl ReActLoop {
         call: &common::ToolCall,
         auth: &avrag_auth::AuthContext,
         doc_scope: &[String],
+        session_id: Option<&str>,
     ) -> ToolResult {
         match call.tool.as_str() {
+            "conversation_history_load" | "user_profile_load" | "conversation_history_tag"
+            | "calculator" | "code_interpreter" | "weather_query" | "web_fetch" | "web_search" => {
+                self.dispatch_skill_tool(call, auth, session_id).await
+            }
             "dense_retrieval" | "lexical_retrieval" | "graph_retrieval" | "index_lookup"
-            | "doc_summary" | "doc_metadata" => {
+            | "doc_summary" | "doc_metadata" | "doc_profile" => {
                 if let Some(runtime) = &self.rag_runtime {
                     dispatch_rag_tool(runtime, auth, call, doc_scope).await
                 } else {
@@ -66,61 +71,26 @@ impl ReActLoop {
                     }
                 }
             }
-            "web_search" => {
-                if let Some(executor) = &self.search_executor {
-                    let query = call
-                        .args
-                        .get("query")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    let vertical = call.args.get("vertical").and_then(|v| v.as_str());
-                    let v = vertical.unwrap_or("web");
-                    if v != "web" && v != "news" {
-                        common::ToolResult {
-                            tool: call.tool.clone(),
-                            version: call.version.clone(),
-                            status: common::ToolStatus::Error,
-                            data: Some(serde_json::json!({
-                                "error": format!("unsupported vertical: {v}. allowed: web, news")
-                            })),
-                            trace: None,
-                        }
-                    } else {
-                        match executor.execute_search(query, Some(v)).await {
-                            Ok(response) => common::ToolResult {
-                                tool: call.tool.clone(),
-                                version: call.version.clone(),
-                                status: common::ToolStatus::Ok,
-                                data: Some(serde_json::to_value(&response).unwrap_or_default()),
-                                trace: None,
-                            },
-                            Err(e) => common::ToolResult {
-                                tool: call.tool.clone(),
-                                version: call.version.clone(),
-                                status: common::ToolStatus::Error,
-                                data: Some(serde_json::json!({"error": e.to_string()})),
-                                trace: None,
-                            },
-                        }
-                    }
-                } else {
-                    common::ToolResult {
-                        tool: call.tool.clone(),
-                        version: call.version.clone(),
-                        status: common::ToolStatus::NotImplemented,
-                        data: Some(serde_json::json!({"error": "search executor not configured"})),
-                        trace: None,
-                    }
-                }
-            }
-            _ => common::ToolResult {
-                tool: call.tool.clone(),
-                version: call.version.clone(),
-                status: common::ToolStatus::NotImplemented,
-                data: None,
-                trace: None,
-            },
+            _ => self.dispatch_skill_tool(call, auth, session_id).await,
         }
+    }
+
+    async fn dispatch_skill_tool(
+        &self,
+        call: &common::ToolCall,
+        auth: &avrag_auth::AuthContext,
+        session_id: Option<&str>,
+    ) -> common::ToolResult {
+        let session_uuid = session_id.and_then(|id| uuid::Uuid::parse_str(id).ok());
+        let pg = self.effective_pg_repo();
+        crate::agents::unified::atomic_tools::dispatch_atomic_tool_with_enforcement(
+            call,
+            self.search_executor.as_deref(),
+            Some(auth),
+            session_uuid,
+            pg.as_deref(),
+        )
+        .await
     }
 
     pub(super) async fn run_iteration(
@@ -247,7 +217,12 @@ impl ReActLoop {
                     let call_id = &call_ids[idx];
                     let tool_start = std::time::Instant::now();
                     let result = self
-                        .dispatch_tool_call(call, auth, &request.doc_scope)
+                        .dispatch_tool_call(
+                            call,
+                            auth,
+                            &request.doc_scope,
+                            request.session_id.as_deref(),
+                        )
                         .await;
                     let tool_elapsed_ms = tool_start.elapsed().as_millis() as u64;
 
@@ -333,23 +308,33 @@ impl ReActLoop {
                     let exec_result: Result<
                         avrag_code_interpreter::ExecutionResult,
                         avrag_code_interpreter::InterpreterError,
-                    > = if let Some(runtime) = &self.rag_runtime {
+                    >;
+                    let mut block_observation_stdout: Option<String> = None;
+
+                    if let Some(runtime) = &self.rag_runtime {
                         let bridge = Arc::new(avrag_rag_core::runtime::bridge::RuntimeBridge::new(
                             Arc::clone(runtime),
                             auth.clone(),
                             request.doc_scope.clone(),
                         ));
                         let interpreter = avrag_code_interpreter::CodeInterpreter::new();
-                        match interpreter
+                        exec_result = match interpreter
                             .execute_with_bridge(&code, Arc::clone(&bridge))
                             .await
                         {
                             Ok(exec) => {
-                                bridge_tool_results.extend(bridge.take_captured_results());
+                                let block_bridge_results = bridge.take_captured_results();
+                                bridge_tool_results.extend(block_bridge_results.clone());
+                                block_observation_stdout = Some(
+                                    crate::agents::unified::helpers::codegen_observation_stdout(
+                                        &exec.stdout,
+                                        &block_bridge_results,
+                                    ),
+                                );
                                 Ok(exec)
                             }
                             Err(e) => Err(e),
-                        }
+                        };
                     } else {
                         let interpreter_lock = Arc::clone(&interpreter_lock);
                         let join_result = tokio::task::spawn_blocking(move || {
@@ -361,13 +346,13 @@ impl ReActLoop {
                             guard.as_ref().unwrap().execute(&code)
                         })
                         .await;
-                        match join_result {
+                        exec_result = match join_result {
                             Ok(result) => result,
                             Err(e) => Err(avrag_code_interpreter::InterpreterError::Bridge(
                                 format!("interpreter task panicked: {e}"),
                             )),
-                        }
-                    };
+                        };
+                    }
 
                     let (block_status, block_text, is_err) = match exec_result {
                         Ok(exec) => {
@@ -379,9 +364,12 @@ impl ReActLoop {
                             } else {
                                 common::ToolStatus::Ok
                             };
+                            let stdout_for_observation = block_observation_stdout
+                                .as_deref()
+                                .unwrap_or(exec.stdout.as_str());
                             let text = format!(
                                 "[block {}] stdout: {}\nstderr: {}",
-                                idx, exec.stdout, exec.stderr
+                                idx, stdout_for_observation, exec.stderr
                             );
                             (status, text, is_err)
                         }
@@ -694,6 +682,144 @@ mod tests {
         );
         assert_eq!(state.messages.len(), 3);
         assert_eq!(state.total_tool_calls, 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chunks() {
+        use avrag_llm::ModelProviderConfig;
+        use avrag_rag_core::RagRuntime;
+        use uuid::Uuid;
+
+        struct StubDataPlane {
+            chunk_id: Uuid,
+            doc_id: Uuid,
+        }
+
+        #[async_trait::async_trait]
+        impl avrag_retrieval_data_plane::RetrievalDataPlane for StubDataPlane {
+            async fn search_text_dense(
+                &self,
+                _request: avrag_retrieval_data_plane::TextDenseSearchRequest,
+            ) -> anyhow::Result<Vec<avrag_retrieval_data_plane::ScoredChunk>> {
+                Ok(vec![avrag_retrieval_data_plane::ScoredChunk {
+                    chunk_id: self.chunk_id,
+                    doc_id: self.doc_id,
+                    content: "bridge hit".to_string(),
+                    score: 0.95,
+                    source: "stub".to_string(),
+                    page: Some(1),
+                    chunk_type: "text".to_string(),
+                    asset_id: None,
+                    caption: None,
+                    image_path: None,
+                    parser_backend: None,
+                    source_locator: None,
+                    parse_run_id: None,
+                }])
+            }
+
+            async fn search_bm25(
+                &self,
+                _request: avrag_retrieval_data_plane::Bm25SearchRequest,
+            ) -> anyhow::Result<avrag_retrieval_data_plane::Bm25SearchOutput> {
+                Ok(avrag_retrieval_data_plane::Bm25SearchOutput {
+                    chunks: vec![],
+                    trace: avrag_retrieval_data_plane::Bm25SearchTrace {
+                        backend: "stub".to_string(),
+                        raw_hit_count: 0,
+                        hydrated_hit_count: 0,
+                        fallback_reason: None,
+                    },
+                })
+            }
+
+            async fn search_multimodal(
+                &self,
+                _request: avrag_retrieval_data_plane::MultimodalSearchRequest,
+            ) -> anyhow::Result<Vec<avrag_retrieval_data_plane::ScoredChunk>> {
+                Ok(vec![])
+            }
+
+            async fn search_graph(
+                &self,
+                _request: avrag_retrieval_data_plane::GraphSearchRequest,
+            ) -> anyhow::Result<avrag_retrieval_data_plane::GraphSearchOutput> {
+                Ok(avrag_retrieval_data_plane::GraphSearchOutput {
+                    relation_paths: vec![],
+                    supporting_chunks: vec![],
+                })
+            }
+        }
+
+        let embedding = Arc::new(avrag_llm::EmbeddingClient::new(ModelProviderConfig {
+            base_url: "http://localhost:9999".to_string(),
+            api_key: "test".to_string(),
+            model: "test-model".to_string(),
+            timeout_ms: 5000,
+            api_style: None,
+            dimensions: None,
+            enable_thinking: None,
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        }));
+        let chunk_id = Uuid::from_u128(1);
+        let doc_id = Uuid::parse_str("00000000-0000-0000-0000-000000000010").unwrap();
+        let data_plane: Arc<dyn avrag_retrieval_data_plane::RetrievalDataPlane> =
+            Arc::new(StubDataPlane { chunk_id, doc_id });
+        let config = avrag_rag_core::RagConfig::new_for_data_plane(embedding, None);
+        let runtime = Arc::new(RagRuntime::with_data_plane(config, data_plane));
+
+        let loop_ = test_loop().with_rag_runtime(Some(runtime));
+        let mode = rag_mode();
+        let mut state = empty_state();
+        let sink = CollectingSink::new();
+        let optimizer = LoopOptimizer::new();
+        let auth = test_auth();
+        let mut request = base_request(AgentKind::Rag);
+        request.doc_scope = vec![doc_id.to_string()];
+
+        // Real LLM often assigns without printing — stdout stays empty.
+        let response = fake_llm_response(
+            r#"<code language="python">chunks = await client.dense_search(query="antifragility", top_k=10)</code>"#,
+        );
+
+        let _outcome = loop_
+            .apply_llm_output(
+                0,
+                4,
+                &mode,
+                &request,
+                &auth,
+                &mode.loop_exit_for_mode(),
+                &mut state,
+                &optimizer,
+                &sink,
+                &response,
+                std::time::Instant::now(),
+            )
+            .await
+            .unwrap();
+
+        let observation = state
+            .messages
+            .iter()
+            .find(|m| m.content.contains("<code_execution_result>"))
+            .map(|m| m.content.as_str())
+            .expect("code_execution_result message");
+        assert!(
+            !super::super::exit_policy::code_execution_has_evidence(observation)
+                || observation.contains("chunk_id"),
+            "when bridge returns chunks, observation stdout should carry chunk json: {observation}"
+        );
+        assert!(
+            state
+                .tool_results
+                .iter()
+                .any(|r| r.tool == "dense_retrieval" && r.status == common::ToolStatus::Ok),
+            "bridge side-channel should record dense_retrieval Ok even when stdout empty; tool_results: {:?}",
+            state.tool_results
+        );
     }
 
     #[tokio::test]

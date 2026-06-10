@@ -76,3 +76,6 @@ playwright/.auth/
 /.playwright-cli/
 .gitnexus
 e2e_output/
+
+# Graphify generated artifacts (graph.json alone is 21MB+)
+/graphify-out/
