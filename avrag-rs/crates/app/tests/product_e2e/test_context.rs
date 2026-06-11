@@ -12,9 +12,11 @@ use super::{
     ChatResponse, DocumentStatus, HttpResponse, NotebookInner, NotebookResponse, SseEvent,
     SseParser, UploadResponse,
     mock_servers::{
-        reset_mock_rag_state, set_mock_rag_codegen_chunk_id, set_mock_rag_codegen_chunk_ids,
-        set_mock_rag_codegen_query, set_mock_rag_skip_codegen,
-        start_mock_embedding_server, start_mock_llm_server, start_mock_search_server,
+        reset_mock_rag_state, set_mock_emit_memory_tool, set_mock_rag_codegen_chunk_id,
+        set_mock_rag_codegen_chunk_ids, set_mock_rag_codegen_doc_id, set_mock_rag_codegen_query,
+        set_mock_rag_multiround_profile, set_mock_rag_skill_request_memory, set_mock_rag_skip_codegen,
+        start_mock_embedding_server,
+        start_mock_llm_server, start_mock_search_server,
     },
     setup,
 };
@@ -396,7 +398,8 @@ impl TestContext {
             .expect("find worker binary");
         let worker_log_path = object_store_dir.path().join("worker.log");
         let mut cmd = tokio::process::Command::new(&worker_binary);
-        cmd.env("DATABASE_URL", &pg_url)
+        cmd.env("E2E_ENABLED", "true")
+            .env("DATABASE_URL", &pg_url)
             .env("AVRAG_RUN_MIGRATIONS", "false")
             .env("AVRAG_OBJECT_ROOT", &object_root)
             .env(
@@ -437,12 +440,30 @@ impl TestContext {
                 "INGESTION_LLM_BASE_URL",
                 "INGESTION_LLM_API_KEY",
                 "INGESTION_LLM_MODEL",
+                "EMBEDDING_BASE_URL",
+                "EMBEDDING_API_KEY",
+                "EMBEDDING_MODEL",
+                "EMBEDDING_DIMENSIONS",
+                "AVRAG_EMBEDDING_DIM",
+                "OFFICE_PARSER_BASE_URL",
+                "PDF_RENDERER_BASE_URL",
+                "PDF_VISUAL_PAGES_PER_CHUNK",
+                "INGESTION_PDF_MAX_PAGES",
+                "INGESTION_TRIPLET_ENABLED",
+                "INGESTION_VLM_TRIPLET_ENABLED",
+                "INGESTION_VLM_SUMMARY_ENABLED",
+                "INGESTION_TRIPLET_MIN_CONFIDENCE",
+                "DASHSCOPE_API_KEY",
+                "MM_EMBEDDING_BASE_URL",
+                "MM_EMBEDDING_API_KEY",
+                "MM_EMBEDDING_MODEL",
+                "MM_EMBEDDING_API_STYLE",
+                "MM_EMBEDDING_DIMENSIONS",
+                "MM_RERANK_BASE_URL",
+                "MM_RERANK_API_KEY",
+                "MM_RERANK_MODEL",
+                "MM_RERANK_API_STYLE",
             ] {
-                if let Ok(v) = std::env::var(key) {
-                    cmd.env(key, v);
-                }
-            }
-            for key in ["EMBEDDING_BASE_URL", "EMBEDDING_API_KEY", "EMBEDDING_MODEL"] {
                 if let Ok(v) = std::env::var(key) {
                     cmd.env(key, v);
                 }
@@ -601,7 +622,41 @@ impl TestContext {
         notebook_id: &str,
     ) -> anyhow::Result<UploadResponse> {
         let content = setup::load_fixture(fixture)?;
-        let bytes = content.into_bytes();
+        self.upload_bytes_to_notebook(fixture, content.into_bytes(), notebook_id)
+            .await
+    }
+
+    /// Upload a local file (absolute or relative path) to an existing notebook.
+    pub async fn upload_file_from_path_to_notebook(
+        &self,
+        file_path: &str,
+        notebook_id: &str,
+    ) -> anyhow::Result<UploadResponse> {
+        let path = std::path::Path::new(file_path);
+        let bytes = std::fs::read(path)
+            .map_err(|e| anyhow::anyhow!("read {}: {e}", path.display()))?;
+        let filename = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("document.bin");
+        self.upload_bytes_to_notebook(filename, bytes, notebook_id)
+            .await
+    }
+
+    /// Upload a local file into a freshly created notebook.
+    pub async fn upload_file_from_path(&self, file_path: &str) -> anyhow::Result<UploadResponse> {
+        let notebook = self.create_notebook("test-notebook").await?;
+        self.upload_file_from_path_to_notebook(file_path, &notebook.id)
+            .await
+    }
+
+    async fn upload_bytes_to_notebook(
+        &self,
+        filename: &str,
+        bytes: Vec<u8>,
+        notebook_id: &str,
+    ) -> anyhow::Result<UploadResponse> {
+        let mime_type = setup::mime_type_for_filename(filename);
 
         let resp = self
             .http_client
@@ -610,9 +665,9 @@ impl TestContext {
                 self.base_url, notebook_id
             ))
             .json(&serde_json::json!({
-                "filename": fixture,
+                "filename": filename,
                 "file_size": bytes.len(),
-                "mime_type": "text/plain",
+                "mime_type": mime_type,
             }))
             .send()
             .await?;
@@ -627,7 +682,6 @@ impl TestContext {
             .ok_or_else(|| anyhow::anyhow!("missing document_id in upload response: {body}"))?
             .to_string();
 
-        // PUT the file bytes
         let upload_resp = self
             .http_client
             .put(format!("{}/dev-upload/{document_id}", self.base_url))
@@ -694,6 +748,24 @@ impl TestContext {
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
+    }
+
+    /// GET `/api/v1/documents/{id}/status` (for diagnostics).
+    pub async fn fetch_document_status(&self, doc_id: &str) -> anyhow::Result<serde_json::Value> {
+        self.fetch_status_with_retry(doc_id).await
+    }
+
+    /// Last N lines of the worker log (when ingestion or RAG fails).
+    pub fn worker_log_tail(&self, max_lines: usize) -> String {
+        let Some(ref path) = self.worker_log_path else {
+            return String::new();
+        };
+        let content = std::fs::read_to_string(path).unwrap_or_default();
+        let lines: Vec<&str> = content.lines().collect();
+        if lines.len() <= max_lines {
+            return content;
+        }
+        lines[lines.len() - max_lines..].join("\n")
     }
 
     /// GET the document status with up to 3 retries on transient errors.
@@ -1089,6 +1161,24 @@ impl TestContext {
         Ok(row.0 as usize)
     }
 
+    /// Text body chunks plus multimodal/visual chunks (scan PDFs may have 0 text rows).
+    pub async fn query_ingested_chunk_units(&self, document_id: &str) -> anyhow::Result<usize> {
+        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
+        let doc_id = Uuid::parse_str(document_id)?;
+        let text: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM chunks WHERE document_id = $1")
+                .bind(doc_id)
+                .fetch_one(&pool)
+                .await?;
+        let multimodal: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM document_multimodal_chunks WHERE document_id = $1",
+        )
+        .bind(doc_id)
+        .fetch_one(&pool)
+        .await?;
+        Ok((text.0 + multimodal.0) as usize)
+    }
+
     /// Return one chunk id from PG for mock codegen embedding.
     pub async fn query_first_chunk_id(&self, document_id: &str) -> anyhow::Result<String> {
         let pool = sqlx::PgPool::connect(&self.pg_url).await?;
@@ -1123,6 +1213,48 @@ impl TestContext {
     pub fn set_mock_rag_skip_codegen(&self, skip: bool) {
         let _ = self;
         set_mock_rag_skip_codegen(skip);
+    }
+
+    /// Enable multiround RAG codegen: doc_profile → chunk_fetch → synthesis.
+    pub fn set_mock_rag_multiround_profile(&self, enabled: bool) {
+        let _ = self;
+        set_mock_rag_multiround_profile(enabled);
+    }
+
+    /// Pin doc_id for multiround mock codegen round0 (`doc_profile`).
+    pub fn set_mock_rag_codegen_doc_id(&self, doc_id: &str) {
+        let _ = self;
+        set_mock_rag_codegen_doc_id(doc_id);
+    }
+
+    /// Emit a memory tool call on the next tools-enabled retrieve turn.
+    pub fn set_mock_emit_memory_tool(&self, tool: Option<&str>) {
+        let _ = self;
+        set_mock_emit_memory_tool(tool.map(str::to_string));
+    }
+
+    /// First RAG retrieve turn returns `{"skill_request":["memory"]}` to disclose on-demand tools.
+    pub fn set_mock_rag_skill_request_memory(&self, enabled: bool) {
+        let _ = self;
+        set_mock_rag_skill_request_memory(enabled);
+    }
+
+    /// Read the latest user message content and resolved_query for a session.
+    pub async fn query_latest_user_resolved_query(
+        &self,
+        session_id: &str,
+    ) -> anyhow::Result<(String, Option<String>)> {
+        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
+        let sid = Uuid::parse_str(session_id)?;
+        let row: (String, Option<String>) = sqlx::query_as(
+            "SELECT content, resolved_query FROM chat_messages \
+             WHERE session_id = $1 AND role = 'user' \
+             ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(sid)
+        .fetch_one(&pool)
+        .await?;
+        Ok(row)
     }
 
     /// Override the ingestion task max_attempts for a document.

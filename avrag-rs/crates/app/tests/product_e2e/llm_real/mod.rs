@@ -128,6 +128,9 @@ pub fn ensure_search_defaults() {
 /// Max attempts for non-deterministic real-LLM chat/search calls.
 pub const REAL_LLM_MAX_ATTEMPTS: usize = 2;
 
+/// Extra attempts for multi-tool RAG probes where the model may answer in one retrieval pass.
+pub const REAL_LLM_MULTITOOL_MAX_ATTEMPTS: usize = 3;
+
 /// Stream deadline for real-LLM runs (thinking models can be slow).
 pub const REAL_LLM_STREAM_DEADLINE: std::time::Duration = std::time::Duration::from_secs(180);
 
@@ -273,17 +276,18 @@ async fn chat_stream_with_retry_inner(
     params: ChatStreamParams<'_>,
     ready: impl Fn(&ChatResponse) -> bool,
     label: &str,
+    max_attempts: usize,
 ) -> LlmRealChatResult {
     let mut last = None;
     let mut last_stream_error_with_done = false;
-    for attempt in 1..=REAL_LLM_MAX_ATTEMPTS {
+    for attempt in 1..=max_attempts {
         let (events, resp, reasoning) = match chat_stream_once(ctx, &params).await {
             Ok(result) => result,
             Err(err) => {
                 eprintln!(
-                    "[llm_real] {label} attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} stream error: {err}"
+                    "[llm_real] {label} attempt {attempt}/{max_attempts} stream error: {err}"
                 );
-                if attempt < REAL_LLM_MAX_ATTEMPTS {
+                if attempt < max_attempts {
                     tokio::time::sleep(RETRY_DELAY).await;
                     continue;
                 }
@@ -294,36 +298,36 @@ async fn chat_stream_with_retry_inner(
         let had_stream_error = stream_had_error(&events);
         if had_stream_error {
             eprintln!(
-                "[llm_real] {label} attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} stream error event; last={:?}",
+                "[llm_real] {label} attempt {attempt}/{max_attempts} stream error event; last={:?}",
                 events.last().map(|e| e.event.as_str())
             );
         }
 
         let Some(resp) = resp else {
             eprintln!(
-                "[llm_real] {label} attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} missing done payload; events={}",
+                "[llm_real] {label} attempt {attempt}/{max_attempts} missing done payload; events={}",
                 events.len()
             );
-            if attempt < REAL_LLM_MAX_ATTEMPTS {
+            if attempt < max_attempts {
                 tokio::time::sleep(RETRY_DELAY).await;
                 continue;
             }
             panic!("{label} stream missing terminal done payload");
         };
 
-        if had_stream_error && attempt == REAL_LLM_MAX_ATTEMPTS {
+        if had_stream_error && attempt == max_attempts {
             eprintln!(
                 "[llm_real] {label} WARNING: final attempt had error event but also produced done payload"
             );
             last_stream_error_with_done = true;
         }
 
-        if had_stream_error && attempt < REAL_LLM_MAX_ATTEMPTS && !ready(&resp) {
+        if had_stream_error && attempt < max_attempts && !ready(&resp) {
             tokio::time::sleep(RETRY_DELAY).await;
             continue;
         }
 
-        if had_stream_error && attempt < REAL_LLM_MAX_ATTEMPTS && ready(&resp) {
+        if had_stream_error && attempt < max_attempts && ready(&resp) {
             eprintln!(
                 "[llm_real] {label} WARNING: accepting ready response on attempt {attempt} despite stream error event"
             );
@@ -344,14 +348,14 @@ async fn chat_stream_with_retry_inner(
         }
 
         eprintln!(
-            "[llm_real] {label} attempt {attempt}/{REAL_LLM_MAX_ATTEMPTS} not ready \
+            "[llm_real] {label} attempt {attempt}/{max_attempts} not ready \
              (answer_len={}, degrade={:?}, reasoning_deltas={}); retrying after {}s",
             resp.answer.len(),
             resp.degrade_trace,
             reasoning.delta_count,
             RETRY_DELAY.as_secs()
         );
-        if attempt < REAL_LLM_MAX_ATTEMPTS {
+        if attempt < max_attempts {
             tokio::time::sleep(RETRY_DELAY).await;
         }
     }
@@ -388,6 +392,89 @@ pub async fn chat_with_retry(
         },
         |resp| !resp.answer.is_empty(),
         "rag chat",
+        REAL_LLM_MAX_ATTEMPTS,
+    )
+    .await
+}
+
+fn answer_rejects_synthesis_fallback(answer: &str) -> bool {
+    let lower = answer.to_ascii_lowercase();
+    !lower.contains("evidence_insufficient_fallback")
+        && !lower.contains("could not format a validated cited answer")
+        && !lower.contains("could not find relevant evidence in your documents")
+}
+
+/// Retry until the answer is non-empty, has citations, and is not a synthesis/evidence fallback.
+pub async fn chat_with_citations_retry(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+    doc_scope: &[String],
+) -> LlmRealChatResult {
+    chat_stream_with_retry_inner(
+        ctx,
+        ChatStreamParams {
+            query,
+            agent_type: "rag",
+            notebook_id,
+            doc_scope,
+            session_id: None,
+            format_hint: None,
+            debug: true,
+        },
+        |resp| {
+            !resp.answer.is_empty()
+                && !resp.citations.is_empty()
+                && answer_rejects_synthesis_fallback(&resp.answer)
+        },
+        "rag chat with citations",
+        REAL_LLM_MAX_ATTEMPTS,
+    )
+    .await
+}
+
+/// Retry RAG chat until the response uses multiple tools (non-deterministic probe).
+pub async fn chat_with_multitool_retry(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+    doc_scope: &[String],
+    min_distinct_tools: usize,
+    retrieval_tools: &[&str],
+    min_answer_len: usize,
+) -> LlmRealChatResult {
+    chat_stream_with_retry_inner(
+        ctx,
+        ChatStreamParams {
+            query,
+            agent_type: "rag",
+            notebook_id,
+            doc_scope,
+            session_id: None,
+            format_hint: None,
+            debug: true,
+        },
+        |resp| {
+            if resp.answer.len() < min_answer_len {
+                return false;
+            }
+            let mut names = std::collections::HashSet::new();
+            for result in &resp.tool_results {
+                names.insert(result.tool.as_str());
+            }
+            let ready = names.len() >= min_distinct_tools
+                && names
+                    .iter()
+                    .any(|tool| retrieval_tools.contains(tool));
+            if !ready {
+                eprintln!(
+                    "[llm_real] rag multitool chat tools={names:?} (need >={min_distinct_tools})"
+                );
+            }
+            ready
+        },
+        "rag multitool chat",
+        REAL_LLM_MULTITOOL_MAX_ATTEMPTS,
     )
     .await
 }
@@ -413,6 +500,7 @@ pub async fn chat_with_format_retry(
         },
         |resp| !resp.answer.is_empty(),
         "format chat",
+        REAL_LLM_MAX_ATTEMPTS,
     )
     .await
 }
@@ -438,6 +526,7 @@ pub async fn chat_with_session_retry(
         },
         |resp| !resp.answer.is_empty(),
         "session chat",
+        REAL_LLM_MAX_ATTEMPTS,
     )
     .await
 }
@@ -462,6 +551,7 @@ pub async fn search_with_retry(
         },
         |resp| !resp.answer.is_empty() && resp.degrade_trace.is_empty(),
         "search",
+        REAL_LLM_MAX_ATTEMPTS,
     )
     .await
 }
@@ -486,6 +576,7 @@ fn require_real_llm_config() {
 
 pub mod format_real;
 pub mod multi_turn;
+pub mod pdf_corpus;
 pub mod rag_real;
 pub mod search_real;
 
@@ -505,6 +596,16 @@ impl TestContext {
         // - does not start mock LLM/Embedding servers
         // - uses real Brave when credentials + connectivity allow, else mock search
         Self::build_smoke(true, 300, None, true, None, false).await
+    }
+
+    /// Real-LLM context with a longer per-task ingestion timeout for full PDF books.
+    pub async fn new_with_real_llm_pdf() -> Self {
+        load_env_from_repo_dotenv();
+        require_real_llm_config();
+        if has_real_search_credentials() {
+            ensure_search_defaults();
+        }
+        Self::build_smoke(true, 1200, None, true, None, false).await
     }
 }
 

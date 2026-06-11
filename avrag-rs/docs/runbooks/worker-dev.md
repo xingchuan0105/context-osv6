@@ -114,15 +114,34 @@ cargo test --manifest-path crates/ingestion/Cargo.toml
 cargo check -p avrag-worker
 ```
 
-## 服务器部署提醒（2026-04-23）
+## 服务器部署提醒
 
-1. MinerU 已升级为 `v4` 协议接入，生产环境需配置：
-   - `MINERU_BASE_URL=https://mineru.net/api/v4`
-   - `MINERU_API_KEY=<有效 key>`
-2. MinerU `v4` 只接受可访问的 `http(s)` 文件 URL。
-   - `file://`、本机路径、MinerU 无法访问的内网地址都会导致解析失败。
-   - 部署时需确保对象存储对 MinerU 可达（通常是可访问的 presigned URL）。
-3. Office 解析走本地 HTTP 服务 `office-parser-jvm`，需确保服务常驻并配置：
-   - `OFFICE_PARSER_BASE_URL=http://127.0.0.1:9090`（或你的实际地址）
-   - 启动脚本：`./scripts/office-parser-up.sh`
-   - 停止脚本：`./scripts/office-parser-down.sh`
+### PDF 视觉入库（VisualRaster，2026-06-10 起默认）
+
+低文字页 / 扫描页走 **PyMuPDF sidecar**，不再使用 MinerU PDF OCR。
+
+1. 启动 pdf-visual-renderer（默认 `127.0.0.1:9091`）：
+   - `PDF_RENDERER_BASE_URL=http://127.0.0.1:9091`
+   - **端口冲突**：Milvus standalone 默认也占 `9091`（metrics）。`docker-compose.milvus.yml` 已把 Milvus 宿主机映射改为 `19091:9091`，gRPC 仍用 `19530`。若 9091 被占，`pdf-renderer-up.sh` 会提示并退出。
+   - 启动：`./scripts/pdf-renderer-up.sh`
+   - 停止：`./scripts/pdf-renderer-down.sh`
+2. 可选调参：
+   - `PDF_VISUAL_PAGES_PER_CHUNK=4` — 多页 fusion chunk 大小
+   - `PDF_RENDERER_TIMEOUT_MS=60000`
+   - `MM_EMBEDDING_IMAGE_TOKEN_ESTIMATE=896` — 多图 embed 限流估算
+3. VLM 页摘要（INGESTION_LLM）与可选 triplet（`INGESTION_VLM_TRIPLET_ENABLED=1`）依赖 `INGESTION_LLM_*` 配置。
+4. 本地 object store 无 presigned URL 时，worker 在 **spawn 任务内** 将页图读入并编码为 `data:image/...;base64,...`（避免主线程同时持有多 chunk 大图）；降级原因写入 `parse_run.outputs.multimodal_degrade_reasons`。
+5. 单 chunk 多模态 embed 失败时 **跳过该 chunk 向量** 并记 degrade，不会导致整单 ingest 失败。
+
+### 图片 MinerU（仅 `MineruImage` 路由）
+
+独立图片文件（非 PDF 页 OCR）仍可能走 MinerU：
+
+- `MINERU_BASE_URL=https://mineru.net/api/v4`
+- `MINERU_API_KEY=<有效 key>`
+- MinerU `v4` 只接受可访问的 `http(s)` 文件 URL；对象存储需对 MinerU 可达（presigned URL）。
+
+### Office 解析
+
+- `OFFICE_PARSER_BASE_URL=http://127.0.0.1:9090`
+- `./scripts/office-parser-up.sh` / `./scripts/office-parser-down.sh`

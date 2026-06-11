@@ -227,6 +227,18 @@ Respond with ONLY a JSON object (no markdown fences):
     }
 
     #[test]
+    fn multiround_codegen_scripts_doc_profile_then_chunk_fetch() {
+        let doc_id = "2724017d-862d-448a-837e-406cd2f438b4";
+        let chunk_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+        let profile = super::mock_servers::format_mock_rag_doc_profile_codegen(doc_id);
+        let fetch = super::mock_servers::format_mock_rag_chunk_fetch_codegen(chunk_id);
+        assert!(profile.contains("client.doc_profile"));
+        assert!(profile.contains(doc_id));
+        assert!(fetch.contains("client.chunk_fetch"));
+        assert!(fetch.contains(chunk_id));
+    }
+
+    #[test]
     fn system_prompt_routing_falls_back_when_no_marker_matches() {
         let prompt = "You are a generic helpful assistant.";
         let user = "Hello";

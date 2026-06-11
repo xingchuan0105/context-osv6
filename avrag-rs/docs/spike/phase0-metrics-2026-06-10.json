@@ -1,0 +1,386 @@
+{
+  "pdf_path": "docs/spike/fixtures/phase0-mini.pdf",
+  "page_count_rendered": 8,
+  "render_total_ms": 0,
+  "strategies": {
+    "one_page": {
+      "label": "one_page",
+      "pages_per_chunk": 1,
+      "render_ms": 111.2,
+      "embed_calls": 8,
+      "embed_ok": 8,
+      "embed_fail": 0,
+      "avg_embed_latency_ms": 326.3,
+      "image_tokens_samples": [
+        280,
+        280,
+        280,
+        280,
+        280,
+        280,
+        280,
+        280
+      ],
+      "image_tokens_avg": 280.0,
+      "embed_results": [
+        {
+          "chunk_pages": [
+            1
+          ],
+          "latency_ms": 452.42409700585995,
+          "status_code": 200,
+          "image_tokens": 280,
+          "error": null
+        },
+        {
+          "chunk_pages": [
+            2
+          ],
+          "latency_ms": 352.2937620000448,
+          "status_code": 200,
+          "image_tokens": 280,
+          "error": null
+        },
+        {
+          "chunk_pages": [
+            3
+          ],
+          "latency_ms": 306.1477329902118,
+          "status_code": 200,
+          "image_tokens": 280,
+          "error": null
+        },
+        {
+          "chunk_pages": [
+            4
+          ],
+          "latency_ms": 334.2250330024399,
+          "status_code": 200,
+          "image_tokens": 280,
+          "error": null
+        },
+        {
+          "chunk_pages": [
+            5
+          ],
+          "latency_ms": 271.16159998695366,
+          "status_code": 200,
+          "image_tokens": 280,
+          "error": null
+        },
+        {
+          "chunk_pages": [
+            6
+          ],
+          "latency_ms": 279.8468050023075,
+          "status_code": 200,
+          "image_tokens": 280,
+          "error": null
+        },
+        {
+          "chunk_pages": [
+            7
+          ],
+          "latency_ms": 350.93437500472646,
+          "status_code": 200,
+          "image_tokens": 280,
+          "error": null
+        },
+        {
+          "chunk_pages": [
+            8
+          ],
+          "latency_ms": 263.3624139998574,
+          "status_code": 200,
+          "image_tokens": 280,
+          "error": null
+        }
+      ],
+      "recall_probe": [
+        {
+          "query": "What is a black swan event according to Taleb?",
+          "top3": [
+            {
+              "pages": [
+                1
+              ],
+              "score": 0.5445570210571149
+            },
+            {
+              "pages": [
+                6
+              ],
+              "score": 0.334884988673188
+            },
+            {
+              "pages": [
+                8
+              ],
+              "score": 0.2605602726221766
+            }
+          ],
+          "query_latency_ms": 223.40941299626138
+        },
+        {
+          "query": "How does Taleb explain the problem of induction and prediction?",
+          "top3": [
+            {
+              "pages": [
+                4
+              ],
+              "score": 0.40609138872144146
+            },
+            {
+              "pages": [
+                6
+              ],
+              "score": 0.3880971957442645
+            },
+            {
+              "pages": [
+                1
+              ],
+              "score": 0.3288071606607088
+            }
+          ],
+          "query_latency_ms": 229.34668100788258
+        },
+        {
+          "query": "What role does narrative fallacy play in misunderstanding history?",
+          "top3": [
+            {
+              "pages": [
+                2
+              ],
+              "score": 0.4509301758346387
+            },
+            {
+              "pages": [
+                8
+              ],
+              "score": 0.2461026281729614
+            },
+            {
+              "pages": [
+                1
+              ],
+              "score": 0.2427060084249397
+            }
+          ],
+          "query_latency_ms": 512.9973880102625
+        },
+        {
+          "query": "Compare mediocristan and extremistan in Taleb's framework.",
+          "top3": [
+            {
+              "pages": [
+                3
+              ],
+              "score": 0.5109101059624079
+            },
+            {
+              "pages": [
+                6
+              ],
+              "score": 0.32360778297632486
+            },
+            {
+              "pages": [
+                1
+              ],
+              "score": 0.3234642961566357
+            }
+          ],
+          "query_latency_ms": 210.17936599673703
+        },
+        {
+          "query": "Where does Taleb discuss silent evidence or hidden failures?",
+          "top3": [
+            {
+              "pages": [
+                5
+              ],
+              "score": 0.4123482443476152
+            },
+            {
+              "pages": [
+                2
+              ],
+              "score": 0.4015346171488419
+            },
+            {
+              "pages": [
+                6
+              ],
+              "score": 0.38551780205519576
+            }
+          ],
+          "query_latency_ms": 232.15667199110612
+        }
+      ]
+    },
+    "four_page_fusion": {
+      "label": "four_page_fusion",
+      "pages_per_chunk": 4,
+      "render_ms": 85.8,
+      "embed_calls": 2,
+      "embed_ok": 2,
+      "embed_fail": 0,
+      "avg_embed_latency_ms": 521.7,
+      "image_tokens_samples": [
+        1120,
+        1120
+      ],
+      "image_tokens_avg": 1120.0,
+      "embed_results": [
+        {
+          "chunk_pages": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "latency_ms": 420.46875500818714,
+          "status_code": 200,
+          "image_tokens": 1120,
+          "error": null
+        },
+        {
+          "chunk_pages": [
+            5,
+            6,
+            7,
+            8
+          ],
+          "latency_ms": 622.8757130011218,
+          "status_code": 200,
+          "image_tokens": 1120,
+          "error": null
+        }
+      ],
+      "recall_probe": [
+        {
+          "query": "What is a black swan event according to Taleb?",
+          "top3": [
+            {
+              "pages": [
+                1,
+                2,
+                3,
+                4
+              ],
+              "score": 0.5846104376273586
+            },
+            {
+              "pages": [
+                5,
+                6,
+                7,
+                8
+              ],
+              "score": 0.4066813525392288
+            }
+          ],
+          "query_latency_ms": 219.1307259927271
+        },
+        {
+          "query": "How does Taleb explain the problem of induction and prediction?",
+          "top3": [
+            {
+              "pages": [
+                1,
+                2,
+                3,
+                4
+              ],
+              "score": 0.5222015172183091
+            },
+            {
+              "pages": [
+                5,
+                6,
+                7,
+                8
+              ],
+              "score": 0.46570567538737284
+            }
+          ],
+          "query_latency_ms": 251.4484330022242
+        },
+        {
+          "query": "What role does narrative fallacy play in misunderstanding history?",
+          "top3": [
+            {
+              "pages": [
+                1,
+                2,
+                3,
+                4
+              ],
+              "score": 0.4018163264370791
+            },
+            {
+              "pages": [
+                5,
+                6,
+                7,
+                8
+              ],
+              "score": 0.32105592083792117
+            }
+          ],
+          "query_latency_ms": 240.71919100242667
+        },
+        {
+          "query": "Compare mediocristan and extremistan in Taleb's framework.",
+          "top3": [
+            {
+              "pages": [
+                1,
+                2,
+                3,
+                4
+              ],
+              "score": 0.4632511369115466
+            },
+            {
+              "pages": [
+                5,
+                6,
+                7,
+                8
+              ],
+              "score": 0.4112456110284938
+            }
+          ],
+          "query_latency_ms": 267.1197419986129
+        },
+        {
+          "query": "Where does Taleb discuss silent evidence or hidden failures?",
+          "top3": [
+            {
+              "pages": [
+                5,
+                6,
+                7,
+                8
+              ],
+              "score": 0.5488900089046581
+            },
+            {
+              "pages": [
+                1,
+                2,
+                3,
+                4
+              ],
+              "score": 0.4740896180720142
+            }
+          ],
+          "query_latency_ms": 225.42584399343468
+        }
+      ]
+    }
+  },
+  "recall_probe": []
+}

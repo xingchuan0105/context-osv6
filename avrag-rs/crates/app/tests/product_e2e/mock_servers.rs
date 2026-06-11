@@ -13,8 +13,12 @@ use std::sync::{Mutex, OnceLock};
 
 static MOCK_RAG_CODEGEN_CHUNK_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 static MOCK_RAG_CODEGEN_CHUNK_IDS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+static MOCK_RAG_CODEGEN_DOC_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 static MOCK_RAG_CODEGEN_QUERY: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 static MOCK_RAG_SKIP_CODEGEN: OnceLock<AtomicBool> = OnceLock::new();
+static MOCK_RAG_MULTIROUND_PROFILE: OnceLock<AtomicBool> = OnceLock::new();
+static MOCK_RAG_SKILL_REQUEST_MEMORY: OnceLock<AtomicBool> = OnceLock::new();
+static MOCK_EMIT_MEMORY_TOOL: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 
 fn mock_rag_chunk_id_cell() -> &'static Mutex<Option<String>> {
     MOCK_RAG_CODEGEN_CHUNK_ID.get_or_init(|| Mutex::new(None))
@@ -32,12 +36,32 @@ fn mock_rag_skip_codegen_flag() -> &'static AtomicBool {
     MOCK_RAG_SKIP_CODEGEN.get_or_init(|| AtomicBool::new(false))
 }
 
+fn mock_rag_codegen_doc_id_cell() -> &'static Mutex<Option<String>> {
+    MOCK_RAG_CODEGEN_DOC_ID.get_or_init(|| Mutex::new(None))
+}
+
+fn mock_rag_multiround_profile_flag() -> &'static AtomicBool {
+    MOCK_RAG_MULTIROUND_PROFILE.get_or_init(|| AtomicBool::new(false))
+}
+
+fn mock_rag_skill_request_memory_flag() -> &'static AtomicBool {
+    MOCK_RAG_SKILL_REQUEST_MEMORY.get_or_init(|| AtomicBool::new(false))
+}
+
+fn mock_emit_memory_tool_cell() -> &'static Mutex<Option<String>> {
+    MOCK_EMIT_MEMORY_TOOL.get_or_init(|| Mutex::new(None))
+}
+
 /// Reset per-test mock RAG state (call from TestContext setup).
 pub fn reset_mock_rag_state() {
     *mock_rag_chunk_id_cell().lock().unwrap() = None;
     mock_rag_chunk_ids_cell().lock().unwrap().clear();
+    *mock_rag_codegen_doc_id_cell().lock().unwrap() = None;
     *mock_rag_codegen_query_cell().lock().unwrap() = None;
     mock_rag_skip_codegen_flag().store(false, Ordering::SeqCst);
+    mock_rag_multiround_profile_flag().store(false, Ordering::SeqCst);
+    mock_rag_skill_request_memory_flag().store(false, Ordering::SeqCst);
+    *mock_emit_memory_tool_cell().lock().unwrap() = None;
 }
 
 /// Pin the chunk id embedded in mock codegen stdout (RAG smoke happy path).
@@ -65,6 +89,26 @@ pub fn set_mock_rag_codegen_query(query: impl Into<String>) {
     *mock_rag_codegen_query_cell().lock().unwrap() = Some(query.into());
 }
 
+/// Pin the doc_id embedded in multiround mock codegen round0 (`doc_profile`).
+pub fn set_mock_rag_codegen_doc_id(id: impl Into<String>) {
+    *mock_rag_codegen_doc_id_cell().lock().unwrap() = Some(id.into());
+}
+
+/// Enable multiround RAG codegen script: round0 `doc_profile` → round1 `chunk_fetch` → synthesis.
+pub fn set_mock_rag_multiround_profile(enabled: bool) {
+    mock_rag_multiround_profile_flag().store(enabled, Ordering::SeqCst);
+}
+
+/// When set, the first RAG retrieve turn returns `{"skill_request":["memory"]}` to disclose the cluster.
+pub fn set_mock_rag_skill_request_memory(enabled: bool) {
+    mock_rag_skill_request_memory_flag().store(enabled, Ordering::SeqCst);
+}
+
+/// When set, the next tools-enabled retrieve turn emits this memory tool call instead of codegen.
+pub fn set_mock_emit_memory_tool(tool: Option<impl Into<String>>) {
+    *mock_emit_memory_tool_cell().lock().unwrap() = tool.map(Into::into);
+}
+
 /// Build mock codegen body that exercises the sandbox retrieval bridge.
 ///
 /// The query defaults to `"antifragility"`, which matches the standard smoke fixture
@@ -82,6 +126,119 @@ chunks = await client.dense_search(query={query_json}, top_k=10)
 import json
 print(json.dumps(chunks))
 </code>"#
+    )
+}
+
+/// Round0 multiround codegen: fetch document profile (sections + metadata).
+pub fn format_mock_rag_doc_profile_codegen(doc_id: &str) -> String {
+    let doc_id_json = serde_json::to_string(doc_id).unwrap_or_else(|_| "\"doc\"".to_string());
+    format!(
+        r#"<code language="python">
+profile = await client.doc_profile(doc_ids=[{doc_id_json}])
+import json
+print(json.dumps(profile))
+</code>"#
+    )
+}
+
+/// Round1 multiround codegen: fetch chunk body by id (`chunk_fetch` → `index_lookup`).
+pub fn format_mock_rag_chunk_fetch_codegen(chunk_id: &str) -> String {
+    let chunk_json = serde_json::to_string(chunk_id).unwrap_or_else(|_| "\"chunk\"".to_string());
+    format!(
+        r#"<code language="python">
+chunks = await client.chunk_fetch(chunk_id={chunk_json})
+import json
+print(json.dumps(chunks))
+</code>"#
+    )
+}
+
+fn count_code_execution_results(messages: &[serde_json::Value]) -> usize {
+    messages
+        .iter()
+        .filter(|message| {
+            message
+                .get("content")
+                .and_then(|content| content.as_str())
+                .is_some_and(|content| content.contains("<code_execution_result>"))
+        })
+        .count()
+}
+
+fn mock_memory_tool_call(tool: &str) -> Option<serde_json::Value> {
+    let (id, arguments) = match tool {
+        "conversation_history_load" => (
+            "call_mem_history_0",
+            serde_json::to_string(&json!({"limit": 20})).unwrap_or_else(|_| "{}".to_string()),
+        ),
+        "user_profile_load" => ("call_mem_profile_0", "{}".to_string()),
+        _ => return None,
+    };
+    Some(json!({
+        "id": id,
+        "type": "function",
+        "function": {
+            "name": tool,
+            "arguments": arguments,
+        }
+    }))
+}
+
+fn mock_rag_retrieve_codegen_content(messages: &[serde_json::Value]) -> String {
+    if mock_rag_skip_codegen_flag().load(Ordering::SeqCst) {
+        return String::new();
+    }
+    if mock_rag_multiround_profile_flag().load(Ordering::SeqCst) {
+        let rounds = count_code_execution_results(messages);
+        return match rounds {
+            0 => {
+                let doc_id = mock_rag_codegen_doc_id_cell()
+                    .lock()
+                    .unwrap()
+                    .clone()
+                    .unwrap_or_else(|| "00000000-0000-4000-8000-000000000001".to_string());
+                format_mock_rag_doc_profile_codegen(&doc_id)
+            }
+            1 => {
+                let chunk_id = mock_rag_chunk_id_cell()
+                    .lock()
+                    .unwrap()
+                    .clone()
+                    .unwrap_or_else(|| "00000000-0000-4000-8000-000000000001".to_string());
+                format_mock_rag_chunk_fetch_codegen(&chunk_id)
+            }
+            _ => String::new(),
+        };
+    }
+    if messages_have_code_execution_result(messages) {
+        String::new()
+    } else {
+        mock_rag_codegen_response()
+    }
+}
+
+fn try_memory_tool_response(tool_names: &[String], has_tool_results: bool) -> Option<axum::response::Response> {
+    if has_tool_results {
+        return None;
+    }
+    let requested = mock_emit_memory_tool_cell().lock().unwrap().clone()?;
+    if !tool_names.iter().any(|name| name == &requested) {
+        return None;
+    }
+    let tool_call = mock_memory_tool_call(&requested)?;
+    Some(
+        axum::Json(json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [tool_call],
+                }
+            }],
+            "usage": {"prompt_tokens": 100, "completion_tokens": 1, "total_tokens": 101},
+            "model": "mock-llm"
+        }))
+        .into_response(),
     )
 }
 
@@ -605,6 +762,18 @@ fn detect_synthesis_route(
     None
 }
 
+fn messages_have_memory_skill_request(messages: &[serde_json::Value]) -> bool {
+    messages.iter().any(|message| {
+        message.get("role").and_then(|r| r.as_str()) == Some("assistant")
+            && message
+                .get("content")
+                .and_then(|c| c.as_str())
+                .is_some_and(|content| {
+                    content.contains("\"skill_request\"") && content.contains("\"memory\"")
+                })
+    })
+}
+
 fn messages_have_code_execution_result(messages: &[serde_json::Value]) -> bool {
     messages.iter().any(|message| {
         message
@@ -641,7 +810,53 @@ async fn mock_llm_handler(
         .iter()
         .any(|m| m.get("role").and_then(|r| r.as_str()) == Some("tool"));
 
-    // ReAct loop: first tools-enabled turn should emit native tool calls.
+    let is_synthesis_contract = system_prompt.contains("internal_answer_v1")
+        || system_prompt.contains("internal_search_answer_v1");
+    let is_rag_retrieve = !is_synthesis_contract && system_prompt.contains("检索 → 评估 → 合成");
+
+    // ReAct loop: after tool results, stop iterating and proceed to synthesis.
+    if !is_stream && !tool_names.is_empty() && has_tool_results {
+        return axum::Json(json!({
+            "choices": [{"message": {"role": "assistant", "content": ""}}],
+            "usage": {"prompt_tokens": 50, "completion_tokens": 1, "total_tokens": 51},
+            "model": "mock-llm"
+        }))
+        .into_response();
+    }
+
+    // Memory tool injection (explicit toggle) takes priority over codegen on retrieve rounds.
+    if !is_stream && !tool_names.is_empty() {
+        if let Some(response) = try_memory_tool_response(&tool_names, has_tool_results) {
+            return response;
+        }
+    }
+
+    // On-demand memory cluster disclosure (smoke helper): one-shot skill_request before tools attach.
+    if !is_stream
+        && is_rag_retrieve
+        && mock_rag_skill_request_memory_flag().load(Ordering::SeqCst)
+        && !messages_have_memory_skill_request(&messages)
+    {
+        return axum::Json(json!({
+            "choices": [{"message": {"role": "assistant", "content": r#"{"skill_request":["memory"]}"#}}],
+            "usage": {"prompt_tokens": 40, "completion_tokens": 8, "total_tokens": 48},
+            "model": "mock-llm"
+        }))
+        .into_response();
+    }
+
+    // RAG retrieve: codegen wins over generic native-tool routing even when tool_pool is non-empty.
+    if !is_stream && is_rag_retrieve {
+        let content = mock_rag_retrieve_codegen_content(&messages);
+        return axum::Json(json!({
+            "choices": [{"message": {"role": "assistant", "content": content}}],
+            "usage": {"prompt_tokens": 40, "completion_tokens": content.len().max(1), "total_tokens": 41},
+            "model": "mock-llm"
+        }))
+        .into_response();
+    }
+
+    // ReAct loop: first tools-enabled turn should emit native tool calls (search, etc.).
     if !is_stream && !tool_names.is_empty() && !has_tool_results {
         if let Some(tool_call) = mock_native_tool_call(&tool_names, user_prompt) {
             return axum::Json(json!({
@@ -659,44 +874,6 @@ async fn mock_llm_handler(
         }
     }
 
-    // ReAct loop: after tool results, stop iterating and proceed to synthesis.
-    if !is_stream && !tool_names.is_empty() && has_tool_results {
-        return axum::Json(json!({
-            "choices": [{"message": {"role": "assistant", "content": ""}}],
-            "usage": {"prompt_tokens": 50, "completion_tokens": 1, "total_tokens": 51},
-            "model": "mock-llm"
-        }))
-        .into_response();
-    }
-
-    let is_synthesis_contract = system_prompt.contains("internal_answer_v1")
-        || system_prompt.contains("internal_search_answer_v1");
-    // ReAct retrieve without native tools: RAG codegen on first round, then end loop.
-    if !is_stream
-        && tool_names.is_empty()
-        && !is_synthesis_contract
-        && system_prompt.contains("检索 → 评估 → 合成")
-    {
-        if mock_rag_skip_codegen_flag().load(Ordering::SeqCst) {
-            return axum::Json(json!({
-                "choices": [{"message": {"role": "assistant", "content": ""}}],
-                "usage": {"prompt_tokens": 40, "completion_tokens": 1, "total_tokens": 41},
-                "model": "mock-llm"
-            }))
-            .into_response();
-        }
-        let content = if messages_have_code_execution_result(&messages) {
-            String::new()
-        } else {
-            mock_rag_codegen_response()
-        };
-        return axum::Json(json!({
-            "choices": [{"message": {"role": "assistant", "content": content}}],
-            "usage": {"prompt_tokens": 40, "completion_tokens": content.len().max(1), "total_tokens": 41},
-            "model": "mock-llm"
-        }))
-        .into_response();
-    }
     if !is_stream
         && tool_names.is_empty()
         && !is_synthesis_contract

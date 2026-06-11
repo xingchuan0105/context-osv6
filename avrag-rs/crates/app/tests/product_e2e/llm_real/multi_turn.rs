@@ -72,6 +72,20 @@ async fn real_llm_multi_turn_rag_follow_up_remembers_context() {
         resp2.degrade_trace
     );
 
+    let follow_up = "Who wrote the book about it?";
+    let (raw_content, resolved) = ctx
+        .query_latest_user_resolved_query(&session_id)
+        .await
+        .expect("query resolved_query from PG");
+    assert_eq!(raw_content, follow_up);
+    let resolved = resolved.unwrap_or_else(|| {
+        panic!("expected resolved_query DB write-back for anaphoric turn-2 query")
+    });
+    assert_ne!(
+        resolved, follow_up,
+        "resolved_query should differ from raw pronoun query, got: {resolved}"
+    );
+
     let out_dir = ctx.llm_real_artifact_dir("real_llm_multi_turn_rag_follow_up_remembers_context");
     let _ = std::fs::create_dir_all(&out_dir);
     let _ = std::fs::write(

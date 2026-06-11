@@ -262,6 +262,20 @@ pub fn create_temp_object_store() -> tempfile::TempDir {
     tempfile::tempdir().expect("create tempdir")
 }
 
+/// Infer MIME type from a filename extension (E2E uploads only).
+pub fn mime_type_for_filename(filename: &str) -> &'static str {
+    let lower = filename.to_ascii_lowercase();
+    if lower.ends_with(".pdf") {
+        "application/pdf"
+    } else if lower.ends_with(".txt") {
+        "text/plain"
+    } else if lower.ends_with(".md") {
+        "text/markdown"
+    } else {
+        "application/octet-stream"
+    }
+}
+
 /// Load fixture content from `tests/product_e2e/fixtures/`.
 pub fn load_fixture(name: &str) -> anyhow::Result<String> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))

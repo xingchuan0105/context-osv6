@@ -1,0 +1,52 @@
+{
+  "version": "1.0",
+  "recorded_at": "2026-06-10",
+  "route": "mineru_pdf_ocr",
+  "note": "Record answers before visual-path rollout. Fill via pdf_corpus llm_real or manual chat with INGEST_MINERU_ENABLED=1.",
+  "corpora": [
+    {
+      "name": "antifragile",
+      "pdf_env": "E2E_LLM_REAL_ANTIFRAGILE_PDF",
+      "queries": [
+        {
+          "id": "af-structure",
+          "query": "First summarize this book's author and chapter structure, then explain a core idea from an early section.",
+          "answer": null,
+          "citations": [],
+          "distinct_tools": [],
+          "notes": "Fill after MinerU-path run"
+        },
+        {
+          "id": "af-antifragility-definition",
+          "query": "How does Taleb define antifragility versus resilience or robustness?",
+          "answer": null,
+          "citations": [],
+          "distinct_tools": [],
+          "notes": null
+        }
+      ]
+    },
+    {
+      "name": "black_swan_scan",
+      "pdf_env": "E2E_LLM_REAL_BLACK_SWAN_PDF",
+      "queries": [
+        {
+          "id": "bs-definition",
+          "query": "What is a black swan event according to Taleb? Cite specific passages.",
+          "answer": null,
+          "citations": [],
+          "distinct_tools": [],
+          "notes": null
+        },
+        {
+          "id": "bs-compare-af",
+          "query": "Compare how Nassim Taleb defines antifragility in Antifragile with how he explains black swan events in The Black Swan.",
+          "answer": null,
+          "citations": [],
+          "distinct_tools": [],
+          "notes": "Multidoc comparison baseline"
+        }
+      ]
+    }
+  ]
+}

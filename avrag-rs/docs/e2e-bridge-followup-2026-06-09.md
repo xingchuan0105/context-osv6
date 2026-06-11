@@ -3,16 +3,18 @@
 来源：Product E2E 测试套件（与新架构对齐）+ ADR-0009 桥接落地的审查意见「三、改进建议（非阻塞）」。
 本批均为**非阻塞**项，主线已可合并；以下逐条转为可执行开发任务。
 
+**状态：已收口（2026-06-09 复审）** — T1–T6 全部完成；`avrag-code-interpreter` / `avrag-rag-core` bridge 单测 + `product_e2e` 全绿；`cargo check -p app` 无告警。
+
 关联：`docs/adr/0009-codegen-sandbox-retrieval-bridge.md`、`crates/code-interpreter/src/bridge.rs`、`crates/rag-core/src/runtime/bridge.rs`、`crates/app/tests/product_e2e/`。
 
-| ID | 任务 | 优先级 | 预估 |
+| ID | 任务 | 优先级 | 状态 |
 |----|------|:------:|:----:|
-| T1 | shim 与 host 的 `rerank` 能力不一致 | **P1** | 小 |
-| T2 | 桥接运行时嵌套偏重 + 跨 runtime 安全性确认 | P2 | 中 |
-| T3 | `rag_smoke` 对 bridge 加强断言 | P2 | 小 |
-| T4 | `chunk_fetch` 解除对 `doc_scope.first()` 的依赖 | P3 | 小 |
-| T5 | mock codegen 硬编码查询词 → 加注释/参数化 | P3 | 小 |
-| T6 | 修 `query_normalize.rs` 可见性 warning | P3 | 小 |
+| T1 | shim 与 host 的 `rerank` 能力不一致 | **P1** | ✅ |
+| T2 | 桥接运行时嵌套偏重 + 跨 runtime 安全性确认 | P2 | ✅ |
+| T3 | `rag_smoke` 对 bridge 加强断言 | P2 | ✅ |
+| T4 | `chunk_fetch` 解除对 `doc_scope.first()` 的依赖 | P3 | ✅ |
+| T5 | mock codegen 硬编码查询词 → 加注释/参数化 | P3 | ✅ |
+| T6 | 修 `query_normalize.rs` 可见性 warning | P3 | ✅ |
 
 ---
 
@@ -110,3 +112,12 @@
 
 - `dense` vs `dense_search`：`avrag_sdk` 包仍是 `dense()`，与 prompt 的 `dense_search` 不一致（桥接 shim 已用 `dense_search`，不受影响）。命名/文档统一单独 PR。
 - `ChatResponse.format_output` 独立字段未落地，`assertions.rs` 相关断言仍注释；需先定契约再写断言。
+
+---
+
+## 收口备注（T2 残留，非阻塞）
+
+共享 pump runtime 已落地，以下两点**不阻塞合并**，留作后续 live / 容量观察：
+
+1. **跨 runtime data plane**：pump 在共享 `current-thread` runtime 上调用 sqlx(PG) / reqwest(Milvus)，连接池在主 runtime 创建；单元测试用 `StubDataPlane` 覆盖不到。`product_e2e::rag_smoke` 断言 `dense_retrieval` 为 `Ok` 且 citation chunk 来自真实 PG —— 带 PG+Milvus 容器的 smoke 绿即视为该路径安全。
+2. **并发串行化**：共享 `current-thread` runtime 下，并行请求的 codegen 检索会在 pump 上串行（一次只有一个 `block_on`）。功能正确；高并发吞吐可能成为隐性瓶颈，量大后可评估 `multi-thread` runtime 或 `Handle::current().spawn`。

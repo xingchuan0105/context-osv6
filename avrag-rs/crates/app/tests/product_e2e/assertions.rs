@@ -198,6 +198,37 @@ fn extract_answer_cited_chunk_ids(answer: &str) -> std::collections::HashSet<Str
     ids
 }
 
+/// Assert a tool result with the given name succeeded.
+pub fn assert_tool_result_ok(resp: &ChatResponse, tool: &str) {
+    assert!(
+        resp.tool_results.iter().any(|result| {
+            result.tool == tool && result.status == contracts::chat::ToolStatus::Ok
+        }),
+        "expected successful tool result '{tool}', got: {:?}",
+        resp
+            .tool_results
+            .iter()
+            .map(|r| (&r.tool, &r.status))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// Assert at least `min` distinct tool names appear in tool_results.
+pub fn assert_distinct_tool_count(resp: &ChatResponse, min: usize) {
+    let mut names = std::collections::HashSet::new();
+    for result in &resp.tool_results {
+        names.insert(result.tool.as_str());
+    }
+    assert!(
+        names.len() >= min,
+        "expected >= {min} distinct tools, got {names:?} from {:?}",
+        resp.tool_results
+            .iter()
+            .map(|r| (&r.tool, &r.status))
+            .collect::<Vec<_>>()
+    );
+}
+
 /// Assert codegen bridge captured a successful `dense_retrieval` tool result.
 pub fn assert_codegen_bridge_dense_retrieval(resp: &ChatResponse) {
     let has_dense = resp.tool_results.iter().any(|result| {
