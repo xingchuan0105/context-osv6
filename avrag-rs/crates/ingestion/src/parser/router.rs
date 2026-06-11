@@ -7,6 +7,7 @@ use super::probe::{
 };
 
 const FIG_COUNT_THRESHOLD: usize = 2;
+const FIG_RATIO_THRESHOLD: f32 = 0.15;
 const TABLE_GARBLE_THRESHOLD: f32 = 0.30;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -382,7 +383,7 @@ fn route_page(page: &PdfPageProbeResult) -> (PdfPageBackend, RouteDecision, Rout
     // Use figure_area_ratio when available (ING-1b-β), fallback to image count
     let has_figures = if let Some(ratio) = page.figure_area_ratio {
         let non_deco = page.non_decorative_image_count.unwrap_or(0);
-        ratio > 0.15 && non_deco >= 2
+        ratio > FIG_RATIO_THRESHOLD && non_deco >= 2
     } else {
         page.image_hint_count >= FIG_COUNT_THRESHOLD
     };

@@ -2,6 +2,11 @@ use anyhow::Result;
 use lopdf::{Document, Object, ObjectId};
 use tracing::debug;
 
+/// Decorative figure: area < 2% of page AND near page edges.
+const DECORATIVE_AREA_RATIO: f32 = 0.02;
+/// Edge margin for decorative detection: 5% of smaller page dimension.
+const DECORATIVE_EDGE_MARGIN_RATIO: f32 = 0.05;
+
 /// An image extracted from a PDF page's XObject resources.
 #[derive(Debug, Clone)]
 pub struct ExtractedPdfImage {
@@ -115,12 +120,12 @@ pub fn compute_figure_area_ratio(
                         let area = w * h;
 
                         // Decorative: near page edges AND small relative to page
-                        let edge_margin = page_w.min(page_h) * 0.05;
+                        let edge_margin = page_w.min(page_h) * DECORATIVE_EDGE_MARGIN_RATIO;
                         let near_edge = min_x < edge_margin
                             || min_y < edge_margin
                             || max_x > page_w - edge_margin
                             || max_y > page_h - edge_margin;
-                        let small = area < page_area * 0.02; // < 2% of page
+                        let small = area < page_area * DECORATIVE_AREA_RATIO;
                         let is_decorative = near_edge && small;
 
                         placements.push(FigurePlacement {

@@ -2712,7 +2712,10 @@ fn merge_pdf_ir(
     for page_plan in &plan.pages {
         let source_ir = match page_plan.backend {
             PdfPageBackend::EdgeParse => digital_ir.as_ref(),
-            PdfPageBackend::PaddleOcr => paddle_ir.as_ref().or(digital_ir.as_ref()),
+            PdfPageBackend::PaddleOcr => paddle_ir
+                .as_ref()
+                .or(visual_ir.as_ref())
+                .or(digital_ir.as_ref()),
             PdfPageBackend::VisualRaster => visual_ir.as_ref(),
         };
         let page_backend = match page_plan.backend {

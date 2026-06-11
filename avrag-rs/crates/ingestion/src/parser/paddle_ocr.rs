@@ -37,14 +37,20 @@ impl PaddleOcrConfig {
 }
 
 #[derive(Debug, Deserialize)]
-struct SubmitJobResponse {
+struct ApiResponse<T> {
+    data: T,
+}
+
+#[derive(Debug, Deserialize)]
+struct SubmitJobData {
+    #[serde(rename = "jobId")]
     job_id: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct JobStatusResponse {
+struct JobStatusData {
     state: String,
-    #[serde(default)]
+    #[serde(rename = "resultUrl", default)]
     result_url: Option<ResultUrl>,
 }
 
@@ -142,7 +148,16 @@ impl PaddleOcrClient {
                     .file_name("document.pdf")
                     .mime_str("application/pdf")?,
             )
-            .text("model", self.config.model.clone());
+            .text("model", self.config.model.clone())
+            .text(
+                "optionalPayload",
+                serde_json::json!({
+                    "useDocOrientationClassify": false,
+                    "useDocUnwarping": true,
+                    "useChartRecognition": false,
+                })
+                .to_string(),
+            );
 
         let resp = self
             .http
@@ -160,9 +175,9 @@ impl PaddleOcrClient {
         }
 
         let body = resp.text().await.context("reading submit response body")?;
-        let job: SubmitJobResponse =
+        let resp: ApiResponse<SubmitJobData> =
             serde_json::from_str(&body).context("invalid submit response JSON")?;
-        Ok(job.job_id)
+        Ok(resp.data.job_id)
     }
 
     async fn poll_job(&self, job_id: &str) -> Result<ResultUrl> {
@@ -195,8 +210,9 @@ impl PaddleOcrClient {
             }
 
             let body = resp.text().await.context("reading poll response body")?;
-            let status: JobStatusResponse =
+            let resp: ApiResponse<JobStatusData> =
                 serde_json::from_str(&body).context("invalid poll response JSON")?;
+            let status = resp.data;
             debug!(job_id, state = %status.state, "PaddleOCR poll");
 
             match status.state.as_str() {
@@ -318,5 +334,31 @@ mod tests {
         assert_eq!(pages.len(), 2);
         assert_eq!(pages[0].page_number, 10);
         assert_eq!(pages[1].page_number, 11);
+    }
+
+    #[test]
+    fn test_submit_response_nested_data() {
+        let body = r#"{"data": {"jobId": "58419290363367424"}}"#;
+        let resp: ApiResponse<SubmitJobData> = serde_json::from_str(body).unwrap();
+        assert_eq!(resp.data.job_id, "58419290363367424");
+    }
+
+    #[test]
+    fn test_poll_response_nested_data() {
+        let body = r#"{"data": {"state": "done", "resultUrl": {"jsonUrl": "https://example.com/result.json"}}}"#;
+        let resp: ApiResponse<JobStatusData> = serde_json::from_str(body).unwrap();
+        assert_eq!(resp.data.state, "done");
+        assert_eq!(
+            resp.data.result_url.unwrap().json_url.unwrap(),
+            "https://example.com/result.json"
+        );
+    }
+
+    #[test]
+    fn test_poll_response_in_progress() {
+        let body = r#"{"data": {"state": "processing"}}"#;
+        let resp: ApiResponse<JobStatusData> = serde_json::from_str(body).unwrap();
+        assert_eq!(resp.data.state, "processing");
+        assert!(resp.data.result_url.is_none());
     }
 }
