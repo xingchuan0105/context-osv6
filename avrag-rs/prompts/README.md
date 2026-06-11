@@ -31,13 +31,10 @@ See [docs/agents/cds-v1.1.md](../docs/agents/cds-v1.1.md) for the full spec.
 | `pipeline/summary-generation-finalize.system.v1.md` | `llm/summary.rs` |
 | `pipeline/triplet-extraction.system.md` | worker triplet batch |
 | `pipeline/section-index.system.v1.md` | worker TOC LLM fallback |
-| `pipeline/session-summary.system.md` | chat postprocess |
 | `pipeline/user-profile-extraction.system.md` | chat postprocess |
 
-Templates: `templates/summary-user.tmpl`, `summary-finalize-user.tmpl`, `section-index-user.tmpl`, `synthesizer-user.tmpl`.
+Templates: `templates/summary-user.tmpl`, `summary-finalize-user.tmpl`, `section-index-user.tmpl`.
 
-## Legacy
+## Deprecated
 
-`legacy/` holds retired planner text files. Root-level `*.v1.tmpl` copies are deprecated; prefer `pipeline/` + `templates/`.
-
-`atomic-tools/` is no longer part of prompt disclosure or `PromptRegistry`. Native tool schemas are registered in `CapabilityRegistry` and disclosed via mode `tool_pool`; RAG retrieval stays behind `codegen` SDK calls and server-side fallback.
+`deprecated/atomic-tools/` holds retired tool prompt docs from before ADR-0007. They are **not** scanned by `build.rs`, **not** in `PromptRegistry`, and **not** used at runtime. Native tool schemas live in Rust `SkillComponent` + mode `tool_pool` → `CapabilityRegistry`; RAG retrieval goes through `codegen` SDK calls and server-side fallback.

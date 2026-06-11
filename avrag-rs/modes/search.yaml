@@ -1,6 +1,6 @@
 mode: search
 system_prompt_base: prompts/orchestrators/search-system.md
-tool_pool: [web_search, web_fetch]
+tool_pool: [web_search, web_fetch, conversation_history_load, user_profile_load]
 inject_retrieval_query: true
 skill_catalog:
   retrieve: [search, memory]

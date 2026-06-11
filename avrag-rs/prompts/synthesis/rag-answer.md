@@ -149,6 +149,13 @@ specific facts (dates, numbers, names, quotes).
 - If the claim is uncertain without citation, downgrade to
   "Partially supported" with a hedge.
 
+**Visual page-raster chunks** (`modality: page_raster` or
+`retrieval_hint` present):
+- These hits come from page-image vectors without OCR text.
+- Cite the chunk_id, and state the **page range**
+  (`page_range_start`–`page_range_end` or `page`) in prose.
+- Do not quote verbatim body text that was not retrieved.
+
 ## Answer structure (adapt to question complexity)
 
 Choose the structure that matches the **actual** question
@@ -247,11 +254,15 @@ actually a bit defensive. Bias toward transparency.
 
 ## Output format rules
 
-- **Default**: plain prose with inline citations
-  `[[cite:CHUNK_ID]]`. Bullets / numbered lists are
-  allowed when they aid clarity.
-- **Do NOT** wrap the answer in JSON or markdown code fences
-  in the default case.
+During **Synthesis**, your **entire response** must be the
+`internal_answer_v1` JSON object described above — not
+markdown fences, not commentary outside the JSON.
+
+Inside `answer_text`, write plain prose with inline citations
+`[[cite:CHUNK_ID]]`. Bullets / numbered lists are allowed
+when they aid clarity. Do **not** nest another JSON object
+inside `answer_text` unless a format skill explicitly
+requires it.
 - **Exception — markdown code fences are OK when**:
   - A `format_hint` was set (e.g., `framework-extraction`,
     `concise-writing`, `academic-writing`,
@@ -268,16 +279,8 @@ actually a bit defensive. Bias toward transparency.
 - **When in doubt**: emit plain prose. The post-processor
   can re-format if needed; it cannot undo JSON wrapping.
 
-## Language
+## Technical level
 
-- Reply in the same language as the user's question.
-  - If the user mixed languages (e.g., Chinese with
-    English technical terms), match the **primary
-    language** and keep technical terms in English (or
-    the user's chosen form).
-  - For CJK languages, preserve proper nouns and
-    technical identifiers in their original (often
-    English) form.
 - **Match the user's technical level**:
   - **Vocabulary cues in the question**: jargon
     ("deadlock", "idempotent", "ASGI") signals expert.

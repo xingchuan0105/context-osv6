@@ -161,4 +161,6 @@ B. 分类型
     regulation, report, research_paper, slides, manual, news, article, book, thesis, documentation, tutorial, review, essay, blog, unknown
   - era: 必须从以下枚举中选择一项：
     classical, modern, contemporary, ancient, medieval, renaissance, enlightenment, industrial, postmodern, unknown
-- 字段值必须严格使用上述枚举值，不能输出自由散文；未知时写 "unknown"
+  - author: 文档作者或机构（若原文或标题页可推断；无法确定时写 null）
+  - publication_date: 发表/出版日期，ISO 8601 格式如 "2012-11-27"（仅精确到年则写 "2012"；无法确定时写 null）
+- 字段值必须严格使用上述枚举值，不能输出自由散文；未知时写 "unknown" 或 null（author/publication_date）

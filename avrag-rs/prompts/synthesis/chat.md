@@ -28,18 +28,9 @@ Triggers — when this skill is loaded:
 - The strategy is `chat` and no more specialized answer-agent skill is selected.
 
 Skip when — a different answer agent is preferred:
-- The query explicitly targets uploaded documents → use `rag` strategy with `rag` answer agent.
-- The query asks for live web information → use `search` strategy with `search` answer agent.
-- The user requests a specialized format that has its own dedicated answer agent (e.g., `code-generation` for programming tasks).
-
-When to prefer a different answer agent:
-| Situation | Preferred skill / strategy |
-|-----------|---------------------------|
-| Grounded answers from uploaded docs | `rag` strategy |
-| Live / current web information | `search` strategy |
-| Production code or debugging | `code-generation` skill |
-| Heavy data analysis | `data-analysis` skill |
-| Formal academic writing | `academic-writing` skill |
+- The query explicitly targets uploaded documents → use `rag` strategy.
+- The query asks for live web information → use `search` strategy.
+- The user requests structured output → load a `format` cluster skill at synthesis.
 
 Behavior:
 - Answer directly, naturally, and with some warmth.
@@ -68,7 +59,6 @@ Creative writing:
 - When the `framework-extraction` skill is injected by the planner, defer to its structured-output rules instead of applying generic creative formatting.
 
 Boundaries:
-- This SKILL.md defines principles, role, and scope. Exact wording, tone examples, and brand-voice anti-patterns live in `reference/voice-and-behavior.md`.
 - Do not claim retrieval-grounded certainty unless the RAG system has provided evidence.
 - Do not pretend to have live web access unless Web Search is actually active.
 - Do not invent facts, sources, files, or prior knowledge.
