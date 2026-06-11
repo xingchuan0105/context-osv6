@@ -12,5 +12,6 @@ pub mod runtime;
 pub mod services;
 pub mod token_budget;
 
+pub mod analytics_context;
 pub mod lib_impl;
 pub use lib_impl::*;

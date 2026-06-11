@@ -54,6 +54,8 @@ pub struct LoopExitConfig {
     pub allow_content_early_stop: bool,
     #[serde(default)]
     pub skip_synthesis_on_direct_answer: bool,
+    #[serde(default)]
+    pub evidence_gate: Option<EvidenceGateConfig>,
 }
 
 impl Default for LoopExitConfig {
@@ -62,8 +64,42 @@ impl Default for LoopExitConfig {
             require_evidence: true,
             allow_content_early_stop: false,
             skip_synthesis_on_direct_answer: false,
+            evidence_gate: None,
         }
     }
+}
+
+/// Pure-code evidence quality gate configuration.
+/// No LLM calls — inspects retrieval metadata only.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EvidenceGateConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_min_top_score")]
+    pub min_top_score: f32,
+    #[serde(default = "default_max_context_tokens")]
+    pub max_context_tokens: usize,
+    #[serde(default = "default_true")]
+    pub topic_overlap_required: bool,
+}
+
+impl Default for EvidenceGateConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            min_top_score: 0.5,
+            max_context_tokens: 12000,
+            topic_overlap_required: true,
+        }
+    }
+}
+
+fn default_min_top_score() -> f32 {
+    0.5
+}
+
+fn default_max_context_tokens() -> usize {
+    12000
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -407,6 +443,10 @@ impl ModeConfig {
             cfg.allow_content_early_stop = false;
             cfg.skip_synthesis_on_direct_answer = false;
         }
+        // Enable evidence gate by default for RAG and search modes
+        if (self.id == "rag" || self.id == "search") && cfg.evidence_gate.is_none() {
+            cfg.evidence_gate = Some(EvidenceGateConfig::default());
+        }
         cfg
     }
 
@@ -525,7 +565,10 @@ mod tests {
     fn rag_mode_config_deserializes_with_tool_pool_and_clusters() {
         let config = load_mode_config("rag").expect("rag mode should load");
         assert_eq!(config.id, "rag");
-        assert!(config.tool_pool.is_empty());
+        assert!(
+            config.tool_pool.is_empty(),
+            "RAG retrieve tools are on-demand via memory cluster disclosure"
+        );
         let codegen = config
             .skill_catalog
             .cluster_by_id("codegen")
@@ -549,9 +592,12 @@ mod tests {
     }
 
     #[test]
-    fn chat_mode_config_has_empty_tool_pool() {
+    fn chat_mode_config_has_empty_retrieve_tool_pool() {
         let config = load_mode_config("chat").expect("chat mode should load");
-        assert!(config.tool_pool.is_empty());
+        assert!(
+            config.tool_pool.is_empty(),
+            "chat memory tools are on-demand via memory cluster disclosure"
+        );
         assert!(
             config
                 .skill_catalog

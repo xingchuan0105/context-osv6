@@ -74,6 +74,7 @@ pub struct ReActLoop {
     skill_registry: Arc<CapabilityRegistry>,
     rag_runtime: Option<Arc<avrag_rag_core::RagRuntime>>,
     search_executor: Option<Arc<dyn avrag_search::SearchProvider>>,
+    pg_repo: Option<Arc<avrag_storage_pg::PgAppRepository>>,
     code_interpreter: Arc<std::sync::Mutex<Option<avrag_code_interpreter::CodeInterpreter>>>,
 }
 
@@ -84,8 +85,23 @@ impl ReActLoop {
             skill_registry,
             rag_runtime: None,
             search_executor: None,
+            pg_repo: None,
             code_interpreter: Arc::new(std::sync::Mutex::new(None)),
         }
+    }
+
+    pub fn with_pg_repo(
+        mut self,
+        pg_repo: Option<Arc<avrag_storage_pg::PgAppRepository>>,
+    ) -> Self {
+        self.pg_repo = pg_repo;
+        self
+    }
+
+    fn effective_pg_repo(&self) -> Option<Arc<avrag_storage_pg::PgAppRepository>> {
+        self.pg_repo
+            .clone()
+            .or_else(|| self.rag_runtime.as_ref().and_then(|r| r.pg_repo()))
     }
 
     pub fn with_rag_runtime(mut self, runtime: Option<Arc<avrag_rag_core::RagRuntime>>) -> Self {
@@ -333,7 +349,7 @@ impl ReActLoop {
         let mut has_evidence = has_retrieval_observation(&messages, &collected_tool_results, mode);
         let retrieval_query = request.effective_query().to_string();
 
-        match decide_synthesis_gate(&loop_exit, has_evidence, direct_answer.as_deref()) {
+        match decide_synthesis_gate(&loop_exit, has_evidence, direct_answer.as_deref(), &collected_tool_results, &retrieval_query) {
             SynthesisGate::SkipSynthesisUseDirect(answer) => {
                 let disclosed_skills: Vec<String> = disclosed_state
                     .disclosed_skill_ids
@@ -595,7 +611,7 @@ impl ReActLoop {
                 if let Some(runtime) = &self.rag_runtime {
                     let args = serde_json::to_value(common::DenseRetrievalArgs {
                         queries: vec![retrieval_query.to_string()],
-                        modality: common::DenseRetrievalModality::Text,
+                        modality: common::DenseRetrievalModality::Both,
                         top_k: fallback.top_k as usize,
                         doc_scope: request.doc_scope.clone(),
                     })

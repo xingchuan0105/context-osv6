@@ -492,6 +492,17 @@ impl AppState {
         self.analytics.clone()
     }
 
+    /// Returns an AnalyticsContext for recording events.
+    /// Part of the Phase 1 AppState decomposition — prefer this over
+    /// direct `record_*_if_available()` calls in new code.
+    pub fn analytics_ctx(&self) -> crate::analytics_context::AnalyticsContext {
+        crate::analytics_context::AnalyticsContext::new(
+            self.analytics.clone(),
+            self.auth.actor_id().map(|a| a.into_uuid()),
+            self.auth.request_id().map(str::to_string),
+        )
+    }
+
     pub async fn record_product_event_if_available(
         &self,
         event_name: analytics::ProductEventName,
