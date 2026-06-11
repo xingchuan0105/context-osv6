@@ -248,19 +248,19 @@ pub(crate) fn build_rag_plan_user_prompt(
         doc_scope_json, metadata_json
     );
 
-    // Inject previously retrieved doc_index results so the planner can issue index_lookup.
-    let doc_index_results: Vec<&serde_json::Value> = previous_tool_results
+    // Inject previously retrieved doc_profile results so the planner can issue index_lookup.
+    let doc_profile_results: Vec<&serde_json::Value> = previous_tool_results
         .iter()
-        .filter(|r| r.tool == "doc_index" && r.status == common::ToolStatus::Ok)
+        .filter(|r| r.tool == "doc_profile" && r.status == common::ToolStatus::Ok)
         .filter_map(|r| r.data.as_ref())
         .collect();
-    if !doc_index_results.is_empty() {
-        let index_json =
-            serde_json::to_string_pretty(&doc_index_results).unwrap_or_else(|_| "[]".to_string());
+    if !doc_profile_results.is_empty() {
+        let profile_json =
+            serde_json::to_string_pretty(&doc_profile_results).unwrap_or_else(|_| "[]".to_string());
         authoritative.push_str(&format!(
-            "\n\nDocument index already retrieved (from prior iteration):\n{}\n\n\
-             Based on this index, call index_lookup for the sections needed to answer the user.",
-            index_json
+            "\n\nDocument profile already retrieved (from prior iteration):\n{}\n\n\
+             Based on section chunk_ids, call index_lookup for the sections needed to answer the user.",
+            profile_json
         ));
     }
 
@@ -733,15 +733,15 @@ pub(crate) fn build_rag_strategy_evaluation_prompt(
         String::new()
     };
 
-    let doc_index_hint = {
-        let has_doc_index = tool_results
+    let doc_profile_hint = {
+        let has_doc_profile = tool_results
             .iter()
-            .any(|r| r.tool == "doc_index" && r.status == common::ToolStatus::Ok);
+            .any(|r| r.tool == "doc_profile" && r.status == common::ToolStatus::Ok);
         let has_index_lookup = tool_results
             .iter()
             .any(|r| r.tool == "index_lookup" && r.status == common::ToolStatus::Ok);
-        if has_doc_index && !has_index_lookup {
-            "\n\nNote: Document index was retrieved but section content (index_lookup) has not been fetched yet. If the user's question requires reading specific sections, recommend Replan and suggest calling index_lookup with the relevant chunk_ids from the document index."
+        if has_doc_profile && !has_index_lookup {
+            "\n\nNote: Document profile was retrieved but section content (index_lookup) has not been fetched yet. If the user's question requires reading specific sections, recommend Replan and suggest calling index_lookup with the relevant chunk_ids from the profile sections."
         } else {
             ""
         }
@@ -786,7 +786,7 @@ pub(crate) fn build_rag_strategy_evaluation_prompt(
         top_chunks.len(),
         truncation_note,
         top_chunks.join("\n"),
-        doc_index_hint,
+        doc_profile_hint,
     )
 }
 

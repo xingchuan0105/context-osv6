@@ -28,6 +28,7 @@ pub struct UnifiedAgent {
     llm_client: Option<LlmClient>,
     rag_runtime: Option<Arc<avrag_rag_core::RagRuntime>>,
     search_executor: Option<Arc<dyn SearchProvider>>,
+    pg_repo: Option<Arc<avrag_storage_pg::PgAppRepository>>,
 }
 
 impl UnifiedAgent {
@@ -36,7 +37,16 @@ impl UnifiedAgent {
             llm_client,
             rag_runtime: None,
             search_executor: None,
+            pg_repo: None,
         }
+    }
+
+    pub fn with_pg_repo(
+        mut self,
+        pg_repo: Option<Arc<avrag_storage_pg::PgAppRepository>>,
+    ) -> Self {
+        self.pg_repo = pg_repo;
+        self
     }
 
     pub fn with_rag_runtime(mut self, runtime: Option<Arc<avrag_rag_core::RagRuntime>>) -> Self {
@@ -134,7 +144,8 @@ impl Agent for UnifiedAgent {
                 };
                 let skill_registry =
                     Arc::new(crate::agents::capability::CapabilityRegistry::standard());
-                let loop_agent = crate::agents::r#loop::ReActLoop::new(llm, skill_registry);
+                let loop_agent = crate::agents::r#loop::ReActLoop::new(llm, skill_registry)
+                    .with_pg_repo(self.pg_repo.clone());
                 let mut result = loop_agent.run(&mode, request, sink).await?;
                 result.routing_decision = Some(mode_id.clone());
                 Ok(result)
@@ -193,7 +204,8 @@ impl Agent for UnifiedAgent {
                 let skill_registry =
                     Arc::new(crate::agents::capability::CapabilityRegistry::standard());
                 let loop_agent = crate::agents::r#loop::ReActLoop::new(llm, skill_registry)
-                    .with_rag_runtime(Some(rag));
+                    .with_rag_runtime(Some(rag))
+                    .with_pg_repo(self.pg_repo.clone());
                 let mut result = loop_agent.run(&mode, request, sink).await?;
                 result.routing_decision = Some(mode_id.clone());
                 Ok(result)
@@ -239,7 +251,8 @@ impl Agent for UnifiedAgent {
                 let skill_registry =
                     Arc::new(crate::agents::capability::CapabilityRegistry::standard());
                 let loop_agent = crate::agents::r#loop::ReActLoop::new(llm, skill_registry)
-                    .with_search_executor(Some(search_executor));
+                    .with_search_executor(Some(search_executor))
+                    .with_pg_repo(self.pg_repo.clone());
                 let mut result = loop_agent.run(&mode, request, sink).await?;
                 result.routing_decision = Some(mode_id.clone());
                 Ok(result)

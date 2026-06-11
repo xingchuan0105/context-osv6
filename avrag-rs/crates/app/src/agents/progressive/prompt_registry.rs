@@ -184,7 +184,7 @@ mod tests {
     #[test]
     fn atomic_tools_directory_skills_are_not_in_prompt_registry() {
         // build.rs scans clusters/ + synthesis/ + orchestrators/ only (ADR-0007).
-        // prompts/atomic-tools/* are legacy reference docs; runtime tools live in
+        // prompts/deprecated/atomic-tools/* are legacy reference docs; runtime tools live in
         // SkillComponent registry + mode tool_pool → CapabilityRegistry.
         let registry = PromptRegistry::standard_cached();
         for name in &[
@@ -197,7 +197,7 @@ mod tests {
         ] {
             assert!(
                 registry.skill(name).is_none(),
-                "atomic-tools/{name} must not load into PromptRegistry"
+                "deprecated/atomic-tools/{name} must not load into PromptRegistry"
             );
         }
         assert!(registry.skill("memory").is_some());

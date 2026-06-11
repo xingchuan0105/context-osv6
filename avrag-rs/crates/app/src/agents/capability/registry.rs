@@ -164,7 +164,6 @@ fn is_retired_skill(id: &str) -> bool {
             | "rag-eval"
             | "search-eval"
             | "rag-memory-mgmt"
-            | "session-summary"
             | "rag-citation-format"
             | "url-citation-format"
             | "rag-codegen-guide"
@@ -183,14 +182,30 @@ fn is_retired_skill(id: &str) -> bool {
 }
 
 fn register_llm_facing_tools() -> HashMap<String, ToolMetadata> {
-    use crate::agents::skills::builtin::{web_fetch::WebFetchSkill, web_search::WebSearchSkill};
+    use crate::agents::skills::builtin::{
+        conversation_history::{ConversationHistoryLoad, UserProfileLoad},
+        web_fetch::WebFetchSkill,
+        web_search::WebSearchSkill,
+    };
 
     let mut tools = HashMap::new();
+    let all_modes = vec![
+        "rag".to_string(),
+        "search".to_string(),
+        "chat".to_string(),
+    ];
     let search = vec!["search".to_string()];
     let perms = vec![Permission::ExternalNetwork];
 
     insert_tool_from_skill(&mut tools, &WebSearchSkill, search.clone(), perms.clone());
     insert_tool_from_skill(&mut tools, &WebFetchSkill, search, perms);
+    insert_tool_from_skill(
+        &mut tools,
+        &ConversationHistoryLoad,
+        all_modes.clone(),
+        vec![],
+    );
+    insert_tool_from_skill(&mut tools, &UserProfileLoad, all_modes, vec![]);
     tools
 }
 
@@ -219,7 +234,7 @@ fn tool_metadata_from_spec(
         description: spec.description.clone(),
         input_schema: spec.input_schema.clone(),
         output_schema: spec.output_schema.clone(),
-        risk_level: super::RiskLevel::High,
+        risk_level: infer_skill_risk_level(&spec.name),
         permissions,
         external_deps: vec![],
         deprecation: None,
@@ -337,7 +352,7 @@ fn infer_skill_strategies(id: &str) -> Vec<String> {
         "search" => vec!["search".to_string()],
         id if id.starts_with("rag-") => vec!["rag".to_string()],
         id if id.starts_with("search-") => vec!["search".to_string()],
-        id if id.starts_with("chat") || id == "session-summary" => vec!["chat".to_string()],
+        id if id.starts_with("chat") => vec!["chat".to_string()],
         "format" | "writing" | "memory" => all(),
         _ => all(),
     }
@@ -377,9 +392,11 @@ mod tests {
     #[test]
     fn standard_registry_loads_prompt_skills_and_search_tools() {
         let registry = CapabilityRegistry::standard();
-        assert_eq!(registry.tool_count(), 2, "search mode LLM-facing tools");
+        assert_eq!(registry.tool_count(), 4, "LLM-facing tools");
         assert!(registry.tool("web_search").is_some());
         assert!(registry.tool("web_fetch").is_some());
+        assert!(registry.tool("conversation_history_load").is_some());
+        assert!(registry.tool("user_profile_load").is_some());
         assert!(registry.skill_count() > 0, "registry should contain skills");
     }
 
@@ -435,7 +452,6 @@ mod tests {
             "rag-eval",
             "search-eval",
             "rag-memory-mgmt",
-            "session-summary",
             "rag-citation-format",
             "url-citation-format",
         ] {
@@ -453,7 +469,15 @@ mod tests {
             .expect("search mode config should load");
         let specs = mode.resolve_tool_specs(&registry, &mode.tool_pool);
         let names: Vec<&str> = specs.iter().map(|spec| spec.name.as_str()).collect();
-        assert_eq!(names, vec!["web_search", "web_fetch"]);
+        assert_eq!(
+            names,
+            vec![
+                "web_search",
+                "web_fetch",
+                "conversation_history_load",
+                "user_profile_load"
+            ]
+        );
         assert!(specs[0].input_schema.get("properties").is_some());
     }
 
@@ -461,7 +485,7 @@ mod tests {
     fn list_tools_returns_search_tools() {
         let registry = CapabilityRegistry::standard();
         let tools = registry.list_tools();
-        assert_eq!(tools.len(), 2);
+        assert_eq!(tools.len(), 4);
     }
 
     #[test]
@@ -550,10 +574,14 @@ mod tests {
     }
 
     #[test]
-    fn rag_plan_tools_are_empty_under_codegen_only_contract() {
+    fn rag_plan_tools_include_memory_retrieval() {
         let registry = CapabilityRegistry::standard();
         let plan_tools = registry.plan_tools("rag");
-        assert!(plan_tools.is_empty());
+        let ids: Vec<&str> = plan_tools.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            vec!["conversation_history_load", "user_profile_load"]
+        );
     }
 
     #[test]
@@ -561,7 +589,6 @@ mod tests {
         let registry = CapabilityRegistry::standard();
         let plan_tools = registry.plan_tools("rag");
 
-        // 所有返回的工具都应该是 PlanAndEvaluate phase
         for tool in &plan_tools {
             assert_eq!(
                 tool.activation_phase,
@@ -569,7 +596,7 @@ mod tests {
             );
         }
 
-        assert!(plan_tools.is_empty());
+        assert_eq!(plan_tools.len(), 2);
     }
 
     #[test]

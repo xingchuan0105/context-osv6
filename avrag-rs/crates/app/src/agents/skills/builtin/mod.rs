@@ -18,6 +18,7 @@ pub fn register_all(registry: &mut SkillRegistry) {
     registry.register(Box::new(calculator::CalculatorSkill));
     registry.register(Box::new(code_interpreter::CodeInterpreterSkill));
     registry.register(Box::new(conversation_history::ConversationHistoryLoad));
+    registry.register(Box::new(conversation_history::UserProfileLoad));
     registry.register(Box::new(conversation_history::ConversationHistoryTag));
     registry.register(Box::new(weather_query::WeatherQuerySkill));
     registry.register(Box::new(web_fetch::WebFetchSkill));

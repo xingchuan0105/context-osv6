@@ -80,7 +80,7 @@ impl AppState {
         let mode_debug = build_mode_debug(req, retrieval.as_ref(), &sources);
         let degrade_trace = build_degrade_trace(&req.agent_type, context_document.is_some());
 
-        let mut state = self.inner.write().await;
+        let mut state = self.storage.inner().write().await;
         let user_message_id = next_message_id(&mut state);
         let assistant_message_id = next_message_id(&mut state);
         let now = now_rfc3339();

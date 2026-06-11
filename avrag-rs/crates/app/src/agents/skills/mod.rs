@@ -14,6 +14,7 @@ pub mod registry;
 
 pub mod builtin;
 pub mod eval;
+pub mod memory_dispatch;
 
 pub use registry::{ExecutionContext, SkillRegistry};
 

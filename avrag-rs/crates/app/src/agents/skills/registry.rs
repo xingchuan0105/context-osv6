@@ -16,11 +16,34 @@ static BUILTIN_REGISTRY: OnceLock<SkillRegistry> = OnceLock::new();
 pub struct ExecutionContext<'a> {
     /// Optional search provider — required by `web_search` and related skills.
     pub search_provider: Option<&'a dyn avrag_search::SearchProvider>,
+    /// Auth + PG session context for memory retrieval tools.
+    pub auth: Option<&'a avrag_auth::AuthContext>,
+    pub session_id: Option<uuid::Uuid>,
+    pub pg_repo: Option<&'a avrag_storage_pg::PgAppRepository>,
 }
 
 impl<'a> ExecutionContext<'a> {
     pub fn new(search_provider: Option<&'a dyn avrag_search::SearchProvider>) -> Self {
-        Self { search_provider }
+        Self {
+            search_provider,
+            auth: None,
+            session_id: None,
+            pg_repo: None,
+        }
+    }
+
+    pub fn with_memory(
+        search_provider: Option<&'a dyn avrag_search::SearchProvider>,
+        auth: Option<&'a avrag_auth::AuthContext>,
+        session_id: Option<uuid::Uuid>,
+        pg_repo: Option<&'a avrag_storage_pg::PgAppRepository>,
+    ) -> Self {
+        Self {
+            search_provider,
+            auth,
+            session_id,
+            pg_repo,
+        }
     }
 }
 

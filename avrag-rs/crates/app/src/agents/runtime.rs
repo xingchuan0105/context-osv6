@@ -143,9 +143,8 @@ impl AgentTrace {
     }
 }
 
-/// Maximum number of message turns to include in LLM prompts.
-/// Aligns with the session-summary trigger threshold (10 turns).
-pub const MAX_PROMPT_HISTORY_TURNS: usize = 10;
+/// Guaranteed recent user turns injected unconditionally (memory floor).
+pub const MAX_PROMPT_HISTORY_TURNS: usize = 3;
 
 /// Return the most recent `max_turns` messages from the history slice.
 pub fn recent_messages(messages: &[ChatTurnInput], max_turns: usize) -> &[ChatTurnInput] {
@@ -607,14 +606,14 @@ mod tests {
             })
             .collect();
         let recent = super::recent_messages(&messages, super::MAX_PROMPT_HISTORY_TURNS);
-        assert_eq!(recent.len(), 10);
-        assert_eq!(recent[0].content, "msg-2");
-        assert_eq!(recent[9].content, "msg-11");
+        assert_eq!(recent.len(), 3);
+        assert_eq!(recent[0].content, "msg-9");
+        assert_eq!(recent[2].content, "msg-11");
     }
 
     #[test]
     fn recent_messages_returns_all_when_under_limit() {
-        let messages: Vec<ChatTurnInput> = (0..5)
+        let messages: Vec<ChatTurnInput> = (0..2)
             .map(|i| ChatTurnInput {
                 role: "user".to_string(),
                 content: format!("msg-{i}"),
@@ -622,7 +621,7 @@ mod tests {
             })
             .collect();
         let recent = super::recent_messages(&messages, super::MAX_PROMPT_HISTORY_TURNS);
-        assert_eq!(recent.len(), 5);
+        assert_eq!(recent.len(), 2);
         assert_eq!(recent[0].content, "msg-0");
     }
 
