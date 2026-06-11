@@ -2,7 +2,9 @@ mod code;
 mod html;
 mod mineru;
 mod office_service;
+pub mod paddle_ocr;
 mod pdf;
+mod pdf_image;
 mod pdf_renderer_service;
 mod probe;
 mod router;
@@ -23,7 +25,9 @@ pub use office_service::{
     OfficeParserParseResponse, OfficeParserParseStats, OfficeParserServiceClient,
     OfficeParserServiceConfig,
 };
+pub use paddle_ocr::{PaddleOcrClient, PaddleOcrConfig, PaddleOcrPageResult};
 pub use pdf::PdfParser;
+pub use pdf_image::{ExtractedPdfImage, PdfImageFormat, FigurePlacement, extract_page_images, image_to_base64, image_mime_type, compute_figure_area_ratio};
 pub use pdf_renderer_service::{
     PdfRendererServiceClient, PdfRendererServiceConfig, RenderedPdfPage, RenderPagesResponse,
     chunk_page_ranges, page_range_metadata, pages_per_visual_chunk, visual_render_strategy,
@@ -33,7 +37,7 @@ pub use probe::{ParseProbe, ParseProbeConfig, ParseProbeResult, PdfPageProbeResu
 pub use router::{
     ExternalParseKind, ExternalParsePlan, LocalParseKind, LocalParsePlan, OfficeDocType,
     OfficeParsePlan, ParsePlan, ParseRoute, ParseRouteDecision, ParseRouteError, ParseRouter,
-    PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteReason,
+    PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteDecision, RouteReason,
 };
 pub use text::TextParser;
 

@@ -1,7 +1,13 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::probe::{ParseProbe, ParseProbeConfig, ParseProbeResult, PdfPageProbeResult};
+use super::probe::{
+    ParseProbe, ParseProbeConfig, ParseProbeResult, PdfPageProbeResult, BIGRAM_REPEAT_THRESHOLD,
+    PAGE_TEXT_THRESHOLD, TEXT_QUAL_THRESHOLD, UNIQUE_TOKEN_THRESHOLD,
+};
+
+const FIG_COUNT_THRESHOLD: usize = 2;
+const TABLE_GARBLE_THRESHOLD: f32 = 0.30;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -14,6 +20,16 @@ pub enum ParseRoute {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum RouteDecision {
+    FastText,
+    FastWithFigures,
+    SlowOcr,
+    SlowOcrSinglePage,
+    Fallback,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RouteReason {
     TextFile,
     ImageFile,
@@ -22,6 +38,11 @@ pub enum RouteReason {
     SimplePdf,
     ComplexPdf,
     ScannedPdf,
+    FastText,
+    FastWithFigures,
+    SlowOcr,
+    SlowOcrSinglePage,
+    OcrFallback,
 }
 
 impl std::fmt::Display for RouteReason {
@@ -34,6 +55,11 @@ impl std::fmt::Display for RouteReason {
             RouteReason::SimplePdf => write!(f, "simple_pdf"),
             RouteReason::ComplexPdf => write!(f, "complex_pdf"),
             RouteReason::ScannedPdf => write!(f, "scanned_pdf"),
+            RouteReason::FastText => write!(f, "fast_text"),
+            RouteReason::FastWithFigures => write!(f, "fast_with_figures"),
+            RouteReason::SlowOcr => write!(f, "slow_ocr"),
+            RouteReason::SlowOcrSinglePage => write!(f, "slow_ocr_single_page"),
+            RouteReason::OcrFallback => write!(f, "ocr_fallback"),
         }
     }
 }
@@ -99,6 +125,7 @@ pub struct OfficeParsePlan {
 #[serde(rename_all = "snake_case")]
 pub enum PdfPageBackend {
     EdgeParse,
+    PaddleOcr,
     VisualRaster,
 }
 
@@ -318,16 +345,66 @@ fn build_pdf_parse_plan(
     PdfParsePlan { pages }
 }
 
-fn build_pdf_page_plan(page_probe: &PdfPageProbeResult, config: &ParseProbeConfig) -> PdfPagePlan {
-    let (backend, reason) = if page_probe.likely_scanned {
-        (PdfPageBackend::VisualRaster, RouteReason::ScannedPdf)
-    } else if page_probe.image_hint_count > config.image_heavy_threshold
-        || page_probe.table_hint_count > config.table_heavy_threshold
+/// Per-page routing decision based on quality signals (v2 model).
+fn route_page(page: &PdfPageProbeResult) -> (PdfPageBackend, RouteDecision, RouteReason) {
+    let readable = page.readable_ratio.unwrap_or(1.0);
+    let bigram = page.bigram_repeat_ratio.unwrap_or(0.0);
+    let unique = page.unique_token_ratio.unwrap_or(1.0);
+
+    // C: no text or garbage quality → PaddleOCR slow path
+    if page.extracted_text_chars == 0
+        || readable < TEXT_QUAL_THRESHOLD
+        || bigram > BIGRAM_REPEAT_THRESHOLD
+        || page.watermark_hit
+        || (page.extracted_text_chars < PAGE_TEXT_THRESHOLD && readable < 0.5)
+        || unique < UNIQUE_TOKEN_THRESHOLD
     {
-        (PdfPageBackend::VisualRaster, RouteReason::ComplexPdf)
+        return (
+            PdfPageBackend::PaddleOcr,
+            RouteDecision::SlowOcr,
+            RouteReason::SlowOcr,
+        );
+    }
+
+    // C′: has text + table hints but table content is garbled → single-page PaddleOCR upgrade
+    if page.table_hint_count > 0 {
+        let garbled = page.table_garbled_ratio.unwrap_or(0.0);
+        if garbled > TABLE_GARBLE_THRESHOLD {
+            return (
+                PdfPageBackend::PaddleOcr,
+                RouteDecision::SlowOcrSinglePage,
+                RouteReason::SlowOcrSinglePage,
+            );
+        }
+    }
+
+    // B: has figures AND has text → EdgeParse + figure pipeline
+    // Use figure_area_ratio when available (ING-1b-β), fallback to image count
+    let has_figures = if let Some(ratio) = page.figure_area_ratio {
+        let non_deco = page.non_decorative_image_count.unwrap_or(0);
+        ratio > 0.15 && non_deco >= 2
     } else {
-        (PdfPageBackend::EdgeParse, RouteReason::SimplePdf)
+        page.image_hint_count >= FIG_COUNT_THRESHOLD
     };
+
+    if has_figures {
+        return (
+            PdfPageBackend::EdgeParse,
+            RouteDecision::FastWithFigures,
+            RouteReason::FastWithFigures,
+        );
+    }
+
+    // A: clean text page
+    (
+        PdfPageBackend::EdgeParse,
+        RouteDecision::FastText,
+        RouteReason::FastText,
+    )
+}
+
+fn build_pdf_page_plan(page_probe: &PdfPageProbeResult, _config: &ParseProbeConfig) -> PdfPagePlan {
+    let (backend, _decision, reason) = route_page(page_probe);
 
     PdfPagePlan {
         page_number: page_probe.page_number,
@@ -341,21 +418,25 @@ fn summarize_pdf_reason(probe_result: &ParseProbeResult, plan: &ParsePlan) -> Ro
         return RouteReason::SimplePdf;
     };
 
-    if pdf_plan
+    let has_ocr = pdf_plan
         .pages
         .iter()
-        .any(|page| page.backend == PdfPageBackend::VisualRaster)
-    {
-        if probe_result.likely_scanned
-            || pdf_plan
-                .pages
-                .iter()
-                .all(|page| page.reason == RouteReason::ScannedPdf)
-        {
-            RouteReason::ScannedPdf
-        } else {
-            RouteReason::ComplexPdf
-        }
+        .any(|p| p.backend == PdfPageBackend::PaddleOcr);
+    let has_visual = pdf_plan
+        .pages
+        .iter()
+        .any(|p| p.backend == PdfPageBackend::VisualRaster);
+    let has_figures = pdf_plan
+        .pages
+        .iter()
+        .any(|p| p.reason == RouteReason::FastWithFigures);
+
+    if has_ocr {
+        RouteReason::ScannedPdf
+    } else if has_visual || probe_result.likely_scanned {
+        RouteReason::ComplexPdf
+    } else if has_figures {
+        RouteReason::ComplexPdf
     } else {
         RouteReason::SimplePdf
     }
@@ -575,6 +656,13 @@ mod tests {
                 image_hint_count: 0,
                 table_hint_count: 0,
                 likely_scanned: false,
+                readable_ratio: Some(0.8),
+                bigram_repeat_ratio: Some(0.1),
+                unique_token_ratio: Some(0.7),
+                watermark_hit: false,
+                figure_area_ratio: None,
+                non_decorative_image_count: None,
+                table_garbled_ratio: None,
             },
             PdfPageProbeResult {
                 page_number: 2,
@@ -582,6 +670,13 @@ mod tests {
                 image_hint_count: 0,
                 table_hint_count: 0,
                 likely_scanned: true,
+                readable_ratio: Some(0.2),
+                bigram_repeat_ratio: Some(0.1),
+                unique_token_ratio: Some(0.5),
+                watermark_hit: false,
+                figure_area_ratio: None,
+                non_decorative_image_count: None,
+                table_garbled_ratio: None,
             },
             PdfPageProbeResult {
                 page_number: 3,
@@ -589,16 +684,126 @@ mod tests {
                 image_hint_count: 0,
                 table_hint_count: 0,
                 likely_scanned: false,
+                readable_ratio: Some(0.7),
+                bigram_repeat_ratio: Some(0.1),
+                unique_token_ratio: Some(0.6),
+                watermark_hit: false,
+                figure_area_ratio: None,
+                non_decorative_image_count: None,
+                table_garbled_ratio: None,
             },
         ];
 
         let plan = build_pdf_parse_plan(&probe_result, &ParseProbeConfig::default());
         assert_eq!(plan.pages.len(), 3);
         assert_eq!(plan.pages[0].backend, PdfPageBackend::EdgeParse);
-        assert_eq!(plan.pages[1].backend, PdfPageBackend::VisualRaster);
+        assert_eq!(plan.pages[1].backend, PdfPageBackend::PaddleOcr);
         assert_eq!(plan.pages[2].backend, PdfPageBackend::EdgeParse);
 
         let reason = summarize_pdf_reason(&probe_result, &ParsePlan::Pdf(plan));
-        assert!(matches!(reason, RouteReason::ComplexPdf));
+        assert!(matches!(reason, RouteReason::ScannedPdf));
+    }
+
+    #[test]
+    fn route_page_scanned_goes_to_paddle() {
+        let page = PdfPageProbeResult {
+            page_number: 1,
+            extracted_text_chars: 0,
+            image_hint_count: 0,
+            table_hint_count: 0,
+            likely_scanned: true,
+            readable_ratio: Some(0.0),
+            bigram_repeat_ratio: Some(0.0),
+            unique_token_ratio: Some(0.0),
+            watermark_hit: false,
+                figure_area_ratio: None,
+                non_decorative_image_count: None,
+                table_garbled_ratio: None,
+        };
+        let (_backend, decision, _reason) = route_page(&page);
+        assert_eq!(decision, RouteDecision::SlowOcr);
+    }
+
+    #[test]
+    fn route_page_image_heavy_with_text_goes_to_b() {
+        let page = PdfPageProbeResult {
+            page_number: 1,
+            extracted_text_chars: 500,
+            image_hint_count: 3,
+            table_hint_count: 0,
+            likely_scanned: false,
+            readable_ratio: Some(0.7),
+            bigram_repeat_ratio: Some(0.1),
+            unique_token_ratio: Some(0.6),
+            watermark_hit: false,
+                figure_area_ratio: None,
+                non_decorative_image_count: None,
+                table_garbled_ratio: None,
+        };
+        let (backend, decision, _reason) = route_page(&page);
+        assert_eq!(backend, PdfPageBackend::EdgeParse);
+        assert_eq!(decision, RouteDecision::FastWithFigures);
+    }
+
+    #[test]
+    fn route_page_watermark_goes_to_ocr() {
+        let page = PdfPageProbeResult {
+            page_number: 1,
+            extracted_text_chars: 500,
+            image_hint_count: 0,
+            table_hint_count: 0,
+            likely_scanned: false,
+            readable_ratio: Some(0.9),
+            bigram_repeat_ratio: Some(0.1),
+            unique_token_ratio: Some(0.8),
+            watermark_hit: true,
+            figure_area_ratio: None,
+            non_decorative_image_count: None,
+            table_garbled_ratio: None,
+        };
+        let (_backend, decision, _reason) = route_page(&page);
+        assert_eq!(decision, RouteDecision::SlowOcr);
+    }
+
+    #[test]
+    fn route_page_clean_text_goes_to_a() {
+        let page = PdfPageProbeResult {
+            page_number: 1,
+            extracted_text_chars: 500,
+            image_hint_count: 0,
+            table_hint_count: 0,
+            likely_scanned: false,
+            readable_ratio: Some(0.8),
+            bigram_repeat_ratio: Some(0.1),
+            unique_token_ratio: Some(0.7),
+            watermark_hit: false,
+            figure_area_ratio: None,
+            non_decorative_image_count: None,
+            table_garbled_ratio: None,
+        };
+        let (backend, decision, _reason) = route_page(&page);
+        assert_eq!(backend, PdfPageBackend::EdgeParse);
+        assert_eq!(decision, RouteDecision::FastText);
+    }
+
+    #[test]
+    fn route_page_garbled_table_goes_to_c_prime() {
+        let page = PdfPageProbeResult {
+            page_number: 1,
+            extracted_text_chars: 300,
+            image_hint_count: 0,
+            table_hint_count: 5,
+            likely_scanned: false,
+            readable_ratio: Some(0.5),
+            bigram_repeat_ratio: Some(0.1),
+            unique_token_ratio: Some(0.6),
+            watermark_hit: false,
+            figure_area_ratio: None,
+            non_decorative_image_count: None,
+            table_garbled_ratio: Some(0.45),
+        };
+        let (backend, decision, _reason) = route_page(&page);
+        assert_eq!(backend, PdfPageBackend::PaddleOcr);
+        assert_eq!(decision, RouteDecision::SlowOcrSinglePage);
     }
 }

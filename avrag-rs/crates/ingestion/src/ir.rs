@@ -48,6 +48,7 @@ impl DocumentType {
 pub enum ParseBackend {
     EdgeParsePdf,
     VisualRasterPdf,
+    PaddleOcrPdf,
     MineruPdfOcr,
     MineruImage,
     Docx4jDocx,
@@ -66,6 +67,7 @@ impl ParseBackend {
         match self {
             Self::EdgeParsePdf => "edge_parse_pdf",
             Self::VisualRasterPdf => "visual_raster_pdf",
+            Self::PaddleOcrPdf => "paddle_ocr_pdf",
             Self::MineruPdfOcr => "mineru_pdf_ocr",
             Self::MineruImage => "mineru_image",
             Self::Docx4jDocx => "docx4j_docx",

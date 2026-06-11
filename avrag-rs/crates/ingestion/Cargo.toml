@@ -11,6 +11,8 @@ anyhow.workspace = true
 base64 = "0.22"
 chrono.workspace = true
 common = { path = "../common" }
+ingestion-types = { path = "../ingestion-types" }
+flate2 = "1"
 lopdf = "0.35"
 reqwest = { workspace = true, features = ["json", "multipart"] }
 scraper = "0.22"
