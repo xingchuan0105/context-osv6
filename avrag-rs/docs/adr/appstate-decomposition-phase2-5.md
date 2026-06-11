@@ -3,7 +3,7 @@
 > 状态：Implemented + Optimized (2026-06-11)
 > 日期：2026-06-11
 > 前置：Phase 1（AnalyticsContext）已完成，commit 3316651
-> 结果：AppState 从 22 字段减少到 8 字段，新增 6 个 Context 结构体，删除 3 个死代码/低价值字段
+> 结果：AppState 从 22 字段减少到 7 字段，新增 5 个 Context 结构体，删除 4 个字段，合并 2 个字段
 
 ---
 
@@ -243,19 +243,18 @@ impl OrchestratorContext {
 
 ## 6. 实施终态
 
-### AppState 字段（22 → 8）
+### AppState 字段（22 → 7）
 
 Phase 2–5 完成后 + 优化清理：
 
 ```rust
 pub struct AppState {
     pub(crate) auth: AuthContext,                          // per-request
-    pub(crate) storage: StorageContext,                    // per-app
+    pub(crate) storage: StorageContext,                    // per-app (含 object_store)
     pub(crate) llm_ctx: LlmContext,                       // per-app
     pub(crate) orchestrator: OrchestratorContext,          // per-app (含 rag_runtime)
-    pub(crate) analytics: Option<Arc<AnalyticsService>>,  // per-app
+    pub(crate) analytics: AnalyticsServiceCtx,            // per-app
     pub(crate) billing: BillingContext,                    // per-app
-    pub(crate) object_storage: ObjectStorageContext,       // per-app
     pub(crate) redis_url: String,                         // middleware config
 }
 ```
@@ -268,17 +267,19 @@ pub struct AppState {
 | 删除 | `search_provider` | 仅 1 个 debug 读取点，已移除 |
 | 删除 | `search_mode` | 仅 1 个 debug 读取点，已移除 |
 | 移入 OrchestratorContext | `rag_runtime` | rag 与 agent 编排同属一个关注点 |
+| 合并入 StorageContext | `object_storage` | 对象存储与数据持久化同属一个关注点 |
+| 包装 | `analytics` | 用 AnalyticsServiceCtx 包装 Option<Arc<>>，提供 into_context() |
 
 ### Context 结构体汇总
 
 | Context | 文件 | 字段 | 方法数 |
 |---------|------|------|--------|
+| `AnalyticsServiceCtx` | `analytics_context.rs` | analytics service | 3 (is_available/service/into_context) |
 | `AnalyticsContext` | `analytics_context.rs` | analytics service, actor_id, request_id | 5 (record_*) |
 | `LlmContext` | `llm_context.rs` | llm_client, memory_llm_client | 5 (client/temperature) |
-| `ObjectStorageContext` | `object_storage_context.rs` | object_store, URLs, expire config | 7 (upload/download/citation) |
 | `BillingContext` | `billing_context.rs` | quota_manager, usage_limit_phase | 6 (quota/usage) |
-| `StorageContext` | `storage_context.rs` | pg, inner, api_keys, config flags | 9 (pg/mode/accessors) |
-| `OrchestratorContext` | `orchestrator_context.rs` | agent_service, chatmemory, guard_pipeline | 4 (accessors) |
+| `StorageContext` | `storage_context.rs` | pg, inner, api_keys, object_store, config | 15 (pg/object/accessors) |
+| `OrchestratorContext` | `orchestrator_context.rs` | agent_service, chatmemory, guard_pipeline, rag_runtime | 5 (accessors) |
 
 ### 向后兼容
 
@@ -294,7 +295,7 @@ pub struct AppState {
 
 ## 7. 进一步优化空间
 
-对 AppState 剩余 8 个字段的分析：
+对 AppState 剩余 7 个字段的分析：
 
 | 字段 | 访问次数 | 状态 | 说明 |
 |------|---------|------|------|
@@ -302,13 +303,10 @@ pub struct AppState {
 | `search_provider` | 1 个读取点 | ✅ 已删除 | debug metadata 不值得一个字段 |
 | `search_mode` | 1 个读取点 | ✅ 已删除 | 同上 |
 | `rag_runtime` | 2 个消费者 | ✅ 已移入 | OrchestratorContext |
-| `analytics` | 39 个调用点 | 保留 | AnalyticsContext 含 per-request 的 actor_id/request_id，不能直接存储在 per-app 的 AppState 中。当前 `analytics_ctx()` 按需创建是正确设计 |
-| `redis_url` | 2 个读取点 | 保留 | 仅被 HTTP rate limiter 使用，移入中间件层收益小 |
+| `object_storage` | 8 个调用点 | ✅ 已合并 | 合入 StorageContext |
+| `analytics` | 39 个调用点 | ✅ 已包装 | AnalyticsServiceCtx 包装 Option<Arc<>> |
+| `redis_url` | 2 个读取点 | 保留 | 仅被 HTTP rate limiter 使用，移入中间件层需改 47 处 build_router 调用 |
 
 ### 结论
 
-8 字段是当前架构的合理终态。`analytics` 和 `redis_url` 的进一步迁移收益不足以证明其改动成本。
-
-如果未来需要进一步压缩，建议方向：
-1. 将 `redis_url` 提取到 transport-http 的 router config 中
-2. 将 `object_storage` 合并入 `StorageContext`（两者都属于数据持久化层）
+7 字段是当前架构的合理终态。`redis_url` 的进一步迁移收益不足以证明其改动成本（需改 47 处 `build_router` 调用）。
