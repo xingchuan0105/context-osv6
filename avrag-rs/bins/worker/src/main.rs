@@ -2437,7 +2437,7 @@ async fn execute_pdf_parse(
             }
         }
     };
-    let paddle_failed = !paddle_pages.is_empty() && paddle_ir.is_none();
+    let _paddle_failed = !paddle_pages.is_empty() && paddle_ir.is_none();
 
     // Fallback: PaddleOCR pages without successful results fall back to VisualRaster
     let paddle_needs_fallback: Vec<u32> = if paddle_pages.is_empty() {
@@ -2493,10 +2493,14 @@ async fn execute_pdf_parse(
                 ingestion::parser::RouteReason::SlowOcrSinglePage => "C_prime",
                 _ => "unknown",
             };
-            let has_page = merged.pages.iter().any(|mp| mp.page_number == p.page_number);
-            let status = if p.backend == PdfPageBackend::PaddleOcr && paddle_failed {
-                "ocr_fail"
-            } else if has_page {
+            let actual_page = merged.pages.iter().find(|mp| mp.page_number == p.page_number);
+            let status = if p.backend == PdfPageBackend::PaddleOcr {
+                match actual_page {
+                    Some(pg) if pg.backend == ParseBackend::PaddleOcrPdf => "ok",
+                    Some(_) => "partial",
+                    None => "ocr_fail",
+                }
+            } else if actual_page.is_some() {
                 "ok"
             } else {
                 "missing"
@@ -2534,7 +2538,30 @@ async fn execute_paddle_ocr(
         .and_then(|v| v.parse().ok())
         .unwrap_or(80);
 
-    let segments = group_contiguous_pages(paddle_pages);
+    let mut segments = group_contiguous_pages(paddle_pages);
+
+    let max_single_jobs: usize = std::env::var("PADDLE_OCR_C_PRIME_MAX_SINGLE_JOBS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+    if segments.len() > max_single_jobs {
+        let mut merged_segments: Vec<(u32, u32)> = Vec::new();
+        for seg in segments {
+            if let Some(last) = merged_segments.last_mut() {
+                if seg.0 - last.1 <= 2 {
+                    last.1 = seg.1;
+                    continue;
+                }
+            }
+            merged_segments.push(seg);
+        }
+        while merged_segments.len() > max_single_jobs {
+            let last = merged_segments.pop().unwrap();
+            merged_segments.last_mut().unwrap().1 = last.1;
+        }
+        segments = merged_segments;
+    }
+
     let mut all_results = Vec::new();
 
     for (seg_start, seg_end) in &segments {
@@ -2995,6 +3022,10 @@ async fn enrich_b_class_figures(
                 metadata.insert("vlm_failed".to_string(), "true".to_string());
             } else {
                 metadata.insert("vlm_summarized".to_string(), "true".to_string());
+            }
+
+            if figure_text.is_empty() {
+                continue;
             }
 
             ir.blocks.push(BlockIr {
@@ -3826,8 +3857,13 @@ async fn maybe_enrich_visual_multimodal_summaries(
         if chunk.chunk_type != "page_raster" {
             continue;
         }
-        if skip_raster_for_ocr && chunk.parser_backend == "paddle_ocr_pdf" {
-            continue;
+        // ING-4: When OCR was used, page_raster chunks are unlikely to be useful.
+        // Architecturally, PaddleOCR pages don't produce PageRaster blocks.
+        // This gate is for edge cases where VisualRaster fallback created rasters for OCR-failed pages.
+        if skip_raster_for_ocr && chunk.parser_backend == "visual_raster_pdf" {
+            if chunk.context_text.is_empty() || chunk.context_text.starts_with("PDF page") {
+                continue;
+            }
         }
         let image_refs = match resolve_visual_chunk_image_refs(&media_ctx, chunk).await {
             Ok(refs) => refs,
