@@ -2403,9 +2403,12 @@ async fn execute_pdf_parse(
         .map(|p| p.page_number)
         .collect();
 
+    let mut page_durations: std::collections::HashMap<u32, u64> = std::collections::HashMap::new();
+
     let digital_ir = if edge_pages.is_empty() {
         None
     } else {
+        let ep_start = std::time::Instant::now();
         let parsed = PdfParser
             .parse_pages(bytes, filename, &edge_pages)
             .await
@@ -2414,6 +2417,9 @@ async fn execute_pdf_parse(
                     "pdf digital parse failed for {filename}: {error}"
                 ))
             })?;
+        let ep_elapsed = ep_start.elapsed().as_millis() as u64;
+        let ep_per_page = ep_elapsed / edge_pages.len() as u64;
+        for &pn in &edge_pages { page_durations.insert(pn, ep_per_page); }
         Some(
             document_ir_from_parsed_document(
                 document_id,
@@ -2429,8 +2435,14 @@ async fn execute_pdf_parse(
     let (paddle_ir, paddle_successful) = if paddle_pages.is_empty() {
         (None, std::collections::HashSet::new())
     } else {
+        let pp_start = std::time::Instant::now();
         match execute_paddle_ocr(bytes, filename, document_id, &paddle_pages).await {
-            Ok((ir, pages)) => (Some(ir), pages),
+            Ok((ir, pages)) => {
+                let pp_elapsed = pp_start.elapsed().as_millis() as u64;
+                let pp_per_page = pp_elapsed / paddle_pages.len() as u64;
+                for &pn in &paddle_pages { page_durations.insert(pn, pp_per_page); }
+                (Some(ir), pages)
+            }
             Err(e) => {
                 tracing::warn!(filename, error = %e, "PaddleOCR failed, falling back to VisualRaster for OCR pages");
                 (None, std::collections::HashSet::new())
@@ -2467,16 +2479,19 @@ async fn execute_pdf_parse(
             ))
         })?;
         let parser = VisualPdfParser::new(renderer.clone());
-        Some(
-            parser
-                .parse_pages(bytes, filename, document_id, &effective_visual_pages)
-                .await
-                .map_err(|error| {
-                    IngestionError::StateSink(format!(
-                        "visual pdf parse failed for {filename}: {error}"
-                    ))
-                })?,
-        )
+        let vr_start = std::time::Instant::now();
+        let result = parser
+            .parse_pages(bytes, filename, document_id, &effective_visual_pages)
+            .await
+            .map_err(|error| {
+                IngestionError::StateSink(format!(
+                    "visual pdf parse failed for {filename}: {error}"
+                ))
+            })?;
+        let vr_elapsed = vr_start.elapsed().as_millis() as u64;
+        let vr_per_page = vr_elapsed / effective_visual_pages.len() as u64;
+        for &pn in &effective_visual_pages { page_durations.insert(pn, vr_per_page); }
+        Some(result)
     };
 
     let mut merged = merge_pdf_ir(document_id, filename, plan, digital_ir, paddle_ir, visual_ir, &paddle_successful)?;
@@ -2509,6 +2524,7 @@ async fn execute_pdf_parse(
                 "page_no": p.page_number,
                 "status": status,
                 "route": route,
+                "duration_ms": page_durations.get(&p.page_number).copied(),
             })
         })
         .collect();
@@ -2932,7 +2948,7 @@ async fn enrich_b_class_figures(
     ir: &mut DocumentIr,
     plan: &ingestion::parser::PdfParsePlan,
 ) {
-    use ingestion::parser::{extract_page_images, image_mime_type, image_to_base64, compute_figure_area_ratio};
+    use ingestion::parser::{extract_page_images, image_mime_type, image_to_base64};
 
     let b_pages: Vec<u32> = plan
         .pages
@@ -2956,33 +2972,11 @@ async fn enrich_b_class_figures(
             }
         };
 
-        let decorative_indices: std::collections::HashSet<usize> =
-            if let Ok(doc) = lopdf::Document::load_mem(pdf_bytes) {
-                let pages = doc.get_pages();
-                if let Some(&page_id) = pages.get(&page_number) {
-                    match compute_figure_area_ratio(&doc, page_id) {
-                        Ok((_, _, placements)) => {
-                            placements
-                                .iter()
-                                .enumerate()
-                                .filter(|(_, p)| p.is_decorative)
-                                .map(|(i, _)| i)
-                                .collect()
-                        }
-                        Err(_) => std::collections::HashSet::new(),
-                    }
-                } else {
-                    std::collections::HashSet::new()
-                }
-            } else {
-                std::collections::HashSet::new()
-            };
+        // Note: extract_page_images already filters tiny decorative images (< 50x50, < 1KB).
+        // FigurePlacement ordering may not match XObject iteration order, so we rely on
+        // size-based filtering rather than content-stream positional analysis.
 
-        let non_deco_indices: Vec<usize> = (0..images.len())
-            .filter(|i| !decorative_indices.contains(i))
-            .collect();
-
-        for (fig_idx, img) in non_deco_indices.iter().map(|&i| (i, &images[i])) {
+        for (fig_idx, img) in images.iter().enumerate() {
             let asset_id = format!("bfig-p{}-{}", page_number, fig_idx);
             let base64_data = image_to_base64(img);
             let mime = image_mime_type(img);
@@ -3057,18 +3051,28 @@ async fn enrich_b_class_figures(
             .map(|b| b.block_id.clone())
             .collect();
 
-        if let (Some(fig_id), Some(txt_id)) = (page_figure_ids.first(), page_text_ids.first()) {
+        // Cross-link: every figure references all text blocks, every text block references all figures
+        let fig_ids_csv = page_figure_ids.join(",");
+        let txt_ids_csv = page_text_ids.join(",");
+
+        for fig_id in &page_figure_ids {
             if let Some(fig_block) = ir.blocks.iter_mut().find(|b| b.block_id == *fig_id) {
-                fig_block.metadata.insert("related_text_block_id".to_string(), txt_id.clone());
+                if !txt_ids_csv.is_empty() {
+                    fig_block.metadata.insert("related_text_block_ids".to_string(), txt_ids_csv.clone());
+                }
             }
+        }
+        for txt_id in &page_text_ids {
             if let Some(txt_block) = ir.blocks.iter_mut().find(|b| b.block_id == *txt_id) {
-                txt_block.metadata.insert("related_figure_id".to_string(), fig_id.clone());
+                if !fig_ids_csv.is_empty() {
+                    txt_block.metadata.insert("related_figure_ids".to_string(), fig_ids_csv.clone());
+                }
             }
         }
 
         // Update page image count
         if let Some(page) = ir.pages.iter_mut().find(|p| p.page_number == page_number) {
-            page.image_count = non_deco_indices.len();
+            page.image_count = images.len();
         }
     }
 }
