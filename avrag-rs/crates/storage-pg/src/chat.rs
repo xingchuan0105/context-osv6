@@ -32,7 +32,7 @@ impl crate::PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select id, session_id, role, content, answer_blocks, agent_id, agent_name, agent_icon, citations, tool_results, turn_metadata, created_at
+            select id, session_id, role, content, answer_blocks, agent_id, agent_name, agent_icon, citations, tool_results, turn_metadata, resolved_query, created_at
             from chat_messages
             where session_id = $1
             order by id asc

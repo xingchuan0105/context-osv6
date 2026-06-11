@@ -171,6 +171,8 @@ mod tests {
                 domain: "technology".into(),
                 genre: "manual".into(),
                 era: "contemporary".into(),
+                author: None,
+                publication_date: None,
             }],
             profile: common::DocScopeProfile {
                 languages: vec!["zh".to_string()],

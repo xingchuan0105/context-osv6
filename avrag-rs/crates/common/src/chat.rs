@@ -59,6 +59,8 @@ pub struct ChatMessage {
     pub tool_results: Vec<ToolResult>,
     #[serde(default)]
     pub turn_metadata: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_query: Option<String>,
     pub created_at: String,
 }
 

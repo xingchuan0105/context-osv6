@@ -49,7 +49,12 @@ class _Client:
     async def chunk_fetch(self, chunk_id):
         return _rpc("chunk_fetch", {"chunk_id": chunk_id})["chunks"]
     async def doc_summary(self, doc_ids, level="doc"):
-        return _rpc("doc_summary", {"doc_ids": doc_ids, "level": level})
+        return _rpc("doc_summary", {"doc_ids": doc_ids, "level": level})["chunks"]
+    async def doc_profile(self, doc_ids, fields=None):
+        payload = {"doc_ids": doc_ids}
+        if fields:
+            payload["fields"] = fields
+        return _rpc("doc_profile", payload)["chunks"]
 
 client = _Client()
 "#
@@ -63,6 +68,7 @@ pub fn bridge_shim_client_method_names() -> &'static [&'static str] {
         "graph_search",
         "chunk_fetch",
         "doc_summary",
+        "doc_profile",
     ]
 }
 
@@ -184,7 +190,10 @@ mod unix_impl {
     fn bridge_pump_runtime() -> &'static tokio::runtime::Runtime {
         static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
         RUNTIME.get_or_init(|| {
-            tokio::runtime::Builder::new_current_thread()
+            // Multi-thread: doc_profile/doc_metadata use tokio::join! for parallel PG
+            // reads; a current-thread runtime can stall when the shared pool is busy.
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
                 .enable_all()
                 .build()
                 .expect("bridge pump runtime")
@@ -407,6 +416,7 @@ mod bridge_shim_tests {
                 "graph_search",
                 "chunk_fetch",
                 "doc_summary",
+                "doc_profile",
             ]
         );
         assert!(!bridge_shim_client_method_names().contains(&"rerank"));

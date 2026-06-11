@@ -73,6 +73,7 @@ fn make_session_context() -> SessionContext {
                 citations: Vec::new(),
                 tool_results: Vec::new(),
                 turn_metadata: None,
+                resolved_query: None,
                 created_at: "2026-03-22T00:00:00Z".to_string(),
             },
             ChatMessage {
@@ -87,6 +88,7 @@ fn make_session_context() -> SessionContext {
                 citations: Vec::new(),
                 tool_results: Vec::new(),
                 turn_metadata: None,
+                resolved_query: None,
                 created_at: "2026-03-22T00:01:00Z".to_string(),
             },
         ],

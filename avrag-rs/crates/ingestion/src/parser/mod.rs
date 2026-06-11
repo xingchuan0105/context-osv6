@@ -3,9 +3,11 @@ mod html;
 mod mineru;
 mod office_service;
 mod pdf;
+mod pdf_renderer_service;
 mod probe;
 mod router;
 mod text;
+mod visual_pdf;
 
 use std::collections::BTreeMap;
 
@@ -22,6 +24,11 @@ pub use office_service::{
     OfficeParserServiceConfig,
 };
 pub use pdf::PdfParser;
+pub use pdf_renderer_service::{
+    PdfRendererServiceClient, PdfRendererServiceConfig, RenderedPdfPage, RenderPagesResponse,
+    chunk_page_ranges, page_range_metadata, pages_per_visual_chunk, visual_render_strategy,
+};
+pub use visual_pdf::VisualPdfParser;
 pub use probe::{ParseProbe, ParseProbeConfig, ParseProbeResult, PdfPageProbeResult};
 pub use router::{
     ExternalParseKind, ExternalParsePlan, LocalParseKind, LocalParsePlan, OfficeDocType,

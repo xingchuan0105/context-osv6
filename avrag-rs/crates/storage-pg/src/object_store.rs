@@ -110,6 +110,7 @@ impl ObjectStoreHandle {
     }
 }
 
+#[derive(Clone)]
 pub struct LocalObjectStore {
     root: PathBuf,
 }
@@ -234,9 +235,19 @@ impl LocalObjectStore {
     }
 }
 
+#[derive(Clone)]
 pub struct S3ObjectStore {
     client: aws_sdk_s3::Client,
     bucket: String,
+}
+
+impl Clone for ObjectStoreHandle {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Local(store) => Self::Local(store.clone()),
+            Self::S3(store) => Self::S3(store.clone()),
+        }
+    }
 }
 
 impl S3ObjectStore {

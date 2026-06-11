@@ -245,6 +245,7 @@ fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
     } else {
         Some(turn_metadata_value)
     };
+    let resolved_query: Option<String> = row.try_get("resolved_query").ok().flatten();
     Ok(ChatMessage {
         id: row.try_get("id")?,
         session_id: session_id.to_string(),
@@ -257,6 +258,7 @@ fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
         citations,
         tool_results,
         turn_metadata,
+        resolved_query,
         created_at: created_at.to_rfc3339(),
     })
 }

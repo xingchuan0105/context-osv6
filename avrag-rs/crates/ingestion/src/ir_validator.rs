@@ -219,6 +219,16 @@ pub fn validate_document_ir(document: &DocumentIr) -> Result<(), DocumentIrValid
                 block.page,
             ));
         }
+
+        if matches!(block.block_type, BlockType::PageRaster) && block.asset_refs.is_empty() {
+            issues.push(issue(
+                "page_raster_missing_asset",
+                format!("page raster block {} is missing render asset", block.block_id),
+                Some(block.block_id.clone()),
+                None,
+                block.page,
+            ));
+        }
     }
 
     let mut asset_ids = BTreeSet::new();

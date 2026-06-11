@@ -35,6 +35,10 @@ fn mm_embedding_cache_key(
         hasher.update(b"image:");
         hasher.update(image.as_bytes());
     }
+    for image in &input.images {
+        hasher.update(b"images:");
+        hasher.update(image.as_bytes());
+    }
     if let Some(video) = input.video.as_deref() {
         hasher.update(b"video:");
         hasher.update(video.as_bytes());
@@ -46,10 +50,19 @@ fn mm_embedding_cache_key(
     }
 }
 
+/// Default per-image token estimate for rate limiting (DashScope ~896/image observed).
+pub fn default_image_token_estimate() -> usize {
+    std::env::var("MM_EMBEDDING_IMAGE_TOKEN_ESTIMATE")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(896)
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct MultiModalEmbeddingInput {
     pub text: Option<String>,
     pub image: Option<String>,
+    pub images: Vec<String>,
     pub video: Option<String>,
 }
 
@@ -58,6 +71,7 @@ impl MultiModalEmbeddingInput {
         Self {
             text: Some(text.into()),
             image: None,
+            images: Vec::new(),
             video: None,
         }
     }
@@ -66,15 +80,80 @@ impl MultiModalEmbeddingInput {
         Self {
             text: Some(text.into()),
             image: Some(image.into()),
+            images: Vec::new(),
             video: None,
         }
     }
 
-    fn modality_count(&self) -> usize {
-        usize::from(self.text.is_some())
-            + usize::from(self.image.is_some())
-            + usize::from(self.video.is_some())
+    pub fn text_images(text: impl Into<String>, images: Vec<String>) -> Self {
+        Self {
+            text: Some(text.into()),
+            image: None,
+            images,
+            video: None,
+        }
     }
+
+    pub fn image_count(&self) -> usize {
+        usize::from(self.image.is_some()) + self.images.len()
+    }
+
+    pub fn estimate_tokens(&self) -> usize {
+        let text_tokens = self
+            .text
+            .as_deref()
+            .map(crate::count_tokens)
+            .unwrap_or(0);
+        let per_image = default_image_token_estimate();
+        let image_tokens = self.image_count() * per_image;
+        let video_tokens = usize::from(self.video.is_some()) * per_image;
+        text_tokens + image_tokens + video_tokens
+    }
+
+}
+
+fn build_dashscope_multimodal_contents(input: &MultiModalEmbeddingInput) -> Vec<serde_json::Value> {
+    let mut contents = Vec::new();
+    if let Some(text) = input
+        .text
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        contents.push(json!({ "text": text }));
+    }
+
+    let image_refs: Vec<&str> = if !input.images.is_empty() {
+        input
+            .images
+            .iter()
+            .map(|value| value.as_str())
+            .filter(|value| !value.trim().is_empty())
+            .collect()
+    } else if let Some(image) = input
+        .image
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        vec![image]
+    } else {
+        Vec::new()
+    };
+    for image in image_refs {
+        contents.push(json!({ "image": image }));
+    }
+
+    if let Some(video) = input
+        .video
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        contents.push(json!({ "video": video }));
+    }
+
+    contents
 }
 
 #[derive(Debug, Clone)]
@@ -214,45 +293,17 @@ impl EmbeddingClient {
             }
         }
 
-        let estimated_tokens = input
-            .text
-            .as_deref()
-            .map(|t| crate::count_tokens(t))
-            .unwrap_or(100);
+        let estimated_tokens = input.estimate_tokens();
         self.check_rate_limit(estimated_tokens)?;
 
-        let mut content = serde_json::Map::new();
-        if let Some(text) = input
-            .text
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            content.insert("text".to_string(), json!(text));
-        }
-        if let Some(image) = input
-            .image
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            content.insert("image".to_string(), json!(image));
-        }
-        if let Some(video) = input
-            .video
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            content.insert("video".to_string(), json!(video));
-        }
-        if content.is_empty() {
+        let contents = build_dashscope_multimodal_contents(input);
+        if contents.is_empty() {
             anyhow::bail!("multimodal embedding input is empty");
         }
 
         let mut parameters = serde_json::Map::new();
         parameters.insert("output_type".to_string(), json!("dense"));
-        if input.modality_count() > 1 {
+        if contents.len() > 1 {
             parameters.insert("enable_fusion".to_string(), json!(true));
         }
         if let Some(dimension) = dimension.or(self.config.dimensions) {
@@ -262,7 +313,7 @@ impl EmbeddingClient {
         let request_body = json!({
             "model": self.config.model,
             "input": {
-                "contents": [serde_json::Value::Object(content)]
+                "contents": contents
             },
             "parameters": serde_json::Value::Object(parameters),
         });
@@ -288,24 +339,54 @@ impl EmbeddingClient {
         }
 
         #[derive(Deserialize)]
-        struct DashScopeEmbeddingResponse {
-            output: DashScopeEmbeddingOutput,
-        }
-
-        #[derive(Deserialize)]
         struct DashScopeEmbeddingOutput {
             embeddings: Vec<DashScopeEmbeddingItem>,
+        }
+
+        #[derive(Deserialize, Default)]
+        struct DashScopeUsage {
+            #[serde(default)]
+            image_tokens: Option<u32>,
+            #[serde(default)]
+            total_tokens: Option<u32>,
         }
 
         #[derive(Deserialize)]
         struct DashScopeEmbeddingItem {
             embedding: Vec<f32>,
+            #[serde(default)]
+            image_tokens: Option<u32>,
+        }
+
+        #[derive(Deserialize)]
+        struct DashScopeEmbeddingResponse {
+            output: DashScopeEmbeddingOutput,
+            #[serde(default)]
+            usage: Option<DashScopeUsage>,
         }
 
         let resp: DashScopeEmbeddingResponse = response
             .json()
             .await
             .context("Failed to parse DashScope multimodal embedding response")?;
+
+        if let Some(limiter) = &self.rate_limiter {
+            let actual_tokens = resp
+                .usage
+                .as_ref()
+                .and_then(|usage| usage.image_tokens.or(usage.total_tokens))
+                .or_else(|| {
+                    resp.output
+                        .embeddings
+                        .first()
+                        .and_then(|item| item.image_tokens)
+                })
+                .map(|value| value as usize)
+                .unwrap_or(estimated_tokens);
+            if actual_tokens > estimated_tokens {
+                let _ = limiter.check_request(actual_tokens.saturating_sub(estimated_tokens));
+            }
+        }
 
         let vector = resp
             .output
@@ -420,7 +501,47 @@ mod tests {
     #[test]
     fn test_multimodal_input_counts_modalities() {
         let input = MultiModalEmbeddingInput::text_image("diagram", "https://example.com/a.png");
-        assert_eq!(input.modality_count(), 2);
+        assert_eq!(super::build_dashscope_multimodal_contents(&input).len(), 2);
+    }
+
+    #[test]
+    fn test_multimodal_token_estimate_uses_image_count() {
+        let single = MultiModalEmbeddingInput::text_image("cap", "data:image/jpeg;base64,abc");
+        let multi = MultiModalEmbeddingInput::text_images(
+            "pages 1-4",
+            vec![
+                "data:image/jpeg;base64,a".to_string(),
+                "data:image/jpeg;base64,b".to_string(),
+                "data:image/jpeg;base64,c".to_string(),
+                "data:image/jpeg;base64,d".to_string(),
+            ],
+        );
+        assert!(multi.estimate_tokens() > single.estimate_tokens());
+        assert!(multi.estimate_tokens() >= 4 * default_image_token_estimate());
+    }
+
+    #[test]
+    fn test_pure_image_estimate_not_100_tokens() {
+        let input = MultiModalEmbeddingInput {
+            text: None,
+            image: Some("data:image/jpeg;base64,abc".to_string()),
+            images: Vec::new(),
+            video: None,
+        };
+        assert!(input.estimate_tokens() >= default_image_token_estimate());
+    }
+
+    #[test]
+    fn test_build_dashscope_contents_uses_separate_image_entries() {
+        let input = MultiModalEmbeddingInput::text_images(
+            "pages 1-4",
+            vec!["img-a".to_string(), "img-b".to_string()],
+        );
+        let contents = super::build_dashscope_multimodal_contents(&input);
+        assert_eq!(contents.len(), 3);
+        assert_eq!(contents[0]["text"], "pages 1-4");
+        assert_eq!(contents[1]["image"], "img-a");
+        assert_eq!(contents[2]["image"], "img-b");
     }
 
     #[test]

@@ -49,6 +49,8 @@ struct ModelSummaryMetadata {
     domain: Option<String>,
     genre: Option<String>,
     era: Option<String>,
+    author: Option<String>,
+    publication_date: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -283,6 +285,14 @@ fn build_summary_metadata(
             .filter(|value| !value.is_empty())
             .map(|value| Era::from(value.as_str()))
             .unwrap_or(Era::Unknown),
+        author: metadata
+            .author
+            .map(|value| normalize_metadata_field(&value))
+            .filter(|value| !value.is_empty()),
+        publication_date: metadata
+            .publication_date
+            .map(|value| normalize_metadata_field(&value))
+            .filter(|value| !value.is_empty()),
     }
 }
 

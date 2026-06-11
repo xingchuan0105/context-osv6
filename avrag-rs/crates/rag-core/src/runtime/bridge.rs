@@ -6,8 +6,8 @@ use async_trait::async_trait;
 use avrag_auth::AuthContext;
 use avrag_code_interpreter::HostBridge;
 use common::{
-    DenseRetrievalArgs, DenseRetrievalModality, DocSummaryArgs, DocSummaryLevel, GraphRetrievalArgs,
-    IndexLookupArgs, LexicalRetrievalArgs, ToolCall, ToolResult, ToolStatus,
+    DenseRetrievalArgs, DenseRetrievalModality, DocProfileArgs, DocSummaryArgs, DocSummaryLevel,
+    GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs, ToolCall, ToolResult, ToolStatus,
 };
 use serde_json::{json, Value};
 use tracing::info;
@@ -50,6 +50,7 @@ impl RuntimeBridge {
             "graph_search",
             "chunk_fetch",
             "doc_summary",
+            "doc_profile",
         ]
     }
 
@@ -75,7 +76,7 @@ impl RuntimeBridge {
                     version: "1.0".to_string(),
                     args: serde_json::to_value(DenseRetrievalArgs {
                         queries: vec![query.to_string()],
-                        modality: DenseRetrievalModality::Text,
+                        modality: DenseRetrievalModality::Both,
                         top_k,
                         doc_scope: self.doc_scope.clone(),
                     })
@@ -169,6 +170,35 @@ impl RuntimeBridge {
                     .unwrap_or_default(),
                 })
             }
+            "doc_profile" => {
+                let doc_ids = args
+                    .get("doc_ids")
+                    .and_then(|v| v.as_array())
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|v| v.as_str().map(str::to_owned))
+                            .collect::<Vec<_>>()
+                    })
+                    .filter(|ids| !ids.is_empty())
+                    .ok_or_else(|| Self::bridge_error("invalid_args", "doc_ids is required"))?;
+                let fields = args
+                    .get("fields")
+                    .and_then(|v| v.as_array())
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|v| v.as_str().map(str::to_owned))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                Ok(ToolCall {
+                    tool: "doc_profile".to_string(),
+                    version: "1.0".to_string(),
+                    args: serde_json::to_value(DocProfileArgs { doc_ids, fields })
+                        .unwrap_or_default(),
+                })
+            }
             other => Err(Self::bridge_error(
                 "unknown_method",
                 format!("unsupported bridge method: {other}"),
@@ -196,7 +226,7 @@ impl RuntimeBridge {
                 json!({ "chunks": chunks_with_content_field(data) })
             }
             "graph_retrieval" => json!({ "chunks": data }),
-            "doc_summary" => json!({ "chunks": data }),
+            "doc_summary" | "doc_profile" => json!({ "chunks": data }),
             _ => json!({ "chunks": data }),
         }
     }

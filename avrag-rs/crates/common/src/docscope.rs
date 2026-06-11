@@ -219,6 +219,10 @@ pub struct SummaryMetadata {
     pub domain: Domain,
     pub genre: Genre,
     pub era: Era,
+    #[serde(default)]
+    pub author: Option<String>,
+    #[serde(default)]
+    pub publication_date: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

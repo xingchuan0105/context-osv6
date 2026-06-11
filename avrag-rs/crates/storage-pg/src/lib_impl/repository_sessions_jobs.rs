@@ -21,6 +21,8 @@ pub struct ChatTurn<'a> {
     pub tool_results: &'a [common::ToolResult],
     /// Metadata for the user message row (e.g. query_resolution per ADR-0008).
     pub user_turn_metadata: Option<serde_json::Value>,
+    /// Non-destructive resolved query for retrieval (ADR-0008); `user_content` stays raw.
+    pub user_resolved_query: Option<&'a str>,
 }
 
 impl PgAppRepository {
@@ -193,14 +195,15 @@ impl PgAppRepository {
             .unwrap_or_else(|| json!({}));
         sqlx::query(
             r#"
-            insert into chat_messages (org_id, session_id, role, content, citations, turn_metadata)
-            values ($1, $2, 'user', $3, '[]'::jsonb, $4)
+            insert into chat_messages (org_id, session_id, role, content, citations, turn_metadata, resolved_query)
+            values ($1, $2, 'user', $3, '[]'::jsonb, $4, $5)
             "#,
         )
         .bind(context.org_id().into_uuid())
         .bind(session_id)
         .bind(turn.user_content)
         .bind(user_turn_metadata)
+        .bind(turn.user_resolved_query)
         .execute(tx.inner())
         .await?;
 

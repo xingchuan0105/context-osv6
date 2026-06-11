@@ -69,7 +69,8 @@ impl SectionIndexGenerator {
         let mut chunks_map = serde_json::Map::new();
         for chunk in chunks {
             let preview = if chunk.text.len() > 1200 {
-                format!("{}…", &chunk.text[..1200])
+                let end = chunk.text.floor_char_boundary(1200);
+                format!("{}…", &chunk.text[..end])
             } else {
                 chunk.text.clone()
             };
@@ -121,6 +122,18 @@ pub fn parse_section_index_response(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chunk_preview_truncation_respects_utf8_boundaries() {
+        // Em-dash is 3 bytes in UTF-8; slicing at a byte inside it must not panic.
+        let em_dash = "—";
+        let text = format!("{}{}", "x".repeat(1198), em_dash);
+        assert!(text.len() > 1200);
+        let end = text.floor_char_boundary(1200);
+        let _preview = format!("{}…", &text[..end]);
+        assert!(end <= 1200);
+        assert!(text.is_char_boundary(end));
+    }
 
     #[test]
     fn parse_section_index_filters_invalid_chunk_ids() {

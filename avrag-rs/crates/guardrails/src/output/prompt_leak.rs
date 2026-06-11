@@ -28,10 +28,6 @@ const PROMPT_SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../prompts/clusters/format/SKILL.md"),
     ),
     (
-        "session-summary",
-        include_str!("../../../../prompts/pipeline/session-summary.system.md"),
-    ),
-    (
         "user-profile-extraction",
         include_str!("../../../../prompts/pipeline/user-profile-extraction.system.md"),
     ),

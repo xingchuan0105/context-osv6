@@ -22,7 +22,7 @@ pub use section_index::{
     SectionIndexChunk, SectionIndexGenerator, SectionIndexOutput, SectionIndexSection,
 };
 pub use summary::SummaryGenerator;
-pub use synthesizer::{AnswerSynthesizer, SynthesisOutput};
+pub use synthesizer::{SynthesisOutput, parse_synthesis_output};
 pub use token_counter::{count_chat_messages, count_system_and_query, count_tokens};
 
 /// Trait for LLM completion providers.

@@ -99,7 +99,7 @@ pub struct OfficeParsePlan {
 #[serde(rename_all = "snake_case")]
 pub enum PdfPageBackend {
     EdgeParse,
-    MineruOcr,
+    VisualRaster,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -284,7 +284,7 @@ fn build_pdf_parse_plan(
         || probe_result.image_hint_count > config.image_heavy_threshold
         || probe_result.table_hint_count > config.table_heavy_threshold
     {
-        PdfPageBackend::MineruOcr
+        PdfPageBackend::VisualRaster
     } else {
         PdfPageBackend::EdgeParse
     };
@@ -320,11 +320,11 @@ fn build_pdf_parse_plan(
 
 fn build_pdf_page_plan(page_probe: &PdfPageProbeResult, config: &ParseProbeConfig) -> PdfPagePlan {
     let (backend, reason) = if page_probe.likely_scanned {
-        (PdfPageBackend::MineruOcr, RouteReason::ScannedPdf)
+        (PdfPageBackend::VisualRaster, RouteReason::ScannedPdf)
     } else if page_probe.image_hint_count > config.image_heavy_threshold
         || page_probe.table_hint_count > config.table_heavy_threshold
     {
-        (PdfPageBackend::MineruOcr, RouteReason::ComplexPdf)
+        (PdfPageBackend::VisualRaster, RouteReason::ComplexPdf)
     } else {
         (PdfPageBackend::EdgeParse, RouteReason::SimplePdf)
     };
@@ -344,7 +344,7 @@ fn summarize_pdf_reason(probe_result: &ParseProbeResult, plan: &ParsePlan) -> Ro
     if pdf_plan
         .pages
         .iter()
-        .any(|page| page.backend == PdfPageBackend::MineruOcr)
+        .any(|page| page.backend == PdfPageBackend::VisualRaster)
     {
         if probe_result.likely_scanned
             || pdf_plan
@@ -595,7 +595,7 @@ mod tests {
         let plan = build_pdf_parse_plan(&probe_result, &ParseProbeConfig::default());
         assert_eq!(plan.pages.len(), 3);
         assert_eq!(plan.pages[0].backend, PdfPageBackend::EdgeParse);
-        assert_eq!(plan.pages[1].backend, PdfPageBackend::MineruOcr);
+        assert_eq!(plan.pages[1].backend, PdfPageBackend::VisualRaster);
         assert_eq!(plan.pages[2].backend, PdfPageBackend::EdgeParse);
 
         let reason = summarize_pdf_reason(&probe_result, &ParsePlan::Pdf(plan));

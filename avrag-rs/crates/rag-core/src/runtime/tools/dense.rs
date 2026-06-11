@@ -1,7 +1,7 @@
 use avrag_auth::AuthContext;
 use common::{
-    ChatRequest, DegradeReason, DegradeTraceItem, DenseRetrievalArgs, LexicalRetrievalArgs, RagPlan,
-    RagPlanItem, ToolResult, ToolStatus, ToolTrace,
+    ChatRequest, DegradeReason, DegradeTraceItem, DenseRetrievalArgs, DenseRetrievalModality,
+    LexicalRetrievalArgs, RagPlan, RagPlanItem, ToolResult, ToolStatus, ToolTrace,
 };
 
 use crate::RagRuntime;
@@ -89,13 +89,56 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
     };
 
     let started = std::time::Instant::now();
-    match runtime
-        .retrieve_text_dense_stage(&request, auth, &rag_plan)
-        .await
-    {
+    let include_text = matches!(
+        args.modality,
+        DenseRetrievalModality::Text | DenseRetrievalModality::Both
+    );
+    let include_multimodal = matches!(
+        args.modality,
+        DenseRetrievalModality::Mm | DenseRetrievalModality::Both
+    );
+
+    let text_result = if include_text {
+        runtime
+            .retrieve_text_dense_stage(&request, auth, &rag_plan)
+            .await
+    } else {
+        Ok((Vec::new(), Vec::new()))
+    };
+
+    match text_result {
         Ok((lists, mut degrade_trace)) => {
             let mut chunks: Vec<crate::ScoredChunk> =
                 lists.into_iter().flat_map(|list| list.chunks).collect();
+
+            if include_multimodal {
+                match runtime
+                    .retrieve_multimodal_dense_stage(&request, auth, &rag_plan)
+                    .await
+                {
+                    Ok((mm_chunks, mm_degrade)) => {
+                        chunks.extend(mm_chunks);
+                        degrade_trace.extend(mm_degrade);
+                    }
+                    Err(error) => degrade_trace.push(DegradeTraceItem {
+                        stage: "dense_retrieval".to_string(),
+                        reason: DegradeReason::Other(format!(
+                            "multimodal dense retrieval failed: {error}"
+                        )),
+                        impact: "skip multimodal dense".to_string(),
+                    }),
+                }
+            }
+
+            chunks.sort_by(|left, right| {
+                right
+                    .score
+                    .partial_cmp(&left.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            if args.top_k > 0 && chunks.len() > args.top_k {
+                chunks.truncate(args.top_k);
+            }
 
             if chunks.is_empty()
                 && (embedding_failure_in_trace(&degrade_trace) || !degrade_trace.is_empty())

@@ -935,6 +935,8 @@ mod tests {
                 domain: common::Domain::Unknown,
                 genre: common::Genre::Unknown,
                 era: common::Era::Contemporary,
+                author: None,
+                publication_date: None,
             },
         };
         repo.update_document_summary(&ctx, document_id, &summary_output, None, None)
@@ -1013,6 +1015,7 @@ mod tests {
                     citations: &[],
                     tool_results: &tool_results,
                     user_turn_metadata: None,
+                    user_resolved_query: None,
                 },
             )
             .await
@@ -1084,6 +1087,7 @@ mod tests {
                     citations: &[],
                     tool_results: &[],
                     user_turn_metadata: Some(metadata),
+                    user_resolved_query: Some("Who wrote Antifragile?"),
                 },
             )
             .await
@@ -1102,6 +1106,10 @@ mod tests {
         assert_eq!(
             stored_meta["query_resolution"]["resolved_query"],
             "Who wrote Antifragile?"
+        );
+        assert_eq!(
+            user_row.resolved_query.as_deref(),
+            Some("Who wrote Antifragile?")
         );
         assert!(message_id > 0);
     }

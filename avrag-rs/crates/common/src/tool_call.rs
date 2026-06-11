@@ -193,10 +193,10 @@ pub struct DenseRetrievalArgs {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DenseRetrievalModality {
-    #[default]
     Text,
     #[serde(alias = "image")]
     Mm,
+    #[default]
     Both,
 }
 
@@ -671,6 +671,13 @@ mod tests {
         .unwrap();
         assert_eq!(req.items.len(), 1);
         assert_eq!(req.graph_hints.len(), 1);
+    }
+
+    #[test]
+    fn dense_retrieval_args_default_modality_is_both() {
+        let args: DenseRetrievalArgs =
+            serde_json::from_str(r#"{"queries":["black swan"]}"#).unwrap();
+        assert_eq!(args.modality, DenseRetrievalModality::Both);
     }
 
     #[test]

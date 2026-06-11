@@ -61,7 +61,8 @@ pub use rag_execute::{
     RelationPath, RetrievalBundle, RetrievedChunk, ScoreBreakdown,
 };
 pub use tool_call::{
-    DenseRetrievalArgs, DenseRetrievalModality, DocMetadataArgs, DocSummaryArgs, DocSummaryLevel,
+    DenseRetrievalArgs, DenseRetrievalModality, DocMetadataArgs, DocProfileArgs, DocSummaryArgs,
+    DocSummaryLevel,
     GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs, MergeConfig, NextStep,
     RetrievalPlannerOutput, RuntimeExecuteRequest, RuntimeExecuteResponse, ToolCall,
     ToolCallAdapterError, ToolResult, ToolSpec, ToolStatus, ToolTrace,
