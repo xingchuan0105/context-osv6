@@ -2426,25 +2426,34 @@ async fn execute_pdf_parse(
         )
     };
 
-    let paddle_ir = if paddle_pages.is_empty() {
-        None
+    let (paddle_ir, paddle_successful) = if paddle_pages.is_empty() {
+        (None, std::collections::HashSet::new())
     } else {
         match execute_paddle_ocr(bytes, filename, document_id, &paddle_pages).await {
-            Ok(ir) => Some(ir),
+            Ok((ir, pages)) => (Some(ir), pages),
             Err(e) => {
                 tracing::warn!(filename, error = %e, "PaddleOCR failed, falling back to VisualRaster for OCR pages");
-                None
+                (None, std::collections::HashSet::new())
             }
         }
     };
     let paddle_failed = !paddle_pages.is_empty() && paddle_ir.is_none();
 
-    // Fallback: if PaddleOCR was requested but failed, route those pages to VisualRaster
-    let effective_visual_pages = if paddle_pages.is_empty() || paddle_ir.is_some() {
+    // Fallback: PaddleOCR pages without successful results fall back to VisualRaster
+    let paddle_needs_fallback: Vec<u32> = if paddle_pages.is_empty() {
+        Vec::new()
+    } else {
+        paddle_pages
+            .iter()
+            .filter(|p| !paddle_successful.contains(p))
+            .copied()
+            .collect()
+    };
+    let effective_visual_pages = if paddle_needs_fallback.is_empty() {
         visual_pages.clone()
     } else {
         let mut pages = visual_pages;
-        pages.extend(&paddle_pages);
+        pages.extend(&paddle_needs_fallback);
         pages.sort();
         pages
     };
@@ -2470,7 +2479,7 @@ async fn execute_pdf_parse(
         )
     };
 
-    let mut merged = merge_pdf_ir(document_id, filename, plan, digital_ir, paddle_ir, visual_ir)?;
+    let mut merged = merge_pdf_ir(document_id, filename, plan, digital_ir, paddle_ir, visual_ir, &paddle_successful)?;
 
     // Write page_status metadata: [{page_no, status, route}, ...]
     let page_status: Vec<serde_json::Value> = plan
@@ -2515,7 +2524,7 @@ async fn execute_paddle_ocr(
     filename: &str,
     document_id: Uuid,
     paddle_pages: &[u32],
-) -> Result<DocumentIr, IngestionError> {
+) -> Result<(DocumentIr, std::collections::HashSet<u32>), IngestionError> {
     let config = PaddleOcrConfig::from_env().map_err(|e| {
         IngestionError::StateSink(format!("PaddleOCR config error: {e}"))
     })?;
@@ -2544,7 +2553,12 @@ async fn execute_paddle_ocr(
         }
     }
 
-    Ok(build_document_ir_from_paddle(document_id, filename, &all_results))
+    let successful_pages: std::collections::HashSet<u32> = all_results
+        .iter()
+        .filter(|r| !r.text.is_empty())
+        .map(|r| r.page_number)
+        .collect();
+    Ok((build_document_ir_from_paddle(document_id, filename, &all_results), successful_pages))
 }
 
 fn group_contiguous_pages(pages: &[u32]) -> Vec<(u32, u32)> {
@@ -2637,6 +2651,10 @@ fn build_document_ir_from_paddle(
 
         for (fig_idx, figure) in page.figures.iter().enumerate() {
             let asset_id = format!("paddle-p{}-fig{}", page.page_number, fig_idx);
+            let mut asset_metadata = std::collections::BTreeMap::new();
+            asset_metadata.insert("source".to_string(), "paddle_ocr".to_string());
+            asset_metadata.insert("ephemeral_url".to_string(), "true".to_string());
+            asset_metadata.insert("original_url".to_string(), figure.image_url.clone());
             ir.assets.push(AssetIr {
                 asset_id: asset_id.clone(),
                 page: Some(page.page_number),
@@ -2646,7 +2664,7 @@ fn build_document_ir_from_paddle(
                 width: None,
                 height: None,
                 parser_backend: ParseBackend::PaddleOcrPdf,
-                metadata: Default::default(),
+                metadata: asset_metadata,
             });
 
             ir.blocks.push(BlockIr {
@@ -2682,6 +2700,7 @@ fn merge_pdf_ir(
     digital_ir: Option<DocumentIr>,
     paddle_ir: Option<DocumentIr>,
     visual_ir: Option<DocumentIr>,
+    paddle_successful: &std::collections::HashSet<u32>,
 ) -> Result<DocumentIr, IngestionError> {
     let title = digital_ir
         .as_ref()
@@ -2762,16 +2781,19 @@ fn merge_pdf_ir(
     for page_plan in &plan.pages {
         let source_ir = match page_plan.backend {
             PdfPageBackend::EdgeParse => digital_ir.as_ref(),
-            PdfPageBackend::PaddleOcr => paddle_ir
-                .as_ref()
-                .or(visual_ir.as_ref())
-                .or(digital_ir.as_ref()),
+            PdfPageBackend::PaddleOcr => {
+                if paddle_ir.is_some() && paddle_successful.contains(&page_plan.page_number) {
+                    paddle_ir.as_ref()
+                } else {
+                    visual_ir.as_ref().or(digital_ir.as_ref())
+                }
+            }
             PdfPageBackend::VisualRaster => visual_ir.as_ref(),
         };
         let page_backend = match page_plan.backend {
             PdfPageBackend::EdgeParse => ParseBackend::EdgeParsePdf,
             PdfPageBackend::PaddleOcr => {
-                if paddle_ir.is_some() {
+                if paddle_ir.is_some() && paddle_successful.contains(&page_plan.page_number) {
                     ParseBackend::PaddleOcrPdf
                 } else {
                     ParseBackend::VisualRasterPdf
@@ -2953,7 +2975,8 @@ async fn enrich_b_class_figures(
                 None
             };
 
-            let figure_text = vlm_summary.clone().unwrap_or_default();
+            let vlm_failed = vlm_summary.is_none();
+            let figure_text = vlm_summary.unwrap_or_default();
 
             ir.assets.push(AssetIr {
                 asset_id: asset_id.clone(),
@@ -2968,7 +2991,9 @@ async fn enrich_b_class_figures(
             });
 
             let mut metadata = std::collections::BTreeMap::new();
-            if vlm_summary.is_some() {
+            if vlm_failed {
+                metadata.insert("vlm_failed".to_string(), "true".to_string());
+            } else {
                 metadata.insert("vlm_summarized".to_string(), "true".to_string());
             }
 
@@ -2989,6 +3014,25 @@ async fn enrich_b_class_figures(
                 parser_backend: ParseBackend::EdgeParsePdf,
                 metadata,
             });
+        }
+
+        // Cross-link figures and text blocks on the same page
+        let page_figure_ids: Vec<String> = ir.blocks.iter()
+            .filter(|b| b.page == Some(page_number) && b.block_type == BlockType::Figure)
+            .map(|b| b.block_id.clone())
+            .collect();
+        let page_text_ids: Vec<String> = ir.blocks.iter()
+            .filter(|b| b.page == Some(page_number) && b.block_type == BlockType::Paragraph)
+            .map(|b| b.block_id.clone())
+            .collect();
+
+        if let (Some(fig_id), Some(txt_id)) = (page_figure_ids.first(), page_text_ids.first()) {
+            if let Some(fig_block) = ir.blocks.iter_mut().find(|b| b.block_id == *fig_id) {
+                fig_block.metadata.insert("related_text_block_id".to_string(), txt_id.clone());
+            }
+            if let Some(txt_block) = ir.blocks.iter_mut().find(|b| b.block_id == *txt_id) {
+                txt_block.metadata.insert("related_figure_id".to_string(), fig_id.clone());
+            }
         }
 
         // Update page image count
@@ -3329,8 +3373,7 @@ async fn build_multimodal_index_records(
         .into_iter()
         .map(|(idx, vector)| {
             let chunk = &chunks[idx];
-            // OCR-fail fallback chunks (visual_raster_pdf) get down-weighted
-            let retrieval_weight = if chunk.parser_backend == "visual_raster_pdf" {
+            let retrieval_weight = if chunk.chunk_type == "page_raster" && chunk.parser_backend == "visual_raster_pdf" {
                 Some(0.4)
             } else {
                 None
@@ -4715,7 +4758,7 @@ mod tests {
 
         // paddle_ir is None (OCR failed) — should fallback to visual_ir
         let merged =
-            merge_pdf_ir(doc_id, "test.pdf", &plan, None, None, Some(visual_ir)).unwrap();
+            merge_pdf_ir(doc_id, "test.pdf", &plan, None, None, Some(visual_ir), &std::collections::HashSet::new()).unwrap();
 
         assert_eq!(merged.pages.len(), 2, "should have 2 pages from visual fallback");
         assert_eq!(merged.blocks.len(), 1, "should have 1 block from visual fallback");
@@ -4763,6 +4806,7 @@ mod tests {
             None,
             Some(paddle_ir),
             None,
+            &std::collections::HashSet::from([1]),
         )
         .unwrap();
 
@@ -4820,6 +4864,7 @@ mod tests {
             Some(digital_ir),
             Some(paddle_ir),
             None,
+            &std::collections::HashSet::from([2]),
         )
         .unwrap();
 
@@ -4827,5 +4872,87 @@ mod tests {
             merged.metadata.get("pdf_route_mode").map(|s| s.as_str()),
             Some("hybrid_v2")
         );
+    }
+
+    #[test]
+    fn merge_pdf_ir_partial_paddle_success() {
+        let doc_id = Uuid::new_v4();
+        let plan = PdfParsePlan {
+            pages: vec![
+                PdfPagePlan {
+                    page_number: 1,
+                    backend: PdfPageBackend::PaddleOcr,
+                    reason: RouteReason::ScannedPdf,
+                },
+                PdfPagePlan {
+                    page_number: 2,
+                    backend: PdfPageBackend::PaddleOcr,
+                    reason: RouteReason::ScannedPdf,
+                },
+            ],
+        };
+
+        let mut paddle_ir = DocumentIr::new(
+            doc_id.to_string(),
+            "test.pdf".to_string(),
+            DocumentType::Pdf,
+            ParseBackend::PaddleOcrPdf,
+        );
+        paddle_ir.pages.push(PageIr {
+            page_number: 1,
+            backend: ParseBackend::PaddleOcrPdf,
+            text_char_count: 500,
+            ..Default::default()
+        });
+        paddle_ir.blocks.push(BlockIr {
+            block_id: "p1".to_string(),
+            page: Some(1),
+            block_type: BlockType::Paragraph,
+            modality: BlockModality::TextOnly,
+            text: "OCR text page 1".to_string(),
+            parser_backend: ParseBackend::PaddleOcrPdf,
+            ..Default::default()
+        });
+
+        let mut visual_ir = DocumentIr::new(
+            doc_id.to_string(),
+            "test.pdf".to_string(),
+            DocumentType::Pdf,
+            ParseBackend::VisualRasterPdf,
+        );
+        visual_ir.pages.push(PageIr {
+            page_number: 2,
+            backend: ParseBackend::VisualRasterPdf,
+            text_char_count: 200,
+            ..Default::default()
+        });
+        visual_ir.blocks.push(BlockIr {
+            block_id: "v2".to_string(),
+            page: Some(2),
+            block_type: BlockType::PageRaster,
+            modality: BlockModality::ImageWithContext,
+            text: "visual page 2".to_string(),
+            parser_backend: ParseBackend::VisualRasterPdf,
+            ..Default::default()
+        });
+
+        // Only page 1 succeeded in OCR; page 2 should fall back to visual
+        let paddle_successful = std::collections::HashSet::from([1]);
+        let merged = merge_pdf_ir(
+            doc_id,
+            "test.pdf",
+            &plan,
+            None,
+            Some(paddle_ir),
+            Some(visual_ir),
+            &paddle_successful,
+        )
+        .unwrap();
+
+        assert_eq!(merged.pages.len(), 2, "should have 2 pages");
+        assert_eq!(merged.pages[0].backend, ParseBackend::PaddleOcrPdf, "page 1 should be paddle");
+        assert_eq!(merged.pages[1].backend, ParseBackend::VisualRasterPdf, "page 2 should fall back to visual");
+        assert_eq!(merged.blocks[0].text, "OCR text page 1");
+        assert_eq!(merged.blocks[1].text, "visual page 2");
     }
 }
