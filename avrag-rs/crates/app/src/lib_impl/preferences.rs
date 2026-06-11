@@ -6,7 +6,7 @@ use crate::lib_impl::*;
 
 impl AppState {
     pub async fn load_user_preferences(&self, user_id: Uuid) -> Result<UserPreferences, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let profile = pg
                 .get_user_profile(&self.auth, user_id)
                 .await
@@ -19,7 +19,7 @@ impl AppState {
             return Ok(preferences);
         }
 
-        let state = self.inner.read().await;
+        let state = self.storage.inner().read().await;
         Ok(state
             .user_preferences
             .get(&user_id.to_string())
@@ -32,7 +32,7 @@ impl AppState {
         user_id: Uuid,
         preferences: &UserPreferences,
     ) -> Result<UserPreferences, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let existing_profile = pg
                 .get_user_profile(&self.auth, user_id)
                 .await
@@ -69,7 +69,7 @@ impl AppState {
             return Ok(preferences.clone());
         }
 
-        let mut state = self.inner.write().await;
+        let mut state = self.storage.inner().write().await;
         state
             .user_preferences
             .insert(user_id.to_string(), preferences.clone());

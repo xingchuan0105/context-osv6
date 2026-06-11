@@ -20,7 +20,7 @@ impl AppState {
         notebook_id: Option<&str>,
         document_id: Option<&str>,
     ) -> Vec<Document> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let notebook_uuid = notebook_id.and_then(|value| Uuid::parse_str(value).ok());
             let document_uuid = document_id.and_then(|value| Uuid::parse_str(value).ok());
             return pg
@@ -28,7 +28,7 @@ impl AppState {
                 .await
                 .unwrap_or_default();
         }
-        let state = self.inner.read().await;
+        let state = self.storage.inner().read().await;
         state
             .documents
             .values()
@@ -63,17 +63,17 @@ impl AppState {
         )
         .map_err(|error| AppError::validation(error.code(), error.to_string()))?;
 
-        if req.file_size > self.max_upload_file_size_bytes {
+        if req.file_size > self.storage.max_upload_file_size_bytes() {
             return Err(AppError::validation(
                 "file_too_large",
                 format!(
                     "file size {} exceeds maximum allowed size of {} bytes",
-                    req.file_size, self.max_upload_file_size_bytes
+                    req.file_size, self.storage.max_upload_file_size_bytes()
                 ),
             ));
         }
 
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             self.ensure_metric_quota("storage_bytes", req.file_size as i64)
                 .await?;
             let notebook_id =
@@ -175,7 +175,7 @@ impl AppState {
         };
 
         {
-            let mut state = self.inner.write().await;
+            let mut state = self.storage.inner().write().await;
             state.documents.insert(document_id.clone(), stored);
         }
         self.record_product_event_if_available(
@@ -229,7 +229,7 @@ impl AppState {
         document_id: &str,
         body: Vec<u8>,
     ) -> Result<StatusOnlyResponse, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
             let seed = pg
@@ -240,7 +240,7 @@ impl AppState {
             if !document_upload_status_is_mutable_for_app(&seed.status) {
                 return Err(upload_status_conflict_error(&seed.status));
             }
-            self.object_store
+            self.object_storage.object_store()
                 .put(&seed.object_path, &body)
                 .await
                 .map_err(|error| AppError::internal(error.to_string()))?;
@@ -249,7 +249,7 @@ impl AppState {
             });
         }
 
-        let mut state = self.inner.write().await;
+        let mut state = self.storage.inner().write().await;
         let stored = state
             .documents
             .get_mut(document_id)
@@ -292,7 +292,7 @@ impl AppState {
             + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
             let seed = pg
@@ -303,7 +303,7 @@ impl AppState {
             if !document_upload_status_is_mutable_for_app(&seed.status) {
                 return Err(upload_status_conflict_error(&seed.status));
             }
-            self.object_store
+            self.object_storage.object_store()
                 .put_stream(&seed.object_path, stream)
                 .await
                 .map_err(|error| AppError::internal(error.to_string()))?;
@@ -327,7 +327,7 @@ impl AppState {
         &self,
         document_id: &str,
     ) -> Result<StatusOnlyResponse, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let document_uuid =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
             let seed = pg
@@ -340,7 +340,7 @@ impl AppState {
                 return Err(upload_status_conflict_error(&seed.status));
             }
 
-            let object_metadata = match self.object_store.head(&seed.object_path).await {
+            let object_metadata = match self.object_storage.object_store().head(&seed.object_path).await {
                 Ok(metadata) => metadata,
                 Err(
                     ObjectStoreHeadError::NotFound { .. } | ObjectStoreHeadError::NotFile { .. },
@@ -448,7 +448,7 @@ impl AppState {
         }
 
         let (notebook_id, file_name, file_size, mime_type) = {
-            let mut state = self.inner.write().await;
+            let mut state = self.storage.inner().write().await;
             let stored = state
                 .documents
                 .get_mut(document_id)
@@ -496,7 +496,7 @@ impl AppState {
                 "deleting and deleted are reserved for the document deletion workflow",
             ));
         }
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
             let updated = pg
@@ -512,7 +512,7 @@ impl AppState {
             return Ok(());
         }
 
-        let mut state = self.inner.write().await;
+        let mut state = self.storage.inner().write().await;
         let stored = state
             .documents
             .get_mut(document_id)
@@ -561,7 +561,7 @@ impl AppState {
                 "deleting and deleted are reserved for the document deletion workflow",
             ));
         }
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
             let notebook_id = req
@@ -592,7 +592,7 @@ impl AppState {
             });
         }
 
-        let mut state = self.inner.write().await;
+        let mut state = self.storage.inner().write().await;
         let stored = state
             .documents
             .get_mut(document_id)
@@ -626,7 +626,7 @@ impl AppState {
     }
 
     pub async fn delete_document(&self, document_id: &str) -> Result<StatusOnlyResponse, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
             let outcome = pg
@@ -636,7 +636,7 @@ impl AppState {
             return handle_document_deletion_outcome(outcome);
         }
 
-        let mut state = self.inner.write().await;
+        let mut state = self.storage.inner().write().await;
         let stored = state
             .documents
             .get_mut(document_id)
@@ -663,7 +663,7 @@ impl AppState {
         &self,
         document_id: &str,
     ) -> Result<StatusOnlyResponse, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
             let seed = pg
@@ -731,7 +731,7 @@ impl AppState {
         &self,
         document_id: &str,
     ) -> Result<DocumentContentResponse, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
             return pg
@@ -741,7 +741,7 @@ impl AppState {
                 .ok_or_else(|| AppError::not_found("document_not_found", "document not found"));
         }
 
-        let state = self.inner.read().await;
+        let state = self.storage.inner().read().await;
         let stored = state
             .documents
             .get(document_id)
@@ -770,7 +770,7 @@ impl AppState {
         cursor: usize,
         limit: usize,
     ) -> Result<ParsedPreviewResponse, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
             return pg
@@ -780,7 +780,7 @@ impl AppState {
                 .ok_or_else(|| AppError::not_found("document_not_found", "document not found"));
         }
 
-        let state = self.inner.read().await;
+        let state = self.storage.inner().read().await;
         let stored = state
             .documents
             .get(document_id)

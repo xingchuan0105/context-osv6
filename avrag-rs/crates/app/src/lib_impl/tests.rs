@@ -24,6 +24,8 @@ mod tests {
                 domain: common::Domain::Technology,
                 genre: common::Genre::Manual,
                 era: common::Era::Contemporary,
+                author: None,
+                publication_date: None,
             },
             common::SummaryMetadata {
                 doc_id: "doc-2".to_string(),
@@ -33,6 +35,8 @@ mod tests {
                 domain: common::Domain::Technology,
                 genre: common::Genre::Report,
                 era: common::Era::Unknown,
+                author: None,
+                publication_date: None,
             },
             common::SummaryMetadata {
                 doc_id: "doc-3".to_string(),
@@ -42,6 +46,8 @@ mod tests {
                 domain: common::Domain::Unknown,
                 genre: common::Genre::Unknown,
                 era: common::Era::Modern,
+                author: None,
+                publication_date: None,
             },
         ];
 
@@ -123,6 +129,7 @@ mod tests {
                 citations: Vec::new(),
                 tool_results: Vec::new(),
                 turn_metadata: None,
+                resolved_query: None,
                 created_at: "2026-03-25T00:00:00Z".to_string(),
             }],
             Some("  carry this forward  ".to_string()),
@@ -658,8 +665,13 @@ mod tests {
         config.object_root = object_root.to_string_lossy().to_string();
 
         let mut state = AppState::new(config);
-        state.pg = Some(Arc::new(repo));
-        state.uses_memory_adapters = false;
+        state.storage = crate::storage_context::StorageContext::new(
+            Some(Arc::new(repo)),
+            state.storage.inner().clone(),
+            state.storage.api_keys().clone(),
+            state.storage.max_upload_file_size_bytes(),
+            false,
+        );
         Some((state, object_root))
     }
 
@@ -706,7 +718,7 @@ mod tests {
     async fn ingestion_task_count(state: &AppState, document_id: &str) -> i64 {
         let document_uuid = Uuid::parse_str(document_id).unwrap();
         state
-            .pg
+            .pg()
             .as_ref()
             .unwrap()
             .count_ingestion_tasks_for_document(&state.auth, document_uuid)
@@ -786,7 +798,7 @@ mod tests {
         assert_eq!(ingestion_task_count(&state, &upload.document_id).await, 1);
 
         let validation = state
-            .pg
+            .pg()
             .as_ref()
             .unwrap()
             .get_document_upload_validation(

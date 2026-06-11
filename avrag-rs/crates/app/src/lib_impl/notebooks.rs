@@ -8,10 +8,10 @@ use crate::lib_impl::*;
 
 impl AppState {
     pub async fn list_notebooks(&self) -> Vec<Notebook> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             return pg.list_notebooks(&self.auth).await.unwrap_or_default();
         }
-        let state = self.inner.read().await;
+        let state = self.storage.inner().read().await;
         state
             .notebooks
             .values()
@@ -21,7 +21,7 @@ impl AppState {
     }
 
     pub async fn get_notebook(&self, notebook_id: &str) -> Option<Notebook> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let notebook_id = Uuid::parse_str(notebook_id).ok()?;
             let notebook = pg
                 .get_notebook(&self.auth, notebook_id)
@@ -30,7 +30,7 @@ impl AppState {
                 .flatten()?;
             return (notebook.org_id == self.current_org_id()).then_some(notebook);
         }
-        let state = self.inner.read().await;
+        let state = self.storage.inner().read().await;
         state
             .notebooks
             .get(notebook_id)
@@ -46,7 +46,7 @@ impl AppState {
             ));
         }
 
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let notebook = pg
                 .create_notebook(&self.auth, req.name.trim(), req.description.trim())
                 .await
@@ -81,7 +81,7 @@ impl AppState {
             updated_at: now,
         };
 
-        let mut state = self.inner.write().await;
+        let mut state = self.storage.inner().write().await;
         state
             .notebooks
             .insert(notebook.id.clone(), notebook.clone());
@@ -105,7 +105,7 @@ impl AppState {
         notebook_id: &str,
         req: UpdateNotebookRequest,
     ) -> Result<Notebook, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let notebook_id =
                 parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
             return pg
@@ -120,7 +120,7 @@ impl AppState {
                 .ok_or_else(|| AppError::not_found("notebook_not_found", "notebook not found"));
         }
 
-        let mut state = self.inner.write().await;
+        let mut state = self.storage.inner().write().await;
         let notebook = state
             .notebooks
             .get_mut(notebook_id)
@@ -142,7 +142,7 @@ impl AppState {
     }
 
     pub async fn delete_notebook(&self, notebook_id: &str) -> Result<StatusOnlyResponse, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let notebook_id =
                 parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
             let deleted = pg
@@ -160,7 +160,7 @@ impl AppState {
             });
         }
 
-        let mut state = self.inner.write().await;
+        let mut state = self.storage.inner().write().await;
         let can_delete = state
             .notebooks
             .get(notebook_id)

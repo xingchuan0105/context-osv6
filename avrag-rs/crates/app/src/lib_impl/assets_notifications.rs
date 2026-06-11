@@ -13,7 +13,7 @@ impl AppState {
         message_id: i64,
         citation_id: i64,
     ) -> Result<CitationLookupResponse, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let session_uuid =
                 parse_uuid_or_app_error(session_id, "session_not_found", "session not found")?;
             let message = pg
@@ -129,7 +129,7 @@ impl AppState {
             });
         }
 
-        let state = self.inner.read().await;
+        let state = self.storage.inner().read().await;
         let messages = state
             .messages
             .get(session_id)
@@ -173,8 +173,8 @@ impl AppState {
     }
 
     pub async fn get_citation_asset(&self, asset_id: &str) -> Result<(Vec<u8>, String), AppError> {
-        let pg = self
-            .pg
+        let pg_opt = self.storage.pg();
+        let pg = pg_opt
             .as_ref()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
         let asset_uuid = parse_uuid_or_app_error(asset_id, "asset_not_found", "asset not found")?;
@@ -195,7 +195,7 @@ impl AppState {
         }
 
         let bytes = self
-            .object_store
+            .object_storage.object_store()
             .get(&storage_path)
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
@@ -209,7 +209,7 @@ impl AppState {
     }
 
     pub async fn list_api_keys(&self, notebook_id: &str) -> Result<Vec<ApiKeyRow>, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let notebook_uuid =
                 parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
             return pg
@@ -218,7 +218,7 @@ impl AppState {
                 .map_err(map_pg_error);
         }
 
-        let keys = self.api_keys.read().await;
+        let keys = self.storage.api_keys().read().await;
         Ok(keys.get(notebook_id).cloned().unwrap_or_default())
     }
 
@@ -242,7 +242,7 @@ impl AppState {
             .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
             .map(|value| value.with_timezone(&chrono::Utc));
 
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let notebook_uuid =
                 parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
             let (api_key, plaintext_key) = pg
@@ -278,7 +278,7 @@ impl AppState {
             updated_at: now_rfc3339(),
         };
         {
-            let mut keys = self.api_keys.write().await;
+            let mut keys = self.storage.api_keys().write().await;
             keys.entry(notebook_id.to_string())
                 .or_default()
                 .push(row.clone());
@@ -294,7 +294,7 @@ impl AppState {
         notebook_id: &str,
         key_id: &str,
     ) -> Result<StatusOnlyResponse, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let notebook_uuid =
                 parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
             let key_uuid =
@@ -314,7 +314,7 @@ impl AppState {
             });
         }
 
-        let mut keys_map = self.api_keys.write().await;
+        let mut keys_map = self.storage.api_keys().write().await;
         let keys = keys_map.entry(notebook_id.to_string()).or_default();
         let before = keys.len();
         keys.retain(|item| item.id != key_id);
@@ -334,7 +334,7 @@ impl AppState {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<NotificationRow>, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let user_id = self
                 .auth
                 .actor_id()
@@ -346,7 +346,7 @@ impl AppState {
                 .map_err(map_pg_error);
         }
 
-        let state = self.inner.read().await;
+        let state = self.storage.inner().read().await;
         if state.notifications.is_empty() {
             return Ok(vec![NotificationRow {
                 id: "notif-m1-skeleton".to_string(),
@@ -368,7 +368,7 @@ impl AppState {
         &self,
         notification_id: &str,
     ) -> Result<StatusOnlyResponse, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let user_id = self
                 .auth
                 .actor_id()
@@ -394,7 +394,7 @@ impl AppState {
             });
         }
 
-        let mut state = self.inner.write().await;
+        let mut state = self.storage.inner().write().await;
         if let Some(item) = state
             .notifications
             .iter_mut()

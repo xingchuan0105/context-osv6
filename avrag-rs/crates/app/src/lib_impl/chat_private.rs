@@ -16,7 +16,7 @@ impl AppState {
         notebook_id: &str,
         doc_scope: &[String],
     ) -> Vec<StoredDocument> {
-        let state = self.inner.read().await;
+        let state = self.storage.inner().read().await;
         state
             .documents
             .values()
@@ -41,45 +41,15 @@ impl AppState {
         }
     }
 
-    pub(crate) async fn maybe_update_session_summary(
-        &self,
-        pg: &PgAppRepository,
-        session: &ChatSession,
-    ) -> bool {
-        let Some(cm) = &self.chatmemory else {
-            return false;
-        };
-        let Ok(session_uuid) =
-            parse_uuid_or_app_error(&session.id, "session_not_found", "session not found")
-        else {
-            return false;
-        };
-        let Ok(messages) = pg.list_messages(&self.auth, session_uuid).await else {
-            return false;
-        };
-        if messages.len() < 10 {
-            return false;
-        }
-
-        let summary = self.build_session_summary(&messages).await;
-        if summary.trim().is_empty() {
-            return false;
-        }
-
-        cm.update_summary(&self.auth, session_uuid, &summary)
-            .await
-            .is_ok()
-    }
-
     /// The "dream" layer: runs at most once per day per user.
     /// LLM proposes a semantic delta; runtime applies deterministic merge rules.
     pub(crate) async fn maybe_update_structured_profile(
         &self,
         pg: &PgAppRepository,
         _session: &ChatSession,
-        session_summary: &str,
+        recent_turns: &str,
     ) -> bool {
-        let Some(cm) = &self.chatmemory else {
+        let Some(cm) = &self.orchestrator.chatmemory() else {
             return false;
         };
         let Some(user_id) = self.auth.actor_id().map(|value| value.into_uuid()) else {
@@ -109,7 +79,7 @@ impl AppState {
             .unwrap_or_else(|| serde_json::json!({}));
 
         let delta = self
-            .infer_profile_delta(session_summary, &existing_structured)
+            .infer_profile_delta(recent_turns, &existing_structured)
             .await;
         if delta.is_null() || delta.as_object().map(|o| o.is_empty()).unwrap_or(false) {
             return false;
@@ -151,7 +121,7 @@ impl AppState {
     /// Ask the LLM to produce a semantic delta, not a full profile.
     pub(crate) async fn infer_profile_delta(
         &self,
-        session_summary: &str,
+        recent_turns: &str,
         existing_profile: &serde_json::Value,
     ) -> serde_json::Value {
         const DREAM_SYSTEM_PROMPT: &str =
@@ -159,15 +129,15 @@ impl AppState {
         let system_prompt = DREAM_SYSTEM_PROMPT.trim();
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
         let user_prompt = format!(
-            "Today's date: {}\n\nExisting profile:\n{}\n\nRecent session summary:\n{}",
+            "Today's date: {}\n\nExisting profile:\n{}\n\nRecent conversation turns:\n{}",
             today,
             serde_json::to_string_pretty(existing_profile).unwrap_or_else(|_| "{}".to_string()),
-            session_summary.trim()
+            recent_turns.trim()
         );
 
         for (llm, temperature) in [
-            (&self.memory_llm_client, self.memory_llm_temperature()),
-            (&self.llm_client, self.agent_llm_temperature()),
+            (self.llm_ctx.memory_client(), self.llm_ctx.memory_llm_temperature()),
+            (self.llm_ctx.agent_client(), self.llm_ctx.agent_llm_temperature()),
         ] {
             if let Some(client) = llm
                 && let Ok(response) = client
@@ -184,7 +154,7 @@ impl AppState {
                 if !trimmed.is_empty() {
                     // Run output guards before parsing; block prompt leaks and scrub PII
                     // before any profile mutation.
-                    let (sanitized, guard_report) = self.guard_pipeline.check_output(trimmed, None);
+                    let (sanitized, guard_report) = self.orchestrator.guard_pipeline().check_output(trimmed, None);
                     if guard_report.blocked {
                         tracing::warn!(
                             "dream layer output blocked by guard pipeline: {:?}",
@@ -206,61 +176,6 @@ impl AppState {
         serde_json::json!({})
     }
 
-    pub(crate) async fn build_session_summary(&self, messages: &[ChatMessage]) -> String {
-        const SESSION_SUMMARY_SYSTEM_PROMPT: &str =
-            include_str!("../../../../prompts/pipeline/session-summary.system.md");
-        let summary_prompt = SESSION_SUMMARY_SYSTEM_PROMPT.trim();
-        let prompt = messages
-            .iter()
-            .rev()
-            .take(12)
-            .rev()
-            .map(|item| format!("{}: {}", item.role, item.content))
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        for (llm, temperature) in [
-            (&self.memory_llm_client, self.memory_llm_temperature()),
-            (&self.llm_client, self.agent_llm_temperature()),
-        ] {
-            if let Some(client) = llm
-                && let Ok(response) = client
-                    .complete(
-                        &[
-                            avrag_llm::ChatMessage::system(summary_prompt),
-                            avrag_llm::ChatMessage::user(&prompt),
-                        ],
-                        temperature,
-                    )
-                    .await
-            {
-                let trimmed = response.content.trim();
-                if !trimmed.is_empty() {
-                    self.record_llm_usage_if_available(
-                        avrag_billing::usage_limit::BillableFeature::Summary,
-                        "session_summary",
-                        &response.usage,
-                        "inline",
-                    )
-                    .await;
-                    return extract_summary_from_structured_response(trimmed);
-                }
-            }
-        }
-
-        messages
-            .iter()
-            .rev()
-            .take(6)
-            .rev()
-            .map(|item| format!("{}: {}", item.role, item.content))
-            .collect::<Vec<_>>()
-            .join(" | ")
-            .chars()
-            .take(320)
-            .collect()
-    }
-
     pub(crate) async fn emit_notification(
         &self,
         event_type: &str,
@@ -268,7 +183,7 @@ impl AppState {
         body: &str,
         data: serde_json::Value,
     ) -> Result<(), AppError> {
-        let Some(pg) = &self.pg else {
+        let Some(pg) = self.storage.pg() else {
             return Ok(());
         };
         let Some(user_id) = self.auth.actor_id().map(|value| value.into_uuid()) else {
@@ -299,89 +214,24 @@ impl AppState {
         usage: &avrag_llm::LlmUsage,
         source: &str,
     ) {
-        if let Some(ref qm) = self.quota_manager {
-            let user_id = self
-                .auth
-                .actor_id()
-                .map(|a| a.into_uuid())
-                .unwrap_or_else(Uuid::nil);
-            let org_id = self.auth.org_id().into_uuid();
-            let ctx = avrag_billing::usage_limit::MeteringContext {
-                user_id,
-                org_id,
-                feature,
-                stage: stage.to_string(),
-                session_id: None,
-                document_id: None,
-                request_id: self.auth.request_id().map(|s| s.to_string()),
-                trace_id: None,
-            };
-            let _ = qm
-                .rolling_service()
-                .record_usage(
-                    &ctx,
-                    avrag_billing::usage_limit::UsageRecord {
-                        provider: &non_empty_or_unknown(&usage.provider),
-                        model: &non_empty_or_unknown(&usage.model),
-                        prompt_tokens: usage.prompt_tokens,
-                        completion_tokens: usage.completion_tokens,
-                        total_tokens: usage.total_tokens,
-                        usage_source: avrag_billing::usage_limit::UsageSource::Actual,
-                    },
-                )
-                .await;
-        }
-        self.record_cost_event_if_available(crate::lib_impl::state_methods::CostEventRecord {
-            event_name: analytics::CostEventName::LlmUsageMetered,
-            feature: feature.as_str(),
-            session_id: None,
-            notebook_id: None,
-            usage,
-            source,
-            metadata: serde_json::json!({
-                "stage": stage,
-                "feature": feature.as_str(),
-            }),
-        })
-        .await;
+        let analytics_ctx = self.analytics_ctx();
+        self.billing
+            .record_llm_usage(&self.auth, &analytics_ctx, feature, stage, usage, source)
+            .await;
     }
 
     /// Get usage limit response for the current user.
     pub async fn get_user_usage_limit(
         &self,
     ) -> Result<avrag_billing::usage_limit::UsageLimitResponse, AppError> {
-        let Some(ref qm) = self.quota_manager else {
-            return Err(AppError::internal("quota service not configured"));
-        };
-        let user_id = self
-            .auth
-            .actor_id()
-            .map(|a| a.into_uuid())
-            .ok_or_else(|| AppError::internal("no authenticated user"))?;
-        let org_id = self.auth.org_id().into_uuid();
-        qm.rolling_service()
-            .get_user_usage(org_id, user_id)
-            .await
-            .map_err(|e| AppError::internal(format!("failed to get usage limit: {}", e)))
+        self.billing.get_user_usage_limit(&self.auth).await
     }
 
     /// Check if the current user has quota remaining.
     pub async fn check_user_quota(
         &self,
     ) -> Result<avrag_billing::usage_limit::QuotaCheckResult, AppError> {
-        let Some(ref qm) = self.quota_manager else {
-            return Err(AppError::internal("quota service not configured"));
-        };
-        let user_id = self
-            .auth
-            .actor_id()
-            .map(|a| a.into_uuid())
-            .unwrap_or_else(Uuid::nil);
-        let org_id = self.auth.org_id().into_uuid();
-        qm.rolling_service()
-            .check_quota(org_id, user_id)
-            .await
-            .map_err(|e| AppError::internal(format!("usage limit check failed: {}", e)))
+        self.billing.check_user_quota(&self.auth).await
     }
 
     pub(crate) async fn ensure_metric_quota(
@@ -389,42 +239,9 @@ impl AppState {
         metric_type: &str,
         requested: i64,
     ) -> Result<(), AppError> {
-        if requested <= 0 {
-            return Ok(());
-        }
-        let Some(ref qm) = self.quota_manager else {
-            return Ok(());
-        };
-        let user_uuid = self
-            .auth
-            .actor_id()
-            .map(|v| v.into_uuid())
-            .unwrap_or_else(Uuid::nil);
-        let decision = qm
-            .check_quota(
-                self.auth.org_id().into_uuid(),
-                user_uuid,
-                metric_type,
-                requested,
-            )
+        self.billing
+            .ensure_metric_quota(&self.auth, metric_type, requested)
             .await
-            .map_err(map_anyhow_error)?;
-
-        if decision.allowed {
-            return Ok(());
-        }
-
-        let error_message = decision
-            .reason
-            .as_ref()
-            .map(|reason| reason.to_string())
-            .unwrap_or_else(|| format!("quota exceeded for {}", metric_type));
-
-        Err(AppError::rate_limited(
-            "quota_exceeded",
-            error_message,
-            decision.retry_after_secs,
-        ))
     }
 
     pub(crate) async fn record_usage(
@@ -436,7 +253,7 @@ impl AppState {
         if quantity <= 0 {
             return Ok(());
         }
-        let Some(pg) = &self.pg else {
+        let Some(pg) = self.storage.pg() else {
             return Ok(());
         };
         pg.record_usage_event(&self.auth, metric_type, quantity, source)
@@ -462,19 +279,8 @@ impl AppState {
         object_path: &str,
         expires_at_unix: Option<u64>,
     ) -> Result<String, AppError> {
-        let expires = expires_at_unix.unwrap_or_else(|| {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|value| value.as_secs())
-                .unwrap_or_default()
-                + self.object_storage_upload_expire_sec
-        });
-        let signature =
-            sign_upload_payload(&upload_signing_secret(), document_id, object_path, expires)?;
-        Ok(format!(
-            "{}/uploads/{}?expires={}&signature={}",
-            self.public_base_url, document_id, expires, signature
-        ))
+        self.object_storage
+            .signed_upload_url(document_id, object_path, expires_at_unix)
     }
 
     pub fn verify_upload_signature(
@@ -484,33 +290,16 @@ impl AppState {
         expires: u64,
         signature: &str,
     ) -> Result<(), AppError> {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|value| value.as_secs())
-            .unwrap_or_default();
-        if expires < now {
-            return Err(AppError::validation(
-                "upload_url_expired",
-                "upload url expired",
-            ));
-        }
-        let expected =
-            sign_upload_payload(&upload_signing_secret(), document_id, object_path, expires)?;
-        if expected != signature {
-            return Err(AppError::validation(
-                "invalid_upload_signature",
-                "invalid upload signature",
-            ));
-        }
-        Ok(())
+        self.object_storage
+            .verify_upload_signature(document_id, object_path, expires, signature)
     }
 
     pub(crate) fn object_root_path(&self) -> &Path {
-        Path::new(&self.object_root)
+        self.object_storage.object_root_path()
     }
 
     pub(crate) async fn enqueue_ingest_task(&self, seed: DocumentTaskSeed) -> Result<(), AppError> {
-        let Some(pg) = &self.pg else {
+        let Some(pg) = self.storage.pg() else {
             return Ok(());
         };
 
@@ -555,7 +344,7 @@ impl AppState {
         &self,
         seed: DocumentTaskSeed,
     ) -> Result<(), AppError> {
-        let Some(pg) = &self.pg else {
+        let Some(pg) = self.storage.pg() else {
             return Ok(());
         };
 
@@ -599,30 +388,6 @@ impl AppState {
             .get(&session.notebook_id)
             .map(|notebook| notebook.org_id == self.current_org_id())
             .unwrap_or(false)
-    }
-}
-
-/// Parse a structured JSON session summary response and extract the prose summary field.
-/// Falls back to the raw text if JSON parsing fails.
-fn extract_summary_from_structured_response(text: &str) -> String {
-    #[derive(Debug, serde::Deserialize)]
-    struct StructuredSummary {
-        #[serde(default)]
-        summary: String,
-    }
-
-    let cleaned = text
-        .trim()
-        .strip_prefix("```json")
-        .or_else(|| text.trim().strip_prefix("```"))
-        .map(|s| s.trim())
-        .and_then(|s| s.strip_suffix("```"))
-        .map(|s| s.trim())
-        .unwrap_or(text.trim());
-
-    match serde_json::from_str::<StructuredSummary>(cleaned) {
-        Ok(parsed) if !parsed.summary.trim().is_empty() => parsed.summary.trim().to_string(),
-        _ => text.trim().to_string(),
     }
 }
 

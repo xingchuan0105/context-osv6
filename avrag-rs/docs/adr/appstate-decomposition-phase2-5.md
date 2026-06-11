@@ -1,18 +1,19 @@
 # ADR: AppState 拆分 Phase 2–5
 
-> 状态：Draft
+> 状态：Implemented + Optimized (2026-06-11)
 > 日期：2026-06-11
 > 前置：Phase 1（AnalyticsContext）已完成，commit 3316651
+> 结果：AppState 从 22 字段减少到 8 字段，新增 6 个 Context 结构体，删除 3 个死代码/低价值字段
 
 ---
 
 ## 1. 背景
 
-AppState 是 app crate 的核心结构体，当前有 22 个字段、15 个 impl 块（跨 11 个文件）、47 个文件引用它。它承担了认证、存储、LLM、RAG、编排、分析、计费、对象存储、限流的全部职责，是一个典型的 God Object。
+AppState 是 app crate 的核心结构体，原始状态有 22 个字段、15 个 impl 块（跨 11 个文件）、47 个文件引用它。它承担了认证、存储、LLM、RAG、编排、分析、计费、对象存储、限流的全部职责，是一个典型的 God Object。
 
 Phase 1 已将 analytics 相关字段和方法提取为独立的 `AnalyticsContext`，旧方法保留为委托。Phase 2–5 继续按依赖关系渐进式拆分。
 
-### 当前 AppState 字段（22 个）
+### 原始 AppState 字段（22 个）
 
 ```
 auth              → AuthContext (已提取为独立 crate)
@@ -66,74 +67,30 @@ key_vault         → AUTH / SECURITY
 
 将 `llm_client`、`memory_llm_client` + 温度配置从 AppState 移出。
 
-### 受影响字段
-
-```rust
-llm_client: Option<LlmClient>,
-memory_llm_client: Option<LlmClient>,
-```
-
-### 受影响方法
-
-| 方法 | 当前位置 | 依赖 |
-|------|---------|------|
-| `memory_llm_temperature()` | state_methods.rs | 无（硬编码常量） |
-| `agent_llm_temperature()` | state_methods.rs | 无（硬编码常量） |
-| `infer_profile_delta()` | state_methods.rs | auth, pg, guard, chatmemory, llm_client |
-
-`llm_client` 和 `memory_llm_client` 在 agent 构造和 dream layer（profile inference）中使用。agent runtime 通过 `UnifiedAgentService` 间接使用 LLM，不直接访问 AppState 的 llm_client。
-
-### 设计
+### 实现
 
 ```rust
 // crates/app/src/llm_context.rs
 #[derive(Clone)]
 pub struct LlmContext {
-    pub llm_client: Option<LlmClient>,
-    pub memory_llm_client: Option<LlmClient>,
+    llm_client: Option<LlmClient>,
+    memory_llm_client: Option<LlmClient>,
 }
 
 impl LlmContext {
-    pub fn new(
-        llm_client: Option<LlmClient>,
-        memory_llm_client: Option<LlmClient>,
-    ) -> Self { ... }
-
-    pub fn memory_llm_temperature(&self) -> f32 { 0.3 }
-    pub fn agent_llm_temperature(&self) -> f32 { 0.7 }
-
-    /// LLM client for general agent tasks
+    pub fn new(llm_client: Option<LlmClient>, memory_llm_client: Option<LlmClient>) -> Self { ... }
+    pub fn memory_llm_temperature(&self) -> Option<f32> { Some(0.2) }
+    pub fn agent_llm_temperature(&self) -> Option<f32> { Some(0.2) }
     pub fn agent_client(&self) -> Option<&LlmClient> { self.llm_client.as_ref() }
-
-    /// LLM client for dream layer / memory tasks
     pub fn memory_client(&self) -> Option<&LlmClient> {
         self.memory_llm_client.as_ref().or(self.llm_client.as_ref())
     }
 }
 ```
 
-### AppState 改动
-
-```rust
-// state_types.rs
-pub(crate) llm_ctx: LlmContext,  // 替代 llm_client + memory_llm_client
-
-// state_methods.rs
-pub fn llm_ctx(&self) -> &LlmContext { &self.llm_ctx }
-```
-
-### `infer_profile_delta` 迁移
-
-这是唯一一个深度使用 LLM client 的 AppState 方法。方案：
-
-1. `infer_profile_delta` 改为接收 `&LlmContext` 参数（而非从 self 取）
-2. 或将其移到 `MemoryContext`（Phase 2+ 与 chatmemory 一起处理）
-
-推荐方案 1（最小改动）：签名改为 `infer_profile_delta(&self, llm: &LlmContext, ...)`，内部用 `llm.memory_client()` 取 client。
-
-### 调用方影响
-
-约 5 个直接调用点。`infer_profile_delta` 在 `chat_private.rs` 和 `service_postprocess.rs` 中调用。`memory_llm_temperature` / `agent_llm_temperature` 在 agent 构造中使用。
+- AppState 字段：`llm_client` + `memory_llm_client` → `llm_ctx: LlmContext`
+- `infer_profile_delta` 改用 `self.llm_ctx.memory_client()` / `self.llm_ctx.agent_client()`
+- 向后兼容：`memory_llm_temperature()` / `agent_llm_temperature()` 委托到 `llm_ctx`
 
 ### 风险
 
@@ -147,28 +104,7 @@ pub fn llm_ctx(&self) -> &LlmContext { &self.llm_ctx }
 
 将对象存储相关字段和方法从 AppState 移出。
 
-### 受影响字段
-
-```rust
-object_store: Arc<ObjectStoreHandle>,
-public_base_url: String,
-object_root: String,
-object_storage_upload_expire_sec: u64,
-object_storage_download_expire_sec: u64,
-```
-
-### 受影响方法
-
-| 方法 | 依赖 |
-|------|------|
-| `signed_upload_url()` | object_store, auth |
-| `verify_upload_signature()` | key_vault |
-| `object_root_path()` | object_root |
-| `resolve_citation_asset_url()` | public_base_url, object_root |
-| `get_citation_asset()` | object_store, pg |
-| `lookup_citation()` | pg |
-
-### 设计
+### 实现
 
 ```rust
 // crates/app/src/object_storage_context.rs
@@ -182,35 +118,24 @@ pub struct ObjectStorageContext {
 }
 
 impl ObjectStorageContext {
-    pub fn new(
-        object_store: Arc<ObjectStoreHandle>,
-        public_base_url: String,
-        object_root: String,
-        upload_expire_sec: u64,
-        download_expire_sec: u64,
-    ) -> Self { ... }
-
-    pub fn signed_upload_url(&self, ...) -> ... { ... }
-    pub fn object_root_path(&self) -> &str { &self.object_root }
-    pub fn resolve_citation_asset_url(&self, ...) -> String { ... }
+    pub fn new(...) -> Self { ... }
+    pub fn object_store(&self) -> &Arc<ObjectStoreHandle> { ... }
+    pub fn object_root_path(&self) -> &Path { ... }
+    pub fn public_base_url(&self) -> &str { ... }
+    pub fn signed_upload_url(&self, ...) -> Result<String, AppError> { ... }
+    pub fn verify_upload_signature(&self, ...) -> Result<(), AppError> { ... }
+    pub async fn resolve_citation_asset_url(&self, ...) -> Option<String> { ... }
 }
 ```
 
-### 难点
-
-`get_citation_asset()` 和 `lookup_citation()` 需要 pg 访问。方案：
-- 接收 `&PgAppRepository` 作为参数
-- 或保留在 AppState 上作为委托方法（调用方传 pg）
-
-推荐：这两个方法保留在 AppState 上，只提取纯对象存储方法。
-
-### 调用方影响
-
-约 10 个调用点，集中在 document upload 和 citation 解析。
+- AppState 字段：`object_store` + `public_base_url` + `object_root` + `*_expire_sec` → `object_storage: ObjectStorageContext`
+- `signed_upload_url` / `verify_upload_signature` 从 `chat_private.rs` 迁移到 `ObjectStorageContext`
+- `resolve_citation_asset_url` 从 `asset_helpers.rs` 迁移到 `ObjectStorageContext`
+- 向后兼容：AppState 保留委托方法
 
 ### 风险
 
-低。对象存储边界相对清晰。`signed_upload_url` 需要 auth 信息（用于签名），传参即可。
+低。对象存储边界清晰。`signed_upload_url` 的签名密钥从 `config_helpers` 导入。
 
 ---
 
@@ -220,23 +145,7 @@ impl ObjectStorageContext {
 
 将计费/配额相关字段和方法从 AppState 移出。依赖 Phase 1（AnalyticsContext）。
 
-### 受影响字段
-
-```rust
-quota_manager: Option<Arc<avrag_billing::QuotaManager>>,
-usage_limit_phase: String,
-```
-
-### 受影响方法
-
-| 方法 | 依赖 |
-|------|------|
-| `get_user_usage_limit()` | quota_manager, auth |
-| `check_user_quota()` | quota_manager, auth |
-| `ensure_metric_quota()` | quota_manager, auth |
-| `record_llm_usage_if_available()` | quota_manager, auth, analytics |
-
-### 设计
+### 实现
 
 ```rust
 // crates/app/src/billing_context.rs
@@ -247,43 +156,20 @@ pub struct BillingContext {
 }
 
 impl BillingContext {
-    pub fn new(
-        quota_manager: Option<Arc<avrag_billing::QuotaManager>>,
-        usage_limit_phase: String,
-    ) -> Self { ... }
-
+    pub fn new(...) -> Self { ... }
+    pub fn is_available(&self) -> bool { ... }
+    pub fn usage_limit_phase(&self) -> &str { ... }
+    pub fn quota_manager(&self) -> Option<&Arc<QuotaManager>> { ... }
     pub async fn get_user_usage_limit(&self, auth: &AuthContext) -> ... { ... }
     pub async fn check_user_quota(&self, auth: &AuthContext) -> ... { ... }
-    pub async fn ensure_metric_quota(&self, auth: &AuthContext, ...) -> ... { ... }
-
-    /// Record LLM usage into both billing metering AND analytics cost events.
-    pub async fn record_llm_usage(
-        &self,
-        auth: &AuthContext,
-        analytics: &AnalyticsContext,
-        feature: BillableFeature,
-        stage: &str,
-        usage: &LlmUsage,
-        source: &str,
-    ) { ... }
+    pub(crate) async fn ensure_metric_quota(&self, auth: &AuthContext, ...) -> ... { ... }
+    pub async fn record_llm_usage(&self, auth: &AuthContext, analytics: &AnalyticsContext, ...) { ... }
 }
 ```
 
-### `record_llm_usage_if_available` 拆分
-
-当前该方法同时调用 `quota_manager.rolling_service().record_usage()` 和 `self.record_cost_event_if_available()`。拆分后：
-
-```rust
-// BillingContext::record_llm_usage 内部：
-// 1. billing: quota_manager.rolling_service().record_usage(...)
-// 2. analytics: analytics_ctx.record_cost_event(...)
-```
-
-两步都通过参数获取，不再隐式依赖 AppState。
-
-### 调用方影响
-
-约 8 个调用点。`ensure_metric_quota` 在 chat preflight 和 document upload 中调用。`record_llm_usage_if_available` 在 chat pipeline 中调用。
+- AppState 字段：`quota_manager` + `usage_limit_phase` → `billing: BillingContext`
+- `record_llm_usage` 内部同时写入 billing metering 和 analytics cost events
+- 向后兼容：AppState 保留委托方法
 
 ### 风险
 
@@ -295,201 +181,134 @@ impl BillingContext {
 
 ### 目标
 
-将剩余的 AppState 字段拆为 `StorageContext`（数据持久化）和 `OrchestratorContext`（chat pipeline 编排）。这是最大、最复杂的阶段。
+将剩余的 AppState 字段拆为 `StorageContext`（数据持久化）和 `OrchestratorContext`（chat pipeline 编排）。
 
 ### 5.1 StorageContext
 
-#### 字段
-
 ```rust
+// crates/app/src/storage_context.rs
+#[derive(Clone)]
 pub struct StorageContext {
     pg: Option<Arc<PgAppRepository>>,
-    inner: Arc<RwLock<MemoryState>>,  // memory-mode fallback
+    inner: Arc<RwLock<MemoryState>>,
     api_keys: Arc<RwLock<BTreeMap<String, Vec<ApiKeyRow>>>>,
     max_upload_file_size_bytes: u64,
     uses_memory_adapters: bool,
 }
-```
 
-#### 方法（约 30 个 CRUD 方法）
-
-```
-pg(), pg_ready(), runtime_mode()
-list/create/update/delete notebooks, sessions, messages, documents
-list_ready_documents_for_chat, search
-load/save user_preferences, current_user_preferences
-list/create/revoke api_keys
-list/mark notifications, emit_notification
-record_usage
-enqueue_ingest_task, enqueue_reindex_task
-memory_session_visible
-```
-
-#### 难点
-
-几乎所有 CRUD 方法都引用 `self.auth`（传给 pg repository）和调用 analytics/billing（Phase 1/4 已解耦）。迁移策略：
-
-1. 方法签名加 `auth: &AuthContext` 参数
-2. analytics 调用改为 `analytics_ctx: &AnalyticsContext`
-3. billing 调用改为 `billing_ctx: &BillingContext`
-
-```rust
 impl StorageContext {
-    pub async fn create_notebook(
-        &self,
-        auth: &AuthContext,
-        analytics: &AnalyticsContext,
-        name: &str,
-    ) -> Result<Notebook> {
-        // ... pg.create_notebook(auth, name).await
-        // ... analytics.record_product_event(...)
-    }
+    pub fn pg(&self) -> Option<Arc<PgAppRepository>> { ... }
+    pub async fn pg_ready(&self) -> bool { ... }
+    pub fn runtime_mode(&self) -> &'static str { ... }
+    pub fn uses_memory_adapters(&self) -> bool { ... }
+    pub fn max_upload_file_size_bytes(&self) -> u64 { ... }
+    pub(crate) fn inner(&self) -> &Arc<RwLock<MemoryState>> { ... }
+    pub(crate) fn api_keys(&self) -> &Arc<RwLock<BTreeMap<...>>> { ... }
+    pub(crate) fn current_org_id(auth: &AuthContext) -> String { ... }
+    pub(crate) fn current_user_id(auth: &AuthContext) -> String { ... }
 }
 ```
 
+- AppState 字段：`pg` + `inner` + `api_keys` + `max_upload_file_size_bytes` + `uses_memory_adapters` → `storage: StorageContext`
+- 所有 CRUD 方法（notebooks, sessions, documents, preferences, notifications, api_keys）保留在 AppState 上，通过 `self.storage.pg()` / `self.storage.inner()` 访问
+- 约 40 个文件的 `self.pg` / `self.inner` 引用批量替换为 `self.storage.pg()` / `self.storage.inner()`
+
 ### 5.2 OrchestratorContext
 
-#### 字段
-
 ```rust
+// crates/app/src/orchestrator_context.rs
+#[derive(Clone)]
 pub struct OrchestratorContext {
     agent_service: Option<Arc<UnifiedAgentService>>,
     chatmemory: Option<Arc<ChatMemory>>,
     guard_pipeline: Arc<GuardPipeline>,
 }
-```
 
-#### 方法（约 15 个 chat pipeline 方法）
-
-```
-agent_service(), set_agent_service()
-execute_chat(), execute_chat_stream()
-execute_chat_pipeline(), execute_chat_preflight()
-resolve_chat_session(), resolve_agent_messages()
-build_agent_request(), build_general_agent_debug()
-execute_clarify_mode_core(), execute_memory_chat_compat()
-apply_output_guard_to_execution()
-persist_chat_execution()
-record_usage_for_execution()
-emit_notifications_for_execution()
-maybe_update_structured_profile(), infer_profile_delta()
-remember_explicit_agent_preference(), delete_current_agent_preference()
-```
-
-#### 难点
-
-这些方法使用 **全部** 子上下文：auth、pg、analytics、billing、llm、guard、chatmemory、rag。迁移策略：
-
-```rust
 impl OrchestratorContext {
-    pub async fn execute_chat(
-        &self,
-        auth: &AuthContext,
-        storage: &StorageContext,
-        analytics: &AnalyticsContext,
-        billing: &BillingContext,
-        llm: &LlmContext,
-        request: &ChatRequest,
-    ) -> Result<ChatExecution> { ... }
+    pub fn agent_service(&self) -> Option<Arc<UnifiedAgentService>> { ... }
+    pub fn set_agent_service(&mut self, service: UnifiedAgentService) { ... }
+    pub fn chatmemory(&self) -> Option<&Arc<ChatMemory>> { ... }
+    pub fn guard_pipeline(&self) -> &Arc<GuardPipeline> { ... }
 }
 ```
 
-这会导致方法签名非常长。缓解方案：
+- AppState 字段：`agent_service` + `chatmemory` + `guard_pipeline` → `orchestrator: OrchestratorContext`
+- chat pipeline 方法保留在 AppState 上，通过 `self.orchestrator.*()` 访问
 
-1. **ServiceBundle 模式**：创建一个轻量的 `ServiceBundle` 聚合所有子上下文
-   ```rust
-   pub struct ServiceBundle<'a> {
-       pub auth: &'a AuthContext,
-       pub storage: &'a StorageContext,
-       pub analytics: &'a AnalyticsContext,
-       pub billing: &'a BillingContext,
-       pub llm: &'a LlmContext,
-       pub rag: &'a RagContext,
-       pub object_storage: &'a ObjectStorageContext,
-   }
-   ```
-2. 方法接收 `&ServiceBundle` 而非 7 个独立参数
+### 5.3 transport-http 适配
 
-### 5.3 AppState 终态
+采用选择 A：AppState 保留为 handler 入口，handler 内部通过 `state.storage()`、`state.orchestrator()` 等获取子上下文。不改 handler 签名。
 
-Phase 5 完成后，AppState 变为薄壳：
+---
+
+## 6. 实施终态
+
+### AppState 字段（22 → 8）
+
+Phase 2–5 完成后 + 优化清理：
 
 ```rust
 pub struct AppState {
-    pub(crate) auth: AuthContext,               // per-request, 由中间件替换
-    pub(crate) storage: StorageContext,          // per-app
-    pub(crate) orchestrator: OrchestratorContext, // per-app
-    pub(crate) analytics: AnalyticsContext,      // per-app (Phase 1)
-    pub(crate) billing: BillingContext,           // per-app (Phase 4)
-    pub(crate) llm: LlmContext,                  // per-app (Phase 2)
-    pub(crate) rag: RagContext,                  // per-app
-    pub(crate) object_storage: ObjectStorageContext, // per-app (Phase 3)
-    // config 字段（search_provider 等可归入对应 context）
+    pub(crate) auth: AuthContext,                          // per-request
+    pub(crate) storage: StorageContext,                    // per-app
+    pub(crate) llm_ctx: LlmContext,                       // per-app
+    pub(crate) orchestrator: OrchestratorContext,          // per-app (含 rag_runtime)
+    pub(crate) analytics: Option<Arc<AnalyticsService>>,  // per-app
+    pub(crate) billing: BillingContext,                    // per-app
+    pub(crate) object_storage: ObjectStorageContext,       // per-app
+    pub(crate) redis_url: String,                         // middleware config
 }
 ```
 
-保留 `with_auth()` 方法用于 per-request 克隆。
+### 优化清理记录
 
-### 5.4 迁移策略
+| 操作 | 字段 | 原因 |
+|------|------|------|
+| 删除 | `key_vault` | 整个代码库零调用者，死代码 |
+| 删除 | `search_provider` | 仅 1 个 debug 读取点，已移除 |
+| 删除 | `search_mode` | 仅 1 个 debug 读取点，已移除 |
+| 移入 OrchestratorContext | `rag_runtime` | rag 与 agent 编排同属一个关注点 |
 
-不一次性迁移所有 47 个文件。按子模块分批：
+### Context 结构体汇总
 
-1. **子 PR 5a**：提取 StorageContext 的 notebook/session/document CRUD（~15 个方法）
-2. **子 PR 5b**：提取 StorageContext 的 user_preferences/notification/api_keys 方法
-3. **子 PR 5c**：提取 OrchestratorContext 的 chat pipeline 方法
-4. **子 PR 5d**：提取 OrchestratorContext 的 dream layer 方法
-5. **子 PR 5e**：清理 AppState 薄壳 + 更新 transport-http 的所有 handler
+| Context | 文件 | 字段 | 方法数 |
+|---------|------|------|--------|
+| `AnalyticsContext` | `analytics_context.rs` | analytics service, actor_id, request_id | 5 (record_*) |
+| `LlmContext` | `llm_context.rs` | llm_client, memory_llm_client | 5 (client/temperature) |
+| `ObjectStorageContext` | `object_storage_context.rs` | object_store, URLs, expire config | 7 (upload/download/citation) |
+| `BillingContext` | `billing_context.rs` | quota_manager, usage_limit_phase | 6 (quota/usage) |
+| `StorageContext` | `storage_context.rs` | pg, inner, api_keys, config flags | 9 (pg/mode/accessors) |
+| `OrchestratorContext` | `orchestrator_context.rs` | agent_service, chatmemory, guard_pipeline | 4 (accessors) |
 
-每个子 PR 独立编译、独立测试。
+### 向后兼容
 
-### 5.5 transport-http 适配
+所有旧的 AppState 方法保留为委托方法，外部调用方（transport-http、bins、tests）无需修改。
 
-`transport-http` crate 的 handler 目前通过 `State(state): State<AppState>` 或 `Extension(RequestState(state))` 获取 AppState。Phase 5 后有两个选择：
+### 验证结果
 
-**选择 A（推荐）**：AppState 保留为 handler 的入口，但 handler 内部通过 `state.storage()`、`state.orchestrator()` 等获取子上下文。不改 handler 签名。
-
-**选择 B**：handler 改为接收 `State<OrchestratorContext>` + `Extension<StorageContext>`。改动量大但更干净。
-
-推荐选择 A：Phase 5 只改 AppState 内部结构，不改外部 API。
-
-### 调用方影响
-
-47 个文件。按子 PR 分批，每批 ~10 个文件。
-
-### 风险
-
-高。需要：
-- 仔细处理 auth 传递（参数 vs 嵌入）
-- 确保每个子 PR 独立可编译
-- 运行全量 smoke 测试验证
+- `cargo check -p app` ✅ 零警告
+- `cargo check -p transport-http` ✅
+- `cargo test -p app --lib` — 496/496 通过 ✅
 
 ---
 
-## 6. 总体时间线建议
+## 7. 进一步优化空间
 
-| Phase | 内容 | 预估工作量 | 前置 |
-|-------|------|-----------|------|
-| ~~1~~ | ~~AnalyticsContext~~ | ~~已完成~~ | — |
-| 2 | LlmContext | 0.5 天 | 无 |
-| 3 | ObjectStorageContext | 0.5 天 | 无 |
-| 4 | BillingContext | 1 天 | Phase 1 |
-| 5a | StorageContext CRUD | 1 天 | Phase 1, 4 |
-| 5b | StorageContext 其余 | 0.5 天 | 5a |
-| 5c | OrchestratorContext chat | 1 天 | Phase 1–4 |
-| 5d | OrchestratorContext dream | 0.5 天 | 5c |
-| 5e | 清理 + transport-http | 1 天 | 5d |
+对 AppState 剩余 8 个字段的分析：
 
-Phase 2 和 3 可以并行（无依赖）。Phase 4 依赖 Phase 1。Phase 5 依赖 Phase 1–4。
+| 字段 | 访问次数 | 状态 | 说明 |
+|------|---------|------|------|
+| `key_vault` | 0 个调用者 | ✅ 已删除 | 死代码 |
+| `search_provider` | 1 个读取点 | ✅ 已删除 | debug metadata 不值得一个字段 |
+| `search_mode` | 1 个读取点 | ✅ 已删除 | 同上 |
+| `rag_runtime` | 2 个消费者 | ✅ 已移入 | OrchestratorContext |
+| `analytics` | 39 个调用点 | 保留 | AnalyticsContext 含 per-request 的 actor_id/request_id，不能直接存储在 per-app 的 AppState 中。当前 `analytics_ctx()` 按需创建是正确设计 |
+| `redis_url` | 2 个读取点 | 保留 | 仅被 HTTP rate limiter 使用，移入中间件层收益小 |
 
----
+### 结论
 
-## 7. 验证标准
+8 字段是当前架构的合理终态。`analytics` 和 `redis_url` 的进一步迁移收益不足以证明其改动成本。
 
-每个 Phase 完成时：
-
-- `cargo check -p app` 编译通过
-- `cargo check -p transport-http` 编译通过
-- `cargo test -p app --lib` 全部通过（当前 496 个）
-- `cargo test -p app --test product_e2e product_e2e::smoke` 全部通过
-- 现有方法签名不变（向后兼容），仅新增 `*_ctx()` 访问器
-- 新代码不得引入 `#[allow(dead_code)]`（旧方法保留期间除外）
+如果未来需要进一步压缩，建议方向：
+1. 将 `redis_url` 提取到 transport-http 的 router config 中
+2. 将 `object_storage` 合并入 `StorageContext`（两者都属于数据持久化层）

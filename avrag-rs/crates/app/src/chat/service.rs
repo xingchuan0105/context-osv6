@@ -24,7 +24,7 @@ impl AppState {
         req: ChatRequest,
     ) -> Result<ChatResponse, AppError> {
         let effective_notebook_id = chat_notebook_id_for_request(self, &req);
-        if self.pg.is_some()
+        if self.storage.pg().is_some()
             && req.agent_type == "rag"
             && req.doc_scope.is_empty()
             && effective_notebook_id.is_none()
@@ -61,7 +61,7 @@ impl AppState {
             .await?;
         self.ensure_metric_quota("llm_output_tokens", 1024).await?;
 
-        let phase = &self.usage_limit_phase;
+        let phase = self.billing.usage_limit_phase();
         let enforce_5h = phase == "5h_enforcement" || phase == "7d_enforcement";
         let enforce_7d = phase == "7d_enforcement";
         let quota = match self.check_user_quota().await {
@@ -144,7 +144,7 @@ impl AppState {
             "chat preflight scope inputs"
         );
 
-        let input_guard = self.guard_pipeline.check_input(
+        let input_guard = self.orchestrator.guard_pipeline().check_input(
             &req.query,
             self.auth.org_id().into_uuid(),
             user_uuid,
@@ -174,7 +174,7 @@ impl AppState {
                 }),
                 created_at: now_rfc3339(),
             };
-            if let Some(ref pg) = self.pg {
+            if let Some(pg) = self.storage.pg() {
                 let _ = pg.append_audit_record(&audit_record).await;
             }
             return Err(AppError::validation(
@@ -186,7 +186,7 @@ impl AppState {
         // R1: Check history messages for prompt injection bypass attempts.
         for msg in &req.messages {
             if msg.role == "user" {
-                let msg_guard = self.guard_pipeline.check_input(
+                let msg_guard = self.orchestrator.guard_pipeline().check_input(
                     &msg.content,
                     self.auth.org_id().into_uuid(),
                     user_uuid,
@@ -216,7 +216,7 @@ impl AppState {
                         }),
                         created_at: now_rfc3339(),
                     };
-                    if let Some(ref pg) = self.pg {
+                    if let Some(pg) = self.storage.pg() {
                         let _ = pg.append_audit_record(&audit_record).await;
                     }
                     return Err(AppError::validation(

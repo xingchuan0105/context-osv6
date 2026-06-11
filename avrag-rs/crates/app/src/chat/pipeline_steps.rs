@@ -241,7 +241,7 @@ async fn run_search_mode(
 }
 
 fn build_search_debug(
-    state: &AppState,
+    _state: &AppState,
     agent_result: &crate::agents::runtime::AgentRunResult,
 ) -> BTreeMap<String, serde_json::Value> {
     let mut search_debug = BTreeMap::new();
@@ -253,14 +253,6 @@ fn build_search_debug(
             search_debug.insert("sub_queries".to_string(), sub_queries.clone());
         }
     }
-    search_debug.insert(
-        "provider".to_string(),
-        serde_json::json!(state.search_provider.clone()),
-    );
-    search_debug.insert(
-        "mode".to_string(),
-        serde_json::json!(state.search_mode.clone()),
-    );
     search_debug.insert(
         "result_count".to_string(),
         serde_json::json!(agent_result.sources.len()),

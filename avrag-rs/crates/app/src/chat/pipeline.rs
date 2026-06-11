@@ -118,7 +118,7 @@ async fn run_pipeline(
         }),
         created_at: common::now_rfc3339(),
     };
-    if let Some(ref pg) = state.pg {
+    if let Some(pg) = state.pg() {
         let _ = pg.append_audit_record(&audit_record).await;
     }
 

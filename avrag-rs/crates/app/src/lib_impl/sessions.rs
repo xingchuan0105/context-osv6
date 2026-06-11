@@ -8,7 +8,7 @@ use uuid::Uuid;
 impl AppState {
     pub async fn search(&self, pattern: &str) -> (Vec<Notebook>, Vec<ChatSession>, Vec<SourceRow>) {
         let like_pattern = format!("%{}%", pattern);
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let nb = pg
                 .search_notebooks(&self.auth, &like_pattern)
                 .await
@@ -23,7 +23,7 @@ impl AppState {
                 .unwrap_or_default();
             (nb, sess, src)
         } else {
-            let state = self.inner.read().await;
+            let state = self.storage.inner().read().await;
             let q = pattern.to_lowercase();
             let notebooks: Vec<Notebook> = state
                 .notebooks
@@ -76,14 +76,14 @@ impl AppState {
     }
 
     pub async fn list_sessions(&self, notebook_id: Option<&str>) -> Vec<ChatSession> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let notebook_uuid = notebook_id.and_then(|value| Uuid::parse_str(value).ok());
             return pg
                 .list_sessions(&self.auth, notebook_uuid)
                 .await
                 .unwrap_or_default();
         }
-        let state = self.inner.read().await;
+        let state = self.storage.inner().read().await;
         state
             .sessions
             .values()
@@ -101,7 +101,7 @@ impl AppState {
         &self,
         req: CreateChatSessionRequest,
     ) -> Result<ChatSession, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let notebook_id = parse_uuid_or_app_error(
                 &req.notebook_id,
                 "notebook_not_found",
@@ -156,7 +156,7 @@ impl AppState {
             updated_at: now,
         };
         {
-            let mut state = self.inner.write().await;
+            let mut state = self.storage.inner().write().await;
             state.sessions.insert(session.id.clone(), session.clone());
         }
         self.record_product_event_if_available(
@@ -185,7 +185,7 @@ impl AppState {
             .filter(|value| !value.is_empty())
             .is_some();
         let pinned = req.pinned;
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let session_id =
                 parse_uuid_or_app_error(session_id, "session_not_found", "session not found")?;
             let title = req
@@ -226,7 +226,7 @@ impl AppState {
             return Ok(session);
         }
 
-        let mut state = self.inner.write().await;
+        let mut state = self.storage.inner().write().await;
         let visible = state
             .sessions
             .get(session_id)
@@ -282,11 +282,11 @@ impl AppState {
     }
 
     pub async fn get_session(&self, session_id: &str) -> Option<ChatSession> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let session_id = Uuid::parse_str(session_id).ok()?;
             return pg.get_session(&self.auth, session_id).await.ok().flatten();
         }
-        let state = self.inner.read().await;
+        let state = self.storage.inner().read().await;
         state
             .sessions
             .get(session_id)
@@ -295,7 +295,7 @@ impl AppState {
     }
 
     pub async fn delete_session(&self, session_id: &str) -> Result<StatusOnlyResponse, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let session_id =
                 parse_uuid_or_app_error(session_id, "session_not_found", "session not found")?;
             let deleted = pg
@@ -322,7 +322,7 @@ impl AppState {
             });
         }
 
-        let mut state = self.inner.write().await;
+        let mut state = self.storage.inner().write().await;
         let can_delete = state
             .sessions
             .get(session_id)
@@ -352,7 +352,7 @@ impl AppState {
     }
 
     pub async fn list_messages(&self, session_id: &str) -> Result<Vec<ChatMessage>, AppError> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let session_id =
                 parse_uuid_or_app_error(session_id, "session_not_found", "session not found")?;
             return pg
@@ -361,7 +361,7 @@ impl AppState {
                 .map_err(map_pg_error);
         }
 
-        let state = self.inner.read().await;
+        let state = self.storage.inner().read().await;
         let Some(session) = state.sessions.get(session_id) else {
             return Err(AppError::not_found(
                 "session_not_found",

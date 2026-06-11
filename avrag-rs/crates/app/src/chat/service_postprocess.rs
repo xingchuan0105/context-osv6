@@ -11,7 +11,7 @@ impl AppState {
             return Ok(());
         }
 
-        let (sanitized_answer, guard_report) = self.guard_pipeline.check_output(
+        let (sanitized_answer, guard_report) = self.orchestrator.guard_pipeline().check_output(
             &execution.response.answer,
             Some(trace_id.to_string()),
         );
@@ -110,7 +110,7 @@ impl AppState {
             .await;
 
         if is_direct_chat_mode(&execution.mode)
-            && let Some(ref cm) = self.chatmemory
+            && let Some(ref cm) = self.orchestrator.chatmemory()
             && let Ok(messages) = pg.list_messages(&self.auth, session_uuid).await
             && let Some(user_id) = self.auth.actor_id().map(|value| value.into_uuid())
         {
@@ -247,7 +247,7 @@ impl AppState {
             )
             .await;
 
-        if let Some(ref usage_svc) = self.quota_manager
+        if let Some(usage_svc) = self.billing.quota_manager()
             && let Some(ref llm_usage) = execution.llm_usage {
                 let feature = match execution.mode.as_str() {
                     "chat" | "general" => avrag_billing::usage_limit::BillableFeature::Chat,
