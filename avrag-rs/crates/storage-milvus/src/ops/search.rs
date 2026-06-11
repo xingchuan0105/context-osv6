@@ -178,11 +178,19 @@ pub(crate) fn scored_text_chunk(row: Value, channel: &str) -> anyhow::Result<Sco
 }
 
 pub(crate) fn scored_multimodal_chunk(row: Value, channel: &str) -> anyhow::Result<ScoredChunk> {
+    let base_score = score_field(&row);
+    let weight = row
+        .get("retrieval_weight")
+        .and_then(Value::as_f64)
+        .map(|w| w as f32)
+        .filter(|w| *w > 0.0 && *w < 1.0);
+    let score = weight.map(|w| base_score * w).unwrap_or(base_score);
+
     Ok(ScoredChunk {
         chunk_id: uuid_field(&row, "chunk_id")?,
         doc_id: uuid_field(&row, "doc_id")?,
         content: string_field(&row, "context_text").unwrap_or_default(),
-        score: score_field(&row),
+        score,
         source: channel.to_string(),
         page: row.get("page").and_then(Value::as_i64),
         chunk_type: string_field(&row, "chunk_type").unwrap_or_else(|| "multimodal".to_string()),

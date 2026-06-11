@@ -17,7 +17,7 @@ pub const TEXT_OUTPUT_FIELDS: [&str; 11] = [
     "workspace_id",
 ];
 
-pub const MULTIMODAL_OUTPUT_FIELDS: [&str; 14] = [
+pub const MULTIMODAL_OUTPUT_FIELDS: [&str; 15] = [
     "chunk_id",
     "doc_id",
     "asset_id",
@@ -28,6 +28,7 @@ pub const MULTIMODAL_OUTPUT_FIELDS: [&str; 14] = [
     "image_path",
     "chunk_type",
     "parser_backend",
+    "retrieval_weight",
     "source_locator",
     "doc_version",
     "org_id",
@@ -101,6 +102,7 @@ pub fn schema_multimodal(config: &MilvusConfig) -> (Value, Vec<Value>) {
             float_vector_field("multimodal_dense", config.multimodal_vector_dim),
             varchar_field("chunk_type", 64, false, false, false),
             varchar_field("parser_backend", 64, false, true, false),
+            float_field("retrieval_weight", true),
             json_field("source_locator", true),
         ],
         Vec::new(),
@@ -236,6 +238,17 @@ pub fn int64_field(name: &str, nullable: bool) -> Value {
     let mut field = json!({
         "fieldName": name,
         "dataType": "Int64",
+    });
+    if nullable {
+        field["nullable"] = json!(true);
+    }
+    field
+}
+
+pub fn float_field(name: &str, nullable: bool) -> Value {
+    let mut field = json!({
+        "fieldName": name,
+        "dataType": "Float",
     });
     if nullable {
         field["nullable"] = json!(true);

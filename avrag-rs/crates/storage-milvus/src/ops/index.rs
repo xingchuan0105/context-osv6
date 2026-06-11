@@ -147,6 +147,7 @@ impl MilvusDataPlane {
                         "multimodal_dense": &chunk.vector,
                         "chunk_type": &chunk.chunk_type,
                         "parser_backend": &chunk.parser_backend,
+                        "retrieval_weight": chunk.retrieval_weight,
                         "source_locator": &chunk.source_locator,
                     })
                 })

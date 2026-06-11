@@ -188,6 +188,10 @@ pub struct MultimodalChunkIndexRecord {
     pub chunk_type: String,
     pub parser_backend: Option<String>,
     pub source_locator: Option<Value>,
+    /// Score multiplier for retrieval (0.0-1.0). None = 1.0 (default).
+    /// Used to down-weight fallback/low-quality chunks (e.g. OCR-fail page_raster = 0.4).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retrieval_weight: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

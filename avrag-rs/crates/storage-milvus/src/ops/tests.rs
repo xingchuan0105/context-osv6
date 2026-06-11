@@ -47,6 +47,7 @@ fn make_test_batch(doc_id: Uuid, parse_run_id: Uuid) -> DocumentIndexBatch {
             chunk_type: "image_with_context".to_string(),
             parser_backend: Some("test".to_string()),
             source_locator: None,
+            retrieval_weight: None,
         }],
         entities: vec![],
         relations: vec![],
