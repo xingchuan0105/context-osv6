@@ -126,6 +126,27 @@ impl PaddleOcrClient {
         pdf_bytes: &[u8],
         start_page: u32,
     ) -> Result<Vec<PaddleOcrPageResult>> {
+        match self.run_ocr_job(pdf_bytes, start_page).await {
+            Ok(pages) => Ok(pages),
+            Err(first_err) => {
+                warn!(start_page, error = %first_err, "PaddleOCR job failed on first attempt, retrying after 5s");
+                sleep(Duration::from_secs(5)).await;
+                self.run_ocr_job(pdf_bytes, start_page)
+                    .await
+                    .map_err(|retry_err| {
+                        retry_err.context(format!(
+                            "PaddleOCR job failed after retry (first error: {first_err})"
+                        ))
+                    })
+            }
+        }
+    }
+
+    async fn run_ocr_job(
+        &self,
+        pdf_bytes: &[u8],
+        start_page: u32,
+    ) -> Result<Vec<PaddleOcrPageResult>> {
         let job_id = self.submit_job(pdf_bytes).await?;
         info!(job_id = %job_id, start_page, "PaddleOCR job submitted");
 

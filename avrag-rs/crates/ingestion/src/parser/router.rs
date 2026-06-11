@@ -9,6 +9,7 @@ use super::probe::{
 const FIG_COUNT_THRESHOLD: usize = 2;
 const FIG_RATIO_THRESHOLD: f32 = 0.15;
 const TABLE_GARBLE_THRESHOLD: f32 = 0.30;
+const TABLE_QUAL_THRESHOLD: f32 = 0.6;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -308,23 +309,8 @@ fn build_pdf_parse_plan(
     probe_result: &ParseProbeResult,
     config: &ParseProbeConfig,
 ) -> PdfParsePlan {
-    let fallback_backend = if probe_result.likely_scanned
-        || probe_result.image_hint_count > config.image_heavy_threshold
-        || probe_result.table_hint_count > config.table_heavy_threshold
-    {
-        PdfPageBackend::VisualRaster
-    } else {
-        PdfPageBackend::EdgeParse
-    };
-    let fallback_reason = if probe_result.likely_scanned {
-        RouteReason::ScannedPdf
-    } else if probe_result.image_hint_count > config.image_heavy_threshold
-        || probe_result.table_hint_count > config.table_heavy_threshold
-    {
-        RouteReason::ComplexPdf
-    } else {
-        RouteReason::SimplePdf
-    };
+    let fallback_backend = PdfPageBackend::PaddleOcr;
+    let fallback_reason = RouteReason::ScannedPdf;
 
     let pages = if probe_result.pdf_page_probes.is_empty() {
         let page_count = probe_result.page_count.unwrap_or(1).max(1);
@@ -368,6 +354,7 @@ fn route_page(page: &PdfPageProbeResult) -> (PdfPageBackend, RouteDecision, Rout
     }
 
     // C′: has text + table hints but table content is garbled → single-page PaddleOCR upgrade
+    // TODO: add edgeparse_table_quality < TABLE_QUAL_THRESHOLD when implemented (always 1.0 for now)
     if page.table_hint_count > 0 {
         let garbled = page.table_garbled_ratio.unwrap_or(0.0);
         if garbled > TABLE_GARBLE_THRESHOLD {
@@ -383,7 +370,7 @@ fn route_page(page: &PdfPageProbeResult) -> (PdfPageBackend, RouteDecision, Rout
     // Use figure_area_ratio when available (ING-1b-β), fallback to image count
     let has_figures = if let Some(ratio) = page.figure_area_ratio {
         let non_deco = page.non_decorative_image_count.unwrap_or(0);
-        ratio > FIG_RATIO_THRESHOLD && non_deco >= 2
+        (ratio > FIG_RATIO_THRESHOLD && non_deco >= 2) || (ratio > 0.10 && page.image_hint_count >= 2)
     } else {
         page.image_hint_count >= FIG_COUNT_THRESHOLD
     };

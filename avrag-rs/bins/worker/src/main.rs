@@ -2437,6 +2437,7 @@ async fn execute_pdf_parse(
             }
         }
     };
+    let paddle_failed = !paddle_pages.is_empty() && paddle_ir.is_none();
 
     // Fallback: if PaddleOCR was requested but failed, route those pages to VisualRaster
     let effective_visual_pages = if paddle_pages.is_empty() || paddle_ir.is_some() {
@@ -2470,6 +2471,38 @@ async fn execute_pdf_parse(
     };
 
     let mut merged = merge_pdf_ir(document_id, filename, plan, digital_ir, paddle_ir, visual_ir)?;
+
+    // Write page_status metadata: [{page_no, status, route}, ...]
+    let page_status: Vec<serde_json::Value> = plan
+        .pages
+        .iter()
+        .map(|p| {
+            let route = match p.reason {
+                ingestion::parser::RouteReason::FastText => "A",
+                ingestion::parser::RouteReason::FastWithFigures => "B",
+                ingestion::parser::RouteReason::SlowOcr => "C",
+                ingestion::parser::RouteReason::SlowOcrSinglePage => "C_prime",
+                _ => "unknown",
+            };
+            let has_page = merged.pages.iter().any(|mp| mp.page_number == p.page_number);
+            let status = if p.backend == PdfPageBackend::PaddleOcr && paddle_failed {
+                "ocr_fail"
+            } else if has_page {
+                "ok"
+            } else {
+                "missing"
+            };
+            serde_json::json!({
+                "page_no": p.page_number,
+                "status": status,
+                "route": route,
+            })
+        })
+        .collect();
+    merged.metadata.insert(
+        "page_status".to_string(),
+        serde_json::to_string(&page_status).unwrap_or_default(),
+    );
 
     // B-class: extract figure XObjects from EdgeParse pages + VLM summary
     enrich_b_class_figures(processor, bytes, &mut merged, plan).await;
@@ -2697,6 +2730,23 @@ fn merge_pdf_ir(
             .insert("pdf_route_mode".to_string(), "hybrid_v2".to_string());
     }
 
+    // Write page_routes metadata: {"1":"A","2":"C","3":"B",...}
+    let mut page_routes_map = serde_json::Map::new();
+    for p in &plan.pages {
+        let route = match p.reason {
+            ingestion::parser::RouteReason::FastText => "A",
+            ingestion::parser::RouteReason::FastWithFigures => "B",
+            ingestion::parser::RouteReason::SlowOcr => "C",
+            ingestion::parser::RouteReason::SlowOcrSinglePage => "C_prime",
+            _ => "unknown",
+        };
+        page_routes_map.insert(p.page_number.to_string(), serde_json::json!(route));
+    }
+    merged.metadata.insert(
+        "page_routes".to_string(),
+        serde_json::to_string(&page_routes_map).unwrap_or_default(),
+    );
+
     // Collect metadata from any source
     for ir in [&digital_ir, &paddle_ir, &visual_ir]
         .iter()
@@ -2833,7 +2883,7 @@ async fn enrich_b_class_figures(
     ir: &mut DocumentIr,
     plan: &ingestion::parser::PdfParsePlan,
 ) {
-    use ingestion::parser::{extract_page_images, image_mime_type, image_to_base64};
+    use ingestion::parser::{extract_page_images, image_mime_type, image_to_base64, compute_figure_area_ratio};
 
     let b_pages: Vec<u32> = plan
         .pages
@@ -2857,7 +2907,33 @@ async fn enrich_b_class_figures(
             }
         };
 
-        for (fig_idx, img) in images.iter().enumerate() {
+        let decorative_indices: std::collections::HashSet<usize> =
+            if let Ok(doc) = lopdf::Document::load_mem(pdf_bytes) {
+                let pages = doc.get_pages();
+                if let Some(&page_id) = pages.get(&page_number) {
+                    match compute_figure_area_ratio(&doc, page_id) {
+                        Ok((_, _, placements)) => {
+                            placements
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, p)| p.is_decorative)
+                                .map(|(i, _)| i)
+                                .collect()
+                        }
+                        Err(_) => std::collections::HashSet::new(),
+                    }
+                } else {
+                    std::collections::HashSet::new()
+                }
+            } else {
+                std::collections::HashSet::new()
+            };
+
+        let non_deco_indices: Vec<usize> = (0..images.len())
+            .filter(|i| !decorative_indices.contains(i))
+            .collect();
+
+        for (fig_idx, img) in non_deco_indices.iter().map(|&i| (i, &images[i])) {
             let asset_id = format!("bfig-p{}-{}", page_number, fig_idx);
             let base64_data = image_to_base64(img);
             let mime = image_mime_type(img);
@@ -2917,7 +2993,7 @@ async fn enrich_b_class_figures(
 
         // Update page image count
         if let Some(page) = ir.pages.iter_mut().find(|p| p.page_number == page_number) {
-            page.image_count = images.len();
+            page.image_count = non_deco_indices.len();
         }
     }
 }
@@ -3697,6 +3773,7 @@ async fn maybe_enrich_visual_multimodal_summaries(
     let Some(llm) = processor.ingestion_llm.clone() else {
         return;
     };
+    let skip_raster_for_ocr = !env_flag_enabled("INGESTION_PAGE_RASTER_WITH_OCR", false);
     let media_ctx = MediaResolveContext {
         object_store: processor.object_store.clone(),
         asset_url_ttl_secs: processor.asset_url_ttl_secs,
@@ -3704,6 +3781,9 @@ async fn maybe_enrich_visual_multimodal_summaries(
 
     for chunk in chunks.iter_mut() {
         if chunk.chunk_type != "page_raster" {
+            continue;
+        }
+        if skip_raster_for_ocr && chunk.parser_backend == "paddle_ocr_pdf" {
             continue;
         }
         let image_refs = match resolve_visual_chunk_image_refs(&media_ctx, chunk).await {
@@ -4574,5 +4654,178 @@ mod tests {
     fn url_to_filename_falls_back_to_page_html() {
         assert_eq!(url_to_filename("https://example.com/article"), "page.html");
         assert_eq!(url_to_filename("https://example.com/"), "page.html");
+    }
+
+    #[test]
+    fn test_group_contiguous_pages() {
+        assert_eq!(group_contiguous_pages(&[]), Vec::<(u32, u32)>::new());
+        assert_eq!(group_contiguous_pages(&[1]), vec![(1, 1)]);
+        assert_eq!(group_contiguous_pages(&[1, 2, 3, 4, 5]), vec![(1, 5)]);
+        assert_eq!(
+            group_contiguous_pages(&[1, 2, 3, 10, 11, 20]),
+            vec![(1, 3), (10, 11), (20, 20)]
+        );
+    }
+
+    #[test]
+    fn merge_pdf_ir_paddle_fallback_to_visual() {
+        let doc_id = Uuid::new_v4();
+        let plan = PdfParsePlan {
+            pages: vec![
+                PdfPagePlan {
+                    page_number: 1,
+                    backend: PdfPageBackend::PaddleOcr,
+                    reason: RouteReason::ScannedPdf,
+                },
+                PdfPagePlan {
+                    page_number: 2,
+                    backend: PdfPageBackend::PaddleOcr,
+                    reason: RouteReason::ScannedPdf,
+                },
+            ],
+        };
+
+        let mut visual_ir = DocumentIr::new(
+            doc_id.to_string(),
+            "test.pdf".to_string(),
+            DocumentType::Pdf,
+            ParseBackend::VisualRasterPdf,
+        );
+        visual_ir.pages.push(PageIr {
+            page_number: 1,
+            backend: ParseBackend::VisualRasterPdf,
+            text_char_count: 100,
+            ..Default::default()
+        });
+        visual_ir.pages.push(PageIr {
+            page_number: 2,
+            backend: ParseBackend::VisualRasterPdf,
+            text_char_count: 200,
+            ..Default::default()
+        });
+        visual_ir.blocks.push(BlockIr {
+            block_id: "v1".to_string(),
+            page: Some(1),
+            block_type: BlockType::PageRaster,
+            modality: BlockModality::ImageWithContext,
+            text: "page 1 raster".to_string(),
+            parser_backend: ParseBackend::VisualRasterPdf,
+            ..Default::default()
+        });
+
+        // paddle_ir is None (OCR failed) — should fallback to visual_ir
+        let merged =
+            merge_pdf_ir(doc_id, "test.pdf", &plan, None, None, Some(visual_ir)).unwrap();
+
+        assert_eq!(merged.pages.len(), 2, "should have 2 pages from visual fallback");
+        assert_eq!(merged.blocks.len(), 1, "should have 1 block from visual fallback");
+        // Backend should be VisualRasterPdf since paddle_ir was None
+        assert_eq!(merged.pages[0].backend, ParseBackend::VisualRasterPdf);
+    }
+
+    #[test]
+    fn merge_pdf_ir_paddle_success_overrides() {
+        let doc_id = Uuid::new_v4();
+        let plan = PdfParsePlan {
+            pages: vec![PdfPagePlan {
+                page_number: 1,
+                backend: PdfPageBackend::PaddleOcr,
+                reason: RouteReason::ScannedPdf,
+            }],
+        };
+
+        let mut paddle_ir = DocumentIr::new(
+            doc_id.to_string(),
+            "test.pdf".to_string(),
+            DocumentType::Pdf,
+            ParseBackend::PaddleOcrPdf,
+        );
+        paddle_ir.pages.push(PageIr {
+            page_number: 1,
+            backend: ParseBackend::PaddleOcrPdf,
+            text_char_count: 500,
+            ..Default::default()
+        });
+        paddle_ir.blocks.push(BlockIr {
+            block_id: "p1".to_string(),
+            page: Some(1),
+            block_type: BlockType::Paragraph,
+            modality: BlockModality::TextOnly,
+            text: "OCR text".to_string(),
+            parser_backend: ParseBackend::PaddleOcrPdf,
+            ..Default::default()
+        });
+
+        let merged = merge_pdf_ir(
+            doc_id,
+            "test.pdf",
+            &plan,
+            None,
+            Some(paddle_ir),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(merged.pages.len(), 1);
+        assert_eq!(merged.pages[0].backend, ParseBackend::PaddleOcrPdf);
+        assert_eq!(merged.blocks[0].text, "OCR text");
+    }
+
+    #[test]
+    fn merge_pdf_ir_hybrid_v2_metadata() {
+        let doc_id = Uuid::new_v4();
+        let plan = PdfParsePlan {
+            pages: vec![
+                PdfPagePlan {
+                    page_number: 1,
+                    backend: PdfPageBackend::EdgeParse,
+                    reason: RouteReason::FastText,
+                },
+                PdfPagePlan {
+                    page_number: 2,
+                    backend: PdfPageBackend::PaddleOcr,
+                    reason: RouteReason::ScannedPdf,
+                },
+            ],
+        };
+
+        let mut digital_ir = DocumentIr::new(
+            doc_id.to_string(),
+            "test.pdf".to_string(),
+            DocumentType::Pdf,
+            ParseBackend::EdgeParsePdf,
+        );
+        digital_ir.pages.push(PageIr {
+            page_number: 1,
+            backend: ParseBackend::EdgeParsePdf,
+            ..Default::default()
+        });
+
+        let mut paddle_ir = DocumentIr::new(
+            doc_id.to_string(),
+            "test.pdf".to_string(),
+            DocumentType::Pdf,
+            ParseBackend::PaddleOcrPdf,
+        );
+        paddle_ir.pages.push(PageIr {
+            page_number: 2,
+            backend: ParseBackend::PaddleOcrPdf,
+            ..Default::default()
+        });
+
+        let merged = merge_pdf_ir(
+            doc_id,
+            "test.pdf",
+            &plan,
+            Some(digital_ir),
+            Some(paddle_ir),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            merged.metadata.get("pdf_route_mode").map(|s| s.as_str()),
+            Some("hybrid_v2")
+        );
     }
 }
