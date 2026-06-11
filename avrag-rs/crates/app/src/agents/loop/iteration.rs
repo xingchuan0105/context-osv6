@@ -402,6 +402,7 @@ impl ReActLoop {
                     name: None,
                     tool_call_id: None,
                     tool_calls: None,
+                    multimodal_content: None,
                     reasoning_content: llm_response.reasoning_content.clone(),
                 });
                 state.messages.push(ChatMessage {
@@ -412,6 +413,7 @@ impl ReActLoop {
                     name: None,
                     tool_call_id: None,
                     tool_calls: None,
+                    multimodal_content: None,
                     reasoning_content: None,
                 });
 
@@ -483,6 +485,7 @@ impl ReActLoop {
                     name: None,
                     tool_call_id: None,
                     tool_calls: None,
+                    multimodal_content: None,
                     reasoning_content: llm_response.reasoning_content.clone(),
                 });
 

@@ -885,6 +885,7 @@ pub(crate) fn build_assistant_message_with_tool_calls(
     ChatMessage {
         role: "assistant".to_string(),
         content: content.to_string(),
+        multimodal_content: None,
         name: None,
         tool_call_id: None,
         tool_calls: Some(serde_json::json!(openai_calls)),
@@ -903,6 +904,7 @@ pub(crate) fn build_tool_message(call_id: &str, tool_name: &str, result: &common
     ChatMessage {
         role: "tool".to_string(),
         content: body.to_string(),
+        multimodal_content: None,
         name: Some(tool_name.to_string()),
         tool_call_id: Some(call_id.to_string()),
         tool_calls: None,

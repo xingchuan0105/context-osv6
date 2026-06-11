@@ -9,15 +9,17 @@ fn build_chat_completion_request_body(
     temperature: Option<f32>,
     stream: bool,
 ) -> serde_json::Value {
-    let mut request_body = serde_json::json!({
-        "model": config.model,
-        "messages": messages
-            .iter()
-            .map(|m| {
-                let mut msg = serde_json::json!({
-                    "role": m.role,
-                    "content": m.content
-                });
+        let mut request_body = serde_json::json!({
+            "model": config.model,
+            "messages": messages
+                .iter()
+                .map(|m| {
+                    let mut msg = serde_json::json!({ "role": m.role });
+                    if let Some(ref parts) = m.multimodal_content {
+                        msg["content"] = serde_json::to_value(parts).unwrap_or_default();
+                    } else {
+                        msg["content"] = serde_json::json!(m.content);
+                    }
                 if let Some(ref name) = m.name {
                     msg["name"] = serde_json::json!(name);
                 }
@@ -787,9 +789,25 @@ impl LlmClient {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ContentPart {
+    Text { text: String },
+    ImageUrl { image_url: ImageUrlDetail },
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ImageUrlDetail {
+    pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub multimodal_content: Option<Vec<ContentPart>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -807,6 +825,7 @@ impl ChatMessage {
         Self {
             role: "user".to_string(),
             content: content.into(),
+            multimodal_content: None,
             name: None,
             tool_call_id: None,
             tool_calls: None,
@@ -818,6 +837,7 @@ impl ChatMessage {
         Self {
             role: "system".to_string(),
             content: content.into(),
+            multimodal_content: None,
             name: None,
             tool_call_id: None,
             tool_calls: None,
@@ -829,6 +849,28 @@ impl ChatMessage {
         Self {
             role: "assistant".to_string(),
             content: content.into(),
+            multimodal_content: None,
+            name: None,
+            tool_call_id: None,
+            tool_calls: None,
+            reasoning_content: None,
+        }
+    }
+
+    pub fn user_multimodal(text: impl Into<String>, image_urls: Vec<String>) -> Self {
+        let mut parts = vec![ContentPart::Text { text: text.into() }];
+        for url in image_urls {
+            parts.push(ContentPart::ImageUrl {
+                image_url: ImageUrlDetail {
+                    url,
+                    detail: Some("low".to_string()),
+                },
+            });
+        }
+        Self {
+            role: "user".to_string(),
+            content: String::new(),
+            multimodal_content: Some(parts),
             name: None,
             tool_call_id: None,
             tool_calls: None,
@@ -1158,6 +1200,7 @@ data: [DONE]
         let msg3 = ChatMessage {
             role: "tool".to_string(),
             content: "success".to_string(),
+            multimodal_content: None,
             name: Some("test_tool".to_string()),
             tool_call_id: Some("call_123".to_string()),
             tool_calls: None,
@@ -1189,6 +1232,7 @@ data: [DONE]
         let assistant = ChatMessage {
             role: "assistant".to_string(),
             content: String::new(),
+            multimodal_content: None,
             name: None,
             tool_call_id: None,
             tool_calls: Some(serde_json::json!([{
