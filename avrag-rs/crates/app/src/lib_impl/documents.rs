@@ -240,7 +240,7 @@ impl AppState {
             if !document_upload_status_is_mutable_for_app(&seed.status) {
                 return Err(upload_status_conflict_error(&seed.status));
             }
-            self.object_storage.object_store()
+            self.storage.object_store()
                 .put(&seed.object_path, &body)
                 .await
                 .map_err(|error| AppError::internal(error.to_string()))?;
@@ -303,7 +303,7 @@ impl AppState {
             if !document_upload_status_is_mutable_for_app(&seed.status) {
                 return Err(upload_status_conflict_error(&seed.status));
             }
-            self.object_storage.object_store()
+            self.storage.object_store()
                 .put_stream(&seed.object_path, stream)
                 .await
                 .map_err(|error| AppError::internal(error.to_string()))?;
@@ -340,7 +340,7 @@ impl AppState {
                 return Err(upload_status_conflict_error(&seed.status));
             }
 
-            let object_metadata = match self.object_storage.object_store().head(&seed.object_path).await {
+            let object_metadata = match self.storage.object_store().head(&seed.object_path).await {
                 Ok(metadata) => metadata,
                 Err(
                     ObjectStoreHeadError::NotFound { .. } | ObjectStoreHeadError::NotFile { .. },

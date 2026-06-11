@@ -20,15 +20,6 @@ use uuid::Uuid;
 impl AppState {
     pub fn new(config: AppConfig) -> Self {
         let auth = auth_context_from_config(&config);
-        let object_storage = crate::object_storage_context::ObjectStorageContext::new(
-            Arc::new(ObjectStoreHandle::local(PathBuf::from(
-                config.object_root.clone(),
-            ))),
-            config.public_base_url.clone(),
-            config.object_root.clone(),
-            config.object_storage.upload_url_expire_sec,
-            config.object_storage.download_url_expire_sec,
-        );
         let llm_ctx = crate::llm_context::LlmContext::new(
             make_llm_client(&config.agent_llm),
             make_llm_client(&config.memory_llm),
@@ -56,6 +47,13 @@ impl AppState {
             Arc::new(RwLock::new(BTreeMap::new())),
             config.max_upload_file_size_bytes,
             true,
+            Arc::new(ObjectStoreHandle::local(PathBuf::from(
+                config.object_root.clone(),
+            ))),
+            config.public_base_url.clone(),
+            config.object_root.clone(),
+            config.object_storage.upload_url_expire_sec,
+            config.object_storage.download_url_expire_sec,
         );
         let orchestrator = crate::orchestrator_context::OrchestratorContext::new(
             agent_service,
@@ -69,8 +67,7 @@ impl AppState {
             storage,
             llm_ctx,
             orchestrator,
-            analytics: None,
-            object_storage,
+            analytics: crate::analytics_context::AnalyticsServiceCtx::new(None),
             billing: crate::billing_context::BillingContext::new(
                 None,
                 config.usage_limit.enforcement_phase.clone(),
@@ -81,13 +78,7 @@ impl AppState {
 
     pub async fn bootstrap(config: AppConfig) -> AnyResult<Self> {
         let auth = auth_context_from_config(&config);
-        let object_storage = crate::object_storage_context::ObjectStorageContext::new(
-            Arc::new(build_object_store(&config).await?),
-            config.public_base_url.clone(),
-            config.object_root.clone(),
-            config.object_storage.upload_url_expire_sec,
-            config.object_storage.download_url_expire_sec,
-        );
+        let object_store = Arc::new(build_object_store(&config).await?);
         let pg = if let Some(database_url) = config.database_url.as_deref() {
             let repository = PgAppRepository::connect(database_url).await?;
             if config.auto_migrate {
@@ -195,9 +186,10 @@ impl AppState {
             quota_manager,
             config.usage_limit.enforcement_phase.clone(),
         );
-        let analytics = pg
-            .as_ref()
-            .map(|p| Arc::new(analytics::AnalyticsService::new(p.raw().clone())));
+        let analytics = crate::analytics_context::AnalyticsServiceCtx::new(
+            pg.as_ref()
+                .map(|p| Arc::new(analytics::AnalyticsService::new(p.raw().clone()))),
+        );
         let uses_memory_adapters = pg.is_none();
         let agent_service = Some(build_unified_agent_service(
             llm_ctx.agent_client().cloned(),
@@ -212,6 +204,11 @@ impl AppState {
             Arc::new(RwLock::new(BTreeMap::new())),
             config.max_upload_file_size_bytes,
             uses_memory_adapters,
+            object_store,
+            config.public_base_url.clone(),
+            config.object_root.clone(),
+            config.object_storage.upload_url_expire_sec,
+            config.object_storage.download_url_expire_sec,
         );
         let orchestrator = crate::orchestrator_context::OrchestratorContext::new(
             agent_service,
@@ -226,7 +223,6 @@ impl AppState {
             llm_ctx,
             orchestrator,
             analytics,
-            object_storage,
             billing,
             redis_url: config.redis.url.clone(),
         })
@@ -319,10 +315,6 @@ impl AppState {
 
     pub fn llm_ctx(&self) -> &crate::llm_context::LlmContext {
         &self.llm_ctx
-    }
-
-    pub fn object_storage(&self) -> &crate::object_storage_context::ObjectStorageContext {
-        &self.object_storage
     }
 
     pub fn billing(&self) -> &crate::billing_context::BillingContext {
@@ -485,16 +477,12 @@ impl AppState {
         general_debug
     }
 
-    pub fn analytics(&self) -> Option<Arc<analytics::AnalyticsService>> {
-        self.analytics.clone()
+    pub fn analytics(&self) -> Option<&Arc<analytics::AnalyticsService>> {
+        self.analytics.service()
     }
 
-    /// Returns an AnalyticsContext for recording events.
-    /// Part of the Phase 1 AppState decomposition — prefer this over
-    /// direct `record_*_if_available()` calls in new code.
     pub fn analytics_ctx(&self) -> crate::analytics_context::AnalyticsContext {
-        crate::analytics_context::AnalyticsContext::new(
-            self.analytics.clone(),
+        self.analytics.into_context(
             self.auth.actor_id().map(|a| a.into_uuid()),
             self.auth.request_id().map(str::to_string),
         )
@@ -509,7 +497,7 @@ impl AppState {
         notebook_id: Option<Uuid>,
         metadata: serde_json::Value,
     ) {
-        let Some(ref analytics) = self.analytics else {
+        let Some(ref analytics) = self.analytics.service() else {
             return;
         };
         let Some(user_id) = self.auth.actor_id().map(|actor| actor.into_uuid()) else {
@@ -549,7 +537,7 @@ pub struct CostEventRecord<'a> {
 
 impl AppState {
     pub async fn record_cost_event_if_available(&self, record: CostEventRecord<'_>) {
-        let Some(ref analytics) = self.analytics else {
+        let Some(ref analytics) = self.analytics.service() else {
             return;
         };
         let Some(user_id) = self.auth.actor_id().map(|actor| actor.into_uuid()) else {
@@ -595,7 +583,7 @@ impl AppState {
         source: &str,
         metadata: serde_json::Value,
     ) {
-        let Some(ref analytics) = self.analytics else {
+        let Some(ref analytics) = self.analytics.service() else {
             return;
         };
         let Some(user_id) = self.auth.actor_id().map(|actor| actor.into_uuid()) else {
@@ -635,7 +623,7 @@ impl AppState {
         external_call_count: i64,
         metadata: serde_json::Value,
     ) {
-        let Some(ref analytics) = self.analytics else {
+        let Some(ref analytics) = self.analytics.service() else {
             return;
         };
         let Some(user_id) = self.auth.actor_id().map(|actor| actor.into_uuid()) else {

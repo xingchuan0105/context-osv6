@@ -15,7 +15,6 @@ pub mod token_budget;
 pub mod analytics_context;
 pub mod billing_context;
 pub mod llm_context;
-pub mod object_storage_context;
 pub mod orchestrator_context;
 pub mod storage_context;
 pub mod lib_impl;

@@ -665,12 +665,18 @@ mod tests {
         config.object_root = object_root.to_string_lossy().to_string();
 
         let mut state = AppState::new(config);
+        let old = &state.storage;
         state.storage = crate::storage_context::StorageContext::new(
             Some(Arc::new(repo)),
-            state.storage.inner().clone(),
-            state.storage.api_keys().clone(),
-            state.storage.max_upload_file_size_bytes(),
+            old.inner().clone(),
+            old.api_keys().clone(),
+            old.max_upload_file_size_bytes(),
             false,
+            old.object_store().clone(),
+            old.public_base_url().to_string(),
+            old.object_root_path().to_string_lossy().to_string(),
+            old.upload_expire_sec(),
+            old.download_expire_sec(),
         );
         Some((state, object_root))
     }

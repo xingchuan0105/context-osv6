@@ -279,7 +279,7 @@ impl AppState {
         object_path: &str,
         expires_at_unix: Option<u64>,
     ) -> Result<String, AppError> {
-        self.object_storage
+        self.storage
             .signed_upload_url(document_id, object_path, expires_at_unix)
     }
 
@@ -290,12 +290,12 @@ impl AppState {
         expires: u64,
         signature: &str,
     ) -> Result<(), AppError> {
-        self.object_storage
+        self.storage
             .verify_upload_signature(document_id, object_path, expires, signature)
     }
 
     pub(crate) fn object_root_path(&self) -> &Path {
-        self.object_storage.object_root_path()
+        self.storage.object_root_path()
     }
 
     pub(crate) async fn enqueue_ingest_task(&self, seed: DocumentTaskSeed) -> Result<(), AppError> {

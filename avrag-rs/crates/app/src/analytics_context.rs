@@ -1,11 +1,41 @@
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// Analytics recording context, extracted from AppState.
+/// Lightweight wrapper around the analytics service for per-app storage.
+///
+/// Holds the service reference. Per-request context (actor_id, request_id)
+/// is created on-demand via `into_context()`.
+#[derive(Clone)]
+pub struct AnalyticsServiceCtx {
+    service: Option<Arc<analytics::AnalyticsService>>,
+}
+
+impl AnalyticsServiceCtx {
+    pub fn new(service: Option<Arc<analytics::AnalyticsService>>) -> Self {
+        Self { service }
+    }
+
+    pub fn is_available(&self) -> bool {
+        self.service.is_some()
+    }
+
+    pub fn service(&self) -> Option<&Arc<analytics::AnalyticsService>> {
+        self.service.as_ref()
+    }
+
+    pub fn into_context(&self, actor_id: Option<Uuid>, request_id: Option<String>) -> AnalyticsContext {
+        AnalyticsContext {
+            analytics: self.service.clone(),
+            actor_id,
+            request_id,
+        }
+    }
+}
+
+/// Per-request analytics recording context.
 ///
 /// Holds the analytics service and auth info needed for event recording.
-/// Phase 1 of AppState decomposition — callers can use `state.analytics_ctx()`
-/// instead of the direct `state.record_*_if_available()` methods.
+/// Created from `AnalyticsServiceCtx` via `into_context()`.
 #[derive(Clone)]
 pub struct AnalyticsContext {
     analytics: Option<Arc<analytics::AnalyticsService>>,

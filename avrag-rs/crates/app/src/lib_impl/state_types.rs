@@ -9,9 +9,8 @@ pub struct AppState {
     pub(crate) storage: crate::storage_context::StorageContext,
     pub(crate) llm_ctx: crate::llm_context::LlmContext,
     pub(crate) orchestrator: crate::orchestrator_context::OrchestratorContext,
-    pub(crate) analytics: Option<Arc<analytics::AnalyticsService>>,
+    pub(crate) analytics: crate::analytics_context::AnalyticsServiceCtx,
     pub(crate) billing: crate::billing_context::BillingContext,
-    pub(crate) object_storage: crate::object_storage_context::ObjectStorageContext,
     pub(crate) redis_url: String,
 }
 

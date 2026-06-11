@@ -50,7 +50,7 @@ impl AppState {
         &self,
         asset: &DocumentAssetRow,
     ) -> Option<String> {
-        self.object_storage.resolve_citation_asset_url(asset).await
+        self.storage.resolve_citation_asset_url(asset).await
     }
 }
 

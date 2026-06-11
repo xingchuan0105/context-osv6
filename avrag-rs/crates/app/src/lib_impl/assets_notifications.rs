@@ -195,7 +195,7 @@ impl AppState {
         }
 
         let bytes = self
-            .object_storage.object_store()
+            .storage.object_store()
             .get(&storage_path)
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
