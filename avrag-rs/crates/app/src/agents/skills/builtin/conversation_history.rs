@@ -64,30 +64,81 @@ impl SkillComponent for ConversationHistoryLoad {
         }
     }
 
-    async fn execute<'a>(&self, args: &Value, _ctx: &'a ExecutionContext<'a>) -> ToolResult {
-        let tags: Vec<String> = args
-            .get("tags")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default();
+    async fn execute<'a>(&self, args: &Value, ctx: &'a ExecutionContext<'a>) -> ToolResult {
+        let (auth, session_id, repo) = match (ctx.auth, ctx.session_id, ctx.pg_repo) {
+            (Some(auth), Some(session_id), Some(repo)) => (auth, session_id, repo),
+            _ => {
+                return crate::agents::skills::memory_dispatch::memory_tool_error(
+                    self.id(),
+                    "conversation history requires auth, session_id, and pg repository",
+                )
+            }
+        };
+        crate::agents::skills::memory_dispatch::conversation_history_load(
+            args, auth, session_id, repo,
+        )
+        .await
+    }
+}
 
-        let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+/// Load the user's long-term profile and preferences on demand.
+pub struct UserProfileLoad;
 
-        ToolResult {
-            tool: self.id().to_string(),
-            version: self.version().to_string(),
-            status: ToolStatus::Ok,
-            data: Some(serde_json::json!({
-                "tags": tags,
-                "limit": limit,
-                "message_count": 0,
-            })),
-            trace: None,
+#[async_trait::async_trait]
+impl SkillComponent for UserProfileLoad {
+    fn id(&self) -> &str {
+        "user_profile_load"
+    }
+
+    fn version(&self) -> &str {
+        "1.0"
+    }
+
+    fn description(&self) -> &str {
+        "Load when the agent needs the user's long-term profile, expertise, or stated preferences \
+         beyond what runtime already injected. Skip when recent turns suffice."
+    }
+
+    fn spec(&self) -> ToolSpec {
+        ToolSpec {
+            name: "user_profile_load".to_string(),
+            version: "1.0".to_string(),
+            description: "Load the authenticated user's structured profile and preference memory."
+                .to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }),
+            output_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "structured_profile": { "type": "object" },
+                    "expertise_domains": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
+                    "preferred_answer_style": { "type": ["string", "null"] },
+                    "frequently_asked_topics": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    }
+                }
+            }),
         }
+    }
+
+    async fn execute<'a>(&self, _args: &Value, ctx: &'a ExecutionContext<'a>) -> ToolResult {
+        let (auth, repo) = match (ctx.auth, ctx.pg_repo) {
+            (Some(auth), Some(repo)) => (auth, repo),
+            _ => {
+                return crate::agents::skills::memory_dispatch::memory_tool_error(
+                    self.id(),
+                    "user profile load requires auth and pg repository",
+                )
+            }
+        };
+        crate::agents::skills::memory_dispatch::user_profile_load(auth, repo).await
     }
 }
 

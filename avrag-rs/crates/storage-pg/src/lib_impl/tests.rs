@@ -935,6 +935,8 @@ mod tests {
                 domain: common::Domain::Unknown,
                 genre: common::Genre::Unknown,
                 era: common::Era::Contemporary,
+                author: None,
+                publication_date: None,
             },
         };
         repo.update_document_summary(&ctx, document_id, &summary_output, None, None)
@@ -1012,6 +1014,8 @@ mod tests {
                     agent_type: "chat",
                     citations: &[],
                     tool_results: &tool_results,
+                    user_turn_metadata: None,
+                    user_resolved_query: None,
                 },
             )
             .await
@@ -1036,6 +1040,105 @@ mod tests {
         assert_eq!(
             assistant_message.tool_results[1].data.as_ref().unwrap()["error"],
             "SyntaxError"
+        );
+    }
+
+    #[tokio::test]
+    async fn chat_message_turn_metadata_roundtrip_when_database_available() {
+        let Some(database_url) = env::var("DATABASE_URL").ok() else {
+            return;
+        };
+        let repo = PgAppRepository::connect(&database_url).await.unwrap();
+        repo.migrate().await.unwrap();
+
+        let org_id = OrgId::from(Uuid::new_v4());
+        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+            .with_actor_id(ActorId::new(Uuid::new_v4()));
+
+        let notebook = repo
+            .create_notebook(&ctx, "turn-metadata-test", "turn metadata test")
+            .await
+            .unwrap();
+        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+        let session = repo
+            .create_session(&ctx, notebook_id, Some("meta-session"), "rag")
+            .await
+            .unwrap();
+        let session_id = Uuid::parse_str(&session.id).unwrap();
+
+        let metadata = serde_json::json!({
+            "query_resolution": {
+                "raw_query": "Who wrote it?",
+                "resolved_query": "Who wrote Antifragile?",
+                "slots": ["pronoun"],
+                "method": "heuristic"
+            }
+        });
+
+        let message_id = repo
+            .append_chat_turn(
+                &ctx,
+                session_id,
+                ChatTurn {
+                    user_content: "Who wrote it?",
+                    assistant_content: "Taleb.",
+                    assistant_answer_blocks: &[],
+                    agent_type: "rag",
+                    citations: &[],
+                    tool_results: &[],
+                    user_turn_metadata: Some(metadata),
+                    user_resolved_query: Some("Who wrote Antifragile?"),
+                },
+            )
+            .await
+            .unwrap();
+
+        let messages = repo.list_messages(&ctx, session_id).await.unwrap();
+        let user_row = messages
+            .iter()
+            .find(|m| m.role == "user")
+            .expect("user row");
+        assert_eq!(user_row.content, "Who wrote it?");
+        let stored_meta = user_row
+            .turn_metadata
+            .as_ref()
+            .expect("turn_metadata should roundtrip");
+        assert_eq!(
+            stored_meta["query_resolution"]["resolved_query"],
+            "Who wrote Antifragile?"
+        );
+        assert_eq!(
+            user_row.resolved_query.as_deref(),
+            Some("Who wrote Antifragile?")
+        );
+        assert!(message_id > 0);
+    }
+
+    #[tokio::test]
+    async fn get_notebook_returns_none_for_other_org_when_database_available() {
+        let Some(database_url) = env::var("DATABASE_URL").ok() else {
+            return;
+        };
+        let repo = PgAppRepository::connect(&database_url).await.unwrap();
+        repo.migrate().await.unwrap();
+
+        let org_a = OrgId::from(Uuid::new_v4());
+        let org_b = OrgId::from(Uuid::new_v4());
+        let ctx_a = AuthContext::new(org_a, avrag_auth::SubjectKind::User)
+            .with_actor_id(ActorId::new(Uuid::new_v4()));
+        let ctx_b = AuthContext::new(org_b, avrag_auth::SubjectKind::User)
+            .with_actor_id(ActorId::new(Uuid::new_v4()));
+
+        let notebook = repo
+            .create_notebook(&ctx_a, "org-a notebook", "isolation test")
+            .await
+            .unwrap();
+        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+
+        let fetched = repo.get_notebook(&ctx_b, notebook_id).await.unwrap();
+        assert!(
+            fetched.is_none(),
+            "org B must not read org A's notebook via get_notebook"
         );
     }
 }

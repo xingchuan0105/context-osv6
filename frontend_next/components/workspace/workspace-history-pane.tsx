@@ -12,6 +12,7 @@ import {
 } from "../../lib/workspace/client";
 import type { WorkspaceSession } from "../../lib/workspace/model";
 import { sortWorkspaceSessions } from "../../lib/workspace/model";
+import type { AnswerBlock } from "../../lib/workspace/stream";
 import styles from "./workspace-shell.module.css";
 
 type WorkspaceHistoryPaneProps = {
@@ -46,8 +47,8 @@ function collapseWhitespace(value: string | null | undefined) {
 }
 
 function extractMessageSearchText(message: WorkspaceChatMessage) {
-  const answerText = message.answer_blocks
-    .filter((block): block is Extract<WorkspaceChatMessage["answer_blocks"][number], { type: "text" }> => block.type === "text")
+  const answerText = (message.answer_blocks ?? [])
+    .filter((block): block is Extract<AnswerBlock, { type: "text" }> => block.type === "text")
     .map((block) => block.text)
     .join(" ");
 

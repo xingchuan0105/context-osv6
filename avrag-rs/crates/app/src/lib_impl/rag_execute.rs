@@ -12,7 +12,7 @@ impl AppState {
             .map_err(|error| AppError::validation("invalid_execute_plan", error.to_string()))?;
         self.validate_execute_plan_doc_scope(&req).await?;
 
-        if let Some(rag_runtime) = &self.rag_runtime {
+        if let Some(rag_runtime) = self.orchestrator.rag_runtime() {
             return rag_runtime
                 .execute_plan(&req, &self.auth)
                 .await
@@ -36,7 +36,7 @@ impl AppState {
             ));
         }
 
-        if let Some(rag_runtime) = &self.rag_runtime {
+        if let Some(rag_runtime) = self.orchestrator.rag_runtime() {
             let results = rag_runtime.execute_tools(&self.auth, req.calls).await;
             return Ok(common::RuntimeExecuteResponse { results });
         }
@@ -58,8 +58,14 @@ impl AppState {
             ));
         }
 
-        let doc_ids = req
-            .doc_scope
+        self.validate_rag_doc_scope(&req.doc_scope).await
+    }
+
+    pub(crate) async fn validate_rag_doc_scope(
+        &self,
+        doc_scope: &[String],
+    ) -> Result<(), AppError> {
+        let doc_ids = doc_scope
             .iter()
             .map(|id| {
                 Uuid::parse_str(id).map_err(|_| {
@@ -75,7 +81,7 @@ impl AppState {
             .copied()
             .collect::<std::collections::HashSet<_>>();
 
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let unique_doc_ids = unique_doc_ids.iter().copied().collect::<Vec<_>>();
             let states = pg
                 .get_document_scope_states(&self.auth, &unique_doc_ids)
@@ -102,8 +108,8 @@ impl AppState {
             return Ok(());
         }
 
-        let state = self.inner.read().await;
-        for doc_id in &req.doc_scope {
+        let state = self.storage.inner().read().await;
+        for doc_id in doc_scope {
             let Some(stored) = state.documents.get(doc_id) else {
                 return Err(AppError::validation(
                     "invalid_doc_scope",

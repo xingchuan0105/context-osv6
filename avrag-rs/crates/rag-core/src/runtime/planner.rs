@@ -1,6 +1,6 @@
 use anyhow::Result;
 use avrag_llm::LlmUsage;
-use common::{ChatRequest, DegradeTraceItem, RagPlan, RagPlanItem, RagTraceItem};
+use common::{ChatRequest, DegradeReason, DegradeTraceItem, RagPlan, RagPlanItem, RagTraceItem};
 use uuid::Uuid;
 
 use crate::context::SessionContext;
@@ -343,10 +343,10 @@ impl RagRuntime {
                     rag_plan = plan;
                     planner_usage = Some(usage);
                 }
-                Err(error) => {
+                Err(_error) => {
                     degrade_trace.push(DegradeTraceItem {
                         stage: "planner".to_string(),
-                        reason: format!("Planner call failed: {}", error),
+                        reason: DegradeReason::PlannerFailed,
                         impact: "Using default retrieval".to_string(),
                     });
                 }

@@ -38,6 +38,9 @@ pub(crate) struct ChatExecution {
     /// Whether Citations events were already emitted during mode-step execution.
     #[serde(default)]
     pub citations_emitted: bool,
+    /// Query normalization metadata from agent run (ADR-0008).
+    #[serde(default)]
+    pub query_resolution: Option<serde_json::Value>,
 }
 
 pub(crate) async fn execute_chat_pipeline(
@@ -115,7 +118,7 @@ async fn run_pipeline(
         }),
         created_at: common::now_rfc3339(),
     };
-    if let Some(ref pg) = state.pg {
+    if let Some(pg) = state.pg() {
         let _ = pg.append_audit_record(&audit_record).await;
     }
 

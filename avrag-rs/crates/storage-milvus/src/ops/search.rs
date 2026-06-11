@@ -1,9 +1,12 @@
-use serde_json::{Value, json};
-use avrag_retrieval_data_plane::{Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, ScoredChunk, TextDenseSearchRequest, MultimodalSearchRequest};
 use crate::lib_impl::MilvusDataPlane;
-use crate::schema::{TEXT_OUTPUT_FIELDS, MULTIMODAL_OUTPUT_FIELDS, doc_filter};
-use crate::utils::{uuid_field, optional_uuid_field, string_field, score_field};
+use crate::schema::{MULTIMODAL_OUTPUT_FIELDS, TEXT_OUTPUT_FIELDS, doc_filter};
 use crate::types::Result;
+use crate::utils::{optional_uuid_field, score_field, string_field, uuid_field};
+use avrag_retrieval_data_plane::{
+    Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, MultimodalSearchRequest, ScoredChunk,
+    TextDenseSearchRequest,
+};
+use serde_json::{Value, json};
 
 impl MilvusDataPlane {
     pub(crate) async fn search_entities(
@@ -23,25 +26,26 @@ impl MilvusDataPlane {
             "limit": limit,
             "outputFields": output_fields
         }));
-        let response = self
-            .post_json("/v2/vectordb/entities/search", body)
-            .await?;
+        let response = self.post_json("/v2/vectordb/entities/search", body).await?;
         let rows = response["data"].as_array().cloned().unwrap_or_default();
         // Milvus v2.6+ nests output fields under "entity"; flatten for compatibility.
-        let flattened: Vec<Value> = rows.into_iter().map(|mut row| {
-            if let Some(entity) = row.as_object_mut().and_then(|obj| obj.remove("entity")) {
-                if let Some(entity_obj) = entity.as_object() {
-                    if let Some(obj) = row.as_object_mut() {
-                        for (k, v) in entity_obj {
-                            if !obj.contains_key(k) {
-                                obj.insert(k.clone(), v.clone());
+        let flattened: Vec<Value> = rows
+            .into_iter()
+            .map(|mut row| {
+                if let Some(entity) = row.as_object_mut().and_then(|obj| obj.remove("entity")) {
+                    if let Some(entity_obj) = entity.as_object() {
+                        if let Some(obj) = row.as_object_mut() {
+                            for (k, v) in entity_obj {
+                                if !obj.contains_key(k) {
+                                    obj.insert(k.clone(), v.clone());
+                                }
                             }
                         }
                     }
                 }
-            }
-            row
-        }).collect();
+                row
+            })
+            .collect();
         Ok(flattened)
     }
 
@@ -73,7 +77,10 @@ impl MilvusDataPlane {
         Ok(chunks)
     }
 
-    pub async fn search_bm25(&self, request: Bm25SearchRequest) -> anyhow::Result<Bm25SearchOutput> {
+    pub async fn search_bm25(
+        &self,
+        request: Bm25SearchRequest,
+    ) -> anyhow::Result<Bm25SearchOutput> {
         if request.query.trim().is_empty() || request.doc_ids.as_ref().is_some_and(Vec::is_empty) {
             return Ok(Bm25SearchOutput {
                 chunks: Vec::new(),
@@ -171,11 +178,19 @@ pub(crate) fn scored_text_chunk(row: Value, channel: &str) -> anyhow::Result<Sco
 }
 
 pub(crate) fn scored_multimodal_chunk(row: Value, channel: &str) -> anyhow::Result<ScoredChunk> {
+    let base_score = score_field(&row);
+    let weight = row
+        .get("retrieval_weight")
+        .and_then(Value::as_f64)
+        .map(|w| w as f32)
+        .filter(|w| *w > 0.0 && *w < 1.0);
+    let score = weight.map(|w| base_score * w).unwrap_or(base_score);
+
     Ok(ScoredChunk {
         chunk_id: uuid_field(&row, "chunk_id")?,
         doc_id: uuid_field(&row, "doc_id")?,
         content: string_field(&row, "context_text").unwrap_or_default(),
-        score: score_field(&row),
+        score,
         source: channel.to_string(),
         page: row.get("page").and_then(Value::as_i64),
         chunk_type: string_field(&row, "chunk_type").unwrap_or_else(|| "multimodal".to_string()),

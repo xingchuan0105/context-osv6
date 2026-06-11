@@ -26,7 +26,8 @@ pub struct SearchExecutor {
 
 impl SearchExecutor {
     pub fn new(config: SearchConfig) -> Self {
-        let client = build_client_with_proxy();
+        crate::proxy::sync_resolved_proxy_env();
+        let client = crate::proxy::build_http_client_with_proxy();
         Self { config, client }
     }
 
@@ -94,21 +95,6 @@ impl SearchExecutor {
     }
 }
 
-/// Build a reqwest Client that respects `HTTPS_PROXY` / `https_proxy` env vars.
-fn build_client_with_proxy() -> Client {
-    let mut builder = Client::builder();
-    if let Ok(proxy_url) = std::env::var("HTTPS_PROXY")
-        .or_else(|_| std::env::var("https_proxy"))
-        .or_else(|_| std::env::var("HTTP_PROXY"))
-        .or_else(|_| std::env::var("http_proxy"))
-    {
-        if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
-            builder = builder.proxy(proxy);
-        }
-    }
-    builder.build().unwrap_or_else(|_| Client::new())
-}
-
 fn unsupported_provider<T>(provider: &str) -> anyhow::Result<T> {
     anyhow::bail!(
         "unsupported search provider: {}; supported providers: brave_llm_context",
@@ -126,4 +112,3 @@ impl SearchProvider for SearchExecutor {
         SearchExecutor::execute_search(self, query, vertical).await
     }
 }
-

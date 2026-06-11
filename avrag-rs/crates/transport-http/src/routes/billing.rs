@@ -101,16 +101,7 @@ async fn get_usage_window(
             "authenticated user required",
         ));
     };
-    let flag = avrag_billing::PricingRevampFlag::from_env();
-    if !flag.is_enabled_for(actor_id.into_uuid()) {
-        return Json(ApiResponse::err(
-            "feature_disabled",
-            "pricing revamp is not yet available for this user",
-        ));
-    }
-    Json(
-        avrag_billing::handle_get_usage_window(repo, UserId::from(actor_id.into_uuid())).await,
-    )
+    Json(avrag_billing::handle_get_usage_window(repo, UserId::from(actor_id.into_uuid())).await)
 }
 
 async fn create_checkout(
@@ -130,12 +121,7 @@ async fn create_checkout(
         ));
     };
     Json(
-        avrag_billing::handle_create_checkout(
-            repo,
-            UserId::from(actor_id.into_uuid()),
-            body,
-        )
-        .await,
+        avrag_billing::handle_create_checkout(repo, UserId::from(actor_id.into_uuid()), body).await,
     )
 }
 
@@ -178,13 +164,6 @@ async fn get_usage_history(
             "authenticated user required",
         ));
     };
-    let flag = avrag_billing::PricingRevampFlag::from_env();
-    if !flag.is_enabled_for(actor_id.into_uuid()) {
-        return Json(ApiResponse::err(
-            "feature_disabled",
-            "pricing revamp is not yet available for this user",
-        ));
-    }
     Json(
         avrag_billing::handle_get_usage_history(
             repo,
@@ -210,12 +189,5 @@ async fn get_usage_forecast(
             "authenticated user required",
         ));
     };
-    let flag = avrag_billing::PricingRevampFlag::from_env();
-    if !flag.is_enabled_for(actor_id.into_uuid()) {
-        return Json(ApiResponse::err(
-            "feature_disabled",
-            "pricing revamp is not yet available for this user",
-        ));
-    }
     Json(avrag_billing::handle_get_usage_forecast(repo, UserId::from(actor_id.into_uuid())).await)
 }

@@ -10,14 +10,26 @@
 //! Run serially with:
 //!   cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1 --nocapture
 //!
+//! Artifacts: `crates/app/tests/e2e_output/llm_real/{run_id}/{test_name}/`
+//!   - `response.json`, `reasoning_summary.txt`, `trace_reasoning.jsonl`, `prompt_snapshots.json`, `metadata.json`
+//! Streaming requests use `debug: true` so prompt_snapshot trace events are emitted.
+//! `trace_reasoning.jsonl` comes from loop telemetry (PlanDecision / Evaluation), not LLM eval.
+//! `metadata.reasoning_empty_warning` is true only when both summary and trace_reasoning are empty
+//! (usually indicates dropped SSE traces, not a non-thinking model).
+//! `metadata.stream_error_with_done` flags final-attempt error+done coexistence.
+//!
 //! Required environment (loaded from the repository `.env` if not already set):
 //!   AGENT_LLM_BASE_URL, AGENT_LLM_API_KEY, AGENT_LLM_MODEL
 //!   MEMORY_LLM_BASE_URL, MEMORY_LLM_API_KEY, MEMORY_LLM_MODEL
 //!   INGESTION_LLM_BASE_URL, INGESTION_LLM_API_KEY, INGESTION_LLM_MODEL
 //!   EMBEDDING_BASE_URL, EMBEDDING_API_KEY, EMBEDDING_MODEL
 //!   SEARCH_PROVIDER, SEARCH_BASE_URL, SEARCH_API_KEY (search tests only)
+//!   SEARCH_REQUIRE_REAL=1 — fail instead of mock fallback when Brave unreachable (search_real sets this)
 
-use crate::product_e2e::TestContext;
+use crate::product_e2e::{
+    ChatResponse, ChatStreamParams, SseEvent, StreamReasoningCapture, TestContext,
+    TraceReasoningRecord,
+};
 
 /// Load key/value pairs from the repository `.env` file into the process
 /// environment.  This lets real-LLM tests discover credentials without
@@ -25,7 +37,7 @@ use crate::product_e2e::TestContext;
 ///
 /// Only sets variables that are **not** already present in the environment,
 /// so explicit exports take priority.
-fn load_env_from_repo_dotenv() {
+pub(crate) fn load_env_from_repo_dotenv() {
     // The worktree usually does not have its own `.env`.
     // Try the worktree location first, then fall back to the main repo copy.
     let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -62,10 +74,486 @@ fn load_env_from_repo_dotenv() {
         } else {
             raw_value
         };
-        if std::env::var(key).is_err() {
+        let should_set = match std::env::var(key) {
+            Err(_) => true,
+            // Allow .env to replace placeholder search credentials left in the shell.
+            Ok(existing)
+                if (key == "SEARCH_API_KEY" && (existing.is_empty() || existing == "mock"))
+                    || (key == "SEARCH_BASE_URL" && existing.starts_with("http://127.0.0.1")) =>
+            {
+                true
+            }
+            Ok(_) => false,
+        };
+        if should_set {
             unsafe { std::env::set_var(key, value) };
         }
     }
+}
+
+/// True when SEARCH_API_KEY (or E2E_BRAVE_API_KEY) is present and not the mock placeholder.
+pub fn has_real_search_credentials() -> bool {
+    fn valid_key(key: Result<String, std::env::VarError>) -> bool {
+        key.map(|k| !k.is_empty() && k != "mock").unwrap_or(false)
+    }
+    valid_key(std::env::var("SEARCH_API_KEY")) || valid_key(std::env::var("E2E_BRAVE_API_KEY"))
+}
+
+/// Ensure SEARCH_PROVIDER / SEARCH_BASE_URL defaults when using real Brave.
+pub fn ensure_search_defaults() {
+    if !std::env::var("SEARCH_API_KEY")
+        .map(|k| !k.is_empty() && k != "mock")
+        .unwrap_or(false)
+    {
+        if let Ok(key) = std::env::var("E2E_BRAVE_API_KEY") {
+            if !key.is_empty() {
+                unsafe { std::env::set_var("SEARCH_API_KEY", key) };
+            }
+        }
+    }
+    if !std::env::var("SEARCH_PROVIDER")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+    {
+        unsafe { std::env::set_var("SEARCH_PROVIDER", "brave_llm_context") };
+    }
+    if !std::env::var("SEARCH_BASE_URL")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+    {
+        unsafe { std::env::set_var("SEARCH_BASE_URL", "https://api.search.brave.com") };
+    }
+}
+
+/// Max attempts for non-deterministic real-LLM chat/search calls.
+pub const REAL_LLM_MAX_ATTEMPTS: usize = 2;
+
+/// Extra attempts for multi-tool RAG probes where the model may answer in one retrieval pass.
+pub const REAL_LLM_MULTITOOL_MAX_ATTEMPTS: usize = 3;
+
+/// Stream deadline for real-LLM runs (thinking models can be slow).
+pub const REAL_LLM_STREAM_DEADLINE: std::time::Duration = std::time::Duration::from_secs(180);
+
+/// Safety cap on SSE events (thinking models emit many small deltas).
+pub const REAL_LLM_STREAM_MAX_EVENTS: usize = 4096;
+
+const RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Real-LLM chat result with streamed reasoning capture for offline analysis.
+#[derive(Debug, Clone)]
+pub struct LlmRealChatResult {
+    pub resp: ChatResponse,
+    pub reasoning: StreamReasoningCapture,
+    /// True when the final attempt had both an SSE `error` event and a `done` payload.
+    pub stream_error_with_done: bool,
+}
+
+/// Collect reasoning deltas, trace reasoning, and prompt snapshots from SSE events.
+pub fn collect_observability_from_events(events: &[SseEvent]) -> StreamReasoningCapture {
+    let mut summary = String::new();
+    let mut delta_count = 0usize;
+    let mut trace_reasoning = Vec::new();
+    let mut prompt_snapshots = Vec::new();
+
+    for event in events {
+        match event.event.as_str() {
+            "reasoning_summary_delta" => {
+                if let Some(chunk) = event.data.get("content").and_then(|v| v.as_str()) {
+                    summary.push_str(chunk);
+                    delta_count += 1;
+                }
+            }
+            "trace" => {
+                let stage = event
+                    .data
+                    .get("stage")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let detail = event
+                    .data
+                    .get("detail")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
+
+                if stage == "prompt_snapshot" {
+                    prompt_snapshots.push(detail.clone());
+                }
+
+                if let Some(reasoning) = detail.get("reasoning").and_then(|v| v.as_str()) {
+                    if !reasoning.is_empty() {
+                        trace_reasoning.push(TraceReasoningRecord {
+                            stage: stage.clone(),
+                            reasoning: serde_json::Value::String(reasoning.to_string()),
+                            detail: detail.clone(),
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    StreamReasoningCapture {
+        summary,
+        delta_count,
+        trace_reasoning,
+        prompt_snapshots,
+    }
+}
+
+/// Concatenate all `reasoning_summary_delta` chunks from an SSE event stream.
+pub fn collect_reasoning_summary_from_events(events: &[SseEvent]) -> StreamReasoningCapture {
+    collect_observability_from_events(events)
+}
+
+/// Merge per-test `extra` fields with stream observability warnings from the result.
+pub fn merge_llm_real_extra(
+    result: &LlmRealChatResult,
+    extra: Option<serde_json::Value>,
+) -> Option<serde_json::Value> {
+    let mut obj = extra
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+    if result.stream_error_with_done {
+        obj.insert("stream_error_with_done".into(), serde_json::json!(true));
+    }
+    if obj.is_empty() {
+        None
+    } else {
+        Some(serde_json::Value::Object(obj))
+    }
+}
+
+/// Parse the terminal `done` payload into a typed [`ChatResponse`].
+pub fn parse_chat_response_from_stream_events(events: &[SseEvent]) -> Option<ChatResponse> {
+    for event in events.iter().rev() {
+        if event.event != "done" {
+            continue;
+        }
+        let payload = event
+            .data
+            .get("payload")
+            .cloned()
+            .unwrap_or_else(|| event.data.clone());
+        if let Ok(resp) = serde_json::from_value::<ChatResponse>(payload) {
+            return Some(resp);
+        }
+    }
+    None
+}
+
+fn stream_had_error(events: &[SseEvent]) -> bool {
+    events.iter().any(|e| e.event == "error")
+}
+
+async fn chat_stream_once(
+    ctx: &TestContext,
+    params: &ChatStreamParams<'_>,
+) -> anyhow::Result<(Vec<SseEvent>, Option<ChatResponse>, StreamReasoningCapture)> {
+    let events = ctx
+        .chat_stream_with_params(
+            ChatStreamParams {
+                query: params.query,
+                agent_type: params.agent_type,
+                notebook_id: params.notebook_id,
+                doc_scope: params.doc_scope,
+                session_id: params.session_id,
+                format_hint: params.format_hint,
+                debug: params.debug,
+            },
+            REAL_LLM_STREAM_MAX_EVENTS,
+            REAL_LLM_STREAM_DEADLINE,
+        )
+        .await?;
+    let capture = collect_observability_from_events(&events);
+    let resp = parse_chat_response_from_stream_events(&events);
+    Ok((events, resp, capture))
+}
+
+async fn chat_stream_with_retry_inner(
+    ctx: &TestContext,
+    params: ChatStreamParams<'_>,
+    ready: impl Fn(&ChatResponse) -> bool,
+    label: &str,
+    max_attempts: usize,
+) -> LlmRealChatResult {
+    let mut last = None;
+    let mut last_stream_error_with_done = false;
+    for attempt in 1..=max_attempts {
+        let (events, resp, reasoning) = match chat_stream_once(ctx, &params).await {
+            Ok(result) => result,
+            Err(err) => {
+                eprintln!(
+                    "[llm_real] {label} attempt {attempt}/{max_attempts} stream error: {err}"
+                );
+                if attempt < max_attempts {
+                    tokio::time::sleep(RETRY_DELAY).await;
+                    continue;
+                }
+                panic!("{label} stream failed: {err}");
+            }
+        };
+
+        let had_stream_error = stream_had_error(&events);
+        if had_stream_error {
+            eprintln!(
+                "[llm_real] {label} attempt {attempt}/{max_attempts} stream error event; last={:?}",
+                events.last().map(|e| e.event.as_str())
+            );
+        }
+
+        let Some(resp) = resp else {
+            eprintln!(
+                "[llm_real] {label} attempt {attempt}/{max_attempts} missing done payload; events={}",
+                events.len()
+            );
+            if attempt < max_attempts {
+                tokio::time::sleep(RETRY_DELAY).await;
+                continue;
+            }
+            panic!("{label} stream missing terminal done payload");
+        };
+
+        if had_stream_error && attempt == max_attempts {
+            eprintln!(
+                "[llm_real] {label} WARNING: final attempt had error event but also produced done payload"
+            );
+            last_stream_error_with_done = true;
+        }
+
+        if had_stream_error && attempt < max_attempts && !ready(&resp) {
+            tokio::time::sleep(RETRY_DELAY).await;
+            continue;
+        }
+
+        if had_stream_error && attempt < max_attempts && ready(&resp) {
+            eprintln!(
+                "[llm_real] {label} WARNING: accepting ready response on attempt {attempt} despite stream error event"
+            );
+        }
+
+        last = Some(LlmRealChatResult {
+            resp: resp.clone(),
+            reasoning: reasoning.clone(),
+            stream_error_with_done: last_stream_error_with_done,
+        });
+
+        if ready(&resp) {
+            return LlmRealChatResult {
+                resp,
+                reasoning,
+                stream_error_with_done: last_stream_error_with_done,
+            };
+        }
+
+        eprintln!(
+            "[llm_real] {label} attempt {attempt}/{max_attempts} not ready \
+             (answer_len={}, degrade={:?}, reasoning_deltas={}); retrying after {}s",
+            resp.answer.len(),
+            resp.degrade_trace,
+            reasoning.delta_count,
+            RETRY_DELAY.as_secs()
+        );
+        if attempt < max_attempts {
+            tokio::time::sleep(RETRY_DELAY).await;
+        }
+    }
+
+    let result = last.unwrap_or_else(|| panic!("{label} stream produced no usable response"));
+    if !ready(&result.resp) {
+        panic!(
+            "{label} stream produced response but readiness check failed on final attempt \
+             (answer_len={}, degrade={:?})",
+            result.resp.answer.len(),
+            result.resp.degrade_trace
+        );
+    }
+    result
+}
+
+/// Retry streaming RAG chat until a non-empty answer, capturing reasoning deltas.
+pub async fn chat_with_retry(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+    doc_scope: &[String],
+) -> LlmRealChatResult {
+    chat_stream_with_retry_inner(
+        ctx,
+        ChatStreamParams {
+            query,
+            agent_type: "rag",
+            notebook_id,
+            doc_scope,
+            session_id: None,
+            format_hint: None,
+            debug: true,
+        },
+        |resp| !resp.answer.is_empty(),
+        "rag chat",
+        REAL_LLM_MAX_ATTEMPTS,
+    )
+    .await
+}
+
+fn answer_rejects_synthesis_fallback(answer: &str) -> bool {
+    let lower = answer.to_ascii_lowercase();
+    !lower.contains("evidence_insufficient_fallback")
+        && !lower.contains("could not format a validated cited answer")
+        && !lower.contains("could not find relevant evidence in your documents")
+}
+
+/// Retry until the answer is non-empty, has citations, and is not a synthesis/evidence fallback.
+pub async fn chat_with_citations_retry(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+    doc_scope: &[String],
+) -> LlmRealChatResult {
+    chat_stream_with_retry_inner(
+        ctx,
+        ChatStreamParams {
+            query,
+            agent_type: "rag",
+            notebook_id,
+            doc_scope,
+            session_id: None,
+            format_hint: None,
+            debug: true,
+        },
+        |resp| {
+            !resp.answer.is_empty()
+                && !resp.citations.is_empty()
+                && answer_rejects_synthesis_fallback(&resp.answer)
+        },
+        "rag chat with citations",
+        REAL_LLM_MAX_ATTEMPTS,
+    )
+    .await
+}
+
+/// Retry RAG chat until the response uses multiple tools (non-deterministic probe).
+pub async fn chat_with_multitool_retry(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+    doc_scope: &[String],
+    min_distinct_tools: usize,
+    retrieval_tools: &[&str],
+    min_answer_len: usize,
+) -> LlmRealChatResult {
+    chat_stream_with_retry_inner(
+        ctx,
+        ChatStreamParams {
+            query,
+            agent_type: "rag",
+            notebook_id,
+            doc_scope,
+            session_id: None,
+            format_hint: None,
+            debug: true,
+        },
+        |resp| {
+            if resp.answer.len() < min_answer_len {
+                return false;
+            }
+            let mut names = std::collections::HashSet::new();
+            for result in &resp.tool_results {
+                names.insert(result.tool.as_str());
+            }
+            let ready = names.len() >= min_distinct_tools
+                && names
+                    .iter()
+                    .any(|tool| retrieval_tools.contains(tool));
+            if !ready {
+                eprintln!(
+                    "[llm_real] rag multitool chat tools={names:?} (need >={min_distinct_tools})"
+                );
+            }
+            ready
+        },
+        "rag multitool chat",
+        REAL_LLM_MULTITOOL_MAX_ATTEMPTS,
+    )
+    .await
+}
+
+/// Retry streaming RAG chat with format_hint until a non-empty answer.
+pub async fn chat_with_format_retry(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+    doc_scope: &[String],
+    format_hint: &str,
+) -> LlmRealChatResult {
+    chat_stream_with_retry_inner(
+        ctx,
+        ChatStreamParams {
+            query,
+            agent_type: "rag",
+            notebook_id,
+            doc_scope,
+            session_id: None,
+            format_hint: Some(format_hint),
+            debug: true,
+        },
+        |resp| !resp.answer.is_empty(),
+        "format chat",
+        REAL_LLM_MAX_ATTEMPTS,
+    )
+    .await
+}
+
+/// Retry streaming multi-turn RAG chat with an existing session_id.
+pub async fn chat_with_session_retry(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+    doc_scope: &[String],
+    session_id: &str,
+) -> LlmRealChatResult {
+    chat_stream_with_retry_inner(
+        ctx,
+        ChatStreamParams {
+            query,
+            agent_type: "rag",
+            notebook_id,
+            doc_scope,
+            session_id: Some(session_id),
+            format_hint: None,
+            debug: true,
+        },
+        |resp| !resp.answer.is_empty(),
+        "session chat",
+        REAL_LLM_MAX_ATTEMPTS,
+    )
+    .await
+}
+
+/// Retry streaming search until a non-empty, non-degraded answer.
+pub async fn search_with_retry(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+) -> LlmRealChatResult {
+    let empty_scope: &[String] = &[];
+    chat_stream_with_retry_inner(
+        ctx,
+        ChatStreamParams {
+            query,
+            agent_type: "search",
+            notebook_id,
+            doc_scope: empty_scope,
+            session_id: None,
+            format_hint: None,
+            debug: true,
+        },
+        |resp| !resp.answer.is_empty() && resp.degrade_trace.is_empty(),
+        "search",
+        REAL_LLM_MAX_ATTEMPTS,
+    )
+    .await
 }
 
 /// Guard that fails fast if a required real-LLM credential is missing.
@@ -86,22 +574,171 @@ fn require_real_llm_config() {
     }
 }
 
+pub mod format_real;
+pub mod multi_turn;
+pub mod pdf_corpus;
 pub mod rag_real;
 pub mod search_real;
 
 impl TestContext {
     /// Create a TestContext that uses the **real** production LLM and embedding
-    /// providers.  Mock search is still used unless SEARCH_API_KEY is present,
-    /// because Brave Search is not the focus of V5 migration validation.
+    /// providers.  Uses real Brave Search when SEARCH_API_KEY is configured
+    /// and reachable; otherwise falls back to the local mock search server.
     pub async fn new_with_real_llm() -> Self {
         load_env_from_repo_dotenv();
         require_real_llm_config();
+        if has_real_search_credentials() {
+            ensure_search_defaults();
+        }
 
         // build_smoke with use_real_llm=true:
         // - does not override AGENT_LLM_* / EMBEDDING_* with mock values
         // - does not start mock LLM/Embedding servers
-        // - still starts mock search server (Brave is not the V5 focus)
-        Self::build_smoke(true, 300, None, true).await
+        // - uses real Brave when credentials + connectivity allow, else mock search
+        Self::build_smoke(true, 300, None, true, None, false).await
+    }
+
+    /// Real-LLM context with a longer per-task ingestion timeout for full PDF books.
+    pub async fn new_with_real_llm_pdf() -> Self {
+        load_env_from_repo_dotenv();
+        require_real_llm_config();
+        if has_real_search_credentials() {
+            ensure_search_defaults();
+        }
+        Self::build_smoke(true, 1200, None, true, None, false).await
+    }
+}
+
+#[cfg(test)]
+mod stream_reasoning_tests {
+    use super::*;
+    use crate::product_e2e::SseEvent;
+
+    #[test]
+    fn collect_reasoning_summary_concatenates_deltas() {
+        let events = vec![
+            SseEvent {
+                event: "reasoning_summary_delta".to_string(),
+                data: serde_json::json!({"content": "Step 1. "}),
+            },
+            SseEvent {
+                event: "token".to_string(),
+                data: serde_json::json!({"content": "answer"}),
+            },
+            SseEvent {
+                event: "reasoning_summary_delta".to_string(),
+                data: serde_json::json!({"content": "Step 2."}),
+            },
+        ];
+        let capture = collect_observability_from_events(&events);
+        assert_eq!(capture.summary, "Step 1. Step 2.");
+        assert_eq!(capture.delta_count, 2);
+        assert!(capture.trace_reasoning.is_empty());
+        assert!(capture.prompt_snapshots.is_empty());
+    }
+
+    #[test]
+    fn collect_observability_parses_trace_reasoning() {
+        let events = vec![SseEvent {
+            event: "trace".to_string(),
+            data: serde_json::json!({
+                "stage": "plan_decision",
+                "status": "ok",
+                "detail": {
+                    "reasoning": "Need retrieval for document QA.",
+                    "selected_tools": ["dense_retrieval"]
+                }
+            }),
+        }];
+        let capture = collect_observability_from_events(&events);
+        assert_eq!(capture.trace_reasoning.len(), 1);
+        assert_eq!(capture.trace_reasoning[0].stage, "plan_decision");
+        assert_eq!(
+            capture.trace_reasoning[0].reasoning,
+            serde_json::json!("Need retrieval for document QA.")
+        );
+    }
+
+    #[test]
+    fn collect_observability_parses_evaluation_trace() {
+        let events = vec![SseEvent {
+            event: "trace".to_string(),
+            data: serde_json::json!({
+                "stage": "evaluation",
+                "status": "ok",
+                "detail": {
+                    "decision": "native_tool_call",
+                    "reasoning": "2 tool calls",
+                    "signals": { "iteration": 0 }
+                }
+            }),
+        }];
+        let capture = collect_observability_from_events(&events);
+        assert_eq!(capture.trace_reasoning.len(), 1);
+        assert_eq!(capture.trace_reasoning[0].stage, "evaluation");
+    }
+
+    #[test]
+    fn collect_observability_ignores_non_string_reasoning() {
+        let events = vec![SseEvent {
+            event: "trace".to_string(),
+            data: serde_json::json!({
+                "stage": "evaluation",
+                "detail": { "reasoning": { "nested": true } }
+            }),
+        }];
+        let capture = collect_observability_from_events(&events);
+        assert!(capture.trace_reasoning.is_empty());
+    }
+
+    #[test]
+    fn collect_observability_parses_prompt_snapshot() {
+        let events = vec![SseEvent {
+            event: "trace".to_string(),
+            data: serde_json::json!({
+                "stage": "prompt_snapshot",
+                "status": "debug",
+                "detail": {
+                    "phase": "retrieve",
+                    "iteration": 0,
+                    "system_content": "You are a RAG assistant."
+                }
+            }),
+        }];
+        let capture = collect_observability_from_events(&events);
+        assert_eq!(capture.prompt_snapshots.len(), 1);
+        assert_eq!(
+            capture.prompt_snapshots[0]
+                .get("phase")
+                .and_then(|v| v.as_str()),
+            Some("retrieve")
+        );
+    }
+
+    #[test]
+    fn parse_chat_response_uses_last_done_payload() {
+        let partial = serde_json::json!({
+            "event": "done",
+            "payload": {"answer": "partial", "session_id": "s1", "agent_type": "rag",
+                "sources": [], "citations": [], "trace": {"mode": "rag"}, "degrade_trace": []}
+        });
+        let full = serde_json::json!({
+            "event": "done",
+            "payload": {"answer": "final", "session_id": "s1", "agent_type": "rag",
+                "sources": [], "citations": [], "trace": {"mode": "rag"}, "degrade_trace": []}
+        });
+        let events = vec![
+            SseEvent {
+                event: "done".to_string(),
+                data: partial,
+            },
+            SseEvent {
+                event: "done".to_string(),
+                data: full,
+            },
+        ];
+        let resp = parse_chat_response_from_stream_events(&events).expect("parse done");
+        assert_eq!(resp.answer, "final");
     }
 }
 
@@ -128,8 +765,6 @@ async fn cost_report_from_artifacts() {
         return;
     }
 
-    let mut test_count = 0usize;
-
     fn collect_metadata_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
@@ -146,16 +781,28 @@ async fn cost_report_from_artifacts() {
     let mut files = Vec::new();
     collect_metadata_files(&base, &mut files);
 
+    let mut test_count = 0usize;
+    // Token counts are available in artifact metadata via ChatResponse.usage.
+    let mut total_prompt_tokens = 0u64;
+    let mut total_completion_tokens = 0u64;
+
     for path in &files {
         let raw = std::fs::read_to_string(path).unwrap_or_default();
-        let _meta: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        let meta: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        if let Some(usage) = meta.get("usage").and_then(|u| u.as_object()) {
+            total_prompt_tokens += usage
+                .get("prompt_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            total_completion_tokens += usage
+                .get("completion_tokens")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+        }
         test_count += 1;
     }
 
-    // NOTE: ChatResponse currently does not expose token counts, so
-    // precise cost calculation requires adding a `usage` field to the
-    // production response schema.  For now we report test count only.
-    // Approximate cost per test (RAG):
+    // Approximate cost when usage is missing from older artifacts.
     //   LLM: ~3K tokens × ¥0.001/1K = ¥0.003
     //   Embedding: ~1.5K tokens × ¥0.0005/1K = ¥0.00075
     //   ≈ ¥0.004 per test
@@ -165,13 +812,14 @@ async fn cost_report_from_artifacts() {
     println!("\n=== Real-LLM E2E Cost Report ===");
     println!("  Artifact files:     {}", files.len());
     println!("  Tests run:          {}", test_count);
+    println!("  Total prompt tok:   {total_prompt_tokens}");
+    println!("  Total completion:   {total_completion_tokens}");
     println!("  Est. cost/test:     ¥{:.4}", approx_cost_per_test);
     println!(
         "  Est. total cost:    ¥{:.4} ({:.4} USD @ 7.2)",
         total_cost_cny,
         total_cost_cny / 7.2
     );
-    println!("  NOTE: precise token counts not yet available in ChatResponse schema.");
 
     // Monthly budget threshold: ¥10 CNY (~$1.40 USD)
     const MONTHLY_BUDGET_CNY: f64 = 10.0;

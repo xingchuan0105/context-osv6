@@ -1,5 +1,9 @@
 # RAG / Chat / WebSearch 策略架构评审与最终决策
 
+> **⚠️ 部分废止（2026-06-08）**  
+> 产品观察与 E2E 结论仍可参考。`format_hint` 硬注入、`chat-plan` 格式路由、`session_summary` 等机制以 [ADR-0007](adr/0007-react-phased-context-disclosure.md) 为准。  
+> 索引：[ARCHIVE-superseded-by-adr-0007.md](agents/ARCHIVE-superseded-by-adr-0007.md)
+
 > 基于真实 LLM（DeepSeek v4-pro/v4-flash + DashScope Embedding + Brave Search）E2E 测试结果
 > 日期：2026-06-01
 > 状态：决策已冻结，待按落地顺序执行

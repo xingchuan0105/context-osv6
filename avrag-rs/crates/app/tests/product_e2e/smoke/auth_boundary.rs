@@ -133,10 +133,10 @@ async fn chat_with_valid_org_but_no_user_id_is_accepted() {
 async fn create_notebook_under_one_org_then_read_under_another_org_returns_404_or_403() {
     // Data-scope boundary at the notebook layer: once User A creates
     // a notebook, User B (different org) cannot fetch it by ID.
-    let ctx_a = TestContext::new_smoke_with_rag_and_org(ORG_ID, USER_ID).await;
+    let ctx_a = TestContext::new_smoke_with_org(ORG_ID, USER_ID).await;
     let notebook = ctx_a.create_notebook("org-a-private").await.unwrap();
 
-    let ctx_b = TestContext::new_smoke_with_rag_and_org(
+    let ctx_b = TestContext::new_smoke_with_org(
         "44444444-4444-4444-4444-444444444444",
         "dddddddd-dddd-dddd-dddd-dddddddddddd",
     )

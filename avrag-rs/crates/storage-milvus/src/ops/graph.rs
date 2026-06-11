@@ -1,9 +1,11 @@
-use serde_json::{Value, json};
-use avrag_retrieval_data_plane::{GraphSearchOutput, GraphSearchRequest, RelationPathCandidate, ScoredChunk};
 use crate::lib_impl::MilvusDataPlane;
 use crate::schema::{RELATION_OUTPUT_FIELDS, doc_filter};
-use crate::utils::{uuid_field, optional_uuid_field, string_field};
 use crate::types::Result;
+use crate::utils::{optional_uuid_field, string_field, uuid_field};
+use avrag_retrieval_data_plane::{
+    GraphSearchOutput, GraphSearchRequest, RelationPathCandidate, ScoredChunk,
+};
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 impl MilvusDataPlane {
@@ -28,7 +30,10 @@ impl MilvusDataPlane {
         Ok(response["data"].as_array().cloned().unwrap_or_default())
     }
 
-    pub async fn search_graph(&self, request: GraphSearchRequest) -> anyhow::Result<GraphSearchOutput> {
+    pub async fn search_graph(
+        &self,
+        request: GraphSearchRequest,
+    ) -> anyhow::Result<GraphSearchOutput> {
         if request.doc_ids.as_ref().is_some_and(Vec::is_empty) {
             return Ok(GraphSearchOutput::default());
         }
@@ -114,31 +119,32 @@ impl MilvusDataPlane {
                 // 去重关系 (Relation ID)
                 let rid_opt = row.get("relation_id").and_then(|v| v.as_str());
                 if let Some(rid) = rid_opt
-                    && !seen_relation_ids.insert(rid.to_string()) {
-                        continue;
-                    }
+                    && !seen_relation_ids.insert(rid.to_string())
+                {
+                    continue;
+                }
 
                 if all_relations.len() < request.relation_limit {
                     let candidate = relation_path_candidate(&row)?;
                     all_relations.push(candidate);
-                    
+
                     if supporting_chunks.len() < request.supporting_chunk_limit {
-                        supporting_chunks.push(scored_relation_chunk(
-                            &row,
-                            "milvus_graph_relation",
-                        )?);
+                        supporting_chunks
+                            .push(scored_relation_chunk(&row, "milvus_graph_relation")?);
                     }
                 }
 
                 // 收集下一跳的实体起点
                 if let Some(s) = row.get("subject").and_then(|v| v.as_str())
-                    && !visited_entities.contains(s) {
-                        next_boundary.insert(s.to_string());
-                    }
+                    && !visited_entities.contains(s)
+                {
+                    next_boundary.insert(s.to_string());
+                }
                 if let Some(o) = row.get("object").and_then(|v| v.as_str())
-                    && !visited_entities.contains(o) {
-                        next_boundary.insert(o.to_string());
-                    }
+                    && !visited_entities.contains(o)
+                {
+                    next_boundary.insert(o.to_string());
+                }
             }
 
             // 更新访问状态和边界

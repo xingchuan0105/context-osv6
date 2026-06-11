@@ -77,10 +77,7 @@ pub fn generate_markdown_report(
                 report.push_str(&format!("- **Dimension:** {:?}\n", entry.dimension));
                 report.push_str(&format!("- **Category:** {:?}\n", entry.category));
                 report.push_str(&format!("- **Signal:** `{}`\n", entry.description));
-                report.push_str(&format!(
-                    "- **Baseline:** {}\n",
-                    entry.baseline_value
-                ));
+                report.push_str(&format!("- **Baseline:** {}\n", entry.baseline_value));
                 report.push_str(&format!("- **Current:** {}\n", entry.current_value));
             }
         }
@@ -168,9 +165,7 @@ pub fn build_json_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{
-        DiffCategory, DiffDimension, DiffSeverity, TestStatus,
-    };
+    use crate::models::{DiffCategory, DiffDimension, DiffSeverity, TestStatus};
 
     fn make_diff(severity: DiffSeverity) -> DiffEntry {
         DiffEntry {

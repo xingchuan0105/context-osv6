@@ -79,9 +79,12 @@ impl BillingConfig {
             alipay_app_id: std::env::var("ALIPAY_APP_ID").unwrap_or_default(),
             alipay_private_key: std::env::var("ALIPAY_PRIVATE_KEY").unwrap_or_default(),
             alipay_public_key: std::env::var("ALIPAY_PUBLIC_KEY").unwrap_or_default(),
-            alipay_gateway_url: std::env::var("ALIPAY_GATEWAY_URL")
-                .unwrap_or_else(|_| "https://openapi-sandbox.dl.alipaydev.com/gateway.do".to_string()),
-            alipay_notify_url: std::env::var("ALIPAY_NOTIFY_URL").ok().filter(|s| !s.trim().is_empty()),
+            alipay_gateway_url: std::env::var("ALIPAY_GATEWAY_URL").unwrap_or_else(|_| {
+                "https://openapi-sandbox.dl.alipaydev.com/gateway.do".to_string()
+            }),
+            alipay_notify_url: std::env::var("ALIPAY_NOTIFY_URL")
+                .ok()
+                .filter(|s| !s.trim().is_empty()),
             alipay_price_pro: std::env::var("ALIPAY_PRICE_PRO")
                 .unwrap_or_else(|_| "129.00".to_string()),
             alipay_price_plus: std::env::var("ALIPAY_PRICE_PLUS")
@@ -464,14 +467,17 @@ pub enum TransitionError {
 }
 
 impl Subscription {
-    pub fn apply_transition(&self, event: &BillingEvent) -> Result<SubscriptionStatus, TransitionError> {
+    pub fn apply_transition(
+        &self,
+        event: &BillingEvent,
+    ) -> Result<SubscriptionStatus, TransitionError> {
         match event {
             BillingEvent::InvoicePaid { new_period_end } => {
                 match self.status {
-                    SubscriptionStatus::Active 
-                    | SubscriptionStatus::PastDue 
-                    | SubscriptionStatus::Expired 
-                    | SubscriptionStatus::Canceled 
+                    SubscriptionStatus::Active
+                    | SubscriptionStatus::PastDue
+                    | SubscriptionStatus::Expired
+                    | SubscriptionStatus::Canceled
                     | SubscriptionStatus::Unpaid => {
                         match (new_period_end, self.current_period_end) {
                             (Some(new_dt), Some(old_dt)) => {
@@ -496,30 +502,20 @@ impl Subscription {
                     }
                 }
             }
-            BillingEvent::PaymentFailed => {
-                match self.status {
-                    SubscriptionStatus::Active => Ok(SubscriptionStatus::PastDue),
-                    SubscriptionStatus::PastDue => Ok(SubscriptionStatus::Unpaid),
-                    _ => Ok(self.status),
-                }
-            }
-            BillingEvent::Cancel => {
-                match self.status {
-                    SubscriptionStatus::Active | SubscriptionStatus::PastDue | SubscriptionStatus::Unpaid => {
-                        Ok(SubscriptionStatus::Canceled)
-                    }
-                    _ => Ok(self.status),
-                }
-            }
-            BillingEvent::Expire => {
-                Ok(SubscriptionStatus::Expired)
-            }
-            BillingEvent::Created => {
-                Ok(SubscriptionStatus::Active)
-            }
-            BillingEvent::Updated { new_status } => {
-                Ok(*new_status)
-            }
+            BillingEvent::PaymentFailed => match self.status {
+                SubscriptionStatus::Active => Ok(SubscriptionStatus::PastDue),
+                SubscriptionStatus::PastDue => Ok(SubscriptionStatus::Unpaid),
+                _ => Ok(self.status),
+            },
+            BillingEvent::Cancel => match self.status {
+                SubscriptionStatus::Active
+                | SubscriptionStatus::PastDue
+                | SubscriptionStatus::Unpaid => Ok(SubscriptionStatus::Canceled),
+                _ => Ok(self.status),
+            },
+            BillingEvent::Expire => Ok(SubscriptionStatus::Expired),
+            BillingEvent::Created => Ok(SubscriptionStatus::Active),
+            BillingEvent::Updated { new_status } => Ok(*new_status),
         }
     }
 }

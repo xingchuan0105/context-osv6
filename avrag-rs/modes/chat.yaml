@@ -1,17 +1,10 @@
 mode: chat
-system_prompt_base: prompts/skills/chat-system/SKILL.md
-native_tools: []
+system_prompt_base: prompts/orchestrators/chat-system.md
+tool_pool: []
 skill_catalog:
-  - chat
-  - anaphora-resolution
-  - tone-guidance
-disclosure:
-  rounds:
-    - round_idx: 0
-      load:
-        skills:
-          - chat
-          - anaphora-resolution
+  retrieve: [memory]
+  synthesis: [writing, format]
+  mandatory_synthesis: [chat]
 budget:
   max_iterations: 2
   by_user_tier:
@@ -19,3 +12,13 @@ budget:
     pro: 3
     enterprise: 3
 temperature: 0.7
+query_normalization:
+  enabled: true
+  max_prior_turns: 6
+  llm_fallback: true
+loop_exit:
+  require_evidence: false
+  allow_content_early_stop: true
+  skip_synthesis_on_direct_answer: true
+synthesis_output:
+  contract: prose_only

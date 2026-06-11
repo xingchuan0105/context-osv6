@@ -43,21 +43,6 @@ pub enum AgentEvent {
     },
     /// Terminal error event.
     Error { code: String, message: String },
-    /// v5 white-box state transition event.
-    /// Emitted by StrategyExecutor at each state enter/complete boundary.
-    StateTransition {
-        #[serde(rename = "type")]
-        transition_type: StateTransitionType,
-        state_id: String,
-        state_kind: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        elapsed_ms: Option<u64>,
-        /// Unix timestamp in milliseconds when the state transition occurred.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        timestamp_ms: Option<u64>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        payload: Option<serde_json::Value>,
-    },
     /// Plan/Decompose phase decision output (white-box observability).
     PlanDecision {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -90,15 +75,15 @@ pub enum AgentEvent {
     /// Budget consumption tick (white-box observability).
     BudgetTick { current: u8, max: u8 },
     /// Routing decision event (white-box observability).
-    /// Emitted when the router resolves a strategy for the request.
+    /// Emitted when the router resolves a mode for the request.
     RoutingDecision {
-        strategy_id: String,
+        mode_id: String,
         matched_rule: String,
         confidence: f64,
         explanation: String,
     },
     /// Terminal decision event (white-box observability).
-    /// Emitted when the strategy reaches a final decision.
+    /// Emitted when the agent reaches a final decision.
     Terminal {
         decision: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -113,15 +98,19 @@ pub enum AgentEvent {
     /// Audit record emitted at key security/policy decision points.
     /// Collected by the orchestrator for persistence into the audit log.
     Audit { record: AuditRecord },
-}
-
-/// Classification of state-transition events for white-box observability.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum StateTransitionType {
-    Entered,
-    Completed,
-    Terminal,
+    /// ADR-0008: ReAct turn started.
+    TurnStart { iteration: u8, phase: String },
+    /// ADR-0008: ReAct turn ended.
+    TurnEnd { iteration: u8, exit_reason: String },
+    /// ADR-0008: Query normalization completed.
+    QueryResolved {
+        raw: String,
+        resolved: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        slots: Vec<String>,
+    },
+    /// ADR-0008: Synthesis JSON contract active.
+    SynthesisContract { schema_version: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -295,17 +284,9 @@ mod tests {
                     action: ingestion::AuditAction::RoutingDecision,
                     resource_type: "agent_request".to_string(),
                     resource_id: "r1".to_string(),
-                    payload: serde_json::json!({"strategy_id": "rag"}),
+                    payload: serde_json::json!({"mode_id": "rag"}),
                     created_at: "2024-01-01T00:00:00Z".to_string(),
                 },
-            },
-            AgentEvent::StateTransition {
-                transition_type: StateTransitionType::Entered,
-                state_id: "plan".to_string(),
-                state_kind: "plan".to_string(),
-                elapsed_ms: Some(42),
-                timestamp_ms: Some(1_000_000),
-                payload: Some(serde_json::json!({"extra": true})),
             },
             AgentEvent::PlanDecision {
                 selected_tools: vec![common::ToolCall {

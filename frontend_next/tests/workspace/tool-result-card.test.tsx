@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ToolResultCard, ToolResultsPanel } from "../../components/workspace/workspace-chat-pane";
+import { ToolResultCard, ToolResultsPanel } from "../../components/workspace/chat-message-list";
 import type { ToolResult } from "../../lib/workspace/stream";
 
 function makeResult(tool: string, status: ToolResult["status"], data: Record<string, unknown> | null): ToolResult {

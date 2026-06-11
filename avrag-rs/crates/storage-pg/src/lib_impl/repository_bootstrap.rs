@@ -1,9 +1,20 @@
+fn pg_pool_options() -> PgPoolOptions {
+    let mut options = PgPoolOptions::new();
+    if std::env::var("E2E_ENABLED").unwrap_or_default() == "true" {
+        // Real-LLM E2E runs API server + worker pools concurrently; default 10
+        // connections per pool exhausts quickly and surfaces as 404/500 errors.
+        options = options
+            .max_connections(25)
+            .acquire_timeout(std::time::Duration::from_secs(30));
+    } else {
+        options = options.max_connections(10);
+    }
+    options
+}
+
 impl PgAppRepository {
     pub async fn connect(database_url: &str) -> Result<Self, PgStorageError> {
-        let pool = PgPoolOptions::new()
-            .max_connections(10)
-            .connect(database_url)
-            .await?;
+        let pool = pg_pool_options().connect(database_url).await?;
         Ok(Self {
             pool: TenantPgPool::new(pool),
         })
@@ -36,10 +47,11 @@ impl PgAppRepository {
             r#"
             select id, org_id, owner_id, title, description, created_at, updated_at
             from notebooks
-            where id = $1
+            where id = $1 and org_id = $2
             "#,
         )
         .bind(notebook_id)
+        .bind(context.org_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
         tx.commit().await?;
@@ -123,8 +135,8 @@ impl PgAppRepository {
         let document_id = Uuid::new_v4();
         let row = sqlx::query(
             r#"
-            insert into documents (id, org_id, notebook_id, file_name, mime_type, file_size, status, chunk_count, object_path)
-            values ($1, $2, $3, $4, $5, $6, 'pending', 0, $7)
+            insert into documents (id, org_id, notebook_id, file_name, mime_type, file_size, status, chunk_count, object_path, user_id)
+            values ($1, $2, $3, $4, $5, $6, 'pending', 0, $7, $8)
             returning id, org_id, notebook_id, file_name, mime_type, file_size, status, chunk_count, created_at, updated_at
             "#,
         )
@@ -135,6 +147,7 @@ impl PgAppRepository {
         .bind(mime_type)
         .bind(i64::try_from(file_size).unwrap_or(i64::MAX))
         .bind(build_object_path(context, notebook_id, document_id, filename))
+        .bind(context.actor_id().map(ActorId::into_uuid))
         .fetch_one(tx.inner())
         .await?;
         tx.commit().await?;

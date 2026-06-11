@@ -1,5 +1,9 @@
 # ADR-0006: 统一 AgentLoop（1+1 工具 + ReAct 单一循环）
 
+> **⛔ 归档 / ARCHIVED（2026-06-08）**  
+> 已被 [0006-unified-agent-loop-revised.md](0006-unified-agent-loop-revised.md) 取代；披露与 orchestrator 以 [ADR-0007](0007-react-phased-context-disclosure.md) 为准。  
+> 索引：[ARCHIVE-superseded-by-adr-0007.md](../agents/ARCHIVE-superseded-by-adr-0007.md)
+
 | 项目 | 内容 |
 |---|---|
 | 状态 | 已采纳（替代 ADR-0005 / 0005-revised） |

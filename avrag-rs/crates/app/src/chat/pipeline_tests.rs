@@ -32,6 +32,7 @@ mod tests {
             doc_scope,
             messages: vec![],
             stream: false,
+            debug: false,
             language: None,
             format_hint: None,
         }

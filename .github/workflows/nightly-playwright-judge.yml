@@ -1,0 +1,79 @@
+name: Nightly Playwright Quality Judge
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+env:
+  CI: true
+
+jobs:
+  skills-with-judge:
+    name: Skills E2E + LLM Judge
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend_next
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend_next/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            avrag-rs/target
+          key: ${{ runner.os }}-cargo-judge-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
+
+      - name: Run skills E2E with quality judge
+        continue-on-error: true
+        run: pnpm exec playwright test --project=skills
+        env:
+          RUN_QUALITY_JUDGE: '1'
+          E2E_RESET_SECRET: ${{ secrets.E2E_RESET_SECRET }}
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          E2E_LLM_BASE_URL: ${{ secrets.E2E_LLM_BASE_URL }}
+          E2E_LLM_API_KEY: ${{ secrets.E2E_LLM_API_KEY }}
+          PRICING_REVAMP_ROLLOUT: '100'
+        timeout-minutes: 45
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-judge-report-${{ github.run_id }}
+          path: |
+            frontend_next/playwright-report/
+            frontend_next/test-results/
+          retention-days: 30
+
+      - name: Judge summary (warn only)
+        if: always()
+        run: |
+          echo "## Playwright Quality Judge (nightly)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Judge scores are attached per test when RUN_QUALITY_JUDGE=1." >> $GITHUB_STEP_SUMMARY
+          echo "Score below 6 is informational only — this job does not fail on low scores." >> $GITHUB_STEP_SUMMARY

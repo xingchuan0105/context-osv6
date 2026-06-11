@@ -11,7 +11,7 @@ impl AppState {
             return Ok(());
         }
 
-        let (sanitized_answer, guard_report) = self.guard_pipeline.check_output(
+        let (sanitized_answer, guard_report) = self.orchestrator.guard_pipeline().check_output(
             &execution.response.answer,
             Some(trace_id.to_string()),
         );
@@ -74,20 +74,18 @@ impl AppState {
             "persisting assistant answer blocks"
         );
         let tool_results: Vec<common::ToolResult> = execution.response.tool_results.iter().map(|r| {
-            common::ToolResult {
-                tool: r.tool.clone(),
-                version: r.version.clone(),
-                status: match r.status {
-                    contracts::chat::ToolStatus::Ok => common::ToolStatus::Ok,
-                    contracts::chat::ToolStatus::Timeout => common::ToolStatus::Timeout,
-                    contracts::chat::ToolStatus::Error => common::ToolStatus::Error,
-                    contracts::chat::ToolStatus::NotFound => common::ToolStatus::NotFound,
-                    contracts::chat::ToolStatus::NotImplemented => common::ToolStatus::NotImplemented,
-                },
-                data: r.data.clone(),
-                trace: None,
-            }
+            common::ToolResult::from(r.clone())
         }).collect();
+        let user_turn_metadata = execution
+            .query_resolution
+            .clone()
+            .map(|meta| serde_json::json!({ "query_resolution": meta }));
+        let user_resolved_query = execution
+            .query_resolution
+            .as_ref()
+            .and_then(|meta| meta.get("resolved_query"))
+            .and_then(|v| v.as_str())
+            .filter(|q| !q.trim().is_empty());
         let assistant_message_id = pg
             .append_chat_turn(
                 &self.auth,
@@ -99,19 +97,20 @@ impl AppState {
                     agent_type: &req.agent_type,
                     citations: &execution.response.citations,
                     tool_results: &tool_results,
+                    user_turn_metadata,
+                    user_resolved_query,
                 },
             )
             .await
             .map_err(map_pg_error)?;
         execution.response.message_id = Some(assistant_message_id);
 
-        let summary_updated = self.maybe_update_session_summary(pg, session).await;
         let _ = self
             .remember_explicit_agent_preference(req.query.trim())
             .await;
 
         if is_direct_chat_mode(&execution.mode)
-            && let Some(ref cm) = self.chatmemory
+            && let Some(ref cm) = self.orchestrator.chatmemory()
             && let Ok(messages) = pg.list_messages(&self.auth, session_uuid).await
             && let Some(user_id) = self.auth.actor_id().map(|value| value.into_uuid())
         {
@@ -167,28 +166,21 @@ impl AppState {
             }
         }
 
-        if summary_updated {
-            // Build summary once and pass it to the dream layer.
-            let session_uuid =
-                parse_uuid_or_app_error(&session.id, "session_not_found", "session not found")
-                    .unwrap_or_else(|_| uuid::Uuid::nil());
-            if let Ok(messages) = pg.list_messages(&self.auth, session_uuid).await {
-                let summary = self.build_session_summary(&messages).await;
-                if !summary.trim().is_empty() {
-                    let _ = self
-                        .maybe_update_structured_profile(pg, session, &summary)
-                        .await;
+        if let Ok(messages) = pg.list_messages(&self.auth, session_uuid).await {
+            let recent_turns = build_recent_turns_context(&messages, PROFILE_INPUT_TURN_WINDOW);
+            if !recent_turns.trim().is_empty() {
+                let profile_updated = self
+                    .maybe_update_structured_profile(pg, session, &recent_turns)
+                    .await;
+                if profile_updated
+                    && is_direct_chat_mode(&execution.mode)
+                    && let Some(mode_debug) = execution.response.mode_debug.as_mut()
+                    && let Some(general) = mode_debug.general.as_mut()
+                {
+                    general.insert("profile_updated".to_string(), serde_json::json!(true));
                 }
             }
         }
-
-        if is_direct_chat_mode(&execution.mode)
-            && summary_updated
-                && let Some(mode_debug) = execution.response.mode_debug.as_mut()
-                && let Some(general) = mode_debug.general.as_mut()
-            {
-                general.insert("summary_updated".to_string(), serde_json::json!(true));
-            }
 
         let event_name = if req.source_type.as_deref() == Some("share") {
             analytics::ProductEventName::SharedKbChatCompleted
@@ -255,7 +247,7 @@ impl AppState {
             )
             .await;
 
-        if let Some(ref usage_svc) = self.quota_manager
+        if let Some(usage_svc) = self.billing.quota_manager()
             && let Some(ref llm_usage) = execution.llm_usage {
                 let feature = match execution.mode.as_str() {
                     "chat" | "general" => avrag_billing::usage_limit::BillableFeature::Chat,
@@ -383,4 +375,18 @@ impl AppState {
 
 fn is_direct_chat_mode(mode: &str) -> bool {
     matches!(mode, "chat" | "general")
+}
+
+/// Recent raw turns fed to the L3 dream layer (not session-summary).
+const PROFILE_INPUT_TURN_WINDOW: usize = 12;
+
+fn build_recent_turns_context(messages: &[common::ChatMessage], max_turns: usize) -> String {
+    messages
+        .iter()
+        .rev()
+        .take(max_turns)
+        .rev()
+        .map(|item| format!("{}: {}", item.role, item.content))
+        .collect::<Vec<_>>()
+        .join("\n")
 }

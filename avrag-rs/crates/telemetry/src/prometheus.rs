@@ -499,6 +499,7 @@ pub fn observe_llm_usage(
     model: &str,
     prompt_tokens: u64,
     completion_tokens: u64,
+    cached_tokens: u64,
 ) {
     let total = prompt_tokens + completion_tokens;
     METRICS
@@ -519,6 +520,17 @@ pub fn observe_llm_usage(
             token_type: "completion".to_string(),
         })
         .inc_by(completion_tokens);
+    if cached_tokens > 0 {
+        METRICS
+            .llm_usage_tokens_total
+            .get_or_create(&LlmUsageLabels {
+                feature: non_empty(feature),
+                provider: non_empty(provider),
+                model: non_empty(model),
+                token_type: "cached".to_string(),
+            })
+            .inc_by(cached_tokens);
+    }
     METRICS
         .llm_usage_tokens_total
         .get_or_create(&LlmUsageLabels {

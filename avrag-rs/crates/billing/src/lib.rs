@@ -1,16 +1,20 @@
+//! Billing crate — checkout, subscriptions, rolling-window usage quotas, and quota enforcement.
+//!
+//! Public surface: HTTP handlers in `api`, subscription lifecycle in `core`,
+//! rolling limits in `usage_limit`, and unified quota decisions in `quota_service`.
+
 mod alipay_client;
 mod api;
 mod core;
 mod creem_client;
-mod feature_flag;
+pub mod quota_service;
 mod stripe_client;
 #[cfg(test)]
 mod tests_impl;
 mod types;
 pub mod usage_limit;
-pub mod quota_service;
 
-pub use quota_service::{QuotaManager, UnifiedQuotaDecision};
+pub use quota_service::{QuotaDenyReason, QuotaManager, UnifiedQuotaDecision};
 
 pub use alipay_client::AlipayClient;
 pub use api::{
@@ -20,7 +24,6 @@ pub use api::{
     handle_get_usage_window, handle_webhook,
 };
 pub use creem_client::CreemClient;
-pub use feature_flag::PricingRevampFlag;
 pub use stripe_client::StripeClient;
 pub use types::{
     BillingConfig, BillingPlan, BillingPlanQuota, BillingProvider, DailyUsage, LimitHits,

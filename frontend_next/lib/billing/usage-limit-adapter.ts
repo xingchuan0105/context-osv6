@@ -45,10 +45,11 @@ function resolvePlanId(data: UsageLimitResponse): UsageMeterProps["planId"] {
 export function usageLimitToMeterProps(
   data: UsageLimitResponse,
   locale: UiLocale,
+  options?: { variant?: UsageMeterProps["variant"] },
 ): UsageMeterProps {
   const { softLimitHit, hardLimitHit } = toLimitHits(data.windows);
   return {
-    variant: "full",
+    variant: options?.variant ?? "full",
     locale,
     planId: resolvePlanId(data),
     rolling5h: toBucket(data.windows.rolling_5h),

@@ -44,13 +44,12 @@ async fn usage_history_aggregates_daily_token_usage_from_llm_usage_events(pool: 
     sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
 
     // Seed user + org.
-    let org_id: Uuid = sqlx::query_scalar(
-        "insert into organizations (name) values ($1) returning id",
-    )
-    .bind(format!("org-{}", Uuid::new_v4()))
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let org_id: Uuid =
+        sqlx::query_scalar("insert into organizations (name) values ($1) returning id")
+            .bind(format!("org-{}", Uuid::new_v4()))
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
     let user_id: Uuid = sqlx::query_scalar(
         "insert into users (org_id, email, full_name) values ($1, $2, $3) returning id",
@@ -68,8 +67,7 @@ async fn usage_history_aggregates_daily_token_usage_from_llm_usage_events(pool: 
     let base_day = now.date_naive();
     for offset_days in 0..3_i64 {
         let day = base_day - chrono::Days::new(offset_days as u64);
-        let when = Utc
-            .from_utc_datetime(&day.and_hms_opt(12, 0, 0).unwrap());
+        let when = Utc.from_utc_datetime(&day.and_hms_opt(12, 0, 0).unwrap());
         sqlx::query(
             r#"
             insert into llm_usage_events

@@ -202,9 +202,7 @@ fn build_report(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{
-        DiffCategory, DiffDimension, DiffSeverity, TestStatus,
-    };
+    use crate::models::{DiffCategory, DiffDimension, DiffSeverity, TestStatus};
 
     fn minimal_result(status: TestStatus, duration_ms: u64) -> TestResult {
         TestResult {
@@ -247,16 +245,16 @@ mod tests {
         assert_eq!(report.confidence, ConfidenceLevel::High);
         assert_eq!(report.suspected_layers.len(), 1);
         assert_eq!(report.suspected_layers[0].layer, "tool_dispatch");
-        assert!(report
-            .suspected_layers[0]
-            .evidence[0]
-            .contains("search_tool"));
+        assert!(report.suspected_layers[0].evidence[0].contains("search_tool"));
         assert!(report.first_anomaly.is_some());
         assert_eq!(
             report.first_anomaly.as_ref().unwrap().description,
             "Tool 'search_tool' returned error status"
         );
-        assert_eq!(report.first_anomaly.as_ref().unwrap().tool_call_index, Some(0));
+        assert_eq!(
+            report.first_anomaly.as_ref().unwrap().tool_call_index,
+            Some(0)
+        );
     }
 
     #[test]
@@ -305,9 +303,7 @@ mod tests {
         let report = report.unwrap();
         assert_eq!(report.failure_category, FailureCategory::ToolFailure);
         assert_eq!(report.confidence, ConfidenceLevel::High);
-        assert!(report.suspected_layers[0]
-            .evidence[0]
-            .contains("missing"));
+        assert!(report.suspected_layers[0].evidence[0].contains("missing"));
     }
 
     #[test]

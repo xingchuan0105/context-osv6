@@ -5,9 +5,9 @@ mod runtime;
 pub mod chunker;
 pub mod ir;
 pub mod ir_validator;
-pub mod semantic;
 pub mod parser;
 pub mod security_scanner;
+pub mod semantic;
 
 pub use error::IngestionError;
 pub use ir::{
@@ -21,9 +21,9 @@ pub use ir_validator::{
 };
 pub use model::{
     AuditAction, AuditRecord, DEFAULT_MAX_ATTEMPTS, DocumentStateMachine, IngestDocumentPayload,
-    IngestUrlPayload, IngestionTask, IngestionTaskKind, IngestionTaskPayload, ReindexDocumentPayload,
-    ReindexReason, Transition, build_ingest_task, build_ingest_url_task, build_reindex_task,
-    task_audit,
+    IngestUrlPayload, IngestionTask, IngestionTaskKind, IngestionTaskPayload,
+    ReindexDocumentPayload, ReindexReason, Transition, build_ingest_task, build_ingest_url_task,
+    build_reindex_task, task_audit,
 };
 pub use runtime::{
     AuditSink, NoopAuditSink, NoopStateSink, NoopTaskProcessor, NoopTaskSource, StateSink,

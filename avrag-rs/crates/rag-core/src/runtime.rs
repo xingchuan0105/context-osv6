@@ -4,6 +4,7 @@ mod planner;
 mod response;
 mod response_utils;
 mod retrieval;
+pub mod bridge;
 pub mod tools;
 
 #[cfg(test)]
@@ -35,10 +36,7 @@ impl RagRuntime {
         }
     }
 
-    pub fn with_embedding_client(
-        mut self,
-        embedding_client: Arc<EmbeddingClient>,
-    ) -> Self {
+    pub fn with_embedding_client(mut self, embedding_client: Arc<EmbeddingClient>) -> Self {
         self.embedding_client = Some(embedding_client);
         self
     }

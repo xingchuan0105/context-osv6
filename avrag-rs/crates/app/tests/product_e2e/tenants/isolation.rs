@@ -14,6 +14,7 @@
 
 use std::time::Duration;
 
+use crate::product_e2e::assertions::assert_answer_excludes_keywords;
 use crate::product_e2e::{ChatResponse, DocumentStatus, HttpResponse, TestContext};
 
 const ORG_A: &str = "11111111-1111-1111-1111-111111111111";
@@ -57,6 +58,7 @@ async fn cross_org_rag_does_not_leak_documents() {
             "cross-org leak: org-B chat returned citation for org-A doc {}",
             upload_a.document_id
         );
+        assert_answer_excludes_keywords(&resp, &["antifragile", "taleb"]);
     } else {
         // Acceptable: server rejected (e.g. docscope_required). Make sure
         // it is a client error, not a 5xx (which would mean RAG crashed).
@@ -94,27 +96,12 @@ async fn cross_org_rag_cannot_query_org_a_doc_by_id() {
         .await
         .unwrap();
 
-    // 3. Acceptable outcomes (any of these = isolation is enforced):
-    //    (a) 4xx (docscope_invalid, unauthorized, forbidden, not found).
-    //    (b) 200 with zero citations referencing the foreign doc.
-    //    NOT acceptable: 200 with the foreign doc cited.
-    if http_resp.status == 200 {
-        let resp: ChatResponse = http_resp.into_business().unwrap();
-        let leaked = resp
-            .citations
-            .iter()
-            .any(|c| c.doc_id == upload_a.document_id);
-        assert!(
-            !leaked,
-            "cross-org leak: org-B passed org-A doc_id {} in doc_scope and got it cited back",
-            upload_a.document_id
-        );
-    } else {
-        assert!(
-            (400..500).contains(&http_resp.status),
-            "expected 4xx when org-B passes foreign doc_scope, got HTTP {} body={}",
-            http_resp.status,
-            http_resp.body_json
-        );
-    }
+    // 3. Passing a foreign doc_id in doc_scope MUST be rejected with 4xx.
+    //    HTTP 200 is no longer acceptable — the server should refuse outright.
+    assert!(
+        (400..500).contains(&http_resp.status),
+        "expected 4xx when org-B passes foreign doc_scope, got HTTP {} body={}",
+        http_resp.status,
+        http_resp.body_json
+    );
 }

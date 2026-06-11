@@ -28,6 +28,7 @@ pub struct ToolCall {
 }
 
 /// Execution status for a single tool.
+/// Note: `PartialEq, Eq` are required for conversion to `contracts::chat::ToolStatus`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolStatus {
@@ -54,7 +55,6 @@ pub struct ToolTrace {
 
 /// Result returned by the runtime for one ToolCall.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct ToolResult {
     pub tool: String,
     pub version: String,
@@ -63,6 +63,58 @@ pub struct ToolResult {
     pub data: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trace: Option<ToolTrace>,
+}
+
+// ---------------------------------------------------------------------------
+// Bridge: common ↔ contracts ToolResult/ToolStatus conversions
+// Eliminates manual field-by-field mapping in service_modes / service_postprocess.
+// ---------------------------------------------------------------------------
+
+impl From<ToolResult> for contracts::chat::ToolResult {
+    fn from(r: ToolResult) -> Self {
+        contracts::chat::ToolResult {
+            tool: r.tool,
+            version: r.version,
+            status: r.status.into(),
+            data: r.data,
+        }
+    }
+}
+
+impl From<contracts::chat::ToolResult> for ToolResult {
+    fn from(r: contracts::chat::ToolResult) -> Self {
+        ToolResult {
+            tool: r.tool,
+            version: r.version,
+            status: r.status.into(),
+            data: r.data,
+            trace: None,
+        }
+    }
+}
+
+impl From<ToolStatus> for contracts::chat::ToolStatus {
+    fn from(s: ToolStatus) -> Self {
+        match s {
+            ToolStatus::Ok => contracts::chat::ToolStatus::Ok,
+            ToolStatus::Timeout => contracts::chat::ToolStatus::Timeout,
+            ToolStatus::Error => contracts::chat::ToolStatus::Error,
+            ToolStatus::NotFound => contracts::chat::ToolStatus::NotFound,
+            ToolStatus::NotImplemented => contracts::chat::ToolStatus::NotImplemented,
+        }
+    }
+}
+
+impl From<contracts::chat::ToolStatus> for ToolStatus {
+    fn from(s: contracts::chat::ToolStatus) -> Self {
+        match s {
+            contracts::chat::ToolStatus::Ok => ToolStatus::Ok,
+            contracts::chat::ToolStatus::Timeout => ToolStatus::Timeout,
+            contracts::chat::ToolStatus::Error => ToolStatus::Error,
+            contracts::chat::ToolStatus::NotFound => ToolStatus::NotFound,
+            contracts::chat::ToolStatus::NotImplemented => ToolStatus::NotImplemented,
+        }
+    }
 }
 
 /// Planner decides what to do after emitting calls.
@@ -141,9 +193,10 @@ pub struct DenseRetrievalArgs {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DenseRetrievalModality {
-    #[default]
     Text,
+    #[serde(alias = "image")]
     Mm,
+    #[default]
     Both,
 }
 
@@ -214,6 +267,14 @@ pub struct DocMetadataArgs {
     pub fields: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DocProfileArgs {
+    pub doc_ids: Vec<String>,
+    #[serde(default)]
+    pub fields: Vec<String>,
+}
+
 fn default_top_k() -> usize {
     10
 }
@@ -270,9 +331,10 @@ impl ExecutePlanRequest {
         for call in calls {
             match call.tool.as_str() {
                 "dense_retrieval" => {
-                    let args: DenseRetrievalArgs = serde_json::from_value(call.args).map_err(
-                        |e| ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string()),
-                    )?;
+                    let args: DenseRetrievalArgs =
+                        serde_json::from_value(call.args).map_err(|e| {
+                            ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string())
+                        })?;
                     for (idx, query) in args.queries.into_iter().enumerate() {
                         let priority = 1.0 - (idx as f32 * 0.1);
                         items.push(ExecutePlanItem {
@@ -283,9 +345,10 @@ impl ExecutePlanRequest {
                     }
                 }
                 "lexical_retrieval" => {
-                    let args: LexicalRetrievalArgs = serde_json::from_value(call.args).map_err(
-                        |e| ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string()),
-                    )?;
+                    let args: LexicalRetrievalArgs =
+                        serde_json::from_value(call.args).map_err(|e| {
+                            ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string())
+                        })?;
                     items.push(ExecutePlanItem {
                         priority: 1.0,
                         query: None,
@@ -293,16 +356,17 @@ impl ExecutePlanRequest {
                     });
                 }
                 "graph_retrieval" => {
-                    let args: GraphRetrievalArgs = serde_json::from_value(call.args).map_err(
-                        |e| ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string()),
-                    )?;
+                    let args: GraphRetrievalArgs =
+                        serde_json::from_value(call.args).map_err(|e| {
+                            ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string())
+                        })?;
                     graph_hints.extend(args.graph_hints);
                     placeholder_triplets.extend(args.placeholder_triplets);
                 }
                 "doc_summary" => {
-                    let args: DocSummaryArgs = serde_json::from_value(call.args).map_err(
-                        |e| ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string()),
-                    )?;
+                    let args: DocSummaryArgs = serde_json::from_value(call.args).map_err(|e| {
+                        ToolCallAdapterError::InvalidArgs(call.tool.clone(), e.to_string())
+                    })?;
                     summary_mode = match args.level {
                         DocSummaryLevel::Doc => ExecutePlanSummaryMode::All,
                         DocSummaryLevel::Section => ExecutePlanSummaryMode::Related,
@@ -320,9 +384,8 @@ impl ExecutePlanRequest {
             }
         }
 
-        let has_retrieval = !items.is_empty()
-            || !graph_hints.is_empty()
-            || !placeholder_triplets.is_empty();
+        let has_retrieval =
+            !items.is_empty() || !graph_hints.is_empty() || !placeholder_triplets.is_empty();
         let has_summary = summary_mode != ExecutePlanSummaryMode::None;
         if !has_retrieval && !has_summary {
             return Err(ToolCallAdapterError::EmptyCalls);
@@ -608,5 +671,22 @@ mod tests {
         .unwrap();
         assert_eq!(req.items.len(), 1);
         assert_eq!(req.graph_hints.len(), 1);
+    }
+
+    #[test]
+    fn dense_retrieval_args_default_modality_is_both() {
+        let args: DenseRetrievalArgs =
+            serde_json::from_str(r#"{"queries":["black swan"]}"#).unwrap();
+        assert_eq!(args.modality, DenseRetrievalModality::Both);
+    }
+
+    #[test]
+    fn dense_retrieval_modality_accepts_image_alias_for_mm() {
+        let args: DenseRetrievalArgs = serde_json::from_value(serde_json::json!({
+            "queries": ["test"],
+            "modality": "image",
+        }))
+        .unwrap();
+        assert_eq!(args.modality, DenseRetrievalModality::Mm);
     }
 }

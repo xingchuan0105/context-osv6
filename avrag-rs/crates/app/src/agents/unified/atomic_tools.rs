@@ -40,11 +40,20 @@ pub async fn dispatch_atomic_tools_with_enforcement(
     calls: Vec<ToolCall>,
     search_provider: Option<&dyn avrag_search::SearchProvider>,
     auth: Option<&avrag_auth::AuthContext>,
+    session_id: Option<uuid::Uuid>,
+    pg_repo: Option<&avrag_storage_pg::PgAppRepository>,
 ) -> Vec<ToolResult> {
     let futures = calls
         .into_iter()
         .map(|call| async move {
-            dispatch_atomic_tool_with_enforcement(&call, search_provider, auth).await
+            dispatch_atomic_tool_with_enforcement(
+                &call,
+                search_provider,
+                auth,
+                session_id,
+                pg_repo,
+            )
+            .await
         })
         .collect::<Vec<_>>();
     futures::future::join_all(futures).await
@@ -55,10 +64,13 @@ pub async fn dispatch_atomic_tool_with_enforcement(
     call: &ToolCall,
     search_provider: Option<&dyn avrag_search::SearchProvider>,
     auth: Option<&avrag_auth::AuthContext>,
+    session_id: Option<uuid::Uuid>,
+    pg_repo: Option<&avrag_storage_pg::PgAppRepository>,
 ) -> ToolResult {
-    // 1. Policy check via CapabilityRegistry
+    // 1. Policy check via non-prompt runtime metadata.
     let registry = crate::agents::capability::CapabilityRegistry::standard_cached();
-    if let Some(meta) = registry.tool(&call.tool) {
+    let runtime_meta = runtime_tool_metadata(&call.tool);
+    if let Some(meta) = registry.tool(&call.tool).or_else(|| runtime_meta.as_ref()) {
         let enforcer = crate::agents::capability::PolicyEnforcer::new(
             crate::agents::capability::standard_rules(),
         );
@@ -91,10 +103,16 @@ pub async fn dispatch_atomic_tool_with_enforcement(
 
     // 2. Execute via SkillRegistry with retry
     let skill_registry = crate::agents::skills::registry::builtin_registry_cached();
-    let ctx = crate::agents::skills::ExecutionContext::new(search_provider);
+    let ctx = crate::agents::skills::ExecutionContext::with_memory(
+        search_provider,
+        auth,
+        session_id,
+        pg_repo,
+    );
 
     let retry_policy = registry
         .tool(&call.tool)
+        .or_else(|| runtime_meta.as_ref())
         .map(|m| m.retry_policy.clone())
         .unwrap_or_default();
 
@@ -103,6 +121,53 @@ pub async fn dispatch_atomic_tool_with_enforcement(
         &retry_policy,
     )
     .await
+}
+
+fn runtime_tool_metadata(id: &str) -> Option<crate::agents::capability::ToolMetadata> {
+    use crate::agents::capability::{
+        ActivationPhase, Permission, RetryPolicy, RiskLevel, ToolMetadata,
+    };
+
+    let (description, risk_level, permissions) = match id {
+        "web_search" => (
+            "Search the public web",
+            RiskLevel::High,
+            vec![Permission::ExternalNetwork],
+        ),
+        "web_fetch" => (
+            "Fetch a public web page",
+            RiskLevel::High,
+            vec![Permission::ExternalNetwork],
+        ),
+        "code_interpreter" => (
+            "Execute code in a sandbox",
+            RiskLevel::High,
+            vec![Permission::CodeExecution],
+        ),
+        "calculator" => (
+            "Evaluate a mathematical expression",
+            RiskLevel::Low,
+            Vec::new(),
+        ),
+        "weather_query" => ("Query weather data", RiskLevel::Low, Vec::new()),
+        _ => return None,
+    };
+
+    Some(ToolMetadata {
+        id: id.to_string(),
+        version: "1.0.0".to_string(),
+        owner: "runtime".to_string(),
+        description: description.to_string(),
+        input_schema: serde_json::Value::Null,
+        output_schema: serde_json::Value::Null,
+        risk_level,
+        permissions,
+        external_deps: Vec::new(),
+        deprecation: None,
+        retry_policy: RetryPolicy::default(),
+        activation_phase: ActivationPhase::PlanAndEvaluate,
+        applicable_strategies: Vec::new(),
+    })
 }
 
 /// Execute an async operation with exponential-backoff retry.
@@ -441,7 +506,8 @@ mod tests {
             avrag_auth::OrgId::new(uuid::Uuid::nil()),
             avrag_auth::SubjectKind::User,
         );
-        let result = dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth)).await;
+        let result =
+            dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
         assert_eq!(result.status, ToolStatus::Error);
         let data = result.data.unwrap();
         assert!(data["error"].as_str().unwrap().contains("external network"));
@@ -456,8 +522,14 @@ mod tests {
         )
         .grant("external_network");
         let provider = FakeSearchProvider;
-        let result =
-            dispatch_atomic_tool_with_enforcement(&call, Some(&provider), Some(&auth)).await;
+        let result = dispatch_atomic_tool_with_enforcement(
+            &call,
+            Some(&provider),
+            Some(&auth),
+            None,
+            None,
+        )
+        .await;
         assert_eq!(result.status, ToolStatus::Ok);
     }
 
@@ -471,7 +543,8 @@ mod tests {
             avrag_auth::OrgId::new(uuid::Uuid::nil()),
             avrag_auth::SubjectKind::User,
         );
-        let result = dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth)).await;
+        let result =
+            dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
         assert_eq!(result.status, ToolStatus::Error);
         let data = result.data.unwrap();
         assert!(data["error"].as_str().unwrap().contains("external network"));
@@ -488,7 +561,8 @@ mod tests {
             avrag_auth::SubjectKind::User,
         )
         .grant("external_network");
-        let result = dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth)).await;
+        let result =
+            dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
         // Without a real HTTP client the fetch may fail, but policy should allow it.
         assert!(matches!(result.status, ToolStatus::Ok | ToolStatus::Error));
     }
@@ -500,7 +574,8 @@ mod tests {
             avrag_auth::OrgId::new(uuid::Uuid::nil()),
             avrag_auth::SubjectKind::User,
         );
-        let result = dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth)).await;
+        let result =
+            dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
         assert_eq!(result.status, ToolStatus::Error);
         let data = result.data.unwrap();
         assert!(data["error"].as_str().unwrap().contains("code execution"));
@@ -513,6 +588,149 @@ mod tests {
         // Legacy dispatch_atomic_tool (no auth) should use permissive enforcer
         let result = dispatch_atomic_tool(&call, Some(&provider)).await;
         assert_eq!(result.status, ToolStatus::Ok);
+    }
+
+    // -----------------------------------------------------------------------
+    // Memory tool context wiring (production path via iteration → atomic_tools)
+    // -----------------------------------------------------------------------
+
+    async fn pg_repo_from_env() -> Option<avrag_storage_pg::PgAppRepository> {
+        let url = std::env::var("DATABASE_URL").ok()?;
+        avrag_storage_pg::PgAppRepository::connect(&url).await.ok()
+    }
+
+    fn memory_test_auth() -> avrag_auth::AuthContext {
+        avrag_auth::AuthContext::new(
+            avrag_auth::OrgId::new(uuid::Uuid::new_v4()),
+            avrag_auth::SubjectKind::User,
+        )
+        .with_actor_id(avrag_auth::ActorId::new(uuid::Uuid::new_v4()))
+    }
+
+    #[tokio::test]
+    async fn test_conversation_history_load_without_memory_context_errors() {
+        let auth = memory_test_auth();
+        let call = tool_call("conversation_history_load", serde_json::json!({}));
+        let result = dispatch_atomic_tool_with_enforcement(
+            &call,
+            None,
+            Some(&auth),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(result.status, ToolStatus::Error);
+        let data = result.data.unwrap();
+        let err = data["error"].as_str().unwrap();
+        assert!(
+            err.contains("requires"),
+            "expected context guard error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_user_profile_load_without_memory_context_errors() {
+        let auth = memory_test_auth();
+        let call = tool_call("user_profile_load", serde_json::json!({}));
+        let result = dispatch_atomic_tool_with_enforcement(
+            &call,
+            None,
+            Some(&auth),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(result.status, ToolStatus::Error);
+        let data = result.data.unwrap();
+        let err = data["error"].as_str().unwrap();
+        assert!(
+            err.contains("requires"),
+            "expected context guard error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_user_profile_load_with_pg_but_no_actor_reaches_memory_dispatch() {
+        let Some(repo) = pg_repo_from_env().await else {
+            return;
+        };
+        let auth = avrag_auth::AuthContext::new(
+            avrag_auth::OrgId::new(uuid::Uuid::new_v4()),
+            avrag_auth::SubjectKind::User,
+        );
+        let call = tool_call("user_profile_load", serde_json::json!({}));
+        let result = dispatch_atomic_tool_with_enforcement(
+            &call,
+            None,
+            Some(&auth),
+            None,
+            Some(&repo),
+        )
+        .await;
+        assert_eq!(result.status, ToolStatus::Error);
+        assert_eq!(
+            result.data.unwrap()["error"].as_str().unwrap(),
+            "authenticated user required"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_conversation_history_load_with_pg_context_succeeds() {
+        let Some(repo) = pg_repo_from_env().await else {
+            return;
+        };
+        let auth = memory_test_auth();
+        let session_id = uuid::Uuid::new_v4();
+        let call = tool_call(
+            "conversation_history_load",
+            serde_json::json!({"limit": 5}),
+        );
+        let result = dispatch_atomic_tool_with_enforcement(
+            &call,
+            None,
+            Some(&auth),
+            Some(session_id),
+            Some(&repo),
+        )
+        .await;
+        assert_eq!(
+            result.status,
+            ToolStatus::Ok,
+            "unexpected result: {:?}",
+            result.data
+        );
+        let data = result.data.unwrap();
+        assert!(data.get("messages").and_then(|v| v.as_array()).is_some());
+        assert_eq!(data["message_count"].as_i64().unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_user_profile_load_with_pg_context_succeeds() {
+        let Some(repo) = pg_repo_from_env().await else {
+            return;
+        };
+        let auth = memory_test_auth();
+        let call = tool_call("user_profile_load", serde_json::json!({}));
+        let result = dispatch_atomic_tool_with_enforcement(
+            &call,
+            None,
+            Some(&auth),
+            None,
+            Some(&repo),
+        )
+        .await;
+        assert_eq!(
+            result.status,
+            ToolStatus::Ok,
+            "unexpected result: {:?}",
+            result.data
+        );
+        let data = result.data.unwrap();
+        assert!(data.get("structured_profile").is_some());
+        assert!(data
+            .get("expertise_domains")
+            .and_then(|v| v.as_array())
+            .is_some());
     }
 
     // -----------------------------------------------------------------------

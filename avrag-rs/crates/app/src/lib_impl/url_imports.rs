@@ -17,7 +17,7 @@ impl AppState {
         }
         let fetched = fetch_url_import(url).await?;
 
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             self.ensure_metric_quota("storage_bytes", fetched.raw_bytes.len() as i64)
                 .await?;
             let notebook_id =
@@ -121,7 +121,7 @@ impl AppState {
             parsed_items,
         };
         {
-            let mut state = self.inner.write().await;
+            let mut state = self.storage.inner().write().await;
             state.documents.insert(document_id.clone(), stored);
         }
         self.record_product_event_if_available(
@@ -157,14 +157,14 @@ impl AppState {
     }
 
     pub async fn list_sources(&self, notebook_id: Option<&str>) -> Vec<SourceRow> {
-        if let Some(pg) = &self.pg {
+        if let Some(pg) = self.storage.pg() {
             let notebook_uuid = notebook_id.and_then(|value| Uuid::parse_str(value).ok());
             return pg
                 .list_sources(&self.auth, notebook_uuid)
                 .await
                 .unwrap_or_default();
         }
-        let state = self.inner.read().await;
+        let state = self.storage.inner().read().await;
         state
             .documents
             .values()

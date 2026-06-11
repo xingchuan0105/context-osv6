@@ -5,11 +5,7 @@ use common::{
 
 use crate::RagRuntime;
 
-pub async fn run(
-    runtime: &RagRuntime,
-    auth: &AuthContext,
-    args: &serde_json::Value,
-) -> ToolResult {
+pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Value) -> ToolResult {
     let args: LexicalRetrievalArgs = match serde_json::from_value(args.clone()) {
         Ok(a) => a,
         Err(e) => {
@@ -18,10 +14,7 @@ pub async fn run(
     };
 
     if args.terms.is_empty() {
-        return super::error_result(
-            "lexical_retrieval",
-            "terms must not be empty".to_string(),
-        );
+        return super::error_result("lexical_retrieval", "terms must not be empty".to_string());
     }
 
     let query = args.terms.join(" ");
@@ -35,8 +28,9 @@ pub async fn run(
         doc_scope: args.doc_scope.clone(),
         messages: Vec::new(),
         stream: false,
+        debug: false,
         language: None,
-    format_hint: None,
+        format_hint: None,
     };
 
     let rag_plan = RagPlan {
@@ -53,10 +47,7 @@ pub async fn run(
     };
 
     let started = std::time::Instant::now();
-    match runtime
-        .retrieve_bm25_stage(&request, auth, &rag_plan)
-        .await
-    {
+    match runtime.retrieve_bm25_stage(&request, auth, &rag_plan).await {
         Ok((lists, degrade_trace)) => {
             let chunks: Vec<crate::ScoredChunk> =
                 lists.into_iter().flat_map(|list| list.chunks).collect();
@@ -64,7 +55,15 @@ pub async fn run(
                 tool: "lexical_retrieval".to_string(),
                 version: "1.0".to_string(),
                 status: ToolStatus::Ok,
-                data: Some(serde_json::to_value(chunks.iter().map(super::scored_chunk_to_json).collect::<Vec<_>>()).unwrap_or_default()),
+                data: Some(
+                    serde_json::to_value(
+                        chunks
+                            .iter()
+                            .map(super::scored_chunk_to_json)
+                            .collect::<Vec<_>>(),
+                    )
+                    .unwrap_or_default(),
+                ),
                 trace: Some(ToolTrace {
                     elapsed_ms: Some(started.elapsed().as_millis() as u64),
                     raw_hit_count: Some(chunks.len()),
@@ -72,7 +71,13 @@ pub async fn run(
                     degrade_reason: if degrade_trace.is_empty() {
                         None
                     } else {
-                        Some(degrade_trace.iter().map(|d| d.reason.as_str()).collect::<Vec<_>>().join("; "))
+                        Some(
+                            degrade_trace
+                                .iter()
+                                .map(|d| d.reason.as_str())
+                                .collect::<Vec<_>>()
+                                .join("; "),
+                        )
                     },
                 }),
             }

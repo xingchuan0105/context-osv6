@@ -145,6 +145,8 @@ mod tests {
             agent_icon: None,
             citations: Vec::new(),
             tool_results: Vec::new(),
+            turn_metadata: None,
+            resolved_query: None,
             created_at: "2026-04-23T00:00:00Z".to_string(),
         }
     }

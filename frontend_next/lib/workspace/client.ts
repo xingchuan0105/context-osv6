@@ -15,9 +15,9 @@ export type Workspace = {
   description: string;
   created_at: string;
   updated_at: string;
-  document_count: number;
-  status_summary: Record<string, number>;
-  shared: boolean;
+  document_count?: number;
+  status_summary?: Record<string, number>;
+  shared?: boolean;
 };
 
 export type WorkspaceResponse = {
@@ -33,11 +33,11 @@ export type WorkspaceChatMessage = {
   session_id: string;
   role: string;
   content: string;
-  answer_blocks: AnswerBlock[];
+  answer_blocks?: AnswerBlock[];
   agent_id?: string | null;
   agent_name?: string | null;
   agent_icon?: string | null;
-  citations: Citation[];
+  citations?: Citation[];
   tool_results?: ToolResult[] | null;
   created_at: string;
 };
@@ -139,125 +139,6 @@ type ErrorEnvelope = {
   message: string;
 };
 
-type RawWorkspace = {
-  id: string;
-  org_id: string;
-  owner_id: string;
-  name: string;
-  title: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
-  document_count?: number;
-  status_summary?: Record<string, number>;
-  shared?: boolean;
-};
-
-type RawWorkspaceResponse = {
-  notebook: RawWorkspace;
-};
-
-type RawWorkspaceSession = {
-  id: string;
-  notebook_id: string;
-  title?: string | null;
-  agent_type: string;
-  summary?: string | null;
-  pinned?: boolean;
-  created_at: string;
-  updated_at: string;
-};
-
-type RawWorkspaceSessionListResponse = {
-  sessions: RawWorkspaceSession[];
-};
-
-type RawWorkspaceChatMessage = {
-  id: number;
-  session_id: string;
-  role: string;
-  content: string;
-  answer_blocks?: AnswerBlock[];
-  agent_id?: string | null;
-  agent_name?: string | null;
-  agent_icon?: string | null;
-  citations?: Citation[];
-  created_at: string;
-};
-
-type RawWorkspaceChatMessageListResponse = {
-  messages: RawWorkspaceChatMessage[];
-};
-
-type RawWorkspaceSource = {
-  id: string;
-  notebook_id: string;
-  notebook_name: string;
-  title: string;
-  file_name: string;
-  status: string;
-};
-
-type RawWorkspaceSourceListResponse = {
-  sources: RawWorkspaceSource[];
-};
-
-type RawWorkspaceNote = {
-  id: string;
-  notebook_id: string;
-  title: string;
-  content: string;
-  preview: string;
-  created_at: string;
-  updated_at: string;
-  promoted_document_id?: string | null;
-  promoted_at?: string | null;
-};
-
-type RawWorkspaceNoteListResponse = {
-  notes: RawWorkspaceNote[];
-};
-
-type RawWorkspaceNoteResponse = {
-  note: RawWorkspaceNote;
-};
-
-type RawPromoteWorkspaceNoteResponse = {
-  note: RawWorkspaceNote;
-  source_id: string;
-};
-
-type RawWorkspaceSourceContentResponse = {
-  content: string;
-  summary?: string | null;
-};
-
-type RawWorkspaceParsedPreviewItem = {
-  kind: string;
-  text: string;
-  page: number;
-  cursor: number;
-};
-
-type RawWorkspaceParsedPreviewResponse = {
-  items: RawWorkspaceParsedPreviewItem[];
-  has_more: boolean;
-  next_cursor: number;
-  summary?: string | null;
-};
-
-type RawWorkspaceCitationLookupResponse = {
-  doc_name?: string | null;
-  content?: string | null;
-  doc_id?: string | null;
-  chunk_id?: string | null;
-  page?: number | null;
-  chunk_type?: string | null;
-  asset_id?: string | null;
-  caption?: string | null;
-  image_url?: string | null;
-};
-
 type EmptyResponse = Record<string, never>;
 
 async function decodeError(response: Response) {
@@ -303,125 +184,16 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string) 
   return (await response.json()) as T;
 }
 
-function mapWorkspace(workspace: RawWorkspace): Workspace {
-  return {
-    workspace_id: workspace.id,
-    org_id: workspace.org_id,
-    owner_id: workspace.owner_id,
-    name: workspace.name,
-    title: workspace.title,
-    description: workspace.description,
-    created_at: workspace.created_at,
-    updated_at: workspace.updated_at,
-    document_count: workspace.document_count ?? 0,
-    status_summary: workspace.status_summary ?? {},
-    shared: workspace.shared ?? false,
-  };
-}
-
-function mapWorkspaceSession(session: RawWorkspaceSession): WorkspaceSession {
-  return {
-    id: session.id,
-    workspace_id: session.notebook_id,
-    title: session.title ?? null,
-    agent_type: session.agent_type,
-    summary: session.summary ?? null,
-    pinned: session.pinned ?? false,
-    created_at: session.created_at,
-    updated_at: session.updated_at,
-  };
-}
-
-function mapWorkspaceChatMessage(message: RawWorkspaceChatMessage): WorkspaceChatMessage {
-  return {
-    id: message.id,
-    session_id: message.session_id,
-    role: message.role,
-    content: message.content,
-    answer_blocks: message.answer_blocks ?? [],
-    agent_id: message.agent_id ?? null,
-    agent_name: message.agent_name ?? null,
-    agent_icon: message.agent_icon ?? null,
-    citations: message.citations ?? [],
-    created_at: message.created_at,
-  };
-}
-
-function mapWorkspaceSource(source: RawWorkspaceSource): WorkspaceSource {
-  return {
-    id: source.id,
-    workspace_id: source.notebook_id,
-    workspace_name: source.notebook_name,
-    title: source.title,
-    file_name: source.file_name,
-    status: source.status,
-  };
-}
-
-function mapWorkspaceNote(note: RawWorkspaceNote): WorkspaceNote {
-  return {
-    id: note.id,
-    workspace_id: note.notebook_id,
-    title: note.title,
-    content: note.content,
-    preview: note.preview,
-    created_at: note.created_at,
-    updated_at: note.updated_at,
-    promoted_document_id: note.promoted_document_id ?? null,
-    promoted_at: note.promoted_at ?? null,
-  };
-}
-
-function mapWorkspaceParsedPreviewResponse(
-  response: RawWorkspaceParsedPreviewResponse,
-): WorkspaceParsedPreviewResponse {
-  return {
-    items: response.items.map((item) => ({
-      kind: item.kind,
-      text: item.text,
-      page: item.page,
-      cursor: item.cursor,
-    })),
-    has_more: response.has_more,
-    next_cursor: response.next_cursor,
-    summary: response.summary ?? null,
-  };
-}
-
-function mapWorkspaceSourceContentResponse(
-  response: RawWorkspaceSourceContentResponse,
-): WorkspaceSourceContentResponse {
-  return {
-    content: response.content,
-    summary: response.summary ?? null,
-  };
-}
-
-function mapWorkspaceCitationLookupResponse(
-  response: RawWorkspaceCitationLookupResponse,
-): WorkspaceCitationLookupResponse {
-  return {
-    doc_name: response.doc_name ?? null,
-    content: response.content ?? null,
-    doc_id: response.doc_id ?? null,
-    chunk_id: response.chunk_id ?? null,
-    page: response.page ?? null,
-    chunk_type: response.chunk_type ?? null,
-    asset_id: response.asset_id ?? null,
-    caption: response.caption ?? null,
-    image_url: response.image_url ?? null,
-  };
-}
-
 export async function getWorkspace(token: string, workspace_id: string): Promise<WorkspaceResponse> {
-  const resp = await request<RawWorkspaceResponse>(
+  const resp = await request<{ notebook: Omit<Workspace, "workspace_id"> & { id: string } }>(
     `/api/v1/notebooks/${workspace_id}`,
     { method: "GET" },
     token,
   );
 
+  const { id, ...notebook } = resp.notebook;
   return {
-    workspace: mapWorkspace(resp.notebook),
+    workspace: { ...notebook, workspace_id: id },
   };
 }
 
@@ -430,7 +202,7 @@ export async function updateWorkspace(
   workspace_id: string,
   requestBody: { name: string; description: string },
 ): Promise<WorkspaceResponse> {
-  const resp = await request<RawWorkspaceResponse>(
+  const resp = await request<{ notebook: Omit<Workspace, "workspace_id"> & { id: string } }>(
     `/api/v1/notebooks/${workspace_id}`,
     {
       method: "PUT",
@@ -439,8 +211,9 @@ export async function updateWorkspace(
     token,
   );
 
+  const { id, ...notebook } = resp.notebook;
   return {
-    workspace: mapWorkspace(resp.notebook),
+    workspace: { ...notebook, workspace_id: id },
   };
 }
 
@@ -448,14 +221,17 @@ export async function listWorkspaceSessions(
   token: string,
   workspace_id: string,
 ): Promise<WorkspaceSessionListResponse> {
-  const resp = await request<RawWorkspaceSessionListResponse>(
-    `/api/v1/chat/sessions?notebook_id=${workspace_id}`,
-    { method: "GET" },
-    token,
-  );
+  const resp = await request<{
+    sessions: Array<
+      Omit<WorkspaceSession, "workspace_id"> & { notebook_id: string }
+    >;
+  }>(`/api/v1/chat/sessions?notebook_id=${workspace_id}`, { method: "GET" }, token);
 
   return {
-    sessions: resp.sessions.map(mapWorkspaceSession),
+    sessions: resp.sessions.map(({ notebook_id, ...session }) => ({
+      ...session,
+      workspace_id: notebook_id,
+    })),
   };
 }
 
@@ -464,7 +240,9 @@ export async function createWorkspaceSession(
   workspace_id: string,
   requestBody: CreateWorkspaceSessionRequest,
 ): Promise<WorkspaceSession> {
-  const resp = await request<RawWorkspaceSession>(
+  const resp = await request<
+    Omit<WorkspaceSession, "workspace_id"> & { notebook_id: string }
+  >(
     "/api/v1/chat/sessions",
     {
       method: "POST",
@@ -476,35 +254,43 @@ export async function createWorkspaceSession(
     token,
   );
 
-  return mapWorkspaceSession(resp);
+  const { notebook_id, ...session } = resp;
+  return {
+    ...session,
+    workspace_id: notebook_id,
+  };
 }
 
 export async function getWorkspaceSession(
   token: string,
   session_id: string,
 ): Promise<WorkspaceSession> {
-  const resp = await request<RawWorkspaceSession>(
+  const resp = await request<
+    Omit<WorkspaceSession, "workspace_id"> & { notebook_id: string }
+  >(
     `/api/v1/chat/sessions/${session_id}`,
     { method: "GET" },
     token,
   );
 
-  return mapWorkspaceSession(resp);
+  const { notebook_id, ...session } = resp;
+  return {
+    ...session,
+    workspace_id: notebook_id,
+  };
 }
 
 export async function listWorkspaceSessionMessages(
   token: string,
   session_id: string,
 ): Promise<WorkspaceChatMessageListResponse> {
-  const resp = await request<RawWorkspaceChatMessageListResponse>(
+  const resp = await request<WorkspaceChatMessageListResponse>(
     `/api/v1/chat/sessions/${session_id}/messages`,
     { method: "GET" },
     token,
   );
 
-  return {
-    messages: resp.messages.map(mapWorkspaceChatMessage),
-  };
+  return resp;
 }
 
 export async function updateWorkspaceSession(
@@ -512,7 +298,9 @@ export async function updateWorkspaceSession(
   session_id: string,
   requestBody: UpdateWorkspaceSessionRequest,
 ): Promise<WorkspaceSession> {
-  const resp = await request<RawWorkspaceSession>(
+  const resp = await request<
+    Omit<WorkspaceSession, "workspace_id"> & { notebook_id: string }
+  >(
     `/api/v1/chat/sessions/${session_id}`,
     {
       method: "PUT",
@@ -521,7 +309,11 @@ export async function updateWorkspaceSession(
     token,
   );
 
-  return mapWorkspaceSession(resp);
+  const { notebook_id, ...session } = resp;
+  return {
+    ...session,
+    workspace_id: notebook_id,
+  };
 }
 
 export async function deleteWorkspaceSession(token: string, session_id: string): Promise<void> {
@@ -532,14 +324,21 @@ export async function listWorkspaceSources(
   token: string,
   workspace_id: string,
 ): Promise<WorkspaceSourceListResponse> {
-  const resp = await request<RawWorkspaceSourceListResponse>(
-    `/api/v1/sources?notebook_id=${workspace_id}`,
-    { method: "GET" },
-    token,
-  );
+  const resp = await request<{
+    sources: Array<
+      Omit<WorkspaceSource, "workspace_id" | "workspace_name"> & {
+        notebook_id: string;
+        notebook_name: string;
+      }
+    >;
+  }>(`/api/v1/sources?notebook_id=${workspace_id}`, { method: "GET" }, token);
 
   return {
-    sources: resp.sources.map(mapWorkspaceSource),
+    sources: resp.sources.map(({ notebook_id, notebook_name, ...source }) => ({
+      ...source,
+      workspace_id: notebook_id,
+      workspace_name: notebook_name,
+    })),
   };
 }
 
@@ -639,13 +438,13 @@ export async function getWorkspaceSourceContent(
   token: string,
   document_id: string,
 ): Promise<WorkspaceSourceContentResponse> {
-  const response = await request<RawWorkspaceSourceContentResponse>(
+  const response = await request<WorkspaceSourceContentResponse>(
     `/api/v1/documents/${document_id}/content`,
     { method: "GET" },
     token,
   );
 
-  return mapWorkspaceSourceContentResponse(response);
+  return response;
 }
 
 export async function getWorkspaceSourceParsedPreview(
@@ -654,20 +453,20 @@ export async function getWorkspaceSourceParsedPreview(
   cursor = 0,
   limit = 120,
 ): Promise<WorkspaceParsedPreviewResponse> {
-  const response = await request<RawWorkspaceParsedPreviewResponse>(
+  const response = await request<WorkspaceParsedPreviewResponse>(
     `/api/v1/documents/${document_id}/parsed-preview?cursor=${cursor}&limit=${limit}`,
     { method: "GET" },
     token,
   );
 
-  return mapWorkspaceParsedPreviewResponse(response);
+  return response;
 }
 
 export async function lookupWorkspaceCitation(
   token: string,
   requestBody: WorkspaceCitationLookupRequest,
 ): Promise<WorkspaceCitationLookupResponse> {
-  const response = await request<RawWorkspaceCitationLookupResponse>(
+  const response = await request<WorkspaceCitationLookupResponse>(
     "/api/v1/chat/citations/lookup",
     {
       method: "POST",
@@ -676,7 +475,7 @@ export async function lookupWorkspaceCitation(
     token,
   );
 
-  return mapWorkspaceCitationLookupResponse(response);
+  return response;
 }
 
 export async function submitWorkspaceMessageFeedback(
@@ -697,14 +496,17 @@ export async function listWorkspaceNotes(
   token: string,
   workspace_id: string,
 ): Promise<WorkspaceNoteListResponse> {
-  const resp = await request<RawWorkspaceNoteListResponse>(
-    `/api/v1/notebooks/${workspace_id}/notes`,
-    { method: "GET" },
-    token,
-  );
+  const resp = await request<{
+    notes: Array<
+      Omit<WorkspaceNote, "workspace_id"> & { notebook_id: string }
+    >;
+  }>(`/api/v1/notebooks/${workspace_id}/notes`, { method: "GET" }, token);
 
   return {
-    notes: resp.notes.map(mapWorkspaceNote),
+    notes: resp.notes.map(({ notebook_id, ...note }) => ({
+      ...note,
+      workspace_id: notebook_id,
+    })),
   };
 }
 
@@ -713,7 +515,9 @@ export async function createWorkspaceNote(
   workspace_id: string,
   requestBody: CreateWorkspaceNoteRequest,
 ): Promise<{ note: WorkspaceNote }> {
-  const resp = await request<RawWorkspaceNoteResponse>(
+  const resp = await request<{
+    note: Omit<WorkspaceNote, "workspace_id"> & { notebook_id: string };
+  }>(
     `/api/v1/notebooks/${workspace_id}/notes`,
     {
       method: "POST",
@@ -722,8 +526,9 @@ export async function createWorkspaceNote(
     token,
   );
 
+  const { notebook_id, ...note } = resp.note;
   return {
-    note: mapWorkspaceNote(resp.note),
+    note: { ...note, workspace_id: notebook_id },
   };
 }
 
@@ -733,7 +538,9 @@ export async function updateWorkspaceNote(
   note_id: string,
   requestBody: UpdateWorkspaceNoteRequest,
 ): Promise<{ note: WorkspaceNote }> {
-  const resp = await request<RawWorkspaceNoteResponse>(
+  const resp = await request<{
+    note: Omit<WorkspaceNote, "workspace_id"> & { notebook_id: string };
+  }>(
     `/api/v1/notebooks/${workspace_id}/notes/${note_id}`,
     {
       method: "PUT",
@@ -742,8 +549,9 @@ export async function updateWorkspaceNote(
     token,
   );
 
+  const { notebook_id, ...note } = resp.note;
   return {
-    note: mapWorkspaceNote(resp.note),
+    note: { ...note, workspace_id: notebook_id },
   };
 }
 
@@ -764,7 +572,10 @@ export async function promoteWorkspaceNote(
   workspace_id: string,
   note_id: string,
 ): Promise<PromoteWorkspaceNoteResponse> {
-  const resp = await request<RawPromoteWorkspaceNoteResponse>(
+  const resp = await request<{
+    note: Omit<WorkspaceNote, "workspace_id"> & { notebook_id: string };
+    source_id: string;
+  }>(
     `/api/v1/notebooks/${workspace_id}/notes/${note_id}/promote-to-source`,
     {
       method: "POST",
@@ -773,8 +584,9 @@ export async function promoteWorkspaceNote(
     token,
   );
 
+  const { notebook_id, ...note } = resp.note;
   return {
-    note: mapWorkspaceNote(resp.note),
+    note: { ...note, workspace_id: notebook_id },
     source_id: resp.source_id,
   };
 }

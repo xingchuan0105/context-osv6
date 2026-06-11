@@ -20,7 +20,8 @@ impl fmt::Display for AgentKind {
 
 impl AgentKind {
     /// Parse agent type string into canonical AgentKind.
-    /// `general` is accepted as a compatibility alias for `Chat`.
+    /// `general` is accepted as a **legacy compatibility alias** for `Chat`
+    /// (retained because E2E tests and historical API clients still use it).
     pub fn parse(agent_type: &str) -> Option<Self> {
         match agent_type.to_ascii_lowercase().as_str() {
             "chat" | "general" => Some(AgentKind::Chat),
@@ -45,19 +46,17 @@ pub mod capability;
 pub mod content_guard;
 pub mod error_kind;
 pub mod eval_framework;
-pub mod evaluator;
+
 pub mod events;
-pub mod progressive;
 pub mod r#loop;
+pub mod progressive;
 pub mod react_loop;
 pub mod redteam;
 pub mod replay;
-pub mod rig_adapter;
 pub mod runtime;
 pub mod service;
 pub mod skills;
 pub mod sse_sink;
-pub mod strategy;
 pub mod unified;
 pub mod untrusted_input;
 

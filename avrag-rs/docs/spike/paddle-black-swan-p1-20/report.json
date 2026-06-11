@@ -1,0 +1,43 @@
+{
+  "input_pdf": "/mnt/e/OneDrive/桌面/知境笔记/the-black-swan_-the-impact-of-the-highly-improbable-second-edition-pdfdrive.com-.pdf",
+  "page_range": [
+    1,
+    20
+  ],
+  "job_id": "58419290363367424",
+  "elapsed_secs": 19.2,
+  "extract_progress": {
+    "startTime": "2026-06-11 12:57:24",
+    "endTime": "2026-06-11 12:57:31",
+    "totalPages": 20,
+    "extractedPages": 20
+  },
+  "json_url": "https://bj.bcebos.com/v1/paddleocr-store-4/job/29c42c16e71018e4e555c693bc6a291ffcc00657e1c8a5cf1f58506910f04474/json/13c881ecf2de5b994abf99c47f1e38d1.json?authorization=bce-auth-v1%2FALTAKDN8mY5KlNI7zaRpLmOqrw%2F2026-06-11T04%3A57%3A34Z%2F604800%2F%2F0d0caece1230d1312897694cea09468988be00a6b0fd19398bed39851cb2fafd",
+  "sample_pages": [
+    {
+      "text_chars": 267,
+      "text_preview": "NEW YORK TIMES BESTSELLER\n\n# THE BLACK SWAN\n\n<div style=\"text-align: center;\"><img src=\"imgs/img_in_image_box_524_657_666_915.jpg\" alt=\"Image\" width=\"11%\" /></div>\n\n\nThe Impact of the HIGHLY IMPROBABLE\n\n“The most prophetic voice of all.”\n\n—GQ\n\n# Nassim Nicholas Taleb",
+      "image_count": 1
+    },
+    {
+      "text_chars": 232,
+      "text_preview": "<div style=\"text-align: center;\"><img src=\"imgs/img_in_image_box_143_141_897_1122.jpg\" alt=\"Image\" width=\"61%\" /></div>\n\n\nRANDOM HOUSE TRADE PAPERBACKS\n\nABC Amber ePub Converter Trial version, http://www.processtext.com/abcepub.html",
+      "image_count": 2
+    },
+    {
+      "text_chars": 11,
+      "text_preview": "## CONTENTS",
+      "image_count": 0
+    },
+    {
+      "text_chars": 218,
+      "text_preview": "## Prologue\n\n## On the Plumage of Birds\n\nWhat You Do Not Know\n\nExperts and \"Empty Suits\"\n\nLearning to Learn\n\nA New Kind of Ingratitude\n\nLife Is Very Unusual\n\nPlato and the Nerd\n\nToo Dull to Write About\n\nThe Bottom Line",
+      "image_count": 0
+    },
+    {
+      "text_chars": 741,
+      "text_preview": "## Chapters Map\n\n# PART ONE: UMBERTO ECO'S ANTILIBRARY, OR HOW WE SEEK VALIDATION\n\nChapter 1: The Apprenticeship of an Empirical Skeptic Anatomy of a Black Swan\n\nOn Walking Walks\n\n\"Paradise\" Evaporated\n\nThe Starred Night\n\nHistory and the Triplet of Opacity\n\nNobody Knows What's Going On\n\nHistory Does Not Crawl, It Jumps\n\nDear Diary: On History Running Backward\n\nEducation in a Taxicab\n\nClusters\n\nWhe",
+      "image_count": 0
+    }
+  ]
+}

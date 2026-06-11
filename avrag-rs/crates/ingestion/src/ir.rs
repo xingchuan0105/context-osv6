@@ -47,6 +47,8 @@ impl DocumentType {
 #[serde(rename_all = "snake_case")]
 pub enum ParseBackend {
     EdgeParsePdf,
+    VisualRasterPdf,
+    PaddleOcrPdf,
     MineruPdfOcr,
     MineruImage,
     Docx4jDocx,
@@ -64,6 +66,8 @@ impl ParseBackend {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::EdgeParsePdf => "edge_parse_pdf",
+            Self::VisualRasterPdf => "visual_raster_pdf",
+            Self::PaddleOcrPdf => "paddle_ocr_pdf",
             Self::MineruPdfOcr => "mineru_pdf_ocr",
             Self::MineruImage => "mineru_image",
             Self::Docx4jDocx => "docx4j_docx",
@@ -239,6 +243,7 @@ pub enum BlockType {
     SlideImage,
     SheetTable,
     SheetCellRange,
+    PageRaster,
 }
 
 impl BlockType {
@@ -257,6 +262,7 @@ impl BlockType {
             Self::SlideImage => "slide_image",
             Self::SheetTable => "sheet_table",
             Self::SheetCellRange => "sheet_cell_range",
+            Self::PageRaster => "page_raster",
         }
     }
 
@@ -277,7 +283,7 @@ impl BlockType {
     }
 
     pub fn supports_multimodal_chunking(&self) -> bool {
-        matches!(self, Self::Figure | Self::SlideImage)
+        matches!(self, Self::Figure | Self::SlideImage | Self::PageRaster)
     }
 }
 

@@ -1,6 +1,6 @@
-use serde_json::{Value, json};
 use crate::config::MilvusConfig;
 use avrag_auth::AuthContext;
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 pub const TEXT_OUTPUT_FIELDS: [&str; 11] = [
@@ -17,7 +17,7 @@ pub const TEXT_OUTPUT_FIELDS: [&str; 11] = [
     "workspace_id",
 ];
 
-pub const MULTIMODAL_OUTPUT_FIELDS: [&str; 14] = [
+pub const MULTIMODAL_OUTPUT_FIELDS: [&str; 15] = [
     "chunk_id",
     "doc_id",
     "asset_id",
@@ -28,6 +28,7 @@ pub const MULTIMODAL_OUTPUT_FIELDS: [&str; 14] = [
     "image_path",
     "chunk_type",
     "parser_backend",
+    "retrieval_weight",
     "source_locator",
     "doc_version",
     "org_id",
@@ -101,6 +102,7 @@ pub fn schema_multimodal(config: &MilvusConfig) -> (Value, Vec<Value>) {
             float_vector_field("multimodal_dense", config.multimodal_vector_dim),
             varchar_field("chunk_type", 64, false, false, false),
             varchar_field("parser_backend", 64, false, true, false),
+            float_field("retrieval_weight", true),
             json_field("source_locator", true),
         ],
         Vec::new(),
@@ -243,6 +245,17 @@ pub fn int64_field(name: &str, nullable: bool) -> Value {
     field
 }
 
+pub fn float_field(name: &str, nullable: bool) -> Value {
+    let mut field = json!({
+        "fieldName": name,
+        "dataType": "Float",
+    });
+    if nullable {
+        field["nullable"] = json!(true);
+    }
+    field
+}
+
 pub fn float_vector_field(name: &str, dim: usize) -> Value {
     json!({
         "fieldName": name,
@@ -321,12 +334,13 @@ pub fn validate_existing_collection_schema(
     expected_schema: &Value,
     describe_response: &Value,
 ) -> crate::types::Result<()> {
-    let expected_fields =
-        schema_fields(expected_schema).ok_or_else(|| crate::types::MilvusStorageError::Backend {
+    let expected_fields = schema_fields(expected_schema).ok_or_else(|| {
+        crate::types::MilvusStorageError::Backend {
             message: format!(
                 "collection {collection_name} expected schema has no fields; cannot validate"
             ),
-        })?;
+        }
+    })?;
 
     let actual_fields =
         describe_schema_fields(describe_response).ok_or_else(|| crate::types::MilvusStorageError::Backend {
@@ -425,7 +439,9 @@ pub fn describe_schema_fields(response: &Value) -> Option<&Vec<Value>> {
 pub fn field_name(field: &Value) -> Option<&str> {
     // Milvus v2.4: fieldName
     // Milvus v2.6+: name
-    field["fieldName"].as_str().or_else(|| field["name"].as_str())
+    field["fieldName"]
+        .as_str()
+        .or_else(|| field["name"].as_str())
 }
 
 pub fn field_data_type(field: &Value) -> Option<String> {

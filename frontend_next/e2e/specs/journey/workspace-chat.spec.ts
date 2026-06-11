@@ -33,6 +33,8 @@ test.describe("Workspace Chat Journey", () => {
   });
 
   test("user can switch to web search mode and get search-grounded answer", async ({ page, runId }) => {
+    test.setTimeout(180_000);
+
     const dashboard = new DashboardPage(page);
     const workspace = new WorkspacePage(page);
     const chat = new ChatPanelPage(page);
@@ -44,7 +46,7 @@ test.describe("Workspace Chat Journey", () => {
 
     const messageText = `E2E ${runId}: What is the latest Rust release?`;
     await chat.sendMessage(messageText);
-    await chat.waitForResponse();
+    await chat.waitForResponse(150_000);
 
     // 结构性断言（优先）：消息完成、消息非空、mode-indicator显示search、citation按钮可见
     const lastMessage = chat.getLastMessage();

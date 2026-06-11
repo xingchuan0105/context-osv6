@@ -1,10 +1,12 @@
 use super::*;
-use crate::executor::tests::{FakeExecutor, Call};
-use avrag_retrieval_data_plane::{TextChunkIndexRecord, MultimodalChunkIndexRecord, DocumentIndexBatch};
-use uuid::Uuid;
-use serde_json::json;
 use crate::config::MilvusConfig;
+use crate::executor::tests::{Call, FakeExecutor};
 use crate::lib_impl::MilvusDataPlane;
+use avrag_retrieval_data_plane::{
+    DocumentIndexBatch, MultimodalChunkIndexRecord, TextChunkIndexRecord,
+};
+use serde_json::json;
+use uuid::Uuid;
 
 fn test_config() -> MilvusConfig {
     MilvusConfig {
@@ -45,6 +47,7 @@ fn make_test_batch(doc_id: Uuid, parse_run_id: Uuid) -> DocumentIndexBatch {
             chunk_type: "image_with_context".to_string(),
             parser_backend: Some("test".to_string()),
             source_locator: None,
+            retrieval_weight: None,
         }],
         entities: vec![],
         relations: vec![],

@@ -82,6 +82,21 @@ pub struct TokenUsage {
     pub completion_tokens: u64,
 }
 
+/// One llm_real test artifact set under `{bucket}/{run_id}/{test_name}/`.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct LlmRealTestArtifact {
+    pub run_id: String,
+    pub test_name: String,
+    pub agent_type: Option<String>,
+    pub usage: Option<serde_json::Value>,
+    pub reasoning_delta_count: Option<u64>,
+    pub trace_reasoning_count: Option<u64>,
+    pub prompt_snapshot_count: Option<u64>,
+    pub reasoning_empty_warning: Option<bool>,
+    pub stream_error_with_done: Option<bool>,
+    pub extra: Option<serde_json::Value>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct RenderDiagnostics {
     pub console_errors: Vec<String>,
@@ -114,9 +129,9 @@ impl RunMetadata {
     /// the `environment` JSON object (actual E2E artifact format).
     pub fn git_branch_from_anywhere(&self) -> Option<&str> {
         self.git_branch.as_deref().or_else(|| {
-            self.environment.as_ref().and_then(|env| {
-                env.get("git_branch").and_then(|v| v.as_str())
-            })
+            self.environment
+                .as_ref()
+                .and_then(|env| env.get("git_branch").and_then(|v| v.as_str()))
         })
     }
 
@@ -124,9 +139,9 @@ impl RunMetadata {
     /// the `environment` JSON object.
     pub fn git_commit_from_anywhere(&self) -> Option<&str> {
         self.git_commit.as_deref().or_else(|| {
-            self.environment.as_ref().and_then(|env| {
-                env.get("git_commit").and_then(|v| v.as_str())
-            })
+            self.environment
+                .as_ref()
+                .and_then(|env| env.get("git_commit").and_then(|v| v.as_str()))
         })
     }
 }

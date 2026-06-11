@@ -456,6 +456,15 @@ pub fn build_ir_chunk_plan(doc: &DocumentIr, filename: &str, policy: &ChunkPolic
                 .filter(|value| !value.trim().is_empty())
                 .unwrap_or_else(|| summary_text.clone());
 
+            let mut metadata = block.metadata.clone();
+            if block.block_type == BlockType::PageRaster && block.asset_refs.len() > 1 {
+                metadata.insert(
+                    "fusion_asset_refs".to_string(),
+                    block.asset_refs.join(","),
+                );
+                metadata.insert("ingest_route".to_string(), "visual".to_string());
+            }
+
             multimodal_chunks.push(IrMultimodalChunkItem {
                 chunk_id: Uuid::new_v4().to_string(),
                 block_id: block.block_id.clone(),
@@ -468,7 +477,7 @@ pub fn build_ir_chunk_plan(doc: &DocumentIr, filename: &str, policy: &ChunkPolic
                 block_type: block.block_type.clone(),
                 parser_backend: block.parser_backend.clone(),
                 source_locator: block.source_locator.clone(),
-                metadata: block.metadata.clone(),
+                metadata,
             });
         }
     }
@@ -515,10 +524,7 @@ fn build_multimodal_summary_text(block: &crate::ir::BlockIr) -> String {
     [
         block.caption.clone().unwrap_or_default(),
         block.section_path.last().cloned().unwrap_or_default(),
-        block
-            .alt_text
-            .clone()
-            .unwrap_or_else(|| block.text.clone()),
+        block.alt_text.clone().unwrap_or_else(|| block.text.clone()),
     ]
     .into_iter()
     .filter(|value| !value.trim().is_empty())

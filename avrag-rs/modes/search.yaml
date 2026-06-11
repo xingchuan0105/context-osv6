@@ -1,33 +1,11 @@
 mode: search
-system_prompt_base: prompts/skills/search-system/SKILL.md
-native_tools:
-  - name: web_search
-    version: "1.0"
-    description: "搜索互联网获取实时信息"
-    input_schema:
-      type: object
-      properties:
-        query: { type: string }
-        vertical:
-          type: string
-          enum: [web, news]
-          default: web
-      required: ["query"]
-    output_schema:
-      type: object
+system_prompt_base: prompts/orchestrators/search-system.md
+tool_pool: [web_search, web_fetch, conversation_history_load, user_profile_load]
+inject_retrieval_query: true
 skill_catalog:
-  - search-strategy
-  - result-validation
-  - url-citation-format
-disclosure:
-  rounds:
-    - round_idx: 0
-      load: Index
-    - round_idx: 1
-      load:
-        skills:
-          - search-strategy
-          - result-validation
+  retrieve: [search, memory]
+  synthesis: [writing, format]
+  mandatory_synthesis: [search-answer]
 budget:
   max_iterations: 3
   by_user_tier:
@@ -35,3 +13,18 @@ budget:
     pro: 3
     enterprise: 3
 temperature: 0.5
+query_normalization:
+  enabled: true
+  max_prior_turns: 6
+  llm_fallback: true
+loop_exit:
+  require_evidence: true
+  allow_content_early_stop: false
+  skip_synthesis_on_direct_answer: false
+synthesis_output:
+  contract: internal_search_answer_v1
+auto_fallback:
+  enabled: true
+  tool_id: web_search
+  top_k: 10
+  vertical: web

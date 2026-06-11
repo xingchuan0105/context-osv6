@@ -46,7 +46,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::time::Duration;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use rag_quality::{EvaluationHarness, GoldenDataset, HarnessConfig, RagEvaluator};
 use reqwest::Client;
 use serde_json::Value;
@@ -72,10 +72,7 @@ struct Chunk {
 /// Load a corpus directory: every `.txt` file becomes one document;
 /// each document is split into paragraph-sized chunks (≥80 chars,
 /// ≤800 chars to keep embedding inputs reasonable).
-async fn load_corpus(
-    corpus_dir: &Path,
-    embed: &EmbeddingClient,
-) -> Result<Vec<Chunk>> {
+async fn load_corpus(corpus_dir: &Path, embed: &EmbeddingClient) -> Result<Vec<Chunk>> {
     let mut chunks = Vec::new();
     let mut entries = tokio::fs::read_dir(corpus_dir).await?;
     while let Some(entry) = entries.next_entry().await? {
@@ -83,15 +80,20 @@ async fn load_corpus(
         if path.extension().and_then(|s| s.to_str()) != Some("txt") {
             continue;
         }
-        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("doc").to_string();
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("doc")
+            .to_string();
         let text = tokio::fs::read_to_string(&path).await?;
         for (i, para) in split_paragraphs(&text).into_iter().enumerate() {
             if para.trim().is_empty() {
                 continue;
             }
-            let embedding = embed.embed(&para).await.with_context(|| {
-                format!("embedding chunk {stem}#{i} ({} chars)", para.len())
-            })?;
+            let embedding = embed
+                .embed(&para)
+                .await
+                .with_context(|| format!("embedding chunk {stem}#{i} ({} chars)", para.len()))?;
             chunks.push(Chunk {
                 id: format!("{stem}#{i}"),
                 text: para,
@@ -407,9 +409,7 @@ impl RagEvaluator for DashScopeRagEvaluator {
                 format!("Question: {query}\n\nContext:\n{context}")
             };
             let answer = llm.complete(system, &user).await?;
-            eprintln!(
-                "[quality_runner] mode={mode} Q: {query}\n[quality_runner] A: {answer}"
-            );
+            eprintln!("[quality_runner] mode={mode} Q: {query}\n[quality_runner] A: {answer}");
             Ok(answer)
         })
     }
@@ -453,10 +453,14 @@ fn parse_args() -> Result<Args> {
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--golden" => {
-                golden = Some(PathBuf::from(it.next().ok_or_else(|| anyhow!("--golden needs value"))?));
+                golden = Some(PathBuf::from(
+                    it.next().ok_or_else(|| anyhow!("--golden needs value"))?,
+                ));
             }
             "--corpus" => {
-                corpus = Some(PathBuf::from(it.next().ok_or_else(|| anyhow!("--corpus needs value"))?));
+                corpus = Some(PathBuf::from(
+                    it.next().ok_or_else(|| anyhow!("--corpus needs value"))?,
+                ));
             }
             "--top-k" => {
                 top_k = it
@@ -491,10 +495,12 @@ async fn main() -> Result<()> {
     let args = parse_args()?;
     let api_key = env::var("DASHSCOPE_API_KEY")
         .or_else(|_| env::var("EMBEDDING_API_KEY"))
-        .map_err(|_| anyhow!(
-            "DASHSCOPE_API_KEY (or EMBEDDING_API_KEY) must be set. Without it, this runner \
+        .map_err(|_| {
+            anyhow!(
+                "DASHSCOPE_API_KEY (or EMBEDDING_API_KEY) must be set. Without it, this runner \
              cannot produce real numbers."
-        ))?;
+            )
+        })?;
     if api_key.trim().is_empty() {
         bail!("API key is empty");
     }
@@ -505,7 +511,10 @@ async fn main() -> Result<()> {
     let chunks = load_corpus(&args.corpus, &embed).await?;
     info!(chunks = chunks.len(), "corpus loaded");
     if chunks.is_empty() {
-        bail!("corpus is empty (no .txt files in {})", args.corpus.display());
+        bail!(
+            "corpus is empty (no .txt files in {})",
+            args.corpus.display()
+        );
     }
 
     let dataset = GoldenDataset::load(&args.golden)?;
@@ -541,9 +550,18 @@ async fn main() -> Result<()> {
     println!("RAG Quality Report  (dataset v{})", report.dataset_version);
     println!("=========================================");
     println!("Total examples:      {}", report.metrics.total_examples);
-    println!("Recall@15:           {:.2}%", report.metrics.recall_at_15 * 100.0);
-    println!("Citation Accuracy:   {:.2}%", report.metrics.citation_accuracy * 100.0);
-    println!("Hallucination Rate:  {:.2}%", report.metrics.hallucination_rate * 100.0);
+    println!(
+        "Recall@15:           {:.2}%",
+        report.metrics.recall_at_15 * 100.0
+    );
+    println!(
+        "Citation Accuracy:   {:.2}%",
+        report.metrics.citation_accuracy * 100.0
+    );
+    println!(
+        "Hallucination Rate:  {:.2}%",
+        report.metrics.hallucination_rate * 100.0
+    );
 
     // Per-subset breakdown: re-iterate the dataset in the same order
     // as the harness to know which subset each result belongs to.
@@ -610,7 +628,10 @@ async fn main() -> Result<()> {
             if let Some(r) = r {
                 println!(
                     "    recall@{}: {:.0}% ({}/{} matched)",
-                    15, r.recall * 100.0, r.matched_chunks.len(), r.golden_count
+                    15,
+                    r.recall * 100.0,
+                    r.matched_chunks.len(),
+                    r.golden_count
                 );
             }
             if let Some(c) = c {

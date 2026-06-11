@@ -146,68 +146,6 @@ export type ChatDonePayload = {
   response: ChatResponse;
 };
 
-export type ChatEvent =
-  | {
-      event: "start";
-      request_id: string;
-      session_id: string;
-    }
-  | {
-      event: "activity";
-      request_id: string;
-      phase: string;
-      title: string;
-      detail?: string | null;
-      counts?: Record<string, number>;
-      sources_preview?: ProgressSourcePreview[];
-      timestamp?: string | null;
-    }
-  | {
-      event: "answer_start";
-      request_id: string;
-      session_id: string;
-      message_id: number;
-      agent_type: string;
-    }
-  | {
-      event: "trace";
-      request_id: string;
-      stage: string;
-      status: string;
-      detail?: unknown | null;
-    }
-  | {
-      event: "token";
-      request_id: string;
-      message_id: number;
-      content: string;
-    }
-  | {
-      event: "reasoning_summary_delta";
-      request_id: string;
-      message_id: number;
-      content: string;
-    }
-  | {
-      event: "citations";
-      request_id: string;
-      message_id: number;
-      citations: Citation[];
-    }
-  | {
-      event: "done";
-      request_id: string;
-      session_id: string;
-      message_id: number;
-      payload: ChatResponse;
-    }
-  | {
-      event: "error";
-      request_id: string;
-      code: string;
-      message: string;
-    };
-
 export type WorkspaceChatStreamEvent =
   | {
       kind: "start";

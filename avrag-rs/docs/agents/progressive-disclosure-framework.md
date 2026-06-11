@@ -1,5 +1,9 @@
 # Progressive Disclosure ReAct Loop Framework
 
+> **⛔ 归档 / ARCHIVED（2026-06-08）**  
+> 本文描述 v4 PLAN→EXECUTE 状态机与按 Phase 披露，**已被** [ADR-0007](../adr/0007-react-phased-context-disclosure.md) **取代**。  
+> Coding agent **勿**按本文实现。索引：[ARCHIVE-superseded-by-adr-0007.md](ARCHIVE-superseded-by-adr-0007.md)
+
 > **Agent 渐进式披露 ReAct 循环统一框架**
 >
 > 将 RAG / WebSearch / Chat 三个 agent 归纳为一个可配置的状态机框架，通过每轮渐进式加载不同的 Tools 和 Skills，减少 token 消耗和模型认知负荷，同时保持可扩展性。

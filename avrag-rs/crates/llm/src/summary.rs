@@ -8,12 +8,13 @@ const MAX_SUMMARY_CONTEXT_TOKENS: usize = 900_000;
 const RESERVED_PROMPT_TOKENS: usize = 4_000;
 const MAX_BATCH_CONTEXT_TOKENS: usize = MAX_SUMMARY_CONTEXT_TOKENS - RESERVED_PROMPT_TOKENS;
 const DEFAULT_SUMMARY_SYSTEM_PROMPT: &str =
-    include_str!("../../../prompts/summary_generation.v1.tmpl");
+    include_str!("../../../prompts/pipeline/summary-generation.system.v1.md");
 const DEFAULT_SUMMARY_FINALIZE_SYSTEM_PROMPT: &str =
-    include_str!("../../../prompts/summary_generation_finalize.v1.tmpl");
-const DEFAULT_SUMMARY_USER_TEMPLATE: &str = include_str!("../../../prompts/summary_user.tmpl");
+    include_str!("../../../prompts/pipeline/summary-generation-finalize.system.v1.md");
+const DEFAULT_SUMMARY_USER_TEMPLATE: &str =
+    include_str!("../../../prompts/templates/summary-user.tmpl");
 const DEFAULT_SUMMARY_FINALIZE_USER_TEMPLATE: &str =
-    include_str!("../../../prompts/summary_finalize_user.tmpl");
+    include_str!("../../../prompts/templates/summary-finalize-user.tmpl");
 const SUMMARY_BLOCK_LABELS: &[&str] = &["summary_text", "markdown", "md", "text"];
 
 #[derive(Debug, Clone)]
@@ -48,6 +49,8 @@ struct ModelSummaryMetadata {
     domain: Option<String>,
     genre: Option<String>,
     era: Option<String>,
+    author: Option<String>,
+    publication_date: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -282,6 +285,14 @@ fn build_summary_metadata(
             .filter(|value| !value.is_empty())
             .map(|value| Era::from(value.as_str()))
             .unwrap_or(Era::Unknown),
+        author: metadata
+            .author
+            .map(|value| normalize_metadata_field(&value))
+            .filter(|value| !value.is_empty()),
+        publication_date: metadata
+            .publication_date
+            .map(|value| normalize_metadata_field(&value))
+            .filter(|value| !value.is_empty()),
     }
 }
 
@@ -307,8 +318,7 @@ fn extract_code_block(raw_output: &str, label: &str, from_end: bool) -> Option<S
         raw_output.find(&fence)?
     };
     let content_start = start + fence.len();
-    let after_fence =
-        raw_output[content_start..].trim_start_matches(['\r', '\n', ' ', '\t']);
+    let after_fence = raw_output[content_start..].trim_start_matches(['\r', '\n', ' ', '\t']);
     let content_end = after_fence.find("```")?;
     Some(after_fence[..content_end].trim().to_string())
 }

@@ -47,7 +47,8 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus:/var/lib/milvus
     ports:
       - "19530:19530"
-      - "9091:9091"
+      # Host 9091 is reserved for pdf-visual-renderer; Milvus metrics REST on 19091.
+      - "19091:9091"
     depends_on:
       - etcd
       - minio

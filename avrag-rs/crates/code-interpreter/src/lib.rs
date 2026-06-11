@@ -15,6 +15,10 @@
 //! expression (if it is not `None`).  Results are serialized as JSON and
 //! returned via the Rust `ExecutionResult` struct.
 
+mod bridge;
+
+pub use bridge::{bridge_shim_client_method_names, HostBridge};
+
 use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -56,6 +60,9 @@ pub enum InterpreterError {
 
     #[error("utf-8 error: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
+
+    #[error("bridge error: {0}")]
+    Bridge(String),
 }
 
 /// Sandboxed Python code interpreter.
@@ -113,9 +120,8 @@ impl CodeInterpreter {
     pub fn execute(&self, code: &str) -> Result<ExecutionResult, InterpreterError> {
         let sandbox_code = build_sandbox_wrapper(code, self.memory_limit_mb, self.cpu_limit_secs);
 
-        let temp_dir = tempfile::TempDir::new().map_err(|e| {
-            InterpreterError::Io(std::io::Error::other(format!("temp dir: {e}")))
-        })?;
+        let temp_dir = tempfile::TempDir::new()
+            .map_err(|e| InterpreterError::Io(std::io::Error::other(format!("temp dir: {e}"))))?;
 
         let mut child = Command::new(&self.python_path)
             .arg("-c")
@@ -160,27 +166,39 @@ impl CodeInterpreter {
                         }
                         Ok(result)
                     }
-                    Err(_) => {
-                        Ok(ExecutionResult {
-                            stdout,
-                            stderr,
-                            result: None,
-                            success: status.success(),
-                            exit_code: status.code(),
-                            killed: false,
-                        })
-                    }
+                    Err(_) => Ok(ExecutionResult {
+                        stdout,
+                        stderr,
+                        result: None,
+                        success: status.success(),
+                        exit_code: status.code(),
+                        killed: false,
+                    }),
                 }
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 Err(InterpreterError::Timeout(self.timeout_secs))
             }
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                Err(InterpreterError::Io(std::io::Error::other(
-                    "child process communication channel disconnected",
-                )))
-            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(InterpreterError::Io(
+                std::io::Error::other("child process communication channel disconnected"),
+            )),
         }
+    }
+
+    /// Execute Python code with a host retrieval bridge (fd3/fd4 pipe RPC).
+    pub async fn execute_with_bridge<B: HostBridge + Send + Sync + 'static>(
+        &self,
+        code: &str,
+        bridge: std::sync::Arc<B>,
+    ) -> Result<ExecutionResult, InterpreterError> {
+        bridge::execute_with_bridge_arc(
+            &self.python_path,
+            self.timeout_secs,
+            self.memory_limit_mb,
+            code,
+            bridge,
+        )
+        .await
     }
 }
 
@@ -203,9 +221,21 @@ fn read_pipe<R: Read>(stream: &mut Option<R>) -> Result<String, InterpreterError
 /// 4. Returns a JSON-serialized `ExecutionResult`
 fn build_sandbox_wrapper(user_code: &str, memory_mb: u64, _cpu_secs: u64) -> String {
     let blocked_modules = [
-        "os", "subprocess", "socket", "sys", "ctypes", "shutil",
-        "posix", "fcntl", "pty", "pwd", "grp", "resource",
-        "signal", "multiprocessing", "threading",
+        "os",
+        "subprocess",
+        "socket",
+        "sys",
+        "ctypes",
+        "shutil",
+        "posix",
+        "fcntl",
+        "pty",
+        "pwd",
+        "grp",
+        "resource",
+        "signal",
+        "multiprocessing",
+        "threading",
     ];
 
     let blocked_list = blocked_modules
@@ -274,6 +304,61 @@ _real_stdout.write(json.dumps(output))
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use serde_json::json;
+
+    struct StubBridge;
+
+    #[async_trait]
+    impl HostBridge for StubBridge {
+        async fn call(&self, method: &str, _args: serde_json::Value) -> serde_json::Value {
+            match method {
+                "dense_search" => json!({
+                    "chunks": [{
+                        "chunk_id": "00000000-0000-4000-8000-000000000001",
+                        "doc_id": "00000000-0000-4000-8000-000000000010",
+                        "content": "hello from stub",
+                        "score": 0.9
+                    }]
+                }),
+                _ => json!({ "chunks": [] }),
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bridge_dense_search_returns_chunks_in_stdout() {
+        let interpreter = CodeInterpreter::new().with_timeout(10);
+        let code = r#"
+chunks = await client.dense_search(query="x", top_k=5)
+import json
+print(json.dumps(chunks))
+"#;
+        let result = interpreter
+            .execute_with_bridge(code, std::sync::Arc::new(StubBridge))
+            .await
+            .unwrap();
+        assert!(result.success, "stderr: {}", result.stderr);
+        assert!(
+            result.stdout.contains("00000000-0000-4000-8000-000000000001"),
+            "stdout: {}",
+            result.stdout
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bridge_blocks_socket_import() {
+        let interpreter = CodeInterpreter::new().with_timeout(10);
+        let result = interpreter
+            .execute_with_bridge("import socket", std::sync::Arc::new(StubBridge))
+            .await
+            .unwrap();
+        assert!(
+            !result.stderr.is_empty() || !result.success,
+            "stderr: {}",
+            result.stderr
+        );
+    }
 
     #[test]
     fn test_simple_expression() {
@@ -295,14 +380,22 @@ mod tests {
     fn test_error_capture() {
         let interpreter = CodeInterpreter::new().with_timeout(10);
         let result = interpreter.execute("raise ValueError('boom')").unwrap();
-        assert!(result.stderr.contains("ValueError"), "stderr: {}", result.stderr);
+        assert!(
+            result.stderr.contains("ValueError"),
+            "stderr: {}",
+            result.stderr
+        );
     }
 
     #[test]
     fn test_blocked_os_import() {
         let interpreter = CodeInterpreter::new().with_timeout(10);
         let result = interpreter.execute("import os").unwrap();
-        assert!(!result.stderr.is_empty(), "stderr should contain error: {}", result.stderr);
+        assert!(
+            !result.stderr.is_empty(),
+            "stderr should contain error: {}",
+            result.stderr
+        );
         assert!(result.stderr.contains("blocked") || result.stderr.contains("ImportError"));
     }
 
@@ -316,7 +409,9 @@ mod tests {
     #[test]
     fn test_list_comprehension() {
         let interpreter = CodeInterpreter::new().with_timeout(10);
-        let result = interpreter.execute("print(sum([i*i for i in range(10)]))").unwrap();
+        let result = interpreter
+            .execute("print(sum([i*i for i in range(10)]))")
+            .unwrap();
         assert!(result.stdout.contains("285"));
     }
 
@@ -333,5 +428,4 @@ print(json.dumps({'mean': mean, 'std': round(std, 2)}))";
         assert!(result.stdout.contains("3.0"), "stdout: {}", result.stdout);
         assert!(result.stdout.contains("1.41"), "stdout: {}", result.stdout);
     }
-
 }

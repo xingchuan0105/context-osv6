@@ -1,5 +1,5 @@
 use avrag_guardrails::GuardPipeline;
-use common::{DegradeTraceItem, ToolResult};
+use common::{DegradeReason, DegradeTraceItem, ToolResult};
 
 const REDACTED_PLACEHOLDER: &str = "[REDACTED: content flagged by security guard]";
 
@@ -33,7 +33,7 @@ pub fn sanitize_tool_results(
                 *text_val = serde_json::json!(REDACTED_PLACEHOLDER);
                 degrade_trace.push(DegradeTraceItem {
                     stage: "input_guard:content_sanitizer".into(),
-                    reason: guard_result.reason,
+                    reason: DegradeReason::ContentGuard,
                     impact: "redact".into(),
                 });
             }
@@ -64,7 +64,7 @@ pub fn sanitize_search_results(
             result.snippet = REDACTED_PLACEHOLDER.to_string();
             degrade_trace.push(DegradeTraceItem {
                 stage: "input_guard:content_sanitizer".into(),
-                reason: guard_result.reason,
+                reason: DegradeReason::ContentGuard,
                 impact: "redact".into(),
             });
         }

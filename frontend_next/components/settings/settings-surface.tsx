@@ -582,6 +582,7 @@ function BillingPanel() {
 
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
+      <UsageLimitPanel />
       {alipayQr ? (
         <section className="app-inline-surface" style={{ display: "grid", gap: "1rem", border: "2px solid hsl(var(--ring))", padding: "1.5rem", justifyItems: "center", textAlign: "center" }}>
           <h3 style={{ margin: 0, color: "hsl(var(--foreground))" }}>{t.scanToPay}</h3>
@@ -634,7 +635,11 @@ function BillingPanel() {
             {formatSettingsShareMessage(locale, "settings.billing.loading")}
           </p>
         ) : (
-          <div className="app-inline-surface" style={{ display: "grid", gap: "0.5rem" }}>
+          <div
+            className="app-inline-surface"
+            data-testid="plan-display"
+            style={{ display: "grid", gap: "0.5rem" }}
+          >
             <div className="app-inline-row" style={{ marginBottom: 0 }}>
               <span>
                 {formatSettingsShareMessage(locale, "settings.billing.currentPlanLabel")}
@@ -888,7 +893,6 @@ function ProfilePanel() {
 
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
-      <UsageLimitPanel />
       <section className="app-inline-surface" style={{ display: "grid", gap: "1rem" }}>
         <div style={{ display: "grid", gap: "0.35rem" }}>
           <h2 style={{ margin: 0 }}>

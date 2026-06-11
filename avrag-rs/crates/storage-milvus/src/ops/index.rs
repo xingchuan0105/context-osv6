@@ -1,10 +1,10 @@
+use crate::config::MilvusConfig;
+use crate::executor::WriteExecutor;
+use crate::lib_impl::MilvusDataPlane;
+use crate::types::{MilvusStorageError, Result};
+use avrag_retrieval_data_plane::{DocumentIndexBatch, IndexWriteReport};
 use serde_json::{Value, json};
 use uuid::Uuid;
-use avrag_retrieval_data_plane::{DocumentIndexBatch, IndexWriteReport};
-use crate::lib_impl::MilvusDataPlane;
-use crate::executor::WriteExecutor;
-use crate::types::{MilvusStorageError, Result};
-use crate::config::MilvusConfig;
 
 impl MilvusDataPlane {
     pub(crate) async fn insert_if_nonempty<E: WriteExecutor>(
@@ -32,7 +32,7 @@ impl MilvusDataPlane {
             "doc_id == '{}' && parse_run_id == '{}'",
             document_id, parse_run_id
         );
-        
+
         let mut errors = Vec::new();
         for collection in collections {
             if let Err(e) = executor.delete(collection, filter.clone()).await {
@@ -66,7 +66,7 @@ impl MilvusDataPlane {
         let relation_count = batch.relations.len();
         let graph_passage_count = batch.graph_passages.len();
 
-        // Phase 0: Pre-cleanup. 
+        // Phase 0: Pre-cleanup.
         let purge_filter = format!(
             "org_id == '{}' && doc_id == '{}'",
             batch.org_id, batch.document_id
@@ -147,6 +147,7 @@ impl MilvusDataPlane {
                         "multimodal_dense": &chunk.vector,
                         "chunk_type": &chunk.chunk_type,
                         "parser_backend": &chunk.parser_backend,
+                        "retrieval_weight": chunk.retrieval_weight,
                         "source_locator": &chunk.source_locator,
                     })
                 })

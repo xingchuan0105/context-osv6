@@ -177,11 +177,12 @@ mod tests {
                 input: crate::agents::runtime::AgentRequest {
                     kind: crate::agents::AgentKind::Chat,
                     query: format!("q{}", i),
+                    resolved_query: format!("q{}", i),
+                    query_resolution: None,
                     notebook_id: None,
                     session_id: None,
                     doc_scope: vec![],
                     messages: vec![],
-                    session_summary: None,
                     user_preferences: None,
                     debug: false,
                     stream: false,

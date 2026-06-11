@@ -21,4 +21,9 @@ async fn open_query_returns_web_citation() {
     // Product assertions
     assert_has_citations(&resp);
     assert_answer_has_web_citation(&resp);
+    assert!(
+        resp.answer.contains("[[") && resp.answer.contains("]]"),
+        "search answer should include [[n]] citation markers, got: {}",
+        resp.answer
+    );
 }

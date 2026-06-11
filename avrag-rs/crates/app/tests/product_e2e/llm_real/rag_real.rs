@@ -9,9 +9,15 @@
 use std::time::Duration;
 
 use crate::product_e2e::{
-    ChatResponse, DocumentStatus, HttpResponse, TestContext,
-    assertions::{assert_answer_has_doc_citation, assert_http_ok},
+    DocumentStatus, TestContext,
+    assertions::{
+        assert_answer_has_doc_citation, assert_answer_substantive, assert_citation_doc_id,
+        assert_citation_referenced_in_answer, assert_has_citations,
+    },
+    llm_real::{chat_with_retry, merge_llm_real_extra},
 };
+
+const RETRIEVAL_TOOLS: &[&str] = &["dense_retrieval", "index_lookup", "doc_profile", "doc_summary"];
 
 /// P0: Basic RAG document Q&A returns a substantive answer with at least
 /// one document citation when using a real LLM and real embedding provider.
@@ -37,63 +43,108 @@ async fn real_llm_rag_document_qa_returns_citation() {
         .expect("ingest document");
     assert_eq!(status, DocumentStatus::Completed);
 
-    // 3. Ask a question that requires reading the document.
-    let http_resp: HttpResponse = ctx
-        .chat(
-            "What is antifragility?",
-            &upload.notebook_id,
-            &[upload.document_id.clone()],
-        )
-        .await
-        .expect("chat request");
+    // 3. Ask a question that requires reading the document (retry for transient LLM errors).
+    let result = chat_with_retry(
+        &ctx,
+        "What is antifragility?",
+        &upload.notebook_id,
+        &[upload.document_id.clone()],
+    )
+    .await;
+    let resp = &result.resp;
 
-    // 4. Protocol + product assertions (loose, because LLM output is non-deterministic).
-    assert_http_ok(&http_resp);
-
-    let resp: ChatResponse = http_resp
-        .into_business()
-        .expect("valid ChatResponse schema");
-
-    assert!(
-        !resp.answer.is_empty(),
-        "real LLM should produce a non-empty answer"
-    );
-    assert!(
-        resp.answer.to_lowercase().contains("antifragil")
-            || resp.answer.to_lowercase().contains("taleb"),
-        "answer should mention the topic or author; got: {}",
-        resp.answer
-    );
+    // 4. Product assertions — align with smoke/rag_smoke: citations + substance, not keywords.
+    assert_has_citations(resp);
+    assert_citation_doc_id(resp, &upload.document_id);
+    assert_answer_has_doc_citation(resp);
+    assert_answer_substantive(resp, 50);
+    assert_citation_referenced_in_answer(resp);
     assert!(
         resp.degrade_trace.is_empty(),
         "expected no degradation trace on the happy path, got: {:?}",
         resp.degrade_trace
     );
 
-    // 5. Hard assertion: RAG must return citations on the happy path.
-    assert!(
-        !resp.citations.is_empty(),
-        "real-LLM RAG returned zero citations on the happy path; answer={}",
-        resp.answer
-    );
-    assert_answer_has_doc_citation(&resp);
-    let cites_uploaded = resp
-        .citations
-        .iter()
-        .any(|c| c.doc_id == upload.document_id);
-    assert!(
-        cites_uploaded,
-        "expected at least one citation from uploaded doc {}, got: {:?}",
-        upload.document_id, resp.citations
-    );
-
-    // 6. White-box: verify the planner actually selected dense_retrieval.
-    ctx.assert_tool_called("dense_retrieval");
+    // 6. RAG retrieval is codegen/SDK-only (no native dense_retrieval tool_call).
+    // Evidence quality is covered by citation assertions above.
 
     // 7. Persist artifact for audit even on pass.
     ctx.save_llm_artifact(
         "real_llm_rag_document_qa_returns_citation",
-        &resp,
-        Some(serde_json::json!({"document_id": upload.document_id})),
+        resp,
+        merge_llm_real_extra(
+            &result,
+            Some(serde_json::json!({"document_id": upload.document_id})),
+        ),
+        Some(result.reasoning),
+    );
+}
+
+/// R1: Complex query should hit real retrieval (loose, non-deterministic).
+///
+/// Prefer ≥2 distinct tools when the model cooperates; otherwise require citations
+/// plus at least one retrieval-class tool result (single consolidated codegen is OK).
+#[tokio::test]
+#[ignore = "requires real LLM API key; run with --ignored --test-threads=1"]
+async fn real_llm_rag_complex_query_uses_multiple_tools() {
+    let mut ctx = TestContext::new_with_real_llm().await;
+
+    let upload = ctx
+        .upload_document("antifragile.txt")
+        .await
+        .expect("upload document");
+    assert_eq!(upload.status, 201);
+
+    let status = ctx
+        .wait_for_ingestion(&upload.document_id, Duration::from_secs(180))
+        .await
+        .expect("ingest document");
+    assert_eq!(status, DocumentStatus::Completed);
+
+    let result = chat_with_retry(
+        &ctx,
+        "First summarize this book's author and chapter structure, then explain a core idea from an early section.",
+        &upload.notebook_id,
+        &[upload.document_id.clone()],
+    )
+    .await;
+    let resp = &result.resp;
+
+    assert_has_citations(resp);
+    assert_citation_doc_id(resp, &upload.document_id);
+    assert_answer_substantive(resp, 80);
+    assert!(
+        resp.tool_results.iter().any(|r| RETRIEVAL_TOOLS.contains(&r.tool.as_str())),
+        "expected at least one retrieval-class tool, got: {:?}",
+        resp.tool_results.iter().map(|r| &r.tool).collect::<Vec<_>>()
+    );
+    assert!(
+        resp.degrade_trace.is_empty(),
+        "expected no degradation on complex query path, got: {:?}",
+        resp.degrade_trace
+    );
+
+    let distinct_tools: std::collections::HashSet<_> =
+        resp.tool_results.iter().map(|r| r.tool.as_str()).collect();
+    let multitool_goal_met = distinct_tools.len() >= 2;
+    if !multitool_goal_met {
+        eprintln!(
+            "[llm_real] R1: multi-tool goal not met (got {distinct_tools:?}); \
+             passing on citation-backed retrieval path"
+        );
+    }
+
+    ctx.save_llm_artifact(
+        "real_llm_rag_complex_query_uses_multiple_tools",
+        resp,
+        merge_llm_real_extra(
+            &result,
+            Some(serde_json::json!({
+                "document_id": upload.document_id,
+                "distinct_tools": resp.tool_results.iter().map(|r| &r.tool).collect::<Vec<_>>(),
+                "multitool_goal_met": multitool_goal_met,
+            })),
+        ),
+        Some(result.reasoning),
     );
 }

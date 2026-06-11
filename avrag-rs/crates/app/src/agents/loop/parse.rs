@@ -38,10 +38,14 @@ fn extract_all_code_tags(content: &str) -> Vec<String> {
     while let Some(start_idx) = content[search_from..].find(start_tag) {
         let absolute_start = search_from + start_idx;
         let after_start = &content[absolute_start..];
-        let Some(tag_end) = after_start.find('>') else { break };
+        let Some(tag_end) = after_start.find('>') else {
+            break;
+        };
         let code_start = absolute_start + tag_end + 1;
         let remaining = &content[code_start..];
-        let Some(code_end) = remaining.find(end_tag) else { break };
+        let Some(code_end) = remaining.find(end_tag) else {
+            break;
+        };
         blocks.push(remaining[..code_end].trim().to_string());
         search_from = code_start + code_end + end_tag.len();
     }
@@ -57,10 +61,14 @@ fn extract_all_markdown_code_blocks(content: &str) -> Vec<String> {
     while let Some(start_idx) = content[search_from..].find(fence) {
         let absolute_start = search_from + start_idx;
         let after_fence = &content[absolute_start + fence.len()..];
-        let Some(first_newline) = after_fence.find('\n') else { break };
+        let Some(first_newline) = after_fence.find('\n') else {
+            break;
+        };
         let code_start = absolute_start + fence.len() + first_newline + 1;
         let remaining = &content[code_start..];
-        let Some(end_idx) = remaining.find(fence) else { break };
+        let Some(end_idx) = remaining.find(fence) else {
+            break;
+        };
         blocks.push(remaining[..end_idx].trim().to_string());
         search_from = code_start + end_idx + fence.len();
     }
@@ -75,6 +83,7 @@ mod tests {
     fn response(content: &str) -> LlmResponse {
         LlmResponse {
             content: content.to_string(),
+            reasoning_content: None,
             tool_calls: None,
             usage: avrag_llm::LlmUsage::zeroed(),
             model: String::new(),

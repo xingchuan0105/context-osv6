@@ -12,33 +12,18 @@ use avrag_search::SearchExecutor;
 use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
 use avrag_storage_pg::{ObjectStoreHandle, PgAppRepository};
 use common::AppError;
-use common::key_vault::EnvKeyVault;
+use common::ChatTurnInput;
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-fn build_key_vault_from_config(config: &AppConfig) -> Arc<dyn common::key_vault::KeyVault> {
-    let vault = EnvKeyVault::new()
-        .with_entry("agent_llm_api_key", config.agent_llm.api_key.clone())
-        .with_entry("memory_llm_api_key", config.memory_llm.api_key.clone())
-        .with_entry("embedding_api_key", config.embedding.api_key.clone())
-        .with_entry("mm_embedding_api_key", config.mm_embedding.api_key.clone())
-        .with_entry("search_api_key", config.search.api_key.clone())
-        .with_entry(
-            "ingestion_llm_api_key",
-            config.ingestion_llm.api_key.clone(),
-        );
-    Arc::new(vault)
-}
-
 impl AppState {
     pub fn new(config: AppConfig) -> Self {
         let auth = auth_context_from_config(&config);
-        let object_store = Arc::new(ObjectStoreHandle::local(PathBuf::from(
-            config.object_root.clone(),
-        )));
-        let llm_client = make_llm_client(&config.agent_llm);
-        let memory_llm_client = make_llm_client(&config.memory_llm);
+        let llm_ctx = crate::llm_context::LlmContext::new(
+            make_llm_client(&config.agent_llm),
+            make_llm_client(&config.memory_llm),
+        );
         let chatmemory = None;
         let search_executor = Some(Arc::new(SearchExecutor::new(avrag_search::SearchConfig {
             provider: config.search.provider.clone(),
@@ -50,42 +35,44 @@ impl AppState {
             freshness: config.search.freshness.clone(),
         })));
         let agent_service = Some(build_unified_agent_service(
-            llm_client.clone(),
-            config.agent_llm.temperature,
+            llm_ctx.agent_client().cloned(),
             search_executor.clone(),
+            None,
             None,
             &config.prompts.dir,
         ));
-        let key_vault = build_key_vault_from_config(&config);
-
-        // RAG components not available in memory mode
-        Self {
-            // config,  // REMOVED
-            auth,
-            pg: None,
-            inner: Arc::new(RwLock::new(MemoryState::default())),
-            llm_client,
-            memory_llm_client,
-            chatmemory,
-            analytics: None,
-            rag_runtime: None,
+        let storage = crate::storage_context::StorageContext::new(
+            None,
+            Arc::new(RwLock::new(MemoryState::default())),
+            Arc::new(RwLock::new(BTreeMap::new())),
+            config.max_upload_file_size_bytes,
+            true,
+            Arc::new(ObjectStoreHandle::local(PathBuf::from(
+                config.object_root.clone(),
+            ))),
+            config.public_base_url.clone(),
+            config.object_root.clone(),
+            config.object_storage.upload_url_expire_sec,
+            config.object_storage.download_url_expire_sec,
+        );
+        let orchestrator = crate::orchestrator_context::OrchestratorContext::new(
             agent_service,
-            object_store,
-            guard_pipeline: Arc::new(GuardPipeline::new()),
-            quota_manager: None,
-            uses_memory_adapters: true,
-            // 提取非敏感配置
-            public_base_url: config.public_base_url,
-            object_root: config.object_root,
-            usage_limit_phase: config.usage_limit.enforcement_phase,
-            search_provider: config.search.provider,
-            search_mode: config.search.mode,
+            chatmemory,
+            Arc::new(GuardPipeline::new()),
+            None,
+        );
+
+        Self {
+            auth,
+            storage,
+            llm_ctx,
+            orchestrator,
+            analytics: crate::analytics_context::AnalyticsServiceCtx::new(None),
+            billing: crate::billing_context::BillingContext::new(
+                None,
+                config.usage_limit.enforcement_phase.clone(),
+            ),
             redis_url: config.redis.url.clone(),
-            object_storage_upload_expire_sec: config.object_storage.upload_url_expire_sec,
-            object_storage_download_expire_sec: config.object_storage.download_url_expire_sec,
-            max_upload_file_size_bytes: config.max_upload_file_size_bytes,
-            api_keys: Arc::new(RwLock::new(BTreeMap::new())),
-            key_vault,
         }
     }
 
@@ -102,8 +89,10 @@ impl AppState {
             None
         };
 
-        let llm_client = make_llm_client(&config.agent_llm);
-        let memory_llm_client = make_llm_client(&config.memory_llm);
+        let llm_ctx = crate::llm_context::LlmContext::new(
+            make_llm_client(&config.agent_llm),
+            make_llm_client(&config.memory_llm),
+        );
         let chatmemory = pg.as_ref().map(|p| Arc::new(ChatMemory::new(p.clone())));
         let search_executor = Some(Arc::new(SearchExecutor::new(avrag_search::SearchConfig {
             provider: config.search.provider.clone(),
@@ -193,46 +182,49 @@ impl AppState {
         let quota_manager = pg
             .as_ref()
             .map(|p| Arc::new(avrag_billing::QuotaManager::new(p.clone())));
-        let analytics = pg
-            .as_ref()
-            .map(|p| Arc::new(analytics::AnalyticsService::new(p.raw().clone())));
+        let billing = crate::billing_context::BillingContext::new(
+            quota_manager,
+            config.usage_limit.enforcement_phase.clone(),
+        );
+        let analytics = crate::analytics_context::AnalyticsServiceCtx::new(
+            pg.as_ref()
+                .map(|p| Arc::new(analytics::AnalyticsService::new(p.raw().clone()))),
+        );
         let uses_memory_adapters = pg.is_none();
         let agent_service = Some(build_unified_agent_service(
-            llm_client.clone(),
-            config.agent_llm.temperature,
+            llm_ctx.agent_client().cloned(),
             search_executor.clone(),
             rag_runtime.clone(),
+            pg.clone(),
             &config.prompts.dir,
         ));
-        let key_vault = build_key_vault_from_config(&config);
+        let storage = crate::storage_context::StorageContext::new(
+            pg,
+            Arc::new(RwLock::new(MemoryState::default())),
+            Arc::new(RwLock::new(BTreeMap::new())),
+            config.max_upload_file_size_bytes,
+            uses_memory_adapters,
+            object_store,
+            config.public_base_url.clone(),
+            config.object_root.clone(),
+            config.object_storage.upload_url_expire_sec,
+            config.object_storage.download_url_expire_sec,
+        );
+        let orchestrator = crate::orchestrator_context::OrchestratorContext::new(
+            agent_service,
+            chatmemory,
+            Arc::new(GuardPipeline::new()),
+            rag_runtime,
+        );
 
         Ok(Self {
-            // config,  // REMOVED
             auth,
-            pg,
-            inner: Arc::new(RwLock::new(MemoryState::default())),
-            llm_client,
-            memory_llm_client,
-            chatmemory,
+            storage,
+            llm_ctx,
+            orchestrator,
             analytics,
-            rag_runtime,
-            agent_service,
-            object_store,
-            guard_pipeline: Arc::new(GuardPipeline::new()),
-            quota_manager,
-            uses_memory_adapters,
-            // 提取非敏感配置
-            public_base_url: config.public_base_url,
-            object_root: config.object_root,
-            usage_limit_phase: config.usage_limit.enforcement_phase,
-            search_provider: config.search.provider,
-            search_mode: config.search.mode,
+            billing,
             redis_url: config.redis.url.clone(),
-            object_storage_upload_expire_sec: config.object_storage.upload_url_expire_sec,
-            object_storage_download_expire_sec: config.object_storage.download_url_expire_sec,
-            max_upload_file_size_bytes: config.max_upload_file_size_bytes,
-            api_keys: Arc::new(RwLock::new(BTreeMap::new())),
-            key_vault,
         })
     }
 
@@ -240,8 +232,8 @@ impl AppState {
         &self,
         doc_scope: &[String],
     ) -> Result<common::DocScopeMetadata, AppError> {
-        let pg = self
-            .pg
+        let pg_opt = self.storage.pg();
+        let pg = pg_opt
             .as_ref()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
 
@@ -266,8 +258,8 @@ impl AppState {
             AppError::validation("invalid_session_id", "invalid session UUID format")
         })?;
 
-        let pg = self
-            .pg
+        let pg_opt = self.storage.pg();
+        let pg = pg_opt
             .as_ref()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
 
@@ -279,25 +271,12 @@ impl AppState {
             return Ok(None);
         }
 
-        let summary = if let Some(cm) = &self.chatmemory {
-            cm.load(&self.auth, session_uuid)
-                .await
-                .ok()
-                .and_then(|m| m.layer2.map(|l2| l2.summary))
-        } else {
-            None
-        };
-
-        Ok(Self::build_rag_session_context(messages, summary))
+        Ok(Self::build_rag_session_context(messages, None))
     }
 
     /// Returns the runtime mode identifier ("postgres" or "memory").
     pub fn runtime_mode(&self) -> &'static str {
-        if self.pg.is_some() {
-            "postgres"
-        } else {
-            "memory"
-        }
+        self.storage.runtime_mode()
     }
 
     pub fn auth(&self) -> &AuthContext {
@@ -311,39 +290,44 @@ impl AppState {
     }
 
     pub fn uses_memory_adapters(&self) -> bool {
-        self.uses_memory_adapters
+        self.storage.uses_memory_adapters()
     }
 
     pub async fn pg_ready(&self) -> bool {
-        if let Some(pg) = &self.pg {
-            return pg.ping().await.is_ok();
-        }
-        false
+        self.storage.pg_ready().await
     }
 
     pub fn pg(&self) -> Option<Arc<PgAppRepository>> {
-        self.pg.clone()
+        self.storage.pg()
     }
 
     pub fn agent_service(&self) -> Option<Arc<UnifiedAgentService>> {
-        self.agent_service.clone()
+        self.orchestrator.agent_service()
     }
 
     pub fn set_agent_service(&mut self, service: UnifiedAgentService) {
-        self.agent_service = Some(Arc::new(service));
+        self.orchestrator.set_agent_service(service);
     }
 
     pub fn set_uses_memory_adapters(&mut self, value: bool) {
-        self.uses_memory_adapters = value;
+        self.storage.set_uses_memory_adapters(value);
+    }
+
+    pub fn llm_ctx(&self) -> &crate::llm_context::LlmContext {
+        &self.llm_ctx
+    }
+
+    pub fn billing(&self) -> &crate::billing_context::BillingContext {
+        &self.billing
     }
 
     // 安全改造：提供辅助方法替代直接从 config 读取
     pub fn memory_llm_temperature(&self) -> Option<f32> {
-        Some(0.2)
+        self.llm_ctx.memory_llm_temperature()
     }
 
     pub fn agent_llm_temperature(&self) -> Option<f32> {
-        Some(0.2)
+        self.llm_ctx.agent_llm_temperature()
     }
 
     pub fn default_user_id(&self) -> String {
@@ -356,26 +340,83 @@ impl AppState {
     }
 
     pub fn max_upload_file_size_bytes(&self) -> u64 {
-        self.max_upload_file_size_bytes
+        self.storage.max_upload_file_size_bytes()
     }
 
-    pub fn key_vault(&self) -> Arc<dyn common::key_vault::KeyVault> {
-        self.key_vault.clone()
+    /// Resolve conversation history for agent prompts.
+    /// Client-supplied `messages` take precedence; otherwise load prior user turns from PG.
+    pub async fn resolve_agent_messages(&self, req: &common::ChatRequest) -> Vec<ChatTurnInput> {
+        if !req.messages.is_empty() {
+            return req.messages.clone();
+        }
+
+        let Some(session_id) = req.session_id.as_ref() else {
+            return Vec::new();
+        };
+        let Ok(session_uuid) = Uuid::parse_str(session_id) else {
+            return Vec::new();
+        };
+        let Some(pg) = self.storage.pg() else {
+            return Vec::new();
+        };
+
+        let Ok(stored) = pg.list_messages(&self.auth, session_uuid).await else {
+            return Vec::new();
+        };
+
+        let current_query = req.query.trim();
+        let history: Vec<ChatTurnInput> = stored
+            .into_iter()
+            .filter(|message| message.role == "user")
+            .filter(|message| !message.content.trim().is_empty())
+            .filter(|message| message.content.trim() != current_query)
+            .map(|message| {
+                let resolved_query = message
+                    .resolved_query
+                    .clone()
+                    .filter(|q| !q.trim().is_empty())
+                    .or_else(|| {
+                        message
+                            .turn_metadata
+                            .as_ref()
+                            .and_then(|meta| meta.get("query_resolution"))
+                            .and_then(|qr| qr.get("resolved_query"))
+                            .and_then(|v| v.as_str())
+                            .map(str::to_string)
+                    });
+                ChatTurnInput {
+                    role: message.role,
+                    content: message.content,
+                    resolved_query,
+                }
+            })
+            .collect();
+
+        crate::agents::runtime::recent_messages(
+            &history,
+            crate::agents::runtime::MAX_PROMPT_HISTORY_TURNS,
+        )
+        .to_vec()
     }
 
     /// Build an `AgentRequest` from chat request and memory context.
     /// This is the single conversion point from legacy `ChatRequest` to new agent protocol.
+    ///
+    /// `session_id_override` allows callers to inject the resolved session ID
+    /// *before* memory loading, fixing the first-turn bug where `req.session_id`
+    /// is `None` but the session object already exists.
     pub async fn build_agent_request(
         &self,
         req: &common::ChatRequest,
         kind: crate::agents::AgentKind,
+        session_id_override: Option<String>,
     ) -> crate::agents::runtime::AgentRequest {
         let notebook_id = req.notebook_id.clone();
-        let session_id = req.session_id.clone();
+        let session_id = session_id_override.or_else(|| req.session_id.clone());
         let doc_scope = req.doc_scope.clone();
         let stream = req.stream;
 
-        let memory_context = if let (Some(sid), Some(cm)) = (&session_id, &self.chatmemory) {
+        let memory_context = if let (Some(sid), Some(cm)) = (&session_id, &self.orchestrator.chatmemory()) {
             if let Ok(session_uuid) = uuid::Uuid::parse_str(sid) {
                 cm.load(&self.auth, session_uuid).await.ok()
             } else {
@@ -384,22 +425,21 @@ impl AppState {
         } else {
             None
         };
-        let session_summary = memory_context
-            .as_ref()
-            .and_then(|memory| memory.layer2.as_ref().map(|layer2| layer2.summary.clone()));
         let user_preferences = memory_context
             .as_ref()
             .and_then(|memory| memory.layer3.as_ref().map(agent_user_preferences_json));
+        let messages = self.resolve_agent_messages(req).await;
         crate::agents::runtime::AgentRequest {
             kind,
             query: req.query.clone(),
+            resolved_query: req.query.clone(),
+            query_resolution: None,
             notebook_id,
             session_id,
             doc_scope,
-            messages: req.messages.clone(),
-            session_summary,
+            messages,
             user_preferences,
-            debug: false,
+            debug: req.debug,
             stream,
             language: req.language.clone(),
             auth_context: serde_json::to_value(&self.auth)
@@ -426,7 +466,7 @@ impl AppState {
         general_debug.insert(
             "memory_loaded".to_string(),
             serde_json::json!(
-                agent_request.session_summary.is_some() || agent_request.user_preferences.is_some()
+                !agent_request.messages.is_empty() || agent_request.user_preferences.is_some()
             ),
         );
         general_debug.insert("summary_updated".to_string(), serde_json::json!(false));
@@ -437,8 +477,15 @@ impl AppState {
         general_debug
     }
 
-    pub fn analytics(&self) -> Option<Arc<analytics::AnalyticsService>> {
-        self.analytics.clone()
+    pub fn analytics(&self) -> Option<&Arc<analytics::AnalyticsService>> {
+        self.analytics.service()
+    }
+
+    pub fn analytics_ctx(&self) -> crate::analytics_context::AnalyticsContext {
+        self.analytics.into_context(
+            self.auth.actor_id().map(|a| a.into_uuid()),
+            self.auth.request_id().map(str::to_string),
+        )
     }
 
     pub async fn record_product_event_if_available(
@@ -450,7 +497,7 @@ impl AppState {
         notebook_id: Option<Uuid>,
         metadata: serde_json::Value,
     ) {
-        let Some(ref analytics) = self.analytics else {
+        let Some(ref analytics) = self.analytics.service() else {
             return;
         };
         let Some(user_id) = self.auth.actor_id().map(|actor| actor.into_uuid()) else {
@@ -490,7 +537,7 @@ pub struct CostEventRecord<'a> {
 
 impl AppState {
     pub async fn record_cost_event_if_available(&self, record: CostEventRecord<'_>) {
-        let Some(ref analytics) = self.analytics else {
+        let Some(ref analytics) = self.analytics.service() else {
             return;
         };
         let Some(user_id) = self.auth.actor_id().map(|actor| actor.into_uuid()) else {
@@ -536,7 +583,7 @@ impl AppState {
         source: &str,
         metadata: serde_json::Value,
     ) {
-        let Some(ref analytics) = self.analytics else {
+        let Some(ref analytics) = self.analytics.service() else {
             return;
         };
         let Some(user_id) = self.auth.actor_id().map(|actor| actor.into_uuid()) else {
@@ -576,7 +623,7 @@ impl AppState {
         external_call_count: i64,
         metadata: serde_json::Value,
     ) {
-        let Some(ref analytics) = self.analytics else {
+        let Some(ref analytics) = self.analytics.service() else {
             return;
         };
         let Some(user_id) = self.auth.actor_id().map(|actor| actor.into_uuid()) else {

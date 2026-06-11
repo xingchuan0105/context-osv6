@@ -7,4 +7,4 @@ Single-context — one global `CONTEXT.md` at the repo root plus `docs/adr/` for
 ## Consumer rules
 
 - Read `CONTEXT.md` first when you need domain background
-- Check `docs/adr/` for past architectural decisions
+- Check `docs/adr/` for past architectural decisions (ADR-0006: unified ReActLoop replaced `agents/strategy/`)

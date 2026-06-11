@@ -1,22 +1,22 @@
 use async_trait::async_trait;
 use avrag_auth::AuthContext;
 use avrag_retrieval_data_plane::{
-    Bm25SearchOutput, Bm25SearchRequest, DocumentIndexBatch, GraphSearchOutput,
-    GraphSearchRequest, IndexWriteReport, MultimodalSearchRequest,
-    RetrievalDataPlane, ScoredChunk, TextDenseSearchRequest,
+    Bm25SearchOutput, Bm25SearchRequest, DocumentIndexBatch, GraphSearchOutput, GraphSearchRequest,
+    IndexWriteReport, MultimodalSearchRequest, RetrievalDataPlane, ScoredChunk,
+    TextDenseSearchRequest,
 };
 
-pub mod types;
 pub mod config;
-pub mod schema;
 pub mod executor;
 pub mod lib_impl;
-pub mod utils;
 pub mod ops;
+pub mod schema;
+pub mod types;
+pub mod utils;
 
-pub use config::{MilvusConfig, TenantContext, MilvusCollectionNames};
-pub use types::{MilvusStorageError, Result};
+pub use config::{MilvusCollectionNames, MilvusConfig, TenantContext};
 pub use lib_impl::MilvusDataPlane;
+pub use types::{MilvusStorageError, Result};
 
 #[async_trait]
 impl RetrievalDataPlane for MilvusDataPlane {
@@ -47,7 +47,11 @@ impl RetrievalDataPlane for MilvusDataPlane {
         Ok(())
     }
 
-    async fn delete_document_index(&self, auth: &AuthContext, document_id: uuid::Uuid) -> anyhow::Result<()> {
+    async fn delete_document_index(
+        &self,
+        auth: &AuthContext,
+        document_id: uuid::Uuid,
+    ) -> anyhow::Result<()> {
         let names = self.config.collection_names();
         let filter = schema::doc_filter(auth, Some(&[document_id]));
         for collection in [
@@ -62,12 +66,18 @@ impl RetrievalDataPlane for MilvusDataPlane {
         Ok(())
     }
 
-    async fn replace_document_index(&self, batch: DocumentIndexBatch) -> anyhow::Result<IndexWriteReport> {
+    async fn replace_document_index(
+        &self,
+        batch: DocumentIndexBatch,
+    ) -> anyhow::Result<IndexWriteReport> {
         let executor = executor::RealExecutor { plane: self };
         self.replace_document_index_impl(batch, &executor).await
     }
 
-    async fn search_text_dense(&self, request: TextDenseSearchRequest) -> anyhow::Result<Vec<ScoredChunk>> {
+    async fn search_text_dense(
+        &self,
+        request: TextDenseSearchRequest,
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
         self.search_text_dense(request).await
     }
 
@@ -75,7 +85,10 @@ impl RetrievalDataPlane for MilvusDataPlane {
         self.search_bm25(request).await
     }
 
-    async fn search_multimodal(&self, request: MultimodalSearchRequest) -> anyhow::Result<Vec<ScoredChunk>> {
+    async fn search_multimodal(
+        &self,
+        request: MultimodalSearchRequest,
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
         self.search_multimodal(request).await
     }
 

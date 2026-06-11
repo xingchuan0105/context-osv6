@@ -16,6 +16,7 @@ text-splitter = { workspace = true }
 tiktoken-rs = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
+uuid = { workspace = true }
 
 avrag-cache-redis = { path = "../cache-redis" }
 common = { path = "../common" }
@@ -26,3 +27,7 @@ tree-sitter-javascript = "0.25"
 tree-sitter-typescript = "0.23.2"
 tree-sitter-go = "0.25"
 tree-sitter-java = "0.23.5"
+
+[dev-dependencies]
+axum = { version = "0.8", features = ["macros"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

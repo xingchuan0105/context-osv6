@@ -244,6 +244,7 @@ export function WorkspaceSourcesPane({
                     .filter(Boolean)
                     .join(" ")}
                   data-testid="ingestion-status"
+                  data-document-id={source.id}
                   data-status={visualStatus}
                   key={source.id}
                   title={showStatus ? statusLabel : undefined}

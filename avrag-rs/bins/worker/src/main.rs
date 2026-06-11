@@ -20,14 +20,17 @@ use avrag_storage_pg::{
 use ingestion::chunker::ChunkPolicy;
 use ingestion::parser::{
     CodeParser, DocumentParser, ExternalParseKind, HtmlParser, LocalParseKind, MineruClient,
-    MineruConfig, OfficeDocType, OfficeParserServiceClient, OfficeParserServiceConfig, ParsePlan,
-    ParseRouter, PdfPageBackend, PdfParser, TextParser, normalize_parsed_document,
+    MineruConfig, OfficeDocType, OfficeParserServiceClient, OfficeParserServiceConfig,
+    PaddleOcrClient, PaddleOcrConfig, ParsePlan, ParseRouter, PdfPageBackend, PdfParser,
+    PdfRendererServiceClient, PdfRendererServiceConfig, TextParser, VisualPdfParser,
+    normalize_parsed_document,
 };
 use ingestion::{
-    AuditRecord, AuditSink, DocumentIr, DocumentIrValidationOptions, DocumentType, IngestionError,
-    IngestionTask, NoopAuditSink, NoopStateSink, NoopTaskProcessor, NoopTaskSource, PageIr,
-    ParseBackend, StateSink, TaskCompletionOutcome, TaskFailureOutcome, TaskProcessor, TaskSource,
-    Transition, WorkerRuntime, WorkerTick, sanitize_and_validate_document_ir,
+    AuditRecord, AuditSink, AssetIr, BlockIr, BlockModality, BlockType, DocumentIr,
+    DocumentIrValidationOptions, DocumentType, IngestionError, IngestionTask, NoopAuditSink,
+    NoopStateSink, NoopTaskProcessor, NoopTaskSource, PageIr, ParseBackend, SourceLocator,
+    StateSink, TaskCompletionOutcome, TaskFailureOutcome, TaskProcessor, TaskSource, Transition,
+    WorkerRuntime, WorkerTick, sanitize_and_validate_document_ir,
 };
 use sha2::{Digest, Sha256};
 use std::convert::TryFrom;
@@ -176,29 +179,29 @@ impl StateSink for PgStateSink {
                     .requested_by
                     .as_deref()
                     .and_then(|value| Uuid::parse_str(value).ok())
-                {
-                    let analytics = analytics::AnalyticsService::new(self.repo.raw().clone());
-                    let event = analytics::ProductEvent {
-                        event_id: Uuid::new_v4(),
-                        event_time: chrono::Utc::now(),
-                        user_id,
-                        session_id: None,
-                        notebook_id: Uuid::parse_str(&task.notebook_id).ok(),
-                        surface: analytics::Surface::Workspace,
-                        event_name: analytics::ProductEventName::DocumentUploadFailed,
-                        result: analytics::ResultTag::Failure,
-                        request_id: None,
-                        trace_id: None,
-                        client_platform: "worker".to_string(),
-                        metadata: serde_json::json!({
-                            "document_id": task.document_id.clone(),
-                            "task_id": task.task_id.clone(),
-                        }),
-                    };
-                    if let Err(error) = analytics.record_product_event(&event).await {
-                        info!(error = %error, document_id = task.document_id, "failed to record document upload failure event");
-                    }
+            {
+                let analytics = analytics::AnalyticsService::new(self.repo.raw().clone());
+                let event = analytics::ProductEvent {
+                    event_id: Uuid::new_v4(),
+                    event_time: chrono::Utc::now(),
+                    user_id,
+                    session_id: None,
+                    notebook_id: Uuid::parse_str(&task.notebook_id).ok(),
+                    surface: analytics::Surface::Workspace,
+                    event_name: analytics::ProductEventName::DocumentUploadFailed,
+                    result: analytics::ResultTag::Failure,
+                    request_id: None,
+                    trace_id: None,
+                    client_platform: "worker".to_string(),
+                    metadata: serde_json::json!({
+                        "document_id": task.document_id.clone(),
+                        "task_id": task.task_id.clone(),
+                    }),
+                };
+                if let Err(error) = analytics.record_product_event(&event).await {
+                    info!(error = %error, document_id = task.document_id, "failed to record document upload failure event");
                 }
+            }
             if let Some(user_id) = task
                 .requested_by
                 .as_deref()
@@ -256,11 +259,14 @@ struct PgTaskProcessor {
     asset_url_ttl_secs: u64,
     redis_lock: Option<DocumentLock>,
     summary_generator: Option<avrag_llm::SummaryGenerator>,
+    section_index_generator: Option<avrag_llm::SectionIndexGenerator>,
     triplet_llm: Option<Arc<avrag_llm::LlmClient>>,
     analytics: Option<analytics::AnalyticsService>,
     usage_limit: Option<avrag_billing::usage_limit::UsageLimitService>,
     mineru_client: Option<MineruClient>,
     office_parser_client: Option<OfficeParserServiceClient>,
+    pdf_renderer_client: Option<PdfRendererServiceClient>,
+    ingestion_llm: Option<Arc<avrag_llm::LlmClient>>,
     task_timeout_secs: u64,
 }
 
@@ -360,7 +366,7 @@ impl TaskProcessor for PgTaskProcessor {
                 }
             }
 
-            let route_decision = if is_url_task {
+            let mut route_decision = if is_url_task {
                 ingestion::parser::ParseRouteDecision {
                     route: ingestion::parser::ParseRoute::Local,
                     reason: ingestion::parser::RouteReason::TextFile,
@@ -373,6 +379,9 @@ impl TaskProcessor for PgTaskProcessor {
                 ParseRouter::route(&bytes, &filename, &claimed_mime_type)
                     .map_err(|error| IngestionError::StateSink(error.to_string()))?
             };
+            if let ParsePlan::Pdf(ref mut pdf_plan) = route_decision.plan {
+                maybe_truncate_pdf_plan(pdf_plan);
+            }
 
             info!(
                 filename = %filename,
@@ -386,16 +395,16 @@ impl TaskProcessor for PgTaskProcessor {
                     .iter()
                     .filter(|page| page.backend == PdfPageBackend::EdgeParse)
                     .count();
-                let mineru_ocr_pages = pdf_plan
+                let visual_raster_pages = pdf_plan
                     .pages
                     .iter()
-                    .filter(|page| page.backend == PdfPageBackend::MineruOcr)
+                    .filter(|page| page.backend == PdfPageBackend::VisualRaster)
                     .count();
                 info!(
                     filename = %filename,
                     total_pages = pdf_plan.pages.len(),
                     edgeparse_pages,
-                    mineru_ocr_pages,
+                    visual_raster_pages,
                     "PDF page routing plan prepared"
                 );
             }
@@ -731,9 +740,10 @@ async fn stop_ingestion_task_lock_heartbeat(heartbeat: Option<tokio::task::JoinH
 
     heartbeat.abort();
     if let Err(error) = heartbeat.await
-        && !error.is_cancelled() {
-            warn!(error = %error, "ingestion task lock heartbeat ended unexpectedly");
-        }
+        && !error.is_cancelled()
+    {
+        warn!(error = %error, "ingestion task lock heartbeat ended unexpectedly");
+    }
 }
 
 fn spawn_document_cleanup_task_lock_heartbeat(
@@ -773,9 +783,10 @@ fn spawn_document_cleanup_task_lock_heartbeat(
 async fn stop_document_cleanup_task_lock_heartbeat(heartbeat: tokio::task::JoinHandle<()>) {
     heartbeat.abort();
     if let Err(error) = heartbeat.await
-        && !error.is_cancelled() {
-            warn!(error = %error, "document cleanup task lock heartbeat ended unexpectedly");
-        }
+        && !error.is_cancelled()
+    {
+        warn!(error = %error, "document cleanup task lock heartbeat ended unexpectedly");
+    }
 }
 
 async fn run_document_cleanup_once(
@@ -1095,11 +1106,10 @@ async fn main() -> Result<()> {
         let worker_object_store = build_worker_object_store(&config).await?;
         let cleanup_object_store = build_worker_object_store(&config).await?;
         let orphan_object_store = Arc::new(build_worker_object_store(&config).await?);
-        let mut orphan_object_job_runner =
-            orphan_object_jobs::OrphanObjectJobRunner::from_env(
-                repo.raw().clone(),
-                orphan_object_store,
-            );
+        let mut orphan_object_job_runner = orphan_object_jobs::OrphanObjectJobRunner::from_env(
+            repo.raw().clone(),
+            orphan_object_store,
+        );
         let retrieval_data_plane = build_worker_retrieval_data_plane(&config).await?;
         let cleanup_retrieval_data_plane = retrieval_data_plane.clone();
         let cleanup_repo = repo.clone();
@@ -1136,13 +1146,21 @@ async fn main() -> Result<()> {
                     let sc = &config.ingestion_llm;
                     if let Some(llm_config) = sc.to_llm_config() {
                         let mut generator = SummaryGenerator::new(llm_config);
-                        if let Some(template) =
-                            load_prompt_template(&config.prompts.dir, &config.prompts.summary_version, "summary_generation").await
+                        if let Some(template) = load_prompt_template(
+                            &config.prompts.dir,
+                            &config.prompts.summary_version,
+                            "summary-generation",
+                        )
+                        .await
                         {
                             generator = generator.with_prompt_template(template);
                         }
-                        if let Some(template) =
-                            load_prompt_template(&config.prompts.dir, &config.prompts.summary_version, "summary_generation_finalize").await
+                        if let Some(template) = load_prompt_template(
+                            &config.prompts.dir,
+                            &config.prompts.summary_version,
+                            "summary-generation-finalize",
+                        )
+                        .await
                         {
                             generator = generator.with_finalize_prompt_template(template);
                         }
@@ -1151,12 +1169,35 @@ async fn main() -> Result<()> {
                         None
                     }
                 },
+                section_index_generator: {
+                    let sc = &config.ingestion_llm;
+                    sc.to_llm_config().map(|cfg| {
+                        let mut section_gen = avrag_llm::SectionIndexGenerator::new(cfg);
+                        if let Ok(system) = std::fs::read_to_string(format!(
+                            "{}/pipeline/section-index.system.v1.md",
+                            config.prompts.dir.trim()
+                        )) {
+                            if let Ok(user) = std::fs::read_to_string(format!(
+                                "{}/templates/section-index-user.tmpl",
+                                config.prompts.dir.trim()
+                            )) {
+                                section_gen = section_gen.with_prompts(system, user);
+                            }
+                        }
+                        section_gen
+                    })
+                },
                 triplet_llm: build_worker_triplet_llm(&config),
                 analytics: Some(analytics::AnalyticsService::new(analytics_pool)),
-                usage_limit: Some(avrag_billing::usage_limit::UsageLimitService::new(usage_limit_pool)),
+                usage_limit: Some(avrag_billing::usage_limit::UsageLimitService::new(
+                    usage_limit_pool,
+                )),
                 mineru_client: MineruConfig::from_env().map(MineruClient::new),
                 office_parser_client: OfficeParserServiceConfig::from_env()
                     .map(OfficeParserServiceClient::new),
+                pdf_renderer_client: PdfRendererServiceConfig::from_env()
+                    .map(PdfRendererServiceClient::new),
+                ingestion_llm: build_worker_triplet_llm(&config),
                 task_timeout_secs,
             },
         );
@@ -1356,6 +1397,143 @@ fn is_remote_media_reference(path: &str) -> bool {
     common::is_remote_url(path)
 }
 
+fn enrich_multimodal_source_locator(
+    source_locator: &SourceLocator,
+    metadata: &std::collections::BTreeMap<String, String>,
+) -> serde_json::Value {
+    let mut value =
+        serde_json::to_value(source_locator).unwrap_or_else(|_| serde_json::json!({}));
+    let Some(obj) = value.as_object_mut() else {
+        return value;
+    };
+    for key in [
+        "page_range_start",
+        "page_range_end",
+        "ingest_route",
+        "page_numbers",
+    ] {
+        if let Some(entry) = metadata.get(key) {
+            obj.insert(key.to_string(), serde_json::Value::String(entry.clone()));
+        }
+    }
+    value
+}
+
+#[derive(Clone)]
+struct MediaResolveContext {
+    object_store: ObjectStoreHandle,
+    asset_url_ttl_secs: u64,
+}
+
+async fn read_asset_bytes(
+    ctx: &MediaResolveContext,
+    path: &str,
+) -> Result<Vec<u8>, String> {
+    if let Some(local_path) = path.strip_prefix("temporary://") {
+        return tokio::fs::read(local_path)
+            .await
+            .map_err(|error| format!("read temp asset: {error}"));
+    }
+    if let Some(local_path) = path.strip_prefix("file://") {
+        return tokio::fs::read(local_path)
+            .await
+            .map_err(|error| format!("read file asset: {error}"));
+    }
+    let local_path = Path::new(path);
+    if local_path.exists() {
+        return tokio::fs::read(local_path)
+            .await
+            .map_err(|error| format!("read local asset: {error}"));
+    }
+    ctx.object_store
+        .get(path)
+        .await
+        .map_err(|error| format!("read object store asset: {error}"))
+}
+
+async fn resolve_media_reference_for_remote_api(
+    ctx: &MediaResolveContext,
+    path: &str,
+) -> Result<Option<String>, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if is_remote_media_reference(trimmed) {
+        return Ok(Some(trimmed.to_string()));
+    }
+
+    if ctx.object_store.is_remote() {
+        if let Ok(presigned) = ctx
+            .object_store
+            .presigned_get_url(trimmed, ctx.asset_url_ttl_secs.max(300))
+            .await
+        {
+            if is_remote_media_reference(&presigned) {
+                return Ok(Some(presigned));
+            }
+        }
+    }
+
+    let bytes = read_asset_bytes(ctx, trimmed).await?;
+    let mime = common::infer_image_extension(trimmed)
+        .map(|ext| format!("image/{ext}"))
+        .unwrap_or_else(|| "image/jpeg".to_string());
+    use base64::Engine as _;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Ok(Some(format!("data:{mime};base64,{encoded}")))
+}
+
+async fn build_multimodal_embed_input(
+    ctx: &MediaResolveContext,
+    chunk: &StoredMultimodalChunk,
+    caption: String,
+) -> MultiModalEmbeddingInput {
+    let mut resolved_fusion = Vec::new();
+    if chunk.fusion_image_paths.len() > 1 {
+        for path in &chunk.fusion_image_paths {
+            if let Ok(Some(resolved)) = resolve_media_reference_for_remote_api(ctx, path).await {
+                resolved_fusion.push(resolved);
+            }
+        }
+    }
+    let resolved_single =
+        resolve_media_reference_for_remote_api(ctx, &chunk.image_path)
+            .await
+            .ok()
+            .flatten();
+    if resolved_fusion.len() > 1 {
+        MultiModalEmbeddingInput::text_images(caption, resolved_fusion)
+    } else if let Some(single) = resolved_single {
+        MultiModalEmbeddingInput::text_image(caption, single)
+    } else {
+        MultiModalEmbeddingInput::text(chunk.context_text.clone())
+    }
+}
+
+async fn resolve_visual_chunk_image_refs(
+    ctx: &MediaResolveContext,
+    chunk: &StoredMultimodalChunk,
+) -> Result<Vec<String>, String> {
+    let paths = if chunk.fusion_image_paths.len() > 1 {
+        chunk.fusion_image_paths.clone()
+    } else {
+        vec![chunk.image_path.clone()]
+    };
+    let mut refs = Vec::new();
+    for path in paths {
+        if let Some(resolved) = resolve_media_reference_for_remote_api(ctx, &path).await? {
+            refs.push(resolved);
+        }
+    }
+    Ok(refs)
+}
+
+fn record_multimodal_degrade(outputs: &mut ParseRunOutputs, reason: String) {
+    outputs.multimodal_degrade_count += 1;
+    outputs.multimodal_degrade_reasons.push(reason);
+}
+
 async fn resolve_mineru_source_url(
     processor: &PgTaskProcessor,
     object_path: &str,
@@ -1380,6 +1558,7 @@ struct StoredMultimodalChunk {
     chunk_id: Uuid,
     asset_id: Uuid,
     image_path: String,
+    fusion_image_paths: Vec<String>,
     caption: Option<String>,
     context_text: String,
     page: Option<i64>,
@@ -1394,6 +1573,8 @@ struct ExtractedTriplet {
     predicate: String,
     object: String,
     supporting_chunk_ids: Vec<Uuid>,
+    source: String,
+    confidence: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -1429,6 +1610,8 @@ struct ParseRunOutputs {
     graph_passage_count: usize,
     graph_degrade_count: usize,
     graph_degrade_reasons: Vec<String>,
+    multimodal_degrade_count: usize,
+    multimodal_degrade_reasons: Vec<String>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -1583,7 +1766,9 @@ async fn run_document_pipeline(
         .map_err(|error| IngestionError::StateSink(error.to_string()))?;
     let processed_chunk_count = chunks.len().max(1);
 
-    let toc_entries = build_toc_entries(&document_ir, &chunks);
+    let mut toc_entries = build_toc_entries(&document_ir, &chunks);
+    toc_entries =
+        maybe_enrich_toc_with_llm(processor, &document_ir, &chunks, filename, toc_entries).await;
     if !toc_entries.is_empty() {
         ensure_ingestion_side_effects_allowed(
             &processor.repo,
@@ -1748,26 +1933,79 @@ async fn run_document_pipeline(
                     metadata: serde_json::json!({
                         "block_id": multimodal_chunk.block_id,
                         "block_type": multimodal_chunk.block_type.as_str(),
-                        "source_locator": multimodal_chunk.source_locator,
+                        "source_locator": enrich_multimodal_source_locator(
+                            &multimodal_chunk.source_locator,
+                            &multimodal_chunk.metadata,
+                        ),
                         "source_image_path": multimodal_chunk.image_path,
+                        "ingest_route": multimodal_chunk.metadata.get("ingest_route"),
+                        "page_range_start": multimodal_chunk.metadata.get("page_range_start"),
+                        "page_range_end": multimodal_chunk.metadata.get("page_range_end"),
+                        "fusion_asset_refs": multimodal_chunk.metadata.get("fusion_asset_refs"),
                     }),
                 },
             )
             .await
             .map_err(|error| IngestionError::StateSink(error.to_string()))?;
 
+        let fusion_asset_refs = multimodal_chunk
+            .metadata
+            .get("fusion_asset_refs")
+            .map(|refs| {
+                refs.split(',')
+                    .map(str::trim)
+                    .filter(|asset_ref| !asset_ref.is_empty())
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let mut fusion_image_paths = Vec::new();
+        for asset_ref in &fusion_asset_refs {
+            if let Some(Some(path)) = stored_asset_path_by_ref.get(asset_ref) {
+                fusion_image_paths.push(path.clone());
+            }
+        }
+        if fusion_asset_refs.len() > 1 {
+            if fusion_image_paths.len() != fusion_asset_refs.len() {
+                record_multimodal_degrade(
+                    &mut parse_run_state.outputs,
+                    format!(
+                        "chunk {chunk_id}: fusion assets mirrored {}/{}",
+                        fusion_image_paths.len(),
+                        fusion_asset_refs.len()
+                    ),
+                );
+            }
+            if fusion_image_paths.len() <= 1 {
+                fusion_image_paths.clear();
+            }
+        } else {
+            fusion_image_paths.clear();
+        }
+
         stored_multimodal_chunks.push(StoredMultimodalChunk {
             chunk_id,
             asset_id,
             image_path: stored_image_path,
+            fusion_image_paths,
             caption: multimodal_chunk.caption.clone(),
-            context_text: multimodal_chunk.summary_text.clone(),
+            context_text: multimodal_chunk.context_text.clone(),
             page: multimodal_chunk.page.map(i64::from),
             chunk_type: multimodal_chunk.block_type.as_str().to_string(),
             parser_backend: multimodal_chunk.parser_backend.as_str().to_string(),
-            source_locator: Some(serde_json::json!(multimodal_chunk.source_locator)),
+            source_locator: Some(enrich_multimodal_source_locator(
+                &multimodal_chunk.source_locator,
+                &multimodal_chunk.metadata,
+            )),
         });
     }
+
+    maybe_enrich_visual_multimodal_summaries(
+        processor,
+        &mut stored_multimodal_chunks,
+        &mut parse_run_state.outputs,
+    )
+    .await;
 
     if let Some(ref summary_gen) = processor.summary_generator {
         let user_uuid = task
@@ -1920,7 +2158,12 @@ async fn run_document_pipeline(
 
     let needs_multimodal_vector_index = processor.retrieval_data_plane.is_some();
     let multimodal_index_records = if needs_multimodal_vector_index {
-        build_multimodal_index_records(processor, &stored_multimodal_chunks).await?
+        build_multimodal_index_records(
+            processor,
+            &stored_multimodal_chunks,
+            &mut parse_run_state.outputs,
+        )
+        .await?
     } else {
         Vec::new()
     };
@@ -1928,14 +2171,27 @@ async fn run_document_pipeline(
         parse_run_state.outputs.multimodal_vector_count = multimodal_index_records.len();
     }
 
-    let graph_records = if processor.retrieval_data_plane.is_some() {
-        let extraction = extract_triplets_for_index(
+    let graph_records = if processor.retrieval_data_plane.is_some() && triplet_extraction_enabled() {
+        let mut extraction = extract_triplets_for_index(
             processor,
             document_id,
             &text_index_records,
             parse_run_state,
         )
         .await;
+        if visual_triplet_extraction_enabled() {
+            let visual = extract_visual_triplets_for_index(
+                processor,
+                document_id,
+                &stored_multimodal_chunks,
+                parse_run_state,
+            )
+            .await;
+            extraction.total_tokens = extraction
+                .total_tokens
+                .saturating_add(visual.total_tokens);
+            extraction.triplets = merge_extracted_triplets(extraction.triplets, visual.triplets);
+        }
         if extraction.total_tokens > 0 {
             let _ = processor
                 .repo
@@ -2124,22 +2380,28 @@ async fn execute_pdf_parse(
     processor: &PgTaskProcessor,
     bytes: &[u8],
     filename: &str,
-    object_path: &str,
+    _object_path: &str,
     document_id: Uuid,
     plan: &ingestion::parser::PdfParsePlan,
 ) -> Result<DocumentIr, IngestionError> {
-    let edge_pages = plan
+    let edge_pages: Vec<u32> = plan
         .pages
         .iter()
-        .filter(|page| page.backend == PdfPageBackend::EdgeParse)
-        .map(|page| page.page_number)
-        .collect::<Vec<_>>();
-    let ocr_pages = plan
+        .filter(|p| p.backend == PdfPageBackend::EdgeParse)
+        .map(|p| p.page_number)
+        .collect();
+    let paddle_pages: Vec<u32> = plan
         .pages
         .iter()
-        .filter(|page| page.backend == PdfPageBackend::MineruOcr)
-        .map(|page| page.page_number)
-        .collect::<Vec<_>>();
+        .filter(|p| p.backend == PdfPageBackend::PaddleOcr)
+        .map(|p| p.page_number)
+        .collect();
+    let visual_pages: Vec<u32> = plan
+        .pages
+        .iter()
+        .filter(|p| p.backend == PdfPageBackend::VisualRaster)
+        .map(|p| p.page_number)
+        .collect();
 
     let digital_ir = if edge_pages.is_empty() {
         None
@@ -2164,98 +2426,388 @@ async fn execute_pdf_parse(
         )
     };
 
-    let mineru_ir = if ocr_pages.is_empty() {
+    let (paddle_ir, paddle_successful) = if paddle_pages.is_empty() {
+        (None, std::collections::HashSet::new())
+    } else {
+        match execute_paddle_ocr(bytes, filename, document_id, &paddle_pages).await {
+            Ok((ir, pages)) => (Some(ir), pages),
+            Err(e) => {
+                tracing::warn!(filename, error = %e, "PaddleOCR failed, falling back to VisualRaster for OCR pages");
+                (None, std::collections::HashSet::new())
+            }
+        }
+    };
+    let paddle_failed = !paddle_pages.is_empty() && paddle_ir.is_none();
+
+    // Fallback: PaddleOCR pages without successful results fall back to VisualRaster
+    let paddle_needs_fallback: Vec<u32> = if paddle_pages.is_empty() {
+        Vec::new()
+    } else {
+        paddle_pages
+            .iter()
+            .filter(|p| !paddle_successful.contains(p))
+            .copied()
+            .collect()
+    };
+    let effective_visual_pages = if paddle_needs_fallback.is_empty() {
+        visual_pages.clone()
+    } else {
+        let mut pages = visual_pages;
+        pages.extend(&paddle_needs_fallback);
+        pages.sort();
+        pages
+    };
+
+    let visual_ir = if effective_visual_pages.is_empty() {
         None
     } else {
-        let mineru = processor.mineru_client.as_ref().ok_or_else(|| {
+        let renderer = processor.pdf_renderer_client.as_ref().ok_or_else(|| {
             IngestionError::StateSink(format!(
-                "PDF OCR fallback selected for {filename}, but MINERU is not configured"
+                "PDF visual raster selected for {filename}, but PDF_RENDERER_BASE_URL is not configured"
             ))
         })?;
-        let source_url = resolve_mineru_source_url(processor, object_path).await?;
-        let normalized = mineru
-            .parse_pdf_pages(bytes, filename, &ocr_pages, source_url.as_deref())
-            .await
-            .map_err(|error| {
-                IngestionError::StateSink(format!(
-                    "MinerU OCR parse failed for {filename}: {error}"
-                ))
-            })?;
+        let parser = VisualPdfParser::new(renderer.clone());
         Some(
-            DocumentIr::from_normalized_document(
-                document_id.to_string(),
-                DocumentType::Pdf,
-                ParseBackend::MineruPdfOcr,
-                &normalized,
-            )
-            .with_pdf_defaults(ParseBackend::MineruPdfOcr),
+            parser
+                .parse_pages(bytes, filename, document_id, &effective_visual_pages)
+                .await
+                .map_err(|error| {
+                    IngestionError::StateSink(format!(
+                        "visual pdf parse failed for {filename}: {error}"
+                    ))
+                })?,
         )
     };
 
+    let mut merged = merge_pdf_ir(document_id, filename, plan, digital_ir, paddle_ir, visual_ir, &paddle_successful)?;
+
+    // Write page_status metadata: [{page_no, status, route}, ...]
+    let page_status: Vec<serde_json::Value> = plan
+        .pages
+        .iter()
+        .map(|p| {
+            let route = match p.reason {
+                ingestion::parser::RouteReason::FastText => "A",
+                ingestion::parser::RouteReason::FastWithFigures => "B",
+                ingestion::parser::RouteReason::SlowOcr => "C",
+                ingestion::parser::RouteReason::SlowOcrSinglePage => "C_prime",
+                _ => "unknown",
+            };
+            let has_page = merged.pages.iter().any(|mp| mp.page_number == p.page_number);
+            let status = if p.backend == PdfPageBackend::PaddleOcr && paddle_failed {
+                "ocr_fail"
+            } else if has_page {
+                "ok"
+            } else {
+                "missing"
+            };
+            serde_json::json!({
+                "page_no": p.page_number,
+                "status": status,
+                "route": route,
+            })
+        })
+        .collect();
+    merged.metadata.insert(
+        "page_status".to_string(),
+        serde_json::to_string(&page_status).unwrap_or_default(),
+    );
+
+    // B-class: extract figure XObjects from EdgeParse pages + VLM summary
+    enrich_b_class_figures(processor, bytes, &mut merged, plan).await;
+
+    Ok(merged)
+}
+
+async fn execute_paddle_ocr(
+    bytes: &[u8],
+    filename: &str,
+    document_id: Uuid,
+    paddle_pages: &[u32],
+) -> Result<(DocumentIr, std::collections::HashSet<u32>), IngestionError> {
+    let config = PaddleOcrConfig::from_env().map_err(|e| {
+        IngestionError::StateSink(format!("PaddleOCR config error: {e}"))
+    })?;
+    let client = PaddleOcrClient::new(config);
+    let batch_pages: usize = std::env::var("PADDLE_OCR_BATCH_PAGES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(80);
+
+    let segments = group_contiguous_pages(paddle_pages);
+    let mut all_results = Vec::new();
+
+    for (seg_start, seg_end) in &segments {
+        for chunk_start in (*seg_start..=*seg_end).step_by(batch_pages) {
+            let chunk_end = (chunk_start + batch_pages as u32 - 1).min(*seg_end);
+            let pdf_slice = extract_pdf_slice(bytes, chunk_start, chunk_end).map_err(|e| {
+                IngestionError::StateSink(format!("PDF slice extraction failed: {e}"))
+            })?;
+
+            let results = client
+                .ocr_pdf_bytes(&pdf_slice, chunk_start)
+                .await
+                .map_err(|e| IngestionError::StateSink(format!("PaddleOCR failed: {e}")))?;
+
+            all_results.extend(results);
+        }
+    }
+
+    let successful_pages: std::collections::HashSet<u32> = all_results
+        .iter()
+        .filter(|r| !r.text.is_empty())
+        .map(|r| r.page_number)
+        .collect();
+    Ok((build_document_ir_from_paddle(document_id, filename, &all_results), successful_pages))
+}
+
+fn group_contiguous_pages(pages: &[u32]) -> Vec<(u32, u32)> {
+    if pages.is_empty() {
+        return Vec::new();
+    }
+    let mut segments = Vec::new();
+    let mut start = pages[0];
+    let mut end = pages[0];
+
+    for &page in &pages[1..] {
+        if page == end + 1 {
+            end = page;
+        } else {
+            segments.push((start, end));
+            start = page;
+            end = page;
+        }
+    }
+    segments.push((start, end));
+    segments
+}
+
+fn extract_pdf_slice(bytes: &[u8], start_page: u32, end_page: u32) -> anyhow::Result<Vec<u8>> {
+    let mut doc = lopdf::Document::load_mem(bytes)?;
+    let all_pages = doc.get_pages();
+    let total_pages = all_pages.len();
+    let pages_to_remove: Vec<u32> = all_pages
+        .into_iter()
+        .filter(|(num, _)| *num < start_page || *num > end_page)
+        .map(|(num, _)| num)
+        .collect();
+
+    if pages_to_remove.len() == total_pages {
+        anyhow::bail!("no pages in range {start_page}-{end_page}");
+    }
+
+    doc.delete_pages(&pages_to_remove);
+    doc.renumber_objects();
+
+    let mut buf = Vec::new();
+    doc.save_to(&mut buf)?;
+    Ok(buf)
+}
+
+fn build_document_ir_from_paddle(
+    document_id: Uuid,
+    filename: &str,
+    pages: &[ingestion::parser::PaddleOcrPageResult],
+) -> DocumentIr {
+    let mut ir = DocumentIr::new(
+        document_id.to_string(),
+        filename.to_string(),
+        DocumentType::Pdf,
+        ParseBackend::PaddleOcrPdf,
+    );
+    ir.metadata
+        .insert("ocr_backend".to_string(), "paddle".to_string());
+
+    for page in pages {
+        ir.pages.push(PageIr {
+            page_number: page.page_number,
+            width: None,
+            height: None,
+            backend: ParseBackend::PaddleOcrPdf,
+            text_char_count: page.text.len(),
+            image_count: page.figures.len(),
+            metadata: Default::default(),
+        });
+
+        if !page.text.is_empty() {
+            ir.blocks.push(BlockIr {
+                block_id: format!("paddle-p{}-text", page.page_number),
+                page: Some(page.page_number),
+                block_type: BlockType::Paragraph,
+                modality: BlockModality::TextOnly,
+                text: page.text.clone(),
+                alt_text: None,
+                asset_refs: Vec::new(),
+                caption: None,
+                section_path: Vec::new(),
+                source_locator: SourceLocator {
+                    page: Some(page.page_number),
+                    ..SourceLocator::default()
+                },
+                parser_backend: ParseBackend::PaddleOcrPdf,
+                metadata: Default::default(),
+            });
+        }
+
+        for (fig_idx, figure) in page.figures.iter().enumerate() {
+            let asset_id = format!("paddle-p{}-fig{}", page.page_number, fig_idx);
+            let mut asset_metadata = std::collections::BTreeMap::new();
+            asset_metadata.insert("source".to_string(), "paddle_ocr".to_string());
+            asset_metadata.insert("ephemeral_url".to_string(), "true".to_string());
+            asset_metadata.insert("original_url".to_string(), figure.image_url.clone());
+            ir.assets.push(AssetIr {
+                asset_id: asset_id.clone(),
+                page: Some(page.page_number),
+                asset_kind: ingestion::AssetKind::Image,
+                storage_path: figure.image_url.clone(),
+                mime_type: None,
+                width: None,
+                height: None,
+                parser_backend: ParseBackend::PaddleOcrPdf,
+                metadata: asset_metadata,
+            });
+
+            ir.blocks.push(BlockIr {
+                block_id: format!("paddle-p{}-fig{}", page.page_number, fig_idx),
+                page: Some(page.page_number),
+                block_type: BlockType::Figure,
+                modality: BlockModality::ImageWithContext,
+                text: figure.surrounding_text.clone(),
+                alt_text: Some(figure.image_key.clone()),
+                asset_refs: vec![asset_id],
+                caption: None,
+                section_path: Vec::new(),
+                source_locator: SourceLocator {
+                    page: Some(page.page_number),
+                    ..SourceLocator::default()
+                },
+                parser_backend: ParseBackend::PaddleOcrPdf,
+                metadata: std::collections::BTreeMap::from([(
+                    "paddle_image_key".to_string(),
+                    figure.image_key.clone(),
+                )]),
+            });
+        }
+    }
+
+    ir
+}
+
+fn merge_pdf_ir(
+    document_id: Uuid,
+    filename: &str,
+    plan: &ingestion::parser::PdfParsePlan,
+    digital_ir: Option<DocumentIr>,
+    paddle_ir: Option<DocumentIr>,
+    visual_ir: Option<DocumentIr>,
+    paddle_successful: &std::collections::HashSet<u32>,
+) -> Result<DocumentIr, IngestionError> {
     let title = digital_ir
         .as_ref()
-        .map(|document| document.title.clone())
-        .filter(|title| !title.trim().is_empty())
+        .map(|d| d.title.clone())
+        .filter(|t| !t.trim().is_empty())
         .or_else(|| {
-            mineru_ir
+            paddle_ir
                 .as_ref()
-                .map(|document| document.title.clone())
-                .filter(|title| !title.trim().is_empty())
+                .map(|d| d.title.clone())
+                .filter(|t| !t.trim().is_empty())
+        })
+        .or_else(|| {
+            visual_ir
+                .as_ref()
+                .map(|d| d.title.clone())
+                .filter(|t| !t.trim().is_empty())
         })
         .unwrap_or_else(|| filename.to_string());
+
+    let has_edge = digital_ir.is_some();
+    let has_paddle = paddle_ir.is_some();
+    let has_visual = visual_ir.is_some();
+    let backend_count = [has_edge, has_paddle, has_visual]
+        .iter()
+        .filter(|&&x| x)
+        .count();
+
+    let primary_backend = if has_edge {
+        ParseBackend::EdgeParsePdf
+    } else if has_paddle {
+        ParseBackend::PaddleOcrPdf
+    } else {
+        ParseBackend::VisualRasterPdf
+    };
 
     let mut merged = DocumentIr::new(
         document_id.to_string(),
         title,
         DocumentType::Pdf,
-        if edge_pages.is_empty() {
-            ParseBackend::MineruPdfOcr
-        } else {
-            ParseBackend::EdgeParsePdf
-        },
+        primary_backend,
     );
-    if let Some(digital_ir) = &digital_ir {
-        merged.metadata = digital_ir.metadata.clone();
-        merged.warnings.extend(digital_ir.warnings.clone());
-    }
-    if let Some(mineru_ir) = &mineru_ir {
-        if merged.metadata.is_empty() {
-            merged.metadata = mineru_ir.metadata.clone();
-        }
-        merged.warnings.extend(mineru_ir.warnings.clone());
+
+    if backend_count > 1 {
+        merged
+            .metadata
+            .insert("pdf_route_mode".to_string(), "hybrid_v2".to_string());
     }
 
+    // Write page_routes metadata: {"1":"A","2":"C","3":"B",...}
+    let mut page_routes_map = serde_json::Map::new();
+    for p in &plan.pages {
+        let route = match p.reason {
+            ingestion::parser::RouteReason::FastText => "A",
+            ingestion::parser::RouteReason::FastWithFigures => "B",
+            ingestion::parser::RouteReason::SlowOcr => "C",
+            ingestion::parser::RouteReason::SlowOcrSinglePage => "C_prime",
+            _ => "unknown",
+        };
+        page_routes_map.insert(p.page_number.to_string(), serde_json::json!(route));
+    }
+    merged.metadata.insert(
+        "page_routes".to_string(),
+        serde_json::to_string(&page_routes_map).unwrap_or_default(),
+    );
+
+    // Collect metadata from any source
+    for ir in [&digital_ir, &paddle_ir, &visual_ir]
+        .iter()
+        .filter_map(|x| x.as_ref())
+    {
+        if merged.metadata.len() <= 1 {
+            merged.metadata.extend(ir.metadata.clone());
+        }
+        merged.warnings.extend(ir.warnings.clone());
+    }
+
+    // Page-level assembly
     for page_plan in &plan.pages {
+        let source_ir = match page_plan.backend {
+            PdfPageBackend::EdgeParse => digital_ir.as_ref(),
+            PdfPageBackend::PaddleOcr => {
+                if paddle_ir.is_some() && paddle_successful.contains(&page_plan.page_number) {
+                    paddle_ir.as_ref()
+                } else {
+                    visual_ir.as_ref().or(digital_ir.as_ref())
+                }
+            }
+            PdfPageBackend::VisualRaster => visual_ir.as_ref(),
+        };
         let page_backend = match page_plan.backend {
             PdfPageBackend::EdgeParse => ParseBackend::EdgeParsePdf,
-            PdfPageBackend::MineruOcr => ParseBackend::MineruPdfOcr,
+            PdfPageBackend::PaddleOcr => {
+                if paddle_ir.is_some() && paddle_successful.contains(&page_plan.page_number) {
+                    ParseBackend::PaddleOcrPdf
+                } else {
+                    ParseBackend::VisualRasterPdf
+                }
+            }
+            PdfPageBackend::VisualRaster => ParseBackend::VisualRasterPdf,
         };
-        let source_ir = if page_plan.backend == PdfPageBackend::EdgeParse {
-            digital_ir.as_ref().ok_or_else(|| {
-                IngestionError::StateSink(format!(
-                    "PDF plan requested EdgeParse page {} but no EdgeParse result was produced",
-                    page_plan.page_number
-                ))
-            })?
-        } else {
-            mineru_ir.as_ref().ok_or_else(|| {
-                IngestionError::StateSink(format!(
-                    "PDF plan requested MinerU page {} but OCR result is missing",
-                    page_plan.page_number
-                ))
-            })?
-        };
-        if !document_ir_represents_page(source_ir, page_plan.page_number) {
-            return Err(IngestionError::StateSink(format!(
-                "{} did not produce requested page {} for {}",
-                page_backend.as_str(),
-                page_plan.page_number,
-                filename
-            )));
-        }
-        let page_slice = filter_document_ir_to_page(source_ir, page_plan.page_number);
 
-        let mut page_row = page_slice.pages.into_iter().next().unwrap_or(PageIr {
+        let Some(source_ir) = source_ir else {
+            continue;
+        };
+
+        let page_data = filter_document_ir_to_page(source_ir, page_plan.page_number);
+        let mut page_row = page_data.pages.into_iter().next().unwrap_or(PageIr {
             page_number: page_plan.page_number,
             width: None,
             height: None,
@@ -2270,7 +2822,7 @@ async fn execute_pdf_parse(
 
         merged
             .blocks
-            .extend(page_slice.blocks.into_iter().map(|mut block| {
+            .extend(page_data.blocks.into_iter().map(|mut block| {
                 block.page = Some(page_plan.page_number);
                 block.source_locator.page = Some(page_plan.page_number);
                 block.parser_backend = page_backend.clone();
@@ -2278,7 +2830,7 @@ async fn execute_pdf_parse(
             }));
         merged
             .assets
-            .extend(page_slice.assets.into_iter().map(|mut asset| {
+            .extend(page_data.assets.into_iter().map(|mut asset| {
                 asset.page = Some(page_plan.page_number);
                 asset.parser_backend = page_backend.clone();
                 asset
@@ -2347,6 +2899,172 @@ fn filter_document_ir_to_page(document_ir: &DocumentIr, page_number: u32) -> Doc
     filtered
 }
 
+async fn enrich_b_class_figures(
+    processor: &PgTaskProcessor,
+    pdf_bytes: &[u8],
+    ir: &mut DocumentIr,
+    plan: &ingestion::parser::PdfParsePlan,
+) {
+    use ingestion::parser::{extract_page_images, image_mime_type, image_to_base64, compute_figure_area_ratio};
+
+    let b_pages: Vec<u32> = plan
+        .pages
+        .iter()
+        .filter(|p| p.reason == ingestion::parser::RouteReason::FastWithFigures)
+        .map(|p| p.page_number)
+        .collect();
+
+    if b_pages.is_empty() {
+        return;
+    }
+
+    let llm = processor.ingestion_llm.clone();
+
+    for page_number in b_pages {
+        let images = match extract_page_images(pdf_bytes, page_number) {
+            Ok(imgs) => imgs,
+            Err(e) => {
+                tracing::warn!(page = page_number, error = %e, "failed to extract page images");
+                continue;
+            }
+        };
+
+        let decorative_indices: std::collections::HashSet<usize> =
+            if let Ok(doc) = lopdf::Document::load_mem(pdf_bytes) {
+                let pages = doc.get_pages();
+                if let Some(&page_id) = pages.get(&page_number) {
+                    match compute_figure_area_ratio(&doc, page_id) {
+                        Ok((_, _, placements)) => {
+                            placements
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, p)| p.is_decorative)
+                                .map(|(i, _)| i)
+                                .collect()
+                        }
+                        Err(_) => std::collections::HashSet::new(),
+                    }
+                } else {
+                    std::collections::HashSet::new()
+                }
+            } else {
+                std::collections::HashSet::new()
+            };
+
+        let non_deco_indices: Vec<usize> = (0..images.len())
+            .filter(|i| !decorative_indices.contains(i))
+            .collect();
+
+        for (fig_idx, img) in non_deco_indices.iter().map(|&i| (i, &images[i])) {
+            let asset_id = format!("bfig-p{}-{}", page_number, fig_idx);
+            let base64_data = image_to_base64(img);
+            let mime = image_mime_type(img);
+            let data_url = format!("data:{mime};base64,{base64_data}");
+
+            // VLM-first: ask DeepSeek to summarize the figure
+            let vlm_summary = if let Some(ref llm) = llm {
+                match summarize_figure_with_vlm(llm, &data_url, page_number).await {
+                    Ok(summary) if !summary.trim().is_empty() => Some(summary),
+                    Ok(_) => None,
+                    Err(e) => {
+                        tracing::debug!(page = page_number, fig = fig_idx, error = %e, "VLM figure summary failed");
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
+            let vlm_failed = vlm_summary.is_none();
+            let figure_text = vlm_summary.unwrap_or_default();
+
+            ir.assets.push(AssetIr {
+                asset_id: asset_id.clone(),
+                page: Some(page_number),
+                asset_kind: ingestion::AssetKind::Image,
+                storage_path: data_url,
+                mime_type: Some(mime.to_string()),
+                width: Some(img.width as u32),
+                height: Some(img.height as u32),
+                parser_backend: ParseBackend::EdgeParsePdf,
+                metadata: std::collections::BTreeMap::new(),
+            });
+
+            let mut metadata = std::collections::BTreeMap::new();
+            if vlm_failed {
+                metadata.insert("vlm_failed".to_string(), "true".to_string());
+            } else {
+                metadata.insert("vlm_summarized".to_string(), "true".to_string());
+            }
+
+            ir.blocks.push(BlockIr {
+                block_id: format!("bfig-p{}-{}", page_number, fig_idx),
+                page: Some(page_number),
+                block_type: BlockType::Figure,
+                modality: BlockModality::ImageWithContext,
+                text: figure_text,
+                alt_text: Some(format!("Figure from page {page_number}")),
+                asset_refs: vec![asset_id],
+                caption: None,
+                section_path: Vec::new(),
+                source_locator: SourceLocator {
+                    page: Some(page_number),
+                    ..SourceLocator::default()
+                },
+                parser_backend: ParseBackend::EdgeParsePdf,
+                metadata,
+            });
+        }
+
+        // Cross-link figures and text blocks on the same page
+        let page_figure_ids: Vec<String> = ir.blocks.iter()
+            .filter(|b| b.page == Some(page_number) && b.block_type == BlockType::Figure)
+            .map(|b| b.block_id.clone())
+            .collect();
+        let page_text_ids: Vec<String> = ir.blocks.iter()
+            .filter(|b| b.page == Some(page_number) && b.block_type == BlockType::Paragraph)
+            .map(|b| b.block_id.clone())
+            .collect();
+
+        if let (Some(fig_id), Some(txt_id)) = (page_figure_ids.first(), page_text_ids.first()) {
+            if let Some(fig_block) = ir.blocks.iter_mut().find(|b| b.block_id == *fig_id) {
+                fig_block.metadata.insert("related_text_block_id".to_string(), txt_id.clone());
+            }
+            if let Some(txt_block) = ir.blocks.iter_mut().find(|b| b.block_id == *txt_id) {
+                txt_block.metadata.insert("related_figure_id".to_string(), fig_id.clone());
+            }
+        }
+
+        // Update page image count
+        if let Some(page) = ir.pages.iter_mut().find(|p| p.page_number == page_number) {
+            page.image_count = non_deco_indices.len();
+        }
+    }
+}
+
+async fn summarize_figure_with_vlm(
+    llm: &Arc<avrag_llm::LlmClient>,
+    image_data_url: &str,
+    page_number: u32,
+) -> anyhow::Result<String> {
+    let prompt = format!(
+        "This is a figure/image extracted from page {page_number} of a PDF document. \
+         Provide a concise factual summary (2-3 sentences) describing what this figure shows. \
+         Focus on content visible in the image: charts, diagrams, photos, illustrations, text overlays. \
+         Return the summary only, no preamble."
+    );
+
+    let messages = vec![
+        ChatMessage::system(
+            "You summarize document figures for a RAG index. Be factual and concise.",
+        ),
+        ChatMessage::user_multimodal(prompt, vec![image_data_url.to_string()]),
+    ];
+
+    let response = llm.complete(&messages, Some(0.1)).await?;
+    Ok(response.content)
+}
+
 fn document_ir_represents_page(document_ir: &DocumentIr, page_number: u32) -> bool {
     document_ir
         .pages
@@ -2388,7 +3106,8 @@ fn build_parse_backend_summary(
                         "page": page.page_number,
                         "backend": match page.backend {
                             PdfPageBackend::EdgeParse => ParseBackend::EdgeParsePdf.as_str(),
-                            PdfPageBackend::MineruOcr => ParseBackend::MineruPdfOcr.as_str(),
+                            PdfPageBackend::PaddleOcr => ParseBackend::PaddleOcrPdf.as_str(),
+                            PdfPageBackend::VisualRaster => ParseBackend::VisualRasterPdf.as_str(),
                         },
                     })
                 })
@@ -2416,6 +3135,8 @@ fn build_parse_backend_summary(
             "graph_passage_count": outputs.graph_passage_count,
             "graph_degrade_count": outputs.graph_degrade_count,
             "graph_degrade_reasons": outputs.graph_degrade_reasons,
+            "multimodal_degrade_count": outputs.multimodal_degrade_count,
+            "multimodal_degrade_reasons": outputs.multimodal_degrade_reasons,
         },
     })
 }
@@ -2555,6 +3276,7 @@ async fn build_text_index_records(
 async fn build_multimodal_index_records(
     processor: &PgTaskProcessor,
     chunks: &[StoredMultimodalChunk],
+    outputs: &mut ParseRunOutputs,
 ) -> Result<Vec<MultimodalChunkIndexRecord>, IngestionError> {
     if chunks.is_empty() {
         return Ok(Vec::new());
@@ -2568,56 +3290,107 @@ async fn build_multimodal_index_records(
         return Ok(Vec::new());
     };
 
+    let media_ctx = MediaResolveContext {
+        object_store: processor.object_store.clone(),
+        asset_url_ttl_secs: processor.asset_url_ttl_secs,
+    };
     let semaphore = Arc::new(tokio::sync::Semaphore::new(4));
     let client = client.clone();
-    type MmEmbeddingHandle = tokio::task::JoinHandle<anyhow::Result<(usize, Vec<f32>)>>;
-    let mut handles: Vec<MmEmbeddingHandle> = Vec::with_capacity(chunks.len());
+    type MmEmbeddingHandle =
+        tokio::task::JoinHandle<anyhow::Result<Option<(usize, Vec<f32>)>>>;
+    let mut handles: Vec<(usize, Uuid, MmEmbeddingHandle)> = Vec::with_capacity(chunks.len());
 
     for (idx, chunk) in chunks.iter().enumerate() {
-        let input = if is_remote_media_reference(&chunk.image_path) {
-            MultiModalEmbeddingInput::text_image(
-                chunk.context_text.clone(),
-                chunk.image_path.clone(),
-            )
-        } else {
-            MultiModalEmbeddingInput::text(chunk.context_text.clone())
-        };
+        let caption = chunk
+            .caption
+            .clone()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| chunk.context_text.clone());
+        let chunk_id = chunk.chunk_id;
+        let had_fusion = chunk.fusion_image_paths.len() > 1;
         let sem = semaphore.clone();
         let c = client.clone();
-        handles.push(tokio::spawn(async move {
-            let _permit = sem
-                .acquire_owned()
-                .await
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
-            let vector = c.embed_multimodal_fused(&input, None).await?;
-            Ok((idx, vector))
-        }));
+        let ctx = media_ctx.clone();
+        let chunk = chunk.clone();
+        handles.push((
+            idx,
+            chunk_id,
+            tokio::spawn(async move {
+                let _permit = sem
+                    .acquire_owned()
+                    .await
+                    .map_err(|e| anyhow::anyhow!("{e}"))?;
+                let input = build_multimodal_embed_input(&ctx, &chunk, caption).await;
+                let used_text_only = input.image.is_none()
+                    && input.images.is_empty()
+                    && input.text.is_some();
+                if used_text_only {
+                    anyhow::bail!(
+                        "chunk {chunk_id} has no resolvable image{}",
+                        if had_fusion {
+                            " for fusion embed"
+                        } else {
+                            ""
+                        }
+                    );
+                }
+                let vector = c.embed_multimodal_fused(&input, None).await?;
+                Ok(Some((idx, vector)))
+            }),
+        ));
     }
 
-    let mut indexed_embeddings = Vec::with_capacity(handles.len());
-    for handle in handles {
-        let (idx, vector) = handle
-            .await
-            .map_err(|error| IngestionError::StateSink(format!("task join: {error}")))?
-            .map_err(|error| IngestionError::StateSink(format!("multimodal embedding: {error}")))?;
-        indexed_embeddings.push((idx, vector));
+    let mut indexed_embeddings: Vec<(usize, Vec<f32>)> = Vec::new();
+    for (idx, chunk_id, handle) in handles {
+        match handle.await {
+            Ok(Ok(Some((embedding_idx, vector)))) => {
+                indexed_embeddings.push((embedding_idx, vector));
+            }
+            Ok(Ok(None)) => {}
+            Ok(Err(error)) => {
+                record_multimodal_degrade(
+                    outputs,
+                    format!("chunk {chunk_id}: multimodal embed failed: {error}"),
+                );
+                warn!(
+                    chunk_id = %chunk_id,
+                    chunk_index = idx,
+                    error = %error,
+                    "multimodal chunk embed failed; skipping vector index"
+                );
+            }
+            Err(error) => {
+                record_multimodal_degrade(
+                    outputs,
+                    format!("chunk {chunk_id}: multimodal embed task join failed: {error}"),
+                );
+            }
+        }
     }
     indexed_embeddings.sort_by_key(|(idx, _)| *idx);
 
-    Ok(chunks
-        .iter()
-        .zip(indexed_embeddings.into_iter().map(|(_, vector)| vector))
-        .map(|(chunk, vector)| MultimodalChunkIndexRecord {
-            chunk_id: chunk.chunk_id,
-            asset_id: chunk.asset_id,
-            context_text: chunk.context_text.clone(),
-            caption: chunk.caption.clone(),
-            image_path: Some(chunk.image_path.clone()),
-            vector,
-            page: chunk.page,
-            chunk_type: chunk.chunk_type.clone(),
-            parser_backend: Some(chunk.parser_backend.clone()),
-            source_locator: chunk.source_locator.clone(),
+    Ok(indexed_embeddings
+        .into_iter()
+        .map(|(idx, vector)| {
+            let chunk = &chunks[idx];
+            let retrieval_weight = if chunk.chunk_type == "page_raster" && chunk.parser_backend == "visual_raster_pdf" {
+                Some(0.4)
+            } else {
+                None
+            };
+            MultimodalChunkIndexRecord {
+                chunk_id: chunk.chunk_id,
+                asset_id: chunk.asset_id,
+                context_text: chunk.context_text.clone(),
+                caption: chunk.caption.clone(),
+                image_path: Some(chunk.image_path.clone()),
+                vector,
+                page: chunk.page,
+                chunk_type: chunk.chunk_type.clone(),
+                parser_backend: Some(chunk.parser_backend.clone()),
+                source_locator: chunk.source_locator.clone(),
+                retrieval_weight,
+            }
         })
         .collect())
 }
@@ -2654,6 +3427,129 @@ async fn embed_text_vectors_with_client(
         .embed(texts)
         .await
         .map_err(|error| IngestionError::StateSink(format!("embedding failed: {error}")))
+}
+
+fn merge_extracted_triplets(
+    mut base: Vec<ExtractedTriplet>,
+    extra: Vec<ExtractedTriplet>,
+) -> Vec<ExtractedTriplet> {
+    let mut triplet_map: std::collections::HashMap<(String, String, String), ExtractedTriplet> =
+        std::collections::HashMap::new();
+    for triplet in base.drain(..).chain(extra) {
+        let key = (
+            triplet.subject.to_lowercase(),
+            triplet.predicate.to_lowercase(),
+            triplet.object.to_lowercase(),
+        );
+        if let Some(existing) = triplet_map.get_mut(&key) {
+            for chunk_id in triplet.supporting_chunk_ids {
+                if !existing.supporting_chunk_ids.contains(&chunk_id) {
+                    existing.supporting_chunk_ids.push(chunk_id);
+                }
+            }
+            if triplet.confidence > existing.confidence {
+                existing.confidence = triplet.confidence;
+            }
+        } else {
+            triplet_map.insert(key, triplet);
+        }
+    }
+    triplet_map.into_values().collect()
+}
+
+async fn extract_visual_triplets_for_index(
+    processor: &PgTaskProcessor,
+    document_id: Uuid,
+    multimodal_chunks: &[StoredMultimodalChunk],
+    parse_run_state: &mut ParseRunState,
+) -> TripletExtractionOutput {
+    let Some(llm) = processor.triplet_llm.clone() else {
+        return TripletExtractionOutput::default();
+    };
+
+    let visual_chunks: Vec<&StoredMultimodalChunk> = multimodal_chunks
+        .iter()
+        .filter(|chunk| chunk.chunk_type == "page_raster")
+        .collect();
+    if visual_chunks.is_empty() {
+        return TripletExtractionOutput::default();
+    }
+
+    let media_ctx = MediaResolveContext {
+        object_store: processor.object_store.clone(),
+        asset_url_ttl_secs: processor.asset_url_ttl_secs,
+    };
+    let mut output = TripletExtractionOutput::default();
+    for chunk in visual_chunks {
+        let image_refs = match resolve_visual_chunk_image_refs(&media_ctx, chunk).await {
+            Ok(refs) => refs,
+            Err(error) => {
+                record_graph_degrade(
+                    &mut parse_run_state.outputs,
+                    format!(
+                        "chunk {}: visual triplet skipped (image resolve failed): {error}",
+                        chunk.chunk_id
+                    ),
+                );
+                continue;
+            }
+        };
+        if image_refs.is_empty() {
+            record_graph_degrade(
+                &mut parse_run_state.outputs,
+                format!(
+                    "chunk {}: visual triplet skipped (no resolvable page images)",
+                    chunk.chunk_id
+                ),
+            );
+            continue;
+        }
+        let caption = chunk
+            .caption
+            .clone()
+            .unwrap_or_else(|| "PDF page raster".to_string());
+        let image_list = image_refs.join(", ");
+        let prompt = format!(
+            "Extract up to 3 factual subject-predicate-object triplets from this page image. \
+             Return JSON: {{\"triplets\":[{{\"chunk_id\":\"{}\",\"subject\":\"...\",\"predicate\":\"...\",\"object\":\"...\",\"confidence\":0.0-1.0,\"source\":\"vlm_page_summary\"}}]}}. \
+             Caption: {caption}. Image URL(s): {image_list}",
+            chunk.chunk_id
+        );
+        let messages = vec![
+            ChatMessage::system(
+                "Extract knowledge-graph triplets from document page images. JSON only.",
+            ),
+            ChatMessage::user(prompt),
+        ];
+        match llm.complete(&messages, Some(0.1)).await {
+            Ok(response) => {
+                output.total_tokens = output
+                    .total_tokens
+                    .saturating_add(response.usage.total_tokens);
+                match parse_triplet_response(&response.content, &[chunk.chunk_id]) {
+                    Ok(mut triplets) => {
+                        for triplet in &mut triplets {
+                            if triplet.source.is_empty() {
+                                triplet.source = "vlm_page_summary".to_string();
+                            }
+                        }
+                        output.triplets.extend(triplets);
+                    }
+                    Err(error) => {
+                        let reason = format!("visual triplet extraction failed: {error}");
+                        record_graph_degrade(&mut parse_run_state.outputs, reason.clone());
+                        info!(document_id = %document_id, error = %reason, "visual triplet extraction degraded");
+                    }
+                }
+            }
+            Err(error) => {
+                let reason = format!("visual triplet extraction failed: {error}");
+                record_graph_degrade(&mut parse_run_state.outputs, reason.clone());
+                info!(document_id = %document_id, error = %reason, "visual triplet extraction degraded");
+            }
+        }
+    }
+    output
 }
 
 async fn extract_triplets_for_index(
@@ -2768,7 +3664,7 @@ fn build_triplet_extraction_batches(
 }
 
 const TRIPLET_EXTRACTION_SYSTEM_PROMPT: &str =
-    include_str!("../../../prompts/skills/triplet-extraction/SKILL.md");
+    include_str!("../../../prompts/pipeline/triplet-extraction.system.md");
 
 fn build_triplet_extraction_messages(batch: &TripletExtractionBatch) -> Vec<ChatMessage> {
     let valid_chunk_ids: Vec<String> = batch.chunk_ids.iter().map(|id| id.to_string()).collect();
@@ -2832,14 +3728,172 @@ fn parse_triplet_response(
             continue;
         };
 
+        let confidence = item
+            .get("confidence")
+            .and_then(|v| v.as_f64())
+            .map(|v| v as f32)
+            .unwrap_or(1.0);
+        let source = item
+            .get("source")
+            .and_then(|v| v.as_str())
+            .unwrap_or("text_chunk")
+            .to_string();
+
         parsed.push(ExtractedTriplet {
             subject,
             predicate,
             object,
             supporting_chunk_ids: vec![chunk_id],
+            source,
+            confidence,
         });
     }
     Ok(parsed)
+}
+
+const VISUAL_TRIPLET_MIN_CONFIDENCE: f32 = 0.6;
+
+fn env_flag_enabled(key: &str, default: bool) -> bool {
+    std::env::var(key)
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(default)
+}
+
+fn ingestion_pdf_max_pages() -> Option<usize> {
+    std::env::var("INGESTION_PDF_MAX_PAGES")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|pages| *pages > 0)
+}
+
+fn maybe_truncate_pdf_plan(plan: &mut ingestion::parser::PdfParsePlan) {
+    let Some(max_pages) = ingestion_pdf_max_pages() else {
+        return;
+    };
+    if plan.pages.len() <= max_pages {
+        return;
+    }
+    plan.pages.truncate(max_pages);
+    info!(
+        max_pages,
+        retained_pages = plan.pages.len(),
+        "PDF plan truncated for ingestion page limit"
+    );
+}
+
+fn triplet_extraction_enabled() -> bool {
+    env_flag_enabled("INGESTION_TRIPLET_ENABLED", true)
+}
+
+fn vlm_summary_enabled() -> bool {
+    env_flag_enabled("INGESTION_VLM_SUMMARY_ENABLED", true)
+}
+
+fn visual_triplet_extraction_enabled() -> bool {
+    env_flag_enabled("INGESTION_VLM_TRIPLET_ENABLED", false)
+}
+
+fn triplet_confidence_threshold() -> f32 {
+    std::env::var("INGESTION_TRIPLET_MIN_CONFIDENCE")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(VISUAL_TRIPLET_MIN_CONFIDENCE)
+}
+
+async fn maybe_enrich_visual_multimodal_summaries(
+    processor: &PgTaskProcessor,
+    chunks: &mut [StoredMultimodalChunk],
+    outputs: &mut ParseRunOutputs,
+) {
+    if !vlm_summary_enabled() {
+        return;
+    }
+    let Some(llm) = processor.ingestion_llm.clone() else {
+        return;
+    };
+    let skip_raster_for_ocr = !env_flag_enabled("INGESTION_PAGE_RASTER_WITH_OCR", false);
+    let media_ctx = MediaResolveContext {
+        object_store: processor.object_store.clone(),
+        asset_url_ttl_secs: processor.asset_url_ttl_secs,
+    };
+
+    for chunk in chunks.iter_mut() {
+        if chunk.chunk_type != "page_raster" {
+            continue;
+        }
+        if skip_raster_for_ocr && chunk.parser_backend == "paddle_ocr_pdf" {
+            continue;
+        }
+        let image_refs = match resolve_visual_chunk_image_refs(&media_ctx, chunk).await {
+            Ok(refs) => refs,
+            Err(error) => {
+                record_multimodal_degrade(
+                    outputs,
+                    format!(
+                        "chunk {}: failed to resolve page images for VLM summary: {error}",
+                        chunk.chunk_id
+                    ),
+                );
+                continue;
+            }
+        };
+        if image_refs.is_empty() {
+            record_multimodal_degrade(
+                outputs,
+                format!(
+                    "chunk {}: VLM summary skipped because no resolvable page images were found",
+                    chunk.chunk_id
+                ),
+            );
+            continue;
+        }
+        let caption = chunk
+            .caption
+            .clone()
+            .unwrap_or_else(|| "PDF page raster".to_string());
+        let image_list = image_refs.join(", ");
+        let prompt = format!(
+            "Summarize the readable content of these PDF page images for retrieval. \
+             Caption: {caption}. Image URL(s): {image_list}. \
+             Return 2-4 sentences of factual summary only."
+        );
+        let messages = vec![
+            ChatMessage::system(
+                "You summarize document page images for a RAG index. Be factual and concise.",
+            ),
+            ChatMessage::user(prompt),
+        ];
+        match llm.complete(&messages, Some(0.1)).await {
+            Ok(response) if !response.content.trim().is_empty() => {
+                chunk.context_text = response.content.trim().to_string();
+            }
+            Ok(_) => {
+                record_multimodal_degrade(
+                    outputs,
+                    format!(
+                        "chunk {}: VLM summary returned empty content",
+                        chunk.chunk_id
+                    ),
+                );
+            }
+            Err(error) => {
+                record_multimodal_degrade(
+                    outputs,
+                    format!("chunk {}: VLM summary failed: {error}", chunk.chunk_id),
+                );
+                warn!(
+                    chunk_id = %chunk.chunk_id,
+                    error = %error,
+                    "visual multimodal VLM summary failed"
+                );
+            }
+        }
+    }
 }
 
 async fn build_graph_index_records(
@@ -2847,6 +3901,12 @@ async fn build_graph_index_records(
     triplets: Vec<ExtractedTriplet>,
     parse_run_state: &mut ParseRunState,
 ) -> GraphIndexRecords {
+    let min_confidence = triplet_confidence_threshold();
+    let triplets: Vec<ExtractedTriplet> = triplets
+        .into_iter()
+        .filter(|triplet| triplet.confidence >= min_confidence)
+        .collect();
+
     if triplets.is_empty() {
         return GraphIndexRecords::default();
     }
@@ -3073,6 +4133,13 @@ async fn mirror_document_asset(
     if let Some(local_path) = source_path.strip_prefix("temporary://") {
         let bytes = tokio::fs::read(local_path).await?;
         object_store.put(&object_key, &bytes).await?;
+        if let Err(error) = tokio::fs::remove_file(local_path).await {
+            warn!(
+                path = local_path,
+                error = %error,
+                "failed to delete temporary page raster file after mirror"
+            );
+        }
         return finalize_mirrored_asset_path(object_store, &object_key, ttl_secs)
             .await
             .map(Some);
@@ -3122,6 +4189,103 @@ async fn finalize_mirrored_asset_path(
 
 // load_prompt_template moved to avrag_app::lib_impl::prompt_loader
 
+// load_prompt_template moved to avrag_app::lib_impl::prompt_loader
+
+async fn maybe_enrich_toc_with_llm(
+    processor: &PgTaskProcessor,
+    document_ir: &ingestion::DocumentIr,
+    chunks: &[avrag_storage_pg::IndexedChunk],
+    filename: &str,
+    toc_entries: Vec<avrag_storage_pg::TocEntry>,
+) -> Vec<avrag_storage_pg::TocEntry> {
+    let heading_blocks = document_ir
+        .blocks
+        .iter()
+        .filter(|b| matches!(b.block_type, ingestion::BlockType::Heading))
+        .count();
+    let force_llm = std::env::var("INGESTION_LLM_SECTION_INDEX")
+        .ok()
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+    let sparse = toc_entries.is_empty() || heading_blocks == 0;
+    if !force_llm && !sparse {
+        return toc_entries;
+    }
+    let Some(generator) = processor.section_index_generator.as_ref() else {
+        return toc_entries;
+    };
+    let index_chunks: Vec<avrag_llm::SectionIndexChunk> = chunks
+        .iter()
+        .filter_map(|c| {
+            Uuid::parse_str(&c.chunk_id)
+                .ok()
+                .map(|chunk_id| avrag_llm::SectionIndexChunk {
+                    chunk_id,
+                    text: c.content.clone(),
+                })
+        })
+        .collect();
+    if index_chunks.is_empty() {
+        return toc_entries;
+    }
+    match generator
+        .generate(&document_ir.title, filename, &index_chunks)
+        .await
+    {
+        Ok(output) if !output.sections.is_empty() => {
+            info!(
+                sections = output.sections.len(),
+                "LLM section index generated for document"
+            );
+            toc_entries_from_llm_sections(&output)
+        }
+        Ok(_) => toc_entries,
+        Err(error) => {
+            info!(error = %error, "LLM section index failed; keeping heuristic toc");
+            toc_entries
+        }
+    }
+}
+
+fn toc_entries_from_llm_sections(
+    output: &avrag_llm::SectionIndexOutput,
+) -> Vec<avrag_storage_pg::TocEntry> {
+    let mut entries = Vec::new();
+    let mut heading_stack: Vec<(i32, Uuid)> = Vec::new();
+
+    for section in &output.sections {
+        let heading_level = section.heading_level.clamp(1, 6);
+        let entry_id = Uuid::new_v4();
+        let parent_id = {
+            while let Some(&(top_level, _)) = heading_stack.last() {
+                if top_level < heading_level {
+                    break;
+                }
+                heading_stack.pop();
+            }
+            heading_stack.last().map(|&(_, id)| id)
+        };
+
+        for chunk_id_str in &section.chunk_ids {
+            let Ok(chunk_id) = Uuid::parse_str(chunk_id_str) else {
+                continue;
+            };
+            entries.push(avrag_storage_pg::TocEntry {
+                id: Uuid::new_v4(),
+                parent_id,
+                title: section.title.clone(),
+                heading_level,
+                page: section.page,
+                chunk_id: Some(chunk_id),
+                rank: section.rank,
+            });
+        }
+
+        heading_stack.push((heading_level, entry_id));
+    }
+
+    entries
+}
+
 fn build_toc_entries(
     document_ir: &ingestion::DocumentIr,
     chunks: &[avrag_storage_pg::IndexedChunk],
@@ -3129,13 +4293,10 @@ fn build_toc_entries(
     let mut block_id_to_chunk_id = std::collections::HashMap::new();
     for chunk in chunks {
         if let Ok(chunk_uuid) = Uuid::parse_str(&chunk.chunk_id)
-            && let Some(block_id) = chunk
-                .metadata
-                .get("block_id")
-                .and_then(|v| v.as_str())
-            {
-                block_id_to_chunk_id.insert(block_id.to_string(), chunk_uuid);
-            }
+            && let Some(block_id) = chunk.metadata.get("block_id").and_then(|v| v.as_str())
+        {
+            block_id_to_chunk_id.insert(block_id.to_string(), chunk_uuid);
+        }
     }
 
     let mut entries = Vec::new();
@@ -3232,10 +4393,31 @@ mod tests {
         config.prompts.dir = temp_dir.to_string_lossy().to_string();
         config.prompts.summary_version = "v2".to_string();
 
-        let template = load_prompt_template(&config.prompts.dir, &config.prompts.summary_version, "summary_generation").await.unwrap();
+        let template = load_prompt_template(
+            &config.prompts.dir,
+            &config.prompts.summary_version,
+            "summary_generation",
+        )
+        .await
+        .unwrap();
         assert_eq!(template, "versioned {{title}}");
 
         let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn enrich_multimodal_source_locator_includes_page_range_metadata() {
+        let mut metadata = std::collections::BTreeMap::new();
+        metadata.insert("page_range_start".to_string(), "5".to_string());
+        metadata.insert("page_range_end".to_string(), "8".to_string());
+        let locator = SourceLocator {
+            page: Some(5),
+            ..Default::default()
+        };
+        let value = enrich_multimodal_source_locator(&locator, &metadata);
+        assert_eq!(value["page"], 5);
+        assert_eq!(value["page_range_start"], "5");
+        assert_eq!(value["page_range_end"], "8");
     }
 
     #[test]
@@ -3247,7 +4429,7 @@ mod tests {
             plan: ParsePlan::Pdf(PdfParsePlan {
                 pages: vec![PdfPagePlan {
                     page_number: 2,
-                    backend: PdfPageBackend::MineruOcr,
+                    backend: PdfPageBackend::VisualRaster,
                     reason: RouteReason::ComplexPdf,
                 }],
             }),
@@ -3269,6 +4451,8 @@ mod tests {
                 graph_passage_count: 1,
                 graph_degrade_count: 1,
                 graph_degrade_reasons: vec!["provider error".to_string()],
+                multimodal_degrade_count: 0,
+                multimodal_degrade_reasons: Vec::new(),
             },
         );
 
@@ -3311,6 +4495,8 @@ mod tests {
                 predicate: "founded".to_string(),
                 object: "Acme".to_string(),
                 supporting_chunk_ids: vec![chunk_id],
+                source: "text_chunk".to_string(),
+                confidence: 1.0,
             }]
         );
     }
@@ -3425,12 +4611,16 @@ mod tests {
                 predicate: "founded".to_string(),
                 object: "Acme".to_string(),
                 supporting_chunk_ids: vec![chunk1],
+                source: "text_chunk".to_string(),
+                confidence: 1.0,
             },
             ExtractedTriplet {
                 subject: "Alice".to_string(),
                 predicate: "founded".to_string(),
                 object: "Acme".to_string(),
                 supporting_chunk_ids: vec![chunk2],
+                source: "text_chunk".to_string(),
+                confidence: 1.0,
             },
         ] {
             let key = (
@@ -3467,12 +4657,16 @@ mod tests {
             predicate: "founded".to_string(),
             object: "Acme".to_string(),
             supporting_chunk_ids: vec![Uuid::from_u128(1)],
+            source: "text_chunk".to_string(),
+            confidence: 1.0,
         };
         let triplet_without_support = ExtractedTriplet {
             subject: "Bob".to_string(),
             predicate: "joined".to_string(),
             object: "Acme".to_string(),
             supporting_chunk_ids: vec![],
+            source: "text_chunk".to_string(),
+            confidence: 1.0,
         };
 
         assert!(!triplet_with_support.supporting_chunk_ids.is_empty());
@@ -3489,13 +4683,276 @@ mod tests {
 
     #[test]
     fn url_to_filename_extracts_last_path_segment_with_extension() {
-        assert_eq!(url_to_filename("https://example.com/article.html"), "article.html");
-        assert_eq!(url_to_filename("https://example.com/path/page.htm"), "page.htm");
+        assert_eq!(
+            url_to_filename("https://example.com/article.html"),
+            "article.html"
+        );
+        assert_eq!(
+            url_to_filename("https://example.com/path/page.htm"),
+            "page.htm"
+        );
     }
 
     #[test]
     fn url_to_filename_falls_back_to_page_html() {
         assert_eq!(url_to_filename("https://example.com/article"), "page.html");
         assert_eq!(url_to_filename("https://example.com/"), "page.html");
+    }
+
+    #[test]
+    fn test_group_contiguous_pages() {
+        assert_eq!(group_contiguous_pages(&[]), Vec::<(u32, u32)>::new());
+        assert_eq!(group_contiguous_pages(&[1]), vec![(1, 1)]);
+        assert_eq!(group_contiguous_pages(&[1, 2, 3, 4, 5]), vec![(1, 5)]);
+        assert_eq!(
+            group_contiguous_pages(&[1, 2, 3, 10, 11, 20]),
+            vec![(1, 3), (10, 11), (20, 20)]
+        );
+    }
+
+    #[test]
+    fn merge_pdf_ir_paddle_fallback_to_visual() {
+        let doc_id = Uuid::new_v4();
+        let plan = PdfParsePlan {
+            pages: vec![
+                PdfPagePlan {
+                    page_number: 1,
+                    backend: PdfPageBackend::PaddleOcr,
+                    reason: RouteReason::ScannedPdf,
+                },
+                PdfPagePlan {
+                    page_number: 2,
+                    backend: PdfPageBackend::PaddleOcr,
+                    reason: RouteReason::ScannedPdf,
+                },
+            ],
+        };
+
+        let mut visual_ir = DocumentIr::new(
+            doc_id.to_string(),
+            "test.pdf".to_string(),
+            DocumentType::Pdf,
+            ParseBackend::VisualRasterPdf,
+        );
+        visual_ir.pages.push(PageIr {
+            page_number: 1,
+            backend: ParseBackend::VisualRasterPdf,
+            text_char_count: 100,
+            ..Default::default()
+        });
+        visual_ir.pages.push(PageIr {
+            page_number: 2,
+            backend: ParseBackend::VisualRasterPdf,
+            text_char_count: 200,
+            ..Default::default()
+        });
+        visual_ir.blocks.push(BlockIr {
+            block_id: "v1".to_string(),
+            page: Some(1),
+            block_type: BlockType::PageRaster,
+            modality: BlockModality::ImageWithContext,
+            text: "page 1 raster".to_string(),
+            parser_backend: ParseBackend::VisualRasterPdf,
+            ..Default::default()
+        });
+
+        // paddle_ir is None (OCR failed) — should fallback to visual_ir
+        let merged =
+            merge_pdf_ir(doc_id, "test.pdf", &plan, None, None, Some(visual_ir), &std::collections::HashSet::new()).unwrap();
+
+        assert_eq!(merged.pages.len(), 2, "should have 2 pages from visual fallback");
+        assert_eq!(merged.blocks.len(), 1, "should have 1 block from visual fallback");
+        // Backend should be VisualRasterPdf since paddle_ir was None
+        assert_eq!(merged.pages[0].backend, ParseBackend::VisualRasterPdf);
+    }
+
+    #[test]
+    fn merge_pdf_ir_paddle_success_overrides() {
+        let doc_id = Uuid::new_v4();
+        let plan = PdfParsePlan {
+            pages: vec![PdfPagePlan {
+                page_number: 1,
+                backend: PdfPageBackend::PaddleOcr,
+                reason: RouteReason::ScannedPdf,
+            }],
+        };
+
+        let mut paddle_ir = DocumentIr::new(
+            doc_id.to_string(),
+            "test.pdf".to_string(),
+            DocumentType::Pdf,
+            ParseBackend::PaddleOcrPdf,
+        );
+        paddle_ir.pages.push(PageIr {
+            page_number: 1,
+            backend: ParseBackend::PaddleOcrPdf,
+            text_char_count: 500,
+            ..Default::default()
+        });
+        paddle_ir.blocks.push(BlockIr {
+            block_id: "p1".to_string(),
+            page: Some(1),
+            block_type: BlockType::Paragraph,
+            modality: BlockModality::TextOnly,
+            text: "OCR text".to_string(),
+            parser_backend: ParseBackend::PaddleOcrPdf,
+            ..Default::default()
+        });
+
+        let merged = merge_pdf_ir(
+            doc_id,
+            "test.pdf",
+            &plan,
+            None,
+            Some(paddle_ir),
+            None,
+            &std::collections::HashSet::from([1]),
+        )
+        .unwrap();
+
+        assert_eq!(merged.pages.len(), 1);
+        assert_eq!(merged.pages[0].backend, ParseBackend::PaddleOcrPdf);
+        assert_eq!(merged.blocks[0].text, "OCR text");
+    }
+
+    #[test]
+    fn merge_pdf_ir_hybrid_v2_metadata() {
+        let doc_id = Uuid::new_v4();
+        let plan = PdfParsePlan {
+            pages: vec![
+                PdfPagePlan {
+                    page_number: 1,
+                    backend: PdfPageBackend::EdgeParse,
+                    reason: RouteReason::FastText,
+                },
+                PdfPagePlan {
+                    page_number: 2,
+                    backend: PdfPageBackend::PaddleOcr,
+                    reason: RouteReason::ScannedPdf,
+                },
+            ],
+        };
+
+        let mut digital_ir = DocumentIr::new(
+            doc_id.to_string(),
+            "test.pdf".to_string(),
+            DocumentType::Pdf,
+            ParseBackend::EdgeParsePdf,
+        );
+        digital_ir.pages.push(PageIr {
+            page_number: 1,
+            backend: ParseBackend::EdgeParsePdf,
+            ..Default::default()
+        });
+
+        let mut paddle_ir = DocumentIr::new(
+            doc_id.to_string(),
+            "test.pdf".to_string(),
+            DocumentType::Pdf,
+            ParseBackend::PaddleOcrPdf,
+        );
+        paddle_ir.pages.push(PageIr {
+            page_number: 2,
+            backend: ParseBackend::PaddleOcrPdf,
+            ..Default::default()
+        });
+
+        let merged = merge_pdf_ir(
+            doc_id,
+            "test.pdf",
+            &plan,
+            Some(digital_ir),
+            Some(paddle_ir),
+            None,
+            &std::collections::HashSet::from([2]),
+        )
+        .unwrap();
+
+        assert_eq!(
+            merged.metadata.get("pdf_route_mode").map(|s| s.as_str()),
+            Some("hybrid_v2")
+        );
+    }
+
+    #[test]
+    fn merge_pdf_ir_partial_paddle_success() {
+        let doc_id = Uuid::new_v4();
+        let plan = PdfParsePlan {
+            pages: vec![
+                PdfPagePlan {
+                    page_number: 1,
+                    backend: PdfPageBackend::PaddleOcr,
+                    reason: RouteReason::ScannedPdf,
+                },
+                PdfPagePlan {
+                    page_number: 2,
+                    backend: PdfPageBackend::PaddleOcr,
+                    reason: RouteReason::ScannedPdf,
+                },
+            ],
+        };
+
+        let mut paddle_ir = DocumentIr::new(
+            doc_id.to_string(),
+            "test.pdf".to_string(),
+            DocumentType::Pdf,
+            ParseBackend::PaddleOcrPdf,
+        );
+        paddle_ir.pages.push(PageIr {
+            page_number: 1,
+            backend: ParseBackend::PaddleOcrPdf,
+            text_char_count: 500,
+            ..Default::default()
+        });
+        paddle_ir.blocks.push(BlockIr {
+            block_id: "p1".to_string(),
+            page: Some(1),
+            block_type: BlockType::Paragraph,
+            modality: BlockModality::TextOnly,
+            text: "OCR text page 1".to_string(),
+            parser_backend: ParseBackend::PaddleOcrPdf,
+            ..Default::default()
+        });
+
+        let mut visual_ir = DocumentIr::new(
+            doc_id.to_string(),
+            "test.pdf".to_string(),
+            DocumentType::Pdf,
+            ParseBackend::VisualRasterPdf,
+        );
+        visual_ir.pages.push(PageIr {
+            page_number: 2,
+            backend: ParseBackend::VisualRasterPdf,
+            text_char_count: 200,
+            ..Default::default()
+        });
+        visual_ir.blocks.push(BlockIr {
+            block_id: "v2".to_string(),
+            page: Some(2),
+            block_type: BlockType::PageRaster,
+            modality: BlockModality::ImageWithContext,
+            text: "visual page 2".to_string(),
+            parser_backend: ParseBackend::VisualRasterPdf,
+            ..Default::default()
+        });
+
+        // Only page 1 succeeded in OCR; page 2 should fall back to visual
+        let paddle_successful = std::collections::HashSet::from([1]);
+        let merged = merge_pdf_ir(
+            doc_id,
+            "test.pdf",
+            &plan,
+            None,
+            Some(paddle_ir),
+            Some(visual_ir),
+            &paddle_successful,
+        )
+        .unwrap();
+
+        assert_eq!(merged.pages.len(), 2, "should have 2 pages");
+        assert_eq!(merged.pages[0].backend, ParseBackend::PaddleOcrPdf, "page 1 should be paddle");
+        assert_eq!(merged.pages[1].backend, ParseBackend::VisualRasterPdf, "page 2 should fall back to visual");
+        assert_eq!(merged.blocks[0].text, "OCR text page 1");
+        assert_eq!(merged.blocks[1].text, "visual page 2");
     }
 }

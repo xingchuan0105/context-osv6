@@ -26,9 +26,13 @@ async fn upload_document_completes_ingestion() {
         .unwrap();
     assert_eq!(status, DocumentStatus::Completed);
 
-    // 3. Verify PG has summary + TOC + chunks
-    // TODO(Phase 1): query PG for document metadata
-    // assert!(pg_has_summary(&upload.document_id).await);
-    // assert!(pg_has_toc(&upload.document_id).await);
-    // assert!(pg_has_chunks(&upload.document_id).await);
+    // 3. Verify PG recorded chunks for the ingested document
+    let chunk_count = ctx
+        .query_document_chunk_count(&upload.document_id)
+        .await
+        .unwrap();
+    assert!(
+        chunk_count > 0,
+        "expected chunk_count > 0 after successful ingestion, got {chunk_count}"
+    );
 }

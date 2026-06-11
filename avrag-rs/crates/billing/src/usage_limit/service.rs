@@ -4,11 +4,11 @@ use sqlx::{PgPool, Row};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::usage_limit::usage_units::compute_usage_units_with_rates;
 use crate::usage_limit::types::{
     MeteringContext, QuotaCheckResult, UsageLimitPolicy, UsageLimitResponse, UsageScope,
     UsageSource, UsageWindow, UsageWindows,
 };
+use crate::usage_limit::usage_units::compute_usage_units_with_rates;
 
 pub struct UsageRecord<'a> {
     pub provider: &'a str,
@@ -34,7 +34,8 @@ impl UsageLimitService {
         ctx: &MeteringContext,
         record: UsageRecord<'_>,
     ) -> Result<i64> {
-        let (input_rate, output_rate) = self.load_model_rates(record.provider, record.model).await?;
+        let (input_rate, output_rate) =
+            self.load_model_rates(record.provider, record.model).await?;
         let usage_units = compute_usage_units_with_rates(
             record.prompt_tokens,
             record.completion_tokens,
@@ -115,7 +116,11 @@ impl UsageLimitService {
         })
     }
 
-    async fn load_effective_policy(&self, _org_id: Uuid, user_id: Uuid) -> Result<UsageLimitPolicy> {
+    async fn load_effective_policy(
+        &self,
+        _org_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<UsageLimitPolicy> {
         // 1. Check user override
         let override_row = sqlx::query(
             r#"

@@ -45,10 +45,10 @@ jobs:
         run: cargo test --no-run --test product_e2e -p app
 
       - name: Run Smoke E2E
-        run: cargo test --test product_e2e -- --nocapture
+        run: cargo test --test product_e2e -p app smoke:: auth_boundary product_e2e:: -- --test-threads=1 --nocapture
         env:
           E2E_MODE: smoke
-        timeout-minutes: 15
+        timeout-minutes: 10
 
       - name: Upload failure artifacts
         if: failure()

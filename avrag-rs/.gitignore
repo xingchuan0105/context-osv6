@@ -20,3 +20,6 @@ Cargo.lock
 /crates/web-ui/
 /crates/web-sdk/
 volumes/
+
+# Python virtual environments
+.venv/

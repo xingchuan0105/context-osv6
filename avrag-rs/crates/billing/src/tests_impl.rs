@@ -134,16 +134,21 @@ fn remove_env(key: &str) {
 #[test]
 fn alipay_client_signature_verify_works() {
     use crate::AlipayClient;
-    use rsa::pkcs8::{EncodePrivateKey, EncodePublicKey};
-    use rsa::RsaPrivateKey;
     use rand::thread_rng;
+    use rsa::RsaPrivateKey;
+    use rsa::pkcs8::{EncodePrivateKey, EncodePublicKey};
 
     let mut rng = thread_rng();
     let private_key = RsaPrivateKey::new(&mut rng, 2048).unwrap();
     let public_key = private_key.to_public_key();
 
-    let private_key_pem = private_key.to_pkcs8_pem(rsa::pkcs8::LineEnding::LF).unwrap().to_string();
-    let public_key_pem = public_key.to_public_key_pem(rsa::pkcs8::LineEnding::LF).unwrap();
+    let private_key_pem = private_key
+        .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
+        .unwrap()
+        .to_string();
+    let public_key_pem = public_key
+        .to_public_key_pem(rsa::pkcs8::LineEnding::LF)
+        .unwrap();
 
     let config = BillingConfig {
         alipay_app_id: "test_app_id".to_string(),
@@ -182,7 +187,10 @@ fn alipay_real_key_loads_and_signs() {
 
     let _guard = ENV_MUTEX.lock().unwrap();
 
-    if std::env::var("ALIPAY_APP_ID").unwrap_or_default().is_empty() {
+    if std::env::var("ALIPAY_APP_ID")
+        .unwrap_or_default()
+        .is_empty()
+    {
         return;
     }
 
@@ -221,7 +229,12 @@ fn plans_endpoint_emits_dual_currency_price_labels_for_plus_and_pro() {
 
     let plans = build_plan_payloads(&config, "free", &Default::default());
 
-    assert_eq!(plans.len(), 3, "expected 3 tiers (free/pro/plus), got {}", plans.len());
+    assert_eq!(
+        plans.len(),
+        3,
+        "expected 3 tiers (free/pro/plus), got {}",
+        plans.len()
+    );
 
     let plus = plans
         .iter()
@@ -267,7 +280,10 @@ fn plans_endpoint_marks_current_user_plan() {
         .and_then(|p| p.get("current"))
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    assert!(plus_current, "plus plan should be marked current when current_plan_id == \"plus\"");
+    assert!(
+        plus_current,
+        "plus plan should be marked current when current_plan_id == \"plus\""
+    );
 
     let free_current = plans
         .iter()
@@ -275,5 +291,8 @@ fn plans_endpoint_marks_current_user_plan() {
         .and_then(|p| p.get("current"))
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
-    assert!(!free_current, "free plan must not be current when user is on plus");
+    assert!(
+        !free_current,
+        "free plan must not be current when user is on plus"
+    );
 }

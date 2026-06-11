@@ -11,17 +11,14 @@ pub struct TenantContext {
 
 impl TenantContext {
     /// 构建 Milvus 过滤条件（强制注入租户 ID）
-    pub fn build_milvus_filter(
-        &self,
-        base_filter: Option<&str>,
-    ) -> String {
+    pub fn build_milvus_filter(&self, base_filter: Option<&str>) -> String {
         let tenant_filter = format!("org_id == '{}'", self.org_id);
         match base_filter {
             Some(base) if !base.is_empty() => format!("({}) && ({})", tenant_filter, base),
             _ => tenant_filter,
         }
     }
-    
+
     /// 验证数据访问权限
     pub fn verify_access(&self, target_org_id: &str) -> Result<(), MilvusStorageError> {
         if self.org_id != target_org_id {

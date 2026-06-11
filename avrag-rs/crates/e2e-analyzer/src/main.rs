@@ -61,7 +61,8 @@ fn main() -> anyhow::Result<()> {
             let min_sev = parse_min_severity(&min_severity);
 
             for test_name in current_map.keys() {
-                if let (Some(b), Some(c)) = (baseline_map.get(test_name), current_map.get(test_name))
+                if let (Some(b), Some(c)) =
+                    (baseline_map.get(test_name), current_map.get(test_name))
                 {
                     let diffs = diff::compare_results(test_name, b, c);
                     let filtered: Vec<_> = diffs
@@ -95,8 +96,14 @@ fn main() -> anyhow::Result<()> {
             let exit_code = report::exit_code(&summary);
             if let Some(out_path) = output {
                 let md = report::generate_markdown_report(
-                    &baseline_dir.file_name().unwrap_or_default().to_string_lossy(),
-                    &current_dir.file_name().unwrap_or_default().to_string_lossy(),
+                    &baseline_dir
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                    &current_dir
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
                     &current_results,
                     &all_diffs,
                 );
@@ -132,10 +139,8 @@ fn main() -> anyhow::Result<()> {
                 .iter()
                 .map(|r| (r.test_name.clone(), r))
                 .collect();
-            let current_map: HashMap<String, &models::TestResult> = results
-                .iter()
-                .map(|r| (r.test_name.clone(), r))
-                .collect();
+            let current_map: HashMap<String, &models::TestResult> =
+                results.iter().map(|r| (r.test_name.clone(), r)).collect();
 
             let mut reports = Vec::new();
 
@@ -156,7 +161,9 @@ fn main() -> anyhow::Result<()> {
                     Vec::new()
                 };
 
-                if let Some(report) = attribution::attribute_failures(test_name, &diffs, baseline, current) {
+                if let Some(report) =
+                    attribution::attribute_failures(test_name, &diffs, baseline, current)
+                {
                     reports.push(report);
                 }
             }
@@ -227,15 +234,14 @@ fn main() -> anyhow::Result<()> {
                 .iter()
                 .map(|r| (r.test_name.clone(), r))
                 .collect();
-            let current_map: HashMap<String, &models::TestResult> = results
-                .iter()
-                .map(|r| (r.test_name.clone(), r))
-                .collect();
+            let current_map: HashMap<String, &models::TestResult> =
+                results.iter().map(|r| (r.test_name.clone(), r)).collect();
 
             let mut all_diffs: Vec<(String, Vec<models::DiffEntry>)> = Vec::new();
 
             for test_name in current_map.keys() {
-                if let (Some(b), Some(c)) = (baseline_map.get(test_name), current_map.get(test_name))
+                if let (Some(b), Some(c)) =
+                    (baseline_map.get(test_name), current_map.get(test_name))
                 {
                     let diffs = diff::compare_results(test_name, b, c);
                     if !diffs.is_empty() {
@@ -246,27 +252,39 @@ fn main() -> anyhow::Result<()> {
 
             let baseline_run_id = baseline_dir
                 .as_ref()
-                .map(|d| d.file_name().unwrap_or_default().to_string_lossy().to_string())
+                .map(|d| {
+                    d.file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string()
+                })
                 .unwrap_or_else(|| "none".to_string());
-            let current_run_id = run_dir.file_name().unwrap_or_default().to_string_lossy().to_string();
+            let current_run_id = run_dir
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
 
             let content = match format {
-                ReportFormat::Markdown => {
-                    report::generate_markdown_report(
-                        &baseline_run_id,
-                        &current_run_id,
-                        &results,
-                        &all_diffs,
-                    )
-                }
+                ReportFormat::Markdown => report::generate_markdown_report(
+                    &baseline_run_id,
+                    &current_run_id,
+                    &results,
+                    &all_diffs,
+                ),
                 ReportFormat::Json => {
-                    let summary = report::build_json_summary(&baseline_run_id, &current_run_id, &all_diffs);
+                    let summary =
+                        report::build_json_summary(&baseline_run_id, &current_run_id, &all_diffs);
                     serde_json::to_string_pretty(&summary)?
                 }
             };
 
             fs::write(&output, content)?;
-            println!("Report written to {} ({:?} format)", output.display(), format);
+            println!(
+                "Report written to {} ({:?} format)",
+                output.display(),
+                format
+            );
         }
 
         Commands::Baseline { run, name, store } => {
@@ -279,10 +297,14 @@ fn main() -> anyhow::Result<()> {
                     .ok_or_else(|| anyhow::anyhow!("Run not found: {}", run_id))?
             };
 
-            let run_id = run_dir.file_name().unwrap_or_default().to_string_lossy().to_string();
-            let output_dir: std::path::PathBuf = store.clone().unwrap_or_else(|| {
-                run_dir.parent().unwrap_or(Path::new(".")).to_path_buf()
-            });
+            let run_id = run_dir
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            let output_dir: std::path::PathBuf = store
+                .clone()
+                .unwrap_or_else(|| run_dir.parent().unwrap_or(Path::new(".")).to_path_buf());
 
             // "promote" subcommand semantics: write the run_id as persistent baseline
             baseline::write_persistent_baseline(&output_dir, &run_id)?;
@@ -300,8 +322,13 @@ fn main() -> anyhow::Result<()> {
             } else {
                 runs[0].parent().unwrap_or(Path::new(".")).to_path_buf()
             };
-            let all_runs = loader::discover_runs(&output_dir);
-            let recent: Vec<_> = all_runs.iter().rev().take(runs.len().max(30)).cloned().collect();
+            let all_runs = loader::discover_all_runs(&output_dir);
+            let recent: Vec<_> = all_runs
+                .iter()
+                .rev()
+                .take(runs.len().max(30))
+                .cloned()
+                .collect();
             let results: Vec<_> = recent.iter().map(|d| loader::load_run_results(d)).collect();
             let matrix = coverage::build_coverage_matrix(&results);
             let gaps = matrix.gaps();
@@ -318,7 +345,7 @@ fn main() -> anyhow::Result<()> {
             output,
             limit,
         } => {
-            let all_runs = loader::discover_runs(&history);
+            let all_runs = loader::discover_all_runs(&history);
             let recent: Vec<_> = all_runs.iter().rev().take(limit).cloned().collect();
             let run_results: Vec<_> = recent
                 .iter()
@@ -358,6 +385,89 @@ fn main() -> anyhow::Result<()> {
                 println!("Report written to {}", out.display());
             }
         }
+
+        Commands::LlmReal { command } => match command {
+            cli::LlmRealCommands::List { output, limit } => {
+                let runs = loader::discover_bucket_runs(&output, "llm_real");
+                if runs.is_empty() {
+                    println!("No llm_real runs under {}", output.join("llm_real").display());
+                } else {
+                    let start = runs.len().saturating_sub(limit);
+                    for run_dir in &runs[start..] {
+                        let artifacts = loader::load_llm_real_run(run_dir);
+                        println!(
+                            "{}  ({} tests)",
+                            run_dir.display(),
+                            artifacts.len()
+                        );
+                    }
+                }
+            }
+
+            cli::LlmRealCommands::Summary { run, output } => {
+                let run_dir = if run.is_dir() {
+                    run
+                } else {
+                    let parent = run.parent().unwrap_or(Path::new("."));
+                    let run_id = run.file_name().unwrap_or_default().to_string_lossy();
+                    loader::find_run_dir(parent, &run_id)
+                        .ok_or_else(|| anyhow::anyhow!("llm_real run not found: {}", run_id))?
+                };
+
+                let artifacts = loader::load_llm_real_run(&run_dir);
+                if artifacts.is_empty() {
+                    println!(
+                        "No llm_real metadata.json files found under {}",
+                        run_dir.display()
+                    );
+                } else {
+                    let mut lines = vec![
+                        "# llm_real observability summary".to_string(),
+                        format!("Run: {}", run_dir.display()),
+                        format!("Tests: {}", artifacts.len()),
+                        String::new(),
+                        "| test | agent | reasoning_deltas | trace_reasoning | prompt_snapshots | empty_warning | error+done |"
+                            .to_string(),
+                        "|------|-------|------------------|-----------------|------------------|---------------|------------|"
+                            .to_string(),
+                    ];
+                    for artifact in &artifacts {
+                        lines.push(format!(
+                            "| {} | {} | {} | {} | {} | {} | {} |",
+                            artifact.test_name,
+                            artifact.agent_type.as_deref().unwrap_or("-"),
+                            artifact
+                                .reasoning_delta_count
+                                .map(|v| v.to_string())
+                                .unwrap_or_else(|| "-".to_string()),
+                            artifact
+                                .trace_reasoning_count
+                                .map(|v| v.to_string())
+                                .unwrap_or_else(|| "-".to_string()),
+                            artifact
+                                .prompt_snapshot_count
+                                .map(|v| v.to_string())
+                                .unwrap_or_else(|| "-".to_string()),
+                            artifact
+                                .reasoning_empty_warning
+                                .map(|v| v.to_string())
+                                .unwrap_or_else(|| "-".to_string()),
+                            artifact
+                                .stream_error_with_done
+                                .map(|v| v.to_string())
+                                .unwrap_or_else(|| "-".to_string()),
+                        ));
+                    }
+                    let report = lines.join("\n");
+                    if let Some(out) = output {
+                        fs::write(&out, &report)?;
+                        println!("Report written to {}", out.display());
+                    } else {
+                        println!("{report}");
+                    }
+                }
+            }
+        },
     }
 
     Ok(())

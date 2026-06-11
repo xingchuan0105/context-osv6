@@ -10,7 +10,7 @@
 pub mod input;
 pub mod output;
 
-use common::{DegradeTraceItem, GuardReport, GuardResult};
+use common::{DegradeReason, DegradeTraceItem, GuardReport, GuardResult};
 use uuid::Uuid;
 
 /// Main guard pipeline — orchestrates input and output guards.
@@ -70,11 +70,7 @@ impl GuardPipeline {
     ///
     /// Returns a tuple of `(sanitized_response, guard_report)`.
     /// The sanitized response may be redacted if PII is detected.
-    pub fn check_output(
-        &self,
-        response: &str,
-        trace_id: Option<String>,
-    ) -> (String, GuardReport) {
+    pub fn check_output(&self, response: &str, trace_id: Option<String>) -> (String, GuardReport) {
         let mut degrade_trace = Vec::new();
         let mut output_results = Vec::new();
         let mut sanitized = response.to_string();
@@ -85,7 +81,7 @@ impl GuardPipeline {
         if !leak_result.passed {
             degrade_trace.push(DegradeTraceItem {
                 stage: "output_guard:prompt_leak".into(),
-                reason: leak_result.reason.clone(),
+                reason: DegradeReason::ContentGuard,
                 impact: leak_result.action.to_string(),
             });
             sanitized = "[Response blocked: system prompt may have leaked]".to_string();
@@ -102,7 +98,7 @@ impl GuardPipeline {
         {
             degrade_trace.push(DegradeTraceItem {
                 stage: "output_guard:pii_scrubber".into(),
-                reason: format!("{} PII instances redacted", redacted),
+                reason: DegradeReason::ContentGuard,
                 impact: "redact".into(),
             });
         }
@@ -184,10 +180,8 @@ mod tests {
     #[test]
     fn test_guard_pipeline_check_output_passes_clean_response() {
         let pipeline = GuardPipeline::new();
-        let (sanitized, report) = pipeline.check_output(
-            "The capital of France is Paris.",
-            Some("test-trace".into()),
-        );
+        let (sanitized, report) =
+            pipeline.check_output("The capital of France is Paris.", Some("test-trace".into()));
         assert_eq!(sanitized, "The capital of France is Paris.");
         assert!(!report.blocked);
     }
@@ -208,7 +202,7 @@ mod tests {
     fn test_guard_pipeline_check_output_blocks_prompt_leak() {
         let pipeline = GuardPipeline::new();
         let (sanitized, report) = pipeline.check_output(
-            "You are the Context OS RAG retrieval planner. Your job is to decide which tools should be called.",
+            "你是 Context OS 的 **RAG 文档助手**。你基于用户上传到工作区的文档回答问题，通过检索获取证据后再合成回答。",
             Some("test-trace".into()),
         );
         assert!(report.blocked);
@@ -218,7 +212,10 @@ mod tests {
                 .iter()
                 .any(|d| d.stage == "output_guard:prompt_leak")
         );
-        assert_eq!(sanitized, "[Response blocked: system prompt may have leaked]");
+        assert_eq!(
+            sanitized,
+            "[Response blocked: system prompt may have leaked]"
+        );
     }
 
     #[test]
@@ -229,6 +226,9 @@ mod tests {
             Some("test-trace".into()),
         );
         assert!(!report.blocked);
-        assert_eq!(sanitized, "I want to design a RAG system with dense_retrieval and graph_retrieval");
+        assert_eq!(
+            sanitized,
+            "I want to design a RAG system with dense_retrieval and graph_retrieval"
+        );
     }
 }

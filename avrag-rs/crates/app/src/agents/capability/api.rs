@@ -12,7 +12,7 @@ pub struct CapabilitiesResponse {
     pub registry_version: String,
     pub tools: Vec<ToolCapability>,
     pub skills: Vec<SkillCapability>,
-    pub strategies: BTreeMap<String, StrategySchema>,
+    pub modes: BTreeMap<String, ModeSchema>,
 }
 
 /// Public representation of a tool capability.
@@ -53,27 +53,15 @@ pub struct SkillCapability {
     pub deprecated: bool,
 }
 
-/// Schema describing a strategy's states and transitions.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StrategySchema {
+/// Schema describing a mode's metadata.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ModeSchema {
     #[serde(default)]
     pub id: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub states: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub transitions: Vec<TransitionSchema>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub external_tools_used: Vec<String>,
     #[serde(default)]
     pub requires_internet: bool,
-    pub max_budget: u8,
-}
-
-/// A single allowed transition between states.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransitionSchema {
-    pub from: String,
-    pub to: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -119,18 +107,18 @@ pub fn build_capabilities_response() -> CapabilitiesResponse {
         })
         .collect();
 
-    let strategies: BTreeMap<String, StrategySchema> = registry
-        .list_strategies()
+    let modes: BTreeMap<String, ModeSchema> = registry
+        .list_modes()
         .into_iter()
         .map(|s| (s.id.clone(), s.clone()))
         .collect();
 
     CapabilitiesResponse {
-        api_version: "v5".to_string(),
+        api_version: "v6".to_string(),
         registry_version: "1.0.0".to_string(),
         tools,
         skills,
-        strategies,
+        modes,
     }
 }
 
@@ -139,28 +127,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn build_capabilities_includes_strategies() {
+    fn build_capabilities_includes_modes() {
         let resp = build_capabilities_response();
-        assert_eq!(resp.api_version, "v5");
-        assert!(resp.strategies.contains_key("chat"));
-        assert!(resp.strategies.contains_key("rag"));
-        assert!(resp.strategies.contains_key("search"));
-    }
-
-    #[test]
-    fn strategy_schemas_have_expected_budgets() {
-        let resp = build_capabilities_response();
-        assert_eq!(resp.strategies["chat"].max_budget, 1);
-        assert_eq!(resp.strategies["rag"].max_budget, 4);
-        assert_eq!(resp.strategies["search"].max_budget, 3);
+        assert_eq!(resp.api_version, "v6");
+        assert!(resp.modes.contains_key("chat"));
+        assert!(resp.modes.contains_key("rag"));
+        assert!(resp.modes.contains_key("search"));
     }
 
     #[test]
     fn search_requires_internet() {
         let resp = build_capabilities_response();
-        assert!(resp.strategies["search"].requires_internet);
-        assert!(!resp.strategies["chat"].requires_internet);
-        assert!(!resp.strategies["rag"].requires_internet);
+        assert!(resp.modes["search"].requires_internet);
+        assert!(!resp.modes["chat"].requires_internet);
+        assert!(!resp.modes["rag"].requires_internet);
     }
 
     #[test]
@@ -168,7 +148,7 @@ mod tests {
         let resp = build_capabilities_response();
         let json = serde_json::to_string(&resp).unwrap();
         let parsed: CapabilitiesResponse = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.api_version, "v5");
-        assert_eq!(parsed.strategies.len(), 3);
+        assert_eq!(parsed.api_version, "v6");
+        assert_eq!(parsed.modes.len(), 3);
     }
 }

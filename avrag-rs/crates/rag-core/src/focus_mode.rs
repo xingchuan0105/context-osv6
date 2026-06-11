@@ -92,10 +92,7 @@ impl FocusMode for ScoreBasedFocusMode {
 
         // 1. Sort by score desc, keep top N.
         let mut sorted: Vec<&(AnswerContextChunk, f32)> = items.iter().collect();
-        sorted.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         let kept: Vec<&(AnswerContextChunk, f32)> = sorted.into_iter().take(target).collect();
 
         // 2. Optionally trim each chunk.

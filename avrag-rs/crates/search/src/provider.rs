@@ -49,8 +49,6 @@ pub(crate) async fn stream_brave_llm_context(
     Ok(response)
 }
 
-
-
 fn configured_brave_api_key(config: &SearchConfig) -> anyhow::Result<&str> {
     let api_key = config.api_key.trim();
     if api_key.is_empty() {
@@ -58,7 +56,6 @@ fn configured_brave_api_key(config: &SearchConfig) -> anyhow::Result<&str> {
     }
     Ok(api_key)
 }
-
 
 fn brave_llm_context_url(config: &SearchConfig) -> String {
     let base = config.base_url.trim().trim_end_matches('/');
@@ -117,7 +114,10 @@ pub(crate) async fn execute_brave_news(
         .get(endpoint)
         .header("X-Subscription-Token", api_key)
         .header("Accept", "application/json")
-        .query(&[("q", query), ("count", &config.max_results.clamp(1, 50).to_string())]);
+        .query(&[
+            ("q", query),
+            ("count", &config.max_results.clamp(1, 50).to_string()),
+        ]);
 
     if let Some(lang) = config.search_lang.as_deref() {
         request = request.query(&[("search_lang", lang)]);
@@ -346,37 +346,12 @@ fn search_response_from_brave_context(
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #[cfg(test)]
 mod tests {
     use super::{
         BraveLlmContextRequest, BraveLlmContextResponse, BraveNewsItem, BraveNewsResponse,
-                search_response_from_brave_context,
-        search_response_from_brave_news,
+        search_response_from_brave_context, search_response_from_brave_news,
     };
-
-
 
     #[test]
     fn parses_brave_llm_context_grounding_into_sources() {
@@ -421,8 +396,6 @@ mod tests {
                 .contains("rollback checklist")
         );
     }
-
-
 
     #[test]
     fn brave_llm_context_request_omits_optional_params_when_none() {
@@ -486,12 +459,13 @@ mod tests {
         assert_eq!(search_response.results[0].snippet, "Description one");
         assert_eq!(search_response.results[0].citation_index, Some(1));
         assert_eq!(search_response.results[1].title, "News Title 2");
-        assert_eq!(search_response.results[1].snippet, "News article (1 day ago)");
+        assert_eq!(
+            search_response.results[1].snippet,
+            "News article (1 day ago)"
+        );
         assert_eq!(search_response.results[1].citation_index, Some(2));
         assert!(
-            search_response
-                .synthesized_answer
-                .contains("News Title 1"),
+            search_response.synthesized_answer.contains("News Title 1"),
             "synthesized_answer should mention first title"
         );
     }

@@ -1,6 +1,6 @@
 use contracts::chat::{
-    AnswerBlock, ChatDonePayload, ChatEvent, ChatRequest, ChatResponse, Citation, DegradeTraceItem,
-    SourceRef, TraceInfo,
+    AnswerBlock, ChatDonePayload, ChatEvent, ChatRequest, ChatResponse, Citation, DegradeReason,
+    DegradeTraceItem, SourceRef, TraceInfo,
 };
 
 #[test]
@@ -25,13 +25,25 @@ fn chat_request_deserializes_with_minimal_defaults_and_no_request_id_field() {
             "source_token": null,
             "doc_scope": [],
             "messages": [],
-            "stream": false
+            "stream": false,
+            "debug": false
         })
     );
     assert!(
         serialized.get("request_id").is_none(),
         "request_id should not be part of the shared contract"
     );
+}
+
+#[test]
+fn chat_request_deserializes_debug_flag() {
+    let json = serde_json::json!({
+        "query": "hello",
+        "debug": true
+    });
+
+    let request: ChatRequest = serde_json::from_value(json).expect("request should deserialize");
+    assert!(request.debug);
 }
 
 #[test]
@@ -165,13 +177,15 @@ fn chat_response_roundtrips_shared_nested_types() {
         },
         degrade_trace: vec![DegradeTraceItem {
             stage: "planner".to_string(),
-            reason: "fallback".to_string(),
+            reason: DegradeReason::PlannerFailed,
             impact: "quality".to_string(),
         }],
         planner_output: None,
         mode_debug: None,
         message_id: Some(7),
         guard_report: None,
+        tool_results: Vec::new(),
+        usage: None,
     };
 
     let json = serde_json::to_value(&response).expect("response should serialize");
@@ -203,6 +217,8 @@ fn done_payload_exposes_terminal_response_fields() {
             mode_debug: None,
             message_id: Some(7),
             guard_report: None,
+            tool_results: Vec::new(),
+            usage: None,
         },
     };
 

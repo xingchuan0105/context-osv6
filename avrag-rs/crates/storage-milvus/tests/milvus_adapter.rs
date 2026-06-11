@@ -77,6 +77,7 @@ async fn configured_milvus_adapter_can_index_search_and_delete() -> anyhow::Resu
                 chunk_type: "image_with_context".to_string(),
                 parser_backend: Some("test".to_string()),
                 source_locator: None,
+                retrieval_weight: None,
             }],
             entities: vec![EntityIndexRecord {
                 entity_id: Uuid::new_v4(),
@@ -200,6 +201,7 @@ fn make_index_batch(
             chunk_type: "image_with_context".to_string(),
             parser_backend: Some("test".to_string()),
             source_locator: None,
+            retrieval_weight: None,
         }],
         entities: vec![EntityIndexRecord {
             entity_id,

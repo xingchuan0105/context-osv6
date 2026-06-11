@@ -3,6 +3,12 @@
   gap: 1rem;
 }
 
+.meterCompactRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
 .card {
   border: 1px solid hsl(var(--border-whisper));
   border-radius: var(--radius-card);

@@ -4,11 +4,7 @@ use uuid::Uuid;
 
 use crate::RagRuntime;
 
-pub async fn run(
-    runtime: &RagRuntime,
-    auth: &AuthContext,
-    args: &serde_json::Value,
-) -> ToolResult {
+pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Value) -> ToolResult {
     let args: DocMetadataArgs = match serde_json::from_value(args.clone()) {
         Ok(a) => a,
         Err(e) => {
@@ -55,20 +51,20 @@ pub async fn run(
     match metadata_list {
         Ok(metadata_list) => {
             let toc_by_doc: std::collections::HashMap<String, Vec<serde_json::Value>> =
-                toc_entries
-                    .unwrap_or_default()
-                    .into_iter()
-                    .fold(std::collections::HashMap::new(), |mut acc, (doc_id, entry)| {
-                        acc.entry(doc_id.to_string()).or_default().push(
-                            serde_json::json!({
+                toc_entries.unwrap_or_default().into_iter().fold(
+                    std::collections::HashMap::new(),
+                    |mut acc, (doc_id, entry)| {
+                        acc.entry(doc_id.to_string())
+                            .or_default()
+                            .push(serde_json::json!({
                                 "title": entry.title,
                                 "heading_level": entry.heading_level,
                                 "page": entry.page,
                                 "rank": entry.rank,
-                            }),
-                        );
+                            }));
                         acc
-                    });
+                    },
+                );
 
             let filtered: Vec<_> = if args.fields.is_empty() {
                 metadata_list
@@ -93,27 +89,48 @@ pub async fn run(
                     .into_iter()
                     .map(|m| {
                         let mut obj = serde_json::Map::new();
-                        obj.insert("doc_id".to_string(), serde_json::Value::String(m.doc_id.clone()));
+                        obj.insert(
+                            "doc_id".to_string(),
+                            serde_json::Value::String(m.doc_id.clone()),
+                        );
                         for field in &args.fields {
                             match field.as_str() {
                                 "name" => {
-                                    obj.insert("name".to_string(), serde_json::Value::String(m.name.clone()));
+                                    obj.insert(
+                                        "name".to_string(),
+                                        serde_json::Value::String(m.name.clone()),
+                                    );
                                 }
                                 "mime_type" => {
-                                    obj.insert("mime_type".to_string(), serde_json::Value::String(m.mime_type.clone()));
+                                    obj.insert(
+                                        "mime_type".to_string(),
+                                        serde_json::Value::String(m.mime_type.clone()),
+                                    );
                                 }
                                 "file_size" => {
-                                    obj.insert("file_size".to_string(), serde_json::json!(m.file_size));
+                                    obj.insert(
+                                        "file_size".to_string(),
+                                        serde_json::json!(m.file_size),
+                                    );
                                 }
                                 "status" => {
-                                    obj.insert("status".to_string(), serde_json::Value::String(m.status.as_str().to_string()));
+                                    obj.insert(
+                                        "status".to_string(),
+                                        serde_json::Value::String(m.status.as_str().to_string()),
+                                    );
                                 }
                                 "chunk_count" => {
-                                    obj.insert("chunk_count".to_string(), serde_json::json!(m.chunk_count));
+                                    obj.insert(
+                                        "chunk_count".to_string(),
+                                        serde_json::json!(m.chunk_count),
+                                    );
                                 }
                                 "toc" => {
                                     if let Some(toc) = toc_by_doc.get(&m.doc_id) {
-                                        obj.insert("toc".to_string(), serde_json::Value::Array(toc.clone()));
+                                        obj.insert(
+                                            "toc".to_string(),
+                                            serde_json::Value::Array(toc.clone()),
+                                        );
                                     }
                                 }
                                 _ => {}

@@ -1,7 +1,7 @@
+use crate::lib_impl::MilvusDataPlane;
+use crate::types::Result;
 use async_trait::async_trait;
 use serde_json::Value;
-use crate::types::Result;
-use crate::lib_impl::MilvusDataPlane;
 
 #[async_trait]
 pub trait WriteExecutor: Send + Sync {
@@ -31,8 +31,14 @@ pub mod tests {
 
     #[derive(Debug, Clone)]
     pub enum Call {
-        Insert { collection: String, row_count: usize },
-        Delete { collection: String, filter: String },
+        Insert {
+            collection: String,
+            row_count: usize,
+        },
+        Delete {
+            collection: String,
+            filter: String,
+        },
     }
 
     pub struct FakeExecutor {
@@ -86,11 +92,7 @@ pub mod tests {
 
     #[async_trait]
     impl WriteExecutor for FakeExecutor {
-        async fn insert(
-            &self,
-            collection: &str,
-            rows: Vec<Value>,
-        ) -> Result<()> {
+        async fn insert(&self, collection: &str, rows: Vec<Value>) -> Result<()> {
             self.calls.lock().unwrap().push(Call::Insert {
                 collection: collection.to_string(),
                 row_count: rows.len(),

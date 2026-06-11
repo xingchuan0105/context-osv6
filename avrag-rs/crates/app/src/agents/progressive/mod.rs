@@ -70,26 +70,28 @@ mod tests {
     }
 
     #[test]
-    fn prompt_registry_standard_cached_loads_all_skills() {
+    fn prompt_registry_standard_cached_loads_cds_assets() {
         let registry = PromptRegistry::standard_cached();
-        assert!(registry.skill("rag-plan").is_some());
+        assert!(registry.skill("codegen").is_some());
+        assert!(registry.skill("writing").is_some());
+        assert!(registry.skill("format").is_some());
+        assert!(registry.skill("memory").is_some());
+        assert!(registry.skill("search").is_some());
         assert!(registry.skill("rag-answer").is_some());
-        assert!(registry.skill("rag-eval").is_some());
-        assert!(registry.skill("search-plan").is_some());
         assert!(registry.skill("search-answer").is_some());
-        assert!(registry.skill("search-eval").is_some());
-        assert!(registry.skill("chat-plan").is_some());
         assert!(registry.skill("chat").is_some());
+        assert!(registry.skill("rag-system").is_some());
+        assert!(registry.skill("dense-retrieval").is_none());
+        assert!(registry.skill("doc-index").is_none());
+        assert!(registry.skill("rag-plan").is_none());
+        assert!(registry.skill("triplet-extraction").is_none());
+        assert!(registry.skill("session-summary").is_none());
     }
 
     #[test]
-    fn atomic_tool_catalog_cached_has_all_atomic_tools() {
+    fn legacy_atomic_tool_catalog_is_empty_after_tool_specs_leave_prompts() {
         let tools = atomic_tool_catalog_cached();
-        assert!(tools.len() >= 3);
-        let names: Vec<&str> = tools.iter().map(|t| t.spec().name.as_str()).collect();
-        assert!(names.contains(&"calculator"));
-        assert!(names.contains(&"code_interpreter"));
-        assert!(names.contains(&"weather_query"));
+        assert!(tools.is_empty());
     }
 
     #[test]
@@ -100,10 +102,9 @@ mod tests {
     }
 
     #[test]
-    fn search_specific_tools_cached_has_web_search() {
+    fn legacy_search_specific_tools_are_not_loaded_from_prompts() {
         let tools = search_specific_tools_cached();
-        assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].spec().name, "web_search");
+        assert!(tools.is_empty());
     }
 
     #[test]

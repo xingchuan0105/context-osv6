@@ -20,6 +20,9 @@ use super::{NormalizedDocument, ParsedUnit};
 const DEFAULT_MINERU_BASE_URL: &str = "https://mineru.net/api/v4";
 const DEFAULT_MINERU_TASK_TIMEOUT_ATTEMPTS: usize = 90;
 const DEFAULT_POLL_INTERVAL_SECS: u64 = 2;
+/// MinerU v4 `file-urls/batch` rejects requests above this count per minute.
+const MINERU_V4_MAX_FILES_PER_UPLOAD_BATCH: usize = 50;
+const MINERU_V4_UPLOAD_BATCH_COOLDOWN: Duration = Duration::from_secs(61);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MineruApiMode {
@@ -352,98 +355,121 @@ impl MineruClient {
             });
         }
 
-        let filenames = files
-            .iter()
-            .map(|file| file.filename.clone())
-            .collect::<Vec<_>>();
-        let (batch_id, upload_urls) = self
-            .create_file_upload_batch_v4_files(&filenames, true)
-            .await?;
-        if upload_urls.len() != files.len() {
-            anyhow::bail!(
-                "MinerU v4 file upload batch returned {} upload URLs for {} files",
-                upload_urls.len(),
-                files.len()
-            );
-        }
-        info!(
-            batch_id,
-            filename,
-            file_count = files.len(),
-            skipped_before_upload = skipped_before_upload.len(),
-            "MinerU v4 OCR batch upload URLs created"
-        );
-
-        for (file, upload_url) in files.iter().zip(upload_urls.iter()) {
-            self.upload_file_to_signed_url_v4(upload_url, &file.bytes)
-                .await
-                .with_context(|| {
-                    format!("Failed to upload MinerU OCR page {}", file.page_number)
-                })?;
-        }
-        info!(
-            batch_id,
-            filename,
-            file_count = files.len(),
-            "MinerU v4 OCR batch files uploaded, waiting for batch result"
-        );
-
-        let results = self
-            .wait_for_batch_completion_v4_all(&batch_id, files.len())
-            .await?;
-        let mut results_by_file = results
-            .into_iter()
-            .filter_map(|result| {
-                result
-                    .file_name
-                    .clone()
-                    .map(|file_name| (file_name, result))
-            })
-            .collect::<BTreeMap<_, _>>();
-
         let mut units = skipped_before_upload
             .iter()
             .map(|page_number| skipped_ocr_page_unit(*page_number))
             .collect::<Vec<_>>();
         let mut title: Option<String> = None;
         let mut skipped_after_ocr = 0usize;
-        for file in files {
-            let task_result = results_by_file.remove(&file.filename).with_context(|| {
-                format!("MinerU v4 batch result missing file {}", file.filename)
-            })?;
-            let zip_url = task_result
-                .full_zip_url
-                .filter(|value| !value.trim().is_empty())
-                .with_context(|| {
-                    format!(
-                        "MinerU v4 batch task for page {} completed without full_zip_url",
-                        file.page_number
-                    )
-                })?;
-            let (markdown, images) = self.fetch_zip_payload_v4(&zip_url, &batch_id).await?;
-            let mut page_document = self.normalize_result(&file.filename, markdown, images)?;
-            title = title.take().or_else(|| Some(page_document.title.clone()));
-            for unit in &mut page_document.units {
-                unit.page = file.page_number;
-                unit.parser_backend = "mineru_pdf_ocr".to_string();
-            }
-            if is_low_value_ocr_document(&page_document) {
-                skipped_after_ocr += 1;
+        let mut total_uploaded = 0usize;
+        let file_chunks: Vec<&[MineruV4PageUploadFile]> = files
+            .chunks(MINERU_V4_MAX_FILES_PER_UPLOAD_BATCH)
+            .collect();
+
+        for (chunk_index, file_chunk) in file_chunks.iter().enumerate() {
+            if chunk_index > 0 {
                 info!(
                     filename,
-                    page_number = file.page_number,
-                    "Skipping low-value MinerU OCR result"
+                    chunk_index,
+                    chunk_count = file_chunks.len(),
+                    "MinerU v4 OCR batch rate-limit cooldown before next upload batch"
                 );
-                units.push(skipped_ocr_page_unit(file.page_number));
-                continue;
+                sleep(MINERU_V4_UPLOAD_BATCH_COOLDOWN).await;
             }
-            units.extend(page_document.units);
+
+            let filenames = file_chunk
+                .iter()
+                .map(|file| file.filename.clone())
+                .collect::<Vec<_>>();
+            let (batch_id, upload_urls) = self
+                .create_file_upload_batch_v4_files(&filenames, true)
+                .await?;
+            if upload_urls.len() != file_chunk.len() {
+                anyhow::bail!(
+                    "MinerU v4 file upload batch returned {} upload URLs for {} files",
+                    upload_urls.len(),
+                    file_chunk.len()
+                );
+            }
+            info!(
+                batch_id,
+                filename,
+                chunk_index,
+                chunk_count = file_chunks.len(),
+                file_count = file_chunk.len(),
+                skipped_before_upload = skipped_before_upload.len(),
+                "MinerU v4 OCR batch upload URLs created"
+            );
+
+            for (file, upload_url) in file_chunk.iter().zip(upload_urls.iter()) {
+                self.upload_file_to_signed_url_v4(upload_url, &file.bytes)
+                    .await
+                    .with_context(|| {
+                        format!("Failed to upload MinerU OCR page {}", file.page_number)
+                    })?;
+            }
+            info!(
+                batch_id,
+                filename,
+                chunk_index,
+                file_count = file_chunk.len(),
+                "MinerU v4 OCR batch files uploaded, waiting for batch result"
+            );
+
+            let results = self
+                .wait_for_batch_completion_v4_all(&batch_id, file_chunk.len())
+                .await?;
+            let mut results_by_file = results
+                .into_iter()
+                .filter_map(|result| {
+                    result
+                        .file_name
+                        .clone()
+                        .map(|file_name| (file_name, result))
+                })
+                .collect::<BTreeMap<_, _>>();
+
+            for file in *file_chunk {
+                let task_result = results_by_file.remove(&file.filename).with_context(|| {
+                    format!("MinerU v4 batch result missing file {}", file.filename)
+                })?;
+                let zip_url = task_result
+                    .full_zip_url
+                    .filter(|value| !value.trim().is_empty())
+                    .with_context(|| {
+                        format!(
+                            "MinerU v4 batch task for page {} completed without full_zip_url",
+                            file.page_number
+                        )
+                    })?;
+                let (markdown, images) = self.fetch_zip_payload_v4(&zip_url, &batch_id).await?;
+                let mut page_document = self.normalize_result(&file.filename, markdown, images)?;
+                title = title.take().or_else(|| Some(page_document.title.clone()));
+                for unit in &mut page_document.units {
+                    unit.page = file.page_number;
+                    unit.parser_backend = "mineru_pdf_ocr".to_string();
+                }
+                if is_low_value_ocr_document(&page_document) {
+                    skipped_after_ocr += 1;
+                    info!(
+                        filename,
+                        page_number = file.page_number,
+                        "Skipping low-value MinerU OCR result"
+                    );
+                    units.push(skipped_ocr_page_unit(file.page_number));
+                    continue;
+                }
+                units.extend(page_document.units);
+            }
+
+            total_uploaded += file_chunk.len();
         }
 
         info!(
             filename,
             pages = page_numbers.len(),
-            uploaded = filenames.len(),
+            uploaded = total_uploaded,
+            upload_batches = file_chunks.len(),
             skipped_before_upload = skipped_before_upload.len(),
             skipped_after_ocr,
             units = units.len(),
@@ -1124,12 +1150,13 @@ fn prepare_v4_file_upload_payload<'a>(
     page_numbers: Option<&'a [u32]>,
 ) -> Result<MineruV4FileUploadPayload<'a>> {
     if let Some(pages) = page_numbers
-        && filename.to_ascii_lowercase().ends_with(".pdf") {
-            return Ok(MineruV4FileUploadPayload {
-                bytes: extract_pdf_pages(bytes, pages)?,
-                page_numbers: None,
-            });
-        }
+        && filename.to_ascii_lowercase().ends_with(".pdf")
+    {
+        return Ok(MineruV4FileUploadPayload {
+            bytes: extract_pdf_pages(bytes, pages)?,
+            page_numbers: None,
+        });
+    }
 
     Ok(MineruV4FileUploadPayload {
         bytes: bytes.to_vec(),
@@ -1195,9 +1222,10 @@ fn extract_pdf_pages(bytes: &[u8], page_numbers: &[u32]) -> Result<Vec<u8>> {
         anyhow::bail!("MinerU v4 PDF upload page filter must not be empty");
     }
     if let [page_number] = page_numbers
-        && let Ok(split) = extract_single_pdf_page_with_pdfseparate(bytes, *page_number) {
-            return Ok(split);
-        }
+        && let Ok(split) = extract_single_pdf_page_with_pdfseparate(bytes, *page_number)
+    {
+        return Ok(split);
+    }
 
     let mut document =
         Document::load_mem(bytes).context("Failed to load PDF for MinerU page upload")?;

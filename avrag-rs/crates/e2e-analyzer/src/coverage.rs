@@ -28,7 +28,13 @@ pub struct CoverageMatrix {
 }
 
 impl CoverageMatrix {
-    fn hit(&mut self, dim: CoverageDimension, value: String, test_name: String, status: TestStatus) {
+    fn hit(
+        &mut self,
+        dim: CoverageDimension,
+        value: String,
+        test_name: String,
+        status: TestStatus,
+    ) {
         let cell = self.cells.entry((dim, value)).or_default();
         cell.test_names.insert(test_name);
         match status {
@@ -56,9 +62,15 @@ impl CoverageMatrix {
                     priority: GapPriority::High,
                     reason: format!(
                         "All {} run(s) failed for {}={}",
-                        total, format_dim(dim), value
+                        total,
+                        format_dim(dim),
+                        value
                     ),
-                    suggested_action: format!("Add or fix test covering {}={}", format_dim(dim), value),
+                    suggested_action: format!(
+                        "Add or fix test covering {}={}",
+                        format_dim(dim),
+                        value
+                    ),
                 });
                 continue;
             }
@@ -93,7 +105,9 @@ impl CoverageMatrix {
         gaps.sort_by(|a, b| {
             let score_a = gap_risk_score(a);
             let score_b = gap_risk_score(b);
-            score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+            score_b
+                .partial_cmp(&score_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         gaps
@@ -223,7 +237,12 @@ pub fn generate_coverage_report(gaps: &[CoverageGap]) -> String {
 mod tests {
     use super::*;
 
-    fn make_result(test_name: &str, strategy: &str, format_skill: Option<&str>, status: TestStatus) -> TestResult {
+    fn make_result(
+        test_name: &str,
+        strategy: &str,
+        format_skill: Option<&str>,
+        status: TestStatus,
+    ) -> TestResult {
         TestResult {
             run_id: "r1".to_string(),
             test_name: test_name.to_string(),
@@ -255,7 +274,10 @@ mod tests {
         let gaps = matrix.gaps();
 
         // Should find at least the Strategy=chat gap (all failing)
-        let high_gaps: Vec<_> = gaps.iter().filter(|g| g.priority == GapPriority::High).collect();
+        let high_gaps: Vec<_> = gaps
+            .iter()
+            .filter(|g| g.priority == GapPriority::High)
+            .collect();
         assert!(
             !high_gaps.is_empty(),
             "Expected at least one High priority gap for all-failing cell, got gaps: {:?}",
@@ -279,7 +301,10 @@ mod tests {
         let matrix = build_coverage_matrix(&runs);
         let gaps = matrix.gaps();
 
-        let medium_gaps: Vec<_> = gaps.iter().filter(|g| g.priority == GapPriority::Medium).collect();
+        let medium_gaps: Vec<_> = gaps
+            .iter()
+            .filter(|g| g.priority == GapPriority::Medium)
+            .collect();
         assert!(
             !medium_gaps.is_empty(),
             "Expected at least one Medium priority gap for flaky cell, got gaps: {:?}",
@@ -295,7 +320,10 @@ mod tests {
         assert_eq!(infer_risk_category("empty_input_handling"), "empty_input");
         assert_eq!(infer_risk_category("budget_exceeded"), "empty_input");
         assert_eq!(infer_risk_category("cancel_operation"), "cancellation");
-        assert_eq!(infer_risk_category("format_output_test"), "format_constraint");
+        assert_eq!(
+            infer_risk_category("format_output_test"),
+            "format_constraint"
+        );
         assert_eq!(infer_risk_category("ppt_generation"), "format_constraint");
         assert_eq!(infer_risk_category("html_rendering"), "format_constraint");
         assert_eq!(infer_risk_category("chat_simple"), "general");
@@ -329,7 +357,12 @@ mod tests {
 
     #[test]
     fn test_format_skill_dimension_tracked() {
-        let run = vec![make_result("test_c", "chat", Some("ppt"), TestStatus::Failed)];
+        let run = vec![make_result(
+            "test_c",
+            "chat",
+            Some("ppt"),
+            TestStatus::Failed,
+        )];
         let matrix = build_coverage_matrix(&[run]);
         let gaps = matrix.gaps();
         let format_gap = gaps.iter().find(|g| g.dimension.contains("OutputFormat"));

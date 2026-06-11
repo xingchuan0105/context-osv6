@@ -176,10 +176,7 @@ pub fn validate_document_ir(document: &DocumentIr) -> Result<(), DocumentIrValid
         if block.alt_text.as_deref().is_some_and(contains_nul) {
             issues.push(issue(
                 "nul_in_alt_text",
-                format!(
-                    "block {} contains NUL bytes in alt_text",
-                    block.block_id
-                ),
+                format!("block {} contains NUL bytes in alt_text", block.block_id),
                 Some(block.block_id.clone()),
                 None,
                 block.page,
@@ -217,6 +214,16 @@ pub fn validate_document_ir(document: &DocumentIr) -> Result<(), DocumentIrValid
                     "slide image block {} is missing slide render asset",
                     block.block_id
                 ),
+                Some(block.block_id.clone()),
+                None,
+                block.page,
+            ));
+        }
+
+        if matches!(block.block_type, BlockType::PageRaster) && block.asset_refs.is_empty() {
+            issues.push(issue(
+                "page_raster_missing_asset",
+                format!("page raster block {} is missing render asset", block.block_id),
                 Some(block.block_id.clone()),
                 None,
                 block.page,

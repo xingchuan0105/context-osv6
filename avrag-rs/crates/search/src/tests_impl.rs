@@ -18,8 +18,9 @@ async fn missing_brave_key_is_explicit_error() {
         doc_scope: Vec::new(),
         messages: Vec::new(),
         stream: false,
+        debug: false,
         language: None,
-    format_hint: None,
+        format_hint: None,
     };
     let auth = avrag_auth::AuthContext::new(
         avrag_auth::OrgId::from(uuid::Uuid::nil()),
@@ -49,8 +50,9 @@ async fn unsupported_provider_is_explicit_error() {
         doc_scope: Vec::new(),
         messages: Vec::new(),
         stream: false,
+        debug: false,
         language: None,
-    format_hint: None,
+        format_hint: None,
     };
     let auth = avrag_auth::AuthContext::new(
         avrag_auth::OrgId::from(uuid::Uuid::nil()),
@@ -108,8 +110,9 @@ async fn brave_llm_context_live_smoke_returns_grounding_sources() {
         doc_scope: Vec::new(),
         messages: Vec::new(),
         stream: false,
+        debug: false,
         language: None,
-    format_hint: None,
+        format_hint: None,
     };
     let auth = avrag_auth::AuthContext::new(
         avrag_auth::OrgId::from(uuid::Uuid::nil()),

@@ -28,13 +28,12 @@ use uuid::Uuid;
 const PLAN_FREE: &str = "free";
 
 async fn seed_user_with_plan(pool: &PgPool, plan_id: &str) -> Uuid {
-    let org_id: Uuid = sqlx::query_scalar(
-        "insert into organizations (name) values ($1) returning id",
-    )
-    .bind(format!("org-{}", Uuid::new_v4()))
-    .fetch_one(pool)
-    .await
-    .unwrap();
+    let org_id: Uuid =
+        sqlx::query_scalar("insert into organizations (name) values ($1) returning id")
+            .bind(format!("org-{}", Uuid::new_v4()))
+            .fetch_one(pool)
+            .await
+            .unwrap();
 
     let user_id: Uuid = sqlx::query_scalar(
         "insert into users (org_id, email, full_name) values ($1, $2, $3) returning id",

@@ -69,26 +69,10 @@ impl<'a> ReactContext<'a> {
 
 /// Iteration budget — see decision ④. Initial defaults: RAG = 3, Search = 2.
 /// Tier-based limits: free users get stricter budgets to control costs.
-///
-/// `max_search_rounds` / `current_search_rounds` (added Step 3) count
-/// search-API round trips separately from the LLM-side `current` /
-/// `max_iterations` counter. WebSearch uses this to enforce a hard
-/// 2-round stop-loss before the LLM evaluator can loop on empty
-/// results.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LoopBudget {
     pub max_iterations: u8,
     pub current: u8,
-    #[deprecated = "Replaced by YAML budget.max_iterations in ADR-0006"]
-    #[serde(default = "default_max_search_rounds")]
-    pub max_search_rounds: u8,
-    #[deprecated = "Replaced by YAML budget.max_iterations in ADR-0006"]
-    #[serde(default)]
-    pub current_search_rounds: u8,
-}
-
-fn default_max_search_rounds() -> u8 {
-    2
 }
 
 /// User tier for cost-controlled loop budgets.
@@ -104,8 +88,6 @@ impl LoopBudget {
         Self {
             max_iterations,
             current: 0,
-            max_search_rounds: 2,
-            current_search_rounds: 0,
         }
     }
 
@@ -146,19 +128,6 @@ impl LoopBudget {
         self.current = self.current.saturating_add(1);
     }
 
-    /// Advance the search-round counter. Saturates at `u8::MAX`.
-    #[deprecated = "Replaced by YAML budget.max_iterations in ADR-0006"]
-    pub fn tick_search_round(&mut self) {
-        self.current_search_rounds = self.current_search_rounds.saturating_add(1);
-    }
-
-    /// True once the search-round ceiling is reached. Use to
-    /// short-circuit a SearchStrategy run before the LLM evaluator
-    /// can loop on empty results.
-    #[deprecated = "Replaced by YAML budget.max_iterations in ADR-0006"]
-    pub fn search_rounds_exhausted(&self) -> bool {
-        self.current_search_rounds >= self.max_search_rounds
-    }
 }
 
 /// Where the loop should branch on a `Continue` decision.
@@ -191,47 +160,7 @@ impl NextStep {
     }
 }
 
-/// Reason recorded on a `Degrade` outcome — surfaced via `DegradeTraceItem`
-/// in `AgentRunResult` so the UI can explain partial answers.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "kind", content = "detail")]
-pub enum DegradeReason {
-    /// Iteration ceiling reached without success.
-    BudgetExhausted,
-    /// Recall remained zero across every variant attempted.
-    NoResultsAfterAllFallbacks,
-    /// Tool execution failed for all subqueries.
-    AllToolsFailed,
-    /// Provider returned a non-retryable error (rate limit, auth, outage).
-    ProviderUnavailable,
-    /// Custom reason carried for telemetry; prefer a concrete variant when possible.
-    Other(String),
-}
-
-impl DegradeReason {
-    /// Stable stage identifier used in `DegradeTraceItem.stage` and activity events.
-    pub fn as_stage(&self) -> &'static str {
-        match self {
-            DegradeReason::BudgetExhausted => "budget_exhausted",
-            DegradeReason::NoResultsAfterAllFallbacks => "no_results",
-            DegradeReason::AllToolsFailed => "all_tools_failed",
-            DegradeReason::ProviderUnavailable => "provider_unavailable",
-            DegradeReason::Other(_) => "other",
-        }
-    }
-
-    pub fn message(&self) -> String {
-        match self {
-            DegradeReason::BudgetExhausted => "iteration budget exhausted".to_string(),
-            DegradeReason::NoResultsAfterAllFallbacks => {
-                "no results after broadening query variants".to_string()
-            }
-            DegradeReason::AllToolsFailed => "all tool calls failed".to_string(),
-            DegradeReason::ProviderUnavailable => "provider unavailable".to_string(),
-            DegradeReason::Other(msg) => msg.clone(),
-        }
-    }
-}
+pub use common::DegradeReason;
 
 /// Outcome of a single ReAct iteration's evaluator.
 ///

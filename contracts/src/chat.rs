@@ -20,6 +20,9 @@ pub struct ChatRequest {
     pub messages: Vec<ChatTurnInput>,
     #[serde(default)]
     pub stream: bool,
+    /// When true, emit debug trace events (e.g. prompt snapshots) in SSE streams.
+    #[serde(default)]
+    pub debug: bool,
     #[serde(default)]
     pub language: Option<String>,
     #[serde(default)]
@@ -30,6 +33,9 @@ pub struct ChatRequest {
 pub struct ChatTurnInput {
     pub role: String,
     pub content: String,
+    /// Prior-turn resolved query from PG `turn_metadata` when available.
+    #[serde(default)]
+    pub resolved_query: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,6 +56,8 @@ pub struct ChatMessage {
     pub citations: Vec<Citation>,
     #[serde(default)]
     pub tool_results: Vec<ToolResult>,
+    #[serde(default)]
+    pub turn_metadata: Option<serde_json::Value>,
     pub created_at: String,
 }
 
@@ -120,10 +128,124 @@ pub struct TraceInfo {
     pub mode: String,
 }
 
+/// Stable degradation reason codes surfaced in `DegradeTraceItem.reason`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DegradeReason {
+    BudgetExhausted,
+    NoResultsAfterAllFallbacks,
+    AllToolsFailed,
+    ProviderUnavailable,
+    EmbeddingUnavailable,
+    LexicalFallback,
+    Search429,
+    SearchTimeout,
+    EmptyDocument,
+    NoReadyDocumentContext,
+    NoValidRetrievalResults,
+    NoRetrievalEvidence,
+    ContentGuard,
+    ChannelTimeout,
+    ChannelFailed,
+    ToolDegraded,
+    ToolUnavailable,
+    PlannerFailed,
+    Other(String),
+}
+
+impl DegradeReason {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::BudgetExhausted => "budget_exhausted",
+            Self::NoResultsAfterAllFallbacks => "no_results_after_all_fallbacks",
+            Self::AllToolsFailed => "all_tools_failed",
+            Self::ProviderUnavailable => "provider_unavailable",
+            Self::EmbeddingUnavailable => "embedding_unavailable",
+            Self::LexicalFallback => "lexical_fallback",
+            Self::Search429 => "search_429",
+            Self::SearchTimeout => "search_timeout",
+            Self::EmptyDocument => "empty_document",
+            Self::NoReadyDocumentContext => "no_ready_document_context",
+            Self::NoValidRetrievalResults => "no_valid_retrieval_results",
+            Self::NoRetrievalEvidence => "no_retrieval_evidence",
+            Self::ContentGuard => "content_guard",
+            Self::ChannelTimeout => "channel_timeout",
+            Self::ChannelFailed => "channel_failed",
+            Self::ToolDegraded => "tool_degraded",
+            Self::ToolUnavailable => "tool_unavailable",
+            Self::PlannerFailed => "planner_failed",
+            Self::Other(value) => value.as_str(),
+        }
+    }
+
+    pub fn from_str(value: &str) -> Self {
+        match value {
+            "budget_exhausted" => Self::BudgetExhausted,
+            "no_results" | "no_results_after_all_fallbacks" => Self::NoResultsAfterAllFallbacks,
+            "all_tools_failed" => Self::AllToolsFailed,
+            "provider_unavailable" => Self::ProviderUnavailable,
+            "embedding_unavailable" => Self::EmbeddingUnavailable,
+            "lexical_fallback" => Self::LexicalFallback,
+            "search_429" => Self::Search429,
+            "search_timeout" => Self::SearchTimeout,
+            "empty_document" => Self::EmptyDocument,
+            "no_ready_document_context" => Self::NoReadyDocumentContext,
+            "no_valid_retrieval_results" => Self::NoValidRetrievalResults,
+            "no_retrieval_evidence" => Self::NoRetrievalEvidence,
+            "content_guard" => Self::ContentGuard,
+            "channel_timeout" => Self::ChannelTimeout,
+            "channel_failed" => Self::ChannelFailed,
+            "tool_degraded" => Self::ToolDegraded,
+            "tool_unavailable" => Self::ToolUnavailable,
+            "planner_failed" => Self::PlannerFailed,
+            other => Self::Other(other.to_string()),
+        }
+    }
+
+    /// Stable stage identifier used in activity events (legacy react_loop helper).
+    pub fn as_stage(&self) -> &'static str {
+        match self {
+            Self::BudgetExhausted => "budget_exhausted",
+            Self::NoResultsAfterAllFallbacks => "no_results",
+            Self::AllToolsFailed => "all_tools_failed",
+            Self::ProviderUnavailable => "provider_unavailable",
+            Self::Other(_) => "other",
+            _ => "degraded",
+        }
+    }
+
+    pub fn message(&self) -> String {
+        match self {
+            Self::BudgetExhausted => "iteration budget exhausted".to_string(),
+            Self::NoResultsAfterAllFallbacks => {
+                "no results after broadening query variants".to_string()
+            }
+            Self::AllToolsFailed => "all tool calls failed".to_string(),
+            Self::ProviderUnavailable => "provider unavailable".to_string(),
+            Self::NoRetrievalEvidence => "no retrieval evidence after loop and fallback".to_string(),
+            Self::EmbeddingUnavailable => "embedding service unavailable".to_string(),
+            Self::Other(msg) => msg.clone(),
+            other => other.as_str().replace('_', " "),
+        }
+    }
+}
+
+impl Serialize for DegradeReason {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for DegradeReason {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        Ok(Self::from_str(&value))
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DegradeTraceItem {
     pub stage: String,
-    pub reason: String,
+    pub reason: DegradeReason,
     pub impact: String,
 }
 
@@ -377,6 +499,19 @@ pub struct ToolResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatTokenUsage {
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub total_tokens: u64,
+    #[serde(default)]
+    pub cached_tokens: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatResponse {
     pub answer: String,
     #[serde(default)]
@@ -397,6 +532,8 @@ pub struct ChatResponse {
     pub guard_report: Option<GuardReport>,
     #[serde(default)]
     pub tool_results: Vec<ToolResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<ChatTokenUsage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

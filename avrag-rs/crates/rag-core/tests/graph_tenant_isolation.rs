@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use avrag_auth::{AuthContext, OrgId, SubjectKind};
+use avrag_rag_core::RagRuntime;
 use avrag_retrieval_data_plane::{
     Bm25SearchOutput, Bm25SearchRequest, GraphSearchOutput, GraphSearchRequest,
     MultimodalSearchRequest, RetrievalDataPlane, ScoredChunk, TextDenseSearchRequest,
 };
-use avrag_rag_core::RagRuntime;
-use common::{GraphRetrievalArgs, GraphHint, ToolResult, ToolStatus};
+use common::{GraphHint, GraphRetrievalArgs, ToolResult, ToolStatus};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -106,12 +106,8 @@ async fn graph_retrieval_rejects_cross_tenant_access() {
     })
     .unwrap();
 
-    let result: ToolResult = avrag_rag_core::runtime::tools::graph::run(
-        &runtime,
-        &auth,
-        &args,
-    )
-    .await;
+    let result: ToolResult =
+        avrag_rag_core::runtime::tools::graph::run(&runtime, &auth, &args).await;
 
     assert_eq!(result.tool, "graph_retrieval");
     assert_eq!(
@@ -155,12 +151,8 @@ async fn graph_retrieval_allows_same_tenant_access() {
     })
     .unwrap();
 
-    let result: ToolResult = avrag_rag_core::runtime::tools::graph::run(
-        &runtime,
-        &auth,
-        &args,
-    )
-    .await;
+    let result: ToolResult =
+        avrag_rag_core::runtime::tools::graph::run(&runtime, &auth, &args).await;
 
     assert_eq!(result.tool, "graph_retrieval");
     assert_eq!(

@@ -4,11 +4,7 @@ use uuid::Uuid;
 
 use crate::RagRuntime;
 
-pub async fn run(
-    runtime: &RagRuntime,
-    auth: &AuthContext,
-    args: &serde_json::Value,
-) -> ToolResult {
+pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Value) -> ToolResult {
     let args: DocSummaryArgs = match serde_json::from_value(args.clone()) {
         Ok(a) => a,
         Err(e) => {
@@ -48,37 +44,35 @@ pub async fn run(
     let started = std::time::Instant::now();
 
     match args.level {
-        DocSummaryLevel::Doc => {
-            match pg_repo.get_summary_chunks(auth, &doc_uuids).await {
-                Ok(summaries) => {
-                    let results: Vec<serde_json::Value> = summaries
-                        .into_iter()
-                        .map(|(doc_id, content)| {
-                            serde_json::json!({
-                                "doc_id": doc_id.to_string(),
-                                "level": "doc",
-                                "summary": content,
-                            })
+        DocSummaryLevel::Doc => match pg_repo.get_summary_chunks(auth, &doc_uuids).await {
+            Ok(summaries) => {
+                let results: Vec<serde_json::Value> = summaries
+                    .into_iter()
+                    .map(|(doc_id, content)| {
+                        serde_json::json!({
+                            "doc_id": doc_id.to_string(),
+                            "level": "doc",
+                            "summary": content,
                         })
-                        .collect();
+                    })
+                    .collect();
 
-                    let hydrated_count = results.len();
-                    ToolResult {
-                        tool: "doc_summary".to_string(),
-                        version: "1.0".to_string(),
-                        status: ToolStatus::Ok,
-                        data: Some(serde_json::Value::Array(results)),
-                        trace: Some(ToolTrace {
-                            elapsed_ms: Some(started.elapsed().as_millis() as u64),
-                            raw_hit_count: Some(doc_uuids.len()),
-                            hydrated_hit_count: Some(hydrated_count),
-                            degrade_reason: None,
-                        }),
-                    }
+                let hydrated_count = results.len();
+                ToolResult {
+                    tool: "doc_summary".to_string(),
+                    version: "1.0".to_string(),
+                    status: ToolStatus::Ok,
+                    data: Some(serde_json::Value::Array(results)),
+                    trace: Some(ToolTrace {
+                        elapsed_ms: Some(started.elapsed().as_millis() as u64),
+                        raw_hit_count: Some(doc_uuids.len()),
+                        hydrated_hit_count: Some(hydrated_count),
+                        degrade_reason: None,
+                    }),
                 }
-                Err(e) => super::error_result("doc_summary", e.to_string()),
             }
-        }
+            Err(e) => super::error_result("doc_summary", e.to_string()),
+        },
         DocSummaryLevel::Section => {
             match pg_repo.get_document_toc_entries(auth, &doc_uuids).await {
                 Ok(entries) => {

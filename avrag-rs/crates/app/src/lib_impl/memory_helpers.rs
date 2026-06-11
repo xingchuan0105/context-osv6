@@ -1,5 +1,5 @@
 use common::{
-    ChatMessage, ChatRequest, Citation, DegradeTraceItem, DocumentStatus, ModeDebug,
+    ChatMessage, ChatRequest, Citation, DegradeReason, DegradeTraceItem, DocumentStatus, ModeDebug,
     ParsedPreviewItem, PlannerOutput, RagModeDebug, RagPlan, RagPlanItem, RagTraceItem,
     RagTraceSummary, SourceRef, SummaryInjectionTrace,
 };
@@ -103,7 +103,7 @@ pub fn build_degrade_trace(agent_type: &str, has_context: bool) -> Vec<DegradeTr
     } else {
         vec![DegradeTraceItem {
             stage: format!("{}.fallback", agent_type),
-            reason: "no_ready_document_context".to_string(),
+            reason: DegradeReason::NoReadyDocumentContext,
             impact: "Used a fallback response without grounded document context".to_string(),
         }]
     }

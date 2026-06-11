@@ -2,10 +2,14 @@ mod code;
 mod html;
 mod mineru;
 mod office_service;
+pub mod paddle_ocr;
 mod pdf;
+mod pdf_image;
+mod pdf_renderer_service;
 mod probe;
 mod router;
 mod text;
+mod visual_pdf;
 
 use std::collections::BTreeMap;
 
@@ -21,12 +25,19 @@ pub use office_service::{
     OfficeParserParseResponse, OfficeParserParseStats, OfficeParserServiceClient,
     OfficeParserServiceConfig,
 };
+pub use paddle_ocr::{PaddleOcrClient, PaddleOcrConfig, PaddleOcrPageResult};
 pub use pdf::PdfParser;
+pub use pdf_image::{ExtractedPdfImage, PdfImageFormat, FigurePlacement, extract_page_images, image_to_base64, image_mime_type, compute_figure_area_ratio};
+pub use pdf_renderer_service::{
+    PdfRendererServiceClient, PdfRendererServiceConfig, RenderedPdfPage, RenderPagesResponse,
+    chunk_page_ranges, page_range_metadata, pages_per_visual_chunk, visual_render_strategy,
+};
+pub use visual_pdf::VisualPdfParser;
 pub use probe::{ParseProbe, ParseProbeConfig, ParseProbeResult, PdfPageProbeResult};
 pub use router::{
     ExternalParseKind, ExternalParsePlan, LocalParseKind, LocalParsePlan, OfficeDocType,
     OfficeParsePlan, ParsePlan, ParseRoute, ParseRouteDecision, ParseRouteError, ParseRouter,
-    PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteReason,
+    PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteDecision, RouteReason,
 };
 pub use text::TextParser;
 
@@ -196,36 +207,37 @@ pub fn normalize_parsed_document(doc: &ParsedDocument, parser_backend: &str) -> 
         .collect::<Vec<_>>();
 
     if let Some(images_json) = doc.metadata.get("embedded_images_json")
-        && let Ok(images) = serde_json::from_str::<Vec<EmbeddedImageMeta>>(images_json) {
-            let base_context = doc
-                .pages
-                .first()
-                .map(|page| page.content.chars().take(400).collect::<String>());
-            for image in images {
-                let caption = image.alt.clone();
-                let context = base_context.clone();
-                let text = [
-                    caption.clone().unwrap_or_default(),
-                    context.clone().unwrap_or_default(),
-                ]
-                .into_iter()
-                .filter(|value| !value.trim().is_empty())
-                .collect::<Vec<_>>()
-                .join("\n\n");
-                units.push(ParsedUnit::new_image_with_context(
-                    1,
-                    if text.is_empty() {
-                        image.src.clone()
-                    } else {
-                        text
-                    },
-                    image.src,
-                    caption,
-                    context,
-                    parser_backend.to_string(),
-                ));
-            }
+        && let Ok(images) = serde_json::from_str::<Vec<EmbeddedImageMeta>>(images_json)
+    {
+        let base_context = doc
+            .pages
+            .first()
+            .map(|page| page.content.chars().take(400).collect::<String>());
+        for image in images {
+            let caption = image.alt.clone();
+            let context = base_context.clone();
+            let text = [
+                caption.clone().unwrap_or_default(),
+                context.clone().unwrap_or_default(),
+            ]
+            .into_iter()
+            .filter(|value| !value.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+            units.push(ParsedUnit::new_image_with_context(
+                1,
+                if text.is_empty() {
+                    image.src.clone()
+                } else {
+                    text
+                },
+                image.src,
+                caption,
+                context,
+                parser_backend.to_string(),
+            ));
         }
+    }
 
     NormalizedDocument {
         title: doc.title.clone(),

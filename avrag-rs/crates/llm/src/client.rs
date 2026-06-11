@@ -9,15 +9,17 @@ fn build_chat_completion_request_body(
     temperature: Option<f32>,
     stream: bool,
 ) -> serde_json::Value {
-    let mut request_body = serde_json::json!({
-        "model": config.model,
-        "messages": messages
-            .iter()
-            .map(|m| {
-                let mut msg = serde_json::json!({
-                    "role": m.role,
-                    "content": m.content
-                });
+        let mut request_body = serde_json::json!({
+            "model": config.model,
+            "messages": messages
+                .iter()
+                .map(|m| {
+                    let mut msg = serde_json::json!({ "role": m.role });
+                    if let Some(ref parts) = m.multimodal_content {
+                        msg["content"] = serde_json::to_value(parts).unwrap_or_default();
+                    } else {
+                        msg["content"] = serde_json::json!(m.content);
+                    }
                 if let Some(ref name) = m.name {
                     msg["name"] = serde_json::json!(name);
                 }
@@ -26,6 +28,9 @@ fn build_chat_completion_request_body(
                 }
                 if let Some(ref tool_calls) = m.tool_calls {
                     msg["tool_calls"] = tool_calls.clone();
+                }
+                if let Some(ref reasoning_content) = m.reasoning_content {
+                    msg["reasoning_content"] = serde_json::json!(reasoning_content);
                 }
                 msg
             })
@@ -65,6 +70,8 @@ fn build_chat_completion_request_body(
 struct StreamChoiceDelta {
     #[serde(default)]
     content: Option<String>,
+    #[serde(default)]
+    reasoning_content: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,11 +80,50 @@ struct StreamChoice {
     delta: Option<StreamChoiceDelta>,
 }
 
-#[derive(Debug, Deserialize)]
-struct StreamUsage {
+#[derive(Debug, Deserialize, Default)]
+struct PromptTokensDetails {
+    #[serde(default)]
+    cached_tokens: u32,
+}
+
+/// Provider usage block (OpenAI-compatible + DeepSeek cache fields).
+#[derive(Debug, Deserialize, Default)]
+struct ApiUsageRaw {
     prompt_tokens: u32,
     completion_tokens: u32,
     total_tokens: u32,
+    #[serde(default)]
+    cached_tokens: u32,
+    #[serde(default)]
+    prompt_cache_hit_tokens: u32,
+    #[serde(default)]
+    prompt_tokens_details: Option<PromptTokensDetails>,
+}
+
+impl ApiUsageRaw {
+    fn cached_token_count(&self) -> u32 {
+        if self.cached_tokens > 0 {
+            self.cached_tokens
+        } else if self.prompt_cache_hit_tokens > 0 {
+            self.prompt_cache_hit_tokens
+        } else {
+            self.prompt_tokens_details
+                .as_ref()
+                .map(|d| d.cached_tokens)
+                .unwrap_or(0)
+        }
+    }
+
+    fn to_llm_usage(&self, provider: String, model: String) -> LlmUsage {
+        LlmUsage {
+            prompt_tokens: self.prompt_tokens,
+            completion_tokens: self.completion_tokens,
+            total_tokens: self.total_tokens,
+            provider,
+            model,
+            cached_tokens: self.cached_token_count(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,7 +131,7 @@ struct StreamChunk {
     #[serde(default)]
     choices: Vec<StreamChoice>,
     #[serde(default)]
-    usage: Option<StreamUsage>,
+    usage: Option<ApiUsageRaw>,
     #[serde(default)]
     model: Option<String>,
 }
@@ -95,6 +141,7 @@ struct ChatCompletionStreamParser {
     buffer: Vec<u8>,
     data_lines: Vec<String>,
     accumulated_content: String,
+    accumulated_reasoning: String,
     usage: Option<LlmUsage>,
     model: String,
     provider: String,
@@ -106,18 +153,24 @@ impl ChatCompletionStreamParser {
             buffer: Vec::new(),
             data_lines: Vec::new(),
             accumulated_content: String::new(),
+            accumulated_reasoning: String::new(),
             usage: None,
             model: configured_model,
             provider,
         }
     }
 
-    fn feed_chunk(&mut self, chunk: &[u8], on_delta: &mut impl FnMut(&str)) -> anyhow::Result<()> {
+    fn feed_chunk(
+        &mut self,
+        chunk: &[u8],
+        on_content_delta: &mut impl FnMut(&str),
+        on_reasoning_delta: &mut impl FnMut(&str),
+    ) -> anyhow::Result<()> {
         self.buffer.extend_from_slice(chunk);
 
         while let Some(line) = self.take_line()? {
             if line.is_empty() {
-                self.flush_event(on_delta)?;
+                self.flush_event(on_content_delta, on_reasoning_delta)?;
                 continue;
             }
 
@@ -133,7 +186,11 @@ impl ChatCompletionStreamParser {
         Ok(())
     }
 
-    fn finish(mut self, on_delta: &mut impl FnMut(&str)) -> anyhow::Result<LlmResponse> {
+    fn finish(
+        mut self,
+        on_content_delta: &mut impl FnMut(&str),
+        on_reasoning_delta: &mut impl FnMut(&str),
+    ) -> anyhow::Result<LlmResponse> {
         if !self.buffer.is_empty() {
             let line = String::from_utf8(std::mem::take(&mut self.buffer))
                 .context("Failed to decode trailing chat completion stream line")?;
@@ -143,14 +200,24 @@ impl ChatCompletionStreamParser {
             }
         }
 
-        self.flush_event(on_delta)?;
+        self.flush_event(on_content_delta, on_reasoning_delta)?;
 
         if self.accumulated_content.is_empty() {
-            anyhow::bail!("Chat completion stream finished without content");
+            if self.accumulated_reasoning.is_empty() {
+                anyhow::bail!("Chat completion stream finished without content");
+            }
+            self.accumulated_content = self.accumulated_reasoning.clone();
         }
+
+        let reasoning_content = if self.accumulated_reasoning.is_empty() {
+            None
+        } else {
+            Some(self.accumulated_reasoning.clone())
+        };
 
         Ok(LlmResponse {
             content: self.accumulated_content,
+            reasoning_content,
             usage: self.usage.unwrap_or_else(|| LlmUsage {
                 prompt_tokens: 0,
                 completion_tokens: 0,
@@ -180,7 +247,11 @@ impl ChatCompletionStreamParser {
         Ok(Some(line))
     }
 
-    fn flush_event(&mut self, on_delta: &mut impl FnMut(&str)) -> anyhow::Result<()> {
+    fn flush_event(
+        &mut self,
+        on_content_delta: &mut impl FnMut(&str),
+        on_reasoning_delta: &mut impl FnMut(&str),
+    ) -> anyhow::Result<()> {
         if self.data_lines.is_empty() {
             return Ok(());
         }
@@ -201,20 +272,19 @@ impl ChatCompletionStreamParser {
         }
 
         if let Some(usage) = chunk.usage {
-            self.usage = Some(LlmUsage {
-                prompt_tokens: usage.prompt_tokens,
-                completion_tokens: usage.completion_tokens,
-                total_tokens: usage.total_tokens,
-                provider: self.provider.clone(),
-                model: self.model.clone(),
-                cached_tokens: 0,
-            });
+            self.usage = Some(usage.to_llm_usage(self.provider.clone(), self.model.clone()));
         }
 
         for choice in chunk.choices {
             let Some(delta) = choice.delta else {
                 continue;
             };
+            if let Some(reasoning) = delta.reasoning_content {
+                if !reasoning.is_empty() {
+                    self.accumulated_reasoning.push_str(&reasoning);
+                    on_reasoning_delta(&reasoning);
+                }
+            }
             let Some(content) = delta.content else {
                 continue;
             };
@@ -224,7 +294,7 @@ impl ChatCompletionStreamParser {
             }
 
             self.accumulated_content.push_str(&content);
-            on_delta(&content);
+            on_content_delta(&content);
         }
 
         Ok(())
@@ -374,6 +444,8 @@ impl LlmClient {
         struct ResponseMessage {
             content: Option<String>,
             #[serde(default)]
+            reasoning_content: Option<String>,
+            #[serde(default)]
             tool_calls: Option<Vec<OpenAiToolCall>>,
         }
 
@@ -394,16 +466,9 @@ impl LlmClient {
         }
 
         #[derive(serde::Deserialize)]
-        struct Usage {
-            prompt_tokens: u32,
-            completion_tokens: u32,
-            total_tokens: u32,
-        }
-
-        #[derive(serde::Deserialize)]
         struct CompletionResponse {
             choices: Vec<Choice>,
-            usage: Usage,
+            usage: ApiUsageRaw,
             model: String,
         }
 
@@ -425,6 +490,7 @@ impl LlmClient {
 
         let choice = resp.choices.first().context("No choices in response")?;
         let content = choice.message.content.clone().unwrap_or_default();
+        let reasoning_content = choice.message.reasoning_content.clone();
 
         let tool_calls = if let Some(ref calls) = choice.message.tool_calls {
             let mut mapped_calls = Vec::new();
@@ -461,20 +527,19 @@ impl LlmClient {
             &resp.model,
             resp.usage.prompt_tokens as u64,
             resp.usage.completion_tokens as u64,
+            resp.usage.cached_token_count() as u64,
         );
 
         self.record_usage(pre_deducted, resp.usage.total_tokens as usize);
 
+        let llm_usage = resp
+            .usage
+            .to_llm_usage(self.config.provider_name(), resp.model.clone());
+
         Ok(LlmResponse {
             content,
-            usage: LlmUsage {
-                prompt_tokens: resp.usage.prompt_tokens,
-                completion_tokens: resp.usage.completion_tokens,
-                total_tokens: resp.usage.total_tokens,
-                provider: self.config.provider_name(),
-                model: resp.model.clone(),
-                cached_tokens: 0,
-            },
+            reasoning_content,
+            usage: llm_usage,
             model: resp.model,
             tool_calls,
         })
@@ -550,20 +615,16 @@ impl LlmClient {
 
         #[derive(serde::Deserialize)]
         struct ResponseMessage {
-            content: String,
-        }
-
-        #[derive(serde::Deserialize)]
-        struct Usage {
-            prompt_tokens: u32,
-            completion_tokens: u32,
-            total_tokens: u32,
+            #[serde(default)]
+            content: Option<String>,
+            #[serde(default)]
+            reasoning_content: Option<String>,
         }
 
         #[derive(serde::Deserialize)]
         struct CompletionResponse {
             choices: Vec<Choice>,
-            usage: Usage,
+            usage: ApiUsageRaw,
             model: String,
         }
 
@@ -583,13 +644,9 @@ impl LlmClient {
             }
         };
 
-        let content = resp
-            .choices
-            .first()
-            .context("No choices in response")?
-            .message
-            .content
-            .clone();
+        let choice = resp.choices.first().context("No choices in response")?;
+        let content = choice.message.content.clone().unwrap_or_default();
+        let reasoning_content = choice.message.reasoning_content.clone();
         telemetry::prometheus::observe_llm_call(
             "generic",
             &provider,
@@ -603,20 +660,19 @@ impl LlmClient {
             &resp.model,
             resp.usage.prompt_tokens as u64,
             resp.usage.completion_tokens as u64,
+            resp.usage.cached_token_count() as u64,
         );
 
         self.record_usage(pre_deducted, resp.usage.total_tokens as usize);
 
+        let llm_usage = resp
+            .usage
+            .to_llm_usage(self.config.provider_name(), resp.model.clone());
+
         Ok(LlmResponse {
             content,
-            usage: LlmUsage {
-                prompt_tokens: resp.usage.prompt_tokens,
-                completion_tokens: resp.usage.completion_tokens,
-                total_tokens: resp.usage.total_tokens,
-                provider: self.config.provider_name(),
-                model: resp.model.clone(),
-                cached_tokens: 0,
-            },
+            reasoning_content,
+            usage: llm_usage,
             model: resp.model,
             tool_calls: None,
         })
@@ -627,7 +683,8 @@ impl LlmClient {
         messages: &[ChatMessage],
         temperature: Option<f32>,
         token: CancellationToken,
-        mut on_delta: impl FnMut(&str),
+        mut on_content_delta: impl FnMut(&str),
+        mut on_reasoning_delta: impl FnMut(&str),
     ) -> anyhow::Result<LlmResponse> {
         let started_at = std::time::Instant::now();
         let provider = self.config.provider_name();
@@ -673,7 +730,8 @@ impl LlmClient {
                     "failure",
                     started_at.elapsed().as_secs_f64() * 1000.0,
                 );
-                return Err(anyhow::Error::new(error)).context("Failed to send chat completion stream request");
+                return Err(anyhow::Error::new(error))
+                    .context("Failed to send chat completion stream request");
             }
         };
 
@@ -703,10 +761,10 @@ impl LlmClient {
                 break;
             };
 
-            parser.feed_chunk(&chunk, &mut on_delta)?;
+            parser.feed_chunk(&chunk, &mut on_content_delta, &mut on_reasoning_delta)?;
         }
 
-        let parsed = parser.finish(&mut on_delta)?;
+        let parsed = parser.finish(&mut on_content_delta, &mut on_reasoning_delta)?;
 
         telemetry::prometheus::observe_llm_call(
             "generic",
@@ -721,6 +779,7 @@ impl LlmClient {
             &parsed.model,
             parsed.usage.prompt_tokens as u64,
             parsed.usage.completion_tokens as u64,
+            parsed.usage.cached_tokens as u64,
         );
 
         self.record_usage(pre_deducted, parsed.usage.total_tokens as usize);
@@ -730,15 +789,35 @@ impl LlmClient {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ContentPart {
+    Text { text: String },
+    ImageUrl { image_url: ImageUrlDetail },
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ImageUrlDetail {
+    pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub multimodal_content: Option<Vec<ContentPart>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<serde_json::Value>,
+    /// Chain-of-thought from thinking-mode models (e.g. DeepSeek); must be
+    /// echoed back on subsequent turns when thinking is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
 }
 
 impl ChatMessage {
@@ -746,9 +825,11 @@ impl ChatMessage {
         Self {
             role: "user".to_string(),
             content: content.into(),
+            multimodal_content: None,
             name: None,
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         }
     }
 
@@ -756,9 +837,11 @@ impl ChatMessage {
         Self {
             role: "system".to_string(),
             content: content.into(),
+            multimodal_content: None,
             name: None,
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
         }
     }
 
@@ -766,9 +849,32 @@ impl ChatMessage {
         Self {
             role: "assistant".to_string(),
             content: content.into(),
+            multimodal_content: None,
             name: None,
             tool_call_id: None,
             tool_calls: None,
+            reasoning_content: None,
+        }
+    }
+
+    pub fn user_multimodal(text: impl Into<String>, image_urls: Vec<String>) -> Self {
+        let mut parts = vec![ContentPart::Text { text: text.into() }];
+        for url in image_urls {
+            parts.push(ContentPart::ImageUrl {
+                image_url: ImageUrlDetail {
+                    url,
+                    detail: Some("low".to_string()),
+                },
+            });
+        }
+        Self {
+            role: "user".to_string(),
+            content: String::new(),
+            multimodal_content: Some(parts),
+            name: None,
+            tool_call_id: None,
+            tool_calls: None,
+            reasoning_content: None,
         }
     }
 }
@@ -776,6 +882,9 @@ impl ChatMessage {
 #[derive(Debug, Clone)]
 pub struct LlmResponse {
     pub content: String,
+    /// Reasoning tokens from thinking-mode responses; carry into the next
+    /// assistant message when multi-turn tool calling continues.
+    pub reasoning_content: Option<String>,
     pub usage: LlmUsage,
     pub model: String,
     pub tool_calls: Option<Vec<common::ToolCall>>,
@@ -824,7 +933,8 @@ impl LlmUsage {
 #[cfg(test)]
 mod tests {
     use super::{
-        ChatCompletionStreamParser, ChatMessage, LlmUsage, build_chat_completion_request_body,
+        ApiUsageRaw, ChatCompletionStreamParser, ChatMessage, LlmUsage,
+        build_chat_completion_request_body,
     };
     use crate::ModelProviderConfig;
 
@@ -917,6 +1027,7 @@ mod tests {
 
 "#,
                 &mut |delta| observed.push_str(delta),
+                &mut |_| {},
             )
             .unwrap();
         parser
@@ -929,11 +1040,12 @@ data: [DONE]
 
 "#,
                 &mut |delta| observed.push_str(delta),
+                &mut |_| {},
             )
             .unwrap();
 
         let response = parser
-            .finish(&mut |delta| observed.push_str(delta))
+            .finish(&mut |delta| observed.push_str(delta), &mut |_| {})
             .unwrap();
 
         assert_eq!(observed, "Hello");
@@ -955,6 +1067,7 @@ data: [DONE]
             .feed_chunk(
                 br#"data: {"choices":[{"delta":{"content":"A"#,
                 &mut |delta| observed.push_str(delta),
+                &mut |_| {},
             )
             .unwrap();
         parser
@@ -965,11 +1078,12 @@ data: [DONE]
 
 "#,
                 &mut |delta| observed.push_str(delta),
+                &mut |_| {},
             )
             .unwrap();
 
         let response = parser
-            .finish(&mut |delta| observed.push_str(delta))
+            .finish(&mut |delta| observed.push_str(delta), &mut |_| {})
             .unwrap();
         assert_eq!(observed, "AB");
         assert_eq!(response.content, "AB");
@@ -988,10 +1102,11 @@ data: [DONE]
 
 "#,
                 &mut |_delta| {},
+                &mut |_| {},
             )
             .unwrap();
 
-        let error = parser.finish(&mut |_delta| {}).unwrap_err();
+        let error = parser.finish(&mut |_delta| {}, &mut |_| {}).unwrap_err();
 
         assert!(
             error
@@ -1001,27 +1116,68 @@ data: [DONE]
     }
 
     #[test]
+    fn chat_completion_stream_parser_falls_back_to_reasoning_when_content_empty() {
+        let mut parser =
+            ChatCompletionStreamParser::new("deepseek".to_string(), "deepseek-chat".to_string());
+
+        let mut reasoning_observed = String::new();
+        parser
+            .feed_chunk(
+                br#"data: {"choices":[{"delta":{"reasoning_content":"Final answer from reasoning."}}]}
+
+data: [DONE]
+
+"#,
+                &mut |_delta| {},
+                &mut |delta| reasoning_observed.push_str(delta),
+            )
+            .unwrap();
+
+        let response = parser
+            .finish(&mut |_delta| {}, &mut |delta| {
+                reasoning_observed.push_str(delta)
+            })
+            .unwrap();
+        assert_eq!(reasoning_observed, "Final answer from reasoning.");
+        assert_eq!(response.content, "Final answer from reasoning.");
+        assert_eq!(
+            response.reasoning_content.as_deref(),
+            Some("Final answer from reasoning.")
+        );
+    }
+
+    #[test]
+    fn usage_parses_cached_tokens_from_provider_fields() {
+        let raw: ApiUsageRaw = serde_json::from_str(
+            r#"{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"prompt_cache_hit_tokens":8}"#,
+        )
+        .unwrap();
+        assert_eq!(raw.cached_token_count(), 8);
+
+        let raw2: ApiUsageRaw = serde_json::from_str(
+            r#"{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":3}}"#,
+        )
+        .unwrap();
+        assert_eq!(raw2.cached_token_count(), 3);
+
+        let usage = raw.to_llm_usage("deepseek".to_string(), "model".to_string());
+        assert_eq!(usage.cached_tokens, 8);
+    }
+
+    #[test]
     fn request_includes_prompt_cache_when_enable_cache_is_true() {
         let mut config = test_config("https://api.deepseek.com", None);
         config.enable_cache = Some(true);
-        let body = build_chat_completion_request_body(
-            &config,
-            &[ChatMessage::user("hello")],
-            None,
-            false,
-        );
+        let body =
+            build_chat_completion_request_body(&config, &[ChatMessage::user("hello")], None, false);
         assert_eq!(body["prompt_cache"], true);
     }
 
     #[test]
     fn request_omits_prompt_cache_when_enable_cache_is_none() {
         let config = test_config("https://api.deepseek.com", None);
-        let body = build_chat_completion_request_body(
-            &config,
-            &[ChatMessage::user("hello")],
-            None,
-            false,
-        );
+        let body =
+            build_chat_completion_request_body(&config, &[ChatMessage::user("hello")], None, false);
         assert!(body.get("prompt_cache").is_none());
     }
 
@@ -1030,7 +1186,7 @@ data: [DONE]
         let config = test_config("https://api.openai.com", None);
         let mut msg1 = ChatMessage::user("Hello");
         msg1.name = Some("user_alice".to_string());
-        
+
         let mut msg2 = ChatMessage::assistant("");
         msg2.tool_calls = Some(serde_json::json!([{
             "id": "call_123",
@@ -1044,17 +1200,14 @@ data: [DONE]
         let msg3 = ChatMessage {
             role: "tool".to_string(),
             content: "success".to_string(),
+            multimodal_content: None,
             name: Some("test_tool".to_string()),
             tool_call_id: Some("call_123".to_string()),
             tool_calls: None,
+            reasoning_content: None,
         };
 
-        let body = build_chat_completion_request_body(
-            &config,
-            &[msg1, msg2, msg3],
-            None,
-            false,
-        );
+        let body = build_chat_completion_request_body(&config, &[msg1, msg2, msg3], None, false);
 
         let messages = body["messages"].as_array().unwrap();
         assert_eq!(messages.len(), 3);
@@ -1071,5 +1224,39 @@ data: [DONE]
         assert_eq!(messages[2]["content"], "success");
         assert_eq!(messages[2]["name"], "test_tool");
         assert_eq!(messages[2]["tool_call_id"], "call_123");
+    }
+
+    #[test]
+    fn request_serializes_assistant_reasoning_content_for_thinking_mode() {
+        let config = test_config("https://api.deepseek.com", Some(true));
+        let assistant = ChatMessage {
+            role: "assistant".to_string(),
+            content: String::new(),
+            multimodal_content: None,
+            name: None,
+            tool_call_id: None,
+            tool_calls: Some(serde_json::json!([{
+                "id": "call_0",
+                "type": "function",
+                "function": {
+                    "name": "dense_retrieval",
+                    "arguments": r#"{"query":"rust"}"#
+                }
+            }])),
+            reasoning_content: Some("Let me search the knowledge base.".to_string()),
+        };
+
+        let body = build_chat_completion_request_body(
+            &config,
+            &[ChatMessage::user("hello"), assistant],
+            None,
+            false,
+        );
+
+        let messages = body["messages"].as_array().unwrap();
+        assert_eq!(
+            messages[1]["reasoning_content"],
+            "Let me search the knowledge base."
+        );
     }
 }

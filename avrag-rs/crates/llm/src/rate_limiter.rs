@@ -214,10 +214,7 @@ mod tests {
             provider_defaults("https://dashscope.aliyuncs.com"),
             (120, 2_000_000)
         );
-        assert_eq!(
-            provider_defaults("https://api.openai.com"),
-            (60, 150_000)
-        );
+        assert_eq!(provider_defaults("https://api.openai.com"), (60, 150_000));
         assert_eq!(
             provider_defaults("https://api.siliconflow.cn"),
             (60, 1_000_000)

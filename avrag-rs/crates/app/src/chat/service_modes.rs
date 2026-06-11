@@ -32,11 +32,13 @@ impl AppState {
                 message_id: None,
                 guard_report: None,
                 tool_results: Vec::new(),
+                usage: None,
             },
             llm_usage: None,
             debug_metadata: None,
             tokens_emitted: false,
             citations_emitted: false,
+            query_resolution: None,
         })
     }
 
@@ -78,7 +80,7 @@ impl AppState {
         let mode_debug = build_mode_debug(req, retrieval.as_ref(), &sources);
         let degrade_trace = build_degrade_trace(&req.agent_type, context_document.is_some());
 
-        let mut state = self.inner.write().await;
+        let mut state = self.storage.inner().write().await;
         let user_message_id = next_message_id(&mut state);
         let assistant_message_id = next_message_id(&mut state);
         let now = now_rfc3339();
@@ -94,6 +96,8 @@ impl AppState {
             agent_icon: None,
             citations: Vec::new(),
             tool_results: Vec::new(),
+            turn_metadata: None,
+            resolved_query: None,
             created_at: now.clone(),
         });
         messages.push(ChatMessage {
@@ -107,6 +111,8 @@ impl AppState {
             agent_icon: Some(agent_icon(&req.agent_type).to_string()),
             citations: citations.clone(),
             tool_results: Vec::new(),
+            turn_metadata: None,
+            resolved_query: None,
             created_at: now.clone(),
         });
 
@@ -135,11 +141,13 @@ impl AppState {
                 message_id: Some(assistant_message_id),
                 guard_report: None,
                 tool_results: Vec::new(),
+                usage: None,
             },
             llm_usage: None,
             debug_metadata: None,
             tokens_emitted: false,
             citations_emitted: false,
+            query_resolution: None,
         })
     }
 
@@ -171,7 +179,16 @@ pub(crate) fn build_chat_execution_from_result(
         total_tokens: usage.total_tokens.min(u32::MAX as u64) as u32,
         provider: usage.provider.clone(),
         model: usage.model.clone(),
-        cached_tokens: 0,
+        cached_tokens: usage.cached_tokens.min(u32::MAX as u64) as u32,
+    });
+
+    let response_usage = agent_result.usage.as_ref().map(|u| common::ChatTokenUsage {
+        prompt_tokens: u.prompt_tokens,
+        completion_tokens: u.completion_tokens,
+        total_tokens: u.total_tokens,
+        cached_tokens: u.cached_tokens,
+        provider: Some(u.provider.clone()),
+        model: Some(u.model.clone()),
     });
 
     ChatExecution {
@@ -193,22 +210,18 @@ pub(crate) fn build_chat_execution_from_result(
             mode_debug: params.mode_debug,
             message_id: None,
             guard_report: None,
-            tool_results: agent_result.tool_results.iter().map(|r| contracts::chat::ToolResult {
-                tool: r.tool.clone(),
-                version: r.version.clone(),
-                status: match r.status {
-                    common::ToolStatus::Ok => contracts::chat::ToolStatus::Ok,
-                    common::ToolStatus::Timeout => contracts::chat::ToolStatus::Timeout,
-                    common::ToolStatus::Error => contracts::chat::ToolStatus::Error,
-                    common::ToolStatus::NotFound => contracts::chat::ToolStatus::NotFound,
-                    common::ToolStatus::NotImplemented => contracts::chat::ToolStatus::NotImplemented,
-                },
-                data: r.data.clone(),
+            tool_results: agent_result.tool_results.iter().map(|r| {
+                contracts::chat::ToolResult::from(r.clone())
             }).collect(),
+            usage: response_usage,
         },
         llm_usage,
         debug_metadata: params.debug_metadata,
         tokens_emitted: false,
         citations_emitted: false,
+        query_resolution: agent_result
+            .query_resolution
+            .as_ref()
+            .and_then(|meta| serde_json::to_value(meta).ok()),
     }
 }

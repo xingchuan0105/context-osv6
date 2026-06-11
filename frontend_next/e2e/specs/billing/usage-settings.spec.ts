@@ -17,9 +17,9 @@ test.describe("Billing Settings Smoke", () => {
     ).toBeVisible();
     await settings.expectBillingTabActive();
     await settings.expectBillingSectionLoaded();
+    await settings.expectUsageMeterVisible();
+    await settings.expectPlanDisplayVisible();
 
-    // Billing UI has no data-testid hooks yet (PR-3 UsageMeter wiring).
-    // Assert stable semantic labels for plan status and usage rows.
     await expect(page.getByText(/状态|Status/i).first()).toBeVisible();
     await expect(
       page.getByText(/令牌|Tokens|文档|Documents/i).first(),

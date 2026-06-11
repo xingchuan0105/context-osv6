@@ -102,8 +102,13 @@ pub(crate) async fn request_context_middleware(
     // Edge-layer rate limit (IP-based coarse limit before App layer)
     let edge_ip = extract_client_ip(&headers);
     let edge_key = format!("edge:{}", edge_ip);
+    let edge_limit = if std::env::var("E2E_ENABLED").unwrap_or_default() == "true" {
+        10_000
+    } else {
+        DEFAULT_EDGE_RATE_LIMIT_RPM
+    };
     let (edge_allowed, _edge_remaining, edge_limit) =
-        check_rate_limit_with_fallback(state.redis_url(), &edge_key, DEFAULT_EDGE_RATE_LIMIT_RPM).await;
+        check_rate_limit_with_fallback(state.redis_url(), &edge_key, edge_limit).await;
     if !edge_allowed {
         let retry_after = retry_after_seconds_for_window();
         return (
@@ -117,10 +122,7 @@ pub(crate) async fn request_context_middleware(
                     HeaderName::from_static(HEADER_RATE_LIMIT_REMAINING),
                     "0".to_string(),
                 ),
-                (
-                    header::RETRY_AFTER,
-                    retry_after.to_string(),
-                ),
+                (header::RETRY_AFTER, retry_after.to_string()),
             ],
             Json(json!({
                 "error": "rate_limit_exceeded",
@@ -199,10 +201,7 @@ pub(crate) async fn request_context_middleware(
                     HeaderName::from_static(HEADER_RATE_LIMIT_REMAINING),
                     "0".to_string(),
                 ),
-                (
-                    header::RETRY_AFTER,
-                    retry_after.to_string(),
-                ),
+                (header::RETRY_AFTER, retry_after.to_string()),
             ],
             Json(json!({
                 "error": "rate_limit_exceeded",
@@ -290,9 +289,10 @@ async fn check_rate_limit_with_fallback(
     if !redis_url.trim().is_empty()
         && let Ok(limiter) =
             RedisFixedWindowRateLimiter::new(redis_url.to_string(), limit_rpm).await
-            && let Ok(decision) = limiter.check(key).await {
-                return (decision.allowed, decision.remaining, decision.limit);
-            }
+        && let Ok(decision) = limiter.check(key).await
+    {
+        return (decision.allowed, decision.remaining, decision.limit);
+    }
 
     check_rate_limit(key, limit_rpm)
 }

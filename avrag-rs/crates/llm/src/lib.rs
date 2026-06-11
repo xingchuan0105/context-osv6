@@ -3,20 +3,27 @@ pub mod embedding;
 pub mod planner;
 pub mod rate_limiter;
 pub mod reranker;
+pub mod section_index;
 pub mod summary;
 pub mod synthesizer;
 pub mod token_counter;
 
 pub use client::{ChatMessage, LlmClient, LlmResponse, LlmUsage};
-pub use token_counter::{count_chat_messages, count_system_and_query, count_tokens};
 pub use embedding::{EmbeddingClient, MultiModalEmbeddingInput};
 pub use planner::RetrievalPlanner;
-pub use rate_limiter::{RateLimiter, RateLimitError, SharedRateLimiter, default_rpm_limit, default_tpm_limit, provider_defaults};
+pub use rate_limiter::{
+    RateLimitError, RateLimiter, SharedRateLimiter, default_rpm_limit, default_tpm_limit,
+    provider_defaults,
+};
 pub use reranker::{
     MultiModalRerankDocument, MultiModalRerankResult, RerankResult, RerankerClient,
 };
+pub use section_index::{
+    SectionIndexChunk, SectionIndexGenerator, SectionIndexOutput, SectionIndexSection,
+};
 pub use summary::SummaryGenerator;
-pub use synthesizer::{AnswerSynthesizer, SynthesisOutput};
+pub use synthesizer::{SynthesisOutput, parse_synthesis_output};
+pub use token_counter::{count_chat_messages, count_system_and_query, count_tokens};
 
 /// Trait for LLM completion providers.
 /// Allows injecting mock/recording providers in tests.

@@ -32,13 +32,30 @@ impl Default for ParseProbeConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PdfPageProbeResult {
     pub page_number: u32,
     pub extracted_text_chars: usize,
     pub image_hint_count: usize,
     pub table_hint_count: usize,
     pub likely_scanned: bool,
+    // v2 quality signals (Option = None when not yet computed)
+    #[serde(default)]
+    pub readable_ratio: Option<f32>,
+    #[serde(default)]
+    pub bigram_repeat_ratio: Option<f32>,
+    #[serde(default)]
+    pub unique_token_ratio: Option<f32>,
+    #[serde(default)]
+    pub watermark_hit: bool,
+    // ING-1b-β: figure area analysis
+    #[serde(default)]
+    pub figure_area_ratio: Option<f32>,
+    #[serde(default)]
+    pub non_decorative_image_count: Option<usize>,
+    // ING-3b: table garbled ratio
+    #[serde(default)]
+    pub table_garbled_ratio: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,9 +110,7 @@ impl ParseProbe {
         match extension.as_str() {
             "pdf" => Self::probe_pdf(bytes, &extension, &mime_type, config),
             "ppt" | "pptx" => Self::probe_presentation(bytes, &extension, &mime_type),
-            "doc" | "docx" | "xls" | "xlsx" => {
-                Self::probe_office(bytes, &extension, &mime_type)
-            }
+            "doc" | "docx" | "xls" | "xlsx" => Self::probe_office(bytes, &extension, &mime_type),
             "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" => {
                 Self::probe_image(bytes, &extension, &mime_type)
             }
@@ -139,22 +154,35 @@ impl ParseProbe {
             let page_number = *page_number_key;
 
             // --- Text extraction ---
-            let page_text_chars = doc
-                .extract_text(&[page_number])
-                .map(|c| c.len())
-                .unwrap_or(0);
+            let page_text = doc.extract_text(&[page_number]).unwrap_or_default();
+            let page_text_chars = page_text.len();
 
             // --- Real image detection via XObject dictionary ---
-            let page_image_count =
-                Self::count_image_xobjects(&doc, *page_object_id).unwrap_or(0);
+            let page_image_count = Self::count_image_xobjects(&doc, *page_object_id).unwrap_or(0);
+
+            // --- Figure area ratio via content stream CTM analysis ---
+            let (figure_area_ratio, non_decorative_image_count) = if page_image_count > 0 {
+                match super::pdf_image::compute_figure_area_ratio(&doc, *page_object_id) {
+                    Ok((ratio, count, _)) => (Some(ratio), Some(count)),
+                    Err(_) => (None, None),
+                }
+            } else {
+                (None, None)
+            };
 
             // --- Real table detection via content-stream analysis ---
-            let page_table_count =
-                Self::count_table_structures(&doc, *page_object_id).unwrap_or(0);
+            let page_table_count = Self::count_table_structures(&doc, *page_object_id).unwrap_or(0);
+
+            // --- Table garbled ratio ---
+            let table_garbled_ratio = if page_table_count > 0 {
+                Some(compute_table_garbled_ratio(&page_text))
+            } else {
+                None
+            };
 
             // --- Presentation detection via aspect ratio ---
-            let is_presentation_page = Self::is_presentation_page(&doc, *page_object_id)
-                .unwrap_or(false);
+            let is_presentation_page =
+                Self::is_presentation_page(&doc, *page_object_id).unwrap_or(false);
             if is_presentation_page {
                 presentation_page_hits += 1;
             }
@@ -165,12 +193,22 @@ impl ParseProbe {
                 total_table_structures += page_table_count;
             }
 
+            let (readable_ratio, bigram_repeat_ratio, unique_token_ratio, watermark_hit) =
+                compute_quality_signals(&page_text);
+
             page_probes.push(PdfPageProbeResult {
                 page_number,
                 extracted_text_chars: page_text_chars,
                 image_hint_count: page_image_count,
                 table_hint_count: page_table_count,
                 likely_scanned: page_text_chars < config.scanned_page_threshold,
+                readable_ratio: Some(readable_ratio),
+                bigram_repeat_ratio: Some(bigram_repeat_ratio),
+                unique_token_ratio: Some(unique_token_ratio),
+                watermark_hit,
+                figure_area_ratio,
+                non_decorative_image_count,
+                table_garbled_ratio,
             });
         }
 
@@ -196,28 +234,28 @@ impl ParseProbe {
 
     /// Count actual Image XObjects in the page's Resources dictionary.
     fn count_image_xobjects(doc: &Document, page_object_id: lopdf::ObjectId) -> Result<usize> {
-        let page_obj = doc.get_object(page_object_id).map_err(|_| {
-            anyhow::anyhow!("Page object not found")
-        })?;
-        let page_dict = page_obj.as_dict().map_err(|_| {
-            anyhow::anyhow!("Page object is not a dictionary")
-        })?;
+        let page_obj = doc
+            .get_object(page_object_id)
+            .map_err(|_| anyhow::anyhow!("Page object not found"))?;
+        let page_dict = page_obj
+            .as_dict()
+            .map_err(|_| anyhow::anyhow!("Page object is not a dictionary"))?;
 
         let resources = match page_dict.get(b"Resources") {
             Ok(r) => r,
             Err(_) => return Ok(0),
         };
-        let res_dict = resources.as_dict().map_err(|_| {
-            anyhow::anyhow!("Resources is not a dictionary")
-        })?;
+        let res_dict = resources
+            .as_dict()
+            .map_err(|_| anyhow::anyhow!("Resources is not a dictionary"))?;
 
         let xobjects = match res_dict.get(b"XObject") {
             Ok(x) => x,
             Err(_) => return Ok(0),
         };
-        let xobj_dict = xobjects.as_dict().map_err(|_| {
-            anyhow::anyhow!("XObject is not a dictionary")
-        })?;
+        let xobj_dict = xobjects
+            .as_dict()
+            .map_err(|_| anyhow::anyhow!("XObject is not a dictionary"))?;
 
         let mut image_count = 0;
         for (_, obj_ref) in xobj_dict.iter() {
@@ -247,20 +285,20 @@ impl ParseProbe {
 
     /// Detect table structures by analysing drawing commands in the page content stream.
     fn count_table_structures(doc: &Document, page_object_id: lopdf::ObjectId) -> Result<usize> {
-        let page_obj = doc.get_object(page_object_id).map_err(|_| {
-            anyhow::anyhow!("Page object not found")
-        })?;
-        let page_dict = page_obj.as_dict().map_err(|_| {
-            anyhow::anyhow!("Page object is not a dictionary")
-        })?;
+        let page_obj = doc
+            .get_object(page_object_id)
+            .map_err(|_| anyhow::anyhow!("Page object not found"))?;
+        let page_dict = page_obj
+            .as_dict()
+            .map_err(|_| anyhow::anyhow!("Page object is not a dictionary"))?;
 
         let resources = match page_dict.get(b"Resources") {
             Ok(r) => r,
             Err(_) => return Ok(0),
         };
-        let res_dict = resources.as_dict().map_err(|_| {
-            anyhow::anyhow!("Resources is not a dictionary")
-        })?;
+        let res_dict = resources
+            .as_dict()
+            .map_err(|_| anyhow::anyhow!("Resources is not a dictionary"))?;
 
         // Count fonts as a proxy for structured text regions
         let font_count: usize = match res_dict.get(b"Font") {
@@ -273,33 +311,32 @@ impl ParseProbe {
 
         // Heuristic: multiple consecutive lines with pipe/tab delimiters
         let pipe_lines = text.lines().filter(|l| l.contains('|')).count();
-        let tab_aligned_lines = text
-            .lines()
-            .filter(|l| l.split('\t').count() >= 3)
-            .count();
+        let tab_aligned_lines = text.lines().filter(|l| l.split('\t').count() >= 3).count();
 
         // Combine structural signals: font diversity + delimiter patterns
-        let table_score = font_count.saturating_add(pipe_lines).saturating_add(tab_aligned_lines);
+        let table_score = font_count
+            .saturating_add(pipe_lines)
+            .saturating_add(tab_aligned_lines);
 
         Ok(table_score)
     }
 
     /// Detect presentation-like pages via aspect-ratio analysis.
     fn is_presentation_page(doc: &Document, page_object_id: lopdf::ObjectId) -> Result<bool> {
-        let page_obj = doc.get_object(page_object_id).map_err(|_| {
-            anyhow::anyhow!("Page object not found")
-        })?;
-        let page_dict = page_obj.as_dict().map_err(|_| {
-            anyhow::anyhow!("Page object is not a dictionary")
-        })?;
+        let page_obj = doc
+            .get_object(page_object_id)
+            .map_err(|_| anyhow::anyhow!("Page object not found"))?;
+        let page_dict = page_obj
+            .as_dict()
+            .map_err(|_| anyhow::anyhow!("Page object is not a dictionary"))?;
 
         let mediabox = match page_dict.get(b"MediaBox") {
             Ok(m) => m,
             Err(_) => return Ok(false),
         };
-        let arr = mediabox.as_array().map_err(|_| {
-            anyhow::anyhow!("MediaBox is not an array")
-        })?;
+        let arr = mediabox
+            .as_array()
+            .map_err(|_| anyhow::anyhow!("MediaBox is not an array"))?;
         if arr.len() < 4 {
             return Ok(false);
         }
@@ -359,11 +396,7 @@ impl ParseProbe {
         Ok(result)
     }
 
-    fn probe_office(
-        bytes: &[u8],
-        extension: &str,
-        mime_type: &str,
-    ) -> Result<ParseProbeResult> {
+    fn probe_office(bytes: &[u8], extension: &str, mime_type: &str) -> Result<ParseProbeResult> {
         let mut result = ParseProbeResult::new(mime_type.to_string(), extension.to_string());
         result.likely_presentation = extension == "pptx";
 
@@ -383,10 +416,8 @@ impl ParseProbe {
         extension: &str,
         _mime_type: &str,
     ) -> Result<ParseProbeResult> {
-        let mut result = ParseProbeResult::new(
-            Self::guess_mime_type(extension),
-            extension.to_string(),
-        );
+        let mut result =
+            ParseProbeResult::new(Self::guess_mime_type(extension), extension.to_string());
 
         let cursor = Cursor::new(bytes);
         let mut archive = zip::ZipArchive::new(cursor)
@@ -437,9 +468,7 @@ impl ParseProbe {
                     for i in 0..archive.len() {
                         if let Ok(mut file) = archive.by_index(i) {
                             let name = file.name();
-                            if name.starts_with("xl/worksheets/sheet")
-                                && name.ends_with(".xml")
-                            {
+                            if name.starts_with("xl/worksheets/sheet") && name.ends_with(".xml") {
                                 let mut sheet_text = String::new();
                                 if file.read_to_string(&mut sheet_text).is_ok() {
                                     text.push_str(&sheet_text);
@@ -511,6 +540,91 @@ impl ParseProbe {
     }
 }
 
+/// Watermark substrings (case-insensitive match via to_lowercase).
+const WATERMARK_PATTERNS: &[&str] = &[
+    "epub converter",
+    "processtext.com",
+    "watermark",
+    "processed by",
+];
+
+/// Compute table garbled ratio from page text.
+/// High ratio = text from tables is likely garbled (EdgeParse can't extract table structure).
+/// Heuristic: count short whitespace-separated fragments typical of broken table columns.
+fn compute_table_garbled_ratio(text: &str) -> f32 {
+    if text.is_empty() {
+        return 0.0;
+    }
+
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.is_empty() {
+        return 0.0;
+    }
+
+    // Count "short fragments" — single chars or 1-2 char tokens that aren't common words
+    let short_fragments = words
+        .iter()
+        .filter(|w| {
+            let len = w.chars().count();
+            len <= 2 && !["a", "an", "is", "in", "on", "of", "to", "or", "at", "by", "no", "it"]
+                .contains(&w.to_lowercase().as_str())
+        })
+        .count();
+
+    let ratio = short_fragments as f32 / words.len() as f32;
+    ratio.min(1.0)
+}
+
+/// readable_ratio below this → route to OCR.
+pub const TEXT_QUAL_THRESHOLD: f32 = 0.3;
+/// Bigram repeat ratio above this → watermark/garbage page.
+pub const BIGRAM_REPEAT_THRESHOLD: f32 = 0.30;
+/// Unique token ratio below this → watermark/garbage page.
+pub const UNIQUE_TOKEN_THRESHOLD: f32 = 0.4;
+/// Pages with fewer chars than this AND low readable_ratio → OCR.
+pub const PAGE_TEXT_THRESHOLD: usize = 100;
+
+/// Compute text quality signals for routing decisions.
+/// Returns (readable_ratio, bigram_repeat_ratio, unique_token_ratio, watermark_hit).
+pub fn compute_quality_signals(text: &str) -> (f32, f32, f32, bool) {
+    if text.is_empty() {
+        return (0.0, 0.0, 0.0, false);
+    }
+
+    let tokens: Vec<&str> = text
+        .split(|c: char| c.is_ascii_whitespace() || c.is_ascii_punctuation())
+        .filter(|t| {
+            (t.len() >= 2 && t.chars().all(|c| c.is_ascii_alphabetic()))
+                || (t.chars().count() == 1 && !t.chars().next().unwrap().is_ascii())
+        })
+        .collect();
+
+    let total_words = text.split_whitespace().count().max(1);
+    let readable_ratio = tokens.len() as f32 / total_words as f32;
+
+    let bigrams: Vec<(char, char)> = text.chars().zip(text.chars().skip(1)).collect();
+    let bigram_count = bigrams.len().max(1);
+    let mut bigram_freq: std::collections::HashMap<(char, char), usize> =
+        std::collections::HashMap::new();
+    for bg in &bigrams {
+        *bigram_freq.entry(*bg).or_insert(0) += 1;
+    }
+    let max_bigram_count = bigram_freq.values().max().copied().unwrap_or(0);
+    let bigram_repeat_ratio = max_bigram_count as f32 / bigram_count as f32;
+
+    let unique_tokens: std::collections::HashSet<&str> = tokens.iter().copied().collect();
+    let unique_token_ratio = if tokens.is_empty() {
+        0.0
+    } else {
+        unique_tokens.len() as f32 / tokens.len() as f32
+    };
+
+    let text_lower = text.to_lowercase();
+    let watermark_hit = WATERMARK_PATTERNS.iter().any(|pat| text_lower.contains(pat));
+
+    (readable_ratio, bigram_repeat_ratio, unique_token_ratio, watermark_hit)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -534,5 +648,61 @@ mod tests {
         );
         assert_eq!(ParseProbe::guess_mime_type("png"), "image/png");
         assert_eq!(ParseProbe::guess_mime_type("txt"), "text/plain");
+    }
+
+    #[test]
+    fn test_compute_quality_signals_empty() {
+        let (rr, br, ut, wm) = compute_quality_signals("");
+        assert_eq!(rr, 0.0);
+        assert_eq!(br, 0.0);
+        assert_eq!(ut, 0.0);
+        assert!(!wm);
+    }
+
+    #[test]
+    fn test_compute_quality_signals_normal_text() {
+        let text = "The Black Swan is a book about uncertainty and rare events in history.";
+        let (rr, _br, ut, wm) = compute_quality_signals(text);
+        assert!(rr > 0.3, "normal text readable_ratio should be > 0.3, got {rr}");
+        assert!(ut > 0.4, "normal text unique_token_ratio should be > 0.4, got {ut}");
+        assert!(!wm);
+    }
+
+    #[test]
+    fn test_compute_quality_signals_watermark_detected() {
+        let text = "ePub Converter some garbage text here for testing purposes";
+        let (_rr, _br, _ut, wm) = compute_quality_signals(text);
+        assert!(wm, "watermark pattern should be detected");
+    }
+
+    #[test]
+    fn test_compute_quality_signals_low_quality_garbage() {
+        let text = "aaaaaaaaaaaaaaaa aaaaaaaaaaaaaaaa aaaaaaaaaaaaaaaa";
+        let (_rr, br, ut, wm) = compute_quality_signals(text);
+        assert!(br > 0.3, "repeating text should have high bigram_repeat_ratio, got {br}");
+        assert!(ut < 0.5, "repeating tokens should have low unique_token_ratio, got {ut}");
+        assert!(!wm);
+    }
+
+    #[test]
+    fn test_pdf_page_probe_result_has_new_fields() {
+        let probe = PdfPageProbeResult {
+            page_number: 1,
+            extracted_text_chars: 500,
+            image_hint_count: 0,
+            table_hint_count: 0,
+            likely_scanned: false,
+            readable_ratio: Some(0.8),
+            bigram_repeat_ratio: Some(0.1),
+            unique_token_ratio: Some(0.7),
+            watermark_hit: false,
+            figure_area_ratio: Some(0.25),
+            non_decorative_image_count: Some(3),
+            table_garbled_ratio: None,
+        };
+        assert_eq!(probe.readable_ratio, Some(0.8));
+        assert!(!probe.watermark_hit);
+        assert_eq!(probe.figure_area_ratio, Some(0.25));
+        assert_eq!(probe.non_decorative_image_count, Some(3));
     }
 }

@@ -8,16 +8,16 @@ use std::sync::Arc;
 use hmac::Mac;
 
 use crate::core::{
-    build_plan_payloads, current_metric_usage, ensure_customer,
+    build_plan_payloads, claim_webhook_with_lease, current_metric_usage, ensure_customer,
     get_current_subscription, load_customer_id, load_plan_quotas, load_quota_limit, load_usage,
     load_usage_forecast, load_usage_history, load_usage_window, process_webhook_event,
-    seconds_until_next_month, claim_webhook_with_lease, update_webhook_lease_status,
+    seconds_until_next_month, update_webhook_lease_status,
 };
 use crate::types::{
-    PLAN_FREE, PLAN_PRO, PLAN_PLUS, BillingProvider, UsageForecastResponse, UsageHistoryResponse,
+    BillingProvider, PLAN_FREE, PLAN_PLUS, PLAN_PRO, UsageForecastResponse, UsageHistoryResponse,
     UsageWindowResponse,
 };
-use crate::{BillingConfig, StripeClient, Subscription, CreemClient, AlipayClient};
+use crate::{AlipayClient, BillingConfig, CreemClient, StripeClient, Subscription};
 
 #[derive(Deserialize)]
 pub struct CreateCheckoutRequest {
@@ -79,7 +79,11 @@ pub async fn handle_get_plans(
     let plans: Vec<serde_json::Value> = base_plans
         .into_iter()
         .map(|mut plan| {
-            let plan_id = plan.get("plan_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let plan_id = plan
+                .get("plan_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let obj = plan.as_object_mut().expect("plan is a JSON object");
             obj.insert(
                 "price_label_cny".to_string(),
@@ -169,7 +173,10 @@ pub async fn handle_create_checkout(
     match requested_provider {
         BillingProvider::Stripe => {
             if !config.stripe_enabled() {
-                return ApiResponse::err("billing_unconfigured", "Stripe billing checkout is not configured");
+                return ApiResponse::err(
+                    "billing_unconfigured",
+                    "Stripe billing checkout is not configured",
+                );
             }
             let client = StripeClient::new(config.clone());
             let Some(price_id) = config
@@ -194,7 +201,9 @@ pub async fn handle_create_checkout(
                             qr_code: None,
                             order_id: None,
                         }),
-                        Err(error) => ApiResponse::err("billing_checkout_failed", &error.to_string()),
+                        Err(error) => {
+                            ApiResponse::err("billing_checkout_failed", &error.to_string())
+                        }
                     }
                 }
                 Err(error) => ApiResponse::err("billing_customer_failed", &error.to_string()),
@@ -202,7 +211,10 @@ pub async fn handle_create_checkout(
         }
         BillingProvider::Creem => {
             if !config.creem_enabled() {
-                return ApiResponse::err("billing_unconfigured", "Creem billing checkout is not configured");
+                return ApiResponse::err(
+                    "billing_unconfigured",
+                    "Creem billing checkout is not configured",
+                );
             }
             let Some(product_id) = config
                 .creem_checkout_product_for_plan(requested_plan)
@@ -214,7 +226,10 @@ pub async fn handle_create_checkout(
                 );
             };
             let client = CreemClient::new(config.clone());
-            match client.create_checkout_session(&product_id, user_id, requested_plan).await {
+            match client
+                .create_checkout_session(&product_id, user_id, requested_plan)
+                .await
+            {
                 Ok((url, session_id)) => ApiResponse::ok(CheckoutResponse {
                     url,
                     session_id,
@@ -226,7 +241,10 @@ pub async fn handle_create_checkout(
         }
         BillingProvider::Alipay => {
             if !config.alipay_enabled() {
-                return ApiResponse::err("billing_unconfigured", "Alipay billing checkout is not configured");
+                return ApiResponse::err(
+                    "billing_unconfigured",
+                    "Alipay billing checkout is not configured",
+                );
             }
             let amount_cents = match requested_plan {
                 PLAN_PRO => 2000,
@@ -238,17 +256,28 @@ pub async fn handle_create_checkout(
                     );
                 }
             };
-            let amount_str = config.alipay_checkout_price_for_plan(requested_plan)
-                .unwrap_or(if requested_plan == PLAN_PRO { "20.00" } else { "100.00" });
+            let amount_str = config
+                .alipay_checkout_price_for_plan(requested_plan)
+                .unwrap_or(if requested_plan == PLAN_PRO {
+                    "20.00"
+                } else {
+                    "100.00"
+                });
 
             let out_trade_no = uuid::Uuid::new_v4().to_string();
 
             // Insert pending order in transaction
             let mut tx = match repo.raw().begin().await {
                 Ok(tx) => tx,
-                Err(error) => return ApiResponse::err("billing_checkout_failed", &error.to_string()),
+                Err(error) => {
+                    return ApiResponse::err("billing_checkout_failed", &error.to_string());
+                }
             };
-            if let Err(error) = sqlx::query("select set_config('app.current_role', 'super_admin', true)").execute(tx.as_mut()).await {
+            if let Err(error) =
+                sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+                    .execute(tx.as_mut())
+                    .await
+            {
                 return ApiResponse::err("billing_checkout_failed", &error.to_string());
             }
             let insert_res = sqlx::query(
@@ -281,7 +310,10 @@ pub async fn handle_create_checkout(
 
             let client = AlipayClient::new(config.clone());
             let subject = format!("Context OS - {} Subscription", requested_plan);
-            match client.create_precreate_order(amount_str, &subject, &out_trade_no, &notify_url).await {
+            match client
+                .create_precreate_order(amount_str, &subject, &out_trade_no, &notify_url)
+                .await
+            {
                 Ok(qr_code) => ApiResponse::ok(CheckoutResponse {
                     url: "".to_string(),
                     session_id: "".to_string(),
@@ -333,8 +365,12 @@ fn percent_decode(s: &str) -> String {
                 }
             } else {
                 res.push('%');
-                if let Some(a) = h1 { res.push(a); }
-                if let Some(b) = h2 { res.push(b); }
+                if let Some(a) = h1 {
+                    res.push(a);
+                }
+                if let Some(b) = h2 {
+                    res.push(b);
+                }
             }
         } else if c == '+' {
             res.push(' ');
@@ -371,10 +407,15 @@ pub async fn handle_webhook(
     match provider {
         BillingProvider::Stripe => {
             if !config.webhook_enabled() {
-                return ApiResponse::err("billing_unconfigured", "billing webhook is not configured");
+                return ApiResponse::err(
+                    "billing_unconfigured",
+                    "billing webhook is not configured",
+                );
             }
             let client = StripeClient::new(config.clone());
-            if let Err(error) = client.verify_webhook_signature(payload, signature.unwrap_or_default()) {
+            if let Err(error) =
+                client.verify_webhook_signature(payload, signature.unwrap_or_default())
+            {
                 return ApiResponse::err("billing_webhook_signature_failed", &error.to_string());
             }
         }
@@ -383,13 +424,19 @@ pub async fn handle_webhook(
             let mut mac = match crate::types::HmacSha256::new_from_slice(secret.as_bytes()) {
                 Ok(m) => m,
                 Err(error) => {
-                    return ApiResponse::err("billing_webhook_failed", &format!("invalid HMAC key: {error}"));
+                    return ApiResponse::err(
+                        "billing_webhook_failed",
+                        &format!("invalid HMAC key: {error}"),
+                    );
                 }
             };
             mac.update(payload);
             let expected_sig = hex::encode(mac.finalize().into_bytes());
             if signature.unwrap_or_default() != expected_sig {
-                return ApiResponse::err("billing_webhook_signature_failed", "invalid Creem signature");
+                return ApiResponse::err(
+                    "billing_webhook_signature_failed",
+                    "invalid Creem signature",
+                );
             }
         }
         BillingProvider::Alipay => {
@@ -400,12 +447,16 @@ pub async fn handle_webhook(
                     params.push((percent_decode(k), percent_decode(v)));
                 }
             }
-            let sign = params.iter()
+            let sign = params
+                .iter()
                 .find(|(k, _)| k == "sign")
                 .map(|(_, v)| v.as_str())
                 .unwrap_or_default();
             if sign.is_empty() {
-                return ApiResponse::err("billing_webhook_signature_failed", "missing Alipay signature");
+                return ApiResponse::err(
+                    "billing_webhook_signature_failed",
+                    "missing Alipay signature",
+                );
             }
             let client = AlipayClient::new(config.clone());
             if let Err(error) = client.verify_signature(&params, sign) {
@@ -419,14 +470,24 @@ pub async fn handle_webhook(
         BillingProvider::Stripe | BillingProvider::Creem => {
             let val: serde_json::Value = match serde_json::from_slice(payload) {
                 Ok(v) => v,
-                Err(error) => return ApiResponse::err("billing_webhook_invalid", &error.to_string()),
+                Err(error) => {
+                    return ApiResponse::err("billing_webhook_invalid", &error.to_string());
+                }
             };
-            let ev_id = val.get("id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+            let ev_id = val
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
             (val, ev_id)
         }
         BillingProvider::Alipay => {
             let val = alipay_payload_to_json(payload);
-            let ev_id = val.get("notify_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+            let ev_id = val
+                .get("notify_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
             (val, ev_id)
         }
     };
@@ -450,11 +511,20 @@ pub async fn handle_webhook(
 
     // 4. Process event
     if let Err(error) = process_webhook_event(repo.clone(), provider, &json, &config).await {
-        let _ = update_webhook_lease_status(repo, provider, &claim.event_id, "failed", Some(error.to_string())).await;
+        let _ = update_webhook_lease_status(
+            repo,
+            provider,
+            &claim.event_id,
+            "failed",
+            Some(error.to_string()),
+        )
+        .await;
         return ApiResponse::err("billing_webhook_failed", &error.to_string());
     }
 
-    if let Err(error) = update_webhook_lease_status(repo, provider, &claim.event_id, "processed", None).await {
+    if let Err(error) =
+        update_webhook_lease_status(repo, provider, &claim.event_id, "processed", None).await
+    {
         return ApiResponse::err("billing_webhook_failed", &error.to_string());
     }
 
