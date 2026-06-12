@@ -3,6 +3,12 @@
 //! - ingestion_smoke.rs: upload → wait → verify PG data
 //! - rag_smoke.rs: upload → RAG query → verify doc citation
 //! - search_smoke.rs: open query → verify web citation
+//!
+//! All smoke tests call [`require_smoke_suite`]. Use `--test-threads=1` for
+//! `auth_boundary` (shared PG + fixed notebook ids).
+//! PR CI module list: [`scripts/run-product-smoke-e2e.sh`](../../../../../scripts/run-product-smoke-e2e.sh).
+
+pub(crate) use crate::product_e2e::e2e_gate::require_smoke_suite;
 
 pub mod auth_boundary;
 pub mod chat_smoke;
@@ -26,6 +32,7 @@ use crate::product_e2e::TestContext;
 #[tokio::test]
 #[ignore = "blocking backend launcher for frontend e2e"]
 async fn backend_launcher() {
+    crate::product_e2e::e2e_gate::require_nightly_suite();
     let ctx = TestContext::new_with_real_llm().await;
     let url = ctx.base_url.clone();
     std::fs::write("/tmp/e2e-backend.url", &url).expect("write backend url");

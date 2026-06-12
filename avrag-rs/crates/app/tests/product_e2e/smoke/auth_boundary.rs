@@ -41,6 +41,8 @@ fn bare_client_with_headers(headers: &[(&str, &str)]) -> reqwest::Client {
 
 #[tokio::test]
 async fn chat_without_any_auth_headers_returns_401() {
+
+    super::require_smoke_suite();
     let ctx = TestContext::new_smoke().await;
     let bare = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
@@ -68,6 +70,8 @@ async fn chat_without_any_auth_headers_returns_401() {
 
 #[tokio::test]
 async fn chat_with_malformed_org_id_uuid_returns_401() {
+
+    super::require_smoke_suite();
     let ctx = TestContext::new_smoke().await;
     let bare = bare_client_with_headers(&[
         ("x-org-id", "not-a-uuid"),
@@ -96,6 +100,8 @@ async fn chat_with_malformed_org_id_uuid_returns_401() {
 
 #[tokio::test]
 async fn chat_with_valid_org_but_no_user_id_is_accepted() {
+
+    super::require_smoke_suite();
     // `x-user-id` is optional in the proxy-header path; missing user_id
     // means the request is treated as system-actor. This is intentional
     // for service-to-service calls and should NOT be rejected.
@@ -131,6 +137,8 @@ async fn chat_with_valid_org_but_no_user_id_is_accepted() {
 
 #[tokio::test]
 async fn create_notebook_under_one_org_then_read_under_another_org_returns_404_or_403() {
+
+    super::require_smoke_suite();
     // Data-scope boundary at the notebook layer: once User A creates
     // a notebook, User B (different org) cannot fetch it by ID.
     let ctx_a = TestContext::new_smoke_with_org(ORG_ID, USER_ID).await;
@@ -167,6 +175,8 @@ async fn create_notebook_under_one_org_then_read_under_another_org_returns_404_o
 
 #[tokio::test]
 async fn unauthenticated_request_to_docs_status_returns_401() {
+
+    super::require_smoke_suite();
     // The /api/v1/documents/{id}/status endpoint also sits behind the
     // auth middleware (it's in the protected `/api/v1` tree).
     let ctx = TestContext::new_smoke().await;

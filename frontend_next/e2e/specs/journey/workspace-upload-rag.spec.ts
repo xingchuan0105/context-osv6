@@ -36,10 +36,9 @@ test.describe("Document Upload + RAG Journey", () => {
     await expect(lastMessage).toBeVisible();
     await expect(lastMessage).not.toBeEmpty();
 
-    // RAG 模式下期望看到 citation 按钮（文档中有相关信息时）
-    const citationButton = chat.getCitationButton();
-    if (await citationButton.count() > 0) {
-      await expect(citationButton).toBeVisible();
-    }
+    // RAG + 固定 fixture：mock/staging 路径 citation 必须存在（对齐 skills golden gate）
+    const citationCount = await chat.citationCount();
+    expect(citationCount, "RAG journey requires at least one citation").toBeGreaterThan(0);
+    await expect(chat.getCitationButton()).toBeVisible();
   });
 });

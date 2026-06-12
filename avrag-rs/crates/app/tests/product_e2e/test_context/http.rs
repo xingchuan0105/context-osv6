@@ -253,9 +253,7 @@ impl TestContext {
         format_hint: Option<&str>,
         pin_mock_chunk_ids: bool,
     ) -> anyhow::Result<HttpResponse> {
-        if pin_mock_chunk_ids {
-            set_mock_rag_codegen_query(query);
-        }
+        set_mock_rag_codegen_query(query);
         let mut body = serde_json::json!({
             "query": query,
             "agent_type": "rag",

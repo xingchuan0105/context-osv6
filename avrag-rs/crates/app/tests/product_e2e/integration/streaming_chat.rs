@@ -14,14 +14,27 @@ const STREAM_DEADLINE: Duration = Duration::from_secs(60);
 const MAX_EVENTS: usize = 512;
 const QUERY: &str = "What is antifragility?";
 
-async fn stream_rag_events(
-    params: ChatStreamParams<'_>,
-) -> Vec<crate::product_e2e::SseEvent> {
+/// Stream RAG chat events via the module-scoped [`shared_ready_rag`] fixture.
+/// Safe under `--test-threads=1` (integration-e2e / local full suite).
+async fn stream_rag_events(debug: bool) -> Vec<crate::product_e2e::SseEvent> {
     let shared = shared_ready_rag().await;
+    let upload = &shared.1;
     let ctx = shared.0.lock().expect("shared ready_rag lock");
-    ctx.chat_stream_with_params(params, MAX_EVENTS, STREAM_DEADLINE)
-        .await
-        .unwrap()
+    ctx.chat_stream_with_params(
+        ChatStreamParams {
+            query: QUERY,
+            agent_type: "rag",
+            notebook_id: &upload.notebook_id,
+            doc_scope: &[upload.document_id.clone()],
+            session_id: None,
+            format_hint: None,
+            debug,
+        },
+        MAX_EVENTS,
+        STREAM_DEADLINE,
+    )
+    .await
+    .unwrap()
 }
 
 /// Mock LLM synthesis emits `reasoning_summary_delta` when the provider
@@ -29,19 +42,9 @@ async fn stream_rag_events(
 /// chat direct-answer skips synthesis, so we exercise the RAG path here.
 #[tokio::test]
 async fn chat_stream_collects_reasoning_delta_from_mock() {
-    let shared = shared_ready_rag().await;
-    let upload = &shared.1;
+    super::require_integration_suite();
 
-    let events = stream_rag_events(ChatStreamParams {
-        query: QUERY,
-        agent_type: "rag",
-        notebook_id: &upload.notebook_id,
-        doc_scope: &[upload.document_id.clone()],
-        session_id: None,
-        format_hint: None,
-        debug: false,
-    })
-    .await;
+    let events = stream_rag_events(false).await;
 
     let capture = collect_observability_from_events(&events);
     assert!(
@@ -54,19 +57,9 @@ async fn chat_stream_collects_reasoning_delta_from_mock() {
 /// without `debug: true`; only `prompt_snapshot` requires debug.
 #[tokio::test]
 async fn chat_stream_collects_trace_telemetry_without_debug() {
-    let shared = shared_ready_rag().await;
-    let upload = &shared.1;
+    super::require_integration_suite();
 
-    let events = stream_rag_events(ChatStreamParams {
-        query: QUERY,
-        agent_type: "rag",
-        notebook_id: &upload.notebook_id,
-        doc_scope: &[upload.document_id.clone()],
-        session_id: None,
-        format_hint: None,
-        debug: false,
-    })
-    .await;
+    let events = stream_rag_events(false).await;
 
     let capture = collect_observability_from_events(&events);
     assert!(
@@ -88,19 +81,9 @@ async fn chat_stream_collects_trace_telemetry_without_debug() {
 /// (`plan_decision` / `evaluation`) for offline trace_reasoning capture.
 #[tokio::test]
 async fn chat_stream_debug_collects_trace_telemetry() {
-    let shared = shared_ready_rag().await;
-    let upload = &shared.1;
+    super::require_integration_suite();
 
-    let events = stream_rag_events(ChatStreamParams {
-        query: QUERY,
-        agent_type: "rag",
-        notebook_id: &upload.notebook_id,
-        doc_scope: &[upload.document_id.clone()],
-        session_id: None,
-        format_hint: None,
-        debug: true,
-    })
-    .await;
+    let events = stream_rag_events(true).await;
 
     let capture = collect_observability_from_events(&events);
     assert!(
@@ -118,19 +101,9 @@ async fn chat_stream_debug_collects_trace_telemetry() {
 /// for offline prompt-compliance analysis.
 #[tokio::test]
 async fn chat_stream_debug_emits_prompt_snapshot() {
-    let shared = shared_ready_rag().await;
-    let upload = &shared.1;
+    super::require_integration_suite();
 
-    let events = stream_rag_events(ChatStreamParams {
-        query: QUERY,
-        agent_type: "rag",
-        notebook_id: &upload.notebook_id,
-        doc_scope: &[upload.document_id.clone()],
-        session_id: None,
-        format_hint: None,
-        debug: true,
-    })
-    .await;
+    let events = stream_rag_events(true).await;
 
     let capture = collect_observability_from_events(&events);
     assert!(

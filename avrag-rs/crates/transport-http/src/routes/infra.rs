@@ -13,6 +13,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/metrics", get(crate::metrics_handler))
         .route("/docs", get(crate::docs_handler))
         .route("/openapi.json", get(crate::openapi_handler))
+        // `/dev-upload` is registered in `router_core` with auth middleware.
         .route("/uploads/{document_id}", put(crate::signed_upload_handler))
         .route("/webhooks/{provider}", post(crate::billing_webhook_handler))
         .route(

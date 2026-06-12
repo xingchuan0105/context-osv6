@@ -4,6 +4,8 @@ use crate::product_e2e::{ChatResponse, TestContext, assertions::*};
 
 #[tokio::test]
 async fn general_agent_returns_non_empty_answer() {
+
+    super::require_smoke_suite();
     let ctx = TestContext::new_smoke().await;
     let notebook = ctx.create_notebook("chat-smoke").await.unwrap();
 

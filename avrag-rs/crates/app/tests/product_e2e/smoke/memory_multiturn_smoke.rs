@@ -17,6 +17,8 @@ async fn ingest_antifragile(ctx: &mut TestContext) -> (String, String) {
 
 #[tokio::test]
 async fn multiturn_anaphora_writes_resolved_query_to_db() {
+
+    super::require_smoke_suite();
     let mut ctx = TestContext::new_smoke_with_rag().await;
     let (notebook_id, doc_id) = ingest_antifragile(&mut ctx).await;
     let doc_scope = vec![doc_id];
@@ -68,6 +70,8 @@ async fn multiturn_anaphora_writes_resolved_query_to_db() {
 
 #[tokio::test]
 async fn on_demand_conversation_history_load_returns_pg_messages() {
+
+    super::require_smoke_suite();
     let mut ctx = TestContext::new_smoke_with_rag().await;
     let (notebook_id, doc_id) = ingest_antifragile(&mut ctx).await;
     let doc_scope = vec![doc_id];
@@ -133,6 +137,8 @@ async fn on_demand_conversation_history_load_returns_pg_messages() {
 
 #[tokio::test]
 async fn on_demand_user_profile_load_returns_profile_shape() {
+
+    super::require_smoke_suite();
     let mut ctx = TestContext::new_smoke_with_rag().await;
     let (notebook_id, doc_id) = ingest_antifragile(&mut ctx).await;
     let doc_scope = vec![doc_id];
@@ -181,6 +187,8 @@ async fn on_demand_user_profile_load_returns_profile_shape() {
 /// First HTTP turn (session_id=None) can still run memory tools after pipeline session backfill.
 #[tokio::test]
 async fn first_turn_memory_tool_works_with_resolved_session_id() {
+
+    super::require_smoke_suite();
     let mut ctx = TestContext::new_smoke_with_rag().await;
     let (notebook_id, doc_id) = ingest_antifragile(&mut ctx).await;
     let doc_scope = vec![doc_id];

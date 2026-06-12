@@ -54,10 +54,10 @@ test.describe("Workspace Chat Journey", () => {
     await expect(lastMessage).not.toBeEmpty();
     await expect(page.locator("[data-testid='mode-indicator']")).toContainText(/search|联网/i);
 
-    // citation 按钮仅在搜索返回 web sources 时出现，属于外部依赖行为，不强求
-    const citationButton = chat.getCitationButton();
-    if (await citationButton.count() > 0) {
-      await expect(citationButton).toBeVisible();
+    // Web search 依赖外部 Brave API，citation 数量不稳定；仅在有 citation 时校验可见性
+    const citationCount = await chat.citationCount();
+    if (citationCount > 0) {
+      await expect(chat.getCitationButton()).toBeVisible();
     }
   });
 });

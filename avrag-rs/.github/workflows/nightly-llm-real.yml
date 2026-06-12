@@ -40,6 +40,7 @@ jobs:
       - name: Run llm_real E2E
         run: cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1 --nocapture
         env:
+          E2E_MODE: nightly
           AGENT_LLM_BASE_URL: ${{ secrets.AGENT_LLM_BASE_URL }}
           AGENT_LLM_API_KEY: ${{ secrets.AGENT_LLM_API_KEY }}
           AGENT_LLM_MODEL: ${{ secrets.AGENT_LLM_MODEL }}

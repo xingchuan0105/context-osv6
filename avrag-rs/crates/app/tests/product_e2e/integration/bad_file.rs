@@ -6,6 +6,8 @@ use crate::product_e2e::{DocumentStatus, TestContext};
 
 #[tokio::test]
 async fn corrupted_file_upload_returns_failed_status() {
+    super::require_integration_suite();
+
     let mut ctx = TestContext::new_smoke().await;
 
     // 1. Upload a file named .pdf with MIME application/pdf, but the body

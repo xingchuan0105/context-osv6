@@ -24,6 +24,8 @@ fn apply_paddle_smoke_profile() {
 #[tokio::test]
 #[ignore = "requires Black Swan PDF, office-parser, pdf-renderer, PaddleOCR; run with --ignored --test-threads=1"]
 async fn black_swan_paddle_pdf_smoke() {
+
+    super::require_smoke_suite();
     apply_paddle_smoke_profile();
     let path = black_swan_pdf_path();
     assert!(

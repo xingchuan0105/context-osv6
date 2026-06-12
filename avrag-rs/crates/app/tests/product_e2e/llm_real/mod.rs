@@ -8,7 +8,7 @@
 //! - may hit provider rate limits under parallel execution.
 //!
 //! Run serially with:
-//!   cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1 --nocapture
+//!   E2E_MODE=nightly cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1 --nocapture
 //!
 //! Artifacts: `crates/app/tests/e2e_output/llm_real/{run_id}/{test_name}/`
 //!   - `response.json`, `reasoning_summary.txt`, `trace_reasoning.jsonl`, `prompt_snapshots.json`, `metadata.json`
@@ -17,6 +17,8 @@
 //! `metadata.reasoning_empty_warning` is true only when both summary and trace_reasoning are empty
 //! (usually indicates dropped SSE traces, not a non-thinking model).
 //! `metadata.stream_error_with_done` flags final-attempt error+done coexistence.
+//!
+//! Gated by `E2E_MODE=nightly` (or `llm_real`) via [`require_nightly_suite`].
 //!
 //! Required environment (loaded from the repository `.env` if not already set):
 //!   AGENT_LLM_BASE_URL, AGENT_LLM_API_KEY, AGENT_LLM_MODEL
@@ -30,6 +32,8 @@ use crate::product_e2e::{
     ChatResponse, ChatStreamParams, SseEvent, StreamReasoningCapture, TestContext,
     TraceReasoningRecord,
 };
+
+pub(crate) use crate::product_e2e::e2e_gate::require_nightly_suite;
 
 /// Load key/value pairs from the repository `.env` file into the process
 /// environment.  This lets real-LLM tests discover credentials without

@@ -14,6 +14,8 @@ use crate::product_e2e::{DocumentStatus, TestContext, assertions::*};
 
 #[tokio::test]
 async fn identical_rag_query_hits_embedding_cache() {
+    super::require_integration_suite();
+
     let mut ctx = TestContext::new_embedding_cache().await;
 
     let upload = ctx.upload_document("antifragile.txt").await.unwrap();

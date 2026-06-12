@@ -6,6 +6,8 @@ use crate::product_e2e::{ChatResponse, DocumentStatus, HttpResponse, TestContext
 
 #[tokio::test]
 async fn empty_document_ingests_with_zero_chunks_and_degrades() {
+    super::require_integration_suite();
+
     let mut ctx = TestContext::new_smoke_with_rag().await;
 
     // 1. Upload empty document

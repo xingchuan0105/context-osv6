@@ -7,6 +7,8 @@ use crate::product_e2e::{ChatResponse, DocumentStatus, HttpResponse, TestContext
 
 #[tokio::test]
 async fn multi_doc_rag_returns_citations_from_both_docs() {
+    super::require_integration_suite();
+
     let mut ctx = TestContext::new_smoke_with_rag().await;
     let notebook = ctx.create_notebook("multi-doc-test").await.unwrap();
 

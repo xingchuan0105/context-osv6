@@ -4,6 +4,8 @@ use crate::product_e2e::{ChatResponse, HttpResponse, TestContext, assertions::*}
 
 #[tokio::test]
 async fn open_query_returns_web_citation() {
+
+    super::require_smoke_suite();
     let ctx = TestContext::new_smoke().await;
 
     let notebook = ctx.create_notebook("test-notebook").await.unwrap();

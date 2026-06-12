@@ -6,6 +6,8 @@ use crate::product_e2e::{DocumentStatus, TestContext};
 
 #[tokio::test]
 async fn duplicate_upload_returns_same_document_id() {
+    super::require_integration_suite();
+
     let mut ctx = TestContext::new_smoke().await;
 
     // 1. First upload

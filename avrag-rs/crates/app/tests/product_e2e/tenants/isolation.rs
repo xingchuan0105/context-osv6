@@ -24,6 +24,8 @@ const USER_B: &str = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 
 #[tokio::test]
 async fn cross_org_rag_does_not_leak_documents() {
+    super::require_integration_suite();
+
     // 1. User A (org-A) uploads and ingests a document
     let mut ctx_a = TestContext::new_smoke_with_rag_and_org(ORG_A, USER_A).await;
     let upload_a = ctx_a.upload_document("antifragile.txt").await.unwrap();
@@ -73,6 +75,8 @@ async fn cross_org_rag_does_not_leak_documents() {
 
 #[tokio::test]
 async fn cross_org_rag_cannot_query_org_a_doc_by_id() {
+    super::require_integration_suite();
+
     // 1. User A (org-A) uploads and ingests a document
     let mut ctx_a = TestContext::new_smoke_with_rag_and_org(ORG_A, USER_A).await;
     let upload_a = ctx_a.upload_document("antifragile.txt").await.unwrap();

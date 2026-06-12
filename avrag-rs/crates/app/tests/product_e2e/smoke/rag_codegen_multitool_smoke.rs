@@ -6,6 +6,8 @@ use crate::product_e2e::{
 
 #[tokio::test]
 async fn rag_multiround_profile_codegen_doc_profile_then_chunk_fetch() {
+
+    super::require_smoke_suite();
     let shared = shared_ready_rag().await;
     let upload = &shared.1;
     let ctx = shared.0.lock().expect("shared ready_rag lock");

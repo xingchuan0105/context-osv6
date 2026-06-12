@@ -62,6 +62,7 @@ jobs:
       - name: Compile tests
         run: cargo test --no-run --test product_e2e -p app
 
+      # --test-threads=1: required for module-scoped fixtures (e.g. streaming_chat::shared_ready_rag)
       - name: Run full Product E2E suite
         run: cargo test --test product_e2e -p app -- --test-threads=1 --nocapture
         env:

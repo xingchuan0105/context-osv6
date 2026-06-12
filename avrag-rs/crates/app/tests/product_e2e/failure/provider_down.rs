@@ -4,6 +4,8 @@ use crate::product_e2e::{ChatResponse, HttpResponse, TestContext, assertions::*}
 
 #[tokio::test]
 async fn search_429_returns_degraded_answer() {
+    super::require_integration_suite();
+
     let ctx = TestContext::new_smoke().await;
 
     // 1. Force mock search to return 429

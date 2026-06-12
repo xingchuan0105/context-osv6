@@ -7,6 +7,7 @@
 
 pub mod assertions;
 pub mod bootstrap;
+pub mod e2e_gate;
 pub mod fixtures;
 pub mod http_helpers;
 pub mod setup;

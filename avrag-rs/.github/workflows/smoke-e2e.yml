@@ -59,11 +59,9 @@ jobs:
       - name: Compile tests
         run: cargo test --no-run --test product_e2e -p app
 
-      - name: Run Smoke E2E
-        run: cargo test --test product_e2e -p app smoke:: auth_boundary product_e2e:: -- --test-threads=1 --nocapture
-        env:
-          E2E_MODE: smoke
-        timeout-minutes: 10
+      - name: Run PR smoke E2E
+        run: ./scripts/run-product-smoke-e2e.sh
+        timeout-minutes: 15
 
       - name: Upload failure artifacts
         if: failure()

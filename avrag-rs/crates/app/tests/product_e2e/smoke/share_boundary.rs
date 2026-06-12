@@ -9,6 +9,8 @@ const USER_B: &str = "ffffffff-ffff-ffff-ffff-ffffffffffff";
 
 #[tokio::test]
 async fn share_token_allows_cross_user_readonly_chat() {
+
+    super::require_smoke_suite();
     let ctx_a = TestContext::new_smoke_with_org(ORG_A, USER_A).await;
     let notebook = ctx_a.create_notebook("shared-notebook").await.unwrap();
     let share_token = ctx_a.create_share_token(&notebook.id).await.unwrap();
@@ -27,6 +29,8 @@ async fn share_token_allows_cross_user_readonly_chat() {
 
 #[tokio::test]
 async fn cross_user_direct_get_notebook_without_token_returns_4xx() {
+
+    super::require_smoke_suite();
     let ctx_a = TestContext::new_smoke_with_org(ORG_A, USER_A).await;
     let notebook = ctx_a.create_notebook("private-notebook").await.unwrap();
 
@@ -50,6 +54,8 @@ async fn cross_user_direct_get_notebook_without_token_returns_4xx() {
 
 #[tokio::test]
 async fn share_chat_with_invalid_token_returns_401_or_403() {
+
+    super::require_smoke_suite();
     let ctx_a = TestContext::new_smoke_with_org(ORG_A, USER_A).await;
     let notebook = ctx_a.create_notebook("bad-token-notebook").await.unwrap();
 

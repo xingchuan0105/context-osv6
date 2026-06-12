@@ -148,6 +148,8 @@ async fn ingest_pdf(ctx: &mut TestContext, path: &str, env_key: &str) -> crate::
 #[tokio::test]
 #[ignore = "requires real LLM + local PDF; run with --ignored --test-threads=1"]
 async fn real_llm_rag_complex_query_antifragile_pdf() {
+
+    super::require_nightly_suite();
     apply_fast_pdf_ingestion_profile();
     require_pdf_ingestion_prereqs().await;
     let mut ctx = TestContext::new_with_real_llm_pdf().await;
@@ -210,6 +212,8 @@ async fn real_llm_rag_complex_query_antifragile_pdf() {
 #[tokio::test]
 #[ignore = "requires real LLM + local PDFs; run with --ignored --test-threads=1"]
 async fn real_llm_rag_multidoc_antifragile_and_black_swan_pdf() {
+
+    super::require_nightly_suite();
     apply_fast_pdf_ingestion_profile();
     require_pdf_ingestion_prereqs().await;
     let mut ctx = TestContext::new_with_real_llm_pdf().await;

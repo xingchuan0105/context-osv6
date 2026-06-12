@@ -52,6 +52,33 @@ pub fn assert_has_citations(resp: &ChatResponse) {
     );
 }
 
+/// Assert two RAG responses cite disjoint chunk sets (independent retrieval).
+pub fn assert_independent_citation_chunks(a: &ChatResponse, b: &ChatResponse) {
+    use std::collections::HashSet;
+
+    let chunks_a: HashSet<String> = a
+        .citations
+        .iter()
+        .filter_map(|c| c.chunk_id.clone())
+        .collect();
+    let chunks_b: HashSet<String> = b
+        .citations
+        .iter()
+        .filter_map(|c| c.chunk_id.clone())
+        .collect();
+    assert!(
+        !chunks_a.is_empty() && !chunks_b.is_empty(),
+        "expected chunk_id on citations for independence check, got a={:?} b={:?}",
+        a.citations,
+        b.citations
+    );
+    let overlap: Vec<_> = chunks_a.intersection(&chunks_b).cloned().collect();
+    assert!(
+        overlap.is_empty(),
+        "expected independent citation chunks, overlap={overlap:?}"
+    );
+}
+
 /// Assert at least one citation comes from the expected doc_id.
 pub fn assert_citation_doc_id(resp: &ChatResponse, expected_doc_id: &str) {
     let ids: Vec<&str> = resp.citations.iter().map(|c| c.doc_id.as_str()).collect();

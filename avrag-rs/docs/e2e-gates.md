@@ -18,17 +18,31 @@ suites. See also [`product-e2e-plan.md`](product-e2e-plan.md).
 ### Smoke (PR)
 
 - Subset: `smoke::` (ingestion, rag, search, **chat**, **share_boundary**, auth_boundary), top-level `product_e2e::` mock routing tests
-- Mock LLM / Search / Embedding only
+- Gated by `require_smoke_suite()` — fails under `E2E_MODE=nightly`
+- CI/local runner: [`scripts/run-product-smoke-e2e.sh`](../scripts/run-product-smoke-e2e.sh) (module list single source of truth)
+- Mock LLM / Search / Embedding only; E2E bootstrap forces **local** `object_root` (ignores `.env` MinIO/S3 for API)
 - Protocol + HTTP assertions; SSE event-order and `done` payload shape in `transport-http` contract tests
 - Main suite uses `REDIS_URL=redis://127.0.0.1:1` (blackhole) to keep embedding failure mocks effective
+- **`auth_boundary`**: run with `--test-threads=1` only (shared PG + fixed notebook ids; parallel within module can 500)
 - **Strict cite (ADR-0008)**: RAG smoke asserts `assert_citation_referenced_in_answer`; search smoke expects `[[n]]` markers; mock synthesis returns `internal_answer_v1` JSON with `[[cite:CHUNK_ID]]`
 
 ### Integration (main)
 
-- Full **35** mock tests (`--test-threads=1`), plus **6** `#[ignore]` (llm_real, backend_launcher)
+- Full mock suite **~45** runnable tests (`--test-threads=1`), plus **`#[ignore]`** (`llm_real`, `backend_launcher`, `paddle_pdf_smoke`, utility)
 - Citation assertions where the mock route guarantees citations
 - `assert_citation_referenced_in_answer` used in selected integration paths
 - `assert_observability_contract` on smoke chat/share paths
+
+#### Shared fixtures (`streaming_chat`)
+
+- `integration::streaming_chat` uses module-scoped [`shared_ready_rag()`](../crates/app/tests/product_e2e/fixtures/ready_rag.rs): one cold `TestContext` + ingested `antifragile.txt` per test binary
+- **Requires** `--test-threads=1` (enforced in `integration-e2e.yml` and local full-suite commands); parallel workers would race on the shared `Mutex<TestContext>`
+- Protocol invariants (`start` first, `done` terminal, payload shape) stay in `transport-http` contract tests; this module only covers mock RAG observability (reasoning delta, trace telemetry, `prompt_snapshot` behind `debug: true`)
+
+#### Concurrent queries (`concurrent_query`)
+
+- `integration::concurrent_query::concurrent_rag_queries_return_independent_citations` issues two chat requests via `tokio::join!` (not serial await)
+- Asserts: independent answers (`assert_ne!`), topic-specific keywords, `assert_codegen_bridge_dense_retrieval`, per-query `assert_has_citations` / `assert_citation_doc_id`, **`assert_independent_citation_chunks`** (disjoint `chunk_id` sets)
 
 ### Embedding cache
 
@@ -38,8 +52,9 @@ suites. See also [`product-e2e-plan.md`](product-e2e-plan.md).
 
 ### llm_real (nightly)
 
-- `#[ignore]` — run with `--ignored --test-threads=1`
-- Manual acceptance after ADR-0008 changes: `cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1 --nocapture`
+- `#[ignore]` — run with `E2E_MODE=nightly` and `--ignored --test-threads=1`
+- Gated by `require_nightly_suite()` — fails under `E2E_MODE=smoke` / `integration` unless filter bypasses body
+- Manual acceptance after ADR-0008 changes: `E2E_MODE=nightly cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1 --nocapture`
 - Requires real `AGENT_LLM_*`, `EMBEDDING_*`; search tests require `SEARCH_API_KEY`
 - `SEARCH_REQUIRE_REAL=1` — Brave unreachable **fails** (no silent mock fallback)
 - Streaming requests use `"debug": true` so `prompt_snapshot` trace events are emitted
@@ -65,7 +80,14 @@ Aligned with golden set `must_have_citation` semantics:
 
 1. **Hard**: HTTP 200, non-empty answer, mode indicator, keyword match, **`citationCount > 0`**
 2. **API confirmation**: `waitForDocumentReady` after upload before chat (RAG)
-3. Journey specs (`workspace-chat`, `workspace-upload-rag`) keep optional citation-button checks for external-search variability
+
+### Journey (Playwright `journey` project)
+
+| Spec | Path | Citation gate | Rationale |
+|------|------|---------------|-----------|
+| `workspace-upload-rag.spec.ts` | Upload fixture → RAG Q&A | **Hard** — `citationCount > 0` + citation button visible | Fixed `sample-document.txt`; mock/staging stack guarantees retrieval |
+| `workspace-chat.spec.ts` (general) | General chat | N/A | No citation expected |
+| `workspace-chat.spec.ts` (web search) | Brave / external search | **Soft** — assert button only when `citationCount > 0` | External API variability; skills project owns hard search citation gate |
 
 ### Quality judge (optional)
 
@@ -76,6 +98,8 @@ Nightly workflow uploads judge attachments; score below 6 does **not** fail the 
 
 | Variable | Purpose |
 |----------|---------|
+| `E2E_MODE` | `smoke` → smoke only; `integration` (default) → smoke + integration; `nightly` / `llm_real` → `llm_real` only |
+| `AVRAG_WORKER_HEALTH_PORT` | Worker: `0` = bind ephemeral port; publishes to `AVRAG_WORKER_HEALTH_PORT_FILE` (E2E) |
 | `SEARCH_REQUIRE_REAL=1` | Fail when Brave Search unreachable (llm_real / nightly) |
 | `SEARCH_FORCE_MOCK=1` | Force mock search even with credentials |
 | `SEARCH_USE_REAL=1` | Use real Brave Search in smoke tests (default: mock) |
@@ -104,14 +128,17 @@ and fail fast when `milvus-standalone` exits (no 180s blind wait).
 ## Local commands
 
 ```bash
-# Rust mock full suite (35 tests)
-cargo test --test product_e2e -p app -- --test-threads=1 --nocapture
+# PR smoke (module list in scripts/run-product-smoke-e2e.sh)
+./scripts/run-product-smoke-e2e.sh
+
+# Rust mock full suite (integration tier; wrong-suite tests panic)
+E2E_MODE=integration cargo test --test product_e2e -p app -- --test-threads=1 --nocapture
 
 # Rust embedding cache
 cargo test -p app --test product_e2e integration::embedding_cache -- --test-threads=1
 
 # Rust real LLM
-cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1 --nocapture
+E2E_MODE=nightly cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1 --nocapture
 
 # Playwright C + D
 cd frontend_next && npx playwright test --project=auth --project=functional --project=journey --project=skills
@@ -142,5 +169,11 @@ cargo test -p avrag-storage-pg --lib turn_metadata
 cargo test -p app --lib
 
 # Nightly real-LLM manual sign-off
-cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1 --nocapture
+E2E_MODE=nightly cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1 --nocapture
 ```
+
+## Known seams (E2E bootstrap)
+
+- `E2E_ENABLED` — transport middleware still reads this from process env during bootstrap
+- `PG_MIGRATIONS_APPLIED` — process-wide `AtomicBool`; first `TestContext` in a cargo process runs migrations
+- Worker health — E2E sets `AVRAG_WORKER_HEALTH_PORT=0` and polls `worker-health.port` under the test object store dir

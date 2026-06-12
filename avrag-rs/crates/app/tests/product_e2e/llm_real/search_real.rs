@@ -17,6 +17,8 @@ use crate::product_e2e::{
 #[tokio::test]
 #[ignore = "requires real LLM + Brave Search API key; run with --ignored --test-threads=1"]
 async fn real_llm_search_open_query_returns_web_citation() {
+
+    super::require_nightly_suite();
     if std::env::var("SEARCH_REQUIRE_REAL").is_err() {
         unsafe { std::env::set_var("SEARCH_REQUIRE_REAL", "1") };
     }

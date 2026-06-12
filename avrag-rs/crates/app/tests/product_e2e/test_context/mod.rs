@@ -4,6 +4,7 @@
 
 mod artifacts;
 mod builder;
+mod config;
 mod http;
 mod profiles;
 

@@ -15,6 +15,8 @@ use crate::product_e2e::{
 #[tokio::test]
 #[ignore = "requires real LLM API key; run with --ignored --test-threads=1"]
 async fn real_llm_multi_turn_rag_follow_up_remembers_context() {
+
+    super::require_nightly_suite();
     let mut ctx = TestContext::new_with_real_llm().await;
 
     let upload = ctx

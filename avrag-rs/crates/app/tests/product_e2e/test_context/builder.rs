@@ -15,9 +15,33 @@ use super::super::{
     },
     setup,
 };
+use super::config::E2eBootstrapConfig;
 use super::TestContext;
 
 static PG_MIGRATIONS_APPLIED: AtomicBool = AtomicBool::new(false);
+
+async fn wait_for_worker_health_port_file(
+    port_file: &std::path::Path,
+    timeout: Duration,
+) -> anyhow::Result<u16> {
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        if let Ok(content) = tokio::fs::read_to_string(port_file).await {
+            if let Ok(port) = content.trim().parse::<u16>() {
+                if port > 0 {
+                    return Ok(port);
+                }
+            }
+        }
+        if tokio::time::Instant::now() >= deadline {
+            anyhow::bail!(
+                "worker health port file not ready: {}",
+                port_file.display()
+            );
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
 
 async fn wait_for_worker_health(port: u16, timeout: Duration) -> anyhow::Result<()> {
     let deadline = tokio::time::Instant::now() + timeout;
@@ -149,7 +173,7 @@ impl TestContext {
         };
 
         let identity = identity.or_else(|| Some(unique_test_identity()));
-        let (org_id, _user_id) = identity
+        let (org_id, user_id) = identity
             .as_ref()
             .expect("identity is always Some after .or_else above");
         let milvus_collection_prefix =
@@ -192,83 +216,58 @@ impl TestContext {
                 (None, None, None, None)
             };
 
+        // Transport middleware still reads this single flag from env (known seam).
         unsafe {
             std::env::set_var("E2E_ENABLED", "true");
-            std::env::set_var("DATABASE_URL", &pg_url);
-            let run_migrations = !PG_MIGRATIONS_APPLIED.swap(true, Ordering::SeqCst);
-            std::env::set_var(
-                "AVRAG_RUN_MIGRATIONS",
-                if run_migrations { "true" } else { "false" },
-            );
-            std::env::set_var("AVRAG_OBJECT_ROOT", &object_root);
-            std::env::set_var(
-                "AVRAG_ENABLE_RAG",
-                if enable_rag { "true" } else { "false" },
-            );
-            let redis = redis_url
-                .clone()
-                .unwrap_or_else(|| "redis://127.0.0.1:1".to_string());
-            std::env::set_var("REDIS_URL", &redis);
-            std::env::set_var("AVRAG_PUBLIC_BASE_URL", "http://127.0.0.1:8080");
-
-            if let Some(ref url) = milvus_url {
-                std::env::set_var("MILVUS_URL", url);
-                std::env::set_var("MILVUS_TOKEN", "");
-                std::env::set_var("MILVUS_DATABASE", "default");
-                let prefix = milvus_collection_prefix
-                    .as_ref()
-                    .expect("RAG contexts must have a Milvus prefix");
-                std::env::set_var("MILVUS_COLLECTION_PREFIX", prefix);
-            }
-            if !use_real_llm {
-                std::env::set_var("AGENT_LLM_BASE_URL", &mock_llm_url);
-                std::env::set_var("AGENT_LLM_API_KEY", "mock");
-                std::env::set_var("AGENT_LLM_MODEL", "mock-llm");
-                std::env::set_var("MEMORY_LLM_BASE_URL", &mock_llm_url);
-                std::env::set_var("MEMORY_LLM_API_KEY", "mock");
-                std::env::set_var("MEMORY_LLM_MODEL", "mock-llm");
-                std::env::set_var("INGESTION_LLM_BASE_URL", &mock_llm_url);
-                std::env::set_var("INGESTION_LLM_API_KEY", "mock");
-                std::env::set_var("INGESTION_LLM_MODEL", "mock-llm");
-            }
-
-            if !has_real_search {
-                std::env::set_var("SEARCH_PROVIDER", "brave_llm_context");
-                std::env::set_var("SEARCH_BASE_URL", &mock_search_url);
-                std::env::set_var("SEARCH_API_KEY", "mock");
-            }
-
-            if let Some(ref url) = mock_embedding_url {
-                std::env::set_var("EMBEDDING_BASE_URL", url);
-                std::env::set_var("EMBEDDING_API_KEY", "mock");
-                std::env::set_var("EMBEDDING_MODEL", "mock-embedding");
-                std::env::set_var("EMBEDDING_DIMENSIONS", "1024");
-                std::env::set_var("AVRAG_EMBEDDING_DIM", "1024");
-                std::env::set_var("MM_EMBEDDING_BASE_URL", url);
-                std::env::set_var("MM_EMBEDDING_API_KEY", "mock");
-                std::env::set_var(
-                    "MM_EMBEDDING_MODEL",
-                    "tongyi-embedding-vision-plus-2026-03-06",
-                );
-                std::env::set_var(
-                    "MM_EMBEDDING_API_STYLE",
-                    "dashscope_multimodal_embedding",
-                );
-                std::env::set_var("MM_EMBEDDING_DIMENSIONS", "1024");
-                std::env::set_var("MILVUS_MULTIMODAL_VECTOR_DIM", "1024");
-            }
         }
 
-        let config = app::AppConfig::from_env();
+        let run_migrations = !PG_MIGRATIONS_APPLIED.swap(true, Ordering::SeqCst);
+        let redis = redis_url
+            .clone()
+            .unwrap_or_else(|| "redis://127.0.0.1:1".to_string());
+        let worker_health_port_file = object_store_dir
+            .path()
+            .join("worker-health.port")
+            .to_string_lossy()
+            .into_owned();
+        let bootstrap = E2eBootstrapConfig {
+            org_id: org_id.clone(),
+            user_id: user_id.clone(),
+            database_url: pg_url.clone(),
+            auto_migrate: run_migrations,
+            object_root: object_root.clone(),
+            enable_rag,
+            redis_url: redis,
+            milvus_url: milvus_url.clone(),
+            milvus_collection_prefix: milvus_collection_prefix.clone(),
+            mock_llm_base_url: if use_real_llm {
+                None
+            } else {
+                Some(mock_llm_url.clone())
+            },
+            mock_embedding_base_url: mock_embedding_url.clone(),
+            mock_search_base_url: if has_real_search {
+                None
+            } else {
+                Some(mock_search_url.clone())
+            },
+            use_real_llm,
+            has_real_search,
+            worker_timeout_secs,
+            worker_health_port_file,
+        };
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+
+        let config = bootstrap.build_app_config(&base_url);
         let state = app::AppState::bootstrap(config.clone())
             .await
             .expect("bootstrap AppState");
 
         let router = transport_http::build_router(state);
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("bind");
-        let base_url = format!("http://{}", listener.local_addr().unwrap());
 
         let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
         tokio::spawn(async move {
@@ -284,124 +283,12 @@ impl TestContext {
             .expect("find worker binary");
         let worker_log_path = object_store_dir.path().join("worker.log");
         let mut cmd = tokio::process::Command::new(&worker_binary);
-        cmd.env("E2E_ENABLED", "true")
-            .env("DATABASE_URL", &pg_url)
-            .env("AVRAG_RUN_MIGRATIONS", "false")
-            .env("AVRAG_OBJECT_ROOT", &object_root)
-            .env(
-                "AVRAG_ENABLE_RAG",
-                if enable_rag { "true" } else { "false" },
-            )
-            .env(
-                "REDIS_URL",
-                redis_url.as_deref().unwrap_or("redis://127.0.0.1:1"),
-            )
-            .env("AVRAG_PUBLIC_BASE_URL", &base_url)
-            .env("AVRAG_WORKER_ID", "test-worker")
-            .env("AVRAG_WORKER_POLL_MILLIS", "200")
-            .env(
-                "AVRAG_INGESTION_TASK_TIMEOUT_SECS",
-                worker_timeout_secs.to_string(),
-            )
-            .stdout(std::process::Stdio::piped())
+        let mut worker_bootstrap = bootstrap.clone();
+        worker_bootstrap.auto_migrate = false;
+        worker_bootstrap.apply_worker_env(&mut cmd, &base_url);
+        cmd.stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
-
-        if let Some(ref url) = milvus_url {
-            let prefix = milvus_collection_prefix.clone().unwrap_or_default();
-            cmd.env("MILVUS_URL", url)
-                .env("MILVUS_TOKEN", "")
-                .env("MILVUS_DATABASE", "default")
-                .env("MILVUS_COLLECTION_PREFIX", prefix);
-        }
-        if use_real_llm {
-            for key in [
-                "AGENT_LLM_BASE_URL",
-                "AGENT_LLM_API_KEY",
-                "AGENT_LLM_MODEL",
-                "MEMORY_LLM_BASE_URL",
-                "MEMORY_LLM_API_KEY",
-                "MEMORY_LLM_MODEL",
-                "INGESTION_LLM_BASE_URL",
-                "INGESTION_LLM_API_KEY",
-                "INGESTION_LLM_MODEL",
-                "EMBEDDING_BASE_URL",
-                "EMBEDDING_API_KEY",
-                "EMBEDDING_MODEL",
-                "EMBEDDING_DIMENSIONS",
-                "AVRAG_EMBEDDING_DIM",
-                "OFFICE_PARSER_BASE_URL",
-                "PDF_RENDERER_BASE_URL",
-                "PDF_VISUAL_PAGES_PER_CHUNK",
-                "INGESTION_PDF_MAX_PAGES",
-                "INGESTION_TRIPLET_ENABLED",
-                "INGESTION_VLM_TRIPLET_ENABLED",
-                "INGESTION_VLM_SUMMARY_ENABLED",
-                "INGESTION_TRIPLET_MIN_CONFIDENCE",
-                "DASHSCOPE_API_KEY",
-                "MM_EMBEDDING_BASE_URL",
-                "MM_EMBEDDING_API_KEY",
-                "MM_EMBEDDING_MODEL",
-                "MM_EMBEDDING_API_STYLE",
-                "MM_EMBEDDING_DIMENSIONS",
-                "MM_RERANK_BASE_URL",
-                "MM_RERANK_API_KEY",
-                "MM_RERANK_MODEL",
-                "MM_RERANK_API_STYLE",
-            ] {
-                if let Ok(v) = std::env::var(key) {
-                    cmd.env(key, v);
-                }
-            }
-        } else {
-            cmd.env("AGENT_LLM_BASE_URL", &mock_llm_url)
-                .env("AGENT_LLM_API_KEY", "mock")
-                .env("AGENT_LLM_MODEL", "mock-llm")
-                .env("MEMORY_LLM_BASE_URL", &mock_llm_url)
-                .env("MEMORY_LLM_API_KEY", "mock")
-                .env("MEMORY_LLM_MODEL", "mock-llm")
-                .env("INGESTION_LLM_BASE_URL", &mock_llm_url)
-                .env("INGESTION_LLM_API_KEY", "mock")
-                .env("INGESTION_LLM_MODEL", "mock-llm");
-
-            if let Some(ref url) = mock_embedding_url {
-                cmd.env("EMBEDDING_BASE_URL", url)
-                    .env("EMBEDDING_API_KEY", "mock")
-                    .env("EMBEDDING_MODEL", "mock-embedding")
-                    .env("EMBEDDING_DIMENSIONS", "1024")
-                    .env("AVRAG_EMBEDDING_DIM", "1024")
-                    .env("MM_EMBEDDING_BASE_URL", url)
-                    .env("MM_EMBEDDING_API_KEY", "mock")
-                    .env(
-                        "MM_EMBEDDING_MODEL",
-                        "tongyi-embedding-vision-plus-2026-03-06",
-                    )
-                    .env("MM_EMBEDDING_API_STYLE", "dashscope_multimodal_embedding")
-                    .env("MM_EMBEDDING_DIMENSIONS", "1024")
-                    .env("MILVUS_MULTIMODAL_VECTOR_DIM", "1024");
-            }
-        }
-
-        if has_real_search {
-            avrag_search::sync_resolved_proxy_env();
-            for key in [
-                "SEARCH_PROVIDER",
-                "SEARCH_BASE_URL",
-                "SEARCH_API_KEY",
-                "HTTPS_PROXY",
-                "https_proxy",
-                "HTTP_PROXY",
-                "http_proxy",
-            ] {
-                if let Ok(v) = std::env::var(key) {
-                    cmd.env(key, v);
-                }
-            }
-        } else {
-            cmd.env("SEARCH_PROVIDER", "brave_llm_context")
-                .env("SEARCH_BASE_URL", &mock_search_url)
-                .env("SEARCH_API_KEY", "mock");
-        }
 
         let mut worker = cmd.spawn().expect("spawn worker");
 
@@ -439,11 +326,23 @@ impl TestContext {
             });
         }
 
-        wait_for_worker_health(8081, Duration::from_secs(10))
+        let worker_health_port = wait_for_worker_health_port_file(
+            std::path::Path::new(&worker_bootstrap.worker_health_port_file),
+            Duration::from_secs(10),
+        )
+        .await
+        .expect("worker health port file ready");
+        wait_for_worker_health(worker_health_port, Duration::from_secs(10))
             .await
             .expect("worker health ready");
 
-        let http_timeout_secs = if use_real_llm { 180 } else { 60 };
+        let http_timeout_secs = if use_real_llm {
+            180
+        } else if enable_rag {
+            120
+        } else {
+            60
+        };
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(http_timeout_secs))
             .default_headers(match &identity {
