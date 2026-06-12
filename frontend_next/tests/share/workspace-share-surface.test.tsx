@@ -4,25 +4,6 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  authState: {
-    token: "token-123",
-  },
-  uiPreferencesState: {
-    locale: "en" as "zh-CN" | "en",
-  },
-  buildShareUrlMock: vi.fn(),
-  getShareSettingsMock: vi.fn(),
-  listMembersMock: vi.fn(),
-  updateShareSettingsMock: vi.fn(),
-  createShareLinkMock: vi.fn(),
-  revokeShareLinkMock: vi.fn(),
-  inviteMemberMock: vi.fn(),
-  getShareAnalyticsMock: vi.fn(),
-  getShareAccessLogsMock: vi.fn(),
-  removeMemberMock: vi.fn(),
-}));
-
 vi.mock("../../lib/auth/context", () => ({
   useAuth: () => mocks.authState,
 }));
@@ -50,6 +31,10 @@ vi.mock("../../lib/share/client", async () => {
 });
 
 import { WorkspaceShareCenterSurface } from "../../components/share/workspace-share-surface";
+
+const mocks = vi.hoisted(() => globalThis.__mockProviders.createWorkspaceShareSurfaceMocks());
+
+
 
 function recentViewsByDay() {
   const today = new Date();

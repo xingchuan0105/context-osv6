@@ -1,4 +1,5 @@
-use app::{AppConfig, AppState};
+use app::{AppState};
+use app_core::AppConfig;
 use avrag_auth::{AuthContext, OrgId, SubjectKind};
 use axum::{
     body::{Body, to_bytes},

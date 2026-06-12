@@ -168,7 +168,7 @@ impl Default for AppConfig {
             mm_embedding: ModelProviderConfig {
                 base_url: "https://dashscope.aliyuncs.com/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding".to_string(),
                 api_key: String::new(),
-                model: "qwen3-vl-embedding".to_string(),
+                model: "tongyi-embedding-vision-plus-2026-03-06".to_string(),
                 timeout_ms: 30000,
                 temperature: None,
                 api_style: Some("dashscope_multimodal_embedding".to_string()),

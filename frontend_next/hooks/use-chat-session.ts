@@ -10,6 +10,7 @@ import type { WorkspaceChatMode } from "../lib/workspace/ui-store";
 import {
   streamWorkspaceChat,
   type AnswerBlock,
+  type ChatRequest,
   type Citation,
   type DegradeTraceItem,
   type ProgressSourcePreview,
@@ -755,7 +756,7 @@ function useChatStream(
               doc_scope: selectedSourceIdsRef.current,
               messages: [],
               stream: true,
-            },
+            } as ChatRequest,
             handleStreamEvent,
             { signal: controller.signal },
           );

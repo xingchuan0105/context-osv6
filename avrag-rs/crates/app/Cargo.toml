@@ -23,6 +23,7 @@ avrag-billing = { path = "../billing" }
 avrag-llm = { path = "../llm" }
 avrag-rag-core = { path = "../rag-core" }
 avrag-search = { path = "../search" }
+avrag-share = { path = "../share" }
 avrag-storage-pg = { path = "../storage-pg" }
 common = { path = "../common" }
 chrono.workspace = true
@@ -33,6 +34,7 @@ regex.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "uuid", "chrono", "json"] }
 telemetry = { path = "../telemetry" }
 thiserror.workspace = true
 tokio.workspace = true

@@ -249,7 +249,7 @@ impl ChatContext {
         if let Some(usage_svc) = self.billing.quota_manager()
             && let Some(ref llm_usage) = execution.llm_usage {
                 let feature = match execution.mode.as_str() {
-                    "chat" | "general" => avrag_billing::usage_limit::BillableFeature::Chat,
+                    "chat" => avrag_billing::usage_limit::BillableFeature::Chat,
                     "search" => avrag_billing::usage_limit::BillableFeature::Search,
                     "rag" => avrag_billing::usage_limit::BillableFeature::Answer,
                     _ => avrag_billing::usage_limit::BillableFeature::Chat,
@@ -296,7 +296,7 @@ impl ChatContext {
 
         if let Some(ref llm_usage) = execution.llm_usage {
             let feature = match execution.mode.as_str() {
-                "chat" | "general" => "chat",
+                "chat" => "chat",
                 "search" => "search",
                 "rag" => "answer",
                 _ => "chat",
@@ -373,7 +373,7 @@ impl ChatContext {
 }
 
 fn is_direct_chat_mode(mode: &str) -> bool {
-    matches!(mode, "chat" | "general")
+    matches!(mode, "chat")
 }
 
 /// Recent raw turns fed to the L3 dream layer (not session-summary).

@@ -10,7 +10,7 @@ async-trait = "0.1"
 anyhow.workspace = true
 base64 = "0.22"
 analytics = { path = "../../crates/analytics" }
-app = { path = "../../crates/app" }
+app-core = { path = "../../crates/app-core" }
 avrag-auth = { path = "../../crates/auth" }
 avrag-cache-redis = { path = "../../crates/cache-redis" }
 avrag-llm = { path = "../../crates/llm" }

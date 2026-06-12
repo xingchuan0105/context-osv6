@@ -172,14 +172,14 @@ async fn auth_logout_handler(
             "Not authenticated",
         );
     };
-    let Some(pg) = state.pg() else {
+    let Some(pool) = state.postgres_pool() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
             "Database not available",
         );
     };
-    let pool = pg.raw();
+    
     let mut tx = match begin_auth_admin_tx(pool).await {
         Ok(tx) => tx,
         Err(error) => {
@@ -252,14 +252,14 @@ async fn auth_me_handler(
     };
     let user_uuid = user_id.into_uuid();
 
-    let Some(pg) = state.pg() else {
+    let Some(pool) = state.postgres_pool() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
             "Database not available",
         );
     };
-    let pool = pg.raw();
+    
     let mut tx = match begin_auth_admin_tx(pool).await {
         Ok(tx) => tx,
         Err(error) => {
@@ -317,7 +317,7 @@ async fn auth_update_profile_handler(
             "Not authenticated",
         );
     };
-    let Some(pg) = state.pg() else {
+    let Some(pool) = state.postgres_pool() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
@@ -327,7 +327,7 @@ async fn auth_update_profile_handler(
 
     let full_name = req.full_name.unwrap_or_default();
     let user_uuid = user_id.into_uuid();
-    let pool = pg.raw();
+    
     let mut tx = match begin_auth_admin_tx(pool).await {
         Ok(tx) => tx,
         Err(error) => {
@@ -638,7 +638,7 @@ async fn auth_change_password_handler(
             "New password must be at least 8 characters",
         );
     }
-    let Some(pg) = state.pg() else {
+    let Some(pool) = state.postgres_pool() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
@@ -647,7 +647,7 @@ async fn auth_change_password_handler(
     };
 
     let user_uuid = user_id.into_uuid();
-    let pool = pg.raw();
+    
     let mut tx = match begin_auth_admin_tx(pool).await {
         Ok(tx) => tx,
         Err(error) => {
@@ -769,7 +769,7 @@ async fn auth_verify_reset_token_handler(
     State(state): State<AppState>,
     Json(req): Json<VerifyResetTokenRequest>,
 ) -> Response {
-    let Some(pg) = state.pg() else {
+    let Some(pool) = state.postgres_pool() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
@@ -782,7 +782,7 @@ async fn auth_verify_reset_token_handler(
         PASSWORD_RESET_PURPOSE,
         req.token.trim(),
     );
-    let mut tx = match begin_auth_admin_tx(pg.raw()).await {
+    let mut tx = match begin_auth_admin_tx(pool).await {
         Ok(tx) => tx,
         Err(error) => {
             warn!(error = %error, "failed to start reset token verification transaction");
@@ -865,14 +865,14 @@ async fn auth_send_reset_code_handler(
             );
         }
     };
-    let Some(pg) = state.pg() else {
+    let Some(pool) = state.postgres_pool() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
             "Database not available",
         );
     };
-    let pool = pg.raw();
+    
     let config = PasswordResetConfig::from_env();
 
     if !password_reset_enabled(&config) {
@@ -1031,7 +1031,7 @@ async fn auth_verify_reset_code_handler(
             );
         }
     };
-    let Some(pg) = state.pg() else {
+    let Some(pool) = state.postgres_pool() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
@@ -1052,7 +1052,7 @@ async fn auth_verify_reset_code_handler(
             .into_response();
     }
 
-    let mut tx = match begin_auth_admin_tx(pg.raw()).await {
+    let mut tx = match begin_auth_admin_tx(pool).await {
         Ok(tx) => tx,
         Err(error) => {
             warn!(error = %error, "failed to start password reset verification transaction");
@@ -1229,7 +1229,7 @@ async fn auth_confirm_reset_password_handler(
             "New password must be at least 8 characters",
         );
     }
-    let Some(pg) = state.pg() else {
+    let Some(pool) = state.postgres_pool() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
@@ -1250,7 +1250,7 @@ async fn auth_confirm_reset_password_handler(
         }
     };
 
-    let mut tx = match begin_auth_admin_tx(pg.raw()).await {
+    let mut tx = match begin_auth_admin_tx(pool).await {
         Ok(tx) => tx,
         Err(error) => {
             warn!(error = %error, "failed to start password reset confirmation transaction");

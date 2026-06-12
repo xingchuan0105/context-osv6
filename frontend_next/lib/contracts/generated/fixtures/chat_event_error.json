@@ -1,0 +1,6 @@
+{
+  "code": "validation_error",
+  "event": "error",
+  "message": "boom",
+  "request_id": "req-err"
+}

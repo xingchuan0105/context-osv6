@@ -1,11 +1,14 @@
+use typeshare::typeshare;
 use serde::{Deserialize, Serialize};
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkspaceDraftPreference {
     pub notebook_id: String,
     pub notes: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct NotebookWorkspacePreference {
     pub notebook_id: String,
@@ -13,6 +16,7 @@ pub struct NotebookWorkspacePreference {
     pub pinned_source_ids: Vec<String>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NotebookNotePreference {
     pub note_id: String,
@@ -27,6 +31,7 @@ pub struct NotebookNotePreference {
     pub promoted_at: Option<String>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct DashboardPreferences {
     #[serde(default)]
@@ -39,6 +44,7 @@ pub struct DashboardPreferences {
     pub notebook_notes: Vec<NotebookNotePreference>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NotificationPreferences {
     #[serde(default = "default_true")]
@@ -68,6 +74,7 @@ impl Default for NotificationPreferences {
     }
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct AgentPreference {
     pub id: String,
@@ -79,6 +86,7 @@ pub struct AgentPreference {
     pub updated_at: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct BlockedAgentPreference {
     pub id: String,
@@ -86,6 +94,7 @@ pub struct BlockedAgentPreference {
     pub blocked_at: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct DailyPreferenceLog {
     pub date: String,
@@ -95,6 +104,7 @@ pub struct DailyPreferenceLog {
     pub no_change: Vec<String>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct AgentPreferenceMemory {
     #[serde(default)]
@@ -109,6 +119,7 @@ pub struct AgentPreferenceMemory {
     pub last_consolidated_at: Option<String>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct UserPreferences {
     #[serde(default)]

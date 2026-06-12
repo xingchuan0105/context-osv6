@@ -1,26 +1,36 @@
+use typeshare::typeshare;
 use serde::{Deserialize, Serialize};
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageResponse {
-    pub used_tokens: i64,
-    pub limit_tokens: i64,
-    pub used_documents: i64,
-    pub limit_documents: i64,
+    #[typeshare(serialized_as = "number")]
+    pub used_tokens:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub limit_tokens:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub used_documents:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub limit_documents:        i64,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanRow {
     pub id: String,
     pub name: String,
-    pub price: i64,
+    #[typeshare(serialized_as = "number")]
+    pub price:        i64,
     pub features: Vec<String>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlansResponse {
     pub plans: Vec<PlanRow>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubscriptionResponse {
     pub plan_id: String,
@@ -28,10 +38,15 @@ pub struct SubscriptionResponse {
     pub current_period_end: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BillingOverview {
-    pub active_subscriptions: i64,
-    pub past_due_subscriptions: i64,
-    pub unpaid_subscriptions: i64,
-    pub canceled_subscriptions: i64,
+    #[typeshare(serialized_as = "number")]
+    pub active_subscriptions:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub past_due_subscriptions:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub unpaid_subscriptions:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub canceled_subscriptions:        i64,
 }

@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use app_core::{domain_rows::UserProfileRow, map_pg_error, AdminStorePort};
+use app_core::{domain_rows::UserProfileRow, AdminStorePort};
+use crate::domain_row_convert::{user_profile_row, user_profile_row_to_pg};
+use crate::pg_error::map_pg_error;
 use avrag_auth::AuthContext;
 use avrag_storage_pg::PgAppRepository;
 use chrono::{DateTime, Utc};
@@ -29,6 +31,7 @@ impl AdminStorePort for PgAdminStoreAdapter {
             .get_user_profile(auth, user_id)
             .await
             .map_err(map_pg_error)
+            .map(|profile| profile.map(user_profile_row))
     }
 
     async fn upsert_user_profile(
@@ -37,7 +40,7 @@ impl AdminStorePort for PgAdminStoreAdapter {
         profile: &UserProfileRow,
     ) -> Result<(), AppError> {
         self.repo
-            .upsert_user_profile(auth, profile)
+            .upsert_user_profile(auth, &user_profile_row_to_pg(profile))
             .await
             .map_err(map_pg_error)
     }

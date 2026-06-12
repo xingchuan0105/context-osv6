@@ -14,13 +14,6 @@ pub(crate) fn default_object_root() -> String {
     )
 }
 
-pub(crate) fn upload_signing_secret() -> String {
-    std::env::var("AVRAG_UPLOAD_SIGNING_SECRET")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "context-osv6-local-upload-secret".to_string())
-}
-
 pub(crate) fn sign_upload_payload(
     secret: &str,
     document_id: &str,

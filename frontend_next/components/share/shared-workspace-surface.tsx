@@ -62,9 +62,9 @@ function sourcesFromCitations(citations: Citation[]) {
     citations.map((citation, index) => ({
       id: citation.chunk_id?.trim() || citation.doc_id.trim() || `citation-source-${index}`,
       title: getCitationLabel(citation, index),
-      snippet: citation.preview?.trim() || citation.content?.trim() || null,
+      snippet: citation.preview?.trim() || citation.content?.trim() || undefined,
       doc_id: citation.doc_id,
-      page: citation.page ?? null,
+      page: citation.page ?? undefined,
     })),
   );
 }

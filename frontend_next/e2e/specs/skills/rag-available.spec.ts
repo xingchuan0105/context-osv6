@@ -49,12 +49,7 @@ test.describe("RAG Skill Availability", () => {
     expect(answer.toLowerCase()).toMatch(/antifragil|taleb|反脆弱|脆弱/);
 
     const citationCount = await chat.citationCount();
-    if (citationCount === 0) {
-      test.info().annotations.push({
-        type: "warning",
-        description: "RAG answer rendered but no citation UI (soft gate per e2e-gates.md)",
-      });
-    }
+    expect(citationCount, "RAG golden set requires at least one citation").toBeGreaterThan(0);
 
     if (process.env.RUN_QUALITY_JUDGE) {
       const { judgeAnswer } = await import("../../utils/judge");

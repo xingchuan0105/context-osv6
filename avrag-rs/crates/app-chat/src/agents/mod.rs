@@ -20,11 +20,9 @@ impl fmt::Display for AgentKind {
 
 impl AgentKind {
     /// Parse agent type string into canonical AgentKind.
-    /// `general` is accepted as a **legacy compatibility alias** for `Chat`
-    /// (retained because E2E tests and historical API clients still use it).
     pub fn parse(agent_type: &str) -> Option<Self> {
         match agent_type.to_ascii_lowercase().as_str() {
-            "chat" | "general" => Some(AgentKind::Chat),
+            "chat" => Some(AgentKind::Chat),
             "rag" => Some(AgentKind::Rag),
             "search" => Some(AgentKind::Search),
             _ => None,
@@ -45,12 +43,14 @@ pub mod audit;
 pub mod capability;
 pub mod content_guard;
 pub mod error_kind;
+#[cfg(feature = "eval")]
 pub mod eval_framework;
 
 pub mod events;
 pub mod r#loop;
 pub mod progressive;
 pub mod react_loop;
+#[cfg(feature = "eval")]
 pub mod redteam;
 pub mod replay;
 pub mod runtime;
@@ -67,13 +67,13 @@ mod tests {
     #[test]
     fn test_agent_kind_parse_chat() {
         assert_eq!(AgentKind::parse("chat"), Some(AgentKind::Chat));
+        assert_eq!(AgentKind::parse("CHAT"), Some(AgentKind::Chat));
     }
 
     #[test]
-    fn test_agent_kind_parse_general_alias() {
-        assert_eq!(AgentKind::parse("general"), Some(AgentKind::Chat));
-        assert_eq!(AgentKind::parse("GENERAL"), Some(AgentKind::Chat));
-        assert_eq!(AgentKind::parse("General"), Some(AgentKind::Chat));
+    fn test_agent_kind_parse_general_alias_removed() {
+        assert_eq!(AgentKind::parse("general"), None);
+        assert_eq!(AgentKind::parse("GENERAL"), None);
     }
 
     #[test]

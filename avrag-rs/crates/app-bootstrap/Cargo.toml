@@ -8,6 +8,8 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
+bytes = "1"
+futures = "0.3"
 chrono.workspace = true
 common = { path = "../common" }
 ingestion-types = { path = "../ingestion-types" }
@@ -30,3 +32,7 @@ avrag-storage-milvus = { path = "../storage-milvus" }
 avrag-storage-pg = { path = "../storage-pg" }
 tokio.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+app-core = { path = "../app-core" }
+tokio.workspace = true

@@ -11,6 +11,7 @@ pub mod quota_service;
 mod stripe_client;
 #[cfg(test)]
 mod tests_impl;
+mod tier;
 mod types;
 pub mod usage_limit;
 
@@ -25,9 +26,10 @@ pub use api::{
 };
 pub use creem_client::CreemClient;
 pub use stripe_client::StripeClient;
+pub use tier::{BillingTier, ReactLoopAgentMode, ReactLoopBudgetPolicy};
 pub use types::{
-    BillingConfig, BillingPlan, BillingPlanQuota, BillingProvider, DailyUsage, LimitHits,
-    Subscription, SubscriptionStatus, UsageForecastResponse, UsageHistoryResponse,
+    BillingConfig, BillingEvent, BillingPlan, BillingPlanQuota, BillingProvider, DailyUsage,
+    LimitHits, Subscription, SubscriptionStatus, UsageForecastResponse, UsageHistoryResponse,
     UsageWindowBucket, UsageWindowResponse,
 };
 

@@ -41,6 +41,21 @@ jobs:
           path: target
           key: ${{ runner.os }}-cargo-build-smoke-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Start Milvus stack
+        run: |
+          COMPOSE_FILE="$(find . -path '*/docker-compose.milvus.yml' -print -quit)"
+          if [ -z "$COMPOSE_FILE" ]; then
+            echo "docker-compose.milvus.yml not found" >&2
+            exit 1
+          fi
+          docker compose -f "$COMPOSE_FILE" up -d --wait
+
+      - name: Clean orphaned E2E containers
+        run: |
+          docker ps -a --filter name=avrag-test-pg --format '{{.Names}}' | xargs -r docker rm -f
+          docker ps -a --filter name=avrag-test-milvus --format '{{.Names}}' | xargs -r docker rm -f
+          docker ps -a --filter name=avrag-test-redis --format '{{.Names}}' | xargs -r docker rm -f
+
       - name: Compile tests
         run: cargo test --no-run --test product_e2e -p app
 

@@ -6,7 +6,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use super::media::{build_multimodal_embed_input, MediaResolveContext};
-use super::page_status::document_paddle_ocr_succeeded;
+use super::ocr_gating::document_paddle_ocr_succeeded;
 use super::env::env_flag_enabled;
 use super::types::{record_multimodal_degrade, StoredMultimodalChunk};
 

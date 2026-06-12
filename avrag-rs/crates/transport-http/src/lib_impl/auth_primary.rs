@@ -11,14 +11,14 @@ async fn auth_register_handler(
         );
     }
 
-    let Some(pg) = state.pg() else {
+    let Some(pool) = state.postgres_pool() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
             "Database not available",
         );
     };
-    let pool = pg.raw();
+    
     let mut tx = match begin_auth_admin_tx(pool).await {
         Ok(tx) => tx,
         Err(error) => {
@@ -154,14 +154,14 @@ async fn auth_login_handler(
     State(state): State<AppState>,
     Json(req): Json<LoginRequest>,
 ) -> Response {
-    let Some(pg) = state.pg() else {
+    let Some(pool) = state.postgres_pool() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
             "Database not available",
         );
     };
-    let pool = pg.raw();
+    
     let mut tx = match begin_auth_admin_tx(pool).await {
         Ok(tx) => tx,
         Err(error) => {

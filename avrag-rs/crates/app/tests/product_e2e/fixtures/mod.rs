@@ -1,3 +1,3 @@
 mod ready_rag;
 
-pub use ready_rag::ready_rag_context;
+pub use ready_rag::{ready_rag_context, shared_ready_rag};

@@ -1,6 +1,8 @@
+use typeshare::typeshare;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct Notebook {
     pub id: String,
@@ -12,23 +14,28 @@ pub struct Notebook {
     pub created_at: String,
     pub updated_at: String,
     #[serde(default)]
-    pub document_count: i64,
+    #[typeshare(serialized_as = "number")]
+    pub document_count:        i64,
     #[serde(default)]
-    pub status_summary: HashMap<String, i64>,
+    #[typeshare(serialized_as = "Record<string, number>")]
+    pub status_summary:        HashMap<String, i64>,
     #[serde(default)]
     pub shared: bool,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookListResponse {
     pub notebooks: Vec<Notebook>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookResponse {
     pub notebook: Notebook,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateNotebookRequest {
     pub name: String,
@@ -36,6 +43,7 @@ pub struct CreateNotebookRequest {
     pub description: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct UpdateNotebookRequest {
     #[serde(default)]
@@ -44,6 +52,7 @@ pub struct UpdateNotebookRequest {
     pub description: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ChatSession {
     pub id: String,
@@ -59,11 +68,13 @@ pub struct ChatSession {
     pub updated_at: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ChatSessionListResponse {
     pub sessions: Vec<ChatSession>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateChatSessionRequest {
     pub notebook_id: String,
@@ -73,6 +84,7 @@ pub struct CreateChatSessionRequest {
     pub agent_type: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 pub struct UpdateChatSessionRequest {
     #[serde(default)]
@@ -81,6 +93,7 @@ pub struct UpdateChatSessionRequest {
     pub pinned: Option<bool>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ApiKeyRow {
     pub id: String,
@@ -100,11 +113,13 @@ pub struct ApiKeyRow {
     pub updated_at: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ApiKeyListResponse {
     pub api_keys: Vec<ApiKeyRow>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateApiKeyRequest {
     pub name: String,
@@ -116,12 +131,14 @@ pub struct CreateApiKeyRequest {
     pub expires_at: Option<String>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateApiKeyResponse {
     pub api_key: ApiKeyRow,
     pub plaintext_key: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookNote {
     pub id: String,
@@ -137,16 +154,19 @@ pub struct NotebookNote {
     pub promoted_at: Option<String>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookNoteListResponse {
     pub notes: Vec<NotebookNote>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookNoteResponse {
     pub note: NotebookNote,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 pub struct CreateNotebookNoteRequest {
     #[serde(default)]
@@ -155,6 +175,7 @@ pub struct CreateNotebookNoteRequest {
     pub content: Option<String>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 pub struct UpdateNotebookNoteRequest {
     #[serde(default)]
@@ -163,55 +184,75 @@ pub struct UpdateNotebookNoteRequest {
     pub content: Option<String>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct PromoteNotebookNoteResponse {
     pub note: NotebookNote,
     pub source_id: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookAnalysisOverview {
     pub title: String,
     pub description: String,
     pub updated_at: String,
-    pub document_count: i64,
+    #[typeshare(serialized_as = "number")]
+    pub document_count:        i64,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookAnalysisSources {
-    pub total: i64,
-    pub ready: i64,
-    pub processing: i64,
-    pub failed: i64,
-    pub selected: i64,
-    pub pinned: i64,
+    #[typeshare(serialized_as = "number")]
+    pub total:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub ready:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub processing:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub failed:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub selected:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub pinned:        i64,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookAnalysisThreads {
-    pub total: i64,
-    pub pinned: i64,
+    #[typeshare(serialized_as = "number")]
+    pub total:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub pinned:        i64,
     #[serde(default)]
     pub latest_activity_at: Option<String>,
     #[serde(default)]
     pub latest_mode: Option<String>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookAnalysisNotes {
-    pub total: i64,
+    #[typeshare(serialized_as = "number")]
+    pub total:        i64,
     #[serde(default)]
     pub latest_edited_at: Option<String>,
-    pub promoted_to_source: i64,
+    #[typeshare(serialized_as = "number")]
+    pub promoted_to_source:        i64,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookAnalysisAccess {
     pub share_enabled: bool,
-    pub member_count: i64,
-    pub active_api_key_count: i64,
+    #[typeshare(serialized_as = "number")]
+    pub member_count:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub active_api_key_count:        i64,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookAnalysisAlert {
     pub level: String,
@@ -219,6 +260,7 @@ pub struct NotebookAnalysisAlert {
     pub message: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookAnalysisResponse {
     pub overview: NotebookAnalysisOverview,

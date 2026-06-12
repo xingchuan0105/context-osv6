@@ -12,7 +12,7 @@ async fn runtime_new_memory_requires_configured_chat_agent() {
             query: "say hello".to_string(),
             notebook_id: None,
             session_id: None,
-            agent_type: "general".to_string(),
+            agent_type: "chat".to_string(),
             source_type: None,
             source_token: None,
             doc_scope: Vec::new(),

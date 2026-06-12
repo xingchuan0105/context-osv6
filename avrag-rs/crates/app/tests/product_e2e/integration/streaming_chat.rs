@@ -1,132 +1,27 @@
-//! SSE streaming chat coverage.
+//! SSE streaming chat coverage — observability and mock-agent behaviour.
 //!
-//! These tests verify the streaming `chat` path (the production
-//! `ChatEvent` JSON-over-SSE protocol) end-to-end. Non-streaming tests
-//! only cover the `Done` payload, leaving 8 other event variants
-//! (`start`, `activity`, `answer_start`, `trace`, `token`,
-//! `reasoning_summary_delta`, `citations`, `error`) untested.
-//!
-//! The streaming RAG path now correctly emits `start → ... → done`.
-//! The mock LLM server supports SSE responses for `"stream": true`
-//! requests, so `LlmClient::complete_stream` works end-to-end.
+//! Protocol invariants (`start` first, `done` terminal, payload shape) live in
+//! `transport-http` contract tests. This module exercises the full mock RAG
+//! pipeline and loop telemetry with a module-scoped [`shared_ready_rag`] fixture.
 
 use std::time::Duration;
 
 use crate::product_e2e::{
-    ChatStreamParams, SseEvent, llm_real::collect_observability_from_events, ready_rag_context,
+    ChatStreamParams, fixtures::shared_ready_rag, llm_real::collect_observability_from_events,
 };
 
 const STREAM_DEADLINE: Duration = Duration::from_secs(60);
-/// The mock LLM emits one `token` event per character of the canned
-/// answer. The longest canned answer is the RAG answer (≈260 chars),
-/// so 512 is comfortably above the expected event count for any
-/// single chat run.
 const MAX_EVENTS: usize = 512;
+const QUERY: &str = "What is antifragility?";
 
-/// A streaming chat run must always begin with a `start` event,
-/// regardless of whether it later completes successfully or errors.
-#[tokio::test]
-async fn chat_stream_emits_start_event_first() {
-    let (mut ctx, upload) = ready_rag_context().await;
-
-    let events = ctx
-        .chat_stream(
-            "What is antifragility?",
-            &upload.notebook_id,
-            &[upload.document_id.clone()],
-            MAX_EVENTS,
-            STREAM_DEADLINE,
-        )
+async fn stream_rag_events(
+    params: ChatStreamParams<'_>,
+) -> Vec<crate::product_e2e::SseEvent> {
+    let shared = shared_ready_rag().await;
+    let ctx = shared.0.lock().expect("shared ready_rag lock");
+    ctx.chat_stream_with_params(params, MAX_EVENTS, STREAM_DEADLINE)
         .await
-        .unwrap();
-
-    assert!(
-        !events.is_empty(),
-        "stream should emit at least one event, got nothing"
-    );
-    let first_event = &events[0];
-    assert_eq!(
-        first_event.event, "start",
-        "first event must be 'start', got '{}' with data: {}",
-        first_event.event, first_event.data
-    );
-}
-
-/// A streaming chat run must terminate with a `done` event.
-#[tokio::test]
-async fn chat_stream_terminates_with_done_or_error() {
-    let (mut ctx, upload) = ready_rag_context().await;
-
-    let events = ctx
-        .chat_stream(
-            "What is antifragility?",
-            &upload.notebook_id,
-            &[upload.document_id.clone()],
-            MAX_EVENTS,
-            STREAM_DEADLINE,
-        )
-        .await
-        .unwrap();
-
-    let names: Vec<&str> = events.iter().map(|e| e.event.as_str()).collect();
-    let last = names.last().copied();
-    assert!(
-        last == Some("done"),
-        "stream must terminate with 'done', got last event: {last:?}, full: {names:?}"
-    );
-}
-
-/// The `done` event payload must contain the full `ChatResponse` shape
-/// that a non-streaming chat would return.
-#[tokio::test]
-async fn chat_stream_done_payload_shape_when_present() {
-    let (mut ctx, upload) = ready_rag_context().await;
-
-    let events = ctx
-        .chat_stream(
-            "What is antifragility?",
-            &upload.notebook_id,
-            &[upload.document_id.clone()],
-            MAX_EVENTS,
-            STREAM_DEADLINE,
-        )
-        .await
-        .unwrap();
-
-    let done = events.iter().find(|e| e.event == "done");
-    assert!(
-        done.is_some(),
-        "stream must contain a 'done' event, got events: {:?}",
-        events.iter().map(|e| e.event.as_str()).collect::<Vec<_>>()
-    );
-    let done = done.unwrap();
-
-    // The production SseSink wraps AgentEvent::Done in a ChatEvent::Done
-    // whose `payload` is a flat object (not a wrapped `response` object):
-    //
-    //   { "session_id", "message_id", "agent_type", "answer",
-    //     "final_message", "usage" }
-    //
-    // The full ChatResponse (citations, degrade_trace, sources) is
-    // delivered separately by the HTTP layer's final `done` payload
-    // rather than embedded in this SSE event. See handlers.rs
-    // `sse_response_from_receiver` + `chat_done_payload`.
-    let payload = done
-        .data
-        .get("payload")
-        .expect("done.data.payload must exist");
-    assert!(
-        payload.get("answer").and_then(|v| v.as_str()).is_some(),
-        "done.payload.answer must be a string, got: {payload}"
-    );
-    assert!(
-        payload.get("agent_type").and_then(|v| v.as_str()).is_some(),
-        "done.payload.agent_type must be a string, got: {payload}"
-    );
-    assert!(
-        payload.get("session_id").and_then(|v| v.as_str()).is_some(),
-        "done.payload.session_id must be a string, got: {payload}"
-    );
+        .unwrap()
 }
 
 /// Mock LLM synthesis emits `reasoning_summary_delta` when the provider
@@ -134,24 +29,19 @@ async fn chat_stream_done_payload_shape_when_present() {
 /// chat direct-answer skips synthesis, so we exercise the RAG path here.
 #[tokio::test]
 async fn chat_stream_collects_reasoning_delta_from_mock() {
-    let (mut ctx, upload) = ready_rag_context().await;
+    let shared = shared_ready_rag().await;
+    let upload = &shared.1;
 
-    let events = ctx
-        .chat_stream_with_params(
-            ChatStreamParams {
-                query: "What is antifragility?",
-                agent_type: "rag",
-                notebook_id: &upload.notebook_id,
-                doc_scope: &[upload.document_id.clone()],
-                session_id: None,
-                format_hint: None,
-                debug: false,
-            },
-            MAX_EVENTS,
-            STREAM_DEADLINE,
-        )
-        .await
-        .unwrap();
+    let events = stream_rag_events(ChatStreamParams {
+        query: QUERY,
+        agent_type: "rag",
+        notebook_id: &upload.notebook_id,
+        doc_scope: &[upload.document_id.clone()],
+        session_id: None,
+        format_hint: None,
+        debug: false,
+    })
+    .await;
 
     let capture = collect_observability_from_events(&events);
     assert!(
@@ -164,24 +54,19 @@ async fn chat_stream_collects_reasoning_delta_from_mock() {
 /// without `debug: true`; only `prompt_snapshot` requires debug.
 #[tokio::test]
 async fn chat_stream_collects_trace_telemetry_without_debug() {
-    let (mut ctx, upload) = ready_rag_context().await;
+    let shared = shared_ready_rag().await;
+    let upload = &shared.1;
 
-    let events = ctx
-        .chat_stream_with_params(
-            ChatStreamParams {
-                query: "What is antifragility?",
-                agent_type: "rag",
-                notebook_id: &upload.notebook_id,
-                doc_scope: &[upload.document_id.clone()],
-                session_id: None,
-                format_hint: None,
-                debug: false,
-            },
-            MAX_EVENTS,
-            STREAM_DEADLINE,
-        )
-        .await
-        .unwrap();
+    let events = stream_rag_events(ChatStreamParams {
+        query: QUERY,
+        agent_type: "rag",
+        notebook_id: &upload.notebook_id,
+        doc_scope: &[upload.document_id.clone()],
+        session_id: None,
+        format_hint: None,
+        debug: false,
+    })
+    .await;
 
     let capture = collect_observability_from_events(&events);
     assert!(
@@ -203,24 +88,19 @@ async fn chat_stream_collects_trace_telemetry_without_debug() {
 /// (`plan_decision` / `evaluation`) for offline trace_reasoning capture.
 #[tokio::test]
 async fn chat_stream_debug_collects_trace_telemetry() {
-    let (mut ctx, upload) = ready_rag_context().await;
+    let shared = shared_ready_rag().await;
+    let upload = &shared.1;
 
-    let events = ctx
-        .chat_stream_with_params(
-            ChatStreamParams {
-                query: "What is antifragility?",
-                agent_type: "rag",
-                notebook_id: &upload.notebook_id,
-                doc_scope: &[upload.document_id.clone()],
-                session_id: None,
-                format_hint: None,
-                debug: true,
-            },
-            MAX_EVENTS,
-            STREAM_DEADLINE,
-        )
-        .await
-        .unwrap();
+    let events = stream_rag_events(ChatStreamParams {
+        query: QUERY,
+        agent_type: "rag",
+        notebook_id: &upload.notebook_id,
+        doc_scope: &[upload.document_id.clone()],
+        session_id: None,
+        format_hint: None,
+        debug: true,
+    })
+    .await;
 
     let capture = collect_observability_from_events(&events);
     assert!(
@@ -238,24 +118,19 @@ async fn chat_stream_debug_collects_trace_telemetry() {
 /// for offline prompt-compliance analysis.
 #[tokio::test]
 async fn chat_stream_debug_emits_prompt_snapshot() {
-    let (mut ctx, upload) = ready_rag_context().await;
+    let shared = shared_ready_rag().await;
+    let upload = &shared.1;
 
-    let events = ctx
-        .chat_stream_with_params(
-            ChatStreamParams {
-                query: "What is antifragility?",
-                agent_type: "rag",
-                notebook_id: &upload.notebook_id,
-                doc_scope: &[upload.document_id.clone()],
-                session_id: None,
-                format_hint: None,
-                debug: true,
-            },
-            MAX_EVENTS,
-            STREAM_DEADLINE,
-        )
-        .await
-        .unwrap();
+    let events = stream_rag_events(ChatStreamParams {
+        query: QUERY,
+        agent_type: "rag",
+        notebook_id: &upload.notebook_id,
+        doc_scope: &[upload.document_id.clone()],
+        session_id: None,
+        format_hint: None,
+        debug: true,
+    })
+    .await;
 
     let capture = collect_observability_from_events(&events);
     assert!(
@@ -275,68 +150,4 @@ async fn chat_stream_debug_emits_prompt_snapshot() {
             .unwrap_or(false),
         "prompt_snapshot should include non-empty system_content"
     );
-}
-
-/// If a streaming run produces an `error` event, the event must include
-/// structured `code` and `message` fields. This path is no longer the
-/// expected terminal state (streams should end with `done`), but if an
-/// error event does appear we validate its shape.
-#[tokio::test]
-async fn chat_stream_error_event_has_code_and_message() {
-    let (mut ctx, upload) = ready_rag_context().await;
-
-    let events = ctx
-        .chat_stream(
-            "What is antifragility?",
-            &upload.notebook_id,
-            &[upload.document_id.clone()],
-            MAX_EVENTS,
-            STREAM_DEADLINE,
-        )
-        .await
-        .unwrap();
-
-    let error = events.iter().find(|e| e.event == "error");
-    let Some(error) = error else {
-        // Stream succeeded with `done` — error-event shape not exercised here.
-        return;
-    };
-
-    let code = error
-        .data
-        .get("code")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let message = error
-        .data
-        .get("message")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-
-    assert!(
-        !code.is_empty(),
-        "error event must have non-empty 'code', got: {}",
-        error.data
-    );
-    assert!(
-        !message.is_empty(),
-        "error event must have non-empty 'message', got: {}",
-        error.data
-    );
-}
-
-#[allow(dead_code)]
-fn event_summary(events: &[SseEvent]) -> Vec<String> {
-    events
-        .iter()
-        .map(|e| {
-            let data_preview = e.data.to_string();
-            let preview = if data_preview.len() > 80 {
-                format!("{}…", &data_preview[..80])
-            } else {
-                data_preview
-            };
-            format!("{}({})", e.event, preview)
-        })
-        .collect()
 }

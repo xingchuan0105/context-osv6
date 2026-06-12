@@ -1,6 +1,16 @@
 import { defineConfig, devices } from "@playwright/test";
 import { readFileSync } from "fs";
 
+function webServerEnv(extra: Record<string, string> = {}): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined) {
+      env[key] = value;
+    }
+  }
+  return { ...env, ...extra };
+}
+
 // Load .env so env vars are available in globalSetup / specs
 for (const envFile of [".env.local", ".env"]) {
   try {
@@ -42,19 +52,16 @@ export default defineConfig({
             url: "http://127.0.0.1:8080/health",
             timeout: 120_000,
             reuseExistingServer: !process.env.CI,
-            env: {
-              ...process.env,
+            env: webServerEnv({
               PRICING_REVAMP_ROLLOUT: "100",
-            },
+            }),
           },
           {
             command: "cd ../avrag-rs && cargo run -p avrag-worker",
             url: "http://127.0.0.1:8081/health",
             timeout: 120_000,
             reuseExistingServer: !process.env.CI,
-            env: {
-              ...process.env,
-            },
+            env: webServerEnv(),
           },
         ]),
     {
@@ -63,10 +70,9 @@ export default defineConfig({
       url: "http://127.0.0.1:3000",
       timeout: 60_000,
       reuseExistingServer: !process.env.CI,
-      env: {
-        ...process.env,
+      env: webServerEnv({
         NEXT_PUBLIC_PRICING_REVAMP_ENABLED: "1",
-      },
+      }),
     },
   ],
 

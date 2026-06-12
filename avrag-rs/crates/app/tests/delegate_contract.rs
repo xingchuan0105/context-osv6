@@ -51,7 +51,7 @@ async fn citation_lookup_session_without_messages_returns_session_not_found() {
         .create_session(CreateChatSessionRequest {
             notebook_id: notebook.id,
             title: Some("citation contract".into()),
-            agent_type: "general".into(),
+            agent_type: "chat".into(),
         })
         .await
         .unwrap();

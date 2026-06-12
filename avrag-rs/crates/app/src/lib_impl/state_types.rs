@@ -1,4 +1,7 @@
+use std::sync::Arc;
+
 use avrag_auth::AuthContext;
+use avrag_storage_pg::PgAppRepository;
 use app_core::StorageContext;
 
 #[derive(Clone)]
@@ -11,6 +14,8 @@ pub struct AppState {
     pub(crate) billing: app_billing::BillingContext,
     pub(crate) admin: app_admin::AdminContext,
     pub(crate) documents: app_documents::DocumentContext,
+    pub(crate) chat: app_chat::ChatContext,
+    pub(crate) postgres: Option<Arc<PgAppRepository>>,
     pub(crate) redis_url: String,
 }
 

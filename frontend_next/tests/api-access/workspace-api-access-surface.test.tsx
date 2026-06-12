@@ -2,15 +2,6 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  authState: {
-    token: "token-123",
-  },
-  getApiAccessBaseUrlMock: vi.fn(),
-  listApiKeysMock: vi.fn(),
-  createApiKeyMock: vi.fn(),
-  revokeApiKeyMock: vi.fn(),
-}));
 
 const workspaceId = "550e8400-e29b-41d4-a716-446655440000";
 
@@ -31,6 +22,10 @@ vi.mock("../../lib/api-access/client", async () => {
 });
 
 import { WorkspaceApiAccessSurface } from "../../components/api-access/workspace-api-access-surface";
+
+const mocks = vi.hoisted(() => globalThis.__mockProviders.createWorkspaceApiAccessSurfaceMocks());
+
+
 
 describe("WorkspaceApiAccessSurface", () => {
   beforeEach(() => {

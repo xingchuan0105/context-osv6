@@ -8,13 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::env;
 use tracing::{info, warn};
-use uuid::Uuid;
 
 use crate::AppState;
-
-// ---------------------------------------------------------------------------
-// E2E Reset API — 仅用于测试环境，6 层安全 gate
-// ---------------------------------------------------------------------------
 
 #[derive(Deserialize)]
 pub(crate) struct ResetUserDataRequest {
@@ -103,70 +98,19 @@ async fn reset_user_data_handler(
         Err(response) => return response,
     };
 
-    // Gate 4: 网络 gates (由部署层面保证 — 仅监听 staging 私网/loopback)
-    // 此 handler 不处理网络层白名单，由反向代理/防火墙负责。
+    info!(email = %email, "e2e reset-user-data executed");
 
-    // Gate 5 & 6: 查找用户并级联删除 + 审计日志
-    let repo = match state.pg() {
-        Some(pg) => pg,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({ "error": "database not available" })),
-            )
-                .into_response();
-        }
-    };
-
-    // 通过 email 查找 user_id
-    let user_id: Option<Uuid> =
-        match sqlx::query_as::<_, (Option<Uuid>,)>("select id from users where email = $1 limit 1")
-            .bind(&email)
-            .fetch_optional(repo.raw())
-            .await
-        {
-            Ok(Some((Some(id),))) => Some(id),
-            Ok(Some((None,))) | Ok(None) => None,
-            Err(e) => {
-                warn!(error = %e, "e2e reset: failed to lookup user by email");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "database error during user lookup" })),
-                )
-                    .into_response();
-            }
-        };
-
-    let user_id = match user_id {
-        Some(id) => id,
-        None => {
-            // 用户不存在 = 环境已干净，视为成功
-            return (
-                StatusCode::OK,
-                Json(ResetUserDataResponse {
-                    success: true,
-                    message: "user not found, nothing to reset".to_string(),
-                }),
-            )
-                .into_response();
-        }
-    };
-
-    // 审计日志
-    info!(
-        user_id = %user_id,
-        email = %email,
-        "e2e reset-user-data executed"
-    );
-
-    // 调用级联删除 (保留账号，删除数据)
-    // TODO: delete_user_cascade 会删除用户账号本身。
-    // 如果需求是"保留账号、只删除数据"，需要改用更细粒度的删除逻辑。
-    // 当前先用 delete_user_cascade，后续根据实际需求调整。
-    let auth_context = state.auth().clone();
-    match repo.delete_user_cascade(&auth_context, user_id).await {
+    match state.reset_e2e_user_data(&email).await {
+        Ok(false) => (
+            StatusCode::OK,
+            Json(ResetUserDataResponse {
+                success: true,
+                message: "user not found, nothing to reset".to_string(),
+            }),
+        )
+            .into_response(),
         Ok(true) => {
-            info!(user_id = %user_id, "e2e reset-user-data succeeded");
+            info!(email = %email, "e2e reset-user-data succeeded");
             (
                 StatusCode::OK,
                 Json(ResetUserDataResponse {
@@ -176,22 +120,11 @@ async fn reset_user_data_handler(
             )
                 .into_response()
         }
-        Ok(false) => {
-            warn!(user_id = %user_id, "e2e reset-user-data: user not found or no data to delete");
-            (
-                StatusCode::OK,
-                Json(ResetUserDataResponse {
-                    success: true,
-                    message: "no data to reset".to_string(),
-                }),
-            )
-                .into_response()
-        }
-        Err(e) => {
-            warn!(error = %e, user_id = %user_id, "e2e reset-user-data failed");
+        Err(error) => {
+            warn!(error = %error, email = %email, "e2e reset-user-data failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "failed to reset user data" })),
+                Json(json!({ "error": error })),
             )
                 .into_response()
         }
@@ -208,89 +141,30 @@ async fn grant_admin_role_handler(
         Err(response) => return response,
     };
 
-    let repo = match state.pg() {
-        Some(pg) => pg,
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({ "error": "database not available" })),
+    match state.grant_e2e_admin_role(&email).await {
+        Ok(()) => {
+            info!(email = %email, "e2e grant-admin-role succeeded");
+            (
+                StatusCode::OK,
+                Json(ResetUserDataResponse {
+                    success: true,
+                    message: "admin role granted successfully".to_string(),
+                }),
             )
-                .into_response();
+                .into_response()
         }
-    };
-
-    let mut tx = match crate::begin_auth_admin_tx(repo.raw()).await {
-        Ok(tx) => tx,
-        Err(e) => {
-            warn!(error = %e, "e2e grant-admin-role: failed to begin admin transaction");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "failed to begin admin transaction" })),
-            )
-                .into_response();
-        }
-    };
-
-    let user_row: Option<(Uuid, Uuid)> = match sqlx::query_as::<_, (Uuid, Uuid)>(
-        "select id, org_id from users where email = $1 limit 1",
-    )
-    .bind(&email)
-    .fetch_optional(tx.as_mut())
-    .await
-    {
-        Ok(row) => row,
-        Err(e) => {
-            warn!(error = %e, "e2e grant-admin-role: failed to lookup user by email");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "database error during user lookup" })),
-            )
-                .into_response();
-        }
-    };
-
-    let (user_id, org_id) = match user_row {
-        Some(row) => row,
-        None => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({ "error": "user not found" })),
-            )
-                .into_response();
-        }
-    };
-
-    if let Err(e) =
-        sqlx::query("update users set role = 'super_admin' where id = $1 and org_id = $2")
-            .bind(user_id)
-            .bind(org_id)
-            .execute(tx.as_mut())
-            .await
-    {
-        warn!(error = %e, user_id = %user_id, "e2e grant-admin-role: update failed");
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "failed to grant admin role" })),
+        Err(error) if error == "user not found" => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": error })),
         )
-            .into_response();
+            .into_response(),
+        Err(error) => {
+            warn!(error = %error, email = %email, "e2e grant-admin-role failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": error })),
+            )
+                .into_response()
+        }
     }
-
-    if let Err(e) = tx.commit().await {
-        warn!(error = %e, user_id = %user_id, "e2e grant-admin-role: commit failed");
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "failed to commit admin role update" })),
-        )
-            .into_response();
-    }
-
-    info!(user_id = %user_id, email = %email, "e2e grant-admin-role succeeded");
-    (
-        StatusCode::OK,
-        Json(ResetUserDataResponse {
-            success: true,
-            message: "admin role granted successfully".to_string(),
-        }),
-    )
-        .into_response()
 }

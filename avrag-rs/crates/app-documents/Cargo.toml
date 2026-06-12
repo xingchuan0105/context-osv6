@@ -23,3 +23,14 @@ serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+app-billing = { path = "../app-billing" }
+app-core = { path = "../app-core" }
+async-trait.workspace = true
+avrag-auth = { path = "../auth" }
+avrag-storage-pg = { path = "../storage-pg" }
+common = { path = "../common" }
+contracts = { path = "../../../contracts" }
+ingestion-types = { path = "../ingestion-types" }
+tokio.workspace = true

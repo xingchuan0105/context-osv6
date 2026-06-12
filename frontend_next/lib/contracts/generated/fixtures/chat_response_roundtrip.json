@@ -1,0 +1,58 @@
+{
+  "agent_type": "rag",
+  "answer": "hello",
+  "answer_blocks": [
+    {
+      "citations": [
+        "1"
+      ],
+      "text": "hello",
+      "type": "text"
+    }
+  ],
+  "citations": [
+    {
+      "asset_id": null,
+      "caption": null,
+      "chunk_id": "chunk-1",
+      "chunk_type": "text",
+      "citation_id": 1,
+      "content": "content",
+      "doc_id": "doc-1",
+      "doc_name": "Doc",
+      "image_url": null,
+      "layer": "summary",
+      "page": 1,
+      "parse_run_id": null,
+      "parser_backend": null,
+      "preview": "preview",
+      "score": 0.8999999761581421,
+      "source_locator": null
+    }
+  ],
+  "degrade_trace": [
+    {
+      "impact": "quality",
+      "reason": "planner_failed",
+      "stage": "planner"
+    }
+  ],
+  "guard_report": null,
+  "message_id": 7,
+  "mode_debug": null,
+  "planner_output": null,
+  "session_id": "session-123",
+  "sources": [
+    {
+      "doc_id": "doc-1",
+      "id": "chunk-1",
+      "page": 1,
+      "snippet": "snippet",
+      "title": "Doc"
+    }
+  ],
+  "tool_results": [],
+  "trace": {
+    "mode": "rag"
+  }
+}

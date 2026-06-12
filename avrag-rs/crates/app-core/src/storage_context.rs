@@ -3,22 +3,25 @@ use std::path::Path;
 use std::sync::Arc;
 
 use avrag_auth::AuthContext;
-use avrag_storage_pg::{DocumentAssetRow, ObjectStoreHandle, PgAppRepository};
 use common::{ApiKeyRow, AppError};
 use tokio::sync::RwLock;
 
 use crate::admin_store::AdminStorePort;
 use crate::billing_quota::BillingQuotaPort;
 use crate::chat_persistence::ChatPersistencePort;
-use crate::document_store::DocumentStorePort;
 use crate::config_helpers::{
     is_remote_asset_reference, sign_upload_payload, upload_signing_secret,
 };
+use crate::domain_rows::DocumentAssetRow;
+use crate::object_store_port::ObjectStorePort;
+use crate::postgres_health::PostgresHealthPort;
+use crate::document_store::DocumentStorePort;
 use crate::state_types::MemoryState;
 
 #[derive(Clone)]
 pub struct StorageContext {
-    pg: Option<Arc<PgAppRepository>>,
+    postgres_health: Option<Arc<dyn PostgresHealthPort>>,
+    postgres_configured: bool,
     document_store: Option<Arc<dyn DocumentStorePort>>,
     admin_store: Option<Arc<dyn AdminStorePort>>,
     billing_quota: Option<Arc<dyn BillingQuotaPort>>,
@@ -27,7 +30,7 @@ pub struct StorageContext {
     api_keys: Arc<RwLock<BTreeMap<String, Vec<ApiKeyRow>>>>,
     max_upload_file_size_bytes: u64,
     uses_memory_adapters: bool,
-    object_store: Arc<ObjectStoreHandle>,
+    object_store: Arc<dyn ObjectStorePort>,
     public_base_url: String,
     object_root: String,
     upload_expire_sec: u64,
@@ -35,8 +38,10 @@ pub struct StorageContext {
 }
 
 impl StorageContext {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        pg: Option<Arc<PgAppRepository>>,
+        postgres_health: Option<Arc<dyn PostgresHealthPort>>,
+        postgres_configured: bool,
         document_store: Option<Arc<dyn DocumentStorePort>>,
         admin_store: Option<Arc<dyn AdminStorePort>>,
         billing_quota: Option<Arc<dyn BillingQuotaPort>>,
@@ -45,14 +50,15 @@ impl StorageContext {
         api_keys: Arc<RwLock<BTreeMap<String, Vec<ApiKeyRow>>>>,
         max_upload_file_size_bytes: u64,
         uses_memory_adapters: bool,
-        object_store: Arc<ObjectStoreHandle>,
+        object_store: Arc<dyn ObjectStorePort>,
         public_base_url: String,
         object_root: String,
         upload_expire_sec: u64,
         download_expire_sec: u64,
     ) -> Self {
         Self {
-            pg,
+            postgres_health,
+            postgres_configured,
             document_store,
             admin_store,
             billing_quota,
@@ -67,13 +73,6 @@ impl StorageContext {
             upload_expire_sec,
             download_expire_sec,
         }
-    }
-
-    #[deprecated(
-        note = "Phase B only: transport-http still uses pg(); app modules must use typed ports"
-    )]
-    pub fn pg(&self) -> Option<Arc<PgAppRepository>> {
-        self.pg.clone()
     }
 
     pub fn document_store(&self) -> Option<Arc<dyn DocumentStorePort>> {
@@ -93,18 +92,22 @@ impl StorageContext {
     }
 
     pub async fn pg_ready(&self) -> bool {
-        if let Some(pg) = &self.pg {
-            return pg.ping().await.is_ok();
+        if let Some(health) = &self.postgres_health {
+            return health.ping().await.is_ok();
         }
         false
     }
 
     pub fn runtime_mode(&self) -> &'static str {
-        if self.pg.is_some() {
+        if self.postgres_configured {
             "postgres"
         } else {
             "memory"
         }
+    }
+
+    pub fn postgres_configured(&self) -> bool {
+        self.postgres_configured
     }
 
     pub fn uses_memory_adapters(&self) -> bool {
@@ -137,7 +140,7 @@ impl StorageContext {
             .unwrap_or_else(|| common::default_user_id())
     }
 
-    pub fn object_store(&self) -> &Arc<ObjectStoreHandle> {
+    pub fn object_store(&self) -> &Arc<dyn ObjectStorePort> {
         &self.object_store
     }
 

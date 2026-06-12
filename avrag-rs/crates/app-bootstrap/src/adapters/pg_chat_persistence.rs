@@ -3,12 +3,16 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use app_core::{
     chat_persistence::{AppendChatTurn, ChatPersistencePort},
-    map_pg_error,
     domain_rows::{
         DocumentAssetRow, IndexedChunk, MultimodalChunkRow, NotificationCreateParams, TaggedMessage,
         UserProfileRow,
     },
 };
+use crate::domain_row_convert::{
+    document_asset_row, indexed_chunk, multimodal_chunk_row, notification_create_params,
+    tagged_message, user_profile_row,
+};
+use crate::pg_error::map_pg_error;
 use avrag_auth::AuthContext;
 use avrag_storage_pg::{ChatTurn, PgAppRepository};
 use common::{AppError, ChatMessage, ChatSession, Notebook, SourceRow};
@@ -183,6 +187,7 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
             .get_user_profile(auth, user_id)
             .await
             .map_err(map_pg_error)
+            .map(|profile| profile.map(user_profile_row))
     }
 
     async fn load_history_by_tags(
@@ -196,6 +201,7 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
             .load_history_by_tags(auth, session_id, tags, limit)
             .await
             .map_err(map_pg_error)
+            .map(|rows| rows.into_iter().map(tagged_message).collect())
     }
 
     async fn create_notification(
@@ -204,7 +210,7 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
         params: NotificationCreateParams,
     ) -> Result<(), AppError> {
         self.repo
-            .create_notification(auth, params)
+            .create_notification(auth, notification_create_params(params))
             .await
             .map(|_| ())
             .map_err(map_pg_error)
@@ -232,6 +238,7 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
             .get_document_asset_by_id(auth, asset_id)
             .await
             .map_err(map_pg_error)
+            .map(|asset| asset.map(document_asset_row))
     }
 
     async fn get_multimodal_chunk_by_id(
@@ -243,6 +250,7 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
             .get_multimodal_chunk_by_id(auth, chunk_id)
             .await
             .map_err(map_pg_error)
+            .map(|chunk| chunk.map(multimodal_chunk_row))
     }
 
     async fn append_audit_record(&self, record: &AuditRecord) -> Result<(), AppError> {
@@ -261,6 +269,7 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
             .get_chunk_by_id(auth, chunk_id)
             .await
             .map_err(map_pg_error)
+            .map(|chunk| chunk.map(indexed_chunk))
     }
 
     async fn get_summary_metadata(

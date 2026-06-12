@@ -409,7 +409,11 @@ impl EmbeddingClient {
         matches!(
             self.config.api_style,
             Some(crate::ApiStyle::DashScopeMultimodalEmbedding)
-        ) || self.config.model == "qwen3-vl-embedding"
+        ) || matches!(
+            self.config.model.as_str(),
+            "qwen3-vl-embedding" | "tongyi-embedding-vision-plus-2026-03-06"
+                | "tongyi-embedding-vision-flash-2026-03-06"
+        )
     }
 
     async fn embed_openai_compatible_text(&self, texts: &[&str]) -> anyhow::Result<Vec<Vec<f32>>> {

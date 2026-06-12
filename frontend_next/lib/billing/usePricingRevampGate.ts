@@ -1,0 +1,57 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+
+import { isPricingRevampEnabled, isPricingRevampEnabledSSR } from "./featureFlag";
+
+export type PricingRevampGateOptions = {
+  redirectTo: string;
+};
+
+export type PricingRevampGateState = {
+  ssrEnabled: boolean;
+  ready: boolean;
+  enabled: boolean;
+};
+
+export function usePricingRevampGate({
+  redirectTo,
+}: PricingRevampGateOptions): PricingRevampGateState {
+  const router = useRouter();
+  const ssrEnabled = isPricingRevampEnabledSSR();
+  const [probeState, setProbeState] = useState<"pending" | "passed" | "failed">(
+    ssrEnabled ? "pending" : "failed",
+  );
+
+  useEffect(() => {
+    if (!ssrEnabled) {
+      router.replace(redirectTo);
+      return;
+    }
+
+    let cancelled = false;
+
+    void isPricingRevampEnabled().then((enabled) => {
+      if (cancelled) {
+        return;
+      }
+      if (!enabled) {
+        setProbeState("failed");
+        router.replace(redirectTo);
+        return;
+      }
+      setProbeState("passed");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [redirectTo, router, ssrEnabled]);
+
+  return {
+    ssrEnabled,
+    ready: !ssrEnabled || probeState !== "pending",
+    enabled: ssrEnabled && probeState === "passed",
+  };
+}

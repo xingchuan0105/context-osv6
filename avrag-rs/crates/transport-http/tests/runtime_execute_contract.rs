@@ -1,4 +1,5 @@
-use app::{AppConfig, AppState};
+use app::{AppState};
+use app_core::AppConfig;
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},

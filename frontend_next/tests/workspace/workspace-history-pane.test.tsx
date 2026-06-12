@@ -2,9 +2,6 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  listWorkspaceSessionMessagesMock: vi.fn(),
-}));
 
 vi.mock("../../lib/auth/context", () => ({
   useAuth: () => ({
@@ -34,6 +31,10 @@ vi.mock("../../lib/workspace/client", () => ({
 }));
 
 import { WorkspaceHistoryPane } from "../../components/workspace/workspace-history-pane";
+
+const mocks = vi.hoisted(() => globalThis.__mockProviders.createWorkspaceHistoryPaneMocks());
+
+
 
 const sessions = [
   {

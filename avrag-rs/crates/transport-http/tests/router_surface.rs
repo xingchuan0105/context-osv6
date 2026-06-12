@@ -1,4 +1,5 @@
-use app::{AppConfig, AppState};
+use app::{AppState};
+use app_core::AppConfig;
 use axum::{
     body::{Body, to_bytes},
     http::{Method, Request, StatusCode},
@@ -17,7 +18,7 @@ async fn router_exposes_only_post_chat_contract() {
                 .uri("/api/v1/chat")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    r#"{"query":"ping","agent_type":"general","stream":false}"#,
+                    r#"{"query":"ping","agent_type":"chat","stream":false}"#,
                 ))
                 .unwrap(),
         )

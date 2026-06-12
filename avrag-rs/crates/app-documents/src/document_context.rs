@@ -1,7 +1,6 @@
-use app_core::{DocumentScopeValidator, map_pg_error, StorageContext};
+use app_core::{domain_rows::DocumentScopeState, DocumentScopeValidator, StorageContext};
 use async_trait::async_trait;
 use avrag_auth::AuthContext;
-use avrag_storage_pg::DocumentScopeState;
 use common::{AppError, DocumentStatus};
 use uuid::Uuid;
 
@@ -35,12 +34,11 @@ impl DocumentContext {
             .copied()
             .collect::<std::collections::HashSet<_>>();
 
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.document_store() {
             let unique_doc_ids = unique_doc_ids.iter().copied().collect::<Vec<_>>();
-            let states = pg
+            let states = store
                 .get_document_scope_states(auth, &unique_doc_ids)
-                .await
-                .map_err(map_pg_error)?;
+                .await?;
             if states.len() != unique_doc_ids.len() {
                 return Err(AppError::validation(
                     "invalid_doc_scope",
@@ -90,7 +88,7 @@ impl DocumentContext {
     pub async fn resolve_citation_asset_url(
         &self,
         storage: &StorageContext,
-        asset: &avrag_storage_pg::DocumentAssetRow,
+        asset: &app_core::DocumentAssetRow,
     ) -> Option<String> {
         storage.resolve_citation_asset_url(asset).await
     }

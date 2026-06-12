@@ -17,10 +17,6 @@ async fn general_agent_returns_non_empty_answer() {
 
     let resp: ChatResponse = http_resp.into_business().unwrap();
     assert_observability_contract(&resp);
-    assert!(
-        resp.agent_type == "general" || resp.agent_type == "chat",
-        "general alias should resolve to chat agent, got {}",
-        resp.agent_type
-    );
+    assert_eq!(resp.agent_type, "chat", "chat agent_type expected, got {}", resp.agent_type);
     assert_answer_substantive(&resp, 10);
 }

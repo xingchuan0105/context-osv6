@@ -5,26 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetDefaultWorkspaceTitleCounters } from "../../lib/dashboard/default-title";
 
-const mocks = vi.hoisted(() => ({
-  pushMock: vi.fn(),
-  listWorkspacesMock: vi.fn(),
-  getFavoriteWorkspaceIdsMock: vi.fn(),
-  createWorkspaceMock: vi.fn(),
-  updateWorkspaceMock: vi.fn(),
-  deleteWorkspaceMock: vi.fn(),
-  updateFavoriteWorkspaceIdsMock: vi.fn(),
-  getUsageLimitMock: vi.fn(),
-  authState: {
-    initialized: true,
-    isAuthenticated: true,
-    token: "token-123",
-    user: { id: "user-1", email: "user@example.com", full_name: "User Example" },
-    passwordResetEnabled: true,
-    completeAuth: vi.fn(),
-    clearAuth: vi.fn(),
-    logout: vi.fn(),
-  },
-}));
+const mocks = vi.hoisted(() => globalThis.__mockProviders.createDashboardSurfaceMocks());
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -143,6 +124,7 @@ beforeEach(() => {
     user: { id: "user-1", email: "user@example.com", full_name: "User Example" },
     passwordResetEnabled: true,
     completeAuth: vi.fn(),
+    updateUser: vi.fn(),
     clearAuth: vi.fn(),
     logout: vi.fn(),
   };

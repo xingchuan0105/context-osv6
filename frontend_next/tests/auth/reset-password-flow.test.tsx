@@ -9,14 +9,6 @@ import {
   storeResetTicket,
 } from "../../lib/auth/reset-state";
 
-const mocks = vi.hoisted(() => ({
-  replaceMock: vi.fn(),
-  useAuthMock: vi.fn(),
-  useRouterMock: vi.fn(),
-  sendResetCodeMock: vi.fn(),
-  verifyResetCodeMock: vi.fn(),
-  confirmResetPasswordMock: vi.fn(),
-}));
 
 vi.mock("next/navigation", () => ({
   useRouter: mocks.useRouterMock,
@@ -44,6 +36,10 @@ vi.mock("../../lib/auth/client", () => ({
 import ConfirmResetPage from "../../app/(auth)/reset-password/confirm/page";
 import ResetPasswordPage from "../../app/(auth)/reset-password/page";
 import VerifyResetPage from "../../app/(auth)/reset-password/verify/page";
+
+const mocks = vi.hoisted(() => globalThis.__mockProviders.createResetPasswordFlowMocks());
+
+
 
 beforeEach(() => {
   window.sessionStorage.clear();

@@ -12,8 +12,9 @@ avrag-auth = { path = "../auth" }
 avrag-billing = { path = "../billing" }
 avrag-admin = { path = "../admin" }
 avrag-share = { path = "../share" }
-avrag-storage-pg = { path = "../storage-pg" }
 app = { path = "../app" }
+app-chat = { path = "../app-chat" }
+app-core = { path = "../app-core" }
 telemetry = { path = "../telemetry" }
 async-stream.workspace = true
 axum.workspace = true

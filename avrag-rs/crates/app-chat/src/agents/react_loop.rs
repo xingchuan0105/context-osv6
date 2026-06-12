@@ -3,9 +3,9 @@
 //! Per `docs/CHAT_GRAPHFLOW_REMOVAL_AND_AGENT_REACT_2026-05-10.md` §4.1, this
 //! module supplies the type-safe scaffolding for bounded ReAct iteration:
 //!
-//! - [`LoopBudget`]: enforces a tier-aware iteration ceiling. Free tier:
-//!   RAG = 2, Search = 2, Chat = 2. Pro/Enterprise: RAG = 4, Search = 3,
-//!   Chat = 3. See [`LoopBudget::rag`] / [`LoopBudget::search`] / [`LoopBudget::chat`].
+//! - [`LoopBudget`]: enforces a tier-aware iteration ceiling via
+//!   [`avrag_billing::ReactLoopBudgetPolicy`]. Free: RAG/Search/Chat = 2.
+//!   Plus/Pro: RAG = 4, Search = 3, Chat = 3.
 //! - [`LoopDecision`]: the only way to advance — `Continue` *requires* fresh
 //!   `new_params`, so a fallback that does not change inputs cannot type-check
 //!   (decision ⑦).
@@ -18,9 +18,13 @@
 //! the decision schema without sharing fields.
 
 use crate::agents::events::{AgentEvent, AgentEventSink};
+use avrag_billing::{BillingTier, ReactLoopAgentMode, ReactLoopBudgetPolicy};
 use common::AppError;
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
+
+/// Canonical billing tier (re-export for agent callers).
+pub use avrag_billing::BillingTier as UserTier;
 
 /// Cancellation-aware shared context passed to every step in a ReAct loop.
 ///
@@ -67,20 +71,11 @@ impl<'a> ReactContext<'a> {
     }
 }
 
-/// Iteration budget — see decision ④. Initial defaults: RAG = 3, Search = 2.
-/// Tier-based limits: free users get stricter budgets to control costs.
+/// Iteration budget — see decision ④. Limits are sourced from billing policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LoopBudget {
     pub max_iterations: u8,
     pub current: u8,
-}
-
-/// User tier for cost-controlled loop budgets.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum UserTier {
-    Free,
-    Pro,
-    Enterprise,
 }
 
 impl LoopBudget {
@@ -91,28 +86,43 @@ impl LoopBudget {
         }
     }
 
-    /// Tier-based RAG budget. Free = 2 (plan + 1 fallback), Pro/Enterprise = 4.
-    pub fn rag(tier: UserTier) -> Self {
-        Self::new(match tier {
-            UserTier::Free => 2,
-            UserTier::Pro | UserTier::Enterprise => 4,
-        })
+    /// Tier-based RAG budget from [`ReactLoopBudgetPolicy`].
+    pub fn rag(tier: BillingTier) -> Self {
+        Self::new(ReactLoopBudgetPolicy::max_iterations(
+            ReactLoopAgentMode::Rag,
+            tier,
+        ))
     }
 
-    /// Tier-based Search budget. Free = 2 (to support action/synthesis), Pro/Enterprise = 3.
-    pub fn search(tier: UserTier) -> Self {
-        Self::new(match tier {
-            UserTier::Free => 2,
-            UserTier::Pro | UserTier::Enterprise => 3,
-        })
+    /// Tier-based RAG budget resolved from a raw subscription `plan_id`.
+    pub fn rag_for_plan(plan_id: &str) -> Self {
+        Self::rag(BillingTier::from_plan_id(plan_id))
     }
 
-    /// Tier-based Chat budget. Free = 2 (to support action/synthesis), Pro/Enterprise = 3.
-    pub fn chat(tier: UserTier) -> Self {
-        Self::new(match tier {
-            UserTier::Free => 2,
-            UserTier::Pro | UserTier::Enterprise => 3,
-        })
+    /// Tier-based Search budget from [`ReactLoopBudgetPolicy`].
+    pub fn search(tier: BillingTier) -> Self {
+        Self::new(ReactLoopBudgetPolicy::max_iterations(
+            ReactLoopAgentMode::Search,
+            tier,
+        ))
+    }
+
+    /// Tier-based Search budget resolved from a raw subscription `plan_id`.
+    pub fn search_for_plan(plan_id: &str) -> Self {
+        Self::search(BillingTier::from_plan_id(plan_id))
+    }
+
+    /// Tier-based Chat budget from [`ReactLoopBudgetPolicy`].
+    pub fn chat(tier: BillingTier) -> Self {
+        Self::new(ReactLoopBudgetPolicy::max_iterations(
+            ReactLoopAgentMode::Chat,
+            tier,
+        ))
+    }
+
+    /// Tier-based Chat budget resolved from a raw subscription `plan_id`.
+    pub fn chat_for_plan(plan_id: &str) -> Self {
+        Self::chat(BillingTier::from_plan_id(plan_id))
     }
 
     pub fn exhausted(&self) -> bool {
@@ -127,7 +137,6 @@ impl LoopBudget {
     pub fn tick(&mut self) {
         self.current = self.current.saturating_add(1);
     }
-
 }
 
 /// Where the loop should branch on a `Continue` decision.
@@ -232,7 +241,7 @@ mod tests {
 
     #[test]
     fn loop_budget_starts_at_zero() {
-        let b = LoopBudget::rag(UserTier::Pro);
+        let b = LoopBudget::rag(BillingTier::Pro);
         assert_eq!(b.current, 0);
         assert_eq!(b.max_iterations, 4);
         assert!(!b.exhausted());
@@ -254,8 +263,18 @@ mod tests {
     }
 
     #[test]
-    fn search_budget_default_is_two() {
-        assert_eq!(LoopBudget::search(UserTier::Pro).max_iterations, 3);
+    fn search_budget_reads_billing_policy() {
+        assert_eq!(LoopBudget::search(BillingTier::Pro).max_iterations, 3);
+        assert_eq!(LoopBudget::search(BillingTier::Plus).max_iterations, 3);
+        assert_eq!(LoopBudget::search(BillingTier::Free).max_iterations, 2);
+    }
+
+    #[test]
+    fn enterprise_plan_id_resolves_to_plus_budget() {
+        assert_eq!(
+            LoopBudget::rag_for_plan("enterprise").max_iterations,
+            LoopBudget::rag(BillingTier::Plus).max_iterations
+        );
     }
 
     #[test]

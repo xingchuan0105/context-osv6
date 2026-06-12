@@ -83,10 +83,13 @@ mod tests {
     }
 
     #[test]
-    fn app_config_defaults_qwen3_vl_embedding_to_multimodal_schema_dimension() {
+    fn app_config_defaults_tongyi_embedding_vision_plus_to_multimodal_schema_dimension() {
         let config = AppConfig::default();
 
-        assert_eq!(config.mm_embedding.model, "qwen3-vl-embedding");
+        assert_eq!(
+            config.mm_embedding.model,
+            "tongyi-embedding-vision-plus-2026-03-06"
+        );
         assert_eq!(config.mm_embedding.dimensions, Some(1024));
         assert_eq!(config.milvus.multimodal_vector_dim, 1024);
     }
@@ -483,7 +486,7 @@ mod tests {
                     query: "hello".to_string(),
                     notebook_id: Some(notebook.id),
                     session_id: None,
-                    agent_type: "general".to_string(),
+                    agent_type: "chat".to_string(),
                     source_type: None,
                     source_token: None,
                     doc_scope: Vec::new(),
@@ -552,7 +555,7 @@ mod tests {
                     query: "hello".to_string(),
                     notebook_id: Some(notebook.id),
                     session_id: None,
-                    agent_type: "general".to_string(),
+                    agent_type: "chat".to_string(),
                     source_type: None,
                     source_token: None,
                     doc_scope: Vec::new(),
@@ -684,8 +687,14 @@ mod tests {
             Arc::new(app_bootstrap::adapters::PgChatPersistenceAdapter::new(pg.clone()))
                 as Arc<dyn app_core::ChatPersistencePort>,
         );
+        let postgres_health = Some(
+            Arc::new(app_bootstrap::adapters::PgHealthAdapter::new(pg.clone()))
+                as Arc<dyn app_core::PostgresHealthPort>,
+        );
+        state.postgres = Some(pg.clone());
         state.storage = crate::storage_context::StorageContext::new(
-            Some(pg),
+            postgres_health,
+            true,
             document_store,
             admin_store,
             None,
@@ -746,7 +755,7 @@ mod tests {
     async fn ingestion_task_count(state: &AppState, document_id: &str) -> i64 {
         let document_uuid = Uuid::parse_str(document_id).unwrap();
         state
-            .pg()
+            .postgres_repo()
             .as_ref()
             .unwrap()
             .count_ingestion_tasks_for_document(&state.auth, document_uuid)
@@ -826,7 +835,7 @@ mod tests {
         assert_eq!(ingestion_task_count(&state, &upload.document_id).await, 1);
 
         let validation = state
-            .pg()
+            .postgres_repo()
             .as_ref()
             .unwrap()
             .get_document_upload_validation(

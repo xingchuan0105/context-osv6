@@ -1,5 +1,5 @@
 use app_billing::BillingContext;
-use app_core::{map_pg_error, parse_uuid_or_app_error, AnalyticsServiceCtx, StorageContext, StoredDocument};
+use app_core::{parse_uuid_or_app_error, AnalyticsServiceCtx, StorageContext, StoredDocument};
 use avrag_auth::AuthContext;
 use common::{
     AddUrlSourceRequest, AppError, CreateDocumentUploadResponse, Document, DocumentStatus,
@@ -21,7 +21,7 @@ impl DocumentContext {
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
-        billing: &BillingContext,
+        _billing: &BillingContext,
         analytics: &AnalyticsServiceCtx,
         notebook_id: &str,
         req: AddUrlSourceRequest,
@@ -32,20 +32,22 @@ impl DocumentContext {
         }
         let fetched = fetch_url_import(url).await?;
 
-        if let Some(pg) = storage.pg() {
-            billing
-                .ensure_metric_quota(auth, "storage_bytes", fetched.raw_bytes.len() as i64)
-                .await?;
+        if let Some(store) = storage.document_store() {
             let notebook_id =
                 parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
-            let notebook = pg.get_notebook(auth, notebook_id).await.map_err(map_pg_error)?;
-            if notebook.is_none() {
+            let quota = storage.billing_quota().ok_or_else(|| {
+                AppError::internal("billing quota port is required for url imports")
+            })?;
+            quota
+                .ensure_storage_bytes_quota(auth, fetched.raw_bytes.len() as i64)
+                .await?;
+            if !quota.notebook_exists(auth, notebook_id).await? {
                 return Err(AppError::not_found(
                     "notebook_not_found",
                     "notebook not found",
                 ));
             }
-            let document = pg
+            let document = store
                 .create_document(
                     auth,
                     notebook_id,
@@ -53,14 +55,12 @@ impl DocumentContext {
                     fetched.raw_bytes.len() as u64,
                     &fetched.mime_type,
                 )
-                .await
-                .map_err(map_pg_error)?;
+                .await?;
             let document_id =
                 parse_uuid_or_app_error(&document.id, "document_not_found", "document not found")?;
-            let seed = pg
+            let seed = store
                 .get_document_task_seed(auth, document_id)
-                .await
-                .map_err(map_pg_error)?
+                .await?
                 .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
             write_raw_object(
                 storage.object_root_path(),
@@ -69,9 +69,9 @@ impl DocumentContext {
             )
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-            pg.set_document_status(auth, document_id, DocumentStatus::Queued)
-                .await
-                .map_err(map_pg_error)?;
+            store
+                .set_document_status(auth, document_id, DocumentStatus::Queued)
+                .await?;
             self.enqueue_ingest_task(auth, storage, seed).await?;
             record_product_event_if_available(
                 auth,
@@ -179,9 +179,9 @@ impl DocumentContext {
         storage: &StorageContext,
         notebook_id: Option<&str>,
     ) -> Vec<SourceRow> {
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.document_store() {
             let notebook_uuid = notebook_id.and_then(|value| Uuid::parse_str(value).ok());
-            return pg
+            return store
                 .list_sources(auth, notebook_uuid)
                 .await
                 .unwrap_or_default();

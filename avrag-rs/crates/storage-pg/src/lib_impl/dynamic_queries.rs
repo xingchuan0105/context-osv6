@@ -1,5 +1,4 @@
 use sea_query::{Iden, PostgresQueryBuilder, Query};
-use uuid::Uuid;
 
 #[derive(Iden)]
 pub enum Notebooks {

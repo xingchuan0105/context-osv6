@@ -4,44 +4,9 @@ struct SignedUploadQuery {
     signature: String,
 }
 
-async fn upload_state_for_document(
-    state: &AppState,
-    document_id: &str,
-) -> Result<(AppState, Option<String>), common::AppError> {
-    let Some(pg) = state.pg() else {
-        return Ok((state.clone(), None));
-    };
-
-    let document_uuid = Uuid::parse_str(document_id)
-        .map_err(|_| common::AppError::validation("document_not_found", "document not found"))?;
-    let mut tx = begin_auth_admin_tx(pg.raw())
-        .await
-        .map_err(|error| common::AppError::internal(error.to_string()))?;
-    let row = sqlx::query("select org_id, object_path from documents where id = $1")
-        .bind(document_uuid)
-        .fetch_optional(tx.as_mut())
-        .await
-        .map_err(|error| common::AppError::internal(error.to_string()))?
-        .ok_or_else(|| common::AppError::not_found("document_not_found", "document not found"))?;
-    let _ = tx.commit().await;
-
-    let org_id = row
-        .try_get::<Uuid, _>("org_id")
-        .map_err(|error| common::AppError::internal(error.to_string()))?;
-    let object_path = row
-        .try_get::<String, _>("object_path")
-        .map_err(|error| common::AppError::internal(error.to_string()))?;
-    let mut auth = avrag_auth::AuthContext::new(org_id.into(), avrag_auth::SubjectKind::System);
-    if let Some(actor) = state.auth().actor_id() {
-        auth = auth.with_actor_id(actor);
-    }
-
-    Ok((state.with_auth(auth), Some(object_path)))
-}
-
 async fn health_handler(State(state): State<AppState>) -> Response {
     let mut components = vec!["api".to_string()];
-    if state.pg().is_some() {
+    if state.postgres_configured() {
         if state.pg_ready().await {
             components.push("postgres:ok".to_string());
         } else {
@@ -60,10 +25,10 @@ async fn ready_handler(State(state): State<AppState>) -> Response {
     let mut ready = true;
     let mut details = Vec::new();
 
-    if let Some(pg) = state.pg() {
-        match pg.ping().await {
-            Ok(()) => details.push("postgres:ok"),
-            Err(_) => {
+    if state.postgres_configured() {
+        match state.pg_ready().await {
+            true => details.push("postgres:ok"),
+            false => {
                 telemetry::prometheus::record_dependency_failure("postgres");
                 details.push("postgres:fail");
                 ready = false;
@@ -145,7 +110,7 @@ async fn dev_upload_handler(
     State(state): State<AppState>,
     body: Bytes,
 ) -> Response {
-    let upload_state = match upload_state_for_document(&state, &document_id).await {
+    let upload_state = match state.upload_state_for_document(&document_id).await {
         Ok((upload_state, _)) => upload_state,
         Err(error) => return handlers::app_error_response(error),
     };
@@ -169,7 +134,7 @@ async fn signed_upload_handler(
     State(state): State<AppState>,
     body: Bytes,
 ) -> Response {
-    let (upload_state, object_path) = match upload_state_for_document(&state, &document_id).await {
+    let (upload_state, object_path) = match state.upload_state_for_document(&document_id).await {
         Ok(value) => value,
         Err(error) => return handlers::app_error_response(error),
     };
@@ -211,20 +176,6 @@ async fn billing_webhook_handler(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let Some(repo) = state.pg() else {
-        return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({
-                "ok": false,
-                "error": {
-                    "code": "billing_unavailable",
-                    "message": "billing repository unavailable",
-                }
-            })),
-        )
-            .into_response();
-    };
-
     let provider = match provider_str.parse::<avrag_billing::BillingProvider>() {
         Ok(p) => p,
         Err(_) => return StatusCode::NOT_FOUND.into_response(),
@@ -240,7 +191,9 @@ async fn billing_webhook_handler(
         avrag_billing::BillingProvider::Alipay => None,
     };
 
-    let result = avrag_billing::handle_webhook(repo, provider, signature, body.as_ref()).await;
+    let result = state
+        .billing_handle_webhook(provider, signature, body.as_ref())
+        .await;
 
     if provider == avrag_billing::BillingProvider::Alipay && result.ok {
         return (StatusCode::OK, "success").into_response();
@@ -432,7 +385,7 @@ async fn shared_notebook_handler(
     Path(token): Path<String>,
     State(state): State<AppState>,
 ) -> Response {
-    let Some(pg) = state.pg() else {
+    if !state.postgres_configured() {
         telemetry::prometheus::record_dependency_failure("postgres");
         return (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -442,9 +395,9 @@ async fn shared_notebook_handler(
             })),
         )
             .into_response();
-    };
+    }
 
-    match avrag_share::handle_get_shared_notebook(&token, pg).await {
+    match state.get_shared_notebook(&token).await {
         Ok(Some(payload)) => (
             StatusCode::OK,
             Json(json!({
@@ -539,7 +492,7 @@ async fn object_storage_webhook_handler(
             }
         };
 
-        let (upload_state, _) = match upload_state_for_document(&state, &document_id).await {
+        let (upload_state, _) = match state.upload_state_for_document(&document_id).await {
             Ok(result) => result,
             Err(error) => {
                 failed += 1;

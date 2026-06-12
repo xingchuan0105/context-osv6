@@ -367,10 +367,18 @@ pub fn release_shared_milvus(milvus: &Arc<SharedMilvus>) {
     }
 }
 
+fn milvus_compose_file() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docker-compose.milvus.yml")
+}
+
+const MILVUS_STANDALONE_CONTAINER: &str = "milvus-standalone";
+
 /// Start or reuse a Milvus instance for product E2E.
 ///
 /// Prefers a healthy external instance on 19530 (fast, already warmed).
-/// Falls back to an ephemeral container when no external Milvus is reachable.
+/// Falls back to the project compose stack (etcd + minio + standalone) when
+/// 19530 is unreachable. Compose services are treated as external so teardown
+/// does not stop a developer's local stack.
 /// Collection isolation relies on per-context `MILVUS_COLLECTION_PREFIX` +
 /// teardown drops, not on dedicated Milvus processes.
 pub async fn start_milvus() -> anyhow::Result<MilvusInstance> {
@@ -378,54 +386,52 @@ pub async fn start_milvus() -> anyhow::Result<MilvusInstance> {
     if milvus_api_ready(external_url).await {
         return Ok(MilvusInstance {
             url: external_url.to_string(),
-            container_name: None,
+            container_name: Some(MILVUS_STANDALONE_CONTAINER.to_string()),
             is_external: true,
         });
     }
 
-    let container_name = format!("avrag-test-milvus-{}", short_docker_id());
+    start_milvus_compose_stack().await?;
+    wait_for_milvus(external_url, MILVUS_STANDALONE_CONTAINER).await?;
+    Ok(MilvusInstance {
+        url: external_url.to_string(),
+        container_name: Some(MILVUS_STANDALONE_CONTAINER.to_string()),
+        is_external: true,
+    })
+}
+
+async fn start_milvus_compose_stack() -> anyhow::Result<()> {
+    let compose_path = milvus_compose_file();
+    if !compose_path.is_file() {
+        anyhow::bail!(
+            "Milvus not reachable on 127.0.0.1:19530 and compose file missing at {}",
+            compose_path.display()
+        );
+    }
+    let compose_dir = compose_path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("compose file has no parent: {}", compose_path.display()))?;
 
     let output = tokio::process::Command::new("docker")
         .args([
-            "run",
+            "compose",
+            "-f",
+            compose_path.to_str().expect("compose path utf-8"),
+            "up",
             "-d",
-            "--rm",
-            "--name",
-            &container_name,
-            "-p",
-            "0:19530",
-            "milvusdb/milvus:v2.4.5",
-            "milvus",
-            "run",
-            "standalone",
         ])
+        .current_dir(compose_dir)
         .output()
         .await?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("docker run milvus failed: {stderr}");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        anyhow::bail!(
+            "docker compose milvus up failed (stderr={stderr}, stdout={stdout})"
+        );
     }
-
-    let grpc_port = match docker_mapped_port(&container_name, 19530).await {
-        Ok(port) => port,
-        Err(e) => {
-            let _ = tokio::process::Command::new("docker")
-                .args(["rm", "-f", &container_name])
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status()
-                .await;
-            return Err(e);
-        }
-    };
-    let url = format!("http://127.0.0.1:{grpc_port}");
-    wait_for_milvus(&url, &container_name).await?;
-    Ok(MilvusInstance {
-        url,
-        container_name: Some(container_name),
-        is_external: false,
-    })
+    Ok(())
 }
 
 /// Stop a Milvus container by name.
@@ -504,18 +510,60 @@ async fn milvus_api_ready(url: &str) -> bool {
     res.status().is_success()
 }
 
+async fn docker_container_running(container_name: &str) -> Option<bool> {
+    let output = tokio::process::Command::new("docker")
+        .args(["inspect", "-f", "{{.State.Running}}", container_name])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .await
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    match String::from_utf8_lossy(&output.stdout).trim() {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
+    }
+}
+
+async fn docker_container_recent_logs(container_name: &str) -> String {
+    let output = tokio::process::Command::new("docker")
+        .args(["logs", "--tail", "40", container_name])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await;
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            format!("{stdout}{stderr}")
+        }
+        Err(e) => format!("(failed to read docker logs: {e})"),
+    }
+}
+
 async fn wait_for_milvus(url: &str, container_name: &str) -> anyhow::Result<()> {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(180);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(90);
     loop {
         if milvus_api_ready(url).await {
             return Ok(());
         }
-        if tokio::time::Instant::now() < deadline {
-            tokio::time::sleep(Duration::from_millis(1000)).await;
-        } else {
-            let _ = stop_milvus(container_name).await;
-            anyhow::bail!("milvus did not become ready in 180s");
+        if let Some(false) = docker_container_running(container_name).await {
+            let logs = docker_container_recent_logs(container_name).await;
+            anyhow::bail!(
+                "milvus container {container_name} exited before becoming ready at {url}; recent logs:\n{logs}"
+            );
         }
+        if tokio::time::Instant::now() >= deadline {
+            let logs = docker_container_recent_logs(container_name).await;
+            anyhow::bail!(
+                "milvus did not become ready in 90s at {url}; recent logs:\n{logs}"
+            );
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
     }
 }
 

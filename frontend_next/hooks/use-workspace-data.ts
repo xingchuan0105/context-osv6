@@ -74,7 +74,7 @@ export function useWorkspaceData(workspaceId: string) {
 
     void load();
     return () => { cancelled = true; };
-  }, [auth.initialized, auth.token, workspaceId, locale]);
+  }, [auth.initialized, auth.token, workspaceId]);
 
   useEffect(() => {
     setRenameSessionTarget(null);

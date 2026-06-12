@@ -1,21 +1,15 @@
 //! S1: Multiround RAG codegen — doc_profile (archive) → chunk_fetch (body) → synthesis.
 
-use std::time::Duration;
-
-use crate::product_e2e::{ChatResponse, DocumentStatus, HttpResponse, TestContext, assertions::*};
+use crate::product_e2e::{
+    ChatResponse, HttpResponse, assertions::*, fixtures::shared_ready_rag,
+};
 
 #[tokio::test]
 async fn rag_multiround_profile_codegen_doc_profile_then_chunk_fetch() {
-    let mut ctx = TestContext::new_smoke_with_rag().await;
-
-    let upload = ctx.upload_document("antifragile.txt").await.unwrap();
-    assert_eq!(upload.status, 201);
-
-    let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
-        .await
-        .unwrap();
-    assert_eq!(status, DocumentStatus::Completed);
+    let shared = shared_ready_rag().await;
+    let upload = &shared.1;
+    let ctx = shared.0.lock().expect("shared ready_rag lock");
+    ctx.reset_mock_state();
 
     let chunk_ids = ctx
         .query_document_chunk_ids(&upload.document_id)

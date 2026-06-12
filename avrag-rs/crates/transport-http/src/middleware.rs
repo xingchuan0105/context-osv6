@@ -1,5 +1,5 @@
 use app::AppState;
-use app::adapters::redis_rate_limiter::RedisFixedWindowRateLimiter;
+use app_core::adapters::redis_rate_limiter::RedisFixedWindowRateLimiter;
 use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
 use axum::{
     Json,
@@ -232,7 +232,6 @@ async fn share_chat_notebook_scope_from_request(
     if req.method() != Method::POST || !is_chat_endpoint_path(req.uri().path()) {
         return None;
     }
-    let pg = state.pg()?;
 
     let (parts, body) = std::mem::replace(req, Request::new(Body::empty())).into_parts();
     let body_bytes = match to_bytes(body, usize::MAX).await {
@@ -250,8 +249,7 @@ async fn share_chat_notebook_scope_from_request(
         return None;
     }
     let token = chat_request.source_token.as_deref()?;
-    let notebook_id = avrag_share::handle_validate_token(token, pg).await.ok()??;
-    let notebook_scope = Uuid::parse_str(&notebook_id).ok()?;
+    let notebook_scope = state.resolve_share_chat_notebook_scope(token).await?;
     if let Some(notebook_id) = chat_request.notebook_id.as_deref()
         && uuid::Uuid::parse_str(notebook_id).ok()? != notebook_scope
     {
@@ -303,22 +301,12 @@ async fn auth_from_bearer(state: &AppState, headers: &HeaderMap) -> Option<AuthC
     let org_uuid = Uuid::parse_str(&claims.org_id).ok()?;
     let user_uuid = Uuid::parse_str(&claims.sub).ok()?;
 
-    if let Some(pg) = state.pg() {
-        let mut tx = crate::begin_auth_admin_tx(pg.raw()).await.ok()?;
-        let auth_version = sqlx::query_scalar::<_, i32>(
-            "select auth_version from users where id = $1 and org_id = $2",
-        )
-        .bind(user_uuid)
-        .bind(org_uuid)
-        .fetch_optional(tx.as_mut())
-        .await
-        .ok()
-        .flatten()?;
-        let _ = tx.commit().await;
-
-        if auth_version != claims.auth_version {
-            return None;
-        }
+    if state.postgres_configured()
+        && !state
+            .jwt_auth_version_matches(user_uuid, org_uuid, claims.auth_version)
+            .await
+    {
+        return None;
     }
 
     let mut ctx = AuthContext::new(OrgId::from(org_uuid), SubjectKind::User)

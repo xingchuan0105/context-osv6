@@ -4,55 +4,6 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  replaceMock: vi.fn(),
-  changePasswordMock: vi.fn(),
-  clearAuthMock: vi.fn(),
-  logoutMock: vi.fn(),
-  updateUserMock: vi.fn(),
-  createPortalSessionMock: vi.fn(),
-  getSubscriptionMock: vi.fn(),
-  getUsageMock: vi.fn(),
-  getUsageLimitMock: vi.fn(),
-  getUserPreferencesMock: vi.fn(),
-  listNotificationsMock: vi.fn(),
-  listPlansMock: vi.fn(),
-  markNotificationReadMock: vi.fn(),
-  updateProfileMock: vi.fn(),
-  updateUserPreferencesMock: vi.fn(),
-  setLocaleMock: vi.fn(),
-  setThemeMock: vi.fn(),
-  authState: {
-    token: "token-123",
-    user: {
-      id: "user-1",
-      email: "owner@example.com",
-      full_name: "Owner",
-    },
-    clearAuth: vi.fn(),
-    updateUser: vi.fn(),
-    logout: vi.fn(),
-    passwordResetEnabled: true,
-  } as {
-    token: string | null;
-    user: {
-      id: string;
-      email: string;
-      full_name: string;
-    } | null;
-    clearAuth: () => void;
-    updateUser: (user: { id: string; email: string; full_name: string }) => void;
-    logout: () => Promise<void>;
-    passwordResetEnabled: boolean;
-  },
-  uiPreferencesState: {
-    locale: "en" as "zh-CN" | "en",
-    theme: "system" as "system" | "light" | "dark",
-    setLocale: vi.fn(),
-    setTheme: vi.fn(),
-  },
-}));
-
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     replace: mocks.replaceMock,
@@ -97,6 +48,10 @@ import {
   type SettingsTab,
 } from "../../components/settings/settings-tabs";
 import { SettingsSurface } from "../../components/settings/settings-surface";
+
+const mocks = vi.hoisted(() => globalThis.__mockProviders.createSettingsSurfaceMocks());
+
+
 
 function createTestQueryClient() {
   return new QueryClient({

@@ -1,6 +1,8 @@
+use typeshare::typeshare;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthUserDto {
     pub id: String,
@@ -9,6 +11,7 @@ pub struct AuthUserDto {
     pub full_name: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthPayload {
     pub token: String,
@@ -16,6 +19,7 @@ pub struct AuthPayload {
     pub reset_ticket: Option<String>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthEnvelope {
     pub success: bool,
@@ -23,6 +27,7 @@ pub struct AuthEnvelope {
     pub error: Option<String>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterRequest {
     pub email: String,
@@ -30,44 +35,52 @@ pub struct RegisterRequest {
     pub full_name: Option<String>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangePasswordRequest {
     pub old_password: String,
     pub new_password: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SendResetCodeRequest {
     pub email: String,
     pub lang: Option<String>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifyResetCodeRequest {
     pub email: String,
     pub code: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfirmResetPasswordRequest {
     pub reset_ticket: String,
     pub new_password: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthRuntimeCapabilitiesResponse {
     pub password_reset_enabled: bool,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmptyResponse {}
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationRow {
     pub id: String,
@@ -84,6 +97,7 @@ pub struct NotificationRow {
     pub updated_at: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationsResponse {
     pub notifications: Vec<NotificationRow>,

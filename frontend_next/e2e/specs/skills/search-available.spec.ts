@@ -38,10 +38,8 @@ test.describe("Search Skill Availability", () => {
     expect(answer.length).toBeGreaterThan(20);
     expect(answer.toLowerCase()).toMatch(/tokyo|weather|东京|天气|搜索|search/);
 
-    const citationButton = chat.getCitationButton();
-    if (await citationButton.count() > 0) {
-      await expect(citationButton).toBeVisible();
-    }
+    const citationCount = await chat.citationCount();
+    expect(citationCount, "Search golden set requires at least one citation").toBeGreaterThan(0);
 
     // Quality judge (non-blocking report)
     if (process.env.RUN_QUALITY_JUDGE) {

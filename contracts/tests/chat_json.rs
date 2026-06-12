@@ -228,3 +228,147 @@ fn done_payload_exposes_terminal_response_fields() {
     assert_eq!(json["message_id"], 7);
     assert_eq!(json["response"]["answer"], "done");
 }
+
+#[test]
+#[ignore = "run via pnpm generate:contracts"]
+fn export_golden_fixtures() {
+    use std::fs;
+    use std::path::PathBuf;
+
+    let out = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../frontend_next/lib/contracts/generated/fixtures");
+    fs::create_dir_all(&out).expect("create fixtures dir");
+
+    let write = |name: &str, value: serde_json::Value| {
+        let path = out.join(name);
+        fs::write(
+            &path,
+            serde_json::to_string_pretty(&value).expect("serialize fixture"),
+        )
+        .unwrap_or_else(|err| panic!("write {path:?}: {err}"));
+    };
+
+    write(
+        "chat_request_minimal.json",
+        serde_json::json!({
+            "query": "hello",
+            "notebook_id": null,
+            "session_id": null,
+            "agent_type": "chat",
+            "source_type": null,
+            "source_token": null,
+            "doc_scope": [],
+            "messages": [],
+            "stream": false,
+            "debug": false
+        }),
+    );
+
+    write(
+        "chat_request_debug.json",
+        serde_json::json!({
+            "query": "hello",
+            "debug": true
+        }),
+    );
+
+    write(
+        "chat_event_start.json",
+        serde_json::to_value(ChatEvent::Start {
+            request_id: "req-123".to_string(),
+            session_id: "session-123".to_string(),
+        })
+        .expect("serialize start event"),
+    );
+
+    write(
+        "chat_event_error.json",
+        serde_json::to_value(ChatEvent::Error {
+            request_id: "req-err".to_string(),
+            code: "validation_error".to_string(),
+            message: "boom".to_string(),
+        })
+        .expect("serialize error event"),
+    );
+
+    let response = ChatResponse {
+        answer: "hello".to_string(),
+        answer_blocks: vec![AnswerBlock::Text {
+            text: "hello".to_string(),
+            citations: vec!["1".to_string()],
+        }],
+        session_id: "session-123".to_string(),
+        agent_type: "rag".to_string(),
+        sources: vec![SourceRef {
+            id: "chunk-1".to_string(),
+            title: "Doc".to_string(),
+            snippet: Some("snippet".to_string()),
+            doc_id: Some("doc-1".to_string()),
+            page: Some(1),
+        }],
+        citations: vec![Citation {
+            citation_id: 1,
+            doc_id: "doc-1".to_string(),
+            chunk_id: Some("chunk-1".to_string()),
+            page: Some(1),
+            doc_name: "Doc".to_string(),
+            preview: Some("preview".to_string()),
+            content: Some("content".to_string()),
+            score: 0.9,
+            layer: Some("summary".to_string()),
+            chunk_type: Some("text".to_string()),
+            asset_id: None,
+            caption: None,
+            image_url: None,
+            parser_backend: None,
+            source_locator: None,
+            parse_run_id: None,
+        }],
+        trace: TraceInfo {
+            mode: "rag".to_string(),
+        },
+        degrade_trace: vec![DegradeTraceItem {
+            stage: "planner".to_string(),
+            reason: DegradeReason::PlannerFailed,
+            impact: "quality".to_string(),
+        }],
+        planner_output: None,
+        mode_debug: None,
+        message_id: Some(7),
+        guard_report: None,
+        tool_results: Vec::new(),
+        usage: None,
+    };
+    write(
+        "chat_response_roundtrip.json",
+        serde_json::to_value(response).expect("serialize response"),
+    );
+
+    write(
+        "chat_done_payload.json",
+        serde_json::to_value(ChatDonePayload {
+            request_id: "req-123".to_string(),
+            session_id: "session-123".to_string(),
+            message_id: 7,
+            response: ChatResponse {
+                answer: "done".to_string(),
+                answer_blocks: Vec::new(),
+                session_id: "session-123".to_string(),
+                agent_type: "general".to_string(),
+                sources: Vec::new(),
+                citations: Vec::new(),
+                trace: TraceInfo {
+                    mode: "general".to_string(),
+                },
+                degrade_trace: Vec::new(),
+                planner_output: None,
+                mode_debug: None,
+                message_id: Some(7),
+                guard_report: None,
+                tool_results: Vec::new(),
+                usage: None,
+            },
+        })
+        .expect("serialize done payload"),
+    );
+}

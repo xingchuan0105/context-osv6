@@ -153,7 +153,7 @@ struct FeatureFlagChangeRequestRow {
 
 macro_rules! repo_or_response {
     ($state:expr) => {
-        match $state.pg() {
+        match $state.postgres_repo() {
             Some(repo) => repo,
             None => {
                 return Json(ApiResponse::<serde_json::Value>::err(
@@ -204,7 +204,7 @@ async fn begin_admin_tx(
     state: &AppState,
 ) -> Result<sqlx::Transaction<'_, sqlx::Postgres>, Response> {
     let actor_id = actor_uuid(state)?;
-    let Some(repo) = state.pg() else {
+    let Some(repo) = state.postgres_repo() else {
         return Err(Json(ApiResponse::<serde_json::Value>::err(
             "postgres_not_configured",
             "postgres backend is not configured",

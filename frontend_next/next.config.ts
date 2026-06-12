@@ -19,11 +19,12 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   allowedDevOrigins: ["127.0.0.1", "localhost"],
 
-  // 桌面端构建时忽略 TypeScript 错误（playwright 配置等非关键错误）
+  // 桌面端构建时跳过 ESLint（playwright 配置等非生产代码的 lint 噪音），
+  // 但保留 TypeScript 类型检查，确保生产代码类型安全。
   ...(isDesktopBuild
     ? {
-        typescript: {
-          ignoreBuildErrors: true,
+        eslint: {
+          ignoreDuringBuilds: true,
         },
       }
     : {}),

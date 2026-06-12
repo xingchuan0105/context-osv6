@@ -8,6 +8,8 @@ mod config_helpers;
 pub mod domain_ports;
 pub mod domain_rows;
 pub mod document_store;
+pub mod object_store_port;
+pub mod postgres_health;
 pub mod ports;
 pub mod prompt_loader;
 pub mod state_types;
@@ -30,4 +32,8 @@ pub use domain_rows::{
 pub use storage_context::StorageContext;
 
 pub use prompt_loader::load_prompt_template;
-pub use config_helpers::{map_pg_error, parse_uuid_or_app_error};
+pub use config_helpers::parse_uuid_or_app_error;
+pub use object_store_port::{
+    ObjectStoreHeadError, ObjectStoreMetadata, ObjectStorePort, ObjectStoreUploadStream,
+};
+pub use postgres_health::PostgresHealthPort;

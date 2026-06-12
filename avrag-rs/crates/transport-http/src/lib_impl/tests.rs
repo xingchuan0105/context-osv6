@@ -8,7 +8,7 @@ mod tests {
     use tower::ServiceExt;
 
     fn test_app_state() -> AppState {
-        let mut config = app::AppConfig::default();
+        let mut config = app_core::AppConfig::default();
         config.org_id = "00000000-0000-0000-0000-000000000001".to_string();
         config.user_id = "00000000-0000-0000-0000-000000000002".to_string();
         AppState::new(config)
@@ -16,7 +16,7 @@ mod tests {
 
     async fn pg_test_app_state() -> Option<AppState> {
         let database_url = env::var("DATABASE_URL").ok()?;
-        let mut config = app::AppConfig::default();
+        let mut config = app_core::AppConfig::default();
         config.database_url = Some(database_url);
         config.auto_migrate = true;
         AppState::bootstrap(config).await.ok()
@@ -179,7 +179,7 @@ mod tests {
             .header(middleware::HEADER_ORG_ID, org_id)
             .header(middleware::HEADER_USER_ID, user_id)
             .body(Body::from(format!(
-                r#"{{"notebook_id":"{}","title":"My Session","agent_type":"general"}}"#,
+                r#"{{"notebook_id":"{}","title":"My Session","agent_type":"chat"}}"#,
                 notebook.id
             )))
             .unwrap();
@@ -899,7 +899,7 @@ mod tests {
         let user_id = Uuid::parse_str(&claims.sub).unwrap();
         let org_id = Uuid::parse_str(&claims.org_id).unwrap();
 
-        let pg = state.pg().expect("pg expected");
+        let pg = state.postgres_repo().expect("pg expected");
         let mut tx = begin_auth_admin_tx(pg.raw()).await.unwrap();
         sqlx::query("update users set role = 'super_admin' where id = $1 and org_id = $2")
             .bind(user_id)
@@ -983,7 +983,7 @@ mod tests {
         let notebook: serde_json::Value = serde_json::from_slice(&notebook_body).unwrap();
         let notebook_id = notebook["notebook"]["id"].as_str().unwrap().to_string();
 
-        let share_token = avrag_share::ShareService::new(state.pg().expect("pg expected"))
+        let share_token = avrag_share::ShareService::new(state.postgres_repo().expect("pg expected"))
             .create_share_token(
                 &avrag_auth::AuthContext::new(
                     avrag_auth::OrgId::from(org_id),
@@ -1002,7 +1002,7 @@ mod tests {
             .method("POST")
             .header("Content-Type", "application/json")
             .body(Body::from(format!(
-                r#"{{"query":"hello public share","notebook_id":"{notebook_id}","agent_type":"general","source_type":"share","source_token":"{share_token}","doc_scope":[],"messages":[],"stream":false}}"#
+                r#"{{"query":"hello public share","notebook_id":"{notebook_id}","agent_type":"chat","source_type":"share","source_token":"{share_token}","doc_scope":[],"messages":[],"stream":false}}"#
             )))
             .unwrap();
         let chat_resp = app.clone().oneshot(chat_req).await.unwrap();
@@ -1016,7 +1016,7 @@ mod tests {
                 .is_some_and(|message| message.contains("asking questions requires sign-in"))
         );
 
-        let pg = state.pg().expect("pg expected");
+        let pg = state.postgres_repo().expect("pg expected");
         let session_count: i64 =
             sqlx::query_scalar("select count(1) from chat_sessions where notebook_id = $1")
                 .bind(Uuid::parse_str(&notebook_id).unwrap())

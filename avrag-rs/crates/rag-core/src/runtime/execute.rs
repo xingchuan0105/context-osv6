@@ -755,11 +755,19 @@ impl RagRuntime {
             .into_iter()
             .collect::<Vec<_>>();
         let doc_names = if let Some(content_store) = self.config.content_store.as_ref() {
-            content_store
+            let names = content_store
                 .get_document_names(auth, &unique_doc_ids)
                 .await
                 .inspect_err(|e| tracing::warn!(error = %e, "content_store.get_document_names failed, degrading"))
-                .unwrap_or_default()
+                .unwrap_or_default();
+            if names.len() < unique_doc_ids.len() {
+                tracing::info!(
+                    resolved = names.len(),
+                    requested = unique_doc_ids.len(),
+                    "some document names could not be resolved"
+                );
+            }
+            names
         } else {
             HashMap::new()
         };

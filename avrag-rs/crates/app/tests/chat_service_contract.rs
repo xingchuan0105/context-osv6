@@ -69,7 +69,7 @@ impl RagExecutor for FakeRagExecutor {
             mode_debug: None,
             message_id: Some(1),
             trace: TraceInfo {
-                mode: "general".into(),
+                mode: "chat".into(),
             },
             degrade_trace: Vec::new(),
             tool_results: Vec::new(),
@@ -94,7 +94,7 @@ async fn chat_service_executes_against_ports() {
             query: "say hello".into(),
             notebook_id: None,
             session_id: None,
-            agent_type: "general".into(),
+            agent_type: "chat".into(),
             source_type: None,
             source_token: None,
             doc_scope: Vec::new(),
@@ -107,6 +107,6 @@ async fn chat_service_executes_against_ports() {
         .await
         .unwrap();
 
-    assert_eq!(response.agent_type, "general");
+    assert_eq!(response.agent_type, "chat");
     assert!(response.answer.contains("hello"));
 }

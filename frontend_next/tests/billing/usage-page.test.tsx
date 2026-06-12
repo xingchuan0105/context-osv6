@@ -1,11 +1,9 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  pushMock: vi.fn(),
-  replaceMock: vi.fn(),
-  isPricingRevampEnabledMock: vi.fn(),
-}));
+import { resetUsagePageMocks } from "./helpers/usage-page.setup";
+
+const mocks = vi.hoisted(() => globalThis.__mockProviders.createUsagePageMocks());
 
 vi.mock("../../lib/billing/api", () => ({
   billingApi: {
@@ -53,10 +51,7 @@ import { billingApi } from "../../lib/billing/api";
 
 describe("UsagePage", () => {
   beforeEach(() => {
-    mocks.pushMock.mockReset();
-    mocks.replaceMock.mockReset();
-    mocks.isPricingRevampEnabledMock.mockReset();
-    mocks.isPricingRevampEnabledMock.mockResolvedValue(true);
+    resetUsagePageMocks(mocks);
     vi.mocked(billingApi.getUsageWindow).mockResolvedValue({
       plan_id: "free",
       rolling_5h: { used: 80000, limit: 100000, percentage: 80, reset_at: "2099-01-01T00:00:00Z" },

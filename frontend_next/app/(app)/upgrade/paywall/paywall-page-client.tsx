@@ -7,11 +7,8 @@ import { PaywallModal } from "@/components/billing/PaywallModal";
 import { billingApi } from "@/lib/billing/api";
 import type { BillingPlan, UsageWindowResponse } from "@/lib/billing/api";
 import { ApiError } from "@/lib/auth/client";
-import {
-  isPricingRevampEnabled,
-  isPricingRevampEnabledSSR,
-  isPricingRevampFeatureDisabledError,
-} from "@/lib/billing/featureFlag";
+import { isPricingRevampFeatureDisabledError } from "@/lib/billing/featureFlag";
+import { usePricingRevampGate } from "@/lib/billing/usePricingRevampGate";
 import { createCheckoutSession } from "@/lib/settings/client";
 import { useAuth } from "@/lib/auth/context";
 import { formatUiMessage } from "@/lib/i18n/messages";
@@ -27,26 +24,17 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
   const auth = useAuth();
   const router = useRouter();
   const { locale } = useUiPreferences();
+  const { ssrEnabled, enabled, ready } = usePricingRevampGate({ redirectTo: "/dashboard" });
   const [state, setState] = useState<PaywallLoadState>({ kind: "loading" });
 
   useEffect(() => {
-    if (!isPricingRevampEnabledSSR()) {
-      router.replace("/dashboard");
+    if (!ready || !enabled) {
       return;
     }
 
     let cancelled = false;
 
     async function loadPaywall() {
-      const enabled = await isPricingRevampEnabled();
-      if (cancelled) {
-        return;
-      }
-      if (!enabled) {
-        router.replace("/dashboard");
-        return;
-      }
-
       try {
         const [windowData, plansData] = await Promise.all([
           billingApi.getUsageWindow(),
@@ -76,7 +64,11 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [enabled, ready, router]);
+
+  if (!ssrEnabled) {
+    return null;
+  }
 
   if (state.kind === "loading") {
     return (

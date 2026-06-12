@@ -2,15 +2,6 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  completeAuthMock: vi.fn(),
-  loginMock: vi.fn(),
-  registerMock: vi.fn(),
-  replaceMock: vi.fn(),
-  useRouterMock: vi.fn(),
-  useSearchParamsMock: vi.fn(),
-  useAuthMock: vi.fn(),
-}));
 
 vi.mock("next/navigation", () => ({
   useRouter: mocks.useRouterMock,
@@ -37,6 +28,10 @@ vi.mock("../../lib/ui-preferences", () => ({
 
 import LoginPage from "../../app/(auth)/login/page";
 import RegisterPage from "../../app/(auth)/register/page";
+
+const mocks = vi.hoisted(() => globalThis.__mockProviders.createLoginRegisterMocks());
+
+
 
 beforeEach(() => {
   mocks.completeAuthMock.mockReset();

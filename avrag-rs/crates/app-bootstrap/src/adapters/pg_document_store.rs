@@ -2,11 +2,16 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use app_core::{
-    map_pg_error, domain_rows::DocumentDeletionOutcome,
+    domain_rows::DocumentDeletionOutcome,
     domain_rows::DocumentScopeState, domain_rows::DocumentTaskSeed,
     domain_rows::DocumentUploadMutationOutcome, domain_rows::DocumentUploadQueueOutcome,
     DocumentStorePort,
 };
+use crate::domain_row_convert::{
+    document_deletion_outcome, document_scope_state, document_task_seed,
+    document_upload_mutation_outcome, document_upload_queue_outcome,
+};
+use crate::pg_error::map_pg_error;
 use avrag_auth::AuthContext;
 use avrag_storage_pg::PgAppRepository;
 use common::{
@@ -98,6 +103,7 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
             .get_document_scope_states(auth, document_ids)
             .await
             .map_err(map_pg_error)
+            .map(|rows| rows.into_iter().map(document_scope_state).collect())
     }
 
     async fn list_sources(
@@ -146,6 +152,7 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
             .get_document_task_seed(auth, document_id)
             .await
             .map_err(map_pg_error)
+            .map(|seed| seed.map(document_task_seed))
     }
 
     async fn set_document_status(
@@ -170,6 +177,7 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
             .set_document_upload_invalid(auth, document_id, detail)
             .await
             .map_err(map_pg_error)
+            .map(document_upload_mutation_outcome)
     }
 
     async fn queue_validated_document_upload(
@@ -184,6 +192,7 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
             .queue_validated_document_upload(auth, document_id, size_bytes, sha256_hex, task)
             .await
             .map_err(map_pg_error)
+            .map(document_upload_queue_outcome)
     }
 
     async fn update_document(
@@ -209,6 +218,7 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
             .delete_document(auth, document_id)
             .await
             .map_err(map_pg_error)
+            .map(document_deletion_outcome)
     }
 
     async fn get_document_content(

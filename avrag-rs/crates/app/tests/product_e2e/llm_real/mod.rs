@@ -557,7 +557,7 @@ pub async fn search_with_retry(
 }
 
 /// Guard that fails fast if a required real-LLM credential is missing.
-fn require_real_llm_config() {
+pub(crate) fn require_real_llm_config() {
     let required = [
         "AGENT_LLM_BASE_URL",
         "AGENT_LLM_API_KEY",
@@ -579,35 +579,6 @@ pub mod multi_turn;
 pub mod pdf_corpus;
 pub mod rag_real;
 pub mod search_real;
-
-impl TestContext {
-    /// Create a TestContext that uses the **real** production LLM and embedding
-    /// providers.  Uses real Brave Search when SEARCH_API_KEY is configured
-    /// and reachable; otherwise falls back to the local mock search server.
-    pub async fn new_with_real_llm() -> Self {
-        load_env_from_repo_dotenv();
-        require_real_llm_config();
-        if has_real_search_credentials() {
-            ensure_search_defaults();
-        }
-
-        // build_smoke with use_real_llm=true:
-        // - does not override AGENT_LLM_* / EMBEDDING_* with mock values
-        // - does not start mock LLM/Embedding servers
-        // - uses real Brave when credentials + connectivity allow, else mock search
-        Self::build_smoke(true, 300, None, true, None, false).await
-    }
-
-    /// Real-LLM context with a longer per-task ingestion timeout for full PDF books.
-    pub async fn new_with_real_llm_pdf() -> Self {
-        load_env_from_repo_dotenv();
-        require_real_llm_config();
-        if has_real_search_credentials() {
-            ensure_search_defaults();
-        }
-        Self::build_smoke(true, 1200, None, true, None, false).await
-    }
-}
 
 #[cfg(test)]
 mod stream_reasoning_tests {

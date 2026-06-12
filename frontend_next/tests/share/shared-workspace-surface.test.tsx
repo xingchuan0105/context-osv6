@@ -3,14 +3,6 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  authState: {
-    initialized: true,
-    token: "token-123" as string | null,
-  },
-  getSharedWorkspaceMock: vi.fn(),
-  streamSharedChatMock: vi.fn(),
-}));
 
 vi.mock("next/link", () => ({
   default: ({
@@ -45,6 +37,10 @@ vi.mock("../../lib/share/client", async () => {
 });
 
 import { SharedWorkspaceSurface } from "../../components/share/shared-workspace-surface";
+
+const mocks = vi.hoisted(() => globalThis.__mockProviders.createSharedWorkspaceSurfaceMocks());
+
+
 
 function buildPayload(overrides?: Partial<Awaited<ReturnType<typeof mocks.getSharedWorkspaceMock>>>) {
   return {

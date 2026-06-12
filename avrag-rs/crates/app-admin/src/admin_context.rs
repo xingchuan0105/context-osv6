@@ -1,6 +1,4 @@
-use std::collections::BTreeMap;
-
-use app_core::{map_pg_error, parse_uuid_or_app_error, StorageContext};
+use app_core::{parse_uuid_or_app_error, StorageContext};
 use avrag_auth::AuthContext;
 use common::{
     new_id, now_rfc3339, ApiKeyRow, AppError, CreateApiKeyRequest, CreateApiKeyResponse,
@@ -21,13 +19,10 @@ impl AdminContext {
         storage: &StorageContext,
         notebook_id: &str,
     ) -> Result<Vec<ApiKeyRow>, AppError> {
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.admin_store() {
             let notebook_uuid =
                 parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
-            return pg
-                .list_api_keys(auth, Some(notebook_uuid))
-                .await
-                .map_err(map_pg_error);
+            return store.list_api_keys(auth, Some(notebook_uuid)).await;
         }
 
         let keys = storage.api_keys().read().await;
@@ -56,24 +51,19 @@ impl AdminContext {
             .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
             .map(|value| value.with_timezone(&chrono::Utc));
 
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.admin_store() {
             let notebook_uuid =
                 parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
-            let (api_key, plaintext_key) = pg
+            return store
                 .create_api_key(
                     auth,
                     Some(notebook_uuid),
                     req.name.trim(),
                     &permissions,
-                    rate_limit_rpm,
+                    i32::try_from(rate_limit_rpm).unwrap_or(60),
                     expires_at,
                 )
-                .await
-                .map_err(map_pg_error)?;
-            return Ok(CreateApiKeyResponse {
-                api_key,
-                plaintext_key,
-            });
+                .await;
         }
 
         let row = ApiKeyRow {
@@ -110,15 +100,14 @@ impl AdminContext {
         notebook_id: &str,
         key_id: &str,
     ) -> Result<StatusOnlyResponse, AppError> {
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.admin_store() {
             let notebook_uuid =
                 parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
             let key_uuid =
                 parse_uuid_or_app_error(key_id, "api_key_not_found", "api key not found")?;
-            let revoked = pg
+            let revoked = store
                 .revoke_api_key(auth, Some(notebook_uuid), key_uuid)
-                .await
-                .map_err(map_pg_error)?;
+                .await?;
             if !revoked {
                 return Err(AppError::not_found(
                     "api_key_not_found",
@@ -152,15 +141,14 @@ impl AdminContext {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<NotificationRow>, AppError> {
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.admin_store() {
             let user_id = auth
                 .actor_id()
                 .map(|value| value.into_uuid())
                 .ok_or_else(|| AppError::unauthorized("notification access requires a user"))?;
-            return pg
+            return store
                 .list_notifications(auth, user_id, limit, offset)
-                .await
-                .map_err(map_pg_error);
+                .await;
         }
 
         let state = storage.inner().read().await;
@@ -172,7 +160,7 @@ impl AdminContext {
                 event_type: "system.degrade".to_string(),
                 title: "M1/M2 skeleton running".to_string(),
                 body: "Rust API is serving placeholder notebook/document/chat flows with explicit degrade trace.".to_string(),
-                data: BTreeMap::new(),
+                data: std::collections::BTreeMap::new(),
                 read_at: None,
                 created_at: now_rfc3339(),
                 updated_at: now_rfc3339(),
@@ -187,7 +175,7 @@ impl AdminContext {
         storage: &StorageContext,
         notification_id: &str,
     ) -> Result<StatusOnlyResponse, AppError> {
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.admin_store() {
             let user_id = auth
                 .actor_id()
                 .map(|value| value.into_uuid())
@@ -197,10 +185,9 @@ impl AdminContext {
                 "notification_not_found",
                 "notification not found",
             )?;
-            let updated = pg
+            let updated = store
                 .mark_notification_read(auth, user_id, notification_uuid)
-                .await
-                .map_err(map_pg_error)?;
+                .await?;
             if !updated {
                 return Err(AppError::not_found(
                     "notification_not_found",

@@ -32,8 +32,6 @@ members = [
   "crates/storage-milvus",
   "crates/telemetry",
   "crates/transport-http",
-  "crates/web-sdk",
-  "crates/web-ui",
   "crates/test-kit",
   "crates/e2e-analyzer",
   "tests/rag_quality",

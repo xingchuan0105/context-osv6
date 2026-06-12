@@ -65,15 +65,16 @@ export function ClientI18nProvider({ children }: { children: React.ReactNode }) 
     setMessages(getMessageCatalog(storedLocale));
     setIsInitialized(true);
 
-    // 监听 locale 变化（通过 cookie 变化）
-    const handleStorageChange = () => {
+    // 监听同 tab 内的 locale 切换。
+    // 浏览器原生 "storage" 事件仅在其它 tab 触发，同 tab 需用自定义事件。
+    const handleLocaleChange = () => {
       const newLocale = getStoredLocale();
       setLocale(newLocale);
       setMessages(getMessageCatalog(newLocale));
     };
 
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
+    window.addEventListener("locale-change", handleLocaleChange);
+    return () => window.removeEventListener("locale-change", handleLocaleChange);
   }, []);
 
   // 初始化完成前显示加载状态
@@ -99,5 +100,5 @@ export function setLocale(locale: UiLocale): void {
   }
 
   document.cookie = `${LOCALE_COOKIE_NAME}=${locale};path=/;max-age=${365 * 24 * 60 * 60}`;
-  window.dispatchEvent(new Event("storage"));
+  window.dispatchEvent(new CustomEvent("locale-change", { detail: locale }));
 }

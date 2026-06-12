@@ -9,7 +9,8 @@
     "build:desktop": "BUILD_TARGET=desktop next build",
     "start": "next start",
     "test": "vitest",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "generate:contracts": "bash ../scripts/generate-contracts.sh"
   },
   "dependencies": {
     "@tanstack/react-query": "5.99.2",

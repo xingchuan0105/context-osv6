@@ -1,12 +1,10 @@
-use app_core::{map_pg_error, StorageContext, StoredDocument};
+use app_core::{DocumentTaskSeed, StorageContext, StoredDocument};
 use avrag_auth::AuthContext;
-use avrag_storage_pg::DocumentTaskSeed;
 use common::{AppError, DocumentStatus};
 use ingestion::{
     AuditAction, IngestDocumentPayload, ReindexDocumentPayload, ReindexReason, build_ingest_task,
     build_reindex_task, task_audit,
 };
-use uuid::Uuid;
 
 use crate::document_context::DocumentContext;
 
@@ -34,7 +32,7 @@ impl DocumentContext {
         storage: &StorageContext,
         seed: DocumentTaskSeed,
     ) -> Result<(), AppError> {
-        let Some(pg) = storage.pg() else {
+        let Some(store) = storage.document_store() else {
             return Ok(());
         };
 
@@ -51,26 +49,23 @@ impl DocumentContext {
                 file_size: seed.file_size,
             },
         );
-        let inserted = pg
-            .enqueue_ingestion_task(&task)
-            .await
-            .map_err(map_pg_error)?;
+        let inserted = store.enqueue_ingestion_task(&task).await?;
         if inserted {
-            pg.append_audit_record(&task_audit(
-                &task,
-                AuditAction::TaskEnqueued,
-                serde_json::json!({
-                    "kind": task.kind,
-                    "document_id": task.document_id,
-                    "object_path": match &task.payload {
-                        ingestion::IngestionTaskPayload::IngestDocument(payload) => payload.object_path.clone(),
-                        ingestion::IngestionTaskPayload::IngestUrl(payload) => payload.url.clone(),
-                        ingestion::IngestionTaskPayload::ReindexDocument(_) => String::new(),
-                    }
-                }),
-            ))
-            .await
-            .map_err(map_pg_error)?;
+            store
+                .append_audit_record(&task_audit(
+                    &task,
+                    AuditAction::TaskEnqueued,
+                    serde_json::json!({
+                        "kind": task.kind,
+                        "document_id": task.document_id,
+                        "object_path": match &task.payload {
+                            ingestion::IngestionTaskPayload::IngestDocument(payload) => payload.object_path.clone(),
+                            ingestion::IngestionTaskPayload::IngestUrl(payload) => payload.url.clone(),
+                            ingestion::IngestionTaskPayload::ReindexDocument(_) => String::new(),
+                        }
+                    }),
+                ))
+                .await?;
         }
         Ok(())
     }
@@ -81,7 +76,7 @@ impl DocumentContext {
         storage: &StorageContext,
         seed: DocumentTaskSeed,
     ) -> Result<(), AppError> {
-        let Some(pg) = storage.pg() else {
+        let Some(store) = storage.document_store() else {
             return Ok(());
         };
 
@@ -92,25 +87,22 @@ impl DocumentContext {
             Some(StorageContext::current_user_id(auth)),
             ReindexDocumentPayload {
                 reason: ReindexReason::Manual,
-                requested_revision: (Uuid::new_v4().as_u128() & u32::MAX as u128) as u32,
+                requested_revision: (uuid::Uuid::new_v4().as_u128() & u32::MAX as u128) as u32,
             },
         );
-        let inserted = pg
-            .enqueue_ingestion_task(&task)
-            .await
-            .map_err(map_pg_error)?;
+        let inserted = store.enqueue_ingestion_task(&task).await?;
         if inserted {
-            pg.append_audit_record(&task_audit(
-                &task,
-                AuditAction::TaskEnqueued,
-                serde_json::json!({
-                    "kind": task.kind,
-                    "document_id": task.document_id,
-                    "reason": "manual",
-                }),
-            ))
-            .await
-            .map_err(map_pg_error)?;
+            store
+                .append_audit_record(&task_audit(
+                    &task,
+                    AuditAction::TaskEnqueued,
+                    serde_json::json!({
+                        "kind": task.kind,
+                        "document_id": task.document_id,
+                        "reason": "manual",
+                    }),
+                ))
+                .await?;
         }
         Ok(())
     }

@@ -1,7 +1,7 @@
 mod env;
 mod media;
 mod multimodal;
-mod page_status;
+mod ocr_gating;
 mod types;
 mod vlm_summary;
 

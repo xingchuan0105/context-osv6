@@ -1,5 +1,5 @@
 //! RAG plan/evaluation prompt helpers — retained for unit tests and future execute-plan wiring.
-#![allow(dead_code)]
+#![cfg_attr(not(test), allow(dead_code))]
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;

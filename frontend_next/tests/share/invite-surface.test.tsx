@@ -2,16 +2,6 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  pushMock: vi.fn(),
-  authState: {
-    initialized: true,
-    token: null as string | null,
-  },
-  getWorkspaceMock: vi.fn(),
-  acceptInviteMock: vi.fn(),
-  declineInviteMock: vi.fn(),
-}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -43,6 +33,10 @@ vi.mock("../../lib/share/client", async () => {
 });
 
 import { InviteSurface } from "../../components/share/invite-surface";
+
+const mocks = vi.hoisted(() => globalThis.__mockProviders.createInviteSurfaceMocks());
+
+
 
 describe("InviteSurface", () => {
   beforeEach(() => {

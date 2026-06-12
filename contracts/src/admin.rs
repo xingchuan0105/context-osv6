@@ -1,13 +1,20 @@
+use typeshare::typeshare;
 use serde::{Deserialize, Serialize};
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RagHealthStatus {
-    pub failed_documents: i64,
-    pub queued_tasks: i64,
-    pub processing_tasks: i64,
-    pub recent_guard_events: i64,
+    #[typeshare(serialized_as = "number")]
+    pub failed_documents:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub queued_tasks:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub processing_tasks:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub recent_guard_events:        i64,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthResponse {
     pub status: String,
@@ -15,33 +22,41 @@ pub struct HealthResponse {
     pub version: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadyResponse {
     pub ready: bool,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrgRow {
     pub id: String,
     pub name: String,
     pub plan: String,
-    pub user_count: i64,
-    pub notebook_count: i64,
-    pub query_count: i64,
+    #[typeshare(serialized_as = "number")]
+    pub user_count:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub notebook_count:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub query_count:        i64,
     pub blocked: bool,
     pub created_at: String,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrgListResponse {
     pub orgs: Vec<OrgRow>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrgResponse {
     pub org: OrgRow,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserRow {
     pub id: String,
@@ -53,18 +68,24 @@ pub struct UserRow {
     pub last_active_at: Option<String>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserListResponse {
     pub users: Vec<UserRow>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdminUsageResponse {
-    pub total_requests: i64,
-    pub total_tokens: i64,
-    pub total_documents: i64,
+    #[typeshare(serialized_as = "number")]
+    pub total_requests:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub total_tokens:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub total_documents:        i64,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeatureFlagEntry {
     pub key: String,
@@ -75,10 +96,12 @@ pub struct FeatureFlagEntry {
     pub config_ready: bool,
     pub requires_config: bool,
     pub source: String,
-    pub updated_at: Option<i64>,
+    #[typeshare(serialized_as = "number")]
+    pub updated_at:        Option<i64>,
     pub has_pending_request: bool,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeatureFlagChangeRequest {
     pub id: String,
@@ -90,37 +113,52 @@ pub struct FeatureFlagChangeRequest {
     pub requested_by: String,
     pub reviewed_by: Option<String>,
     pub review_note: Option<String>,
-    pub created_at: i64,
-    pub reviewed_at: Option<i64>,
-    pub executed_at: Option<i64>,
+    #[typeshare(serialized_as = "number")]
+    pub created_at:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub reviewed_at:        Option<i64>,
+    #[typeshare(serialized_as = "number")]
+    pub executed_at:        Option<i64>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkerStatusResponse {
     pub runtime_mode: String,
-    pub queued_tasks: i64,
-    pub processing_tasks: i64,
-    pub failed_documents: i64,
+    #[typeshare(serialized_as = "number")]
+    pub queued_tasks:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub processing_tasks:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub failed_documents:        i64,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DegradationStatusResponse {
-    pub failed_documents: i64,
-    pub recent_guard_events: i64,
-    pub share_access_events: i64,
+    #[typeshare(serialized_as = "number")]
+    pub failed_documents:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub recent_guard_events:        i64,
+    #[typeshare(serialized_as = "number")]
+    pub share_access_events:        i64,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditLogEntry {
-    pub id: i64,
+    #[typeshare(serialized_as = "number")]
+    pub id:        i64,
     pub actor_id: Option<String>,
     pub action: String,
     pub resource_type: String,
     pub resource_id: String,
     pub org_id: Option<String>,
-    pub created_at: i64,
+    #[typeshare(serialized_as = "number")]
+    pub created_at:        i64,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuditLogQuery {
     #[serde(default)]
@@ -134,15 +172,21 @@ pub struct AuditLogQuery {
     #[serde(default)]
     pub window: Option<String>,
     #[serde(default)]
-    pub page: Option<usize>,
+    #[typeshare(serialized_as = "number")]
+    pub page:        Option<usize>,
     #[serde(default)]
-    pub per_page: Option<usize>,
+    #[typeshare(serialized_as = "number")]
+    pub per_page:        Option<usize>,
 }
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditLogListResponse {
     pub items: Vec<AuditLogEntry>,
-    pub total: usize,
-    pub page: usize,
-    pub per_page: usize,
+    #[typeshare(serialized_as = "number")]
+    pub total:        usize,
+    #[typeshare(serialized_as = "number")]
+    pub page:        usize,
+    #[typeshare(serialized_as = "number")]
+    pub per_page:        usize,
 }

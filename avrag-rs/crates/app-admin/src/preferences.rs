@@ -1,6 +1,5 @@
-use app_core::{map_pg_error, StorageContext};
+use app_core::{domain_rows::UserProfileRow, StorageContext};
 use avrag_auth::AuthContext;
-use avrag_storage_pg::UserProfileRow;
 use common::{
     new_id, now_rfc3339, AgentPreference, AgentPreferenceMemory, AppError, BlockedAgentPreference,
     DailyPreferenceLog,
@@ -17,11 +16,8 @@ impl AdminContext {
         storage: &StorageContext,
         user_id: Uuid,
     ) -> Result<UserPreferences, AppError> {
-        if let Some(pg) = storage.pg() {
-            let profile = pg
-                .get_user_profile(auth, user_id)
-                .await
-                .map_err(map_pg_error)?;
+        if let Some(store) = storage.admin_store() {
+            let profile = store.get_user_profile(auth, user_id).await?;
             let preferences = profile
                 .and_then(|row| {
                     serde_json::from_value::<UserPreferences>(row.custom_preferences).ok()
@@ -45,11 +41,8 @@ impl AdminContext {
         user_id: Uuid,
         preferences: &UserPreferences,
     ) -> Result<UserPreferences, AppError> {
-        if let Some(pg) = storage.pg() {
-            let existing_profile = pg
-                .get_user_profile(auth, user_id)
-                .await
-                .map_err(map_pg_error)?;
+        if let Some(store) = storage.admin_store() {
+            let existing_profile = store.get_user_profile(auth, user_id).await?;
             let profile = UserProfileRow {
                 user_id,
                 org_id: auth.org_id(),
@@ -76,9 +69,7 @@ impl AdminContext {
                     .map(|profile| profile.inference_version.clone())
                     .unwrap_or_else(|| "preferences-v1".to_string()),
             };
-            pg.upsert_user_profile(auth, &profile)
-                .await
-                .map_err(map_pg_error)?;
+            store.upsert_user_profile(auth, &profile).await?;
             return Ok(preferences.clone());
         }
 

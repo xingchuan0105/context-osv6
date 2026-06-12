@@ -1,4 +1,3 @@
-use app_chat::ChatContext;
 use common::{
     AppError, ChatMessage, ChatRequest, ChatResponse, ChatSession, CreateChatSessionRequest,
     Notebook, SourceRow, StatusOnlyResponse, UpdateChatSessionRequest,
@@ -10,17 +9,8 @@ use tokio_util::sync::CancellationToken;
 use super::AppState;
 
 impl AppState {
-    pub(crate) fn chat_ctx(&self) -> ChatContext {
-        ChatContext {
-            auth: self.auth.clone(),
-            storage: self.storage.clone(),
-            llm_ctx: self.llm_ctx.clone(),
-            orchestrator: self.orchestrator.clone(),
-            analytics: self.analytics.clone(),
-            billing: self.billing.clone(),
-            admin: self.admin.clone(),
-            documents: self.documents.clone(),
-        }
+    pub(crate) fn chat_ctx(&self) -> &app_chat::ChatContext {
+        &self.chat
     }
 
     pub async fn search(&self, pattern: &str) -> (Vec<Notebook>, Vec<ChatSession>, Vec<SourceRow>) {

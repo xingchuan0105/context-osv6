@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ToolResultCard, ToolResultsPanel } from "../../components/workspace/chat-message-list";
-import type { ToolResult } from "../../lib/workspace/stream";
+import { ToolStatus, type ToolResult } from "../../lib/workspace/stream";
 
 function makeResult(tool: string, status: ToolResult["status"], data: Record<string, unknown> | null): ToolResult {
   return {
@@ -20,8 +20,8 @@ describe("ToolResultsPanel", () => {
 
   it("renders multiple tool result cards", () => {
     const results: ToolResult[] = [
-      makeResult("calculator", "ok", { result: 42, expression: "6*7" }),
-      makeResult("weather_query", "ok", { location: "Beijing", temperature: 25 }),
+      makeResult("calculator", ToolStatus.Ok, { result: 42, expression: "6*7" }),
+      makeResult("weather_query", ToolStatus.Ok, { location: "Beijing", temperature: 25 }),
     ];
     render(<ToolResultsPanel locale="en" results={results} />);
     expect(screen.getByText("Calculator")).toBeTruthy();
@@ -34,7 +34,7 @@ describe("ToolResultCard — calculator", () => {
     render(
       <ToolResultCard
         locale="en"
-        result={makeResult("calculator", "ok", { result: 42, expression: "6 * 7" })}
+        result={makeResult("calculator", ToolStatus.Ok, { result: 42, expression: "6 * 7" })}
       />,
     );
     expect(screen.getByText("Calculator")).toBeTruthy();
@@ -49,7 +49,7 @@ describe("ToolResultCard — calculator", () => {
     render(
       <ToolResultCard
         locale="en"
-        result={makeResult("calculator", "error", { error: "bad expression" })}
+        result={makeResult("calculator", ToolStatus.Error, { error: "bad expression" })}
       />,
     );
     expect(screen.getAllByText("Error").length).toBeGreaterThanOrEqual(1);
@@ -60,7 +60,7 @@ describe("ToolResultCard — calculator", () => {
     render(
       <ToolResultCard
         locale="zh-CN"
-        result={makeResult("calculator", "ok", { result: 42, expression: "1+1" })}
+        result={makeResult("calculator", ToolStatus.Ok, { result: 42, expression: "1+1" })}
       />,
     );
     expect(screen.getByText("计算器")).toBeTruthy();
@@ -74,7 +74,7 @@ describe("ToolResultCard — code_interpreter", () => {
     render(
       <ToolResultCard
         locale="en"
-        result={makeResult("code_interpreter", "ok", {
+        result={makeResult("code_interpreter", ToolStatus.Ok, {
           stdout: "hello\n",
           stderr: "warning\n",
           result: "42",
@@ -96,7 +96,7 @@ describe("ToolResultCard — code_interpreter", () => {
     render(
       <ToolResultCard
         locale="en"
-        result={makeResult("code_interpreter", "error", {
+        result={makeResult("code_interpreter", ToolStatus.Error, {
           error: "SyntaxError",
         })}
       />,
@@ -111,7 +111,7 @@ describe("ToolResultCard — weather_query", () => {
     render(
       <ToolResultCard
         locale="en"
-        result={makeResult("weather_query", "ok", {
+        result={makeResult("weather_query", ToolStatus.Ok, {
           location: "Beijing",
           description: "clear sky",
           temperature: 25,
@@ -138,7 +138,7 @@ describe("ToolResultCard — weather_query", () => {
     render(
       <ToolResultCard
         locale="en"
-        result={makeResult("weather_query", "ok", {
+        result={makeResult("weather_query", ToolStatus.Ok, {
           location: "New York",
           temperature: 77,
           units: "imperial",
@@ -154,7 +154,7 @@ describe("ToolResultCard — generic fallback", () => {
     render(
       <ToolResultCard
         locale="en"
-        result={makeResult("custom_tool", "ok", { foo: "bar", count: 3 })}
+        result={makeResult("custom_tool", ToolStatus.Ok, { foo: "bar", count: 3 })}
       />,
     );
     expect(screen.getByText("custom_tool")).toBeTruthy();
@@ -168,7 +168,7 @@ describe("ToolResultCard — collapsible", () => {
     render(
       <ToolResultCard
         locale="en"
-        result={makeResult("calculator", "ok", { result: 42, expression: "6*7" })}
+        result={makeResult("calculator", ToolStatus.Ok, { result: 42, expression: "6*7" })}
       />,
     );
 
@@ -185,11 +185,11 @@ describe("ToolResultCard — collapsible", () => {
 
 describe("ToolResultCard — status badges", () => {
   it.each([
-    ["ok", "OK"],
-    ["error", "Error"],
-    ["timeout", "Timeout"],
-    ["not_found", "Not Found"],
-    ["not_implemented", "Not Implemented"],
+    [ToolStatus.Ok, "OK"],
+    [ToolStatus.Error, "Error"],
+    [ToolStatus.Timeout, "Timeout"],
+    [ToolStatus.NotFound, "Not Found"],
+    [ToolStatus.NotImplemented, "Not Implemented"],
   ] as const)("renders '%s' badge as '%s'", (status, label) => {
     render(
       <ToolResultCard
@@ -204,7 +204,7 @@ describe("ToolResultCard — status badges", () => {
     render(
       <ToolResultCard
         locale="zh-CN"
-        result={makeResult("calculator", "error", {})}
+        result={makeResult("calculator", ToolStatus.Error, {})}
       />,
     );
     expect(screen.getByText("错误")).toBeTruthy();

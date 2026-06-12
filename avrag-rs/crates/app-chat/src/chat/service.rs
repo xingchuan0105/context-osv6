@@ -1,4 +1,4 @@
-use app_core::{map_pg_error, parse_uuid_or_app_error, RetrievedContext};
+use app_core::{parse_uuid_or_app_error, RetrievedContext};
 use chrono::Utc;
 use common::{
     AppError, ChatMessage, ChatRequest, ChatResponse, ChatSession, CreateChatSessionRequest,

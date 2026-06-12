@@ -10,7 +10,7 @@ suites. See also [`product-e2e-plan.md`](product-e2e-plan.md).
 | PR smoke | `smoke-e2e.yml` | PR | N/A (mock LLM) |
 | Integration | `integration-e2e.yml` | main / manual | Hard in integration tests |
 | llm_real | `nightly-llm-real.yml` | schedule / manual | **Hard** — `assert_citations_non_empty` |
-| Playwright skills | `frontend-skills.yml` | schedule / manual | **Soft** — structure + keywords first |
+| Playwright skills | `frontend-skills.yml` | schedule / manual | **Hard** — `must_have_citation` golden entries |
 | Playwright judge | `nightly-playwright-judge.yml` | schedule / manual | Score &lt; 6 → **warn only** |
 
 ## Rust Product E2E
@@ -19,7 +19,7 @@ suites. See also [`product-e2e-plan.md`](product-e2e-plan.md).
 
 - Subset: `smoke::` (ingestion, rag, search, **chat**, **share_boundary**, auth_boundary), top-level `product_e2e::` mock routing tests
 - Mock LLM / Search / Embedding only
-- Protocol + HTTP assertions; no real provider credentials
+- Protocol + HTTP assertions; SSE event-order and `done` payload shape in `transport-http` contract tests
 - Main suite uses `REDIS_URL=redis://127.0.0.1:1` (blackhole) to keep embedding failure mocks effective
 - **Strict cite (ADR-0008)**: RAG smoke asserts `assert_citation_referenced_in_answer`; search smoke expects `[[n]]` markers; mock synthesis returns `internal_answer_v1` JSON with `[[cite:CHUNK_ID]]`
 
@@ -63,9 +63,9 @@ suites. See also [`product-e2e-plan.md`](product-e2e-plan.md).
 
 Aligned with golden set `must_have_citation` semantics:
 
-1. **Hard**: HTTP 200, non-empty answer, mode indicator, keyword match
-2. **Soft**: `expect.soft(citationCount > 0)` — real LLM may skip retrieval or UI may lag
-3. **API confirmation**: `waitForDocumentReady` after upload before chat (RAG)
+1. **Hard**: HTTP 200, non-empty answer, mode indicator, keyword match, **`citationCount > 0`**
+2. **API confirmation**: `waitForDocumentReady` after upload before chat (RAG)
+3. Journey specs (`workspace-chat`, `workspace-upload-rag`) keep optional citation-button checks for external-search variability
 
 ### Quality judge (optional)
 
@@ -81,6 +81,25 @@ Nightly workflow uploads judge attachments; score below 6 does **not** fail the 
 | `SEARCH_USE_REAL=1` | Use real Brave Search in smoke tests (default: mock) |
 | `RUN_QUALITY_JUDGE=1` | Enable Playwright LLM judge attachments |
 | `RUN_CROSS_BROWSER=1` | Enable Firefox/WebKit journey projects |
+
+## Local prerequisites (Product E2E)
+
+Milvus must be healthy on `127.0.0.1:19530` before RAG tests. Use the project
+compose stack (etcd + minio + standalone), not a single `milvus run standalone`
+container — standalone still requires etcd.
+
+```bash
+# One-shot precheck (from repo root)
+./scripts/e2e-precheck.sh
+
+# Or manually
+cd avrag-rs && docker compose -f docker-compose.milvus.yml up -d
+curl -s -X POST http://127.0.0.1:19530/v2/vectordb/collections/list \
+  -H 'Content-Type: application/json' -d '{"dbName":"default"}'
+```
+
+If Milvus is down, tests fall back to `docker compose -f docker-compose.milvus.yml up -d`
+and fail fast when `milvus-standalone` exits (no 180s blind wait).
 
 ## Local commands
 

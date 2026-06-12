@@ -6,36 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const originalAnchorClick = HTMLAnchorElement.prototype.click;
 
-const mocks = vi.hoisted(() => ({
-  authState: {
-    token: "token-123",
-    user: {
-      id: "user-1",
-      email: "owner@example.com",
-      full_name: "Owner",
-    },
-  },
-  uiPreferencesState: {
-    locale: "en" as "zh-CN" | "en",
-  },
-  listAdminOrganizationsMock: vi.fn(),
-  getAdminOrganizationMock: vi.fn(),
-  listAdminUsersForOrganizationMock: vi.fn(),
-  getAdminUsageForOrganizationMock: vi.fn(),
-  updateAdminOrganizationBlockedMock: vi.fn(),
-  getAdminHealthMock: vi.fn(),
-  getAdminBillingOverviewMock: vi.fn(),
-  getAdminRagHealthMock: vi.fn(),
-  listAdminFeatureFlagsMock: vi.fn(),
-  requestAdminFeatureFlagChangeMock: vi.fn(),
-  reviewAdminFeatureFlagChangeMock: vi.fn(),
-  listAdminFeatureFlagChangeRequestsMock: vi.fn(),
-  getAdminWorkerStatusMock: vi.fn(),
-  getAdminDegradationStatusMock: vi.fn(),
-  listAdminAuditLogsMock: vi.fn(),
-  exportAdminAuditLogsCsvMock: vi.fn(),
-}));
-
 vi.mock("next/navigation", () => ({
   useParams: () => ({
     org_id: "org-1",
@@ -71,6 +41,10 @@ vi.mock("../../lib/admin/client", () => ({
 
 import { AdminOrganizationsSurface, AdminUsageSurface } from "../../components/admin/admin-core-surfaces";
 import { AdminAuditLogsSurface, AdminFeatureFlagsSurface } from "../../components/admin/admin-ops-surfaces";
+
+const mocks = vi.hoisted(() => globalThis.__mockProviders.createAdminSurfacesMocks());
+
+
 
 function createQueryClient() {
   return new QueryClient({

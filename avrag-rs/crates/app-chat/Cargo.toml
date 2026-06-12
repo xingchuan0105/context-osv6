@@ -5,6 +5,10 @@ license.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[features]
+default = []
+eval = []
+
 [dependencies]
 analytics = { path = "../analytics" }
 anyhow.workspace = true

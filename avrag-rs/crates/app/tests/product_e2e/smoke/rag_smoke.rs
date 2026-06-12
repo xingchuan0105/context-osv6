@@ -13,21 +13,18 @@ use crate::product_e2e::{ChatResponse, DocumentStatus, HttpResponse, TestContext
 async fn rag_document_qa_returns_citation() {
     let mut ctx = TestContext::new_smoke_with_rag().await;
 
-    // 1. Upload document
     let upload = ctx.upload_document("antifragile.txt").await.unwrap();
     assert_eq!(
         upload.status, 201,
         "expected HTTP 201 from POST .../documents"
     );
 
-    // 2. Wait for ingestion
     let status = ctx
         .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
         .await
         .unwrap();
     assert_eq!(status, DocumentStatus::Completed);
 
-    // 2b. Verify PG recorded chunks
     let chunk_count = ctx
         .query_document_chunk_count(&upload.document_id)
         .await
@@ -46,7 +43,6 @@ async fn rag_document_qa_returns_citation() {
         "expected chunk ids in PG for bridge citation assertions"
     );
 
-    // 3. Chat — no mock chunk pin; bridge must return real retrieval chunks
     let http_resp: HttpResponse = ctx
         .chat_without_mock_chunk_pin(
             "What is antifragility?",
@@ -56,13 +52,10 @@ async fn rag_document_qa_returns_citation() {
         .await
         .unwrap();
 
-    // 4. Protocol assertions
     assert_http_ok(&http_resp);
 
-    // 5. Deserialize to business object
     let resp: ChatResponse = http_resp.into_business().unwrap();
 
-    // 6. Product assertions (codegen main path — not auto_fallback)
     assert!(
         resp.degrade_trace.is_empty(),
         "codegen happy path should not degrade: {:?}",

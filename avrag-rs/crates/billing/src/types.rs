@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use chrono::{DateTime, Utc};
 use hmac::Hmac;
 use serde::{Deserialize, Serialize};

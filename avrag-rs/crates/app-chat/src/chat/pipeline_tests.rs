@@ -2,21 +2,54 @@
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+    use std::{collections::BTreeMap, sync::Arc};
 
     use app_admin::AdminContext;
     use app_billing::BillingContext;
-    use app_core::{AnalyticsServiceCtx, MemoryState, StorageContext};
+    use app_core::{AnalyticsServiceCtx, MemoryState, ObjectStorePort, StorageContext};
     use app_documents::DocumentContext;
     use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
     use avrag_guardrails::GuardPipeline;
-    use avrag_storage_pg::ObjectStoreHandle;
-    use common::{ChatRequest, ChatSession, Notebook, now_rfc3339, new_id};
+    use common::{AppError, ChatRequest, ChatSession, Notebook, now_rfc3339, new_id};
     use tokio::sync::RwLock;
     use uuid::Uuid;
 
     use crate::chat::pipeline_steps::dispatch_mode;
     use crate::{ChatContext, LlmContext, OrchestratorContext};
+
+    struct TestObjectStore;
+
+    #[async_trait::async_trait]
+    impl ObjectStorePort for TestObjectStore {
+        async fn put(&self, _path: &str, _bytes: &[u8]) -> Result<(), AppError> {
+            Ok(())
+        }
+
+        async fn put_stream(
+            &self,
+            _path: &str,
+            _stream: app_core::ObjectStoreUploadStream,
+        ) -> Result<(), AppError> {
+            Ok(())
+        }
+
+        async fn get(&self, _path: &str) -> Result<Vec<u8>, AppError> {
+            Ok(Vec::new())
+        }
+
+        async fn head(
+            &self,
+            _path: &str,
+        ) -> Result<app_core::ObjectStoreMetadata, app_core::ObjectStoreHeadError> {
+            Err(app_core::ObjectStoreHeadError::NotFound {
+                path: String::new(),
+            })
+        }
+
+        async fn presigned_get_url(&self, _path: &str, _ttl_secs: u64) -> Result<String, AppError> {
+            Ok(String::new())
+        }
+    }
 
     fn test_auth() -> AuthContext {
         AuthContext::new(OrgId::from(Uuid::nil()), SubjectKind::User)
@@ -35,6 +68,7 @@ mod tests {
             auth: test_auth(),
             storage: StorageContext::new(
                 None,
+                false,
                 None,
                 None,
                 None,
@@ -43,7 +77,7 @@ mod tests {
                 Arc::new(RwLock::new(BTreeMap::new())),
                 10 * 1024 * 1024,
                 true,
-                Arc::new(ObjectStoreHandle::local(PathBuf::from("/tmp/avrag-test"))),
+                Arc::new(TestObjectStore),
                 "http://localhost".to_string(),
                 "/tmp/avrag-test".to_string(),
                 3600,

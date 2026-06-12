@@ -15,7 +15,8 @@ avrag-auth = { path = "../auth" }
 avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
 avrag-billing = { path = "../billing" }
 avrag-llm = { path = "../llm" }
-avrag-storage-pg = { path = "../storage-pg" }
+bytes = "1"
+futures = "0.3"
 ingestion = { path = "../ingestion" }
 ingestion-types = { path = "../ingestion-types" }
 telemetry = { path = "../telemetry" }
@@ -29,3 +30,9 @@ sha2.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+async-trait.workspace = true
+avrag-auth = { path = "../auth" }
+common = { path = "../common" }
+tokio.workspace = true

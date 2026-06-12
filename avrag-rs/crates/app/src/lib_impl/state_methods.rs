@@ -20,6 +20,8 @@ impl From<AppBootstrapResult> for AppState {
             billing: result.billing,
             admin: result.admin,
             documents: result.documents,
+            chat: result.chat,
+            postgres: result.postgres,
             redis_url: result.redis_url,
         }
     }
@@ -45,7 +47,8 @@ impl AppState {
 
     pub fn with_auth(&self, auth: AuthContext) -> Self {
         let mut new_state = self.clone();
-        new_state.auth = auth;
+        new_state.auth = auth.clone();
+        new_state.chat.auth = auth;
         new_state
     }
 
@@ -57,8 +60,21 @@ impl AppState {
         self.storage.pg_ready().await
     }
 
+    pub fn postgres_configured(&self) -> bool {
+        self.postgres.is_some()
+    }
+
+    pub fn postgres_pool(&self) -> Option<&sqlx::PgPool> {
+        self.postgres.as_ref().map(|repo| repo.raw())
+    }
+
+    pub fn postgres_repo(&self) -> Option<Arc<PgAppRepository>> {
+        self.postgres.clone()
+    }
+
+    #[deprecated(note = "Use postgres_repo/postgres_pool or typed port delegates instead")]
     pub fn pg(&self) -> Option<Arc<PgAppRepository>> {
-        self.storage.pg()
+        self.postgres_repo()
     }
 
     pub fn agent_service(&self) -> Option<Arc<UnifiedAgentService>> {
@@ -67,10 +83,12 @@ impl AppState {
 
     pub fn set_agent_service(&mut self, service: UnifiedAgentService) {
         self.orchestrator.set_agent_service(service);
+        self.chat.orchestrator = self.orchestrator.clone();
     }
 
     pub fn set_uses_memory_adapters(&mut self, value: bool) {
         self.storage.set_uses_memory_adapters(value);
+        self.chat.storage = self.storage.clone();
     }
 
     pub fn llm_ctx(&self) -> &app_chat::LlmContext {

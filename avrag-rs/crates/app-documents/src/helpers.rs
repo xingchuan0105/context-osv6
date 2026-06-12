@@ -1,4 +1,4 @@
-use avrag_storage_pg::{
+use app_core::{
     DocumentDeletionOutcome, DocumentUploadMutationOutcome, DocumentUploadQueueOutcome,
 };
 use common::{AppError, DocumentStatus, ParsedPreviewItem};

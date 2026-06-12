@@ -1,12 +1,15 @@
 mod adapters;
 mod config_helpers;
+mod domain_row_convert;
+mod pg_error;
 
 use adapters::{
-    PgAdminStoreAdapter, PgBillingQuotaAdapter, PgChatPersistenceAdapter, PgDocumentStoreAdapter,
+    ObjectStorePortAdapter, PgAdminStoreAdapter, PgBillingQuotaAdapter, PgChatPersistenceAdapter,
+    PgDocumentStoreAdapter, PgHealthAdapter,
 };
 use app_admin::AdminContext;
 use app_billing::BillingContext;
-use app_chat::{LlmContext, OrchestratorContext};
+use app_chat::{ChatContext, LlmContext, OrchestratorContext};
 use app_core::{
     AdminStorePort, AnalyticsServiceCtx, AppConfig, BillingQuotaPort, ChatPersistencePort,
     DocumentStorePort, MemoryState, StorageContext,
@@ -40,7 +43,31 @@ pub struct AppBootstrapResult {
     pub billing: BillingContext,
     pub admin: AdminContext,
     pub documents: DocumentContext,
+    pub chat: ChatContext,
+    pub postgres: Option<Arc<PgAppRepository>>,
     pub redis_url: String,
+}
+
+fn build_chat_context(
+    auth: &AuthContext,
+    storage: &StorageContext,
+    llm_ctx: &LlmContext,
+    orchestrator: &OrchestratorContext,
+    analytics: &AnalyticsServiceCtx,
+    billing: &BillingContext,
+    admin: &AdminContext,
+    documents: &DocumentContext,
+) -> ChatContext {
+    ChatContext::new(
+        auth.clone(),
+        storage.clone(),
+        llm_ctx.clone(),
+        orchestrator.clone(),
+        analytics.clone(),
+        billing.clone(),
+        admin.clone(),
+        documents.clone(),
+    )
 }
 
 pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
@@ -66,8 +93,14 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         None,
         &config.prompts.dir,
     ));
+    let object_store: Arc<dyn app_core::ObjectStorePort> = Arc::new(ObjectStorePortAdapter::new(
+        Arc::new(ObjectStoreHandle::local(PathBuf::from(
+            config.object_root.clone(),
+        ))),
+    ));
     let storage = StorageContext::new(
         None,
+        false,
         None,
         None,
         None,
@@ -76,9 +109,7 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         Arc::new(RwLock::new(BTreeMap::new())),
         config.max_upload_file_size_bytes,
         true,
-        Arc::new(ObjectStoreHandle::local(PathBuf::from(
-            config.object_root.clone(),
-        ))),
+        object_store,
         config.public_base_url.clone(),
         config.object_root.clone(),
         config.object_storage.upload_url_expire_sec,
@@ -91,25 +122,42 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         None,
     );
 
+    let billing = BillingContext::new(
+        None,
+        config.usage_limit.enforcement_phase.clone(),
+    );
+    let admin = AdminContext::new();
+    let documents = DocumentContext::new();
+    let analytics = AnalyticsServiceCtx::new(None);
+    let chat = build_chat_context(
+        &auth,
+        &storage,
+        &llm_ctx,
+        &orchestrator,
+        &analytics,
+        &billing,
+        &admin,
+        &documents,
+    );
+
     AppBootstrapResult {
         auth,
         storage,
         llm_ctx,
         orchestrator,
-        analytics: AnalyticsServiceCtx::new(None),
-        billing: BillingContext::new(
-            None,
-            config.usage_limit.enforcement_phase.clone(),
-        ),
-        admin: AdminContext::new(),
-        documents: DocumentContext::new(),
+        analytics,
+        billing,
+        admin,
+        documents,
+        chat,
+        postgres: None,
         redis_url: config.redis.url.clone(),
     }
 }
 
 pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> {
     let auth = auth_context_from_config(&config);
-    let object_store = Arc::new(build_object_store(&config).await?);
+    let object_store_handle = Arc::new(build_object_store(&config).await?);
     let pg = if let Some(database_url) = config.database_url.as_deref() {
         let repository = PgAppRepository::connect(database_url).await?;
         if config.auto_migrate {
@@ -221,6 +269,11 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         pg.as_ref()
             .map(|p| Arc::new(analytics::AnalyticsService::new(p.raw().clone()))),
     );
+    let object_store: Arc<dyn app_core::ObjectStorePort> =
+        Arc::new(ObjectStorePortAdapter::new(object_store_handle));
+    let postgres_health = pg
+        .as_ref()
+        .map(|repo| Arc::new(PgHealthAdapter::new(repo.clone())) as Arc<dyn app_core::PostgresHealthPort>);
     let uses_memory_adapters = pg.is_none();
     let document_store: Option<Arc<dyn DocumentStorePort>> = pg.as_ref().map(|repository| {
         Arc::new(PgDocumentStoreAdapter::new(repository.clone())) as Arc<dyn DocumentStorePort>
@@ -247,7 +300,8 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         &config.prompts.dir,
     ));
     let storage = StorageContext::new(
-        pg,
+        postgres_health,
+        pg.is_some(),
         document_store,
         admin_store,
         billing_quota,
@@ -269,6 +323,19 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         rag_runtime,
     );
 
+    let admin = AdminContext::new();
+    let documents = DocumentContext::new();
+    let chat = build_chat_context(
+        &auth,
+        &storage,
+        &llm_ctx,
+        &orchestrator,
+        &analytics,
+        &billing,
+        &admin,
+        &documents,
+    );
+
     Ok(AppBootstrapResult {
         auth,
         storage,
@@ -276,8 +343,10 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         orchestrator,
         analytics,
         billing,
-        admin: AdminContext::new(),
-        documents: DocumentContext::new(),
+        admin,
+        documents,
+        chat,
+        postgres: pg,
         redis_url: config.redis.url.clone(),
     })
 }

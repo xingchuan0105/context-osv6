@@ -1,3 +1,8 @@
+//! Internal Rust runtime types for avrag services.
+//!
+//! Re-exports wire DTOs from `contracts` and adds service-only helpers.
+//! New cross-language fields belong in `contracts/` first; see `CONTEXT.md`.
+
 pub mod chat;
 pub mod content_store;
 pub mod docscope;

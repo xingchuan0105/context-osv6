@@ -1,9 +1,7 @@
 use app_billing::BillingContext;
-use app_core::{
-    map_pg_error, parse_uuid_or_app_error, AnalyticsServiceCtx, StorageContext, StoredDocument,
-};
+use app_core::{ObjectStoreHeadError, parse_uuid_or_app_error, AnalyticsServiceCtx, StorageContext, StoredDocument};
+use futures::TryStreamExt;
 use avrag_auth::AuthContext;
-use avrag_storage_pg::ObjectStoreHeadError;
 use common::{
     AppError, CreateDocumentRequest, CreateDocumentUploadResponse, Document,
     DocumentContentResponse, DocumentStatus, ParsedPreviewResponse, StatusOnlyResponse,
@@ -33,10 +31,10 @@ impl DocumentContext {
         notebook_id: Option<&str>,
         document_id: Option<&str>,
     ) -> Vec<Document> {
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.document_store() {
             let notebook_uuid = notebook_id.and_then(|value| Uuid::parse_str(value).ok());
             let document_uuid = document_id.and_then(|value| Uuid::parse_str(value).ok());
-            return pg
+            return store
                 .list_documents(auth, notebook_uuid, document_uuid)
                 .await
                 .unwrap_or_default();
@@ -63,7 +61,7 @@ impl DocumentContext {
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
-        billing: &BillingContext,
+        _billing: &BillingContext,
         analytics: &AnalyticsServiceCtx,
         notebook_id: &str,
         req: CreateDocumentRequest,
@@ -91,23 +89,21 @@ impl DocumentContext {
             ));
         }
 
-        if let Some(pg) = storage.pg() {
-            billing
-                .ensure_metric_quota(auth, "storage_bytes", req.file_size as i64)
-                .await?;
+        if let Some(store) = storage.document_store() {
+            if let Some(quota) = storage.billing_quota() {
+                quota
+                    .ensure_storage_bytes_quota(auth, req.file_size as i64)
+                    .await?;
+            }
             let notebook_id =
                 parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
-            let notebook = pg
-                .get_notebook(auth, notebook_id)
-                .await
-                .map_err(map_pg_error)?;
-            if notebook.is_none() {
+            if store.get_notebook(auth, notebook_id).await?.is_none() {
                 return Err(AppError::not_found(
                     "notebook_not_found",
                     "notebook not found",
                 ));
             }
-            let document = pg
+            let document = store
                 .create_document(
                     auth,
                     notebook_id,
@@ -115,9 +111,8 @@ impl DocumentContext {
                     req.file_size,
                     &req.mime_type,
                 )
-                .await
-                .map_err(map_pg_error)?;
-            let seed = pg
+                .await?;
+            let seed = store
                 .get_document_task_seed(
                     auth,
                     parse_uuid_or_app_error(
@@ -126,8 +121,7 @@ impl DocumentContext {
                         "document not found",
                     )?,
                 )
-                .await
-                .map_err(map_pg_error)?
+                .await?
                 .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
             record_product_event_if_available(
                 auth,
@@ -258,13 +252,12 @@ impl DocumentContext {
         document_id: &str,
         body: Vec<u8>,
     ) -> Result<StatusOnlyResponse, AppError> {
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.document_store() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
-            let seed = pg
+            let seed = store
                 .get_document_task_seed(auth, document_id)
-                .await
-                .map_err(map_pg_error)?
+                .await?
                 .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
             if !document_upload_status_is_mutable_for_app(&seed.status) {
                 return Err(upload_status_conflict_error(&seed.status));
@@ -324,22 +317,26 @@ impl DocumentContext {
             + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.document_store() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
-            let seed = pg
+            let seed = store
                 .get_document_task_seed(auth, document_id)
-                .await
-                .map_err(map_pg_error)?
+                .await?
                 .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
             if !document_upload_status_is_mutable_for_app(&seed.status) {
                 return Err(upload_status_conflict_error(&seed.status));
             }
+            use futures::StreamExt;
             storage
                 .object_store()
-                .put_stream(&seed.object_path, stream)
-                .await
-                .map_err(|error| AppError::internal(error.to_string()))?;
+                .put_stream(
+                    &seed.object_path,
+                    Box::pin(stream.map(|result| {
+                        result.map_err(|error| AppError::internal(error.to_string()))
+                    })),
+                )
+                .await?;
             return Ok(StatusOnlyResponse {
                 status: "uploaded".to_string(),
             });
@@ -363,13 +360,12 @@ impl DocumentContext {
         analytics: &AnalyticsServiceCtx,
         document_id: &str,
     ) -> Result<StatusOnlyResponse, AppError> {
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.document_store() {
             let document_uuid =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
-            let seed = pg
+            let seed = store
                 .get_document_task_seed(auth, document_uuid)
-                .await
-                .map_err(map_pg_error)?
+                .await?
                 .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
 
             if !document_upload_status_is_mutable_for_app(&seed.status) {
@@ -383,9 +379,9 @@ impl DocumentContext {
                 ) => {
                     let detail = format!("object missing or invalid for {}", seed.object_path);
                     handle_upload_invalid_outcome(
-                        pg.set_document_upload_invalid(auth, document_uuid, &detail)
-                            .await
-                            .map_err(map_pg_error)?,
+                        store
+                            .set_document_upload_invalid(auth, document_uuid, &detail)
+                            .await?,
                     )?;
                     return Err(AppError::validation(
                         "upload_validation_failed",
@@ -405,9 +401,9 @@ impl DocumentContext {
                     seed.object_path, seed.file_size, object_metadata.size_bytes
                 );
                 handle_upload_invalid_outcome(
-                    pg.set_document_upload_invalid(auth, document_uuid, &detail)
-                        .await
-                        .map_err(map_pg_error)?,
+                    store
+                        .set_document_upload_invalid(auth, document_uuid, &detail)
+                        .await?,
                 )?;
                 return Err(AppError::validation(
                     "upload_validation_failed",
@@ -431,7 +427,7 @@ impl DocumentContext {
                     file_size: seed.file_size,
                 },
             );
-            let queue_outcome = pg
+            let queue_outcome = store
                 .queue_validated_document_upload(
                     auth,
                     document_uuid,
@@ -439,8 +435,7 @@ impl DocumentContext {
                     object_metadata.sha256_hex.as_deref(),
                     &task,
                 )
-                .await
-                .map_err(map_pg_error)?;
+                .await?;
             let task_inserted = handle_upload_queue_outcome(queue_outcome)?;
             let notebook_id = Uuid::parse_str(&seed.notebook_id).ok();
             let metadata = serde_json::json!({
@@ -453,17 +448,17 @@ impl DocumentContext {
                 "status": "queued",
             });
             if task_inserted {
-                pg.append_audit_record(&task_audit(
-                    &task,
-                    AuditAction::TaskEnqueued,
-                    serde_json::json!({
-                        "kind": task.kind,
-                        "document_id": task.document_id,
-                        "object_path": seed.object_path,
-                    }),
-                ))
-                .await
-                .map_err(map_pg_error)?;
+                store
+                    .append_audit_record(&task_audit(
+                        &task,
+                        AuditAction::TaskEnqueued,
+                        serde_json::json!({
+                            "kind": task.kind,
+                            "document_id": task.document_id,
+                            "object_path": seed.object_path,
+                        }),
+                    ))
+                    .await?;
             }
             record_product_event_if_available(
                 auth,
@@ -534,13 +529,12 @@ impl DocumentContext {
                 "deleting and deleted are reserved for the document deletion workflow",
             ));
         }
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.document_store() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
-            let updated = pg
+            let updated = store
                 .set_document_status(auth, document_id, status)
-                .await
-                .map_err(map_pg_error)?;
+                .await?;
             if !updated {
                 return Err(AppError::not_found(
                     "document_not_found",
@@ -611,7 +605,7 @@ impl DocumentContext {
                 "deleting and deleted are reserved for the document deletion workflow",
             ));
         }
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.document_store() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
             let notebook_id = req
@@ -621,7 +615,7 @@ impl DocumentContext {
                     parse_uuid_or_app_error(value, "notebook_not_found", "notebook not found")
                 })
                 .transpose()?;
-            let updated = pg
+            let updated = store
                 .update_document(
                     auth,
                     document_id,
@@ -629,8 +623,7 @@ impl DocumentContext {
                     notebook_id,
                     req.status.clone(),
                 )
-                .await
-                .map_err(map_pg_error)?;
+                .await?;
             if !updated {
                 return Err(AppError::not_found(
                     "document_not_found",
@@ -681,13 +674,10 @@ impl DocumentContext {
         storage: &StorageContext,
         document_id: &str,
     ) -> Result<StatusOnlyResponse, AppError> {
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.document_store() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
-            let outcome = pg
-                .delete_document(auth, document_id)
-                .await
-                .map_err(map_pg_error)?;
+            let outcome = store.delete_document(auth, document_id).await?;
             return handle_document_deletion_outcome(outcome);
         }
 
@@ -721,13 +711,12 @@ impl DocumentContext {
         analytics: &AnalyticsServiceCtx,
         document_id: &str,
     ) -> Result<StatusOnlyResponse, AppError> {
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.document_store() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
-            let seed = pg
+            let seed = store
                 .get_document_task_seed(auth, document_id)
-                .await
-                .map_err(map_pg_error)?
+                .await?
                 .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
             if document_is_deleting_or_deleted(&seed.status) {
                 return Err(AppError::not_found(
@@ -735,10 +724,9 @@ impl DocumentContext {
                     "document not found",
                 ));
             }
-            let updated = pg
+            let updated = store
                 .set_document_status(auth, document_id, DocumentStatus::Queued)
-                .await
-                .map_err(map_pg_error)?;
+                .await?;
             if !updated {
                 return Err(AppError::not_found(
                     "document_not_found",
@@ -795,13 +783,12 @@ impl DocumentContext {
         storage: &StorageContext,
         document_id: &str,
     ) -> Result<DocumentContentResponse, AppError> {
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.document_store() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
-            return pg
+            return store
                 .get_document_content(auth, document_id)
-                .await
-                .map_err(map_pg_error)?
+                .await?
                 .ok_or_else(|| AppError::not_found("document_not_found", "document not found"));
         }
 
@@ -836,14 +823,18 @@ impl DocumentContext {
         cursor: usize,
         limit: usize,
     ) -> Result<ParsedPreviewResponse, AppError> {
-        if let Some(pg) = storage.pg() {
+        if let Some(store) = storage.document_store() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
-            return pg
-                .get_parsed_preview(auth, document_id, cursor, limit)
-                .await
-                .map_err(map_pg_error)?
-                .ok_or_else(|| AppError::not_found("document_not_found", "document not found"));
+            let cursor_str = cursor.to_string();
+            let cursor_ref = if cursor == 0 {
+                None
+            } else {
+                Some(cursor_str.as_str())
+            };
+            return store
+                .get_parsed_preview(auth, document_id, cursor_ref, limit)
+                .await;
         }
 
         let state = storage.inner().read().await;

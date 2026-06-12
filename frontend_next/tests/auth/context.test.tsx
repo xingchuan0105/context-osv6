@@ -2,11 +2,6 @@ import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 
-const mocks = vi.hoisted(() => ({
-  meMock: vi.fn(),
-  logoutMock: vi.fn(),
-  authRuntimeCapabilitiesMock: vi.fn(),
-}));
 
 vi.mock("../../lib/auth/client", () => ({
   authRuntimeCapabilities: mocks.authRuntimeCapabilitiesMock,
@@ -16,6 +11,10 @@ vi.mock("../../lib/auth/client", () => ({
 
 import { AuthProvider, useAuth } from "../../lib/auth/context";
 import type { AuthPayload } from "../../lib/auth/client";
+
+const mocks = vi.hoisted(() => globalThis.__mockProviders.createAuthContextMocks());
+
+
 
 type AuthApi = {
   initialized: boolean;

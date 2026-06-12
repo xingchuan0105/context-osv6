@@ -1,150 +1,35 @@
 import { ApiError, buildApiUrl } from "../auth/client";
+import type {
+  AnswerBlock,
+  ChatActivitySourcePreview,
+  ChatDonePayload,
+  ChatRequest,
+  ChatResponse,
+  Citation,
+  DegradeTraceItem,
+  ToolResult,
+} from "../contracts";
 
-export type ChatTurnInput = {
-  role: string;
-  content: string;
-};
+export type {
+  AnswerBlock,
+  ChatDonePayload,
+  ChatRequest,
+  ChatResponse,
+  ChatTurnInput,
+  Citation,
+  DegradeTraceItem,
+  GuardReport,
+  ModeDebug,
+  PlannerOutput,
+  SourceRef,
+  ToolResult,
+  TraceInfo,
+} from "../contracts";
 
-export type AnswerBlock =
-  | {
-      type: "text";
-      text: string;
-      citations: string[];
-    }
-  | {
-      type: "image";
-      chunk_id: string;
-    };
+export { ToolStatus } from "../contracts";
 
-export type ToolStatus = "ok" | "timeout" | "error" | "not_found" | "not_implemented";
-
-export type ToolResult = {
-  tool: string;
-  version: string;
-  status: ToolStatus;
-  data?: Record<string, unknown> | null;
-};
-
-export type CitationSourceLocator = {
-  url?: string | null;
-  citation_index?: number | null;
-};
-
-export type Citation = {
-  citation_id: number;
-  doc_id: string;
-  chunk_id?: string | null;
-  page?: number | null;
-  doc_name: string;
-  preview?: string | null;
-  content?: string | null;
-  score: number;
-  layer?: string | null;
-  chunk_type?: string | null;
-  asset_id?: string | null;
-  caption?: string | null;
-  image_url?: string | null;
-  source_locator?: CitationSourceLocator | null;
-  parse_run_id?: string | null;
-};
-
-export type SourceRef = {
-  id: string;
-  title: string;
-  snippet?: string | null;
-  doc_id?: string | null;
-  page?: number | null;
-};
-
-export type ProgressSourcePreview = {
-  id: string;
-  label: string;
-  href?: string | null;
-};
-
-export type TraceInfo = {
-  mode: string;
-};
-
-export type DegradeTraceItem = {
-  stage: string;
-  reason: string;
-  impact: string;
-};
-
-export type ChatMessage = {
-  id: number;
-  session_id: string;
-  role: string;
-  content: string;
-  answer_blocks: AnswerBlock[];
-  agent_id?: string | null;
-  agent_name?: string | null;
-  agent_icon?: string | null;
-  citations: Citation[];
-  created_at: string;
-};
-
-export type ChatRequest = {
-  query: string;
-  notebook_id?: string | null;
-  session_id?: string | null;
-  agent_type?: string;
-  source_type?: string | null;
-  source_token?: string | null;
-  doc_scope?: string[];
-  messages?: ChatTurnInput[];
-  stream?: boolean;
-  language?: string | null;
-};
-
-export type ModeDebug = {
-  rag?: Record<string, unknown> | null;
-  search?: Record<string, unknown> | null;
-  general?: Record<string, unknown> | null;
-};
-
-export type PlannerOutput = {
-  plan_version?: string | null;
-  plan_confidence?: number | null;
-  clarify_needed?: boolean | null;
-  items?: Array<{
-    priority: number;
-    query?: string | null;
-    bm25_terms?: string[] | null;
-  }> | null;
-};
-
-export type GuardReport = {
-  passed: boolean;
-  guard_type: string;
-  risk_level?: string | null;
-  message?: string | null;
-  degrade_trace?: DegradeTraceItem[] | null;
-};
-
-export type ChatResponse = {
-  answer: string;
-  answer_blocks: AnswerBlock[];
-  session_id: string;
-  agent_type: string;
-  sources: SourceRef[];
-  citations: Citation[];
-  trace: TraceInfo;
-  degrade_trace: DegradeTraceItem[];
-  planner_output?: PlannerOutput | null;
-  mode_debug?: ModeDebug | null;
-  message_id?: number | null;
-  guard_report?: GuardReport | null;
-  tool_results?: ToolResult[] | null;
-};
-
-export type ChatDonePayload = {
-  request_id: string;
-  session_id: string;
-  message_id: number;
-  response: ChatResponse;
-};
+/** Frontend alias for generated `ChatActivitySourcePreview`. */
+export type ProgressSourcePreview = ChatActivitySourcePreview;
 
 export type WorkspaceChatStreamEvent =
   | {
@@ -223,6 +108,38 @@ async function decodeError(response: Response) {
   }
 }
 
+function parseCitation(item: unknown): Citation | null {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+
+  const c = item as Record<string, unknown>;
+  const docId = String(c.doc_id ?? "");
+
+  if (!docId) {
+    return null;
+  }
+
+  return {
+    citation_id: Number(c.citation_id ?? 0),
+    doc_id: docId,
+    chunk_id: c.chunk_id == null ? undefined : String(c.chunk_id),
+    page: c.page == null ? undefined : Number(c.page),
+    doc_name: String(c.doc_name ?? ""),
+    preview: c.preview == null ? undefined : String(c.preview),
+    content: c.content == null ? undefined : String(c.content),
+    score: Number(c.score ?? 0),
+    layer: c.layer == null ? undefined : String(c.layer),
+    chunk_type: c.chunk_type == null ? undefined : String(c.chunk_type),
+    asset_id: c.asset_id == null ? undefined : String(c.asset_id),
+    caption: c.caption == null ? undefined : String(c.caption),
+    image_url: c.image_url == null ? undefined : String(c.image_url),
+    parser_backend: c.parser_backend == null ? undefined : String(c.parser_backend),
+    source_locator: c.source_locator ?? undefined,
+    parse_run_id: c.parse_run_id == null ? undefined : String(c.parse_run_id),
+  };
+}
+
 function decodeChatEvent(eventName: string, dataText: string): WorkspaceChatStreamEvent | null {
   if (!eventName || !dataText.trim()) {
     return null;
@@ -275,7 +192,7 @@ function decodeChatEvent(eventName: string, dataText: string): WorkspaceChatStre
               return {
                 id: String(src.id ?? ""),
                 label: String(src.label ?? ""),
-                href: src.href == null ? null : String(src.href),
+                href: src.href == null ? undefined : String(src.href),
               };
             })
           : [],
@@ -317,31 +234,7 @@ function decodeChatEvent(eventName: string, dataText: string): WorkspaceChatStre
         request_id: String(raw.request_id ?? ""),
         message_id: Number(raw.message_id ?? 0),
         citations: Array.isArray(raw.citations)
-          ? raw.citations
-              .map((item: unknown) => {
-                const c = item as Record<string, unknown>;
-                return {
-                  citation_id: Number(c.citation_id ?? 0),
-                  doc_id: String(c.doc_id ?? ""),
-                  chunk_id: c.chunk_id == null ? null : String(c.chunk_id),
-                  page: c.page == null ? null : Number(c.page),
-                  doc_name: String(c.doc_name ?? ""),
-                  preview: c.preview == null ? null : String(c.preview),
-                  content: c.content == null ? null : String(c.content),
-                  score: Number(c.score ?? 0),
-                  layer: c.layer == null ? null : String(c.layer),
-                  chunk_type: c.chunk_type == null ? null : String(c.chunk_type),
-                  asset_id: c.asset_id == null ? null : String(c.asset_id),
-                  caption: c.caption == null ? null : String(c.caption),
-                  image_url: c.image_url == null ? null : String(c.image_url),
-                  source_locator:
-                    c.source_locator == null
-                      ? null
-                      : (c.source_locator as CitationSourceLocator),
-                  parse_run_id: c.parse_run_id == null ? null : String(c.parse_run_id),
-                };
-              })
-              .filter((c) => c.doc_id)
+          ? raw.citations.map(parseCitation).filter((citation): citation is Citation => citation !== null)
           : [],
       };
     case "done":

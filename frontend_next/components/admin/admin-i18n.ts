@@ -619,14 +619,13 @@ export function planLabel(locale: UiLocale, plan: string) {
       return locale === "zh-CN" ? "未配置" : "Unset";
     case "free":
       return locale === "zh-CN" ? "免费版" : "Free";
+    case "plus":
     case "starter":
-      return locale === "zh-CN" ? "入门版" : "Starter";
+    case "team":
+    case "enterprise":
+      return "Plus";
     case "pro":
       return locale === "zh-CN" ? "专业版" : "Pro";
-    case "team":
-      return locale === "zh-CN" ? "团队版" : "Team";
-    case "enterprise":
-      return locale === "zh-CN" ? "企业版" : "Enterprise";
     default:
       return plan;
   }

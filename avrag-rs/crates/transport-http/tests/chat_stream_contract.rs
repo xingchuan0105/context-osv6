@@ -1,9 +1,10 @@
-use app::agents::{
+use app_chat::agents::{
     events::{AgentEvent, AgentEventSink},
     runtime::{Agent, AgentRequest, AgentRunResult, AgentRunUsage},
     service::UnifiedAgentService,
 };
-use app::{AppConfig, AppState};
+use app::{AppState};
+use app_core::AppConfig;
 use avrag_auth::{AuthContext, OrgId, SubjectKind};
 use axum::{
     body::{Body, to_bytes},
@@ -28,7 +29,7 @@ impl Agent for ScriptedAgent {
     ) -> Result<AgentRunResult, common::AppError> {
         // Simulate RAG-specific behaviour so that RAG contract tests can verify
         // end-to-end streaming without a real runtime.
-        if request.kind == app::agents::AgentKind::Rag {
+        if request.kind == app_chat::agents::AgentKind::Rag {
             sink.emit(AgentEvent::Activity {
                 stage: "planning".to_string(),
                 message: "planning".to_string(),
@@ -112,7 +113,7 @@ async fn post_chat_with_stream_flag_only_returns_sse() {
             serde_json::json!({
                 "query": "Reply with a short answer.",
                 "notebook_id": notebook_id,
-                "agent_type": "general",
+                "agent_type": "chat",
                 "stream": true
             }),
             None,
@@ -146,7 +147,7 @@ async fn post_chat_with_accept_sse_only_returns_sse() {
             serde_json::json!({
                 "query": "Reply with a short answer.",
                 "notebook_id": notebook_id,
-                "agent_type": "general",
+                "agent_type": "chat",
                 "stream": false
             }),
             Some("text/event-stream"),
@@ -252,6 +253,48 @@ async fn post_rag_chat_with_empty_doc_scope_clarifies_without_retrieval() {
 }
 
 #[tokio::test]
+async fn post_chat_stream_done_payload_includes_core_fields() {
+    let (app, notebook_id, org_id) = test_app().await;
+    let request_id = "req-done-payload";
+    let response = app
+        .oneshot(chat_post_request(
+            org_id,
+            serde_json::json!({
+                "query": "Reply with a short answer.",
+                "notebook_id": notebook_id,
+                "agent_type": "chat",
+                "stream": true
+            }),
+            None,
+            Some(request_id),
+        ))
+        .await
+        .unwrap();
+
+    assert_sse_response(response, |events| {
+        assert!(matches!(events.first(), Some(ChatEvent::Start { .. })));
+        assert!(matches!(events.last(), Some(ChatEvent::Done { .. })));
+
+        let ChatEvent::Done { payload, .. } = events.last().unwrap() else {
+            unreachable!("last event checked above");
+        };
+        assert!(
+            payload.get("answer").and_then(|v| v.as_str()).is_some(),
+            "done.payload.answer must be a string, got: {payload}"
+        );
+        assert!(
+            payload.get("agent_type").and_then(|v| v.as_str()).is_some(),
+            "done.payload.agent_type must be a string, got: {payload}"
+        );
+        assert!(
+            payload.get("session_id").and_then(|v| v.as_str()).is_some(),
+            "done.payload.session_id must be a string, got: {payload}"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn post_chat_without_streaming_returns_json() {
     let (app, notebook_id, org_id) = test_app().await;
     let response = app
@@ -260,7 +303,7 @@ async fn post_chat_without_streaming_returns_json() {
             serde_json::json!({
                 "query": "Reply with a short answer.",
                 "notebook_id": notebook_id,
-                "agent_type": "general",
+                "agent_type": "chat",
                 "stream": false
             }),
             Some("application/json"),
@@ -313,7 +356,7 @@ async fn post_chat_stream_errors_emit_request_id_and_code() {
             org_id,
             serde_json::json!({
                 "query": "Reply with a short answer.",
-                "agent_type": "general",
+                "agent_type": "chat",
                 "stream": true
             }),
             Some("text/event-stream"),

@@ -26,6 +26,28 @@ pub struct ChatContext {
 }
 
 impl ChatContext {
+    pub fn new(
+        auth: AuthContext,
+        storage: StorageContext,
+        llm_ctx: LlmContext,
+        orchestrator: OrchestratorContext,
+        analytics: AnalyticsServiceCtx,
+        billing: BillingContext,
+        admin: AdminContext,
+        documents: DocumentContext,
+    ) -> Self {
+        Self {
+            auth,
+            storage,
+            llm_ctx,
+            orchestrator,
+            analytics,
+            billing,
+            admin,
+            documents,
+        }
+    }
+
     pub fn chat_persistence(&self) -> Option<Arc<dyn ChatPersistencePort>> {
         self.storage.chat_persistence()
     }
