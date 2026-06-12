@@ -3,6 +3,7 @@ import type {
   AnswerBlock,
   ChatActivitySourcePreview,
   ChatDonePayload,
+  ChatEvent,
   ChatRequest,
   ChatResponse,
   Citation,
@@ -31,67 +32,47 @@ export { ToolStatus } from "../contracts";
 /** Frontend alias for generated `ChatActivitySourcePreview`. */
 export type ProgressSourcePreview = ChatActivitySourcePreview;
 
+/**
+ * SSE wire JSON uses `event` (generated {@link ChatEvent}); frontend reducers use `kind`.
+ * {@link WireToWorkspace} maps the discriminator and narrows fields where runtime parsing
+ * is stricter than the wire contract (`citations`, `done.payload`).
+ */
+type WireToWorkspace<
+  E extends ChatEvent,
+  Overrides extends object = object,
+> = Omit<E, "event" | keyof Overrides> & { kind: E["event"] } & Overrides;
+
 export type WorkspaceChatStreamEvent =
-  | {
-      kind: "start";
-      request_id: string;
-      session_id: string;
-    }
-  | {
-      kind: "activity";
-      request_id: string;
-      phase: string;
-      title: string;
-      detail?: string | null;
-      counts: Record<string, number>;
-      sources_preview: ProgressSourcePreview[];
-      timestamp?: string | null;
-    }
-  | {
-      kind: "answer_start";
-      request_id: string;
-      session_id: string;
-      message_id: number;
-      agent_type: string;
-    }
-  | {
-      kind: "trace";
-      request_id: string;
-      stage: string;
-      status: string;
-      detail?: unknown | null;
-    }
-  | {
-      kind: "token";
-      request_id: string;
-      message_id: number;
-      content: string;
-    }
-  | {
-      kind: "reasoning_summary_delta";
-      request_id: string;
-      message_id: number;
-      content: string;
-    }
-  | {
-      kind: "citations";
-      request_id: string;
-      message_id: number;
-      citations: Citation[];
-    }
-  | {
-      kind: "done";
-      request_id: string;
-      session_id: string;
-      message_id: number;
-      payload: ChatResponse;
-    }
-  | {
-      kind: "error";
-      request_id: string;
-      code: string;
-      message: string;
-    };
+  | WireToWorkspace<Extract<ChatEvent, { event: "start" }>>
+  | WireToWorkspace<
+      Extract<ChatEvent, { event: "activity" }>,
+      { sources_preview: ProgressSourcePreview[] }
+    >
+  | WireToWorkspace<Extract<ChatEvent, { event: "answer_start" }>>
+  | WireToWorkspace<Extract<ChatEvent, { event: "trace" }>>
+  | WireToWorkspace<Extract<ChatEvent, { event: "token" }>>
+  | WireToWorkspace<Extract<ChatEvent, { event: "reasoning_summary_delta" }>>
+  | WireToWorkspace<
+      Extract<ChatEvent, { event: "citations" }>,
+      { citations: Citation[] }
+    >
+  | WireToWorkspace<
+      Extract<ChatEvent, { event: "done" }>,
+      { payload: ChatResponse }
+    >
+  | WireToWorkspace<Extract<ChatEvent, { event: "error" }>>;
+
+const CHAT_EVENT_NAMES = new Set<ChatEvent["event"]>([
+  "start",
+  "activity",
+  "answer_start",
+  "trace",
+  "token",
+  "reasoning_summary_delta",
+  "citations",
+  "done",
+  "error",
+]);
 
 async function decodeError(response: Response) {
   const raw = await response.text();
@@ -106,6 +87,38 @@ async function decodeError(response: Response) {
   } catch {
     return new ApiError(response.status, null, raw);
   }
+}
+
+function parseSourceLocator(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    if (process.env.NODE_ENV !== "production" && value != null) {
+      console.warn("parseCitation: invalid source_locator shape", value);
+    }
+    return undefined;
+  }
+
+  const raw = value as Record<string, unknown>;
+  const parsed: Record<string, unknown> = {};
+
+  if (typeof raw.url === "string" && raw.url.trim()) {
+    parsed.url = raw.url.trim();
+  }
+
+  if (raw.page != null) {
+    const page = Number(raw.page);
+    if (!Number.isNaN(page)) {
+      parsed.page = page;
+    }
+  }
+
+  if (Object.keys(parsed).length === 0) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("parseCitation: source_locator had no usable fields", value);
+    }
+    return undefined;
+  }
+
+  return parsed;
 }
 
 function parseCitation(item: unknown): Citation | null {
@@ -135,13 +148,28 @@ function parseCitation(item: unknown): Citation | null {
     caption: c.caption == null ? undefined : String(c.caption),
     image_url: c.image_url == null ? undefined : String(c.image_url),
     parser_backend: c.parser_backend == null ? undefined : String(c.parser_backend),
-    source_locator: c.source_locator ?? undefined,
+    source_locator: parseSourceLocator(c.source_locator),
     parse_run_id: c.parse_run_id == null ? undefined : String(c.parse_run_id),
   };
 }
 
-function decodeChatEvent(eventName: string, dataText: string): WorkspaceChatStreamEvent | null {
+function parseSourcePreview(item: unknown): ProgressSourcePreview {
+  const src = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+
+  return {
+    id: String(src.id ?? ""),
+    label: String(src.label ?? ""),
+    href: src.href == null ? undefined : String(src.href),
+  };
+}
+
+/** Parse SSE `data` JSON into the generated wire {@link ChatEvent} shape. */
+export function parseWireChatEvent(eventName: string, dataText: string): ChatEvent | null {
   if (!eventName || !dataText.trim()) {
+    return null;
+  }
+
+  if (!CHAT_EVENT_NAMES.has(eventName as ChatEvent["event"])) {
     return null;
   }
 
@@ -163,16 +191,16 @@ function decodeChatEvent(eventName: string, dataText: string): WorkspaceChatStre
     return null;
   }
 
-  switch (eventName) {
+  switch (eventName as ChatEvent["event"]) {
     case "start":
       return {
-        kind: "start",
+        event: "start",
         request_id: String(raw.request_id ?? ""),
         session_id: String(raw.session_id ?? ""),
       };
     case "activity":
       return {
-        kind: "activity",
+        event: "activity",
         request_id: String(raw.request_id ?? ""),
         phase: String(raw.phase ?? ""),
         title: String(raw.title ?? ""),
@@ -187,20 +215,13 @@ function decodeChatEvent(eventName: string, dataText: string): WorkspaceChatStre
               )
             : {},
         sources_preview: Array.isArray(raw.sources_preview)
-          ? raw.sources_preview.map((item: unknown) => {
-              const src = item as Record<string, unknown>;
-              return {
-                id: String(src.id ?? ""),
-                label: String(src.label ?? ""),
-                href: src.href == null ? undefined : String(src.href),
-              };
-            })
+          ? raw.sources_preview.map(parseSourcePreview)
           : [],
         timestamp: raw.timestamp == null ? null : String(raw.timestamp),
       };
     case "answer_start":
       return {
-        kind: "answer_start",
+        event: "answer_start",
         request_id: String(raw.request_id ?? ""),
         session_id: String(raw.session_id ?? ""),
         message_id: Number(raw.message_id ?? 0),
@@ -208,7 +229,7 @@ function decodeChatEvent(eventName: string, dataText: string): WorkspaceChatStre
       };
     case "trace":
       return {
-        kind: "trace",
+        event: "trace",
         request_id: String(raw.request_id ?? ""),
         stage: String(raw.stage ?? ""),
         status: String(raw.status ?? ""),
@@ -216,38 +237,41 @@ function decodeChatEvent(eventName: string, dataText: string): WorkspaceChatStre
       };
     case "token":
       return {
-        kind: "token",
+        event: "token",
         request_id: String(raw.request_id ?? ""),
         message_id: Number(raw.message_id ?? 0),
         content: String(raw.content ?? ""),
       };
     case "reasoning_summary_delta":
       return {
-        kind: "reasoning_summary_delta",
+        event: "reasoning_summary_delta",
         request_id: String(raw.request_id ?? ""),
         message_id: Number(raw.message_id ?? 0),
         content: String(raw.content ?? raw.summary ?? ""),
       };
     case "citations":
       return {
-        kind: "citations",
+        event: "citations",
         request_id: String(raw.request_id ?? ""),
         message_id: Number(raw.message_id ?? 0),
         citations: Array.isArray(raw.citations)
-          ? raw.citations.map(parseCitation).filter((citation): citation is Citation => citation !== null)
+          ? (raw.citations as Array<Record<string, unknown>>)
           : [],
       };
     case "done":
       return {
-        kind: "done",
+        event: "done",
         request_id: String(raw.request_id ?? ""),
         session_id: String(raw.session_id ?? ""),
         message_id: Number(raw.message_id ?? 0),
-        payload: (raw.payload ?? {}) as ChatResponse,
+        payload:
+          typeof raw.payload === "object" && raw.payload !== null
+            ? (raw.payload as Record<string, unknown>)
+            : {},
       };
     case "error":
       return {
-        kind: "error",
+        event: "error",
         request_id: String(raw.request_id ?? ""),
         code: String(raw.code ?? ""),
         message: String(raw.message ?? ""),
@@ -255,6 +279,97 @@ function decodeChatEvent(eventName: string, dataText: string): WorkspaceChatStre
     default:
       return null;
   }
+}
+
+/** Map wire {@link ChatEvent} (`event`) to frontend {@link WorkspaceChatStreamEvent} (`kind`). */
+export function chatEventToWorkspace(wire: ChatEvent): WorkspaceChatStreamEvent {
+  switch (wire.event) {
+    case "start":
+      return {
+        kind: "start",
+        request_id: wire.request_id,
+        session_id: wire.session_id,
+      };
+    case "activity":
+      return {
+        kind: "activity",
+        request_id: wire.request_id,
+        phase: wire.phase,
+        title: wire.title,
+        detail: wire.detail,
+        counts: wire.counts,
+        sources_preview: wire.sources_preview.map((source) => ({
+          id: source.id,
+          label: source.label,
+          href: source.href == null ? undefined : source.href,
+        })),
+        timestamp: wire.timestamp,
+      };
+    case "answer_start":
+      return {
+        kind: "answer_start",
+        request_id: wire.request_id,
+        session_id: wire.session_id,
+        message_id: wire.message_id,
+        agent_type: wire.agent_type,
+      };
+    case "trace":
+      return {
+        kind: "trace",
+        request_id: wire.request_id,
+        stage: wire.stage,
+        status: wire.status,
+        detail: wire.detail,
+      };
+    case "token":
+      return {
+        kind: "token",
+        request_id: wire.request_id,
+        message_id: wire.message_id,
+        content: wire.content,
+      };
+    case "reasoning_summary_delta":
+      return {
+        kind: "reasoning_summary_delta",
+        request_id: wire.request_id,
+        message_id: wire.message_id,
+        content: wire.content,
+      };
+    case "citations":
+      return {
+        kind: "citations",
+        request_id: wire.request_id,
+        message_id: wire.message_id,
+        citations: wire.citations
+          .map(parseCitation)
+          .filter((citation): citation is Citation => citation !== null),
+      };
+    case "done":
+      return {
+        kind: "done",
+        request_id: wire.request_id,
+        session_id: wire.session_id,
+        message_id: wire.message_id,
+        payload: wire.payload as unknown as ChatResponse,
+      };
+    case "error":
+      return {
+        kind: "error",
+        request_id: wire.request_id,
+        code: wire.code,
+        message: wire.message,
+      };
+  }
+}
+
+function decodeChatEvent(eventName: string, dataText: string): WorkspaceChatStreamEvent | null {
+  const wire = parseWireChatEvent(eventName, dataText);
+
+  if (!wire) {
+    return null;
+  }
+
+  return chatEventToWorkspace(wire);
 }
 
 function splitLine(buffer: string) {

@@ -697,6 +697,46 @@ export const workspaceMessages = {
     zh: "选择一条笔记后可在此直接编辑。",
     en: "Select a note to edit it in place.",
   },
+  "workspaceProgressHeadingRag": {
+    zh: "知识库检索中",
+    en: "Knowledge Retrieval",
+  },
+  "workspaceProgressHeadingSearch": {
+    zh: "网络搜索中",
+    en: "Web Search",
+  },
+  "workspaceProgressToggleExpand": {
+    zh: "展开过程",
+    en: "Expand progress",
+  },
+  "workspaceProgressToggleCollapse": {
+    zh: "收起过程",
+    en: "Collapse progress",
+  },
+  "workspaceProgressThinking": {
+    zh: "正在思考",
+    en: "Thinking",
+  },
+  "workspaceProgressCountQueries": {
+    zh: "查询",
+    en: "queries",
+  },
+  "workspaceProgressCountResults": {
+    zh: "结果",
+    en: "results",
+  },
+  "workspaceProgressCountSources": {
+    zh: "来源",
+    en: "sources",
+  },
+  "workspaceProgressCountChunks": {
+    zh: "片段",
+    en: "chunks",
+  },
+  "workspaceProgressCountDocuments": {
+    zh: "文档",
+    en: "documents",
+  },
   "workspaceRightRail.promoteNoteAction": {
     zh: "转换为来源",
     en: "Convert to source",

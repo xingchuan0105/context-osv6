@@ -163,6 +163,36 @@ describe("ToolResultCard — generic fallback", () => {
   });
 });
 
+describe("ToolResultCard — web_search", () => {
+  it("renders safe search result links", () => {
+    render(
+      <ToolResultCard
+        locale="en"
+        result={makeResult("web_search", ToolStatus.Ok, {
+          results: [{ title: "Example", url: "https://example.com/article", snippet: "Preview" }],
+        })}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: "Example" });
+    expect(link.getAttribute("href")).toBe("https://example.com/article");
+  });
+
+  it("does not render javascript: URLs as links", () => {
+    render(
+      <ToolResultCard
+        locale="en"
+        result={makeResult("web_search", ToolStatus.Ok, {
+          results: [{ title: "Malicious", url: "javascript:alert(1)", snippet: "Preview" }],
+        })}
+      />,
+    );
+
+    expect(screen.queryByRole("link", { name: "Malicious" })).toBeNull();
+    expect(screen.getByText("Malicious")).toBeTruthy();
+  });
+});
+
 describe("ToolResultCard — collapsible", () => {
   it("collapses and expands on header click", () => {
     render(

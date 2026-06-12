@@ -300,4 +300,66 @@ describe("WorkspaceChatPane markdown", () => {
     });
     expect(onOpenWebSources).toHaveBeenCalledTimes(1);
   });
+
+  it("sanitizes raw LLM HTML documents", async () => {
+    mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({
+      messages: [
+        {
+          id: 6,
+          session_id: "sess-html-sanitize",
+          role: "assistant",
+          content:
+            '<html><body><p>Safe paragraph</p><script>alert("xss")</script><img src=x onerror=alert(1) /></body></html>',
+          answer_blocks: [],
+          agent_id: "general",
+          citations: [],
+          created_at: "2026-04-17T00:03:00Z",
+        },
+      ],
+    });
+
+    const { container } = render(
+      <WorkspaceChatPane
+        workspaceId="ws-html-sanitize"
+        sessionId="sess-html-sanitize"
+        selectedSourceIds={[]}
+        onOpenWebSources={vi.fn()}
+        onSelectCitation={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("Safe paragraph")).toBeTruthy();
+    expect(container.querySelector("script")).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("does not render unsafe markdown links", async () => {
+    mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({
+      messages: [
+        {
+          id: 7,
+          session_id: "sess-markdown-link",
+          role: "assistant",
+          content: "[Click me](data:text/html,evil)",
+          answer_blocks: [],
+          agent_id: "general",
+          citations: [],
+          created_at: "2026-04-17T00:04:00Z",
+        },
+      ],
+    });
+
+    render(
+      <WorkspaceChatPane
+        workspaceId="ws-markdown-link"
+        sessionId="sess-markdown-link"
+        selectedSourceIds={[]}
+        onOpenWebSources={vi.fn()}
+        onSelectCitation={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("Click me")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Click me" })).toBeNull();
+  });
 });

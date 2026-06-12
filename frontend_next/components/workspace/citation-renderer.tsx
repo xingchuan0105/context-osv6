@@ -1,5 +1,7 @@
 "use client";
 
+import DOMPurify, { type Config as DOMPurifyConfig } from "dompurify";
+
 import type {
   WorkspaceCitationAnchor,
   WorkspaceWebSourcesRequest,
@@ -9,10 +11,56 @@ import {
   type AnswerBlock,
   type Citation,
 } from "../../lib/workspace/stream";
+import { toSafeHttpUrl } from "../../lib/url/isSafeHttpUrl";
 import { markdownToInlineHtml, markdownToRichTextHtml } from "./workspace-note-rich-text";
 import styles from "./workspace-chat.module.css";
-import type { ChatMessage } from "../../hooks/use-chat-session";
+import type { UiChatMessage } from "../../hooks/use-chat-session";
 import { ToolResultsPanel } from "./tool-result-card";
+
+const WORKSPACE_HTML_SANITIZE_CONFIG = {
+  ALLOWED_TAGS: [
+    "a",
+    "blockquote",
+    "br",
+    "button",
+    "code",
+    "em",
+    "h1",
+    "h2",
+    "h3",
+    "input",
+    "li",
+    "ol",
+    "p",
+    "pre",
+    "span",
+    "strong",
+    "table",
+    "tbody",
+    "td",
+    "th",
+    "thead",
+    "tr",
+    "ul",
+  ],
+  ALLOWED_ATTR: [
+    "aria-label",
+    "checked",
+    "class",
+    "data-inline-citation-token-index",
+    "data-testid",
+    "disabled",
+    "href",
+    "rel",
+    "target",
+    "type",
+  ],
+  ALLOW_DATA_ATTR: false,
+};
+
+function sanitizeWorkspaceHtml(html: string) {
+  return DOMPurify.sanitize(html, WORKSPACE_HTML_SANITIZE_CONFIG);
+}
 
 function getCitationLabel(citation: Citation, index: number) {
   return citation.doc_name.trim().length > 0 ? citation.doc_name : `Source ${index + 1}`;
@@ -110,18 +158,15 @@ function dedupeCitations(citations: Array<Citation | null>) {
 
 function getCitationUrl(citation: Citation): string | null {
   const locator =
-    citation.source_locator && typeof citation.source_locator === "object"
+    citation.source_locator && typeof citation.source_locator === "object" && !Array.isArray(citation.source_locator)
       ? (citation.source_locator as { url?: string | null })
       : null;
-  const locatorUrl = locator?.url?.trim();
+  const locatorUrl = toSafeHttpUrl(locator?.url);
   if (locatorUrl) {
     return locatorUrl;
   }
   const docId = citation.doc_id.trim();
-  if (/^https?:\/\//i.test(docId)) {
-    return docId;
-  }
-  return null;
+  return toSafeHttpUrl(docId);
 }
 
 function hasOnlyTextAnswerBlocks(blocks: AnswerBlock[]) {
@@ -246,7 +291,7 @@ function tokenizeRenderedAnswerLine(line: string) {
 
 type CitationRendererProps = {
   locale: "zh-CN" | "en";
-  message: ChatMessage;
+  message: UiChatMessage;
   onOpenWebSources?: (request: WorkspaceWebSourcesRequest) => void;
   onSelectCitation: (citation: Citation, target: HTMLElement) => void;
 };
@@ -355,7 +400,7 @@ export function CitationRenderer({
                 handleCitationClick(citation, button);
               }
             }}
-            dangerouslySetInnerHTML={{ __html: richMarkdown.html }}
+            dangerouslySetInnerHTML={{ __html: sanitizeWorkspaceHtml(richMarkdown.html) }}
           />
           {trailingCitations.length > 0 ? (
             <div className={styles.inlineCitationGroup} style={{ marginTop: "0.5rem" }}>
@@ -393,7 +438,7 @@ export function CitationRenderer({
             return (
               <p className={styles.answerTextBlock} key={`text-${blockIndex}`}>
                 {blockHtml ? (
-                  <span dangerouslySetInnerHTML={{ __html: blockHtml }} />
+                  <span dangerouslySetInnerHTML={{ __html: sanitizeWorkspaceHtml(blockHtml) }} />
                 ) : null}
                 {blockCitations.length > 0 ? (
                   <span className={styles.inlineCitationGroup}>
@@ -440,7 +485,9 @@ export function CitationRenderer({
               }
               return (
                 <span
-                  dangerouslySetInnerHTML={{ __html: markdownToInlineHtml(token.text) }}
+                  dangerouslySetInnerHTML={{
+                    __html: sanitizeWorkspaceHtml(markdownToInlineHtml(token.text)),
+                  }}
                   key={`text-${lineIndex}-${tokenIndex}`}
                 />
               );
@@ -502,7 +549,10 @@ export function CitationRenderer({
   if (looksLikeHtml) {
     return (
       <>
-        <div className={styles.markdownContent} dangerouslySetInnerHTML={{ __html: rawContent }} />
+        <div
+          className={styles.markdownContent}
+          dangerouslySetInnerHTML={{ __html: sanitizeWorkspaceHtml(rawContent) }}
+        />
         {trailingCitationsFallback.length > 0 ? (
           <div className={styles.inlineCitationGroup} style={{ marginTop: "0.5rem" }}>
             {trailingCitationsFallback.map((citation, idx) =>
@@ -519,7 +569,7 @@ export function CitationRenderer({
     <>
       <div
         className={styles.markdownContent}
-        dangerouslySetInnerHTML={{ __html: markdownToRichTextHtml(rawContent) }}
+        dangerouslySetInnerHTML={{ __html: sanitizeWorkspaceHtml(markdownToRichTextHtml(rawContent)) }}
       />
       {trailingCitationsFallback.length > 0 ? (
         <div className={styles.inlineCitationGroup} style={{ marginTop: "0.5rem" }}>

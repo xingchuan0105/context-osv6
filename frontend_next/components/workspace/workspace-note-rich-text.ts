@@ -1,3 +1,5 @@
+import { isSafeHttpUrl } from "../../lib/url/isSafeHttpUrl";
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -25,7 +27,12 @@ function renderInlineMarkdown(value: string) {
     codeTokens.push(`<code>${code}</code>`);
     return token;
   });
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label: string, href: string) => {
+    if (!isSafeHttpUrl(href)) {
+      return escapeHtml(label);
+    }
+    return `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${label}</a>`;
+  });
   html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/__([^_]+)__/g, "<strong>$1</strong>");
   html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");

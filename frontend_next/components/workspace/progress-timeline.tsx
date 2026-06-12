@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
+import { formatUiMessage } from "../../lib/i18n/messages";
 import type { WorkspaceChatMode } from "../../lib/workspace/ui-store";
 import type { ProgressEntry } from "../../hooks/use-chat-session";
 import styles from "./workspace-chat.module.css";
@@ -11,101 +12,39 @@ function isResearchMode(mode: WorkspaceChatMode) {
 }
 
 function getProgressHeading(locale: "zh-CN" | "en", mode: WorkspaceChatMode) {
-  if (locale === "zh-CN") {
-    return mode === "rag" ? "知识库检索中" : "网络搜索中";
+  if (mode === "rag") {
+    return formatUiMessage(locale, "workspaceProgressHeadingRag");
   }
-  return mode === "rag" ? "Knowledge Retrieval" : "Web Search";
+  return formatUiMessage(locale, "workspaceProgressHeadingSearch");
 }
 
 function getProgressToggleLabel(locale: "zh-CN" | "en", collapsed: boolean) {
-  if (locale === "zh-CN") {
-    return collapsed ? "展开过程" : "收起过程";
-  }
-  return collapsed ? "Expand progress" : "Collapse progress";
+  return formatUiMessage(
+    locale,
+    collapsed ? "workspaceProgressToggleExpand" : "workspaceProgressToggleCollapse",
+  );
 }
 
 function getCompactStatusTitle(locale: "zh-CN" | "en") {
-  return locale === "zh-CN" ? "正在思考" : "Thinking";
+  return formatUiMessage(locale, "workspaceProgressThinking");
 }
 
 function getProgressCountLabel(locale: "zh-CN" | "en", key: string) {
-  if (locale === "zh-CN") {
-    switch (key) {
-      case "queries":
-        return "查询";
-      case "results":
-        return "结果";
-      case "sources":
-        return "来源";
-      case "chunks":
-        return "片段";
-      case "documents":
-        return "文档";
-      default:
-        return key;
-    }
-  }
   switch (key) {
     case "queries":
-      return "queries";
+      return formatUiMessage(locale, "workspaceProgressCountQueries");
     case "results":
-      return "results";
+      return formatUiMessage(locale, "workspaceProgressCountResults");
     case "sources":
-      return "sources";
+      return formatUiMessage(locale, "workspaceProgressCountSources");
     case "chunks":
-      return "chunks";
+      return formatUiMessage(locale, "workspaceProgressCountChunks");
     case "documents":
-      return "documents";
+      return formatUiMessage(locale, "workspaceProgressCountDocuments");
     default:
       return key;
   }
 }
-
-function getInitialProgressEntry(locale: "zh-CN" | "en", mode: WorkspaceChatMode): ProgressEntry {
-  if (locale === "zh-CN") {
-    if (mode === "rag") {
-      return {
-        id: "progress-initial",
-        phase: "planning",
-        title: "正在分析问题并准备检索知识库",
-        detail: "系统正在规划检索范围与证据路径。",
-        counts: {},
-        sourcesPreview: [],
-        timestamp: null,
-      };
-    }
-    return {
-      id: "progress-initial",
-      phase: "planning",
-      title: "正在生成网络搜索计划",
-      detail: "系统正在拆解问题并准备搜索网页来源。",
-      counts: {},
-      sourcesPreview: [],
-      timestamp: null,
-    };
-  }
-  if (mode === "rag") {
-    return {
-      id: "progress-initial",
-      phase: "planning",
-      title: "Preparing knowledge retrieval",
-      detail: "Building a retrieval plan and evidence path.",
-      counts: {},
-      sourcesPreview: [],
-      timestamp: null,
-    };
-  }
-  return {
-    id: "progress-initial",
-    phase: "planning",
-    title: "Preparing a web research plan",
-    detail: "Breaking down the request before searching the web.",
-    counts: {},
-    sourcesPreview: [],
-    timestamp: null,
-  };
-}
-
 
 type ProgressTimelineProps = {
   activities: ProgressEntry[];
@@ -221,4 +160,3 @@ export function ProgressTimeline({
     </section>
   );
 }
-

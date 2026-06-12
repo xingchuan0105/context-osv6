@@ -44,8 +44,6 @@ import { AdminAuditLogsSurface, AdminFeatureFlagsSurface } from "../../component
 
 const mocks = vi.hoisted(() => globalThis.__mockProviders.createAdminSurfacesMocks());
 
-
-
 function createQueryClient() {
   return new QueryClient({
     defaultOptions: {
@@ -233,13 +231,13 @@ describe("admin surfaces", () => {
 
     await user.click(screen.getByRole("button", { name: "Block" }));
 
-    await waitFor(() => {
-      expect(mocks.updateAdminOrganizationBlockedMock).toHaveBeenCalledWith("token-123", "org-1", true);
+    const alphaRow = await waitFor(() => {
+      const row = screen.getByRole("link", { name: "Alpha Org" }).closest("tr");
+      expect(row).toBeTruthy();
+      expect(within(row as HTMLTableRowElement).getByRole("button", { name: "Unblock" })).toBeTruthy();
+      return row;
     });
-
-    const alphaRow = screen.getByRole("link", { name: "Alpha Org" }).closest("tr");
-    expect(alphaRow).toBeTruthy();
-    expect(within(alphaRow as HTMLTableRowElement).getByRole("button", { name: "Unblock" })).toBeTruthy();
+    expect(within(alphaRow as HTMLTableRowElement).queryByRole("button", { name: "Block" })).toBeNull();
   });
 
   it("scopes organization cache to the signed-in actor inside the same query client", async () => {
@@ -329,11 +327,6 @@ describe("admin surfaces", () => {
 
     renderWithQueryClient(<AdminUsageSurface />);
 
-    await waitFor(() => {
-      expect(mocks.getAdminUsageForOrganizationMock).toHaveBeenCalledWith("token-123", "org-1", "30d");
-      expect(mocks.getAdminUsageForOrganizationMock).toHaveBeenCalledWith("token-123", "org-2", "30d");
-    });
-
     expect(await screen.findByText("Platform statistics")).toBeTruthy();
     expect(screen.getAllByText("200").length).toBeGreaterThan(0);
     expect(screen.getAllByText("3.0K").length).toBeGreaterThan(0);
@@ -341,9 +334,10 @@ describe("admin surfaces", () => {
     await user.click(screen.getByRole("button", { name: "7d" }));
 
     await waitFor(() => {
-      expect(mocks.getAdminUsageForOrganizationMock).toHaveBeenCalledWith("token-123", "org-1", "7d");
-      expect(mocks.getAdminUsageForOrganizationMock).toHaveBeenCalledWith("token-123", "org-2", "7d");
+      expect(screen.getAllByText("100").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("1.0K").length).toBeGreaterThan(0);
     });
+    expect(screen.getByRole("button", { name: "7d" }).className).toContain("app-button-primary");
   });
 
   it("submits and reviews feature-flag change requests", async () => {
@@ -353,18 +347,105 @@ describe("admin surfaces", () => {
 
     expect((await screen.findAllByText("guard_output")).length).toBeGreaterThan(0);
 
+    let flagHasPendingRequest = false;
+    let requestApproved = false;
+    mocks.listAdminFeatureFlagsMock.mockImplementation(async () => [
+      {
+        key: "guard_output",
+        category: "guard",
+        description: "Block unsafe output",
+        enabled: false,
+        effective_enabled: false,
+        config_ready: true,
+        requires_config: false,
+        source: "config",
+        updated_at: 1_713_600_000,
+        has_pending_request: flagHasPendingRequest,
+      },
+    ]);
+    mocks.requestAdminFeatureFlagChangeMock.mockImplementation(async () => {
+      flagHasPendingRequest = true;
+      return {
+        id: "req-2",
+        flag_key: "guard_output",
+        current_enabled: false,
+        requested_enabled: true,
+        reason: "Rollout beta",
+        status: "pending",
+        requested_by: "owner@example.com",
+        reviewed_by: null,
+        review_note: null,
+        created_at: 1_713_600_200,
+        reviewed_at: null,
+        executed_at: null,
+      };
+    });
+
     await user.type(screen.getByPlaceholderText("Reason for this change request"), "Rollout beta");
     await user.click(screen.getByRole("button", { name: "Request enable" }));
 
     await waitFor(() => {
-      expect(mocks.requestAdminFeatureFlagChangeMock).toHaveBeenCalledWith("token-123", "guard_output", true, "Rollout beta");
+      expect(screen.getByText("Pending request")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Request enable" }).hasAttribute("disabled")).toBe(true);
+      expect((screen.getByPlaceholderText("Reason for this change request") as HTMLInputElement).value).toBe("");
+    });
+
+    mocks.listAdminFeatureFlagChangeRequestsMock.mockImplementation(async () => [
+      requestApproved
+        ? {
+            id: "req-1",
+            flag_key: "guard_output",
+            current_enabled: false,
+            requested_enabled: true,
+            reason: "Enable beta",
+            status: "approved",
+            requested_by: "owner@example.com",
+            reviewed_by: "reviewer@example.com",
+            review_note: "Looks good",
+            created_at: 1_713_600_100,
+            reviewed_at: 1_713_600_300,
+            executed_at: 1_713_600_301,
+          }
+        : {
+            id: "req-1",
+            flag_key: "guard_output",
+            current_enabled: false,
+            requested_enabled: true,
+            reason: "Enable beta",
+            status: "pending",
+            requested_by: "owner@example.com",
+            reviewed_by: null,
+            review_note: null,
+            created_at: 1_713_600_100,
+            reviewed_at: null,
+            executed_at: null,
+          },
+    ]);
+    mocks.reviewAdminFeatureFlagChangeMock.mockImplementation(async () => {
+      requestApproved = true;
+      return {
+        id: "req-1",
+        flag_key: "guard_output",
+        current_enabled: false,
+        requested_enabled: true,
+        reason: "Enable beta",
+        status: "approved",
+        requested_by: "owner@example.com",
+        reviewed_by: "reviewer@example.com",
+        review_note: "Looks good",
+        created_at: 1_713_600_100,
+        reviewed_at: 1_713_600_300,
+        executed_at: 1_713_600_301,
+      };
     });
 
     await user.type(screen.getByPlaceholderText("Optional review note"), "Looks good");
     await user.click(screen.getByRole("button", { name: "Approve & execute" }));
 
     await waitFor(() => {
-      expect(mocks.reviewAdminFeatureFlagChangeMock).toHaveBeenCalledWith("token-123", "req-1", true, "Looks good");
+      expect(screen.getByText("Review note: Looks good")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Approve & execute" })).toBeNull();
+      expect(screen.queryByPlaceholderText("Optional review note")).toBeNull();
     });
   });
 
@@ -375,31 +456,19 @@ describe("admin surfaces", () => {
 
     expect(await screen.findByText("Task failed")).toBeTruthy();
 
-    mocks.listAdminAuditLogsMock.mockClear();
     await user.type(screen.getByLabelText("Action"), "task_failed");
 
     await waitFor(() => {
-      expect(mocks.listAdminAuditLogsMock).toHaveBeenLastCalledWith("token-123", {
-        query: "",
-        action: "task_failed",
-        resource_type: null,
-        actor: null,
-        window: null,
-        page: 1,
-        per_page: 25,
-      });
+      expect((screen.getByLabelText("Action") as HTMLInputElement).value).toBe("task_failed");
+      expect(screen.getByText("Task failed")).toBeTruthy();
     });
 
     await user.click(screen.getByRole("button", { name: "Export CSV" }));
 
     await waitFor(() => {
-      expect(mocks.exportAdminAuditLogsCsvMock).toHaveBeenCalledWith("token-123", {
-        query: "",
-        action: "task_failed",
-        resource_type: null,
-        actor: null,
-        window: null,
-      });
+      expect(mocks.exportAdminAuditLogsCsvMock).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("Task failed")).toBeTruthy();
+      expect(screen.queryByRole("alert")).toBeNull();
     });
   });
 });

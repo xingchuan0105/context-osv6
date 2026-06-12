@@ -12,7 +12,7 @@ import {
   type Citation,
 } from "../../lib/workspace/stream";
 import styles from "./workspace-chat.module.css";
-import type { ChatMessage, ProgressEntry } from "../../hooks/use-chat-session";
+import type { ProgressEntry, UiChatMessage } from "../../hooks/use-chat-session";
 import { CitationRenderer, collectWebSources, getCitationAnchorRect } from "./citation-renderer";
 import { ProgressTimeline } from "./progress-timeline";
 
@@ -25,7 +25,7 @@ function getAnswerBlockText(blocks: AnswerBlock[]) {
     .join("");
 }
 
-function getCopyableMessageContent(message: ChatMessage) {
+function getCopyableMessageContent(message: UiChatMessage) {
   if (message.role === "assistant") {
     const answerText = getAnswerBlockText(message.answerBlocks).trim();
     if (answerText) {
@@ -59,7 +59,7 @@ function getModeCode(mode: WorkspaceChatMode) {
   }
 }
 
-function getMessageActions(locale: "zh-CN" | "en", role: ChatMessage["role"]) {
+function getMessageActions(locale: "zh-CN" | "en", role: UiChatMessage["role"]) {
   if (role === "user") {
     return [
       formatUiMessage(locale, "workspaceChatActionCopy"),
@@ -77,7 +77,7 @@ function getMessageActions(locale: "zh-CN" | "en", role: ChatMessage["role"]) {
 
 
 type ChatMessageListProps = {
-  messages: ChatMessage[];
+  messages: UiChatMessage[];
   progress: { activities: ProgressEntry[]; mode: WorkspaceChatMode | null; collapsed: boolean };
   isStreaming: boolean;
   locale: "zh-CN" | "en";
@@ -113,7 +113,7 @@ export function ChatMessageList({
     transcript.scrollTop = transcript.scrollHeight;
   }, [messages, isStreaming]);
 
-  function handleCitationSelect(message: ChatMessage, citation: Citation, target?: HTMLElement | null) {
+  function handleCitationSelect(message: UiChatMessage, citation: Citation, target?: HTMLElement | null) {
     if (message.sessionId && message.messageId !== null) {
       onSelectCitation({
         session_id: message.sessionId,

@@ -19,8 +19,8 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   allowedDevOrigins: ["127.0.0.1", "localhost"],
 
-  // 桌面端构建时跳过 ESLint（playwright 配置等非生产代码的 lint 噪音），
-  // 但保留 TypeScript 类型检查，确保生产代码类型安全。
+  // 桌面端构建时跳过 ESLint（playwright 配置等非生产代码的 lint 噪音）。
+  // TypeScript 检查保持开启；e2e/playwright 通过 tsconfig exclude 排除。
   ...(isDesktopBuild
     ? {
         eslint: {
@@ -28,6 +28,10 @@ const nextConfig: NextConfig = {
         },
       }
     : {}),
+
+  typescript: {
+    tsconfigPath: "./tsconfig.json",
+  },
 
   turbopack: {
     root: projectRoot,

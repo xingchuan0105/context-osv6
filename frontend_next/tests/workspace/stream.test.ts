@@ -156,6 +156,79 @@ describe("workspace chat stream transport", () => {
     ]);
   });
 
+  it("drops invalid source_locator shapes when parsing citations", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const events: WorkspaceChatStreamEvent[] = [];
+
+    await parseWorkspaceChatEventStream(
+      makeStream([
+        'event: citations\ndata: {"request_id":"req-3","message_id":8,"citations":[{"citation_id":2,"doc_id":"doc-2","doc_name":"Doc 2","score":0.5,"source_locator":"not-an-object"}]}\n\n',
+        'event: citations\ndata: {"request_id":"req-3","message_id":8,"citations":[{"citation_id":3,"doc_id":"doc-3","doc_name":"Doc 3","score":0.6,"source_locator":{"url":"https://example.test/source","page":4}}]}\n\n',
+      ]),
+      (event) => {
+        events.push(event);
+      },
+    );
+
+    expect(events).toEqual([
+      {
+        kind: "citations",
+        request_id: "req-3",
+        message_id: 8,
+        citations: [
+          {
+            citation_id: 2,
+            doc_id: "doc-2",
+            chunk_id: undefined,
+            page: undefined,
+            doc_name: "Doc 2",
+            preview: undefined,
+            content: undefined,
+            score: 0.5,
+            layer: undefined,
+            chunk_type: undefined,
+            asset_id: undefined,
+            caption: undefined,
+            image_url: undefined,
+            parser_backend: undefined,
+            source_locator: undefined,
+            parse_run_id: undefined,
+          },
+        ],
+      },
+      {
+        kind: "citations",
+        request_id: "req-3",
+        message_id: 8,
+        citations: [
+          {
+            citation_id: 3,
+            doc_id: "doc-3",
+            chunk_id: undefined,
+            page: undefined,
+            doc_name: "Doc 3",
+            preview: undefined,
+            content: undefined,
+            score: 0.6,
+            layer: undefined,
+            chunk_type: undefined,
+            asset_id: undefined,
+            caption: undefined,
+            image_url: undefined,
+            parser_backend: undefined,
+            source_locator: {
+              url: "https://example.test/source",
+              page: 4,
+            },
+            parse_run_id: undefined,
+          },
+        ],
+      },
+    ]);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
   it("does not log token or trace payloads while parsing streaming diagnostics", async () => {
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
 

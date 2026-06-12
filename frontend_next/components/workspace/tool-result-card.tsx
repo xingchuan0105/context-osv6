@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { toSafeHttpUrl } from "../../lib/url/isSafeHttpUrl";
 import {
   type ToolResult,
   ToolStatus,
@@ -234,7 +235,9 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
                 {locale === "zh-CN" ? "搜索结果" : "Search Results"}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                {results.map((r: any, i: number) => (
+                {results.map((r: any, i: number) => {
+                  const safeUrl = toSafeHttpUrl(typeof r.url === "string" ? r.url : null);
+                  return (
                   <div
                     key={i}
                     style={{
@@ -243,9 +246,9 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
                       background: "hsl(var(--muted) / 0.15)",
                     }}
                   >
-                    {r.url ? (
+                    {safeUrl ? (
                       <a
-                        href={r.url}
+                        href={safeUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{
@@ -255,7 +258,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
                           textDecoration: "none",
                         }}
                       >
-                        {typeof r.title === "string" ? r.title : r.url}
+                        {typeof r.title === "string" ? r.title : safeUrl}
                       </a>
                     ) : (
                       <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>
@@ -274,7 +277,8 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
                       </div>
                     ) : null}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ) : null}
