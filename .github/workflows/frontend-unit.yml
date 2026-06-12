@@ -1,0 +1,67 @@
+name: Frontend Unit Tests
+
+on:
+  pull_request:
+    paths:
+      - 'frontend_next/**'
+      - 'contracts/**'
+      - 'scripts/generate-contracts.sh'
+      - '.github/workflows/frontend-unit.yml'
+  workflow_dispatch:
+
+env:
+  CI: true
+
+jobs:
+  vitest:
+    name: Frontend Vitest
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend_next
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          cache-dependency-path: frontend_next/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo (contracts codegen)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/typeshare
+            contracts/target
+          key: ${{ runner.os }}-contracts-codegen-${{ hashFiles('contracts/Cargo.lock', 'scripts/generate-contracts.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-contracts-codegen-
+
+      - name: Install typeshare CLI
+        run: |
+          if ! command -v typeshare &>/dev/null; then
+            cargo install typeshare-cli --locked --quiet
+          fi
+
+      - name: Check contract codegen drift
+        run: |
+          pnpm generate:contracts
+          git diff --exit-code -- frontend_next/lib/contracts/generated/
+
+      - name: Run unit tests
+        run: pnpm test run
