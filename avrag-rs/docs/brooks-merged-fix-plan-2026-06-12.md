@@ -1,192 +1,264 @@
-# Brooks 四维审计合并修复计划 — 2026-06-12
+# Brooks 四维审计合并修复计划 — 2026-06-12（v2 复测版）
 
-合并以下四份 Brooks 审计报告的全部结论，去重后按**目录边界解耦**为可并行开发的修复流（Stream），并给出依赖关系与集成门禁。
+合并四份 Brooks 审计报告的全部结论，去重后按**目录边界解耦**为可并行 subagent 工作流（Stream），并给出依赖关系与集成门禁。
 
-| 输入报告 | 维度 | 分数 |
-|----------|------|------|
-| [brooks-health-architecture-audit-2026-06-10.md](./brooks-health-architecture-audit-2026-06-10.md) | 健康度 + 架构 | 80 / 73 |
-| [brooks-pr-review-2026-06-12.md](./brooks-pr-review-2026-06-12.md) | PR 可合并性 | 43 |
-| [brooks-tech-debt-assessment-2026-06-12.md](./brooks-tech-debt-assessment-2026-06-12.md) | 技术债 | 34 |
-| [brooks-test-quality-review-2026-06-12.md](./brooks-test-quality-review-2026-06-12.md) | 测试质量 | 52 |
+| 输入报告 | 维度 | 分数 | 趋势 |
+|----------|------|------|------|
+| [brooks-architecture-audit-2026-06-12.md](./brooks-architecture-audit-2026-06-12.md) | 架构 | **77** | 73→77 |
+| [brooks-tech-debt-assessment-2026-06-12.md](./brooks-tech-debt-assessment-2026-06-12.md) | 技术债 | **58** | 34→58 |
+| [brooks-test-quality-review-2026-06-12.md](./brooks-test-quality-review-2026-06-12.md) | 测试质量 | **62** | 52→62 |
+| [brooks-pr-review-2026-06-12-v2.md](./brooks-pr-review-2026-06-12-v2.md) | PR（P2-13 专项） | **83** | 43→83 |
 
-**计划制定时实测状态（2026-06-12）：**
+**v2 复测时实测状态（2026-06-12）：**
 
-- `cargo check --workspace` 失败：`app-bootstrap` 68 errors（缺 `common` 等依赖、`storage-pg` `get_parsed_preview` 调用参数错位、trait impl 不匹配）——与测试报告 Critical 一致，**仍未修复**。
-- 6 个新 domain crate（`app-core` / `app-chat` / `app-bootstrap` / `app-documents` / `app-admin` / `app-billing`）+ `ingestion-types` / `storage-local` 等**仍为未跟踪文件**。
-- 巨型文件实测行数：`worker/main.rs` 3263、`handlers.rs` 1834、`test_context.rs` 1486、`messages.ts` 2519、`settings-surface.tsx` 1572、`chat-message-list.tsx` 1406。
-
----
-
-## 1. 结论去重映射
-
-四份报告对同一问题多次报告，合并后共 **13 个独立问题域**：
-
-| # | 合并后问题 | 出现于 | 最高severity |
-|---|-----------|--------|--------------|
-| M1 | workspace 编译断裂（app-bootstrap 依赖链 + storage-pg 残留） | 健康 A1/P0 · PR Critical · 测试 Critical | **Critical** |
-| M2 | 新 crate 未入库，PR 不完整不可审查 | PR Critical ×2 | **Critical** |
-| M3 | 前后端 API 类型手工三层同步，无 codegen | 技术债 Critical（Priority 9） | **Critical** |
-| M4 | worker `main.rs` 3263 行上帝文件 + worker→app 多余依赖 + URL 绕过 ParseRouter | 健康 R1/A3/A6/A7 · PR Warning · 技术债 Critical | **Critical** |
-| M5 | `app-core`↔PG 强绑定：`pg()` 逃逸口、Port 泄漏行类型 | 健康 A2/A5/P1 · 技术债 Suggestion | Warning |
-| M6 | `transport-http/handlers.rs` 1834 行单体 + NotebookAnalysisCollector 混杂 | PR Warning · 技术债 Warning | Warning |
-| M7 | chat facade 双份维护（chat_delegates 透传 + ChatContext 重建 21 处）且无契约测试 | PR Warning ×2 | Warning |
-| M8 | 前端 Surface 测试过度 mock / stub 子组件 / mock 块 14 处复制 | 测试 Warning ×4 | Warning |
-| M9 | 前端巨型组件与重复逻辑（settings / chat-message-list / messages.ts / 定价 gate 6+ 处重复） | 健康 R2 · 技术债 Warning ×2 | Warning |
-| M10 | E2E 结构债：test_context 1486 行上帝 fixture、streaming_chat 冷启动、45 分钟单线程预算 | 健康 T1 · 技术债 Warning · 测试 Warning | Warning |
-| M11 | 计费层级词汇分裂（Enterprise vs Plus/Pro） | 技术债 Warning（Domain Distortion） | Warning |
-| M12 | module_surface 假覆盖、retrieval-data-plane 仅 2 测、边界无 characterization test | 测试 Warning/盲区 | Warning |
-| M13 | 低优清理：redteam/eval 未接生产、crate 级 `#![allow]`、CONTEXT.md 过期、AgentKind "general" 别名、common/contracts 双层类型 | 技术债/PR Suggestion ×5 | Suggestion |
+- `cargo check --workspace` ✅ 通过（P0 编译债已清）
+- `cargo test --no-run -p app` ❌ 4 个 `E0603`（`lib_impl/tests.rs` 引用 private `app_bootstrap::adapters`）
+- `worker/main.rs` **4 行**；债务转移至 `pipeline/helpers.rs` **1273 行**
+- `transport-http` 仍 **12 处** `use app::AppState`；auth/admin 层 **~2400 行** SQL 未 Port 化
+- `stream.ts` 仍维护手写 `WorkspaceChatStreamEvent`（codegen 管道已建但未接入 SSE 层）
+- 前端 Vitest **232 测 ~17s 全绿**；Product E2E integration **45 分钟** CI 预算
 
 ---
 
-## 2. 总体结构：1 个串行门禁 + 3 波并行
+## 1. 已偿还项（四报告共识，不再分配 Stream）
 
-**解耦原则：每个 Stream 拥有独占目录边界，同一文件不会被两个并行 Stream 同时修改。** 存在文件冲突的任务用波次（Wave）排序隔离。
+| 原问题域 | 证据 |
+|----------|------|
+| workspace 编译断裂（68 errors） | `cargo build --workspace` 通过 |
+| worker `main.rs` 3263 行上帝文件 | `main.rs` = 4 行；逻辑在 `pipeline/` |
+| worker → `app` 多余依赖 | 改依赖 `app-core` |
+| URL 绕过 ParseRouter | `processor.rs` 统一 `ParseRouter::route` |
+| `storage.pg()` 逃逸口 | 零匹配 + 契约测试守护 |
+| `app-core` 生产依赖 `storage-pg` | Cargo 已解耦 |
+| handlers.rs 1834 行单体 | 拆为 `handlers/{chat,documents,notebooks,...}.rs` |
+| contracts→TS codegen 管道 | `pnpm generate:contracts` + golden fixtures |
+| billing tier Enterprise/Plus 分裂 | `BillingTier::Free/Plus/Pro` + DB alias |
+| settings/chat-pane/messages 巨型文件 | settings 25 行；messages 15 域分片；chat-pane 180 行 |
+| E2E test_context 1486 行单文件 | 5 文件，最大 548 行 |
+| mock-providers 零引用 | `globalThis.__mockProviders` 全局注入 |
+| Workspace Surface stub 子组件 | integration 用例 + harness 已建 |
+| AgentKind `"general"` API 别名 | `parse("general") → None` |
+
+---
+
+## 2. 结论去重映射（剩余 **14 个独立问题域**）
+
+| # | 合并后问题 | 出现于 | Severity | 优先级 |
+|---|-----------|--------|----------|--------|
+| R1 | `app` lib 内联测试 4×E0603（private adapters） | 测试 Critical | **Critical** | P0 |
+| R2 | transport-http ~2400 行 SQL 直连 PG（auth + admin） | 架构 Warning | **Warning** | P1 |
+| R3 | SSE 解析层与 `ChatEvent` codegen 双轨（Pain×Spread=9） | 技术债 Warning | **Warning** | P1 |
+| R4 | UI `ChatMessage` 与 contract 同名不同义（Pain×Spread=9） | 技术债 Warning | **Warning** | P1 |
+| R5 | `pipeline/helpers.rs` 1273 行 ingestion 编排器 | 架构+技术债 Warning | **Warning** | P1 |
+| R6 | transport-http 经 `app::AppState` 门面（12 处） | 技术债 Warning | **Warning** | P2 |
+| R7 | `PgContentStore` 留在 app-documents（应迁 bootstrap） | 架构 Warning | **Warning** | P2 |
+| R8 | Product E2E 45 分钟预算 + P2-13 假并发/弱断言 | 测试+PR Warning | **Warning** | P2 |
+| R9 | 前端测试：Admin/Settings mock 主断言、streaming 658 行、vi.hoisted 重复 | 测试 Warning | **Warning** | P2 |
+| R10 | 前端巨型 surface（share 1319 / dashboard 1057 / right-rail 930 / hook 912） | 技术债 Warning | **Warning** | P2 |
+| R11 | 8 crate module_surface 假覆盖 + retrieval-data-plane 仅 3 测 | 测试 Warning | **Warning** | P2 |
+| R12 | Playwright citation soft gate | 测试 Suggestion | Suggestion | P3 |
+| R13 | CI 无 codegen drift check | 技术债 Suggestion | Suggestion | P2 |
+| R14 | 低优清理：common/auth 扇入、app-chat 巨型 loop/prompts、notebooks 924 行、eval_framework、pricing gate 14 文件、Plus 倍数文案 6×/10× | 架构+技术债 Suggestion | Suggestion | P3 |
+
+---
+
+## 3. 总体结构：Wave 0 串行门禁 + 3 波并行 Subagent
+
+**解耦原则：** 每个 Stream 独占目录边界；同一文件不会被两个并行 Stream 同时修改。存在冲突的目录用波次隔离。
 
 ```mermaid
 flowchart TD
-  W0["Wave 0 门禁（串行）<br/>G: 编译修复 + 入库 + 安全网"]
-  W0 --> S1["S1 存储 Port 化 Phase A<br/>(M5)"]
-  W0 --> S2["S2 worker 拆分<br/>(M4)"]
-  W0 --> S3["S3 contracts→TS codegen<br/>(M3 后端侧)"]
-  W0 --> S4["S4 计费词汇统一<br/>(M11)"]
-  W0 --> S5["S5 前端测试 mock 治理<br/>(M8 去重部分)"]
-  W0 --> S10["S10 Rust 测试补强<br/>(M12)"]
-  S1 --> S6["S6 handlers.rs 拆分<br/>(M6)"]
-  S3 --> S9["S9 前端接入生成类型<br/>(M3 前端侧)"]
-  S5 --> S7["S7 前端 destub + 测试拆分<br/>(M8 剩余)"]
-  S7 --> S8["S8 前端 UI 组件拆分<br/>(M9)"]
-  S6 --> S11["S11 Port 化 Phase B<br/>(M5 收尾)"]
-  S6 --> S12["S12 E2E 结构优化<br/>(M10)"]
+  W0["Wave 0 门禁（1 agent 串行）<br/>G: test seam + P2-13 快修"]
+  W0 --> S1["S1 worker helpers 拆分<br/>(R5)"]
+  W0 --> S2["S2 SSE 接入 ChatEvent<br/>(R3)"]
+  W0 --> S3["S3 UiChatMessage 重命名<br/>(R4)"]
+  W0 --> S4["S4 前端测试治理<br/>(R9)"]
+  W0 --> S5["S5 Rust behavioral 测试<br/>(R11)"]
+  W0 --> S6["S6 CI codegen drift<br/>(R13)"]
+  S5 --> S7["S7 auth SQL Port 化<br/>(R2 前半)"]
+  S5 --> S8["S8 admin SQL + PgContentStore<br/>(R2 后半 + R7)"]
+  S7 --> S9["S9 transport 去 app 门面<br/>(R6)"]
+  S8 --> S9
+  S4 --> S10["S10 前端巨型 surface 拆分<br/>(R10)"]
+  S7 --> S11["S11 E2E 结构 + P2-13 深化<br/>(R8)"]
+  S2 --> S11
+  S9 --> S12["S12 收尾清理<br/>(R12/R14)"]
   S10 --> S12
-  S1 --> S13["S13 facade 收尾与清理<br/>(M7/M13)"]
-  S11 --> S13
+  S11 --> S12
 ```
 
 ---
 
-## 3. Wave 0 — 串行门禁（必须最先完成，阻塞一切并行）
+## 4. Wave 0 — 串行门禁（1 subagent，阻塞 Wave 1）
 
-**对应：M1 + M2 + M7 的安全网部分。这是唯一不可并行的阶段。**
+| 步骤 | 任务 | 对应 | 验收 |
+|------|------|------|------|
+| G1 | `app-bootstrap` 公开 `test_support`（re-export adapter 或 `build_test_storage()`） | R1 | `cargo test --no-run -p app` 零错误 |
+| G2 | `concurrent_query.rs`：删 `eprintln!`；`tokio::join!` 真并发；`assert_ne!` 答案/citation 独立性；对齐 `rag_smoke` bridge 断言 | R8 | `cargo test -p app concurrent_rag -- --nocapture` |
+| G3 | 基线快照：`cargo test -p contracts -p transport-http` + `pnpm vitest run` | — | 全绿作对照 |
 
-| 步骤 | 任务 | 验收 |
-|------|------|------|
-| G1 | 修复 `app-bootstrap/Cargo.toml`：补 `common`、`async-trait`、`chrono`、`ingestion-types` 等缺失依赖 | `cargo check -p app-bootstrap` |
-| G2 | 修复 adapter import：`app_core::config_helpers::map_pg_error`（私有路径）→ `app_core::map_pg_error`；对齐 trait impl lifetime；修复 `storage-pg` `get_parsed_preview` 调用参数错位 | 同上 |
-| G3 | 修复 `app/src/lib_impl/state_methods.rs:80` 过期的 `crate::billing_context::BillingContext` → `app_billing::BillingContext` | `cargo check -p app` |
-| G4 | `git add` 全部未跟踪新 crate 与配套文件（约 42 项），形成完整可审查基线 | `git status` 无关键 `??` |
-| G5 | 全量基线：`cargo check --workspace` + `cargo test --no-run -p app` + `pnpm test run`（前端当前 224 测 12s 全绿，作对照基线） | 三者通过 |
-| G6 | **安全网**：在 app/app-chat 边界补 3–5 个 characterization/contract 测试（`execute_chat` memory 模式、`execute_chat_stream`、`list_sessions`、`execute_rag_execute_plan`），断言错误码与 HTTP 入口一致 | `cargo test -p app --test delegate_contract` |
-
-> G6 来自测试报告的明确要求：「补 characterization 测试后再继续模块迁移」。没有它，Wave 1 的所有移动式重构都没有回归保护。
+> G1 完成后，S5/S7/S8 才可安全改 `app-bootstrap/adapters/`。
 
 ---
 
-## 4. Wave 1 — 五路并行（目录互斥，零交叉）
+## 5. Wave 1 — 六路并行（目录互斥，零交叉）
 
-| Stream | 问题域 | 独占目录边界 | 任务要点 | 验收 |
-|--------|--------|--------------|----------|------|
-| **S1 存储 Port 化 Phase A** | M5 | `crates/app-core/`（ports）、`crates/app-bootstrap/src/adapters/`、`crates/app-documents/`、`crates/app-admin/` | 完成已起草的 `DocumentStorePort` / `AdminStorePort` / `BillingQuotaPort` wiring；`app-documents`/`app-admin` 全量 `pg()` → port；`pg()` 标 deprecated；URL imports 配额走 `BillingQuotaPort`（原 P3 合并入此） | `rg 'storage\.pg\(' crates/app-documents crates/app-admin` 为 0；`cargo test -p app-documents -p app-admin -p app-bootstrap -p app-core` |
-| **S2 worker 拆分** | M4 | `bins/worker/`、`crates/ingestion/src/parser/router.rs` | 纯移动式重构：`PgTaskProcessor::process`、`run_document_pipeline`(~575行)、`execute_parse_plan` 移入 `pipeline/`（fetch→route→parse→index）；`main.rs` 只留 wiring（目标 ≤200 行，硬指标 <1800）；去掉 `worker → app` 依赖（改 `app-core`，删 `AppState::bootstrap` 用法）；URL 任务硬编码 `Local+Html` 改走 `ParseRouter::route`；`ocr_gating.rs` 重命名 | `cargo build -p avrag-worker`；`wc -l bins/worker/src/main.rs`；worker `Cargo.toml` 无 `app` 依赖；不改任何函数签名 |
-| **S3 contracts→TS codegen** | M3 后端侧 | `contracts/`、`scripts/`、`frontend_next/lib/contracts/generated/`（新目录） | `typeshare`（fallback `ts-rs`）从 `contracts` 生成 TS；从 `contracts/tests/chat_json.rs` 导出 golden JSON fixture；新增 `pnpm generate:contracts` 脚本；**本阶段不改 `stream.ts`**（留给 S9，避免与前端冲突） | `cargo test -p contracts`；`pnpm generate:contracts` 产出文件 |
-| **S4 计费词汇统一** | M11 | `crates/app-chat/src/agents/react_loop.rs`、`crates/billing/`、`frontend_next/components/admin/admin-i18n.ts` | tier enum 统一 `Free \| Plus \| Pro`（enterprise 仅作 DB migration alias）；react_loop budget 改读 billing policy；admin-i18n 对齐 | `cargo test -p avrag-billing -p app-chat`；migration 0037 测试必须 pass |
-| **S5 前端测试 mock 治理** | M8 去重部分 | `frontend_next/tests/helpers/`、各 surface 测试文件的 mock 声明块 | 将 14–16 处 `vi.hoisted` 复制块迁入 `mock-providers.ts` 工厂；每文件 mock 声明 ≤5 行；**只动 mock 声明，不动断言**（destub 留给 S7） | `pnpm test run` 全绿；`mock-providers.ts` 被实际 import |
-| **S10 Rust 测试补强** | M12 | 各 crate `tests/` 目录（不含 transport-http、不含 product_e2e） | 8 个 module_surface crate 各补 ≥1 个 behavioral contract test；`retrieval-data-plane` 补行为测试；`bootstrap_contract` 测试 | `cargo test -p retrieval-data-plane` 等新测试通过 |
+每个 Stream 可独立派给 1 个 subagent；**从 Wave 0 同一 commit 分支**。
 
-**冲突说明：** S1 与 S10 都可能碰 `app-admin`/`app-documents` 的测试——约定 S10 不写这两个 crate 的测试（其行为测试由 S1 在迁移时顺带补），S10 专注 `common`/`ingestion`/`billing`/`search`/`share`/`storage-pg`/`retrieval-data-plane`。
+| Stream | 问题域 | 独占目录 | Subagent 任务要点 | 验收 |
+|--------|--------|----------|-------------------|------|
+| **S1** | R5 | `bins/worker/src/pipeline/` | 纯移动式拆分 `helpers.rs` → `parse_route.rs` / `index_dispatch.rs` / `pg_side_effects.rs`；单文件 ≤400 行；**不改函数签名** | `cargo build -p avrag-worker`；`wc -l pipeline/*.rs` |
+| **S2** | R3 | `frontend_next/lib/workspace/stream.ts`、`frontend_next/tests/workspace/stream.test.ts`、`frontend_next/tests/contracts/` | 删除手写 `WorkspaceChatStreamEvent`；消费 generated `ChatEvent`（thin adapter 处理 `event`↔`kind`）；扩展 golden 覆盖 decode 路径 | `pnpm typecheck`；`pnpm vitest run tests/workspace/stream.test.ts tests/contracts/` |
+| **S3** | R4 | `frontend_next/hooks/use-chat-session.ts`、引用 UI `ChatMessage` 的 components | 重命名 UI 类型 → `UiChatMessage`；wire 类型统一从 `lib/contracts` 导入 | `pnpm typecheck` |
+| **S4** | R9 | `frontend_next/tests/`（不含 `lib/`） | `installSurfaceMocks()` 封装 vi.mock（≤3 行/文件）；Admin/Settings 主断言改 DOM；`streaming.test.tsx` 按 SSE 事件类型再拆 | `pnpm vitest run` 全绿 |
+| **S5** | R11 | `crates/{common,ingestion,billing,search,share,storage-pg,retrieval-data-plane}/tests/` | 每 crate 补 ≥1 behavioral contract test；**不写** transport-http / product_e2e / app-documents | `cargo test -p retrieval-data-plane -p avrag-billing ...` |
+| **S6** | R13 | `scripts/generate-contracts.sh`、`.github/workflows/`、`frontend_next/package.json` | CI 加 `pnpm generate:contracts && git diff --exit-code lib/contracts/generated/` | workflow 绿 |
 
----
+**Wave 1 冲突说明：**
 
-## 5. Wave 2 — 四路并行（依赖 Wave 1 对应项合并）
-
-| Stream | 问题域 | 依赖 | 独占目录边界 | 任务要点 | 验收 |
-|--------|--------|------|--------------|----------|------|
-| **S6 handlers.rs 拆分** | M6 | S1 合并后（避免与 Port 化改动撞 transport-http 调用点） | `crates/transport-http/src/` | 按 domain 拆 `handlers/chat.rs`、`handlers/documents.rs`、`handlers/notebooks.rs` 等，与 `routes/` 对齐；`NotebookAnalysisCollector` 移到 `notebook_analysis.rs` 或 `app-documents` | `cargo test -p transport-http`；`chat_stream_contract.rs` 通过 |
-| **S7 前端 destub + 测试拆分** | M8 剩余 | S5 | `frontend_next/tests/`（workspace/admin surface 文件） | 逐步移除 `WorkspaceChatPane`/`RightRail` stub，改 DOM 行为断言（用户已决策：destub 增量方案）；`workspace-chat-pane.test.tsx`(1237行) 拆为 transcript/streaming/composer；`workspace-right-rail.test.tsx`(797行) 按 tab 拆 + `renderRightRail()` helper；billing 测试命名修正；至少 1 条不 stub 子组件的 shell 集成测试 | `pnpm test run`；surface 主断言为 DOM 可见结果 |
-| **S8 前端 UI 组件拆分** | M9 | S7（拆出的 DOM 断言测试为重构护航） | `frontend_next/components/`、`frontend_next/lib/i18n/`、`frontend_next/app/(app)/`、`(marketing)/` 定价相关页 | `settings-surface.tsx` 拆 Tab 组件；`chat-message-list.tsx` 拆 `CitationRenderer`/`ProgressTimeline`；`messages.ts` 按 domain 拆 `messages/admin.ts` 等；定价改版 gate 6+ 处重复收敛为 `usePricingRevampGate` / `<PricingRevampGate>` | `pnpm typecheck`；`pnpm test run`；行数核查 |
-| **S9 前端接入生成类型** | M3 前端侧 | S3 | `frontend_next/lib/workspace/stream.ts`、`lib/contracts/`、相关 tests | `stream.ts` 删除手写 `AnswerBlock`/`Citation`/`ToolResult`/`ChatTurnInput` 等，只保留 SSE 解析逻辑；接 golden fixture 做 cross-lang contract test；修正已知漂移（`ChatRequest.debug`、`GuardReport`、`PlannerOutput`） | `pnpm typecheck`；无重复手写 DTO；contract test 通过 |
-
-**冲突说明：** S8 与 S9 都碰前端，但目录互斥（components/i18n vs lib/workspace/lib/contracts）。S7 与 S8 有顺序依赖不可并行同一组件域，可按组件域流水（chat 域先 destub→再拆分，settings 域同理错峰）。
+- S2 与 S3 都碰 chat 类型，但目录互斥（`lib/workspace` vs `hooks/`+components）
+- S5 与 Wave 2 的 S7/S8 **约定**：S5 不写 `app-bootstrap` adapters（由 G1 test_support + S7/S8 顺带补测试）
 
 ---
 
-## 6. Wave 3 — 收尾（依赖前两波）
+## 6. Wave 2 — 五路并行（依赖 Wave 0 G1 + Wave 1 部分合并）
 
-| Stream | 问题域 | 依赖 | 目录边界 | 任务要点 | 验收 |
-|--------|--------|------|----------|----------|------|
-| **S11 Port 化 Phase B** | M5 收尾 | S1 + S6 | `crates/transport-http/`、`crates/app-core/Cargo.toml`、`crates/app-bootstrap/` | `transport-http` 去 `pg()`；object store 类型拆分或 `ObjectStorePort`；`app-core` Cargo 移除 `storage-pg` 依赖；删除 `pg()` 逃逸口 | `rg '\.pg\(\)' crates/transport-http` 为 0；`app-core/Cargo.toml` 无 storage-pg |
-| **S12 E2E 结构优化** | M10 | S6 + S10 | `crates/app/tests/product_e2e/`、`.github/workflows/`、Playwright specs | `test_context.rs`(1486行) 按 profile 拆 `SmokeContext`/`RagContext`/`LlmRealContext` builder；`streaming_chat` 模块级共享 context、推广 `ready_rag` fixture；SSE event-order 等 protocol 断言下沉到 transport-http contract test；Playwright citation `if (count>0)` soft gate 改 hard assert（soft 仅 nightly）；同步 `e2e-gates.md` | `E2E_MODE=smoke cargo test -p app --test product_e2e -- --test-threads=1`；integration 时长下降 |
-| **S13 facade 收尾与清理** | M7 + M13 | S1 + S11（多数调用方已迁走） | `crates/app/`、`crates/app-chat/`（redteam）、`CONTEXT.md`、`crates/common/` | bootstrap 时预构建 `ChatContext` 存入 `AppState`（消除 21 处重建）；`transport-http`/`worker` 改直接依赖 app-* crate，收缩 `app` facade；移除 crate 级 `#![allow(dead_code/deprecated/unused_mut)]`；redteam/eval_framework feature-gate 或移出；`CONTEXT.md` 路径/行数批量更新；E2E 改用 `"chat"` 后移除 AgentKind `"general"` 别名；明确 `contracts`=API 边界 / `common`=内部 runtime 类型的分层规则 | `cargo build --workspace` 无 dead_code 抑制下通过；CONTEXT.md 路径存在性检查 |
+| Stream | 问题域 | 依赖 | 独占目录 | Subagent 任务要点 | 验收 |
+|--------|--------|------|----------|-------------------|------|
+| **S7** | R2 前半 | G1 | `crates/transport-http/src/lib_impl/auth_*.rs`、`crates/app-bootstrap/src/adapters/`（auth 相关） | auth SQL 下沉 bootstrap；transport 仅调 Port/AppState 方法 | `cargo test -p transport-http` |
+| **S8** | R2 后半 + R7 | G1 | `crates/transport-http/src/routes/admin.rs`、`crates/app-documents/`、`app-bootstrap/adapters/` | admin SQL 下沉；`PgContentStore` 迁至 bootstrap；documents 去 `storage-pg` 生产依赖 | `rg 'avrag-storage-pg' crates/app-documents/Cargo.toml` 无生产 dep |
+| **S9** | R6 | S7+S8 merge | `crates/transport-http/`、`crates/app/` | 12 处 `app::AppState` → `app_bootstrap::AppState` 或 trait port；完成后评估移除 transport `sqlx` | `rg 'use app::AppState' crates/transport-http` 为 0 |
+| **S10** | R10 | S4 | `frontend_next/components/share/`、`dashboard/`、`workspace-right-rail*`、`hooks/use-chat-session.ts` | 按 Tab/Panel 拆分巨型 surface；hook 提取 event reducer 子 hook | `pnpm typecheck`；行数核查 |
+| **S11** | R8 | G2 + S2 | `crates/app/tests/product_e2e/`、`frontend_next/e2e/`、`.github/workflows/integration-e2e.yml` | protocol 断言下沉 transport-http contract；`streaming_chat` 共享 context；Playwright citation **hard assert**（staging 子集） | smoke ≤10min；`e2e-gates.md` 同步 |
 
----
-
-## 7. 目录所有权矩阵（防并行冲突的硬约束）
-
-| 目录 | Wave 0 | Wave 1 | Wave 2 | Wave 3 |
-|------|--------|--------|--------|--------|
-| `crates/app-bootstrap/` | G1/G2 | S1 | — | S11 |
-| `crates/app-core/` | — | S1 | — | S11 |
-| `crates/app-documents/`、`app-admin/` | — | S1 | — | — |
-| `crates/app/`（src + delegate 测试） | G3/G6 | — | — | S13 |
-| `crates/app/tests/product_e2e/` | — | — | — | S12 |
-| `bins/worker/` | — | S2 | — | S13（仅 Cargo 依赖） |
-| `crates/ingestion/` | — | S2（仅 router） | — | — |
-| `contracts/`、`scripts/` | — | S3 | — | — |
-| `crates/app-chat/`、`crates/billing/` | — | S4 | — | S13（redteam） |
-| `crates/transport-http/` | — | — | S6 | S11/S12（contract test） |
-| `frontend_next/tests/` | — | S5/S10 | S7 | — |
-| `frontend_next/components/`、`lib/i18n/` | — | S4（仅 admin-i18n） | S8 | — |
-| `frontend_next/lib/workspace/`、`lib/contracts/` | — | S3（仅 generated/） | S9 | — |
+**硬顺序（同目录）：** S7 → S8 → S9 必须 rebase 顺序合并到 `transport-http`（可两 agent 并行 auth vs admin，merge 后再 S9）。
 
 ---
 
-## 8. 集成门禁（每个 Wave 结束执行）
+## 7. Wave 3 — 收尾（2–3 路并行）
+
+| Stream | 问题域 | 依赖 | 目录 | 任务 | 验收 |
+|--------|--------|------|------|------|------|
+| **S12a** | R14 架构 | S9 | `crates/common/`、`crates/app-chat/src/agents/` | common 分层文档化；`rag_prompts.rs` / loop 拆分规划（可只做 notebooks 924 行再拆） | `cargo build --workspace` |
+| **S12b** | R12 + 低优 | S11 | `frontend_next/e2e/`、`lib/i18n/` | Playwright soft gate 仅 nightly；Plus 倍数文案统一；`settings-share-messages` 合并 | product 确认倍数 |
+| **S12c** | R14 门面 | S9 | `crates/app/`、`CONTEXT.md` | 收缩 app facade；bootstrap 预构建 ChatContext；更新 CONTEXT 路径 | Brooks 复测 Architecture ≥85 |
+
+---
+
+## 8. Subagent 派发模板
+
+每个 Stream 启动 subagent 时使用以下 prompt 骨架（替换 `{STREAM}` / `{DIRS}` / `{ACCEPT}`）：
+
+```markdown
+## 任务：Brooks 修复 Stream {STREAM}
+
+**独占目录（禁止修改其他目录）：** {DIRS}
+
+**背景：** 见 avrag-rs/docs/brooks-merged-fix-plan-2026-06-12.md Wave {N} / {STREAM}
+
+**必须做：**
+1. 只改独占目录内文件
+2. 纯移动式重构不改行为（若适用）
+3. 完成后运行验收命令
+
+**禁止做：**
+- 修改独占目录外的文件（除非 Cargo.toml 最小依赖调整且已在计划中）
+- 顺手重构无关代码
+- 新增未请求功能
+
+**验收：** {ACCEPT}
+```
+
+### 推荐并行批次
+
+| 批次 | 同时派出的 Subagent | 预计冲突 |
+|------|---------------------|----------|
+| Batch 0 | G1+G2+G3（单 agent 串行） | 无 |
+| Batch 1 | S1 / S2 / S3 / S4 / S5 / S6（6 agents） | 无 |
+| Batch 2a | S7 / S8 / S10 / S11（4 agents） | S7∥S8 不同文件，merge 需人工 |
+| Batch 2b | S9（等 2a merge 后 1 agent） | — |
+| Batch 3 | S12a / S12b / S12c（3 agents） | 无 |
+
+---
+
+## 9. 目录所有权矩阵
+
+| 目录 | W0 | W1 | W2 | W3 |
+|------|----|----|----|-----|
+| `crates/app-bootstrap/` | G1 | — | S7/S8 | S12c |
+| `crates/app/src/lib_impl/tests.rs` | G1 | — | — | — |
+| `crates/app/tests/product_e2e/integration/concurrent_query.rs` | G2 | — | S11 | — |
+| `bins/worker/src/pipeline/` | — | S1 | — | — |
+| `frontend_next/lib/workspace/` | — | S2 | — | — |
+| `frontend_next/hooks/` | — | S3 | S10 | — |
+| `frontend_next/tests/` | — | S4 | — | — |
+| `frontend_next/components/` | — | — | S10 | — |
+| `crates/*/tests/`（见 S5 列表） | — | S5 | — | — |
+| `scripts/`、`.github/workflows/` | — | S6 | S11 | — |
+| `crates/transport-http/` | — | — | S7→S8→S9 | — |
+| `crates/app-documents/` | — | — | S8 | — |
+| `frontend_next/e2e/` | — | — | S11 | S12b |
+| `crates/common/`、`app-chat/` | — | — | — | S12a |
+
+---
+
+## 10. 集成门禁（每个 Wave 结束）
 
 ```bash
 # Rust
 cd avrag-rs
 cargo check --workspace
+cargo test --no-run -p app                    # Wave 0 后必须零错误
 cargo test -p contracts -p app -p app-chat -p app-core -p app-bootstrap \
   -p app-documents -p app-admin -p transport-http -p avrag-billing -p avrag-worker
 
 # Frontend
 cd ../frontend_next
-pnpm generate:contracts   # S3 之后
+pnpm generate:contracts
 pnpm typecheck
-pnpm test run
+pnpm vitest run
 
 # 治理与 E2E
 cd ../avrag-rs
 ../scripts/check_contract_governance.sh
 E2E_MODE=smoke cargo test -p app --test product_e2e smoke:: -- --test-threads=1
 
-# 结构变更后更新知识图谱
+# 结构变更后
 graphify update .
 ```
 
-**复测目标（来自健康报告）：** Architecture ≥ 80、Composite ≥ 87；Change Propagation 与 Cognitive Overload 降级 Critical → Warning。
+**复测目标：** Architecture ≥85、Tech Debt ≥65、Test Quality ≥70、Composite ≥82。
 
 ---
 
-## 9. 风险与缓解（合并自各报告）
+## 11. 风险与缓解
 
 | 风险 | 缓解 |
 |------|------|
-| typeshare 不支持 `ChatEvent` tagged enum | fallback `ts-rs`；SSE 变体保留 thin TS wrapper（S3/S9） |
-| worker 拆分引入行为变化 | S2 严格纯移动、不改签名；合并前跑 product_e2e smoke |
-| S6 与 S11 同改 transport-http | 硬顺序：S6 merge → S11 rebase |
-| Enterprise 用户 quota 回归 | S4 保留 DB row + alias 层；migration 0037 测试必须 pass |
-| destub 后 surface 测试大量翻红 | S7 增量按文件推进，每文件独立 PR |
-| 并行 Stream 同时 rebase 巨型基线 | Wave 0 G4 先入库形成稳定基线，之后各 Stream 从同一 commit 分支 |
+| SSE `event` vs `kind` 字段不兼容 | S2 thin adapter；golden fixture 覆盖 decode |
+| S7/S8 并行改 transport-http merge 冲突 | 约定 auth agent 只碰 `auth_*`，admin agent 只碰 `routes/admin.rs` |
+| helpers.rs 拆分引入行为变化 | S1 严格纯移动；merge 前跑 product_e2e smoke |
+| destub/mock→DOM 测试大量翻红 | S4 按文件增量，每文件独立 PR |
+| Plus 倍数 6×/10× 需产品确认 | S12b 先读 pricing 页权威值 |
+| test_support 公开 API 膨胀 | G1 仅 re-export 测试所需类型，或 `#[doc(hidden)]` test module |
 
 ---
 
-## 10. 排期摘要
+## 12. 排期摘要
 
 ```
-Wave 0（串行）：G1–G6 编译修复 + 入库 + 安全网          ← 唯一阻塞项，最优先
-Wave 1（并行 ×6）：S1 / S2 / S3 / S4 / S5 / S10
-Wave 2（并行 ×4）：S6 / S7 / S8 / S9
-Wave 3（并行 ×3）：S11 / S12 / S13
-每 Wave 结束：§8 集成门禁 + Brooks 复测记分
+Wave 0（1 agent 串行）：G1 test seam + G2 P2-13 + G3 基线     ← 最优先，~半天
+Wave 1（6 agents 并行）：S1 / S2 / S3 / S4 / S5 / S6         ← ~2–3 天
+Wave 2（4+1 agents）：S7∥S8∥S10∥S11 → merge → S9            ← ~3–5 天
+Wave 3（3 agents 并行）：S12a / S12b / S12c                  ← ~2 天
+每 Wave 结束：§10 集成门禁 + Brooks 四维复测
 ```
+
+---
+
+## 修订记录
+
+| 日期 | 说明 |
+|------|------|
+| 2026-06-12 v1 | 初版（基于未完成的 P0 编译债） |
+| 2026-06-12 v2 | 四报告复测合并：标记 14 项已偿还；重排 Wave；对齐 architecture/tech-debt/test/PR-v2 当前分数与实测 |
