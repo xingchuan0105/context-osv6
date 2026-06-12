@@ -7,6 +7,7 @@
 pub mod auth_boundary;
 pub mod chat_smoke;
 pub mod ingestion_smoke;
+pub mod paddle_pdf_smoke;
 pub mod memory_multiturn_smoke;
 pub mod rag_codegen_multitool_smoke;
 pub mod rag_fallback_smoke;

@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import styles from "./UsageWarningToast.module.css";
 import { formatCompactToken, formatCountdown, formatLimitToken } from "../../lib/billing/format";
-import { formatUiMessage, type UiLocale } from "../../lib/i18n/messages";
+import { formatUiMessage } from "../../lib/i18n/messages";
+import type { UiLocale } from "../../lib/i18n/config";
 
 export type UsageWarningToastProps = {
   threshold: 80 | 95;

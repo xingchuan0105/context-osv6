@@ -1,25 +1,11 @@
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{info, warn};
 
+pub use ingestion_types::{TaskCompletionOutcome, TaskFailureOutcome};
+
 use crate::model::{AuditAction, AuditRecord, DocumentStateMachine, IngestionTask, Transition};
 use crate::{IngestionError, model};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TaskFailureOutcome {
-    Requeued,
-    DeadLettered,
-    LeaseLost,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TaskCompletionOutcome {
-    Completed,
-    LeaseLost,
-}
 
 #[async_trait]
 pub trait TaskSource {

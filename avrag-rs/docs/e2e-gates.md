@@ -78,6 +78,7 @@ Nightly workflow uploads judge attachments; score below 6 does **not** fail the 
 |----------|---------|
 | `SEARCH_REQUIRE_REAL=1` | Fail when Brave Search unreachable (llm_real / nightly) |
 | `SEARCH_FORCE_MOCK=1` | Force mock search even with credentials |
+| `SEARCH_USE_REAL=1` | Use real Brave Search in smoke tests (default: mock) |
 | `RUN_QUALITY_JUDGE=1` | Enable Playwright LLM judge attachments |
 | `RUN_CROSS_BROWSER=1` | Enable Firefox/WebKit journey projects |
 

@@ -1,11 +1,16 @@
 import { SharedWorkspaceSurface } from "../../../../components/share/shared-workspace-surface";
 
 type SharedWorkspacePageProps = {
-  params: {
+  params: Promise<{
     token: string;
-  };
+  }>;
 };
 
-export default function SharedWorkspacePage({ params }: SharedWorkspacePageProps) {
-  return <SharedWorkspaceSurface shareToken={params.token} />;
+export function generateStaticParams() {
+  return [{ token: "_placeholder" }];
+}
+
+export default async function SharedWorkspacePage({ params }: SharedWorkspacePageProps) {
+  const { token } = await params;
+  return <SharedWorkspaceSurface shareToken={token} />;
 }

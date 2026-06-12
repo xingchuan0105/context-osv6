@@ -1,5 +1,36 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DocumentStatus {
+    Pending,
+    Enqueueing,
+    Queued,
+    Processing,
+    Completed,
+    Failed,
+    Deleting,
+    Deleted,
+    #[serde(rename = "upload_invalid")]
+    UploadInvalid,
+}
+
+impl DocumentStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Enqueueing => "enqueueing",
+            Self::Queued => "queued",
+            Self::Processing => "processing",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Deleting => "deleting",
+            Self::Deleted => "deleted",
+            Self::UploadInvalid => "upload_invalid",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateDocumentUploadResponse {
     pub document_id: String,

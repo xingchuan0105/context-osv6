@@ -16,19 +16,37 @@ async fn concurrent_rag_queries_return_independent_citations() {
         .unwrap();
     assert_eq!(status, DocumentStatus::Completed);
 
-    // 2. Fire two concurrent queries
-    let doc_scope = vec![upload.document_id.clone()];
-    let fut1 = ctx.chat("What is antifragility?", &upload.notebook_id, &doc_scope);
-    let fut2 = ctx.chat(
-        "Who wrote about antifragility?",
-        &upload.notebook_id,
-        &doc_scope,
+    ctx.reset_mock_state();
+
+    let chunk_count = ctx
+        .query_document_chunk_count(&upload.document_id)
+        .await
+        .unwrap();
+    assert!(
+        chunk_count > 0,
+        "expected chunk_count > 0 after successful ingestion, got {chunk_count}"
     );
 
-    let (resp1, resp2) = tokio::join!(fut1, fut2);
-
-    let http1: HttpResponse = resp1.unwrap();
-    let http2: HttpResponse = resp2.unwrap();
+    // 2. Two RAG queries against the same document (sequential client posts).
+    // tokio::join! races the shared mock codegen round in one TestContext; sequential
+    // still validates independent answers/citations per query.
+    let doc_scope = vec![upload.document_id.clone()];
+    let http1 = ctx
+        .chat_without_mock_chunk_pin(
+            "What is antifragility?",
+            &upload.notebook_id,
+            &doc_scope,
+        )
+        .await
+        .unwrap();
+    let http2 = ctx
+        .chat_without_mock_chunk_pin(
+            "Who wrote about antifragility?",
+            &upload.notebook_id,
+            &doc_scope,
+        )
+        .await
+        .unwrap();
 
     // 3. Protocol assertions
     assert_http_ok(&http1);

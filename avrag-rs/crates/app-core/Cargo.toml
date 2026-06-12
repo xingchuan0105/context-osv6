@@ -1,0 +1,31 @@
+[package]
+name = "app-core"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+analytics = { path = "../analytics" }
+contracts = { path = "../../../contracts" }
+serde.workspace = true
+avrag-auth = { path = "../auth" }
+avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
+avrag-billing = { path = "../billing" }
+avrag-llm = { path = "../llm" }
+avrag-storage-pg = { path = "../storage-pg" }
+ingestion = { path = "../ingestion" }
+ingestion-types = { path = "../ingestion-types" }
+telemetry = { path = "../telemetry" }
+common = { path = "../common" }
+chrono.workspace = true
+hex.workspace = true
+hmac.workspace = true
+redis.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true

@@ -17,9 +17,10 @@ import requests
 _SESSION = requests.Session()
 _SESSION.trust_env = False
 
-JOB_URL = os.environ.get(
-    "PADDLE_OCR_BASE_URL", "https://paddleocr.aistudio-app.com/api/v2/ocr/jobs"
+_BASE = os.environ.get(
+    "PADDLE_OCR_BASE_URL", "https://paddleocr.aistudio-app.com/api/v2/ocr"
 ).rstrip("/")
+JOB_URL = f"{_BASE}/jobs"
 TOKEN = os.environ.get("PADDLE_OCR_API_TOKEN", "")
 MODEL = os.environ.get("PADDLE_OCR_MODEL", "PaddleOCR-VL-1.6")
 POLL_SECS = int(os.environ.get("PADDLE_OCR_POLL_INTERVAL_SECS", "5"))

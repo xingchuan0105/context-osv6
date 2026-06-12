@@ -3,19 +3,19 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { PaywallModal } from "../../../../components/billing/PaywallModal";
-import { billingApi } from "../../../../lib/billing/api";
-import type { BillingPlan, UsageWindowResponse } from "../../../../lib/billing/api";
-import { ApiError } from "../../../../lib/auth/client";
+import { PaywallModal } from "@/components/billing/PaywallModal";
+import { billingApi } from "@/lib/billing/api";
+import type { BillingPlan, UsageWindowResponse } from "@/lib/billing/api";
+import { ApiError } from "@/lib/auth/client";
 import {
   isPricingRevampEnabled,
   isPricingRevampEnabledSSR,
   isPricingRevampFeatureDisabledError,
-} from "../../../../lib/billing/featureFlag";
-import { createCheckoutSession } from "../../../../lib/settings/client";
-import { useAuth } from "../../../../lib/auth/context";
-import { formatUiMessage } from "../../../../lib/i18n/messages";
-import { useUiPreferences } from "../../../../lib/ui-preferences";
+} from "@/lib/billing/featureFlag";
+import { createCheckoutSession } from "@/lib/settings/client";
+import { useAuth } from "@/lib/auth/context";
+import { formatUiMessage } from "@/lib/i18n/messages";
+import { useUiPreferences } from "@/lib/ui-preferences";
 import styles from "./paywall-page.module.css";
 
 type PaywallLoadState =

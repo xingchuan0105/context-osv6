@@ -7,6 +7,10 @@ node_modules/
 *.wasm
 .DS_Store
 
+# Tauri desktop build
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+
 # =====================
 # IDE / Editor
 # =====================

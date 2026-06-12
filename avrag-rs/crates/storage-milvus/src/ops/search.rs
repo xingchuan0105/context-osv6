@@ -7,6 +7,7 @@ use avrag_retrieval_data_plane::{
     TextDenseSearchRequest,
 };
 use serde_json::{Value, json};
+use tracing::warn;
 
 impl MilvusDataPlane {
     pub(crate) async fn search_entities(
@@ -71,7 +72,7 @@ impl MilvusDataPlane {
         for row in rows {
             match scored_text_chunk(row, "milvus_text_dense") {
                 Ok(chunk) => chunks.push(chunk),
-                Err(e) => eprintln!("[MILVUS WARN] skipped row: {}", e),
+                Err(e) => warn!(error = %e, channel = "milvus_text_dense", "skipped malformed search row"),
             }
         }
         Ok(chunks)
@@ -108,7 +109,7 @@ impl MilvusDataPlane {
         for row in rows {
             match scored_text_chunk(row, "milvus_bm25") {
                 Ok(chunk) => chunks.push(chunk),
-                Err(e) => eprintln!("[MILVUS WARN] skipped row: {}", e),
+                Err(e) => warn!(error = %e, channel = "milvus_bm25", "skipped malformed search row"),
             }
         }
         let hydrated_hit_count = chunks.len();
@@ -145,7 +146,7 @@ impl MilvusDataPlane {
         for row in rows {
             match scored_multimodal_chunk(row, "milvus_multimodal_dense") {
                 Ok(chunk) => chunks.push(chunk),
-                Err(e) => eprintln!("[MILVUS WARN] skipped row: {}", e),
+                Err(e) => warn!(error = %e, channel = "milvus_multimodal_dense", "skipped malformed search row"),
             }
         }
         Ok(chunks)
@@ -204,4 +205,50 @@ pub(crate) fn scored_multimodal_chunk(row: Value, channel: &str) -> anyhow::Resu
             .filter(|value| !value.is_null()),
         parse_run_id: optional_uuid_field(&row, "parse_run_id")?,
     })
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::scored_multimodal_chunk;
+    use serde_json::json;
+    use uuid::Uuid;
+
+    fn sample_multimodal_row(retrieval_weight: Option<f64>) -> serde_json::Value {
+        let mut row = json!({
+            "chunk_id": Uuid::from_u128(1).to_string(),
+            "doc_id": Uuid::from_u128(2).to_string(),
+            "context_text": "page raster",
+            "distance": 0.9,
+            "chunk_type": "page_raster",
+            "parser_backend": "visual_raster_pdf",
+        });
+        if let Some(weight) = retrieval_weight {
+            row["retrieval_weight"] = json!(weight);
+        }
+        row
+    }
+
+    #[test]
+    fn scored_multimodal_applies_fallback_weight() {
+        let chunk = scored_multimodal_chunk(
+            sample_multimodal_row(Some(0.4)),
+            "milvus_multimodal_dense",
+        )
+        .expect("row should parse");
+        assert!((chunk.score - 0.36).abs() < 1e-6);
+    }
+
+    #[test]
+    fn scored_multimodal_ignores_full_weight() {
+        let chunk = scored_multimodal_chunk(sample_multimodal_row(Some(1.0)), "test")
+            .expect("row should parse");
+        assert!((chunk.score - 0.9).abs() < 1e-6);
+    }
+
+    #[test]
+    fn scored_multimodal_without_weight_uses_base_score() {
+        let chunk = scored_multimodal_chunk(sample_multimodal_row(None), "test")
+            .expect("row should parse");
+        assert!((chunk.score - 0.9).abs() < 1e-6);
+    }
 }

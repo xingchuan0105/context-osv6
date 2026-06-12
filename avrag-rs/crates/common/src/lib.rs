@@ -1,29 +1,33 @@
 pub mod chat;
+pub mod content_store;
 pub mod docscope;
 pub mod documents;
 pub mod errors;
 pub mod guards_access;
-pub mod health;
 pub mod identity;
 pub mod key_vault;
 pub mod notebook_requests;
 pub mod rag_execute;
 pub mod tool_call;
-pub mod tool_spec;
 pub mod util;
 
 pub use contracts::chat::{
-    AnswerBlock, ChatDonePayload, ChatRequest, ChatResponse, ChatTokenUsage, ChatTurnInput,
-    Citation, DegradeReason, DegradeTraceItem, GeneralPlan, GuardAction, GuardReport, GuardResult, ModeDebug,
-    PlannerOutput, RagModeDebug, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary, RiskLevel,
-    SearchPlan, SourceRef, SummaryInjectionTrace, TraceInfo,
+    AnswerBlock, ChatDonePayload, ChatMessage, ChatMessageListResponse, ChatRequest, ChatResponse,
+    ChatTokenUsage, ChatTurnInput, Citation, DegradeReason, DegradeTraceItem, GeneralPlan,
+    GuardAction, GuardReport, GuardResult, MessageFeedbackRating, MessageFeedbackRequest, ModeDebug, PlannerOutput,
+    RagModeDebug, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary, RiskLevel, SearchPlan,
+    SourceRef, SummaryInjectionTrace, TraceInfo,
 };
-pub use contracts::documents::{CreateDocumentUploadResponse, DocumentStatusResponse};
+pub use contracts::documents::{
+    CitationLookupRequest, CitationLookupResponse, CreateDocumentUploadResponse, DocumentStatus,
+    DocumentStatusResponse,
+};
 pub use contracts::notebooks::{
-    CreateNotebookNoteRequest, Notebook, NotebookAnalysisAccess, NotebookAnalysisAlert,
-    NotebookAnalysisNotes, NotebookAnalysisOverview, NotebookAnalysisResponse,
-    NotebookAnalysisSources, NotebookAnalysisThreads, NotebookListResponse, NotebookNote,
-    NotebookNoteListResponse, NotebookNoteResponse, NotebookResponse, PromoteNotebookNoteResponse,
+    ChatSession, ChatSessionListResponse, CreateChatSessionRequest, CreateNotebookNoteRequest,
+    Notebook, NotebookAnalysisAccess, NotebookAnalysisAlert, NotebookAnalysisNotes,
+    NotebookAnalysisOverview, NotebookAnalysisResponse, NotebookAnalysisSources,
+    NotebookAnalysisThreads, NotebookListResponse, NotebookNote, NotebookNoteListResponse,
+    NotebookNoteResponse, NotebookResponse, PromoteNotebookNoteResponse, UpdateChatSessionRequest,
     UpdateNotebookNoteRequest,
 };
 pub use contracts::preferences::{
@@ -33,25 +37,21 @@ pub use contracts::preferences::{
 };
 
 pub use chat::{
-    ChatMessage, ChatMessageListResponse, ChatSession, ChatSessionListResponse,
-    CitationLookupRequest, CitationLookupResponse, CreateChatSessionRequest,
-    MessageFeedbackRequest, UpdateChatSessionRequest, answer_blocks_from_rendered_answer,
-    answer_blocks_to_markup, plain_text_answer_blocks,
+    answer_blocks_from_rendered_answer, answer_blocks_to_markup, plain_text_answer_blocks,
 };
 pub use docscope::{
     DocScopeMetadata, DocScopeProfile, Domain, Era, Genre, SummaryMetadata, SummaryOutput,
 };
 pub use documents::{
     AddUrlSourceRequest, CreateDocumentRequest, Document, DocumentContentResponse,
-    DocumentMetadata, DocumentStatus, DocumentsResponse, ParsedPreviewItem, ParsedPreviewResponse,
-    SourceRow, SourcesResponse, StatusOnlyResponse, UpdateDocumentRequest,
+    DocumentMetadata, DocumentsResponse, ParsedPreviewItem, ParsedPreviewResponse,
+    SourceRow, SourcesResponse, StatusOnlyResponse, TocEntry, UpdateDocumentRequest,
 };
 pub use errors::{ApiError, ApiResponse, AppError, ErrorBody};
 pub use guards_access::{
     AnswerContextChunk, ApiKeyListResponse, ApiKeyRow, CreateApiKeyRequest, CreateApiKeyResponse,
     InputGuardType, NotificationRow, NotificationsResponse, OutputGuardType, ShareTokenResponse,
 };
-pub use health::{HealthResponse, ReadyCheck, ReadyResponse};
 pub use identity::{OrgId, UserId, default_org_id, default_rag_agent, default_user_id};
 pub use notebook_requests::{CreateNotebookRequest, UpdateNotebookRequest};
 pub use rag_execute::{
@@ -67,7 +67,7 @@ pub use tool_call::{
     RetrievalPlannerOutput, RuntimeExecuteRequest, RuntimeExecuteResponse, ToolCall,
     ToolCallAdapterError, ToolResult, ToolSpec, ToolStatus, ToolTrace,
 };
-pub use tool_spec::{ModelToolCall, StopReason, ToolAwareResponse, ToolSpec as AgentToolSpec};
+pub use content_store::{ContentStore, ContentStoreError, IndexedChunk};
 pub use util::{
     estimate_token_count, infer_image_extension, infer_mime_type, is_remote_url, new_id,
     now_rfc3339,

@@ -26,7 +26,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
         return super::error_result("doc_summary", "no valid doc_ids provided".to_string());
     }
 
-    let Some(pg_repo) = runtime.config.pg_repo.as_ref() else {
+    let Some(content_store) = runtime.config.content_store.as_ref() else {
         return ToolResult {
             tool: "doc_summary".to_string(),
             version: "1.0".to_string(),
@@ -36,7 +36,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                 elapsed_ms: Some(0),
                 raw_hit_count: Some(0),
                 hydrated_hit_count: Some(0),
-                degrade_reason: Some("pg_repo not configured — returning empty".to_string()),
+                degrade_reason: Some("content_store not configured — returning empty".to_string()),
             }),
         };
     };
@@ -44,7 +44,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
     let started = std::time::Instant::now();
 
     match args.level {
-        DocSummaryLevel::Doc => match pg_repo.get_summary_chunks(auth, &doc_uuids).await {
+        DocSummaryLevel::Doc => match content_store.get_summary_chunks(auth, &doc_uuids).await {
             Ok(summaries) => {
                 let results: Vec<serde_json::Value> = summaries
                     .into_iter()
@@ -74,7 +74,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
             Err(e) => super::error_result("doc_summary", e.to_string()),
         },
         DocSummaryLevel::Section => {
-            match pg_repo.get_document_toc_entries(auth, &doc_uuids).await {
+            match content_store.get_document_toc_entries(auth, &doc_uuids).await {
                 Ok(entries) => {
                     let results: Vec<serde_json::Value> = entries
                         .into_iter()

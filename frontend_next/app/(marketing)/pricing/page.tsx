@@ -1,14 +1,24 @@
-import { redirect } from "next/navigation";
+"use client";
 
-import { isPricingRevampEnabledSSR } from "../../../lib/billing/featureFlag";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+import { isPricingRevampEnabled, isPricingRevampEnabledSSR } from "../../../lib/billing/featureFlag";
 import { PricingPageClient } from "./pricing-page-client";
 
-export const dynamic = "force-dynamic";
+export default function PricingPage() {
+  const router = useRouter();
 
-/** Env-only SSR gate; marketing page does not probe usage API (see featureFlag.ts). */
-export default async function PricingPage() {
+  useEffect(() => {
+    isPricingRevampEnabled().then((enabled) => {
+      if (!enabled) {
+        router.replace("/dashboard");
+      }
+    });
+  }, [router]);
+
   if (!isPricingRevampEnabledSSR()) {
-    redirect("/dashboard");
+    return null;
   }
 
   return <PricingPageClient />;

@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { NextIntlClientProvider } from "next-intl";
-import { getLocale, getMessages } from "next-intl/server";
 import { Space_Grotesk, IBM_Plex_Sans, JetBrains_Mono } from "next/font/google";
 
 import "./globals.css";
 import { AuthProvider } from "../lib/auth/context";
 import { normalizeLocale } from "../lib/i18n/config";
 import { QueryProvider } from "../lib/query/provider";
+import { ClientI18nProvider } from "../lib/runtime/client-i18n";
 import { UiPreferencesProvider } from "../lib/ui-preferences";
 
 const spaceGrotesk = Space_Grotesk({
@@ -65,9 +64,45 @@ export const metadata: Metadata = {
   },
 };
 
+// 桌面端构建时使用客户端 i18n Provider
+const isDesktopBuild = process.env.BUILD_TARGET === "desktop";
+
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const locale = normalizeLocale(await getLocale());
-  const messages = await getMessages();
+  // 桌面端：使用默认 locale，客户端会从 cookie 读取
+  // Web 端：使用服务端获取的 locale
+  let locale: "zh-CN" | "en" = "zh-CN";
+  let messages = {};
+
+  if (!isDesktopBuild) {
+    try {
+      const { getLocale, getMessages } = await import("next-intl/server");
+      locale = normalizeLocale(await getLocale());
+      messages = await getMessages();
+    } catch {
+      // 降级到默认值
+    }
+  }
+
+  // 桌面端：使用客户端 i18n Provider
+  if (isDesktopBuild) {
+    return (
+      <html lang={locale} suppressHydrationWarning>
+        <body className={`${spaceGrotesk.variable} ${ibmPlexSans.variable} ${jetbrainsMono.variable}`}>
+          <QueryProvider>
+            <ClientI18nProvider>
+              <UiPreferencesProvider initialLocale={locale}>
+                <AuthProvider>{children}</AuthProvider>
+              </UiPreferencesProvider>
+            </ClientI18nProvider>
+          </QueryProvider>
+        </body>
+      </html>
+    );
+  }
+
+  // Web 端：使用 NextIntlClientProvider
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { NextIntlClientProvider } = require("next-intl");
 
   return (
     <html lang={locale} suppressHydrationWarning>

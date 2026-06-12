@@ -4,7 +4,8 @@ import styles from "./PaywallModal.module.css";
 import { UsageMeter } from "./UsageMeter";
 import { PricingCards } from "./PricingCards";
 import type { BillingPlan, UsageWindowBucket } from "../../lib/billing/api";
-import { formatUiMessage, type UiLocale } from "../../lib/i18n/messages";
+import { formatUiMessage } from "../../lib/i18n/messages";
+import type { UiLocale } from "../../lib/i18n/config";
 
 export type PaywallModalProps = {
   reason: "5h" | "7d";

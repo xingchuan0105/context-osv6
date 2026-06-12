@@ -1,11 +1,16 @@
 import { redirect } from "next/navigation";
 
 type ShareAccessLogsPageProps = {
-  params: {
+  params: Promise<{
     workspace_id: string;
-  };
+  }>;
 };
 
-export default function ShareAccessLogsPage({ params }: ShareAccessLogsPageProps) {
-  redirect(`/dashboard/${params.workspace_id}/share#activity`);
+export function generateStaticParams() {
+  return [{ workspace_id: "_placeholder" }];
+}
+
+export default async function ShareAccessLogsPage({ params }: ShareAccessLogsPageProps) {
+  const { workspace_id } = await params;
+  redirect(`/dashboard/${workspace_id}/share#activity`);
 }

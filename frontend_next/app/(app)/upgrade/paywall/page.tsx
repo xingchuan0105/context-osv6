@@ -1,22 +1,28 @@
-import { redirect } from "next/navigation";
+"use client";
 
-import { isPricingRevampEnabledSSR } from "../../../../lib/billing/featureFlag";
+import { useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+
+import { isPricingRevampEnabled, isPricingRevampEnabledSSR } from "../../../../lib/billing/featureFlag";
 import { PaywallPageClient } from "./paywall-page-client";
 
-export const dynamic = "force-dynamic";
+export default function PaywallPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-type PaywallPageProps = {
-  searchParams: Promise<{ reason?: string }>;
-};
+  useEffect(() => {
+    isPricingRevampEnabled().then((enabled) => {
+      if (!enabled) {
+        router.replace("/dashboard");
+      }
+    });
+  }, [router]);
 
-/** Env-only SSR gate; bucket check runs client-side via isPricingRevampEnabled(). */
-export default async function PaywallPage({ searchParams }: PaywallPageProps) {
   if (!isPricingRevampEnabledSSR()) {
-    redirect("/dashboard");
+    return null;
   }
 
-  const params = await searchParams;
-  const reason = params.reason === "7d" ? "7d" : "5h";
+  const reason = searchParams.get("reason") === "7d" ? "7d" : "5h";
 
   return <PaywallPageClient reason={reason} />;
 }

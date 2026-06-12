@@ -39,13 +39,4 @@ pub struct StoreDocumentChunkParams {
     pub metadata: serde_json::Value,
 }
 
-#[derive(Debug, Clone)]
-pub struct TocEntry {
-    pub id: Uuid,
-    pub parent_id: Option<Uuid>,
-    pub title: String,
-    pub heading_level: i32,
-    pub page: Option<i32>,
-    pub chunk_id: Option<Uuid>,
-    pub rank: i32,
-}
+pub use common::TocEntry;

@@ -5,14 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useState } from "react";
 import { flushSync } from "react-dom";
 
-import { GuestOnlyGate } from "../../../components/auth-gates";
-import { AuthFrame } from "../../../components/page-frame";
-import { register } from "../../../lib/auth/client";
-import { useAuth } from "../../../lib/auth/context";
-import { describeAuthError } from "../../../lib/auth/errors";
-import { formatUiMessage } from "../../../lib/i18n/messages";
-import { getSafeNextPath } from "../../../lib/navigation/next-path";
-import { useUiPreferences } from "../../../lib/ui-preferences";
+import { GuestOnlyGate } from "@/components/auth-gates";
+import { AuthFrame } from "@/components/page-frame";
+import { register } from "@/lib/auth/client";
+import { useAuth } from "@/lib/auth/context";
+import { describeAuthError } from "@/lib/auth/errors";
+import { formatUiMessage } from "@/lib/i18n/messages";
+import { getSafeNextPath } from "@/lib/navigation/next-path";
+import { useUiPreferences } from "@/lib/ui-preferences";
 
 export default function RegisterPage() {
   const router = useRouter();

@@ -52,7 +52,7 @@ impl RagRuntime {
         rag_plan: &RagPlan,
         chunks: &[ScoredChunk],
     ) -> Result<Vec<(Uuid, String)>> {
-        let Some(pg_repo) = self.config.pg_repo.as_ref() else {
+        let Some(content_store) = self.config.content_store.as_ref() else {
             return Ok(Vec::new());
         };
 
@@ -75,9 +75,10 @@ impl RagRuntime {
             if let Some(scope_ids) = doc_scope_ids.as_deref() {
                 scope_ids.to_vec()
             } else if let Some(notebook_id) = notebook_id {
-                pg_repo
+                content_store
                     .list_documents(auth, Some(notebook_id), None)
                     .await
+                    .inspect_err(|e| tracing::warn!(error = %e, "content_store.list_documents failed, degrading"))
                     .unwrap_or_default()
                     .into_iter()
                     .filter_map(|document| Uuid::parse_str(&document.id).ok())
@@ -93,9 +94,10 @@ impl RagRuntime {
             return Ok(Vec::new());
         }
 
-        Ok(pg_repo
+        Ok(content_store
             .get_summary_chunks(auth, &summary_target_ids)
             .await
+            .inspect_err(|e| tracing::warn!(error = %e, "content_store.get_summary_chunks failed, degrading"))
             .unwrap_or_default())
     }
 
@@ -197,10 +199,11 @@ impl RagRuntime {
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let doc_names = if let Some(pg_repo) = self.config.pg_repo.as_ref() {
-            pg_repo
+        let doc_names = if let Some(content_store) = self.config.content_store.as_ref() {
+            content_store
                 .get_document_names(params.auth, &unique_doc_ids)
                 .await
+                .inspect_err(|e| tracing::warn!(error = %e, "content_store.get_document_names failed, degrading"))
                 .unwrap_or_default()
         } else {
             HashMap::new()

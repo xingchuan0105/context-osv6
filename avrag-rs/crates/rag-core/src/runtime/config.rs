@@ -1,15 +1,16 @@
 use std::sync::Arc;
 
 use avrag_llm::{EmbeddingClient, RerankerClient, RetrievalPlanner};
-use avrag_storage_pg::PgAppRepository;
+
+use crate::ports::ContentStore;
 
 /// Configuration for the RAG runtime
 #[derive(Clone)]
 pub struct RagConfig {
     pub embedding_client: Arc<EmbeddingClient>,
     pub mm_embedding_client: Option<Arc<EmbeddingClient>>,
-    /// PostgreSQL repository for sparse retrieval and content fetching.
-    pub pg_repo: Option<Arc<PgAppRepository>>,
+    /// Content store for sparse retrieval helpers and document lookups.
+    pub content_store: Option<Arc<dyn ContentStore>>,
     /// Legacy retrieval planner for planner-compatible paths.
     pub planner: Option<Arc<RetrievalPlanner>>,
     /// Reranker for cross-encoder reranking
@@ -23,12 +24,12 @@ pub struct RagConfig {
 impl RagConfig {
     pub fn new_for_data_plane(
         embedding_client: Arc<EmbeddingClient>,
-        pg_repo: Option<Arc<PgAppRepository>>,
+        content_store: Option<Arc<dyn ContentStore>>,
     ) -> Self {
         Self {
             embedding_client,
             mm_embedding_client: None,
-            pg_repo,
+            content_store,
             planner: None,
             reranker: None,
             mm_reranker: None,

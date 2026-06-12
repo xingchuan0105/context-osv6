@@ -1,14 +1,24 @@
-import { redirect } from "next/navigation";
+"use client";
 
-import { isPricingRevampEnabledSSR } from "../../../../lib/billing/featureFlag";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+import { isPricingRevampEnabled, isPricingRevampEnabledSSR } from "../../../../lib/billing/featureFlag";
 import { UsageDashboardClient } from "./usage-dashboard-client";
 
-export const dynamic = "force-dynamic";
+export default function UsagePage() {
+  const router = useRouter();
 
-/** Env-only SSR gate; bucket check runs client-side via isPricingRevampEnabled(). */
-export default async function UsagePage() {
+  useEffect(() => {
+    isPricingRevampEnabled().then((enabled) => {
+      if (!enabled) {
+        router.replace("/settings");
+      }
+    });
+  }, [router]);
+
   if (!isPricingRevampEnabledSSR()) {
-    redirect("/settings");
+    return null;
   }
 
   return <UsageDashboardClient />;

@@ -3,14 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { PricingCards } from "../../../components/billing/PricingCards";
-import { createCheckoutSession } from "../../../lib/settings/client";
-import { useAuth } from "../../../lib/auth/context";
-import type { BillingPlan } from "../../../lib/billing/api";
-import { billingApi } from "../../../lib/billing/api";
-import { MARKETING_BILLING_PLANS } from "../../../lib/billing/publicPlans";
-import { formatUiMessage } from "../../../lib/i18n/messages";
-import { useUiPreferences } from "../../../lib/ui-preferences";
+import { PricingCards } from "@/components/billing/PricingCards";
+import { createCheckoutSession } from "@/lib/settings/client";
+import { useAuth } from "@/lib/auth/context";
+import type { BillingPlan } from "@/lib/billing/api";
+import { billingApi } from "@/lib/billing/api";
+import { MARKETING_BILLING_PLANS } from "@/lib/billing/publicPlans";
+import { formatUiMessage } from "@/lib/i18n/messages";
+import { useUiPreferences } from "@/lib/ui-preferences";
 import styles from "./pricing.module.css";
 
 export function PricingPageClient() {

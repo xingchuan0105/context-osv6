@@ -991,7 +991,7 @@ impl PgAppRepository {
         )
         .bind(org_id)
         .bind(record.actor_id.as_deref().and_then(|value| Uuid::parse_str(value).ok()))
-        .bind(audit_action_str(&record.action))
+        .bind(record.action.as_str())
         .bind(&record.resource_type)
         .bind(&record.resource_id)
         .bind(&record.payload)

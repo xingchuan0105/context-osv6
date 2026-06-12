@@ -13,27 +13,13 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 
-import { ApiError } from "../../lib/auth/client";
+import { useWorkspaceData } from "../../hooks/use-workspace-data";
 import { useAuth } from "../../lib/auth/context";
-import { billingApi } from "../../lib/billing/api";
 import type { UsageWindowBucket, UsageWindowResponse } from "../../lib/billing/api";
-import { isPricingRevampEnabled, isPricingRevampEnabledSSR } from "../../lib/billing/featureFlag";
-import { createWorkspace } from "../../lib/dashboard/client";
-import {
-  getDefaultWorkspaceTitle,
-  markDefaultWorkspaceTitleUsed,
-} from "../../lib/dashboard/default-title";
+import { probePricingRevampUsageWindow } from "../../lib/billing/featureFlag";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
-import {
-  deleteWorkspaceSession,
-  getWorkspace,
-  listWorkspaceSessions,
-  updateWorkspace,
-  updateWorkspaceSession,
-} from "../../lib/workspace/client";
-import type { Workspace } from "../../lib/workspace/client";
-import type { WorkspaceSession, WorkspaceWebSourcesRequest } from "../../lib/workspace/model";
+import type { WorkspaceWebSourcesRequest } from "../../lib/workspace/model";
 import { DEFAULT_WORKSPACE_UI_STATE, useWorkspaceUi } from "../../lib/workspace/ui-store";
 import styles from "./workspace-shell.module.css";
 import { WorkspaceChatPane } from "./workspace-chat-pane";
@@ -42,10 +28,6 @@ import { WorkspaceHistoryPane } from "./workspace-history-pane";
 import { WorkspaceRightRail } from "./workspace-right-rail";
 import { WorkspaceTopBar } from "./workspace-top-bar";
 import { UsageWarningToast } from "../billing/UsageWarningToast";
-
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function usageWindowPressure(bucket: UsageWindowBucket): number {
   if (bucket.limit <= 0) {
@@ -139,35 +121,25 @@ function useIsMobile() {
   return isMobile;
 }
 
-function getWorkspaceLoadErrorMessage(error: unknown, locale: string) {
-  if (error instanceof ApiError && error.status === 404) {
-    return locale === "zh-CN"
-      ? `当前工作区在后端不存在：${error.message}`
-      : `This workspace does not exist on the current backend: ${error.message}`;
-  }
-
-  if (error instanceof Error && error.message.trim()) {
-    return error.message;
-  }
-
-  return locale === "zh-CN"
-    ? "当前工作区加载失败，暂时无法继续对话。"
-    : "Unable to load this workspace right now.";
-}
-
 export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
   const auth = useAuth();
   const router = useRouter();
   const { locale } = useUiPreferences();
   const isMobile = useIsMobile();
   const workspaceUi = useWorkspaceUi(workspaceId);
-  const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [workspaceTitleDraft, setWorkspaceTitleDraft] = useState("");
-  const [renameSessionTarget, setRenameSessionTarget] = useState<WorkspaceSession | null>(null);
-  const [renameSessionTitle, setRenameSessionTitle] = useState("");
-  const [sessions, setSessions] = useState<WorkspaceSession[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [workspaceLoadError, setWorkspaceLoadError] = useState("");
+  const {
+    workspace, workspaceTitleDraft, setWorkspaceTitleDraft,
+    sessions, activeSessionId, setActiveSessionId, workspaceLoadError,
+    renameSessionTarget, renameSessionTitle, setRenameSessionTitle,
+    reloadSessions, saveWorkspaceTitle, createWorkspaceFlow, startNewThread: rawStartNewThread,
+    toggleSessionPin, renameSession, dismissRename, submitRenameSession, removeSession,
+  } = useWorkspaceData(workspaceId);
+
+  function startNewThread() {
+    rawStartNewThread();
+    workspaceUi.setActiveCitation(null);
+    workspaceUi.setFocusedSourceId(null);
+  }
   const [activeWebSources, setActiveWebSources] =
     useState<WorkspaceWebSourcesRequest | null>(null);
   const [usageWarning, setUsageWarning] = useState<{
@@ -180,45 +152,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
   const recheckUsageRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (!auth.initialized || !auth.token) {
-      return;
-    }
-
-    let cancelled = false;
-
-    async function loadWorkspace() {
-      const [workspaceResponse, sessionResponse] = await Promise.all([
-        getWorkspace(auth.token!, workspaceId),
-        listWorkspaceSessions(auth.token!, workspaceId),
-      ]);
-
-      if (cancelled) {
-        return;
-      }
-
-      setWorkspaceLoadError("");
-      setWorkspace(workspaceResponse.workspace);
-      setWorkspaceTitleDraft(workspaceResponse.workspace.title || workspaceResponse.workspace.name);
-      setSessions(sessionResponse.sessions);
-      setActiveSessionId((current) => current ?? sessionResponse.sessions[0]?.id ?? null);
-    }
-
-    void loadWorkspace().catch((error) => {
-      if (!cancelled) {
-        setWorkspaceLoadError(getWorkspaceLoadErrorMessage(error, locale));
-        setWorkspace(null);
-        setSessions([]);
-        setActiveSessionId(null);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [auth.initialized, auth.token, locale, workspaceId]);
-
-  useEffect(() => {
-    if (!auth.initialized || !auth.token || !auth.user?.id || !isPricingRevampEnabledSSR()) {
+    if (!auth.initialized || !auth.token || !auth.user?.id) {
       return;
     }
 
@@ -226,20 +160,12 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     let intervalId: ReturnType<typeof setInterval> | undefined;
 
     async function checkUsage() {
-      const enabled = await isPricingRevampEnabled();
-      if (cancelled || !enabled) {
+      const probe = await probePricingRevampUsageWindow();
+      if (cancelled || !probe.enabled || !probe.usageWindow) {
         return;
       }
 
-      try {
-        const usageWindow = await billingApi.getUsageWindow();
-        if (cancelled) {
-          return;
-        }
-        applyUsageWindowLimits(usageWindow, router, setUsageWarning);
-      } catch {
-        // Ignore transient billing probe failures; workspace remains usable.
-      }
+      applyUsageWindowLimits(probe.usageWindow, router, setUsageWarning);
     }
 
     recheckUsageRef.current = () => {
@@ -259,11 +185,6 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
       }
     };
   }, [auth.initialized, auth.token, auth.user?.id, router]);
-
-  useEffect(() => {
-    setRenameSessionTarget(null);
-    setRenameSessionTitle("");
-  }, [workspaceId]);
 
   useEffect(() => {
     if (!isMobile) {
@@ -307,129 +228,14 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     [],
   );
 
-  async function reloadSessions(preferredSessionId?: string | null) {
-    if (!auth.token) {
-      return;
-    }
-
-    const response = await listWorkspaceSessions(auth.token, workspaceId);
-    setSessions(response.sessions);
-
-    setActiveSessionId((current) => {
-      const nextActive = preferredSessionId ?? current;
-
-      if (nextActive && response.sessions.some((session) => session.id === nextActive)) {
-        return nextActive;
-      }
-
-      return response.sessions[0]?.id ?? null;
-    });
-  }
-
-  async function saveWorkspaceTitle() {
-    if (!auth.token || !workspace) {
-      return;
-    }
-
-    const nextTitle = workspaceTitleDraft.trim();
-    if (!nextTitle) {
-      return;
-    }
-
-    const response = await updateWorkspace(auth.token, workspaceId, {
-      name: nextTitle,
-      description: workspace.description,
-    });
-
-    localStorage.setItem("avrag.workspace-renamed.v1", String(Date.now()));
-
-    setWorkspace(response.workspace);
-    setWorkspaceTitleDraft(response.workspace.title || response.workspace.name);
-  }
-
-  async function createWorkspaceFlow() {
-    if (!auth.token) {
-      return;
-    }
-
-    const title = getDefaultWorkspaceTitle(locale, todayKey());
-    const response = await createWorkspace(auth.token, {
-      name: title,
-      description: "",
-    });
-
-    markDefaultWorkspaceTitleUsed(locale, todayKey());
-    router.push(`/dashboard/${response.workspace.workspace_id}`);
-  }
-
-  async function startNewThread() {
-    setActiveSessionId(null);
-    workspaceUi.setActiveCitation(null);
-    workspaceUi.setFocusedSourceId(null);
-  }
-
-  async function toggleSessionPin(session: WorkspaceSession) {
-    if (!auth.token) {
-      return;
-    }
-
-    const updated = await updateWorkspaceSession(auth.token, session.id, {
-      pinned: !session.pinned,
-    });
-
-    setSessions((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-  }
-
-  function renameSession(session: WorkspaceSession) {
-    setRenameSessionTarget(session);
-    setRenameSessionTitle(session.title ?? "");
-  }
-
-  async function submitRenameSession() {
-    if (!auth.token || !renameSessionTarget) {
-      return;
-    }
-
-    const updated = await updateWorkspaceSession(auth.token, renameSessionTarget.id, {
-      title: renameSessionTitle.trim(),
-    });
-
-    setSessions((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-    setRenameSessionTarget(null);
-    setRenameSessionTitle("");
-  }
-
-  async function removeSession(session: WorkspaceSession) {
-    if (!auth.token) {
-      return;
-    }
-
-    await deleteWorkspaceSession(auth.token, session.id);
-    if (renameSessionTarget?.id === session.id) {
-      setRenameSessionTarget(null);
-      setRenameSessionTitle("");
-    }
-    setSessions((current) => {
-      const nextSessions = current.filter((item) => item.id !== session.id);
-
-      setActiveSessionId((currentActive) => {
-        if (currentActive !== session.id) {
-          return currentActive;
-        }
-
-        return nextSessions[0]?.id ?? null;
-      });
-
-      return nextSessions;
-    });
-  }
-
   const historyPane = (
     <WorkspaceHistoryPane
       activeSessionId={activeSessionId}
       onDeleteSession={(session) => void removeSession(session)}
       onNewThread={() => void startNewThread()}
-      onRenameSession={renameSession}
+      onRenameSession={(session) => {
+        renameSession(session);
+      }}
       onRequestClose={() => workspaceUi.setHistoryRailOpen(false)}
       onSelectSession={setActiveSessionId}
       onTogglePinSession={(session) => void toggleSessionPin(session)}
@@ -683,8 +489,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
         <div
           className={styles.modalBackdrop}
           onClick={() => {
-            setRenameSessionTarget(null);
-            setRenameSessionTitle("");
+            dismissRename();
           }}
         >
           <div
@@ -714,8 +519,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
                   className={styles.secondaryButton}
                   type="button"
                   onClick={() => {
-                    setRenameSessionTarget(null);
-                    setRenameSessionTitle("");
+                    dismissRename();
                   }}
                 >
                   {formatUiMessage(locale, "commonCancel")}

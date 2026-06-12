@@ -4,7 +4,7 @@ use common::{
     ApiKeyRow, ChatMessage, ChatSession, Citation, Document, DocumentContentResponse,
     DocumentStatus, Notebook, NotificationRow, ParsedPreviewItem, ParsedPreviewResponse, SourceRow,
 };
-use ingestion::{
+use ingestion_types::{
     AuditRecord, IngestionTask, IngestionTaskKind, IngestionTaskPayload, TaskCompletionOutcome,
     TaskFailureOutcome,
 };

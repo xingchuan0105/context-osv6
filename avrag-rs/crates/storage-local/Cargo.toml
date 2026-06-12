@@ -1,0 +1,16 @@
+[package]
+name = "storage-local"
+version = "0.1.0"
+edition = "2021"
+description = "Local file system storage adapter for desktop client"
+
+[dependencies]
+async-trait = "0.1"
+tokio = { version = "1", features = ["fs", "io-util"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+common = { path = "../common" }
+avrag-rag-core = { path = "../rag-core" }
+avrag-auth = { path = "../auth" }
+tracing = "0.1"

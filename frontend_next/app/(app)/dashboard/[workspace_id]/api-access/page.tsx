@@ -6,8 +6,11 @@ type ApiAccessPageProps = {
   }>;
 };
 
+export function generateStaticParams() {
+  return [{ workspace_id: "_placeholder" }];
+}
+
 export default async function ApiAccessPage({ params }: ApiAccessPageProps) {
-  const resolvedParams = await params;
-  const workspace_id = typeof resolvedParams?.workspace_id === "string" ? resolvedParams.workspace_id : "";
+  const { workspace_id } = await params;
   return <WorkspaceApiAccessSurface workspaceId={workspace_id} />;
 }

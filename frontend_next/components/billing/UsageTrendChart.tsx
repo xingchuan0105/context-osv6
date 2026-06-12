@@ -4,7 +4,8 @@ import { useMemo } from "react";
 import styles from "./UsageTrendChart.module.css";
 import { formatCompactToken } from "../../lib/billing/format";
 import type { DailyUsage } from "../../lib/billing/api";
-import { formatUiMessage, type UiLocale } from "../../lib/i18n/messages";
+import { formatUiMessage } from "../../lib/i18n/messages";
+import type { UiLocale } from "../../lib/i18n/config";
 
 export type UsageTrendChartProps = {
   daily: DailyUsage[];

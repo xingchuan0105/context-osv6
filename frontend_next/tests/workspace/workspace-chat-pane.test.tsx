@@ -139,13 +139,12 @@ describe("WorkspaceChatPane", () => {
     expect(screen.getByText("The plan changed.")).toBeTruthy();
     expect(screen.queryByText("[[1]]")).toBeNull();
 
-    const userMessage = screen.getByText("What changed?").closest("article");
-    const assistantMessage = screen.getByText("The plan changed.").closest("article");
-    const assistantBubble = screen.getByText("The plan changed.").closest("div[class*='bubble']");
-    expect(userMessage?.className).toContain("messageUser");
-    expect(assistantMessage?.className).toContain("messageAssistant");
-    expect(assistantBubble?.className).toContain("bubbleAssistantRag");
-    expect(assistantBubble?.className).not.toContain("bubblePending");
+    const userMessage = screen.getByText("What changed?").closest('[data-testid="chat-message"]');
+    const assistantBubble = screen.getByText("The plan changed.").closest('[data-testid="workspace-answer-bubble"]');
+    expect(userMessage?.getAttribute("data-role")).toBe("user");
+    expect(assistantBubble?.closest('[data-testid="chat-message"]')?.getAttribute("data-role")).toBe("assistant");
+    expect(assistantBubble?.getAttribute("data-mode")).toBe("rag");
+    expect(assistantBubble?.closest('[data-testid="chat-message"]')?.getAttribute("data-pending")).not.toBe("true");
 
     const citationButton = screen.getByRole("button", { name: "引用 1：Doc One" });
     await userEvent.click(citationButton);
@@ -738,7 +737,7 @@ describe("WorkspaceChatPane", () => {
       expect(screen.getByText("Hello")).toBeTruthy();
     });
     expect(screen.getAllByText("Hello")).toHaveLength(1);
-    expect(screen.getByText("Hello").closest("div[class*='bubble']")?.className).toContain("bubbleAssistantSearch");
+    expect(screen.getByText("Hello").closest('[data-testid="workspace-answer-bubble"]')?.getAttribute("data-mode")).toBe("search");
 
     expect(onSessionChange).toHaveBeenCalledWith("sess-new");
     await waitFor(() => {

@@ -145,246 +145,26 @@ describe("workspace client", () => {
     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer token-123");
   });
 
-  it("wraps sessions, sources, and notes with workspace-scoped request bodies", async () => {
-    fetchMock
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            sessions: [
-              {
-                id: "sess-1",
-                notebook_id: "ws-1",
-                title: "Draft",
-                agent_type: "rag",
-                summary: "Summary",
-                pinned: true,
-                created_at: "2026-04-17T00:00:00Z",
-                updated_at: "2026-04-18T00:00:00Z",
-              },
-            ],
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            id: "sess-2",
-            notebook_id: "ws-1",
-            title: null,
-            agent_type: "rag",
-            summary: null,
-            pinned: false,
-            created_at: "2026-04-19T00:00:00Z",
-            updated_at: "2026-04-19T00:00:00Z",
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            id: "sess-2",
-            notebook_id: "ws-1",
-            title: "Renamed",
-            agent_type: "rag",
-            summary: "Updated summary",
-            pinned: true,
-            created_at: "2026-04-19T00:00:00Z",
-            updated_at: "2026-04-20T00:00:00Z",
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            id: "sess-2",
-            notebook_id: "ws-1",
-            title: "Renamed",
-            agent_type: "rag",
-            summary: "Updated summary",
-            pinned: true,
-            created_at: "2026-04-19T00:00:00Z",
-            updated_at: "2026-04-20T00:00:00Z",
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            messages: [
-              {
-                id: 11,
-                session_id: "sess-2",
-                role: "assistant",
-                content: "Hello",
-                answer_blocks: [{ type: "text", text: "Hello", citations: [] }],
-                agent_id: "search",
-                agent_name: "网络搜索助手",
-                agent_icon: "🔍",
-                citations: [],
-                created_at: "2026-04-20T00:00:00Z",
-              },
-            ],
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            sources: [
-              {
-                id: "src-1",
-                notebook_id: "ws-1",
-                notebook_name: "Workspace 1",
-                title: "Doc",
-                file_name: "alpha.pdf",
-                status: "ready",
-              },
-            ],
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            document_id: "doc-1",
-            upload_url: "https://upload.example.test/doc-1",
-            status: "pending",
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({}), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({}), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            notes: [
-              {
-                id: "note-1",
-                notebook_id: "ws-1",
-                title: "Note",
-                content: "Body",
-                preview: "Body",
-                created_at: "2026-04-17T00:00:00Z",
-                updated_at: "2026-04-18T00:00:00Z",
-                promoted_document_id: null,
-                promoted_at: null,
-              },
-            ],
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            note: {
-              id: "note-2",
+  it("listWorkspaceSessions maps notebook_id to workspace_id", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          sessions: [
+            {
+              id: "sess-1",
               notebook_id: "ws-1",
-              title: "Created",
-              content: "Fresh",
-              preview: "Fresh",
-              created_at: "2026-04-19T00:00:00Z",
-              updated_at: "2026-04-19T00:00:00Z",
-              promoted_document_id: null,
-              promoted_at: null,
+              title: "Draft",
+              agent_type: "rag",
+              summary: "Summary",
+              pinned: true,
+              created_at: "2026-04-17T00:00:00Z",
+              updated_at: "2026-04-18T00:00:00Z",
             },
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            note: {
-              id: "note-2",
-              notebook_id: "ws-1",
-              title: "Updated",
-              content: "Fresh",
-              preview: "Fresh",
-              created_at: "2026-04-19T00:00:00Z",
-              updated_at: "2026-04-20T00:00:00Z",
-              promoted_document_id: null,
-              promoted_at: null,
-            },
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({}), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
+          ],
         }),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            note: {
-              id: "note-2",
-              notebook_id: "ws-1",
-              title: "Updated",
-              content: "Fresh",
-              preview: "Fresh",
-              created_at: "2026-04-19T00:00:00Z",
-              updated_at: "2026-04-20T00:00:00Z",
-              promoted_document_id: "doc-2",
-              promoted_at: "2026-04-20T00:00:00Z",
-            },
-            source_id: "src-2",
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      );
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
 
     await expect(listWorkspaceSessions("token-123", "ws-1")).resolves.toEqual({
       sessions: [
@@ -400,11 +180,33 @@ describe("workspace client", () => {
         },
       ],
     });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.example.test/api/v1/chat/sessions?notebook_id=ws-1",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("createWorkspaceSession sends workspace-scoped request body", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: "sess-2",
+          notebook_id: "ws-1",
+          title: null,
+          agent_type: "rag",
+          summary: null,
+          pinned: false,
+          created_at: "2026-04-19T00:00:00Z",
+          updated_at: "2026-04-19T00:00:00Z",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
     await expect(
-      createWorkspaceSession("token-123", "ws-1", {
-        title: null,
-        agent_type: "rag",
-      }),
+      createWorkspaceSession("token-123", "ws-1", { title: null, agent_type: "rag" }),
     ).resolves.toEqual({
       id: "sess-2",
       workspace_id: "ws-1",
@@ -415,11 +217,36 @@ describe("workspace client", () => {
       created_at: "2026-04-19T00:00:00Z",
       updated_at: "2026-04-19T00:00:00Z",
     });
-    await expect(
-      updateWorkspaceSession("token-123", "sess-2", {
-        title: "Renamed",
-        pinned: true,
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.example.test/api/v1/chat/sessions",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ notebook_id: "ws-1", title: null, agent_type: "rag" }),
       }),
+    );
+  });
+
+  it("updateWorkspaceSession maps notebook_id to workspace_id", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: "sess-2",
+          notebook_id: "ws-1",
+          title: "Renamed",
+          agent_type: "rag",
+          summary: "Updated summary",
+          pinned: true,
+          created_at: "2026-04-19T00:00:00Z",
+          updated_at: "2026-04-20T00:00:00Z",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await expect(
+      updateWorkspaceSession("token-123", "sess-2", { title: "Renamed", pinned: true }),
     ).resolves.toEqual({
       id: "sess-2",
       workspace_id: "ws-1",
@@ -430,6 +257,33 @@ describe("workspace client", () => {
       created_at: "2026-04-19T00:00:00Z",
       updated_at: "2026-04-20T00:00:00Z",
     });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.example.test/api/v1/chat/sessions/sess-2",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ title: "Renamed", pinned: true }),
+      }),
+    );
+  });
+
+  it("getWorkspaceSession maps notebook_id to workspace_id", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: "sess-2",
+          notebook_id: "ws-1",
+          title: "Renamed",
+          agent_type: "rag",
+          summary: "Updated summary",
+          pinned: true,
+          created_at: "2026-04-19T00:00:00Z",
+          updated_at: "2026-04-20T00:00:00Z",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
     await expect(getWorkspaceSession("token-123", "sess-2")).resolves.toEqual({
       id: "sess-2",
       workspace_id: "ws-1",
@@ -440,6 +294,36 @@ describe("workspace client", () => {
       created_at: "2026-04-19T00:00:00Z",
       updated_at: "2026-04-20T00:00:00Z",
     });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.example.test/api/v1/chat/sessions/sess-2",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("listWorkspaceSessionMessages fetches messages for a session", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          messages: [
+            {
+              id: 11,
+              session_id: "sess-2",
+              role: "assistant",
+              content: "Hello",
+              answer_blocks: [{ type: "text", text: "Hello", citations: [] }],
+              agent_id: "search",
+              agent_name: "网络搜索助手",
+              agent_icon: "🔍",
+              citations: [],
+              created_at: "2026-04-20T00:00:00Z",
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
 
     await expect(listWorkspaceSessionMessages("token-123", "sess-2")).resolves.toEqual({
       messages: [
@@ -457,6 +341,33 @@ describe("workspace client", () => {
         },
       ],
     });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.example.test/api/v1/chat/sessions/sess-2/messages",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("listWorkspaceSources maps notebook fields to workspace fields", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          sources: [
+            {
+              id: "src-1",
+              notebook_id: "ws-1",
+              notebook_name: "Workspace 1",
+              title: "Doc",
+              file_name: "alpha.pdf",
+              status: "ready",
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
     await expect(listWorkspaceSources("token-123", "ws-1")).resolves.toEqual({
       sources: [
         {
@@ -469,13 +380,98 @@ describe("workspace client", () => {
         },
       ],
     });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.example.test/api/v1/sources?notebook_id=ws-1",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("addWorkspaceSourceUrl posts url to notebook sources endpoint", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          document_id: "doc-1",
+          upload_url: "https://upload.example.test/doc-1",
+          status: "pending",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
     await expect(addWorkspaceSourceUrl("token-123", "ws-1", "https://example.test")).resolves.toEqual({
       document_id: "doc-1",
       upload_url: "https://upload.example.test/doc-1",
       status: "pending",
     });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.example.test/api/v1/notebooks/ws-1/sources/url",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ url: "https://example.test" }),
+      }),
+    );
+  });
+
+  it("deleteWorkspaceDocument sends DELETE request", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
     await expect(deleteWorkspaceDocument("token-123", "doc-1")).resolves.toBeUndefined();
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.example.test/api/v1/documents/doc-1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("reindexWorkspaceDocument sends POST to reindex endpoint", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
     await expect(reindexWorkspaceDocument("token-123", "doc-1")).resolves.toBeUndefined();
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.example.test/api/v1/documents/doc-1/reindex",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("listWorkspaceNotes maps notebook_id to workspace_id", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          notes: [
+            {
+              id: "note-1",
+              notebook_id: "ws-1",
+              title: "Note",
+              content: "Body",
+              preview: "Body",
+              created_at: "2026-04-17T00:00:00Z",
+              updated_at: "2026-04-18T00:00:00Z",
+              promoted_document_id: null,
+              promoted_at: null,
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
     await expect(listWorkspaceNotes("token-123", "ws-1")).resolves.toEqual({
       notes: [
         {
@@ -491,11 +487,36 @@ describe("workspace client", () => {
         },
       ],
     });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.example.test/api/v1/notebooks/ws-1/notes",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("createWorkspaceNote sends note data to notebook notes endpoint", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          note: {
+            id: "note-2",
+            notebook_id: "ws-1",
+            title: "Created",
+            content: "Fresh",
+            preview: "Fresh",
+            created_at: "2026-04-19T00:00:00Z",
+            updated_at: "2026-04-19T00:00:00Z",
+            promoted_document_id: null,
+            promoted_at: null,
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
     await expect(
-      createWorkspaceNote("token-123", "ws-1", {
-        title: "Created",
-        content: "Fresh",
-      }),
+      createWorkspaceNote("token-123", "ws-1", { title: "Created", content: "Fresh" }),
     ).resolves.toEqual({
       note: {
         id: "note-2",
@@ -509,11 +530,39 @@ describe("workspace client", () => {
         promoted_at: null,
       },
     });
-    await expect(
-      updateWorkspaceNote("token-123", "ws-1", "note-2", {
-        title: "Updated",
-        content: "Fresh",
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.example.test/api/v1/notebooks/ws-1/notes",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ title: "Created", content: "Fresh" }),
       }),
+    );
+  });
+
+  it("updateWorkspaceNote maps notebook_id to workspace_id", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          note: {
+            id: "note-2",
+            notebook_id: "ws-1",
+            title: "Updated",
+            content: "Fresh",
+            preview: "Fresh",
+            created_at: "2026-04-19T00:00:00Z",
+            updated_at: "2026-04-20T00:00:00Z",
+            promoted_document_id: null,
+            promoted_at: null,
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await expect(
+      updateWorkspaceNote("token-123", "ws-1", "note-2", { title: "Updated", content: "Fresh" }),
     ).resolves.toEqual({
       note: {
         id: "note-2",
@@ -527,7 +576,55 @@ describe("workspace client", () => {
         promoted_at: null,
       },
     });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.example.test/api/v1/notebooks/ws-1/notes/note-2",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ title: "Updated", content: "Fresh" }),
+      }),
+    );
+  });
+
+  it("deleteWorkspaceNote sends DELETE to note endpoint", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
     await expect(deleteWorkspaceNote("token-123", "ws-1", "note-2")).resolves.toBeUndefined();
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.example.test/api/v1/notebooks/ws-1/notes/note-2",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("promoteWorkspaceNote maps notebook fields and returns source_id", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          note: {
+            id: "note-2",
+            notebook_id: "ws-1",
+            title: "Updated",
+            content: "Fresh",
+            preview: "Fresh",
+            created_at: "2026-04-19T00:00:00Z",
+            updated_at: "2026-04-20T00:00:00Z",
+            promoted_document_id: "doc-2",
+            promoted_at: "2026-04-20T00:00:00Z",
+          },
+          source_id: "src-2",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
     await expect(promoteWorkspaceNote("token-123", "ws-1", "note-2")).resolves.toEqual({
       note: {
         id: "note-2",
@@ -545,111 +642,100 @@ describe("workspace client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "https://api.example.test/api/v1/chat/sessions?notebook_id=ws-1",
-      expect.objectContaining({
-        method: "GET",
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      "https://api.example.test/api/v1/chat/sessions",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          notebook_id: "ws-1",
-          title: null,
-          agent_type: "rag",
-        }),
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      4,
-      "https://api.example.test/api/v1/chat/sessions/sess-2",
-      expect.objectContaining({
-        method: "GET",
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      5,
-      "https://api.example.test/api/v1/chat/sessions/sess-2/messages",
-      expect.objectContaining({
-        method: "GET",
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      6,
-      "https://api.example.test/api/v1/sources?notebook_id=ws-1",
-      expect.objectContaining({
-        method: "GET",
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      7,
-      "https://api.example.test/api/v1/notebooks/ws-1/sources/url",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          url: "https://example.test",
-        }),
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      8,
-      "https://api.example.test/api/v1/documents/doc-1",
-      expect.objectContaining({
-        method: "DELETE",
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      9,
-      "https://api.example.test/api/v1/documents/doc-1/reindex",
-      expect.objectContaining({
-        method: "POST",
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      10,
-      "https://api.example.test/api/v1/notebooks/ws-1/notes",
-      expect.objectContaining({
-        method: "GET",
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      11,
-      "https://api.example.test/api/v1/notebooks/ws-1/notes",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          title: "Created",
-          content: "Fresh",
-        }),
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      12,
-      "https://api.example.test/api/v1/notebooks/ws-1/notes/note-2",
-      expect.objectContaining({
-        method: "PUT",
-        body: JSON.stringify({
-          title: "Updated",
-          content: "Fresh",
-        }),
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      13,
-      "https://api.example.test/api/v1/notebooks/ws-1/notes/note-2",
-      expect.objectContaining({
-        method: "DELETE",
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      14,
       "https://api.example.test/api/v1/notebooks/ws-1/notes/note-2/promote-to-source",
-      expect.objectContaining({
-        method: "POST",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("throws ApiError on 401 Unauthorized", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "unauthorized", message: "Token expired" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
       }),
     );
+
+    await expect(getWorkspace("token-123", "ws-1")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 401,
+    });
+  });
+
+  it("throws ApiError on 403 Forbidden", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "forbidden", message: "No access" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(getWorkspace("token-123", "ws-1")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 403,
+    });
+  });
+
+  it("throws ApiError on 404 Not Found", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "not_found", message: "Workspace not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(getWorkspace("token-123", "ws-1")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 404,
+    });
+  });
+
+  it("throws ApiError on 500 Internal Server Error", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "internal", message: "Something went wrong" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(getWorkspace("token-123", "ws-1")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 500,
+    });
+  });
+
+  it("throws on network failure", async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
+
+    await expect(getWorkspace("token-123", "ws-1")).rejects.toThrow("fetch failed");
+  });
+
+  it("throws ApiError on malformed JSON response", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response("not json {{{", {
+        status: 502,
+        headers: { "Content-Type": "text/plain" },
+      }),
+    );
+
+    await expect(getWorkspace("token-123", "ws-1")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 502,
+    });
+  });
+
+  it("throws ApiError on empty error response body", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response("", {
+        status: 503,
+        headers: { "Content-Type": "text/plain" },
+      }),
+    );
+
+    await expect(getWorkspace("token-123", "ws-1")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 503,
+      message: "Request failed with status 503",
+    });
   });
 
   it("creates, uploads, and completes document uploads", async () => {

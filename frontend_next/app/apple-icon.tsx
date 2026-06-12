@@ -1,29 +1,14 @@
-import { ImageResponse } from "next/og";
+// 桌面端静态导出：使用静态图标文件替代动态生成
+// ImageResponse 在静态导出时有兼容性问题
 
-import { MetadataBrandIcon } from "./metadata-brand";
+export const dynamic = "force-static";
 
-export const size = {
-  width: 180,
-  height: 180,
-};
-
-export const contentType = "image/png";
-
+// 返回一个简单的空响应，桌面端会使用 public/ 目录下的静态图标
 export default function AppleIcon() {
-  return new ImageResponse(
-    (
-      <div
-        style={{
-          display: "flex",
-          width: "100%",
-          height: "100%",
-          background: "white",
-          padding: "12px",
-        }}
-      >
-        <MetadataBrandIcon />
-      </div>
-    ),
-    size,
-  );
+  return new Response(null, {
+    status: 301,
+    headers: {
+      Location: "/apple-icon.png",
+    },
+  });
 }

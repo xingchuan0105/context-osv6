@@ -15,6 +15,7 @@ tiktoken-rs.workspace = true
 uuid.workspace = true
 rayon.workspace = true
 tracing = "0.1"
+thiserror.workspace = true
 futures-util = "0.3"
 sha2.workspace = true
 hex.workspace = true
@@ -23,7 +24,6 @@ common = { path = "../common" }
 avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
 avrag-auth = { path = "../auth" }
 avrag-cache-redis = { path = "../cache-redis" }
-avrag-storage-pg = { path = "../storage-pg" }
 avrag-llm = { path = "../llm" }
 avrag-code-interpreter = { path = "../code-interpreter" }
 

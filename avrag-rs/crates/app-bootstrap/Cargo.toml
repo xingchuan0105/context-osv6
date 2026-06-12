@@ -1,0 +1,32 @@
+[package]
+name = "app-bootstrap"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+common = { path = "../common" }
+ingestion-types = { path = "../ingestion-types" }
+serde.workspace = true
+analytics = { path = "../analytics" }
+app-admin = { path = "../app-admin" }
+app-billing = { path = "../app-billing" }
+app-chat = { path = "../app-chat" }
+app-core = { path = "../app-core" }
+app-documents = { path = "../app-documents" }
+avrag-auth = { path = "../auth" }
+avrag-billing = { path = "../billing" }
+avrag-cache-redis = { path = "../cache-redis" }
+avrag-chatmemory = { path = "../chatmemory" }
+avrag-guardrails = { path = "../guardrails" }
+avrag-llm = { path = "../llm" }
+avrag-rag-core = { path = "../rag-core" }
+avrag-search = { path = "../search" }
+avrag-storage-milvus = { path = "../storage-milvus" }
+avrag-storage-pg = { path = "../storage-pg" }
+tokio.workspace = true
+uuid.workspace = true

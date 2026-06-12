@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   chatPaneMock: vi.fn(),
   rightRailMock: vi.fn(),
   getUsageWindowMock: vi.fn(),
+  probePricingRevampUsageWindowMock: vi.fn(),
 }));
 
 let mobileViewport = false;
@@ -89,15 +90,10 @@ vi.mock("../../lib/workspace/client", () => ({
   lookupWorkspaceCitation: mocks.lookupWorkspaceCitationMock,
 }));
 
-vi.mock("../../lib/billing/api", () => ({
-  billingApi: {
-    getUsageWindow: mocks.getUsageWindowMock,
-  },
-}));
-
 vi.mock("../../lib/billing/featureFlag", () => ({
   isPricingRevampEnabledSSR: () => true,
   isPricingRevampEnabled: vi.fn().mockResolvedValue(true),
+  probePricingRevampUsageWindow: mocks.probePricingRevampUsageWindowMock,
 }));
 
 vi.mock("../../components/workspace/workspace-chat-pane", () => ({
@@ -276,6 +272,7 @@ beforeEach(() => {
   mocks.chatPaneMock.mockReset();
   mocks.rightRailMock.mockReset();
   mocks.getUsageWindowMock.mockReset();
+  mocks.probePricingRevampUsageWindowMock.mockReset();
 
   mocks.getUsageWindowMock.mockResolvedValue({
     plan_id: "free",
@@ -284,6 +281,10 @@ beforeEach(() => {
     soft_limit_hit: { rolling_5h: false, rolling_7d: false },
     hard_limit_hit: { rolling_5h: false, rolling_7d: false },
   });
+  mocks.probePricingRevampUsageWindowMock.mockImplementation(async () => ({
+    enabled: true,
+    usageWindow: await mocks.getUsageWindowMock(),
+  }));
 
   mocks.getWorkspaceMock.mockResolvedValue({
     workspace: {

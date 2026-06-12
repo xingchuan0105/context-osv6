@@ -6,6 +6,9 @@
 //! - Protocol assertions first, then deserialize to business types.
 
 pub mod assertions;
+pub mod bootstrap;
+pub mod fixtures;
+pub mod http_helpers;
 pub mod setup;
 
 pub mod failure;
@@ -15,7 +18,15 @@ pub mod smoke;
 pub mod tenants;
 
 mod mock_servers;
+mod pg_queries;
 mod test_context;
+
+pub use fixtures::ready_rag_context;
+
+pub use http_helpers::{
+    DEFAULT_TEST_ORG_ID, DEFAULT_TEST_USER_ID, milvus_collection_prefix_for_identity,
+    test_auth_headers_for, unique_test_identity,
+};
 
 /// Raw HTTP response from the test client.
 ///
@@ -162,9 +173,7 @@ pub struct NotebookInner {
     pub title: String,
 }
 
-pub use test_context::{
-    ChatStreamParams, DEFAULT_TEST_ORG_ID, DEFAULT_TEST_USER_ID, TestContext, unique_test_identity,
-};
+pub use test_context::{ChatStreamParams, TestContext};
 
 #[cfg(test)]
 mod mock_routing_tests {

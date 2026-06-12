@@ -3,12 +3,16 @@ fn parse_document_status(value: &str) -> DocumentStatus {
         "enqueueing" => DocumentStatus::Enqueueing,
         "queued" => DocumentStatus::Queued,
         "processing" => DocumentStatus::Processing,
-        "completed" => DocumentStatus::Completed,
-        "failed" => DocumentStatus::Failed,
+        "completed" | "ready" => DocumentStatus::Completed,
+        "failed" | "error" => DocumentStatus::Failed,
         "deleting" => DocumentStatus::Deleting,
         "deleted" => DocumentStatus::Deleted,
         "upload_invalid" => DocumentStatus::UploadInvalid,
-        _ => DocumentStatus::Pending,
+        "pending" => DocumentStatus::Pending,
+        unknown => {
+            tracing::warn!(status = unknown, "unknown document status, falling back to Pending");
+            DocumentStatus::Pending
+        }
     }
 }
 
@@ -102,32 +106,9 @@ fn parse_ingestion_kind(value: &str) -> IngestionTaskKind {
     match value {
         "reindex_document" => IngestionTaskKind::ReindexDocument,
         "ingest_url" => IngestionTaskKind::IngestUrl,
-        _ => IngestionTaskKind::IngestDocument,
-    }
-}
-
-fn audit_action_str(action: &ingestion::AuditAction) -> &'static str {
-    match action {
-        ingestion::AuditAction::TaskEnqueued => "task_enqueued",
-        ingestion::AuditAction::TaskStarted => "task_started",
-        ingestion::AuditAction::TaskCompleted => "task_completed",
-        ingestion::AuditAction::TaskFailed => "task_failed",
-        ingestion::AuditAction::StateTransition => "state_transition",
-        ingestion::AuditAction::InputGuardBlock => "input_guard_block",
-        ingestion::AuditAction::OutputGuardBlock => "output_guard_block",
-        ingestion::AuditAction::OutputGuardRedact => "output_guard_redact",
-        ingestion::AuditAction::OutputGuardFlag => "output_guard_flag",
-        ingestion::AuditAction::ChatRequest => "chat_request",
-        ingestion::AuditAction::SearchRequest => "search_request",
-        ingestion::AuditAction::RagRequest => "rag_request",
-        ingestion::AuditAction::MessageFeedback => "message_feedback",
-        ingestion::AuditAction::CitationClick => "citation_click",
-        ingestion::AuditAction::RoutingDecision => "routing_decision",
-        ingestion::AuditAction::HighRiskToolCall => "high_risk_tool_call",
-        ingestion::AuditAction::PolicyDeny => "policy_deny",
-        ingestion::AuditAction::PolicyRequireApproval => "policy_require_approval",
-        ingestion::AuditAction::BudgetExhausted => "budget_exhausted",
-        ingestion::AuditAction::DegradeEvent => "degrade_event",
-        ingestion::AuditAction::PermissionDenied => "permission_denied",
+        unknown => {
+            tracing::warn!(kind = unknown, "unknown ingestion kind, falling back to IngestDocument");
+            IngestionTaskKind::IngestDocument
+        }
     }
 }

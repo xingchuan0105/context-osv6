@@ -3,23 +3,23 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { UsageMeter } from "../../../../components/billing/UsageMeter";
-import { UsageTrendChart } from "../../../../components/billing/UsageTrendChart";
-import { UsageForecastCard } from "../../../../components/billing/UsageForecastCard";
-import { billingApi } from "../../../../lib/billing/api";
+import { UsageMeter } from "@/components/billing/UsageMeter";
+import { UsageTrendChart } from "@/components/billing/UsageTrendChart";
+import { UsageForecastCard } from "@/components/billing/UsageForecastCard";
+import { billingApi } from "@/lib/billing/api";
 import type {
   UsageForecastResponse,
   UsageHistoryResponse,
   UsageWindowResponse,
-} from "../../../../lib/billing/api";
-import { ApiError } from "../../../../lib/auth/client";
+} from "@/lib/billing/api";
+import { ApiError } from "@/lib/auth/client";
 import {
   isPricingRevampEnabled,
   isPricingRevampEnabledSSR,
   isPricingRevampFeatureDisabledError,
-} from "../../../../lib/billing/featureFlag";
-import { formatUiMessage } from "../../../../lib/i18n/messages";
-import { useUiPreferences } from "../../../../lib/ui-preferences";
+} from "@/lib/billing/featureFlag";
+import { formatUiMessage } from "@/lib/i18n/messages";
+import { useUiPreferences } from "@/lib/ui-preferences";
 import styles from "./usage.module.css";
 
 type DashboardState =

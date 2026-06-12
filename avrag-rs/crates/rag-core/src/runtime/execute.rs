@@ -754,10 +754,11 @@ impl RagRuntime {
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let doc_names = if let Some(pg_repo) = self.config.pg_repo.as_ref() {
-            pg_repo
+        let doc_names = if let Some(content_store) = self.config.content_store.as_ref() {
+            content_store
                 .get_document_names(auth, &unique_doc_ids)
                 .await
+                .inspect_err(|e| tracing::warn!(error = %e, "content_store.get_document_names failed, degrading"))
                 .unwrap_or_default()
         } else {
             HashMap::new()

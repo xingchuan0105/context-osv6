@@ -4,7 +4,8 @@ import styles from "./PricingCards.module.css";
 import type { BillingPlan } from "../../lib/billing/api";
 import { formatCompactToken } from "../../lib/billing/format";
 import { getPlanRollingLimits } from "../../lib/billing/planLimits";
-import { formatUiMessage, type UiLocale } from "../../lib/i18n/messages";
+import { formatUiMessage } from "../../lib/i18n/messages";
+import type { UiLocale } from "../../lib/i18n/config";
 
 export type PricingCardsProps = {
   plans: BillingPlan[];

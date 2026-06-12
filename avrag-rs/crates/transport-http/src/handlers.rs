@@ -585,121 +585,188 @@ pub(crate) async fn get_notebook_analysis_handler(
         Err(error) => return app_error_response(error),
     };
 
-    let ready_sources = sources
-        .iter()
-        .filter(|source| matches!(source.status.as_str(), "ready" | "completed"))
-        .count() as i64;
-    let failed_sources = sources
-        .iter()
-        .filter(|source| matches!(source.status.as_str(), "failed" | "error"))
-        .count() as i64;
-    let processing_sources = sources.len() as i64 - ready_sources - failed_sources;
-    let pinned_sources = pinned_source_count(&preferences, &notebook_id);
-    let latest_session = sessions
-        .iter()
-        .max_by(|left, right| left.updated_at.cmp(&right.updated_at));
-    let promoted_notes = notes
-        .iter()
-        .filter(|note| note.promoted_document_id.is_some())
-        .count() as i64;
-    let latest_note_update = notes.iter().map(|note| note.updated_at.clone()).max();
-
-    let member_count = if let Some(pg) = state.pg() {
-        avrag_share::handle_list_members(state.auth().clone(), notebook_id.clone(), pg)
-            .await
-            .map(|members| members.len() as i64)
-            .unwrap_or(0)
-    } else {
-        0
-    };
-    let share_enabled = if let Some(pg) = state.pg() {
-        avrag_share::handle_get_share_settings(state.auth().clone(), notebook_id.clone(), pg)
-            .await
-            .map(|settings| {
-                settings
-                    .share_tokens
-                    .iter()
-                    .any(|token| token.revoked_at.is_none() && !token.token.trim().is_empty())
-                    && !settings.access_level.eq_ignore_ascii_case("private")
-            })
-            .unwrap_or(false)
-    } else {
-        false
-    };
-    let active_api_key_count = state
-        .list_api_keys(&notebook_id)
-        .await
-        .map(|items| items.into_iter().filter(|item| item.is_active).count() as i64)
-        .unwrap_or(0);
-
-    let mut alerts = Vec::new();
-    if ready_sources == 0 {
-        alerts.push(common::NotebookAnalysisAlert {
-            level: "warning".to_string(),
-            code: "no_ready_sources".to_string(),
-            message: "No ready sources are available for RAG chat.".to_string(),
-        });
-    }
-    if failed_sources > 0 {
-        alerts.push(common::NotebookAnalysisAlert {
-            level: "warning".to_string(),
-            code: "failed_sources".to_string(),
-            message: format!("{failed_sources} sources need attention or reindexing."),
-        });
-    }
-    if sessions.is_empty() {
-        alerts.push(common::NotebookAnalysisAlert {
-            level: "info".to_string(),
-            code: "no_threads".to_string(),
-            message: "This notebook does not have any threads yet.".to_string(),
-        });
-    }
-    if !notes.is_empty() && promoted_notes == 0 {
-        alerts.push(common::NotebookAnalysisAlert {
-            level: "info".to_string(),
-            code: "notes_not_promoted".to_string(),
-            message: "Notes exist, but none have been promoted into shared sources yet."
-                .to_string(),
-        });
-    }
+    let collector = NotebookAnalysisCollector;
+    let overview = collector.collect_overview(&notebook);
+    let sources_summary = collector.collect_sources(&sources, &preferences, &notebook_id);
+    let threads = collector.collect_threads(&sessions);
+    let notes_summary = collector.collect_notes(&notes);
+    let access = collector.collect_access(&state, &notebook_id).await;
+    let alerts = collector.build_alerts(&sources_summary, &sessions, &notes, &notes_summary);
 
     (
         StatusCode::OK,
         Json(common::NotebookAnalysisResponse {
-            overview: common::NotebookAnalysisOverview {
-                title: notebook.title,
-                description: notebook.description,
-                updated_at: notebook.updated_at,
-                document_count: notebook.document_count,
-            },
-            sources: common::NotebookAnalysisSources {
-                total: sources.len() as i64,
-                ready: ready_sources,
-                processing: processing_sources.max(0),
-                failed: failed_sources,
-                selected: 0,
-                pinned: pinned_sources,
-            },
-            threads: common::NotebookAnalysisThreads {
-                total: sessions.len() as i64,
-                pinned: sessions.iter().filter(|session| session.pinned).count() as i64,
-                latest_activity_at: latest_session.map(|session| session.updated_at.clone()),
-                latest_mode: latest_session.map(|session| session.agent_type.clone()),
-            },
-            notes: common::NotebookAnalysisNotes {
-                total: notes.len() as i64,
-                latest_edited_at: latest_note_update,
-                promoted_to_source: promoted_notes,
-            },
-            access: common::NotebookAnalysisAccess {
-                share_enabled,
-                member_count,
-                active_api_key_count,
-            },
+            overview,
+            sources: sources_summary,
+            threads,
+            notes: notes_summary,
+            access,
             alerts,
         }),
     )
         .into_response()
+}
+
+struct NotebookAnalysisCollector;
+
+impl NotebookAnalysisCollector {
+    fn collect_overview(
+        &self,
+        notebook: &common::Notebook,
+    ) -> common::NotebookAnalysisOverview {
+        common::NotebookAnalysisOverview {
+            title: notebook.title.clone(),
+            description: notebook.description.clone(),
+            updated_at: notebook.updated_at.clone(),
+            document_count: notebook.document_count,
+        }
+    }
+
+    fn collect_sources(
+        &self,
+        sources: &[common::Document],
+        preferences: &common::UserPreferences,
+        notebook_id: &str,
+    ) -> common::NotebookAnalysisSources {
+        let (mut ready, mut failed) = (0i64, 0i64);
+        for source in sources {
+            match source.status {
+                common::DocumentStatus::Completed => ready += 1,
+                common::DocumentStatus::Failed => failed += 1,
+                _ => {}
+            }
+        }
+        let processing = (sources.len() as i64) - ready - failed;
+        let pinned = pinned_source_count(preferences, notebook_id);
+        common::NotebookAnalysisSources {
+            total: sources.len() as i64,
+            ready,
+            processing: processing.max(0),
+            failed,
+            selected: 0,
+            pinned,
+        }
+    }
+
+    fn collect_threads(
+        &self,
+        sessions: &[common::ChatSession],
+    ) -> common::NotebookAnalysisThreads {
+        let latest = sessions
+            .iter()
+            .max_by(|a, b| a.updated_at.cmp(&b.updated_at));
+        common::NotebookAnalysisThreads {
+            total: sessions.len() as i64,
+            pinned: sessions.iter().filter(|s| s.pinned).count() as i64,
+            latest_activity_at: latest.map(|s| s.updated_at.clone()),
+            latest_mode: latest.map(|s| s.agent_type.clone()),
+        }
+    }
+
+    fn collect_notes(
+        &self,
+        notes: &[common::NotebookNote],
+    ) -> common::NotebookAnalysisNotes {
+        let promoted = notes
+            .iter()
+            .filter(|n| n.promoted_document_id.is_some())
+            .count() as i64;
+        let latest = notes.iter().map(|n| n.updated_at.clone()).max();
+        common::NotebookAnalysisNotes {
+            total: notes.len() as i64,
+            latest_edited_at: latest,
+            promoted_to_source: promoted,
+        }
+    }
+
+    async fn collect_access(
+        &self,
+        state: &AppState,
+        notebook_id: &str,
+    ) -> common::NotebookAnalysisAccess {
+        let auth = state.auth().clone();
+        let notebook_id = notebook_id.to_string();
+        let (member_count, share_enabled, active_api_key_count) = tokio::join!(
+            async {
+                if let Some(pg) = state.pg() {
+                    avrag_share::handle_list_members(auth.clone(), notebook_id.clone(), pg)
+                        .await
+                        .map(|m| m.len() as i64)
+                        .unwrap_or(0)
+                } else {
+                    0
+                }
+            },
+            async {
+                if let Some(pg) = state.pg() {
+                    avrag_share::handle_get_share_settings(auth.clone(), notebook_id.clone(), pg)
+                        .await
+                        .map(|settings| {
+                            settings
+                                .share_tokens
+                                .iter()
+                                .any(|t| t.revoked_at.is_none() && !t.token.trim().is_empty())
+                                && !settings.access_level.eq_ignore_ascii_case("private")
+                        })
+                        .unwrap_or(false)
+                } else {
+                    false
+                }
+            },
+            async {
+                state
+                    .list_api_keys(&notebook_id)
+                    .await
+                    .map(|items| items.into_iter().filter(|k| k.is_active).count() as i64)
+                    .unwrap_or(0)
+            },
+        );
+        common::NotebookAnalysisAccess {
+            share_enabled,
+            member_count,
+            active_api_key_count,
+        }
+    }
+
+    fn build_alerts(
+        &self,
+        sources: &common::NotebookAnalysisSources,
+        sessions: &[common::ChatSession],
+        notes: &[common::NotebookNote],
+        notes_summary: &common::NotebookAnalysisNotes,
+    ) -> Vec<common::NotebookAnalysisAlert> {
+        let mut alerts = Vec::new();
+        if sources.ready == 0 {
+            alerts.push(common::NotebookAnalysisAlert {
+                level: "warning".to_string(),
+                code: "no_ready_sources".to_string(),
+                message: "No ready sources are available for RAG chat.".to_string(),
+            });
+        }
+        if sources.failed > 0 {
+            alerts.push(common::NotebookAnalysisAlert {
+                level: "warning".to_string(),
+                code: "failed_sources".to_string(),
+                message: format!("{} sources need attention or reindexing.", sources.failed),
+            });
+        }
+        if sessions.is_empty() {
+            alerts.push(common::NotebookAnalysisAlert {
+                level: "info".to_string(),
+                code: "no_threads".to_string(),
+                message: "This notebook does not have any threads yet.".to_string(),
+            });
+        }
+        if !notes.is_empty() && notes_summary.promoted_to_source == 0 {
+            alerts.push(common::NotebookAnalysisAlert {
+                level: "info".to_string(),
+                code: "notes_not_promoted".to_string(),
+                message: "Notes exist, but none have been promoted into shared sources yet."
+                    .to_string(),
+            });
+        }
+        alerts
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1727,9 +1794,13 @@ pub(crate) async fn message_feedback_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(req): Json<common::MessageFeedbackRequest>,
 ) -> Response {
+    let rating = match req.rating {
+        contracts::chat::MessageFeedbackRating::Up => "up",
+        contracts::chat::MessageFeedbackRating::Down => "down",
+    };
     let metadata = serde_json::json!({
         "message_id": req.message_id,
-        "rating": req.rating,
+        "rating": rating,
     });
     state
         .record_product_event_if_available(

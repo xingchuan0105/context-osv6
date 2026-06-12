@@ -1,4 +1,17 @@
 //! TestContext bootstrap and HTTP helpers for Product E2E.
+//!
+//! ## Smoke profile matrix (`build_smoke`)
+//!
+//! | Constructor | RAG (Milvus) | Worker | Mock LLM/Embed | Redis | Typical use |
+//! |-------------|--------------|--------|----------------|-------|-------------|
+//! | `new_smoke` | no | yes | yes | no | Auth, chat without retrieval |
+//! | `new_smoke_with_rag` | yes | yes | yes | no | RAG smoke + integration |
+//! | `new_smoke_with_rag_and_timeout` | yes | yes (short timeout) | yes | no | Worker timeout failure tests |
+//! | `new_smoke_with_org` / `new_smoke_with_rag_and_org` | optional | yes | yes | no | Multi-tenant isolation |
+//! | `new_embedding_cache` | yes | yes | yes (call counter) | yes | Embedding cache integration |
+//! | `new_with_real_llm` | yes | yes | **real** LLM (+ optional real search) | optional | `llm_real` corpus tests |
+//!
+//! For RAG tests that need an ingested document, prefer [`super::fixtures::ready_rag_context`].
 
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -68,7 +81,7 @@ pub struct TestContext {
     server_abort: Option<tokio::sync::oneshot::Sender<()>>,
     #[allow(dead_code)]
     object_store_dir: tempfile::TempDir,
-    pg_url: String,
+    pub(crate) pg_url: String,
     mock_llm_abort: Option<tokio::sync::oneshot::Sender<()>>,
     mock_embedding_abort: Option<tokio::sync::oneshot::Sender<()>>,
     mock_search_abort: Option<tokio::sync::oneshot::Sender<()>>,
@@ -81,43 +94,9 @@ pub struct TestContext {
     artifact_run_id: String,
 }
 
-/// Default test org/user IDs.
-///
-/// Kept as public constants for tests that need a stable, well-known
-/// identity (e.g. checking that the production auth path correctly
-/// handles a specific UUID format). New tests that do not need a fixed
-/// identity should use [`unique_test_identity`] instead, so that
-/// parallel tests do not share the same rate-limit bucket.
-pub const DEFAULT_TEST_ORG_ID: &str = "00000000-0000-0000-0000-000000000001";
-pub const DEFAULT_TEST_USER_ID: &str = "00000000-0000-0000-0000-000000000001";
-
-/// Generate a unique `(org_id, user_id)` pair for a test context so that
-/// each test gets its own rate-limit bucket and does not collide with
-/// other tests running in parallel.
-pub fn unique_test_identity() -> (String, String) {
-    use uuid::Uuid;
-    (Uuid::new_v4().to_string(), Uuid::new_v4().to_string())
-}
-
-fn milvus_collection_prefix_for_identity(org_id: &str, _user_id: &str) -> String {
-    let suffix = org_id
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
-        .take(8)
-        .collect::<String>()
-        .to_ascii_lowercase();
-    format!("avrag_e2e_{suffix}")
-}
-
-/// Auth headers for a specific org/user (used by `build_smoke` and by
-/// multi-tenant isolation tests).
-fn test_auth_headers_for(org_id: &str, user_id: &str) -> reqwest::header::HeaderMap {
-    let mut headers = reqwest::header::HeaderMap::new();
-    headers.insert("x-org-id", org_id.parse().unwrap());
-    headers.insert("x-user-id", user_id.parse().unwrap());
-    headers.insert("x-permissions", "external_network".parse().unwrap());
-    headers
-}
+use super::http_helpers::{
+    milvus_collection_prefix_for_identity, test_auth_headers_for, unique_test_identity,
+};
 
 impl TestContext {
     /// Create a Smoke E2E context (no RAG).
@@ -174,7 +153,11 @@ impl TestContext {
         }
 
         if !use_real_llm {
-            return true;
+            // PR smoke stays on mock search for deterministic failure injection (429/503).
+            // Opt in to real Brave via SEARCH_USE_REAL=1 when validating live search.
+            return std::env::var("SEARCH_USE_REAL")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
         }
 
         // A prior test may have pointed SEARCH_BASE_URL at the local mock server.
@@ -272,7 +255,7 @@ impl TestContext {
             .as_ref()
             .expect("identity is always Some after .or_else above");
         let milvus_collection_prefix =
-            enable_rag.then(|| milvus_collection_prefix_for_identity(org_id, user_id));
+            enable_rag.then(|| milvus_collection_prefix_for_identity(org_id));
 
         // 1. Acquire shared Postgres (one container per test binary).
         let (pg_url, shared_pg) = setup::acquire_shared_postgres()
@@ -834,6 +817,18 @@ impl TestContext {
             .await
     }
 
+    /// RAG + format_hint without pinning mock synthesis chunk ids (real bridge retrieval).
+    pub async fn chat_with_format_hint_without_mock_chunk_pin(
+        &self,
+        query: &str,
+        notebook_id: &str,
+        doc_scope: &[String],
+        format_hint: Option<&str>,
+    ) -> anyhow::Result<HttpResponse> {
+        self.post_rag_chat(query, notebook_id, doc_scope, format_hint, false)
+            .await
+    }
+
     async fn post_rag_chat(
         &self,
         query: &str,
@@ -842,7 +837,9 @@ impl TestContext {
         format_hint: Option<&str>,
         pin_mock_chunk_ids: bool,
     ) -> anyhow::Result<HttpResponse> {
-        set_mock_rag_codegen_query(query);
+        if pin_mock_chunk_ids {
+            set_mock_rag_codegen_query(query);
+        }
         let mut body = serde_json::json!({
             "query": query,
             "agent_type": "rag",
@@ -1150,60 +1147,6 @@ impl TestContext {
     // Failure artifact capture
     // -----------------------------------------------------------------------
 
-    /// Query the chunk_count stored in PG for a completed document.
-    pub async fn query_document_chunk_count(&self, document_id: &str) -> anyhow::Result<usize> {
-        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
-        let doc_id = Uuid::parse_str(document_id)?;
-        let row: (i32,) = sqlx::query_as("SELECT chunk_count FROM documents WHERE id = $1")
-            .bind(doc_id)
-            .fetch_one(&pool)
-            .await?;
-        Ok(row.0 as usize)
-    }
-
-    /// Text body chunks plus multimodal/visual chunks (scan PDFs may have 0 text rows).
-    pub async fn query_ingested_chunk_units(&self, document_id: &str) -> anyhow::Result<usize> {
-        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
-        let doc_id = Uuid::parse_str(document_id)?;
-        let text: (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM chunks WHERE document_id = $1")
-                .bind(doc_id)
-                .fetch_one(&pool)
-                .await?;
-        let multimodal: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM document_multimodal_chunks WHERE document_id = $1",
-        )
-        .bind(doc_id)
-        .fetch_one(&pool)
-        .await?;
-        Ok((text.0 + multimodal.0) as usize)
-    }
-
-    /// Return one chunk id from PG for mock codegen embedding.
-    pub async fn query_first_chunk_id(&self, document_id: &str) -> anyhow::Result<String> {
-        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
-        let doc_id = Uuid::parse_str(document_id)?;
-        let row: (Uuid,) =
-            sqlx::query_as("SELECT id FROM chunks WHERE document_id = $1 ORDER BY created_at LIMIT 1")
-                .bind(doc_id)
-                .fetch_one(&pool)
-                .await?;
-        Ok(row.0.to_string())
-    }
-
-    /// Return all chunk ids for a document (for bridge smoke assertions).
-    pub async fn query_document_chunk_ids(&self, document_id: &str) -> anyhow::Result<Vec<String>> {
-        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
-        let doc_id = Uuid::parse_str(document_id)?;
-        let rows: Vec<(Uuid,)> =
-            sqlx::query_as("SELECT id FROM chunks WHERE document_id = $1 ORDER BY created_at")
-                .bind(doc_id)
-                .fetch_all(&pool)
-                .await?;
-        Ok(rows.into_iter().map(|(id,)| id.to_string()).collect())
-    }
-
-    /// Pin chunk id for mock LLM codegen stdout (RAG smoke happy path).
     pub fn set_mock_rag_chunk_id(&self, chunk_id: &str) {
         let _ = self;
         set_mock_rag_codegen_chunk_id(chunk_id);
@@ -1239,49 +1182,9 @@ impl TestContext {
         set_mock_rag_skill_request_memory(enabled);
     }
 
-    /// Read the latest user message content and resolved_query for a session.
-    pub async fn query_latest_user_resolved_query(
-        &self,
-        session_id: &str,
-    ) -> anyhow::Result<(String, Option<String>)> {
-        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
-        let sid = Uuid::parse_str(session_id)?;
-        let row: (String, Option<String>) = sqlx::query_as(
-            "SELECT content, resolved_query FROM chat_messages \
-             WHERE session_id = $1 AND role = 'user' \
-             ORDER BY created_at DESC LIMIT 1",
-        )
-        .bind(sid)
-        .fetch_one(&pool)
-        .await?;
-        Ok(row)
-    }
-
-    /// Override the ingestion task max_attempts for a document.
-    ///
-    /// Useful in failure-scenario tests where we want a parser error to
-    /// dead-letter immediately instead of waiting through the full retry
-    /// backoff chain (≈ 7.5 min with default max_attempts=5).
-    pub async fn set_ingestion_max_attempts(
-        &self,
-        document_id: &str,
-        max_attempts: i32,
-    ) -> anyhow::Result<()> {
-        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
-        let doc_id = Uuid::parse_str(document_id)?;
-        sqlx::query(
-            r#"
-            update ingestion_tasks
-            set max_attempts = $1,
-                updated_at = now()
-            where document_id = $2
-            "#,
-        )
-        .bind(max_attempts.max(1))
-        .bind(doc_id)
-        .execute(&pool)
-        .await?;
-        Ok(())
+    /// Reset mock LLM RAG routing state (call when a test needs a clean mock slate).
+    pub fn reset_mock_state(&self) {
+        reset_mock_rag_state();
     }
 
     /// Toggle mock search server to return 429 (rate limit).
@@ -1575,10 +1478,8 @@ mod tests {
 
     #[test]
     fn milvus_collection_prefix_uses_context_identity_suffix() {
-        let prefix = milvus_collection_prefix_for_identity(
-            "12345678-aaaa-bbbb-cccc-dddddddddddd",
-            "ignored-user",
-        );
+        let prefix =
+            milvus_collection_prefix_for_identity("12345678-aaaa-bbbb-cccc-dddddddddddd");
 
         assert_eq!(prefix, "avrag_e2e_12345678");
     }

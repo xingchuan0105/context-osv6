@@ -4,17 +4,11 @@ import { useEffect, useState } from "react";
 import styles from "./UsageMeter.module.css";
 import { formatCompactToken, formatCountdown, formatLimitToken } from "../../lib/billing/format";
 import type { UsageWindowBucket, LimitHits } from "../../lib/billing/api";
-import { formatUiMessage, type UiLocale } from "../../lib/i18n/messages";
+import { formatUiMessage } from "../../lib/i18n/messages";
+import type { UiLocale } from "../../lib/i18n/config";
 
-export type UsageMeterProps = {
-  variant: "full" | "compact";
-  locale: UiLocale;
-  planId: "free" | "plus" | "pro";
-  rolling5h: UsageWindowBucket;
-  rolling7d: UsageWindowBucket;
-  softLimitHit: LimitHits;
-  hardLimitHit: LimitHits;
-};
+import type { UsageMeterProps } from "../../lib/billing/types";
+export type { UsageMeterProps };
 
 function useCountdown(resetAt: string) {
   const [now, setNow] = useState(() => Date.now());

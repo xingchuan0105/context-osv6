@@ -1,0 +1,19 @@
+[package]
+name = "app-billing"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+analytics = { path = "../analytics" }
+app-core = { path = "../app-core" }
+avrag-auth = { path = "../auth" }
+avrag-billing = { path = "../billing" }
+avrag-llm = { path = "../llm" }
+common = { path = "../common" }
+chrono.workspace = true
+serde_json.workspace = true
+telemetry = { path = "../telemetry" }
+tracing.workspace = true
+uuid.workspace = true

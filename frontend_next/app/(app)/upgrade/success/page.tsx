@@ -1,19 +1,13 @@
-import Link from "next/link";
-import { getLocale } from "next-intl/server";
-import { redirect } from "next/navigation";
+"use client";
 
-import { isPricingRevampEnabledSSR } from "../../../lib/billing/featureFlag";
-import { normalizeLocale } from "../../../lib/i18n/config";
-import { formatUiMessage } from "../../../lib/i18n/messages";
+import Link from "next/link";
+
+import { formatUiMessage } from "../../../../lib/i18n/messages";
+import { useUiPreferences } from "../../../../lib/ui-preferences";
 import styles from "./success.module.css";
 
-export const dynamic = "force-dynamic";
-
-export default async function UpgradeSuccessPage() {
-  if (!isPricingRevampEnabledSSR()) {
-    redirect("/dashboard");
-  }
-  const locale = normalizeLocale(await getLocale());
+export default function UpgradeSuccessPage() {
+  const { locale } = useUiPreferences();
 
   return (
     <div className={styles.page}>

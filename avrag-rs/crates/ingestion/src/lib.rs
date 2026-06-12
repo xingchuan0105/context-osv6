@@ -19,16 +19,18 @@ pub use ir_validator::{
     DocumentIrValidationReport, sanitize_and_validate_document_ir, sanitize_document_ir,
     validate_document_ir,
 };
-pub use model::{
-    AuditAction, AuditRecord, DEFAULT_MAX_ATTEMPTS, DocumentStateMachine, IngestDocumentPayload,
-    IngestUrlPayload, IngestionTask, IngestionTaskKind, IngestionTaskPayload,
-    ReindexDocumentPayload, ReindexReason, Transition, build_ingest_task, build_ingest_url_task,
+pub use ingestion_types::{
+    AuditAction, AuditRecord, DEFAULT_MAX_ATTEMPTS, IngestDocumentPayload, IngestUrlPayload,
+    IngestionTask, IngestionTaskKind, IngestionTaskPayload, ReindexDocumentPayload, ReindexReason,
+    TaskCompletionOutcome, TaskFailureOutcome,
+};
+pub use model::{DocumentStateMachine, Transition, build_ingest_task, build_ingest_url_task,
     build_reindex_task, task_audit,
 };
+pub use parser::{PageParseStatus, PageStatusEntry, parse_page_status_from_ir};
 pub use runtime::{
     AuditSink, NoopAuditSink, NoopStateSink, NoopTaskProcessor, NoopTaskSource, StateSink,
-    TaskCompletionOutcome, TaskFailureOutcome, TaskProcessor, TaskSource, WorkerRuntime,
-    WorkerTick,
+    TaskProcessor, TaskSource, WorkerRuntime, WorkerTick,
 };
 
 #[cfg(test)]

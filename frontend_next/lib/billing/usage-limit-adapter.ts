@@ -1,6 +1,6 @@
 import type { UsageLimitResponse, UsageWindow } from "../settings/client";
 import type { LimitHits, UsageWindowBucket } from "./api";
-import type { UsageMeterProps } from "../../components/billing/UsageMeter";
+import type { UsageMeterProps } from "./types";
 import type { UiLocale } from "../i18n/config";
 
 const PLAN_IDS = new Set<UsageMeterProps["planId"]>(["free", "plus", "pro"]);

@@ -1,35 +1,7 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum DocumentStatus {
-    Pending,
-    Enqueueing,
-    Queued,
-    Processing,
-    Completed,
-    Failed,
-    Deleting,
-    Deleted,
-    #[serde(rename = "upload_invalid")]
-    UploadInvalid,
-}
-
-impl DocumentStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Enqueueing => "enqueueing",
-            Self::Queued => "queued",
-            Self::Processing => "processing",
-            Self::Completed => "completed",
-            Self::Failed => "failed",
-            Self::Deleting => "deleting",
-            Self::Deleted => "deleted",
-            Self::UploadInvalid => "upload_invalid",
-        }
-    }
-}
+use crate::DocumentStatus;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
@@ -125,6 +97,17 @@ pub struct SourceRow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourcesResponse {
     pub sources: Vec<SourceRow>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TocEntry {
+    pub id: Uuid,
+    pub parent_id: Option<Uuid>,
+    pub title: String,
+    pub heading_level: i32,
+    pub page: Option<i32>,
+    pub chunk_id: Option<Uuid>,
+    pub rank: i32,
 }
 
 #[cfg(test)]

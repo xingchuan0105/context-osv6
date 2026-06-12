@@ -1,0 +1,25 @@
+[package]
+name = "app-documents"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+analytics = { path = "../analytics" }
+anyhow.workspace = true
+app-billing = { path = "../app-billing" }
+app-core = { path = "../app-core" }
+async-trait.workspace = true
+avrag-auth = { path = "../auth" }
+avrag-rag-core = { path = "../rag-core" }
+avrag-storage-pg = { path = "../storage-pg" }
+bytes = "1"
+common = { path = "../common" }
+futures = "0.3"
+ingestion = { path = "../ingestion" }
+reqwest.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true

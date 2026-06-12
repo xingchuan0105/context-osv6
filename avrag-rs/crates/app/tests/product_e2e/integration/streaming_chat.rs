@@ -13,8 +13,7 @@
 use std::time::Duration;
 
 use crate::product_e2e::{
-    ChatStreamParams, DocumentStatus, SseEvent, TestContext,
-    llm_real::collect_observability_from_events,
+    ChatStreamParams, SseEvent, llm_real::collect_observability_from_events, ready_rag_context,
 };
 
 const STREAM_DEADLINE: Duration = Duration::from_secs(60);
@@ -28,13 +27,7 @@ const MAX_EVENTS: usize = 512;
 /// regardless of whether it later completes successfully or errors.
 #[tokio::test]
 async fn chat_stream_emits_start_event_first() {
-    let mut ctx = TestContext::new_smoke_with_rag().await;
-    let upload = ctx.upload_document("antifragile.txt").await.unwrap();
-    let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
-        .await
-        .unwrap();
-    assert_eq!(status, DocumentStatus::Completed);
+    let (mut ctx, upload) = ready_rag_context().await;
 
     let events = ctx
         .chat_stream(
@@ -62,13 +55,7 @@ async fn chat_stream_emits_start_event_first() {
 /// A streaming chat run must terminate with a `done` event.
 #[tokio::test]
 async fn chat_stream_terminates_with_done_or_error() {
-    let mut ctx = TestContext::new_smoke_with_rag().await;
-    let upload = ctx.upload_document("antifragile.txt").await.unwrap();
-    let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
-        .await
-        .unwrap();
-    assert_eq!(status, DocumentStatus::Completed);
+    let (mut ctx, upload) = ready_rag_context().await;
 
     let events = ctx
         .chat_stream(
@@ -93,13 +80,7 @@ async fn chat_stream_terminates_with_done_or_error() {
 /// that a non-streaming chat would return.
 #[tokio::test]
 async fn chat_stream_done_payload_shape_when_present() {
-    let mut ctx = TestContext::new_smoke_with_rag().await;
-    let upload = ctx.upload_document("antifragile.txt").await.unwrap();
-    let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
-        .await
-        .unwrap();
-    assert_eq!(status, DocumentStatus::Completed);
+    let (mut ctx, upload) = ready_rag_context().await;
 
     let events = ctx
         .chat_stream(
@@ -153,13 +134,7 @@ async fn chat_stream_done_payload_shape_when_present() {
 /// chat direct-answer skips synthesis, so we exercise the RAG path here.
 #[tokio::test]
 async fn chat_stream_collects_reasoning_delta_from_mock() {
-    let mut ctx = TestContext::new_smoke_with_rag().await;
-    let upload = ctx.upload_document("antifragile.txt").await.unwrap();
-    let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
-        .await
-        .unwrap();
-    assert_eq!(status, DocumentStatus::Completed);
+    let (mut ctx, upload) = ready_rag_context().await;
 
     let events = ctx
         .chat_stream_with_params(
@@ -189,13 +164,7 @@ async fn chat_stream_collects_reasoning_delta_from_mock() {
 /// without `debug: true`; only `prompt_snapshot` requires debug.
 #[tokio::test]
 async fn chat_stream_collects_trace_telemetry_without_debug() {
-    let mut ctx = TestContext::new_smoke_with_rag().await;
-    let upload = ctx.upload_document("antifragile.txt").await.unwrap();
-    let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
-        .await
-        .unwrap();
-    assert_eq!(status, DocumentStatus::Completed);
+    let (mut ctx, upload) = ready_rag_context().await;
 
     let events = ctx
         .chat_stream_with_params(
@@ -234,13 +203,7 @@ async fn chat_stream_collects_trace_telemetry_without_debug() {
 /// (`plan_decision` / `evaluation`) for offline trace_reasoning capture.
 #[tokio::test]
 async fn chat_stream_debug_collects_trace_telemetry() {
-    let mut ctx = TestContext::new_smoke_with_rag().await;
-    let upload = ctx.upload_document("antifragile.txt").await.unwrap();
-    let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
-        .await
-        .unwrap();
-    assert_eq!(status, DocumentStatus::Completed);
+    let (mut ctx, upload) = ready_rag_context().await;
 
     let events = ctx
         .chat_stream_with_params(
@@ -275,13 +238,7 @@ async fn chat_stream_debug_collects_trace_telemetry() {
 /// for offline prompt-compliance analysis.
 #[tokio::test]
 async fn chat_stream_debug_emits_prompt_snapshot() {
-    let mut ctx = TestContext::new_smoke_with_rag().await;
-    let upload = ctx.upload_document("antifragile.txt").await.unwrap();
-    let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
-        .await
-        .unwrap();
-    assert_eq!(status, DocumentStatus::Completed);
+    let (mut ctx, upload) = ready_rag_context().await;
 
     let events = ctx
         .chat_stream_with_params(
@@ -326,13 +283,7 @@ async fn chat_stream_debug_emits_prompt_snapshot() {
 /// error event does appear we validate its shape.
 #[tokio::test]
 async fn chat_stream_error_event_has_code_and_message() {
-    let mut ctx = TestContext::new_smoke_with_rag().await;
-    let upload = ctx.upload_document("antifragile.txt").await.unwrap();
-    let status = ctx
-        .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
-        .await
-        .unwrap();
-    assert_eq!(status, DocumentStatus::Completed);
+    let (mut ctx, upload) = ready_rag_context().await;
 
     let events = ctx
         .chat_stream(

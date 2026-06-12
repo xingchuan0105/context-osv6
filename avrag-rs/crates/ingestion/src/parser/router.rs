@@ -9,6 +9,7 @@ use super::probe::{
 const FIG_COUNT_THRESHOLD: usize = 2;
 const FIG_RATIO_THRESHOLD: f32 = 0.15;
 const TABLE_GARBLE_THRESHOLD: f32 = 0.30;
+#[allow(dead_code)] // referenced by TODO below once edgeparse_table_quality lands
 const TABLE_QUAL_THRESHOLD: f32 = 0.6;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -20,7 +21,7 @@ pub enum ParseRoute {
     MineruImage,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RouteDecision {
     FastText,
@@ -63,6 +64,38 @@ impl std::fmt::Display for RouteReason {
             RouteReason::SlowOcrSinglePage => write!(f, "slow_ocr_single_page"),
             RouteReason::OcrFallback => write!(f, "ocr_fallback"),
         }
+    }
+}
+
+/// Canonical per-page route label for metadata (`page_routes`, `page_status`).
+pub fn page_route_label(decision: RouteDecision) -> &'static str {
+    match decision {
+        RouteDecision::FastText => "A",
+        RouteDecision::FastWithFigures => "B",
+        RouteDecision::SlowOcr => "C",
+        RouteDecision::SlowOcrSinglePage => "C_prime",
+        RouteDecision::Fallback => "fallback",
+    }
+}
+
+impl RouteReason {
+    /// Short per-page route label for metadata (`page_routes`, `page_status`).
+    pub fn route_label(&self) -> &'static str {
+        match self {
+            RouteReason::FastText => page_route_label(RouteDecision::FastText),
+            RouteReason::FastWithFigures => page_route_label(RouteDecision::FastWithFigures),
+            RouteReason::SlowOcr => page_route_label(RouteDecision::SlowOcr),
+            RouteReason::SlowOcrSinglePage => page_route_label(RouteDecision::SlowOcrSinglePage),
+            RouteReason::OcrFallback => page_route_label(RouteDecision::Fallback),
+            _ => "unknown",
+        }
+    }
+}
+
+impl RouteDecision {
+    /// Short per-page route label aligned with [`RouteReason::route_label`].
+    pub fn route_label(&self) -> &'static str {
+        page_route_label(*self)
     }
 }
 
@@ -392,7 +425,10 @@ fn route_page(page: &PdfPageProbeResult) -> (PdfPageBackend, RouteDecision, Rout
 }
 
 fn build_pdf_page_plan(page_probe: &PdfPageProbeResult, _config: &ParseProbeConfig) -> PdfPagePlan {
-    let (backend, _decision, reason) = route_page(page_probe);
+    let (backend, reason) = {
+        let (backend, _, reason) = route_page(page_probe);
+        (backend, reason)
+    };
 
     PdfPagePlan {
         page_number: page_probe.page_number,
@@ -793,5 +829,24 @@ mod tests {
         let (backend, decision, _reason) = route_page(&page);
         assert_eq!(backend, PdfPageBackend::PaddleOcr);
         assert_eq!(decision, RouteDecision::SlowOcrSinglePage);
+    }
+
+    #[test]
+    fn route_reason_labels_match_page_classes() {
+        assert_eq!(RouteReason::FastText.route_label(), "A");
+        assert_eq!(RouteReason::FastWithFigures.route_label(), "B");
+        assert_eq!(RouteReason::SlowOcr.route_label(), "C");
+        assert_eq!(RouteReason::SlowOcrSinglePage.route_label(), "C_prime");
+        assert_eq!(RouteReason::OcrFallback.route_label(), "fallback");
+        assert_eq!(RouteReason::SimplePdf.route_label(), "unknown");
+    }
+
+    #[test]
+    fn route_decision_labels_match_reason() {
+        assert_eq!(RouteDecision::FastText.route_label(), "A");
+        assert_eq!(RouteDecision::FastWithFigures.route_label(), "B");
+        assert_eq!(RouteDecision::SlowOcr.route_label(), "C");
+        assert_eq!(RouteDecision::SlowOcrSinglePage.route_label(), "C_prime");
+        assert_eq!(RouteDecision::Fallback.route_label(), "fallback");
     }
 }

@@ -26,7 +26,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
         return super::error_result("doc_metadata", "no valid doc_ids provided".to_string());
     }
 
-    let Some(pg_repo) = runtime.config.pg_repo.as_ref() else {
+    let Some(content_store) = runtime.config.content_store.as_ref() else {
         return ToolResult {
             tool: "doc_metadata".to_string(),
             version: "1.0".to_string(),
@@ -36,7 +36,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                 elapsed_ms: Some(0),
                 raw_hit_count: Some(0),
                 hydrated_hit_count: Some(0),
-                degrade_reason: Some("pg_repo not configured — returning empty".to_string()),
+                degrade_reason: Some("content_store not configured — returning empty".to_string()),
             }),
         };
     };
@@ -44,8 +44,8 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
     let started = std::time::Instant::now();
 
     let (metadata_list, toc_entries) = tokio::join!(
-        pg_repo.get_document_metadata_by_ids(auth, &doc_uuids),
-        pg_repo.get_document_toc_entries(auth, &doc_uuids),
+        content_store.get_document_metadata_by_ids(auth, &doc_uuids),
+        content_store.get_document_toc_entries(auth, &doc_uuids),
     );
 
     match metadata_list {

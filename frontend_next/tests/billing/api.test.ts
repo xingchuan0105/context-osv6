@@ -55,6 +55,18 @@ describe("billingApi.getPlans", () => {
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
   });
+
+  it("throws on server error", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: false, message: "Internal error" }), { status: 500 }),
+    );
+    await expect(billingApi.getPlans()).rejects.toThrow();
+  });
+
+  it("throws on network failure", async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
+    await expect(billingApi.getPlans()).rejects.toThrow("fetch failed");
+  });
 });
 
 describe("billingApi.getUsageWindow", () => {
@@ -157,6 +169,13 @@ describe("billingApi.getUsageHistory", () => {
       expect.anything(),
     );
   });
+
+  it("throws on server error", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: false, message: "boom" }), { status: 500 }),
+    );
+    await expect(billingApi.getUsageHistory()).rejects.toThrow();
+  });
 });
 
 describe("billingApi.getUsageForecast", () => {
@@ -182,5 +201,12 @@ describe("billingApi.getUsageForecast", () => {
     const result = await billingApi.getUsageForecast();
     expect(result.upgrade_recommended).toBe(true);
     expect(result.suggestion_en).toBe("Consider upgrading");
+  });
+
+  it("throws on server error", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: false, message: "boom" }), { status: 500 }),
+    );
+    await expect(billingApi.getUsageForecast()).rejects.toThrow();
   });
 });

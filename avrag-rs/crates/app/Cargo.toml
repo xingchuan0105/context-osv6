@@ -8,45 +8,41 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
+app-admin = { path = "../app-admin" }
+app-billing = { path = "../app-billing" }
+app-bootstrap = { path = "../app-bootstrap" }
+app-chat = { path = "../app-chat" }
+app-core = { path = "../app-core" }
+app-documents = { path = "../app-documents" }
 analytics = { path = "../analytics" }
 bytes = "1"
 contracts = { path = "../../../contracts" }
 serde.workspace = true
 avrag-auth = { path = "../auth" }
 avrag-billing = { path = "../billing" }
-avrag-storage-pg = { path = "../storage-pg" }
-avrag-storage-milvus = { path = "../storage-milvus" }
-avrag-search = { path = "../search" }
-avrag-chatmemory = { path = "../chatmemory" }
 avrag-llm = { path = "../llm" }
 avrag-rag-core = { path = "../rag-core" }
-avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
-avrag-cache-redis = { path = "../cache-redis" }
-avrag-guardrails = { path = "../guardrails" }
-telemetry = { path = "../telemetry" }
+avrag-search = { path = "../search" }
+avrag-storage-pg = { path = "../storage-pg" }
 common = { path = "../common" }
 chrono.workspace = true
 futures = "0.3"
 hex.workspace = true
 hmac.workspace = true
-ingestion = { path = "../ingestion" }
+regex.workspace = true
+reqwest.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-reqwest.workspace = true
-redis.workspace = true
+telemetry = { path = "../telemetry" }
+thiserror.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
 tracing.workspace = true
 uuid.workspace = true
-rig-core = "0.36.0"
-regex.workspace = true
-thiserror.workspace = true
-tokio-util.workspace = true
-evalexpr.workspace = true
-avrag-code-interpreter = { path = "../code-interpreter" }
-serde_yaml = "0.9"
 
 [dev-dependencies]
 axum = { version = "0.8", features = ["macros"] }
+redis.workspace = true
 tempfile = "3"
 tokio = { workspace = true, features = ["process"] }
 transport-http = { path = "../transport-http" }

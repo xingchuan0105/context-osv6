@@ -4,6 +4,18 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+/// Down-weight multiplier for OCR-failed page raster chunks in multimodal search (RET-1).
+pub const FALLBACK_RETRIEVAL_WEIGHT: f32 = 0.4;
+
+/// RET-1: down-weight `page_raster` chunks when the source page OCR failed.
+pub fn multimodal_retrieval_weight(chunk_type: &str, page_ocr_failed: bool) -> Option<f32> {
+    if chunk_type == "page_raster" && page_ocr_failed {
+        Some(FALLBACK_RETRIEVAL_WEIGHT)
+    } else {
+        None
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoredChunk {
     pub chunk_id: Uuid,
@@ -349,6 +361,16 @@ mod tests {
         let message = error.to_string();
         assert!(message.contains(method), "{message}");
         assert!(message.contains("not implemented"), "{message}");
+    }
+
+    #[test]
+    fn multimodal_retrieval_weight_downweights_ocr_fail_page_raster() {
+        assert_eq!(
+            multimodal_retrieval_weight("page_raster", true),
+            Some(FALLBACK_RETRIEVAL_WEIGHT)
+        );
+        assert_eq!(multimodal_retrieval_weight("page_raster", false), None);
+        assert_eq!(multimodal_retrieval_weight("text", true), None);
     }
 
     #[tokio::test]

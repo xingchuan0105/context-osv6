@@ -18,8 +18,8 @@ async fn chat_presentation_html_returns_structured_slides() {
 
     // 2. Ask a RAG question with format_hint="ppt-generation".
     let http_resp = ctx
-        .chat_with_format_hint(
-            "Summarise the core ideas of the document as a presentation",
+        .chat_with_format_hint_without_mock_chunk_pin(
+            "What is antifragility?",
             &upload.notebook_id,
             &[upload.document_id],
             Some("ppt-generation"),
@@ -59,8 +59,8 @@ async fn chat_html_renderer_returns_valid_html() {
 
     // 2. Ask a RAG question with format_hint="html-renderer".
     let http_resp = ctx
-        .chat_with_format_hint(
-            "Render the document content as an HTML page",
+        .chat_with_format_hint_without_mock_chunk_pin(
+            "What is antifragility?",
             &upload.notebook_id,
             &[upload.document_id],
             Some("html-renderer"),

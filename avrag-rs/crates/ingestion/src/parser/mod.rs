@@ -7,6 +7,7 @@ mod pdf;
 mod pdf_image;
 mod pdf_renderer_service;
 mod probe;
+mod page_status;
 mod router;
 mod text;
 mod visual_pdf;
@@ -34,10 +35,11 @@ pub use pdf_renderer_service::{
 };
 pub use visual_pdf::VisualPdfParser;
 pub use probe::{ParseProbe, ParseProbeConfig, ParseProbeResult, PdfPageProbeResult};
+pub use page_status::{PageParseStatus, PageStatusEntry, parse_page_status_from_ir};
 pub use router::{
     ExternalParseKind, ExternalParsePlan, LocalParseKind, LocalParsePlan, OfficeDocType,
     OfficeParsePlan, ParsePlan, ParseRoute, ParseRouteDecision, ParseRouteError, ParseRouter,
-    PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteDecision, RouteReason,
+    PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteDecision, RouteReason, page_route_label,
 };
 pub use text::TextParser;
 

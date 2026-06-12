@@ -25,13 +25,14 @@ pub use billing::{BillingOverview, PlanRow, PlansResponse, SubscriptionResponse,
 pub use chat::{
     AnswerBlock, ChatDonePayload, ChatEvent, ChatMessage, ChatMessageListResponse, ChatRequest,
     ChatResponse, ChatTurnInput, Citation, DegradeTraceItem, GeneralPlan, GuardAction, GuardReport,
-    GuardResult, ModeDebug, PlannerOutput, RagModeDebug, RagPlan, RagPlanItem, RagTraceItem,
-    RagTraceSummary, RiskLevel, SearchPlan, SourceRef, SummaryInjectionTrace, TraceInfo,
+    GuardResult, MessageFeedbackRating, MessageFeedbackRequest, ModeDebug, PlannerOutput, RagModeDebug, RagPlan, RagPlanItem,
+    RagTraceItem, RagTraceSummary, RiskLevel, SearchPlan, SourceRef, SummaryInjectionTrace, TraceInfo,
 };
 pub use documents::{
     AnswerContextChunk, CitationLookupRequest, CitationLookupResponse, CreateDocumentRequest,
-    CreateDocumentUploadResponse, Document, DocumentContentResponse, DocumentStatusResponse,
-    DocumentsResponse, ParsedPreviewItem, ParsedPreviewResponse, SourceRow, SourcesResponse,
+    CreateDocumentUploadResponse, Document, DocumentContentResponse, DocumentStatus,
+    DocumentStatusResponse, DocumentsResponse, ParsedPreviewItem, ParsedPreviewResponse, SourceRow,
+    SourcesResponse,
 };
 pub use errors::ErrorEnvelope;
 pub use notebooks::{

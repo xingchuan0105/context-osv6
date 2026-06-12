@@ -82,35 +82,7 @@ fn chunk_page(
         return Vec::new();
     }
 
-    let config = token_chunk_config();
-    let segments: Vec<String> = match mode {
-        SplitMode::Markdown => MarkdownSplitter::new(config)
-            .chunks(content)
-            .map(str::trim)
-            .filter(|segment| !segment.is_empty())
-            .map(ToOwned::to_owned)
-            .collect(),
-        SplitMode::Code(language) => match code_splitter(language, config) {
-            Some(splitter) => splitter
-                .chunks(content)
-                .map(str::trim)
-                .filter(|segment| !segment.is_empty())
-                .map(ToOwned::to_owned)
-                .collect(),
-            None => TextSplitter::new(token_chunk_config())
-                .chunks(content)
-                .map(str::trim)
-                .filter(|segment| !segment.is_empty())
-                .map(ToOwned::to_owned)
-                .collect(),
-        },
-        SplitMode::Text => TextSplitter::new(config)
-            .chunks(content)
-            .map(str::trim)
-            .filter(|segment| !segment.is_empty())
-            .map(ToOwned::to_owned)
-            .collect(),
-    };
+    let segments = split_text_segments(content, mode);
 
     let mut items: Vec<ParsedPreviewItem> = Vec::new();
     for segment in segments {
@@ -300,35 +272,7 @@ pub fn build_chunk_plan(
     for unit in &doc.units {
         match unit.kind {
             ParsedUnitKind::Text => {
-                let config = token_chunk_config();
-                let segments: Vec<String> = match mode {
-                    SplitMode::Markdown => MarkdownSplitter::new(config)
-                        .chunks(&unit.text)
-                        .map(str::trim)
-                        .filter(|segment| !segment.is_empty())
-                        .map(ToOwned::to_owned)
-                        .collect(),
-                    SplitMode::Code(language) => match code_splitter(language, config) {
-                        Some(splitter) => splitter
-                            .chunks(&unit.text)
-                            .map(str::trim)
-                            .filter(|segment| !segment.is_empty())
-                            .map(ToOwned::to_owned)
-                            .collect(),
-                        None => TextSplitter::new(token_chunk_config())
-                            .chunks(&unit.text)
-                            .map(str::trim)
-                            .filter(|segment| !segment.is_empty())
-                            .map(ToOwned::to_owned)
-                            .collect(),
-                    },
-                    SplitMode::Text => TextSplitter::new(config)
-                        .chunks(&unit.text)
-                        .map(str::trim)
-                        .filter(|segment| !segment.is_empty())
-                        .map(ToOwned::to_owned)
-                        .collect(),
-                };
+                let segments = split_text_segments(&unit.text, mode);
 
                 for segment in segments {
                     let char_count = segment.chars().count();

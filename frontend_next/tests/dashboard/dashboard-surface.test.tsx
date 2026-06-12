@@ -1,3 +1,5 @@
+import type { ReactElement } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   updateWorkspaceMock: vi.fn(),
   deleteWorkspaceMock: vi.fn(),
   updateFavoriteWorkspaceIdsMock: vi.fn(),
+  getUsageLimitMock: vi.fn(),
   authState: {
     initialized: true,
     isAuthenticated: true,
@@ -59,7 +62,26 @@ vi.mock("../../lib/dashboard/preferences", () => ({
   updateFavoriteWorkspaceIds: mocks.updateFavoriteWorkspaceIdsMock,
 }));
 
+vi.mock("../../lib/settings/client", () => ({
+  getUsageLimit: mocks.getUsageLimitMock,
+}));
+
 import { DashboardSurface } from "../../components/dashboard/dashboard-surface";
+
+function renderWithQuery(ui: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+      mutations: {
+        retry: false,
+      },
+    },
+  });
+
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
 
 const workspaces = [
   {
@@ -113,6 +135,7 @@ beforeEach(() => {
   mocks.updateWorkspaceMock.mockReset();
   mocks.deleteWorkspaceMock.mockReset();
   mocks.updateFavoriteWorkspaceIdsMock.mockReset();
+  mocks.getUsageLimitMock.mockReset();
   mocks.authState = {
     initialized: true,
     isAuthenticated: true,
@@ -149,6 +172,43 @@ beforeEach(() => {
   });
   mocks.deleteWorkspaceMock.mockResolvedValue(undefined);
   mocks.updateFavoriteWorkspaceIdsMock.mockResolvedValue(["ws-2", "ws-1"]);
+  mocks.getUsageLimitMock.mockResolvedValue({
+    policy: {
+      enabled: true,
+      rolling_5h_limit_units: 1000,
+      rolling_7d_limit_units: 7000,
+    },
+    windows: {
+      rolling_5h: {
+        used_units: 250,
+        limit_units: 1000,
+        remaining_units: 750,
+        percent_used: 25,
+        blocked: false,
+        next_relief_at: "2026-04-20T12:00:00Z",
+        blocked_until: null,
+      },
+      rolling_7d: {
+        used_units: 1000,
+        limit_units: 7000,
+        remaining_units: 6000,
+        percent_used: 14.3,
+        blocked: false,
+        next_relief_at: null,
+        blocked_until: null,
+      },
+    },
+    breakdown: {
+      embedding_tokens: 300,
+      llm_input_tokens: 400,
+    },
+    scope: {
+      plan_default: {
+        plan_id: "pro",
+      },
+    },
+    has_estimated_usage: false,
+  });
 });
 
 afterEach(() => {
@@ -164,7 +224,7 @@ describe("DashboardSurface", () => {
   it("renders card view by default and makes workspace content clickable outside the actions menu", async () => {
     const user = userEvent.setup();
 
-    render(<DashboardSurface />);
+    renderWithQuery(<DashboardSurface />);
 
     await waitFor(() => {
       expect(mocks.listWorkspacesMock).toHaveBeenCalledTimes(1);
@@ -202,7 +262,7 @@ describe("DashboardSurface", () => {
   it("switches tabs, sort mode, view mode, and favorites", async () => {
     const user = userEvent.setup();
 
-    render(<DashboardSurface />);
+    renderWithQuery(<DashboardSurface />);
 
     await screen.findByRole("grid", { name: "工作区卡片" });
 
@@ -241,7 +301,7 @@ describe("DashboardSurface", () => {
     mocks.listWorkspacesMock.mockResolvedValue({ workspaces: [] });
     mocks.getFavoriteWorkspaceIdsMock.mockResolvedValue([]);
 
-    render(<DashboardSurface />);
+    renderWithQuery(<DashboardSurface />);
 
     await screen.findByText("创建第一个工作区");
 
@@ -260,7 +320,7 @@ describe("DashboardSurface", () => {
     const promptMock = vi.spyOn(window, "prompt").mockReturnValue("Renamed Gamma");
     const confirmMock = vi.spyOn(window, "confirm").mockReturnValue(true);
 
-    render(<DashboardSurface />);
+    renderWithQuery(<DashboardSurface />);
 
     await screen.findByRole("grid", { name: "工作区卡片" });
 

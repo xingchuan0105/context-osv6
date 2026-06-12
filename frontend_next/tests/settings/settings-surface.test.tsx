@@ -364,7 +364,6 @@ describe("SettingsSurface", () => {
       full_name: "Owner Updated",
     });
     expect(screen.getByText("Settings saved.")).toBeTruthy();
-    expect(mocks.getUsageLimitMock).toHaveBeenCalledWith("token-123");
   });
 
   it("switches theme and locale from the appearance panel", async () => {

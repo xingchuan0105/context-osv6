@@ -1,4 +1,5 @@
 import { ApiError, buildApiUrl } from "../auth/client";
+import type { UsageWindowResponse } from "./api";
 
 /**
  * Pricing revamp gate design (keep frontend aligned with backend PRICING_REVAMP_ROLLOUT):
@@ -28,13 +29,19 @@ export function isPricingRevampEnabledClient(): boolean {
 
 type UsageWindowProbeEnvelope = {
   ok?: boolean;
+  data?: UsageWindowResponse;
   error?: { code?: string; message?: string } | null;
 };
 
-/** Canonical authenticated check: env prerequisite + usage/window probe (bucket-aware). */
-export async function isPricingRevampEnabled(): Promise<boolean> {
+export type PricingRevampProbe = {
+  enabled: boolean;
+  usageWindow?: UsageWindowResponse;
+};
+
+/** Authenticated probe: env prerequisite + usage/window fetch (bucket-aware). */
+export async function probePricingRevampUsageWindow(): Promise<PricingRevampProbe> {
   if (!isPricingRevampEnabledSSR()) {
-    return false;
+    return { enabled: false };
   }
 
   try {
@@ -44,13 +51,22 @@ export async function isPricingRevampEnabled(): Promise<boolean> {
       headers: { Accept: "application/json" },
     });
     if (!response.ok) {
-      return false;
+      return { enabled: false };
     }
     const envelope = (await response.json()) as UsageWindowProbeEnvelope;
-    return envelope.ok === true;
+    if (envelope.ok !== true || !envelope.data) {
+      return { enabled: false };
+    }
+    return { enabled: true, usageWindow: envelope.data };
   } catch {
-    return false;
+    return { enabled: false };
   }
+}
+
+/** Canonical authenticated check: env prerequisite + usage/window probe (bucket-aware). */
+export async function isPricingRevampEnabled(): Promise<boolean> {
+  const probe = await probePricingRevampUsageWindow();
+  return probe.enabled;
 }
 
 export function isPricingRevampFeatureDisabledError(error: unknown): boolean {

@@ -1,11 +1,16 @@
 import { redirect } from "next/navigation";
 
 type ShareAnalyticsPageProps = {
-  params: {
+  params: Promise<{
     workspace_id: string;
-  };
+  }>;
 };
 
-export default function ShareAnalyticsPage({ params }: ShareAnalyticsPageProps) {
-  redirect(`/dashboard/${params.workspace_id}/share#insights`);
+export function generateStaticParams() {
+  return [{ workspace_id: "_placeholder" }];
+}
+
+export default async function ShareAnalyticsPage({ params }: ShareAnalyticsPageProps) {
+  const { workspace_id } = await params;
+  redirect(`/dashboard/${workspace_id}/share#insights`);
 }

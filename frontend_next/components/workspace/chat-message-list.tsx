@@ -1275,6 +1275,7 @@ export function ChatMessageList({
                   .filter(Boolean)
                   .join(" ")}
                 data-testid="workspace-answer-bubble"
+                data-mode={message.mode ?? "chat"}
               >
                 {message.role === "assistant" ? (
                   <AssistantAnswerContent

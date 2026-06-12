@@ -51,9 +51,9 @@ impl RagRuntime {
         self.config.cache.clone()
     }
 
-    /// Access the PostgreSQL repository if configured.
-    pub fn pg_repo(&self) -> Option<std::sync::Arc<avrag_storage_pg::PgAppRepository>> {
-        self.config.pg_repo.clone()
+    /// Access the content store if configured.
+    pub fn content_store(&self) -> Option<Arc<dyn crate::ports::ContentStore>> {
+        self.config.content_store.clone()
     }
 
     /// Access the reranker client if configured.

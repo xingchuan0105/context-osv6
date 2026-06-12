@@ -23,9 +23,9 @@ pub struct ChatRequest {
     /// When true, emit debug trace events (e.g. prompt snapshots) in SSE streams.
     #[serde(default)]
     pub debug: bool,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format_hint: Option<String>,
 }
 
@@ -58,6 +58,8 @@ pub struct ChatMessage {
     pub tool_results: Vec<ToolResult>,
     #[serde(default)]
     pub turn_metadata: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_query: Option<String>,
     pub created_at: String,
 }
 
@@ -479,7 +481,7 @@ pub struct SummaryInjectionTrace {
     pub injected_count: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolStatus {
     Ok,
@@ -489,6 +491,19 @@ pub enum ToolStatus {
     NotImplemented,
 }
 
+/// Per-tool execution trace (latency, hit counts, degrade reason).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ToolTrace {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elapsed_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_hit_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hydrated_hit_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub degrade_reason: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolResult {
     pub tool: String,
@@ -496,6 +511,8 @@ pub struct ToolResult {
     pub status: ToolStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace: Option<ToolTrace>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -626,4 +643,18 @@ fn default_rag_plan_version() -> String {
 
 fn default_rag_plan_confidence() -> f32 {
     0.5
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MessageFeedbackRating {
+    Up,
+    Down,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageFeedbackRequest {
+    pub session_id: String,
+    pub message_id: i64,
+    pub rating: MessageFeedbackRating,
 }

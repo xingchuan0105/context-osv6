@@ -1,0 +1,47 @@
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use app_core::{BillingQuotaPort, DocumentStorePort};
+use app_billing::BillingContext;
+use avrag_auth::AuthContext;
+use common::AppError;
+use uuid::Uuid;
+
+pub struct PgBillingQuotaAdapter {
+    billing: BillingContext,
+    document_store: Arc<dyn DocumentStorePort>,
+}
+
+impl PgBillingQuotaAdapter {
+    pub fn new(billing: BillingContext, document_store: Arc<dyn DocumentStorePort>) -> Self {
+        Self {
+            billing,
+            document_store,
+        }
+    }
+}
+
+#[async_trait]
+impl BillingQuotaPort for PgBillingQuotaAdapter {
+    async fn ensure_storage_bytes_quota(
+        &self,
+        auth: &AuthContext,
+        bytes: i64,
+    ) -> Result<(), AppError> {
+        self.billing
+            .ensure_metric_quota(auth, "storage_bytes", bytes)
+            .await
+    }
+
+    async fn notebook_exists(
+        &self,
+        auth: &AuthContext,
+        notebook_id: Uuid,
+    ) -> Result<bool, AppError> {
+        Ok(self
+            .document_store
+            .get_notebook(auth, notebook_id)
+            .await?
+            .is_some())
+    }
+}

@@ -3,19 +3,24 @@
 #![allow(deprecated)]
 #![allow(unused_mut)]
 
-pub mod adapters;
-pub mod agents;
+pub use app_chat::{
+    agents, chat_streaming, memory_helpers, rag_prompts, AgentKind, ChatContext, LlmContext,
+    OrchestratorContext,
+};
 mod chat;
+pub mod adapters;
 pub mod ports;
-pub mod rag_prompts;
 pub mod runtime;
 pub mod services;
-pub mod token_budget;
 
-pub mod analytics_context;
-pub mod billing_context;
-pub mod llm_context;
-pub mod orchestrator_context;
+pub use app_chat::token_budget;
+
+pub use app_core::{
+    analytics_context::AnalyticsContext, analytics_context::AnalyticsServiceCtx,
+    analytics_context::CostEventRecord, config::*, load_prompt_template, domain_ports::*,
+    MemoryState, RetrievedContext, StoredDocument, StorageContext,
+};
+
 pub mod storage_context;
 pub mod lib_impl;
 pub use lib_impl::*;

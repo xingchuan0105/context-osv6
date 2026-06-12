@@ -5,14 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { type KeyboardEvent, useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 
-import { GuestOnlyGate } from "../../../components/auth-gates";
-import { AuthFrame } from "../../../components/page-frame";
-import { login } from "../../../lib/auth/client";
-import { useAuth } from "../../../lib/auth/context";
-import { describeAuthError } from "../../../lib/auth/errors";
-import { formatUiMessage } from "../../../lib/i18n/messages";
-import { getSafeNextPath } from "../../../lib/navigation/next-path";
-import { useUiPreferences } from "../../../lib/ui-preferences";
+import { GuestOnlyGate } from "@/components/auth-gates";
+import { AuthFrame } from "@/components/page-frame";
+import { login } from "@/lib/auth/client";
+import { useAuth } from "@/lib/auth/context";
+import { describeAuthError } from "@/lib/auth/errors";
+import { formatUiMessage } from "@/lib/i18n/messages";
+import { getSafeNextPath } from "@/lib/navigation/next-path";
+import { useUiPreferences } from "@/lib/ui-preferences";
 
 export default function LoginPage() {
   const router = useRouter();

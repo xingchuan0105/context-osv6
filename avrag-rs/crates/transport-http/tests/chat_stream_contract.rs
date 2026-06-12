@@ -91,6 +91,7 @@ impl Agent for ScriptedAgent {
                 completion_tokens: 2,
                 total_tokens: 3,
                 request_count: 1,
+                cached_tokens: 0,
             }),
             ..Default::default()
         })

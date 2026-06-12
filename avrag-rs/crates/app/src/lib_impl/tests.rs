@@ -1,6 +1,11 @@
 #[cfg(test)]
 mod tests {
     use crate::lib_impl::*;
+    use crate::AppConfig;
+    use app_documents::{
+        build_docscope_metadata, build_url_source_filename, infer_url_import_mime_type,
+        normalize_imported_text,
+    };
     use common::{
         ChatMessage, CreateDocumentRequest, CreateDocumentUploadResponse, CreateNotebookRequest,
         DocumentStatus, Notebook, UpdateDocumentRequest,
@@ -666,8 +671,25 @@ mod tests {
 
         let mut state = AppState::new(config);
         let old = &state.storage;
+        let pg = Arc::new(repo);
+        let document_store = Some(
+            Arc::new(app_bootstrap::adapters::PgDocumentStoreAdapter::new(pg.clone()))
+                as Arc<dyn app_core::DocumentStorePort>,
+        );
+        let admin_store = Some(
+            Arc::new(app_bootstrap::adapters::PgAdminStoreAdapter::new(pg.clone()))
+                as Arc<dyn app_core::AdminStorePort>,
+        );
+        let chat_persistence = Some(
+            Arc::new(app_bootstrap::adapters::PgChatPersistenceAdapter::new(pg.clone()))
+                as Arc<dyn app_core::ChatPersistencePort>,
+        );
         state.storage = crate::storage_context::StorageContext::new(
-            Some(Arc::new(repo)),
+            Some(pg),
+            document_store,
+            admin_store,
+            None,
+            chat_persistence,
             old.inner().clone(),
             old.api_keys().clone(),
             old.max_upload_file_size_bytes(),

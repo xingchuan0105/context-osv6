@@ -51,6 +51,22 @@ vi.mock("../../lib/share/client", async () => {
 
 import { WorkspaceShareCenterSurface } from "../../components/share/workspace-share-surface";
 
+function recentViewsByDay() {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  const earlierDay = new Date(today);
+  earlierDay.setUTCDate(today.getUTCDate() - 2);
+
+  const latestDay = new Date(today);
+  latestDay.setUTCDate(today.getUTCDate() - 1);
+
+  return {
+    [earlierDay.toISOString().slice(0, 10)]: 8,
+    [latestDay.toISOString().slice(0, 10)]: 4,
+  };
+}
+
 function renderWithQuery(ui: ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -116,10 +132,7 @@ describe("WorkspaceShareCenterSurface", () => {
     mocks.getShareAnalyticsMock.mockResolvedValue({
       total_views: 12,
       total_unique_visitors: 3,
-      views_by_day: {
-        "2026-04-17": 8,
-        "2026-04-18": 4,
-      },
+      views_by_day: recentViewsByDay(),
     });
     mocks.getShareAccessLogsMock.mockResolvedValue({
       logs: [

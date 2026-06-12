@@ -235,7 +235,10 @@ fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
     let tool_results_value: serde_json::Value =
         row.try_get("tool_results").unwrap_or_else(|_| json!([]));
     let tool_results = serde_json::from_value::<Vec<common::ToolResult>>(tool_results_value)
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .into_iter()
+        .map(Into::into)
+        .collect();
     let turn_metadata_value: serde_json::Value =
         row.try_get("turn_metadata").unwrap_or_else(|_| json!({}));
     let turn_metadata = if turn_metadata_value.is_null()
@@ -415,7 +418,7 @@ fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
         payload: serde_json::from_value::<IngestionTaskPayload>(payload)?,
         lock_token: lock_token.map(|value| value.to_string()),
         attempt_count: row.try_get("attempt_count").unwrap_or(0),
-        max_attempts: row.try_get("max_attempts").unwrap_or(ingestion::DEFAULT_MAX_ATTEMPTS),
+        max_attempts: row.try_get("max_attempts").unwrap_or(ingestion_types::DEFAULT_MAX_ATTEMPTS),
     })
 }
 
