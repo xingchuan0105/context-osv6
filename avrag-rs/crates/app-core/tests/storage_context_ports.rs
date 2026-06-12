@@ -49,6 +49,7 @@ fn storage_context_exposes_typed_ports() {
         None,
         None,
         None,
+        None,
         Arc::new(RwLock::new(MemoryState::default())),
         Arc::new(RwLock::new(BTreeMap::new())),
         10 * 1024 * 1024,

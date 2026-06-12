@@ -4,7 +4,6 @@ mod documents;
 mod helpers;
 mod ingest;
 mod notebooks;
-pub mod pg_content_store;
 mod url_fetch;
 mod url_imports;
 
@@ -15,7 +14,6 @@ pub use helpers::{
     document_is_deleting_or_deleted, infer_mime_type_from_path, is_remote_asset_reference,
     sanitize_filename, status_label,
 };
-pub use pg_content_store::PgContentStore;
 pub use url_fetch::{
     build_url_source_filename, extract_url_import_content, fetch_url_import,
     infer_url_import_mime_type, looks_like_html, normalize_imported_text, write_raw_object,

@@ -1,0 +1,455 @@
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use app_core::{
+    AuthStorePort, AuthUserCredentials, AuthUserProfile, CreatePasswordResetTicketInput,
+    PasswordResetUser, RegisterUserInput, RegisterUserResult,
+};
+use crate::pg_error::map_pg_error;
+use avrag_storage_pg::PgAppRepository;
+use chrono::{DateTime, Utc};
+use common::AppError;
+use sha2::{Digest, Sha256};
+use sqlx::PgPool;
+use uuid::Uuid;
+
+pub struct PgAuthStoreAdapter {
+    repo: Arc<PgAppRepository>,
+}
+
+impl PgAuthStoreAdapter {
+    pub fn new(repo: Arc<PgAppRepository>) -> Self {
+        Self { repo }
+    }
+}
+
+async fn begin_super_admin_tx<'a>(
+    pool: &'a PgPool,
+) -> Result<sqlx::Transaction<'a, sqlx::Postgres>, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+        .execute(&mut *tx)
+        .await?;
+    Ok(tx)
+}
+
+fn org_name_from_email(email: &str) -> String {
+    format!("org-{}", email.split('@').next().unwrap_or("user"))
+}
+
+fn hash_reset_value(secret: &str, scope: &str, value: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(secret.as_bytes());
+    hasher.update(b":");
+    hasher.update(scope.as_bytes());
+    hasher.update(b":");
+    hasher.update(value.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+#[async_trait]
+impl AuthStorePort for PgAuthStoreAdapter {
+    async fn register_user(&self, input: &RegisterUserInput) -> Result<RegisterUserResult, AppError> {
+        let pool = self.repo.raw();
+        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+
+        match sqlx::query("SELECT id FROM users WHERE email = $1")
+            .bind(input.email.trim())
+            .fetch_optional(tx.as_mut())
+            .await
+        {
+            Ok(Some(_)) => {
+                return Err(AppError::conflict(
+                    "email_exists",
+                    "An account with this email already exists",
+                ));
+            }
+            Err(error) => return Err(map_sqlx_error(error)),
+            _ => {}
+        }
+
+        let org_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let full_name = input.full_name.as_deref().unwrap_or_default();
+
+        if let Err(error) = sqlx::query(
+            "INSERT INTO organizations (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
+        )
+        .bind(org_id)
+        .bind(org_name_from_email(&input.email))
+        .execute(tx.as_mut())
+        .await
+        {
+            return Err(map_sqlx_error(error));
+        }
+
+        if let Err(error) = sqlx::query(
+            "INSERT INTO users (id, org_id, email, full_name, password_hash, role) VALUES ($1, $2, $3, $4, $5, 'user')",
+        )
+        .bind(user_id)
+        .bind(org_id)
+        .bind(input.email.trim())
+        .bind(full_name)
+        .bind(&input.password_hash)
+        .execute(tx.as_mut())
+        .await
+        {
+            return Err(map_sqlx_error(error));
+        }
+
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(RegisterUserResult {
+            user_id,
+            org_id,
+            email: input.email.trim().to_string(),
+            full_name: full_name.to_string(),
+            auth_version: 1,
+        })
+    }
+
+    async fn find_user_for_login(
+        &self,
+        email: &str,
+    ) -> Result<Option<AuthUserCredentials>, AppError> {
+        let pool = self.repo.raw();
+        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, Option<String>, i32)>(
+            "SELECT id, org_id, email, full_name, password_hash, auth_version FROM users WHERE email = $1",
+        )
+        .bind(email.trim())
+        .fetch_optional(tx.as_mut())
+        .await
+        .map_err(map_sqlx_error)?;
+        tx.commit().await.map_err(map_sqlx_error)?;
+
+        Ok(row.map(
+            |(user_id, org_id, email, full_name, password_hash, auth_version)| AuthUserCredentials {
+                user_id,
+                org_id,
+                email,
+                full_name,
+                password_hash,
+                auth_version,
+            },
+        ))
+    }
+
+    async fn invalidate_session(&self, user_id: Uuid) -> Result<bool, AppError> {
+        let pool = self.repo.raw();
+        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let result = sqlx::query(
+            r#"
+            update users
+            set auth_version = auth_version + 1
+            where id = $1
+            "#,
+        )
+        .bind(user_id)
+        .execute(tx.as_mut())
+        .await
+        .map_err(map_sqlx_error)?;
+        if result.rows_affected() == 0 {
+            return Ok(false);
+        }
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(true)
+    }
+
+    async fn get_user_profile(&self, user_id: Uuid) -> Result<Option<AuthUserProfile>, AppError> {
+        let pool = self.repo.raw();
+        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>)>(
+            "SELECT id, org_id, email, full_name FROM users WHERE id = $1",
+        )
+        .bind(user_id)
+        .fetch_optional(tx.as_mut())
+        .await
+        .map_err(map_sqlx_error)?;
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(row.map(|(user_id, org_id, email, full_name)| AuthUserProfile {
+            user_id,
+            org_id,
+            email,
+            full_name,
+        }))
+    }
+
+    async fn update_user_profile(
+        &self,
+        user_id: Uuid,
+        full_name: &str,
+    ) -> Result<Option<AuthUserProfile>, AppError> {
+        let pool = self.repo.raw();
+        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>)>(
+            r#"
+            update users
+            set full_name = $2
+            where id = $1
+            returning id, org_id, email, full_name
+            "#,
+        )
+        .bind(user_id)
+        .bind(full_name)
+        .fetch_optional(tx.as_mut())
+        .await
+        .map_err(map_sqlx_error)?;
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(row.map(|(user_id, org_id, email, full_name)| AuthUserProfile {
+            user_id,
+            org_id,
+            email,
+            full_name,
+        }))
+    }
+
+    async fn get_password_hash(&self, user_id: Uuid) -> Result<Option<String>, AppError> {
+        let pool = self.repo.raw();
+        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let row = sqlx::query_as::<_, (String,)>(
+            "SELECT password_hash FROM users WHERE id = $1",
+        )
+        .bind(user_id)
+        .fetch_optional(tx.as_mut())
+        .await
+        .map_err(map_sqlx_error)?;
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(row.map(|(password_hash,)| password_hash))
+    }
+
+    async fn change_password(&self, user_id: Uuid, password_hash: &str) -> Result<(), AppError> {
+        let pool = self.repo.raw();
+        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        sqlx::query(
+            r#"
+            update users
+            set password_hash = $2,
+                password_updated_at = now(),
+                auth_version = auth_version + 1
+            where id = $1
+            "#,
+        )
+        .bind(user_id)
+        .bind(password_hash)
+        .execute(tx.as_mut())
+        .await
+        .map_err(map_sqlx_error)?;
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(())
+    }
+
+    async fn find_user_by_email_for_reset(
+        &self,
+        email: &str,
+    ) -> Result<Option<PasswordResetUser>, AppError> {
+        let pool = self.repo.raw();
+        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let row = sqlx::query_as::<_, (Uuid, Uuid, String)>(
+            r#"
+            select id, org_id, email
+            from users
+            where lower(email) = lower($1)
+            order by created_at desc
+            limit 1
+            "#,
+        )
+        .bind(email)
+        .fetch_optional(tx.as_mut())
+        .await
+        .map_err(map_sqlx_error)?;
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(row.map(|(user_id, org_id, email)| PasswordResetUser {
+            user_id,
+            org_id,
+            email,
+        }))
+    }
+
+    async fn create_password_reset_ticket(
+        &self,
+        input: &CreatePasswordResetTicketInput,
+    ) -> Result<(), AppError> {
+        let pool = self.repo.raw();
+        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        sqlx::query(
+            r#"
+            insert into password_reset_tickets (
+                org_id, user_id, email, purpose, ticket_hash, code_hash,
+                expires_at, code_expires_at, attempts, used_at, created_at, updated_at
+            )
+            values ($1, $2, $3, $4, $5, $6, $7, $8, 0, null, now(), now())
+            "#,
+        )
+        .bind(input.org_id)
+        .bind(input.user_id)
+        .bind(&input.email)
+        .bind(&input.purpose)
+        .bind(&input.ticket_hash)
+        .bind(&input.code_hash)
+        .bind(input.expires_at)
+        .bind(input.code_expires_at)
+        .execute(tx.as_mut())
+        .await
+        .map_err(map_sqlx_error)?;
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(())
+    }
+
+    async fn verify_reset_ticket_exists(&self, ticket_hash: &str) -> Result<bool, AppError> {
+        let pool = self.repo.raw();
+        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let row = sqlx::query(
+            r#"
+            select 1
+            from password_reset_tickets
+            where ticket_hash = $1
+              and used_at is null
+              and expires_at > now()
+            limit 1
+            "#,
+        )
+        .bind(ticket_hash)
+        .fetch_optional(tx.as_mut())
+        .await
+        .map_err(map_sqlx_error)?;
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(row.is_some())
+    }
+
+    async fn verify_and_rotate_reset_code(
+        &self,
+        email: &str,
+        purpose: &str,
+        code: &str,
+        reset_code_secret: &str,
+        new_ticket_hash: &str,
+        max_attempts: i32,
+    ) -> Result<Option<(Uuid, String)>, AppError> {
+        let pool = self.repo.raw();
+        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, i32, Option<DateTime<Utc>>)>(
+            r#"
+            select id, user_id, email, code_hash, attempts, code_expires_at
+            from password_reset_tickets
+            where lower(email) = lower($1)
+              and purpose = $2
+              and used_at is null
+            order by created_at desc
+            limit 1
+            for update
+            "#,
+        )
+        .bind(email)
+        .bind(purpose)
+        .fetch_optional(tx.as_mut())
+        .await
+        .map_err(map_sqlx_error)?;
+
+        let Some((ticket_id, user_id, resolved_email, code_hash, attempts, code_expires_at)) = row
+        else {
+            tx.commit().await.map_err(map_sqlx_error)?;
+            return Ok(None);
+        };
+
+        if attempts >= max_attempts
+            || code_expires_at
+                .map(|value| value < chrono::Utc::now())
+                .unwrap_or(true)
+        {
+            tx.commit().await.map_err(map_sqlx_error)?;
+            return Ok(None);
+        }
+
+        let expected_code_hash =
+            hash_reset_value(reset_code_secret, purpose, &format!("{resolved_email}:{code}"));
+        if code_hash.as_deref() != Some(expected_code_hash.as_str()) {
+            sqlx::query(
+                "update password_reset_tickets set attempts = attempts + 1, updated_at = now() where id = $1",
+            )
+            .bind(ticket_id)
+            .execute(tx.as_mut())
+            .await
+            .map_err(map_sqlx_error)?;
+            tx.commit().await.map_err(map_sqlx_error)?;
+            return Ok(None);
+        }
+
+        sqlx::query(
+            r#"
+            update password_reset_tickets
+            set ticket_hash = $2,
+                updated_at = now()
+            where id = $1
+            "#,
+        )
+        .bind(ticket_id)
+        .bind(new_ticket_hash)
+        .execute(tx.as_mut())
+        .await
+        .map_err(map_sqlx_error)?;
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(Some((user_id, resolved_email)))
+    }
+
+    async fn reset_password_with_ticket_hash(
+        &self,
+        ticket_hash: &str,
+        purpose: &str,
+        password_hash: &str,
+    ) -> Result<Uuid, AppError> {
+        let pool = self.repo.raw();
+        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let row = sqlx::query_as::<_, (Uuid, Uuid)>(
+            r#"
+            select id, user_id
+            from password_reset_tickets
+            where ticket_hash = $1
+              and purpose = $2
+              and used_at is null
+              and expires_at > now()
+            limit 1
+            for update
+            "#,
+        )
+        .bind(ticket_hash)
+        .bind(purpose)
+        .fetch_optional(tx.as_mut())
+        .await
+        .map_err(map_sqlx_error)?;
+
+        let Some((ticket_id, user_id)) = row else {
+            return Err(AppError::validation(
+                "invalid_reset_ticket",
+                "Reset session is invalid or expired",
+            ));
+        };
+
+        sqlx::query(
+            r#"
+            update users
+            set password_hash = $2,
+                password_updated_at = now(),
+                auth_version = auth_version + 1
+            where id = $1
+            "#,
+        )
+        .bind(user_id)
+        .bind(password_hash)
+        .execute(tx.as_mut())
+        .await
+        .map_err(map_sqlx_error)?;
+        sqlx::query(
+            "update password_reset_tickets set used_at = now(), updated_at = now() where id = $1",
+        )
+        .bind(ticket_id)
+        .execute(tx.as_mut())
+        .await
+        .map_err(map_sqlx_error)?;
+        tx.commit().await.map_err(map_sqlx_error)?;
+        Ok(user_id)
+    }
+}
+
+fn map_sqlx_error(error: sqlx::Error) -> AppError {
+    map_pg_error(error.into())
+}

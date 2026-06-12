@@ -262,6 +262,7 @@ fn memory_storage() -> StorageContext {
         None,
         None,
         None,
+        None,
         Arc::new(RwLock::new(MemoryState::default())),
         Arc::new(RwLock::new(BTreeMap::new())),
         10 * 1024 * 1024,
@@ -279,6 +280,7 @@ fn storage_with_document_store(store: Arc<dyn DocumentStorePort>) -> StorageCont
         None,
         false,
         Some(store),
+        None,
         None,
         None,
         None,
@@ -341,4 +343,11 @@ fn billing_quota_port_is_required_for_url_import_pg_path() {
     assert!(source.contains("storage.billing_quota()"));
     assert!(source.contains("ensure_storage_bytes_quota"));
     assert!(!source.contains("billing.ensure_metric_quota"));
+}
+
+#[test]
+fn billing_quota_port_is_required_for_create_document_pg_path() {
+    let source = include_str!("../src/documents.rs");
+    assert!(source.contains("storage.billing_quota().ok_or_else"));
+    assert!(source.contains("ensure_storage_bytes_quota"));
 }

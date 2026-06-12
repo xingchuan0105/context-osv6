@@ -131,6 +131,94 @@ impl AdminStorePort for RecordingAdminStore {
     ) -> Result<bool, AppError> {
         Ok(false)
     }
+
+    async fn ensure_admin_access(&self, _auth: &AuthContext) -> Result<(), AppError> {
+        Ok(())
+    }
+
+    async fn billing_overview(
+        &self,
+        _auth: &AuthContext,
+    ) -> Result<app_core::AdminBillingOverview, AppError> {
+        Ok(app_core::AdminBillingOverview {
+            active_subscriptions: 0,
+            past_due_subscriptions: 0,
+            unpaid_subscriptions: 0,
+            canceled_subscriptions: 0,
+        })
+    }
+
+    async fn rag_health(
+        &self,
+        _auth: &AuthContext,
+    ) -> Result<app_core::AdminRagHealthStatus, AppError> {
+        Ok(app_core::AdminRagHealthStatus {
+            failed_documents: 0,
+            queued_tasks: 0,
+            processing_tasks: 0,
+            dead_letter_tasks: 0,
+            recent_guard_events: 0,
+        })
+    }
+
+    async fn worker_status(
+        &self,
+        _auth: &AuthContext,
+    ) -> Result<app_core::AdminWorkerStatus, AppError> {
+        Ok(app_core::AdminWorkerStatus {
+            runtime_mode: "memory",
+            queued_tasks: 0,
+            processing_tasks: 0,
+            dead_letter_tasks: 0,
+            failed_documents: 0,
+        })
+    }
+
+    async fn degradation_status(
+        &self,
+        _auth: &AuthContext,
+    ) -> Result<app_core::AdminDegradationStatus, AppError> {
+        Ok(app_core::AdminDegradationStatus {
+            failed_documents: 0,
+            recent_guard_events: 0,
+            share_access_events: 0,
+        })
+    }
+
+    async fn list_feature_flags(
+        &self,
+        _auth: &AuthContext,
+    ) -> Result<Vec<app_core::AdminFeatureFlagEntry>, AppError> {
+        Ok(Vec::new())
+    }
+
+    async fn list_feature_flag_change_requests(
+        &self,
+        _auth: &AuthContext,
+        _status: Option<&str>,
+    ) -> Result<Vec<app_core::AdminFeatureFlagChangeRequest>, AppError> {
+        Ok(Vec::new())
+    }
+
+    async fn create_feature_flag_change_request(
+        &self,
+        _auth: &AuthContext,
+        _key: &str,
+        _enabled: bool,
+        _reason: &str,
+    ) -> Result<app_core::AdminFeatureFlagChangeRequest, AppError> {
+        Err(AppError::internal("not implemented"))
+    }
+
+    async fn review_feature_flag_change_request(
+        &self,
+        _auth: &AuthContext,
+        _request_id: &str,
+        _approved: bool,
+        _review_note: Option<&str>,
+    ) -> Result<app_core::AdminFeatureFlagChangeRequest, AppError> {
+        Err(AppError::internal("not implemented"))
+    }
 }
 
 fn test_auth() -> AuthContext {
@@ -143,6 +231,7 @@ fn memory_storage() -> StorageContext {
     StorageContext::new(
         None,
         false,
+        None,
         None,
         None,
         None,
@@ -163,6 +252,7 @@ fn storage_with_admin_store(store: Arc<dyn AdminStorePort>) -> StorageContext {
     StorageContext::new(
         None,
         false,
+        None,
         None,
         Some(store),
         None,

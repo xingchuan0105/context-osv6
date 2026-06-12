@@ -26,6 +26,9 @@ pub async fn fetch_url_import(raw_url: &str) -> Result<UrlImportPayload, AppErro
             "url must start with http:// or https://",
         ));
     }
+    common::validate_http_url_with_dns(raw_url, true).map_err(|error| {
+        AppError::validation("ssrf_blocked", format!("url fetch blocked: {error}"))
+    })?;
 
     let client = HttpClient::builder()
         .redirect(Policy::limited(5))
@@ -217,4 +220,33 @@ pub async fn write_raw_object(
         fs::create_dir_all(parent).await?;
     }
     fs::write(full_path, bytes).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fetch_url_import;
+
+    #[tokio::test]
+    async fn url_import_blocks_metadata_ip_before_request() {
+        let error = fetch_url_import("http://169.254.169.254/latest/meta-data/")
+            .await
+            .expect_err("metadata ip must be blocked before http request");
+        assert_eq!(error.code(), "ssrf_blocked");
+    }
+
+    #[tokio::test]
+    async fn url_import_blocks_loopback_before_request() {
+        let error = fetch_url_import("http://127.0.0.1/")
+            .await
+            .expect_err("loopback ip must be blocked before http request");
+        assert_eq!(error.code(), "ssrf_blocked");
+    }
+
+    #[tokio::test]
+    async fn url_import_rejects_non_http_scheme() {
+        let error = fetch_url_import("file:///etc/passwd")
+            .await
+            .expect_err("non-http schemes must be rejected");
+        assert_eq!(error.code(), "invalid_url_scheme");
+    }
 }

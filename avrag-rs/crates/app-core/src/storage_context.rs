@@ -7,6 +7,7 @@ use common::{ApiKeyRow, AppError};
 use tokio::sync::RwLock;
 
 use crate::admin_store::AdminStorePort;
+use crate::auth_store::AuthStorePort;
 use crate::billing_quota::BillingQuotaPort;
 use crate::chat_persistence::ChatPersistencePort;
 use crate::config_helpers::{
@@ -23,6 +24,7 @@ pub struct StorageContext {
     postgres_health: Option<Arc<dyn PostgresHealthPort>>,
     postgres_configured: bool,
     document_store: Option<Arc<dyn DocumentStorePort>>,
+    auth_store: Option<Arc<dyn AuthStorePort>>,
     admin_store: Option<Arc<dyn AdminStorePort>>,
     billing_quota: Option<Arc<dyn BillingQuotaPort>>,
     chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
@@ -43,6 +45,7 @@ impl StorageContext {
         postgres_health: Option<Arc<dyn PostgresHealthPort>>,
         postgres_configured: bool,
         document_store: Option<Arc<dyn DocumentStorePort>>,
+        auth_store: Option<Arc<dyn AuthStorePort>>,
         admin_store: Option<Arc<dyn AdminStorePort>>,
         billing_quota: Option<Arc<dyn BillingQuotaPort>>,
         chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
@@ -60,6 +63,7 @@ impl StorageContext {
             postgres_health,
             postgres_configured,
             document_store,
+            auth_store,
             admin_store,
             billing_quota,
             chat_persistence,
@@ -77,6 +81,10 @@ impl StorageContext {
 
     pub fn document_store(&self) -> Option<Arc<dyn DocumentStorePort>> {
         self.document_store.clone()
+    }
+
+    pub fn auth_store(&self) -> Option<Arc<dyn AuthStorePort>> {
+        self.auth_store.clone()
     }
 
     pub fn admin_store(&self) -> Option<Arc<dyn AdminStorePort>> {
@@ -99,10 +107,13 @@ impl StorageContext {
     }
 
     pub fn runtime_mode(&self) -> &'static str {
-        if self.postgres_configured {
+        if !self.postgres_configured {
+            return "memory";
+        }
+        if self.document_store.is_some() && !self.uses_memory_adapters {
             "postgres"
         } else {
-            "memory"
+            "postgres_degraded"
         }
     }
 

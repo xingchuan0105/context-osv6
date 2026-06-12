@@ -90,11 +90,12 @@ impl DocumentContext {
         }
 
         if let Some(store) = storage.document_store() {
-            if let Some(quota) = storage.billing_quota() {
-                quota
-                    .ensure_storage_bytes_quota(auth, req.file_size as i64)
-                    .await?;
-            }
+            let quota = storage.billing_quota().ok_or_else(|| {
+                AppError::internal("billing quota port is required for document uploads")
+            })?;
+            quota
+                .ensure_storage_bytes_quota(auth, req.file_size as i64)
+                .await?;
             let notebook_id =
                 parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
             if store.get_notebook(auth, notebook_id).await?.is_none() {

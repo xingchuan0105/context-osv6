@@ -172,63 +172,29 @@ async fn auth_logout_handler(
             "Not authenticated",
         );
     };
-    let Some(pool) = state.postgres_pool() else {
+    let Some(store) = state.auth_store() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
             "Database not available",
         );
     };
-    
-    let mut tx = match begin_auth_admin_tx(pool).await {
-        Ok(tx) => tx,
-        Err(error) => {
-            warn!(error = %error, "failed to start logout transaction");
-            return handlers::error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "Logout failed",
-            );
-        }
-    };
 
-    match sqlx::query(
-        r#"
-        update users
-        set auth_version = auth_version + 1
-        where id = $1
-        "#,
-    )
-    .bind(user_id.into_uuid())
-    .execute(tx.as_mut())
-    .await
-    {
-        Ok(result) => {
-            if result.rows_affected() == 0 {
-                return handlers::error_response(
-                    StatusCode::UNAUTHORIZED,
-                    "unauthorized",
-                    "Not authenticated",
-                );
-            }
-            if let Err(error) = tx.commit().await {
-                warn!(error = %error, "failed to commit logout transaction");
-                return handlers::error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "internal_error",
-                    "Logout failed",
-                );
-            }
-            (
-                StatusCode::OK,
-                Json(AuthEnvelope {
-                    success: true,
-                    data: None,
-                    error: None,
-                }),
-            )
-                .into_response()
-        }
+    match store.invalidate_session(user_id.into_uuid()).await {
+        Ok(true) => (
+            StatusCode::OK,
+            Json(AuthEnvelope {
+                success: true,
+                data: None,
+                error: None,
+            }),
+        )
+            .into_response(),
+        Ok(false) => handlers::error_response(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Not authenticated",
+        ),
         Err(error) => {
             warn!(error = %error, "failed to invalidate session on logout");
             handlers::error_response(
@@ -252,45 +218,25 @@ async fn auth_me_handler(
     };
     let user_uuid = user_id.into_uuid();
 
-    let Some(pool) = state.postgres_pool() else {
+    let Some(store) = state.auth_store() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
             "Database not available",
         );
     };
-    
-    let mut tx = match begin_auth_admin_tx(pool).await {
-        Ok(tx) => tx,
-        Err(error) => {
-            warn!(error = %error, "failed to start auth me transaction");
-            return handlers::error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "Failed to load profile",
-            );
-        }
-    };
 
-    let result = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>)>(
-        "SELECT id, org_id, email, full_name FROM users WHERE id = $1",
-    )
-    .bind(user_uuid)
-    .fetch_optional(tx.as_mut())
-    .await;
-    let _ = tx.commit().await;
-
-    match result {
-        Ok(Some((id, _org_id, email, full_name))) => (
+    match store.get_user_profile(user_uuid).await {
+        Ok(Some(profile)) => (
             StatusCode::OK,
             Json(AuthEnvelope {
                 success: true,
                 data: Some(AuthPayload {
                     token: String::new(),
                     user: AuthUserDto {
-                        id: id.to_string(),
-                        email,
-                        full_name: full_name.unwrap_or_default(),
+                        id: profile.user_id.to_string(),
+                        email: profile.email,
+                        full_name: profile.full_name.unwrap_or_default(),
                     },
                     reset_ticket: None,
                 }),
@@ -298,11 +244,19 @@ async fn auth_me_handler(
             }),
         )
             .into_response(),
-        _ => handlers::error_response(
+        Ok(None) => handlers::error_response(
             StatusCode::NOT_FOUND,
             "user_not_found",
             "User profile not found",
         ),
+        Err(error) => {
+            warn!(error = %error, "failed to load profile");
+            handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Failed to load profile",
+            )
+        }
     }
 }
 
@@ -317,7 +271,7 @@ async fn auth_update_profile_handler(
             "Not authenticated",
         );
     };
-    let Some(pool) = state.postgres_pool() else {
+    let Some(store) = state.auth_store() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
@@ -327,44 +281,21 @@ async fn auth_update_profile_handler(
 
     let full_name = req.full_name.unwrap_or_default();
     let user_uuid = user_id.into_uuid();
-    
-    let mut tx = match begin_auth_admin_tx(pool).await {
-        Ok(tx) => tx,
-        Err(error) => {
-            warn!(error = %error, "failed to start profile update transaction");
-            return handlers::error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "Profile update failed",
-            );
-        }
-    };
-    let result = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>)>(
-        r#"
-        update users
-        set full_name = $2
-        where id = $1
-        returning id, org_id, email, full_name
-    "#,
-    )
-    .bind(user_uuid)
-    .bind(full_name)
-    .fetch_optional(tx.as_mut())
-    .await;
-    if result.is_ok() {
-        let _ = tx.commit().await;
-    }
-    match result {
-        Ok(Some((id, _org_id, email, full_name))) => (
+
+    match store
+        .update_user_profile(user_uuid, &full_name)
+        .await
+    {
+        Ok(Some(profile)) => (
             StatusCode::OK,
             Json(AuthEnvelope {
                 success: true,
                 data: Some(AuthPayload {
                     token: String::new(),
                     user: AuthUserDto {
-                        id: id.to_string(),
-                        email,
-                        full_name: full_name.unwrap_or_default(),
+                        id: profile.user_id.to_string(),
+                        email: profile.email,
+                        full_name: profile.full_name.unwrap_or_default(),
                     },
                     reset_ticket: None,
                 }),
@@ -638,7 +569,7 @@ async fn auth_change_password_handler(
             "New password must be at least 8 characters",
         );
     }
-    let Some(pool) = state.postgres_pool() else {
+    let Some(store) = state.auth_store() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
@@ -647,26 +578,9 @@ async fn auth_change_password_handler(
     };
 
     let user_uuid = user_id.into_uuid();
-    
-    let mut tx = match begin_auth_admin_tx(pool).await {
-        Ok(tx) => tx,
-        Err(error) => {
-            warn!(error = %error, "failed to start password change transaction");
-            return handlers::error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "Password update failed",
-            );
-        }
-    };
-    let row = match sqlx::query_as::<_, (String, )>(
-        "SELECT password_hash FROM users WHERE id = $1",
-    )
-    .bind(user_uuid)
-    .fetch_optional(tx.as_mut())
-    .await
-    {
-        Ok(Some(row)) => row,
+
+    let stored_hash = match store.get_password_hash(user_uuid).await {
+        Ok(Some(hash)) => hash,
         Ok(None) => {
             return handlers::error_response(
                 StatusCode::NOT_FOUND,
@@ -684,7 +598,7 @@ async fn auth_change_password_handler(
         }
     };
 
-    match verify(&req.old_password, &row.0) {
+    match verify(&req.old_password, &stored_hash) {
         Ok(true) => {}
         _ => {
             return handlers::error_response(
@@ -707,39 +621,16 @@ async fn auth_change_password_handler(
         }
     };
 
-    match sqlx::query(
-        r#"
-        update users
-        set password_hash = $2,
-            password_updated_at = now(),
-            auth_version = auth_version + 1
-        where id = $1
-        "#,
-    )
-    .bind(user_uuid)
-    .bind(new_hash)
-    .execute(tx.as_mut())
-    .await
-    {
-        Ok(_) => {
-            if let Err(error) = tx.commit().await {
-                warn!(error = %error, "failed to commit password change transaction");
-                return handlers::error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "internal_error",
-                    "Password update failed",
-                );
-            }
-            (
-                StatusCode::OK,
-                Json(AuthEnvelope {
-                    success: true,
-                    data: None,
-                    error: None,
-                }),
-            )
-                .into_response()
-        }
+    match store.change_password(user_uuid, &new_hash).await {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(AuthEnvelope {
+                success: true,
+                data: None,
+                error: None,
+            }),
+        )
+            .into_response(),
         Err(error) => {
             warn!(error = %error, "failed to update password");
             handlers::error_response(
@@ -769,7 +660,7 @@ async fn auth_verify_reset_token_handler(
     State(state): State<AppState>,
     Json(req): Json<VerifyResetTokenRequest>,
 ) -> Response {
-    let Some(pool) = state.postgres_pool() else {
+    let Some(store) = state.auth_store() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
@@ -782,33 +673,8 @@ async fn auth_verify_reset_token_handler(
         PASSWORD_RESET_PURPOSE,
         req.token.trim(),
     );
-    let mut tx = match begin_auth_admin_tx(pool).await {
-        Ok(tx) => tx,
-        Err(error) => {
-            warn!(error = %error, "failed to start reset token verification transaction");
-            return handlers::error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "Failed to verify reset session",
-            );
-        }
-    };
-    let result = sqlx::query(
-        r#"
-        select 1
-        from password_reset_tickets
-        where ticket_hash = $1
-          and used_at is null
-          and expires_at > now()
-        limit 1
-        "#,
-    )
-    .bind(ticket_hash)
-    .fetch_optional(tx.as_mut())
-    .await;
-    let _ = tx.commit().await;
-    match result {
-        Ok(Some(_)) => (
+    match store.verify_reset_ticket_exists(&ticket_hash).await {
+        Ok(true) => (
             StatusCode::OK,
             Json(AuthEnvelope {
                 success: true,
@@ -817,7 +683,7 @@ async fn auth_verify_reset_token_handler(
             }),
         )
             .into_response(),
-        Ok(None) => (
+        Ok(false) => (
             StatusCode::OK,
             Json(AuthEnvelope {
                 success: false,
@@ -865,14 +731,14 @@ async fn auth_send_reset_code_handler(
             );
         }
     };
-    let Some(pool) = state.postgres_pool() else {
+    let Some(store) = state.auth_store() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
             "Database not available",
         );
     };
-    
+
     let config = PasswordResetConfig::from_env();
 
     if !password_reset_enabled(&config) {
@@ -883,31 +749,7 @@ async fn auth_send_reset_code_handler(
         );
     }
 
-    let mut tx = match begin_auth_admin_tx(pool).await {
-        Ok(tx) => tx,
-        Err(error) => {
-            warn!(error = %error, "failed to start password reset request transaction");
-            return handlers::error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "Failed to initiate password reset",
-            );
-        }
-    };
-
-    let user_row = match sqlx::query_as::<_, (Uuid, Uuid, String)>(
-        r#"
-        select id, org_id, email
-        from users
-        where lower(email) = lower($1)
-        order by created_at desc
-        limit 1
-        "#,
-    )
-    .bind(&email)
-    .fetch_optional(tx.as_mut())
-    .await
-    {
+    let user_row = match store.find_user_by_email_for_reset(&email).await {
         Ok(row) => row,
         Err(error) => {
             warn!(error = %error, "failed to resolve password reset user");
@@ -919,7 +761,7 @@ async fn auth_send_reset_code_handler(
         }
     };
 
-    let Some((user_id, org_id, resolved_email)) = user_row else {
+    let Some(user_row) = user_row else {
         return (
             StatusCode::ACCEPTED,
             Json(json!({
@@ -931,6 +773,9 @@ async fn auth_send_reset_code_handler(
             .into_response();
     };
 
+    let user_id = user_row.user_id;
+    let org_id = user_row.org_id;
+    let resolved_email = user_row.email;
     let code = generate_reset_code();
     let reset_ticket = generate_reset_ticket();
     let code_hash = hash_reset_value(
@@ -944,36 +789,20 @@ async fn auth_send_reset_code_handler(
     let ticket_expires_at =
         chrono::Utc::now() + chrono::Duration::minutes(RESET_TICKET_TTL_MINUTES);
 
-    if let Err(error) = sqlx::query(
-        r#"
-        insert into password_reset_tickets (
-            org_id, user_id, email, purpose, ticket_hash, code_hash,
-            expires_at, code_expires_at, attempts, used_at, created_at, updated_at
-        )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, 0, null, now(), now())
-        "#,
-    )
-    .bind(org_id)
-    .bind(user_id)
-    .bind(&resolved_email)
-    .bind(PASSWORD_RESET_PURPOSE)
-    .bind(ticket_hash)
-    .bind(code_hash)
-    .bind(ticket_expires_at)
-    .bind(code_expires_at)
-    .execute(tx.as_mut())
-    .await
+    if let Err(error) = store
+        .create_password_reset_ticket(&CreatePasswordResetTicketInput {
+            org_id,
+            user_id,
+            email: resolved_email.clone(),
+            purpose: PASSWORD_RESET_PURPOSE.to_string(),
+            ticket_hash,
+            code_hash,
+            expires_at: ticket_expires_at,
+            code_expires_at,
+        })
+        .await
     {
         warn!(error = %error, "failed to persist password reset ticket");
-        return handlers::error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Failed to initiate password reset",
-        );
-    }
-
-    if let Err(error) = tx.commit().await {
-        warn!(error = %error, "failed to commit password reset request");
         return handlers::error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal_error",
@@ -1031,7 +860,7 @@ async fn auth_verify_reset_code_handler(
             );
         }
     };
-    let Some(pool) = state.postgres_pool() else {
+    let Some(store) = state.auth_store() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
@@ -1052,138 +881,43 @@ async fn auth_verify_reset_code_handler(
             .into_response();
     }
 
-    let mut tx = match begin_auth_admin_tx(pool).await {
-        Ok(tx) => tx,
-        Err(error) => {
-            warn!(error = %error, "failed to start password reset verification transaction");
-            return handlers::error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "Failed to verify reset code",
-            );
-        }
-    };
-
-    let row = match sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, i32, Option<chrono::DateTime<chrono::Utc>>)>(
-        r#"
-        select id, user_id, email, code_hash, attempts, code_expires_at
-        from password_reset_tickets
-        where lower(email) = lower($1)
-          and purpose = $2
-          and used_at is null
-        order by created_at desc
-        limit 1
-        for update
-        "#,
-    )
-    .bind(&email)
-    .bind(PASSWORD_RESET_PURPOSE)
-    .fetch_optional(tx.as_mut())
-    .await
-    {
-        Ok(row) => row,
-        Err(error) => {
-            warn!(error = %error, "failed to load password reset ticket");
-            return handlers::error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "Failed to verify reset code",
-            );
-        }
-    };
-
-    let Some((ticket_id, user_id, resolved_email, code_hash, attempts, code_expires_at)) = row else {
-        return (
-            StatusCode::OK,
-            Json(AuthEnvelope {
-                success: false,
-                data: None,
-                error: Some("Reset code is invalid or expired".to_string()),
-            }),
-        )
-            .into_response();
-    };
-
-    if attempts >= RESET_MAX_ATTEMPTS {
-        return (
-            StatusCode::OK,
-            Json(AuthEnvelope {
-                success: false,
-                data: None,
-                error: Some("Reset code is invalid or expired".to_string()),
-            }),
-        )
-            .into_response();
-    }
-
-    if code_expires_at.map(|value| value < chrono::Utc::now()).unwrap_or(true) {
-        return (
-            StatusCode::OK,
-            Json(AuthEnvelope {
-                success: false,
-                data: None,
-                error: Some("Reset code is invalid or expired".to_string()),
-            }),
-        )
-            .into_response();
-    }
-
-    let expected = hash_reset_value(
-        &config.reset_code_secret,
-        PASSWORD_RESET_PURPOSE,
-        &format!("{resolved_email}:{code}"),
-    );
-    if code_hash.as_deref() != Some(expected.as_str()) {
-        let _ = sqlx::query(
-            "update password_reset_tickets set attempts = attempts + 1, updated_at = now() where id = $1",
-        )
-        .bind(ticket_id)
-        .execute(tx.as_mut())
-        .await;
-        let _ = tx.commit().await;
-        return (
-            StatusCode::OK,
-            Json(AuthEnvelope {
-                success: false,
-                data: None,
-                error: Some("Reset code is invalid or expired".to_string()),
-            }),
-        )
-            .into_response();
-    }
-
     let reset_ticket = generate_reset_ticket();
     let ticket_hash =
         hash_reset_value(&config.reset_code_secret, PASSWORD_RESET_PURPOSE, &reset_ticket);
-    if let Err(error) = sqlx::query(
-        r#"
-        update password_reset_tickets
-        set ticket_hash = $2,
-            updated_at = now()
-        where id = $1
-        "#,
-    )
-    .bind(ticket_id)
-    .bind(ticket_hash)
-    .execute(tx.as_mut())
-    .await
+    let verified = match store
+        .verify_and_rotate_reset_code(
+            &email,
+            PASSWORD_RESET_PURPOSE,
+            code,
+            &config.reset_code_secret,
+            &ticket_hash,
+            RESET_MAX_ATTEMPTS,
+        )
+        .await
     {
-        warn!(error = %error, "failed to persist reset ticket");
-        return handlers::error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Failed to verify reset code",
-        );
-    }
+        Ok(verified) => verified,
+        Err(error) => {
+            warn!(error = %error, "failed to verify reset code");
+            return handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Failed to verify reset code",
+            );
+        }
+    };
 
-    if let Err(error) = tx.commit().await {
-        warn!(error = %error, "failed to commit reset verification");
-        return handlers::error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Failed to verify reset code",
-        );
-    }
+    let Some((user_id, resolved_email)) = verified else {
+        return (
+            StatusCode::OK,
+            Json(AuthEnvelope {
+                success: false,
+                data: None,
+                error: Some("Reset code is invalid or expired".to_string()),
+            }),
+        )
+            .into_response();
+    };
+
     record_api_product_event_if_available(
         &state,
         user_id,
@@ -1229,7 +963,7 @@ async fn auth_confirm_reset_password_handler(
             "New password must be at least 8 characters",
         );
     }
-    let Some(pool) = state.postgres_pool() else {
+    let Some(store) = state.auth_store() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
@@ -1250,10 +984,20 @@ async fn auth_confirm_reset_password_handler(
         }
     };
 
-    let mut tx = match begin_auth_admin_tx(pool).await {
-        Ok(tx) => tx,
+    let user_id = match store
+        .reset_password_with_ticket_hash(&ticket_hash, PASSWORD_RESET_PURPOSE, &password_hash)
+        .await
+    {
+        Ok(user_id) => user_id,
+        Err(error) if error.http_status() == 400 => {
+            return handlers::error_response(
+                StatusCode::BAD_REQUEST,
+                "invalid_reset_ticket",
+                "Reset session is invalid or expired",
+            );
+        }
         Err(error) => {
-            warn!(error = %error, "failed to start password reset confirmation transaction");
+            warn!(error = %error, "failed to reset password");
             return handlers::error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal_error",
@@ -1262,87 +1006,6 @@ async fn auth_confirm_reset_password_handler(
         }
     };
 
-    let row = match sqlx::query_as::<_, (Uuid, Uuid)>(
-        r#"
-        select id, user_id
-        from password_reset_tickets
-        where ticket_hash = $1
-          and purpose = $2
-          and used_at is null
-          and expires_at > now()
-        limit 1
-        for update
-        "#,
-    )
-    .bind(ticket_hash)
-    .bind(PASSWORD_RESET_PURPOSE)
-    .fetch_optional(tx.as_mut())
-    .await
-    {
-        Ok(row) => row,
-        Err(error) => {
-            warn!(error = %error, "failed to load reset ticket");
-            return handlers::error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "Failed to reset password",
-            );
-        }
-    };
-
-    let Some((ticket_id, user_id)) = row else {
-        return handlers::error_response(
-            StatusCode::BAD_REQUEST,
-            "invalid_reset_ticket",
-            "Reset session is invalid or expired",
-        );
-    };
-
-    if let Err(error) = sqlx::query(
-        r#"
-        update users
-        set password_hash = $2,
-            password_updated_at = now(),
-            auth_version = auth_version + 1
-        where id = $1
-        "#,
-    )
-    .bind(user_id)
-    .bind(password_hash)
-    .execute(tx.as_mut())
-    .await
-    {
-        warn!(error = %error, "failed to update password from reset");
-        return handlers::error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Failed to reset password",
-        );
-    }
-
-    if let Err(error) = sqlx::query(
-        "update password_reset_tickets set used_at = now(), updated_at = now() where id = $1",
-    )
-    .bind(ticket_id)
-    .execute(tx.as_mut())
-    .await
-    {
-        warn!(error = %error, "failed to consume reset ticket");
-        return handlers::error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Failed to reset password",
-        );
-    }
-
-    if let Err(error) = tx.commit().await {
-        warn!(error = %error, "failed to commit password reset");
-        return handlers::error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Failed to reset password",
-        );
-    }
     record_api_product_event_if_available(
         &state,
         user_id,

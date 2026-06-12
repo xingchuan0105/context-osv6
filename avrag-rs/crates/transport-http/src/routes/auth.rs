@@ -1,4 +1,4 @@
-use app::AppState;
+use app_bootstrap::AppState;
 use axum::{
     Router,
     routing::{delete, get, post, put},

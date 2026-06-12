@@ -13,7 +13,6 @@ app-core = { path = "../app-core" }
 async-trait.workspace = true
 avrag-auth = { path = "../auth" }
 avrag-rag-core = { path = "../rag-core" }
-avrag-storage-pg = { path = "../storage-pg" }
 bytes = "1"
 common = { path = "../common" }
 futures = "0.3"
@@ -29,7 +28,6 @@ app-billing = { path = "../app-billing" }
 app-core = { path = "../app-core" }
 async-trait.workspace = true
 avrag-auth = { path = "../auth" }
-avrag-storage-pg = { path = "../storage-pg" }
 common = { path = "../common" }
 contracts = { path = "../../../contracts" }
 ingestion-types = { path = "../ingestion-types" }

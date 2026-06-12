@@ -1,5 +1,7 @@
 pub mod adapters;
+pub mod admin_domain;
 pub mod admin_store;
+pub mod auth_store;
 pub mod analytics_context;
 pub mod billing_quota;
 pub mod chat_persistence;
@@ -20,7 +22,15 @@ pub use analytics_context::*;
 pub use config::*;
 pub use domain_ports::*;
 pub use state_types::{MemoryState, RetrievedContext, StoredDocument};
+pub use admin_domain::{
+    AdminBillingOverview, AdminDegradationStatus, AdminFeatureFlagChangeRequest,
+    AdminFeatureFlagEntry, AdminRagHealthStatus, AdminWorkerStatus,
+};
 pub use admin_store::AdminStorePort;
+pub use auth_store::{
+    AuthStorePort, AuthUserCredentials, AuthUserProfile, CreatePasswordResetTicketInput,
+    PasswordResetUser, RegisterUserInput, RegisterUserResult,
+};
 pub use billing_quota::BillingQuotaPort;
 pub use chat_persistence::{AppendChatTurn, ChatPersistencePort};
 pub use document_store::DocumentStorePort;

@@ -7,8 +7,6 @@ use app_core::{
 use async_trait::async_trait;
 use avrag_storage_pg::ObjectStoreHandle;
 use common::AppError;
-use futures::StreamExt;
-
 pub struct ObjectStorePortAdapter {
     inner: Arc<ObjectStoreHandle>,
 }
@@ -33,13 +31,14 @@ impl ObjectStorePort for ObjectStorePortAdapter {
         path: &str,
         stream: ObjectStoreUploadStream,
     ) -> Result<(), AppError> {
-        use futures::StreamExt;
-        let mut collected = Vec::new();
-        let mut stream = stream;
-        while let Some(chunk) = stream.next().await {
-            collected.extend_from_slice(&chunk?);
-        }
-        self.put(path, &collected).await
+        use futures::TryStreamExt;
+        let bytes = stream
+            .try_fold(Vec::new(), |mut acc, chunk| async move {
+                acc.extend_from_slice(&chunk);
+                Ok(acc)
+            })
+            .await?;
+        self.put(path, &bytes).await
     }
 
     async fn get(&self, path: &str) -> Result<Vec<u8>, AppError> {

@@ -2,7 +2,6 @@ async fn auth_register_handler(
     State(state): State<AppState>,
     Json(req): Json<RegisterRequest>,
 ) -> Response {
-    // Input validation
     if req.email.trim().is_empty() || req.password.len() < 8 {
         return handlers::error_response(
             StatusCode::BAD_REQUEST,
@@ -11,51 +10,14 @@ async fn auth_register_handler(
         );
     }
 
-    let Some(pool) = state.postgres_pool() else {
+    let Some(store) = state.auth_store() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
             "Database not available",
         );
     };
-    
-    let mut tx = match begin_auth_admin_tx(pool).await {
-        Ok(tx) => tx,
-        Err(error) => {
-            warn!(error = %error, "failed to start registration transaction");
-            return handlers::error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "Registration failed",
-            );
-        }
-    };
 
-    // Check email uniqueness
-    match sqlx::query("SELECT id FROM users WHERE email = $1")
-        .bind(req.email.trim())
-        .fetch_optional(tx.as_mut())
-        .await
-    {
-        Ok(Some(_)) => {
-            return handlers::error_response(
-                StatusCode::CONFLICT,
-                "email_exists",
-                "An account with this email already exists",
-            );
-        }
-        Err(e) => {
-            warn!(error = %e, "DB error checking email");
-            return handlers::error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "Registration failed",
-            );
-        }
-        _ => {}
-    }
-
-    // Hash password
     let password_hash = match hash(&req.password, DEFAULT_COST) {
         Ok(h) => h,
         Err(e) => {
@@ -68,65 +30,40 @@ async fn auth_register_handler(
         }
     };
 
-    let org_id = Uuid::new_v4();
-    let user_id = Uuid::new_v4();
-
-    // Create org
-    if let Err(e) =
-        sqlx::query("INSERT INTO organizations (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING")
-            .bind(org_id)
-            .bind(format!(
-                "org-{}",
-                req.email.split('@').next().unwrap_or("user")
-            ))
-            .execute(tx.as_mut())
-            .await
+    let result = match store
+        .register_user(&RegisterUserInput {
+            email: req.email.trim().to_string(),
+            password_hash,
+            full_name: req.full_name.clone(),
+        })
+        .await
     {
-        warn!(error = %e, "failed to create org");
-        return handlers::error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Registration failed",
-        );
-    }
+        Ok(result) => result,
+        Err(error) if error.http_status() == 409 => {
+            return handlers::error_response(
+                StatusCode::CONFLICT,
+                "email_exists",
+                "An account with this email already exists",
+            );
+        }
+        Err(error) => {
+            warn!(error = %error, "registration failed");
+            return handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Registration failed",
+            );
+        }
+    };
 
-    // Create user
-    if let Err(e) = sqlx::query(
-        "INSERT INTO users (id, org_id, email, full_name, password_hash, role) VALUES ($1, $2, $3, $4, $5, 'user')",
-    )
-    .bind(user_id)
-    .bind(org_id)
-    .bind(req.email.trim())
-    .bind(req.full_name.as_deref().unwrap_or_default())
-    .bind(&password_hash)
-    .execute(tx.as_mut())
-    .await
-    {
-        warn!(error = %e, "failed to create user");
-        return handlers::error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Registration failed",
-        );
-    }
-    if let Err(error) = tx.commit().await {
-        warn!(error = %error, "failed to commit registration transaction");
-        return handlers::error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "Registration failed",
-        );
-    }
-
-    let token = issue_jwt_for_auth_version(&user_id, &org_id, 1);
-    let full_name = req.full_name.unwrap_or_default();
+    let token = issue_jwt_for_auth_version(&result.user_id, &result.org_id, result.auth_version);
     record_api_product_event_if_available(
         &state,
-        user_id,
+        result.user_id,
         analytics::ProductEventName::UserRegistered,
         analytics::ResultTag::Success,
         serde_json::json!({
-            "email_domain": req.email.split('@').nth(1).unwrap_or_default(),
+            "email_domain": result.email.split('@').nth(1).unwrap_or_default(),
         }),
     )
     .await;
@@ -138,9 +75,9 @@ async fn auth_register_handler(
             data: Some(AuthPayload {
                 token,
                 user: AuthUserDto {
-                    id: user_id.to_string(),
-                    email: req.email.trim().to_string(),
-                    full_name,
+                    id: result.user_id.to_string(),
+                    email: result.email,
+                    full_name: result.full_name,
                 },
                 reset_ticket: None,
             }),
@@ -154,18 +91,18 @@ async fn auth_login_handler(
     State(state): State<AppState>,
     Json(req): Json<LoginRequest>,
 ) -> Response {
-    let Some(pool) = state.postgres_pool() else {
+    let Some(store) = state.auth_store() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "service_unavailable",
             "Database not available",
         );
     };
-    
-    let mut tx = match begin_auth_admin_tx(pool).await {
-        Ok(tx) => tx,
+
+    let credentials = match store.find_user_for_login(req.email.trim()).await {
+        Ok(credentials) => credentials,
         Err(error) => {
-            warn!(error = %error, "failed to start login transaction");
+            warn!(error = %error, "DB error fetching user");
             return handlers::error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal_error",
@@ -174,37 +111,15 @@ async fn auth_login_handler(
         }
     };
 
-    let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, String, Option<String>, i32)>(
-        "SELECT id, org_id, email, full_name, role, password_hash, auth_version FROM users WHERE email = $1",
-    )
-    .bind(req.email.trim())
-    .fetch_optional(tx.as_mut())
-    .await;
-
-    let row = match row {
-        Ok(Some(r)) => r,
-        Ok(None) => {
-            return handlers::error_response(
-                StatusCode::UNAUTHORIZED,
-                "account_not_registered",
-                "This account is not registered",
-            );
-        }
-        Err(e) => {
-            warn!(error = %e, "DB error fetching user");
-            return handlers::error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_error",
-                "Login failed",
-            );
-        }
+    let Some(credentials) = credentials else {
+        return handlers::error_response(
+            StatusCode::UNAUTHORIZED,
+            "account_not_registered",
+            "This account is not registered",
+        );
     };
 
-    let (user_id, org_id, email, full_name, _role, password_hash, auth_version) = row;
-    let _ = tx.commit().await;
-
-    // Verify password
-    let stored_hash = match password_hash {
+    let stored_hash = match credentials.password_hash {
         Some(h) => h,
         None => {
             return handlers::error_response(
@@ -226,14 +141,18 @@ async fn auth_login_handler(
         }
     }
 
-    let token = issue_jwt_for_auth_version(&user_id, &org_id, auth_version);
+    let token = issue_jwt_for_auth_version(
+        &credentials.user_id,
+        &credentials.org_id,
+        credentials.auth_version,
+    );
     record_api_product_event_if_available(
         &state,
-        user_id,
+        credentials.user_id,
         analytics::ProductEventName::UserLoggedIn,
         analytics::ResultTag::Success,
         serde_json::json!({
-            "email_domain": email.split('@').nth(1).unwrap_or_default(),
+            "email_domain": credentials.email.split('@').nth(1).unwrap_or_default(),
         }),
     )
     .await;
@@ -245,9 +164,9 @@ async fn auth_login_handler(
             data: Some(AuthPayload {
                 token,
                 user: AuthUserDto {
-                    id: user_id.to_string(),
-                    email,
-                    full_name: full_name.unwrap_or_default(),
+                    id: credentials.user_id.to_string(),
+                    email: credentials.email,
+                    full_name: credentials.full_name.unwrap_or_default(),
                 },
                 reset_ticket: None,
             }),

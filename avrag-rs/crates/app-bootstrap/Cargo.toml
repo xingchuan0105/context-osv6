@@ -12,8 +12,10 @@ bytes = "1"
 futures = "0.3"
 chrono.workspace = true
 common = { path = "../common" }
+contracts = { path = "../../../contracts" }
 ingestion-types = { path = "../ingestion-types" }
 serde.workspace = true
+serde_json.workspace = true
 analytics = { path = "../analytics" }
 app-admin = { path = "../app-admin" }
 app-billing = { path = "../app-billing" }
@@ -28,10 +30,20 @@ avrag-guardrails = { path = "../guardrails" }
 avrag-llm = { path = "../llm" }
 avrag-rag-core = { path = "../rag-core" }
 avrag-search = { path = "../search" }
+avrag-share = { path = "../share" }
 avrag-storage-milvus = { path = "../storage-milvus" }
 avrag-storage-pg = { path = "../storage-pg" }
+hex.workspace = true
+sha2.workspace = true
+sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "uuid", "chrono", "json"] }
+telemetry = { path = "../telemetry" }
 tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
 uuid.workspace = true
+
+[features]
+test-support = []
 
 [dev-dependencies]
 app-core = { path = "../app-core" }

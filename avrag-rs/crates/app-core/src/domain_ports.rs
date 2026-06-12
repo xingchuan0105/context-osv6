@@ -1,10 +1,14 @@
 use async_trait::async_trait;
+use avrag_auth::AuthContext;
 use common::AppError;
+
+use crate::StorageContext;
 
 /// Retrieval boundary for chat/RAG — implementations live in rag-core + storage adapters.
 pub use avrag_retrieval_data_plane::RetrievalDataPlane as RetrievalPort;
 
 pub use crate::admin_store::AdminStorePort;
+pub use crate::auth_store::AuthStorePort;
 pub use crate::billing_quota::BillingQuotaPort;
 pub use crate::chat_persistence::ChatPersistencePort;
 pub use crate::document_store::DocumentStorePort;
@@ -14,6 +18,8 @@ pub use crate::document_store::DocumentStorePort;
 pub trait DocumentScopeValidator: Send + Sync {
     async fn validate_document_scope(
         &self,
+        auth: &AuthContext,
+        storage: &StorageContext,
         notebook_id: &str,
         document_ids: &[String],
     ) -> Result<(), AppError>;
