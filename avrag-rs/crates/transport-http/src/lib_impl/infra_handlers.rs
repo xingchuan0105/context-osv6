@@ -249,7 +249,7 @@ async fn openai_chat_completions_handler(
     Path(notebook_id): Path<String>,
     Extension(RequestState(state)): Extension<RequestState>,
     headers: HeaderMap,
-    Json(mut req): Json<common::ChatRequest>,
+    Json(mut req): Json<contracts::chat::ChatRequest>,
 ) -> Response {
     req.notebook_id = Some(notebook_id.clone());
     if let Err(error) = expand_external_notebook_rag_scope(&state, &notebook_id, &mut req).await {
@@ -343,7 +343,7 @@ async fn mcp_tool_call_handler(
         })
         .unwrap_or_default();
 
-    let mut req = common::ChatRequest {
+    let mut req = contracts::chat::ChatRequest {
         query,
         notebook_id: Some(notebook_id.clone()),
         session_id: None,
@@ -384,7 +384,7 @@ async fn mcp_tool_call_handler(
 async fn expand_external_notebook_rag_scope(
     state: &AppState,
     notebook_id: &str,
-    req: &mut common::ChatRequest,
+    req: &mut contracts::chat::ChatRequest,
 ) -> Result<(), common::AppError> {
     if req.agent_type != "rag" || !req.doc_scope.is_empty() {
         return Ok(());
@@ -398,7 +398,7 @@ async fn expand_external_notebook_rag_scope(
         .list_documents(Some(notebook_id), None)
         .await
         .into_iter()
-        .filter(|document| matches!(document.status, common::DocumentStatus::Completed))
+        .filter(|document| matches!(document.status, contracts::documents::DocumentStatus::Completed))
         .map(|document| document.id)
         .collect::<Vec<_>>();
     if doc_scope.is_empty() {

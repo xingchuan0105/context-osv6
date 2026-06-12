@@ -1,5 +1,5 @@
 use avrag_auth::AuthContext;
-use common::ChatRequest;
+use contracts::chat::ChatRequest;
 use reqwest::Client;
 
 use crate::{SearchConfig, SearchResponse, SearchStreamUpdate, provider};

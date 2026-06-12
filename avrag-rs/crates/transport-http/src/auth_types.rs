@@ -130,7 +130,7 @@ pub(crate) struct UserPreferencesPayload {
     #[serde(default)]
     pub notifications: NotificationPreferences,
     #[serde(default)]
-    pub agent_memory: common::AgentPreferenceMemory,
+    pub agent_memory: contracts::preferences::AgentPreferenceMemory,
 }
 
 #[allow(dead_code)]

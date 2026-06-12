@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use avrag_auth::AuthContext;
-use common::ChatMessage;
+use contracts::chat::ChatMessage;
 use uuid::Uuid;
 
 #[derive(Clone)]

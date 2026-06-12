@@ -38,14 +38,14 @@ pub async fn emit_buffered_agent_answer_if_needed(
     }
 }
 
-pub fn chat_done_payload(response: &common::ChatResponse) -> serde_json::Value {
+pub fn chat_done_payload(response: &contracts::chat::ChatResponse) -> serde_json::Value {
     serde_json::to_value(response).unwrap_or_else(|_| serde_json::json!({}))
 }
 
 impl ChatContext {
     pub async fn execute_chat_stream(
         &self,
-        req: common::ChatRequest,
+        req: contracts::chat::ChatRequest,
         request_id: String,
         sender: UnboundedSender<ChatEvent>,
         token: CancellationToken,

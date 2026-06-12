@@ -1,7 +1,8 @@
 use app_bootstrap::AppState;
 use app_core::{
-    AdminBillingOverview, AdminDegradationStatus, AdminFeatureFlagChangeRequest,
-    AdminFeatureFlagEntry, AdminRagHealthStatus, AdminStorePort, AdminWorkerStatus,
+    AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview, AdminDegradationStatus,
+    AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminOrgInfo, AdminRagHealthStatus,
+    AdminStorePort, AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
 };
 use axum::{
     Extension, Json, Router,
@@ -90,20 +91,6 @@ struct CreateFeatureFlagChangeRequest {
 struct ReviewFeatureFlagChangeRequest {
     approved: bool,
     review_note: Option<String>,
-}
-
-macro_rules! repo_or_response {
-    ($state:expr) => {
-        match $state.postgres_repo() {
-            Some(repo) => repo,
-            None => {
-                return app_error_response::<serde_json::Value>(AppError::validation(
-                    "postgres_not_configured",
-                    "postgres backend is not configured",
-                ));
-            }
-        }
-    };
 }
 
 macro_rules! admin_store_or_response {
@@ -198,33 +185,8 @@ fn parse_org_id(value: &str) -> Result<common::OrgId, Response> {
     })
 }
 
-async fn ensure_admin_access(state: &AppState) -> Result<(), Response> {
-    if state.auth().actor_id().is_none() {
-        return Err(
-            Json(ApiResponse::<serde_json::Value>::err(
-                "authenticated_user_required",
-                "admin action requires an authenticated user",
-            ))
-            .into_response(),
-        );
-    }
-    let Some(store) = state.admin_store() else {
-        return Err(
-            Json(ApiResponse::<serde_json::Value>::err(
-                "postgres_not_configured",
-                "postgres backend is not configured",
-            ))
-            .into_response(),
-        );
-    };
-    store
-        .ensure_admin_access(state.auth())
-        .await
-        .map_err(app_error_response::<serde_json::Value>)
-}
-
-fn audit_query(query: AuditQuery) -> avrag_admin::AuditLogQuery {
-    avrag_admin::AuditLogQuery {
+fn audit_query(query: AuditQuery) -> AdminAuditLogQuery {
+    AdminAuditLogQuery {
         query: query.query,
         action: query.action,
         resource_type: query.resource_type,
@@ -236,51 +198,47 @@ fn audit_query(query: AuditQuery) -> avrag_admin::AuditLogQuery {
 }
 
 async fn list_orgs(Extension(RequestState(state)): Extension<RequestState>) -> Response {
-    if let Err(response) = ensure_admin_access(&state).await {
-        return response;
-    }
-    let repo = repo_or_response!(state);
-    Json(avrag_admin::handle_list_orgs(state.auth().clone(), repo).await).into_response()
+    call_admin_store::<Vec<AdminOrgInfo>, _, _>(&state, |store| {
+        let auth = state.auth().clone();
+        async move { store.list_orgs(&auth).await }
+    })
+    .await
 }
 
 async fn get_org(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(org_id): Path<String>,
 ) -> Response {
-    if let Err(response) = ensure_admin_access(&state).await {
-        return response;
-    }
-    let repo = repo_or_response!(state);
     let org_id = match parse_org_id(&org_id) {
         Ok(org_id) => org_id,
         Err(response) => return response,
     };
-    Json(avrag_admin::handle_get_org(state.auth().clone(), org_id, repo).await).into_response()
+    call_admin_store::<AdminOrgInfo, _, _>(&state, |store| {
+        let auth = state.auth().clone();
+        async move { store.get_org(&auth, org_id).await }
+    })
+    .await
 }
 
 async fn list_users(
     Extension(RequestState(state)): Extension<RequestState>,
     Query(query): Query<OrgQuery>,
 ) -> Response {
-    if let Err(response) = ensure_admin_access(&state).await {
-        return response;
-    }
-    let repo = repo_or_response!(state);
     let org_id = match parse_org_id(&query.org_id) {
         Ok(org_id) => org_id,
         Err(response) => return response,
     };
-    Json(avrag_admin::handle_list_users(state.auth().clone(), org_id, repo).await).into_response()
+    call_admin_store::<Vec<AdminUserInfo>, _, _>(&state, |store| {
+        let auth = state.auth().clone();
+        async move { store.list_users(&auth, org_id).await }
+    })
+    .await
 }
 
 async fn delete_user(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(user_id): Path<String>,
 ) -> Response {
-    if let Err(response) = ensure_admin_access(&state).await {
-        return response;
-    }
-    let repo = repo_or_response!(state);
     let user_id = match user_id.parse::<Uuid>() {
         Ok(id) => id,
         Err(_) => {
@@ -292,48 +250,42 @@ async fn delete_user(
         }
     };
     let org_id = state.auth().org_id();
-    Json(avrag_admin::handle_delete_user(state.auth().clone(), org_id, user_id, repo).await)
-        .into_response()
+    call_admin_store::<(), _, _>(&state, |store| {
+        let auth = state.auth().clone();
+        async move { store.delete_user(&auth, org_id, user_id).await }
+    })
+    .await
 }
 
 async fn get_usage(
     Extension(RequestState(state)): Extension<RequestState>,
     Query(query): Query<UsageQuery>,
 ) -> Response {
-    if let Err(response) = ensure_admin_access(&state).await {
-        return response;
-    }
-    let repo = repo_or_response!(state);
     let org_id = match parse_org_id(&query.org_id) {
         Ok(org_id) => org_id,
         Err(response) => return response,
     };
-    Json(
-        avrag_admin::handle_get_usage(
-            state.auth().clone(),
-            org_id,
-            query.period.unwrap_or_else(|| "30d".to_string()),
-            repo,
-        )
-        .await,
-    )
-    .into_response()
+    let period = query.period.unwrap_or_else(|| "30d".to_string());
+    call_admin_store::<AdminUsageStats, _, _>(&state, |store| {
+        let auth = state.auth().clone();
+        async move { store.get_usage(&auth, org_id, &period).await }
+    })
+    .await
 }
 
 async fn block_org(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(body): Json<BlockOrgRequest>,
 ) -> Response {
-    if let Err(response) = ensure_admin_access(&state).await {
-        return response;
-    }
-    let repo = repo_or_response!(state);
     let org_id = match parse_org_id(&body.org_id) {
         Ok(org_id) => org_id,
         Err(response) => return response,
     };
-    Json(avrag_admin::handle_block_org(state.auth().clone(), org_id, body.blocked, repo).await)
-        .into_response()
+    call_admin_store::<(), _, _>(&state, |store| {
+        let auth = state.auth().clone();
+        async move { store.set_org_blocked(&auth, org_id, body.blocked).await }
+    })
+    .await
 }
 
 async fn health() -> Response {
@@ -437,25 +389,35 @@ async fn audit_logs(
     Extension(RequestState(state)): Extension<RequestState>,
     Query(query): Query<AuditQuery>,
 ) -> Response {
-    if let Err(response) = ensure_admin_access(&state).await {
-        return response;
+    if state.auth().actor_id().is_none() {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(ApiResponse::<AdminAuditLogPage>::err(
+                "authenticated_user_required",
+                "admin action requires an authenticated user",
+            )),
+        )
+            .into_response();
     }
-    let repo = repo_or_response!(state);
+    let store = admin_store_or_response!(state);
     let format = query.format.clone();
-    let query = audit_query(query);
+    let audit_query = audit_query(query);
+    let auth = state.auth().clone();
     if format.as_deref() == Some("csv") {
-        let response =
-            avrag_admin::handle_export_audit_logs_csv(state.auth().clone(), query, repo).await;
-        if let Some(csv) = response.data {
-            return (
-                StatusCode::OK,
-                [(header::CONTENT_TYPE, "text/csv; charset=utf-8")],
-                csv,
-            )
-                .into_response();
+        match store.export_audit_logs_csv(&auth, &audit_query).await {
+            Ok(csv) => {
+                return (
+                    StatusCode::OK,
+                    [(header::CONTENT_TYPE, "text/csv; charset=utf-8")],
+                    csv,
+                )
+                    .into_response();
+            }
+            Err(error) => return app_error_response::<AdminAuditLogPage>(error),
         }
-        return Json(response).into_response();
     }
-    Json(avrag_admin::handle_list_audit_logs(state.auth().clone(), query, repo).await)
-        .into_response()
+    match store.list_audit_logs(&auth, &audit_query).await {
+        Ok(page) => Json(ApiResponse::ok(page)).into_response(),
+        Err(error) => app_error_response::<AdminAuditLogPage>(error),
+    }
 }

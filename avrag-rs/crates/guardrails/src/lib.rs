@@ -10,7 +10,7 @@
 pub mod input;
 pub mod output;
 
-use common::{DegradeReason, DegradeTraceItem, GuardReport, GuardResult};
+use contracts::chat::{DegradeReason, DegradeTraceItem, GuardReport, GuardResult};
 use uuid::Uuid;
 
 /// Main guard pipeline — orchestrates input and output guards.

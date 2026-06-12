@@ -23,9 +23,6 @@ use common::AppError;
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 
-/// Canonical billing tier (re-export for agent callers).
-pub use avrag_billing::BillingTier as UserTier;
-
 /// Cancellation-aware shared context passed to every step in a ReAct loop.
 ///
 /// The sink is `&dyn AgentEventSink` so steps can be exercised with both the
@@ -169,7 +166,7 @@ impl NextStep {
     }
 }
 
-pub use common::DegradeReason;
+pub use contracts::chat::DegradeReason;
 
 /// Outcome of a single ReAct iteration's evaluator.
 ///

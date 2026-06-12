@@ -76,7 +76,7 @@ impl StateSink for PgStateSink {
 
         if matches!(
             transition.to,
-            common::DocumentStatus::Processing | common::DocumentStatus::Completed
+            contracts::documents::DocumentStatus::Processing | contracts::documents::DocumentStatus::Completed
         ) {
             ensure_ingestion_side_effects_allowed(
                 &self.repo,
@@ -90,7 +90,7 @@ impl StateSink for PgStateSink {
 
         let updated = if matches!(
             transition.to,
-            common::DocumentStatus::Processing | common::DocumentStatus::Completed
+            contracts::documents::DocumentStatus::Processing | contracts::documents::DocumentStatus::Completed
         ) {
             self.repo
                 .set_document_status_for_ingestion_task(
@@ -135,9 +135,9 @@ impl StateSink for PgStateSink {
 
         if matches!(
             transition.to,
-            common::DocumentStatus::Completed | common::DocumentStatus::Failed
+            contracts::documents::DocumentStatus::Completed | contracts::documents::DocumentStatus::Failed
         ) {
-            if matches!(transition.to, common::DocumentStatus::Failed)
+            if matches!(transition.to, contracts::documents::DocumentStatus::Failed)
                 && let Some(user_id) = task
                     .requested_by
                     .as_deref()
@@ -170,12 +170,12 @@ impl StateSink for PgStateSink {
                 .as_deref()
                 .and_then(|value| Uuid::parse_str(value).ok())
             {
-                let title = if matches!(transition.to, common::DocumentStatus::Completed) {
+                let title = if matches!(transition.to, contracts::documents::DocumentStatus::Completed) {
                     "Document ingestion completed"
                 } else {
                     "Document ingestion failed"
                 };
-                let body = if matches!(transition.to, common::DocumentStatus::Completed) {
+                let body = if matches!(transition.to, contracts::documents::DocumentStatus::Completed) {
                     "A document finished ingestion and is ready for retrieval."
                 } else {
                     "A document failed ingestion and needs attention."
@@ -188,7 +188,7 @@ impl StateSink for PgStateSink {
                             user_id,
                             event_type: if matches!(
                                 transition.to,
-                                common::DocumentStatus::Completed
+                                contracts::documents::DocumentStatus::Completed
                             ) {
                                 "ingestion.success".to_string()
                             } else {

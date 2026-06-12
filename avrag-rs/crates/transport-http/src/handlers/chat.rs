@@ -8,10 +8,10 @@ use axum::{
         sse::{Event, KeepAlive},
     },
 };
-use common::{
-    AppError, ChatRequest, CitationLookupRequest, CreateChatSessionRequest,
-    ExecutePlanRequest, RuntimeExecuteRequest, UpdateChatSessionRequest,
-};
+use common::{AppError, ExecutePlanRequest, RuntimeExecuteRequest};
+use contracts::chat::{ChatRequest};
+use contracts::documents::{CitationLookupRequest};
+use contracts::notebooks::{CreateChatSessionRequest, UpdateChatSessionRequest};
 use contracts::chat::ChatEvent;
 use std::{convert::Infallible, time::Duration};
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
@@ -324,7 +324,7 @@ pub(crate) async fn list_chat_sessions_handler(
     let sessions = state.list_sessions(params.notebook_id.as_deref()).await;
     (
         StatusCode::OK,
-        Json(common::ChatSessionListResponse { sessions }),
+        Json(contracts::notebooks::ChatSessionListResponse { sessions }),
     )
         .into_response()
 }
@@ -380,7 +380,7 @@ pub(crate) async fn get_chat_messages_handler(
     match state.list_messages(&session_id).await {
         Ok(messages) => (
             StatusCode::OK,
-            Json(common::ChatMessageListResponse { messages }),
+            Json(contracts::chat::ChatMessageListResponse { messages }),
         )
             .into_response(),
         Err(error) => app_error_response(error),
@@ -442,7 +442,7 @@ pub(crate) async fn citation_asset_handler(
 }
 pub(crate) async fn message_feedback_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Json(req): Json<common::MessageFeedbackRequest>,
+    Json(req): Json<contracts::chat::MessageFeedbackRequest>,
 ) -> Response {
     let rating = match req.rating {
         contracts::chat::MessageFeedbackRating::Up => "up",

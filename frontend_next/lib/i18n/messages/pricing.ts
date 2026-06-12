@@ -1,5 +1,9 @@
 import type { UiMessageDescriptor } from "./types";
 
+/**
+ * Pricing page copy. Authoritative Plus multipliers vs Free come from
+ * lib/billing/planLimits.ts (5h: 600K/100K = 6×, 7d: 4M/400K = 10×).
+ */
 export const pricingMessages = {
   pricingTitle: {
     zh: "选择适合你的方案",

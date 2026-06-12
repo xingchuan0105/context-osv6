@@ -1,6 +1,7 @@
 use app_core::parse_uuid_or_app_error;
 use app_documents::{infer_mime_type_from_path, is_remote_asset_reference};
-use common::{AppError, CitationLookupResponse};
+use common::{AppError};
+use contracts::documents::{CitationLookupResponse};
 
 use crate::context::ChatContext;
 

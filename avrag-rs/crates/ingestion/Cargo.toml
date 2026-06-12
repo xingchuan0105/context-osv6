@@ -6,6 +6,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+contracts = { path = "../../../contracts" }
 async-trait = "0.1"
 anyhow.workspace = true
 base64 = "0.22"

@@ -2,17 +2,19 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use app_core::{
-    domain_rows::UserProfileRow, AdminBillingOverview, AdminDegradationStatus,
-    AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminRagHealthStatus, AdminStorePort,
-    AdminWorkerStatus,
+    admin_audit_logs_to_csv, admin_audit_window_start, admin_clamp_audit_per_page,
+    admin_usage_period_start, domain_rows::UserProfileRow, AdminAuditLogEntry, AdminAuditLogPage,
+    AdminAuditLogQuery, AdminBillingOverview, AdminDegradationStatus, AdminFeatureFlagChangeRequest,
+    AdminFeatureFlagEntry, AdminOrgInfo, AdminRagHealthStatus, AdminStorePort, AdminUsageStats,
+    AdminUserInfo, AdminWorkerStatus,
 };
 use crate::domain_row_convert::{user_profile_row, user_profile_row_to_pg};
 use crate::pg_error::map_pg_error;
-use avrag_auth::AuthContext;
+use avrag_auth::{AuthContext, OrgId};
 use avrag_storage_pg::PgAppRepository;
 use chrono::{DateTime, Utc};
-use common::{ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow};
-use sqlx::Row;
+use common::{ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow, UserId};
+use sqlx::{Postgres, QueryBuilder, Row};
 use uuid::Uuid;
 
 pub struct PgAdminStoreAdapter {
@@ -98,6 +100,168 @@ impl PgAdminStoreAdapter {
                 .ok()
                 .flatten(),
         }
+    }
+
+    fn map_org_info(row: sqlx::postgres::PgRow) -> Result<AdminOrgInfo, AppError> {
+        let id: Uuid = row
+            .try_get("id")
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        let created_at: DateTime<Utc> = row
+            .try_get("created_at")
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        Ok(AdminOrgInfo {
+            id: OrgId::from(id),
+            name: row
+                .try_get("name")
+                .map_err(|error| AppError::internal(error.to_string()))?,
+            created_at: created_at.timestamp(),
+            blocked: row
+                .try_get("blocked")
+                .map_err(|error| AppError::internal(error.to_string()))?,
+            user_count: row
+                .try_get("user_count")
+                .map_err(|error| AppError::internal(error.to_string()))?,
+            document_count: row
+                .try_get("document_count")
+                .map_err(|error| AppError::internal(error.to_string()))?,
+            query_count: row
+                .try_get("query_count")
+                .map_err(|error| AppError::internal(error.to_string()))?,
+        })
+    }
+
+    fn map_user_info(row: sqlx::postgres::PgRow) -> Result<AdminUserInfo, AppError> {
+        let id: Uuid = row
+            .try_get("id")
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        let org_id: Uuid = row
+            .try_get("org_id")
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        let created_at: DateTime<Utc> = row
+            .try_get("created_at")
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        Ok(AdminUserInfo {
+            id: UserId::from(id),
+            email: row
+                .try_get("email")
+                .map_err(|error| AppError::internal(error.to_string()))?,
+            org_id: OrgId::from(org_id),
+            role: row
+                .try_get("role")
+                .map_err(|error| AppError::internal(error.to_string()))?,
+            created_at: created_at.timestamp(),
+        })
+    }
+
+    fn build_audit_log_base_query(
+        builder: &mut QueryBuilder<'_, Postgres>,
+        query: &AdminAuditLogQuery,
+        count_only: bool,
+    ) {
+        if count_only {
+            builder.push("select count(*) as total from audit_log where 1 = 1");
+        } else {
+            builder.push(
+                "select id, actor_id, action, resource_type, resource_id, org_id, created_at from audit_log where 1 = 1",
+            );
+        }
+
+        if let Some(window_start) = admin_audit_window_start(query.window.as_deref()) {
+            builder.push(" and created_at >= ").push_bind(window_start);
+        }
+        if let Some(action) = query.action.as_deref() {
+            builder
+                .push(" and action = ")
+                .push_bind(action.trim().to_string());
+        }
+        if let Some(resource_type) = query.resource_type.as_deref() {
+            builder
+                .push(" and resource_type = ")
+                .push_bind(resource_type.trim().to_string());
+        }
+        if let Some(actor) = query.actor.as_deref() {
+            builder
+                .push(" and coalesce(actor_id::text, '') ilike ")
+                .push_bind(format!("%{}%", actor.trim()));
+        }
+        if let Some(search) = query.query.as_deref() {
+            let pattern = format!("%{}%", search.trim());
+            builder.push(" and (action ilike ");
+            builder.push_bind(pattern.clone());
+            builder.push(" or resource_type ilike ");
+            builder.push_bind(pattern.clone());
+            builder.push(" or resource_id ilike ");
+            builder.push_bind(pattern.clone());
+            builder.push(" or coalesce(actor_id::text, '') ilike ");
+            builder.push_bind(pattern);
+            builder.push(")");
+        }
+    }
+
+    async fn audit_log_total(
+        conn: &mut sqlx::PgConnection,
+        query: &AdminAuditLogQuery,
+    ) -> Result<usize, AppError> {
+        let mut builder = QueryBuilder::<Postgres>::new("");
+        Self::build_audit_log_base_query(&mut builder, query, true);
+        let row = builder
+            .build()
+            .fetch_one(conn)
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        Ok(row
+            .try_get::<i64, _>("total")
+            .map_err(|error| AppError::internal(error.to_string()))?
+            .max(0) as usize)
+    }
+
+    async fn audit_log_rows(
+        conn: &mut sqlx::PgConnection,
+        query: &AdminAuditLogQuery,
+    ) -> Result<Vec<sqlx::postgres::PgRow>, AppError> {
+        let per_page = admin_clamp_audit_per_page(query.per_page);
+        let page = query.page.max(1);
+        let offset = (page - 1) * per_page;
+        let mut builder = QueryBuilder::<Postgres>::new("");
+        Self::build_audit_log_base_query(&mut builder, query, false);
+        builder.push(" order by created_at desc, id desc limit ");
+        builder.push_bind(per_page as i64);
+        builder.push(" offset ");
+        builder.push_bind(offset as i64);
+        builder
+            .build()
+            .fetch_all(conn)
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))
+    }
+
+    fn map_audit_log_entry(row: sqlx::postgres::PgRow) -> Result<AdminAuditLogEntry, AppError> {
+        let actor_id = row
+            .try_get::<Option<Uuid>, _>("actor_id")
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        let org_id = row
+            .try_get::<Option<Uuid>, _>("org_id")
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        let created_at: DateTime<Utc> = row
+            .try_get("created_at")
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        Ok(AdminAuditLogEntry {
+            id: row
+                .try_get("id")
+                .map_err(|error| AppError::internal(error.to_string()))?,
+            actor_id: actor_id.map(|value| value.to_string()),
+            action: row
+                .try_get("action")
+                .map_err(|error| AppError::internal(error.to_string()))?,
+            resource_type: row
+                .try_get("resource_type")
+                .map_err(|error| AppError::internal(error.to_string()))?,
+            resource_id: row
+                .try_get("resource_id")
+                .map_err(|error| AppError::internal(error.to_string()))?,
+            org_id: org_id.map(|value| value.to_string()),
+            created_at: created_at.timestamp(),
+        })
     }
 }
 
@@ -459,5 +623,235 @@ impl AdminStorePort for PgAdminStoreAdapter {
             .mark_notification_read(auth, user_id, notification_id)
             .await
             .map_err(map_pg_error)
+    }
+
+    async fn list_orgs(&self, auth: &AuthContext) -> Result<Vec<AdminOrgInfo>, AppError> {
+        let mut tx = self.begin_admin_tx(auth).await?;
+        let rows = sqlx::query(
+            r#"
+            select
+              o.id,
+              o.name,
+              o.created_at,
+              o.blocked,
+              (select count(*) from users u where u.org_id = o.id) as user_count,
+              (select count(*) from documents d where d.org_id = o.id) as document_count,
+              (select count(*) from chat_messages m where m.org_id = o.id and m.role = 'user') as query_count
+            from organizations o
+            order by o.created_at desc
+            "#,
+        )
+        .fetch_all(tx.as_mut())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        rows.into_iter().map(Self::map_org_info).collect()
+    }
+
+    async fn get_org(&self, auth: &AuthContext, org_id: OrgId) -> Result<AdminOrgInfo, AppError> {
+        let mut tx = self.begin_admin_tx(auth).await?;
+        let row = sqlx::query(
+            r#"
+            select
+              o.id,
+              o.name,
+              o.created_at,
+              o.blocked,
+              (select count(*) from users u where u.org_id = o.id) as user_count,
+              (select count(*) from documents d where d.org_id = o.id) as document_count,
+              (select count(*) from chat_messages m where m.org_id = o.id and m.role = 'user') as query_count
+            from organizations o
+            where o.id = $1
+            "#,
+        )
+        .bind(org_id.into_uuid())
+        .fetch_optional(tx.as_mut())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        row.map(Self::map_org_info)
+            .transpose()?
+            .ok_or_else(|| AppError::not_found("org_not_found", "Organization not found"))
+    }
+
+    async fn list_users(
+        &self,
+        auth: &AuthContext,
+        org_id: OrgId,
+    ) -> Result<Vec<AdminUserInfo>, AppError> {
+        let mut tx = self.begin_admin_tx(auth).await?;
+        let rows = sqlx::query(
+            r#"
+            select id, email, org_id, role, created_at
+            from users
+            where org_id = $1
+            order by created_at asc
+            "#,
+        )
+        .bind(org_id.into_uuid())
+        .fetch_all(tx.as_mut())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        rows.into_iter().map(Self::map_user_info).collect()
+    }
+
+    async fn delete_user(
+        &self,
+        auth: &AuthContext,
+        org_id: OrgId,
+        user_id: Uuid,
+    ) -> Result<(), AppError> {
+        let mut tx = self.begin_admin_tx(auth).await?;
+        let exists: bool = sqlx::query_scalar(
+            "select exists(select 1 from users where id = $1 and org_id = $2)",
+        )
+        .bind(user_id)
+        .bind(org_id.into_uuid())
+        .fetch_one(tx.as_mut())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+        if !exists {
+            tx.commit()
+                .await
+                .map_err(|error| AppError::internal(error.to_string()))?;
+            return Err(AppError::not_found(
+                "user_not_found",
+                "User not found in this organization",
+            ));
+        }
+        let deleted: i64 = sqlx::query_scalar("select delete_user_cascade($1)")
+            .bind(user_id)
+            .fetch_one(tx.as_mut())
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        if deleted > 0 {
+            Ok(())
+        } else {
+            Err(AppError::not_found(
+                "user_not_found",
+                "User not found in this organization",
+            ))
+        }
+    }
+
+    async fn get_usage(
+        &self,
+        auth: &AuthContext,
+        org_id: OrgId,
+        period: &str,
+    ) -> Result<AdminUsageStats, AppError> {
+        let mut tx = self.begin_admin_tx(auth).await?;
+        let since = admin_usage_period_start(period);
+        let row = sqlx::query(
+            r#"
+            select
+              (select count(*) from chat_messages m where m.org_id = $1 and m.role = 'user' and m.created_at >= $2) as query_count,
+              (select count(*) from documents d where d.org_id = $1 and d.created_at >= $2) as document_count,
+              (select count(*) from chunks c where c.org_id = $1 and c.created_at >= $2) as chunk_count,
+              (select coalesce(sum(d.file_size), 0)::bigint from documents d where d.org_id = $1) as storage_bytes
+            "#,
+        )
+        .bind(org_id.into_uuid())
+        .bind(since)
+        .fetch_one(tx.as_mut())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        Ok(AdminUsageStats {
+            org_id,
+            period: period.to_string(),
+            query_count: row
+                .try_get("query_count")
+                .map_err(|error| AppError::internal(error.to_string()))?,
+            document_count: row
+                .try_get("document_count")
+                .map_err(|error| AppError::internal(error.to_string()))?,
+            chunk_count: row
+                .try_get("chunk_count")
+                .map_err(|error| AppError::internal(error.to_string()))?,
+            storage_bytes: row
+                .try_get("storage_bytes")
+                .map_err(|error| AppError::internal(error.to_string()))?,
+        })
+    }
+
+    async fn set_org_blocked(
+        &self,
+        auth: &AuthContext,
+        org_id: OrgId,
+        blocked: bool,
+    ) -> Result<(), AppError> {
+        let mut tx = self.begin_admin_tx(auth).await?;
+        sqlx::query("update organizations set blocked = $2 where id = $1")
+            .bind(org_id.into_uuid())
+            .bind(blocked)
+            .execute(tx.as_mut())
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        Ok(())
+    }
+
+    async fn list_audit_logs(
+        &self,
+        auth: &AuthContext,
+        query: &AdminAuditLogQuery,
+    ) -> Result<AdminAuditLogPage, AppError> {
+        let mut tx = self.begin_admin_tx(auth).await?;
+        let total = Self::audit_log_total(tx.as_mut(), query).await?;
+        let rows = Self::audit_log_rows(tx.as_mut(), query).await?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        Ok(AdminAuditLogPage {
+            items: rows
+                .into_iter()
+                .map(Self::map_audit_log_entry)
+                .collect::<Result<Vec<_>, _>>()?,
+            total,
+            page: query.page.max(1),
+            per_page: admin_clamp_audit_per_page(query.per_page),
+        })
+    }
+
+    async fn export_audit_logs_csv(
+        &self,
+        auth: &AuthContext,
+        query: &AdminAuditLogQuery,
+    ) -> Result<String, AppError> {
+        let mut tx = self.begin_admin_tx(auth).await?;
+        let export_query = AdminAuditLogQuery {
+            query: query.query.clone(),
+            action: query.action.clone(),
+            resource_type: query.resource_type.clone(),
+            actor: query.actor.clone(),
+            window: query.window.clone(),
+            page: 1,
+            per_page: 5_000,
+        };
+        let rows = Self::audit_log_rows(tx.as_mut(), &export_query).await?;
+        tx.commit()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        Ok(admin_audit_logs_to_csv(
+            &rows
+                .into_iter()
+                .map(Self::map_audit_log_entry)
+                .collect::<Result<Vec<_>, _>>()?,
+        ))
     }
 }

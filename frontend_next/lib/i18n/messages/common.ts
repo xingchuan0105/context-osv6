@@ -9,4 +9,8 @@ export const commonMessages = {
     zh: "保存",
     en: "Save",
   },
+  commonUnlimited: {
+    zh: "不限",
+    en: "Unlimited",
+  },
 } satisfies Record<string, UiMessageDescriptor>;

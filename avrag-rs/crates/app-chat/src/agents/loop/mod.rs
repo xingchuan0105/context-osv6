@@ -2,10 +2,12 @@ use std::sync::Arc;
 
 pub mod answer_contract;
 pub mod assembler;
-pub mod config;
-pub mod disclosure_plan;
-pub mod exit_policy;
 pub mod fallback;
+pub mod policy;
+pub use policy::config as config;
+pub use policy::disclosure_plan as disclosure_plan;
+pub use policy::exit_policy as exit_policy;
+pub use policy::LoopPolicy;
 pub mod hooks;
 pub mod iteration;
 pub mod message_queue;
@@ -460,7 +462,7 @@ impl ReActLoop {
                             reason: crate::agents::react_loop::DegradeReason::NoResultsAfterAllFallbacks,
                         }),
                     );
-                    result.degrade_trace.push(common::DegradeTraceItem {
+                    result.degrade_trace.push(contracts::chat::DegradeTraceItem {
                         stage: "degraded_no_evidence".to_string(),
                         reason: DegradeReason::NoRetrievalEvidence,
                         impact: "Answer withheld; synthesis skipped".to_string(),
@@ -711,7 +713,7 @@ impl ReActLoop {
         Ok(())
     }
 
-    async fn emit_run_citations(&self, sink: &dyn AgentEventSink, citations: &[common::Citation]) {
+    async fn emit_run_citations(&self, sink: &dyn AgentEventSink, citations: &[contracts::chat::Citation]) {
         if !citations.is_empty() {
             let _ = sink
                 .emit(AgentEvent::Citations {

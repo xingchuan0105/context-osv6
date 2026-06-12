@@ -1,6 +1,7 @@
 use crate::ports::chat::chat_session_store::ChatSessionStore;
 use async_trait::async_trait;
-use common::{AppError, ChatSession, now_rfc3339};
+use common::{AppError, now_rfc3339};
+use contracts::notebooks::{ChatSession};
 use contracts::chat::ChatRequest;
 
 #[derive(Clone, Default)]

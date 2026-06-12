@@ -1,7 +1,8 @@
 use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::runtime::AgentRunUsage;
 use avrag_llm::LlmUsage;
-use common::{AnswerContextChunk, Citation, DegradeReason, DegradeTraceItem, SourceRef, ToolResult, ToolStatus};
+use common::{AnswerContextChunk, ToolResult, ToolStatus};
+use contracts::chat::{Citation, DegradeReason, DegradeTraceItem, SourceRef};
 
 pub fn merge_usage(existing: Option<&LlmUsage>, new: &LlmUsage) -> LlmUsage {
     match existing {
@@ -499,7 +500,8 @@ pub fn broaden_query(query: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::{Citation, ToolResult};
+    use common::{ToolResult};
+use contracts::chat::{Citation};
 
     fn make_usage(prompt: u32, completion: u32) -> LlmUsage {
         LlmUsage {

@@ -1,6 +1,7 @@
 use app_core::{DocumentTaskSeed, StorageContext, StoredDocument};
 use avrag_auth::AuthContext;
-use common::{AppError, DocumentStatus};
+use common::{AppError};
+use contracts::documents::{DocumentStatus};
 use ingestion::{
     AuditAction, IngestDocumentPayload, ReindexDocumentPayload, ReindexReason, build_ingest_task,
     build_reindex_task, task_audit,

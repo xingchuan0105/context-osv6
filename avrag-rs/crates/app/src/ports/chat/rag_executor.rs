@@ -1,5 +1,6 @@
 use async_trait::async_trait;
-use common::{AppError, ChatSession};
+use common::{AppError};
+use contracts::notebooks::{ChatSession};
 use contracts::chat::{ChatRequest, ChatResponse};
 
 #[async_trait]

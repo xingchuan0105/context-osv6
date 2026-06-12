@@ -1,0 +1,12 @@
+{
+  "plans": [
+    {
+      "features": [
+        "base"
+      ],
+      "id": "free",
+      "name": "Free",
+      "price": 0
+    }
+  ]
+}

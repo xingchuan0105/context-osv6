@@ -1,9 +1,9 @@
 use avrag_auth::{ActorId, AuthContext, AuthError, OrgId};
 use chrono::{DateTime, Utc};
-use common::{
-    ApiKeyRow, ChatMessage, ChatSession, Citation, Document, DocumentContentResponse,
-    DocumentStatus, Notebook, NotificationRow, ParsedPreviewItem, ParsedPreviewResponse, SourceRow,
-};
+use common::{ApiKeyRow, Document, DocumentContentResponse, NotificationRow, ParsedPreviewItem, ParsedPreviewResponse, SourceRow};
+use contracts::chat::{ChatMessage, Citation};
+use contracts::documents::{DocumentStatus};
+use contracts::notebooks::{ChatSession, Notebook};
 use ingestion_types::{
     AuditRecord, IngestionTask, IngestionTaskKind, IngestionTaskPayload, TaskCompletionOutcome,
     TaskFailureOutcome,

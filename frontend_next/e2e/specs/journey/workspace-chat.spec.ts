@@ -3,6 +3,7 @@ import { DashboardPage } from "../../pom/dashboard-page";
 import { WorkspacePage } from "../../pom/workspace-page";
 import { ChatPanelPage } from "../../pom/chat-panel-page";
 import { resetTestUserData } from "../../utils/api-helpers";
+import { isHardCitationGate } from "../../utils/citation-gate";
 
 test.describe("Workspace Chat Journey", () => {
   test.beforeAll(async ({ request }) => {
@@ -54,9 +55,15 @@ test.describe("Workspace Chat Journey", () => {
     await expect(lastMessage).not.toBeEmpty();
     await expect(page.locator("[data-testid='mode-indicator']")).toContainText(/search|联网/i);
 
-    // Web search 依赖外部 Brave API，citation 数量不稳定；仅在有 citation 时校验可见性
     const citationCount = await chat.citationCount();
-    if (citationCount > 0) {
+    if (isHardCitationGate()) {
+      expect(
+        citationCount,
+        "nightly/staging (E2E_TIER) requires at least one web-search citation",
+      ).toBeGreaterThan(0);
+      await expect(chat.getCitationButton()).toBeVisible();
+    } else if (citationCount > 0) {
+      // PR journey: Brave variability — assert visibility only when citations exist
       await expect(chat.getCitationButton()).toBeVisible();
     }
   });

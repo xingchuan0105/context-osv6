@@ -5,7 +5,8 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::context::ChatContext;
-use common::{AppError, ChatRequest, ChatResponse};
+use common::{AppError};
+use contracts::chat::{ChatRequest, ChatResponse};
 use app_documents::{AuditAction, AuditRecord};
 
 #[derive(Clone)]

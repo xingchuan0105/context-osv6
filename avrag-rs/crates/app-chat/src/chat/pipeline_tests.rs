@@ -10,7 +10,9 @@ mod tests {
     use app_documents::DocumentContext;
     use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
     use avrag_guardrails::GuardPipeline;
-    use common::{AppError, ChatRequest, ChatSession, Notebook, now_rfc3339, new_id};
+    use common::{AppError, now_rfc3339, new_id};
+use contracts::chat::{ChatRequest};
+use contracts::notebooks::{ChatSession, Notebook};
     use tokio::sync::RwLock;
     use uuid::Uuid;
 

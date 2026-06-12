@@ -11,8 +11,8 @@ To maintain semantic consistency across the codebase, tests, and documentation, 
 | Term | Definition | Context / Scope |
 | :--- | :--- | :--- |
 | **Unified Agent** | The core single-agent service architecture (V5) that replaced the legacy multi-agent graph flows. It handles stream chats, RAG execution, and web searches. | Backend (`avrag-rs/crates/app-chat`) |
-| **app (facade)** | Thin HTTP-facing facade: `AppState` delegates to domain crates (`app-chat`, `app-documents`, `app-admin`, …) wired by `app-bootstrap`. Pre-built `ChatContext` lives on `AppState.chat`. | Backend (`avrag-rs/crates/app`) |
-| **app-bootstrap** | Composes runtime dependencies (Postgres, Milvus, Redis, LLM, RAG) and pre-builds `ChatContext` once at startup. | Backend (`avrag-rs/crates/app-bootstrap`) |
+| **app (facade)** | Thin HTTP-facing facade: re-exports `AppState` from `app-bootstrap` and delegates to domain crates (`app-chat`, `app-documents`, `app-admin`, …). Pre-built `ChatContext` lives on `AppState.chat`. | Backend (`avrag-rs/crates/app`) |
+| **app-bootstrap** | Owns `AppState` construction: wires Postgres/Milvus/Redis/LLM/RAG, builds `ChatContext` once, and exposes ports (`AdminStorePort`, `AuthStorePort`, `DocumentStorePort`, …) via `StorageContext`. | Backend (`avrag-rs/crates/app-bootstrap`) |
 | **contracts** | Cross-language API boundary types (Rust + TypeScript via typeshare). HTTP request/response DTOs, SSE event shapes, billing/admin public schemas. | Repo root (`contracts/`) |
 | **common** | Internal Rust runtime types re-exporting `contracts` for handlers/services, plus app-only helpers (docscope, rag_execute, tool_call, identity). Not a second API surface. | Backend (`avrag-rs/crates/common`) |
 | **avrag-api** | The HTTP/REST API server providing backend functionalities to the frontend, including authentication, chat streams, and workspace uploads. | Backend (`avrag-rs/bins/api`) |
@@ -68,14 +68,16 @@ The repository's git worktree structure has been consolidated and cleaned up:
 
 | Concern | Canonical crate | Notes |
 | :--- | :--- | :--- |
-| HTTP `AppState` + delegates | `avrag-rs/crates/app/` | Facade only; domain logic in `app-*` |
-| Dependency wiring | `avrag-rs/crates/app-bootstrap/` | Builds `ChatContext` once |
+| HTTP `AppState` (canonical type) | `avrag-rs/crates/app-bootstrap/` | `AppState` struct + `bootstrap()`; re-exported by `app` |
+| HTTP facade + service delegates | `avrag-rs/crates/app/` | Thin layer; domain logic in `app-*` |
+| Admin persistence port | `avrag-rs/crates/app-core/src/admin_store.rs` | `AdminStorePort`; adapter `app-bootstrap/adapters/pg_admin_store.rs` |
+| Auth persistence port | `avrag-rs/crates/app-core/` | `AuthStorePort`; adapter `app-bootstrap/adapters/pg_auth_store.rs` |
 | Chat / agents | `avrag-rs/crates/app-chat/` | `eval` / `redteam` behind `feature = "eval"` |
 | Documents | `avrag-rs/crates/app-documents/` | |
 | Admin | `avrag-rs/crates/app-admin/` | |
 | Billing context | `avrag-rs/crates/app-billing/` | Quota delegates |
 | Ports & config | `avrag-rs/crates/app-core/` | `AppConfig`, storage ports |
-| HTTP transport | `avrag-rs/crates/transport-http/` | Depends on `app` (`AppState`), `app-core`, `app-chat` |
+| HTTP transport | `avrag-rs/crates/transport-http/` | Depends on `app-bootstrap` (`AppState`), `app-core`, `app-chat`; admin routes use `AdminStorePort` |
 | API binary | `avrag-rs/bins/api/` | |
 | Worker binary | `avrag-rs/bins/worker/` | No `app` facade dependency |
 

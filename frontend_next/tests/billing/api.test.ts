@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 describe("billingApi.getPlans", () => {
-  it("returns parsed BillingPlansResponse", async () => {
+  it("getPlans_returnsParsedBillingPlansResponse", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -56,21 +56,21 @@ describe("billingApi.getPlans", () => {
     );
   });
 
-  it("throws on server error", async () => {
+  it("getPlans_throwsOnServerError", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ ok: false, message: "Internal error" }), { status: 500 }),
     );
     await expect(billingApi.getPlans()).rejects.toThrow();
   });
 
-  it("throws on network failure", async () => {
+  it("getPlans_throwsOnNetworkFailure", async () => {
     fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
     await expect(billingApi.getPlans()).rejects.toThrow("fetch failed");
   });
 });
 
 describe("billingApi.getUsageWindow", () => {
-  it("returns parsed UsageWindowResponse", async () => {
+  it("getUsageWindow_returnsParsedUsageWindowResponse", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -94,14 +94,14 @@ describe("billingApi.getUsageWindow", () => {
     expect(result.soft_limit_hit.rolling_5h).toBe(true);
   });
 
-  it("throws on non-ok response", async () => {
+  it("getUsageWindow_throwsOnNonOkResponse", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ ok: false, message: "boom" }), { status: 500 }),
     );
     await expect(billingApi.getUsageWindow()).rejects.toThrow();
   });
 
-  it("throws when envelope is not ok", async () => {
+  it("getUsageWindow_throwsWhenEnvelopeIsNotOk", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({ ok: false, error: { message: "no access" } }),
@@ -116,7 +116,7 @@ describe("billingApi.getUsageWindow", () => {
     });
   });
 
-  it("throws ApiError with feature_disabled code from envelope", async () => {
+  it("getUsageWindow_throwsApiErrorWithFeatureDisabledCode", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -137,7 +137,7 @@ describe("billingApi.getUsageWindow", () => {
 });
 
 describe("billingApi.getUsageHistory", () => {
-  it("uses the days query parameter", async () => {
+  it("getUsageHistory_usesDaysQueryParameter", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -156,7 +156,7 @@ describe("billingApi.getUsageHistory", () => {
     );
   });
 
-  it("defaults to 7 days", async () => {
+  it("getUsageHistory_defaultsToSevenDays", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({ ok: true, data: { daily: [] } }),
@@ -170,7 +170,7 @@ describe("billingApi.getUsageHistory", () => {
     );
   });
 
-  it("throws on server error", async () => {
+  it("getUsageHistory_throwsOnServerError", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ ok: false, message: "boom" }), { status: 500 }),
     );
@@ -179,7 +179,7 @@ describe("billingApi.getUsageHistory", () => {
 });
 
 describe("billingApi.getUsageForecast", () => {
-  it("returns parsed forecast", async () => {
+  it("getUsageForecast_returnsParsedForecast", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -203,7 +203,7 @@ describe("billingApi.getUsageForecast", () => {
     expect(result.suggestion_en).toBe("Consider upgrading");
   });
 
-  it("throws on server error", async () => {
+  it("getUsageForecast_throwsOnServerError", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ ok: false, message: "boom" }), { status: 500 }),
     );

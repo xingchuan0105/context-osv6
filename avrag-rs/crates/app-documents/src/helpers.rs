@@ -1,7 +1,8 @@
 use app_core::{
     DocumentDeletionOutcome, DocumentUploadMutationOutcome, DocumentUploadQueueOutcome,
 };
-use common::{AppError, DocumentStatus, ParsedPreviewItem};
+use common::{AppError, ParsedPreviewItem};
+use contracts::documents::{DocumentStatus};
 
 pub fn status_label(status: &DocumentStatus) -> &'static str {
     match status {

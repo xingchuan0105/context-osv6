@@ -8,7 +8,7 @@ fn default_provider_is_brave_llm_context() {
 #[tokio::test]
 async fn missing_brave_key_is_explicit_error() {
     let executor = SearchExecutor::new(SearchConfig::default());
-    let request = common::ChatRequest {
+    let request = contracts::chat::ChatRequest {
         query: "test".to_string(),
         notebook_id: None,
         session_id: None,
@@ -40,7 +40,7 @@ async fn unsupported_provider_is_explicit_error() {
         provider: "exa".to_string(),
         ..SearchConfig::default()
     });
-    let request = common::ChatRequest {
+    let request = contracts::chat::ChatRequest {
         query: "test".to_string(),
         notebook_id: None,
         session_id: None,
@@ -100,7 +100,7 @@ async fn brave_llm_context_live_smoke_returns_grounding_sources() {
         max_results: 3,
         ..SearchConfig::default()
     });
-    let request = common::ChatRequest {
+    let request = contracts::chat::ChatRequest {
         query: "What is the Brave Search LLM Context API?".to_string(),
         notebook_id: None,
         session_id: None,

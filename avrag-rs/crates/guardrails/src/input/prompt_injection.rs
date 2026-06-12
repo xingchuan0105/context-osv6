@@ -7,7 +7,7 @@
 //! - Encoded/obfuscated injection attempts
 
 use crate::input::{InputGuard, InputGuardContext};
-use common::{GuardResult, RiskLevel};
+use contracts::chat::{GuardResult, RiskLevel};
 use lazy_static::lazy_static;
 use regex::Regex;
 
@@ -222,7 +222,7 @@ mod tests {
         assert!(result.is_some());
         let r = result.unwrap();
         assert!(!r.passed);
-        assert_eq!(r.risk_level, common::RiskLevel::Critical);
+        assert_eq!(r.risk_level, contracts::chat::RiskLevel::Critical);
     }
 
     #[test]

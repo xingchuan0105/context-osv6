@@ -2,11 +2,8 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use anyhow::Result;
 use avrag_auth::AuthContext;
-use common::{
-    ChatRequest, ChatResponse, Citation, DegradeTraceItem, ExecutePlanResponse, ModeDebug,
-    PlannerOutput, RagModeDebug, RagPlan, RagTraceItem, RagTraceSummary, SourceRef,
-    SummaryInjectionTrace, TraceInfo,
-};
+use common::{ExecutePlanResponse};
+use contracts::chat::{ChatRequest, ChatResponse, Citation, DegradeTraceItem, ModeDebug, PlannerOutput, RagModeDebug, RagPlan, RagTraceItem, RagTraceSummary, SourceRef, SummaryInjectionTrace, TraceInfo};
 use uuid::Uuid;
 
 use crate::context::count_tokens;

@@ -2,75 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => globalThis.__mockProviders.createWorkspaceSurfaceMocks());
-
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({
-    push: mocks.pushMock,
-    replace: mocks.replaceMock,
-    prefetch: vi.fn(),
-    refresh: vi.fn(),
-    back: vi.fn(),
-    forward: vi.fn(),
-  }),
-}));
-
-vi.mock("../../lib/auth/context", () => ({
-  useAuth: () => mocks.authState,
-}));
-
-vi.mock("../../lib/ui-preferences", () => ({
-  useUiPreferences: () => ({
-    locale: "zh-CN" as const,
-    theme: "system" as const,
-    setLocale: mocks.setLocaleMock,
-    setTheme: mocks.setThemeMock,
-  }),
-}));
-
-vi.mock("../../lib/dashboard/client", () => ({
-  createWorkspace: mocks.createWorkspaceMock,
-}));
-
-vi.mock("../../lib/dashboard/default-title", () => ({
-  getDefaultWorkspaceTitle: mocks.getDefaultWorkspaceTitleMock,
-  markDefaultWorkspaceTitleUsed: mocks.markDefaultWorkspaceTitleUsedMock,
-}));
-
-vi.mock("../../lib/workspace/client", () => ({
-  getWorkspace: mocks.getWorkspaceMock,
-  listWorkspaceSessions: mocks.listWorkspaceSessionsMock,
-  listWorkspaceSessionMessages: mocks.listWorkspaceSessionMessagesMock,
-  createWorkspaceSession: mocks.createWorkspaceSessionMock,
-  updateWorkspace: mocks.updateWorkspaceMock,
-  updateWorkspaceSession: mocks.updateWorkspaceSessionMock,
-  deleteWorkspaceSession: mocks.deleteWorkspaceSessionMock,
-  lookupWorkspaceCitation: mocks.lookupWorkspaceCitationMock,
-  addWorkspaceSourceUrl: mocks.addWorkspaceSourceUrlMock,
-  completeWorkspaceDocumentUpload: mocks.completeWorkspaceDocumentUploadMock,
-  createWorkspaceNote: mocks.createWorkspaceNoteMock,
-  createWorkspaceDocumentUpload: mocks.createWorkspaceDocumentUploadMock,
-  deleteWorkspaceDocument: mocks.deleteWorkspaceDocumentMock,
-  deleteWorkspaceNote: mocks.deleteWorkspaceNoteMock,
-  getWorkspaceSourceContent: mocks.getWorkspaceSourceContentMock,
-  getWorkspaceSourceParsedPreview: mocks.getWorkspaceSourceParsedPreviewMock,
-  listWorkspaceNotes: mocks.listWorkspaceNotesMock,
-  listWorkspaceSources: mocks.listWorkspaceSourcesMock,
-  promoteWorkspaceNote: mocks.promoteWorkspaceNoteMock,
-  reindexWorkspaceDocument: mocks.reindexWorkspaceDocumentMock,
-  uploadWorkspaceDocumentFile: mocks.uploadWorkspaceDocumentFileMock,
-  updateWorkspaceNote: mocks.updateWorkspaceNoteMock,
-}));
-
-vi.mock("../../lib/workspace/stream", () => ({
-  streamWorkspaceChat: mocks.streamWorkspaceChatMock,
-}));
-
-vi.mock("../../lib/billing/featureFlag", () => ({
-  isPricingRevampEnabledSSR: () => true,
-  isPricingRevampEnabled: vi.fn().mockResolvedValue(true),
-  probePricingRevampUsageWindow: mocks.probePricingRevampUsageWindowMock,
-}));
+import { workspaceSurfaceMocks as mocks } from "./helpers/workspace-surface.mocks";
 
 import {
   clearSurfaceMatchMediaListeners,

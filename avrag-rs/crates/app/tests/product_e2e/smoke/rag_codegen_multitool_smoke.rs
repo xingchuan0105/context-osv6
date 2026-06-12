@@ -1,16 +1,16 @@
 //! S1: Multiround RAG codegen — doc_profile (archive) → chunk_fetch (body) → synthesis.
 
 use crate::product_e2e::{
-    ChatResponse, HttpResponse, assertions::*, fixtures::shared_ready_rag,
+    ChatResponse, HttpResponse, assertions::*, fixtures::shared_ready_rag_context,
 };
 
 #[tokio::test]
 async fn rag_multiround_profile_codegen_doc_profile_then_chunk_fetch() {
 
     super::require_smoke_suite();
-    let shared = shared_ready_rag().await;
-    let upload = &shared.1;
-    let ctx = shared.0.lock().expect("shared ready_rag lock");
+    let fixture = crate::product_e2e::fixtures::shared_rag_fixture().await;
+    let upload = &fixture.upload;
+    let ctx = shared_ready_rag_context().await;
     ctx.reset_mock_state();
 
     let chunk_ids = ctx

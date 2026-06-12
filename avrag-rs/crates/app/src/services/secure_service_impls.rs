@@ -1,6 +1,7 @@
 use crate::services::secure_services::{
     EmbeddingService, LlmService, SearchResult, SearchService, StorageService,
 };
+use app_core::ObjectStorePort;
 use avrag_llm::{ChatMessage, LlmClient, LlmResponse};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -120,15 +121,12 @@ impl SearchService for SecureSearchService {
 
 /// 安全的存储服务实现
 pub struct SecureStorageService {
-    _object_store: Arc<avrag_storage_pg::ObjectStoreHandle>,
+    _object_store: Arc<dyn ObjectStorePort>,
     public_base_url: String,
 }
 
 impl SecureStorageService {
-    pub fn new(
-        object_store: Arc<avrag_storage_pg::ObjectStoreHandle>,
-        public_base_url: String,
-    ) -> Self {
+    pub fn new(object_store: Arc<dyn ObjectStorePort>, public_base_url: String) -> Self {
         Self {
             _object_store: object_store,
             public_base_url,

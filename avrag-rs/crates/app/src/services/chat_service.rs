@@ -1,5 +1,6 @@
 use crate::{AppConfig, AppState};
-use common::{AppError, ChatRequest, ChatResponse, CreateNotebookRequest};
+use common::{AppError, CreateNotebookRequest};
+use contracts::chat::{ChatRequest, ChatResponse};
 
 #[derive(Clone)]
 pub struct ChatService {

@@ -4,8 +4,8 @@ use thiserror::Error;
 pub enum IngestionError {
     #[error("invalid state transition: {from:?} -> {to:?}")]
     InvalidStateTransition {
-        from: common::DocumentStatus,
-        to: common::DocumentStatus,
+        from: contracts::documents::DocumentStatus,
+        to: contracts::documents::DocumentStatus,
     },
     #[error("task source error: {0}")]
     TaskSource(String),

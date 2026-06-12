@@ -1,4 +1,4 @@
-use crate::{AnswerBlock, Citation};
+use contracts::chat::{AnswerBlock, Citation};
 
 pub fn plain_text_answer_blocks(text: &str) -> Vec<AnswerBlock> {
     let trimmed = text.trim();

@@ -107,16 +107,6 @@ fn password_reset_enabled(config: &PasswordResetConfig) -> bool {
     cfg!(test) || config.smtp_ready()
 }
 
-async fn begin_auth_admin_tx<'a>(
-    pool: &'a sqlx::PgPool,
-) -> Result<sqlx::Transaction<'a, sqlx::Postgres>, sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    sqlx::query("select set_config('app.current_role', 'super_admin', true)")
-        .execute(tx.as_mut())
-        .await?;
-    Ok(tx)
-}
-
 async fn send_reset_email(
     config: &PasswordResetConfig,
     to: &str,
@@ -378,7 +368,7 @@ async fn auth_update_preferences_handler(
 
     let next_preferences = match serde_json::to_value(&req)
         .ok()
-        .and_then(|value| serde_json::from_value::<common::UserPreferences>(value).ok())
+        .and_then(|value| serde_json::from_value::<contracts::preferences::UserPreferences>(value).ok())
     {
         Some(preferences) => preferences,
         None => {
@@ -455,7 +445,7 @@ async fn auth_get_agent_preferences_handler(
 
 async fn auth_update_agent_preferences_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Json(agent_memory): Json<common::AgentPreferenceMemory>,
+    Json(agent_memory): Json<contracts::preferences::AgentPreferenceMemory>,
 ) -> Response {
     if state.auth().actor_id().is_none() {
         return handlers::error_response(

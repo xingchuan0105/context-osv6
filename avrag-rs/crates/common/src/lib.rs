@@ -1,6 +1,7 @@
 //! Internal Rust runtime types for avrag services.
 //!
-//! Re-exports wire DTOs from `contracts` and adds service-only helpers.
+//! Wire DTOs live in `contracts/` — import them directly from that crate.
+//! This crate holds service-only helpers (rag_execute, tool_call, errors, etc.).
 //! New cross-language fields belong in `contracts/` first; see `CONTEXT.md`.
 
 pub mod chat;
@@ -16,31 +17,6 @@ pub mod rag_execute;
 pub mod ssrf;
 pub mod tool_call;
 pub mod util;
-
-pub use contracts::chat::{
-    AnswerBlock, ChatDonePayload, ChatMessage, ChatMessageListResponse, ChatRequest, ChatResponse,
-    ChatTokenUsage, ChatTurnInput, Citation, DegradeReason, DegradeTraceItem, GeneralPlan,
-    GuardAction, GuardReport, GuardResult, MessageFeedbackRating, MessageFeedbackRequest, ModeDebug, PlannerOutput,
-    RagModeDebug, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary, RiskLevel, SearchPlan,
-    SourceRef, SummaryInjectionTrace, TraceInfo,
-};
-pub use contracts::documents::{
-    CitationLookupRequest, CitationLookupResponse, CreateDocumentUploadResponse, DocumentStatus,
-    DocumentStatusResponse,
-};
-pub use contracts::notebooks::{
-    ChatSession, ChatSessionListResponse, CreateChatSessionRequest, CreateNotebookNoteRequest,
-    Notebook, NotebookAnalysisAccess, NotebookAnalysisAlert, NotebookAnalysisNotes,
-    NotebookAnalysisOverview, NotebookAnalysisResponse, NotebookAnalysisSources,
-    NotebookAnalysisThreads, NotebookListResponse, NotebookNote, NotebookNoteListResponse,
-    NotebookNoteResponse, NotebookResponse, PromoteNotebookNoteResponse, UpdateChatSessionRequest,
-    UpdateNotebookNoteRequest,
-};
-pub use contracts::preferences::{
-    AgentPreference, AgentPreferenceMemory, BlockedAgentPreference, DailyPreferenceLog,
-    DashboardPreferences, NotebookNotePreference, NotebookWorkspacePreference,
-    NotificationPreferences, UserPreferences, WorkspaceDraftPreference,
-};
 
 pub use chat::{
     answer_blocks_from_rendered_answer, answer_blocks_to_markup, plain_text_answer_blocks,

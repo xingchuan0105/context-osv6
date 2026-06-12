@@ -1,8 +1,7 @@
 use app_core::parse_uuid_or_app_error;
-use common::{
-    AppError, ChatMessage, ChatRequest, ChatResponse, ChatSession, CreateChatSessionRequest,
-    Notebook, SourceRow, StatusOnlyResponse, UpdateChatSessionRequest, new_id, now_rfc3339,
-};
+use common::{AppError, SourceRow, StatusOnlyResponse, new_id, now_rfc3339};
+use contracts::chat::{ChatMessage, ChatRequest, ChatResponse};
+use contracts::notebooks::{ChatSession, CreateChatSessionRequest, Notebook, UpdateChatSessionRequest};
 use uuid::Uuid;
 
 use crate::context::ChatContext;

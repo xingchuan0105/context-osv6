@@ -6,7 +6,7 @@ use avrag_llm::{MultiModalEmbeddingInput, MultiModalRerankDocument};
 use avrag_retrieval_data_plane::{
     Bm25SearchRequest, MultimodalSearchRequest, TextDenseSearchRequest, WeightedChunkList,
 };
-use common::{ChatRequest, DegradeReason, DegradeTraceItem, RagPlan};
+use contracts::chat::{ChatRequest, DegradeReason, DegradeTraceItem, RagPlan};
 
 use crate::merge::{cut_top_k, dual_threshold_cut, global_rrf_merge};
 use crate::retrieval::ScoredChunk;

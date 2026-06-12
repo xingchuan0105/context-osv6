@@ -6,7 +6,7 @@
 //! the user's scope.
 
 use crate::input::{InputGuard, InputGuardContext};
-use common::{GuardResult, RiskLevel};
+use contracts::chat::{GuardResult, RiskLevel};
 
 #[derive(Debug, Clone)]
 pub struct ScopeGuard;

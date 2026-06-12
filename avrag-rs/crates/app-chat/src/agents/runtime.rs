@@ -1,7 +1,7 @@
 use super::AgentKind;
 use crate::agents::events::AgentEventSink;
 use crate::agents::react_loop::DegradeReason;
-use common::{ChatTurnInput, Citation, DegradeTraceItem};
+use contracts::chat::{ChatTurnInput, Citation, DegradeTraceItem};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -272,7 +272,7 @@ pub struct AgentRunResult {
     #[serde(default)]
     pub citations: Vec<Citation>,
     #[serde(default)]
-    pub sources: Vec<common::SourceRef>,
+    pub sources: Vec<contracts::chat::SourceRef>,
     #[serde(default)]
     pub reasoning_summary: Option<String>,
     #[serde(default)]

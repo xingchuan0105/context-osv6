@@ -241,7 +241,7 @@ async fn share_chat_notebook_scope_from_request(
             return None;
         }
     };
-    let chat_request = serde_json::from_slice::<common::ChatRequest>(&body_bytes).ok();
+    let chat_request = serde_json::from_slice::<contracts::chat::ChatRequest>(&body_bytes).ok();
     *req = Request::from_parts(parts, Body::from(body_bytes));
 
     let chat_request = chat_request?;

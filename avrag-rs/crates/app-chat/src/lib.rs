@@ -9,6 +9,9 @@ pub mod i18n;
 pub mod llm_context;
 pub mod memory_helpers;
 pub mod orchestrator_context;
+#[cfg(feature = "eval")]
+pub mod eval;
+pub mod prompts;
 pub mod rag_execute;
 pub mod rag_prompts;
 pub mod sessions;

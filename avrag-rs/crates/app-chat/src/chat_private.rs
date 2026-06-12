@@ -1,7 +1,10 @@
 use avrag_rag_core::context::SessionContext as RagSessionContext;
 use app_core::{ChatPersistencePort, NotificationCreateParams};
 use app_core::{MemoryState, StoredDocument};
-use common::{AppError, ChatMessage, ChatSession, DocumentStatus};
+use common::{AppError};
+use contracts::chat::{ChatMessage};
+use contracts::documents::{DocumentStatus};
+use contracts::notebooks::{ChatSession};
 
 use crate::context::ChatContext;
 

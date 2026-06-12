@@ -14,7 +14,7 @@ pub use v1::{
 
 /// Layer 1: Raw messages (last N messages)
 pub struct Layer1Messages {
-    pub messages: Vec<common::ChatMessage>,
+    pub messages: Vec<contracts::chat::ChatMessage>,
 }
 
 /// Layer 2: Session summary

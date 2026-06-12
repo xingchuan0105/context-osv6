@@ -13,3 +13,6 @@ pub use app_core::{
 pub mod storage_context;
 pub mod lib_impl;
 pub use lib_impl::*;
+
+#[cfg(feature = "product-e2e")]
+pub mod product_e2e_http;

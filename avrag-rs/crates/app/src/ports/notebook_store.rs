@@ -1,5 +1,6 @@
 use async_trait::async_trait;
-use common::{AppError, CreateNotebookRequest, Notebook};
+use common::{AppError, CreateNotebookRequest};
+use contracts::notebooks::{Notebook};
 
 #[async_trait]
 pub trait NotebookStore: Send + Sync {

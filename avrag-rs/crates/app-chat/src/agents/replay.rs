@@ -62,7 +62,7 @@ pub struct CapturedRunResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_summary: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub degrade_trace: Vec<common::DegradeTraceItem>,
+    pub degrade_trace: Vec<contracts::chat::DegradeTraceItem>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub final_decision: Option<crate::agents::runtime::FinalDecision>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

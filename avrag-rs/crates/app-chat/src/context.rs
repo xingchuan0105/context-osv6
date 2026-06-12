@@ -126,10 +126,10 @@ impl ChatContext {
             .await
     }
 
-    pub fn document_is_deleting_or_deleted(status: &common::DocumentStatus) -> bool {
+    pub fn document_is_deleting_or_deleted(status: &contracts::documents::DocumentStatus) -> bool {
         matches!(
             status,
-            common::DocumentStatus::Deleting | common::DocumentStatus::Deleted
+            contracts::documents::DocumentStatus::Deleting | contracts::documents::DocumentStatus::Deleted
         )
     }
 }

@@ -227,7 +227,7 @@ impl SkillCatalogConfig {
             return;
         }
 
-        let registry = super::super::progressive::PromptRegistry::standard_cached();
+        let registry = crate::agents::progressive::PromptRegistry::standard_cached();
         let mut clusters = Vec::new();
 
         for id in &self.retrieve_clusters {
@@ -245,7 +245,7 @@ impl SkillCatalogConfig {
 }
 
 fn cluster_from_registry(
-    registry: &super::super::progressive::PromptRegistry,
+    registry: &crate::agents::progressive::PromptRegistry,
     id: &str,
     default_phase: DiscloseAt,
 ) -> Option<SkillCluster> {

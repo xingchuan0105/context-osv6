@@ -1,4 +1,5 @@
-use common::{AgentPreferenceMemory, AppError};
+use common::{AppError};
+use contracts::preferences::{AgentPreferenceMemory};
 use contracts::UserPreferences;
 use uuid::Uuid;
 

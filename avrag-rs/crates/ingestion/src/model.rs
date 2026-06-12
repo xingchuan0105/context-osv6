@@ -1,5 +1,6 @@
 use chrono::Utc;
-use common::{DocumentStatus, new_id};
+use common::{new_id};
+use contracts::documents::{DocumentStatus};
 use serde_json::Value;
 
 use crate::IngestionError;

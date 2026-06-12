@@ -5,7 +5,8 @@ use app::ports::{
 };
 use app::services::chat::service::ChatService;
 use async_trait::async_trait;
-use common::{AppError, ChatSession, CreateNotebookRequest, Notebook};
+use common::{AppError, CreateNotebookRequest};
+use contracts::notebooks::{ChatSession, Notebook};
 use contracts::chat::{ChatRequest, ChatResponse, TraceInfo};
 use std::sync::Arc;
 

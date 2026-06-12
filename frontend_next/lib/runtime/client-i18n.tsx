@@ -7,9 +7,8 @@
  * 静态导出不支持 cookies() 等服务端 API，所以需要客户端读取 locale。
  */
 
+import { NextIntlClientProvider } from "next-intl";
 import { useEffect, useState } from "react";
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { NextIntlClientProvider } = require("next-intl");
 
 import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, normalizeLocale, type UiLocale } from "../i18n/config";
 import { getMessageCatalog } from "../i18n/messages";

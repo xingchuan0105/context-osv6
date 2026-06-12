@@ -1,4 +1,6 @@
-use common::{ChatMessage, ChatSession, Document, Notebook, NotificationRow, ParsedPreviewItem};
+use common::{Document, NotificationRow, ParsedPreviewItem};
+use contracts::chat::{ChatMessage};
+use contracts::notebooks::{ChatSession, Notebook};
 use contracts::UserPreferences;
 use std::collections::BTreeMap;
 

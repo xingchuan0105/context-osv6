@@ -1,4 +1,5 @@
-use common::{AppError, CitationLookupResponse};
+use common::{AppError};
+use contracts::documents::{CitationLookupResponse};
 
 use super::AppState;
 

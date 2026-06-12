@@ -6,10 +6,10 @@ mod tests {
         build_docscope_metadata, build_url_source_filename, infer_url_import_mime_type,
         normalize_imported_text,
     };
-    use common::{
-        ChatMessage, CreateDocumentRequest, CreateDocumentUploadResponse, CreateNotebookRequest,
-        DocumentStatus, Notebook, UpdateDocumentRequest,
-    };
+    use common::{CreateDocumentRequest, CreateNotebookRequest, UpdateDocumentRequest};
+use contracts::chat::{ChatMessage};
+use contracts::documents::{CreateDocumentUploadResponse, DocumentStatus};
+use contracts::notebooks::{Notebook};
 
     use uuid::Uuid;
 
@@ -178,8 +178,8 @@ mod tests {
 
     #[test]
     fn general_profile_custom_preferences_preserves_agent_memory() {
-        let mut agent_memory = common::AgentPreferenceMemory::default();
-        agent_memory.active.push(common::AgentPreference {
+        let mut agent_memory = contracts::preferences::AgentPreferenceMemory::default();
+        agent_memory.active.push(contracts::preferences::AgentPreference {
             id: "pref-1".to_string(),
             text: "Use concise answers".to_string(),
             category: "interaction".to_string(),
@@ -482,7 +482,7 @@ mod tests {
 
         state
             .execute_chat_stream(
-                common::ChatRequest {
+                contracts::chat::ChatRequest {
                     query: "hello".to_string(),
                     notebook_id: Some(notebook.id),
                     session_id: None,
@@ -551,7 +551,7 @@ mod tests {
 
         state
             .execute_chat_stream(
-                common::ChatRequest {
+                contracts::chat::ChatRequest {
                     query: "hello".to_string(),
                     notebook_id: Some(notebook.id),
                     session_id: None,
@@ -613,7 +613,7 @@ mod tests {
 
         state
             .execute_chat_stream(
-                common::ChatRequest {
+                contracts::chat::ChatRequest {
                     query: "hello".to_string(),
                     notebook_id: Some(notebook.id),
                     session_id: None,

@@ -6,7 +6,7 @@
 //! - Bypass permission boundaries
 
 use crate::input::{InputGuard, InputGuardContext};
-use common::{GuardResult, RiskLevel};
+use contracts::chat::{GuardResult, RiskLevel};
 use lazy_static::lazy_static;
 use regex::Regex;
 

@@ -23,8 +23,11 @@ pub use config::*;
 pub use domain_ports::*;
 pub use state_types::{MemoryState, RetrievedContext, StoredDocument};
 pub use admin_domain::{
+    admin_audit_logs_to_csv, admin_audit_window_start, admin_clamp_audit_per_page,
+    admin_usage_period_start, AdminAuditLogEntry, AdminAuditLogPage, AdminAuditLogQuery,
     AdminBillingOverview, AdminDegradationStatus, AdminFeatureFlagChangeRequest,
-    AdminFeatureFlagEntry, AdminRagHealthStatus, AdminWorkerStatus,
+    AdminFeatureFlagEntry, AdminOrgInfo, AdminRagHealthStatus, AdminUsageStats, AdminUserInfo,
+    AdminWorkerStatus,
 };
 pub use admin_store::AdminStorePort;
 pub use auth_store::{

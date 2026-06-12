@@ -284,7 +284,7 @@ pub(crate) async fn process_document_cleanup_task(
     };
     if !matches!(
         targets.status,
-        common::DocumentStatus::Deleting | common::DocumentStatus::Deleted
+        contracts::documents::DocumentStatus::Deleting | contracts::documents::DocumentStatus::Deleted
     ) {
         return Err(anyhow::anyhow!(
             "document {} was not in deleting/deleted status during cleanup",

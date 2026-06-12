@@ -10,7 +10,9 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
-use common::{ChatResponse, CreateDocumentRequest, CreateNotebookRequest, DocumentStatus};
+use common::{CreateDocumentRequest, CreateNotebookRequest};
+use contracts::chat::{ChatResponse};
+use contracts::documents::{DocumentStatus};
 use contracts::chat::ChatEvent;
 use http_body_util::BodyExt;
 use std::time::Duration;
@@ -248,6 +250,54 @@ async fn post_rag_chat_with_empty_doc_scope_clarifies_without_retrieval() {
             })
             .collect::<String>();
         assert!(streamed_answer.contains("选择"));
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn post_chat_stream_event_order_start_first_done_terminal() {
+    let (app, notebook_id, org_id) = test_app().await;
+    let request_id = "req-event-order";
+    let response = app
+        .oneshot(chat_post_request(
+            org_id,
+            serde_json::json!({
+                "query": "Reply with a short answer.",
+                "notebook_id": notebook_id,
+                "agent_type": "chat",
+                "stream": true
+            }),
+            None,
+            Some(request_id),
+        ))
+        .await
+        .unwrap();
+
+    assert_sse_response(response, |events| {
+        assert!(
+            matches!(events.first(), Some(ChatEvent::Start { request_id: rid, .. }) if rid == request_id),
+            "first SSE event must be start, got: {:?}",
+            events.first()
+        );
+        assert!(
+            matches!(events.last(), Some(ChatEvent::Done { request_id: rid, .. }) if rid == request_id),
+            "last SSE event must be done, got: {:?}",
+            events.last()
+        );
+        let done_index = events
+            .iter()
+            .position(|event| matches!(event, ChatEvent::Done { .. }))
+            .expect("done event checked above");
+        assert_eq!(
+            done_index,
+            events.len() - 1,
+            "no events may follow done: {:?}",
+            events
+                .iter()
+                .skip(done_index + 1)
+                .map(sse_event_name)
+                .collect::<Vec<_>>()
+        );
     })
     .await;
 }

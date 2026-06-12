@@ -1,4 +1,4 @@
-use common::ChatMessage;
+use contracts::chat::ChatMessage;
 use serde::{Deserialize, Serialize};
 use tiktoken_rs::CoreBPE;
 use uuid::Uuid;

@@ -7,7 +7,7 @@
 //! - Phone numbers
 //! - Medical record numbers
 
-use common::GuardResult;
+use contracts::chat::GuardResult;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::collections::HashMap;
@@ -130,7 +130,7 @@ mod tests {
         let guard = PiiScrubberGuard::new();
         let result = guard.check("My SSN is 123-45-6789", None);
         assert!(result.passed); // PII guard redacts, not blocks
-        assert_eq!(result.action, common::GuardAction::Redact);
+        assert_eq!(result.action, contracts::chat::GuardAction::Redact);
         let details = result.details.as_ref().unwrap();
         assert_eq!(details["redacted_count"], 1);
     }
@@ -160,7 +160,7 @@ mod tests {
         let guard = PiiScrubberGuard::new();
         let result = guard.check("Card: 4111-1111-1111-1111", None);
         assert!(result.passed);
-        assert_eq!(result.action, common::GuardAction::Redact);
+        assert_eq!(result.action, contracts::chat::GuardAction::Redact);
     }
 
     #[test]

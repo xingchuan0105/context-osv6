@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use common::{AppError, ChatRequest, ChatSession, ModeDebug};
+use common::{AppError};
+use contracts::chat::{ChatRequest, ModeDebug};
+use contracts::notebooks::{ChatSession};
 
 use crate::agents::runtime::AgentRequest;
 use crate::chat_streaming::STREAM_PLACEHOLDER_MESSAGE_ID;

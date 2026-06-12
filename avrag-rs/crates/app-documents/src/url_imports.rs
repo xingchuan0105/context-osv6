@@ -1,10 +1,8 @@
 use app_billing::BillingContext;
 use app_core::{parse_uuid_or_app_error, AnalyticsServiceCtx, StorageContext, StoredDocument};
 use avrag_auth::AuthContext;
-use common::{
-    AddUrlSourceRequest, AppError, CreateDocumentUploadResponse, Document, DocumentStatus,
-    SourceRow, new_id, now_rfc3339,
-};
+use common::{AddUrlSourceRequest, AppError, Document, SourceRow, new_id, now_rfc3339};
+use contracts::documents::{CreateDocumentUploadResponse, DocumentStatus};
 use uuid::Uuid;
 
 use crate::analytics_helpers::{

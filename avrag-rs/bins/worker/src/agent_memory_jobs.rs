@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use common::{AgentPreference, DailyPreferenceLog, UserPreferences};
+use contracts::preferences::{AgentPreference, DailyPreferenceLog, UserPreferences};
 use sqlx::Row;
 use tokio::time::Duration;
 use tracing::info;

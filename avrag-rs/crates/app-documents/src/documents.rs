@@ -2,11 +2,8 @@ use app_billing::BillingContext;
 use app_core::{ObjectStoreHeadError, parse_uuid_or_app_error, AnalyticsServiceCtx, StorageContext, StoredDocument};
 use futures::TryStreamExt;
 use avrag_auth::AuthContext;
-use common::{
-    AppError, CreateDocumentRequest, CreateDocumentUploadResponse, Document,
-    DocumentContentResponse, DocumentStatus, ParsedPreviewResponse, StatusOnlyResponse,
-    UpdateDocumentRequest, new_id, now_rfc3339,
-};
+use common::{AppError, CreateDocumentRequest, Document, DocumentContentResponse, ParsedPreviewResponse, StatusOnlyResponse, UpdateDocumentRequest, new_id, now_rfc3339};
+use contracts::documents::{CreateDocumentUploadResponse, DocumentStatus};
 use ingestion::{AuditAction, IngestDocumentPayload, build_ingest_task, task_audit};
 use tokio::time::{Duration, sleep};
 use tracing::info;

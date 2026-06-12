@@ -1,7 +1,5 @@
-use common::{
-    ExecutePlanRequest, ExecutePlanSummaryMode, ExecutePlanValidationError, RagPlan, RagPlanItem,
-    RetrievalBundle,
-};
+use common::{ExecutePlanRequest, ExecutePlanSummaryMode, ExecutePlanValidationError, RetrievalBundle};
+use contracts::chat::{RagPlan, RagPlanItem};
 
 #[test]
 fn execute_plan_request_drops_legacy_clarify_fields_when_mapped_from_rag_plan() {
@@ -463,7 +461,7 @@ fn retrieval_bundle_citation_chunks_includes_graph_supported_chunks() {
             score_breakdown: Vec::new(),
         }],
         relation_paths: vec![],
-        citations: vec![common::Citation {
+        citations: vec![contracts::chat::Citation {
             citation_id: 1,
             doc_id: "doc-1".to_string(),
             chunk_id: Some("graph-chunk-1".to_string()),

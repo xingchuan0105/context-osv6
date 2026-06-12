@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+contracts = { path = "../../../contracts" }
 anyhow.workspace = true
 avrag-auth = { path = "../auth" }
 aws-config = "1"

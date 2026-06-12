@@ -139,6 +139,10 @@ impl E2eBootstrapConfig {
         config
     }
 
+    /// Inject worker process env. `NEXT_PUBLIC_DEV_ORG_ID` / `NEXT_PUBLIC_DEV_USER_ID`
+    /// are shared with `AppConfig::from_env` (see `app-core` config) — worker has no
+    /// separate `AVRAG_ORG_ID` / `AVRAG_USER_ID` keys; E2E must keep API headers,
+    /// bootstrap config, and worker env aligned on the same pair.
     pub(crate) fn apply_worker_env(&self, cmd: &mut tokio::process::Command, base_url: &str) {
         cmd.env("E2E_ENABLED", "true")
             .env("NEXT_PUBLIC_DEV_ORG_ID", &self.org_id)

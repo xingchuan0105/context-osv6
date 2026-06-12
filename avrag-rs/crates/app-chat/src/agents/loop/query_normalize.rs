@@ -325,14 +325,14 @@ mod tests {
             session_id: None,
             doc_scope: vec![],
             messages: vec![
-                common::ChatTurnInput {
+                contracts::chat::ChatTurnInput {
                     role: "user".to_string(),
                     content: "Who wrote it?".to_string(),
                     resolved_query: Some(
                         "Who wrote Antifragile by Nassim Nicholas Taleb?".to_string(),
                     ),
                 },
-                common::ChatTurnInput {
+                contracts::chat::ChatTurnInput {
                     role: "assistant".to_string(),
                     content: "Taleb.".to_string(),
                     resolved_query: None,

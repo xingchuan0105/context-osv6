@@ -5,6 +5,7 @@ rust-version = "1.93"
 version = "0.1.0"
 
 [dependencies]
+contracts = { path = "../../../contracts" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 reqwest = { workspace = true }

@@ -106,7 +106,7 @@ async function decodeError(response: Response) {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}, token?: string) {
+export async function request<T>(path: string, init: RequestInit = {}, token?: string) {
   const headers = new Headers(init.headers);
 
   if (!headers.has("Accept")) {

@@ -1,10 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
-use common::{
-    ChatRequest, ChatResponse, Citation, DegradeTraceItem, ModeDebug, PlannerOutput, RagModeDebug,
-    RagPlan, RagTraceItem, RagTraceSummary, SummaryInjectionTrace, TraceInfo,
-};
+use contracts::chat::{ChatRequest, ChatResponse, Citation, DegradeTraceItem, ModeDebug, PlannerOutput, RagModeDebug, RagPlan, RagTraceItem, RagTraceSummary, SummaryInjectionTrace, TraceInfo};
 use uuid::Uuid;
 
 use super::planner::rag_summary_mode;

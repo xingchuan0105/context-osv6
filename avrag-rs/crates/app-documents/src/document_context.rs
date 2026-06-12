@@ -1,7 +1,8 @@
 use app_core::{domain_rows::DocumentScopeState, DocumentScopeValidator, StorageContext};
 use async_trait::async_trait;
 use avrag_auth::AuthContext;
-use common::{AppError, DocumentStatus};
+use common::{AppError};
+use contracts::documents::{DocumentStatus};
 use uuid::Uuid;
 
 #[derive(Clone, Default)]

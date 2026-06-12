@@ -1,7 +1,7 @@
 use crate::ModelProviderConfig;
 use crate::client::{ChatMessage, LlmClient, LlmUsage};
 use anyhow::Context;
-use common::RagPlan;
+use contracts::chat::RagPlan;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 

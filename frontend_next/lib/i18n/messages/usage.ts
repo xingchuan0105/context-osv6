@@ -1,5 +1,6 @@
 import type { UiMessageDescriptor } from "./types";
 
+/** Plus vs Free rolling limits (see lib/billing/planLimits.ts): 5h 6×, 7d 10×. */
 export const usageMessages = {
   currentPlan: {
     zh: "当前套餐",
@@ -42,8 +43,8 @@ export const usageMessages = {
     en: "Based on usage, upgrading to Plus is recommended",
   },
   toastUpgradeCta: {
-    zh: "升级 Plus 解锁 6× 用量 →",
-    en: "Upgrade to Plus for 6× usage →",
+    zh: "升级 Plus 解锁 {multiplier}× 用量 →",
+    en: "Upgrade to Plus for {multiplier}× usage →",
   },
   toastClose: {
     zh: "关闭",
@@ -74,8 +75,8 @@ export const usageMessages = {
     en: "Current plan:",
   },
   usageFreeUpgradeHint: {
-    zh: "→ Free 升级 Plus 解锁 10× 用量",
-    en: "→ Upgrade Free to Plus for 10× usage",
+    zh: "→ Free 升级 Plus：5h 6× / 7d 10× 用量",
+    en: "→ Upgrade Free to Plus: 6× (5h) / 10× (7d) usage",
   },
   usageUnlimited: {
     zh: "无限制",

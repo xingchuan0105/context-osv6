@@ -2,20 +2,14 @@
 
 import type { ReactNode } from "react";
 
-import {
-  usePricingRevampGate,
-  type PricingRevampGateOptions,
-} from "../../lib/billing/usePricingRevampGate";
+import type { PricingRevampGateOptions } from "../../lib/billing/usePricingRevampGate";
+import { PricingRevampGateProvider } from "./pricing-revamp-gate-context";
 
 export function PricingRevampGate({
   redirectTo,
   children,
 }: PricingRevampGateOptions & { children: ReactNode }) {
-  const { ssrEnabled } = usePricingRevampGate({ redirectTo });
-
-  if (!ssrEnabled) {
-    return null;
-  }
-
-  return children;
+  return <PricingRevampGateProvider redirectTo={redirectTo}>{children}</PricingRevampGateProvider>;
 }
+
+export { usePricingRevampGateResult } from "./pricing-revamp-gate-context";

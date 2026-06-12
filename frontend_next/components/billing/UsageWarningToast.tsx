@@ -65,6 +65,7 @@ export function UsageWarningToast({
 
   const urgency = threshold === 95 ? styles.urgent : styles.elevated;
   const unlimitedLabel = formatUiMessage(locale, "usageUnlimited");
+  const plusMultiplier = windowType === "5h" ? 6 : 10;
 
   return (
     <div className={`${styles.toast} ${urgency}`} role="alert">
@@ -78,7 +79,7 @@ export function UsageWarningToast({
           {formatUiMessage(locale, "toastResetsIn", { time: countdown })}{" "}
           {onUpgradeClick && (
             <button type="button" className={styles.upgradeLink} onClick={onUpgradeClick}>
-              {formatUiMessage(locale, "toastUpgradeCta")}
+              {formatUiMessage(locale, "toastUpgradeCta", { multiplier: plusMultiplier })}
             </button>
           )}
         </div>

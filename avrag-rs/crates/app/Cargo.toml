@@ -5,6 +5,9 @@ license.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[features]
+product-e2e = ["dep:transport-http", "dep:axum"]
+
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
@@ -24,7 +27,6 @@ avrag-llm = { path = "../llm" }
 avrag-rag-core = { path = "../rag-core" }
 avrag-search = { path = "../search" }
 avrag-share = { path = "../share" }
-avrag-storage-pg = { path = "../storage-pg" }
 common = { path = "../common" }
 chrono.workspace = true
 futures = "0.3"
@@ -34,18 +36,19 @@ regex.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "uuid", "chrono", "json"] }
 telemetry = { path = "../telemetry" }
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+axum = { workspace = true, optional = true }
+transport-http = { path = "../transport-http", optional = true }
 
 [dev-dependencies]
 axum = { version = "0.8", features = ["macros"] }
+avrag-storage-pg = { path = "../storage-pg" }
 redis.workspace = true
 tempfile = "3"
 tokio = { workspace = true, features = ["process"] }
-transport-http = { path = "../transport-http" }
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio"] }

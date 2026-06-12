@@ -7,22 +7,15 @@ import {
   type ChatRequest,
   type WorkspaceChatStreamEvent,
 } from "../../lib/workspace/stream";
+import { dispatchStreamEvent, type StreamEventHandlerDeps } from "./stream-event-handlers";
 import {
-  STREAM_TYPEWRITER_CHARS_PER_TICK,
-  STREAM_TYPEWRITER_INTERVAL_MS,
-  STREAM_TYPEWRITER_MAX_DRAIN_CHARS_AFTER_DONE,
-  getAnswerText,
-  getAssistantMessageKey,
-  getPrefersReducedStreamingMotion,
-  getStreamingDisplayText,
-  hasGuardrailIntervention,
-  isResearchMode,
-  normalizeMessageMode,
-  normalizeStreamMessageId,
-} from "./helpers";
+  createStreamAssistantUpdates,
+  type StreamAssistantUpdates,
+} from "./stream-assistant-updates";
+import { createStreamTypewriter, type StreamTypewriter } from "./stream-typewriter";
 import type { MessageHistory } from "./use-message-history";
 import type { ProgressTracker } from "./use-progress-tracker";
-import type { PendingDoneEvent, UiChatMessage, UseChatSessionOptions } from "./types";
+import type { UseChatSessionOptions } from "./types";
 
 export function useChatStream(
   options: UseChatSessionOptions,
@@ -32,9 +25,6 @@ export function useChatStream(
   activeSessionId: string | null,
   setActiveSessionId: React.Dispatch<React.SetStateAction<string | null>>,
 ) {
-  // ---------------------------------------------------------------------------
-  // Refs for latest option values (avoid stale closures)
-  // ---------------------------------------------------------------------------
   const tokenRef = useRef(options.token);
   const workspaceIdRef = useRef(options.workspaceId);
   const sessionIdRef = useRef(options.sessionId);
@@ -57,343 +47,71 @@ export function useChatStream(
     activeSessionIdRef.current = activeSessionId;
   });
 
-  // ---------------------------------------------------------------------------
-  // Stream state
-  // ---------------------------------------------------------------------------
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
 
   const streamingSessionIdRef = useRef<string | null>(null);
   const streamingMessageIdRef = useRef<string | null>(null);
-  const streamTypewriterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const streamTypewriterQueueRef = useRef("");
-  const streamDisplayedTextRef = useRef("");
-  const streamReceivedTokenRef = useRef(false);
-  const streamReduceMotionRef = useRef(false);
   const stopControllerRef = useRef<AbortController | null>(null);
-  const pendingDoneEventRef = useRef<PendingDoneEvent | null>(null);
 
-  // ---------------------------------------------------------------------------
-  // Typewriter helpers
-  // ---------------------------------------------------------------------------
+  const streamEnginesRef = useRef<{
+    assistant: StreamAssistantUpdates;
+    typewriter: StreamTypewriter;
+  } | null>(null);
 
-  function stopStreamingTypewriter() {
-    if (streamTypewriterTimerRef.current !== null) {
-      clearTimeout(streamTypewriterTimerRef.current);
-      streamTypewriterTimerRef.current = null;
-    }
-  }
+  if (!streamEnginesRef.current) {
+    const typewriterResetRef = { current: () => {} };
 
-  function resetStreamingTypewriter() {
-    stopStreamingTypewriter();
-    streamTypewriterQueueRef.current = "";
-    streamDisplayedTextRef.current = "";
-    streamReceivedTokenRef.current = false;
-    streamReduceMotionRef.current = getPrefersReducedStreamingMotion();
-    pendingDoneEventRef.current = null;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Message accumulation helpers
-  // ---------------------------------------------------------------------------
-
-  function updateStreamingAssistant(
-    updater: (current: UiChatMessage | null) => UiChatMessage,
-    targetId?: string | null,
-    fallbackId?: string | null,
-  ) {
-    const candidateIds = [targetId ?? streamingMessageIdRef.current, fallbackId].filter(
-      (value): value is string => Boolean(value),
-    );
-
-    if (candidateIds.length === 0) {
-      return;
-    }
-
-    messageHistory.setMessages((current) => {
-      let found = false;
-      const next = current.map((message) => {
-        const matchesId = candidateIds.includes(message.id);
-        const matchesPendingAssistant = !matchesId && message.role === "assistant" && message.pending;
-
-        if (!matchesId && !matchesPendingAssistant) {
-          return message;
-        }
-
-        found = true;
-        return updater(message);
-      });
-
-      if (!found) {
-        next.push(updater(null));
-      }
-
-      return next;
+    const assistant = createStreamAssistantUpdates({
+      messageHistory,
+      streamingMessageIdRef,
+      streamingSessionIdRef,
+      effectiveChatModeRef,
+      setActiveSessionId,
+      onSessionChangeRef,
+      setIsStreaming,
+      setStreamingMessageId,
+      resetStreamingTypewriter: () => typewriterResetRef.current(),
+      streamingMessageId: null,
     });
+
+    const typewriter = createStreamTypewriter({
+      appendStreamingDisplayText: assistant.appendStreamingDisplayText,
+      finalizeStreamingDone: assistant.finalizeStreamingDone,
+    });
+
+    typewriterResetRef.current = typewriter.resetStreamingTypewriter;
+    streamEnginesRef.current = { assistant, typewriter };
   }
 
-  function ensureStreamingAssistant(
-    event: Extract<WorkspaceChatStreamEvent, { kind: "answer_start" | "token" | "citations" }>,
-  ) {
-    const resolvedMessageId = normalizeStreamMessageId(event.message_id);
-    const fallbackAssistantId = getAssistantMessageKey(event.message_id);
-    const eventMode = event.kind === "answer_start" ? normalizeMessageMode(event.agent_type) : null;
-
-    updateStreamingAssistant(
-      (current) => ({
-        id:
-          current?.id ??
-          streamingMessageIdRef.current ??
-          (resolvedMessageId !== null ? getAssistantMessageKey(resolvedMessageId) : fallbackAssistantId) ??
-          `assistant-${Date.now()}`,
-        role: "assistant",
-        mode: eventMode ?? current?.mode ?? effectiveChatModeRef.current,
-        content: current?.content ?? "",
-        answerBlocks: current?.answerBlocks ?? [],
-        citations: event.kind === "citations" ? event.citations : current?.citations ?? [],
-        degradeTrace: current?.degradeTrace ?? [],
-        guarded: current?.guarded ?? false,
-        messageId: resolvedMessageId ?? current?.messageId ?? null,
-        pending: true,
-        sessionId:
-          event.kind === "answer_start"
-            ? current?.sessionId ?? event.session_id
-            : current?.sessionId ?? streamingSessionIdRef.current,
-        toolResults: current?.toolResults ?? [],
-      }),
-      undefined,
-      fallbackAssistantId,
-    );
-  }
-
-  function appendStreamingDisplayText(chunk: string) {
-    if (!chunk) {
-      return;
-    }
-
-    streamDisplayedTextRef.current += chunk;
-    updateStreamingAssistant((current) => ({
-      id: current?.id ?? streamingMessageIdRef.current ?? `assistant-${Date.now()}`,
-      role: "assistant",
-      mode: current?.mode ?? effectiveChatModeRef.current,
-      content: `${current?.content ?? ""}${chunk}`,
-      answerBlocks: current?.answerBlocks ?? [],
-      citations: current?.citations ?? [],
-      degradeTrace: current?.degradeTrace ?? [],
-      guarded: current?.guarded ?? false,
-      messageId: current?.messageId ?? null,
-      pending: true,
-      sessionId: current?.sessionId ?? streamingSessionIdRef.current,
-      toolResults: current?.toolResults ?? [],
-    }));
-  }
-
-  function finalizeStreamingDone(event: PendingDoneEvent) {
-    const answer = getAnswerText(event.payload.answer ?? "", event.payload.answer_blocks ?? []);
-    const resolvedMessageId = normalizeStreamMessageId(event.message_id);
-    const fallbackAssistantId = getAssistantMessageKey(event.message_id);
-
-    updateStreamingAssistant(
-      (current) => ({
-        id: resolvedMessageId !== null ? getAssistantMessageKey(resolvedMessageId) : current?.id ?? fallbackAssistantId,
-        role: "assistant",
-        mode: normalizeMessageMode(event.payload.agent_type) ?? current?.mode ?? effectiveChatModeRef.current,
-        content: answer || current?.content || "",
-        answerBlocks:
-          event.payload.answer_blocks && event.payload.answer_blocks.length > 0
-            ? event.payload.answer_blocks
-            : current?.answerBlocks ?? [],
-        citations:
-          event.payload.citations && event.payload.citations.length > 0
-            ? event.payload.citations
-            : current?.citations ?? [],
-        degradeTrace: event.payload.degrade_trace ?? [],
-        guarded: hasGuardrailIntervention(event.payload.guard_report),
-        messageId: resolvedMessageId ?? current?.messageId ?? null,
-        pending: false,
-        sessionId: event.session_id,
-        toolResults: event.payload.tool_results ?? current?.toolResults ?? [],
-      }),
-      undefined,
-      fallbackAssistantId,
-    );
-
-    streamingSessionIdRef.current = event.session_id;
-    setActiveSessionId(event.session_id);
-    onSessionChangeRef.current?.(event.session_id);
-    setIsStreaming(false);
-    setStreamingMessageId(null);
-    streamingMessageIdRef.current = null;
-    resetStreamingTypewriter();
-  }
-
-  function finalizePendingDoneIfReady() {
-    if (streamTypewriterQueueRef.current.length > 0 || !pendingDoneEventRef.current) {
-      return;
-    }
-    finalizeStreamingDone(pendingDoneEventRef.current);
-  }
-
-  function flushStreamingTypewriterQueue() {
-    streamTypewriterTimerRef.current = null;
-
-    const nextChunk = streamTypewriterQueueRef.current.slice(0, STREAM_TYPEWRITER_CHARS_PER_TICK);
-    streamTypewriterQueueRef.current = streamTypewriterQueueRef.current.slice(STREAM_TYPEWRITER_CHARS_PER_TICK);
-    appendStreamingDisplayText(nextChunk);
-
-    if (streamTypewriterQueueRef.current.length > 0) {
-      scheduleStreamingTypewriter();
-      return;
-    }
-
-    finalizePendingDoneIfReady();
-  }
-
-  function scheduleStreamingTypewriter() {
-    if (streamTypewriterTimerRef.current !== null) {
-      return;
-    }
-    streamTypewriterTimerRef.current = setTimeout(flushStreamingTypewriterQueue, STREAM_TYPEWRITER_INTERVAL_MS);
-  }
-
-  function enqueueStreamingText(text: string) {
-    if (!text) {
-      finalizePendingDoneIfReady();
-      return;
-    }
-
-    if (streamReduceMotionRef.current) {
-      appendStreamingDisplayText(text);
-      finalizePendingDoneIfReady();
-      return;
-    }
-
-    streamTypewriterQueueRef.current += text;
-    scheduleStreamingTypewriter();
-  }
-
-  function shouldDrainTypewriterQueueAfterDone(event: PendingDoneEvent) {
-    if (!streamReceivedTokenRef.current || streamReduceMotionRef.current) {
-      return false;
-    }
-
-    const queuedText = streamTypewriterQueueRef.current;
-
-    if (!queuedText) {
-      return false;
-    }
-
-    if (queuedText.length > STREAM_TYPEWRITER_MAX_DRAIN_CHARS_AFTER_DONE) {
-      return false;
-    }
-
-    const answer = getStreamingDisplayText(event.payload.answer ?? "", event.payload.answer_blocks ?? []);
-
-    if (!answer) {
-      return true;
-    }
-
-    const queuedAnswer = `${streamDisplayedTextRef.current}${queuedText}`;
-
-    if (!answer.startsWith(queuedAnswer)) {
-      return false;
-    }
-
-    return answer.length - queuedAnswer.length <= STREAM_TYPEWRITER_MAX_DRAIN_CHARS_AFTER_DONE;
-  }
-
-  function handleDoneWithTypewriter(event: PendingDoneEvent) {
-    if (!shouldDrainTypewriterQueueAfterDone(event)) {
-      finalizeStreamingDone(event);
-      return;
-    }
-
-    pendingDoneEventRef.current = event;
-    scheduleStreamingTypewriter();
-  }
-
-  function clearPendingStreamingAssistant() {
-    const pendingMessageId = streamingMessageIdRef.current ?? streamingMessageId;
-
-    if (!pendingMessageId) {
-      return;
-    }
-
-    messageHistory.setMessages((current) =>
-      current.map((message) =>
-        message.id === pendingMessageId ? { ...message, pending: false } : message,
-      ),
-    );
-  }
-
-  function beginAnswerStreaming(event: Extract<WorkspaceChatStreamEvent, { kind: "answer_start" }>) {
-    ensureStreamingAssistant(event);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Event handler
-  // ---------------------------------------------------------------------------
+  const { assistant: assistantUpdates, typewriter } = streamEnginesRef.current;
 
   const handleStreamEvent = useCallback(
     (event: WorkspaceChatStreamEvent) => {
-      switch (event.kind) {
-        case "start":
-          if (event.session_id) {
-            streamingSessionIdRef.current = event.session_id;
-            setActiveSessionId(event.session_id);
-            onSessionChangeRef.current?.(event.session_id);
-          }
-          break;
-        case "activity":
-          progressTracker.addActivity(event);
-          break;
-        case "answer_start":
-          if (normalizeMessageMode(event.agent_type) !== "chat") {
-            beginAnswerStreaming(event);
-          }
-          break;
-        case "token": {
-          const activeProgressMode = progressTracker.modeRef.current;
-          if (!activeProgressMode || !isResearchMode(activeProgressMode)) {
-            progressTracker.hide();
-          }
-          ensureStreamingAssistant(event);
-          streamReceivedTokenRef.current = true;
-          enqueueStreamingText(event.content);
-          break;
-        }
-        case "reasoning_summary_delta":
-          progressTracker.addReasoning(event.content);
-          break;
-        case "citations":
-          ensureStreamingAssistant(event);
-          break;
-        case "done": {
-          progressTracker.hide();
-          handleDoneWithTypewriter(event);
-          break;
-        }
-        case "error":
-          progressTracker.hide();
-          resetStreamingTypewriter();
-          clearPendingStreamingAssistant();
-          setError(event.message);
-          setIsStreaming(false);
-          setStreamingMessageId(null);
-          streamingSessionIdRef.current = null;
-          streamingMessageIdRef.current = null;
-          break;
-        case "trace":
-          break;
-      }
+      const deps: StreamEventHandlerDeps = {
+        progressTracker,
+        setError,
+        setActiveSessionId,
+        setIsStreaming,
+        setStreamingMessageId,
+        streamingSessionIdRef,
+        streamingMessageIdRef,
+        onSessionChangeRef,
+        streamingMessageId,
+        beginAnswerStreaming: assistantUpdates.beginAnswerStreaming,
+        ensureStreamingAssistant: assistantUpdates.ensureStreamingAssistant,
+        markTokenReceived: typewriter.markTokenReceived,
+        enqueueStreamingText: typewriter.enqueueStreamingText,
+        handleDoneWithTypewriter: typewriter.handleDoneWithTypewriter,
+        resetStreamingTypewriter: typewriter.resetStreamingTypewriter,
+        clearPendingStreamingAssistant: assistantUpdates.clearPendingStreamingAssistant,
+      };
+
+      dispatchStreamEvent(deps, event);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [progressTracker, setError, setActiveSessionId, streamingMessageId],
   );
-
-  // ---------------------------------------------------------------------------
-  // Send / Stop
-  // ---------------------------------------------------------------------------
 
   const send = useCallback(
     (query: string) => {
@@ -410,7 +128,7 @@ export function useChatStream(
       setIsStreaming(true);
       setStreamingMessageId(nextAssistantId);
       streamingMessageIdRef.current = nextAssistantId;
-      resetStreamingTypewriter();
+      typewriter.resetStreamingTypewriter();
       onSessionActivityRef.current?.();
 
       messageHistory.setMessages((current) => [
@@ -455,8 +173,8 @@ export function useChatStream(
             return;
           }
           progressTracker.hide();
-          resetStreamingTypewriter();
-          clearPendingStreamingAssistant();
+          typewriter.resetStreamingTypewriter();
+          assistantUpdates.clearPendingStreamingAssistant();
           setError(
             submitError instanceof Error
               ? submitError.message
@@ -473,7 +191,7 @@ export function useChatStream(
       })();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isStreaming, messageHistory.setMessages, progressTracker, setError],
+    [isStreaming, messageHistory.setMessages, progressTracker, setError, handleStreamEvent],
   );
 
   const stop = useCallback(() => {
@@ -486,20 +204,19 @@ export function useChatStream(
     controller.abort();
 
     progressTracker.hide();
-    resetStreamingTypewriter();
-    clearPendingStreamingAssistant();
+    typewriter.resetStreamingTypewriter();
+    assistantUpdates.clearPendingStreamingAssistant();
     setIsStreaming(false);
     setStreamingMessageId(null);
     streamingMessageIdRef.current = null;
-  }, [progressTracker, setError]);
-
-  // ---------------------------------------------------------------------------
-  // Cleanup on unmount
-  // ---------------------------------------------------------------------------
+  }, [progressTracker]);
 
   useEffect(() => {
+    const engines = streamEnginesRef.current;
+
     return () => {
-      resetStreamingTypewriter();
+      engines?.typewriter.resetStreamingTypewriter();
+      engines?.typewriter.stopStreamingTypewriter();
       if (stopControllerRef.current) {
         stopControllerRef.current.abort();
         stopControllerRef.current = null;
@@ -511,7 +228,7 @@ export function useChatStream(
     isStreaming,
     send,
     stop,
-    resetStreamingTypewriter,
+    resetStreamingTypewriter: typewriter.resetStreamingTypewriter,
     streamingSessionIdRef,
     streamingMessageIdRef,
   };

@@ -1,4 +1,4 @@
-use common::DocumentStatus;
+use contracts::documents::DocumentStatus;
 use ingestion::{
     DocumentStateMachine, IngestionError, Transition,
     parser::{LocalParseKind, ParsePlan, ParseRoute, ParseRouter, RouteReason},

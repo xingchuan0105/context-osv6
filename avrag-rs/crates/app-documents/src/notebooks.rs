@@ -1,9 +1,7 @@
 use app_core::{parse_uuid_or_app_error, AnalyticsServiceCtx, StorageContext};
 use avrag_auth::AuthContext;
-use common::{
-    AppError, CreateNotebookRequest, Notebook, StatusOnlyResponse, UpdateNotebookRequest, new_id,
-    now_rfc3339,
-};
+use common::{AppError, CreateNotebookRequest, StatusOnlyResponse, UpdateNotebookRequest, new_id, now_rfc3339};
+use contracts::notebooks::{Notebook};
 use uuid::Uuid;
 
 use crate::analytics_helpers::record_product_event_if_available;

@@ -8,7 +8,7 @@ import { billingApi } from "@/lib/billing/api";
 import type { BillingPlan, UsageWindowResponse } from "@/lib/billing/api";
 import { ApiError } from "@/lib/auth/client";
 import { isPricingRevampFeatureDisabledError } from "@/lib/billing/featureFlag";
-import { usePricingRevampGate } from "@/lib/billing/usePricingRevampGate";
+import { usePricingRevampGateResult } from "@/components/billing/PricingRevampGate";
 import { createCheckoutSession } from "@/lib/settings/client";
 import { useAuth } from "@/lib/auth/context";
 import { formatUiMessage } from "@/lib/i18n/messages";
@@ -24,7 +24,7 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
   const auth = useAuth();
   const router = useRouter();
   const { locale } = useUiPreferences();
-  const { ssrEnabled, enabled, ready } = usePricingRevampGate({ redirectTo: "/dashboard" });
+  const { ssrEnabled, enabled, ready } = usePricingRevampGateResult();
   const [state, setState] = useState<PaywallLoadState>({ kind: "loading" });
 
   useEffect(() => {

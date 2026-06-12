@@ -175,10 +175,10 @@ impl StateSink for OrderingStateSink {
     ) -> Result<(), IngestionError> {
         DocumentStateMachine::validate(&transition)?;
         match transition.to {
-            common::DocumentStatus::Processing => {
+            contracts::documents::DocumentStatus::Processing => {
                 self.events.lock().unwrap().push("state.processing")
             }
-            common::DocumentStatus::Completed => {
+            contracts::documents::DocumentStatus::Completed => {
                 self.events.lock().unwrap().push("state.completed")
             }
             _ => {}
@@ -203,24 +203,24 @@ impl TaskProcessor for OrderingProcessor {
 fn validates_state_machine_rules() {
     assert!(
         DocumentStateMachine::validate(&Transition {
-            from: common::DocumentStatus::Queued,
-            to: common::DocumentStatus::Processing,
+            from: contracts::documents::DocumentStatus::Queued,
+            to: contracts::documents::DocumentStatus::Processing,
         })
         .is_ok()
     );
 
     assert!(
         DocumentStateMachine::validate(&Transition {
-            from: common::DocumentStatus::Processing,
-            to: common::DocumentStatus::Queued,
+            from: contracts::documents::DocumentStatus::Processing,
+            to: contracts::documents::DocumentStatus::Queued,
         })
         .is_ok()
     );
 
     assert!(
         DocumentStateMachine::validate(&Transition {
-            from: common::DocumentStatus::Pending,
-            to: common::DocumentStatus::Completed,
+            from: contracts::documents::DocumentStatus::Pending,
+            to: contracts::documents::DocumentStatus::Completed,
         })
         .is_err()
     );
@@ -342,13 +342,13 @@ async fn worker_runtime_requeues_retryable_failures_without_marking_failed() {
     assert!(worker.run_once().await.is_err());
     let transitions = transitions.lock().unwrap();
     assert!(transitions.iter().any(|transition| {
-        transition.from == common::DocumentStatus::Processing
-            && transition.to == common::DocumentStatus::Queued
+        transition.from == contracts::documents::DocumentStatus::Processing
+            && transition.to == contracts::documents::DocumentStatus::Queued
     }));
     assert!(
         !transitions
             .iter()
-            .any(|transition| transition.to == common::DocumentStatus::Failed)
+            .any(|transition| transition.to == contracts::documents::DocumentStatus::Failed)
     );
 }
 

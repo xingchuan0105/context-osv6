@@ -3,7 +3,8 @@ use std::sync::Arc;
 
 use crate::agents::service::UnifiedAgentService;
 use avrag_rag_core::context::SessionContext as RagSessionContext;
-use common::{AppError, ChatTurnInput};
+use common::{AppError};
+use contracts::chat::{ChatTurnInput};
 use uuid::Uuid;
 
 use crate::agents;
@@ -39,7 +40,7 @@ impl ChatContext {
 
     pub async fn build_session_context(
         &self,
-        session: &common::ChatSession,
+        session: &contracts::notebooks::ChatSession,
     ) -> Result<Option<RagSessionContext>, AppError> {
         let session_uuid = Uuid::parse_str(&session.id).map_err(|_| {
             AppError::validation("invalid_session_id", "invalid session UUID format")
@@ -61,7 +62,7 @@ impl ChatContext {
         Ok(Self::build_rag_session_context(messages, None))
     }
 
-    pub async fn get_notebook(&self, notebook_id: &str) -> Option<common::Notebook> {
+    pub async fn get_notebook(&self, notebook_id: &str) -> Option<contracts::notebooks::Notebook> {
         if let Some(pg) = self.storage.chat_persistence() {
             let notebook_id = Uuid::parse_str(notebook_id).ok()?;
             let notebook = pg
@@ -94,7 +95,7 @@ impl ChatContext {
     }
 
     /// Resolve conversation history for agent prompts.
-    pub async fn resolve_agent_messages(&self, req: &common::ChatRequest) -> Vec<ChatTurnInput> {
+    pub async fn resolve_agent_messages(&self, req: &contracts::chat::ChatRequest) -> Vec<ChatTurnInput> {
         if !req.messages.is_empty() {
             return req.messages.clone();
         }
@@ -150,7 +151,7 @@ impl ChatContext {
 
     pub async fn build_agent_request(
         &self,
-        req: &common::ChatRequest,
+        req: &contracts::chat::ChatRequest,
         kind: agents::AgentKind,
         session_id_override: Option<String>,
     ) -> agents::runtime::AgentRequest {

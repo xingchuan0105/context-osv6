@@ -1,9 +1,7 @@
 use app_core::{domain_rows::UserProfileRow, StorageContext};
 use avrag_auth::AuthContext;
-use common::{
-    new_id, now_rfc3339, AgentPreference, AgentPreferenceMemory, AppError, BlockedAgentPreference,
-    DailyPreferenceLog,
-};
+use common::{new_id, now_rfc3339, AppError};
+use contracts::preferences::{AgentPreference, AgentPreferenceMemory, BlockedAgentPreference, DailyPreferenceLog};
 use contracts::UserPreferences;
 use uuid::Uuid;
 

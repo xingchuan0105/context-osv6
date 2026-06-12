@@ -1,6 +1,16 @@
 use app_bootstrap::AppState;
+use axum::{
+    Json,
+    extract::{Extension, Path},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 
-fn pinned_source_count(preferences: &common::UserPreferences, notebook_id: &str) -> i64 {
+use crate::RequestState;
+use super::super::{app_error_response, error_response};
+use super::notes::load_notebook_notes;
+
+fn pinned_source_count(preferences: &contracts::preferences::UserPreferences, notebook_id: &str) -> i64 {
     preferences
         .dashboard
         .workspace_preferences
@@ -10,14 +20,14 @@ fn pinned_source_count(preferences: &common::UserPreferences, notebook_id: &str)
         .unwrap_or(0)
 }
 
-pub(super) struct NotebookAnalysisCollector;
+struct NotebookAnalysisCollector;
 
 impl NotebookAnalysisCollector {
-    pub(super) fn collect_overview(
+    fn collect_overview(
         &self,
-        notebook: &common::Notebook,
-    ) -> common::NotebookAnalysisOverview {
-        common::NotebookAnalysisOverview {
+        notebook: &contracts::notebooks::Notebook,
+    ) -> contracts::notebooks::NotebookAnalysisOverview {
+        contracts::notebooks::NotebookAnalysisOverview {
             title: notebook.title.clone(),
             description: notebook.description.clone(),
             updated_at: notebook.updated_at.clone(),
@@ -25,23 +35,23 @@ impl NotebookAnalysisCollector {
         }
     }
 
-    pub(super) fn collect_sources(
+    fn collect_sources(
         &self,
         sources: &[common::Document],
-        preferences: &common::UserPreferences,
+        preferences: &contracts::preferences::UserPreferences,
         notebook_id: &str,
-    ) -> common::NotebookAnalysisSources {
+    ) -> contracts::notebooks::NotebookAnalysisSources {
         let (mut ready, mut failed) = (0i64, 0i64);
         for source in sources {
             match source.status {
-                common::DocumentStatus::Completed => ready += 1,
-                common::DocumentStatus::Failed => failed += 1,
+                contracts::documents::DocumentStatus::Completed => ready += 1,
+                contracts::documents::DocumentStatus::Failed => failed += 1,
                 _ => {}
             }
         }
         let processing = (sources.len() as i64) - ready - failed;
         let pinned = pinned_source_count(preferences, notebook_id);
-        common::NotebookAnalysisSources {
+        contracts::notebooks::NotebookAnalysisSources {
             total: sources.len() as i64,
             ready,
             processing: processing.max(0),
@@ -51,14 +61,14 @@ impl NotebookAnalysisCollector {
         }
     }
 
-    pub(super) fn collect_threads(
+    fn collect_threads(
         &self,
-        sessions: &[common::ChatSession],
-    ) -> common::NotebookAnalysisThreads {
+        sessions: &[contracts::notebooks::ChatSession],
+    ) -> contracts::notebooks::NotebookAnalysisThreads {
         let latest = sessions
             .iter()
             .max_by(|a, b| a.updated_at.cmp(&b.updated_at));
-        common::NotebookAnalysisThreads {
+        contracts::notebooks::NotebookAnalysisThreads {
             total: sessions.len() as i64,
             pinned: sessions.iter().filter(|s| s.pinned).count() as i64,
             latest_activity_at: latest.map(|s| s.updated_at.clone()),
@@ -66,27 +76,27 @@ impl NotebookAnalysisCollector {
         }
     }
 
-    pub(super) fn collect_notes(
+    fn collect_notes(
         &self,
-        notes: &[common::NotebookNote],
-    ) -> common::NotebookAnalysisNotes {
+        notes: &[contracts::notebooks::NotebookNote],
+    ) -> contracts::notebooks::NotebookAnalysisNotes {
         let promoted = notes
             .iter()
             .filter(|n| n.promoted_document_id.is_some())
             .count() as i64;
         let latest = notes.iter().map(|n| n.updated_at.clone()).max();
-        common::NotebookAnalysisNotes {
+        contracts::notebooks::NotebookAnalysisNotes {
             total: notes.len() as i64,
             latest_edited_at: latest,
             promoted_to_source: promoted,
         }
     }
 
-    pub(super) async fn collect_access(
+    async fn collect_access(
         &self,
         state: &AppState,
         notebook_id: &str,
-    ) -> common::NotebookAnalysisAccess {
+    ) -> contracts::notebooks::NotebookAnalysisAccess {
         let notebook_id = notebook_id.to_string();
         let (member_count, share_enabled, active_api_key_count) = tokio::join!(
             async { state.share_member_count(&notebook_id).await },
@@ -99,44 +109,44 @@ impl NotebookAnalysisCollector {
                     .unwrap_or(0)
             },
         );
-        common::NotebookAnalysisAccess {
+        contracts::notebooks::NotebookAnalysisAccess {
             share_enabled,
             member_count,
             active_api_key_count,
         }
     }
 
-    pub(super) fn build_alerts(
+    fn build_alerts(
         &self,
-        sources: &common::NotebookAnalysisSources,
-        sessions: &[common::ChatSession],
-        notes: &[common::NotebookNote],
-        notes_summary: &common::NotebookAnalysisNotes,
-    ) -> Vec<common::NotebookAnalysisAlert> {
+        sources: &contracts::notebooks::NotebookAnalysisSources,
+        sessions: &[contracts::notebooks::ChatSession],
+        notes: &[contracts::notebooks::NotebookNote],
+        notes_summary: &contracts::notebooks::NotebookAnalysisNotes,
+    ) -> Vec<contracts::notebooks::NotebookAnalysisAlert> {
         let mut alerts = Vec::new();
         if sources.ready == 0 {
-            alerts.push(common::NotebookAnalysisAlert {
+            alerts.push(contracts::notebooks::NotebookAnalysisAlert {
                 level: "warning".to_string(),
                 code: "no_ready_sources".to_string(),
                 message: "No ready sources are available for RAG chat.".to_string(),
             });
         }
         if sources.failed > 0 {
-            alerts.push(common::NotebookAnalysisAlert {
+            alerts.push(contracts::notebooks::NotebookAnalysisAlert {
                 level: "warning".to_string(),
                 code: "failed_sources".to_string(),
                 message: format!("{} sources need attention or reindexing.", sources.failed),
             });
         }
         if sessions.is_empty() {
-            alerts.push(common::NotebookAnalysisAlert {
+            alerts.push(contracts::notebooks::NotebookAnalysisAlert {
                 level: "info".to_string(),
                 code: "no_threads".to_string(),
                 message: "This notebook does not have any threads yet.".to_string(),
             });
         }
         if !notes.is_empty() && notes_summary.promoted_to_source == 0 {
-            alerts.push(common::NotebookAnalysisAlert {
+            alerts.push(contracts::notebooks::NotebookAnalysisAlert {
                 level: "info".to_string(),
                 code: "notes_not_promoted".to_string(),
                 message: "Notes exist, but none have been promoted into shared sources yet."
@@ -145,4 +155,45 @@ impl NotebookAnalysisCollector {
         }
         alerts
     }
+}
+
+pub(crate) async fn get_notebook_analysis_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Path(notebook_id): Path<String>,
+) -> Response {
+    let Some(notebook) = state.get_notebook(&notebook_id).await else {
+        return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
+    };
+
+    let sources = state.list_documents(Some(&notebook_id), None).await;
+    let sessions = state.list_sessions(Some(&notebook_id)).await;
+    let preferences = match state.current_user_preferences().await {
+        Ok(preferences) => preferences,
+        Err(error) => return app_error_response(error),
+    };
+    let notes = match load_notebook_notes(&state, &notebook_id).await {
+        Ok(notes) => notes,
+        Err(error) => return app_error_response(error),
+    };
+
+    let collector = NotebookAnalysisCollector;
+    let overview = collector.collect_overview(&notebook);
+    let sources_summary = collector.collect_sources(&sources, &preferences, &notebook_id);
+    let threads = collector.collect_threads(&sessions);
+    let notes_summary = collector.collect_notes(&notes);
+    let access = collector.collect_access(&state, &notebook_id).await;
+    let alerts = collector.build_alerts(&sources_summary, &sessions, &notes, &notes_summary);
+
+    (
+        StatusCode::OK,
+        Json(contracts::notebooks::NotebookAnalysisResponse {
+            overview,
+            sources: sources_summary,
+            threads,
+            notes: notes_summary,
+            access,
+            alerts,
+        }),
+    )
+        .into_response()
 }

@@ -14,10 +14,9 @@ use crate::domain_row_convert::{
 use crate::pg_error::map_pg_error;
 use avrag_auth::AuthContext;
 use avrag_storage_pg::PgAppRepository;
-use common::{
-    AppError, Document, DocumentContentResponse, DocumentStatus, Notebook, ParsedPreviewResponse,
-    SourceRow,
-};
+use common::{AppError, Document, DocumentContentResponse, ParsedPreviewResponse, SourceRow};
+use contracts::documents::{DocumentStatus};
+use contracts::notebooks::{Notebook};
 use ingestion_types::{AuditRecord, IngestionTask};
 use uuid::Uuid;
 

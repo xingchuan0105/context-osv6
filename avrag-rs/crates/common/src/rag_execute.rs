@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    AnswerContextChunk, ChatRequest, Citation, DegradeTraceItem, RagPlan, RagPlanItem,
-    RagTraceItem, RagTraceSummary,
+use crate::AnswerContextChunk;
+use contracts::chat::{
+    ChatRequest, Citation, DegradeTraceItem, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary,
 };
 
 fn default_execute_plan_version() -> String {

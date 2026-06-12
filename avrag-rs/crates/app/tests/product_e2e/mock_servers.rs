@@ -1,5 +1,6 @@
 //! Mock HTTP servers for Product E2E (LLM, Embedding, Search).
 
+use super::persistent_runtime::{bind_persistent_listener, spawn_persistent};
 use axum::{
     Json, Router,
     extract::Query,
@@ -109,23 +110,53 @@ pub fn set_mock_emit_memory_tool(tool: Option<impl Into<String>>) {
     *mock_emit_memory_tool_cell().lock().unwrap() = tool.map(Into::into);
 }
 
-/// Build mock codegen body that exercises the sandbox retrieval bridge.
-///
-/// The query defaults to `"antifragility"`, which matches the standard smoke fixture
-/// `antifragile.txt`. Override via [`set_mock_rag_codegen_query`] when using other fixtures.
-pub fn format_mock_rag_codegen_response(_chunk_id: &str) -> String {
-    let query = mock_rag_codegen_query_cell()
-        .lock()
-        .unwrap()
-        .clone()
-        .unwrap_or_else(|| "antifragility".to_string());
-    let query_json = serde_json::to_string(&query).unwrap_or_else(|_| "\"antifragility\"".to_string());
+fn latest_user_message_content(messages: &[serde_json::Value]) -> Option<&str> {
+    messages
+        .iter()
+        .rev()
+        .find(|message| message.get("role").and_then(|role| role.as_str()) == Some("user"))
+        .and_then(|message| message.get("content").and_then(|content| content.as_str()))
+}
+
+fn dense_search_query_from_messages(messages: &[serde_json::Value]) -> Option<String> {
+    let content = latest_user_message_content(messages)?;
+    let query = content.trim().trim_start_matches("[prior_user_query]").trim();
+    if query.is_empty() {
+        None
+    } else {
+        Some(query.to_string())
+    }
+}
+
+fn resolve_dense_search_query(messages: &[serde_json::Value]) -> String {
+    dense_search_query_from_messages(messages)
+        .or_else(|| mock_rag_codegen_query_cell().lock().unwrap().clone())
+        .unwrap_or_else(|| "antifragility".to_string())
+}
+
+fn format_mock_rag_codegen_response_for_query(query: &str) -> String {
+    let query_json =
+        serde_json::to_string(query).unwrap_or_else(|_| "\"antifragility\"".to_string());
     format!(
         r#"<code language="python">
 chunks = await client.dense_search(query={query_json}, top_k=10)
 import json
 print(json.dumps(chunks))
 </code>"#
+    )
+}
+
+/// Build mock codegen body that exercises the sandbox retrieval bridge.
+///
+/// The query defaults to `"antifragility"`, which matches the standard smoke fixture
+/// `antifragile.txt`. Override via [`set_mock_rag_codegen_query`] when using other fixtures.
+pub fn format_mock_rag_codegen_response(_chunk_id: &str) -> String {
+    format_mock_rag_codegen_response_for_query(
+        &mock_rag_codegen_query_cell()
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(|| "antifragility".to_string()),
     )
 }
 
@@ -213,7 +244,7 @@ fn mock_rag_retrieve_codegen_content(messages: &[serde_json::Value]) -> String {
     if messages_have_code_execution_result(messages) {
         String::new()
     } else {
-        mock_rag_codegen_response()
+        format_mock_rag_codegen_response_for_query(&resolve_dense_search_query(messages))
     }
 }
 
@@ -337,14 +368,10 @@ pub(crate) async fn start_mock_llm_server() -> (String, tokio::sync::oneshot::Se
         post(mock_llm_handler).layer(axum::extract::DefaultBodyLimit::max(8 * 1024 * 1024)),
     );
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("bind mock llm");
-    let port = listener.local_addr().unwrap().port();
-    let base_url = format!("http://127.0.0.1:{port}");
+    let (listener, base_url) = bind_persistent_listener().await;
 
     let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
-    tokio::spawn(async move {
+    spawn_persistent(async move {
         let server = axum::serve(listener, app);
         tokio::select! {
             _ = server => {},
@@ -380,14 +407,10 @@ pub(crate) async fn start_mock_embedding_server() -> (
             mock_dashscope_multimodal_embedding_handler(req, flag_mm.clone(), call_count_mm.clone())
         }));
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("bind mock embedding");
-    let port = listener.local_addr().unwrap().port();
-    let base_url = format!("http://127.0.0.1:{port}");
+    let (listener, base_url) = bind_persistent_listener().await;
 
     let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
-    tokio::spawn(async move {
+    spawn_persistent(async move {
         let server = axum::serve(listener, app);
         tokio::select! {
             _ = server => {},
@@ -789,9 +812,6 @@ fn messages_have_code_execution_result(messages: &[serde_json::Value]) -> bool {
     })
 }
 
-fn mock_rag_codegen_response() -> String {
-    format_mock_rag_codegen_response("")
-}
 
 async fn mock_llm_handler(
     headers: axum::http::HeaderMap,
@@ -1083,14 +1103,10 @@ pub(crate) async fn start_mock_search_server()
             .post(move |req| mock_search_handler(req, flag3.clone())),
         );
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("bind mock search");
-    let port = listener.local_addr().unwrap().port();
-    let base_url = format!("http://127.0.0.1:{port}");
+    let (listener, base_url) = bind_persistent_listener().await;
 
     let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
-    tokio::spawn(async move {
+    spawn_persistent(async move {
         let server = axum::serve(listener, app);
         tokio::select! {
             _ = server => {},

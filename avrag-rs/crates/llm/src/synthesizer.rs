@@ -4,7 +4,7 @@ use std::collections::HashSet;
 #[derive(Debug, Clone)]
 pub struct SynthesisOutput {
     pub answer_text: String,
-    pub answer_blocks: Vec<common::AnswerBlock>,
+    pub answer_blocks: Vec<contracts::chat::AnswerBlock>,
     pub cited_chunk_ids: Vec<String>,
     pub llm_usage: Option<crate::LlmUsage>,
 }
@@ -144,7 +144,7 @@ pub fn parse_synthesis_output(raw_output: &str) -> SynthesisOutput {
                 .answer_blocks
                 .iter()
                 .map(|block| match block {
-                    RawAnswerBlock::Text { text, citations } => common::AnswerBlock::Text {
+                    RawAnswerBlock::Text { text, citations } => contracts::chat::AnswerBlock::Text {
                         text: text.trim().to_string(),
                         citations: citations
                             .iter()
@@ -152,7 +152,7 @@ pub fn parse_synthesis_output(raw_output: &str) -> SynthesisOutput {
                             .filter(|chunk_id| !chunk_id.is_empty())
                             .collect(),
                     },
-                    RawAnswerBlock::Image { chunk_id } => common::AnswerBlock::Image {
+                    RawAnswerBlock::Image { chunk_id } => contracts::chat::AnswerBlock::Image {
                         chunk_id: chunk_id.trim().to_string(),
                     },
                 })

@@ -386,7 +386,7 @@ fn now_rfc3339() -> String {
 mod tests {
     use super::*;
     use crate::agents::events::{AgentEvent, AgentEventSink};
-    use common::Citation;
+    use contracts::chat::Citation;
     use tokio::sync::mpsc::unbounded_channel;
 
     #[test]

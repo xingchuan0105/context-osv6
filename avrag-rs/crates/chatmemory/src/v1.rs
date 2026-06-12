@@ -1,4 +1,4 @@
-use common::ChatMessage;
+use contracts::chat::ChatMessage;
 use serde::{Deserialize, Serialize};
 
 fn normalize_for_similarity(value: &str) -> Vec<String> {

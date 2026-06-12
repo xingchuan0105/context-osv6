@@ -6,9 +6,12 @@ use common::{
 };
 use uuid::Uuid;
 
+use avrag_auth::OrgId;
+
 use crate::admin_domain::{
-    AdminBillingOverview, AdminDegradationStatus, AdminFeatureFlagChangeRequest,
-    AdminFeatureFlagEntry, AdminRagHealthStatus, AdminWorkerStatus,
+    AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview, AdminDegradationStatus,
+    AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminOrgInfo, AdminRagHealthStatus,
+    AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
 };
 use crate::domain_rows::UserProfileRow;
 
@@ -103,4 +106,70 @@ pub trait AdminStorePort: Send + Sync {
         user_id: Uuid,
         notification_id: Uuid,
     ) -> Result<bool, AppError>;
+
+    async fn list_orgs(&self, _auth: &AuthContext) -> Result<Vec<AdminOrgInfo>, AppError> {
+        Err(AppError::internal("list_orgs not implemented"))
+    }
+
+    async fn get_org(&self, auth: &AuthContext, org_id: OrgId) -> Result<AdminOrgInfo, AppError> {
+        let _ = (auth, org_id);
+        Err(AppError::internal("get_org not implemented"))
+    }
+
+    async fn list_users(
+        &self,
+        auth: &AuthContext,
+        org_id: OrgId,
+    ) -> Result<Vec<AdminUserInfo>, AppError> {
+        let _ = (auth, org_id);
+        Err(AppError::internal("list_users not implemented"))
+    }
+
+    async fn delete_user(
+        &self,
+        auth: &AuthContext,
+        org_id: OrgId,
+        user_id: Uuid,
+    ) -> Result<(), AppError> {
+        let _ = (auth, org_id, user_id);
+        Err(AppError::internal("delete_user not implemented"))
+    }
+
+    async fn get_usage(
+        &self,
+        auth: &AuthContext,
+        org_id: OrgId,
+        period: &str,
+    ) -> Result<AdminUsageStats, AppError> {
+        let _ = (auth, org_id, period);
+        Err(AppError::internal("get_usage not implemented"))
+    }
+
+    async fn set_org_blocked(
+        &self,
+        auth: &AuthContext,
+        org_id: OrgId,
+        blocked: bool,
+    ) -> Result<(), AppError> {
+        let _ = (auth, org_id, blocked);
+        Err(AppError::internal("set_org_blocked not implemented"))
+    }
+
+    async fn list_audit_logs(
+        &self,
+        auth: &AuthContext,
+        query: &AdminAuditLogQuery,
+    ) -> Result<AdminAuditLogPage, AppError> {
+        let _ = (auth, query);
+        Err(AppError::internal("list_audit_logs not implemented"))
+    }
+
+    async fn export_audit_logs_csv(
+        &self,
+        auth: &AuthContext,
+        query: &AdminAuditLogQuery,
+    ) -> Result<String, AppError> {
+        let _ = (auth, query);
+        Err(AppError::internal("export_audit_logs_csv not implemented"))
+    }
 }

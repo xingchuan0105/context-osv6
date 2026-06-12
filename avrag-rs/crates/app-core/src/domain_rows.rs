@@ -2,7 +2,7 @@
 
 use avrag_auth::OrgId;
 use chrono::{DateTime, Utc};
-use common::DocumentStatus;
+use contracts::documents::DocumentStatus;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

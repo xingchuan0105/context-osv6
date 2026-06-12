@@ -17,7 +17,7 @@ impl AppState {
         &self,
         notebook_id: &str,
         req: common::CreateDocumentRequest,
-    ) -> Result<common::CreateDocumentUploadResponse, common::AppError> {
+    ) -> Result<contracts::documents::CreateDocumentUploadResponse, common::AppError> {
         self.documents
             .create_document_upload(
                 &self.auth,
@@ -70,7 +70,7 @@ impl AppState {
     pub async fn transition_document_status(
         &self,
         document_id: &str,
-        status: common::DocumentStatus,
+        status: contracts::documents::DocumentStatus,
     ) -> Result<(), common::AppError> {
         self.documents
             .transition_document_status(&self.auth, &self.storage, document_id, status)

@@ -1,9 +1,7 @@
 use app_core::{MemoryState, RetrievedContext, StoredDocument};
-use common::{
-    ChatMessage, ChatRequest, Citation, DegradeReason, DegradeTraceItem, DocumentStatus, ModeDebug,
-    ParsedPreviewItem, PlannerOutput, RagModeDebug, RagPlan, RagPlanItem, RagTraceItem,
-    RagTraceSummary, SourceRef, SummaryInjectionTrace,
-};
+use common::{ParsedPreviewItem};
+use contracts::chat::{ChatMessage, ChatRequest, Citation, DegradeReason, DegradeTraceItem, ModeDebug, PlannerOutput, RagModeDebug, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary, SourceRef, SummaryInjectionTrace};
+use contracts::documents::{DocumentStatus};
 
 pub fn next_message_id(state: &mut MemoryState) -> i64 {
     state.next_message_id += 1;
@@ -73,7 +71,7 @@ pub fn detect_preferred_style(query: &str) -> Option<String> {
 
 pub fn merge_general_profile_custom_preferences(
     mut custom_preferences: serde_json::Value,
-    agent_memory: common::AgentPreferenceMemory,
+    agent_memory: contracts::preferences::AgentPreferenceMemory,
     query: &str,
     refined_query: &str,
 ) -> serde_json::Value {

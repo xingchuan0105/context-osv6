@@ -1,9 +1,8 @@
 use app_core::{parse_uuid_or_app_error, RetrievedContext};
 use chrono::Utc;
-use common::{
-    AppError, ChatMessage, ChatRequest, ChatResponse, ChatSession, CreateChatSessionRequest,
-    ModeDebug, TraceInfo, now_rfc3339,
-};
+use common::{AppError, now_rfc3339};
+use contracts::chat::{ChatMessage, ChatRequest, ChatResponse, ModeDebug, TraceInfo};
+use contracts::notebooks::{ChatSession, CreateChatSessionRequest};
 use app_documents::{AuditAction, AuditRecord};
 use tracing::info;
 use uuid::Uuid;

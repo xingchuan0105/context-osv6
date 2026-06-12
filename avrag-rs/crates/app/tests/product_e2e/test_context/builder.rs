@@ -14,6 +14,7 @@ use super::super::{
         reset_mock_rag_state, start_mock_embedding_server, start_mock_llm_server,
         start_mock_search_server,
     },
+    persistent_runtime::{bind_persistent_listener, spawn_persistent},
     setup,
 };
 use super::config::E2eBootstrapConfig;
@@ -366,10 +367,7 @@ impl TestContext {
             worker_health_port_file,
         };
 
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("bind");
-        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let (listener, base_url) = bind_persistent_listener().await;
 
         let config = bootstrap.build_app_config(&base_url);
         let state = match app::AppState::bootstrap(config.clone()).await {
@@ -389,7 +387,7 @@ impl TestContext {
         let router = app::product_e2e_http::build_router(state);
 
         let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
-        tokio::spawn(async move {
+        spawn_persistent(async move {
             let server = axum::serve(listener, router);
             tokio::select! {
                 _ = server => {},
@@ -500,12 +498,13 @@ impl TestContext {
         }
     }
 
-    /// Respawn API + worker on the current tokio runtime, reusing shared RAG infra.
+    /// Attach a fresh worker to the module-scoped API + shared RAG infra.
     pub(crate) async fn spawn_from_rag_fixture(
         fixture: &super::super::fixtures::RagSharedFixture,
     ) -> Self {
         reset_mock_rag_state();
 
+        let base_url = fixture.api_base_url.clone();
         let placeholder_dir = tempfile::tempdir().expect("placeholder object store");
         let worker_health_port_file = placeholder_dir
             .path()
@@ -516,22 +515,6 @@ impl TestContext {
         let mut bootstrap = fixture.worker_bootstrap.clone();
         bootstrap.auto_migrate = false;
         bootstrap.worker_health_port_file = worker_health_port_file;
-
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("bind");
-        let base_url = format!("http://{}", listener.local_addr().unwrap());
-
-        let router = app::product_e2e_http::build_router(fixture.app_state.as_ref().clone());
-
-        let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
-        tokio::spawn(async move {
-            let server = axum::serve(listener, router);
-            tokio::select! {
-                _ = server => {},
-                _ = abort_rx => {},
-            }
-        });
 
         let worker_binary = setup::find_worker_binary()
             .await
@@ -610,13 +593,14 @@ impl TestContext {
             user_id: fixture.user_id.clone(),
             app_state: Some(fixture.app_state.clone()),
             bootstrap: Some(bootstrap),
-            shared_pg: Some(fixture.shared_pg.clone()),
-            shared_milvus: Some(fixture.shared_milvus.clone()),
+            // Infra ref-counting is owned by the module-scoped [`RagSharedFixture`].
+            shared_pg: None,
+            shared_milvus: None,
             milvus_url: Some(fixture.milvus_url.clone()),
             // Collection cleanup is owned by the module-scoped [`RagSharedFixture`].
             milvus_collection_prefix: None,
             worker: Some(worker),
-            server_abort: Some(abort_tx),
+            server_abort: None,
             object_store_dir: placeholder_dir,
             pg_url: fixture.pg_url.clone(),
             mock_llm_abort: None,

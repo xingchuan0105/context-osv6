@@ -1,4 +1,4 @@
-use common::Citation;
+use contracts::chat::Citation;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 

@@ -182,7 +182,7 @@ pub(crate) fn build_chat_execution_from_result(
         cached_tokens: usage.cached_tokens.min(u32::MAX as u64) as u32,
     });
 
-    let response_usage = agent_result.usage.as_ref().map(|u| common::ChatTokenUsage {
+    let response_usage = agent_result.usage.as_ref().map(|u| contracts::chat::ChatTokenUsage {
         prompt_tokens: u.prompt_tokens,
         completion_tokens: u.completion_tokens,
         total_tokens: u.total_tokens,

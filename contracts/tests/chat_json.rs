@@ -344,6 +344,53 @@ fn export_golden_fixtures() {
         serde_json::to_value(response).expect("serialize response"),
     );
 
+    use contracts::{
+        HealthResponse, NotebookListResponse, Notebook, PlansResponse, PlanRow,
+    };
+
+    write(
+        "notebook_list_minimal.json",
+        serde_json::to_value(NotebookListResponse {
+            notebooks: vec![Notebook {
+                id: "nb-1".to_string(),
+                org_id: "org-1".to_string(),
+                owner_id: "user-1".to_string(),
+                name: "demo".to_string(),
+                title: "Demo".to_string(),
+                description: "".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                updated_at: "2026-01-01T00:00:00Z".to_string(),
+                document_count: 0,
+                status_summary: std::collections::HashMap::new(),
+                shared: false,
+            }],
+        })
+        .expect("serialize notebook list"),
+    );
+
+    write(
+        "billing_plans_minimal.json",
+        serde_json::to_value(PlansResponse {
+            plans: vec![PlanRow {
+                id: "free".to_string(),
+                name: "Free".to_string(),
+                price: 0,
+                features: vec!["base".to_string()],
+            }],
+        })
+        .expect("serialize plans response"),
+    );
+
+    write(
+        "admin_health_minimal.json",
+        serde_json::to_value(HealthResponse {
+            status: "ok".to_string(),
+            service: "avrag-api".to_string(),
+            version: "0.1.0".to_string(),
+        })
+        .expect("serialize health response"),
+    );
+
     write(
         "chat_done_payload.json",
         serde_json::to_value(ChatDonePayload {

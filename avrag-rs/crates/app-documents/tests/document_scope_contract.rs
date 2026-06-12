@@ -94,7 +94,7 @@ async fn validate_document_scope_rejects_foreign_notebook_in_memory() {
                     file_name: "scope.txt".to_string(),
                     mime_type: "text/plain".to_string(),
                     file_size: 4,
-                    status: common::DocumentStatus::Completed,
+                    status: contracts::documents::DocumentStatus::Completed,
                     chunk_count: 0,
                     created_at: String::new(),
                     updated_at: String::new(),

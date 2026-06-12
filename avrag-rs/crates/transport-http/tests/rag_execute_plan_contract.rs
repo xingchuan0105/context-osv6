@@ -5,7 +5,8 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
-use common::{CreateDocumentRequest, CreateNotebookRequest, DocumentStatus};
+use common::{CreateDocumentRequest, CreateNotebookRequest};
+use contracts::documents::{DocumentStatus};
 use tower::ServiceExt;
 use transport_http::build_router;
 use uuid::Uuid;

@@ -19,10 +19,11 @@ pub mod smoke;
 pub mod tenants;
 
 mod mock_servers;
+mod persistent_runtime;
 mod pg_queries;
 mod test_context;
 
-pub use fixtures::{ready_rag_context, shared_ready_rag};
+pub use fixtures::{ready_rag_context, shared_rag_fixture, shared_ready_rag_context};
 
 pub use http_helpers::{
     DEFAULT_TEST_ORG_ID, DEFAULT_TEST_USER_ID, milvus_collection_prefix_for_identity,
@@ -128,7 +129,8 @@ impl SseParser {
 // Business response types (re-exported from production code)
 // ---------------------------------------------------------------------------
 
-pub use common::{ChatResponse, Citation, DegradeReason, DegradeTraceItem, DocumentStatus};
+pub use contracts::chat::{ChatResponse, Citation, DegradeReason, DegradeTraceItem};
+use contracts::documents::{DocumentStatus};
 
 /// A trace event record that carries reasoning text (plan_decision, evaluation, etc.).
 #[derive(Debug, Clone, serde::Serialize)]

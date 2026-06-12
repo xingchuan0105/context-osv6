@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use avrag_auth::AuthContext;
-use common::Notebook;
+use contracts::notebooks::Notebook;
 
 #[derive(Clone)]
 pub struct PgNotebookQueries {

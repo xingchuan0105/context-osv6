@@ -15,7 +15,9 @@ use crate::domain_row_convert::{
 use crate::pg_error::map_pg_error;
 use avrag_auth::AuthContext;
 use avrag_storage_pg::{ChatTurn, PgAppRepository};
-use common::{AppError, ChatMessage, ChatSession, Notebook, SourceRow};
+use common::{AppError, SourceRow};
+use contracts::chat::{ChatMessage};
+use contracts::notebooks::{ChatSession, Notebook};
 use ingestion_types::AuditRecord;
 use uuid::Uuid;
 

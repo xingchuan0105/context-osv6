@@ -23,15 +23,15 @@ impl ChatContext {
         execution.response.guard_report = Some(guard_report.clone());
 
         for result in &guard_report.output_results {
-            if !result.passed || result.action == common::GuardAction::Redact {
+            if !result.passed || result.action == contracts::chat::GuardAction::Redact {
                 telemetry::prometheus::observe_guardrail_block(
                     &result.guard_type.to_string(),
                     &result.action.to_string(),
                 );
                 let audit_action = match result.action {
-                    common::GuardAction::Block => AuditAction::OutputGuardBlock,
-                    common::GuardAction::Redact => AuditAction::OutputGuardRedact,
-                    common::GuardAction::Flag => AuditAction::OutputGuardFlag,
+                    contracts::chat::GuardAction::Block => AuditAction::OutputGuardBlock,
+                    contracts::chat::GuardAction::Redact => AuditAction::OutputGuardRedact,
+                    contracts::chat::GuardAction::Flag => AuditAction::OutputGuardFlag,
                     _ => continue,
                 };
                 let audit_record = AuditRecord {
@@ -379,7 +379,7 @@ fn is_direct_chat_mode(mode: &str) -> bool {
 /// Recent raw turns fed to the L3 dream layer (not session-summary).
 const PROFILE_INPUT_TURN_WINDOW: usize = 12;
 
-fn build_recent_turns_context(messages: &[common::ChatMessage], max_turns: usize) -> String {
+fn build_recent_turns_context(messages: &[contracts::chat::ChatMessage], max_turns: usize) -> String {
     messages
         .iter()
         .rev()

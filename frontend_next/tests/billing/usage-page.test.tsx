@@ -48,6 +48,15 @@ vi.mock("../../lib/ui-preferences", () => ({
 
 import { UsageDashboardClient } from "../../app/(app)/settings/usage/usage-dashboard-client";
 import { billingApi } from "../../lib/billing/api";
+import { PricingRevampGate } from "../../components/billing/PricingRevampGate";
+
+function renderUsageDashboard() {
+  return render(
+    <PricingRevampGate redirectTo="/settings">
+      <UsageDashboardClient />
+    </PricingRevampGate>,
+  );
+}
 
 describe("UsagePage", () => {
   beforeEach(() => {
@@ -62,7 +71,7 @@ describe("UsagePage", () => {
   });
 
   it("renders title + 2 UsageMeter cards + trend chart + forecast", async () => {
-    render(<UsageDashboardClient />);
+    renderUsageDashboard();
     await waitFor(() => {
       expect(screen.getByText(/用量与套餐/)).toBeTruthy();
     });
@@ -74,7 +83,7 @@ describe("UsagePage", () => {
 
   it("redirects when bucket probe fails", async () => {
     mocks.isPricingRevampEnabledMock.mockResolvedValue(false);
-    render(<UsageDashboardClient />);
+    renderUsageDashboard();
     await waitFor(() => {
       expect(mocks.replaceMock).toHaveBeenCalledWith("/settings");
     });
@@ -82,7 +91,7 @@ describe("UsagePage", () => {
 
   it("shows error state when data load fails", async () => {
     vi.mocked(billingApi.getUsageWindow).mockRejectedValueOnce(new Error("network"));
-    render(<UsageDashboardClient />);
+    renderUsageDashboard();
     await waitFor(() => {
       expect(screen.getByText(/用量数据加载失败/)).toBeTruthy();
     });

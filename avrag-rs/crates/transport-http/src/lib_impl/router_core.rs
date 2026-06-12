@@ -12,7 +12,6 @@ use axum::{
     routing::put,
 };
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use sqlx::Row;
 use serde::Deserialize;
 use serde_json::json;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
@@ -33,9 +32,9 @@ use utoipa_swagger_ui::SwaggerUi;
     ),
     components(
         schemas(
-            common::Notebook,
-            common::NotebookResponse,
-            common::NotebookListResponse,
+            contracts::notebooks::Notebook,
+            contracts::notebooks::NotebookResponse,
+            contracts::notebooks::NotebookListResponse,
             common::CreateNotebookRequest,
             common::UpdateNotebookRequest,
         )

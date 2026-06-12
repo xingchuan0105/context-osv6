@@ -4,10 +4,9 @@
 //! points used by transport-http handlers — without importing lib_impl internals.
 
 use app::{AppConfig, AppState};
-use common::{
-    CreateChatSessionRequest, CreateDocumentRequest, CreateNotebookRequest, DocumentStatus,
-    ExecutePlanRequest, ExecutePlanBudget, ExecutePlanItem, ExecutePlanSummaryMode,
-};
+use common::{CreateDocumentRequest, CreateNotebookRequest, ExecutePlanRequest, ExecutePlanBudget, ExecutePlanItem, ExecutePlanSummaryMode};
+use contracts::documents::{DocumentStatus};
+use contracts::notebooks::{CreateChatSessionRequest};
 use contracts::chat::ChatEvent;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -16,7 +15,7 @@ async fn memory_state() -> AppState {
     AppState::new(AppConfig::default())
 }
 
-async fn create_notebook(state: &AppState) -> common::Notebook {
+async fn create_notebook(state: &AppState) -> contracts::notebooks::Notebook {
     state
         .create_notebook(CreateNotebookRequest {
             name: "delegate-contract".into(),
@@ -99,7 +98,7 @@ async fn execute_chat_empty_query_returns_validation_error() {
     let state = memory_state().await;
 
     let err = state
-        .execute_chat(common::ChatRequest {
+        .execute_chat(contracts::chat::ChatRequest {
             query: "   ".to_string(),
             notebook_id: None,
             session_id: None,
@@ -145,7 +144,7 @@ async fn execute_chat_memory_rag_mode_returns_answer() {
         .unwrap();
 
     let response = state
-        .execute_chat(common::ChatRequest {
+        .execute_chat(contracts::chat::ChatRequest {
             query: "summarize notes".to_string(),
             notebook_id: Some(notebook.id.clone()),
             session_id: None,
@@ -193,7 +192,7 @@ async fn execute_chat_stream_memory_rag_emits_done_event() {
     let (tx, mut rx) = mpsc::unbounded_channel();
     state
         .execute_chat_stream(
-            common::ChatRequest {
+            contracts::chat::ChatRequest {
                 query: "stream summarize".to_string(),
                 notebook_id: Some(notebook.id.clone()),
                 session_id: None,

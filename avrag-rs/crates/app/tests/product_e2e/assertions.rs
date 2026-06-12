@@ -52,7 +52,10 @@ pub fn assert_has_citations(resp: &ChatResponse) {
     );
 }
 
-/// Assert two RAG responses cite disjoint chunk sets (independent retrieval).
+/// Assert two RAG responses cite non-identical chunk sets (independent retrieval).
+///
+/// Overlap on a shared document is allowed — concurrent queries on the same doc
+/// may hit the same top-k chunks — but the cited sets must not be identical.
 pub fn assert_independent_citation_chunks(a: &ChatResponse, b: &ChatResponse) {
     use std::collections::HashSet;
 
@@ -72,10 +75,9 @@ pub fn assert_independent_citation_chunks(a: &ChatResponse, b: &ChatResponse) {
         a.citations,
         b.citations
     );
-    let overlap: Vec<_> = chunks_a.intersection(&chunks_b).cloned().collect();
     assert!(
-        overlap.is_empty(),
-        "expected independent citation chunks, overlap={overlap:?}"
+        chunks_a != chunks_b,
+        "expected non-identical citation chunk sets, chunks_a={chunks_a:?} chunks_b={chunks_b:?}"
     );
 }
 

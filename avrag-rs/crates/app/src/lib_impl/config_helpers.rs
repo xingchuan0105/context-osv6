@@ -1,4 +1,3 @@
-use avrag_storage_pg::PgStorageError;
 use common::AppError;
 use uuid::Uuid;
 
@@ -17,13 +16,6 @@ pub(crate) fn parse_uuid_or_app_error(
     message: &'static str,
 ) -> Result<Uuid, AppError> {
     Uuid::parse_str(value).map_err(|_| AppError::not_found(code, message))
-}
-
-pub(crate) fn map_pg_error(error: PgStorageError) -> AppError {
-    match error {
-        PgStorageError::NotFound(message) => AppError::not_found("not_found", message),
-        other => AppError::internal(other.to_string()),
-    }
 }
 
 pub(crate) fn map_anyhow_error(error: anyhow::Error) -> AppError {

@@ -1,6 +1,6 @@
 //! Prompt leak detection guard.
 
-use common::{GuardResult, RiskLevel};
+use contracts::chat::{GuardResult, RiskLevel};
 
 const PROMPT_SOURCES: &[(&str, &str)] = &[
     (

@@ -146,8 +146,8 @@ where
                 .transition(
                     &task,
                     Transition {
-                        from: common::DocumentStatus::Queued,
-                        to: common::DocumentStatus::Processing,
+                        from: contracts::documents::DocumentStatus::Queued,
+                        to: contracts::documents::DocumentStatus::Processing,
                     },
                 )
                 .await?;
@@ -166,8 +166,8 @@ where
                         .transition(
                             &task,
                             Transition {
-                                from: common::DocumentStatus::Processing,
-                                to: common::DocumentStatus::Failed,
+                                from: contracts::documents::DocumentStatus::Processing,
+                                to: contracts::documents::DocumentStatus::Failed,
                             },
                         )
                         .await
@@ -188,8 +188,8 @@ where
                         .transition(
                             &task,
                             Transition {
-                                from: common::DocumentStatus::Processing,
-                                to: common::DocumentStatus::Queued,
+                                from: contracts::documents::DocumentStatus::Processing,
+                                to: contracts::documents::DocumentStatus::Queued,
                             },
                         )
                         .await
@@ -228,8 +228,8 @@ where
             .transition(
                 &task,
                 Transition {
-                    from: common::DocumentStatus::Processing,
-                    to: common::DocumentStatus::Completed,
+                    from: contracts::documents::DocumentStatus::Processing,
+                    to: contracts::documents::DocumentStatus::Completed,
                 },
             )
             .await?;

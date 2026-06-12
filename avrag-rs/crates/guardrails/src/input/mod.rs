@@ -14,7 +14,7 @@ pub use privilege_escalation::PrivilegeEscalationGuard;
 pub use prompt_injection::PromptInjectionGuard;
 pub use scope::ScopeGuard;
 
-use common::GuardResult;
+use contracts::chat::GuardResult;
 use uuid::Uuid;
 
 /// Context passed to all input guards.

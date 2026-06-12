@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use avrag_auth::AuthContext;
-use common::{
-    AppError, ChatMessage, ChatSession, Notebook, SourceRow, ToolResult,
-};
+use common::{AppError, SourceRow, ToolResult};
+use contracts::chat::{ChatMessage};
+use contracts::notebooks::{ChatSession, Notebook};
 use ingestion_types::AuditRecord;
 use uuid::Uuid;
 
@@ -15,9 +15,9 @@ use crate::domain_rows::{
 pub struct AppendChatTurn<'a> {
     pub user_content: &'a str,
     pub assistant_content: &'a str,
-    pub assistant_answer_blocks: &'a [common::AnswerBlock],
+    pub assistant_answer_blocks: &'a [contracts::chat::AnswerBlock],
     pub agent_type: &'a str,
-    pub citations: &'a [common::Citation],
+    pub citations: &'a [contracts::chat::Citation],
     pub tool_results: &'a [ToolResult],
     pub user_turn_metadata: Option<serde_json::Value>,
     pub user_resolved_query: Option<&'a str>,

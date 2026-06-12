@@ -222,7 +222,7 @@ fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
     let answer_blocks_value: serde_json::Value =
         row.try_get("answer_blocks").unwrap_or_else(|_| json!([]));
     let answer_blocks = if role == "assistant" {
-        let parsed = serde_json::from_value::<Vec<common::AnswerBlock>>(answer_blocks_value)
+        let parsed = serde_json::from_value::<Vec<contracts::chat::AnswerBlock>>(answer_blocks_value)
             .unwrap_or_default();
         if parsed.is_empty() {
             common::answer_blocks_from_rendered_answer(&content, &citations)

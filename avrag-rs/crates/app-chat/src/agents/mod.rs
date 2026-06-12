@@ -44,7 +44,7 @@ pub mod capability;
 pub mod content_guard;
 pub mod error_kind;
 #[cfg(feature = "eval")]
-pub mod eval_framework;
+pub use crate::eval::framework as eval_framework;
 
 pub mod events;
 pub mod r#loop;

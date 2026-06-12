@@ -9,7 +9,6 @@ use common::AppError;
 
 mod chat;
 mod documents;
-mod notebook_analysis;
 mod notebooks;
 
 pub(crate) use chat::*;

@@ -107,7 +107,7 @@ Aligned with golden set `must_have_citation` semantics:
 |------|------|---------------|-----------|
 | `workspace-upload-rag.spec.ts` | Upload fixture → RAG Q&A | **Hard** — `citationCount > 0` + citation button visible | Fixed `sample-document.txt`; mock/staging stack guarantees retrieval |
 | `workspace-chat.spec.ts` (general) | General chat | N/A | No citation expected |
-| `workspace-chat.spec.ts` (web search) | Brave / external search | **Soft** — assert button only when `citationCount > 0` | External API variability; skills project owns hard search citation gate |
+| `workspace-chat.spec.ts` (web search) | Brave / external search | **Soft** (PR journey) / **Hard** when `E2E_TIER=nightly\|staging` | PR: external API variability; nightly/staging: `citationCount > 0` + citation button visible (skills project also hard-gates search) |
 
 ### Quality judge (optional)
 
@@ -125,6 +125,7 @@ Nightly workflow uploads judge attachments; score below 6 does **not** fail the 
 | `SEARCH_USE_REAL=1` | Use real Brave Search in smoke tests (default: mock) |
 | `RUN_QUALITY_JUDGE=1` | Enable Playwright LLM judge attachments |
 | `RUN_CROSS_BROWSER=1` | Enable Firefox/WebKit journey projects |
+| `E2E_TIER` | `nightly` or `staging` — journey web-search citation **hard** gate in `workspace-chat.spec.ts` |
 
 ## Local prerequisites (Product E2E)
 

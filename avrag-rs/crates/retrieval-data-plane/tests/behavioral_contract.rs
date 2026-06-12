@@ -113,3 +113,120 @@ async fn default_graph_search_fails_with_explicit_adapter_message() {
     assert!(message.contains("search_graph"));
     assert!(message.contains("not implemented"));
 }
+
+#[test]
+fn scored_chunk_new_text_defaults_to_text_chunk_type() {
+    let chunk_id = Uuid::from_u128(20);
+    let doc_id = Uuid::from_u128(21);
+    let chunk = avrag_retrieval_data_plane::ScoredChunk::new_text(
+        chunk_id,
+        doc_id,
+        "dense hit".to_string(),
+        0.91,
+        "text_dense".to_string(),
+        Some(3),
+    );
+
+    assert_eq!(chunk.chunk_id, chunk_id);
+    assert_eq!(chunk.doc_id, doc_id);
+    assert_eq!(chunk.chunk_type, "text");
+    assert_eq!(chunk.source, "text_dense");
+    assert_eq!(chunk.page, Some(3));
+}
+
+#[test]
+fn scored_chunk_with_metadata_preserves_parser_backend_and_locator() {
+    let chunk = avrag_retrieval_data_plane::ScoredChunk::new_text(
+        Uuid::from_u128(30),
+        Uuid::from_u128(31),
+        "figure caption".to_string(),
+        0.75,
+        "multimodal_dense".to_string(),
+        Some(2),
+    )
+    .with_metadata(
+        "page_raster".to_string(),
+        Some("paddle".to_string()),
+        Some(serde_json::json!({"page": 2, "bbox": [0, 0, 100, 100]})),
+    );
+
+    assert_eq!(chunk.chunk_type, "page_raster");
+    assert_eq!(chunk.parser_backend.as_deref(), Some("paddle"));
+    assert_eq!(chunk.source_locator.as_ref().and_then(|v| v.get("page")), Some(&serde_json::json!(2)));
+}
+
+#[test]
+fn weighted_chunk_list_roundtrip_preserves_weight_and_chunks() {
+    let list = avrag_retrieval_data_plane::WeightedChunkList {
+        weight: FALLBACK_RETRIEVAL_WEIGHT,
+        chunks: vec![avrag_retrieval_data_plane::ScoredChunk::new_text(
+            Uuid::from_u128(40),
+            Uuid::from_u128(41),
+            "fallback chunk".to_string(),
+            0.4,
+            "multimodal_dense".to_string(),
+            Some(1),
+        )],
+    };
+
+    let encoded = serde_json::to_value(&list).unwrap();
+    let decoded: avrag_retrieval_data_plane::WeightedChunkList =
+        serde_json::from_value(encoded).unwrap();
+
+    assert_eq!(decoded.weight, FALLBACK_RETRIEVAL_WEIGHT);
+    assert_eq!(decoded.chunks.len(), 1);
+    assert_eq!(decoded.chunks[0].content, "fallback chunk");
+}
+
+#[tokio::test]
+async fn default_index_write_methods_fail_with_explicit_adapter_message() {
+    let data_plane = StubDataPlane;
+    let auth = auth_context();
+
+    for (method, error) in [
+        (
+            "ensure_schema",
+            data_plane.ensure_schema().await.unwrap_err(),
+        ),
+        (
+            "replace_document_index",
+            data_plane
+                .replace_document_index(DocumentIndexBatch {
+                    org_id: auth.org_id(),
+                    workspace_id: None,
+                    document_id: Uuid::from_u128(50),
+                    parse_run_id: Uuid::from_u128(51),
+                    doc_version: 1,
+                    text_chunks: Vec::new(),
+                    multimodal_chunks: Vec::new(),
+                    entities: Vec::new(),
+                    relations: Vec::new(),
+                    graph_passages: Vec::new(),
+                })
+                .await
+                .unwrap_err(),
+        ),
+        (
+            "delete_document_index",
+            data_plane
+                .delete_document_index(&auth, Uuid::from_u128(50))
+                .await
+                .unwrap_err(),
+        ),
+    ] {
+        let message = error.to_string();
+        assert!(message.contains(method), "{message}");
+        assert!(message.contains("not implemented"), "{message}");
+    }
+}
+
+#[test]
+fn index_write_report_default_is_zero_counts() {
+    let report = avrag_retrieval_data_plane::IndexWriteReport::default();
+
+    assert_eq!(report.text_chunk_count, 0);
+    assert_eq!(report.multimodal_chunk_count, 0);
+    assert_eq!(report.entity_count, 0);
+    assert_eq!(report.relation_count, 0);
+    assert_eq!(report.graph_passage_count, 0);
+}

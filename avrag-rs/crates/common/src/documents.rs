@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::DocumentStatus;
+use contracts::documents::DocumentStatus;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {

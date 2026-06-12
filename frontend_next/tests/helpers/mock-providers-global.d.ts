@@ -5,6 +5,9 @@ declare global {
   var __workspaceChatPaneHarnessMocks: ReturnType<
     typeof MockProviders.createWorkspaceChatPaneMocks
   >;
+  var __workspaceSurfaceHarnessMocks: ReturnType<
+    typeof MockProviders.createWorkspaceSurfaceMocks
+  >;
 }
 
 export {};

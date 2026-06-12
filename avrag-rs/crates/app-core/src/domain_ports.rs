@@ -32,5 +32,5 @@ pub trait CitationResolver: Send + Sync {
         &self,
         session_id: &str,
         citation_id: &str,
-    ) -> Result<Option<common::Citation>, AppError>;
+    ) -> Result<Option<contracts::chat::Citation>, AppError>;
 }

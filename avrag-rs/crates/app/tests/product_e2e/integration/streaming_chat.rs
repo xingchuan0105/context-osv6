@@ -2,24 +2,23 @@
 //!
 //! Protocol invariants (`start` first, `done` terminal, payload shape) live in
 //! `transport-http` contract tests. This module exercises the full mock RAG
-//! pipeline and loop telemetry with a module-scoped [`shared_ready_rag`] fixture.
+//! pipeline and loop telemetry with a module-scoped ingested fixture.
 
 use std::time::Duration;
 
 use crate::product_e2e::{
-    ChatStreamParams, fixtures::shared_ready_rag, llm_real::collect_observability_from_events,
+    ChatStreamParams, fixtures::shared_ready_rag_context, llm_real::collect_observability_from_events,
 };
 
 const STREAM_DEADLINE: Duration = Duration::from_secs(60);
 const MAX_EVENTS: usize = 512;
 const QUERY: &str = "What is antifragility?";
 
-/// Stream RAG chat events via the module-scoped [`shared_ready_rag`] fixture.
-/// Safe under `--test-threads=1` (integration-e2e / local full suite).
-async fn stream_rag_events(debug: bool) -> Vec<crate::product_e2e::SseEvent> {
-    let shared = shared_ready_rag().await;
-    let upload = &shared.1;
-    let ctx = shared.0.lock().expect("shared ready_rag lock");
+/// Stream RAG chat events via shared ingested infra + a per-test API runtime.
+async fn stream_rag_events(debug: bool) -> anyhow::Result<Vec<crate::product_e2e::SseEvent>> {
+    let fixture = crate::product_e2e::fixtures::shared_rag_fixture().await;
+    let upload = &fixture.upload;
+    let ctx = shared_ready_rag_context().await;
     ctx.chat_stream_with_params(
         ChatStreamParams {
             query: QUERY,
@@ -34,7 +33,6 @@ async fn stream_rag_events(debug: bool) -> Vec<crate::product_e2e::SseEvent> {
         STREAM_DEADLINE,
     )
     .await
-    .unwrap()
 }
 
 /// Mock LLM synthesis emits `reasoning_summary_delta` when the provider
@@ -44,7 +42,7 @@ async fn stream_rag_events(debug: bool) -> Vec<crate::product_e2e::SseEvent> {
 async fn chat_stream_collects_reasoning_delta_from_mock() {
     super::require_integration_suite();
 
-    let events = stream_rag_events(false).await;
+    let events = stream_rag_events(false).await.expect("rag stream");
 
     let capture = collect_observability_from_events(&events);
     assert!(
@@ -59,7 +57,7 @@ async fn chat_stream_collects_reasoning_delta_from_mock() {
 async fn chat_stream_collects_trace_telemetry_without_debug() {
     super::require_integration_suite();
 
-    let events = stream_rag_events(false).await;
+    let events = stream_rag_events(false).await.expect("rag stream");
 
     let capture = collect_observability_from_events(&events);
     assert!(
@@ -83,7 +81,7 @@ async fn chat_stream_collects_trace_telemetry_without_debug() {
 async fn chat_stream_debug_collects_trace_telemetry() {
     super::require_integration_suite();
 
-    let events = stream_rag_events(true).await;
+    let events = stream_rag_events(true).await.expect("rag stream");
 
     let capture = collect_observability_from_events(&events);
     assert!(
@@ -103,7 +101,7 @@ async fn chat_stream_debug_collects_trace_telemetry() {
 async fn chat_stream_debug_emits_prompt_snapshot() {
     super::require_integration_suite();
 
-    let events = stream_rag_events(true).await;
+    let events = stream_rag_events(true).await.expect("rag stream");
 
     let capture = collect_observability_from_events(&events);
     assert!(

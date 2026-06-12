@@ -13,10 +13,8 @@ use avrag_retrieval_data_plane::{
     Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, GraphSearchOutput, GraphSearchRequest,
     MultimodalSearchRequest, RelationPathCandidate, TextDenseSearchRequest,
 };
-use common::{
-    BackendTrace, ChatMessage, ChatRequest, Citation, Coverage, ExecutePlanResponse, RagPlan,
-    RagPlanItem, RetrievalBundle, RetrievedChunk,
-};
+use common::{BackendTrace, Coverage, ExecutePlanResponse, RetrievalBundle, RetrievedChunk};
+use contracts::chat::{ChatMessage, ChatRequest, Citation, RagPlan, RagPlanItem};
 use std::sync::Arc;
 use tokio::sync::Barrier;
 use uuid::Uuid;
@@ -967,7 +965,7 @@ async fn build_rag_chat_response_from_bundle_reuses_bundle_citations() {
             trace: None,
             item_trace: Vec::new(),
             channel_trace: Vec::new(),
-            retrieval_trace: common::RagTraceSummary {
+            retrieval_trace: contracts::chat::RagTraceSummary {
                 item_count: 0,
                 total_candidate_budget: TOTAL_CANDIDATE_BUDGET,
                 max_rerank_docs: FINAL_RERANK_BUDGET,
@@ -1073,7 +1071,7 @@ async fn build_rag_chat_response_from_bundle_graph_only_non_empty_citations_and_
             trace: None,
             item_trace: Vec::new(),
             channel_trace: Vec::new(),
-            retrieval_trace: common::RagTraceSummary {
+            retrieval_trace: contracts::chat::RagTraceSummary {
                 item_count: 0,
                 total_candidate_budget: TOTAL_CANDIDATE_BUDGET,
                 max_rerank_docs: FINAL_RERANK_BUDGET,

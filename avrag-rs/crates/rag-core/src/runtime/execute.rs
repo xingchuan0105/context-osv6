@@ -8,11 +8,8 @@ use avrag_auth::AuthContext;
 use avrag_retrieval_data_plane::{
     GraphRelationHint, GraphSearchOutput, GraphSearchRequest, WeightedChunkList,
 };
-use common::{
-    BackendTrace, ChannelCoverage, ChannelTraceItem, Coverage, DegradeReason, DegradeTraceItem,
-    ExecutePlanRequest, ExecutePlanResponse, PlaceholderTriplet, RelationPath, RetrievalBundle,
-    RetrievedChunk,
-};
+use common::{BackendTrace, ChannelCoverage, ChannelTraceItem, Coverage, ExecutePlanRequest, ExecutePlanResponse, PlaceholderTriplet, RelationPath, RetrievalBundle, RetrievedChunk};
+use contracts::chat::{DegradeReason, DegradeTraceItem};
 use sha2::{Digest, Sha256};
 
 const RETRIEVAL_CACHE_TTL_SECS: u64 = 30 * 60; // 30 minutes
@@ -198,8 +195,8 @@ fn citation_from_scored(
     index: usize,
     chunk: &ScoredChunk,
     doc_names: &HashMap<uuid::Uuid, String>,
-) -> common::Citation {
-    common::Citation {
+) -> contracts::chat::Citation {
+    contracts::chat::Citation {
         citation_id: (index + 1) as i64,
         doc_id: chunk.doc_id.to_string(),
         chunk_id: Some(chunk.chunk_id.to_string()),
@@ -364,9 +361,9 @@ fn timeout_degrade(stage: &str) -> DegradeTraceItem {
 impl RagRuntime {
     async fn run_text_dense_channel(
         &self,
-        request: &common::ChatRequest,
+        request: &contracts::chat::ChatRequest,
         auth: &AuthContext,
-        rag_plan: &common::RagPlan,
+        rag_plan: &contracts::chat::RagPlan,
         budget: usize,
     ) -> TextDenseChannelOutput {
         let started = Instant::now();
@@ -410,9 +407,9 @@ impl RagRuntime {
 
     async fn run_bm25_channel(
         &self,
-        request: &common::ChatRequest,
+        request: &contracts::chat::ChatRequest,
         auth: &AuthContext,
-        rag_plan: &common::RagPlan,
+        rag_plan: &contracts::chat::RagPlan,
         budget: usize,
     ) -> Bm25ChannelOutput {
         let started = Instant::now();
@@ -456,9 +453,9 @@ impl RagRuntime {
 
     async fn run_multimodal_channel(
         &self,
-        request: &common::ChatRequest,
+        request: &contracts::chat::ChatRequest,
         auth: &AuthContext,
-        rag_plan: &common::RagPlan,
+        rag_plan: &contracts::chat::RagPlan,
         budget: usize,
     ) -> MultimodalChannelOutput {
         let started = Instant::now();
@@ -843,7 +840,7 @@ impl RagRuntime {
                     multimodal_output.trace,
                     graph_output.trace,
                 ],
-                retrieval_trace: common::RagTraceSummary {
+                retrieval_trace: contracts::chat::RagTraceSummary {
                     item_count: item_trace.len(),
                     total_candidate_budget,
                     max_rerank_docs: rerank_budget,

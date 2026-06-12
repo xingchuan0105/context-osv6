@@ -41,7 +41,9 @@ export function PaywallModal({
           softLimitHit={{ rolling_5h: true, rolling_7d: false }}
           hardLimitHit={{ rolling_5h: reason === "5h", rolling_7d: reason === "7d" }}
         />
-        <p className={styles.subtitle}>{formatUiMessage(locale, "paywallSubtitle")}</p>
+        <p className={styles.subtitle}>
+          {formatUiMessage(locale, reason === "5h" ? "paywallSubtitle5h" : "paywallSubtitle7d")}
+        </p>
         <PricingCards plans={plans} highlightTier="plus" locale={locale} onSelect={onSelect} compact />
         <div className={styles.footer}>
           <button
