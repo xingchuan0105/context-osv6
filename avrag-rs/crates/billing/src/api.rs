@@ -381,6 +381,30 @@ fn percent_decode(s: &str) -> String {
     res
 }
 
+fn webhook_db_unavailable(error: &anyhow::Error) -> bool {
+    if let Some(sqlx_err) = error.downcast_ref::<sqlx::Error>() {
+        return matches!(
+            sqlx_err,
+            sqlx::Error::PoolTimedOut
+                | sqlx::Error::PoolClosed
+                | sqlx::Error::Io(_)
+                | sqlx::Error::Tls(_)
+        ) || matches!(sqlx_err, sqlx::Error::Database(db) if matches!(
+            db.code().as_deref(),
+            Some("08000") | Some("08006") | Some("57P01") | Some("57P03")
+        ));
+    }
+    false
+}
+
+fn webhook_error_response(error: anyhow::Error) -> ApiResponse<serde_json::Value> {
+    if webhook_db_unavailable(&error) {
+        ApiResponse::err("billing_webhook_unavailable", "billing database unavailable")
+    } else {
+        ApiResponse::err("billing_webhook_failed", &error.to_string())
+    }
+}
+
 fn alipay_payload_to_json(payload: &[u8]) -> serde_json::Value {
     let s = String::from_utf8_lossy(payload);
     let mut map = serde_json::Map::new();
@@ -499,7 +523,7 @@ pub async fn handle_webhook(
     // 3. Lease-based idempotence check
     let claim = match claim_webhook_with_lease(repo.clone(), provider, &event_id).await {
         Ok(claim) => claim,
-        Err(error) => return ApiResponse::err("billing_webhook_failed", &error.to_string()),
+        Err(error) => return webhook_error_response(error),
     };
 
     if claim.duplicate_processed {
@@ -519,13 +543,13 @@ pub async fn handle_webhook(
             Some(error.to_string()),
         )
         .await;
-        return ApiResponse::err("billing_webhook_failed", &error.to_string());
+        return webhook_error_response(error);
     }
 
     if let Err(error) =
         update_webhook_lease_status(repo, provider, &claim.event_id, "processed", None).await
     {
-        return ApiResponse::err("billing_webhook_failed", &error.to_string());
+        return webhook_error_response(error);
     }
 
     ApiResponse::ok(serde_json::json!({ "status": "ok" }))

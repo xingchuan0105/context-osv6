@@ -107,10 +107,28 @@ async fn openapi_handler() -> Response {
 
 async fn dev_upload_handler(
     Path(document_id): Path<String>,
-    State(state): State<AppState>,
+    Extension(RequestState(state)): Extension<RequestState>,
     body: Bytes,
 ) -> Response {
-    let upload_state = match state.upload_state_for_document(&document_id).await {
+    let node_env = std::env::var("NODE_ENV").unwrap_or_default();
+    let e2e_enabled = std::env::var("E2E_ENABLED").unwrap_or_default();
+    if node_env == "production" || e2e_enabled != "true" {
+        warn!(
+            node_env = %node_env,
+            e2e_enabled = %e2e_enabled,
+            "dev upload rejected: environment gate failed"
+        );
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "dev upload not enabled in this environment" })),
+        )
+            .into_response();
+    }
+
+    let upload_state = match state
+        .upload_state_for_authenticated_document(&document_id)
+        .await
+    {
         Ok((upload_state, _)) => upload_state,
         Err(error) => return handlers::app_error_response(error),
     };
@@ -134,20 +152,31 @@ async fn signed_upload_handler(
     State(state): State<AppState>,
     body: Bytes,
 ) -> Response {
-    let (upload_state, object_path) = match state.upload_state_for_document(&document_id).await {
+    let (upload_state, object_path) = match state
+        .upload_state_for_system_document(&document_id)
+        .await
+    {
         Ok(value) => value,
         Err(error) => return handlers::app_error_response(error),
     };
 
-    if let Some(object_path) = object_path
-        && let Err(error) = upload_state.verify_upload_signature(
-            &document_id,
-            &object_path,
-            query.expires,
-            &query.signature,
-        )
-    {
-        return handlers::app_error_response(error);
+    match object_path {
+        Some(object_path) => {
+            if let Err(error) = upload_state.verify_upload_signature(
+                &document_id,
+                &object_path,
+                query.expires,
+                &query.signature,
+            ) {
+                return handlers::app_error_response(error);
+            }
+        }
+        None if state.postgres_configured() => {
+            return handlers::app_error_response(common::AppError::internal(
+                "upload object path is not configured",
+            ));
+        }
+        None => {}
     }
 
     if body.len() as u64 > state.max_upload_file_size_bytes() {
@@ -206,7 +235,9 @@ async fn billing_webhook_handler(
             Some("billing_webhook_signature_failed" | "billing_webhook_invalid") => {
                 StatusCode::BAD_REQUEST
             }
-            Some("billing_unconfigured") => StatusCode::SERVICE_UNAVAILABLE,
+            Some("billing_unconfigured" | "billing_webhook_unavailable") => {
+                StatusCode::SERVICE_UNAVAILABLE
+            }
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     };
@@ -492,7 +523,10 @@ async fn object_storage_webhook_handler(
             }
         };
 
-        let (upload_state, _) = match state.upload_state_for_document(&document_id).await {
+        let (upload_state, _) = match state
+            .upload_state_for_system_document(&document_id)
+            .await
+        {
             Ok(result) => result,
             Err(error) => {
                 failed += 1;

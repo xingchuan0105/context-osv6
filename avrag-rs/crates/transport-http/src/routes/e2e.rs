@@ -124,7 +124,7 @@ async fn reset_user_data_handler(
             warn!(error = %error, email = %email, "e2e reset-user-data failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": error })),
+                Json(json!({ "error": "user data reset failed" })),
             )
                 .into_response()
         }
@@ -155,14 +155,14 @@ async fn grant_admin_role_handler(
         }
         Err(error) if error == "user not found" => (
             StatusCode::NOT_FOUND,
-            Json(json!({ "error": error })),
+            Json(json!({ "error": "user not found" })),
         )
             .into_response(),
         Err(error) => {
             warn!(error = %error, email = %email, "e2e grant-admin-role failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": error })),
+                Json(json!({ "error": "admin role grant failed" })),
             )
                 .into_response()
         }

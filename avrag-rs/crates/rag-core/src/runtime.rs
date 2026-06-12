@@ -56,6 +56,11 @@ impl RagRuntime {
         self.config.content_store.clone()
     }
 
+    /// Access chat persistence if configured on the runtime.
+    pub fn chat_persistence(&self) -> Option<Arc<dyn app_core::ChatPersistencePort>> {
+        self.config.chat_persistence.clone()
+    }
+
     /// Access the reranker client if configured.
     pub fn reranker(&self) -> Option<Arc<avrag_llm::RerankerClient>> {
         self.config.reranker.clone()

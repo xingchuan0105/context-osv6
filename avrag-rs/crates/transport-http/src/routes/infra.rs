@@ -1,4 +1,4 @@
-use app::AppState;
+use app_bootstrap::AppState;
 use axum::{
     Router,
     routing::{get, post, put},
@@ -13,7 +13,6 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/metrics", get(crate::metrics_handler))
         .route("/docs", get(crate::docs_handler))
         .route("/openapi.json", get(crate::openapi_handler))
-        .route("/dev-upload/{document_id}", put(crate::dev_upload_handler))
         .route("/uploads/{document_id}", put(crate::signed_upload_handler))
         .route("/webhooks/{provider}", post(crate::billing_webhook_handler))
         .route(

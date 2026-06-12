@@ -758,7 +758,11 @@ impl RagRuntime {
             let names = content_store
                 .get_document_names(auth, &unique_doc_ids)
                 .await
-                .inspect_err(|e| tracing::warn!(error = %e, "content_store.get_document_names failed, degrading"))
+                .inspect_err(|e| tracing::warn!(
+                    error = %e,
+                    doc_ids = ?unique_doc_ids,
+                    "content_store.get_document_names failed, degrading"
+                ))
                 .unwrap_or_default();
             if names.len() < unique_doc_ids.len() {
                 tracing::info!(

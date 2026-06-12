@@ -26,6 +26,7 @@ avrag-auth = { path = "../auth" }
 avrag-cache-redis = { path = "../cache-redis" }
 avrag-llm = { path = "../llm" }
 avrag-code-interpreter = { path = "../code-interpreter" }
+app-core = { path = "../app-core" }
 
 [dev-dependencies]
 insta.workspace = true

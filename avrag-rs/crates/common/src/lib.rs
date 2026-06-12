@@ -13,6 +13,7 @@ pub mod identity;
 pub mod key_vault;
 pub mod notebook_requests;
 pub mod rag_execute;
+pub mod ssrf;
 pub mod tool_call;
 pub mod util;
 
@@ -73,6 +74,7 @@ pub use tool_call::{
     ToolCallAdapterError, ToolResult, ToolSpec, ToolStatus, ToolTrace,
 };
 pub use content_store::{ContentStore, ContentStoreError, IndexedChunk};
+pub use ssrf::{validate_http_url, validate_http_url_with_dns, SsrfError};
 pub use util::{
     estimate_token_count, infer_image_extension, infer_mime_type, is_remote_url, new_id,
     now_rfc3339,
