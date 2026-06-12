@@ -4,7 +4,7 @@
 
 mod artifacts;
 mod builder;
-mod config;
+pub(crate) mod config;
 mod http;
 mod profiles;
 
@@ -23,8 +23,13 @@ use super::setup;
 pub struct TestContext {
     pub http_client: reqwest::Client,
     pub base_url: String,
+    pub(crate) org_id: String,
+    pub(crate) user_id: String,
+    pub(crate) app_state: Option<Arc<app::AppState>>,
+    pub(crate) bootstrap: Option<config::E2eBootstrapConfig>,
     pub(crate) shared_pg: Option<Arc<setup::SharedPostgres>>,
     pub(crate) shared_milvus: Option<Arc<setup::SharedMilvus>>,
+    pub(crate) milvus_url: Option<String>,
     pub(crate) milvus_collection_prefix: Option<String>,
     pub(crate) worker: Option<tokio::process::Child>,
     pub(crate) server_abort: Option<Sender<()>>,
@@ -76,6 +81,7 @@ impl Drop for TestContext {
 
 #[cfg(test)]
 mod tests {
+    use super::builder::{pg_url_mark_migrated, pg_url_needs_migration};
     use super::super::http_helpers::milvus_collection_prefix_for_identity;
 
     #[test]
@@ -84,5 +90,33 @@ mod tests {
             milvus_collection_prefix_for_identity("12345678-aaaa-bbbb-cccc-dddddddddddd");
 
         assert_eq!(prefix, "avrag_e2e_12345678");
+    }
+
+    #[test]
+    fn pg_url_migration_dedup_uses_cross_process_marker() {
+        let temp = tempfile::tempdir().expect("temp pg migrated dir");
+        unsafe {
+            std::env::set_var(
+                "AVRAG_E2E_PG_MIGRATED_DIR",
+                temp.path().to_string_lossy().as_ref(),
+            );
+            std::env::set_var("AVRAG_E2E_PG_MIGRATION_WAIT_SECS", "0");
+        }
+
+        let database_url = "postgres://e2e:secret@127.0.0.1:5432/dedup_test";
+        assert!(
+            pg_url_needs_migration(database_url),
+            "first caller should claim migration"
+        );
+        assert!(
+            !pg_url_needs_migration(database_url),
+            "second caller should wait and skip while lock is held"
+        );
+
+        pg_url_mark_migrated(database_url);
+        assert!(
+            !pg_url_needs_migration(database_url),
+            "marker should suppress migration for later callers"
+        );
     }
 }

@@ -55,16 +55,23 @@ jobs:
 
       - name: Clean orphaned E2E containers
         run: |
+          # Test-owned ephemeral names only (matches setup::cleanup_orphaned_test_containers).
+          # Milvus uses docker-compose (milvus-standalone); not force-removed — collection
+          # isolation uses MILVUS_COLLECTION_PREFIX + teardown drops, not dedicated containers.
           docker ps -a --filter name=avrag-test-pg --format '{{.Names}}' | xargs -r docker rm -f
-          docker ps -a --filter name=avrag-test-milvus --format '{{.Names}}' | xargs -r docker rm -f
           docker ps -a --filter name=avrag-test-redis --format '{{.Names}}' | xargs -r docker rm -f
 
       - name: Compile tests
-        run: cargo test --no-run --test product_e2e -p app
+        run: |
+          cargo test --no-run --test product_e2e -p app --features product-e2e
+          cargo test --no-run -p transport-http
 
-      # --test-threads=1: required for module-scoped fixtures (e.g. streaming_chat::shared_ready_rag)
+      # --test-threads=1: required for module-scoped fixtures (e.g. streaming_chat::shared_rag_fixture)
+      - name: Run transport-http contract tests
+        run: cargo test -p transport-http
+
       - name: Run full Product E2E suite
-        run: cargo test --test product_e2e -p app -- --test-threads=1 --nocapture
+        run: cargo test --test product_e2e -p app --features product-e2e -- --test-threads=1 --nocapture
         env:
           E2E_MODE: integration
         timeout-minutes: 40

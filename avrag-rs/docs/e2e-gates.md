@@ -17,11 +17,19 @@ suites. See also [`product-e2e-plan.md`](product-e2e-plan.md).
 
 ### Smoke (PR)
 
-- Subset: `smoke::` (ingestion, rag, search, **chat**, **share_boundary**, auth_boundary), top-level `product_e2e::` mock routing tests
+- **Smoke integration modules** (`smoke::`, serial for RAG): `ingestion_smoke`, `rag_smoke`, `rag_fallback_smoke`, `rag_codegen_multitool_smoke`, `memory_multiturn_smoke`, `paddle_pdf_smoke`
+- **Non-RAG smoke modules** (parallel): `chat_smoke`, `search_smoke`, `auth_boundary`, `share_boundary`
+- **Unit tests** (parallel with non-RAG smoke; no Docker):
+  - `setup::tests` (6) — docker port/timestamp parsing, active-container registry, docker id
+  - `e2e_gate::tests` (4) — `E2E_MODE` suite gating
+  - `test_context::tests` (2) — Milvus collection prefix, PG migration cross-process dedup
+  - `mock_routing` (6) — mock LLM route / synthesis contract routing
+- Non-RAG smoke + unit tests run **in parallel** (`run-product-smoke-e2e.sh`); RAG smoke modules run **serial** after `wait`
+- Orphan Docker cleanup removes only test-owned `avrag-test-pg-*` / `avrag-test-redis-*` names; skips active/young containers (see `setup::cleanup_orphaned_test_containers`). **Milvus** uses the shared compose stack (`milvus-standalone`); CI does not force-remove it — isolation is per-context `MILVUS_COLLECTION_PREFIX` + teardown collection drops
 - Gated by `require_smoke_suite()` — fails under `E2E_MODE=nightly`
 - CI/local runner: [`scripts/run-product-smoke-e2e.sh`](../scripts/run-product-smoke-e2e.sh) (module list single source of truth)
 - Mock LLM / Search / Embedding only; E2E bootstrap forces **local** `object_root` (ignores `.env` MinIO/S3 for API)
-- Protocol + HTTP assertions; SSE event-order and `done` payload shape in `transport-http` contract tests
+- Protocol + HTTP assertions; SSE event-order (`start` first, `done` terminal, no post-`done` events) and `done` payload shape in [`transport-http` contract tests](../crates/transport-http/tests/chat_stream_contract.rs) (`cargo test -p transport-http`)
 - Main suite uses `REDIS_URL=redis://127.0.0.1:1` (blackhole) to keep embedding failure mocks effective
 - **`auth_boundary`**: run with `--test-threads=1` only (shared PG + fixed notebook ids; parallel within module can 500)
 - **Strict cite (ADR-0008)**: RAG smoke asserts `assert_citation_referenced_in_answer`; search smoke expects `[[n]]` markers; mock synthesis returns `internal_answer_v1` JSON with `[[cite:CHUNK_ID]]`
@@ -35,14 +43,26 @@ suites. See also [`product-e2e-plan.md`](product-e2e-plan.md).
 
 #### Shared fixtures (`streaming_chat`)
 
-- `integration::streaming_chat` uses module-scoped [`shared_ready_rag()`](../crates/app/tests/product_e2e/fixtures/ready_rag.rs): one cold `TestContext` + ingested `antifragile.txt` per test binary
-- **Requires** `--test-threads=1` (enforced in `integration-e2e.yml` and local full-suite commands); parallel workers would race on the shared `Mutex<TestContext>`
-- Protocol invariants (`start` first, `done` terminal, payload shape) stay in `transport-http` contract tests; this module only covers mock RAG observability (reasoning delta, trace telemetry, `prompt_snapshot` behind `debug: true`)
+- `integration::streaming_chat` uses module-scoped [`shared_rag_fixture()`](../crates/app/tests/product_e2e/fixtures/ready_rag.rs): one cold ingest of `antifragile.txt` per test binary; each test respawns ephemeral API/mock/worker via `shared_ready_rag_context()`
+- **Requires** `--test-threads=1` for the full integration suite (enforced in `integration-e2e.yml`); parallel workers would race on shared Milvus collection state during cold bootstrap
+- Protocol invariants stay in `transport-http` contract tests; this module only covers mock RAG observability (reasoning delta, trace telemetry, `prompt_snapshot` behind `debug: true`)
 
 #### Concurrent queries (`concurrent_query`)
 
 - `integration::concurrent_query::concurrent_rag_queries_return_independent_citations` issues two chat requests via `tokio::join!` (not serial await)
-- Asserts: independent answers (`assert_ne!`), topic-specific keywords, `assert_codegen_bridge_dense_retrieval`, per-query `assert_has_citations` / `assert_citation_doc_id`, **`assert_independent_citation_chunks`** (disjoint `chunk_id` sets)
+- Asserts: independent answers (`assert_ne!`), topic-specific keywords, `assert_codegen_bridge_dense_retrieval`, per-query `assert_has_citations` / `assert_citation_doc_id`, **`assert_independent_citation_chunks`** (citation `chunk_id` sets must differ — overlap on the same document is allowed)
+
+#### HTTP client timeouts (Product E2E bootstrap)
+
+Defined in [`test_context/builder.rs`](../crates/app/tests/product_e2e/test_context/builder.rs):
+
+| Constant | Seconds | When |
+|----------|---------|------|
+| `HTTP_TIMEOUT_DEFAULT_SECS` | 60 | Non-RAG smoke |
+| `HTTP_TIMEOUT_RAG_SECS` | 120 | Mock RAG / integration paths |
+| `HTTP_TIMEOUT_REAL_LLM_SECS` | 180 | `use_real_llm` / nightly |
+
+Worker ingestion timeout is separate: `E2eBootstrapConfig.worker_timeout_secs` → `AVRAG_INGESTION_TASK_TIMEOUT_SECS`.
 
 ### Embedding cache
 

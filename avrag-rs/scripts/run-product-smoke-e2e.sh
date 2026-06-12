@@ -11,6 +11,14 @@ NON_RAG_MODULES=(
   share_boundary
 )
 
+# PR smoke unit tests (parallel with non-RAG smoke; no Docker).
+UNIT_TEST_FILTERS=(
+  setup::tests
+  e2e_gate::tests
+  test_context::tests
+  mock_routing
+)
+
 RAG_SERIAL_MODULES=(
   ingestion_smoke
   rag_smoke
@@ -22,14 +30,16 @@ RAG_SERIAL_MODULES=(
 
 export E2E_MODE=smoke
 
-echo "== Non-RAG smoke (parallel) =="
+echo "== Non-RAG smoke + unit tests (parallel) =="
 for t in "${NON_RAG_MODULES[@]}"; do
-  cargo test --test product_e2e -p app "smoke::${t}" -- --test-threads=1 --nocapture &
+  cargo test --test product_e2e -p app --features product-e2e "smoke::${t}" -- --test-threads=1 --nocapture &
 done
-cargo test --test product_e2e -p app product_e2e:: -- --test-threads=1 --nocapture &
+for f in "${UNIT_TEST_FILTERS[@]}"; do
+  cargo test --test product_e2e -p app --features product-e2e "$f" -- --test-threads=1 --nocapture &
+done
 wait
 
 echo "== RAG smoke (serial) =="
 for t in "${RAG_SERIAL_MODULES[@]}"; do
-  cargo test --test product_e2e -p app "smoke::${t}" -- --test-threads=1 --nocapture
+  cargo test --test product_e2e -p app --features product-e2e "smoke::${t}" -- --test-threads=1 --nocapture
 done

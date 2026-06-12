@@ -5,9 +5,153 @@
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
+
+/// Cross-process registry of containers currently owned by a running E2E test.
+const ACTIVE_CONTAINER_DIR: &str = "/tmp/avrag-e2e-active-containers";
+
+/// Only remove unmatched containers older than this (parallel runs stay safe).
+const ORPHAN_MIN_AGE_SECS: u64 = 120;
+
+/// Registry markers outlive a crashed container; prune when PID is dead and container is gone or ancient.
+const STALE_REGISTRY_AGE_SECS: u64 = 600;
+
+fn ensure_active_container_dir() -> std::io::Result<()> {
+    std::fs::create_dir_all(ACTIVE_CONTAINER_DIR)
+}
+
+/// Mark a test-owned container as in-use so orphan cleanup will not delete it.
+pub fn register_active_test_container(container_name: &str) -> bool {
+    if let Err(error) = ensure_active_container_dir() {
+        eprintln!("[product_e2e] register container dir failed: {error}");
+        return false;
+    }
+    let path = format!("{ACTIVE_CONTAINER_DIR}/{container_name}");
+    match std::fs::write(path, std::process::id().to_string()) {
+        Ok(()) => true,
+        Err(error) => {
+            eprintln!(
+                "[product_e2e] failed to register active container {container_name}: {error}"
+            );
+            false
+        }
+    }
+}
+
+/// Clear the in-use marker when a test releases its container.
+pub fn unregister_active_test_container(container_name: &str) {
+    let path = format!("{ACTIVE_CONTAINER_DIR}/{container_name}");
+    let _ = std::fs::remove_file(path);
+}
+
+fn is_active_test_container(container_name: &str) -> bool {
+    std::path::Path::new(ACTIVE_CONTAINER_DIR)
+        .join(container_name)
+        .is_file()
+}
+
+async fn docker_container_exists(container_name: &str) -> bool {
+    tokio::process::Command::new("docker")
+        .args(["inspect", container_name])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .await
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn parse_docker_inspect_timestamp(raw: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.starts_with("0001-01-01") {
+        return None;
+    }
+    chrono::DateTime::parse_from_rfc3339(trimmed)
+        .ok()
+        .or_else(|| {
+            chrono::DateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M:%S.%f %z %Z").ok()
+        })
+        .or_else(|| chrono::DateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M:%S %z %Z").ok())
+}
+
+async fn docker_container_age_secs(container_name: &str) -> Option<u64> {
+    let output = tokio::process::Command::new("docker")
+        .args([
+            "inspect",
+            "--format",
+            "{{.CreatedAt}}",
+            container_name,
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .await
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let created_raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let created = parse_docker_inspect_timestamp(&created_raw)?;
+    let created_ms = created.timestamp_millis().max(0) as u64;
+    if created_ms == 0 {
+        return None;
+    }
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    Some(now_ms.saturating_sub(created_ms) / 1000)
+}
+
+fn is_pid_alive(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    std::path::Path::new(&format!("/proc/{pid}")).exists()
+}
+
+async fn prune_stale_active_registry() {
+    let Ok(entries) = std::fs::read_dir(ACTIVE_CONTAINER_DIR) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let Ok(file_name) = entry.file_name().into_string() else {
+            continue;
+        };
+        let pid = std::fs::read_to_string(entry.path())
+            .ok()
+            .and_then(|raw| raw.trim().parse::<u32>().ok())
+            .unwrap_or(0);
+        if is_pid_alive(pid) {
+            continue;
+        }
+        let container_exists = docker_container_exists(&file_name).await;
+        let should_remove = if !container_exists {
+            true
+        } else {
+            match docker_container_age_secs(&file_name).await {
+                Some(age_secs) => age_secs >= STALE_REGISTRY_AGE_SECS,
+                None => false,
+            }
+        };
+        if should_remove {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
+async fn is_safe_to_remove_orphan(container_name: &str) -> bool {
+    if is_active_test_container(container_name) {
+        return false;
+    }
+    match docker_container_age_secs(container_name).await {
+        Some(age_secs) => age_secs >= ORPHAN_MIN_AGE_SECS,
+        // Unknown age: keep the container rather than risk killing a parallel test.
+        None => false,
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Postgres
@@ -23,14 +167,14 @@ pub struct SharedPostgres {
     refs: AtomicUsize,
 }
 
-static SHARED_PG: OnceLock<Mutex<Option<Arc<SharedPostgres>>>> = OnceLock::new();
+static SHARED_PG: OnceLock<tokio::sync::Mutex<Option<Arc<SharedPostgres>>>> = OnceLock::new();
 
-fn shared_pg_slot() -> &'static Mutex<Option<Arc<SharedPostgres>>> {
-    SHARED_PG.get_or_init(|| Mutex::new(None))
+fn shared_pg_slot() -> &'static tokio::sync::Mutex<Option<Arc<SharedPostgres>>> {
+    SHARED_PG.get_or_init(|| tokio::sync::Mutex::new(None))
 }
 
 fn short_docker_id() -> String {
-    Uuid::new_v4().to_string()[..8].to_string()
+    Uuid::new_v4().to_string()
 }
 
 async fn postgres_is_ready(url: &str) -> bool {
@@ -42,18 +186,22 @@ async fn postgres_is_ready(url: &str) -> bool {
 
 /// Acquire a reference to the shared Postgres container, creating it on first use.
 pub async fn acquire_shared_postgres() -> anyhow::Result<(String, Arc<SharedPostgres>)> {
-    let mut slot = shared_pg_slot()
-        .lock()
-        .map_err(|_| anyhow::anyhow!("shared postgres lock poisoned"))?;
+    let existing = {
+        let slot = shared_pg_slot().lock().await;
+        slot.clone()
+    };
 
-    if let Some(pg) = slot.as_ref() {
+    if let Some(pg) = existing {
         if postgres_is_ready(&pg.url).await {
             pg.refs.fetch_add(1, Ordering::SeqCst);
-            return Ok((pg.url.clone(), pg.clone()));
+            return Ok((pg.url.clone(), pg));
         }
         let stale_name = pg.container_name.clone();
         let _ = stop_postgres(&stale_name).await;
-        *slot = None;
+        let mut slot = shared_pg_slot().lock().await;
+        if slot.as_ref().is_some_and(|shared| Arc::ptr_eq(shared, &pg)) {
+            *slot = None;
+        }
     }
 
     let (url, container_name) = start_postgres().await?;
@@ -62,6 +210,7 @@ pub async fn acquire_shared_postgres() -> anyhow::Result<(String, Arc<SharedPost
         container_name,
         refs: AtomicUsize::new(1),
     });
+    let mut slot = shared_pg_slot().lock().await;
     *slot = Some(pg.clone());
     Ok((url, pg))
 }
@@ -74,10 +223,9 @@ pub fn release_shared_postgres(pg: &Arc<SharedPostgres>) {
         block_on_with_timeout(async move {
             stop_postgres(&container_name).await;
         });
-        if let Ok(mut slot) = shared_pg_slot().lock() {
-            if slot.as_ref().is_some_and(|shared| Arc::ptr_eq(shared, pg)) {
-                *slot = None;
-            }
+        let mut slot = shared_pg_slot().blocking_lock();
+        if slot.as_ref().is_some_and(|shared| Arc::ptr_eq(shared, pg)) {
+            *slot = None;
         }
     }
 }
@@ -140,10 +288,12 @@ async fn start_postgres_once() -> anyhow::Result<(String, String)> {
             .await;
         anyhow::bail!("docker run postgres failed: {stderr}");
     }
+    register_active_test_container(&container_name);
 
     let port = match docker_mapped_port(&container_name, 5432).await {
         Ok(port) => port,
         Err(e) => {
+            unregister_active_test_container(&container_name);
             let _ = tokio::process::Command::new("docker")
                 .args(["rm", "-f", &container_name])
                 .stdout(Stdio::null())
@@ -154,7 +304,10 @@ async fn start_postgres_once() -> anyhow::Result<(String, String)> {
         }
     };
     let url = format!("postgres://test:test@127.0.0.1:{port}/test");
-    wait_for_postgres(&url, &container_name).await?;
+    if let Err(error) = wait_for_postgres(&url, &container_name).await {
+        unregister_active_test_container(&container_name);
+        return Err(error);
+    }
     Ok((url, container_name))
 }
 
@@ -193,6 +346,7 @@ pub fn sync_drop_milvus_collections(prefix: &str) {
 
 /// Stop a Postgres container by name.
 pub async fn stop_postgres(container_name: &str) {
+    unregister_active_test_container(container_name);
     let _ = tokio::process::Command::new("docker")
         .args(["stop", "-t", "3", container_name])
         .stdout(Stdio::null())
@@ -308,29 +462,33 @@ pub struct SharedMilvus {
     refs: AtomicUsize,
 }
 
-static SHARED_MILVUS: OnceLock<Mutex<Option<Arc<SharedMilvus>>>> = OnceLock::new();
+static SHARED_MILVUS: OnceLock<tokio::sync::Mutex<Option<Arc<SharedMilvus>>>> = OnceLock::new();
 
-fn shared_milvus_slot() -> &'static Mutex<Option<Arc<SharedMilvus>>> {
-    SHARED_MILVUS.get_or_init(|| Mutex::new(None))
+fn shared_milvus_slot() -> &'static tokio::sync::Mutex<Option<Arc<SharedMilvus>>> {
+    SHARED_MILVUS.get_or_init(|| tokio::sync::Mutex::new(None))
 }
 
 /// Acquire a shared Milvus instance, creating it on first use.
 pub async fn acquire_shared_milvus() -> anyhow::Result<(String, Arc<SharedMilvus>)> {
-    let mut slot = shared_milvus_slot()
-        .lock()
-        .map_err(|_| anyhow::anyhow!("shared milvus lock poisoned"))?;
+    let existing = {
+        let slot = shared_milvus_slot().lock().await;
+        slot.clone()
+    };
 
-    if let Some(milvus) = slot.as_ref() {
+    if let Some(milvus) = existing {
         if milvus_api_ready(&milvus.url).await {
             milvus.refs.fetch_add(1, Ordering::SeqCst);
-            return Ok((milvus.url.clone(), milvus.clone()));
+            return Ok((milvus.url.clone(), milvus));
         }
         if !milvus.is_external
             && let Some(ref stale_name) = milvus.container_name
         {
             let _ = stop_milvus(stale_name).await;
         }
-        *slot = None;
+        let mut slot = shared_milvus_slot().lock().await;
+        if slot.as_ref().is_some_and(|shared| Arc::ptr_eq(shared, &milvus)) {
+            *slot = None;
+        }
     }
 
     let inst = start_milvus().await?;
@@ -340,6 +498,7 @@ pub async fn acquire_shared_milvus() -> anyhow::Result<(String, Arc<SharedMilvus
         is_external: inst.is_external,
         refs: AtomicUsize::new(1),
     });
+    let mut slot = shared_milvus_slot().lock().await;
     *slot = Some(milvus.clone());
     Ok((inst.url, milvus))
 }
@@ -356,13 +515,9 @@ pub fn release_shared_milvus(milvus: &Arc<SharedMilvus>) {
                 stop_milvus(&container_name).await;
             });
         }
-        if let Ok(mut slot) = shared_milvus_slot().lock() {
-            if slot
-                .as_ref()
-                .is_some_and(|shared| Arc::ptr_eq(shared, milvus))
-            {
-                *slot = None;
-            }
+        let mut slot = shared_milvus_slot().blocking_lock();
+        if slot.as_ref().is_some_and(|shared| Arc::ptr_eq(shared, milvus)) {
+            *slot = None;
         }
     }
 }
@@ -377,8 +532,9 @@ const MILVUS_STANDALONE_CONTAINER: &str = "milvus-standalone";
 ///
 /// Prefers a healthy external instance on 19530 (fast, already warmed).
 /// Falls back to the project compose stack (etcd + minio + standalone) when
-/// 19530 is unreachable. Compose services are treated as external so teardown
-/// does not stop a developer's local stack.
+/// 19530 is unreachable. A pre-existing healthy instance on 19530 is treated as
+/// external (developer stack; no register/stop). A compose stack started by this
+/// test run is test-owned (`is_external: false`) and registered for orphan safety.
 /// Collection isolation relies on per-context `MILVUS_COLLECTION_PREFIX` +
 /// teardown drops, not on dedicated Milvus processes.
 pub async fn start_milvus() -> anyhow::Result<MilvusInstance> {
@@ -393,10 +549,11 @@ pub async fn start_milvus() -> anyhow::Result<MilvusInstance> {
 
     start_milvus_compose_stack().await?;
     wait_for_milvus(external_url, MILVUS_STANDALONE_CONTAINER).await?;
+    register_active_test_container(MILVUS_STANDALONE_CONTAINER);
     Ok(MilvusInstance {
         url: external_url.to_string(),
         container_name: Some(MILVUS_STANDALONE_CONTAINER.to_string()),
-        is_external: true,
+        is_external: false,
     })
 }
 
@@ -442,6 +599,9 @@ pub async fn stop_milvus(container_name: &str) {
         .stderr(Stdio::null())
         .status()
         .await;
+    if is_active_test_container(container_name) {
+        unregister_active_test_container(container_name);
+    }
 }
 
 /// Drop all collections belonging to a given prefix via the Milvus REST API.
@@ -593,10 +753,12 @@ pub async fn start_redis() -> anyhow::Result<(String, String)> {
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!("docker run redis failed: {stderr}");
     }
+    register_active_test_container(&container_name);
 
     let port = match docker_mapped_port(&container_name, 6379).await {
         Ok(port) => port,
         Err(e) => {
+            unregister_active_test_container(&container_name);
             let _ = tokio::process::Command::new("docker")
                 .args(["rm", "-f", &container_name])
                 .stdout(Stdio::null())
@@ -607,7 +769,10 @@ pub async fn start_redis() -> anyhow::Result<(String, String)> {
         }
     };
     let url = format!("redis://127.0.0.1:{port}");
-    wait_for_redis(&url, &container_name).await?;
+    if let Err(error) = wait_for_redis(&url, &container_name).await {
+        unregister_active_test_container(&container_name);
+        return Err(error);
+    }
     Ok((url, container_name))
 }
 
@@ -621,6 +786,7 @@ pub fn sync_stop_redis(container_name: &str) {
 
 /// Stop a Redis container by name.
 pub async fn stop_redis(container_name: &str) {
+    unregister_active_test_container(container_name);
     let _ = tokio::process::Command::new("docker")
         .args(["stop", "-t", "3", container_name])
         .stdout(Stdio::null())
@@ -700,13 +866,20 @@ pub async fn find_worker_binary() -> anyhow::Result<std::path::PathBuf> {
 // Orphan cleanup
 // ---------------------------------------------------------------------------
 
-/// Remove any leftover `avrag-test-pg-*` / `avrag-test-milvus-*` containers
-/// from previous test runs that did not clean up (CI flakes, SIGKILL, OOM).
+/// Remove stale `avrag-test-pg-*` / `avrag-test-redis-*` containers from crashed runs.
 ///
-/// Idempotent. Logs a single line per removed container.
+/// Milvus compose uses fixed names (`milvus-standalone`); those are external unless
+/// registered by a test that started compose via [`start_milvus`].
+///
+/// Skips containers that are:
+/// - registered in [`register_active_test_container`] (another parallel E2E process), or
+/// - younger than [`ORPHAN_MIN_AGE_SECS`] (race window while a test is bootstrapping).
 pub async fn cleanup_orphaned_test_containers() -> anyhow::Result<usize> {
+    let _ = ensure_active_container_dir();
+    prune_stale_active_registry().await;
+
     let mut removed = 0usize;
-    for prefix in ["avrag-test-pg-", "avrag-test-milvus-", "avrag-test-redis-"] {
+    for prefix in ["avrag-test-pg-", "avrag-test-redis-"] {
         let output = tokio::process::Command::new("docker")
             .args([
                 "ps",
@@ -725,14 +898,21 @@ pub async fn cleanup_orphaned_test_containers() -> anyhow::Result<usize> {
         }
         let names = String::from_utf8_lossy(&output.stdout);
         for name in names.lines().filter(|s| !s.trim().is_empty()) {
+            let name = name.trim();
+            if !is_safe_to_remove_orphan(name).await {
+                continue;
+            }
+            if is_active_test_container(name) {
+                continue;
+            }
             let status = tokio::process::Command::new("docker")
-                .args(["rm", "-f", name.trim()])
+                .args(["rm", "-f", name])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .status()
                 .await?;
             if status.success() {
-                eprintln!("[product_e2e] cleaned up orphan container: {name}");
+                eprintln!("[product_e2e] cleaned up stale orphan container: {name}");
                 removed += 1;
             }
         }
@@ -751,6 +931,35 @@ mod tests {
         let port = parse_docker_port_output(output).unwrap();
 
         assert_eq!(port, 32771);
+    }
+
+    #[test]
+    fn active_container_registry_marks_in_use_containers() {
+        let name = format!("avrag-test-pg-registry-{}", short_docker_id());
+        assert!(!is_active_test_container(&name));
+        assert!(register_active_test_container(&name));
+        assert!(is_active_test_container(&name));
+        unregister_active_test_container(&name);
+        assert!(!is_active_test_container(&name));
+    }
+
+    #[test]
+    fn parse_docker_inspect_timestamp_rejects_zero_dates() {
+        assert!(parse_docker_inspect_timestamp("").is_none());
+        assert!(parse_docker_inspect_timestamp("0001-01-01T00:00:00Z").is_none());
+    }
+
+    #[test]
+    fn short_docker_id_is_full_uuid() {
+        let id = short_docker_id();
+        assert_eq!(id.len(), 36);
+        assert!(Uuid::parse_str(&id).is_ok());
+    }
+
+    #[test]
+    fn is_pid_alive_detects_current_process() {
+        assert!(is_pid_alive(std::process::id()));
+        assert!(!is_pid_alive(0));
     }
 
     #[test]

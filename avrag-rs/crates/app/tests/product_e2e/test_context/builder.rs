@@ -1,8 +1,9 @@
 //! Shared smoke bootstrap (`build_smoke`) and orphan cleanup.
 
-use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::hash::{Hash, Hasher};
+use std::io::Write;
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 use tokio::io::AsyncBufReadExt;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
@@ -18,7 +19,112 @@ use super::super::{
 use super::config::E2eBootstrapConfig;
 use super::TestContext;
 
-static PG_MIGRATIONS_APPLIED: AtomicBool = AtomicBool::new(false);
+/// HTTP client timeout for mock RAG paths (ingestion + retrieval + synthesis).
+pub(crate) const HTTP_TIMEOUT_RAG_SECS: u64 = 120;
+/// HTTP client timeout when `use_real_llm` is enabled (nightly / llm_real).
+pub(crate) const HTTP_TIMEOUT_REAL_LLM_SECS: u64 = 180;
+/// HTTP client timeout for non-RAG smoke paths.
+pub(crate) const HTTP_TIMEOUT_DEFAULT_SECS: u64 = 60;
+
+fn http_client_timeout_secs(use_real_llm: bool, enable_rag: bool) -> u64 {
+    if use_real_llm {
+        HTTP_TIMEOUT_REAL_LLM_SECS
+    } else if enable_rag {
+        HTTP_TIMEOUT_RAG_SECS
+    } else {
+        HTTP_TIMEOUT_DEFAULT_SECS
+    }
+}
+
+/// Cross-process registry: one marker per migrated database URL (see setup.rs container registry).
+const PG_MIGRATED_DIR: &str = "/tmp/avrag-e2e-pg-migrated";
+
+fn pg_migrated_dir() -> std::path::PathBuf {
+    std::env::var("AVRAG_E2E_PG_MIGRATED_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from(PG_MIGRATED_DIR))
+}
+
+fn ensure_pg_migrated_dir() {
+    if let Err(error) = std::fs::create_dir_all(pg_migrated_dir()) {
+        eprintln!("[product_e2e] pg migrated dir failed: {error}");
+    }
+}
+
+fn pg_url_hash(database_url: &str) -> String {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    database_url.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
+fn pg_migration_marker_path(database_url: &str) -> std::path::PathBuf {
+    pg_migrated_dir().join(pg_url_hash(database_url))
+}
+
+fn pg_migration_lock_path(database_url: &str) -> std::path::PathBuf {
+    pg_migrated_dir().join(format!("{}.lock", pg_url_hash(database_url)))
+}
+
+fn pg_migration_wait_timeout() -> Duration {
+    std::env::var("AVRAG_E2E_PG_MIGRATION_WAIT_SECS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(Duration::from_secs)
+        .unwrap_or_else(|| Duration::from_secs(120))
+}
+
+fn pg_url_wait_for_migrated(database_url: &str, timeout: Duration) {
+    let marker = pg_migration_marker_path(database_url);
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if marker.is_file() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    eprintln!(
+        "[product_e2e] WARN: timed out waiting for pg migration marker for {}",
+        pg_url_hash(database_url)
+    );
+}
+
+/// Returns true when this caller should run bootstrap migrations for `database_url`.
+pub(crate) fn pg_url_needs_migration(database_url: &str) -> bool {
+    ensure_pg_migrated_dir();
+    if pg_migration_marker_path(database_url).is_file() {
+        return false;
+    }
+    let lock_path = pg_migration_lock_path(database_url);
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&lock_path)
+    {
+        Ok(mut file) => {
+            let _ = writeln!(file, "{}", std::process::id());
+            true
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            pg_url_wait_for_migrated(database_url, pg_migration_wait_timeout());
+            false
+        }
+        Err(error) => {
+            eprintln!("[product_e2e] pg migration lock claim failed: {error}");
+            false
+        }
+    }
+}
+
+pub(crate) fn pg_url_mark_migrated(database_url: &str) {
+    ensure_pg_migrated_dir();
+    let marker = pg_migration_marker_path(database_url);
+    let _ = std::fs::write(&marker, std::process::id().to_string());
+    let _ = std::fs::remove_file(pg_migration_lock_path(database_url));
+}
+
+pub(crate) fn pg_url_release_migration_claim(database_url: &str) {
+    let _ = std::fs::remove_file(pg_migration_lock_path(database_url));
+}
 
 async fn wait_for_worker_health_port_file(
     port_file: &std::path::Path,
@@ -206,7 +312,10 @@ impl TestContext {
         let (mock_search_url, mock_search_abort, search_should_429) =
             start_mock_search_server().await;
 
-        let has_real_search = Self::resolve_use_real_search(use_real_llm).await;
+        let mut has_real_search = Self::resolve_use_real_search(use_real_llm).await;
+        if !use_real_llm {
+            has_real_search = false;
+        }
 
         let (mock_embedding_url, mock_embedding_abort, embedding_should_503, embedding_call_count) =
             if enable_rag && !use_real_llm {
@@ -221,7 +330,7 @@ impl TestContext {
             std::env::set_var("E2E_ENABLED", "true");
         }
 
-        let run_migrations = !PG_MIGRATIONS_APPLIED.swap(true, Ordering::SeqCst);
+        let run_migrations = pg_url_needs_migration(&pg_url);
         let redis = redis_url
             .clone()
             .unwrap_or_else(|| "redis://127.0.0.1:1".to_string());
@@ -263,11 +372,21 @@ impl TestContext {
         let base_url = format!("http://{}", listener.local_addr().unwrap());
 
         let config = bootstrap.build_app_config(&base_url);
-        let state = app::AppState::bootstrap(config.clone())
-            .await
-            .expect("bootstrap AppState");
+        let state = match app::AppState::bootstrap(config.clone()).await {
+            Ok(state) => state,
+            Err(error) => {
+                if run_migrations {
+                    pg_url_release_migration_claim(&pg_url);
+                }
+                panic!("bootstrap AppState: {error}");
+            }
+        };
+        if run_migrations {
+            pg_url_mark_migrated(&pg_url);
+        }
+        let app_state = Arc::new(state.clone());
 
-        let router = transport_http::build_router(state);
+        let router = app::product_e2e_http::build_router(state);
 
         let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
         tokio::spawn(async move {
@@ -336,15 +455,11 @@ impl TestContext {
             .await
             .expect("worker health ready");
 
-        let http_timeout_secs = if use_real_llm {
-            180
-        } else if enable_rag {
-            120
-        } else {
-            60
-        };
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(http_timeout_secs))
+            .timeout(Duration::from_secs(http_client_timeout_secs(
+                use_real_llm,
+                enable_rag,
+            )))
             .default_headers(match &identity {
                 Some((org, user)) => test_auth_headers_for(org, user),
                 None => unreachable!("identity is always Some after .or_else above"),
@@ -361,8 +476,13 @@ impl TestContext {
         Self {
             http_client: client,
             base_url,
+            org_id: org_id.clone(),
+            user_id: user_id.clone(),
+            app_state: Some(app_state),
+            bootstrap: Some(bootstrap),
             shared_pg: Some(shared_pg),
             shared_milvus,
+            milvus_url,
             milvus_collection_prefix,
             worker: Some(worker),
             server_abort: Some(abort_tx),
@@ -375,6 +495,137 @@ impl TestContext {
             embedding_should_503,
             embedding_call_count,
             redis_container_name,
+            worker_log_path: Some(worker_log_path),
+            artifact_run_id,
+        }
+    }
+
+    /// Respawn API + worker on the current tokio runtime, reusing shared RAG infra.
+    pub(crate) async fn spawn_from_rag_fixture(
+        fixture: &super::super::fixtures::RagSharedFixture,
+    ) -> Self {
+        reset_mock_rag_state();
+
+        let placeholder_dir = tempfile::tempdir().expect("placeholder object store");
+        let worker_health_port_file = placeholder_dir
+            .path()
+            .join(format!("worker-health-{}.port", Uuid::new_v4().simple()))
+            .to_string_lossy()
+            .into_owned();
+
+        let mut bootstrap = fixture.worker_bootstrap.clone();
+        bootstrap.auto_migrate = false;
+        bootstrap.worker_health_port_file = worker_health_port_file;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+
+        let router = app::product_e2e_http::build_router(fixture.app_state.as_ref().clone());
+
+        let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
+        tokio::spawn(async move {
+            let server = axum::serve(listener, router);
+            tokio::select! {
+                _ = server => {},
+                _ = abort_rx => {},
+            }
+        });
+
+        let worker_binary = setup::find_worker_binary()
+            .await
+            .expect("find worker binary");
+        let worker_log_path = placeholder_dir.path().join("worker.log");
+        let mut cmd = tokio::process::Command::new(&worker_binary);
+        let mut worker_bootstrap = bootstrap.clone();
+        worker_bootstrap.auto_migrate = false;
+        worker_bootstrap.apply_worker_env(&mut cmd, &base_url);
+        cmd.stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true);
+
+        let mut worker = cmd.spawn().expect("spawn worker");
+
+        let log_path = worker_log_path.clone();
+        if let Some(stdout) = worker.stdout.take() {
+            let mut reader = tokio::io::BufReader::new(stdout).lines();
+            tokio::spawn(async move {
+                let mut file = match tokio::fs::File::create(&log_path).await {
+                    Ok(f) => f,
+                    Err(_) => return,
+                };
+                while let Ok(Some(line)) = reader.next_line().await {
+                    let _ = file.write_all(line.as_bytes()).await;
+                    let _ = file.write_all(b"\n").await;
+                }
+            });
+        }
+        if let Some(stderr) = worker.stderr.take() {
+            let log_path = worker_log_path.clone();
+            let mut reader = tokio::io::BufReader::new(stderr).lines();
+            tokio::spawn(async move {
+                let mut file = match tokio::fs::OpenOptions::new()
+                    .append(true)
+                    .create(true)
+                    .open(&log_path)
+                    .await
+                {
+                    Ok(f) => f,
+                    Err(_) => return,
+                };
+                while let Ok(Some(line)) = reader.next_line().await {
+                    let _ = file.write_all(line.as_bytes()).await;
+                    let _ = file.write_all(b"\n").await;
+                }
+            });
+        }
+
+        let worker_health_port = wait_for_worker_health_port_file(
+            std::path::Path::new(&worker_bootstrap.worker_health_port_file),
+            Duration::from_secs(10),
+        )
+        .await
+        .expect("worker health port file ready");
+        wait_for_worker_health(worker_health_port, Duration::from_secs(10))
+            .await
+            .expect("worker health ready");
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(HTTP_TIMEOUT_RAG_SECS))
+            .default_headers(test_auth_headers_for(&fixture.org_id, &fixture.user_id))
+            .build()
+            .expect("reqwest client build");
+
+        let now = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+        let short_commit = option_env!("GITHUB_SHA")
+            .map(|s| &s[..s.len().min(8)])
+            .unwrap_or("local");
+        let artifact_run_id = format!("e2e_{now}_{short_commit}_{}", Uuid::new_v4().simple());
+
+        Self {
+            http_client: client,
+            base_url,
+            org_id: fixture.org_id.clone(),
+            user_id: fixture.user_id.clone(),
+            app_state: Some(fixture.app_state.clone()),
+            bootstrap: Some(bootstrap),
+            shared_pg: Some(fixture.shared_pg.clone()),
+            shared_milvus: Some(fixture.shared_milvus.clone()),
+            milvus_url: Some(fixture.milvus_url.clone()),
+            // Collection cleanup is owned by the module-scoped [`RagSharedFixture`].
+            milvus_collection_prefix: None,
+            worker: Some(worker),
+            server_abort: Some(abort_tx),
+            object_store_dir: placeholder_dir,
+            pg_url: fixture.pg_url.clone(),
+            mock_llm_abort: None,
+            mock_embedding_abort: None,
+            mock_search_abort: None,
+            search_should_429: fixture.search_should_429.clone(),
+            embedding_should_503: fixture.embedding_should_503.clone(),
+            embedding_call_count: fixture.embedding_call_count.clone(),
+            redis_container_name: None,
             worker_log_path: Some(worker_log_path),
             artifact_run_id,
         }
