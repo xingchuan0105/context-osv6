@@ -55,6 +55,8 @@ pub(crate) async fn build_worker_object_store(config: &AppConfig) -> Result<Obje
 }
 
 pub(crate) async fn fetch_url_content(url: &str) -> Result<Vec<u8>> {
+    common::validate_http_url_with_dns(url, true)
+        .map_err(|error| anyhow::anyhow!("url fetch blocked: {error}"))?;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()?;
@@ -141,16 +143,35 @@ pub(crate) fn worker_health_port() -> u16 {
         .unwrap_or(8081)
 }
 
+fn publish_worker_health_port(port: u16) {
+    let Ok(path) = std::env::var("AVRAG_WORKER_HEALTH_PORT_FILE") else {
+        return;
+    };
+    if let Err(error) = std::fs::write(&path, port.to_string()) {
+        warn!(%error, %path, "failed to publish worker health port");
+    }
+}
+
 pub(crate) fn spawn_health_listener(port: u16) {
     tokio::spawn(async move {
-        let addr = format!("127.0.0.1:{port}");
-        let listener = match tokio::net::TcpListener::bind(&addr).await {
+        let bind_addr = if port == 0 {
+            "127.0.0.1:0".to_string()
+        } else {
+            format!("127.0.0.1:{port}")
+        };
+        let listener = match tokio::net::TcpListener::bind(&bind_addr).await {
             Ok(listener) => listener,
             Err(error) => {
-                warn!(%error, %addr, "worker health listener failed to bind");
+                warn!(%error, %bind_addr, "worker health listener failed to bind");
                 return;
             }
         };
+        let bound_port = listener
+            .local_addr()
+            .map(|addr| addr.port())
+            .unwrap_or(port);
+        publish_worker_health_port(bound_port);
+        let addr = format!("127.0.0.1:{bound_port}");
         info!(%addr, "worker health listener started");
         loop {
             let Ok((mut stream, _)) = listener.accept().await else {

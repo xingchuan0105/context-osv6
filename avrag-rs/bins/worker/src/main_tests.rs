@@ -11,9 +11,9 @@ use uuid::Uuid;
 use crate::pipeline::helpers::{
     build_document_index_batch, build_parse_backend_summary, embed_text_vectors_with_client,
     enrich_multimodal_source_locator, parse_triplet_response, record_graph_degrade,
-    ExtractedTriplet, GraphIndexRecords,
+    validate_mirror_source_path, ExtractedTriplet, GraphIndexRecords,
 };
-use crate::runtime_support::{safe_relative_object_key, url_to_filename};
+use crate::runtime_support::{fetch_url_content, safe_relative_object_key, url_to_filename};
 use crate::ParseRunOutputs;
 
 #[test]
@@ -346,4 +346,26 @@ fn url_to_filename_extracts_last_path_segment_with_extension() {
 fn url_to_filename_falls_back_to_page_html() {
     assert_eq!(url_to_filename("https://example.com/article"), "page.html");
     assert_eq!(url_to_filename("https://example.com/"), "page.html");
+}
+
+#[test]
+fn mirror_source_path_rejects_absolute_local_paths() {
+    let error = validate_mirror_source_path("/etc/passwd")
+        .expect_err("absolute local mirror paths must be rejected");
+    assert!(error.to_string().contains("rejected"));
+}
+
+#[test]
+fn mirror_source_path_rejects_temporary_paths_outside_worker_temp_dir() {
+    let error = validate_mirror_source_path("temporary:///etc/passwd")
+        .expect_err("temporary mirror paths outside temp dir must be rejected");
+    assert!(error.to_string().contains("temp dir"));
+}
+
+#[tokio::test]
+async fn fetch_url_content_blocks_metadata_ip_before_request() {
+    let error = fetch_url_content("http://169.254.169.254/latest/meta-data/")
+        .await
+        .expect_err("metadata ip must be blocked before http request");
+    assert!(error.to_string().contains("blocked"));
 }
