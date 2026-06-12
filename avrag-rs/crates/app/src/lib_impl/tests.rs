@@ -673,42 +673,51 @@ mod tests {
         config.object_root = object_root.to_string_lossy().to_string();
 
         let mut state = AppState::new(config);
-        let old = &state.storage;
+        let old = state.test_storage().clone();
         let pg = Arc::new(repo);
         let document_store = Some(
-            Arc::new(app_bootstrap::adapters::PgDocumentStoreAdapter::new(pg.clone()))
+            Arc::new(app_bootstrap::test_support::PgDocumentStoreAdapter::new(pg.clone()))
                 as Arc<dyn app_core::DocumentStorePort>,
         );
         let admin_store = Some(
-            Arc::new(app_bootstrap::adapters::PgAdminStoreAdapter::new(pg.clone()))
+            Arc::new(app_bootstrap::test_support::PgAdminStoreAdapter::new(pg.clone()))
                 as Arc<dyn app_core::AdminStorePort>,
         );
         let chat_persistence = Some(
-            Arc::new(app_bootstrap::adapters::PgChatPersistenceAdapter::new(pg.clone()))
+            Arc::new(app_bootstrap::test_support::PgChatPersistenceAdapter::new(pg.clone()))
                 as Arc<dyn app_core::ChatPersistencePort>,
         );
         let postgres_health = Some(
-            Arc::new(app_bootstrap::adapters::PgHealthAdapter::new(pg.clone()))
+            Arc::new(app_bootstrap::test_support::PgHealthAdapter::new(pg.clone()))
                 as Arc<dyn app_core::PostgresHealthPort>,
         );
-        state.postgres = Some(pg.clone());
-        state.storage = crate::storage_context::StorageContext::new(
+        let inner = old.inner().clone();
+        let api_keys = old.api_keys().clone();
+        let max_upload = old.max_upload_file_size_bytes();
+        let object_store = old.object_store().clone();
+        let public_base_url = old.public_base_url().to_string();
+        let object_root_path = old.object_root_path().to_string_lossy().to_string();
+        let upload_expire = old.upload_expire_sec();
+        let download_expire = old.download_expire_sec();
+        state.test_set_postgres(pg.clone());
+        state.test_replace_storage(crate::storage_context::StorageContext::new(
             postgres_health,
             true,
             document_store,
+            None,
             admin_store,
             None,
             chat_persistence,
-            old.inner().clone(),
-            old.api_keys().clone(),
-            old.max_upload_file_size_bytes(),
+            inner,
+            api_keys,
+            max_upload,
             false,
-            old.object_store().clone(),
-            old.public_base_url().to_string(),
-            old.object_root_path().to_string_lossy().to_string(),
-            old.upload_expire_sec(),
-            old.download_expire_sec(),
-        );
+            object_store,
+            public_base_url,
+            object_root_path,
+            upload_expire,
+            download_expire,
+        ));
         Some((state, object_root))
     }
 
@@ -758,7 +767,7 @@ mod tests {
             .postgres_repo()
             .as_ref()
             .unwrap()
-            .count_ingestion_tasks_for_document(&state.auth, document_uuid)
+            .count_ingestion_tasks_for_document(state.auth(), document_uuid)
             .await
             .unwrap()
     }
@@ -839,7 +848,7 @@ mod tests {
             .as_ref()
             .unwrap()
             .get_document_upload_validation(
-                &state.auth,
+                state.auth(),
                 Uuid::parse_str(&upload.document_id).unwrap(),
             )
             .await

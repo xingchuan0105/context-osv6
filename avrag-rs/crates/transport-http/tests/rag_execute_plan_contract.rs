@@ -1,4 +1,4 @@
-use app::{AppState};
+use app_bootstrap::AppState;
 use app_core::AppConfig;
 use avrag_auth::{AuthContext, OrgId, SubjectKind};
 use axum::{

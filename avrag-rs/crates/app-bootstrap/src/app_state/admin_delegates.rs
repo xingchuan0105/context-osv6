@@ -3,7 +3,7 @@ use common::{
     ShareTokenResponse, StatusOnlyResponse, new_id,
 };
 
-use crate::lib_impl::AppState;
+use super::AppState;
 
 impl AppState {
     pub async fn list_api_keys(&self, notebook_id: &str) -> Result<Vec<ApiKeyRow>, AppError> {

@@ -5,7 +5,7 @@ use avrag_share::{
 use common::{AppError, ShareTokenResponse};
 use uuid::Uuid;
 
-use crate::lib_impl::AppState;
+use super::AppState;
 
 impl AppState {
     pub async fn create_share_link(

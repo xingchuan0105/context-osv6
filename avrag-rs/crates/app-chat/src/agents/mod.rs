@@ -22,7 +22,7 @@ impl AgentKind {
     /// Parse agent type string into canonical AgentKind.
     pub fn parse(agent_type: &str) -> Option<Self> {
         match agent_type.to_ascii_lowercase().as_str() {
-            "chat" => Some(AgentKind::Chat),
+            "chat" | "general" => Some(AgentKind::Chat),
             "rag" => Some(AgentKind::Rag),
             "search" => Some(AgentKind::Search),
             _ => None,
@@ -71,9 +71,9 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_kind_parse_general_alias_removed() {
-        assert_eq!(AgentKind::parse("general"), None);
-        assert_eq!(AgentKind::parse("GENERAL"), None);
+    fn test_agent_kind_parse_general_alias() {
+        assert_eq!(AgentKind::parse("general"), Some(AgentKind::Chat));
+        assert_eq!(AgentKind::parse("GENERAL"), Some(AgentKind::Chat));
     }
 
     #[test]

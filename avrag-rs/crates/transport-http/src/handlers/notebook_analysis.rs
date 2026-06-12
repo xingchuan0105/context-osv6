@@ -1,4 +1,4 @@
-use app::AppState;
+use app_bootstrap::AppState;
 
 fn pinned_source_count(preferences: &common::UserPreferences, notebook_id: &str) -> i64 {
     preferences

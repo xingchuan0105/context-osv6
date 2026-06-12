@@ -1,4 +1,4 @@
-use app::AppState;
+use app_bootstrap::AppState;
 use axum::{Extension, Json, Router, extract::Query, routing::get};
 use common::{ApiResponse, UserId};
 use serde::Deserialize;

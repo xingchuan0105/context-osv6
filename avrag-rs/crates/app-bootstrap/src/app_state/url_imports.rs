@@ -1,6 +1,6 @@
 use common::{AddUrlSourceRequest, AppError, CreateDocumentUploadResponse, SourceRow};
 
-use crate::lib_impl::AppState;
+use super::AppState;
 
 impl AppState {
     pub async fn add_url_source(

@@ -1,4 +1,4 @@
-use app::AppState;
+use app_bootstrap::AppState;
 use app_core::adapters::redis_rate_limiter::RedisFixedWindowRateLimiter;
 use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
 use axum::{

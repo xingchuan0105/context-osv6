@@ -1,27 +1,35 @@
 mod adapters;
+mod app_state;
 mod config_helpers;
 mod domain_row_convert;
 mod pg_error;
 
+pub use app_state::{
+    agent_icon, agent_name, build_answer, build_citations, build_degrade_trace, build_docscope_metadata,
+    build_mode_debug, build_parsed_preview, build_planner_output, build_redis_url,
+    build_sources, build_summary, derive_profile_domains, derive_profile_topics,
+    detect_preferred_style, document_is_deleting_or_deleted, estimate_token_count,
+    infer_mime_type_from_path, is_remote_asset_reference, merge_general_profile_custom_preferences,
+    next_message_id, status_label, AppState, CostEventRecord, MemoryState, RetrievedContext,
+    StoredDocument,
+};
+
 use adapters::{
-    ObjectStorePortAdapter, PgAdminStoreAdapter, PgBillingQuotaAdapter, PgChatPersistenceAdapter,
-    PgDocumentStoreAdapter, PgHealthAdapter,
+    ObjectStorePortAdapter, PgAdminStoreAdapter, PgAuthStoreAdapter, PgBillingQuotaAdapter,
+    PgChatPersistenceAdapter, PgContentStore, PgDocumentStoreAdapter, PgHealthAdapter,
 };
 use app_admin::AdminContext;
 use app_billing::BillingContext;
 use app_chat::{ChatContext, LlmContext, OrchestratorContext};
 use app_core::{
-    AdminStorePort, AnalyticsServiceCtx, AppConfig, BillingQuotaPort, ChatPersistencePort,
-    DocumentStorePort, MemoryState, StorageContext,
+    AdminStorePort, AnalyticsServiceCtx, AppConfig, AuthStorePort, BillingQuotaPort,
+    ChatPersistencePort, DocumentStorePort, StorageContext,
 };
 use app_documents::DocumentContext;
 use avrag_auth::AuthContext;
 use avrag_chatmemory::ChatMemory;
 use avrag_guardrails::GuardPipeline;
-use avrag_llm::EmbeddingClient;
-use avrag_rag_core::{
-    RagConfig, RagRuntime, RetrievalDataPlane,
-};
+use avrag_rag_core::{RagConfig, RagRuntime, RetrievalDataPlane};
 use avrag_search::SearchExecutor;
 use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
 use avrag_storage_pg::{ObjectStoreHandle, PgAppRepository};
@@ -32,6 +40,14 @@ pub use config_helpers::{
     auth_context_from_config, build_object_store, build_unified_agent_service,
     make_embedding_client, make_llm_client, make_planner, make_reranker,
 };
+
+#[cfg(any(test, feature = "test-support"))]
+#[doc(hidden)]
+pub mod test_support {
+    pub use crate::adapters::{
+        PgAdminStoreAdapter, PgChatPersistenceAdapter, PgDocumentStoreAdapter, PgHealthAdapter,
+    };
+}
 
 #[derive(Clone)]
 pub struct AppBootstrapResult {
@@ -101,6 +117,7 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
     let storage = StorageContext::new(
         None,
         false,
+        None,
         None,
         None,
         None,
@@ -191,28 +208,20 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
             .map(Arc::new)
     };
 
+    let chat_persistence: Option<Arc<dyn ChatPersistencePort>> = pg.as_ref().map(|repository| {
+        Arc::new(PgChatPersistenceAdapter::new(repository.clone())) as Arc<dyn ChatPersistencePort>
+    });
+
     let rag_runtime = if config.enable_rag && pg.is_some() {
         let pg_repo = pg.as_ref().unwrap();
-        let embedding = make_embedding_client(&config.embedding, cache_store.clone());
+        let embedding = make_embedding_client(&config.embedding, cache_store.clone()).ok_or_else(
+            || anyhow::anyhow!("embedding client is required when enable_rag=true"),
+        )?;
         let mm_embedding = make_embedding_client(&config.mm_embedding, cache_store.clone());
         let planner = make_planner(&config.agent_llm, cache_store.clone());
         let reranker = make_reranker(&config.rerank);
         let mm_reranker = make_reranker(&config.mm_rerank);
 
-        let fallback_embedding =
-            Arc::new(EmbeddingClient::new(avrag_llm::ModelProviderConfig {
-                base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1".to_string(),
-                api_key: String::new(),
-                model: "text-embedding-v4".to_string(),
-                timeout_ms: 15000,
-                api_style: None,
-                dimensions: Some(1024),
-                enable_thinking: None,
-                enable_cache: None,
-                rpm_limit: None,
-                tpm_limit: None,
-            }));
-        let embedding_for_config = embedding.unwrap_or(fallback_embedding);
         let attach_rag_components = |mut rag_config: RagConfig| {
             if let Some(p) = planner.clone() {
                 rag_config = rag_config.with_planner(p);
@@ -229,14 +238,12 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
             if let Some(cache) = cache_store.clone() {
                 rag_config = rag_config.with_cache(cache);
             }
-            rag_config
+            rag_config.with_chat_persistence(chat_persistence.clone())
         };
 
         let rag_config = attach_rag_components(RagConfig::new_for_data_plane(
-            embedding_for_config,
-            Some(Arc::new(app_documents::PgContentStore::new(
-                pg_repo.clone(),
-            )) as Arc<dyn common::ContentStore>),
+            embedding,
+            Some(Arc::new(PgContentStore::new(pg_repo.clone())) as Arc<dyn common::ContentStore>),
         ));
         let milvus_config = StorageMilvusConfig {
             url: config.milvus.url.clone(),
@@ -281,16 +288,13 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     let admin_store: Option<Arc<dyn AdminStorePort>> = pg.as_ref().map(|repository| {
         Arc::new(PgAdminStoreAdapter::new(repository.clone())) as Arc<dyn AdminStorePort>
     });
+    let auth_store: Option<Arc<dyn AuthStorePort>> = pg.as_ref().map(|repository| {
+        Arc::new(PgAuthStoreAdapter::new(repository.clone())) as Arc<dyn AuthStorePort>
+    });
     let billing_quota: Option<Arc<dyn BillingQuotaPort>> =
         document_store.as_ref().map(|store| {
             Arc::new(PgBillingQuotaAdapter::new(billing.clone(), store.clone()))
                 as Arc<dyn BillingQuotaPort>
-        });
-    let chat_persistence: Option<Arc<dyn ChatPersistencePort>> = pg
-        .as_ref()
-        .map(|repository| {
-            Arc::new(PgChatPersistenceAdapter::new(repository.clone()))
-                as Arc<dyn ChatPersistencePort>
         });
     let agent_service = Some(build_unified_agent_service(
         llm_ctx.agent_client().cloned(),
@@ -303,6 +307,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         postgres_health,
         pg.is_some(),
         document_store,
+        auth_store,
         admin_store,
         billing_quota,
         chat_persistence,
@@ -349,4 +354,27 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         postgres: pg,
         redis_url: config.redis.url.clone(),
     })
+}
+
+#[cfg(feature = "test-support")]
+mod app_state_test_support {
+    use super::AppState;
+    use app_core::StorageContext;
+    use avrag_storage_pg::PgAppRepository;
+    use std::sync::Arc;
+
+    impl AppState {
+        pub fn test_storage(&self) -> &StorageContext {
+            &self.storage
+        }
+
+        pub fn test_set_postgres(&mut self, postgres: Arc<PgAppRepository>) {
+            self.postgres = Some(postgres);
+        }
+
+        pub fn test_replace_storage(&mut self, storage: StorageContext) {
+            self.storage = storage.clone();
+            self.chat.storage = storage;
+        }
+    }
 }

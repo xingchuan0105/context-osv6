@@ -2,7 +2,7 @@ use common::{AgentPreferenceMemory, AppError};
 use contracts::UserPreferences;
 use uuid::Uuid;
 
-use crate::lib_impl::*;
+use super::AppState;
 
 impl AppState {
     pub async fn load_user_preferences(&self, user_id: Uuid) -> Result<UserPreferences, AppError> {
@@ -45,7 +45,7 @@ impl AppState {
             .await
     }
 
-    pub(crate) async fn remember_explicit_agent_preference(
+    pub async fn remember_explicit_agent_preference(
         &self,
         query: &str,
     ) -> Result<(), AppError> {

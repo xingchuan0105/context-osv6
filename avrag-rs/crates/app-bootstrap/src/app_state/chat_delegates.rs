@@ -105,7 +105,7 @@ impl AppState {
         self.chat_ctx().memory_session_visible(state, session)
     }
 
-    pub(crate) async fn execute_chat_pipeline(
+    pub async fn execute_chat_pipeline(
         &self,
         req: common::ChatRequest,
     ) -> Result<common::ChatResponse, common::AppError> {
@@ -151,7 +151,7 @@ impl AppState {
         self.chat_ctx().build_general_agent_debug(agent_request)
     }
 
-    pub(crate) fn build_rag_session_context(
+    pub fn build_rag_session_context(
         messages: Vec<common::ChatMessage>,
         summary: Option<String>,
     ) -> Option<avrag_rag_core::context::SessionContext> {

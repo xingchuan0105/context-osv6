@@ -101,8 +101,9 @@ impl ReActLoop {
 
     fn effective_chat_persistence(&self) -> Option<Arc<dyn ChatPersistencePort>> {
         self.chat_persistence.clone().or_else(|| {
-            tracing::debug!("chat_persistence is None and RagRuntime has no fallback; returning None");
-            None
+            self.rag_runtime
+                .as_ref()
+                .and_then(|runtime| runtime.chat_persistence())
         })
     }
 

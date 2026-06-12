@@ -1,4 +1,4 @@
-use app::AppState;
+use app_bootstrap::AppState;
 use axum::{
     Json,
     extract::{Extension, Path, Query},

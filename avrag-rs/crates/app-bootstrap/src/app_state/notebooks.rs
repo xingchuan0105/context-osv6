@@ -1,6 +1,6 @@
 use common::{AppError, CreateNotebookRequest, Notebook, StatusOnlyResponse, UpdateNotebookRequest};
 
-use crate::lib_impl::AppState;
+use super::AppState;
 
 impl AppState {
     pub async fn list_notebooks(&self) -> Vec<Notebook> {

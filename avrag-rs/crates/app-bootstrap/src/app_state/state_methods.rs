@@ -1,8 +1,8 @@
-use app_bootstrap::AppBootstrapResult;
+use app_core::{AdminStorePort, AppConfig};
 use common::AppError;
 use app_chat::agents::service::UnifiedAgentService;
-use crate::lib_impl::*;
-use crate::AppConfig;
+use super::AppState;
+use crate::AppBootstrapResult;
 use anyhow::Result as AnyResult;
 use avrag_auth::AuthContext;
 use avrag_storage_pg::PgAppRepository;
@@ -29,11 +29,11 @@ impl From<AppBootstrapResult> for AppState {
 
 impl AppState {
     pub fn new(config: AppConfig) -> Self {
-        app_bootstrap::new_memory(config).into()
+        crate::new_memory(config).into()
     }
 
     pub async fn bootstrap(config: AppConfig) -> AnyResult<Self> {
-        Ok(app_bootstrap::bootstrap(config).await?.into())
+        Ok(crate::bootstrap(config).await?.into())
     }
 
     /// Returns the runtime mode identifier ("postgres" or "memory").
@@ -68,8 +68,16 @@ impl AppState {
         self.postgres.as_ref().map(|repo| repo.raw())
     }
 
+    pub fn auth_store(&self) -> Option<std::sync::Arc<dyn app_core::AuthStorePort>> {
+        self.storage.auth_store()
+    }
+
     pub fn postgres_repo(&self) -> Option<Arc<PgAppRepository>> {
         self.postgres.clone()
+    }
+
+    pub fn admin_store(&self) -> Option<Arc<dyn AdminStorePort>> {
+        self.storage.admin_store()
     }
 
     #[deprecated(note = "Use postgres_repo/postgres_pool or typed port delegates instead")]

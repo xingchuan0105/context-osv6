@@ -1,8 +1,5 @@
 use avrag_storage_pg::PgStorageError;
 use common::AppError;
-use hmac::{Hmac, Mac};
-
-type HmacSha256 = Hmac<sha2::Sha256>;
 use uuid::Uuid;
 
 use app_core::ModelProviderConfig;
@@ -12,22 +9,6 @@ pub(crate) fn default_object_root() -> String {
         "{}/.local/share/avrag-dev/objects",
         std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string())
     )
-}
-
-pub(crate) fn sign_upload_payload(
-    secret: &str,
-    document_id: &str,
-    object_path: &str,
-    expires: u64,
-) -> Result<String, AppError> {
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .map_err(|error| AppError::internal(format!("upload signer init failed: {error}")))?;
-    mac.update(document_id.as_bytes());
-    mac.update(b":");
-    mac.update(object_path.as_bytes());
-    mac.update(b":");
-    mac.update(expires.to_string().as_bytes());
-    Ok(hex::encode(mac.finalize().into_bytes()))
 }
 
 pub(crate) fn parse_uuid_or_app_error(

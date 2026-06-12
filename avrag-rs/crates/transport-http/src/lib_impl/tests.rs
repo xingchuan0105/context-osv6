@@ -448,6 +448,11 @@ mod tests {
 
     #[tokio::test]
     async fn dev_upload_handler_completes_upload_flow() {
+        let previous = env::var("E2E_ENABLED").ok();
+        unsafe {
+            env::set_var("E2E_ENABLED", "true");
+        }
+
         let state = test_app_state();
         let notebook = state
             .create_notebook(CreateNotebookRequest {
@@ -472,6 +477,8 @@ mod tests {
         let req = Request::builder()
             .uri(format!("/dev-upload/{}", created.document_id))
             .method("PUT")
+            .header("x-org-id", "00000000-0000-0000-0000-000000000001")
+            .header("x-user-id", "00000000-0000-0000-0000-000000000002")
             .body(Body::from("hello dev upload"))
             .unwrap();
         let response = app.oneshot(req).await.unwrap();
@@ -483,6 +490,16 @@ mod tests {
             payload.get("status").and_then(|v| v.as_str()),
             Some("queued")
         );
+
+        if let Some(value) = previous {
+            unsafe {
+                env::set_var("E2E_ENABLED", value);
+            }
+        } else {
+            unsafe {
+                env::remove_var("E2E_ENABLED");
+            }
+        }
     }
 
     #[tokio::test]

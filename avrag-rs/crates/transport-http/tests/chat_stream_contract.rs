@@ -3,7 +3,7 @@ use app_chat::agents::{
     runtime::{Agent, AgentRequest, AgentRunResult, AgentRunUsage},
     service::UnifiedAgentService,
 };
-use app::{AppState};
+use app_bootstrap::AppState;
 use app_core::AppConfig;
 use avrag_auth::{AuthContext, OrgId, SubjectKind};
 use axum::{

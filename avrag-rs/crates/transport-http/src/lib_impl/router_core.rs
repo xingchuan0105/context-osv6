@@ -1,6 +1,7 @@
 
 
-use app::AppState;
+use app_bootstrap::AppState;
+use app_core::{AuthStorePort, CreatePasswordResetTicketInput, RegisterUserInput};
 use bcrypt::{DEFAULT_COST, hash, verify};
 use axum::{
     Json, Router,
@@ -8,6 +9,7 @@ use axum::{
     extract::{Extension, Path, Query, State},
     http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
+    routing::put,
 };
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use sqlx::Row;
@@ -214,9 +216,17 @@ pub fn build_router(state: AppState) -> Router {
         axum::middleware::from_fn_with_state(state.clone(), middleware::request_context_middleware),
     );
 
+    let protected_dev_upload = Router::new()
+        .route("/dev-upload/{document_id}", put(crate::dev_upload_handler))
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            middleware::request_context_middleware,
+        ));
+
     Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .merge(routes::infra::router())
+        .merge(protected_dev_upload)
         .nest("/api/auth", routes::auth::public_router().merge(protected_auth))
         .nest("/api/v1", protected_api_v1)
         .nest("/api/e2e", routes::e2e::router())

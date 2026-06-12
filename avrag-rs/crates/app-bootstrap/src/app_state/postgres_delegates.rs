@@ -2,7 +2,7 @@ use common::{ApiResponse, UserId};
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::lib_impl::AppState;
+use super::AppState;
 
 impl AppState {
     pub async fn billing_get_plans(&self) -> ApiResponse<serde_json::Value> {
@@ -196,35 +196,49 @@ impl AppState {
             .raw()
             .begin()
             .await
-            .map_err(|error| format!("failed to begin admin transaction: {error}"))?;
+            .map_err(|error| {
+                tracing::warn!(error = %error, "E2E grant: failed to begin transaction");
+                "admin role grant failed".to_string()
+            })?;
         sqlx::query("select set_config('app.current_role', 'super_admin', true)")
             .execute(&mut *tx)
             .await
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| {
+                tracing::warn!(error = %error, "E2E grant: failed to set super_admin role");
+                "admin role grant failed".to_string()
+            })?;
         let user_row: Option<(Uuid, Uuid)> = sqlx::query_as::<_, (Uuid, Uuid)>(
             "select id, org_id from users where email = $1 limit 1",
         )
         .bind(email)
         .fetch_optional(&mut *tx)
         .await
-        .map_err(|error| format!("database error during user lookup: {error}"))?;
+        .map_err(|error| {
+            tracing::warn!(error = %error, "E2E grant: database error during user lookup");
+            "admin role grant failed".to_string()
+        })?;
         let (user_id, org_id) = user_row.ok_or_else(|| "user not found".to_string())?;
         sqlx::query("update users set role = 'super_admin' where id = $1 and org_id = $2")
             .bind(user_id)
             .bind(org_id)
             .execute(&mut *tx)
             .await
-            .map_err(|error| format!("failed to grant admin role: {error}"))?;
+            .map_err(|error| {
+                tracing::warn!(error = %error, "E2E grant: failed to update user role");
+                "admin role grant failed".to_string()
+            })?;
         tx.commit()
             .await
-            .map_err(|error| format!("failed to commit admin role update: {error}"))
+            .map_err(|error| {
+                tracing::warn!(error = %error, "E2E grant: failed to commit transaction");
+                "admin role grant failed".to_string()
+            })
     }
 
     /// Checks if the JWT's auth_version matches the user's current auth_version.
     ///
-    /// Returns `true` (fail-open) when PostgreSQL is not configured — this allows
-    /// local development without a database. When PostgreSQL IS configured but
-    /// the connection fails, returns `false` (fail-closed) to reject stale tokens.
+    /// Returns `false` when PostgreSQL is not configured unless
+    /// `AVRAG_AUTH_VERSION_BYPASS=true` is set explicitly for local development.
     pub async fn jwt_auth_version_matches(
         &self,
         user_uuid: Uuid,
@@ -232,7 +246,9 @@ impl AppState {
         token_auth_version: i32,
     ) -> bool {
         let Some(repo) = self.postgres_repo() else {
-            return true;
+            return std::env::var("AVRAG_AUTH_VERSION_BYPASS")
+                .ok()
+                .is_some_and(|value| matches!(value.as_str(), "true" | "1"));
         };
         let Ok(mut tx) = repo.raw().begin().await else {
             return false;
@@ -253,15 +269,48 @@ impl AppState {
         auth_version == Some(token_auth_version)
     }
 
-    pub async fn upload_state_for_document(
+    pub async fn upload_state_for_authenticated_document(
+        &self,
+        document_id: &str,
+    ) -> Result<(Self, Option<String>), common::AppError> {
+        let Some(_repo) = self.postgres_repo() else {
+            return Ok((self.clone(), None));
+        };
+        if self.auth().actor_id().is_none() {
+            return Err(common::AppError::Validation {
+                code: "authenticated_user_required",
+                message: "authenticated user required".to_string(),
+                http_status: 401,
+            });
+        }
+        let document_uuid = Uuid::parse_str(document_id).map_err(|_| {
+            common::AppError::validation("document_not_found", "document not found")
+        })?;
+        let Some(store) = self.storage.document_store() else {
+            return Err(common::AppError::internal(
+                "document store is not configured",
+            ));
+        };
+        let seed = store
+            .get_document_task_seed(self.auth(), document_uuid)
+            .await?
+            .ok_or_else(|| {
+                common::AppError::not_found("document_not_found", "document not found")
+            })?;
+        Ok((self.clone(), Some(seed.object_path)))
+    }
+
+    /// System lookup for signed uploads and object-storage webhooks.
+    pub async fn upload_state_for_system_document(
         &self,
         document_id: &str,
     ) -> Result<(Self, Option<String>), common::AppError> {
         let Some(repo) = self.postgres_repo() else {
             return Ok((self.clone(), None));
         };
-        let document_uuid = Uuid::parse_str(document_id)
-            .map_err(|_| common::AppError::validation("document_not_found", "document not found"))?;
+        let document_uuid = Uuid::parse_str(document_id).map_err(|_| {
+            common::AppError::validation("document_not_found", "document not found")
+        })?;
         let mut tx = repo
             .raw()
             .begin()
@@ -276,7 +325,9 @@ impl AppState {
             .fetch_optional(&mut *tx)
             .await
             .map_err(|error| common::AppError::internal(error.to_string()))?
-            .ok_or_else(|| common::AppError::not_found("document_not_found", "document not found"))?;
+            .ok_or_else(|| {
+                common::AppError::not_found("document_not_found", "document not found")
+            })?;
         tx.commit()
             .await
             .map_err(|error| common::AppError::internal(error.to_string()))?;
@@ -287,7 +338,8 @@ impl AppState {
         let object_path = row
             .try_get::<String, _>("object_path")
             .map_err(|error| common::AppError::internal(error.to_string()))?;
-        let mut auth = avrag_auth::AuthContext::new(org_id.into(), avrag_auth::SubjectKind::System);
+        let mut auth =
+            avrag_auth::AuthContext::new(org_id.into(), avrag_auth::SubjectKind::System);
         if let Some(actor) = self.auth().actor_id() {
             auth = auth.with_actor_id(actor);
         }

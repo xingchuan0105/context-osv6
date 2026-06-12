@@ -12,7 +12,7 @@ avrag-auth = { path = "../auth" }
 avrag-billing = { path = "../billing" }
 avrag-admin = { path = "../admin" }
 avrag-share = { path = "../share" }
-app = { path = "../app" }
+app-bootstrap = { path = "../app-bootstrap" }
 app-chat = { path = "../app-chat" }
 app-core = { path = "../app-core" }
 telemetry = { path = "../telemetry" }
@@ -40,5 +40,6 @@ tokio-util.workspace = true
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-native-tls"] }
 
 [dev-dependencies]
+app-bootstrap = { path = "../app-bootstrap", features = ["test-support"] }
 async-trait.workspace = true
 http-body-util = "0.1"

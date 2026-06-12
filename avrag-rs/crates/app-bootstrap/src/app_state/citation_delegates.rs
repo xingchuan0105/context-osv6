@@ -1,6 +1,6 @@
 use common::{AppError, CitationLookupResponse};
 
-use crate::lib_impl::AppState;
+use super::AppState;
 
 impl AppState {
     pub async fn lookup_citation(
