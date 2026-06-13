@@ -1610,3 +1610,39 @@ textarea {
   white-space: pre-wrap;
   word-wrap: break-word;
 }
+
+.consent-checkbox {
+  margin: 1rem 0;
+}
+
+.consent-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.consent-input {
+  margin-top: 0.25rem;
+}
+
+.consent-text {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.consent-link {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
+.consent-link:hover {
+  color: #2563eb;
+}
+
+.consent-error {
+  margin-top: 0.5rem;
+  color: #ef4444;
+  font-size: 0.875rem;
+}
