@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import LegalFooterLinks from "@/components/legal/LegalFooterLinks";
 import { AUTH_SESSION_COOKIE_NAME } from "../lib/auth/server-session";
 
 function getCookie(name: string): string | null {
@@ -24,6 +25,7 @@ export default function HomePage() {
   return (
     <div style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center" }}>
       <div style={{ color: "#6b7280", fontSize: "14px" }}>正在进入 Context OS...</div>
+      <LegalFooterLinks />
     </div>
   );
 }

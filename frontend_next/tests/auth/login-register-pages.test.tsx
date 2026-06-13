@@ -140,6 +140,7 @@ describe("login and register pages", () => {
     await user.type(screen.getByLabelText("邮箱"), "new@example.com");
     await user.type(screen.getByLabelText("密码"), "password123");
     await user.type(screen.getByLabelText("确认密码"), "password123");
+    await user.click(screen.getByRole("checkbox"));
     await user.click(screen.getByRole("button", { name: "创建账号" }));
 
     await waitFor(() => {
@@ -170,6 +171,7 @@ describe("login and register pages", () => {
     await user.type(screen.getByLabelText("邮箱"), "taken@example.com");
     await user.type(screen.getByLabelText("密码"), "password123");
     await user.type(screen.getByLabelText("确认密码"), "password123");
+    await user.click(screen.getByRole("checkbox"));
     await user.click(screen.getByRole("button", { name: "创建账号" }));
 
     await waitFor(() => {

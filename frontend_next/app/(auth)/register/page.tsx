@@ -6,6 +6,7 @@ import { type FormEvent, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { GuestOnlyGate } from "@/components/auth-gates";
+import ConsentCheckbox from "@/components/legal/ConsentCheckbox";
 import { AuthFrame } from "@/components/page-frame";
 import { register } from "@/lib/auth/client";
 import { useAuth } from "@/lib/auth/context";
@@ -25,6 +26,7 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [consented, setConsented] = useState(false);
   const nextPath = getSafeNextPath(searchParams.get("next"));
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -44,6 +46,11 @@ export default function RegisterPage() {
 
     if (password !== confirmPassword) {
       setError(formatUiMessage(locale, "authPasswordMismatch"));
+      return;
+    }
+
+    if (!consented) {
+      setError("请先阅读并同意用户协议与隐私政策");
       return;
     }
 
@@ -138,6 +145,11 @@ export default function RegisterPage() {
               value={confirmPassword}
             />
           </div>
+          <ConsentCheckbox
+            onConsentChange={setConsented}
+            termsVersion="2026-06-13"
+            privacyVersion="2026-06-13"
+          />
           {error ? <p className="app-notice-banner">{error}</p> : null}
           <button className="app-button-primary app-button-block" disabled={loading} type="submit">
             {loading ? formatUiMessage(locale, "authCreatingAccount") : formatUiMessage(locale, "authCreateAccount")}

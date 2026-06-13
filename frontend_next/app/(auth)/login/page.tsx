@@ -6,6 +6,7 @@ import { type KeyboardEvent, useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { GuestOnlyGate } from "@/components/auth-gates";
+import LegalFooterLinks from "@/components/legal/LegalFooterLinks";
 import { AuthFrame } from "@/components/page-frame";
 import { login } from "@/lib/auth/client";
 import { useAuth } from "@/lib/auth/context";
@@ -79,66 +80,69 @@ export default function LoginPage() {
   }
 
   return (
-    <GuestOnlyGate>
-      <AuthFrame
-        title={formatUiMessage(locale, "authLoginTitle")}
-        subtitle={formatUiMessage(locale, "authLoginSubtitle")}
-      >
-        <div style={{ display: "grid", gap: "1rem" }}>
-          <div>
-            <label className="app-form-label" htmlFor="login-email">
-              {formatUiMessage(locale, "authEmailLabel")}
-            </label>
-            <input
-              autoComplete="email"
-              className="app-input"
-              id="login-email"
-              onChange={(event) => setEmail(event.target.value)}
-              onKeyDown={handleFieldKeyDown}
-              placeholder="name@example.com"
-              type="email"
-              value={email}
-            />
-          </div>
-          <div>
-            <div className="app-inline-row">
-              <label className="app-form-label" htmlFor="login-password" style={{ marginBottom: 0 }}>
-                {formatUiMessage(locale, "authPasswordLabel")}
+    <>
+      <GuestOnlyGate>
+        <AuthFrame
+          title={formatUiMessage(locale, "authLoginTitle")}
+          subtitle={formatUiMessage(locale, "authLoginSubtitle")}
+        >
+          <div style={{ display: "grid", gap: "1rem" }}>
+            <div>
+              <label className="app-form-label" htmlFor="login-email">
+                {formatUiMessage(locale, "authEmailLabel")}
               </label>
-              {passwordResetEnabled ? (
-                <Link className="app-link app-link-muted" href="/reset-password">
-                  {formatUiMessage(locale, "authForgotPassword")}
-                </Link>
-              ) : null}
+              <input
+                autoComplete="email"
+                className="app-input"
+                id="login-email"
+                onChange={(event) => setEmail(event.target.value)}
+                onKeyDown={handleFieldKeyDown}
+                placeholder="name@example.com"
+                type="email"
+                value={email}
+              />
             </div>
-            <input
-              autoComplete="current-password"
-              className="app-input"
-              id="login-password"
-              onChange={(event) => setPassword(event.target.value)}
-              onKeyDown={handleFieldKeyDown}
-              placeholder={formatUiMessage(locale, "authPasswordMinLengthHint")}
-              type="password"
-              value={password}
-            />
+            <div>
+              <div className="app-inline-row">
+                <label className="app-form-label" htmlFor="login-password" style={{ marginBottom: 0 }}>
+                  {formatUiMessage(locale, "authPasswordLabel")}
+                </label>
+                {passwordResetEnabled ? (
+                  <Link className="app-link app-link-muted" href="/reset-password">
+                    {formatUiMessage(locale, "authForgotPassword")}
+                  </Link>
+                ) : null}
+              </div>
+              <input
+                autoComplete="current-password"
+                className="app-input"
+                id="login-password"
+                onChange={(event) => setPassword(event.target.value)}
+                onKeyDown={handleFieldKeyDown}
+                placeholder={formatUiMessage(locale, "authPasswordMinLengthHint")}
+                type="password"
+                value={password}
+              />
+            </div>
+            {error ? <p className="app-notice-banner">{error}</p> : null}
+            <button
+              className="app-button-primary app-button-block"
+              disabled={loading || !interactive}
+              type="button"
+              onClick={() => void handleSubmit()}
+            >
+              {loading ? formatUiMessage(locale, "authLoginSubmitting") : formatUiMessage(locale, "authLoginSubmit")}
+            </button>
           </div>
-          {error ? <p className="app-notice-banner">{error}</p> : null}
-          <button
-            className="app-button-primary app-button-block"
-            disabled={loading || !interactive}
-            type="button"
-            onClick={() => void handleSubmit()}
-          >
-            {loading ? formatUiMessage(locale, "authLoginSubmitting") : formatUiMessage(locale, "authLoginSubmit")}
-          </button>
-        </div>
-        <p className="app-form-footnote">
-          {formatUiMessage(locale, "authNeedsAccount")}{" "}
-          <Link className="app-link" href="/register">
-            {formatUiMessage(locale, "authSignUp")}
-          </Link>
-        </p>
-      </AuthFrame>
-    </GuestOnlyGate>
+          <p className="app-form-footnote">
+            {formatUiMessage(locale, "authNeedsAccount")}{" "}
+            <Link className="app-link" href="/register">
+              {formatUiMessage(locale, "authSignUp")}
+            </Link>
+          </p>
+        </AuthFrame>
+      </GuestOnlyGate>
+      <LegalFooterLinks />
+    </>
   );
 }
