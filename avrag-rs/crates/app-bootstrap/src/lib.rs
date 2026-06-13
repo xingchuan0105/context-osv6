@@ -14,7 +14,10 @@ pub use app_state::{
     StoredDocument,
 };
 
-pub use adapters::{PgBillingStoreAdapter, PgUsageLimitStoreAdapter};
+pub use adapters::{
+    PgBillingStoreAdapter, PgUsageLimitStoreAdapter, RedisFixedWindowRateLimiter,
+    RedisRateLimitBackend, build_rate_limit_backend,
+};
 
 use adapters::{
     ObjectStorePortAdapter, PgAdminStoreAdapter, PgAuthStoreAdapter, PgBillingQuotaAdapter,
@@ -65,6 +68,7 @@ pub struct AppBootstrapResult {
     pub chat: ChatContext,
     pub postgres: Option<Arc<PgAppRepository>>,
     pub redis_url: String,
+    pub rate_limit_backend: Option<Arc<RedisRateLimitBackend>>,
 }
 
 fn build_chat_context(
@@ -174,6 +178,7 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         chat,
         postgres: None,
         redis_url: config.redis.url.clone(),
+        rate_limit_backend: build_rate_limit_backend(&config.redis.url),
     }
 }
 
@@ -378,6 +383,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         chat,
         postgres: pg,
         redis_url: config.redis.url.clone(),
+        rate_limit_backend: build_rate_limit_backend(&config.redis.url),
     })
 }
 

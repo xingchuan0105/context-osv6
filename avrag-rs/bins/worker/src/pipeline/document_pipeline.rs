@@ -1,13 +1,10 @@
 use avrag_auth::AuthContext;
-use avrag_retrieval_data_plane::RetrievalDataPlane;
-use avrag_storage_pg::{ObjectStoreHandle, PgAppRepository};
 use ingestion::chunker::ChunkPolicy;
-use ingestion::parser::{ParsePlan, PdfPageBackend};
+use ingestion::parser::{ParsePlan, ParseRouter};
 use ingestion::{
     DocumentIr, DocumentIrValidationOptions, IngestionError, IngestionTask,
     sanitize_and_validate_document_ir,
 };
-use std::sync::Arc;
 use tracing::info;
 use uuid::Uuid;
 
@@ -15,17 +12,16 @@ use crate::ingestion_guard::ensure_ingestion_side_effects_allowed;
 use crate::pdf;
 use crate::indexing::{
     build_multimodal_index_records, maybe_enrich_visual_multimodal_summaries,
-    record_multimodal_degrade, resolve_visual_chunk_image_refs, MediaResolveContext,
-    StoredMultimodalChunk,
+    record_multimodal_degrade, StoredMultimodalChunk,
 };
 use super::helpers::{
     build_asset_object_key, build_document_block_rows, build_document_chunk_rows,
     build_document_index_batch, build_graph_index_records, build_text_index_records,
-    build_toc_entries, collect_document_text, embed_text_vectors, enrich_multimodal_source_locator,
+    build_toc_entries, collect_document_text, enrich_multimodal_source_locator,
     execute_external_parse, execute_local_parse, execute_office_parse,
     extract_triplets_for_index, extract_visual_triplets_for_index, maybe_enrich_toc_with_llm,
-    merge_extracted_triplets, mirror_document_asset, mirror_remote_asset, record_graph_degrade,
-    triplet_extraction_enabled, visual_triplet_extraction_enabled, GraphIndexRecords, ParseRunOutputs,
+    merge_extracted_triplets, mirror_document_asset, triplet_extraction_enabled,
+    visual_triplet_extraction_enabled, GraphIndexRecords, ParseRunOutputs,
 };
 use super::processor::PgTaskProcessor;
 #[derive(Debug, Default, Clone)]
@@ -46,6 +42,7 @@ async fn execute_parse_plan(
     filename: &str,
     object_path: &str,
     document_id: Uuid,
+    parse_run_id: Uuid,
     route_decision: &ingestion::parser::ParseRouteDecision,
 ) -> Result<DocumentIr, IngestionError> {
     match &route_decision.plan {
@@ -62,16 +59,52 @@ async fn execute_parse_plan(
                 filename,
                 object_path,
                 document_id,
+                parse_run_id,
                 &plan.kind,
             )
             .await
         }
         ParsePlan::Pdf(plan) => {
+            let (pdf_bytes, pdf_filename) =
+                pdf::maybe_convert_office_to_pdf(bytes, filename)
+                    .await
+                    .map_err(|e| {
+                        IngestionError::StateSink(format!(
+                            "office to pdf conversion failed for {filename}: {e}"
+                        ))
+                    })?;
+
+            let (effective_plan, liteparse_snapshot) = if plan.pages.is_empty() {
+                let routed = ParseRouter::route(&pdf_bytes, &pdf_filename, "application/pdf")
+                    .map_err(|e| IngestionError::StateSink(e.to_string()))?;
+                match routed.plan {
+                    ParsePlan::Pdf(p) => (p, routed.liteparse_snapshot),
+                    other => {
+                        return Err(IngestionError::StateSink(format!(
+                            "expected pdf plan after office conversion, got {other:?}"
+                        )));
+                    }
+                }
+            } else {
+                (
+                    plan.clone(),
+                    route_decision.liteparse_snapshot.clone(),
+                )
+            };
+
             let ctx = pdf::PdfParseContext::new(
                 processor.pdf_renderer_client.clone(),
                 processor.ingestion_llm.clone(),
             );
-            pdf::execute_pdf_parse(&ctx, bytes, filename, object_path, document_id, plan).await
+            pdf::execute_pdf_parse(
+                &ctx,
+                &pdf_bytes,
+                &pdf_filename,
+                document_id,
+                &effective_plan,
+                liteparse_snapshot.as_ref(),
+            )
+            .await
         }
     }
 }
@@ -110,6 +143,7 @@ pub(crate) async fn run_document_pipeline(
             filename,
             object_path,
             document_id,
+            parse_run_id,
             route_decision,
         )
         .await?,

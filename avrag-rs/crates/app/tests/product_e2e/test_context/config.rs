@@ -24,6 +24,7 @@ pub(crate) struct E2eBootstrapConfig {
     pub mock_llm_base_url: Option<String>,
     pub mock_embedding_base_url: Option<String>,
     pub mock_search_base_url: Option<String>,
+    pub mock_paddle_ocr_base_url: Option<String>,
     pub use_real_llm: bool,
     pub has_real_search: bool,
     pub worker_timeout_secs: u64,
@@ -193,6 +194,9 @@ impl E2eBootstrapConfig {
                 "EMBEDDING_DIMENSIONS",
                 "AVRAG_EMBEDDING_DIM",
                 "OFFICE_PARSER_BASE_URL",
+                "PADDLE_OCR_BASE_URL",
+                "PADDLE_OCR_API_TOKEN",
+                "PADDLE_OCR_MODEL",
                 "PDF_RENDERER_BASE_URL",
                 "PDF_VISUAL_PAGES_PER_CHUNK",
                 "INGESTION_PDF_MAX_PAGES",
@@ -262,6 +266,55 @@ impl E2eBootstrapConfig {
             cmd.env("SEARCH_PROVIDER", "brave_llm_context")
                 .env("SEARCH_BASE_URL", url)
                 .env("SEARCH_API_KEY", "mock");
+        }
+
+        if let Some(ref url) = self.mock_paddle_ocr_base_url {
+            cmd.env("PADDLE_OCR_BASE_URL", url)
+                .env("PADDLE_OCR_API_TOKEN", "mock")
+                .env("PADDLE_OCR_MODEL", "mock-paddle")
+                .env("PADDLE_OCR_POLL_INTERVAL_SECS", "1")
+                .env("PADDLE_OCR_MAX_JOBS_PER_DOCUMENT", "5")
+                .env("PADDLE_OCR_RESULT_CACHE_ENABLED", "0");
+        } else {
+            Self::forward_optional_env(
+                cmd,
+                &[
+                    "PADDLE_OCR_BASE_URL",
+                    "PADDLE_OCR_API_TOKEN",
+                    "PADDLE_OCR_MODEL",
+                    "PADDLE_OCR_MAX_JOBS_PER_DOCUMENT",
+                    "PADDLE_OCR_RESULT_CACHE_ENABLED",
+                ],
+            );
+        }
+
+        Self::forward_optional_env(
+            cmd,
+            &[
+                "LITEPARSE_OCR_ENABLED",
+                "LITEPARSE_OCR_SERVER_URL",
+                "LITEPARSE_OCR_LANGUAGE",
+                "LITEPARSE_SCANNED_PAGE_THRESHOLD",
+                "LITEPARSE_TABLE_GARBLE_THRESHOLD",
+                "LITEPARSE_TABLE_HEAVY_THRESHOLD",
+                "LITEPARSE_FIG_RATIO_THRESHOLD",
+                "LITEPARSE_FIG_COUNT_THRESHOLD",
+                "LITEPARSE_TEXT_QUAL_THRESHOLD",
+                "LITEPARSE_DECORATIVE_MAX_AREA",
+                "PDF_RENDERER_BASE_URL",
+                "INGESTION_PDF_MAX_PAGES",
+                "INGESTION_TRIPLET_ENABLED",
+                "INGESTION_VLM_TRIPLET_ENABLED",
+                "INGESTION_VLM_SUMMARY_ENABLED",
+            ],
+        );
+    }
+
+    fn forward_optional_env(cmd: &mut tokio::process::Command, keys: &[&str]) {
+        for key in keys {
+            if let Ok(value) = std::env::var(key) {
+                cmd.env(key, value);
+            }
         }
     }
 }

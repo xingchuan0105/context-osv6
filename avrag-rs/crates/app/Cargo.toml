@@ -46,8 +46,9 @@ axum = { workspace = true, optional = true }
 transport-http = { path = "../transport-http", optional = true }
 
 [dev-dependencies]
-axum = { version = "0.8", features = ["macros"] }
+axum = { version = "0.8", features = ["macros", "multipart"] }
 avrag-storage-pg = { path = "../storage-pg" }
+ingestion = { path = "../ingestion" }
 redis.workspace = true
 tempfile = "3"
 tokio = { workspace = true, features = ["process"] }

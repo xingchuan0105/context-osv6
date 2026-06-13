@@ -8,5 +8,7 @@ pub mod duplicate_upload;
 pub mod embedding_cache;
 pub mod format_output;
 pub mod ingestion_full;
+pub mod liteparse_pdf_e2e;
+pub mod paddle_image_e2e;
 pub mod multi_doc;
 pub mod streaming_chat;

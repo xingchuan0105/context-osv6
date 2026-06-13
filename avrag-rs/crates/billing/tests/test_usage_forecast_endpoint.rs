@@ -7,13 +7,14 @@
 //! limit and emits a bilingual upgrade suggestion.
 //!
 //! The pure-rust test below locks the response shape the frontend
-//! `UsageForecastCard` (Task 11) deserializes. A `#[sqlx::test]` is
-//! CI-only (requires a live PG) and verifies the 30-day aggregation
-//! across `llm_usage_events` matches the spec.
+//! `UsageForecastCard` (Task 11) deserializes. A live-PG integration test
+//! verifies the 30-day aggregation across `llm_usage_events` matches the spec.
+
+mod support;
 
 use avrag_billing::UsageForecastResponse;
 use chrono::{Duration, TimeZone, Utc};
-use sqlx::PgPool;
+use support::{pg_pool_or_skip, run_migrations};
 use uuid::Uuid;
 
 #[test]
@@ -44,9 +45,14 @@ fn usage_forecast_response_shape_matches_spec() {
     );
 }
 
-#[sqlx::test]
-async fn usage_forecast_aggregates_30d_token_usage_from_llm_usage_events(pool: PgPool) {
-    sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+#[tokio::test]
+async fn usage_forecast_aggregates_30d_token_usage_from_llm_usage_events() {
+    let Some(pool) =
+        pg_pool_or_skip("usage_forecast_aggregates_30d_token_usage_from_llm_usage_events").await
+    else {
+        return;
+    };
+    run_migrations(&pool).await;
     sqlx::query("select set_config('app.current_role', 'super_admin', false)")
         .execute(&pool)
         .await

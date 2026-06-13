@@ -4,16 +4,13 @@ use ingestion::{DocumentIr, ParseBackend, SourceLocator};
 pub(crate) use super::graph_index::{
     build_document_index_batch, build_graph_index_records, GraphIndexRecords,
 };
-pub(crate) use super::index_dispatch::{
-    build_text_index_records, embed_text_vectors, embed_text_vectors_with_client,
-};
+pub(crate) use super::index_dispatch::build_text_index_records;
 pub(crate) use super::parse_route::{
-    execute_external_parse, execute_local_parse, execute_office_parse, resolve_mineru_source_url,
+    execute_external_parse, execute_local_parse, execute_office_parse,
 };
 pub(crate) use super::pg_side_effects::{
     build_asset_object_key, build_document_block_rows, build_document_chunk_rows, build_toc_entries,
-    collect_document_text, finalize_mirrored_asset_path, maybe_enrich_toc_with_llm,
-    mirror_remote_asset,
+    collect_document_text, maybe_enrich_toc_with_llm,
 };
 use anyhow::{anyhow, Result};
 use avrag_auth::AuthContext;
@@ -24,9 +21,13 @@ use uuid::Uuid;
 use crate::runtime_support::safe_relative_object_key;
 pub(crate) use super::triplet_extraction::{
     extract_triplets_for_index, extract_visual_triplets_for_index, merge_extracted_triplets,
-    parse_triplet_response, triplet_extraction_enabled, visual_triplet_extraction_enabled,
-    ExtractedTriplet, TripletExtractionOutput,
+    triplet_extraction_enabled, visual_triplet_extraction_enabled,
 };
+
+#[cfg(test)]
+pub(crate) use super::index_dispatch::embed_text_vectors_with_client;
+#[cfg(test)]
+pub(crate) use super::triplet_extraction::{parse_triplet_response, ExtractedTriplet};
 
 pub(crate) fn estimate_token_count(text: &str) -> i64 {
     common::estimate_token_count(text)
@@ -170,7 +171,8 @@ pub(crate) fn build_parse_backend_summary(
                     serde_json::json!({
                         "page": page.page_number,
                         "backend": match page.backend {
-                            PdfPageBackend::EdgeParse => ParseBackend::EdgeParsePdf.as_str(),
+                            // Wire plan: `edge_parse` (= LiteParse text); metadata uses canonical backend.
+                            PdfPageBackend::EdgeParse => ParseBackend::LiteParsePdf.as_str(),
                             PdfPageBackend::PaddleOcr => ParseBackend::PaddleOcrPdf.as_str(),
                             PdfPageBackend::VisualRaster => ParseBackend::VisualRasterPdf.as_str(),
                         },
@@ -184,6 +186,42 @@ pub(crate) fn build_parse_backend_summary(
         .and_then(|document| document.metadata.get("page_status"))
         .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok());
 
+    let ingest_routing = document_ir.map(|document| {
+        let keys = [
+            "pdf_route_mode",
+            "paddle_jobs_count",
+            "paddle_jobs_used",
+            "ocr_backend",
+            "paddle_jobs_budget_skipped",
+            "paddle_cache_hits",
+            "ingest_route_version",
+        ];
+        let mut routing = serde_json::Map::new();
+        for key in keys {
+            if let Some(value) = document.metadata.get(key) {
+                routing.insert(key.to_string(), serde_json::Value::String(value.clone()));
+            }
+        }
+        let paddle_warnings: Vec<_> = document
+            .warnings
+            .iter()
+            .filter(|w| w.code.starts_with("paddle_job_"))
+            .map(|w| {
+                serde_json::json!({
+                    "code": w.code,
+                    "page": w.page,
+                })
+            })
+            .collect();
+        if !paddle_warnings.is_empty() {
+            routing.insert(
+                "paddle_warnings".to_string(),
+                serde_json::Value::Array(paddle_warnings),
+            );
+        }
+        serde_json::Value::Object(routing)
+    });
+
     serde_json::json!({
         "route": &route_decision.route,
         "reason": &route_decision.reason,
@@ -191,6 +229,7 @@ pub(crate) fn build_parse_backend_summary(
         "probe_result": &route_decision.probe_result,
         "page_backends": page_backends,
         "page_status": page_status,
+        "ingest_routing": ingest_routing,
         "outputs": {
             "primary_backend": document_ir.map(|document| document.primary_backend.as_str()),
             "block_count": outputs.block_count,

@@ -2,7 +2,7 @@ use anyhow::Result;
 use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
 use avrag_retrieval_data_plane::RetrievalDataPlane;
 use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
-use avrag_storage_pg::{DocumentCleanupTask, ObjectStoreHandle, PgAppRepository, S3ObjectStore};
+use avrag_storage_pg::{DocumentCleanupTask, ObjectStoreHandle, S3ObjectStore};
 use app_core::AppConfig;
 use ingestion::IngestionTask;
 use std::path::{Path, PathBuf};

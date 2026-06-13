@@ -27,7 +27,8 @@ suites. See also [`product-e2e-plan.md`](product-e2e-plan.md).
 - Non-RAG smoke + unit tests run **in parallel** (`run-product-smoke-e2e.sh`); RAG smoke modules run **serial** after `wait`
 - Orphan Docker cleanup removes only test-owned `avrag-test-pg-*` / `avrag-test-redis-*` names; skips active/young containers (see `setup::cleanup_orphaned_test_containers`). **Milvus** uses the shared compose stack (`milvus-standalone`); CI does not force-remove it — isolation is per-context `MILVUS_COLLECTION_PREFIX` + teardown collection drops
 - Gated by `require_smoke_suite()` — fails under `E2E_MODE=nightly`
-- CI/local runner: [`scripts/run-product-smoke-e2e.sh`](../scripts/run-product-smoke-e2e.sh) (module list single source of truth; **module coverage guard** compares `cargo test … smoke:: -- --list` against `NON_RAG_MODULES` + `RAG_SERIAL_MODULES` and exits 1 on mismatch; **EXIT trap** removes `avrag-test-*` containers)
+- CI/local runner: [`scripts/run-product-smoke-e2e.sh`](../scripts/run-product-smoke-e2e.sh) (module list single source of truth; **module coverage guard** compares `cargo test … smoke:: -- --list` against `NON_RAG_MODULES` + `RAG_SERIAL_MODULES` and exits 1 on mismatch; quick check: `./scripts/run-product-smoke-e2e.sh --check-modules`; **EXIT trap** removes `avrag-test-*` containers)
+- **Module coverage guard (2026-06-13): green.** Parser matches `product_e2e::smoke::<module>::…` via `sed -n 's/.*::smoke::\([^:]*\)::.*/\1/p'`; `backend_launcher` (no submodule segment) is intentionally excluded.
 - Mock LLM / Search / Embedding only; E2E bootstrap forces **local** `object_root` (ignores `.env` MinIO/S3 for API)
 - Protocol + HTTP assertions; SSE event-order (`start` first, `done` terminal, no post-`done` events) and `done` payload shape in [`transport-http` contract tests](../crates/transport-http/tests/chat_stream_contract.rs) (`cargo test -p transport-http`)
 - Main suite uses `REDIS_URL=redis://127.0.0.1:1` (blackhole) to keep embedding failure mocks effective
@@ -152,7 +153,7 @@ and fail fast when `milvus-standalone` exits (no 180s blind wait).
 
 ## Integration regression status (Jun 2026)
 
-Tracked while closing the post-refactor integration gate. Last full-suite run before doc update: **not green** (interrupted mid-run).
+Tracked while closing the post-refactor integration gate. Last full-suite run before doc update: **not green** (interrupted mid-run). Latest smoke-runner reprobe (2026-06-13): **module coverage guard green** (`--check-modules` / pre-run guard); full suite depends on local Docker + Milvus.
 
 ### Fixed and verified
 
@@ -176,7 +177,7 @@ Tracked while closing the post-refactor integration gate. Last full-suite run be
 1. **`mem::forget(abort_tx)`** on persistent API/mock servers — prevents oneshot abort from killing process-lifetime tasks; no explicit shutdown on binary exit
 2. **`concurrent_query` semantics** — mock suite tests concurrent codegen-bridge safety only; citation-chunk independence is gated by `real_llm_concurrent_rag_queries_have_independent_citation_chunks` (`#[ignore]`, nightly)
 3. **`--features product-e2e` required** — without it, `product_e2e.rs` runs a single skip placeholder. ✅ Confirmed (2026-06-12): `smoke-e2e.yml` and `integration-e2e.yml` both pass the feature. ⚠️ However these workflows live under `avrag-rs/.github/workflows/` which GitHub never reads (repo root is `context-osv6`) — see [test quality review round 4](./brooks-test-quality-review-2026-06-12.md) Critical finding
-4. ~~**Ingestion parser layout**~~ — ✅ Resolved (2026-06-12): only `mineru/` + `router/` directory trees remain, no duplicate `.rs` siblings; compile clean
+4. ~~**Ingestion parser layout**~~ — ✅ Resolved (2026-06-13 P4): `mineru/` removed; `router/` + `liteparse*.rs` + `liteparse_probe_bridge.rs` are canonical; compile clean
 5. **`docs` drift** — this section. ✅ Stale CI comments mentioning `shared_ready_rag` + `Mutex<TestContext>` cleared repo-wide (2026-06-12)
 
 ### Re-run checklist (when resuming)

@@ -1,7 +1,9 @@
-use super::stages;
+use super::page_routes::route_page_with_config;
 use super::{
-    ParsePlan, PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteDecision, RouteReason,
+    PageRouteKind, ParsePlan, PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteReason,
 };
+#[cfg(test)]
+use super::RouteDecision;
 use super::super::probe::{ParseProbeConfig, ParseProbeResult, PdfPageProbeResult};
 
 pub(super) fn build_pdf_parse_plan(
@@ -18,6 +20,7 @@ pub(super) fn build_pdf_parse_plan(
                 page_number,
                 backend: fallback_backend.clone(),
                 reason: fallback_reason.clone(),
+                route_kinds: vec![PageRouteKind::ScanOcr],
             })
             .collect()
     } else {
@@ -31,27 +34,22 @@ pub(super) fn build_pdf_parse_plan(
     PdfParsePlan { pages }
 }
 
+#[cfg(test)]
 pub(super) fn route_page(
     page: &PdfPageProbeResult,
 ) -> (PdfPageBackend, RouteDecision, RouteReason) {
-    if let Some(result) = stages::fallback::route(page) {
-        return result;
-    }
-    if let Some(result) = stages::table::route(page) {
-        return result;
-    }
-    if let Some(result) = stages::figure::route(page) {
-        return result;
-    }
-    stages::layout::route(page)
+    let (backend, decision, reason, _routes) =
+        route_page_with_config(page, &ParseProbeConfig::default());
+    (backend, decision, reason)
 }
 
-fn build_pdf_page_plan(page_probe: &PdfPageProbeResult, _config: &ParseProbeConfig) -> PdfPagePlan {
-    let (backend, _, reason) = route_page(page_probe);
+fn build_pdf_page_plan(page_probe: &PdfPageProbeResult, config: &ParseProbeConfig) -> PdfPagePlan {
+    let (backend, _, reason, route_kinds) = route_page_with_config(page_probe, config);
     PdfPagePlan {
         page_number: page_probe.page_number,
         backend,
         reason,
+        route_kinds,
     }
 }
 
@@ -60,9 +58,19 @@ pub(super) fn summarize_pdf_reason(probe_result: &ParseProbeResult, plan: &Parse
         return RouteReason::SimplePdf;
     };
 
-    let has_ocr = pdf_plan.pages.iter().any(|p| p.backend == PdfPageBackend::PaddleOcr);
-    let has_visual = pdf_plan.pages.iter().any(|p| p.backend == PdfPageBackend::VisualRaster);
-    let has_figures = pdf_plan.pages.iter().any(|p| p.reason == RouteReason::FastWithFigures);
+    let has_ocr = pdf_plan.pages.iter().any(|p| {
+        p.route_kinds
+            .iter()
+            .any(|k| matches!(k, PageRouteKind::ScanOcr | PageRouteKind::TableOcr))
+    });
+    let has_visual = pdf_plan
+        .pages
+        .iter()
+        .any(|p| p.backend == PdfPageBackend::VisualRaster);
+    let has_figures = pdf_plan
+        .pages
+        .iter()
+        .any(|p| p.route_kinds.contains(&PageRouteKind::Figure));
 
     if has_ocr {
         RouteReason::ScannedPdf
@@ -73,4 +81,16 @@ pub(super) fn summarize_pdf_reason(probe_result: &ParseProbeResult, plan: &Parse
     } else {
         RouteReason::SimplePdf
     }
+}
+
+pub fn pdf_page_route_labels(plan: &PdfPagePlan) -> String {
+    let mut labels: Vec<&str> = plan
+        .route_kinds
+        .iter()
+        .map(|k| k.as_label())
+        .collect();
+    if labels.is_empty() {
+        labels.push(plan.reason.route_label());
+    }
+    labels.join("+")
 }

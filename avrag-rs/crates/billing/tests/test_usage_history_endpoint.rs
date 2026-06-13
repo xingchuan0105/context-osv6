@@ -7,13 +7,14 @@
 //! days (default 7) for the authenticated user.
 //!
 //! The pure-rust test locks the response shape the frontend
-//! `UsageTrendChart` (Task 12) deserializes. The `#[sqlx::test]` is
-//! CI-only (requires a live PG) and verifies the SQL aggregation
-//! produces one row per day for a seeded event stream.
+//! `UsageTrendChart` (Task 12) deserializes. A live-PG integration test
+//! verifies the SQL aggregation produces one row per day for a seeded event stream.
+
+mod support;
 
 use avrag_billing::{DailyUsage, UsageHistoryResponse};
 use chrono::{Duration, TimeZone, Utc};
-use sqlx::PgPool;
+use support::{pg_pool_or_skip, run_migrations};
 use uuid::Uuid;
 
 #[test]
@@ -39,9 +40,14 @@ fn usage_history_response_shape_matches_spec() {
     assert_eq!(json["daily"][1]["tokens"], 75000);
 }
 
-#[sqlx::test]
-async fn usage_history_aggregates_daily_token_usage_from_llm_usage_events(pool: PgPool) {
-    sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+#[tokio::test]
+async fn usage_history_aggregates_daily_token_usage_from_llm_usage_events() {
+    let Some(pool) =
+        pg_pool_or_skip("usage_history_aggregates_daily_token_usage_from_llm_usage_events").await
+    else {
+        return;
+    };
+    run_migrations(&pool).await;
     sqlx::query("select set_config('app.current_role', 'super_admin', false)")
         .execute(&pool)
         .await

@@ -17,6 +17,10 @@ fn router_builds_per_page_plan_for_mini_pdf() {
     let decision =
         ParseRouter::route(&bytes, "phase0-mini.pdf", "application/pdf").expect("route pdf");
     assert_eq!(decision.route, ParseRoute::Pdf);
+    assert!(
+        decision.liteparse_snapshot.is_some(),
+        "pdf route should carry a reusable LiteParse snapshot"
+    );
     let ParsePlan::Pdf(plan) = decision.plan else {
         panic!("expected pdf plan");
     };
@@ -24,8 +28,8 @@ fn router_builds_per_page_plan_for_mini_pdf() {
     assert!(
         plan.pages
             .iter()
-            .any(|p| p.backend == PdfPageBackend::EdgeParse),
-        "digital text pages should stay on edge/liteparse path"
+            .any(|p| p.backend == PdfPageBackend::LITEPARSE_TEXT),
+        "digital text pages should use LiteParse text backend (wire: edge_parse)"
     );
 }
 
@@ -35,17 +39,18 @@ async fn liteparse_probe_and_extract_mini_pdf() {
     let bytes = std::fs::read(&path).expect("read fixture pdf");
     let service = LiteParseService::from_env();
 
-    let probes = service.probe(&bytes).await.expect("liteparse probe");
+    let snapshot = service
+        .parse_pdf_document(&bytes)
+        .await
+        .expect("liteparse snapshot");
+    let probes = snapshot.probes();
     assert!(!probes.is_empty(), "probe should return page signals");
     assert!(
         probes.iter().any(|p| p.extracted_text_chars > 0),
         "mini pdf should contain extractable text"
     );
 
-    let blocks = service
-        .extract_blocks(&bytes, &[])
-        .await
-        .expect("liteparse extract");
+    let blocks = snapshot.extract_blocks_for_pages(&[]);
     assert!(!blocks.is_empty(), "extract should yield text blocks");
     assert!(
         blocks.iter().all(|b| b.bbox[2] >= b.bbox[0] && b.bbox[3] >= b.bbox[1]),

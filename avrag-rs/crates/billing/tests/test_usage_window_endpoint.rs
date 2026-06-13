@@ -20,9 +20,12 @@
 //!   - Free plan caps are 100K (5h) / 400K (7d).
 //!   - `reset_at` equals `oldest_event + window_duration`.
 
+mod support;
+
 use avrag_billing::{LimitHits, UsageWindowBucket, UsageWindowResponse};
 use chrono::{Duration, Utc};
 use sqlx::PgPool;
+use support::{pg_pool_or_skip, run_migrations};
 use uuid::Uuid;
 
 const PLAN_FREE: &str = "free";
@@ -69,9 +72,12 @@ async fn seed_user_with_plan(pool: &PgPool, plan_id: &str) -> (Uuid, Uuid) {
     (user_id, org_id)
 }
 
-#[sqlx::test]
-async fn free_plan_caps_match_pricing_revamp(pool: PgPool) {
-    sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+#[tokio::test]
+async fn free_plan_caps_match_pricing_revamp() {
+    let Some(pool) = pg_pool_or_skip("free_plan_caps_match_pricing_revamp").await else {
+        return;
+    };
+    run_migrations(&pool).await;
 
     // The handler reads caps directly from usage_limit_plan_policies; assert
     // the seed migration leaves the Free plan at the spec values. The
@@ -87,9 +93,12 @@ async fn free_plan_caps_match_pricing_revamp(pool: PgPool) {
     assert_eq!(row, (100_000, 400_000));
 }
 
-#[sqlx::test]
-async fn oldest_event_in_window_drives_reset_at(pool: PgPool) {
-    sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+#[tokio::test]
+async fn oldest_event_in_window_drives_reset_at() {
+    let Some(pool) = pg_pool_or_skip("oldest_event_in_window_drives_reset_at").await else {
+        return;
+    };
+    run_migrations(&pool).await;
 
     let (user_id, org_id) = seed_user_with_plan(&pool, PLAN_FREE).await;
 

@@ -83,6 +83,7 @@ e2e_output/
 
 # Graphify generated artifacts (graph.json alone is 21MB+)
 /graphify-out/
+avrag-rs/graphify-out/
 
 # =====================
 # Brooks v4 plan hygiene (M0)

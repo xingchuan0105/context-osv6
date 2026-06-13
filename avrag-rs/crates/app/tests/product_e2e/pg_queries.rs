@@ -64,6 +64,34 @@ impl TestContext {
         Ok(row.0)
     }
 
+    /// MIME type stored on the document row after upload.
+    pub async fn query_document_mime_type(&self, document_id: &str) -> anyhow::Result<String> {
+        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
+        let doc_id = Uuid::parse_str(document_id)?;
+        let row: (String,) =
+            sqlx::query_as("SELECT mime_type FROM documents WHERE id = $1")
+                .bind(doc_id)
+                .fetch_one(&pool)
+                .await?;
+        Ok(row.0)
+    }
+
+    /// Multimodal chunks indexed from Paddle Figure blocks.
+    pub async fn query_multimodal_figure_chunk_count(
+        &self,
+        document_id: &str,
+    ) -> anyhow::Result<i64> {
+        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
+        let doc_id = Uuid::parse_str(document_id)?;
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM document_multimodal_chunks WHERE document_id = $1 AND metadata->>'block_type' = 'figure'",
+        )
+        .bind(doc_id)
+        .fetch_one(&pool)
+        .await?;
+        Ok(row.0)
+    }
+
     /// Text body chunks plus multimodal/visual chunks (scan PDFs may have 0 text rows).
     pub async fn query_ingested_chunk_units(&self, document_id: &str) -> anyhow::Result<usize> {
         let pool = sqlx::PgPool::connect(&self.pg_url).await?;
@@ -122,6 +150,34 @@ impl TestContext {
         .fetch_one(&pool)
         .await?;
         Ok(row)
+    }
+
+    /// Latest ingestion task row for debugging E2E failures.
+    pub async fn query_ingestion_task_debug(
+        &self,
+        document_id: &str,
+    ) -> anyhow::Result<serde_json::Value> {
+        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
+        let doc_id = Uuid::parse_str(document_id)?;
+        let row: (String, i32, i32, Option<String>, Option<String>) = sqlx::query_as(
+            r#"
+            select status, attempt_count, max_attempts, last_error, locked_by
+            from ingestion_tasks
+            where document_id = $1
+            order by enqueued_at desc
+            limit 1
+            "#,
+        )
+        .bind(doc_id)
+        .fetch_one(&pool)
+        .await?;
+        Ok(serde_json::json!({
+            "status": row.0,
+            "attempt_count": row.1,
+            "max_attempts": row.2,
+            "last_error": row.3,
+            "locked_by": row.4,
+        }))
     }
 
     /// Override the ingestion task max_attempts for a document.

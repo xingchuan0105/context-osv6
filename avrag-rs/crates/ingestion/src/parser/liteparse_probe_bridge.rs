@@ -2,30 +2,40 @@
 
 use anyhow::{Context, Result};
 
-use super::liteparse::LiteParseService;
+use super::liteparse::{LiteParseService, ParsedPdfSnapshot};
 use super::liteparse_ir::LiteParsePageProbe;
 use super::probe::{ParseProbe, ParseProbeConfig, ParseProbeResult, PdfPageProbeResult};
+
+/// Hybrid probe output: lopdf routing signals plus a reusable LiteParse parse snapshot.
+#[derive(Debug, Clone)]
+pub struct HybridPdfProbeOutcome {
+    pub probe_result: ParseProbeResult,
+    pub liteparse_snapshot: ParsedPdfSnapshot,
+}
 
 /// Probe PDF using lopdf structure hints overlaid with LiteParse text extraction.
 pub fn probe_pdf_hybrid(
     bytes: &[u8],
     filename: &str,
     config: &ParseProbeConfig,
-) -> Result<ParseProbeResult> {
-    let mut result = ParseProbe::probe_with_config(bytes, filename, config)?;
-    let lp_pages = run_liteparse_probe_blocking(bytes)?;
-    overlay_liteparse_signals(&mut result, &lp_pages, config);
-    Ok(result)
+) -> Result<HybridPdfProbeOutcome> {
+    let mut probe_result = ParseProbe::probe_with_config(bytes, filename, config)?;
+    let liteparse_snapshot = run_liteparse_snapshot_blocking(bytes)?;
+    overlay_liteparse_signals(&mut probe_result, liteparse_snapshot.probes(), config);
+    Ok(HybridPdfProbeOutcome {
+        probe_result,
+        liteparse_snapshot,
+    })
 }
 
-fn run_liteparse_probe_blocking(bytes: &[u8]) -> Result<Vec<LiteParsePageProbe>> {
+fn run_liteparse_snapshot_blocking(bytes: &[u8]) -> Result<ParsedPdfSnapshot> {
     let pdf_bytes = bytes.to_vec();
-    std::thread::spawn(move || -> Result<Vec<LiteParsePageProbe>> {
+    std::thread::spawn(move || -> Result<ParsedPdfSnapshot> {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .context("failed to build tokio runtime for liteparse probe")?;
-        rt.block_on(async { LiteParseService::from_env().probe(&pdf_bytes).await })
+        rt.block_on(async { LiteParseService::from_env().parse_pdf_document(&pdf_bytes).await })
     })
     .join()
     .map_err(|_| anyhow::anyhow!("liteparse probe thread panicked"))?
@@ -115,21 +125,23 @@ mod tests {
         let hybrid = probe_pdf_hybrid(&bytes, "phase0-mini.pdf", &config).expect("hybrid probe");
 
         assert!(
-            !hybrid.pdf_page_probes.is_empty(),
+            !hybrid.probe_result.pdf_page_probes.is_empty(),
             "hybrid probe should return page probes"
         );
         assert_eq!(
-            hybrid.pdf_page_probes.len(),
+            hybrid.probe_result.pdf_page_probes.len(),
             lopdf_only.pdf_page_probes.len(),
             "hybrid should preserve lopdf page count"
         );
         assert!(
-            hybrid.extracted_text_chars >= lopdf_only.extracted_text_chars
+            hybrid.probe_result.extracted_text_chars >= lopdf_only.extracted_text_chars
                 || hybrid
+                    .probe_result
                     .pdf_page_probes
                     .iter()
                     .any(|p| p.extracted_text_chars > 0),
             "liteparse overlay should contribute text char signals"
         );
+        assert!(!hybrid.liteparse_snapshot.text_blocks().is_empty());
     }
 }

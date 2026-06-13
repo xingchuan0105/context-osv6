@@ -1,15 +1,17 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::probe::{ParseProbe, ParseProbeConfig, ParseProbeResult};
+use super::probe::{ParseProbeConfig, ParseProbeResult};
 mod mime;
+mod page_routes;
 mod pdf_plan;
-mod stages;
 use mime::{
     is_code_extension, is_supported_extension, mime_matches_extension, normalize_extension,
     normalize_mime_type,
 };
 use pdf_plan::{build_pdf_parse_plan, summarize_pdf_reason};
+
+pub use pdf_plan::pdf_page_route_labels;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -17,7 +19,7 @@ pub enum ParseRoute {
     Local,
     OfficeService,
     Pdf,
-    MineruImage,
+    PaddleOcrImage,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,6 +126,9 @@ pub struct ParseRouteDecision {
     pub reason: RouteReason,
     pub probe_result: Option<ParseProbeResult>,
     pub plan: ParsePlan,
+    /// Single LiteParse parse pass from routing; worker reuses instead of re-parsing.
+    #[serde(skip)]
+    pub liteparse_snapshot: Option<super::liteparse::ParsedPdfSnapshot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -155,12 +160,41 @@ pub struct OfficeParsePlan {
     pub doc_type: OfficeDocType,
 }
 
+/// Per-page PDF routing backend (serialized in parse plans and worker metadata).
+///
+/// Wire names are stable for stored plans; see [`Self::LITEPARSE_TEXT`] for post-P4 semantics.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PdfPageBackend {
+    /// Wire name `edge_parse`: LiteParse digital text path (not lopdf primary parse).
     EdgeParse,
     PaddleOcr,
     VisualRaster,
+}
+
+impl PdfPageBackend {
+    /// Post-P4 alias for [`Self::EdgeParse`] — LiteParse text extraction on A/B routes.
+    pub const LITEPARSE_TEXT: Self = Self::EdgeParse;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PageRouteKind {
+    Text,
+    Figure,
+    TableOcr,
+    ScanOcr,
+}
+
+impl PageRouteKind {
+    pub fn as_label(&self) -> &'static str {
+        match self {
+            Self::Text => "A",
+            Self::Figure => "B",
+            Self::TableOcr => "C",
+            Self::ScanOcr => "D",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -168,6 +202,9 @@ pub struct PdfPagePlan {
     pub page_number: u32,
     pub backend: PdfPageBackend,
     pub reason: RouteReason,
+    /// Composable page routes (A/B/C/D may combine).
+    #[serde(default)]
+    pub route_kinds: Vec<PageRouteKind>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -178,7 +215,7 @@ pub struct PdfParsePlan {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExternalParseKind {
-    MineruImage,
+    PaddleOcrImage,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -235,7 +272,7 @@ impl ParseRouter {
         filename: &str,
         mime_type: &str,
     ) -> Result<ParseRouteDecision, ParseRouteError> {
-        Self::route_with_config(bytes, filename, mime_type, &ParseProbeConfig::default())
+        Self::route_with_config(bytes, filename, mime_type, &ParseProbeConfig::from_env())
     }
 
     pub fn route_with_config(
@@ -257,6 +294,7 @@ impl ParseRouter {
                     plan: ParsePlan::Local(LocalParsePlan {
                         kind: LocalParseKind::Text,
                     }),
+                    liteparse_snapshot: None,
                 })
             }
             "html" | "htm" => Ok(ParseRouteDecision {
@@ -266,6 +304,7 @@ impl ParseRouter {
                 plan: ParsePlan::Local(LocalParsePlan {
                     kind: LocalParseKind::Html,
                 }),
+                liteparse_snapshot: None,
             }),
             _ if is_code_extension(&extension) => Ok(ParseRouteDecision {
                 route: ParseRoute::Local,
@@ -274,50 +313,36 @@ impl ParseRouter {
                 plan: ParsePlan::Local(LocalParsePlan {
                     kind: LocalParseKind::Code,
                 }),
+                liteparse_snapshot: None,
             }),
             "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" => Ok(ParseRouteDecision {
-                route: ParseRoute::MineruImage,
+                route: ParseRoute::PaddleOcrImage,
                 reason: RouteReason::ImageFile,
                 probe_result: None,
                 plan: ParsePlan::External(ExternalParsePlan {
-                    kind: ExternalParseKind::MineruImage,
+                    kind: ExternalParseKind::PaddleOcrImage,
                 }),
+                liteparse_snapshot: None,
             }),
-            "ppt" | "pptx" => Ok(ParseRouteDecision {
-                route: ParseRoute::OfficeService,
-                reason: RouteReason::PresentationFile,
-                probe_result: None,
-                plan: ParsePlan::Office(OfficeParsePlan {
-                    doc_type: if extension == "ppt" {
-                        OfficeDocType::Ppt
-                    } else {
-                        OfficeDocType::Pptx
-                    },
-                }),
-            }),
-            "pdf" => {
-                let probe_result = ParseProbe::probe_with_config(bytes, filename, config)
-                    .map_err(|error| ParseRouteError::unsupported(error.to_string()))?;
-                let plan = ParsePlan::Pdf(build_pdf_parse_plan(&probe_result, config));
-                Ok(ParseRouteDecision {
-                    route: ParseRoute::Pdf,
-                    reason: summarize_pdf_reason(&probe_result, &plan),
-                    probe_result: Some(probe_result),
-                    plan,
-                })
-            }
-            "doc" | "docx" => Ok(ParseRouteDecision {
-                route: ParseRoute::OfficeService,
+            "ppt" | "pptx" | "doc" | "docx" => Ok(ParseRouteDecision {
+                route: ParseRoute::Pdf,
                 reason: RouteReason::OfficeDocument,
                 probe_result: None,
-                plan: ParsePlan::Office(OfficeParsePlan {
-                    doc_type: if extension == "doc" {
-                        OfficeDocType::Doc
-                    } else {
-                        OfficeDocType::Docx
-                    },
-                }),
+                plan: ParsePlan::Pdf(PdfParsePlan { pages: vec![] }),
+                liteparse_snapshot: None,
             }),
+            "pdf" => {
+                let hybrid = super::liteparse_probe_bridge::probe_pdf_hybrid(bytes, filename, config)
+                    .map_err(|error| ParseRouteError::unsupported(error.to_string()))?;
+                let plan = ParsePlan::Pdf(build_pdf_parse_plan(&hybrid.probe_result, config));
+                Ok(ParseRouteDecision {
+                    route: ParseRoute::Pdf,
+                    reason: summarize_pdf_reason(&hybrid.probe_result, &plan),
+                    probe_result: Some(hybrid.probe_result),
+                    plan,
+                    liteparse_snapshot: Some(hybrid.liteparse_snapshot),
+                })
+            }
             "xls" | "xlsx" => Ok(ParseRouteDecision {
                 route: ParseRoute::OfficeService,
                 reason: RouteReason::OfficeDocument,
@@ -329,6 +354,7 @@ impl ParseRouter {
                         OfficeDocType::Xlsx
                     },
                 }),
+                liteparse_snapshot: None,
             }),
             _ => Err(ParseRouteError::unsupported(format!(
                 "file {filename} uses unsupported extension .{extension}"
@@ -337,5 +363,14 @@ impl ParseRouter {
     }
 }
 
+/// Build a PDF parse plan from probe signals (used by tests and tooling).
+pub fn pdf_parse_plan_for_probe(
+    probe_result: &ParseProbeResult,
+    config: &ParseProbeConfig,
+) -> PdfParsePlan {
+    build_pdf_parse_plan(probe_result, config)
+}
+
 #[cfg(test)]
 mod tests;
+

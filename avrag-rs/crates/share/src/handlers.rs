@@ -15,13 +15,13 @@ pub async fn handle_create_share_link(
     access_level: AccessLevel,
     expires_in_secs: Option<i64>,
     store: Arc<dyn ShareStorePort>,
-) -> Result<axum::Json<ShareTokenResponse>, AppError> {
+) -> Result<ShareTokenResponse, AppError> {
     let service = ShareService::new(store);
     let token = service
         .create_share_token(&ctx, &notebook_id, access_level, expires_in_secs)
         .await
         .map_err(map_anyhow_error)?;
-    Ok(axum::Json(ShareTokenResponse { share_token: token }))
+    Ok(ShareTokenResponse { share_token: token })
 }
 
 pub async fn handle_validate_token(

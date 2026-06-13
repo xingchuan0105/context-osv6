@@ -15,7 +15,7 @@ use tokio::time::{Duration, interval};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::runtime_support::{document_cleanup_task_context, safe_relative_object_key, task_context};
+use crate::runtime_support::{document_cleanup_task_context, safe_relative_object_key};
 
 pub(crate) async fn ensure_ingestion_side_effects_allowed(
     repo: &PgAppRepository,

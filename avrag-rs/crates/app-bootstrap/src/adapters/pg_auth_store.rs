@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use app_core::{
-    AuthStorePort, AuthUserCredentials, AuthUserProfile, CreatePasswordResetTicketInput,
-    PasswordResetUser, RegisterUserInput, RegisterUserResult,
+    auth_store::RecordLegalAcceptanceInput, AuthStorePort, AuthUserCredentials, AuthUserProfile,
+    CreatePasswordResetTicketInput, PasswordResetUser, RegisterUserInput, RegisterUserResult,
 };
 use crate::adapters::pg_session::begin_super_admin_tx_sqlx;
 use crate::pg_error::map_pg_error;
@@ -95,6 +95,24 @@ impl AuthStorePort for PgAuthStoreAdapter {
             full_name: full_name.to_string(),
             auth_version: 1,
         })
+    }
+
+    async fn record_legal_acceptance(&self, input: &RecordLegalAcceptanceInput) -> Result<(), AppError> {
+        let pool = self.repo.raw();
+        sqlx::query(
+            "INSERT INTO legal_acceptances (user_id, terms_version, privacy_version, context, ip_address, user_agent)
+             VALUES ($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(input.user_id)
+        .bind(&input.terms_version)
+        .bind(&input.privacy_version)
+        .bind(&input.context)
+        .bind(&input.ip_address)
+        .bind(&input.user_agent)
+        .execute(pool)
+        .await
+        .map_err(map_sqlx_error)?;
+        Ok(())
     }
 
     async fn find_user_for_login(

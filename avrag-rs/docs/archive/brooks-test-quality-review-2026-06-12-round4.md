@@ -166,7 +166,7 @@ cargo test -p app --test product_e2e --features product-e2e integration::concurr
 
 - Round 1–3（已归档）：[`round1`](./archive/brooks-test-quality-review-2026-06-12-round1.md) / [`round2`](./archive/brooks-test-quality-review-2026-06-12-round2.md) / [`round3`](./archive/brooks-test-quality-review-2026-06-12-round3.md)
 - [E2E Quality Gates](./e2e-gates.md)（遗留问题状态本轮已同步更新）
-- 姊妹报告（同日 v4）：[架构审计](./brooks-architecture-audit-2026-06-12.md) / [PR 审查](./brooks-pr-review-2026-06-12-v4.md) / [技术债](./brooks-tech-debt-assessment-2026-06-12.md)
+- 姊妹报告（同日 v4）：[架构审计](./brooks-architecture-audit-2026-06-13-v4.md) / [PR 审查](./brooks-pr-review-2026-06-12-v4.md) / [技术债](./brooks-tech-debt-assessment-2026-06-12-v4.md)
 - 历史分数：[`../../.brooks-lint-history.json`](../../.brooks-lint-history.json)
 
 ---

@@ -1,34 +1,3 @@
-    async fn ensure_admin_access(&self, auth: &AuthContext) -> Result<(), AppError> {
-        let tx = self.begin_admin_tx(auth).await?;
-        tx.commit().await.map_err(db_err)
-    }
-
-    async fn billing_overview(&self, auth: &AuthContext) -> Result<AdminBillingOverview, AppError> {
-        let mut tx = self.begin_admin_tx(auth).await?;
-        let row = sqlx::query(
-            r#"
-            select
-              count(*) filter (where status = 'active') as active_subscriptions,
-              count(*) filter (where status = 'past_due') as past_due_subscriptions,
-              count(*) filter (where status = 'unpaid') as unpaid_subscriptions,
-              count(*) filter (where status = 'canceled') as canceled_subscriptions
-            from subscriptions
-            "#,
-        )
-        .fetch_one(tx.as_mut())
-        .await
-        .map_err(db_err)?;
-        tx.commit()
-            .await
-            .map_err(db_err)?;
-        Ok(AdminBillingOverview {
-            active_subscriptions: row.try_get("active_subscriptions").unwrap_or(0),
-            past_due_subscriptions: row.try_get("past_due_subscriptions").unwrap_or(0),
-            unpaid_subscriptions: row.try_get("unpaid_subscriptions").unwrap_or(0),
-            canceled_subscriptions: row.try_get("canceled_subscriptions").unwrap_or(0),
-        })
-    }
-
     async fn rag_health(&self, auth: &AuthContext) -> Result<AdminRagHealthStatus, AppError> {
         let mut tx = self.begin_admin_tx(auth).await?;
         let response = AdminRagHealthStatus {
@@ -122,3 +91,4 @@
             .map_err(db_err)?;
         Ok(response)
     }
+

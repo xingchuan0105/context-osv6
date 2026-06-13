@@ -30,7 +30,7 @@ hex.workspace = true
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "uuid", "chrono", "json"] }
 text-splitter.workspace = true
 tokio.workspace = true
-tokio-util.workspace = true
+tempfile = "3.27"
 telemetry = { path = "../../crates/telemetry" }
 tracing.workspace = true
 uuid.workspace = true

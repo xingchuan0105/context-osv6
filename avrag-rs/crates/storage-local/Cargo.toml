@@ -2,6 +2,7 @@
 name = "storage-local"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 description = "Local file system storage adapter for desktop client"
 
 [dependencies]

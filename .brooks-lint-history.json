@@ -3,6 +3,44 @@
     "date": "2026-06-13",
     "mode": "PR Review",
     "score": 96,
+    "findings": { "critical": 0, "warning": 1, "suggestion": 0 },
+    "scope": "post review-fix: git tracked, adapter dead shards removed, workspace -D warnings green, smoke prebuild + paddle_image_smoke; residual: full parallel smoke not re-run end-to-end"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Tech Debt Assessment",
+    "score": 97,
+    "findings": { "critical": 0, "warning": 1, "suggestion": 1 },
+    "scope": "post review-fix: pg port_impl monolith remains but dead duplicate shards deleted; LiteParse/Paddle/M5/M14 intact"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Test Quality Review",
+    "score": 96,
+    "findings": { "critical": 0, "warning": 1, "suggestion": 0 },
+    "scope": "post review-fix: smoke 11 modules, paddle_image_smoke + worker contract in script, billing skip gate; integration E2E still E2E_MODE gated"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Architecture Audit",
+    "score": 98,
+    "findings": { "critical": 0, "warning": 0, "suggestion": 1 },
+    "scope": "post review-fix: adapter dead-code drift removed; Redis/app-chat/share splits intact; pg port_impl size remains"
+  },
+    "findings": { "critical": 0, "warning": 2, "suggestion": 2 },
+    "scope": "avrag-rs active Rust workspace (34 members) + desktop Tauri shell + frontend_next transport seam; deep reprobe v5, deprecated frontend_rust excluded"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Tech Debt Assessment",
+    "score": 57,
+    "findings": { "critical": 1, "warning": 5, "suggestion": 3 },
+    "scope": "avrag-rs + frontend_next + contracts + desktop (v6 LiteParse P4 post-cutover deep debt scan: image route gap, repeated parse passes, warning gate drift, docs/config drift)"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "PR Review",
+    "score": 96,
     "findings": { "critical": 0, "warning": 0, "suggestion": 1 },
     "scope": "post Brooks merge-fix plan (M0b–M14b): git staging complete, E2E compile green, transport/decodeError unified, port contracts, PR split-ready"
   },
@@ -152,5 +190,19 @@
     "score": 73,
     "findings": { "critical": 2, "warning": 5, "suggestion": 2 },
     "scope": "avrag-rs (35 workspace members, deep subagent audit)"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Test Quality Review",
+    "score": 68,
+    "findings": { "critical": 1, "warning": 3, "suggestion": 2 },
+    "scope": "avrag-rs + frontend_next + contracts + desktop (deep reprobe round 6; product_e2e compile green, smoke runner guard red, billing sqlx tests PoolTimedOut)"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "PR Review",
+    "score": 48,
+    "findings": { "critical": 2, "warning": 4, "suggestion": 2 },
+    "scope": "staged 360 files (+46118/-12813) + unstaged 61 files (+1910/-3058); sampled LiteParse/Paddle P4, smoke runner, docs archive, frontend transport residual"
   }
 ]

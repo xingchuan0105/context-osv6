@@ -61,12 +61,12 @@ pub(in crate::parser::router) fn routes_to_backend(routes: &[PageRouteKind]) -> 
     if routes.iter().any(|r| matches!(r, PageRouteKind::ScanOcr | PageRouteKind::TableOcr)) {
         if routes.iter().any(|r| matches!(r, PageRouteKind::Text | PageRouteKind::Figure)) {
             // Combined page: text via LiteParse, OCR via paddle in worker
-            PdfPageBackend::EdgeParse
+            PdfPageBackend::LITEPARSE_TEXT
         } else {
             PdfPageBackend::PaddleOcr
         }
     } else {
-        PdfPageBackend::EdgeParse
+        PdfPageBackend::LITEPARSE_TEXT
     }
 }
 

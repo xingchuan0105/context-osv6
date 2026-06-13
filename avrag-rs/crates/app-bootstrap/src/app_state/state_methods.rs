@@ -2,6 +2,7 @@ use app_core::{AdminStorePort, AppConfig, BillingStorePort, ShareStorePort};
 use common::AppError;
 use app_chat::agents::service::UnifiedAgentService;
 use super::AppState;
+use crate::adapters::RedisRateLimitBackend;
 use crate::AppBootstrapResult;
 use anyhow::Result as AnyResult;
 use avrag_auth::AuthContext;
@@ -23,6 +24,7 @@ impl From<AppBootstrapResult> for AppState {
             chat: result.chat,
             postgres: result.postgres,
             redis_url: result.redis_url,
+            rate_limit_backend: result.rate_limit_backend,
         }
     }
 }
@@ -131,6 +133,10 @@ impl AppState {
 
     pub fn redis_url(&self) -> &str {
         &self.redis_url
+    }
+
+    pub fn rate_limit_backend(&self) -> Option<&RedisRateLimitBackend> {
+        self.rate_limit_backend.as_deref()
     }
 
     pub fn max_upload_file_size_bytes(&self) -> u64 {

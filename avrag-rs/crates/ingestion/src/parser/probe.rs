@@ -18,6 +18,26 @@ pub struct ParseProbeConfig {
     pub table_heavy_threshold: usize,
     /// Aspect-ratio tolerance for detecting presentation-like pages.
     pub presentation_aspect_ratio_tolerance: f32,
+    /// LiteParse routing thresholds (§5.3).
+    pub fig_ratio_threshold: f32,
+    pub fig_count_threshold: usize,
+    pub table_garble_threshold: f32,
+    pub text_qual_threshold: f32,
+}
+
+impl ParseProbeConfig {
+    pub fn from_env() -> Self {
+        let lp = crate::parser::LiteParseConfig::from_env();
+        Self {
+            scanned_page_threshold: lp.scanned_page_threshold,
+            table_heavy_threshold: lp.table_heavy_threshold,
+            fig_ratio_threshold: lp.fig_ratio_threshold,
+            fig_count_threshold: lp.fig_count_threshold,
+            table_garble_threshold: lp.table_garble_threshold,
+            text_qual_threshold: lp.text_qual_threshold,
+            ..Self::default()
+        }
+    }
 }
 
 impl Default for ParseProbeConfig {
@@ -28,6 +48,10 @@ impl Default for ParseProbeConfig {
             image_heavy_threshold: 5,
             table_heavy_threshold: 10,
             presentation_aspect_ratio_tolerance: 0.15,
+            fig_ratio_threshold: 0.15,
+            fig_count_threshold: 2,
+            table_garble_threshold: 0.30,
+            text_qual_threshold: 0.5,
         }
     }
 }
@@ -549,7 +573,7 @@ const WATERMARK_PATTERNS: &[&str] = &[
 ];
 
 /// Compute table garbled ratio from page text.
-/// High ratio = text from tables is likely garbled (EdgeParse can't extract table structure).
+/// High ratio = text from tables is likely garbled (LiteParse text path lacks table structure).
 /// Heuristic: count short whitespace-separated fragments typical of broken table columns.
 fn compute_table_garbled_ratio(text: &str) -> f32 {
     if text.is_empty() {
@@ -575,8 +599,6 @@ fn compute_table_garbled_ratio(text: &str) -> f32 {
     ratio.min(1.0)
 }
 
-/// readable_ratio below this → route to OCR.
-pub const TEXT_QUAL_THRESHOLD: f32 = 0.3;
 /// Bigram repeat ratio above this → watermark/garbage page.
 pub const BIGRAM_REPEAT_THRESHOLD: f32 = 0.30;
 /// Unique token ratio below this → watermark/garbage page.

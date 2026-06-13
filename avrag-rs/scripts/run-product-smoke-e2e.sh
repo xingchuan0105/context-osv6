@@ -11,6 +11,7 @@ NON_RAG_MODULES=(
   search_smoke
   auth_boundary
   share_boundary
+  paddle_image_smoke
 )
 
 # PR smoke unit tests (parallel with non-RAG smoke; no Docker).
@@ -37,7 +38,7 @@ assert_smoke_module_coverage() {
 
   mapfile -t discovered < <(
     cargo test --test product_e2e -p app --features product-e2e smoke:: -- --list \
-      | sed -n 's/^smoke::\([^:]*\)::.*/\1/p' \
+      | sed -n 's/.*::smoke::\([^:]*\)::.*/\1/p' \
       | sort -u
   )
 
@@ -54,11 +55,25 @@ assert_smoke_module_coverage() {
       exit 1
     fi
   done
+
+  echo "OK: smoke module coverage guard passed (${#registered[@]} modules match cargo --list)"
 }
+
+if [[ "${1:-}" == "--check-modules" ]]; then
+  assert_smoke_module_coverage
+  exit 0
+fi
 
 assert_smoke_module_coverage
 
 export E2E_MODE=smoke
+
+echo "== Pre-build shared artifacts (avoid parallel cargo lock contention) =="
+cargo build -p avrag-worker -p app --features product-e2e --tests
+
+echo "== Paddle image routing + worker metadata contracts =="
+cargo test -p ingestion image_file_routing_uses_paddle_ocr_image_route --quiet
+cargo test -p avrag-worker paddle_image_route_metadata_contract --quiet
 
 echo "== Non-RAG smoke + unit tests (parallel) =="
 for t in "${NON_RAG_MODULES[@]}"; do

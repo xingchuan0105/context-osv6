@@ -4,6 +4,8 @@ use avrag_auth::AuthContext;
 use avrag_storage_pg::PgAppRepository;
 use app_core::StorageContext;
 
+use crate::adapters::RedisRateLimitBackend;
+
 #[derive(Clone)]
 pub struct AppState {
     pub(crate) auth: AuthContext,
@@ -17,6 +19,7 @@ pub struct AppState {
     pub(crate) chat: app_chat::ChatContext,
     pub(crate) postgres: Option<Arc<PgAppRepository>>,
     pub(crate) redis_url: String,
+    pub(crate) rate_limit_backend: Option<Arc<RedisRateLimitBackend>>,
 }
 
 pub use app_core::{MemoryState, RetrievedContext, StoredDocument};

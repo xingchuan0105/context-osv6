@@ -9,10 +9,11 @@ use std::{env, fs};
 use uuid::Uuid;
 
 use crate::pipeline::helpers::{
-    build_document_index_batch, build_parse_backend_summary, embed_text_vectors_with_client,
-    enrich_multimodal_source_locator, parse_triplet_response, record_graph_degrade,
-    validate_mirror_source_path, ExtractedTriplet, GraphIndexRecords,
+    build_document_index_batch, build_parse_backend_summary, enrich_multimodal_source_locator,
+    record_graph_degrade, validate_mirror_source_path, GraphIndexRecords,
 };
+#[cfg(test)]
+use crate::pipeline::helpers::{embed_text_vectors_with_client, parse_triplet_response, ExtractedTriplet};
 use crate::runtime_support::{fetch_url_content, safe_relative_object_key, url_to_filename};
 use crate::ParseRunOutputs;
 
@@ -88,8 +89,10 @@ fn build_parse_backend_summary_uses_fixed_contract_fields() {
                 page_number: 2,
                 backend: PdfPageBackend::VisualRaster,
                 reason: RouteReason::ComplexPdf,
+                route_kinds: vec![],
             }],
         }),
+        liteparse_snapshot: None,
     };
 
     let summary = build_parse_backend_summary(

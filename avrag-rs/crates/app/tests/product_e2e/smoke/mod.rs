@@ -13,6 +13,7 @@ pub(crate) use crate::product_e2e::e2e_gate::require_smoke_suite;
 pub mod auth_boundary;
 pub mod chat_smoke;
 pub mod ingestion_smoke;
+pub mod paddle_image_smoke;
 pub mod paddle_pdf_smoke;
 pub mod memory_multiturn_smoke;
 pub mod rag_codegen_multitool_smoke;

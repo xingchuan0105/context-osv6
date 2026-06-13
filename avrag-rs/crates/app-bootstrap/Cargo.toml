@@ -34,6 +34,7 @@ avrag-share = { path = "../share" }
 avrag-storage-milvus = { path = "../storage-milvus" }
 avrag-storage-pg = { path = "../storage-pg" }
 hex.workspace = true
+redis.workspace = true
 sha2.workspace = true
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "uuid", "chrono", "json"] }
 telemetry = { path = "../telemetry" }

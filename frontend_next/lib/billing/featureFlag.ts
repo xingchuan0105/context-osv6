@@ -1,4 +1,4 @@
-import { ApiError, buildApiUrl } from "../auth/client";
+import { ApiError, buildApiUrl } from "../http/request";
 import type { UsageWindowResponse } from "./api";
 
 /**

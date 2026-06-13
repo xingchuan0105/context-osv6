@@ -38,7 +38,7 @@ pub use admin_domain::{
 pub use admin_store::AdminStorePort;
 pub use auth_store::{
     AuthStorePort, AuthUserCredentials, AuthUserProfile, CreatePasswordResetTicketInput,
-    PasswordResetUser, RegisterUserInput, RegisterUserResult,
+    PasswordResetUser, RecordLegalAcceptanceInput, RegisterUserInput, RegisterUserResult,
 };
 pub use billing_quota::BillingQuotaPort;
 pub use billing_domain::{

@@ -28,8 +28,19 @@
 
 ## 入库 / Ingestion
 
-- [LiteParse + Paddle Jobs 统一入库架构（2026-06-13）](/home/chuan/context-osv6/avrag-rs/docs/liteparse-paddle-ingestion-architecture-2026-06-13.md) — **当前目标方案**：LiteParse 主解析、Paddle Jobs OCR、MM 示意图、Excel-only Office；MinerU/Paddle 慢线退役。
-- [入库路由讨论纪要（2026-06-10，部分已被上文取代）](/home/chuan/context-osv6/avrag-rs/docs/ingestion-routing-discussion-2026-06-10.md)
+- [LiteParse + Paddle Jobs 统一入库架构（2026-06-13）](/home/chuan/context-osv6/avrag-rs/docs/liteparse-paddle-ingestion-architecture-2026-06-13.md) — **当前实现真相源**：LiteParse hybrid 探针 + `router/page_routes` 页内分拣 + Paddle Jobs OCR；Excel-only Office；已知缺口见 §0.1（Brooks M3/M4/M5）。
+- [P4 前 MinerU / shadow / 灰度迁移（历史归档）](/home/chuan/context-osv6/avrag-rs/docs/archive/p4-mineru-shadow-migration-historical.md) — 已删除的 `LITEPARSE_*` / `MINERU_*` 开关与跳过的 Shadow/灰度阶段。
+- [入库路由讨论纪要（2026-06-10，过程记录）](/home/chuan/context-osv6/avrag-rs/docs/ingestion-routing-discussion-2026-06-10.md) — 讨论过程；**路由结论以上文为准**。
+- [历史文档：视觉 PDF 入库与检索改造（2026-06-10）](/home/chuan/context-osv6/avrag-rs/docs/archive/visual-pdf-ingest-requirements-2026-06-10.md) — 已归档；MinerU 旁路/视觉默认方案仅代表 P4 前讨论。
+
+## Brooks-Lint 当前报告
+
+- [架构审计（2026-06-13 v5）](/home/chuan/context-osv6/avrag-rs/docs/brooks-architecture-audit-2026-06-13.md) — 当前架构健康分 88/100；生产依赖图无环，重点风险为 `app-core` Redis adapter 泄漏与 `app-chat` 千行文件。
+- [PR 审查（2026-06-13 v6）](/home/chuan/context-osv6/avrag-rs/docs/brooks-pr-review-2026-06-13-v6.md) — 当前 PR 健康分 48/100；blocker 为 Git 变更集分裂与 smoke runner 清单解析失效。
+- [测试质量审查（2026-06-13 round6）](/home/chuan/context-osv6/avrag-rs/docs/brooks-test-quality-review-2026-06-13.md)
+- [技术债评估（2026-06-13 v6）](/home/chuan/context-osv6/avrag-rs/docs/brooks-tech-debt-assessment-2026-06-13.md)
+
+旧版 Brooks 报告放在 `docs/archive/`；本轮已归档 [PR 审查 v5](/home/chuan/context-osv6/avrag-rs/docs/archive/brooks-pr-review-2026-06-13-v5.md) 与 [架构审计 v4](/home/chuan/context-osv6/avrag-rs/docs/archive/brooks-architecture-audit-2026-06-13-v4.md)。
 
 ## 历史与外部资料
 

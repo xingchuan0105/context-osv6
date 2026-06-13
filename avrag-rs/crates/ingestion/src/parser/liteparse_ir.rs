@@ -5,9 +5,8 @@ use uuid::Uuid;
 use crate::ir::{
     BlockIr, BlockModality, BlockType, DocumentIr, DocumentType, PageIr, ParseBackend, SourceLocator,
 };
-use crate::parser::probe::PdfPageProbeResult;
 
-/// Per-page probe signals from LiteParse (mirrors [`PdfPageProbeResult`] + routing fields).
+/// Per-page probe signals from LiteParse (mirrors [`PdfPageProbeResult`](super::probe::PdfPageProbeResult) + routing fields).
 #[derive(Debug, Clone, PartialEq)]
 pub struct LiteParsePageProbe {
     pub page_number: u32,
@@ -31,23 +30,6 @@ pub struct LiteParseTextBlock {
     /// `[x1, y1, x2, y2]` PDF points, origin top-left.
     pub bbox: [f32; 4],
     pub block_type: String,
-}
-
-pub fn liteparse_page_probe_from_pdf_probe(probe: &LiteParsePageProbe) -> PdfPageProbeResult {
-    PdfPageProbeResult {
-        page_number: probe.page_number,
-        extracted_text_chars: probe.extracted_text_chars,
-        image_hint_count: probe.image_hint_count,
-        table_hint_count: probe.table_hint_count,
-        likely_scanned: probe.likely_scanned,
-        readable_ratio: probe.readable_ratio,
-        bigram_repeat_ratio: probe.bigram_repeat_ratio,
-        unique_token_ratio: probe.unique_token_ratio,
-        watermark_hit: probe.watermark_hit,
-        figure_area_ratio: probe.figure_area_ratio,
-        non_decorative_image_count: probe.non_decorative_image_count,
-        table_garbled_ratio: probe.table_garbled_ratio,
-    }
 }
 
 /// Build partial `DocumentIr` from LiteParse text blocks (A/B routes).

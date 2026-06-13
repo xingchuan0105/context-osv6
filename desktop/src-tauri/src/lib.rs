@@ -1,12 +1,21 @@
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+mod commands;
+mod registry;
 
-use contracts::chat::ChatEvent;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use common::ContentStore;
+use contracts::chat::ChatEvent;
 use storage_local::{CachePort, LocalCache, LocalContentStore};
 use tauri::{AppHandle, Emitter, Manager, State};
-use uuid::Uuid;
+
+use commands::api::{not_implemented_api_error, IpcApiError};
+use commands::backend::{backend_status_payload, local_document_json};
+use commands::chat::{
+    chat_event_channel, desktop_placeholder_events, parse_chat_request_id,
+    session_id_from_request,
+};
+use registry::ChatStreamRegistry;
 
 /// Managed local backend state (replaces OnceCell globals).
 pub struct AppLocalState {
@@ -14,61 +23,9 @@ pub struct AppLocalState {
     pub cache: Arc<LocalCache>,
 }
 
-/// Tracks in-flight chat streams for cancellation (C2).
-#[derive(Default)]
-pub struct ChatStreamRegistry {
-    cancellations: Mutex<HashMap<String, Arc<AtomicBool>>>,
-}
-
-impl ChatStreamRegistry {
-    pub fn register(&self, request_id: &str) -> Arc<AtomicBool> {
-        let flag = Arc::new(AtomicBool::new(false));
-        self.cancellations
-            .lock()
-            .expect("chat registry lock")
-            .insert(request_id.to_string(), Arc::clone(&flag));
-        flag
-    }
-
-    pub fn cancel(&self, request_id: &str) -> bool {
-        let mut guard = self.cancellations.lock().expect("chat registry lock");
-        if let Some(flag) = guard.get(request_id) {
-            flag.store(true, Ordering::SeqCst);
-            guard.remove(request_id);
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn remove(&self, request_id: &str) {
-        self.cancellations
-            .lock()
-            .expect("chat registry lock")
-            .remove(request_id);
-    }
-}
-
-#[derive(Debug, serde::Serialize)]
-struct IpcApiError {
-    status: u16,
-    code: String,
-    message: String,
-}
-
 fn emit_chat_event(app: &AppHandle, request_id: &str, event: &ChatEvent) -> Result<(), String> {
-    let channel = format!("chat://{request_id}");
-    app.emit(&channel, event)
+    app.emit(&chat_event_channel(request_id), event)
         .map_err(|e| format!("Failed to emit chat event: {e}"))
-}
-
-fn session_id_from_request(request: &serde_json::Value) -> String {
-    request
-        .get("session_id")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| Uuid::new_v4().to_string())
 }
 
 fn is_cancelled(cancel: &AtomicBool) -> bool {
@@ -131,19 +88,7 @@ async fn init_local_backend(app: tauri::AppHandle) -> Result<String, String> {
 #[tauri::command]
 async fn get_backend_status(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let initialized = app.try_state::<AppLocalState>().is_some();
-
-    Ok(serde_json::json!({
-        "initialized": initialized,
-        "type": "local",
-        "storage": {
-            "type": "filesystem",
-            "initialized": initialized
-        },
-        "cache": {
-            "type": "memory",
-            "initialized": initialized
-        }
-    }))
+    Ok(backend_status_payload(initialized))
 }
 
 /// 列出本地文档
@@ -160,19 +105,10 @@ async fn list_local_documents(state: State<'_, AppLocalState>) -> Result<Vec<ser
         .await
         .map_err(|e| format!("Failed to list documents: {e}"))?;
 
-    let result: Vec<serde_json::Value> = documents
+    Ok(documents
         .iter()
-        .map(|doc| {
-            serde_json::json!({
-                "id": doc.id,
-                "name": doc.file_name,
-                "status": doc.status,
-                "created_at": doc.created_at,
-            })
-        })
-        .collect();
-
-    Ok(result)
+        .map(local_document_json)
+        .collect())
 }
 
 /// Chat 流式接口：通过事件推送 contracts ChatEvent 给前端 (C1)
@@ -183,13 +119,7 @@ async fn chat_stream(
     app: tauri::AppHandle,
     registry: State<'_, ChatStreamRegistry>,
 ) -> Result<(), String> {
-    let request_id = request
-        .get("request_id")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .ok_or_else(|| "request_id is required".to_string())?;
-
+    let request_id = parse_chat_request_id(&request)?;
     let session_id = session_id_from_request(&request);
     let cancel = registry.register(&request_id);
 
@@ -202,59 +132,11 @@ async fn chat_stream(
     };
 
     let result = (|| {
-        if !emit_or_stop(
-            &app,
-            &ChatEvent::Start {
-                request_id: request_id.clone(),
-                session_id: session_id.clone(),
-            },
-        )? {
-            return Ok(());
+        for event in desktop_placeholder_events(&request_id, &session_id) {
+            if !emit_or_stop(&app, &event)? {
+                return Ok(());
+            }
         }
-
-        let message_id: i64 = 1;
-        if !emit_or_stop(
-            &app,
-            &ChatEvent::AnswerStart {
-                request_id: request_id.clone(),
-                session_id: session_id.clone(),
-                message_id,
-                agent_type: "chat".to_string(),
-            },
-        )? {
-            return Ok(());
-        }
-
-        let placeholder = "[Desktop mode] Chat is not yet connected to LLM backend. This is a placeholder response.";
-        if !emit_or_stop(
-            &app,
-            &ChatEvent::Token {
-                request_id: request_id.clone(),
-                message_id,
-                content: placeholder.to_string(),
-            },
-        )? {
-            return Ok(());
-        }
-
-        if is_cancelled(&cancel) {
-            return Ok(());
-        }
-
-        emit_chat_event(
-            &app,
-            &request_id,
-            &ChatEvent::Done {
-                request_id: request_id.clone(),
-                session_id,
-                message_id,
-                payload: serde_json::json!({
-                    "answer": placeholder,
-                    "status": "done",
-                }),
-            },
-        )?;
-
         Ok(())
     })();
 
@@ -277,11 +159,7 @@ async fn api_call(
     _body: Option<serde_json::Value>,
     _token: Option<String>,
 ) -> Result<serde_json::Value, IpcApiError> {
-    Err(IpcApiError {
-        status: 501,
-        code: "not_implemented".to_string(),
-        message: format!("API call {method} {path} is not yet implemented in desktop mode"),
-    })
+    Err(not_implemented_api_error(&method, &path))
 }
 
 /// 获取本地缓存值

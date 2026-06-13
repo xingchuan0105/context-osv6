@@ -1,7 +1,8 @@
 # ADR 0002: 文件解析路由与多模态检索召回优化
 
-> Status: historical ADR, partially superseded on 2026-04-26.
+> Status: historical ADR, partially superseded on 2026-04-26 and again on 2026-06-13 (P4 LiteParse).
 > The parser routing, DocumentIR, text/multimodal evidence, and citation ideas remain valid.
+> **MinerU 精准解析路由、本地 lopdf 主路径、shadow/灰度切流** 已由 [LiteParse + Paddle Jobs 统一入库架构（2026-06-13）](/home/chuan/context-osv6/avrag-rs/docs/liteparse-paddle-ingestion-architecture-2026-06-13.md) 取代；历史迁移见 [P4 MinerU/shadow 归档](/home/chuan/context-osv6/avrag-rs/docs/archive/p4-mineru-shadow-migration-historical.md).
 > Storage and retrieval target descriptions that mention Qdrant or PostgreSQL BM25 are superseded by [Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md): Milvus is the retrieval data plane for BM25 sparse, text dense, multimodal dense, and graph relation retrieval; Postgres remains the product control plane.
 
 ## 背景

@@ -14,9 +14,11 @@ chrono.workspace = true
 common = { path = "../common" }
 ingestion-types = { path = "../ingestion-types" }
 flate2 = "1"
+liteparse = { version = "2", default-features = false }
 lopdf = "0.35"
 reqwest = { workspace = true, features = ["json", "multipart"] }
 scraper = "0.22"
+sha2 = "0.10"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

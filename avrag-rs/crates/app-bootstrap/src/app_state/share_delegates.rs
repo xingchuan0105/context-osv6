@@ -25,7 +25,6 @@ impl AppState {
             store,
         )
         .await
-        .map(|response| response.0)
     }
 
     pub async fn revoke_share_link(&self, token: String) -> Result<(), AppError> {

@@ -1,1 +1,2 @@
-pub use app_core::adapters::{memory, redis_rate_limiter};
+pub use app_bootstrap::{RedisFixedWindowRateLimiter, RedisRateLimitBackend};
+pub use app_core::adapters::memory;

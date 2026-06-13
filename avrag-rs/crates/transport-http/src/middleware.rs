@@ -1,5 +1,4 @@
 use app_bootstrap::AppState;
-use app_core::adapters::redis_rate_limiter::RedisFixedWindowRateLimiter;
 use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
 use axum::{
     Json,
@@ -108,7 +107,7 @@ pub(crate) async fn request_context_middleware(
         DEFAULT_EDGE_RATE_LIMIT_RPM
     };
     let (edge_allowed, _edge_remaining, edge_limit) =
-        check_rate_limit_with_fallback(state.redis_url(), &edge_key, edge_limit).await;
+        check_rate_limit_with_fallback(state.rate_limit_backend(), &edge_key, edge_limit).await;
     if !edge_allowed {
         let retry_after = retry_after_seconds_for_window();
         return (
@@ -172,7 +171,7 @@ pub(crate) async fn request_context_middleware(
         limit_rpm = 1000;
     }
     let (allowed, remaining, limit) =
-        check_rate_limit_with_fallback(state.redis_url(), &rate_key, limit_rpm).await;
+        check_rate_limit_with_fallback(state.rate_limit_backend(), &rate_key, limit_rpm).await;
 
     let auth = if let Some(request_id) = headers
         .get(HEADER_REQUEST_ID)
@@ -280,14 +279,12 @@ pub(crate) async fn observability_middleware(req: Request, next: Next) -> Respon
 }
 
 async fn check_rate_limit_with_fallback(
-    redis_url: &str,
+    backend: Option<&app_bootstrap::RedisRateLimitBackend>,
     key: &str,
     limit_rpm: u32,
 ) -> (bool, u32, u32) {
-    if !redis_url.trim().is_empty()
-        && let Ok(limiter) =
-            RedisFixedWindowRateLimiter::new(redis_url.to_string(), limit_rpm).await
-        && let Ok(decision) = limiter.check(key).await
+    if let Some(backend) = backend
+        && let Ok(decision) = backend.check(key, limit_rpm).await
     {
         return (decision.allowed, decision.remaining, decision.limit);
     }

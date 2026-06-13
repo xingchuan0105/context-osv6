@@ -55,10 +55,13 @@ pub fn resolve_baseline(
         }
     }
 
-    // Tier 3: latest successful run on the same branch
+    // Tier 3: latest successful run on the same branch (and commit when known)
     let meta = crate::loader::load_run_metadata(current_run_dir);
-    if let Some(branch) = meta.and_then(|m| m.git_branch_from_anywhere().map(String::from)) {
-        if let Some(dir) = crate::loader::find_latest_run_on_branch(output_dir, &branch) {
+    if let Some(branch) = meta.as_ref().and_then(|m| m.git_branch_from_anywhere()) {
+        let commit = meta.as_ref().and_then(|m| m.git_commit_from_anywhere());
+        if let Some(dir) =
+            crate::loader::find_latest_run_on_branch(output_dir, branch, commit)
+        {
             // A run should not be its own baseline.
             if dir != current_run_dir {
                 return Some(dir);

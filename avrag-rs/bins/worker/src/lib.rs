@@ -15,7 +15,7 @@ use avrag_cache_redis::DocumentLock;
 use avrag_llm::SummaryGenerator;
 use avrag_storage_pg::PgAppRepository;
 use ingestion::parser::{
-    MineruClient, MineruConfig, OfficeParserServiceClient, OfficeParserServiceConfig,
+    OfficeParserServiceClient, OfficeParserServiceConfig,
     PdfRendererServiceClient, PdfRendererServiceConfig,
 };
 use ingestion::{
@@ -33,7 +33,7 @@ use runtime_support::{
 };
 use sources::{PgAuditSink, PgStateSink, PgTaskSource};
 
-pub(crate) use pipeline::ParseRunOutputs;
+pub(crate) use pipeline::helpers::ParseRunOutputs;
 
 pub async fn run() -> Result<()> {
     let _ = dotenvy::dotenv();
@@ -170,7 +170,6 @@ pub async fn run() -> Result<()> {
                 usage_limit: Some(avrag_billing::usage_limit::UsageLimitService::new(
                     usage_limit_store.clone(),
                 )),
-                mineru_client: MineruConfig::from_env().map(MineruClient::new),
                 office_parser_client: OfficeParserServiceConfig::from_env()
                     .map(OfficeParserServiceClient::new),
                 pdf_renderer_client: PdfRendererServiceConfig::from_env()

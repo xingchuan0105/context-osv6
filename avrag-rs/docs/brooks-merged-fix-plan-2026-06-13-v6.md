@@ -21,7 +21,7 @@
 - `scripts/run-product-smoke-e2e.sh` 的模块清单解析会误判为空，真实 smoke 测试没有执行。
 - 当前工作区再次有 staged / unstaged / untracked 混合风险，LiteParse 新文件、MinerU 删除、文档归档必须按主题完整入库。
 - `agents/loop/mod.rs` 仍 1289 行，`run()` 仍是主热点；上一轮“完成 M2b”的结论偏乐观。
-- `pg_admin_store` / `pg_share_store` 虽拆目录，但 `port_impl.rs` 仍是大文件，且分片源文件与实际编译路径存在重复维护风险。
+- `pg_admin_store` / `pg_share_store` 已按业务域拆分为 `shards.lst` 分片 + `build.rs` 拼装单一 trait impl（Rust 2024 下不可在 `impl` 内 `include!`）；分片清单以 `shards.lst` 为唯一事实源。
 
 ---
 
@@ -628,7 +628,7 @@ cd .. && graphify update .
 - `common -> avrag-auth` 生产依赖解除
 - `rag-core -> app-core` 生产依赖解除
 - `atomic_tools` / `helpers` 拆目录
-- `pg_share_store.rs` 单文件拆目录（但 `port_impl` 巨型问题仍归 M15 复测后处理）
+- `pg_share_store.rs` 单文件拆目录 + `port_impl` 域分片（`shards.lst` + `build.rs` 拼装，share 9 分片 / admin 7 分片）
 - 前端大多数 client 统一 HTTP（剩 `billing/featureFlag.ts`）
 
 ---

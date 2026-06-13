@@ -27,7 +27,10 @@ pub use ingestion_types::{
 pub use model::{DocumentStateMachine, Transition, build_ingest_task, build_ingest_url_task,
     build_reindex_task, task_audit,
 };
-pub use parser::{PageParseStatus, PageStatusEntry, parse_page_status_from_ir};
+pub use parser::{
+    blocks_to_document_ir, LiteParseConfig, LiteParseService, PageParseStatus, PageStatusEntry,
+    ParsedPdfSnapshot, parse_page_status_from_ir,
+};
 pub use runtime::{
     AuditSink, NoopAuditSink, NoopStateSink, NoopTaskProcessor, NoopTaskSource, StateSink,
     TaskProcessor, TaskSource, WorkerRuntime, WorkerTick,

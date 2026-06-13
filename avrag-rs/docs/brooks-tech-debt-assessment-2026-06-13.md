@@ -1,17 +1,20 @@
 # Brooks-Lint Review — 技术债深度评估
 
 **Mode:** Tech Debt Assessment
-**Scope:** `avrag-rs`（34 workspace crate）+ `frontend_next` + `contracts` + `desktop`（全项目深度探测 v5；方法级 + 依赖图 + 接缝复测）
-**Health Score:** 61/100
-**Trend:** 59 → **61**（+2 vs v4）
+**Scope:** `avrag-rs` + `frontend_next` + `contracts` + `desktop`（v6；LiteParse P4 全量切换后深度复查，重点检查缺口、BUG、漂移）
+**Health Score:** 57/100
+**Trend:** 61 → **57**（-4 vs v5）
 
-**一句话结论：** v4 路线图大部分已兑现——前端 HTTP 统一、桌面 IPC 契约对齐、记忆画像拆分、LLM 客户端拆分、`storage-pg` 直连清零、`dispatch_skill_tool` 从 475 行降至 170 行；剩余债务高度集中在 **ReAct `run()` 主循环（381 行 / 52 行深嵌套）** 与 **app-bootstrap 三个 850+ 行 PG 适配器**。
+**一句话结论：** Brooks 满分计划的多数结构性债务已经偿还，但 LiteParse 全量切换后暴露出新的入库链路债务：独立图片 Paddle 路由仍缺少端到端产物保护，LiteParse 对同一 PDF 多次重复解析，`-D warnings` 门禁目标被一批未清理的 P4 残留破坏，且部分历史文档仍在描述已删除的 shadow/灰度/MinerU 过渡期。
 
 > **归档：**
 > - v1 → [`archive/brooks-tech-debt-assessment-2026-06-12-v1.md`](./archive/brooks-tech-debt-assessment-2026-06-12-v1.md)（Health 34）
 > - v2 → [`archive/brooks-tech-debt-assessment-2026-06-12-v2.md`](./archive/brooks-tech-debt-assessment-2026-06-12-v2.md)（Health 58）
 > - v3 → [`archive/brooks-tech-debt-assessment-2026-06-12-v3.md`](./archive/brooks-tech-debt-assessment-2026-06-12-v3.md)（Health 70）
 > - v4 → [`archive/brooks-tech-debt-assessment-2026-06-12-v4.md`](./archive/brooks-tech-debt-assessment-2026-06-12-v4.md)（Health 59）
+> - v5 → [`archive/brooks-tech-debt-assessment-2026-06-13-v5.md`](./archive/brooks-tech-debt-assessment-2026-06-13-v5.md)（Health 61）
+
+> **事实更正（2026-06-13 PR Review v6）：** 本报告中关于 `LiteParseImage` 的 Critical finding 已被后续 P4 代码取代：当前 router 将独立图片路由到 `ParseRoute::PaddleOcrImage` / `ExternalParseKind::PaddleOcrImage`，worker 走 `execute_paddle_ocr_image`。剩余风险应收窄为“独立图片 Paddle 产物缺少 E2E/asset contract 保护”，而不是“图片仍走 LiteParse 抽字”。本报告未重新计分；以最新 PR Review v6 为准。
 
 ---
 
@@ -19,245 +22,218 @@
 
 | 维度 | 说明 |
 |------|------|
-| Workspace | 34 crate；`cargo metadata` DFS **循环依赖：0** |
-| 六类衰减风险 | 全部启用（无 `.brooks-lint.yaml`） |
-| 优先级公式 | Pain × Spread（各 1–3，最高 9）；7–9 Critical debt / 4–6 Scheduled / 1–3 Monitored |
-| 验证方式 | `cargo metadata` 依赖图、impl 方法级行数与 ≥6 层缩进统计、生产路径 `unwrap` 上下文核查、前端 import 链追踪 |
+| 配置 | 无 `.brooks-lint.yaml`，六类衰减风险全部启用 |
+| 重点变更 | LiteParse 主链、MinerU/Shadow 删除、Office Excel-only、Paddle Jobs、前端 HTTP 统一残留 |
+| 证据来源 | `graphify query`、代码路径追踪、`rg` 残留扫描、`cargo test -p ingestion -p avrag-worker`、`cargo test --no-run -p app --test product_e2e --features product-e2e`、`cargo check -p avrag-worker` |
+| 验证结果 | 功能测试通过，但 worker/ingestion 编译输出仍有大量 warning；Product E2E 可编译但测试夹具仍有 warning |
+| 优先级公式 | Pain × Spread（1–3）；7–9 Critical debt / 4–6 Scheduled / 1–3 Monitored |
 
-### 1.1 关键指标对比（v4 → v5）
+### 1.1 v5 → v6 关键变化
 
-| 指标 | v4 | v5（本次） | 变化 |
-|------|-----|------------|------|
-| ReAct `run()` | ~465 行 / ge6≈89 | **381 行 / ge6=52** | ✅ 部分提取（`check_iteration_budget_exhausted`、`emit_turn_end_telemetry` 等已拆出） |
-| `dispatch_skill_tool()` | ~475 行 | **170 行**（+ `dispatch_codegen` 等子分发） | ✅ 拆分完成 |
-| `run_auto_fallback()` | 未单独计量 | **126 行 / ge6=51** | ❌ 新暴露热点 |
-| loop 目录总行 | 6060 | **6309**（policy 子树增长） | ⚠️ 净增 249 行 |
-| 前端 7× `client.ts` fetch 重复 | 2288 行各自包装 | **1901 行，全部 `import ../http/request`** | ✅ 统一完成 |
-| 桌面 IPC 事件 schema | 手写第三份 | **`contracts::ChatEvent` + `parseIpcChatEvent`** | ✅ 单源对齐 |
-| `chat_private` | 1122 行 + 8 处生产 unwrap | **`chat_private/` 模块树 515+499 行；生产 0 unwrap** | ✅ 拆分 + typed delta |
-| `llm/client.rs` | 1262 行三合一 | **`client/mod.rs` 375 行** + stream_parser/rate_limit/request | ✅ 拆分完成 |
-| `storage-pg` 运行时直连 | 4 个 domain crate | **仅 `app-bootstrap` + `avrag-worker`** | ✅ 架构目标达成 |
-| `settings-share-messages` shim | 14 行 + 10 调用方 | **文件与引用均 0** | ✅ 清除 |
-| `auth_secondary.rs` | 1040 行 | **拆至 `auth/reset.rs` 等**（最大 537 行） | ✅ 按子域拆分 |
-| `repository_retrieval.rs` | 1222 行混域 | **458 + 504（lifecycle）** | ✅ 按域拆分 |
-| `use-workspace-context-rail.ts` | 750 行 / 39 hooks | **114 行** | ✅ 大幅瘦身 |
-| `WorkspaceChatStreamEvent` | 独立 kind 层 | **`= ChatEvent` 类型别名** | ✅ DTO 统一 |
-| `pg_share_store.rs` | 未单列 | **1062 行** | ❌ 新热点 |
-| `pg_admin_store.rs` | 未单列 | **894 行** | ❌ 新热点 |
-| `billing_sql/core_webhooks.rs` | 未单列 | **884 行** | ❌ 新热点 |
-| 生产 TODO/FIXME（Rust） | 3 处 | **3 处**（eval + guardrails） | ✅ 维持 |
+| 指标 | v5 | v6 复查 | 结论 |
+|------|----|---------|------|
+| `atomic_tools` / `helpers` | 报告中仍按 860+ 行单文件计 | 已拆成目录与子模块 | ✅ v5 此项已过时，移出发现 |
+| `pg_share_store.rs` | 报告中仍按 1062 行单文件计 | 已拆成 `pg_share_store/` 目录（12 个源文件：mod/mappers/port_impl + 9 个 `shards.lst` 分片） | ✅ v5 此项已过时，移出发现 |
+| `agents/loop/mod.rs` | 仍是主循环热点 | 文件 1289 行；`run` / `run_auto_fallback` 仍在同文件 | ⚠️ 仍保留为认知负担项 |
+| 独立图片路径 | v5 未覆盖 | 当前已路由到 `PaddleOcrImage`，但缺少 image E2E/asset contract | 🟢 PR Review v6 已收窄 |
+| LiteParse PDF 解析次数 | v5 未覆盖 | 路由 probe + `page_dimensions` + `extract_blocks`，失败/预算降级还会再 parse | 🟡 新性能债 |
+| P4 警告门禁 | v5 未覆盖 | `cargo test -p ingestion -p avrag-worker` 绿但有 30+ warning | 🟡 与 `-D warnings` 目标漂移 |
+| 当前架构文档 | v5 未覆盖 | 仍描述 `LITEPARSE_ENABLED` / shadow / MinerU 删除前阶段 | 🟡 文档真相源漂移 |
+| 前端 HTTP 统一 | v5 说基本完成 | `billing/featureFlag.ts` 仍从 `auth/client` 拿 `buildApiUrl` 并手写 fetch | 🟢 小残留 |
 
 ---
 
-## 2. Findings
+## Findings
 
-### 🔴 Critical
+### Critical
 
-**Cognitive Overload — ReAct `run()` 仍占 381 行，52 行处于 ≥6 层缩进**
+**Domain Model Distortion — [Superseded] 独立图片路径 finding 已被 P4 代码收窄**
 
-Symptom: `agents/loop/mod.rs` 的 `run()` 占 **L126–506（381 行）**，其中 **52 行缩进 ≥6 层**；虽已提取 `check_iteration_budget_exhausted`、`emit_turn_end_telemetry`、`trigger_auto_fallback_and_check_degraded` 等辅助方法，主循环体仍是 loop-within-match-within-if 的深嵌套控制流。同文件 `build_run_result` 另占 169 行。loop 目录合计 **6309 行**，为全项目最大行为子系统。
-Source: Fowler — *Refactoring*, Long Method; McConnell — *Code Complete*, Ch. 7: High-Quality Routines; Ousterhout — *A Philosophy of Software Design*, Deep vs Shallow Modules
-Consequence: 所有 agent 行为的主执行路径——调整 exit policy、disclosure、synthesis gate、auto-fallback 时仍需在 380 行方法内定位上下文；修改回归风险集中；新人无法在工作记忆内装下完整控制流。v4→v5 虽有进展，但按 Severity Guide（>50 行且嵌套 >5）仍属 Critical。
-Remedy: 继续不动行为地提取：`run()` 内每轮迭代的「LLM 调用 → 解析 → 分发 → 状态更新」四段各成 <80 行私有方法；将 `build_run_result` 移入 `assembler.rs` 或独立 `run_result.rs`。现有 mod.rs/iteration.rs 内嵌 20+ 用例是安全网，拆一步跑一次。
-Priority: Pain 3 × Spread 2 = **6**（Scheduled） | Intent: **[accidental]**
+Symptom: 原报告认为 `router/mod.rs` 将图片路由到 `ExternalParseKind::LiteParseImage` 且 worker 只调用 `LiteParseService::parse_file`。后续 P4 代码已改为 `ParseRoute::PaddleOcrImage` / `ExternalParseKind::PaddleOcrImage`，`parse_route.rs` 调用 `execute_paddle_ocr_image`。因此这条 finding 的原始事实已过时；剩余可保留的问题是独立图片缺少端到端产物测试。
+
+Source: Evans — *Domain-Driven Design*, Ubiquitous Language；Ousterhout — *A Philosophy of Software Design*, Information Leakage
+
+Consequence: 若继续按原 finding 执行，会把工程精力花在不存在的 `LiteParseImage` 分支上；真正需要保护的是 Paddle image ingest 产物是否包含可检索文本、Figure asset 与正确 metadata。
+
+Remedy: 不再修 `LiteParseImage`。补一个图片 E2E 或 fake Paddle contract：上传 png，断言 `doc_type=image`、`paddle_jobs_count=1`、至少存在一个 searchable text block 或 Figure asset；如需 MM 原图落库，再把 asset 存储路径和 chunking contract 补齐。
+
+Priority: Pain 3 × Spread 2 = **6**（Scheduled, but severity Critical because current route can silently lose image recall） | Intent: **[accidental]**
 
 ---
 
-### 🟡 Warning
+### Warning
 
-**Cognitive Overload — `run_auto_fallback()` 126 行、51 行深嵌套**
+**Accidental Complexity — LiteParse 主链对同一 PDF 重复解析，成本随页数放大**
 
-Symptom: `agents/loop/mod.rs` 的 `run_auto_fallback()` 占 **L700–825（126 行）**，**51 行缩进 ≥6 层**——与 `run()` 同级的 fallback 路径复杂度被 v4 拆分后暴露出来。
-Source: Fowler — *Refactoring*, Long Method; Brooks — *The Mythical Man-Month*, Second-System Effect（局部战术补丁未同步简化）
-Consequence: auto-fallback 是 degraded-run 恢复的关键路径；深嵌套使 fallback 分支难以独立测试，与 `run()` 形成「双核心」认知负担。
-Remedy: 将 fallback 按触发原因（no_evidence / budget_exhausted / synthesis_blocked）拆为三个 <50 行策略函数，由 `run_auto_fallback` 做薄分发。
-Priority: Pain 2 × Spread 2 = **4**（Scheduled） | Intent: **[accidental]**
+Symptom: PDF 路由阶段 `probe_pdf_hybrid` 会调用 `LiteParseService::probe` 解析一次；执行阶段 `execute_pdf_parse` 又调用 `page_dimensions` 解析一次、`extract_blocks` 解析一次；预算跳过或 Paddle 失败时会再次 `extract_blocks`。这些函数内部都重新 `parse_input(PdfInput::Bytes(...))`。也就是说同一 PDF 在正常路径至少被 LiteParse 解析 3 次，异常路径更多。
 
-**Cognitive Overload — app-bootstrap 三个 850+ 行 PG 适配器**
+Source: Hunt & Thomas — *The Pragmatic Programmer*, Orthogonality；Ousterhout — *A Philosophy of Software Design*, Tactical Programming
 
-Symptom: `pg_share_store.rs` **1062 行**、`pg_admin_store.rs` **894 行**、`billing_sql/core_webhooks.rs` **884 行**；每个文件混合 RLS `set_config`、事务开启、多表 SQL 与 port trait 实现。`pg_share_store` 单独含 20+ 处 `sqlx::query` 调用。
-Source: Fowler — *Refactoring*, Divergent Change; Martin — *Clean Architecture*, SRP
-Consequence: share/admin/billing 任一 schema 变更需在同一巨型文件中定位；merge conflict 面大；bootstrap 层 fan-out 达 20，成为 composition root 的认知瓶颈。
-Remedy: 按 port 子域再拆——如 `pg_share_store/{tokens,members,analytics}.rs`；抽取共享 `set_rls_context()` 到 `adapters/pg_session.rs`（6 个适配器重复 `set_config` 模式）。参照 `repository_retrieval` 按域拆分先例。
+Consequence: P4 取消 shadow/灰度后，LiteParse 是唯一主链；重复解析会直接拉长大 PDF 入库时间，并增加内存峰值。后续调优会被迫在多个函数之间传递“已经解析过的事实”，形成新的 change propagation。
+
+Remedy: 让 `LiteParseService` 提供一次性 `parse_pdf(bytes) -> LiteParseParsedDocument` 或 `ParsedPdfSnapshot`，包含 page probes、dimensions、text blocks；路由和执行共享该快照，或者在 `execute_pdf_parse` 内至少把 `page_dimensions` 与 `extract_blocks` 合并为一次 parse pass。
+
 Priority: Pain 2 × Spread 3 = **6**（Scheduled） | Intent: **[accidental]**
 
-**Cognitive Overload — unified agent 工具层 `atomic_tools` + `helpers` 各 860+ 行**
+**Accidental Complexity — P4 删除旧路径后留下大量 warning，`-D warnings` 门禁目标漂移**
 
-Symptom: `agents/unified/atomic_tools.rs` **869 行**、`helpers.rs` **861 行**；混合 codegen 桥接、检索 citation 构建、observation 序列化、tool result 格式化等多个变更原因。
-Source: Fowler — *Refactoring*, Divergent Change / Feature Envy
-Consequence: 新增 atomic tool 或调整 codegen observation 格式时，需在 1700 行 unified 层中导航；与 loop/iteration 的 dispatch 子函数形成平行复杂度。
-Remedy: 按工具族拆分：`atomic_tools/{retrieval,codegen,search}.rs`；`helpers` 中 codegen 相关移入 `codegen_bridge.rs`（与 iteration 的 `dispatch_codegen` 对齐）。
+Symptom: `cargo test -p ingestion -p avrag-worker` 全绿，但输出包括 `ParseProbe` 未用导入、旧 `router/stages/*::route` 未用、`office_convert.rs` 的 `is_image_file/temp_pdf_path` 未用、worker pipeline 多个未用导入、`DocumentIrPdfExt` 未用等 30+ warning。`cargo check -p avrag-worker` 同样输出这些 warning。此前 Brooks 计划已把 `RUSTFLAGS="-D warnings"` 作为 smoke/integration 的质量门槛，但当前 worker/ingestion 路径还不能稳定满足这个目标。
+
+Source: McConnell — *Code Complete*, Construction Hygiene；Winters et al. — *Software Engineering at Google*, Code Sustainability
+
+Consequence: warning 会掩盖真实新增问题，也会让 `-D warnings` 在不同 workflow 或本地命令中表现不一致。新同学无法判断哪些是“可忽略的历史遗留”，哪些是 P4 删除旧路径造成的漏清理。
+
+Remedy: 删除未用 `router/stages` 旧分阶段路由或重新接回；清理 worker/pipeline 未用导入；移除 `parse_json` 的 shadow diff 注释和未用函数，或用 `#[cfg(test)]`/明确 allow 标注历史兼容原因。然后在 ingestion/worker 的 CI job 中加入 `RUSTFLAGS="-D warnings" cargo check -p ingestion -p avrag-worker`。
+
+Priority: Pain 2 × Spread 3 = **6**（Scheduled） | Intent: **[accidental]**
+
+**Knowledge Duplication — 当前 LiteParse 架构文档仍描述已删除的 shadow/灰度/MinerU 阶段**
+
+Symptom: `docs/liteparse-paddle-ingestion-architecture-2026-06-13.md` 仍包含 `LITEPARSE_ENABLED`、`LITEPARSE_SHADOW_MODE`、`LITEPARSE_ROLLOUT_PERCENT`、“先 shadow 再切流再删代码”、“保留一键回退至 lopdf + 现网路由”等内容。但代码已经删除 shadow diff CLI、shadow runtime、rollout 判断和 MinerU 模块；`.env.example` 也已去掉这些开关。旧 `visual-pdf-ingest-requirements` 与 runbook 还在说明 MinerU 配置。
+
+Source: Hunt & Thomas — *The Pragmatic Programmer*, DRY；Ousterhout — *A Philosophy of Software Design*, Information Leakage
+
+Consequence: 文档作为“当前目标方案”的真相源时会误导部署和回滚：按文档配置 `LITEPARSE_ENABLED=0` 已经没有效果，按文档寻找 shadow artifact 也找不到。后续排障会浪费在不存在的切流路径上。
+
+Remedy: 把 LiteParse 架构文档升级为 P4 后状态：删除 shadow/rollout 章节，保留“历史迁移路径”到 archive；runbook 中 MinerU 配置改为历史说明或归档；`docs/README.md` 链接说明从“目标方案”改为“当前实现 + 已知缺口”。
+
 Priority: Pain 2 × Spread 2 = **4**（Scheduled） | Intent: **[accidental]**
 
-**Knowledge Duplication — 前端 `decodeError` 仍有 4 份拷贝**
+**Cognitive Overload — `execute_pdf_parse` 同时编排路由、OCR、降级、metadata 与状态写入**
 
-Symptom: `lib/http/request.ts` 已有 `decodeApiError`，但 `workspace/stream.ts`、`billing/api.ts`、`dashboard/preferences.ts` 仍各自实现 **几乎相同的 JSON 错误解析**（各 15–25 行）；`billing/api.ts` 另从 `auth/client` 导入 `buildApiUrl` 而非 `http/request`。
-Source: Hunt & Thomas — *The Pragmatic Programmer*, DRY
-Consequence: 错误 envelope 格式变更需改 4 处；auth 与 http 模块边界模糊，新开发者不知以哪份为准。
-Remedy: `stream.ts`/`billing/api.ts`/`preferences.ts` 统一 `import { decodeApiError, buildApiUrl } from "../http/request"`；删除本地 `decodeError`。
-Priority: Pain 1 × Spread 3 = **3**（Monitored，边界 Warning） | Intent: **[accidental]**
+Symptom: `bins/worker/src/pdf/parse.rs` 约 362 行；`execute_pdf_parse` 内部同时计算 text/ocr/table 页面集合、调用 Paddle Jobs、处理预算跳过、做 LiteParse 降级、做 Visual fallback、写 metadata/warnings、再调用 B 类图片增强和 page_status。P4 删除 legacy 后，这个函数成为唯一 PDF 主控路径，但它仍混合了策略判断和执行细节。
+
+Source: Fowler — *Refactoring*, Long Method / Divergent Change；McConnell — *Code Complete*, High-Quality Routines
+
+Consequence: 修 OCR 预算、修 Visual fallback、修 metadata schema、修 B 类图增强都会进同一个函数；每次改动都要重新理解整条入库链，容易引入重复 page parse 或 page_status 漏标。
+
+Remedy: 拆出 4 个内部阶段：`collect_page_routes`、`run_ocr_pages`、`apply_text_fallbacks`、`attach_ingest_metadata_and_status`。每个阶段只返回一个结构化结果，`execute_pdf_parse` 保持薄 orchestration。
+
+Priority: Pain 2 × Spread 2 = **4**（Scheduled） | Intent: **[accidental]**
+
+**Change Propagation — 前端 HTTP 统一仍有 `billing/featureFlag.ts` 残留旧入口**
+
+Symptom: `frontend_next/lib/http/request.ts` 已提供 `buildApiUrl`/`decodeApiError`/`requestJson`，但 `frontend_next/lib/billing/featureFlag.ts` 仍从 `../auth/client` 导入 `ApiError, buildApiUrl` 并手写 fetch。v5 报告中“8 个 client 全部 import 统一入口”的结论因此不完整。
+
+Source: Hunt & Thomas — *The Pragmatic Programmer*, DRY；Winters et al. — *Software Engineering at Google*, Hyrum's Law
+
+Consequence: 认证 URL 构造和 HTTP 错误格式仍有一条旁路；如果 `http/request` 后续调整 API base、错误 envelope 或 IPC/HTTP 分叉，这个文件可能静默漂移。
+
+Remedy: 将 `featureFlag.ts` 改为使用 `lib/http/request` 的统一函数；若它必须保留轻量 fetch，至少从 `http/request` 导入 `buildApiUrl` 和 `ApiError`，不再依赖 `auth/client`。
+
+Priority: Pain 1 × Spread 2 = **2**（Monitored, but counted as Warning because it invalidates the previous completion claim） | Intent: **[accidental]**
 
 ---
 
-### 🟢 Suggestion
+### Suggestion
 
-**Change Propagation — `stream.ts` 仍含 ~200 行手写 wire 事件窄化**
+**Domain Model Distortion — LiteParse 全量切换后仍保留 `EdgeParse` / `Mineru*` 历史枚举名**
 
-Symptom: `WorkspaceChatStreamEvent` 已 alias 为 `ChatEvent`，但 `parseWireChatEvent`/`parseIpcChatEvent` 仍 **419 行**，含 citation/source_locator 手工窄化与 `CHAT_EVENT_NAMES` 校验。
-Source: Ousterhout — *A Philosophy of Software Design*, Information Leakage
-Consequence: 协议字段变更时映射层可能 drift；风险已因 DTO 统一而显著降低。
-Remedy: 评估 generated schema 校验（zod/typia）替代手写 switch；或让 reducer 直接消费 `ChatEvent.event` 删除中间层。
-Priority: Pain 1 × Spread 2 = **2**（Monitored） | Intent: **[intentional]** UI 适配层
+Symptom: `PdfPageBackend::EdgeParse` 现在实际代表 LiteParse 数字文本路径；`ParseBackend::MineruImage` / `MineruPdfOcr` 仍在 IR 枚举中用于历史文档兼容。代码中也有 `merge_page_legacy_backend`、`PdfPageBackend::PaddleOcr` 等历史语义。
 
-**Cognitive Overload — `loop/policy/config.rs` 669 行 YAML 策略配置**
+Source: Evans — *Domain-Driven Design*, Ubiquitous Language；Fowler — *Refactoring*, Primitive Obsession / Alternative Classes
 
-Symptom: 单文件承载三模式（rag/search/chat）的 YAML 加载、校验、默认值与 10+ 内嵌测试。
-Source: McConnell — *Code Complete*, Ch. 7
-Consequence: 新增 agent 模式或调整 policy cluster 时需编辑大文件；与 loop 主循环共享变更面。
-Remedy: 按 mode 拆 `config/{rag,search,chat}.yaml` + 薄加载器；或提取 `ModeConfig` 校验到独立 `config/validate.rs`。
+Consequence: 新开发者看到 `EdgeParse` 会以为 lopdf 主链仍在；看到 `MineruImage` 会以为 MinerU 仍是支持后端。短期为历史 IR 兼容可以接受，但需要明确边界。
+
+Remedy: 保留 `ParseBackend::Mineru*` 但加 `#[deprecated]` 或注释“历史 IR only”；新增 `PdfPageBackend::LiteParseText`，逐步替换计划层的 `EdgeParse` 命名；迁移完成后只在历史反序列化层保留旧名。
+
+Priority: Pain 1 × Spread 2 = **2**（Monitored） | Intent: **[intentional]**（历史兼容）
+
+**Accidental Complexity — `LiteParseService` 仍暴露 shadow-era API 与注释**
+
+Symptom: `LiteParseService::parse_json` 注释为 “Export parse result as JSON for shadow diff”，`LiteParsePageProbe::to_pdf_page_probe` 注释为 “legacy probe struct for router compatibility during migration”。P4 已删除 shadow diff 文件和 shadow CLI，但这些 API 仍留在生产模块里。
+
+Source: Fowler — *Refactoring*, Speculative Generality / Lazy Class
+
+Consequence: 这些函数会暗示 shadow diff 仍是支持能力，也会诱导后续代码继续依赖迁移期适配层。它们本身不是高风险，但会加重命名漂移。
+
+Remedy: 若仅测试使用，移入 `#[cfg(test)]`；若没有引用，直接删除。迁移期注释改为 P4 后真实语义，例如“convert LiteParse probe into router probe model”。
+
+Priority: Pain 1 × Spread 1 = **1**（Monitored） | Intent: **[accidental]**
+
+**Cognitive Overload — `agents/loop/mod.rs` 仍是 1289 行主循环聚合点**
+
+Symptom: M2 已将 `iteration_codegen`、`iteration_tools`、`run_result` 等拆出，但 `agents/loop/mod.rs` 仍为 1289 行，并保留 `pub async fn run` 和 `run_auto_fallback` 两个核心入口。这个文件不再是本轮最高风险，但仍是 agent 行为变更的主要导航成本。
+
+Source: Fowler — *Refactoring*, Long Method；Ousterhout — *A Philosophy of Software Design*, Deep Modules
+
+Consequence: 新增 exit policy、fallback 或 tracing 时仍会回到同一个大文件；虽然风险比 v5 降低，但仍会拖慢后续 agent 改动。
+
+Remedy: 在下一轮小步拆 `run` 的 LLM-call/parse/dispatch/state-update 四段；把 fallback 策略移到 `fallback.rs`，`mod.rs` 只保留编排接口。
+
 Priority: Pain 1 × Spread 2 = **2**（Monitored） | Intent: **[accidental]**
 
-**Domain Model Distortion — 记忆画像 typed delta 与 JSON 存储桥接**
-
-Symptom: `profile_merge.rs`（499 行）已引入 `ProfileDelta`/`SlotUpdate` 等 typed struct，但运行时 profile 仍以 `serde_json::Value` 存储与合并（`ensure_profile_object`、`slot_update_to_value` 等桥接函数）。
-Source: Evans — *Domain-Driven Design*, Anemic Domain Model; Fowler — *Refactoring*, Primitive Obsession
-Consequence: 类型安全仅覆盖 delta 入口，profile 主体仍是无形状 JSON；未来新增 slot 类型需同时维护 struct 与 JSON 路径。
-Remedy: 定义 `UserProfile` struct（serde 序列化），merge 函数操作 typed struct 后一次性 `to_value`；与 v4 路线图 #4 方向一致，现可降级为收尾项。
-Priority: Pain 1 × Spread 1 = **1**（Monitored） | Intent: **[intentional]**（渐进迁移中）
-
-**Accidental Complexity — eval framework 1633 行（feature 门控）**
-
-Symptom: `eval/framework.rs` 占 1633 行，门控于 `#![cfg(feature = "eval")]`，不进入生产二进制。
-Source: Brooks — *The Mythical Man-Month*, Second-System Effect
-Consequence: 无生产风险；开启 eval feature 时编译与认知成本高。
-Remedy: 按 eval 场景（rag/search/chat/redteam）拆子模块；维持 feature gate。
-Priority: Pain 1 × Spread 1 = **1**（Monitored） | Intent: **[intentional]**
-
 ---
 
-## 3. Debt Summary
+## Debt Summary
 
 | Risk | Findings | Avg Priority | Classification | Intent |
 |------|----------|-------------|----------------|--------|
-| Cognitive Overload | 5 | 3.4 | Scheduled | accidental |
-| Knowledge Duplication | 1 | 3.0 | Monitored | accidental |
-| Change Propagation | 1 | 2.0 | Monitored | intentional |
-| Domain Model Distortion | 1 | 1.0 | Monitored | intentional |
-| Accidental Complexity | 1 | 1.0 | Monitored | intentional |
-| Dependency Disorder | 0 | — | **Clean**（无环；storage-pg 直连清零） | — |
+| Cognitive Overload | 2 | 3.0 | Monitored/Scheduled | accidental |
+| Change Propagation | 1 | 2.0 | Monitored | accidental |
+| Knowledge Duplication | 1 | 4.0 | Scheduled | accidental |
+| Accidental Complexity | 3 | 4.3 | Scheduled | accidental |
+| Dependency Disorder | 0 | — | Clean | — |
+| Domain Model Distortion | 2 | 4.0 | Scheduled | mixed |
 
-**Recommended focus:** Cognitive Overload（ReAct `run()` + `run_auto_fallback` 收尾拆分 → app-bootstrap PG 适配器按域拆分）
-
-**系统性判读:** v4 的 11 项偿还清单中 **7 项已完全清零、2 项大幅进展**；债务重心从「多热点分散」收敛为「两个主堡垒」——agent loop 主路径与 bootstrap PG 适配层。六风险中 Dependency Disorder 首次清零，是本轮最显著的架构收益。
+**Recommended focus:** 先修独立图片链路（功能缺口），再清 warning 与文档漂移，最后优化 LiteParse 单次解析缓存。Agent loop 可继续排期，但已经不是这次 P4 后最紧急的风险。
 
 ---
 
-## 4. 偿还路线图（v5 更新）
+## 2. 偿还路线图（v6）
 
-### 4.0 自 v4 以来已完成 ✅
-
-| 任务 | 验收 |
-|------|------|
-| 前端统一 `lib/http/request.ts` | 8 个 client 全部 import |
-| 桌面 IPC `ChatEvent` 对齐 | `desktop/lib.rs` emit contracts；`tauri-ipc.ts` 用 `parseIpcChatEvent` |
-| `chat_private` 拆分 + 生产 unwrap 清零 | `chat_private/{mod,profile_merge,profile_types,...}` |
-| `llm/client` 拆文件 | `client/{mod,stream_parser,rate_limit,request}.rs` |
-| `storage-pg` 域 crate 直连清零 | normal 依赖仅 bootstrap + worker |
-| `dispatch_skill_tool` 拆分 | 170 行 + 子分发函数 |
-| `settings-share-messages` 删除 | 0 引用 |
-| `auth_secondary` 按子域拆分 | `auth/reset.rs` 等 |
-| `repository_retrieval` 按域拆分 | retrieval + lifecycle |
-| `use-workspace-context-rail` 瘦身 | 114 行 |
-
-### 4.1 计分模型：61 → 100
-
-| 档位 | 数量 | 单项分值 | 合计 | 清完后累计 |
-|------|------|---------|------|-----------|
-| 🔴 Critical | 1 | +15 | +15 | 61 → **76** |
-| 🟡 Warning | 4 | +5 | +20 | 76 → **96** |
-| 🟢 Suggestion | 4 | +1 | +4 | 96 → **100** |
-
-### 4.2 第一档 — Critical（61 → 76）
+### 2.1 第一档：必须先修（57 → 72）
 
 | # | 任务 | 验收 |
 |---|------|------|
-| 1 | 继续拆 `run()` + `build_run_result` | 单方法 <150 行；ge6 行数 <20；`cargo test -p app-chat` 全绿 |
+| 1 | 独立图片 `PaddleOcrImage` 补 E2E/asset contract | 图片 E2E：上传 png 后 text chunk 或 MM chunk 至少一类存在；无 MinerU 引用 |
 
-### 4.3 第二档 — Warning（76 → 96）
-
-| # | 任务 | 验收 |
-|---|------|------|
-| 2 | 拆 `run_auto_fallback` 三策略 | 单函数 <60 行 |
-| 3 | bootstrap PG 适配器按域拆分 | 单文件 <500 行；共享 `set_rls_context` |
-| 4 | unified `atomic_tools`/`helpers` 按工具族拆分 | 单文件 <500 行 |
-| 5 | 前端 `decodeError` 统一到 `http/request` | 4 处 → 1 处 |
-
-### 4.4 第三档 — Suggestion（96 → 100）
+### 2.2 第二档：上线卫生（72 → 97）
 
 | # | 任务 | 验收 |
 |---|------|------|
-| 6 | 评估删除 `stream.ts` 手写窄化层 | 或减少至 <200 行 |
-| 7 | `loop/policy/config` 按 mode 拆分 | 单文件 <400 行 |
-| 8 | `UserProfile` typed struct 收尾 | merge 不再直接操纵 Value |
-| 9 | eval framework 按场景拆模块 | 维持 feature gate |
+| 2 | LiteParse parse pass 缓存/合并，避免同一 PDF 正常路径 parse 3 次 | 单 PDF 正常路径 LiteParse parse 次数 ≤1 或 ≤2；大文件耗时基线下降 |
+| 3 | 清理 ingestion/worker warning，恢复 `-D warnings` 可用性 | `RUSTFLAGS="-D warnings" cargo check -p ingestion -p avrag-worker` 通过 |
+| 4 | 更新 LiteParse 架构文档与 runbook，删除 shadow/rollout/MinerU 现行描述 | `rg 'LITEPARSE_ENABLED|LITEPARSE_SHADOW|MINERU_' docs/*.md docs/runbooks` 只剩 archive/历史说明 |
+| 5 | 拆 `execute_pdf_parse` 阶段函数 | 主函数 <120 行；各阶段有单元测试或现有 worker tests 通过 |
+| 6 | 前端 `billing/featureFlag.ts` 接统一 HTTP 层 | `rg 'from "../auth/client"' frontend_next/lib/billing` 为 0 |
 
-### 4.5 建议执行顺序
+### 2.3 第三档：命名与收尾（97 → 100）
 
-```
-快赢:      #5 decodeError 统一          (半天)
-并行攻坚:  #1 run() 拆分  +  #2 auto_fallback  (每步跑测试)
-结构性:    #3 bootstrap 适配器  +  #4 unified 工具层
-收尾:      #6 → #7 → #8 → #9
-```
+| # | 任务 | 验收 |
+|---|------|------|
+| 7 | `EdgeParse` / `Mineru*` 历史枚举加注释或迁移命名 | 新计划层不再用 `EdgeParse` 表示 LiteParse；历史 IR 兼容保留有注释 |
+| 8 | 删除/测试门控 `parse_json`、`to_pdf_page_probe` 等迁移 API | `rg 'shadow diff' crates/ingestion/src/parser` 为 0 |
+| 9 | `agents/loop/mod.rs` 继续薄化 | `mod.rs` <900 行；fallback 迁到 `fallback.rs` |
 
-### 4.6 维持机制
+---
 
-- 新 PG 适配器文件 >500 行、新函数 >150 行时在 PR review 拦截
-- 桌面端新 IPC 命令必须序列化 contracts 类型（已有成例）
-- 每完成一批跑集成门禁并重测 Brooks-Lint
-
-### 集成门禁
+## 3. 验证记录
 
 ```bash
-cd avrag-rs && cargo test -p app-chat -p app-bootstrap -p avrag-llm
-cd contracts && cargo test
-cd frontend_next && pnpm check:contracts-drift && pnpm typecheck
-./scripts/check_contract_governance.sh
+cargo test -p ingestion -p avrag-worker --quiet
+# 通过；但输出 30+ warning
+
+cargo test --no-run -p app --test product_e2e --features product-e2e --quiet
+# 通过；product_e2e fixture 仍有 warning
+
+cargo check -p avrag-worker --quiet
+# 通过；但输出 worker/ingestion warning
 ```
 
 ---
 
-## 5. 预期成果
+## 4. 附录：关键代码锚点
 
-| 维度 | v5 | 第一档完成 | 第一+二档完成 | 全部清零 |
-|------|-----|-----------|--------------|---------|
-| Health Score | 61 | **76** | **96** | **100** |
-| Critical | 1 | 0 | 0 | 0 |
-| Warning | 4 | 4 | 0 | 0 |
-| Suggestion | 4 | 4 | 4 | 0 |
-| 最大单方法 | 381 行 (`run`) | <150 行 | <150 行 | <150 行 |
-| storage-pg 域直连 | 0 | 0 | 0 | 0 |
-| 前端 decodeError 拷贝 | 4 | 4 | 1 | 1 |
-
----
-
-## 6. 附录：关键文件索引
-
-| 路径 | 行数 | 说明 |
-|------|------|------|
-| `app-chat/src/agents/loop/mod.rs` | 1201（`run` 381 / `run_auto_fallback` 126） | 🔴 主病灶 |
-| `app-bootstrap/src/adapters/pg_share_store.rs` | 1062 | 🟡 巨型适配器 |
-| `app-bootstrap/src/adapters/pg_admin_store.rs` | 894 | 🟡 巨型适配器 |
-| `app-bootstrap/src/adapters/billing_sql/core_webhooks.rs` | 884 | 🟡 巨型适配器 |
-| `app-chat/src/agents/unified/atomic_tools.rs` | 869 | 🟡 工具层 |
-| `app-chat/src/agents/unified/helpers.rs` | 861 | 🟡 工具层 |
-| `app-chat/src/agents/loop/iteration.rs` | 1147（`dispatch_skill_tool` 170） | ✅ 已拆分 |
-| `frontend_next/lib/http/request.ts` | 147 | ✅ HTTP 统一入口 |
-| `frontend_next/lib/workspace/stream.ts` | 419 | 🟢 wire 窄化残留 |
-| `app-chat/src/chat_private/profile_merge.rs` | 499 | 🟢 typed delta 桥接 |
-| `llm/src/client/mod.rs` | 375 | ✅ 已拆分 |
-| `desktop/src-tauri/src/lib.rs` | ~320 | ✅ contracts ChatEvent |
+| 路径 | 观察 |
+|------|------|
+| `crates/ingestion/src/parser/router/mod.rs` | 图片扩展名路由到 `ParseRoute::PaddleOcrImage`；PDF 始终 `probe_pdf_hybrid` |
+| `bins/worker/src/pipeline/parse_route.rs` | `PaddleOcrImage` 分支调用 `execute_paddle_ocr_image`；剩余缺口是 E2E/asset contract |
+| `crates/ingestion/src/parser/liteparse.rs` | `probe` / `extract_blocks` / `page_dimensions` 各自重新 parse bytes |
+| `bins/worker/src/pdf/parse.rs` | 唯一 PDF 主链，混合 OCR、fallback、metadata、page_status |
+| `docs/liteparse-paddle-ingestion-architecture-2026-06-13.md` | 仍描述 shadow/rollout/一键回退旧链 |
+| `frontend_next/lib/billing/featureFlag.ts` | HTTP 统一残留旁路 |
 
 ---
 
-*生成工具：Brooks-Lint Tech Debt Assessment · 2026-06-13 v5（深入探测，方法级口径）*
+*生成工具：Brooks-Lint Tech Debt Assessment · 2026-06-13 v6（LiteParse P4 后深度探查）*

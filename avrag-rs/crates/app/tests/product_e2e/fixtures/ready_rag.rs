@@ -14,6 +14,7 @@ use super::super::{DocumentStatus, TestContext, UploadResponse};
 use super::super::setup;
 
 /// Infra captured after one cold upload + ingestion (lives for the test binary).
+#[allow(dead_code)]
 pub(crate) struct RagSharedFixture {
     pub upload: UploadResponse,
     pub(crate) org_id: String,
@@ -87,6 +88,9 @@ impl RagSharedFixture {
             std::mem::forget(tx);
         }
         if let Some(tx) = ctx.mock_search_abort.take() {
+            std::mem::forget(tx);
+        }
+        if let Some(tx) = ctx.mock_paddle_abort.take() {
             std::mem::forget(tx);
         }
         std::mem::forget(ctx);

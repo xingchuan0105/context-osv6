@@ -118,7 +118,7 @@ mod tests {
             "doc-1",
             "title",
             DocumentType::Pdf,
-            ParseBackend::EdgeParsePdf,
+            ParseBackend::EdgeParsePdf, // historical IR wire name
         );
         document.metadata.insert(
             "page_status".to_string(),

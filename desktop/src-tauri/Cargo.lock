@@ -97,9 +97,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 name = "avrag-auth"
 version = "0.1.0"
 dependencies = [
- "serde",
- "thiserror 2.0.18",
- "uuid",
+ "contracts",
 ]
 
 [[package]]
@@ -125,6 +123,13 @@ name = "avrag-rag-core-ports"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
+ "common",
+ "contracts",
+ "ingestion-types",
+ "serde",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]
@@ -383,7 +388,6 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "avrag-auth",
  "chrono",
  "contracts",
  "serde",
@@ -398,6 +402,7 @@ dependencies = [
 name = "contracts"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1583,6 +1588,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a588916bfdfd92e71cacef98a63d9b1f0d74d6599980d11894290e7ddefffcf7"
 dependencies = [
  "cfb",
+]
+
+[[package]]
+name = "ingestion-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

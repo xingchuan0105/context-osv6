@@ -3,6 +3,7 @@ name = "avrag-llm"
 edition = "2024"
 rust-version = "1.93"
 version = "0.1.0"
+license.workspace = true
 
 [dependencies]
 contracts = { path = "../../../contracts" }

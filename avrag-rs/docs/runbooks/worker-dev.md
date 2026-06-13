@@ -116,32 +116,40 @@ cargo check -p avrag-worker
 
 ## 服务器部署提醒
 
-### PDF 视觉入库（VisualRaster，2026-06-10 起默认）
+### PDF 入库（LiteParse + Paddle Jobs，P4 后默认）
 
-低文字页 / 扫描页走 **PyMuPDF sidecar**，不再使用 MinerU PDF OCR。
+PDF 与 Office→PDF 文档走 **LiteParse 主链**：hybrid 探针（`probe_pdf_hybrid`）→ `router/page_routes` 页内分拣 → Worker `execute_pdf_parse`。
 
-1. 启动 pdf-visual-renderer（默认 `127.0.0.1:9091`）：
+| 页型 | 处理方式 |
+|------|----------|
+| A/B（有字） | LiteParse 抽字；B 类附加 Figure → MM |
+| C/D（表/扫描） | Paddle AI Studio **Jobs** API（`PADDLE_OCR_*`） |
+| E（兜底） | `pdf-renderer` sidecar 整页 VisualRaster |
+
+1. **Paddle Jobs（C/D 类 PDF 页 + 独立图片）**
+   - `PADDLE_OCR_BASE_URL` — 默认 `https://paddleocr.aistudio-app.com/api/v2/ocr`
+   - `PADDLE_OCR_API_TOKEN` — AI Studio Token（**禁止入库/日志**）
+   - `PADDLE_OCR_MODEL` — 如 `PaddleOCR-VL-1.6`
+2. **E 类 VisualRaster sidecar**（仅 OCR 失败 / Job 预算耗尽时）
    - `PDF_RENDERER_BASE_URL=http://127.0.0.1:9091`
    - **端口冲突**：Milvus standalone 默认也占 `9091`（metrics）。`docker-compose.milvus.yml` 已把 Milvus 宿主机映射改为 `19091:9091`，gRPC 仍用 `19530`。若 9091 被占，`pdf-renderer-up.sh` 会提示并退出。
-   - 启动：`./scripts/pdf-renderer-up.sh`
-   - 停止：`./scripts/pdf-renderer-down.sh`
-2. 可选调参：
-   - `PDF_VISUAL_PAGES_PER_CHUNK=4` — 多页 fusion chunk 大小
-   - `PDF_RENDERER_TIMEOUT_MS=60000`
-   - `MM_EMBEDDING_IMAGE_TOKEN_ESTIMATE=896` — 多图 embed 限流估算
-3. VLM 页摘要（INGESTION_LLM）与可选 triplet（`INGESTION_VLM_TRIPLET_ENABLED=1`）依赖 `INGESTION_LLM_*` 配置。
-4. 本地 object store 无 presigned URL 时，worker 在 **spawn 任务内** 将页图读入并编码为 `data:image/...;base64,...`（避免主线程同时持有多 chunk 大图）；降级原因写入 `parse_run.outputs.multimodal_degrade_reasons`。
-5. 单 chunk 多模态 embed 失败时 **跳过该 chunk 向量** 并记 degrade，不会导致整单 ingest 失败。
+   - 启动：`./scripts/pdf-renderer-up.sh` / 停止：`./scripts/pdf-renderer-down.sh`
+3. 可选调参：`PDF_VISUAL_PAGES_PER_CHUNK=4`、`PDF_RENDERER_TIMEOUT_MS=60000`、`MM_EMBEDDING_IMAGE_TOKEN_ESTIMATE=896`
+4. VLM 页摘要（INGESTION_LLM）与可选 triplet（`INGESTION_VLM_TRIPLET_ENABLED=1`）依赖 `INGESTION_LLM_*` 配置。
 
-### 图片 MinerU（仅 `MineruImage` 路由）
+> **已删除：** MinerU PDF OCR、`LITEPARSE_ENABLED` / shadow / 灰度开关。历史见 `docs/archive/p4-mineru-shadow-migration-historical.md`。架构详情见 `docs/liteparse-paddle-ingestion-architecture-2026-06-13.md`。
 
-独立图片文件（非 PDF 页 OCR）仍可能走 MinerU：
+### 独立图片 Paddle OCR（`ParseRoute::PaddleOcrImage`）
 
-- `MINERU_BASE_URL=https://mineru.net/api/v4`
-- `MINERU_API_KEY=<有效 key>`
-- MinerU `v4` 只接受可访问的 `http(s)` 文件 URL；对象存储需对 MinerU 可达（presigned URL）。
+独立图片（`png` / `jpg` / `webp` 等）走 Paddle Jobs，1 文件 = 1 Job：
 
-### Office 解析
+- `PADDLE_OCR_BASE_URL` — 默认 `https://paddleocr.aistudio-app.com/api/v2/ocr`
+- `PADDLE_OCR_API_TOKEN` — AI Studio Token（**禁止入库/日志**）
+- `PADDLE_OCR_MODEL` — 如 `PaddleOCR-VL-1.6`
+
+产出：`DocumentType::Image`，`pdf_route_mode=paddle_image`，文本块 + Figure 块（含 MM 索引）。
+
+### Office 解析（仅 Excel）
 
 - `OFFICE_PARSER_BASE_URL=http://127.0.0.1:9090`
 - `./scripts/office-parser-up.sh` / `./scripts/office-parser-down.sh`

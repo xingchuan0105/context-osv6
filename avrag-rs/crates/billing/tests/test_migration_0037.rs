@@ -1,9 +1,13 @@
-use sqlx::PgPool;
+mod support;
 
-#[sqlx::test]
-async fn migration_0037_sets_pricing_revamp_quotas(pool: PgPool) {
-    // Apply all migrations up to 0037 (path relative to crate root: crates/billing)
-    sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+use support::{pg_pool_or_skip, run_migrations};
+
+#[tokio::test]
+async fn migration_0037_sets_pricing_revamp_quotas() {
+    let Some(pool) = pg_pool_or_skip("migration_0037_sets_pricing_revamp_quotas").await else {
+        return;
+    };
+    run_migrations(&pool).await;
 
     // 1) quota_limits: capacity values refreshed, spec §1.1
     //    Free llm_input_tokens: 50K soft / 100K hard
@@ -58,11 +62,14 @@ async fn migration_0037_sets_pricing_revamp_quotas(pool: PgPool) {
     assert_eq!(row, (2500000, 15000000));
 }
 
-#[sqlx::test]
-async fn migration_0037_preserves_enterprise_unlimited_policy(pool: PgPool) {
-    // The revamp targets free / plus / pro only; the legacy enterprise row
-    // (left at 0/0 = unlimited by 0018) must remain untouched.
-    sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+#[tokio::test]
+async fn migration_0037_preserves_enterprise_unlimited_policy() {
+    let Some(pool) =
+        pg_pool_or_skip("migration_0037_preserves_enterprise_unlimited_policy").await
+    else {
+        return;
+    };
+    run_migrations(&pool).await;
 
     let row: (i64, i64) = sqlx::query_as(
         "SELECT rolling_5h_limit_units, rolling_7d_limit_units \

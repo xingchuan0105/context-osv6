@@ -1,11 +1,9 @@
 use anyhow::Result;
-use avrag_auth::AuthContext;
 use avrag_cache_redis::DocumentLock;
-use avrag_llm::{SummaryGenerator};
 use avrag_retrieval_data_plane::RetrievalDataPlane;
 use avrag_storage_pg::{ObjectStoreHandle, PgAppRepository};
 use ingestion::parser::{
-    MineruClient, OfficeParserServiceClient, ParsePlan, ParseRouter, PdfPageBackend,
+    OfficeParserServiceClient, ParsePlan, ParseRouter, PdfPageBackend,
     PdfRendererServiceClient,
 };
 use ingestion::{IngestionError, IngestionTask, TaskProcessor};
@@ -38,7 +36,6 @@ pub(crate) struct PgTaskProcessor {
     pub(crate) triplet_llm: Option<Arc<avrag_llm::LlmClient>>,
     pub(crate) analytics: Option<analytics::AnalyticsService>,
     pub(crate) usage_limit: Option<avrag_billing::usage_limit::UsageLimitService>,
-    pub(crate) mineru_client: Option<MineruClient>,
     pub(crate) office_parser_client: Option<OfficeParserServiceClient>,
     pub(crate) pdf_renderer_client: Option<PdfRendererServiceClient>,
     pub(crate) ingestion_llm: Option<Arc<avrag_llm::LlmClient>>,
@@ -154,10 +151,10 @@ impl TaskProcessor for PgTaskProcessor {
                 "Document routing decision"
             );
             if let ParsePlan::Pdf(pdf_plan) = &route_decision.plan {
-                let edgeparse_pages = pdf_plan
+                let liteparse_text_pages = pdf_plan
                     .pages
                     .iter()
-                    .filter(|page| page.backend == PdfPageBackend::EdgeParse)
+                    .filter(|page| page.backend == PdfPageBackend::LITEPARSE_TEXT)
                     .count();
                 let visual_raster_pages = pdf_plan
                     .pages
@@ -167,7 +164,7 @@ impl TaskProcessor for PgTaskProcessor {
                 info!(
                     filename = %filename,
                     total_pages = pdf_plan.pages.len(),
-                    edgeparse_pages,
+                    liteparse_text_pages,
                     visual_raster_pages,
                     "PDF page routing plan prepared"
                 );

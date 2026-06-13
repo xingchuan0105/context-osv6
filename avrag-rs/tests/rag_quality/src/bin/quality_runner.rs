@@ -50,7 +50,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use rag_quality::{EvaluationHarness, GoldenDataset, HarnessConfig, RagEvaluator};
 use reqwest::Client;
 use serde_json::Value;
-use tracing::{info, warn};
+use tracing::info;
 
 const EMBED_BASE: &str = "https://dashscope.aliyuncs.com/compatible-mode/v1";
 const EMBED_MODEL: &str = "text-embedding-v4";
@@ -63,7 +63,7 @@ const LLM_MODEL: &str = "qwen-plus"; // OpenAI-compatible DashScope chat model
 /// A single in-memory chunk used as the retrieval unit.
 #[derive(Clone)]
 struct Chunk {
-    id: String,
+    _id: String,
     text: String,
     /// Pre-computed embedding vector.
     embedding: Vec<f32>,
@@ -95,7 +95,7 @@ async fn load_corpus(corpus_dir: &Path, embed: &EmbeddingClient) -> Result<Vec<C
                 .await
                 .with_context(|| format!("embedding chunk {stem}#{i} ({} chars)", para.len()))?;
             chunks.push(Chunk {
-                id: format!("{stem}#{i}"),
+                _id: format!("{stem}#{i}"),
                 text: para,
                 embedding,
             });

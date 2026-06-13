@@ -4,7 +4,9 @@
 
 use crate::models::{
     DiffEntry, DiffSeverity, GateStatus, JsonSummary, RunMetadata, SeveritySummary, TestResult,
+    TestFingerprint,
 };
+use crate::fingerprint::{fingerprint_for_test, fingerprint_match};
 use chrono::Utc;
 
 // ---------------------------------------------------------------------------
@@ -122,6 +124,7 @@ pub fn exit_code(summary: &SeveritySummary) -> i32 {
 pub fn build_json_summary(
     _baseline_run_id: &str,
     current_run_id: &str,
+    results: &[TestResult],
     diffs: &[(String, Vec<DiffEntry>)],
 ) -> JsonSummary {
     let severity_summary = summarize_diffs(diffs);
@@ -132,6 +135,15 @@ pub fn build_json_summary(
         .flat_map(|(_, entries)| entries.clone())
         .collect();
 
+    let fingerprints: Vec<TestFingerprint> = results
+        .iter()
+        .filter_map(|r| fingerprint_for_test(&r.test_name))
+        .collect();
+    let stable_fingerprints = fingerprints
+        .iter()
+        .filter(|fp| fingerprint_match(&fp.sha256, &fp.sha256))
+        .count();
+
     JsonSummary {
         run_metadata: RunMetadata {
             run_id: current_run_id.to_string(),
@@ -140,14 +152,14 @@ pub fn build_json_summary(
             git_sha: None,
             git_branch: None,
             environment: None,
-            total_tests: None,
-            passed: None,
+            total_tests: Some(results.len()),
+            passed: Some(stable_fingerprints),
             failed: None,
             skipped: None,
             timestamp: None,
             git_commit: None,
         },
-        fingerprints: Vec::new(),
+        fingerprints,
         diffs: flat_diffs,
         attributions: Vec::new(),
         coverage_gaps: Vec::new(),

@@ -219,7 +219,10 @@ fn main() -> anyhow::Result<()> {
                     .ok_or_else(|| anyhow::anyhow!("Run not found: {}", run_id))?
             };
 
-            let results = loader::load_run_results(&run_dir);
+            let run_record = loader::load_run_record(&run_dir);
+            let results = run_record
+                .map(|record| record.results)
+                .unwrap_or_else(|| loader::load_run_results(&run_dir));
             let baseline_dir = baseline::resolve_baseline(
                 run_dir.parent().unwrap_or(Path::new(".")),
                 None,
@@ -273,8 +276,12 @@ fn main() -> anyhow::Result<()> {
                     &all_diffs,
                 ),
                 ReportFormat::Json => {
-                    let summary =
-                        report::build_json_summary(&baseline_run_id, &current_run_id, &all_diffs);
+                    let summary = report::build_json_summary(
+                        &baseline_run_id,
+                        &current_run_id,
+                        &results,
+                        &all_diffs,
+                    );
                     serde_json::to_string_pretty(&summary)?
                 }
             };

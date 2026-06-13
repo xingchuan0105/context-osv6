@@ -4,7 +4,7 @@
 
 | 输入报告 | 维度 | 分数 | 趋势 |
 |----------|------|------|------|
-| [brooks-architecture-audit-2026-06-12.md](./brooks-architecture-audit-2026-06-12.md)（v2 复测） | 架构 | **83** | 73→77→83 |
+| [brooks-architecture-audit-2026-06-12-v2.md](./brooks-architecture-audit-2026-06-12-v2.md)（v2 复测） | 架构 | **83** | 73→77→83 |
 | [brooks-tech-debt-assessment-2026-06-12.md](./brooks-tech-debt-assessment-2026-06-12.md)（v4 深探,方法级口径;v3 原文见 [archive](./archive/brooks-tech-debt-assessment-2026-06-12-v3.md)） | 技术债 | **59**（v3 口径≈69） | 34→58→70→59 |
 | [brooks-test-quality-review-2026-06-12.md](./brooks-test-quality-review-2026-06-12.md)（Round 3） | 测试质量 | **82** | 52→62→82 |
 | [brooks-pr-review-2026-06-12-v3.md](./brooks-pr-review-2026-06-12-v3.md)（v3） | PR | **93** | 43→83→93 |

@@ -2,7 +2,7 @@
 //!
 //! Design: minimal external dependencies (no testcontainers crate), uses docker CLI directly.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -456,6 +456,16 @@ pub fn mime_type_for_filename(filename: &str) -> &'static str {
         "text/plain"
     } else if lower.ends_with(".md") {
         "text/markdown"
+    } else if lower.ends_with(".png") {
+        "image/png"
+    } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+        "image/jpeg"
+    } else if lower.ends_with(".webp") {
+        "image/webp"
+    } else if lower.ends_with(".gif") {
+        "image/gif"
+    } else if lower.ends_with(".bmp") {
+        "image/bmp"
     } else {
         "application/octet-stream"
     }
@@ -463,11 +473,16 @@ pub fn mime_type_for_filename(filename: &str) -> &'static str {
 
 /// Load fixture content from `tests/product_e2e/fixtures/`.
 pub fn load_fixture(name: &str) -> anyhow::Result<String> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/product_e2e/fixtures")
-        .join(name);
+    let path = fixture_path(name)?;
     std::fs::read_to_string(&path)
         .map_err(|e| anyhow::anyhow!("failed to read fixture {}: {}", path.display(), e))
+}
+
+/// Resolve a fixture path under `tests/product_e2e/fixtures/`.
+pub fn fixture_path(name: &str) -> anyhow::Result<PathBuf> {
+    Ok(Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/product_e2e/fixtures")
+        .join(name))
 }
 
 // ---------------------------------------------------------------------------
@@ -864,18 +879,10 @@ pub async fn redis_ping(url: &str) -> bool {
 /// Tries `target/debug/avrag-worker` first, then falls back to `cargo build -p avrag-worker`.
 pub async fn find_worker_binary() -> anyhow::Result<std::path::PathBuf> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let candidate = manifest_dir.join("../../../target/debug/avrag-worker");
-    if candidate.exists() {
-        return Ok(candidate);
-    }
-    let candidate2 = manifest_dir.join("../../target/debug/avrag-worker");
-    if candidate2.exists() {
-        return Ok(candidate2);
-    }
-
-    // Build it
+    let workspace_root = manifest_dir.join("../..");
     let status = tokio::process::Command::new("cargo")
         .args(["build", "-p", "avrag-worker"])
+        .current_dir(&workspace_root)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -884,13 +891,20 @@ pub async fn find_worker_binary() -> anyhow::Result<std::path::PathBuf> {
         anyhow::bail!("cargo build -p avrag-worker failed");
     }
 
+    let target_dir = std::env::var("CARGO_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| workspace_root.join("target"));
+    let candidate = target_dir.join("debug/avrag-worker");
     if candidate.exists() {
-        Ok(candidate)
-    } else if candidate2.exists() {
-        Ok(candidate2)
-    } else {
-        anyhow::bail!("avrag-worker binary not found after build");
+        return Ok(candidate);
     }
+
+    let legacy = manifest_dir.join("../../../target/debug/avrag-worker");
+    if legacy.exists() {
+        return Ok(legacy);
+    }
+
+    anyhow::bail!("avrag-worker binary not found after build")
 }
 
 // ---------------------------------------------------------------------------

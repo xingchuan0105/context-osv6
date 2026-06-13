@@ -37,8 +37,8 @@ KEY_VARS=(
   # Search — Brave LLM Context primary, Perplexity legacy
   SEARCH_API_KEY
   PERPLEXITY_API_KEY
-  # Document parsing
-  MINERU_API_KEY
+  # Document parsing — Paddle OCR (PDF pages + standalone images)
+  PADDLE_OCR_API_TOKEN
 )
 
 CHECK_ONLY=false

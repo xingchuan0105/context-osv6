@@ -43,13 +43,25 @@ impl DocumentType {
     }
 }
 
+/// Parser backend recorded on document IR blocks and pages.
+///
+/// Post-P4 PDF text ingest uses [`Self::LiteParsePdf`] / [`Self::LiteParseFigure`].
+/// Variants prefixed with historical wire names (`edge_parse_*`, `mineru_*`) remain
+/// for deserializing stored IR only — do not select them in new ingest paths.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ParseBackend {
+    /// Historical wire name (`edge_parse_pdf`). Post-P4 digital text uses [`Self::LiteParsePdf`].
     EdgeParsePdf,
     VisualRasterPdf,
     PaddleOcrPdf,
+    /// LiteParse digital text extraction (canonical post-P4 PDF text backend).
+    LiteParsePdf,
+    /// LiteParse B-route figure enrichment (VLM caption / asset metadata).
+    LiteParseFigure,
+    /// Historical IR only (pre-P4 MinerU OCR PDF). Do not emit on new ingest.
     MineruPdfOcr,
+    /// Historical IR only (pre-P4 MinerU image OCR). Do not emit on new ingest.
     MineruImage,
     Docx4jDocx,
     PoiXlsx,
@@ -63,11 +75,26 @@ pub enum ParseBackend {
 }
 
 impl ParseBackend {
+    /// Canonical PDF text backend for new ingest (post-P4 LiteParse main chain).
+    pub const fn canonical_pdf_text() -> Self {
+        Self::LiteParsePdf
+    }
+
+    /// Whether this variant is retained only for historical stored IR / metadata.
+    pub const fn is_historical_ir_only(self) -> bool {
+        matches!(
+            self,
+            Self::EdgeParsePdf | Self::MineruPdfOcr | Self::MineruImage
+        )
+    }
+
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::EdgeParsePdf => "edge_parse_pdf",
             Self::VisualRasterPdf => "visual_raster_pdf",
             Self::PaddleOcrPdf => "paddle_ocr_pdf",
+            Self::LiteParsePdf => "liteparse_pdf",
+            Self::LiteParseFigure => "liteparse_figure",
             Self::MineruPdfOcr => "mineru_pdf_ocr",
             Self::MineruImage => "mineru_image",
             Self::Docx4jDocx => "docx4j_docx",

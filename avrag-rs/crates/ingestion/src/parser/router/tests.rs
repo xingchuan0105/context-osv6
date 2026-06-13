@@ -16,28 +16,22 @@ fn text_file_routing_uses_local_text_parser() {
 }
 
 #[test]
-fn image_file_routing_uses_mineru_image_route() {
+fn image_file_routing_uses_paddle_ocr_image_route() {
     let decision = ParseRouter::route(b"fake image", "test.png", "image/png").unwrap();
-    assert_eq!(decision.route, ParseRoute::MineruImage);
+    assert_eq!(decision.route, ParseRoute::PaddleOcrImage);
     assert!(matches!(decision.reason, RouteReason::ImageFile));
 }
 
 #[test]
-fn presentation_file_routing_uses_office_service() {
+fn presentation_file_routing_uses_pdf_after_conversion() {
     let decision = ParseRouter::route(
         b"fake ppt",
         "test.pptx",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     )
     .unwrap();
-    assert_eq!(decision.route, ParseRoute::OfficeService);
-    assert!(matches!(decision.reason, RouteReason::PresentationFile));
-    assert!(matches!(
-        decision.plan,
-        ParsePlan::Office(OfficeParsePlan {
-            doc_type: OfficeDocType::Pptx
-        })
-    ));
+    assert_eq!(decision.route, ParseRoute::Pdf);
+    assert!(matches!(decision.reason, RouteReason::OfficeDocument));
 }
 
 #[test]
@@ -104,9 +98,9 @@ fn pdf_page_plan_routes_each_page_independently() {
 
     let plan = build_pdf_parse_plan(&probe_result, &ParseProbeConfig::default());
     assert_eq!(plan.pages.len(), 3);
-    assert_eq!(plan.pages[0].backend, PdfPageBackend::EdgeParse);
+    assert_eq!(plan.pages[0].backend, PdfPageBackend::LITEPARSE_TEXT);
     assert_eq!(plan.pages[1].backend, PdfPageBackend::PaddleOcr);
-    assert_eq!(plan.pages[2].backend, PdfPageBackend::EdgeParse);
+    assert_eq!(plan.pages[2].backend, PdfPageBackend::LITEPARSE_TEXT);
 
     let reason = summarize_pdf_reason(&probe_result, &ParsePlan::Pdf(plan));
     assert!(matches!(reason, RouteReason::ScannedPdf));
@@ -149,7 +143,7 @@ fn route_page_image_heavy_with_text_goes_to_b() {
         table_garbled_ratio: None,
     };
     let (backend, decision, _reason) = route_page(&page);
-    assert_eq!(backend, PdfPageBackend::EdgeParse);
+    assert_eq!(backend, PdfPageBackend::LITEPARSE_TEXT);
     assert_eq!(decision, RouteDecision::FastWithFigures);
 }
 
@@ -190,7 +184,7 @@ fn route_page_clean_text_goes_to_a() {
         table_garbled_ratio: None,
     };
     let (backend, decision, _reason) = route_page(&page);
-    assert_eq!(backend, PdfPageBackend::EdgeParse);
+    assert_eq!(backend, PdfPageBackend::LITEPARSE_TEXT);
     assert_eq!(decision, RouteDecision::FastText);
 }
 
@@ -213,6 +207,18 @@ fn route_page_garbled_table_goes_to_c_prime() {
     let (backend, decision, _reason) = route_page(&page);
     assert_eq!(backend, PdfPageBackend::PaddleOcr);
     assert_eq!(decision, RouteDecision::SlowOcrSinglePage);
+}
+
+#[test]
+fn pdf_page_route_labels_use_composable_kinds() {
+    use super::pdf_page_route_labels;
+    let plan = PdfPagePlan {
+        page_number: 1,
+        backend: PdfPageBackend::LITEPARSE_TEXT,
+        reason: RouteReason::FastText,
+        route_kinds: vec![PageRouteKind::Text, PageRouteKind::Figure],
+    };
+    assert_eq!(pdf_page_route_labels(&plan), "A+B");
 }
 
 #[test]

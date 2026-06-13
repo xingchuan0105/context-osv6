@@ -1,9 +1,9 @@
 # 入库路由与 OCR 策略 —— 讨论纪要（2026-06-10）
 
-> 本文记录与产品/工程侧关于 PDF 分流、Paddle OCR、Ingestion LLM 的**讨论结论与待定项**。  
-> **路由与 OCR 最终结论（2026-06-13）以 [`liteparse-paddle-ingestion-architecture-2026-06-13.md`](./liteparse-paddle-ingestion-architecture-2026-06-13.md) 为准**；本文保留讨论过程与历史上下文。  
-> 关联：`docs/visual-pdf-ingest-requirements-2026-06-10.md`、`docs/adr/0002-ingestion-routing-and-retrieval.md`  
-> 代码锚点：`crates/ingestion/src/parser/router.rs`、`bins/worker/src/main.rs`
+> 本文记录与产品/工程侧关于 PDF 分流、Paddle OCR、Ingestion LLM 的**讨论过程**（P4 前语境）。  
+> **路由与 OCR 现行结论（2026-06-13 P4 后）以 [`liteparse-paddle-ingestion-architecture-2026-06-13.md`](./liteparse-paddle-ingestion-architecture-2026-06-13.md) 为准**；文中 EdgeParse/MinerU 描述不代表当前实现。  
+> 关联：`docs/archive/p4-mineru-shadow-migration-historical.md`、`docs/archive/visual-pdf-ingest-requirements-2026-06-10.md`  
+> 代码锚点（P4 后）：`crates/ingestion/src/parser/router/`、`liteparse_probe_bridge.rs`、`bins/worker/src/pdf/`
 
 ---
 
@@ -14,7 +14,7 @@
 | 时期 | PDF 主路径 | 说明 |
 |------|-----------|------|
 | 早期 E2E / 旧文档 | `EdgeParse` + **`MineruOcr`（按页）** | Antifragile 66 页低字 → MinerU；Black Swan 567 页全 OCR；慢 + 429 |
-| **当前 `router.rs`（本分支）** | `EdgeParse` + **`VisualRaster`** | **PDF 已不再路由到 MinerU**；MinerU 仅用于独立图片文件（`.png` 等） |
+| **当前 P4 分支** | LiteParse PDF 主链 + **Paddle Jobs OCR** | PDF 不再路由到 MinerU；独立图片走 `PaddleOcrImage` |
 
 因此「混合 PDF 测试时全走 MinerU」更准确地说是：**旧链路 / 按页 OCR 过重**；在现分支上应改写为：
 

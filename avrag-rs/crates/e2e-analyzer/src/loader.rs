@@ -268,9 +268,20 @@ pub fn load_llm_real_run(run_dir: &Path) -> Vec<crate::models::LlmRealTestArtifa
     artifacts
 }
 
+/// Load run metadata plus all test results as a single record envelope.
+pub fn load_run_record(run_dir: &Path) -> Option<crate::models::RunRecord> {
+    let metadata = load_run_metadata(run_dir)?;
+    let results = load_run_results(run_dir);
+    Some(crate::models::RunRecord { metadata, results })
+}
+
 /// Find the most recent run on the given git branch that has at least one
-/// passed test.
-pub fn find_latest_run_on_branch(output_dir: &Path, branch: &str) -> Option<PathBuf> {
+/// passed test. When `commit` is set, only runs on that commit are considered.
+pub fn find_latest_run_on_branch(
+    output_dir: &Path,
+    branch: &str,
+    commit: Option<&str>,
+) -> Option<PathBuf> {
     let runs = discover_runs(output_dir);
 
     // Iterate newest first.
@@ -278,8 +289,13 @@ pub fn find_latest_run_on_branch(output_dir: &Path, branch: &str) -> Option<Path
         let meta = load_run_metadata(run_dir);
         let branch_matches =
             meta.as_ref().and_then(|m| m.git_branch_from_anywhere()) == Some(branch);
+        let commit_matches = commit.is_none_or(|expected| {
+            meta.as_ref()
+                .and_then(|m| m.git_commit_from_anywhere())
+                == Some(expected)
+        });
 
-        if !branch_matches {
+        if !branch_matches || !commit_matches {
             continue;
         }
 

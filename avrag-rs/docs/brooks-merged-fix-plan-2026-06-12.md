@@ -11,7 +11,7 @@ v3 计划的 K1–K12 已全部落地（见 [archive/brooks-merged-fix-plan-2026
 | 输入报告 | 维度 | 当前分 | 距满分差额构成 |
 |----------|------|--------|----------------|
 | [brooks-pr-review-2026-06-12-v4.md](./brooks-pr-review-2026-06-12-v4.md) | PR | **78** | 4 Warning + 2 Suggestion |
-| [brooks-architecture-audit-2026-06-12.md](./brooks-architecture-audit-2026-06-12.md)（v3 轮） | 架构 | **77** | 4 Warning（×5）+ 3 Suggestion（×1）= 23 |
+| [brooks-architecture-audit-2026-06-12-v3.md](./archive/brooks-architecture-audit-2026-06-12-v3.md)（v3 轮） | 架构 | **77** | 4 Warning（×5）+ 3 Suggestion（×1）= 23 |
 | [brooks-tech-debt-assessment-2026-06-12.md](./brooks-tech-debt-assessment-2026-06-12.md)（v4） | 技术债 | **59** | 1 Critical（15）+ 4 Warning（×5）+ 6 Suggestion（×1）= 41（报告 §4.1 自带分值表） |
 | [brooks-test-quality-review-2026-06-12.md](./brooks-test-quality-review-2026-06-12.md)（第 4 轮） | 测试 | **69** | 1 Critical（15）+ 3 Warning（×5）+ 1 Suggestion（×1）= 31 |
 | **admin codereview（外部核验清单）** | 不计入现分 | — | 9 项属实（5 应修 + 4 程度被夸大但代码层面属实）；**不修则下一轮 PR/技术债复测必然成为新发现**，是守住满分的前置条件 |

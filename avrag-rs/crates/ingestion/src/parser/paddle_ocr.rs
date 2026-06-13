@@ -13,7 +13,12 @@ pub struct PaddleOcrConfig {
     pub model: String,
     pub poll_interval_secs: u64,
     pub job_timeout_secs: u64,
+    pub max_jobs_per_document: usize,
+    pub max_concurrent_jobs: usize,
 }
+
+/// Alias for architecture doc naming.
+pub type PaddleJobsOcrService = PaddleOcrClient;
 
 impl PaddleOcrConfig {
     pub fn from_env() -> Result<Self> {
@@ -32,6 +37,14 @@ impl PaddleOcrConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(3600),
+            max_jobs_per_document: std::env::var("PADDLE_OCR_MAX_JOBS_PER_DOCUMENT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(50),
+            max_concurrent_jobs: std::env::var("PADDLE_OCR_MAX_CONCURRENT_JOBS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5),
         })
     }
 }
@@ -126,12 +139,15 @@ impl PaddleOcrClient {
         pdf_bytes: &[u8],
         start_page: u32,
     ) -> Result<Vec<PaddleOcrPageResult>> {
-        match self.run_ocr_job(pdf_bytes, start_page).await {
+        match self
+            .run_ocr_job(pdf_bytes, "document.pdf", "application/pdf", start_page)
+            .await
+        {
             Ok(pages) => Ok(pages),
             Err(first_err) => {
                 warn!(start_page, error = %first_err, "PaddleOCR job failed on first attempt, retrying after 5s");
                 sleep(Duration::from_secs(5)).await;
-                self.run_ocr_job(pdf_bytes, start_page)
+                self.run_ocr_job(pdf_bytes, "document.pdf", "application/pdf", start_page)
                     .await
                     .map_err(|retry_err| {
                         retry_err.context(format!(
@@ -142,12 +158,44 @@ impl PaddleOcrClient {
         }
     }
 
+    pub async fn ocr_image_bytes(
+        &self,
+        image_bytes: &[u8],
+        filename: &str,
+    ) -> Result<PaddleOcrPageResult> {
+        let (mime_type, upload_name) = image_upload_meta(filename)?;
+        match self
+            .run_ocr_job(image_bytes, upload_name, mime_type, 1)
+            .await
+        {
+            Ok(pages) => pages
+                .into_iter()
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("PaddleOCR returned no pages for image {filename}")),
+            Err(first_err) => {
+                warn!(filename, error = %first_err, "PaddleOCR image job failed on first attempt, retrying after 5s");
+                sleep(Duration::from_secs(5)).await;
+                self.run_ocr_job(image_bytes, upload_name, mime_type, 1)
+                    .await?
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "PaddleOCR returned no pages for image {filename} after retry"
+                        )
+                    })
+            }
+        }
+    }
+
     async fn run_ocr_job(
         &self,
-        pdf_bytes: &[u8],
+        file_bytes: &[u8],
+        upload_name: &str,
+        mime_type: &str,
         start_page: u32,
     ) -> Result<Vec<PaddleOcrPageResult>> {
-        let job_id = self.submit_job(pdf_bytes).await?;
+        let job_id = self.submit_job(file_bytes, upload_name, mime_type).await?;
         info!(job_id = %job_id, start_page, "PaddleOCR job submitted");
 
         let result_url = self.poll_job(&job_id).await?;
@@ -159,26 +207,24 @@ impl PaddleOcrClient {
         Ok(pages)
     }
 
-    async fn submit_job(&self, pdf_bytes: &[u8]) -> Result<String> {
+    async fn submit_job(
+        &self,
+        file_bytes: &[u8],
+        upload_name: &str,
+        mime_type: &str,
+    ) -> Result<String> {
         let url = format!("{}/jobs", self.config.base_url);
+        let optional_payload = optional_payload_json();
 
         let form = reqwest::multipart::Form::new()
             .part(
                 "file",
-                reqwest::multipart::Part::bytes(pdf_bytes.to_vec())
-                    .file_name("document.pdf")
-                    .mime_str("application/pdf")?,
+                reqwest::multipart::Part::bytes(file_bytes.to_vec())
+                    .file_name(upload_name.to_string())
+                    .mime_str(mime_type)?,
             )
             .text("model", self.config.model.clone())
-            .text(
-                "optionalPayload",
-                serde_json::json!({
-                    "useDocOrientationClassify": false,
-                    "useDocUnwarping": true,
-                    "useChartRecognition": false,
-                })
-                .to_string(),
-            );
+            .text("optionalPayload", optional_payload.to_string());
 
         let resp = self
             .http
@@ -266,6 +312,54 @@ impl PaddleOcrClient {
         let pages = parse_jsonl_or_json_pages(&body, start_page)?;
         Ok(pages)
     }
+
+    /// OCR a single-page PDF slice (1 page = 1 Job).
+    pub async fn ocr_single_page_pdf(
+        &self,
+        pdf_bytes: &[u8],
+        page_number: u32,
+    ) -> Result<PaddleOcrPageResult> {
+        let pages = self.ocr_pdf_bytes(pdf_bytes, page_number).await?;
+        pages
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("PaddleOCR returned no pages for page {page_number}"))
+    }
+}
+
+/// JSON payload for Paddle optionalPayload (§7.2).
+pub fn optional_payload_json() -> serde_json::Value {
+    let use_doc_orientation = std::env::var("PADDLE_OCR_USE_DOC_ORIENTATION_CLASSIFY")
+        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(true);
+    serde_json::json!({
+        "useDocOrientationClassify": use_doc_orientation,
+        "useDocUnwarping": true,
+        "useChartRecognition": false,
+    })
+}
+
+/// Stable sha256 hex digest of the optional payload JSON for cache keys.
+pub fn optional_payload_hash() -> String {
+    use sha2::{Digest, Sha256};
+    let payload = optional_payload_json().to_string();
+    format!("{:x}", Sha256::digest(payload.as_bytes()))
+}
+
+fn image_upload_meta(filename: &str) -> Result<(&'static str, &'static str)> {
+    let ext = filename
+        .rsplit('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    match ext.as_str() {
+        "png" => Ok(("image/png", "document.png")),
+        "jpg" | "jpeg" => Ok(("image/jpeg", "document.jpg")),
+        "webp" => Ok(("image/webp", "document.webp")),
+        "gif" => Ok(("image/gif", "document.gif")),
+        "bmp" => Ok(("image/bmp", "document.bmp")),
+        other => anyhow::bail!("unsupported image extension for Paddle OCR: {other}"),
+    }
 }
 
 fn parse_jsonl_or_json_pages(body: &str, start_page: u32) -> Result<Vec<PaddleOcrPageResult>> {
@@ -325,6 +419,40 @@ fn parse_jsonl_or_json_pages(body: &str, start_page: u32) -> Result<Vec<PaddleOc
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn image_upload_meta_maps_common_extensions() {
+        assert_eq!(
+            image_upload_meta("photo.PNG").unwrap(),
+            ("image/png", "document.png")
+        );
+        assert_eq!(
+            image_upload_meta("scan.jpeg").unwrap(),
+            ("image/jpeg", "document.jpg")
+        );
+        assert!(image_upload_meta("file.xyz").is_err());
+    }
+
+    #[test]
+    fn optional_payload_hash_changes_with_orientation_flag() {
+        unsafe {
+            std::env::remove_var("PADDLE_OCR_USE_DOC_ORIENTATION_CLASSIFY");
+        }
+        let default_hash = optional_payload_hash();
+        unsafe {
+            std::env::set_var("PADDLE_OCR_USE_DOC_ORIENTATION_CLASSIFY", "false");
+        }
+        let disabled_hash = optional_payload_hash();
+        unsafe {
+            std::env::remove_var("PADDLE_OCR_USE_DOC_ORIENTATION_CLASSIFY");
+        }
+        assert_ne!(default_hash, disabled_hash);
+        let payload = optional_payload_json();
+        assert_eq!(
+            payload.get("useDocOrientationClassify").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+    }
 
     #[test]
     fn test_parse_jsonl_with_result_wrapper() {

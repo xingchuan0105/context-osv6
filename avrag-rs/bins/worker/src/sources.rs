@@ -1,5 +1,4 @@
 use anyhow::Result;
-use avrag_auth::AuthContext;
 use avrag_storage_pg::{NotificationCreateParams, PgAppRepository};
 use ingestion::{AuditRecord, AuditSink, IngestionError, IngestionTask, StateSink, TaskCompletionOutcome, TaskFailureOutcome, TaskSource, Transition};
 use tracing::info;
