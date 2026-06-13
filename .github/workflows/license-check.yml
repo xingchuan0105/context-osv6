@@ -10,6 +10,11 @@ on:
       - 'contracts/Cargo.toml'
       - 'scripts/check-licenses.sh'
       - 'scripts/generate-third-party-notices.sh'
+      - 'scripts/sync-legal-assets.sh'
+      - 'scripts/check-legal-publish-gate.sh'
+      - 'THIRD_PARTY_NOTICES.md'
+      - 'LICENSE'
+      - 'frontend_next/content/legal/**'
   push:
     branches: [master]
     paths:
@@ -20,6 +25,11 @@ on:
       - 'contracts/Cargo.toml'
       - 'scripts/check-licenses.sh'
       - 'scripts/generate-third-party-notices.sh'
+      - 'scripts/sync-legal-assets.sh'
+      - 'scripts/check-legal-publish-gate.sh'
+      - 'THIRD_PARTY_NOTICES.md'
+      - 'LICENSE'
+      - 'frontend_next/content/legal/**'
   workflow_dispatch:
 
 jobs:
@@ -49,3 +59,44 @@ jobs:
 
       - name: Run license gate
         run: ./scripts/check-licenses.sh
+
+  notice-drift:
+    name: NOTICE drift check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync legal assets
+        run: bash scripts/sync-legal-assets.sh
+
+      - name: Check THIRD_PARTY_NOTICES.md has no drift
+        run: |
+          if ! diff -q THIRD_PARTY_NOTICES.md frontend_next/public/legal/third-party-notices.md > /dev/null 2>&1; then
+            echo "::error::THIRD_PARTY_NOTICES.md and frontend_next/public/legal/third-party-notices.md are out of sync."
+            echo "Run 'cd frontend_next && pnpm sync:legal' locally and commit the result."
+            diff THIRD_PARTY_NOTICES.md frontend_next/public/legal/third-party-notices.md || true
+            exit 1
+          fi
+          echo "✅ NOTICE files are in sync"
+
+      - name: Check LICENSE has no drift
+        run: |
+          if ! diff -q LICENSE frontend_next/public/legal/LICENSE > /dev/null 2>&1; then
+            echo "::error::LICENSE and frontend_next/public/legal/LICENSE are out of sync."
+            echo "Run 'cd frontend_next && pnpm sync:legal' locally and commit the result."
+            exit 1
+          fi
+          echo "✅ LICENSE files are in sync"
+
+  legal-publish-gate:
+    name: Legal publish gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check legal document publish status
+        run: bash scripts/check-legal-publish-gate.sh

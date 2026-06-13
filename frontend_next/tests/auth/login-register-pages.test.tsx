@@ -148,6 +148,8 @@ describe("login and register pages", () => {
         email: "new@example.com",
         password: "password123",
         full_name: "New User",
+        terms_version: "2026-06-13",
+        privacy_version: "2026-06-13",
       });
     });
 

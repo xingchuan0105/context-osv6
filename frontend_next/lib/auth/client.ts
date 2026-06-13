@@ -29,6 +29,8 @@ export type RegisterRequest = {
   email: string;
   password: string;
   full_name?: string | null;
+  terms_version?: string;
+  privacy_version?: string;
 };
 
 export type ChangePasswordRequest = {

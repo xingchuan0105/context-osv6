@@ -1,5 +1,12 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+
 import LegalLayout from '@/components/legal/LegalLayout';
+
+export const metadata: Metadata = {
+  title: '开源软件说明',
+  description: 'Context-OS 使用的开源组件及其许可证摘要。',
+};
 
 export default function LicensesSummary() {
   const majorComponents = [

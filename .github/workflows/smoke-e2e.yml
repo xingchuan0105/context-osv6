@@ -105,5 +105,5 @@ jobs:
           path: ~/.cargo/git
           key: ${{ runner.os }}-cargo-index-desktop-${{ hashFiles('desktop/src-tauri/Cargo.lock', 'avrag-rs/**/Cargo.lock') }}
 
-      - name: Cargo check desktop
-        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
+      - name: Cargo test desktop
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --quiet

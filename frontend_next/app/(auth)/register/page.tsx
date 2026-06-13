@@ -62,6 +62,8 @@ export default function RegisterPage() {
         email: email.trim(),
         password,
         full_name: fullName.trim() ? fullName.trim() : null,
+        terms_version: "2026-06-13",
+        privacy_version: "2026-06-13",
       });
 
       if (!response.success || !response.data) {

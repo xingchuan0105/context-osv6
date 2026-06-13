@@ -1,5 +1,12 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+
 import LegalFooterLinks from '@/components/legal/LegalFooterLinks';
+
+export const metadata: Metadata = {
+  title: '法律中心',
+  description: 'Context-OS 法律中心，查看用户服务协议、隐私政策和开源声明。',
+};
 
 export default function LegalCenter() {
   const cards = [
@@ -29,7 +36,7 @@ export default function LegalCenter() {
         <h1>法律中心</h1>
         <p>使用Context-OS前请阅读以下文档</p>
       </div>
-      
+
       <div className="legal-cards">
         {cards.map((card) => (
           <Link key={card.href} href={card.href} className="legal-card">
@@ -41,11 +48,11 @@ export default function LegalCenter() {
           </Link>
         ))}
       </div>
-      
+
       <div className="legal-contact">
         <p>如有法律问题，请联系: <a href="mailto:legal@context-os.com">legal@context-os.com</a></p>
       </div>
-      
+
       <LegalFooterLinks />
     </div>
   );

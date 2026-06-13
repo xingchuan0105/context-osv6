@@ -1,29 +1,30 @@
 import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
+import type { Metadata } from 'next';
+
 import LegalDocRenderer from '@/components/legal/LegalDocRenderer';
+import { renderLegalMarkdown } from '@/lib/legal/render-markdown';
+
+export const metadata: Metadata = {
+  title: '隐私政策',
+  description: 'Context-OS 隐私政策，了解我们如何收集、使用和保护您的个人信息。',
+};
 
 export default async function PrivacyPage() {
   const privacyPath = path.join(process.cwd(), 'content/legal/zh-CN/privacy.mdx');
   const fileContent = fs.readFileSync(privacyPath, 'utf8');
   const { content, data } = matter(fileContent);
-  
-  const htmlContent = content
-    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-    .replace(/\*\*(.*)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*)\*/g, '<em>$1</em>')
-    .replace(/!\[(.*?)\]\((.*?)\)/g, '<img alt="$1" src="$2" />')
-    .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2">$1</a>')
-    .replace(/\n/g, '<br />');
-  
+
+  const { html, toc } = await renderLegalMarkdown(content);
+
   return (
     <LegalDocRenderer
-      content={htmlContent}
+      content={html}
       title={data.title}
       lastUpdated={data.version}
       version={data.version}
+      toc={toc}
     />
   );
 }
