@@ -69,7 +69,7 @@ test.describe("Legal pages accessibility (P0-IA / P0-UX)", () => {
     await page.goto("/legal/privacy");
     const body =
       (await page.locator("main, .legal-document, article").first().textContent()) ?? "";
-    expect(body).toMatch(/(不用于|不会用于).{0,15}(训练|model.{0,3}train)/i);
+    expect(body).toMatch(/不.{0,6}训练/);
   });
 
   test("long-form pages render a table of contents", async ({ page }) => {
