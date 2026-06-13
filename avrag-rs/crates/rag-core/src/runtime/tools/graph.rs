@@ -1,6 +1,6 @@
 use avrag_auth::AuthContext;
 use avrag_retrieval_data_plane::GraphSearchRequest;
-use common::{GraphRetrievalArgs, ToolResult, ToolStatus, ToolTrace};
+use contracts::{GraphRetrievalArgs, ToolResult, ToolStatus, ToolTrace};
 use uuid::Uuid;
 
 use crate::RagRuntime;

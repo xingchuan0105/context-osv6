@@ -65,15 +65,15 @@ impl AppState {
 
     pub async fn execute_rag_execute_plan(
         &self,
-        req: common::ExecutePlanRequest,
-    ) -> Result<common::ExecutePlanResponse, AppError> {
+        req: contracts::ExecutePlanRequest,
+    ) -> Result<contracts::ExecutePlanResponse, AppError> {
         self.chat_ctx().execute_rag_execute_plan(req).await
     }
 
     pub async fn execute_runtime_tools(
         &self,
-        req: common::RuntimeExecuteRequest,
-    ) -> Result<common::RuntimeExecuteResponse, AppError> {
+        req: contracts::RuntimeExecuteRequest,
+    ) -> Result<contracts::RuntimeExecuteResponse, AppError> {
         self.chat_ctx().execute_runtime_tools(req).await
     }
 
@@ -89,6 +89,7 @@ impl AppState {
         self.chat_ctx().check_user_quota().await
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn validate_rag_doc_scope(
         &self,
         doc_scope: &[String],
@@ -96,6 +97,7 @@ impl AppState {
         self.chat_ctx().validate_rag_doc_scope(doc_scope).await
     }
 
+    #[allow(dead_code)]
     pub(crate) fn memory_session_visible(
         &self,
         state: &app_core::MemoryState,
@@ -143,6 +145,7 @@ impl AppState {
             .await
     }
 
+    #[allow(dead_code)]
     pub(crate) fn build_general_agent_debug(
         &self,
         agent_request: &app_chat::agents::runtime::AgentRequest,

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { formatSettingsShareMessage } from "../../lib/settings-share-messages";
+import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import { ShareActivityPanel } from "./parts/share-activity-panel";
 import { ShareControlBar } from "./parts/share-control-bar";
@@ -29,7 +29,7 @@ export function WorkspaceShareCenterSurface({
       >
         <header style={{ display: "grid", gap: "0.65rem" }}>
           <Link className="app-link app-link-muted" href={`/dashboard/${workspaceId}`}>
-            {formatSettingsShareMessage(locale, "shareCenter.backToWorkspace")}
+            {formatUiMessage(locale, "shareCenter.backToWorkspace")}
           </Link>
           <div
             style={{
@@ -41,13 +41,13 @@ export function WorkspaceShareCenterSurface({
           >
             <div>
               <h1 className="app-page-title" style={{ fontSize: "clamp(2.15rem, 5vw, 2.8rem)" }}>
-                {formatSettingsShareMessage(locale, "shareCenter.pageTitle")}
+                {formatUiMessage(locale, "shareCenter.pageTitle")}
               </h1>
               <p
                 className="app-page-subtitle"
                 style={{ fontSize: "1rem", lineHeight: 1.55, marginTop: "0.25rem" }}
               >
-                {formatSettingsShareMessage(locale, "shareCenter.pageSubtitle")}
+                {formatUiMessage(locale, "shareCenter.pageSubtitle")}
               </p>
             </div>
             <section
@@ -76,7 +76,7 @@ export function WorkspaceShareCenterSurface({
         {settingsQuery.isLoading && !settingsQuery.data ? (
           <section className="app-surface-card">
             <p style={{ margin: 0 }}>
-              {formatSettingsShareMessage(locale, "shareCenter.loading")}
+              {formatUiMessage(locale, "shareCenter.loading")}
             </p>
           </section>
         ) : null}
@@ -86,7 +86,7 @@ export function WorkspaceShareCenterSurface({
             <p className="app-notice-banner" style={{ margin: 0 }}>
               {settingsQuery.error instanceof Error
                 ? settingsQuery.error.message
-                : formatSettingsShareMessage(locale, "shareCenter.settingsLoadError")}
+                : formatUiMessage(locale, "shareCenter.settingsLoadError")}
             </p>
           </section>
         ) : null}

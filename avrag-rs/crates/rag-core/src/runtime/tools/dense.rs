@@ -1,5 +1,5 @@
 use avrag_auth::AuthContext;
-use common::{DenseRetrievalArgs, DenseRetrievalModality, LexicalRetrievalArgs, ToolResult, ToolStatus, ToolTrace};
+use contracts::{DenseRetrievalArgs, DenseRetrievalModality, LexicalRetrievalArgs, ToolResult, ToolStatus, ToolTrace};
 use contracts::chat::{ChatRequest, DegradeReason, DegradeTraceItem, RagPlan, RagPlanItem};
 
 use crate::RagRuntime;
@@ -249,7 +249,7 @@ mod tests {
     fn lexical_args_from_dense_splits_query_terms() {
         let args = DenseRetrievalArgs {
             queries: vec!["What is antifragility?".to_string()],
-            modality: common::DenseRetrievalModality::Text,
+            modality: contracts::DenseRetrievalModality::Text,
             top_k: 5,
             doc_scope: vec!["doc-1".to_string()],
         };

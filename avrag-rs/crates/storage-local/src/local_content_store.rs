@@ -1,9 +1,6 @@
 use async_trait::async_trait;
 use avrag_auth::AuthContext;
-use common::{
-    ContentStore, ContentStoreError, Document, DocumentMetadata, IndexedChunk, SummaryMetadata,
-    TocEntry,
-};
+use common::{ContentStore, ContentStoreError, Document, DocumentMetadata, IndexedChunk, SummaryMetadata, TocEntry};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs;

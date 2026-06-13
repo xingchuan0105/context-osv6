@@ -6,7 +6,7 @@ use super::AppState;
 
 impl AppState {
     pub async fn billing_get_plans(&self) -> ApiResponse<serde_json::Value> {
-        let Some(repo) = self.postgres_repo() else {
+        let Some(store) = self.billing_store() else {
             return ApiResponse::err(
                 "postgres_not_configured",
                 "postgres backend is not configured",
@@ -18,13 +18,13 @@ impl AppState {
                 "authenticated user required",
             );
         };
-        avrag_billing::handle_get_plans(repo, UserId::from(actor_id.into_uuid())).await
+        avrag_billing::handle_get_plans(store, UserId::from(actor_id.into_uuid())).await
     }
 
     pub async fn billing_get_subscription(
         &self,
     ) -> ApiResponse<avrag_billing::SubscriptionResponse> {
-        let Some(repo) = self.postgres_repo() else {
+        let Some(store) = self.billing_store() else {
             return ApiResponse::err(
                 "postgres_not_configured",
                 "postgres backend is not configured",
@@ -36,11 +36,11 @@ impl AppState {
                 "authenticated user required",
             );
         };
-        avrag_billing::handle_get_subscription(repo, UserId::from(actor_id.into_uuid())).await
+        avrag_billing::handle_get_subscription(store, UserId::from(actor_id.into_uuid())).await
     }
 
     pub async fn billing_get_usage(&self) -> ApiResponse<avrag_billing::UsageResponse> {
-        let Some(repo) = self.postgres_repo() else {
+        let Some(store) = self.billing_store() else {
             return ApiResponse::err(
                 "postgres_not_configured",
                 "postgres backend is not configured",
@@ -52,13 +52,13 @@ impl AppState {
                 "authenticated user required",
             );
         };
-        avrag_billing::handle_get_usage(repo, UserId::from(actor_id.into_uuid())).await
+        avrag_billing::handle_get_usage(store, UserId::from(actor_id.into_uuid())).await
     }
 
     pub async fn billing_get_usage_window(
         &self,
     ) -> ApiResponse<avrag_billing::UsageWindowResponse> {
-        let Some(repo) = self.postgres_repo() else {
+        let Some(store) = self.billing_store() else {
             return ApiResponse::err(
                 "postgres_not_configured",
                 "postgres backend is not configured",
@@ -70,14 +70,14 @@ impl AppState {
                 "authenticated user required",
             );
         };
-        avrag_billing::handle_get_usage_window(repo, UserId::from(actor_id.into_uuid())).await
+        avrag_billing::handle_get_usage_window(store, UserId::from(actor_id.into_uuid())).await
     }
 
     pub async fn billing_get_usage_history(
         &self,
         days: i32,
     ) -> ApiResponse<avrag_billing::UsageHistoryResponse> {
-        let Some(repo) = self.postgres_repo() else {
+        let Some(store) = self.billing_store() else {
             return ApiResponse::err(
                 "postgres_not_configured",
                 "postgres backend is not configured",
@@ -89,13 +89,13 @@ impl AppState {
                 "authenticated user required",
             );
         };
-        avrag_billing::handle_get_usage_history(repo, UserId::from(actor_id.into_uuid()), days).await
+        avrag_billing::handle_get_usage_history(store, UserId::from(actor_id.into_uuid()), days).await
     }
 
     pub async fn billing_get_usage_forecast(
         &self,
     ) -> ApiResponse<avrag_billing::UsageForecastResponse> {
-        let Some(repo) = self.postgres_repo() else {
+        let Some(store) = self.billing_store() else {
             return ApiResponse::err(
                 "postgres_not_configured",
                 "postgres backend is not configured",
@@ -107,14 +107,14 @@ impl AppState {
                 "authenticated user required",
             );
         };
-        avrag_billing::handle_get_usage_forecast(repo, UserId::from(actor_id.into_uuid())).await
+        avrag_billing::handle_get_usage_forecast(store, UserId::from(actor_id.into_uuid())).await
     }
 
     pub async fn billing_create_checkout(
         &self,
         body: avrag_billing::CreateCheckoutRequest,
     ) -> ApiResponse<avrag_billing::CheckoutResponse> {
-        let Some(repo) = self.postgres_repo() else {
+        let Some(store) = self.billing_store() else {
             return ApiResponse::err(
                 "postgres_not_configured",
                 "postgres backend is not configured",
@@ -126,11 +126,11 @@ impl AppState {
                 "billing checkout requires an authenticated user",
             );
         };
-        avrag_billing::handle_create_checkout(repo, UserId::from(actor_id.into_uuid()), body).await
+        avrag_billing::handle_create_checkout(store, UserId::from(actor_id.into_uuid()), body).await
     }
 
     pub async fn billing_create_portal(&self) -> ApiResponse<avrag_billing::PortalResponse> {
-        let Some(repo) = self.postgres_repo() else {
+        let Some(store) = self.billing_store() else {
             return ApiResponse::err(
                 "postgres_not_configured",
                 "postgres backend is not configured",
@@ -142,7 +142,7 @@ impl AppState {
                 "authenticated user required",
             );
         };
-        avrag_billing::handle_create_portal(repo, UserId::from(actor_id.into_uuid())).await
+        avrag_billing::handle_create_portal(store, UserId::from(actor_id.into_uuid())).await
     }
 
     pub async fn billing_handle_webhook(
@@ -151,13 +151,13 @@ impl AppState {
         signature: Option<&str>,
         body: &[u8],
     ) -> common::ApiResponse<serde_json::Value> {
-        let Some(repo) = self.postgres_repo() else {
+        let Some(store) = self.billing_store() else {
             return common::ApiResponse::err(
                 "billing_unavailable",
                 "billing repository unavailable",
             );
         };
-        avrag_billing::handle_webhook(repo, provider, signature, body).await
+        avrag_billing::handle_webhook(store, provider, signature, body).await
     }
 
     pub async fn reset_e2e_user_data(&self, email: &str) -> Result<bool, String> {

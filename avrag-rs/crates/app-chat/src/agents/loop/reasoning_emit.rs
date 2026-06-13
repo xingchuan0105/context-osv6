@@ -1,6 +1,6 @@
 use super::assembler::{AssembledContext, DisclosedState};
 use crate::agents::events::{AgentEvent, AgentEventSink};
-use common::ToolCall;
+use contracts::ToolCall;
 
 /// Chunk size for non-streaming reasoning emission (matches stream token granularity).
 const REASONING_CHUNK_CHARS: usize = 256;
@@ -210,7 +210,7 @@ mod tests {
         disclosed.disclosed_skill_ids.insert("rag-plan".to_string());
         let assembled = AssembledContext {
             system_content: "sys".to_string(),
-            tools: vec![common::ToolSpec {
+            tools: vec![contracts::ToolSpec {
                 name: "dense_retrieval".to_string(),
                 version: "1.0".to_string(),
                 description: String::new(),

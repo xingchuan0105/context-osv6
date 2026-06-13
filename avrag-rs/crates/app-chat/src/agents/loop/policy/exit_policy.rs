@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use avrag_llm::ChatMessage;
-use common::{ToolResult, ToolStatus};
+use contracts::{ToolResult, ToolStatus};
 
 use super::config::{EvidenceGateConfig, LoopExitConfig, ModeConfig};
 

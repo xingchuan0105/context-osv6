@@ -8,7 +8,8 @@ use axum::{
         sse::{Event, KeepAlive},
     },
 };
-use common::{AppError, ExecutePlanRequest, RuntimeExecuteRequest};
+use common::{AppError};
+use contracts::{ExecutePlanRequest, RuntimeExecuteRequest};
 use contracts::chat::{ChatRequest};
 use contracts::documents::{CitationLookupRequest};
 use contracts::notebooks::{CreateChatSessionRequest, UpdateChatSessionRequest};

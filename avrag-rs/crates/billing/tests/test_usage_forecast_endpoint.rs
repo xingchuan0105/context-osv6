@@ -47,6 +47,10 @@ fn usage_forecast_response_shape_matches_spec() {
 #[sqlx::test]
 async fn usage_forecast_aggregates_30d_token_usage_from_llm_usage_events(pool: PgPool) {
     sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+    sqlx::query("select set_config('app.current_role', 'super_admin', false)")
+        .execute(&pool)
+        .await
+        .unwrap();
 
     // Seed user + org.
     let org_id: Uuid =

@@ -21,7 +21,7 @@ describe("WorkspaceChatPane streaming typewriter", () => {
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
     mocks.streamWorkspaceChatMock.mockImplementation(async (_token, _request, onEvent) => {
       await onEvent({
-        kind: "answer_start",
+        event: "answer_start",
         request_id: "req-type",
         session_id: "sess-type",
         message_id: 0,
@@ -29,14 +29,14 @@ describe("WorkspaceChatPane streaming typewriter", () => {
       });
 
       await onEvent({
-        kind: "token",
+        event: "token",
         request_id: "req-type",
         message_id: 0,
         content: "Hel",
       });
 
       await onEvent({
-        kind: "done",
+        event: "done",
         request_id: "req-type",
         session_id: "sess-type",
         message_id: 21,
@@ -103,7 +103,7 @@ describe("WorkspaceChatPane streaming typewriter", () => {
       mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
       mocks.streamWorkspaceChatMock.mockImplementation(async (_token, _request, onEvent) => {
         await onEvent({
-          kind: "answer_start",
+          event: "answer_start",
           request_id: "req-reduce",
           session_id: "sess-reduce",
           message_id: 0,
@@ -111,7 +111,7 @@ describe("WorkspaceChatPane streaming typewriter", () => {
         });
 
         await onEvent({
-          kind: "token",
+          event: "token",
           request_id: "req-reduce",
           message_id: 0,
           content: "Instant token",
@@ -120,7 +120,7 @@ describe("WorkspaceChatPane streaming typewriter", () => {
         await doneReady;
 
         await onEvent({
-          kind: "done",
+          event: "done",
           request_id: "req-reduce",
           session_id: "sess-reduce",
           message_id: 33,

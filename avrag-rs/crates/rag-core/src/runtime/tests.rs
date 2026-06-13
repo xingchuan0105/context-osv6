@@ -13,7 +13,7 @@ use avrag_retrieval_data_plane::{
     Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, GraphSearchOutput, GraphSearchRequest,
     MultimodalSearchRequest, RelationPathCandidate, TextDenseSearchRequest,
 };
-use common::{BackendTrace, Coverage, ExecutePlanResponse, RetrievalBundle, RetrievedChunk};
+use contracts::{BackendTrace, Coverage, ExecutePlanResponse, RetrievalBundle, RetrievedChunk};
 use contracts::chat::{ChatMessage, ChatRequest, Citation, RagPlan, RagPlanItem};
 use std::sync::Arc;
 use tokio::sync::Barrier;
@@ -362,16 +362,16 @@ fn graph_final_context_budget_reserves_twenty_percent_when_available() {
 async fn execute_plan_includes_graph_relation_paths_and_supporting_chunks() {
     let runtime = RagRuntime::with_data_plane(test_config(), Arc::new(GraphStubRetrievalDataPlane));
     let auth = AuthContext::new(OrgId::new(Uuid::from_u128(9)), SubjectKind::System);
-    let request = common::ExecutePlanRequest {
+    let request = contracts::ExecutePlanRequest {
         plan_version: "rag-execute-v1".to_string(),
         doc_scope: vec![Uuid::from_u128(10_090).to_string()],
-        items: vec![common::ExecutePlanItem {
+        items: vec![contracts::ExecutePlanItem {
             priority: 1.0,
             query: None,
             bm25_terms: Some(vec!["exact".to_string(), "term".to_string()]),
         }],
-        summary_mode: common::ExecutePlanSummaryMode::None,
-        budget: Some(common::ExecutePlanBudget {
+        summary_mode: contracts::ExecutePlanSummaryMode::None,
+        budget: Some(contracts::ExecutePlanBudget {
             total_candidate_budget: Some(8),
             final_chunk_budget: Some(4),
             graph_hop_limit: None,
@@ -379,7 +379,7 @@ async fn execute_plan_includes_graph_relation_paths_and_supporting_chunks() {
         }),
         channel_budget: None,
         query_entities: Vec::new(),
-        graph_hints: vec![common::GraphHint {
+        graph_hints: vec![contracts::GraphHint {
             subject: Some("Atlas".to_string()),
             predicate: Some("uses".to_string()),
             object: Some("rollback checklist".to_string()),
@@ -419,29 +419,29 @@ async fn execute_plan_starts_bm25_and_graph_channels_in_parallel() {
         }),
     );
     let auth = AuthContext::new(OrgId::new(Uuid::from_u128(9)), SubjectKind::System);
-    let request = common::ExecutePlanRequest {
+    let request = contracts::ExecutePlanRequest {
         plan_version: "rag-execute-v1".to_string(),
         doc_scope: vec![Uuid::from_u128(10_022).to_string()],
-        items: vec![common::ExecutePlanItem {
+        items: vec![contracts::ExecutePlanItem {
             priority: 1.0,
             query: None,
             bm25_terms: Some(vec!["exact".to_string(), "term".to_string()]),
         }],
-        summary_mode: common::ExecutePlanSummaryMode::None,
-        budget: Some(common::ExecutePlanBudget {
+        summary_mode: contracts::ExecutePlanSummaryMode::None,
+        budget: Some(contracts::ExecutePlanBudget {
             total_candidate_budget: Some(20),
             final_chunk_budget: Some(5),
             graph_hop_limit: None,
             graph_fan_out_limit: None,
         }),
-        channel_budget: Some(common::ChannelBudget {
+        channel_budget: Some(contracts::ChannelBudget {
             text_dense: Some(0),
             bm25: Some(5),
             multimodal_dense: Some(0),
             graph: Some(5),
         }),
         query_entities: Vec::new(),
-        graph_hints: vec![common::GraphHint {
+        graph_hints: vec![contracts::GraphHint {
             subject: Some("Atlas".to_string()),
             predicate: Some("uses".to_string()),
             object: Some("checklist".to_string()),
@@ -467,16 +467,16 @@ async fn execute_plan_maps_traceable_placeholder_triplets_to_graph_hints() {
     let runtime =
         RagRuntime::with_data_plane(test_config(), Arc::new(PlaceholderTripletGraphDataPlane));
     let auth = AuthContext::new(OrgId::new(Uuid::from_u128(9)), SubjectKind::System);
-    let request = common::ExecutePlanRequest {
+    let request = contracts::ExecutePlanRequest {
         plan_version: "rag-execute-v1".to_string(),
         doc_scope: vec![Uuid::from_u128(10_092).to_string()],
-        items: vec![common::ExecutePlanItem {
+        items: vec![contracts::ExecutePlanItem {
             priority: 1.0,
             query: Some("how does Atlas use the checklist?".to_string()),
             bm25_terms: None,
         }],
-        summary_mode: common::ExecutePlanSummaryMode::None,
-        budget: Some(common::ExecutePlanBudget {
+        summary_mode: contracts::ExecutePlanSummaryMode::None,
+        budget: Some(contracts::ExecutePlanBudget {
             total_candidate_budget: Some(8),
             final_chunk_budget: Some(4),
             graph_hop_limit: None,
@@ -486,12 +486,12 @@ async fn execute_plan_maps_traceable_placeholder_triplets_to_graph_hints() {
         query_entities: Vec::new(),
         graph_hints: Vec::new(),
         placeholder_triplets: vec![
-            common::PlaceholderTriplet {
+            contracts::PlaceholderTriplet {
                 subject: "Atlas".to_string(),
                 predicate: "uses".to_string(),
                 object: "?checklist".to_string(),
             },
-            common::PlaceholderTriplet {
+            contracts::PlaceholderTriplet {
                 subject: "?system".to_string(),
                 predicate: "uses".to_string(),
                 object: "?artifact".to_string(),

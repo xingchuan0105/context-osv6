@@ -1,4 +1,5 @@
-import { ApiError, buildApiUrl, type AuthEnvelope } from "../auth/client";
+import type { AuthEnvelope } from "../auth/client";
+import { request } from "../http/request";
 
 export type NotificationPreferences = {
   email_enabled: boolean;
@@ -99,11 +100,6 @@ export type PortalSessionResponse = {
   url: string;
 };
 
-type ErrorEnvelope = {
-  error?: string | null;
-  message?: string;
-};
-
 type ApiEnvelope<T> = {
   ok?: boolean;
   data?: T | null;
@@ -145,49 +141,6 @@ type RawSubscriptionPayload = {
 type RawUsagePayload = {
   usage: Record<string, number>;
 };
-
-async function decodeError(response: Response) {
-  const raw = await response.text();
-
-  if (!raw.trim()) {
-    return new ApiError(response.status, null, `Request failed with status ${response.status}`);
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as ErrorEnvelope;
-    return new ApiError(response.status, parsed.error ?? null, parsed.message ?? raw);
-  } catch {
-    return new ApiError(response.status, null, raw);
-  }
-}
-
-async function request<T>(path: string, init: RequestInit = {}, token?: string) {
-  const headers = new Headers(init.headers);
-
-  if (!headers.has("Accept")) {
-    headers.set("Accept", "application/json");
-  }
-
-  if (init.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  const response = await fetch(buildApiUrl(path), {
-    ...init,
-    cache: "no-store",
-    headers,
-  });
-
-  if (!response.ok) {
-    throw await decodeError(response);
-  }
-
-  return (await response.json()) as T;
-}
 
 function unwrapApiData<T>(envelope: ApiEnvelope<T>, fallback: string) {
   if (envelope.ok && envelope.data) {

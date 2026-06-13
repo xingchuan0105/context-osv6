@@ -14,32 +14,32 @@ impl AppState {
         access_level: AccessLevel,
         expires_in_secs: Option<i64>,
     ) -> Result<ShareTokenResponse, AppError> {
-        let repo = self
-            .postgres_repo()
+        let store = self
+            .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
         avrag_share::handle_create_share_link(
             self.auth().clone(),
             notebook_id,
             access_level,
             expires_in_secs,
-            repo,
+            store,
         )
         .await
         .map(|response| response.0)
     }
 
     pub async fn revoke_share_link(&self, token: String) -> Result<(), AppError> {
-        let repo = self
-            .postgres_repo()
+        let store = self
+            .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
-        avrag_share::handle_revoke_share_link(self.auth().clone(), token, repo).await
+        avrag_share::handle_revoke_share_link(self.auth().clone(), token, store).await
     }
 
     pub async fn get_share_settings(&self, notebook_id: String) -> Result<ShareSettings, AppError> {
-        let repo = self
-            .postgres_repo()
+        let store = self
+            .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
-        avrag_share::handle_get_share_settings(self.auth().clone(), notebook_id, repo).await
+        avrag_share::handle_get_share_settings(self.auth().clone(), notebook_id, store).await
     }
 
     pub async fn update_share_settings(
@@ -48,15 +48,15 @@ impl AppState {
         access_level: Option<String>,
         allow_download: Option<bool>,
     ) -> Result<ShareSettings, AppError> {
-        let repo = self
-            .postgres_repo()
+        let store = self
+            .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
         avrag_share::handle_update_share_settings(
             self.auth().clone(),
             notebook_id,
             access_level,
             allow_download,
-            repo,
+            store,
         )
         .await
     }
@@ -66,10 +66,10 @@ impl AppState {
         notebook_id: String,
         access_level: String,
     ) -> Result<String, AppError> {
-        let repo = self
-            .postgres_repo()
+        let store = self
+            .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
-        avrag_share::handle_update_access_level(self.auth().clone(), notebook_id, access_level, repo)
+        avrag_share::handle_update_access_level(self.auth().clone(), notebook_id, access_level, store)
             .await
     }
 
@@ -77,37 +77,37 @@ impl AppState {
         &self,
         notebook_id: String,
     ) -> Result<Vec<ShareAnalytics>, AppError> {
-        let repo = self
-            .postgres_repo()
+        let store = self
+            .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
-        avrag_share::handle_get_share_analytics(self.auth().clone(), notebook_id, repo).await
+        avrag_share::handle_get_share_analytics(self.auth().clone(), notebook_id, store).await
     }
 
     pub async fn get_share_access_logs(
         &self,
         notebook_id: String,
     ) -> Result<Vec<ShareAccessLog>, AppError> {
-        let repo = self
-            .postgres_repo()
+        let store = self
+            .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
-        avrag_share::handle_get_share_access_logs(self.auth().clone(), notebook_id, None, repo).await
+        avrag_share::handle_get_share_access_logs(self.auth().clone(), notebook_id, None, store).await
     }
 
     pub async fn validate_share_token(&self, token: &str) -> Result<Option<String>, AppError> {
-        let repo = self
-            .postgres_repo()
+        let store = self
+            .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
-        avrag_share::handle_validate_token(token, repo).await
+        avrag_share::handle_validate_token(token, store).await
     }
 
     pub async fn list_share_members(
         &self,
         notebook_id: String,
     ) -> Result<Vec<avrag_share::NotebookMember>, AppError> {
-        let repo = self
-            .postgres_repo()
+        let store = self
+            .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
-        avrag_share::handle_list_members(self.auth().clone(), notebook_id, repo).await
+        avrag_share::handle_list_members(self.auth().clone(), notebook_id, store).await
     }
 
     pub async fn invite_share_member(
@@ -116,10 +116,10 @@ impl AppState {
         email: String,
         role: AccessLevel,
     ) -> Result<(), AppError> {
-        let repo = self
-            .postgres_repo()
+        let store = self
+            .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
-        avrag_share::handle_invite_member(self.auth().clone(), notebook_id, email, role, repo)
+        avrag_share::handle_invite_member(self.auth().clone(), notebook_id, email, role, store)
             .await
             .map(|_| ())
     }
@@ -129,10 +129,10 @@ impl AppState {
         notebook_id: String,
         member_id: String,
     ) -> Result<(), AppError> {
-        let repo = self
-            .postgres_repo()
+        let store = self
+            .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
-        avrag_share::handle_accept_invite(self.auth().clone(), notebook_id, member_id, repo).await
+        avrag_share::handle_accept_invite(self.auth().clone(), notebook_id, member_id, store).await
     }
 
     pub async fn decline_share_invite(
@@ -140,10 +140,10 @@ impl AppState {
         notebook_id: String,
         member_id: String,
     ) -> Result<(), AppError> {
-        let repo = self
-            .postgres_repo()
+        let store = self
+            .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
-        avrag_share::handle_decline_invite(self.auth().clone(), notebook_id, member_id, repo).await
+        avrag_share::handle_decline_invite(self.auth().clone(), notebook_id, member_id, store).await
     }
 
     pub async fn remove_share_member(
@@ -151,37 +151,37 @@ impl AppState {
         notebook_id: String,
         member_id: String,
     ) -> Result<(), AppError> {
-        let repo = self
-            .postgres_repo()
+        let store = self
+            .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
-        avrag_share::handle_remove_member(self.auth().clone(), notebook_id, member_id, repo).await
+        avrag_share::handle_remove_member(self.auth().clone(), notebook_id, member_id, store).await
     }
 
     pub async fn get_shared_notebook(
         &self,
         token: &str,
     ) -> Result<Option<SharedNotebookPayload>, AppError> {
-        let repo = self
-            .postgres_repo()
+        let store = self
+            .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
-        avrag_share::handle_get_shared_notebook(token, repo).await
+        avrag_share::handle_get_shared_notebook(token, store).await
     }
 
     pub async fn share_member_count(&self, notebook_id: &str) -> i64 {
-        let Some(repo) = self.postgres_repo() else {
+        let Some(store) = self.share_store() else {
             return 0;
         };
-        avrag_share::handle_list_members(self.auth().clone(), notebook_id.to_string(), repo)
+        avrag_share::handle_list_members(self.auth().clone(), notebook_id.to_string(), store)
             .await
             .map(|members| members.len() as i64)
             .unwrap_or(0)
     }
 
     pub async fn share_enabled_for_notebook(&self, notebook_id: &str) -> bool {
-        let Some(repo) = self.postgres_repo() else {
+        let Some(store) = self.share_store() else {
             return false;
         };
-        avrag_share::handle_get_share_settings(self.auth().clone(), notebook_id.to_string(), repo)
+        avrag_share::handle_get_share_settings(self.auth().clone(), notebook_id.to_string(), store)
             .await
             .map(|settings| {
                 settings
@@ -194,8 +194,8 @@ impl AppState {
     }
 
     pub async fn resolve_share_chat_notebook_scope(&self, token: &str) -> Option<Uuid> {
-        let repo = self.postgres_repo()?;
-        let notebook_id = avrag_share::handle_validate_token(token, repo).await.ok()??;
+        let store = self.share_store()?;
+        let notebook_id = avrag_share::handle_validate_token(token, store).await.ok()??;
         Uuid::parse_str(&notebook_id).ok()
     }
 }

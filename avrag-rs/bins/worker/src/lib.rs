@@ -78,7 +78,9 @@ pub async fn run() -> Result<()> {
             );
         let mut audit_log_job_runner =
             audit_log_jobs::AuditLogJobRunner::from_env(repo.raw().clone());
-        let usage_limit_pool = repo.raw().clone();
+        let usage_limit_store = std::sync::Arc::new(app_bootstrap::PgUsageLimitStoreAdapter::new(
+            std::sync::Arc::new(repo.clone()),
+        )) as std::sync::Arc<dyn app_core::UsageLimitStorePort>;
         let worker_object_store = build_worker_object_store(&config).await?;
         let cleanup_object_store = build_worker_object_store(&config).await?;
         let orphan_object_store = Arc::new(build_worker_object_store(&config).await?);
@@ -166,7 +168,7 @@ pub async fn run() -> Result<()> {
                 triplet_llm: build_worker_triplet_llm(&config),
                 analytics: Some(analytics::AnalyticsService::new(analytics_pool)),
                 usage_limit: Some(avrag_billing::usage_limit::UsageLimitService::new(
-                    usage_limit_pool,
+                    usage_limit_store.clone(),
                 )),
                 mineru_client: MineruConfig::from_env().map(MineruClient::new),
                 office_parser_client: OfficeParserServiceConfig::from_env()
@@ -205,11 +207,15 @@ pub async fn run() -> Result<()> {
                         Err(error) => info!(error = %error, "worker document cleanup poll failed"),
                     }
 
-                    let billing_repo = std::sync::Arc::new(cleanup_repo.clone());
-                    if let Err(error) = avrag_billing::expire_subscriptions(billing_repo.clone()).await {
+                    let billing_store = std::sync::Arc::new(app_bootstrap::PgBillingStoreAdapter::new(
+                        std::sync::Arc::new(cleanup_repo.clone()),
+                    )) as std::sync::Arc<dyn app_core::BillingStorePort>;
+                    if let Err(error) =
+                        avrag_billing::expire_subscriptions(billing_store.clone()).await
+                    {
                         warn!(error = %error, "billing expire subscriptions job failed");
                     }
-                    if let Err(error) = avrag_billing::process_outbox(billing_repo).await {
+                    if let Err(error) = avrag_billing::process_outbox(billing_store).await {
                         warn!(error = %error, "billing process outbox job failed");
                     }
                 }

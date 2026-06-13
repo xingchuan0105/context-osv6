@@ -1,0 +1,237 @@
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use app_core::{
+    admin_audit_logs_to_csv, admin_audit_window_start, admin_clamp_audit_per_page,
+    admin_clamp_org_list_per_page, admin_escape_ilike_pattern, admin_usage_period_start,
+    domain_rows::UserProfileRow, AdminAuditLogEntry, AdminAuditLogPage, AdminAuditLogQuery,
+    AdminBillingOverview, AdminDegradationStatus, AdminFeatureFlagChangeRequest,
+    AdminFeatureFlagEntry, AdminOrgInfo, AdminRagHealthStatus, AdminStorePort, AdminUsageStats,
+    AdminUserInfo, AdminWorkerStatus,
+};
+use crate::domain_row_convert::{user_profile_row, user_profile_row_to_pg};
+use crate::pg_error::map_pg_error;
+use avrag_auth::{AuthContext, OrgId};
+use avrag_storage_pg::PgAppRepository;
+use chrono::{DateTime, Utc};
+use common::{ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow, UserId};
+use sqlx::{Postgres, QueryBuilder, Row};
+use uuid::Uuid;
+
+use crate::adapters::pg_session::{begin_tx, db_err, set_current_org, set_current_role};
+
+pub struct PgAdminStoreAdapter {
+    repo: Arc<PgAppRepository>,
+}
+
+impl PgAdminStoreAdapter {
+    pub fn new(repo: Arc<PgAppRepository>) -> Self {
+        Self { repo }
+    }
+
+    async fn begin_admin_tx(
+        &self,
+        auth: &AuthContext,
+    ) -> Result<sqlx::Transaction<'_, sqlx::Postgres>, AppError> {
+        let actor_id = auth.actor_id().ok_or_else(|| {
+            AppError::unauthorized("admin action requires an authenticated user")
+        })?;
+        let mut tx = begin_tx(self.repo.raw()).await?;
+        set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
+        let role =
+            sqlx::query_scalar::<_, String>("select role from users where id = $1 and org_id = $2")
+                .bind(actor_id.into_uuid())
+                .bind(auth.org_id().into_uuid())
+                .fetch_optional(tx.as_mut())
+                .await
+                .map_err(db_err)?;
+        if matches!(
+            role.as_deref(),
+            Some("super_admin" | "ops_admin" | "finance_admin")
+        ) {
+            set_current_role(
+                tx.as_mut(),
+                role.expect("role checked as Some above").as_str(),
+            )
+            .await?;
+            return Ok(tx);
+        }
+        Err(AppError::forbidden("admin_access_denied", "admin access denied"))
+    }
+
+    async fn scalar_count(conn: &mut sqlx::PgConnection, sql: &str) -> i64 {
+        sqlx::query_scalar::<_, i64>(sql)
+            .fetch_one(conn)
+            .await
+            .unwrap_or(0)
+    }
+
+    fn map_feature_flag_change_request(row: sqlx::postgres::PgRow) -> AdminFeatureFlagChangeRequest {
+        AdminFeatureFlagChangeRequest {
+            id: row.try_get("id").unwrap_or_default(),
+            flag_key: row.try_get("flag_key").unwrap_or_default(),
+            current_enabled: row.try_get("current_enabled").unwrap_or(false),
+            requested_enabled: row.try_get("requested_enabled").unwrap_or(false),
+            reason: row.try_get("reason").unwrap_or_default(),
+            status: row.try_get("status").unwrap_or_default(),
+            requested_by: row
+                .try_get::<Uuid, _>("requested_by")
+                .map(|value| value.to_string())
+                .unwrap_or_default(),
+            reviewed_by: row
+                .try_get::<Option<Uuid>, _>("reviewed_by")
+                .ok()
+                .flatten()
+                .map(|value| value.to_string()),
+            review_note: row.try_get("review_note").ok(),
+            created_at: row.try_get("created_epoch").unwrap_or(0),
+            reviewed_at: row
+                .try_get::<Option<i64>, _>("reviewed_epoch")
+                .ok()
+                .flatten(),
+            executed_at: row
+                .try_get::<Option<i64>, _>("executed_epoch")
+                .ok()
+                .flatten(),
+        }
+    }
+
+    fn map_org_info(row: sqlx::postgres::PgRow) -> Result<AdminOrgInfo, AppError> {
+        let id: Uuid = row.try_get("id").map_err(db_err)?;
+        let created_at: DateTime<Utc> = row.try_get("created_at").map_err(db_err)?;
+        Ok(AdminOrgInfo {
+            id: OrgId::from(id),
+            name: row.try_get("name").map_err(db_err)?,
+            created_at: created_at.timestamp(),
+            blocked: row.try_get("blocked").map_err(db_err)?,
+            user_count: row.try_get("user_count").map_err(db_err)?,
+            document_count: row.try_get("document_count").map_err(db_err)?,
+            query_count: row.try_get("query_count").map_err(db_err)?,
+        })
+    }
+
+    fn map_user_info(row: sqlx::postgres::PgRow) -> Result<AdminUserInfo, AppError> {
+        let id: Uuid = row.try_get("id").map_err(db_err)?;
+        let org_id: Uuid = row.try_get("org_id").map_err(db_err)?;
+        let created_at: DateTime<Utc> = row.try_get("created_at").map_err(db_err)?;
+        Ok(AdminUserInfo {
+            id: UserId::from(id),
+            email: row.try_get("email").map_err(db_err)?,
+            org_id: OrgId::from(org_id),
+            role: row.try_get("role").map_err(db_err)?,
+            created_at: created_at.timestamp(),
+        })
+    }
+
+    fn build_audit_log_base_query(
+        builder: &mut QueryBuilder<'_, Postgres>,
+        query: &AdminAuditLogQuery,
+        count_only: bool,
+    ) {
+        if count_only {
+            builder.push("select count(*) as total from audit_log where 1 = 1");
+        } else {
+            builder.push(
+                "select id, actor_id, action, resource_type, resource_id, org_id, created_at from audit_log where 1 = 1",
+            );
+        }
+
+        if let Some(window_start) = admin_audit_window_start(query.window.as_deref()) {
+            builder.push(" and created_at >= ").push_bind(window_start);
+        }
+        if let Some(action) = query.action.as_deref() {
+            builder
+                .push(" and action = ")
+                .push_bind(action.trim().to_string());
+        }
+        if let Some(resource_type) = query.resource_type.as_deref() {
+            builder
+                .push(" and resource_type = ")
+                .push_bind(resource_type.trim().to_string());
+        }
+        if let Some(actor) = query.actor.as_deref() {
+            let pattern = format!("%{}%", admin_escape_ilike_pattern(actor.trim()));
+            builder
+                .push(" and coalesce(actor_id::text, '') ilike ")
+                .push_bind(pattern);
+            builder.push(" escape '\\'");
+        }
+        if let Some(search) = query.query.as_deref() {
+            let pattern = format!("%{}%", admin_escape_ilike_pattern(search.trim()));
+            builder.push(" and (action ilike ");
+            builder.push_bind(pattern.clone());
+            builder.push(" escape '\\' or resource_type ilike ");
+            builder.push_bind(pattern.clone());
+            builder.push(" escape '\\' or resource_id ilike ");
+            builder.push_bind(pattern.clone());
+            builder.push(" escape '\\' or coalesce(actor_id::text, '') ilike ");
+            builder.push_bind(pattern);
+            builder.push(" escape '\\')");
+        }
+    }
+
+    async fn audit_log_total(
+        conn: &mut sqlx::PgConnection,
+        query: &AdminAuditLogQuery,
+    ) -> Result<usize, AppError> {
+        let mut builder = QueryBuilder::<Postgres>::new("");
+        Self::build_audit_log_base_query(&mut builder, query, true);
+        let row = builder.build().fetch_one(conn).await.map_err(db_err)?;
+        Ok(row
+            .try_get::<i64, _>("total")
+            .map_err(db_err)?
+            .max(0) as usize)
+    }
+
+    async fn audit_log_rows(
+        conn: &mut sqlx::PgConnection,
+        query: &AdminAuditLogQuery,
+    ) -> Result<Vec<sqlx::postgres::PgRow>, AppError> {
+        let per_page = admin_clamp_audit_per_page(query.per_page);
+        let page = query.page.max(1);
+        let offset = (page - 1) * per_page;
+        let mut builder = QueryBuilder::<Postgres>::new("");
+        Self::build_audit_log_base_query(&mut builder, query, false);
+        builder.push(" order by created_at desc, id desc limit ");
+        builder.push_bind(per_page as i64);
+        builder.push(" offset ");
+        builder.push_bind(offset as i64);
+        builder.build().fetch_all(conn).await.map_err(db_err)
+    }
+
+    fn map_audit_log_entry(row: sqlx::postgres::PgRow) -> Result<AdminAuditLogEntry, AppError> {
+        let actor_id = row
+            .try_get::<Option<Uuid>, _>("actor_id")
+            .map_err(db_err)?;
+        let org_id = row
+            .try_get::<Option<Uuid>, _>("org_id")
+            .map_err(db_err)?;
+        let created_at: DateTime<Utc> = row.try_get("created_at").map_err(db_err)?;
+        Ok(AdminAuditLogEntry {
+            id: row.try_get("id").map_err(db_err)?,
+            actor_id: actor_id.map(|value| value.to_string()),
+            action: row.try_get("action").map_err(db_err)?,
+            resource_type: row.try_get("resource_type").map_err(db_err)?,
+            resource_id: row.try_get("resource_id").map_err(db_err)?,
+            org_id: org_id.map(|value| value.to_string()),
+            created_at: created_at.timestamp(),
+        })
+    }
+}
+
+include!("port_impl.rs");
+
+#[cfg(test)]
+mod tests {
+    use app_core::admin_escape_ilike_pattern;
+
+    #[test]
+    fn escape_ilike_pattern_treats_percent_as_literal() {
+        assert_eq!(admin_escape_ilike_pattern("100%"), r"100\%");
+    }
+
+    #[test]
+    fn escape_ilike_pattern_treats_underscore_as_literal() {
+        assert_eq!(admin_escape_ilike_pattern("a_b"), r"a\_b");
+    }
+}

@@ -2,6 +2,11 @@ pub mod adapters;
 pub mod admin_domain;
 pub mod admin_store;
 pub mod auth_store;
+pub mod billing_domain;
+pub mod billing_store;
+pub mod billing_usage_units;
+pub mod share_domain;
+pub mod share_store;
 pub mod analytics_context;
 pub mod billing_quota;
 pub mod chat_persistence;
@@ -24,7 +29,8 @@ pub use domain_ports::*;
 pub use state_types::{MemoryState, RetrievedContext, StoredDocument};
 pub use admin_domain::{
     admin_audit_logs_to_csv, admin_audit_window_start, admin_clamp_audit_per_page,
-    admin_usage_period_start, AdminAuditLogEntry, AdminAuditLogPage, AdminAuditLogQuery,
+    admin_clamp_org_list_per_page, admin_escape_ilike_pattern, admin_usage_period_start,
+    AdminAuditLogEntry, AdminAuditLogPage, AdminAuditLogQuery,
     AdminBillingOverview, AdminDegradationStatus, AdminFeatureFlagChangeRequest,
     AdminFeatureFlagEntry, AdminOrgInfo, AdminRagHealthStatus, AdminUsageStats, AdminUserInfo,
     AdminWorkerStatus,
@@ -35,7 +41,27 @@ pub use auth_store::{
     PasswordResetUser, RegisterUserInput, RegisterUserResult,
 };
 pub use billing_quota::BillingQuotaPort;
+pub use billing_domain::{
+    BillableFeature, BillingConfig, BillingEvent, BillingPlan, BillingPlanQuota, BillingProvider,
+    DailyUsage, ExistingSubscriptionFields, LimitHits, MeteringContext, StripeSubscriptionSnapshot,
+    Subscription, SubscriptionStatus, UsageForecastResponse, UsageHistoryResponse, UsageSource,
+    UsageWindowBucket, UsageWindowResponse, WebhookClaim,
+    ADMIN_ROLE_SUPER, PLAN_FREE, PLAN_PLUS, PLAN_PRO, STATUS_ACTIVE, STATUS_CANCELED,
+    STATUS_PAST_DUE, STATUS_UNPAID,
+};
+pub use billing_store::{
+    BillingStorePort, UsageLimitOverrideRow, UsageLimitPlanPolicyRow, UsageLimitStorePort,
+    UsageLimitUsageRecord,
+};
+pub use billing_usage_units::{compute_usage_units, compute_usage_units_with_rates};
 pub use chat_persistence::{AppendChatTurn, ChatPersistencePort};
+pub use share_domain::{
+    NotebookAccessSnapshot, PublicShareChatContextSnapshot, ShareAccessLevel,
+    ShareAccessLogEntry, ShareAnalyticsEntry, ShareNotebookMember, ShareSettingsSnapshot,
+    ShareTokenSnapshot, SharedKnowledgeBaseSnapshot, SharedNotebookSnapshot,
+    SharedShareInfoSnapshot, SharedSourceSnapshot,
+};
+pub use share_store::ShareStorePort;
 pub use document_store::DocumentStorePort;
 pub use domain_rows::{
     DocumentAssetRow, DocumentDeletionOutcome, DocumentScopeState, DocumentTaskSeed,

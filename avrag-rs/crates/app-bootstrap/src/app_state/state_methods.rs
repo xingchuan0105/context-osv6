@@ -1,4 +1,4 @@
-use app_core::{AdminStorePort, AppConfig};
+use app_core::{AdminStorePort, AppConfig, BillingStorePort, ShareStorePort};
 use common::AppError;
 use app_chat::agents::service::UnifiedAgentService;
 use super::AppState;
@@ -78,6 +78,14 @@ impl AppState {
 
     pub fn admin_store(&self) -> Option<Arc<dyn AdminStorePort>> {
         self.storage.admin_store()
+    }
+
+    pub fn billing_store(&self) -> Option<Arc<dyn BillingStorePort>> {
+        self.storage.billing_store()
+    }
+
+    pub fn share_store(&self) -> Option<Arc<dyn ShareStorePort>> {
+        self.storage.share_store()
     }
 
     #[deprecated(note = "Use postgres_repo/postgres_pool or typed port delegates instead")]
@@ -232,6 +240,7 @@ impl AppState {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn non_empty_or_unknown(value: &str) -> String {
     if value.trim().is_empty() {
         "unknown".to_string()

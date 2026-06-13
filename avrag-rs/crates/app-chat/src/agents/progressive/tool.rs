@@ -1,13 +1,13 @@
-/// A Tool wraps a [`common::ToolSpec`] (JSON schema + description) so it can be
+/// A Tool wraps a [`contracts::ToolSpec`] (JSON schema + description) so it can be
 /// progressively disclosed to the LLM planner.
 #[derive(Clone)]
 pub struct Tool {
-    spec: common::ToolSpec,
+    spec: contracts::ToolSpec,
     gotchas: Vec<String>,
 }
 
 impl Tool {
-    pub fn new(spec: common::ToolSpec) -> Self {
+    pub fn new(spec: contracts::ToolSpec) -> Self {
         Self {
             spec,
             gotchas: Vec::new(),
@@ -19,7 +19,7 @@ impl Tool {
         self
     }
 
-    pub fn spec(&self) -> &common::ToolSpec {
+    pub fn spec(&self) -> &contracts::ToolSpec {
         &self.spec
     }
 }

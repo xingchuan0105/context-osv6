@@ -220,13 +220,10 @@ pub fn release_shared_postgres(pg: &Arc<SharedPostgres>) {
     let prev = pg.refs.fetch_sub(1, Ordering::SeqCst);
     if prev == 1 {
         let container_name = pg.container_name.clone();
+        let pg = Arc::clone(pg);
         block_on_with_timeout(async move {
-            stop_postgres(&container_name).await;
+            stop_postgres_and_clear_slot(&container_name, pg).await;
         });
-        let mut slot = shared_pg_slot().blocking_lock();
-        if slot.as_ref().is_some_and(|shared| Arc::ptr_eq(shared, pg)) {
-            *slot = None;
-        }
     }
 }
 
@@ -311,6 +308,32 @@ async fn start_postgres_once() -> anyhow::Result<(String, String)> {
     Ok((url, container_name))
 }
 
+const TEARDOWN_TIMEOUT: Duration = Duration::from_secs(10);
+
+async fn clear_shared_pg_slot(pg: &Arc<SharedPostgres>) {
+    let mut slot = shared_pg_slot().lock().await;
+    if slot.as_ref().is_some_and(|shared| Arc::ptr_eq(shared, pg)) {
+        *slot = None;
+    }
+}
+
+async fn clear_shared_milvus_slot(milvus: &Arc<SharedMilvus>) {
+    let mut slot = shared_milvus_slot().lock().await;
+    if slot.as_ref().is_some_and(|shared| Arc::ptr_eq(shared, milvus)) {
+        *slot = None;
+    }
+}
+
+async fn stop_postgres_and_clear_slot(container_name: &str, pg: Arc<SharedPostgres>) {
+    stop_postgres(container_name).await;
+    clear_shared_pg_slot(&pg).await;
+}
+
+async fn stop_milvus_and_clear_slot(container_name: &str, milvus: Arc<SharedMilvus>) {
+    stop_milvus(container_name).await;
+    clear_shared_milvus_slot(&milvus).await;
+}
+
 fn block_on_with_timeout(fut: impl std::future::Future<Output = ()> + Send + 'static) {
     std::thread::Builder::new()
         .name("product-e2e-teardown".into())
@@ -320,7 +343,15 @@ fn block_on_with_timeout(fut: impl std::future::Future<Output = ()> + Send + 'st
                 .build()
                 .expect("tokio runtime for sync teardown")
                 .block_on(async {
-                    let _ = tokio::time::timeout(Duration::from_secs(10), fut).await;
+                    if tokio::time::timeout(TEARDOWN_TIMEOUT, fut)
+                        .await
+                        .is_err()
+                    {
+                        eprintln!(
+                            "[product_e2e] teardown timed out after {}s",
+                            TEARDOWN_TIMEOUT.as_secs()
+                        );
+                    }
                 });
         })
         .expect("spawn teardown thread")
@@ -507,18 +538,18 @@ pub async fn acquire_shared_milvus() -> anyhow::Result<(String, Arc<SharedMilvus
 pub fn release_shared_milvus(milvus: &Arc<SharedMilvus>) {
     let prev = milvus.refs.fetch_sub(1, Ordering::SeqCst);
     if prev == 1 {
-        if !milvus.is_external
-            && let Some(ref container_name) = milvus.container_name
-        {
-            let container_name = container_name.clone();
-            block_on_with_timeout(async move {
-                stop_milvus(&container_name).await;
-            });
-        }
-        let mut slot = shared_milvus_slot().blocking_lock();
-        if slot.as_ref().is_some_and(|shared| Arc::ptr_eq(shared, milvus)) {
-            *slot = None;
-        }
+        let milvus = Arc::clone(milvus);
+        block_on_with_timeout(async move {
+            if !milvus.is_external {
+                if let Some(container_name) = milvus.container_name.clone() {
+                    stop_milvus_and_clear_slot(&container_name, milvus).await;
+                } else {
+                    clear_shared_milvus_slot(&milvus).await;
+                }
+            } else {
+                clear_shared_milvus_slot(&milvus).await;
+            }
+        });
     }
 }
 

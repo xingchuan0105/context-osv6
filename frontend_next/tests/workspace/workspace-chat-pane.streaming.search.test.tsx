@@ -40,13 +40,13 @@ describe("WorkspaceChatPane streaming search flow", () => {
       });
 
       await onEvent({
-        kind: "start",
+        event: "start",
         request_id: "req-1",
         session_id: "sess-new",
       });
 
       await onEvent({
-        kind: "activity",
+        event: "activity",
         request_id: "req-1",
         phase: "searching",
         title: "正在搜索网页",
@@ -70,7 +70,7 @@ describe("WorkspaceChatPane streaming search flow", () => {
       });
 
       await onEvent({
-        kind: "answer_start",
+        event: "answer_start",
         request_id: "req-1",
         session_id: "sess-new",
         message_id: 0,
@@ -78,7 +78,7 @@ describe("WorkspaceChatPane streaming search flow", () => {
       });
 
       await onEvent({
-        kind: "token",
+        event: "token",
         request_id: "req-1",
         message_id: 0,
         content: "Hel",
@@ -90,14 +90,14 @@ describe("WorkspaceChatPane streaming search flow", () => {
       });
 
       await onEvent({
-        kind: "token",
+        event: "token",
         request_id: "req-1",
         message_id: 0,
         content: "lo",
       });
 
       await onEvent({
-        kind: "citations",
+        event: "citations",
         request_id: "req-1",
         message_id: 11,
         citations: [
@@ -113,7 +113,7 @@ describe("WorkspaceChatPane streaming search flow", () => {
       await new Promise((resolve) => setTimeout(resolve, 25));
 
       await onEvent({
-        kind: "done",
+        event: "done",
         request_id: "req-1",
         session_id: "sess-new",
         message_id: 11,

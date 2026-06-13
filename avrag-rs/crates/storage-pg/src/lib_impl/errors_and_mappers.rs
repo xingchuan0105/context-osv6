@@ -234,7 +234,7 @@ fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
     };
     let tool_results_value: serde_json::Value =
         row.try_get("tool_results").unwrap_or_else(|_| json!([]));
-    let tool_results = serde_json::from_value::<Vec<common::ToolResult>>(tool_results_value)
+    let tool_results = serde_json::from_value::<Vec<contracts::ToolResult>>(tool_results_value)
         .unwrap_or_default()
         .into_iter()
         .map(Into::into)

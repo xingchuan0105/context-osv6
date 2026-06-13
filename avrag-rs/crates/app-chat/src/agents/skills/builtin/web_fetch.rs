@@ -1,4 +1,4 @@
-use common::{ToolResult, ToolSpec, ToolStatus};
+use contracts::{ToolResult, ToolSpec, ToolStatus};
 use serde_json::Value;
 
 use crate::agents::skills::{ExecutionContext, SkillComponent};
@@ -127,7 +127,7 @@ impl SkillComponent for WebFetchSkill {
                         "truncated": result.truncated,
                         "length": result.length,
                     })),
-                    trace: Some(common::ToolTrace {
+                    trace: Some(contracts::ToolTrace {
                         elapsed_ms: Some(elapsed_ms),
                         raw_hit_count: None,
                         hydrated_hit_count: None,
@@ -142,7 +142,7 @@ impl SkillComponent for WebFetchSkill {
                     version: self.version().to_string(),
                     status: ToolStatus::Error,
                     data: Some(serde_json::json!({ "error": error.to_string() })),
-                    trace: Some(common::ToolTrace {
+                    trace: Some(contracts::ToolTrace {
                         elapsed_ms: Some(elapsed_ms),
                         raw_hit_count: None,
                         hydrated_hit_count: None,

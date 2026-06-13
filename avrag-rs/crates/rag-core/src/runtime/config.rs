@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use app_core::ChatPersistencePort;
+use avrag_rag_core_ports::ChatPersistencePort;
 use avrag_llm::{EmbeddingClient, RerankerClient, RetrievalPlanner};
 
 use crate::ports::ContentStore;

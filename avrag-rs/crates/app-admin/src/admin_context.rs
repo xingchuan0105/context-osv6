@@ -1,9 +1,6 @@
 use app_core::{parse_uuid_or_app_error, StorageContext};
 use avrag_auth::AuthContext;
-use common::{
-    new_id, now_rfc3339, ApiKeyRow, AppError, CreateApiKeyRequest, CreateApiKeyResponse,
-    NotificationRow, StatusOnlyResponse,
-};
+use common::{new_id, now_rfc3339, ApiKeyRow, AppError, CreateApiKeyRequest, CreateApiKeyResponse, NotificationRow, StatusOnlyResponse};
 
 #[derive(Clone, Default)]
 pub struct AdminContext;

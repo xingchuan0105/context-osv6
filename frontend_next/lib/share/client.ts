@@ -1,4 +1,4 @@
-import { ApiError, buildApiUrl } from "../auth/client";
+import { fetchResponse, request } from "../http/request";
 import {
   parseWorkspaceChatEventStream,
   type WorkspaceChatStreamEvent,
@@ -66,16 +66,6 @@ export type SharedWorkspacePayload = {
   sources: SharedSource[];
 };
 
-type ErrorEnvelope = {
-  error?:
-    | string
-    | {
-        message?: string | null;
-      }
-    | null;
-  message?: string | null;
-};
-
 type ApiEnvelope<T> = {
   ok?: boolean;
   data?: T | null;
@@ -118,57 +108,6 @@ type RawShareAccessLog = {
   action: string;
   accessed_at: number;
 };
-
-async function decodeError(response: Response) {
-  const raw = await response.text();
-
-  if (!raw.trim()) {
-    return new ApiError(response.status, null, `Request failed with status ${response.status}`);
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as ErrorEnvelope;
-    const errorCode = typeof parsed.error === "string" ? parsed.error : null;
-    const nestedMessage =
-      parsed.error && typeof parsed.error === "object" ? parsed.error.message : null;
-
-    return new ApiError(
-      response.status,
-      errorCode,
-      parsed.message ?? nestedMessage ?? errorCode ?? raw,
-    );
-  } catch {
-    return new ApiError(response.status, null, raw);
-  }
-}
-
-async function request<T>(path: string, init: RequestInit = {}, token?: string) {
-  const headers = new Headers(init.headers);
-
-  if (!headers.has("Accept")) {
-    headers.set("Accept", "application/json");
-  }
-
-  if (init.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  const response = await fetch(buildApiUrl(path), {
-    ...init,
-    cache: "no-store",
-    headers,
-  });
-
-  if (!response.ok) {
-    throw await decodeError(response);
-  }
-
-  return (await response.json()) as T;
-}
 
 function mapShareSettings(raw: RawShareSettings): ShareSettings {
   const activeShareToken =
@@ -367,35 +306,28 @@ export async function streamSharedChat(
   onEvent: (event: WorkspaceChatStreamEvent) => void | Promise<void>,
   authToken?: string | null,
 ) {
-  const headers: Record<string, string> = {
-    Accept: "text/event-stream",
-    "Content-Type": "application/json",
-  };
-
-  if (authToken) {
-    headers.Authorization = `Bearer ${authToken}`;
-  }
-
-  const response = await fetch(buildApiUrl("/api/v1/chat"), {
-    method: "POST",
-    cache: "no-store",
-    headers,
-    body: JSON.stringify({
-      query,
-      notebook_id: notebookId,
-      session_id: null,
-      agent_type: "rag",
-      source_type: "share",
-      source_token: shareToken,
-      doc_scope: [],
-      messages: [],
-      stream: true,
-    }),
-  });
-
-  if (!response.ok) {
-    throw await decodeError(response);
-  }
+  const response = await fetchResponse(
+    "/api/v1/chat",
+    {
+      method: "POST",
+      headers: {
+        Accept: "text/event-stream",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query,
+        notebook_id: notebookId,
+        session_id: null,
+        agent_type: "rag",
+        source_type: "share",
+        source_token: shareToken,
+        doc_scope: [],
+        messages: [],
+        stream: true,
+      }),
+    },
+    { token: authToken ?? undefined },
+  );
 
   await parseWorkspaceChatEventStream(response.body, onEvent);
 }

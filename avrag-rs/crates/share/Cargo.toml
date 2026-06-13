@@ -6,14 +6,16 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 analytics = { path = "../analytics" }
-avrag-storage-pg = { path = "../storage-pg" }
+app-core = { path = "../app-core" }
 avrag-auth = { path = "../auth" }
 common = { path = "../common" }
 tokio = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "uuid", "chrono"] }
 tracing = { workspace = true }
 uuid = { workspace = true }
 axum = { workspace = true }
+
+[dev-dependencies]
+async-trait.workspace = true

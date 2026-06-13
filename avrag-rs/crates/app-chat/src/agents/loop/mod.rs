@@ -10,11 +10,14 @@ pub use policy::exit_policy as exit_policy;
 pub use policy::LoopPolicy;
 pub mod hooks;
 pub mod iteration;
+mod iteration_codegen;
+mod iteration_tools;
 pub mod message_queue;
 pub mod optimizer;
 pub mod parse;
 pub mod query_normalize;
 pub mod reasoning_emit;
+mod run_result;
 pub mod skill_request;
 pub mod skills;
 pub mod synthesis;
@@ -24,15 +27,14 @@ use crate::agents::capability::CapabilityRegistry;
 use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::react_loop::DegradeReason;
 use crate::agents::r#loop::optimizer::{IterationProgress, LoopOptimizer};
-use crate::agents::runtime::{
-    AgentRequest, AgentRunResult, AgentRunUsage, BudgetUsage, EvaluationSignals, FinalDecision,
-    IterationRecord,
-};
-use iteration::{IterationControl, IterationState};
+use crate::agents::runtime::{AgentRequest, AgentRunResult, FinalDecision};
+use run_result::build_run_result;
+use iteration::{IterationControl, IterationOutcome, IterationState};
 use assembler::{ContextAssembler, DisclosedState};
 use app_core::ChatPersistencePort;
 use avrag_llm::{ChatMessage, LlmClient, LlmUsage};
-use common::{AppError, ToolResult};
+use common::{AppError};
+use contracts::{ToolResult};
 use config::ModeConfig;
 use exit_policy::{
     PostLoopAction, SynthesisGate, decide_synthesis_gate, degraded_no_evidence_answer,
@@ -43,7 +45,7 @@ use query_normalize::normalize_query;
 use synthesis::SynthesisPhase;
 use telemetry::ReActIterationRecord;
 
-pub(crate) fn merge_request_doc_scope(call: &mut common::ToolCall, doc_scope: &[String]) {
+pub(crate) fn merge_request_doc_scope(call: &mut contracts::ToolCall, doc_scope: &[String]) {
     if doc_scope.is_empty() {
         return;
     }
@@ -62,7 +64,7 @@ pub(crate) fn merge_request_doc_scope(call: &mut common::ToolCall, doc_scope: &[
 pub(crate) async fn dispatch_rag_tool(
     runtime: &avrag_rag_core::RagRuntime,
     auth: &avrag_auth::AuthContext,
-    call: &common::ToolCall,
+    call: &contracts::ToolCall,
     doc_scope: &[String],
 ) -> ToolResult {
     let mut call = call.clone();
@@ -156,6 +158,104 @@ impl ReActLoop {
             });
         }
 
+        let (request, base_message_count, max_iterations, auth, loop_user_query) =
+            self.prepare_run_request(mode, request, norm, sink).await?;
+
+        let mut state = IterationState {
+            messages: self.build_initial_messages(mode, &request, &loop_user_query),
+            disclosed: DisclosedState::default(),
+            tool_results: Vec::new(),
+            progress: IterationProgress::new(),
+            total_tool_calls: 0,
+            consecutive_sandbox_errors: 0,
+            reasoning_acc: String::new(),
+        };
+        let (iteration, direct_answer, telemetry_records, total_usage) = self
+            .run_retrieval_loop(
+                mode,
+                &request,
+                &auth,
+                &loop_exit,
+                &hooks,
+                base_message_count,
+                max_iterations,
+                &cancel,
+                &mut state,
+                sink,
+            )
+            .await?;
+
+        let mut messages = state.messages;
+        let mut disclosed_state = state.disclosed;
+        let mut collected_tool_results = state.tool_results;
+        let total_tool_calls = state.total_tool_calls;
+        let reasoning_summary_acc = state.reasoning_acc;
+
+        if cancel.is_cancelled() {
+            return Err(crate::agents::react_loop::cancellation_error());
+        }
+
+        let retrieval_query = request.effective_query().to_string();
+        if let Some(result) = self
+            .resolve_synthesis_gate(
+                mode,
+                &loop_exit,
+                &request,
+                &auth,
+                &retrieval_query,
+                direct_answer.as_deref(),
+                &mut messages,
+                &mut collected_tool_results,
+                &disclosed_state,
+                sink,
+                iteration,
+                max_iterations,
+                total_tool_calls,
+                &telemetry_records,
+                &total_usage,
+                &reasoning_summary_acc,
+                start_time,
+            )
+            .await?
+        {
+            return Ok(result);
+        }
+
+        self.run_synthesis_phase(
+            mode,
+            &request,
+            &mut disclosed_state,
+            &messages,
+            &collected_tool_results,
+            sink,
+            &cancel,
+            iteration,
+            max_iterations,
+            total_tool_calls,
+            &telemetry_records,
+            &total_usage,
+            &reasoning_summary_acc,
+            start_time,
+        )
+        .await
+    }
+
+    async fn prepare_run_request(
+        &self,
+        mode: &ModeConfig,
+        request: AgentRequest,
+        norm: query_normalize::NormalizeResult,
+        sink: &dyn AgentEventSink,
+    ) -> Result<
+        (
+            AgentRequest,
+            usize,
+            u8,
+            avrag_auth::AuthContext,
+            String,
+        ),
+        AppError,
+    > {
         let request = request.with_resolved_query(norm.resolved_query.clone(), norm.meta);
         let slots: Vec<String> = request
             .query_resolution
@@ -180,30 +280,17 @@ impl ReActLoop {
             })
             .await;
 
-        let mut messages: Vec<ChatMessage> = Vec::new();
-
-        // Cross-mode history injection: ADR-0006 requires prior user queries
-        // to be injected with a [prior_user_query] prefix so the ReAct loop
-        // can see conversational context without leaking assistant/tool turns
-        // from a different mode.
-        for turn in &request.messages {
-            if turn.role == "user" {
-                let content = format!("[prior_user_query] {}", turn.content);
-                messages.push(ChatMessage::user(&content));
-            }
-        }
-
         let loop_user_query = if mode.id == "rag" || mode.id == "search" {
             request.effective_query().to_string()
         } else {
             request.query.clone()
         };
-        messages.push(ChatMessage::user(&loop_user_query));
-
-        // base_message_count = conversation history + user query.
-        // ReAct steps are appended after this. Truncation must never touch
-        // the base conversation — only intermediate ReAct rounds.
-        let base_message_count = messages.len();
+        let base_message_count = request
+            .messages
+            .iter()
+            .filter(|turn| turn.role == "user")
+            .count()
+            + 1;
 
         let max_iterations = request
             .max_iterations
@@ -216,15 +303,40 @@ impl ReActLoop {
         let auth: avrag_auth::AuthContext = serde_json::from_value(request.auth_context.clone())
             .map_err(|e| AppError::internal(format!("invalid auth context: {e}")))?;
 
-        let mut state = IterationState {
-            messages,
-            disclosed: DisclosedState::default(),
-            tool_results: Vec::new(),
-            progress: IterationProgress::new(),
-            total_tool_calls: 0,
-            consecutive_sandbox_errors: 0,
-            reasoning_acc: String::new(),
-        };
+        Ok((request, base_message_count, max_iterations, auth, loop_user_query))
+    }
+
+    fn build_initial_messages(
+        &self,
+        mode: &ModeConfig,
+        request: &AgentRequest,
+        loop_user_query: &str,
+    ) -> Vec<ChatMessage> {
+        let _ = mode;
+        let mut messages: Vec<ChatMessage> = Vec::new();
+        for turn in &request.messages {
+            if turn.role == "user" {
+                let content = format!("[prior_user_query] {}", turn.content);
+                messages.push(ChatMessage::user(&content));
+            }
+        }
+        messages.push(ChatMessage::user(loop_user_query));
+        messages
+    }
+
+    async fn run_retrieval_loop(
+        &self,
+        mode: &ModeConfig,
+        request: &AgentRequest,
+        auth: &avrag_auth::AuthContext,
+        loop_exit: &config::LoopExitConfig,
+        hooks: &StandardLoopHooks,
+        base_message_count: usize,
+        max_iterations: u8,
+        cancel: &tokio_util::sync::CancellationToken,
+        state: &mut IterationState,
+        sink: &dyn AgentEventSink,
+    ) -> Result<(u8, Option<String>, Vec<ReActIterationRecord>, LlmUsage), AppError> {
         let mut iteration: u8 = 0;
         let mut telemetry_records: Vec<ReActIterationRecord> = vec![];
         let mut total_usage = LlmUsage::zeroed();
@@ -236,28 +348,10 @@ impl ReActLoop {
                 break;
             }
 
-            if iteration >= max_iterations {
-                let disclosed_skills: Vec<String> = state
-                    .disclosed
-                    .disclosed_skill_ids
-                    .iter()
-                    .cloned()
-                    .collect();
-                reasoning_emit::emit_evaluation_telemetry(
-                    sink,
-                    iteration,
-                    "budget_exhausted",
-                    "iteration budget exhausted, evaluating exit policy",
-                    &disclosed_skills,
-                    "budget_exhausted",
-                )
-                .await;
-                let _ = sink
-                    .emit(AgentEvent::Activity {
-                        stage: "budget_exhausted".to_string(),
-                        message: "iteration budget exhausted, evaluating exit policy".to_string(),
-                    })
-                    .await;
+            if self
+                .check_iteration_budget_exhausted(iteration, max_iterations, state, sink)
+                .await
+            {
                 break;
             }
 
@@ -276,39 +370,18 @@ impl ReActLoop {
                     iteration,
                     max_iterations,
                     mode,
-                    &request,
-                    &auth,
-                    &loop_exit,
-                    &mut state,
+                    request,
+                    auth,
+                    loop_exit,
+                    state,
                     &mut total_usage,
                     &optimizer,
                     sink,
                 )
                 .await?;
 
-            if !outcome.sandbox_break {
-                if let Some(record) = outcome.record {
-                    let exit_reason = record.exit_reason.clone();
-                    let observation_preview = record.observation_preview.clone();
-                    let disclosed_skills = record.disclosed_skills.clone();
-                    reasoning_emit::emit_evaluation_telemetry(
-                        sink,
-                        iteration,
-                        &exit_reason,
-                        &observation_preview,
-                        &disclosed_skills,
-                        &exit_reason,
-                    )
-                    .await;
-                    let _ = sink
-                        .emit(AgentEvent::TurnEnd {
-                            iteration,
-                            exit_reason,
-                        })
-                        .await;
-                    telemetry_records.push(record);
-                }
-            }
+            self.emit_turn_end_telemetry(iteration, &outcome, sink, &mut telemetry_records)
+                .await;
 
             match outcome.control {
                 IterationControl::Continue => {
@@ -325,7 +398,7 @@ impl ReActLoop {
                 &mut state.messages,
                 &LoopContext {
                     mode,
-                    request: &request,
+                    request,
                     iteration,
                     phase: assembler::LoopPhase::Retrieve,
                     has_retrieval_observation: has_evidence,
@@ -341,198 +414,206 @@ impl ReActLoop {
                 .await;
         }
 
-        let mut messages = state.messages;
-        let mut disclosed_state = state.disclosed;
-        let mut collected_tool_results = state.tool_results;
-        let total_tool_calls = state.total_tool_calls;
-        let reasoning_summary_acc = state.reasoning_acc;
+        Ok((iteration, direct_answer, telemetry_records, total_usage))
+    }
 
-        if cancel.is_cancelled() {
-            return Err(crate::agents::react_loop::cancellation_error());
-        }
+    async fn resolve_synthesis_gate(
+        &self,
+        mode: &ModeConfig,
+        loop_exit: &config::LoopExitConfig,
+        request: &AgentRequest,
+        auth: &avrag_auth::AuthContext,
+        retrieval_query: &str,
+        direct_answer: Option<&str>,
+        messages: &mut Vec<ChatMessage>,
+        collected_tool_results: &mut Vec<ToolResult>,
+        disclosed_state: &DisclosedState,
+        sink: &dyn AgentEventSink,
+        iteration: u8,
+        max_iterations: u8,
+        total_tool_calls: u32,
+        telemetry_records: &[ReActIterationRecord],
+        total_usage: &LlmUsage,
+        reasoning_summary_acc: &str,
+        start_time: std::time::Instant,
+    ) -> Result<Option<AgentRunResult>, AppError> {
+        let mut has_evidence =
+            has_retrieval_observation(messages, collected_tool_results, mode);
 
-        let mut has_evidence = has_retrieval_observation(&messages, &collected_tool_results, mode);
-        let retrieval_query = request.effective_query().to_string();
-
-        match decide_synthesis_gate(&loop_exit, has_evidence, direct_answer.as_deref(), &collected_tool_results, &retrieval_query) {
+        match decide_synthesis_gate(
+            loop_exit,
+            has_evidence,
+            direct_answer,
+            collected_tool_results,
+            retrieval_query,
+        ) {
             SynthesisGate::SkipSynthesisUseDirect(answer) => {
-                let disclosed_skills: Vec<String> = disclosed_state
-                    .disclosed_skill_ids
-                    .iter()
-                    .cloned()
-                    .collect();
-                let observation_preview = truncate_preview(&answer, 200);
-                reasoning_emit::emit_evaluation_telemetry(
-                    sink,
-                    iteration,
-                    "skip_synthesis_direct",
-                    &observation_preview,
-                    &disclosed_skills,
-                    "skip_synthesis_direct",
-                )
-                .await;
-                let _ = sink
-                    .emit(AgentEvent::MessageDelta {
-                        text: answer.clone(),
-                    })
-                    .await;
-                let _ = sink
-                    .emit(AgentEvent::Done {
-                        final_message: Some(answer.clone()),
-                        usage: None,
-                    })
-                    .await;
-                return self
-                    .finish_run(
-                        sink,
+                return Ok(Some(
+                    self.finish_direct_answer_run(
                         answer,
-                        &request,
-                        &collected_tool_results,
-                        &telemetry_records,
-                        &total_usage,
-                        &reasoning_summary_acc,
+                        request,
+                        disclosed_state,
+                        collected_tool_results,
+                        sink,
                         iteration,
                         max_iterations,
                         total_tool_calls,
+                        telemetry_records,
+                        total_usage,
+                        reasoning_summary_acc,
                         start_time,
-                        Some(FinalDecision::DirectAnswer),
+                        "skip_synthesis_direct",
+                        FinalDecision::DirectAnswer,
                     )
-                    .await;
+                    .await?,
+                ));
             }
             SynthesisGate::RunFallbackThenCheck => {
-                self.run_auto_fallback(
-                    mode,
-                    &request,
-                    &auth,
-                    &retrieval_query,
-                    &mut messages,
-                    &mut collected_tool_results,
-                    sink,
-                )
-                .await?;
-                has_evidence = has_retrieval_observation(&messages, &collected_tool_results, mode);
-                if post_fallback_gate(&loop_exit, has_evidence)
-                    == PostLoopAction::DegradedNoEvidence
-                {
-                    let answer = degraded_no_evidence_answer(&mode.id);
-                    let disclosed_skills: Vec<String> = disclosed_state
-                        .disclosed_skill_ids
-                        .iter()
-                        .cloned()
-                        .collect();
-                    let observation_preview = truncate_preview(&answer, 200);
-                    reasoning_emit::emit_evaluation_telemetry(
+                if let Some(result) = self
+                    .trigger_auto_fallback_and_check_degraded(
+                        mode,
+                        loop_exit,
+                        request,
+                        auth,
+                        retrieval_query,
+                        messages,
+                        collected_tool_results,
+                        disclosed_state,
                         sink,
-                        iteration,
-                        "degraded_no_evidence",
-                        &observation_preview,
-                        &disclosed_skills,
-                        "degraded_no_evidence",
-                    )
-                    .await;
-                    let _ = sink
-                        .emit(AgentEvent::Activity {
-                            stage: "degraded_no_evidence".to_string(),
-                            message: answer.clone(),
-                        })
-                        .await;
-                    let _ = sink
-                        .emit(AgentEvent::MessageDelta {
-                            text: answer.clone(),
-                        })
-                        .await;
-                    let _ = sink
-                        .emit(AgentEvent::Done {
-                            final_message: Some(answer.clone()),
-                            usage: None,
-                        })
-                        .await;
-                    let mut result = self.build_run_result(
-                        answer,
-                        &request,
-                        &collected_tool_results,
-                        &telemetry_records,
-                        &total_usage,
-                        &reasoning_summary_acc,
                         iteration,
                         max_iterations,
                         total_tool_calls,
+                        telemetry_records,
+                        total_usage,
+                        reasoning_summary_acc,
                         start_time,
-                        Some(FinalDecision::Degraded {
-                            reason: crate::agents::react_loop::DegradeReason::NoResultsAfterAllFallbacks,
-                        }),
-                    );
-                    result.degrade_trace.push(contracts::chat::DegradeTraceItem {
-                        stage: "degraded_no_evidence".to_string(),
-                        reason: DegradeReason::NoRetrievalEvidence,
-                        impact: "Answer withheld; synthesis skipped".to_string(),
-                    });
-                    self.emit_run_citations(sink, &result.citations).await;
-                    return Ok(result);
+                    )
+                    .await?
+                {
+                    return Ok(Some(result));
                 }
+                has_evidence =
+                    has_retrieval_observation(messages, collected_tool_results, mode);
             }
             SynthesisGate::DegradedNoEvidence => {
-                let answer = degraded_no_evidence_answer(&mode.id);
-                let disclosed_skills: Vec<String> = disclosed_state
-                    .disclosed_skill_ids
-                    .iter()
-                    .cloned()
-                    .collect();
-                let observation_preview = truncate_preview(&answer, 200);
-                reasoning_emit::emit_evaluation_telemetry(
-                    sink,
-                    iteration,
-                    "degraded_no_evidence",
-                    &observation_preview,
-                    &disclosed_skills,
-                    "degraded_no_evidence",
-                )
-                .await;
-                let _ = sink
-                    .emit(AgentEvent::MessageDelta {
-                        text: answer.clone(),
-                    })
-                    .await;
-                let _ = sink
-                    .emit(AgentEvent::Done {
-                        final_message: Some(answer.clone()),
-                        usage: None,
-                    })
-                    .await;
-                return self
-                    .finish_run(
+                return Ok(Some(
+                    self.finish_direct_answer_run(
+                        degraded_no_evidence_answer(&mode.id),
+                        request,
+                        disclosed_state,
+                        collected_tool_results,
                         sink,
-                        answer,
-                        &request,
-                        &collected_tool_results,
-                        &telemetry_records,
-                        &total_usage,
-                        &reasoning_summary_acc,
                         iteration,
                         max_iterations,
                         total_tool_calls,
+                        telemetry_records,
+                        total_usage,
+                        reasoning_summary_acc,
                         start_time,
-                        Some(FinalDecision::Degraded {
+                        "degraded_no_evidence",
+                        FinalDecision::Degraded {
                             reason: crate::agents::react_loop::DegradeReason::NoResultsAfterAllFallbacks,
-                        }),
+                        },
                     )
-                    .await;
+                    .await?,
+                ));
             }
             SynthesisGate::EnterSynthesis => {}
         }
 
+        let _ = has_evidence;
+        Ok(None)
+    }
+
+    async fn finish_direct_answer_run(
+        &self,
+        answer: String,
+        request: &AgentRequest,
+        disclosed_state: &DisclosedState,
+        collected_tool_results: &[ToolResult],
+        sink: &dyn AgentEventSink,
+        iteration: u8,
+        max_iterations: u8,
+        total_tool_calls: u32,
+        telemetry_records: &[ReActIterationRecord],
+        total_usage: &LlmUsage,
+        reasoning_summary_acc: &str,
+        start_time: std::time::Instant,
+        telemetry_label: &str,
+        final_decision: FinalDecision,
+    ) -> Result<AgentRunResult, AppError> {
+        let disclosed_skills: Vec<String> = disclosed_state
+            .disclosed_skill_ids
+            .iter()
+            .cloned()
+            .collect();
+        let observation_preview = truncate_preview(&answer, 200);
+        reasoning_emit::emit_evaluation_telemetry(
+            sink,
+            iteration,
+            telemetry_label,
+            &observation_preview,
+            &disclosed_skills,
+            telemetry_label,
+        )
+        .await;
+        let _ = sink
+            .emit(AgentEvent::MessageDelta {
+                text: answer.clone(),
+            })
+            .await;
+        let _ = sink
+            .emit(AgentEvent::Done {
+                final_message: Some(answer.clone()),
+                usage: None,
+            })
+            .await;
+        self.finish_run(
+            sink,
+            answer,
+            request,
+            collected_tool_results,
+            telemetry_records,
+            total_usage,
+            reasoning_summary_acc,
+            iteration,
+            max_iterations,
+            total_tool_calls,
+            start_time,
+            Some(final_decision),
+        )
+        .await
+    }
+
+    async fn run_synthesis_phase(
+        &self,
+        mode: &ModeConfig,
+        request: &AgentRequest,
+        disclosed_state: &mut DisclosedState,
+        messages: &[ChatMessage],
+        collected_tool_results: &[ToolResult],
+        sink: &dyn AgentEventSink,
+        cancel: &tokio_util::sync::CancellationToken,
+        iteration: u8,
+        max_iterations: u8,
+        total_tool_calls: u32,
+        telemetry_records: &[ReActIterationRecord],
+        total_usage: &LlmUsage,
+        reasoning_summary_acc: &str,
+        start_time: std::time::Instant,
+    ) -> Result<AgentRunResult, AppError> {
         let synthesis_ctx = ContextAssembler::assemble_synthesis(
             mode,
-            &request,
+            request,
             &self.skill_registry,
-            &mut disclosed_state,
+            disclosed_state,
         );
         reasoning_emit::emit_prompt_snapshot(
             sink,
             "synthesis",
             iteration,
             &synthesis_ctx,
-            &disclosed_state,
+            disclosed_state,
         )
         .await;
         reasoning_emit::emit_plan_decision_telemetry(
@@ -540,7 +621,7 @@ impl ReActLoop {
             "synthesis",
             iteration,
             &synthesis_ctx,
-            &disclosed_state,
+            disclosed_state,
         )
         .await;
 
@@ -550,10 +631,10 @@ impl ReActLoop {
                 &self.llm,
                 &synthesis_ctx,
                 mode,
-                &messages,
-                &collected_tool_results,
+                messages,
+                collected_tool_results,
                 sink,
-                &cancel,
+                cancel,
             )
             .await?;
 
@@ -573,11 +654,11 @@ impl ReActLoop {
         self.finish_run(
             sink,
             final_answer,
-            &request,
-            &collected_tool_results,
-            &telemetry_records,
-            &total_usage,
-            &reasoning_summary_acc,
+            request,
+            collected_tool_results,
+            telemetry_records,
+            total_usage,
+            reasoning_summary_acc,
             iteration,
             max_iterations,
             total_tool_calls,
@@ -585,6 +666,200 @@ impl ReActLoop {
             Some(FinalDecision::Synthesized),
         )
         .await
+    }
+
+    async fn check_iteration_budget_exhausted(
+        &self,
+        iteration: u8,
+        max_iterations: u8,
+        state: &IterationState,
+        sink: &dyn AgentEventSink,
+    ) -> bool {
+        if iteration < max_iterations {
+            return false;
+        }
+        let disclosed_skills: Vec<String> = state
+            .disclosed
+            .disclosed_skill_ids
+            .iter()
+            .cloned()
+            .collect();
+        reasoning_emit::emit_evaluation_telemetry(
+            sink,
+            iteration,
+            "budget_exhausted",
+            "iteration budget exhausted, evaluating exit policy",
+            &disclosed_skills,
+            "budget_exhausted",
+        )
+        .await;
+        let _ = sink
+            .emit(AgentEvent::Activity {
+                stage: "budget_exhausted".to_string(),
+                message: "iteration budget exhausted, evaluating exit policy".to_string(),
+            })
+            .await;
+        true
+    }
+
+    async fn emit_turn_end_telemetry(
+        &self,
+        iteration: u8,
+        outcome: &IterationOutcome,
+        sink: &dyn AgentEventSink,
+        telemetry_records: &mut Vec<ReActIterationRecord>,
+    ) {
+        if outcome.sandbox_break {
+            return;
+        }
+        let Some(record) = outcome.record.clone() else {
+            return;
+        };
+        let exit_reason = record.exit_reason.clone();
+        let observation_preview = record.observation_preview.clone();
+        let disclosed_skills = record.disclosed_skills.clone();
+        reasoning_emit::emit_evaluation_telemetry(
+            sink,
+            iteration,
+            &exit_reason,
+            &observation_preview,
+            &disclosed_skills,
+            &exit_reason,
+        )
+        .await;
+        let _ = sink
+            .emit(AgentEvent::TurnEnd {
+                iteration,
+                exit_reason,
+            })
+            .await;
+        telemetry_records.push(record);
+    }
+
+    async fn trigger_auto_fallback_and_check_degraded(
+        &self,
+        mode: &ModeConfig,
+        loop_exit: &config::LoopExitConfig,
+        request: &AgentRequest,
+        auth: &avrag_auth::AuthContext,
+        retrieval_query: &str,
+        messages: &mut Vec<ChatMessage>,
+        collected_tool_results: &mut Vec<ToolResult>,
+        disclosed_state: &DisclosedState,
+        sink: &dyn AgentEventSink,
+        iteration: u8,
+        max_iterations: u8,
+        total_tool_calls: u32,
+        telemetry_records: &[ReActIterationRecord],
+        total_usage: &LlmUsage,
+        reasoning_summary_acc: &str,
+        start_time: std::time::Instant,
+    ) -> Result<Option<AgentRunResult>, AppError> {
+        self.run_auto_fallback(
+            mode,
+            request,
+            auth,
+            retrieval_query,
+            messages,
+            collected_tool_results,
+            sink,
+        )
+        .await?;
+        let has_evidence =
+            has_retrieval_observation(messages, collected_tool_results, mode);
+        if post_fallback_gate(loop_exit, has_evidence) != PostLoopAction::DegradedNoEvidence {
+            return Ok(None);
+        }
+        Ok(Some(
+            self.finish_degraded_no_evidence_run(
+                mode,
+                request,
+                disclosed_state,
+                collected_tool_results,
+                sink,
+                iteration,
+                max_iterations,
+                total_tool_calls,
+                telemetry_records,
+                total_usage,
+                reasoning_summary_acc,
+                start_time,
+            )
+            .await?,
+        ))
+    }
+
+    async fn finish_degraded_no_evidence_run(
+        &self,
+        mode: &ModeConfig,
+        request: &AgentRequest,
+        disclosed_state: &DisclosedState,
+        collected_tool_results: &[ToolResult],
+        sink: &dyn AgentEventSink,
+        iteration: u8,
+        max_iterations: u8,
+        total_tool_calls: u32,
+        telemetry_records: &[ReActIterationRecord],
+        total_usage: &LlmUsage,
+        reasoning_summary_acc: &str,
+        start_time: std::time::Instant,
+    ) -> Result<AgentRunResult, AppError> {
+        let answer = degraded_no_evidence_answer(&mode.id);
+        let disclosed_skills: Vec<String> = disclosed_state
+            .disclosed_skill_ids
+            .iter()
+            .cloned()
+            .collect();
+        let observation_preview = truncate_preview(&answer, 200);
+        reasoning_emit::emit_evaluation_telemetry(
+            sink,
+            iteration,
+            "degraded_no_evidence",
+            &observation_preview,
+            &disclosed_skills,
+            "degraded_no_evidence",
+        )
+        .await;
+        let _ = sink
+            .emit(AgentEvent::Activity {
+                stage: "degraded_no_evidence".to_string(),
+                message: answer.clone(),
+            })
+            .await;
+        let _ = sink
+            .emit(AgentEvent::MessageDelta {
+                text: answer.clone(),
+            })
+            .await;
+        let _ = sink
+            .emit(AgentEvent::Done {
+                final_message: Some(answer.clone()),
+                usage: None,
+            })
+            .await;
+        let mut result = build_run_result(
+            &self.llm,
+            answer,
+            request,
+            collected_tool_results,
+            telemetry_records,
+            total_usage,
+            reasoning_summary_acc,
+            iteration,
+            max_iterations,
+            total_tool_calls,
+            start_time,
+            Some(FinalDecision::Degraded {
+                reason: crate::agents::react_loop::DegradeReason::NoResultsAfterAllFallbacks,
+            }),
+        );
+        result.degrade_trace.push(contracts::chat::DegradeTraceItem {
+            stage: "degraded_no_evidence".to_string(),
+            reason: DegradeReason::NoRetrievalEvidence,
+            impact: "Answer withheld; synthesis skipped".to_string(),
+        });
+        self.emit_run_citations(sink, &result.citations).await;
+        Ok(result)
     }
 
     async fn run_auto_fallback(
@@ -612,105 +887,123 @@ impl ReActLoop {
             .await;
 
         match fallback.tool_id.as_str() {
-            "dense_retrieval" => {
-                if let Some(runtime) = &self.rag_runtime {
-                    let args = serde_json::to_value(common::DenseRetrievalArgs {
-                        queries: vec![retrieval_query.to_string()],
-                        modality: common::DenseRetrievalModality::Both,
-                        top_k: fallback.top_k as usize,
-                        doc_scope: request.doc_scope.clone(),
-                    })
-                    .map_err(|e| AppError::internal(format!("serialize fallback args: {e}")))?;
-                    let result = fallback::inject_fallback_observation(
-                        runtime,
-                        auth,
-                        args,
-                        &fallback.tool_id,
-                        messages,
-                    )
-                    .await;
-                    collected_tool_results.push(result);
-                }
-            }
-            "lexical_retrieval" => {
-                if let Some(runtime) = &self.rag_runtime {
-                    let args = serde_json::to_value(common::LexicalRetrievalArgs {
-                        terms: retrieval_query
-                            .split_whitespace()
-                            .map(ToOwned::to_owned)
-                            .collect(),
-                        top_k: fallback.top_k as usize,
-                        doc_scope: request.doc_scope.clone(),
-                    })
-                    .map_err(|e| AppError::internal(format!("serialize fallback args: {e}")))?;
-                    let result = fallback::inject_fallback_observation(
-                        runtime,
-                        auth,
-                        args,
-                        &fallback.tool_id,
-                        messages,
-                    )
-                    .await;
-                    collected_tool_results.push(result);
-                }
-            }
-            "graph_retrieval" => {
-                if let Some(runtime) = &self.rag_runtime {
-                    let args = serde_json::to_value(common::GraphRetrievalArgs {
-                        graph_hints: Vec::new(),
-                        placeholder_triplets: Vec::new(),
-                        relation_limit: 20,
-                        supporting_chunk_limit: 10,
-                        hop_limit: 1,
-                        fan_out_limit: 10,
-                        query: Some(retrieval_query.to_string()),
-                        doc_scope: request.doc_scope.clone(),
-                    })
-                    .map_err(|e| AppError::internal(format!("serialize fallback args: {e}")))?;
-                    let result = fallback::inject_fallback_observation(
-                        runtime,
-                        auth,
-                        args,
-                        &fallback.tool_id,
-                        messages,
-                    )
-                    .await;
-                    collected_tool_results.push(result);
-                }
+            "dense_retrieval" | "lexical_retrieval" | "graph_retrieval" => {
+                self.run_rag_retrieval_fallback(
+                    request,
+                    auth,
+                    retrieval_query,
+                    fallback,
+                    messages,
+                    collected_tool_results,
+                )
+                .await?;
             }
             "web_search" => {
-                if let Some(executor) = &self.search_executor {
-                    let v = fallback.vertical.as_deref().unwrap_or("web");
-                    match executor.execute_search(retrieval_query, Some(v)).await {
-                        Ok(response) => {
-                            let text = serde_json::to_string_pretty(&response)
-                                .unwrap_or_else(|_| "search succeeded".to_string());
-                            messages
-                                .push(ChatMessage::system(format!("自动兜底搜索结果:\n{text}")));
-                            collected_tool_results.push(ToolResult {
-                                tool: "web_search".to_string(),
-                                version: "1.0".to_string(),
-                                status: common::ToolStatus::Ok,
-                                data: Some(serde_json::to_value(&response).unwrap_or_default()),
-                                trace: None,
-                            });
-                        }
-                        Err(e) => {
-                            messages.push(ChatMessage::system(format!("[fallback failed: {e}]")));
-                        }
-                    }
-                }
+                self.run_web_search_fallback(
+                    retrieval_query,
+                    fallback,
+                    messages,
+                    collected_tool_results,
+                )
+                .await?;
             }
             other => {
-                let _ = sink
-                    .emit(AgentEvent::Activity {
-                        stage: "fallback_skipped".to_string(),
-                        message: format!("unknown fallback tool_id: {other}"),
-                    })
-                    .await;
+                self.emit_unknown_fallback_skipped(sink, other).await;
             }
         }
         Ok(())
+    }
+
+    async fn run_rag_retrieval_fallback(
+        &self,
+        request: &AgentRequest,
+        auth: &avrag_auth::AuthContext,
+        retrieval_query: &str,
+        fallback: &config::AutoFallbackConfig,
+        messages: &mut Vec<ChatMessage>,
+        collected_tool_results: &mut Vec<ToolResult>,
+    ) -> Result<(), AppError> {
+        let Some(runtime) = &self.rag_runtime else {
+            return Ok(());
+        };
+        let args = match fallback.tool_id.as_str() {
+            "dense_retrieval" => serde_json::to_value(contracts::DenseRetrievalArgs {
+                queries: vec![retrieval_query.to_string()],
+                modality: contracts::DenseRetrievalModality::Both,
+                top_k: fallback.top_k as usize,
+                doc_scope: request.doc_scope.clone(),
+            }),
+            "lexical_retrieval" => serde_json::to_value(contracts::LexicalRetrievalArgs {
+                terms: retrieval_query
+                    .split_whitespace()
+                    .map(ToOwned::to_owned)
+                    .collect(),
+                top_k: fallback.top_k as usize,
+                doc_scope: request.doc_scope.clone(),
+            }),
+            "graph_retrieval" => serde_json::to_value(contracts::GraphRetrievalArgs {
+                graph_hints: Vec::new(),
+                placeholder_triplets: Vec::new(),
+                relation_limit: 20,
+                supporting_chunk_limit: 10,
+                hop_limit: 1,
+                fan_out_limit: 10,
+                query: Some(retrieval_query.to_string()),
+                doc_scope: request.doc_scope.clone(),
+            }),
+            _ => return Ok(()),
+        }
+        .map_err(|e| AppError::internal(format!("serialize fallback args: {e}")))?;
+        let result = fallback::inject_fallback_observation(
+            runtime,
+            auth,
+            args,
+            &fallback.tool_id,
+            messages,
+        )
+        .await;
+        collected_tool_results.push(result);
+        Ok(())
+    }
+
+    async fn run_web_search_fallback(
+        &self,
+        retrieval_query: &str,
+        fallback: &config::AutoFallbackConfig,
+        messages: &mut Vec<ChatMessage>,
+        collected_tool_results: &mut Vec<ToolResult>,
+    ) -> Result<(), AppError> {
+        let Some(executor) = &self.search_executor else {
+            return Ok(());
+        };
+        let v = fallback.vertical.as_deref().unwrap_or("web");
+        match executor.execute_search(retrieval_query, Some(v)).await {
+            Ok(response) => {
+                let text = serde_json::to_string_pretty(&response)
+                    .unwrap_or_else(|_| "search succeeded".to_string());
+                messages.push(ChatMessage::system(format!("自动兜底搜索结果:\n{text}")));
+                collected_tool_results.push(ToolResult {
+                    tool: "web_search".to_string(),
+                    version: "1.0".to_string(),
+                    status: contracts::ToolStatus::Ok,
+                    data: Some(serde_json::to_value(&response).unwrap_or_default()),
+                    trace: None,
+                });
+            }
+            Err(e) => {
+                messages.push(ChatMessage::system(format!("[fallback failed: {e}]")));
+            }
+        }
+        Ok(())
+    }
+
+    async fn emit_unknown_fallback_skipped(&self, sink: &dyn AgentEventSink, tool_id: &str) {
+        let _ = sink
+            .emit(AgentEvent::Activity {
+                stage: "fallback_skipped".to_string(),
+                message: format!("unknown fallback tool_id: {tool_id}"),
+            })
+            .await;
     }
 
     async fn emit_run_citations(&self, sink: &dyn AgentEventSink, citations: &[contracts::chat::Citation]) {
@@ -738,7 +1031,8 @@ impl ReActLoop {
         start_time: std::time::Instant,
         final_decision: Option<FinalDecision>,
     ) -> Result<AgentRunResult, AppError> {
-        let result = self.build_run_result(
+        let result = build_run_result(
+            &self.llm,
             final_answer,
             request,
             collected_tool_results,
@@ -753,102 +1047,6 @@ impl ReActLoop {
         );
         self.emit_run_citations(sink, &result.citations).await;
         Ok(result)
-    }
-
-    fn build_run_result(
-        &self,
-        final_answer: String,
-        request: &AgentRequest,
-        collected_tool_results: &[ToolResult],
-        telemetry_records: &[ReActIterationRecord],
-        total_usage: &LlmUsage,
-        reasoning_summary_acc: &str,
-        iteration: u8,
-        max_iterations: u8,
-        total_tool_calls: u32,
-        start_time: std::time::Instant,
-        final_decision: Option<FinalDecision>,
-    ) -> AgentRunResult {
-        let total_elapsed_ms = start_time.elapsed().as_millis() as u64;
-        let citations = crate::agents::unified::helpers::build_all_citations_from_tool_results(
-            collected_tool_results,
-        );
-        let citations = crate::agents::unified::helpers::filter_citations_for_mode(
-            &request.kind.as_canonical_str(),
-            &final_answer,
-            citations,
-        );
-        let sources = crate::agents::unified::helpers::build_sources_from_tool_results(
-            collected_tool_results,
-        );
-        let degrade_trace = crate::agents::unified::helpers::degrade_trace_from_tool_results(
-            collected_tool_results,
-        );
-
-        AgentRunResult {
-            answer: final_answer,
-            answer_blocks: Vec::new(),
-            citations,
-            sources,
-            reasoning_summary: if reasoning_summary_acc.is_empty() {
-                None
-            } else {
-                Some(reasoning_summary_acc.to_string())
-            },
-            degrade_trace,
-            usage: Some(AgentRunUsage {
-                provider: if total_usage.provider.is_empty() {
-                    self.llm.config.provider_name()
-                } else {
-                    total_usage.provider.clone()
-                },
-                model: if total_usage.model.is_empty() {
-                    self.llm.config.model.clone()
-                } else {
-                    total_usage.model.clone()
-                },
-                prompt_tokens: total_usage.prompt_tokens as u64,
-                completion_tokens: total_usage.completion_tokens as u64,
-                total_tokens: total_usage.total_tokens as u64,
-                request_count: telemetry_records.len() as u64,
-                cached_tokens: total_usage.cached_tokens as u64,
-            }),
-            debug_payload: None,
-            message_id: None,
-            iterations: telemetry_records
-                .iter()
-                .map(|r| IterationRecord {
-                    iteration: r.iteration,
-                    plan: serde_json::json!({
-                        "action_type": r.action_type,
-                        "observation_preview": r.observation_preview,
-                        "disclosed_skills": r.disclosed_skills,
-                        "exit_reason": r.exit_reason,
-                    }),
-                    signals: EvaluationSignals::default(),
-                    decision: r.exit_reason.clone(),
-                    elapsed_ms: r.elapsed_ms,
-                    llm_evaluation: None,
-                    usage: r.llm_usage.clone(),
-                })
-                .collect(),
-            total_tool_calls,
-            tool_results: collected_tool_results.to_vec(),
-            final_decision,
-            query_resolution: request.query_resolution.clone(),
-            trace_id: request.session_id.clone(),
-            budget_used: Some(BudgetUsage {
-                current: iteration,
-                max: max_iterations,
-            }),
-            total_elapsed_ms: Some(total_elapsed_ms),
-            trace: None,
-            snapshot: None,
-            decisions: Vec::new(),
-            tool_calls: Vec::new(),
-            routing_decision: None,
-            eval_summary: None,
-        }
     }
 }
 
@@ -866,7 +1064,7 @@ pub(crate) fn truncate_preview(s: &str, max_chars: usize) -> String {
 /// If the LLM also emitted reasoning text in `content`, it is preserved so
 /// the next iteration can see the model's chain-of-thought.
 pub(crate) fn build_assistant_message_with_tool_calls(
-    calls: &[common::ToolCall],
+    calls: &[contracts::ToolCall],
     call_ids: &[String],
     content: &str,
     reasoning_content: Option<String>,
@@ -900,7 +1098,7 @@ pub(crate) fn build_assistant_message_with_tool_calls(
 
 /// Build a `tool` role message from a native tool result, keyed by the
 /// synthetic call id used in the assistant message.
-pub(crate) fn build_tool_message(call_id: &str, tool_name: &str, result: &common::ToolResult) -> ChatMessage {
+pub(crate) fn build_tool_message(call_id: &str, tool_name: &str, result: &contracts::ToolResult) -> ChatMessage {
     let body = serde_json::json!({
         "tool": tool_name,
         "status": result.status,
@@ -925,7 +1123,7 @@ mod tests {
 
     #[test]
     fn assistant_tool_calls_use_openai_format() {
-        let calls = vec![common::ToolCall {
+        let calls = vec![contracts::ToolCall {
             tool: "dense_retrieval".to_string(),
             version: "1".to_string(),
             args: serde_json::json!({"query": "rust"}),
@@ -955,10 +1153,10 @@ mod tests {
 
     #[test]
     fn tool_message_carries_matching_call_id() {
-        let result = common::ToolResult {
+        let result = contracts::ToolResult {
             tool: "web_search".to_string(),
             version: "1".to_string(),
-            status: common::ToolStatus::Ok,
+            status: contracts::ToolStatus::Ok,
             data: Some(serde_json::json!({"hits": 3})),
             trace: None,
         };
@@ -1023,34 +1221,34 @@ mod tests {
 
     #[test]
     fn fallback_dense_args_roundtrips() {
-        let args = serde_json::to_value(common::DenseRetrievalArgs {
+        let args = serde_json::to_value(contracts::DenseRetrievalArgs {
             queries: vec!["rust".to_string()],
-            modality: common::DenseRetrievalModality::Text,
+            modality: contracts::DenseRetrievalModality::Text,
             top_k: 10,
             doc_scope: vec!["doc1".to_string()],
         })
         .unwrap();
-        let round: common::DenseRetrievalArgs = serde_json::from_value(args).unwrap();
+        let round: contracts::DenseRetrievalArgs = serde_json::from_value(args).unwrap();
         assert_eq!(round.queries, vec!["rust"]);
         assert_eq!(round.top_k, 10);
     }
 
     #[test]
     fn fallback_lexical_args_roundtrips() {
-        let args = serde_json::to_value(common::LexicalRetrievalArgs {
+        let args = serde_json::to_value(contracts::LexicalRetrievalArgs {
             terms: vec!["rust".to_string(), "lang".to_string()],
             top_k: 10,
             doc_scope: vec!["doc1".to_string()],
         })
         .unwrap();
-        let round: common::LexicalRetrievalArgs = serde_json::from_value(args).unwrap();
+        let round: contracts::LexicalRetrievalArgs = serde_json::from_value(args).unwrap();
         assert_eq!(round.terms, vec!["rust", "lang"]);
         assert_eq!(round.top_k, 10);
     }
 
     #[test]
     fn fallback_graph_args_roundtrips() {
-        let args = serde_json::to_value(common::GraphRetrievalArgs {
+        let args = serde_json::to_value(contracts::GraphRetrievalArgs {
             graph_hints: Vec::new(),
             placeholder_triplets: Vec::new(),
             relation_limit: 20,
@@ -1061,7 +1259,7 @@ mod tests {
             doc_scope: vec!["doc1".to_string()],
         })
         .unwrap();
-        let round: common::GraphRetrievalArgs = serde_json::from_value(args).unwrap();
+        let round: contracts::GraphRetrievalArgs = serde_json::from_value(args).unwrap();
         assert_eq!(round.query.as_deref(), Some("rust"));
         assert_eq!(round.hop_limit, 1);
     }

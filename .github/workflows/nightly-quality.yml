@@ -1,0 +1,100 @@
+name: Nightly RAG Quality
+
+on:
+  schedule:
+    # Every day at 03:00 UTC (off-peak for both US and EU; LLM API
+    # rate limits and CI capacity are at their lowest)
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      golden_set:
+        description: 'Golden set to run (default: fixtures_golden.json)'
+        required: false
+        default: 'tests/rag_quality/fixtures_golden.json'
+      corpus_dir:
+        description: 'Corpus directory (default: product_e2e fixtures)'
+        required: false
+        default: 'crates/app/tests/product_e2e/fixtures'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rag-quality:
+    name: RAG Quality (Recall@15 / Citation Accuracy / Hallucination Rate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: avrag-rs
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: avrag-rs/target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
+
+      - name: Build quality_runner
+        run: cargo build -p rag_quality --bin quality_runner --release
+
+      - name: Run quality_runner against fixture corpus
+        env:
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+        run: |
+          ./target/release/quality_runner \
+            --golden ${{ inputs.golden_set || 'tests/rag_quality/fixtures_golden.json' }} \
+            --corpus ${{ inputs.corpus_dir || 'crates/app/tests/product_e2e/fixtures' }} \
+            --top-k 4 2>&1 | tee quality-runner.log
+
+      - name: Upload quality report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rag-quality-report-${{ github.run_id }}
+          path: avrag-rs/quality-runner.log
+          retention-days: 90
+
+      - name: Summary
+        if: always()
+        working-directory: avrag-rs
+        run: |
+          echo "## RAG Quality (nightly)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f quality-runner.log ]; then
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            # Extract just the metrics + gate lines
+            grep -E '^(Total|Recall|Citation|Halluc|GATE|  Recall|  Citation|  Halluc)' \
+              quality-runner.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "quality-runner.log not found (build or run failed)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Fail build on gate regression
+        # The runner exits with code 1 if the gate fails. This step
+        # is `if: failure()` so the job shows red on the PR that
+        # introduces a regression. For scheduled runs, a red job
+        # appears in the Actions UI but does NOT block any PR.
+        if: failure()
+        run: |
+          echo "RAG quality gate failed or runner crashed. See the \
+            uploaded artifact for the full report." >&2
+          exit 1

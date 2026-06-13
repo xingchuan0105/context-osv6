@@ -117,7 +117,7 @@ impl AnalyticsContext {
             prompt_tokens: i64::from(record.usage.prompt_tokens),
             completion_tokens: i64::from(record.usage.completion_tokens),
             embedding_tokens: 0,
-            usage_units: avrag_billing::usage_limit::compute_usage_units(
+            usage_units: super::compute_usage_units(
                 &record.usage.provider,
                 &record.usage.model,
                 record.usage.prompt_tokens,

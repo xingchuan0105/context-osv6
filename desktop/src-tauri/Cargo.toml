@@ -1,0 +1,32 @@
+[package]
+name = "avrag-desktop"
+version = "0.1.0"
+edition = "2021"
+description = "AVRag Desktop Client - Tauri 2 桌面壳"
+authors = ["AVRag Team"]
+
+[lib]
+name = "avrag_desktop_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+
+# 复用 avrag-rs 核心 crates（轻量 ports，不直接依赖 avrag-rag-core）
+common = { path = "../../avrag-rs/crates/common" }
+contracts = { path = "../../contracts" }
+storage-local = { path = "../../avrag-rs/crates/storage-local" }
+avrag-auth = { path = "../../avrag-rs/crates/auth" }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

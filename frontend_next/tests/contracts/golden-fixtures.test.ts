@@ -14,10 +14,8 @@ import {
   type PlannerOutput,
 } from "../../lib/contracts";
 import {
-  chatEventToWorkspace,
   parseWireChatEvent,
   parseWorkspaceChatEventStream,
-  type WorkspaceChatStreamEvent,
 } from "../../lib/workspace/stream";
 
 const fixturesDir = join(
@@ -106,20 +104,10 @@ describe("contract golden fixtures", () => {
     expect(parseWireChatEvent("error", JSON.stringify(wire))).toEqual(wire);
   });
 
-  it("chatEventToWorkspace maps wire event to frontend kind", () => {
-    const wire = loadFixture<ChatEvent>("chat_event_start.json");
-
-    expect(chatEventToWorkspace(wire)).toEqual({
-      kind: "start",
-      request_id: "req-123",
-      session_id: "session-123",
-    });
-  });
-
   it("parseWorkspaceChatEventStream decodes golden fixtures over SSE framing", async () => {
     const start = loadFixture<ChatEvent>("chat_event_start.json");
     const error = loadFixture<ChatEvent>("chat_event_error.json");
-    const events: WorkspaceChatStreamEvent[] = [];
+    const events: ChatEvent[] = [];
 
     await parseWorkspaceChatEventStream(
       makeSseStream([sseFrame("start", start), sseFrame("error", error)]),
@@ -128,19 +116,7 @@ describe("contract golden fixtures", () => {
       },
     );
 
-    expect(events).toEqual([
-      {
-        kind: "start",
-        request_id: "req-123",
-        session_id: "session-123",
-      },
-      {
-        kind: "error",
-        request_id: "req-err",
-        code: "validation_error",
-        message: "boom",
-      },
-    ]);
+    expect(events).toEqual([start, error]);
   });
 
   it("chat_response_roundtrip matches generated ChatResponse including nullable guard/planner fields", () => {

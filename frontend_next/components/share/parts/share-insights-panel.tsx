@@ -1,6 +1,6 @@
 "use client";
 
-import { formatSettingsShareMessage } from "../../../lib/settings-share-messages";
+import { formatUiMessage } from "../../../lib/i18n/messages";
 import { InsightMetricCard, SectionHeader } from "./share-center-ui";
 import { formatDayLabel } from "./share-center-utils";
 import type { useShareCenter } from "./use-share-center";
@@ -37,15 +37,15 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
           }}
         >
           <SectionHeader
-            subtitle={formatSettingsShareMessage(locale, "shareCenter.overviewSectionSubtitle")}
-            title={formatSettingsShareMessage(locale, "shareCenter.overviewSectionTitle")}
+            subtitle={formatUiMessage(locale, "shareCenter.overviewSectionSubtitle")}
+            title={formatUiMessage(locale, "shareCenter.overviewSectionTitle")}
           />
 
           {analyticsQuery.error && !analyticsQuery.data ? (
             <p className="app-notice-banner" style={{ margin: 0 }}>
               {analyticsQuery.error instanceof Error
                 ? analyticsQuery.error.message
-                : formatSettingsShareMessage(locale, "shareCenter.analyticsLoadError")}
+                : formatUiMessage(locale, "shareCenter.analyticsLoadError")}
             </p>
           ) : null}
 
@@ -53,7 +53,7 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
             <p className="app-notice-banner" style={{ margin: 0 }}>
               {accessLogsQuery.error instanceof Error
                 ? accessLogsQuery.error.message
-                : formatSettingsShareMessage(locale, "shareCenter.accessLogsLoadError")}
+                : formatUiMessage(locale, "shareCenter.accessLogsLoadError")}
             </p>
           ) : null}
 
@@ -65,23 +65,23 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
             }}
           >
             <InsightMetricCard
-              title={formatSettingsShareMessage(locale, "shareCenter.overviewCurrentStatus")}
+              title={formatUiMessage(locale, "shareCenter.overviewCurrentStatus")}
               value={shareStatusText}
             />
             <InsightMetricCard
-              title={formatSettingsShareMessage(locale, "shareCenter.overviewTotalViews")}
+              title={formatUiMessage(locale, "shareCenter.overviewTotalViews")}
               value={totalViewsValue}
             />
             <InsightMetricCard
-              title={formatSettingsShareMessage(locale, "shareCenter.overviewRecentViews")}
+              title={formatUiMessage(locale, "shareCenter.overviewRecentViews")}
               value={recentViewsValue}
             />
             <InsightMetricCard
-              title={formatSettingsShareMessage(locale, "shareCenter.overviewActiveDays")}
+              title={formatUiMessage(locale, "shareCenter.overviewActiveDays")}
               value={activeDaysValue}
             />
             <InsightMetricCard
-              title={formatSettingsShareMessage(locale, "shareCenter.overviewLastAccess")}
+              title={formatUiMessage(locale, "shareCenter.overviewLastAccess")}
               value={latestAccessValue}
             />
           </div>
@@ -90,7 +90,7 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
         {analyticsQuery.isLoading && !analyticsQuery.data ? (
           <section className="app-surface-card">
             <p style={{ margin: 0 }}>
-              {formatSettingsShareMessage(locale, "shareCenter.analyticsLoading")}
+              {formatUiMessage(locale, "shareCenter.analyticsLoading")}
             </p>
           </section>
         ) : analyticsQuery.error && !analyticsQuery.data ? (
@@ -98,7 +98,7 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
             <p className="app-notice-banner" style={{ margin: 0 }}>
               {analyticsQuery.error instanceof Error
                 ? analyticsQuery.error.message
-                : formatSettingsShareMessage(locale, "shareCenter.analyticsLoadError")}
+                : formatUiMessage(locale, "shareCenter.analyticsLoadError")}
             </p>
           </section>
         ) : (
@@ -120,8 +120,8 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
             >
               <div style={{ minWidth: 0 }}>
                 <SectionHeader
-                  subtitle={formatSettingsShareMessage(locale, "shareCenter.trendSectionSubtitle")}
-                  title={formatSettingsShareMessage(locale, "shareCenter.trendSectionTitle")}
+                  subtitle={formatUiMessage(locale, "shareCenter.trendSectionSubtitle")}
+                  title={formatUiMessage(locale, "shareCenter.trendSectionTitle")}
                 />
               </div>
               <div className="app-button-row" style={{ justifyContent: "flex-start" }}>
@@ -135,7 +135,7 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
                   type="button"
                   onClick={() => setTrendWindowDays(7)}
                 >
-                  {formatSettingsShareMessage(locale, "shareCenter.trendRange7")}
+                  {formatUiMessage(locale, "shareCenter.trendRange7")}
                 </button>
                 <button
                   className={trendWindowDays === 30 ? "app-button-secondary" : "app-button-ghost"}
@@ -147,7 +147,7 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
                   type="button"
                   onClick={() => setTrendWindowDays(30)}
                 >
-                  {formatSettingsShareMessage(locale, "shareCenter.trendRange30")}
+                  {formatUiMessage(locale, "shareCenter.trendRange30")}
                 </button>
               </div>
             </div>
@@ -201,9 +201,9 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
               </div>
             ) : (
               <div className="app-inline-surface" style={{ display: "grid", gap: "0.25rem" }}>
-                <strong>{formatSettingsShareMessage(locale, "shareCenter.trendEmptyTitle")}</strong>
+                <strong>{formatUiMessage(locale, "shareCenter.trendEmptyTitle")}</strong>
                 <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
-                  {formatSettingsShareMessage(locale, "shareCenter.trendEmptyBody")}
+                  {formatUiMessage(locale, "shareCenter.trendEmptyBody")}
                 </p>
               </div>
             )}

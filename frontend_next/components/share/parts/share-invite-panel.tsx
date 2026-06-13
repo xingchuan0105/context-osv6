@@ -1,6 +1,6 @@
 "use client";
 
-import { formatSettingsShareMessage } from "../../../lib/settings-share-messages";
+import { formatUiMessage } from "../../../lib/i18n/messages";
 import { SectionHeader } from "./share-center-ui";
 import {
   formatAccessedAt,
@@ -39,8 +39,8 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
           }}
         >
           <SectionHeader
-            subtitle={formatSettingsShareMessage(locale, "shareCenter.inviteSectionSubtitle")}
-            title={formatSettingsShareMessage(locale, "shareCenter.inviteSectionTitle")}
+            subtitle={formatUiMessage(locale, "shareCenter.inviteSectionSubtitle")}
+            title={formatUiMessage(locale, "shareCenter.inviteSectionTitle")}
           />
 
           <div
@@ -81,7 +81,7 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
               onClick={() => void handleInviteMember()}
             >
               {inviteMemberMutation.isPending
-                ? formatSettingsShareMessage(locale, "shareCenter.inviteSending")
+                ? formatUiMessage(locale, "shareCenter.inviteSending")
                 : locale === "zh-CN"
                   ? "发送邀请"
                   : "Send invite"}
@@ -90,12 +90,12 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
           </div>
 
           {membersQuery.isLoading && !membersQuery.data ? (
-            <p style={{ margin: 0 }}>{formatSettingsShareMessage(locale, "shareCenter.loading")}</p>
+            <p style={{ margin: 0 }}>{formatUiMessage(locale, "shareCenter.loading")}</p>
           ) : membersQuery.error && !membersQuery.data ? (
             <p className="app-notice-banner" style={{ margin: 0 }}>
               {membersQuery.error instanceof Error
                 ? membersQuery.error.message
-                : formatSettingsShareMessage(locale, "shareCenter.membersLoadError")}
+                : formatUiMessage(locale, "shareCenter.membersLoadError")}
             </p>
           ) : membersQuery.data && membersQuery.data.members.length > 0 ? (
             <div style={{ display: "grid", gap: "0.75rem" }}>
@@ -115,7 +115,7 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
                         {memberRoleLabel(locale, member.role)} · {memberStatusLabel(locale, member.status)}
                       </span>
                       <span style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.88rem" }}>
-                        {formatSettingsShareMessage(locale, "shareCenter.memberInvitedAt", {
+                        {formatUiMessage(locale, "shareCenter.memberInvitedAt", {
                           value: formatAccessedAt(locale, member.invited_at),
                         })}
                       </span>
@@ -128,7 +128,7 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
                           type="button"
                           onClick={() => void handleConfirmRemove(member.member_id)}
                         >
-                          {formatSettingsShareMessage(locale, "shareCenter.confirmRemoveAction")}
+                          {formatUiMessage(locale, "shareCenter.confirmRemoveAction")}
                         </button>
                         <button
                           className="app-button-ghost"
@@ -146,7 +146,7 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
                         type="button"
                         onClick={() => setPendingRemoveMemberId(member.member_id)}
                       >
-                        {formatSettingsShareMessage(locale, "shareCenter.removeAction")}
+                        {formatUiMessage(locale, "shareCenter.removeAction")}
                       </button>
                     )}
                   </article>

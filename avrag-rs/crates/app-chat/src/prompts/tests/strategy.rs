@@ -4,27 +4,27 @@ use avrag_search::SearchResult;
 #[test]
 fn build_rag_strategy_evaluation_prompt_contains_all_inputs() {
     let tool_results = vec![
-        common::ToolResult {
+        contracts::ToolResult {
             tool: "dense_retrieval".to_string(),
             version: "1.0".to_string(),
-            status: common::ToolStatus::Ok,
+            status: contracts::ToolStatus::Ok,
             data: Some(serde_json::json!([
                 {"chunk_id": "c1", "text": "alpha"},
                 {"chunk_id": "c2", "text": "beta"},
             ])),
             trace: None,
         },
-        common::ToolResult {
+        contracts::ToolResult {
             tool: "lexical_retrieval".to_string(),
             version: "1.0".to_string(),
-            status: common::ToolStatus::Ok,
+            status: contracts::ToolStatus::Ok,
             data: Some(serde_json::json!([])),
             trace: None,
         },
-        common::ToolResult {
+        contracts::ToolResult {
             tool: "graph_retrieval".to_string(),
             version: "1.0".to_string(),
-            status: common::ToolStatus::Error,
+            status: contracts::ToolStatus::Error,
             data: None,
             trace: None,
         },
@@ -44,7 +44,7 @@ fn build_rag_strategy_evaluation_prompt_contains_all_inputs() {
     ];
 
     let chunks = vec![
-        common::RetrievedChunk {
+        contracts::RetrievedChunk {
             chunk_id: "c1".to_string(),
             doc_id: "doc1".to_string(),
             chunk_type: "paragraph".to_string(),
@@ -60,7 +60,7 @@ fn build_rag_strategy_evaluation_prompt_contains_all_inputs() {
             parse_run_id: None,
             score_breakdown: vec![],
         },
-        common::RetrievedChunk {
+        contracts::RetrievedChunk {
             chunk_id: "c2".to_string(),
             doc_id: "doc1".to_string(),
             chunk_type: "paragraph".to_string(),
@@ -100,10 +100,10 @@ fn build_rag_strategy_evaluation_prompt_contains_all_inputs() {
 #[test]
 fn build_rag_strategy_evaluation_prompt_maps_multi_query_tool_correctly() {
     // One dense_retrieval call with 2 queries → both map to tool_index 0
-    let tool_results = vec![common::ToolResult {
+    let tool_results = vec![contracts::ToolResult {
         tool: "dense_retrieval".to_string(),
         version: "1.0".to_string(),
-        status: common::ToolStatus::Ok,
+        status: contracts::ToolStatus::Ok,
         data: Some(serde_json::json!([
             {"chunk_id": "c1", "text": "alpha"},
             {"chunk_id": "c2", "text": "beta"},
@@ -125,7 +125,7 @@ fn build_rag_strategy_evaluation_prompt_maps_multi_query_tool_correctly() {
         },
     ];
 
-    let chunks: Vec<common::RetrievedChunk> = vec![];
+    let chunks: Vec<contracts::RetrievedChunk> = vec![];
 
     let prompt = build_rag_strategy_evaluation_prompt(
         "test",

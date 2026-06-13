@@ -6,11 +6,11 @@ description = "Local file system storage adapter for desktop client"
 
 [dependencies]
 async-trait = "0.1"
-tokio = { version = "1", features = ["fs", "io-util"] }
+tokio = { version = "1", features = ["fs", "io-util", "sync"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 common = { path = "../common" }
-avrag-rag-core = { path = "../rag-core" }
+avrag-rag-core-ports = { path = "../rag-core-ports" }
 avrag-auth = { path = "../auth" }
 tracing = "0.1"

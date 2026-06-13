@@ -2,7 +2,7 @@
 
 use app_core::ChatPersistencePort;
 use avrag_auth::AuthContext;
-use common::{ToolResult, ToolStatus};
+use contracts::{ToolResult, ToolStatus};
 use serde_json::Value;
 use uuid::Uuid;
 

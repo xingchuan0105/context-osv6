@@ -970,7 +970,7 @@ mod tests {
         let notebook: serde_json::Value = serde_json::from_slice(&notebook_body).unwrap();
         let notebook_id = notebook["notebook"]["id"].as_str().unwrap().to_string();
 
-        let share_token = avrag_share::ShareService::new(state.postgres_repo().expect("pg expected"))
+        let share_token = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
             .create_share_token(
                 &avrag_auth::AuthContext::new(
                     avrag_auth::OrgId::from(org_id),

@@ -1,6 +1,6 @@
 use app_bootstrap::AppState;
 use axum::{Extension, Json, Router, extract::Query, routing::get};
-use common::{ApiResponse, UserId};
+use common::ApiResponse;
 use serde::Deserialize;
 
 use crate::RequestState;

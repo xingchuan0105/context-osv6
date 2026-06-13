@@ -46,7 +46,7 @@ pub fn atomic_tool_catalog() -> Vec<Tool> {
                 .and_then(|s| serde_json::from_str(s).ok())
                 .unwrap_or(serde_json::json!({}));
 
-            Tool::new(common::ToolSpec {
+            Tool::new(contracts::ToolSpec {
                 name: skill.id().replace('-', "_"),
                 version: skill.version().to_string(),
                 description: skill.description().to_string(),
@@ -116,7 +116,7 @@ pub fn search_specific_tools() -> Vec<Tool> {
                 .unwrap_or(serde_json::json!({}));
 
             vec![
-                Tool::new(common::ToolSpec {
+                Tool::new(contracts::ToolSpec {
                     name: skill.id().replace('-', "_"),
                     version: skill.version().to_string(),
                     description: skill.description().to_string(),

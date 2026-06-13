@@ -10,8 +10,10 @@ pub use avrag_retrieval_data_plane::RetrievalDataPlane as RetrievalPort;
 pub use crate::admin_store::AdminStorePort;
 pub use crate::auth_store::AuthStorePort;
 pub use crate::billing_quota::BillingQuotaPort;
+pub use crate::billing_store::{BillingStorePort, UsageLimitStorePort};
 pub use crate::chat_persistence::ChatPersistencePort;
 pub use crate::document_store::DocumentStorePort;
+pub use crate::share_store::ShareStorePort;
 
 /// Validates that document IDs belong to the caller's notebook scope.
 #[async_trait]

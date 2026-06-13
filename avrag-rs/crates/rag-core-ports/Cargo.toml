@@ -1,0 +1,17 @@
+[package]
+name = "avrag-rag-core-ports"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+description = "Lightweight port traits for rag-core consumers (desktop, storage-local)"
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+common = { path = "../common" }
+contracts = { path = "../../../contracts" }
+ingestion-types = { path = "../ingestion-types" }
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true

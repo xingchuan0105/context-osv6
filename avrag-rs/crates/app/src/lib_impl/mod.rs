@@ -7,7 +7,6 @@ pub use app_bootstrap::{
     next_message_id, status_label, AppState, CostEventRecord, MemoryState, RetrievedContext,
     StoredDocument,
 };
-pub mod config_helpers;
 
 #[cfg(test)]
 pub mod tests;

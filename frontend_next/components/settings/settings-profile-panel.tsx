@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { describeAuthError } from "../../lib/auth/errors";
 import { useAuth } from "../../lib/auth/context";
-import { formatSettingsShareMessage } from "../../lib/settings-share-messages";
+import { formatUiMessage } from "../../lib/i18n/messages";
 import { updateProfile } from "../../lib/settings/client";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import { applyZodErrors, bannerStyle, type ProfileFormValues } from "./settings-shared";
@@ -25,14 +25,14 @@ export function ProfilePanel() {
   const profileMutation = useMutation({
     mutationFn: async (fullName: string | null) => {
       if (!auth.token) {
-        throw new Error(formatSettingsShareMessage(locale, "settings.profile.notAuthenticated"));
+        throw new Error(formatUiMessage(locale, "settings.profile.notAuthenticated"));
       }
 
       const response = await updateProfile(auth.token, fullName);
 
       if (!response.success || !response.data) {
         throw new Error(
-          response.error ?? formatSettingsShareMessage(locale, "settings.saveError"),
+          response.error ?? formatUiMessage(locale, "settings.saveError"),
         );
       }
 
@@ -40,7 +40,7 @@ export function ProfilePanel() {
     },
     onSuccess: (user) => {
       auth.updateUser(user);
-      setBanner(formatSettingsShareMessage(locale, "settings.saveSuccess"));
+      setBanner(formatUiMessage(locale, "settings.saveSuccess"));
     },
   });
 
@@ -52,7 +52,7 @@ export function ProfilePanel() {
 
   const profileSchema = z.object({
     fullName: z.string().trim().max(120, {
-      message: formatSettingsShareMessage(locale, "settings.profile.nameTooLong"),
+      message: formatUiMessage(locale, "settings.profile.nameTooLong"),
     }),
   });
 
@@ -73,7 +73,7 @@ export function ProfilePanel() {
     } catch (error) {
       setActionError(
         describeAuthError(
-          formatSettingsShareMessage(locale, "settings.saveError"),
+          formatUiMessage(locale, "settings.saveError"),
           error,
         ),
       );
@@ -85,10 +85,10 @@ export function ProfilePanel() {
       <section className="app-inline-surface" style={{ display: "grid", gap: "1rem" }}>
         <div style={{ display: "grid", gap: "0.35rem" }}>
           <h2 style={{ margin: 0 }}>
-            {formatSettingsShareMessage(locale, "settings.profile.sectionTitle")}
+            {formatUiMessage(locale, "settings.profile.sectionTitle")}
           </h2>
           <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
-            {formatSettingsShareMessage(locale, "settings.profile.sectionSubtitle")}
+            {formatUiMessage(locale, "settings.profile.sectionSubtitle")}
           </p>
         </div>
         <form
@@ -98,7 +98,7 @@ export function ProfilePanel() {
         >
           <div>
             <label className="app-form-label" htmlFor="settings-profile-email">
-              {formatSettingsShareMessage(locale, "settings.profile.emailLabel")}
+              {formatUiMessage(locale, "settings.profile.emailLabel")}
             </label>
             <input
               className="app-input"
@@ -111,12 +111,12 @@ export function ProfilePanel() {
           </div>
           <div>
             <label className="app-form-label" htmlFor="settings-profile-name">
-              {formatSettingsShareMessage(locale, "settings.profile.nameLabel")}
+              {formatUiMessage(locale, "settings.profile.nameLabel")}
             </label>
             <input
               className="app-input"
               id="settings-profile-name"
-              placeholder={formatSettingsShareMessage(locale, "settings.profile.namePlaceholder")}
+              placeholder={formatUiMessage(locale, "settings.profile.namePlaceholder")}
               type="text"
               {...profileForm.register("fullName")}
             />
@@ -139,8 +139,8 @@ export function ProfilePanel() {
               type="submit"
             >
               {profileMutation.isPending
-                ? formatSettingsShareMessage(locale, "shareCenter.saving")
-                : formatSettingsShareMessage(locale, "settings.profile.saveAction")}
+                ? formatUiMessage(locale, "shareCenter.saving")
+                : formatUiMessage(locale, "settings.profile.saveAction")}
             </button>
           </div>
         </form>

@@ -6,7 +6,7 @@ import {
 } from "react-hook-form";
 import { z } from "zod";
 
-import { formatSettingsShareMessage } from "../../lib/settings-share-messages";
+import { formatUiMessage } from "../../lib/i18n/messages";
 import {
   defaultNotificationPreferences,
   type NotificationPreferences,
@@ -159,7 +159,7 @@ export function formatPrice(cents: number) {
 }
 
 export function metricLabel(locale: "zh-CN" | "en", metric: string) {
-  const keyMap: Record<string, Parameters<typeof formatSettingsShareMessage>[1]> = {
+  const keyMap: Record<string, Parameters<typeof formatUiMessage>[1]> = {
     embedding_tokens: "settings.metric.embedding_tokens",
     llm_input_tokens: "settings.metric.llm_input_tokens",
     llm_output_tokens: "settings.metric.llm_output_tokens",
@@ -168,7 +168,7 @@ export function metricLabel(locale: "zh-CN" | "en", metric: string) {
   };
 
   const key = keyMap[metric.trim()];
-  return key ? formatSettingsShareMessage(locale, key) : metric;
+  return key ? formatUiMessage(locale, key) : metric;
 }
 
 export function featureLabel(locale: "zh-CN" | "en", feature: string) {
@@ -180,32 +180,32 @@ export function featureLabel(locale: "zh-CN" | "en", feature: string) {
 
   const normalizedValue =
     value.trim().toLowerCase() === "unlimited"
-      ? formatSettingsShareMessage(locale, "commonUnlimited")
+      ? formatUiMessage(locale, "commonUnlimited")
       : value.trim();
 
   return `${metricLabel(locale, metric)}: ${normalizedValue}`;
 }
 
 export function notificationTypeLabel(locale: "zh-CN" | "en", eventType: string) {
-  const keyMap: Record<string, Parameters<typeof formatSettingsShareMessage>[1]> = {
+  const keyMap: Record<string, Parameters<typeof formatUiMessage>[1]> = {
     product_update: "settings.notifications.event.product_update",
     security_alert: "settings.notifications.event.security_alert",
     weekly_digest: "settings.notifications.event.weekly_digest",
   };
 
   const key = keyMap[eventType];
-  return key ? formatSettingsShareMessage(locale, key) : eventType;
+  return key ? formatUiMessage(locale, key) : eventType;
 }
 
 export function subscriptionStatusLabel(locale: "zh-CN" | "en", status: string) {
-  const keyMap: Record<string, Parameters<typeof formatSettingsShareMessage>[1]> = {
+  const keyMap: Record<string, Parameters<typeof formatUiMessage>[1]> = {
     active: "settings.billing.status.active",
     past_due: "settings.billing.status.past_due",
     canceled: "settings.billing.status.canceled",
   };
 
   const key = keyMap[status];
-  return key ? formatSettingsShareMessage(locale, key) : status;
+  return key ? formatUiMessage(locale, key) : status;
 }
 
 export function notificationFormDefaults(

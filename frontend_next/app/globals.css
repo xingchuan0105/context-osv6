@@ -1425,3 +1425,80 @@ textarea {
 .animate-fade-in {
   animation: fadeIn 200ms ease-out forwards;
 }
+
+.legal-center {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.legal-center-header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.legal-center-header h1 {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.legal-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin-bottom: 3rem;
+}
+
+.legal-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.2s;
+}
+
+.legal-card:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.legal-card h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.legal-card p {
+  color: #64748b;
+  margin-bottom: 1rem;
+}
+
+.legal-card-updated {
+  font-size: 0.875rem;
+  color: #94a3b8;
+}
+
+.legal-contact {
+  text-align: center;
+  margin-bottom: 2rem;
+  color: #64748b;
+}
+
+.legal-footer-links {
+  text-align: center;
+  padding: 2rem 0;
+  border-top: 1px solid #e2e8f0;
+}
+
+.legal-footer-content {
+  margin-bottom: 0.5rem;
+}
+
+.legal-footer-separator {
+  margin: 0 0.5rem;
+  color: #94a3b8;
+}
+
+.legal-footer-copyright {
+  font-size: 0.875rem;
+  color: #94a3b8;
+}

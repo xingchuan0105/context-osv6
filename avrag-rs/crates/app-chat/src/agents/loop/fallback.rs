@@ -1,7 +1,7 @@
 //! RAG auto-fallback — lexical/dense retrieval when ReAct loop degrades.
 
 use avrag_llm::ChatMessage;
-use common::{ToolCall, ToolResult, ToolStatus};
+use contracts::{ToolCall, ToolResult, ToolStatus};
 
 /// Execute automatic retrieval as fallback with caller-supplied args.
 pub async fn auto_fallback(

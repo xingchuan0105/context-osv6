@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { describeAuthError } from "../../lib/auth/errors";
 import { useAuth } from "../../lib/auth/context";
-import { formatSettingsShareMessage } from "../../lib/settings-share-messages";
+import { formatUiMessage } from "../../lib/i18n/messages";
 import {
   getUserPreferences,
   listNotifications,
@@ -53,7 +53,7 @@ export function NotificationsPanel() {
     onSuccess: async (updatedPreferences) => {
       queryClient.setQueryData(settingsKeys.preferences(token), updatedPreferences);
       await queryClient.invalidateQueries({ queryKey: settingsKeys.preferences(token) });
-      setBanner(formatSettingsShareMessage(locale, "settings.saveSuccess"));
+      setBanner(formatUiMessage(locale, "settings.saveSuccess"));
     },
   });
   const markReadMutation = useMutation({
@@ -88,7 +88,7 @@ export function NotificationsPanel() {
     .string()
     .trim()
     .refine((value) => value.length === 0 || TIME_24H_PATTERN.test(value), {
-      message: formatSettingsShareMessage(locale, "settings.notifications.invalidTime"),
+      message: formatUiMessage(locale, "settings.notifications.invalidTime"),
     });
   const notificationSchema = z.object({
     email_enabled: z.boolean(),
@@ -112,7 +112,7 @@ export function NotificationsPanel() {
     }
 
     if (!token) {
-      setActionError(formatSettingsShareMessage(locale, "settings.profile.notAuthenticated"));
+      setActionError(formatUiMessage(locale, "settings.profile.notAuthenticated"));
       return;
     }
 
@@ -134,7 +134,7 @@ export function NotificationsPanel() {
     } catch (error) {
       setActionError(
         describeAuthError(
-          formatSettingsShareMessage(locale, "settings.saveError"),
+          formatUiMessage(locale, "settings.saveError"),
           error,
         ),
       );
@@ -149,7 +149,7 @@ export function NotificationsPanel() {
     } catch (error) {
       setActionError(
         describeAuthError(
-          formatSettingsShareMessage(locale, "settings.saveError"),
+          formatUiMessage(locale, "settings.saveError"),
           error,
         ),
       );
@@ -159,12 +159,12 @@ export function NotificationsPanel() {
   const loadError =
     (preferencesQuery.error &&
       describeAuthError(
-        formatSettingsShareMessage(locale, "settings.loadError"),
+        formatUiMessage(locale, "settings.loadError"),
         preferencesQuery.error,
       )) ||
     (notificationsQuery.error &&
       describeAuthError(
-        formatSettingsShareMessage(locale, "settings.loadError"),
+        formatUiMessage(locale, "settings.loadError"),
         notificationsQuery.error,
       )) ||
     "";
@@ -176,10 +176,10 @@ export function NotificationsPanel() {
         <div className="app-inline-row" style={{ marginBottom: 0, alignItems: "start" }}>
           <div style={{ display: "grid", gap: "0.35rem" }}>
             <h2 style={{ margin: 0 }}>
-              {formatSettingsShareMessage(locale, "settings.notifications.sectionTitle")}
+              {formatUiMessage(locale, "settings.notifications.sectionTitle")}
             </h2>
             <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
-              {formatSettingsShareMessage(locale, "settings.notifications.sectionSubtitle")}
+              {formatUiMessage(locale, "settings.notifications.sectionSubtitle")}
             </p>
           </div>
           <button
@@ -189,8 +189,8 @@ export function NotificationsPanel() {
             form="settings-notifications-form"
           >
             {saveMutation.isPending
-              ? formatSettingsShareMessage(locale, "shareCenter.saving")
-              : formatSettingsShareMessage(locale, "settings.notifications.saveAction")}
+              ? formatUiMessage(locale, "shareCenter.saving")
+              : formatUiMessage(locale, "settings.notifications.saveAction")}
           </button>
         </div>
         {banner ? (
@@ -215,10 +215,10 @@ export function NotificationsPanel() {
             }}
           >
             {([
-              ["email_enabled", formatSettingsShareMessage(locale, "settings.notifications.emailUpdatesLabel")],
-              ["product_enabled", formatSettingsShareMessage(locale, "settings.notifications.productUpdatesLabel")],
-              ["security_enabled", formatSettingsShareMessage(locale, "settings.notifications.securityAlertsLabel")],
-              ["weekly_digest_enabled", formatSettingsShareMessage(locale, "settings.notifications.weeklyDigestLabel")],
+              ["email_enabled", formatUiMessage(locale, "settings.notifications.emailUpdatesLabel")],
+              ["product_enabled", formatUiMessage(locale, "settings.notifications.productUpdatesLabel")],
+              ["security_enabled", formatUiMessage(locale, "settings.notifications.securityAlertsLabel")],
+              ["weekly_digest_enabled", formatUiMessage(locale, "settings.notifications.weeklyDigestLabel")],
             ] as const).map(([key, title]) => (
               <label
                 className="app-inline-surface"
@@ -245,12 +245,12 @@ export function NotificationsPanel() {
           >
             <div>
               <label className="app-form-label" htmlFor="settings-quiet-hours-start">
-                {formatSettingsShareMessage(locale, "settings.notifications.quietHoursStartLabel")}
+                {formatUiMessage(locale, "settings.notifications.quietHoursStartLabel")}
               </label>
               <input
                 className="app-input"
                 id="settings-quiet-hours-start"
-                placeholder={formatSettingsShareMessage(
+                placeholder={formatUiMessage(
                   locale,
                   "settings.notifications.quietHoursPlaceholderStart",
                 )}
@@ -265,12 +265,12 @@ export function NotificationsPanel() {
             </div>
             <div>
               <label className="app-form-label" htmlFor="settings-quiet-hours-end">
-                {formatSettingsShareMessage(locale, "settings.notifications.quietHoursEndLabel")}
+                {formatUiMessage(locale, "settings.notifications.quietHoursEndLabel")}
               </label>
               <input
                 className="app-input"
                 id="settings-quiet-hours-end"
-                placeholder={formatSettingsShareMessage(
+                placeholder={formatUiMessage(
                   locale,
                   "settings.notifications.quietHoursPlaceholderEnd",
                 )}
@@ -289,19 +289,19 @@ export function NotificationsPanel() {
 
       <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
         <h3 style={{ margin: 0 }}>
-          {formatSettingsShareMessage(locale, "settings.notifications.historyTitle")}
+          {formatUiMessage(locale, "settings.notifications.historyTitle")}
         </h3>
         {notificationsQuery.isLoading ? (
           <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
-            {formatSettingsShareMessage(locale, "settings.notifications.loading")}
+            {formatUiMessage(locale, "settings.notifications.loading")}
           </p>
         ) : notifications.length === 0 ? (
           <div style={{ display: "grid", gap: "0.3rem" }}>
             <strong>
-              {formatSettingsShareMessage(locale, "settings.notifications.emptyTitle")}
+              {formatUiMessage(locale, "settings.notifications.emptyTitle")}
             </strong>
             <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
-              {formatSettingsShareMessage(locale, "settings.notifications.emptyBody")}
+              {formatUiMessage(locale, "settings.notifications.emptyBody")}
             </p>
           </div>
         ) : (
@@ -334,11 +334,11 @@ export function NotificationsPanel() {
                     onClick={() => void handleMarkRead(notification.id)}
                   >
                     {notification.read_at
-                      ? formatSettingsShareMessage(locale, "settings.notifications.read")
+                      ? formatUiMessage(locale, "settings.notifications.read")
                       : markReadMutation.isPending &&
                           markReadMutation.variables === notification.id
-                        ? formatSettingsShareMessage(locale, "settings.notifications.processing")
-                        : formatSettingsShareMessage(locale, "settings.notifications.markRead")}
+                        ? formatUiMessage(locale, "settings.notifications.processing")
+                        : formatUiMessage(locale, "settings.notifications.markRead")}
                   </button>
                 </div>
                 <p style={{ margin: 0 }}>{notification.body}</p>

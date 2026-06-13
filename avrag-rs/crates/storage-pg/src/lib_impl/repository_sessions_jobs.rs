@@ -18,7 +18,7 @@ pub struct ChatTurn<'a> {
     pub assistant_answer_blocks: &'a [contracts::chat::AnswerBlock],
     pub agent_type: &'a str,
     pub citations: &'a [contracts::chat::Citation],
-    pub tool_results: &'a [common::ToolResult],
+    pub tool_results: &'a [contracts::ToolResult],
     /// Metadata for the user message row (e.g. query_resolution per ADR-0008).
     pub user_turn_metadata: Option<serde_json::Value>,
     /// Non-destructive resolved query for retrieval (ADR-0008); `user_content` stays raw.

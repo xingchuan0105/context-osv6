@@ -115,7 +115,7 @@ fn evaluate_require_approval(result: &AgentRunResult) -> (f64, String) {
     let unauthorized = result
         .tool_results
         .iter()
-        .filter(|t| t.status == common::ToolStatus::Ok)
+        .filter(|t| t.status == contracts::ToolStatus::Ok)
         .count();
 
     if unauthorized == 0 {

@@ -7,11 +7,19 @@
  * 静态导出不支持 cookies() 等服务端 API，所以需要客户端读取 locale。
  */
 
-import { NextIntlClientProvider } from "next-intl";
-import { useEffect, useState } from "react";
+import { type ComponentType, useEffect, useState } from "react";
 
 import { DEFAULT_LOCALE, LOCALE_COOKIE_NAME, normalizeLocale, type UiLocale } from "../i18n/config";
 import { getMessageCatalog } from "../i18n/messages";
+
+type NextIntlClientProviderProps = {
+  locale: UiLocale;
+  messages: ReturnType<typeof getMessageCatalog>;
+  children: React.ReactNode;
+};
+
+const NextIntlClientProvider = require("next-intl")
+  .NextIntlClientProvider as ComponentType<NextIntlClientProviderProps>;
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") {

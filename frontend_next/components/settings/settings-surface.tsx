@@ -1,7 +1,7 @@
 "use client";
 
 import { AppPageFrame } from "../page-frame";
-import { formatSettingsShareMessage } from "../../lib/settings-share-messages";
+import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import { SettingsPanel } from "./settings-panel";
 import { SettingsTabBar } from "./settings-tab-bar";
@@ -12,8 +12,8 @@ export function SettingsSurface({ activeTab }: { activeTab: SettingsTab }) {
 
   return (
     <AppPageFrame
-      title={formatSettingsShareMessage(locale, "settings.pageTitle")}
-      subtitle={formatSettingsShareMessage(locale, "settings.pageSubtitle")}
+      title={formatUiMessage(locale, "settings.pageTitle")}
+      subtitle={formatUiMessage(locale, "settings.pageSubtitle")}
     >
       <div className="app-surface-card" style={{ display: "grid", gap: "1rem" }}>
         <SettingsTabBar activeTab={activeTab} />

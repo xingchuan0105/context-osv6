@@ -73,8 +73,8 @@ impl ChatContext {
             answer_blocks = ?execution.response.answer_blocks,
             "persisting assistant answer blocks"
         );
-        let tool_results: Vec<common::ToolResult> = execution.response.tool_results.iter().map(|r| {
-            common::ToolResult::from(r.clone())
+        let tool_results: Vec<contracts::ToolResult> = execution.response.tool_results.iter().map(|r| {
+            contracts::ToolResult::from(r.clone())
         }).collect();
         let user_turn_metadata = execution
             .query_resolution

@@ -1,59 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BillableFeature {
-    Summary,
-    Planner,
-    Answer,
-    Search,
-    Chat,
-    GraphExtraction,
-}
-
-impl BillableFeature {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Summary => "summary",
-            Self::Planner => "planner",
-            Self::Answer => "answer",
-            Self::Search => "search",
-            Self::Chat => "chat",
-            Self::GraphExtraction => "graph_extraction",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MeteringContext {
-    pub user_id: Uuid,
-    pub org_id: Uuid,
-    pub feature: BillableFeature,
-    pub stage: String,
-    pub session_id: Option<Uuid>,
-    pub document_id: Option<Uuid>,
-    pub request_id: Option<String>,
-    pub trace_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum UsageSource {
-    Actual,
-    Estimated,
-}
-
-impl UsageSource {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Actual => "actual",
-            Self::Estimated => "estimated",
-        }
-    }
-}
+pub use app_core::{BillableFeature, MeteringContext, UsageSource};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageLimitPolicy {

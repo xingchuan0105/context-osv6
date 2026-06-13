@@ -1,4 +1,4 @@
-use common::{ExecutePlanItem, ExecutePlanRequest, ExecutePlanSummaryMode, RetrievalPlannerOutput, ToolCall};
+use contracts::{ExecutePlanItem, ExecutePlanRequest, ExecutePlanSummaryMode, RetrievalPlannerOutput, ToolCall};
 use contracts::chat::{ChatRequest};
 
 use super::internal::{
@@ -36,7 +36,7 @@ pub(crate) fn fallback_execute_plan_request(
 pub(crate) fn build_rag_plan_user_prompt(
     request: &ChatRequest,
     docscope_metadata: Option<&common::DocScopeMetadata>,
-    previous_tool_results: &[common::ToolResult],
+    previous_tool_results: &[contracts::ToolResult],
 ) -> String {
     let metadata_json = docscope_metadata
         .and_then(|metadata| serde_json::to_string_pretty(metadata).ok())
@@ -51,7 +51,7 @@ pub(crate) fn build_rag_plan_user_prompt(
     // Inject previously retrieved doc_profile results so the planner can issue index_lookup.
     let doc_profile_results: Vec<&serde_json::Value> = previous_tool_results
         .iter()
-        .filter(|r| r.tool == "doc_profile" && r.status == common::ToolStatus::Ok)
+        .filter(|r| r.tool == "doc_profile" && r.status == contracts::ToolStatus::Ok)
         .filter_map(|r| r.data.as_ref())
         .collect();
     if !doc_profile_results.is_empty() {
@@ -217,7 +217,7 @@ pub(crate) fn execute_plan_request_to_tool_calls(plan: ExecutePlanRequest) -> Ve
 
     // Summary mode → doc_summary
     match plan.summary_mode {
-        common::ExecutePlanSummaryMode::All => {
+        contracts::ExecutePlanSummaryMode::All => {
             calls.push(ToolCall {
                 tool: "doc_summary".to_string(),
                 version: "1.0".to_string(),
@@ -227,7 +227,7 @@ pub(crate) fn execute_plan_request_to_tool_calls(plan: ExecutePlanRequest) -> Ve
                 }),
             });
         }
-        common::ExecutePlanSummaryMode::Related => {
+        contracts::ExecutePlanSummaryMode::Related => {
             calls.push(ToolCall {
                 tool: "doc_summary".to_string(),
                 version: "1.0".to_string(),
@@ -237,7 +237,7 @@ pub(crate) fn execute_plan_request_to_tool_calls(plan: ExecutePlanRequest) -> Ve
                 }),
             });
         }
-        common::ExecutePlanSummaryMode::None => {}
+        contracts::ExecutePlanSummaryMode::None => {}
     }
 
     calls

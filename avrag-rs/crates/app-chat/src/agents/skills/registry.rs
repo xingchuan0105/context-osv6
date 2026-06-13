@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use app_core::ChatPersistencePort;
-use common::{ToolResult, ToolSpec};
+use contracts::{ToolResult, ToolSpec};
 use serde_json::Value;
 
 use super::SkillComponent;
@@ -107,7 +107,7 @@ impl SkillRegistry {
             None => ToolResult {
                 tool: id.to_string(),
                 version: "1.0".to_string(),
-                status: common::ToolStatus::NotImplemented,
+                status: contracts::ToolStatus::NotImplemented,
                 data: None,
                 trace: None,
             },
@@ -140,7 +140,7 @@ pub fn builtin_registry_cached() -> &'static SkillRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use common::ToolStatus;
+    use contracts::ToolStatus;
 
     struct DummySkill;
 

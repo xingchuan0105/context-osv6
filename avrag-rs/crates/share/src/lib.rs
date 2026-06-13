@@ -1,5 +1,4 @@
 mod access;
-mod db;
 mod handlers;
 mod members;
 mod public_read;

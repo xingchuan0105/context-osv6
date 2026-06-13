@@ -111,7 +111,7 @@ pub(crate) fn build_budget_warning(remaining: u8, max: u8) -> String {
 
 /// Extract chunk_ids from tool results.
 /// Handles dense_retrieval, lexical_retrieval, graph_retrieval formats.
-pub fn extract_chunk_ids(results: &[common::ToolResult]) -> Vec<String> {
+pub fn extract_chunk_ids(results: &[contracts::ToolResult]) -> Vec<String> {
     let mut ids = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for result in results {
@@ -223,10 +223,10 @@ mod tests {
 
     #[test]
     fn extract_chunk_ids_with_dense_retrieval_data() {
-        let results = vec![common::ToolResult {
+        let results = vec![contracts::ToolResult {
             tool: "dense_retrieval".to_string(),
             version: "1.0".to_string(),
-            status: common::ToolStatus::Ok,
+            status: contracts::ToolStatus::Ok,
             data: Some(serde_json::json!({
                 "chunks": [
                     {"chunk_id": "c1", "text": "hello"},
@@ -241,10 +241,10 @@ mod tests {
 
     #[test]
     fn extract_chunk_ids_with_empty_chunks() {
-        let results = vec![common::ToolResult {
+        let results = vec![contracts::ToolResult {
             tool: "dense_retrieval".to_string(),
             version: "1.0".to_string(),
-            status: common::ToolStatus::Ok,
+            status: contracts::ToolStatus::Ok,
             data: Some(serde_json::json!({"chunks": []})),
             trace: None,
         }];
@@ -254,10 +254,10 @@ mod tests {
 
     #[test]
     fn extract_chunk_ids_with_non_rag_tool() {
-        let results = vec![common::ToolResult {
+        let results = vec![contracts::ToolResult {
             tool: "calculator".to_string(),
             version: "1.0".to_string(),
-            status: common::ToolStatus::Ok,
+            status: contracts::ToolStatus::Ok,
             data: Some(serde_json::json!({"result": 42})),
             trace: None,
         }];

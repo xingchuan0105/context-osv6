@@ -1,5 +1,6 @@
 use avrag_auth::AuthContext;
-use common::{DocProfileArgs, ToolResult, ToolStatus, ToolTrace, TocEntry};
+use common::{TocEntry};
+use contracts::{DocProfileArgs, ToolResult, ToolStatus, ToolTrace};
 use uuid::Uuid;
 
 use crate::RagRuntime;

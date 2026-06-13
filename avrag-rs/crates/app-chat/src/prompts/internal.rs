@@ -1,7 +1,6 @@
 use super::types::*;
-use common::{
-    AnswerContextChunk, ExecutePlanItem, GraphHint, PlaceholderTriplet, QueryEntity,
-};
+use contracts::AnswerContextChunk;
+use contracts::{ExecutePlanItem, GraphHint, PlaceholderTriplet, QueryEntity};
 use std::collections::HashSet;
 
 pub(crate) const RAG_EXECUTE_PLAN_VERSION: &str = "rag-execute-v1";

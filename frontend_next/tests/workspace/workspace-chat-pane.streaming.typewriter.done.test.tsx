@@ -20,7 +20,7 @@ describe("WorkspaceChatPane streaming typewriter done finalization", () => {
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
     mocks.streamWorkspaceChatMock.mockImplementation(async (_token, _request, onEvent) => {
       await onEvent({
-        kind: "done",
+        event: "done",
         request_id: "req-done-only",
         session_id: "sess-done-only",
         message_id: 31,
@@ -52,7 +52,7 @@ describe("WorkspaceChatPane streaming typewriter done finalization", () => {
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
     mocks.streamWorkspaceChatMock.mockImplementation(async (_token, _request, onEvent) => {
       await onEvent({
-        kind: "answer_start",
+        event: "answer_start",
         request_id: "req-long-done",
         session_id: "sess-long-done",
         message_id: 0,
@@ -60,14 +60,14 @@ describe("WorkspaceChatPane streaming typewriter done finalization", () => {
       });
 
       await onEvent({
-        kind: "token",
+        event: "token",
         request_id: "req-long-done",
         message_id: 0,
         content: "S",
       });
 
       await onEvent({
-        kind: "done",
+        event: "done",
         request_id: "req-long-done",
         session_id: "sess-long-done",
         message_id: 32,

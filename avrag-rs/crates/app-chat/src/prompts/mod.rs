@@ -1,5 +1,5 @@
 //! RAG plan/evaluation prompt helpers.
-#![cfg_attr(not(test), allow(dead_code))]
+#![cfg_attr(not(test), allow(dead_code, unused_imports))]
 
 mod citations;
 mod internal;

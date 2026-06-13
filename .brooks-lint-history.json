@@ -1,0 +1,156 @@
+[
+  {
+    "date": "2026-06-13",
+    "mode": "PR Review",
+    "score": 96,
+    "findings": { "critical": 0, "warning": 0, "suggestion": 1 },
+    "scope": "post Brooks merge-fix plan (M0b–M14b): git staging complete, E2E compile green, transport/decodeError unified, port contracts, PR split-ready"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Test Quality Review",
+    "score": 96,
+    "findings": { "critical": 0, "warning": 1, "suggestion": 1 },
+    "scope": "post merge-fix: product_e2e compiles; billing/share port contract tests; smoke path RUSTFLAGS=-D warnings"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Tech Debt Assessment",
+    "score": 96,
+    "findings": { "critical": 0, "warning": 1, "suggestion": 2 },
+    "scope": "post merge-fix: loop/unified/adapters split; pg_session; common/auth + rag-core-ports decouple"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Architecture Audit",
+    "score": 97,
+    "findings": { "critical": 0, "warning": 0, "suggestion": 2 },
+    "scope": "post merge-fix: contracts auth_runtime; ChatPersistencePort in rag-core-ports; ShareStorePort contracts"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "PR Review",
+    "score": 63,
+    "findings": { "critical": 1, "warning": 4, "suggestion": 2 },
+    "scope": "working tree 222 files (+3136/-13105); sampled admin/billing/share ports, contracts, agent loop, E2E, frontend transport, CI migration; deep probe v5"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Test Quality Review",
+    "score": 68,
+    "findings": { "critical": 1, "warning": 3, "suggestion": 2 },
+    "scope": "avrag-rs + frontend_next + contracts + desktop (deep audit round 5; Round 4 closure reprobe + product_e2e compile failure discovered)"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Tech Debt Assessment",
+    "score": 61,
+    "findings": { "critical": 1, "warning": 4, "suggestion": 4 },
+    "scope": "avrag-rs + frontend_next + contracts + desktop (deep reprobe v5; v4 roadmap paydown verified, method-level)"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Architecture Audit",
+    "score": 82,
+    "findings": { "critical": 0, "warning": 3, "suggestion": 3 },
+    "scope": "avrag-rs (34 members) + desktop Tauri shell + frontend_next transport seam; deep reprobe v4 post major refactor"
+  },
+  {
+    "date": "2026-06-12",
+    "mode": "Test Quality Review",
+    "score": 69,
+    "findings": { "critical": 1, "warning": 3, "suggestion": 1 },
+    "scope": "avrag-rs + frontend_next + contracts + desktop (deep audit round 4; CI gate wiring probe + e2e-gates backlog merged, full integration suite verified green 59/0/10)"
+  },
+  {
+    "date": "2026-06-12",
+    "mode": "Architecture Audit",
+    "score": 77,
+    "findings": { "critical": 0, "warning": 4, "suggestion": 3 },
+    "scope": "avrag-rs (34 members) + desktop Tauri shell + frontend_next transport seam; deep reprobe v3"
+  },
+  {
+    "date": "2026-06-12",
+    "mode": "PR Review",
+    "score": 78,
+    "findings": { "critical": 0, "warning": 4, "suggestion": 2 },
+    "scope": "working tree: product_e2e mock/teardown + frontend runtime transport (8 files, +114/-74); deep probe v4"
+  },
+  {
+    "date": "2026-06-12",
+    "mode": "Tech Debt Assessment",
+    "score": 59,
+    "findings": { "critical": 1, "warning": 4, "suggestion": 6 },
+    "scope": "avrag-rs + frontend_next + contracts + desktop (deep reprobe v4, method-level; ~69 on v3 file-level basis)"
+  },
+  {
+    "date": "2026-06-12",
+    "mode": "Architecture Audit",
+    "score": 83,
+    "findings": { "critical": 0, "warning": 4, "suggestion": 3 },
+    "scope": "avrag-rs (35 workspace members) + frontend_next sample; deep reprobe v2 post auth Port + pipeline split"
+  },
+  {
+    "date": "2026-06-12",
+    "mode": "Test Quality Review",
+    "score": 82,
+    "findings": { "critical": 0, "warning": 3, "suggestion": 3 },
+    "scope": "avrag-rs + frontend_next + contracts (deep audit round 3)"
+  },
+  {
+    "date": "2026-06-12",
+    "mode": "Test Quality Review",
+    "score": 62,
+    "findings": { "critical": 1, "warning": 5, "suggestion": 3 },
+    "scope": "avrag-rs + frontend_next + contracts (deep audit round 2)"
+  },
+  {
+    "date": "2026-06-12",
+    "mode": "Test Quality Review",
+    "score": 52,
+    "findings": { "critical": 1, "warning": 6, "suggestion": 3 },
+    "scope": "avrag-rs + frontend_next + contracts (full deep audit, max effort)"
+  },
+  {
+    "date": "2026-06-12",
+    "mode": "PR Review",
+    "score": 43,
+    "findings": { "critical": 2, "warning": 5, "suggestion": 2 },
+    "scope": "branch working tree vs HEAD (196 tracked files; sampled high-risk areas)"
+  },
+  {
+    "date": "2026-06-12",
+    "mode": "Tech Debt Assessment",
+    "score": 34,
+    "findings": { "critical": 2, "warning": 8, "suggestion": 4 },
+    "scope": "avrag-rs + frontend_next + contracts (full deep audit)"
+  },
+  {
+    "date": "2026-06-11",
+    "mode": "Health Dashboard",
+    "score": 80,
+    "findings": { "critical": 1, "warning": 7, "suggestion": 0 },
+    "scope": "avrag-rs (ingestion routing v2 post-merge)"
+  },
+  {
+    "date": "2026-06-11",
+    "mode": "Health Dashboard",
+    "score": 80,
+    "findings": { "critical": 2, "warning": 8, "suggestion": 0 },
+    "scope": "avrag-rs (Brooks Health fixes post-implementation)"
+  },
+  {
+    "date": "2026-06-10",
+    "mode": "Health Dashboard",
+    "score": 80,
+    "findings": { "critical": 2, "warning": 10, "suggestion": 0 },
+    "scope": "avrag-rs + frontend_next (Round 2 post-implementation, subagent deep scan)"
+  },
+  {
+    "date": "2026-06-10",
+    "mode": "Architecture Audit",
+    "score": 73,
+    "findings": { "critical": 2, "warning": 5, "suggestion": 2 },
+    "scope": "avrag-rs (35 workspace members, deep subagent audit)"
+  }
+]

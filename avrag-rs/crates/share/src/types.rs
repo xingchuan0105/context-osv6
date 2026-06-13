@@ -1,4 +1,4 @@
-use avrag_storage_pg::PgAppRepository;
+use app_core::ShareStorePort;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -12,32 +12,19 @@ pub enum AccessLevel {
 
 impl AccessLevel {
     pub fn from_role(role: &str) -> Self {
-        match role {
-            "viewer" | "read" | "partial" => Self::Read,
-            "editor" | "write" | "full" => Self::Write,
-            "admin" => Self::Admin,
-            _ => Self::None,
-        }
+        app_core::ShareAccessLevel::from_role(role).into()
     }
 
     pub fn as_db(&self) -> &'static str {
-        match self {
-            Self::None => "none",
-            Self::Read => "read",
-            Self::Write => "write",
-            Self::Admin => "admin",
-        }
+        app_core::ShareAccessLevel::from(*self).as_db()
     }
 
     pub fn allows_share_management(&self) -> bool {
-        matches!(self, Self::Write | Self::Admin)
+        app_core::ShareAccessLevel::from(*self).allows_share_management()
     }
 
     pub fn as_permission_label(&self) -> &'static str {
-        match self {
-            Self::Read | Self::None => "partial",
-            Self::Write | Self::Admin => "full",
-        }
+        app_core::ShareAccessLevel::from(*self).as_permission_label()
     }
 
     pub fn as_invite_role(&self) -> &'static str {
@@ -45,6 +32,28 @@ impl AccessLevel {
             Self::Admin => "owner",
             Self::Write => "editor",
             Self::Read | Self::None => "viewer",
+        }
+    }
+}
+
+impl From<app_core::ShareAccessLevel> for AccessLevel {
+    fn from(value: app_core::ShareAccessLevel) -> Self {
+        match value {
+            app_core::ShareAccessLevel::None => Self::None,
+            app_core::ShareAccessLevel::Read => Self::Read,
+            app_core::ShareAccessLevel::Write => Self::Write,
+            app_core::ShareAccessLevel::Admin => Self::Admin,
+        }
+    }
+}
+
+impl From<AccessLevel> for app_core::ShareAccessLevel {
+    fn from(value: AccessLevel) -> Self {
+        match value {
+            AccessLevel::None => Self::None,
+            AccessLevel::Read => Self::Read,
+            AccessLevel::Write => Self::Write,
+            AccessLevel::Admin => Self::Admin,
         }
     }
 }
@@ -60,6 +69,22 @@ pub struct NotebookMember {
     pub invited_by: Option<String>,
     pub invited_at: i64,
     pub accepted_at: Option<i64>,
+}
+
+impl From<app_core::ShareNotebookMember> for NotebookMember {
+    fn from(value: app_core::ShareNotebookMember) -> Self {
+        Self {
+            id: value.id,
+            notebook_id: value.notebook_id,
+            user_id: value.user_id,
+            email: value.email,
+            access_level: value.access_level.into(),
+            invite_status: value.invite_status,
+            invited_by: value.invited_by,
+            invited_at: value.invited_at,
+            accepted_at: value.accepted_at,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,5 +165,11 @@ pub struct PublicShareChatContext {
 }
 
 pub struct ShareService {
-    pub(crate) repo: Arc<PgAppRepository>,
+    pub(crate) store: Arc<dyn ShareStorePort>,
+}
+
+impl ShareService {
+    pub fn new(store: Arc<dyn ShareStorePort>) -> Self {
+        Self { store }
+    }
 }

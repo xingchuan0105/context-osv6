@@ -7,7 +7,7 @@ import { useState, type FormEvent } from "react";
 import { changePassword } from "../../lib/auth/client";
 import { describeAuthError } from "../../lib/auth/errors";
 import { useAuth } from "../../lib/auth/context";
-import { formatSettingsShareMessage } from "../../lib/settings-share-messages";
+import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 
 export function SecurityPanel() {
@@ -23,12 +23,12 @@ export function SecurityPanel() {
     event.preventDefault();
 
     if (!token) {
-      setError(formatSettingsShareMessage(locale, "settings.security.notAuthenticated"));
+      setError(formatUiMessage(locale, "settings.security.notAuthenticated"));
       return;
     }
 
     if (!currentPassword.trim() || !newPassword.trim()) {
-      setError(formatSettingsShareMessage(locale, "settings.security.missingPassword"));
+      setError(formatUiMessage(locale, "settings.security.missingPassword"));
       return;
     }
 
@@ -45,7 +45,7 @@ export function SecurityPanel() {
     } catch (submitError) {
       setError(
         describeAuthError(
-          formatSettingsShareMessage(locale, "settings.security.failed"),
+          formatUiMessage(locale, "settings.security.failed"),
           submitError,
         ),
       );
@@ -64,16 +64,16 @@ export function SecurityPanel() {
       <section className="app-inline-surface" style={{ display: "grid", gap: "1rem" }}>
         <div style={{ display: "grid", gap: "0.35rem" }}>
           <h2 style={{ margin: 0 }}>
-            {formatSettingsShareMessage(locale, "settings.security.sectionTitle")}
+            {formatUiMessage(locale, "settings.security.sectionTitle")}
           </h2>
           <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
-            {formatSettingsShareMessage(locale, "settings.security.sectionSubtitle")}
+            {formatUiMessage(locale, "settings.security.sectionSubtitle")}
           </p>
         </div>
         <form style={{ display: "grid", gap: "1rem" }} onSubmit={handleSubmit}>
           <div>
             <label className="app-form-label" htmlFor="settings-current-password">
-              {formatSettingsShareMessage(locale, "settings.security.currentPasswordLabel")}
+              {formatUiMessage(locale, "settings.security.currentPasswordLabel")}
             </label>
             <input
               autoComplete="current-password"
@@ -86,7 +86,7 @@ export function SecurityPanel() {
           </div>
           <div>
             <label className="app-form-label" htmlFor="settings-new-password">
-              {formatSettingsShareMessage(locale, "settings.security.newPasswordLabel")}
+              {formatUiMessage(locale, "settings.security.newPasswordLabel")}
             </label>
             <input
               autoComplete="new-password"
@@ -101,16 +101,16 @@ export function SecurityPanel() {
           <div className="app-button-row">
             <button className="app-button-primary" disabled={loading} type="submit">
               {loading
-                ? formatSettingsShareMessage(locale, "settings.security.updating")
-                : formatSettingsShareMessage(locale, "settings.security.changePasswordAction")}
+                ? formatUiMessage(locale, "settings.security.updating")
+                : formatUiMessage(locale, "settings.security.changePasswordAction")}
             </button>
             {passwordResetEnabled ? (
               <Link className="app-button-secondary" href="/reset-password">
-                {formatSettingsShareMessage(locale, "settings.security.resetPasswordAction")}
+                {formatUiMessage(locale, "settings.security.resetPasswordAction")}
               </Link>
             ) : null}
             <button className="app-button-ghost" type="button" onClick={() => void handleLogout()}>
-              {formatSettingsShareMessage(locale, "workspaceLogout")}
+              {formatUiMessage(locale, "workspaceLogout")}
             </button>
           </div>
         </form>
@@ -118,30 +118,30 @@ export function SecurityPanel() {
 
       <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
         <h3 style={{ margin: 0 }}>
-          {formatSettingsShareMessage(locale, "settings.security.currentSessionTitle")}
+          {formatUiMessage(locale, "settings.security.currentSessionTitle")}
         </h3>
         <div className="app-inline-row" style={{ marginBottom: 0 }}>
-          <span>{formatSettingsShareMessage(locale, "settings.security.signedInAs")}</span>
+          <span>{formatUiMessage(locale, "settings.security.signedInAs")}</span>
           <strong>
             {user?.email ??
-              formatSettingsShareMessage(locale, "settings.security.unknownAccount")}
+              formatUiMessage(locale, "settings.security.unknownAccount")}
           </strong>
         </div>
         <div className="app-inline-row" style={{ marginBottom: 0 }}>
-          <span>{formatSettingsShareMessage(locale, "settings.appearance.currentLanguage")}</span>
+          <span>{formatUiMessage(locale, "settings.appearance.currentLanguage")}</span>
           <strong>
             {locale === "zh-CN"
-              ? formatSettingsShareMessage(locale, "workspaceLanguageChinese")
-              : formatSettingsShareMessage(locale, "workspaceLanguageEnglish")}
+              ? formatUiMessage(locale, "workspaceLanguageChinese")
+              : formatUiMessage(locale, "workspaceLanguageEnglish")}
           </strong>
         </div>
         <div className="app-inline-row" style={{ marginBottom: 0 }}>
-          <span>{formatSettingsShareMessage(locale, "settings.appearance.currentTheme")}</span>
+          <span>{formatUiMessage(locale, "settings.appearance.currentTheme")}</span>
           <strong>
             {{
-              system: formatSettingsShareMessage(locale, "settings.appearance.theme.system"),
-              light: formatSettingsShareMessage(locale, "settings.appearance.theme.light"),
-              dark: formatSettingsShareMessage(locale, "settings.appearance.theme.dark"),
+              system: formatUiMessage(locale, "settings.appearance.theme.system"),
+              light: formatUiMessage(locale, "settings.appearance.theme.light"),
+              dark: formatUiMessage(locale, "settings.appearance.theme.dark"),
             }[theme]}
           </strong>
         </div>

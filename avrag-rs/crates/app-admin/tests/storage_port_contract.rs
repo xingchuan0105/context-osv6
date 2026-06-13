@@ -219,6 +219,79 @@ impl AdminStorePort for RecordingAdminStore {
     ) -> Result<app_core::AdminFeatureFlagChangeRequest, AppError> {
         Err(AppError::internal("not implemented"))
     }
+
+    async fn list_orgs(
+        &self,
+        _auth: &AuthContext,
+        _page: usize,
+        _per_page: usize,
+    ) -> Result<Vec<app_core::AdminOrgInfo>, AppError> {
+        Ok(Vec::new())
+    }
+
+    async fn get_org(
+        &self,
+        _auth: &AuthContext,
+        _org_id: OrgId,
+    ) -> Result<app_core::AdminOrgInfo, AppError> {
+        Err(AppError::not_found("org_not_found", "Organization not found"))
+    }
+
+    async fn list_users(
+        &self,
+        _auth: &AuthContext,
+        _org_id: OrgId,
+    ) -> Result<Vec<app_core::AdminUserInfo>, AppError> {
+        Ok(Vec::new())
+    }
+
+    async fn delete_user(
+        &self,
+        _auth: &AuthContext,
+        _org_id: OrgId,
+        _user_id: Uuid,
+    ) -> Result<(), AppError> {
+        Ok(())
+    }
+
+    async fn get_usage(
+        &self,
+        _auth: &AuthContext,
+        _org_id: OrgId,
+        _period: &str,
+    ) -> Result<app_core::AdminUsageStats, AppError> {
+        Err(AppError::not_found("org_not_found", "Organization not found"))
+    }
+
+    async fn set_org_blocked(
+        &self,
+        _auth: &AuthContext,
+        _org_id: OrgId,
+        _blocked: bool,
+    ) -> Result<(), AppError> {
+        Ok(())
+    }
+
+    async fn list_audit_logs(
+        &self,
+        _auth: &AuthContext,
+        _query: &app_core::AdminAuditLogQuery,
+    ) -> Result<app_core::AdminAuditLogPage, AppError> {
+        Ok(app_core::AdminAuditLogPage {
+            items: Vec::new(),
+            total: 0,
+            page: 1,
+            per_page: 50,
+        })
+    }
+
+    async fn export_audit_logs_csv(
+        &self,
+        _auth: &AuthContext,
+        _query: &app_core::AdminAuditLogQuery,
+    ) -> Result<String, AppError> {
+        Ok(String::new())
+    }
 }
 
 fn test_auth() -> AuthContext {
@@ -231,6 +304,8 @@ fn memory_storage() -> StorageContext {
     StorageContext::new(
         None,
         false,
+        None,
+        None,
         None,
         None,
         None,
@@ -255,6 +330,8 @@ fn storage_with_admin_store(store: Arc<dyn AdminStorePort>) -> StorageContext {
         None,
         None,
         Some(store),
+        None,
+        None,
         None,
         None,
         Arc::new(RwLock::new(MemoryState::default())),

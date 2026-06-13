@@ -1,12 +1,15 @@
 pub mod admin;
 pub mod auth;
+pub mod auth_runtime;
 pub mod billing;
 pub mod chat;
 pub mod documents;
 pub mod errors;
 pub mod notebooks;
 pub mod preferences;
+pub mod rag_execute;
 pub mod share;
+pub mod tool_call;
 pub mod usage_limit;
 
 pub use admin::{
@@ -16,6 +19,9 @@ pub use admin::{
     UserRow, WorkerStatusResponse,
 };
 pub use auth::{AuthEnvelope, AuthPayload, AuthRuntimeCapabilitiesResponse, AuthUserDto};
+pub use auth_runtime::{
+    ensure_same_org, ActorId, AuthContext, AuthError, OrgId, SubjectKind,
+};
 pub use auth::{
     ChangePasswordRequest, ConfirmResetPasswordRequest, EmptyResponse, LoginRequest,
     NotificationRow, NotificationsResponse, RegisterRequest, SendResetCodeRequest,
@@ -27,6 +33,7 @@ pub use chat::{
     ChatResponse, ChatTurnInput, Citation, DegradeTraceItem, GeneralPlan, GuardAction, GuardReport,
     GuardResult, MessageFeedbackRating, MessageFeedbackRequest, ModeDebug, PlannerOutput, RagModeDebug, RagPlan, RagPlanItem,
     RagTraceItem, RagTraceSummary, RiskLevel, SearchPlan, SourceRef, SummaryInjectionTrace, TraceInfo,
+    ToolResult, ToolStatus, ToolTrace,
 };
 pub use documents::{
     AnswerContextChunk, CitationLookupRequest, CitationLookupResponse, CreateDocumentRequest,
@@ -56,4 +63,16 @@ pub use share::{
 };
 pub use usage_limit::{
     UsageLimitPolicy, UsageLimitResponse, UsageScope, UsageWindow, UsageWindows,
+};
+pub use rag_execute::{
+    BackendTrace, ChannelBudget, ChannelCoverage, ChannelTraceItem, Coverage, ExecutePlanBudget,
+    ExecutePlanItem, ExecutePlanRequest, ExecutePlanResponse, ExecutePlanSummaryMode,
+    ExecutePlanTrace, ExecutePlanValidationError, GraphHint, PlaceholderTriplet, QueryEntity,
+    RelationPath, RetrievalBundle, RetrievedChunk, ScoreBreakdown,
+};
+pub use tool_call::{
+    DenseRetrievalArgs, DenseRetrievalModality, DocMetadataArgs, DocProfileArgs, DocSummaryArgs,
+    DocSummaryLevel, GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs, MergeConfig,
+    NextStep, RetrievalPlannerOutput, RuntimeExecuteRequest, RuntimeExecuteResponse, ToolCall,
+    ToolCallAdapterError, ToolSpec,
 };

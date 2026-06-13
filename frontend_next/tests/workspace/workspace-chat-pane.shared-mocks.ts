@@ -22,8 +22,8 @@ vi.mock("../../lib/workspace/client", () => ({
   listWorkspaceSessionMessages: globalThis.__workspaceChatPaneHarnessMocks.listWorkspaceSessionMessagesMock,
 }));
 
-vi.mock("../../lib/workspace/stream", () => ({
-  streamWorkspaceChat: globalThis.__workspaceChatPaneHarnessMocks.streamWorkspaceChatMock,
+vi.mock("../../lib/runtime/transport", () => ({
+  streamChat: globalThis.__workspaceChatPaneHarnessMocks.streamWorkspaceChatMock,
 }));
 
 export const workspaceChatPaneMocks = globalThis.__workspaceChatPaneHarnessMocks;

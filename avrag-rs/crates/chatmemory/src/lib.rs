@@ -1,5 +1,5 @@
+use app_core::{ChatPersistencePort, UserProfileRow};
 use avrag_auth::AuthContext;
-use avrag_storage_pg::{PgAppRepository, UserProfileRow};
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -36,14 +36,13 @@ pub struct Layer3Profile {
     pub inference_version: String,
 }
 
-#[derive(Debug)]
 pub struct ChatMemory {
-    repo: Arc<PgAppRepository>,
+    persistence: Arc<dyn ChatPersistencePort>,
 }
 
 impl ChatMemory {
-    pub fn new(repo: Arc<PgAppRepository>) -> Self {
-        Self { repo }
+    pub fn new(persistence: Arc<dyn ChatPersistencePort>) -> Self {
+        Self { persistence }
     }
 
     pub async fn load(
@@ -51,13 +50,13 @@ impl ChatMemory {
         auth: &AuthContext,
         session_id: Uuid,
     ) -> anyhow::Result<ChatMemoryData> {
-        let messages = self.repo.list_messages(auth, session_id).await?;
-        let session = self.repo.get_session(auth, session_id).await?;
+        let messages = self.persistence.list_messages(auth, session_id).await?;
+        let session = self.persistence.get_session(auth, session_id).await?;
         let summary = session.and_then(|s| s.summary);
 
         let actor_id = auth.actor_id().map(|value| value.into_uuid());
         let profile = if let Some(user_id) = actor_id {
-            self.repo
+            self.persistence
                 .get_user_profile(auth, user_id)
                 .await?
                 .map(map_profile)
@@ -82,7 +81,7 @@ impl ChatMemory {
         session_id: Uuid,
         new_summary: &str,
     ) -> anyhow::Result<()> {
-        self.repo
+        self.persistence
             .update_session_summary(auth, session_id, new_summary)
             .await?;
         Ok(())
@@ -118,7 +117,7 @@ impl ChatMemory {
             inferred_at: Utc::now(),
             inference_version: update.inference_version,
         };
-        self.repo.upsert_user_profile(auth, &profile).await?;
+        self.persistence.upsert_user_profile(auth, &profile).await?;
         Ok(())
     }
 }

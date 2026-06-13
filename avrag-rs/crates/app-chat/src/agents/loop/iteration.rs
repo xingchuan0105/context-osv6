@@ -1,24 +1,17 @@
-use std::sync::Arc;
-
 use avrag_llm::{ChatMessage, LlmResponse, LlmUsage};
-use common::{AppError, ToolResult};
+use common::AppError;
+use contracts::ToolResult;
 
 use super::assembler::{ContextAssembler, DisclosedState};
 use super::config::{LoopExitConfig, ModeConfig};
 use super::exit_policy::{has_retrieval_observation, should_block_content_early_stop};
-use super::optimizer::{
-    build_budget_warning, build_duplicate_hint, extract_chunk_ids, ContextAdjustment,
-    IterationProgress, LoopOptimizer,
-};
+use super::optimizer::{IterationProgress, LoopOptimizer};
 use super::parse::{LlmOutput, parse_llm_output};
 use super::reasoning_emit::{self, record_reasoning};
 use super::skill_request::{is_skill_request_message, validate_skill_request};
 use super::telemetry::ReActIterationRecord;
-use super::{
-    build_assistant_message_with_tool_calls, build_tool_message, dispatch_rag_tool,
-    truncate_preview, ReActLoop,
-};
-use crate::agents::events::{AgentEvent, AgentEventSink};
+use super::{truncate_preview, ReActLoop};
+use crate::agents::events::{AgentEventSink};
 use crate::agents::runtime::{AgentRequest, AgentRunUsage};
 
 pub struct IterationState {
@@ -45,54 +38,6 @@ pub struct IterationOutcome {
 }
 
 impl ReActLoop {
-    async fn dispatch_tool_call(
-        &self,
-        call: &common::ToolCall,
-        auth: &avrag_auth::AuthContext,
-        doc_scope: &[String],
-        session_id: Option<&str>,
-    ) -> ToolResult {
-        match call.tool.as_str() {
-            "conversation_history_load" | "user_profile_load" | "conversation_history_tag"
-            | "calculator" | "code_interpreter" | "weather_query" | "web_fetch" | "web_search" => {
-                self.dispatch_skill_tool(call, auth, session_id).await
-            }
-            "dense_retrieval" | "lexical_retrieval" | "graph_retrieval" | "index_lookup"
-            | "doc_summary" | "doc_metadata" | "doc_profile" => {
-                if let Some(runtime) = &self.rag_runtime {
-                    dispatch_rag_tool(runtime, auth, call, doc_scope).await
-                } else {
-                    common::ToolResult {
-                        tool: call.tool.clone(),
-                        version: call.version.clone(),
-                        status: common::ToolStatus::NotImplemented,
-                        data: Some(serde_json::json!({"error": "rag runtime not configured"})),
-                        trace: None,
-                    }
-                }
-            }
-            _ => self.dispatch_skill_tool(call, auth, session_id).await,
-        }
-    }
-
-    async fn dispatch_skill_tool(
-        &self,
-        call: &common::ToolCall,
-        auth: &avrag_auth::AuthContext,
-        session_id: Option<&str>,
-    ) -> common::ToolResult {
-        let session_uuid = session_id.and_then(|id| uuid::Uuid::parse_str(id).ok());
-        let chat_persistence = self.effective_chat_persistence();
-        crate::agents::unified::atomic_tools::dispatch_atomic_tool_with_enforcement(
-            call,
-            self.search_executor.as_deref(),
-            Some(auth),
-            session_uuid,
-            chat_persistence.as_ref().map(|p| &**p),
-        )
-        .await
-    }
-
     pub(super) async fn run_iteration(
         &self,
         iteration: u8,
@@ -106,6 +51,36 @@ impl ReActLoop {
         optimizer: &LoopOptimizer,
         sink: &dyn AgentEventSink,
     ) -> Result<IterationOutcome, AppError> {
+        let assembled = self.assemble_retrieve_context(iteration, mode, request, state, sink).await;
+        let iter_start = std::time::Instant::now();
+        let llm_response = self
+            .call_retrieve_llm(mode, state, total_usage, &assembled, sink)
+            .await?;
+
+        self.apply_llm_output(
+            iteration,
+            max_iterations,
+            mode,
+            request,
+            auth,
+            loop_exit,
+            state,
+            optimizer,
+            sink,
+            &llm_response,
+            iter_start,
+        )
+        .await
+    }
+
+    async fn assemble_retrieve_context(
+        &self,
+        iteration: u8,
+        mode: &ModeConfig,
+        request: &AgentRequest,
+        state: &mut IterationState,
+        sink: &dyn AgentEventSink,
+    ) -> super::assembler::AssembledContext {
         let last_assistant_content = state
             .messages
             .iter()
@@ -137,15 +112,24 @@ impl ReActLoop {
             &state.disclosed,
         )
         .await;
+        assembled
+    }
 
-        let mut round_messages = vec![ChatMessage::system(assembled.system_content)];
+    async fn call_retrieve_llm(
+        &self,
+        mode: &ModeConfig,
+        state: &mut IterationState,
+        total_usage: &mut LlmUsage,
+        assembled: &super::assembler::AssembledContext,
+        sink: &dyn AgentEventSink,
+    ) -> Result<LlmResponse, AppError> {
+        let mut round_messages = vec![ChatMessage::system(assembled.system_content.clone())];
         for msg in &state.messages {
             if msg.role != "system" {
                 round_messages.push(msg.clone());
             }
         }
 
-        let iter_start = std::time::Instant::now();
         let temperature = mode.temperature.unwrap_or(0.7);
         let llm_response = self
             .llm
@@ -160,21 +144,7 @@ impl ReActLoop {
             llm_response.reasoning_content.as_deref(),
         )
         .await;
-
-        self.apply_llm_output(
-            iteration,
-            max_iterations,
-            mode,
-            request,
-            auth,
-            loop_exit,
-            state,
-            optimizer,
-            sink,
-            &llm_response,
-            iter_start,
-        )
-        .await
+        Ok(llm_response)
     }
 
     pub(crate) async fn apply_llm_output(
@@ -197,360 +167,148 @@ impl ReActLoop {
         }
 
         let parsed = parse_llm_output(llm_response);
-        let llm_usage = || AgentRunUsage {
-            provider: llm_response.usage.provider.clone(),
-            model: llm_response.model.clone(),
-            prompt_tokens: llm_response.usage.prompt_tokens as u64,
-            completion_tokens: llm_response.usage.completion_tokens as u64,
-            total_tokens: llm_response.usage.total_tokens as u64,
-            request_count: 1,
-            cached_tokens: llm_response.usage.cached_tokens as u64,
-        };
 
         match parsed {
             LlmOutput::NativeToolCalls(calls) => {
-                let call_ids: Vec<String> =
-                    (0..calls.len()).map(|i| format!("call_{}", i)).collect();
-
-                let mut tool_messages = Vec::new();
-                for (idx, call) in calls.iter().enumerate() {
-                    let call_id = &call_ids[idx];
-                    let tool_start = std::time::Instant::now();
-                    let result = self
-                        .dispatch_tool_call(
-                            call,
-                            auth,
-                            &request.doc_scope,
-                            request.session_id.as_deref(),
-                        )
-                        .await;
-                    let tool_elapsed_ms = tool_start.elapsed().as_millis() as u64;
-
-                    let _ = sink
-                        .emit(AgentEvent::ToolResult {
-                            tool: call.tool.clone(),
-                            status: result.status.clone(),
-                            data: result.data.clone(),
-                            elapsed_ms: tool_elapsed_ms,
-                        })
-                        .await;
-
-                    tool_messages.push(build_tool_message(call_id, &call.tool, &result));
-                    state.tool_results.push(result);
-                }
-
-                state.messages.push(build_assistant_message_with_tool_calls(
-                    &calls,
-                    &call_ids,
-                    &llm_response.content,
-                    llm_response.reasoning_content.clone(),
-                ));
-                for tm in tool_messages {
-                    state.messages.push(tm);
-                }
-
-                let current_chunk_ids = extract_chunk_ids(&state.tool_results);
-                state.progress.record_iteration(iteration, &current_chunk_ids);
-                let remaining = max_iterations.saturating_sub(iteration + 1);
-                match optimizer.advise(
-                    &state.progress,
-                    &current_chunk_ids,
-                    remaining,
+                self.dispatch_native_tool_calls(
+                    iteration,
                     max_iterations,
-                ) {
-                    ContextAdjustment::DuplicateChunksHint {
-                        chunk_ids,
-                        first_seen_at,
-                    } => {
-                        state
-                            .messages
-                            .push(ChatMessage::system(build_duplicate_hint(
-                                &chunk_ids,
-                                &first_seen_at,
-                            )));
-                    }
-                    ContextAdjustment::BudgetWarning { remaining, max } => {
-                        state
-                            .messages
-                            .push(ChatMessage::system(build_budget_warning(remaining, max)));
-                    }
-                    ContextAdjustment::None => {}
-                }
-
-                state.total_tool_calls += calls.len() as u32;
-                state.consecutive_sandbox_errors = 0;
-
-                let exit_reason = "native_tool_call".to_string();
-                Ok(IterationOutcome {
-                    control: IterationControl::Continue,
-                    record: Some(ReActIterationRecord {
-                        iteration,
-                        disclosed_skills: disclosed_skill_ids(&state.disclosed),
-                        action_type: exit_reason.clone(),
-                        observation_preview: format!("{} tool calls", calls.len()),
-                        llm_usage: Some(llm_usage()),
-                        elapsed_ms: iter_start.elapsed().as_millis() as u64,
-                        exit_reason,
-                    }),
-                    sandbox_break: false,
-                })
+                    mode,
+                    request,
+                    auth,
+                    loop_exit,
+                    state,
+                    optimizer,
+                    sink,
+                    llm_response,
+                    iter_start,
+                    calls,
+                )
+                .await
             }
             LlmOutput::CodeBlocks(codes) => {
-                let code_start = std::time::Instant::now();
-                let interpreter_lock = Arc::clone(&self.code_interpreter);
-                let mut combined_result = String::new();
-                let mut any_error = false;
-                let mut bridge_tool_results = Vec::new();
-
-                for (idx, code) in codes.iter().enumerate() {
-                    let code = code.clone();
-                    let interpreter_lock = Arc::clone(&interpreter_lock);
-                    let exec_result: Result<
-                        avrag_code_interpreter::ExecutionResult,
-                        avrag_code_interpreter::InterpreterError,
-                    >;
-                    let mut block_observation_stdout: Option<String> = None;
-
-                    if let Some(runtime) = &self.rag_runtime {
-                        let bridge = Arc::new(avrag_rag_core::runtime::bridge::RuntimeBridge::new(
-                            Arc::clone(runtime),
-                            auth.clone(),
-                            request.doc_scope.clone(),
-                        ));
-                        let interpreter = avrag_code_interpreter::CodeInterpreter::new();
-                        exec_result = match interpreter
-                            .execute_with_bridge(&code, Arc::clone(&bridge))
-                            .await
-                        {
-                            Ok(exec) => {
-                                let block_bridge_results = bridge.take_captured_results();
-                                bridge_tool_results.extend(block_bridge_results.clone());
-                                block_observation_stdout = Some(
-                                    crate::agents::unified::helpers::codegen_observation_stdout(
-                                        &exec.stdout,
-                                        &block_bridge_results,
-                                    ),
-                                );
-                                Ok(exec)
-                            }
-                            Err(e) => Err(e),
-                        };
-                    } else {
-                        let interpreter_lock = Arc::clone(&interpreter_lock);
-                        let join_result = tokio::task::spawn_blocking(move || {
-                            let mut guard =
-                                interpreter_lock.lock().unwrap_or_else(|e| e.into_inner());
-                            if guard.is_none() {
-                                *guard = Some(avrag_code_interpreter::CodeInterpreter::new());
-                            }
-                            guard.as_ref().unwrap().execute(&code)
-                        })
-                        .await;
-                        exec_result = match join_result {
-                            Ok(result) => result,
-                            Err(e) => Err(avrag_code_interpreter::InterpreterError::Bridge(
-                                format!("interpreter task panicked: {e}"),
-                            )),
-                        };
-                    }
-
-                    let (block_status, block_text, is_err) = match exec_result {
-                        Ok(exec) => {
-                            let is_err = !exec.success
-                                || !exec.stderr.is_empty()
-                                || exec.exit_code.unwrap_or(0) != 0;
-                            let status = if is_err {
-                                common::ToolStatus::Error
-                            } else {
-                                common::ToolStatus::Ok
-                            };
-                            let stdout_for_observation = block_observation_stdout
-                                .as_deref()
-                                .unwrap_or(exec.stdout.as_str());
-                            let text = format!(
-                                "[block {}] stdout: {}\nstderr: {}",
-                                idx, stdout_for_observation, exec.stderr
-                            );
-                            (status, text, is_err)
-                        }
-                        Err(e) => {
-                            let text = format!("[block {}] Execution failed: {e}", idx);
-                            (common::ToolStatus::Error, text, true)
-                        }
-                    };
-
-                    combined_result.push_str(&block_text);
-                    combined_result.push('\n');
-                    if is_err {
-                        any_error = true;
-                    }
-
-                    let _ = sink
-                        .emit(AgentEvent::ToolResult {
-                            tool: "code_gen".to_string(),
-                            status: block_status,
-                            data: Some(serde_json::json!({ "result": block_text })),
-                            elapsed_ms: code_start.elapsed().as_millis() as u64,
-                        })
-                        .await;
-                }
-
-                let elapsed_ms = code_start.elapsed().as_millis() as u64;
-                state.messages.push(ChatMessage {
-                    role: "assistant".to_string(),
-                    content: llm_response.content.clone(),
-                    name: None,
-                    tool_call_id: None,
-                    tool_calls: None,
-                    multimodal_content: None,
-                    reasoning_content: llm_response.reasoning_content.clone(),
-                });
-                state.messages.push(ChatMessage {
-                    role: "user".to_string(),
-                    content: format!(
-                        "<code_execution_result>\n{combined_result}\n</code_execution_result>"
-                    ),
-                    name: None,
-                    tool_call_id: None,
-                    tool_calls: None,
-                    multimodal_content: None,
-                    reasoning_content: None,
-                });
-
-                if any_error {
-                    state.consecutive_sandbox_errors += 1;
-                    if state.consecutive_sandbox_errors >= 2 {
-                        let disclosed_skills = disclosed_skill_ids(&state.disclosed);
-                        reasoning_emit::emit_evaluation_telemetry(
-                            sink,
-                            iteration,
-                            "sandbox_break_to_synthesis",
-                            "consecutive sandbox errors, breaking to synthesis",
-                            &disclosed_skills,
-                            "sandbox_break_to_synthesis",
-                        )
-                        .await;
-                        let _ = sink
-                            .emit(AgentEvent::Activity {
-                                stage: "sandbox_error".to_string(),
-                                message: "consecutive sandbox errors, breaking to synthesis"
-                                    .to_string(),
-                            })
-                            .await;
-                        return Ok(IterationOutcome {
-                            control: IterationControl::BreakToSynthesis {
-                                reason: "sandbox_break_to_synthesis".to_string(),
-                            },
-                            record: None,
-                            sandbox_break: true,
-                        });
-                    }
-                } else {
-                    state.consecutive_sandbox_errors = 0;
-                    if !bridge_tool_results.is_empty() {
-                        state.tool_results.extend(bridge_tool_results);
-                    } else if let Some(result) =
-                        crate::agents::unified::helpers::tool_result_from_code_execution_observation(
-                            &combined_result,
-                        )
-                    {
-                        state.tool_results.push(result);
-                    }
-                }
-
-                state.total_tool_calls += codes.len() as u32;
-                let exit_reason = if any_error {
-                    "code_gen_error".to_string()
-                } else {
-                    "code_gen".to_string()
-                };
-                Ok(IterationOutcome {
-                    control: IterationControl::Continue,
-                    record: Some(ReActIterationRecord {
-                        iteration,
-                        disclosed_skills: disclosed_skill_ids(&state.disclosed),
-                        action_type: exit_reason.clone(),
-                        observation_preview: truncate_preview(&combined_result, 200),
-                        llm_usage: Some(llm_usage()),
-                        elapsed_ms,
-                        exit_reason,
-                    }),
-                    sandbox_break: false,
-                })
+                self.dispatch_codegen(
+                    iteration,
+                    request,
+                    auth,
+                    state,
+                    sink,
+                    llm_response,
+                    iter_start,
+                    codes,
+                )
+                .await
             }
             LlmOutput::Content(content) => {
-                state.messages.push(ChatMessage {
-                    role: "assistant".to_string(),
-                    content: content.clone(),
-                    name: None,
-                    tool_call_id: None,
-                    tool_calls: None,
-                    multimodal_content: None,
-                    reasoning_content: llm_response.reasoning_content.clone(),
-                });
-
-                if is_skill_request_message(&content) {
-                    let exit_reason = "skill_request".to_string();
-                    return Ok(IterationOutcome {
-                        control: IterationControl::Continue,
-                        record: Some(ReActIterationRecord {
-                            iteration,
-                            disclosed_skills: disclosed_skill_ids(&state.disclosed),
-                            action_type: exit_reason.clone(),
-                            observation_preview: truncate_preview(&content, 200),
-                            llm_usage: Some(llm_usage()),
-                            elapsed_ms: iter_start.elapsed().as_millis() as u64,
-                            exit_reason,
-                        }),
-                        sandbox_break: false,
-                    });
-                }
-
-                let has_evidence_now =
-                    has_retrieval_observation(&state.messages, &state.tool_results, mode);
-                if should_block_content_early_stop(loop_exit, has_evidence_now) {
-                    state.messages.push(ChatMessage::user(
-                        "You must retrieve evidence (code execution or tools) before answering. \
-                         Continue with retrieval — do not answer from memory alone.",
-                    ));
-                    let exit_reason = "content_blocked_no_evidence".to_string();
-                    return Ok(IterationOutcome {
-                        control: IterationControl::Continue,
-                        record: Some(ReActIterationRecord {
-                            iteration,
-                            disclosed_skills: disclosed_skill_ids(&state.disclosed),
-                            action_type: exit_reason.clone(),
-                            observation_preview: truncate_preview(&content, 200),
-                            llm_usage: Some(llm_usage()),
-                            elapsed_ms: iter_start.elapsed().as_millis() as u64,
-                            exit_reason,
-                        }),
-                        sandbox_break: false,
-                    });
-                }
-
-                let exit_reason = "direct_content".to_string();
-                Ok(IterationOutcome {
-                    control: IterationControl::DirectAnswer {
-                        content: content.clone(),
-                    },
-                    record: Some(ReActIterationRecord {
-                        iteration,
-                        disclosed_skills: disclosed_skill_ids(&state.disclosed),
-                        action_type: exit_reason.clone(),
-                        observation_preview: truncate_preview(&content, 200),
-                        llm_usage: Some(llm_usage()),
-                        elapsed_ms: iter_start.elapsed().as_millis() as u64,
-                        exit_reason,
-                    }),
-                    sandbox_break: false,
-                })
+                self.dispatch_content(
+                    iteration,
+                    mode,
+                    loop_exit,
+                    state,
+                    sink,
+                    llm_response,
+                    iter_start,
+                    content,
+                )
+                .await
             }
         }
     }
+
+    async fn dispatch_content(
+        &self,
+        iteration: u8,
+        mode: &ModeConfig,
+        loop_exit: &LoopExitConfig,
+        state: &mut IterationState,
+        _sink: &dyn AgentEventSink,
+        llm_response: &LlmResponse,
+        iter_start: std::time::Instant,
+        content: String,
+    ) -> Result<IterationOutcome, AppError> {
+        let llm_usage = iteration_llm_usage(llm_response);
+        state.messages.push(ChatMessage {
+            role: "assistant".to_string(),
+            content: content.clone(),
+            name: None,
+            tool_call_id: None,
+            tool_calls: None,
+            multimodal_content: None,
+            reasoning_content: llm_response.reasoning_content.clone(),
+        });
+
+        if is_skill_request_message(&content) {
+            let exit_reason = "skill_request".to_string();
+            return Ok(IterationOutcome {
+                control: IterationControl::Continue,
+                record: Some(ReActIterationRecord {
+                    iteration,
+                    disclosed_skills: disclosed_skill_ids(&state.disclosed),
+                    action_type: exit_reason.clone(),
+                    observation_preview: truncate_preview(&content, 200),
+                    llm_usage: Some(llm_usage),
+                    elapsed_ms: iter_start.elapsed().as_millis() as u64,
+                    exit_reason,
+                }),
+                sandbox_break: false,
+            });
+        }
+
+        let has_evidence_now =
+            has_retrieval_observation(&state.messages, &state.tool_results, mode);
+        if should_block_content_early_stop(loop_exit, has_evidence_now) {
+            state.messages.push(ChatMessage::user(
+                "You must retrieve evidence (code execution or tools) before answering. \
+                 Continue with retrieval — do not answer from memory alone.",
+            ));
+            let exit_reason = "content_blocked_no_evidence".to_string();
+            return Ok(IterationOutcome {
+                control: IterationControl::Continue,
+                record: Some(ReActIterationRecord {
+                    iteration,
+                    disclosed_skills: disclosed_skill_ids(&state.disclosed),
+                    action_type: exit_reason.clone(),
+                    observation_preview: truncate_preview(&content, 200),
+                    llm_usage: Some(llm_usage),
+                    elapsed_ms: iter_start.elapsed().as_millis() as u64,
+                    exit_reason,
+                }),
+                sandbox_break: false,
+            });
+        }
+
+        let exit_reason = "direct_content".to_string();
+        Ok(IterationOutcome {
+            control: IterationControl::DirectAnswer {
+                content: content.clone(),
+            },
+            record: Some(ReActIterationRecord {
+                iteration,
+                disclosed_skills: disclosed_skill_ids(&state.disclosed),
+                action_type: exit_reason.clone(),
+                observation_preview: truncate_preview(&content, 200),
+                llm_usage: Some(llm_usage),
+                elapsed_ms: iter_start.elapsed().as_millis() as u64,
+                exit_reason,
+            }),
+            sandbox_break: false,
+        })
+    }
 }
 
-fn disclosed_skill_ids(disclosed: &DisclosedState) -> Vec<String> {
+pub(super) fn iteration_llm_usage(llm_response: &LlmResponse) -> AgentRunUsage {
+    AgentRunUsage {
+        provider: llm_response.usage.provider.clone(),
+        model: llm_response.model.clone(),
+        prompt_tokens: llm_response.usage.prompt_tokens as u64,
+        completion_tokens: llm_response.usage.completion_tokens as u64,
+        total_tokens: llm_response.usage.total_tokens as u64,
+        request_count: 1,
+        cached_tokens: llm_response.usage.cached_tokens as u64,
+    }
+}
+
+pub(super) fn disclosed_skill_ids(disclosed: &DisclosedState) -> Vec<String> {
     disclosed.disclosed_skill_ids.iter().cloned().collect()
 }
 
@@ -655,7 +413,7 @@ mod tests {
         let optimizer = LoopOptimizer::new();
         let auth = test_auth();
         let mut response = fake_llm_response("");
-        response.tool_calls = Some(vec![common::ToolCall {
+        response.tool_calls = Some(vec![contracts::ToolCall {
             tool: "web_search".to_string(),
             version: "1".to_string(),
             args: serde_json::json!({"query": "news"}),
@@ -819,7 +577,7 @@ mod tests {
             state
                 .tool_results
                 .iter()
-                .any(|r| r.tool == "dense_retrieval" && r.status == common::ToolStatus::Ok),
+                .any(|r| r.tool == "dense_retrieval" && r.status == contracts::ToolStatus::Ok),
             "bridge side-channel should record dense_retrieval Ok even when stdout empty; tool_results: {:?}",
             state.tool_results
         );

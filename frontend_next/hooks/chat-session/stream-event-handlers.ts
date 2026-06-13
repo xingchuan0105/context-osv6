@@ -1,4 +1,4 @@
-import type { WorkspaceChatStreamEvent } from "../../lib/workspace/stream";
+import type { ChatEvent } from "../../lib/contracts";
 import { isResearchMode, normalizeMessageMode } from "./helpers";
 import type { ProgressTracker } from "./use-progress-tracker";
 import type { PendingDoneEvent, UseChatSessionOptions } from "./types";
@@ -14,9 +14,9 @@ export type StreamEventHandlerDeps = {
   streamingMessageIdRef: React.MutableRefObject<string | null>;
   onSessionChangeRef: React.MutableRefObject<UseChatSessionOptions["onSessionChange"] | undefined>;
   streamingMessageId: string | null;
-  beginAnswerStreaming: (event: Extract<WorkspaceChatStreamEvent, { kind: "answer_start" }>) => void;
+  beginAnswerStreaming: (event: Extract<ChatEvent, { event: "answer_start" }>) => void;
   ensureStreamingAssistant: (
-    event: Extract<WorkspaceChatStreamEvent, { kind: "answer_start" | "token" | "citations" }>,
+    event: Extract<ChatEvent, { event: "answer_start" | "token" | "citations" }>,
   ) => void;
   markTokenReceived: () => void;
   enqueueStreamingText: (text: string) => void;
@@ -27,7 +27,7 @@ export type StreamEventHandlerDeps = {
 
 export function handleStartEvent(
   deps: StreamEventHandlerDeps,
-  event: Extract<WorkspaceChatStreamEvent, { kind: "start" }>,
+  event: Extract<ChatEvent, { event: "start" }>,
 ) {
   if (!event.session_id) {
     return;
@@ -40,14 +40,14 @@ export function handleStartEvent(
 
 export function handleActivityEvent(
   deps: StreamEventHandlerDeps,
-  event: Extract<WorkspaceChatStreamEvent, { kind: "activity" }>,
+  event: Extract<ChatEvent, { event: "activity" }>,
 ) {
   deps.progressTracker.addActivity(event);
 }
 
 export function handleAnswerStartEvent(
   deps: StreamEventHandlerDeps,
-  event: Extract<WorkspaceChatStreamEvent, { kind: "answer_start" }>,
+  event: Extract<ChatEvent, { event: "answer_start" }>,
 ) {
   if (normalizeMessageMode(event.agent_type) === "chat") {
     return;
@@ -58,7 +58,7 @@ export function handleAnswerStartEvent(
 
 export function handleTokenEvent(
   deps: StreamEventHandlerDeps,
-  event: Extract<WorkspaceChatStreamEvent, { kind: "token" }>,
+  event: Extract<ChatEvent, { event: "token" }>,
 ) {
   const activeProgressMode = deps.progressTracker.modeRef.current;
 
@@ -73,29 +73,29 @@ export function handleTokenEvent(
 
 export function handleReasoningSummaryDeltaEvent(
   deps: StreamEventHandlerDeps,
-  event: Extract<WorkspaceChatStreamEvent, { kind: "reasoning_summary_delta" }>,
+  event: Extract<ChatEvent, { event: "reasoning_summary_delta" }>,
 ) {
   deps.progressTracker.addReasoning(event.content);
 }
 
 export function handleCitationsEvent(
   deps: StreamEventHandlerDeps,
-  event: Extract<WorkspaceChatStreamEvent, { kind: "citations" }>,
+  event: Extract<ChatEvent, { event: "citations" }>,
 ) {
   deps.ensureStreamingAssistant(event);
 }
 
 export function handleDoneEvent(
   deps: StreamEventHandlerDeps,
-  event: Extract<WorkspaceChatStreamEvent, { kind: "done" }>,
+  event: Extract<ChatEvent, { event: "done" }>,
 ) {
   deps.progressTracker.hide();
-  deps.handleDoneWithTypewriter(event);
+  deps.handleDoneWithTypewriter(event as PendingDoneEvent);
 }
 
 export function handleErrorEvent(
   deps: StreamEventHandlerDeps,
-  event: Extract<WorkspaceChatStreamEvent, { kind: "error" }>,
+  event: Extract<ChatEvent, { event: "error" }>,
 ) {
   deps.progressTracker.hide();
   deps.resetStreamingTypewriter();
@@ -109,13 +109,13 @@ export function handleErrorEvent(
 
 export function handleTraceEvent(
   _deps: StreamEventHandlerDeps,
-  _event: Extract<WorkspaceChatStreamEvent, { kind: "trace" }>,
+  _event: Extract<ChatEvent, { event: "trace" }>,
 ) {
   // Trace events are diagnostic only; UI ignores them today.
 }
 
-export function dispatchStreamEvent(deps: StreamEventHandlerDeps, event: WorkspaceChatStreamEvent) {
-  switch (event.kind) {
+export function dispatchStreamEvent(deps: StreamEventHandlerDeps, event: ChatEvent) {
+  switch (event.event) {
     case "start":
       handleStartEvent(deps, event);
       break;

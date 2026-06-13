@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use avrag_rag_core::CachePort;
+use avrag_rag_core_ports::CachePort;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

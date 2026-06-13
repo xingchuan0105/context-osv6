@@ -14,16 +14,19 @@ pub use app_state::{
     StoredDocument,
 };
 
+pub use adapters::{PgBillingStoreAdapter, PgUsageLimitStoreAdapter};
+
 use adapters::{
     ObjectStorePortAdapter, PgAdminStoreAdapter, PgAuthStoreAdapter, PgBillingQuotaAdapter,
     PgChatPersistenceAdapter, PgContentStore, PgDocumentStoreAdapter, PgHealthAdapter,
+    PgShareStoreAdapter,
 };
 use app_admin::AdminContext;
 use app_billing::BillingContext;
 use app_chat::{ChatContext, LlmContext, OrchestratorContext};
 use app_core::{
     AdminStorePort, AnalyticsServiceCtx, AppConfig, AuthStorePort, BillingQuotaPort,
-    ChatPersistencePort, DocumentStorePort, StorageContext,
+    BillingStorePort, ChatPersistencePort, DocumentStorePort, ShareStorePort, StorageContext,
 };
 use app_documents::DocumentContext;
 use avrag_auth::AuthContext;
@@ -122,6 +125,8 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         None,
         None,
         None,
+        None,
+        None,
         Arc::new(RwLock::new(MemoryState::default())),
         Arc::new(RwLock::new(BTreeMap::new())),
         config.max_upload_file_size_bytes,
@@ -189,7 +194,12 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         make_llm_client(&config.agent_llm),
         make_llm_client(&config.memory_llm),
     );
-    let chatmemory = pg.as_ref().map(|p| Arc::new(ChatMemory::new(p.clone())));
+    let chat_persistence: Option<Arc<dyn ChatPersistencePort>> = pg.as_ref().map(|repository| {
+        Arc::new(PgChatPersistenceAdapter::new(repository.clone())) as Arc<dyn ChatPersistencePort>
+    });
+    let chatmemory = chat_persistence
+        .as_ref()
+        .map(|port| Arc::new(ChatMemory::new(port.clone())));
     let search_executor = Some(Arc::new(SearchExecutor::new(avrag_search::SearchConfig {
         provider: config.search.provider.clone(),
         base_url: config.search.base_url.clone(),
@@ -208,9 +218,25 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
             .map(Arc::new)
     };
 
-    let chat_persistence: Option<Arc<dyn ChatPersistencePort>> = pg.as_ref().map(|repository| {
-        Arc::new(PgChatPersistenceAdapter::new(repository.clone())) as Arc<dyn ChatPersistencePort>
+    let billing_store: Option<Arc<dyn BillingStorePort>> = pg.as_ref().map(|repository| {
+        Arc::new(PgBillingStoreAdapter::new(repository.clone())) as Arc<dyn BillingStorePort>
     });
+    let share_store: Option<Arc<dyn ShareStorePort>> = pg.as_ref().map(|repository| {
+        Arc::new(PgShareStoreAdapter::new(repository.clone())) as Arc<dyn ShareStorePort>
+    });
+    let usage_limit_store = pg.as_ref().map(|repository| {
+        Arc::new(PgUsageLimitStoreAdapter::new(repository.clone()))
+            as Arc<dyn app_core::UsageLimitStorePort>
+    });
+
+    let quota_manager = billing_store.as_ref().zip(usage_limit_store.as_ref()).map(
+        |(billing, usage_limit)| {
+            Arc::new(avrag_billing::QuotaManager::new(
+                billing.clone(),
+                usage_limit.clone(),
+            ))
+        },
+    );
 
     let rag_runtime = if config.enable_rag && pg.is_some() {
         let pg_repo = pg.as_ref().unwrap();
@@ -265,9 +291,6 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         None
     };
 
-    let quota_manager = pg
-        .as_ref()
-        .map(|p| Arc::new(avrag_billing::QuotaManager::new(p.clone())));
     let billing = BillingContext::new(
         quota_manager,
         config.usage_limit.enforcement_phase.clone(),
@@ -310,6 +333,8 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         auth_store,
         admin_store,
         billing_quota,
+        billing_store,
+        share_store,
         chat_persistence,
         Arc::new(RwLock::new(MemoryState::default())),
         Arc::new(RwLock::new(BTreeMap::new())),

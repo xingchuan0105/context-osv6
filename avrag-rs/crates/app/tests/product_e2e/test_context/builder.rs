@@ -305,6 +305,10 @@ impl TestContext {
         let (mock_llm_url, mock_llm_abort) = if use_real_llm {
             (String::new(), None)
         } else {
+            // Mock RAG dense_search query injection: only LLM request message parsing is
+            // end-to-end reliable (see mock_servers::dense_search_query_from_messages).
+            // Per-request chat headers and the global set_mock_rag_codegen_query cell are
+            // best-effort fallbacks for single-flight tests, not concurrent paths.
             reset_mock_rag_state();
             let (url, abort) = start_mock_llm_server().await;
             (url, Some(abort))

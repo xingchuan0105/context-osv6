@@ -8,7 +8,6 @@ version.workspace = true
 [dependencies]
 app-core = { path = "../app-core" }
 avrag-auth = { path = "../auth" }
-avrag-storage-pg = { path = "../storage-pg" }
 common = { path = "../common" }
 contracts = { path = "../../../contracts" }
 chrono.workspace = true
@@ -22,4 +21,5 @@ avrag-auth = { path = "../auth" }
 avrag-storage-pg = { path = "../storage-pg" }
 common = { path = "../common" }
 contracts = { path = "../../../contracts" }
+serde.workspace = true
 tokio.workspace = true

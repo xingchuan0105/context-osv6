@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+app-core = { path = "../app-core" }
 contracts = { path = "../../../contracts" }
 anyhow.workspace = true
 tokio.workspace = true
@@ -15,4 +16,3 @@ chrono.workspace = true
 uuid.workspace = true
 common = { path = "../common" }
 avrag-auth = { path = "../auth" }
-avrag-storage-pg = { path = "../storage-pg" }

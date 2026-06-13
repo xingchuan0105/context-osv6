@@ -5,7 +5,9 @@
  * 使用 @tauri-apps/api 官方 API，不直接访问 internals
  */
 
-import type { ChatRequest, WorkspaceChatStreamEvent } from "../workspace/stream";
+import { ApiError } from "../auth/client";
+import type { ChatRequest, ChatEvent } from "../contracts";
+import { parseIpcChatEvent } from "../workspace/stream";
 
 /**
  * 检测是否在 Tauri 环境中运行
@@ -28,6 +30,56 @@ async function getTauriInvoke() {
 async function getTauriListen() {
   const { listen } = await import("@tauri-apps/api/event");
   return listen;
+}
+
+type StructuredIpcError = {
+  status: number;
+  code?: string | null;
+  message: string;
+};
+
+function isStructuredIpcError(value: unknown): value is StructuredIpcError {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.status === "number" && typeof candidate.message === "string";
+}
+
+function mapInvokeError(error: unknown): Error {
+  if (isStructuredIpcError(error)) {
+    return new ApiError(
+      error.status,
+      typeof error.code === "string" ? error.code : null,
+      error.message,
+    );
+  }
+
+  if (typeof error === "string") {
+    try {
+      const parsed: unknown = JSON.parse(error);
+      if (isStructuredIpcError(parsed)) {
+        return new ApiError(
+          parsed.status,
+          typeof parsed.code === "string" ? parsed.code : null,
+          parsed.message,
+        );
+      }
+    } catch {
+      return new Error(error);
+    }
+
+    return new Error(error);
+  }
+
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw new DOMException("The operation was aborted.", "AbortError");
+  }
 }
 
 /**
@@ -88,22 +140,42 @@ export async function setCacheValue(key: string, value: string, ttlSecs: number)
 export async function streamChatViaIPC(
   token: string,
   request: ChatRequest,
-  onEvent: (event: WorkspaceChatStreamEvent) => void | Promise<void>,
+  onEvent: (event: ChatEvent) => void | Promise<void>,
   options?: { signal?: AbortSignal },
 ): Promise<void> {
   const invoke = await getTauriInvoke();
   const listen = await getTauriListen();
 
   const requestId = crypto.randomUUID();
+  const signal = options?.signal;
+  let unlisten: (() => void) | null = null;
+  let abortHandler: (() => void) | null = null;
 
-  // 监听聊天事件
-  const unlisten = await listen(`chat://${requestId}`, (e) => {
-    const event = e.payload as WorkspaceChatStreamEvent;
-    onEvent(event);
-  });
+  const cleanupListener = () => {
+    if (unlisten) {
+      unlisten();
+      unlisten = null;
+    }
+  };
+
+  throwIfAborted(signal);
 
   try {
-    // 发起聊天请求
+    unlisten = await listen(`chat://${requestId}`, (e) => {
+      const event = parseIpcChatEvent(e.payload);
+
+      if (event) {
+        void onEvent(event);
+      }
+    });
+
+    abortHandler = () => {
+      cleanupListener();
+      void invoke("chat_cancel", { request_id: requestId }).catch(() => {});
+    };
+
+    signal?.addEventListener("abort", abortHandler, { once: true });
+
     await invoke("chat_stream", {
       token,
       request: {
@@ -112,9 +184,13 @@ export async function streamChatViaIPC(
         stream: true,
       },
     });
+
+    throwIfAborted(signal);
   } finally {
-    // 清理监听器
-    unlisten();
+    if (abortHandler && signal) {
+      signal.removeEventListener("abort", abortHandler);
+    }
+    cleanupListener();
   }
 }
 
@@ -127,10 +203,25 @@ export async function requestViaIPC<T>(
   token?: string,
 ): Promise<T> {
   const invoke = await getTauriInvoke();
-  return invoke("api_call", {
-    method: init?.method || "GET",
-    path,
-    body: init?.body ? JSON.parse(init.body as string) : null,
-    token,
-  });
+
+  let body: unknown = null;
+
+  if (init?.body != null) {
+    if (typeof init.body !== "string") {
+      throw new TypeError("requestViaIPC only supports JSON string bodies");
+    }
+
+    body = JSON.parse(init.body);
+  }
+
+  try {
+    return await invoke<T>("api_call", {
+      method: init?.method || "GET",
+      path,
+      body,
+      token,
+    });
+  } catch (error) {
+    throw mapInvokeError(error);
+  }
 }

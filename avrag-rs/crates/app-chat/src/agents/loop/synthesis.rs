@@ -7,7 +7,8 @@ use super::config::{AnswerContractKind, ModeConfig};
 use super::reasoning_emit;
 use crate::agents::events::{AgentEvent, AgentEventSink};
 use avrag_llm::{ChatMessage, LlmClient};
-use common::{AppError, ToolResult};
+use common::{AppError};
+use contracts::{ToolResult};
 use tokio_util::sync::CancellationToken;
 
 pub struct SynthesisPhase;

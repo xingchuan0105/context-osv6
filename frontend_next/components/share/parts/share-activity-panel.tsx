@@ -1,6 +1,6 @@
 "use client";
 
-import { formatSettingsShareMessage } from "../../../lib/settings-share-messages";
+import { formatUiMessage } from "../../../lib/i18n/messages";
 import { SectionHeader } from "./share-center-ui";
 import { formatAccessedAt, parseAccessedAt } from "./share-center-utils";
 import type { useShareCenter } from "./use-share-center";
@@ -15,7 +15,7 @@ export function ShareActivityPanel({ center }: { center: ShareCenter }) {
       {accessLogsQuery.isLoading && !accessLogsQuery.data ? (
           <section className="app-surface-card" id="activity" style={{ scrollMarginTop: "6rem" }}>
             <p style={{ margin: 0 }}>
-              {formatSettingsShareMessage(locale, "shareCenter.accessLogsLoading")}
+              {formatUiMessage(locale, "shareCenter.accessLogsLoading")}
             </p>
           </section>
         ) : accessLogsQuery.error && !accessLogsQuery.data ? (
@@ -23,7 +23,7 @@ export function ShareActivityPanel({ center }: { center: ShareCenter }) {
             <p className="app-notice-banner" style={{ margin: 0 }}>
               {accessLogsQuery.error instanceof Error
                 ? accessLogsQuery.error.message
-                : formatSettingsShareMessage(locale, "shareCenter.accessLogsLoadError")}
+                : formatUiMessage(locale, "shareCenter.accessLogsLoadError")}
             </p>
           </section>
         ) : (
@@ -40,8 +40,8 @@ export function ShareActivityPanel({ center }: { center: ShareCenter }) {
             }}
           >
             <SectionHeader
-              subtitle={formatSettingsShareMessage(locale, "shareCenter.activitySectionSubtitle")}
-              title={formatSettingsShareMessage(locale, "shareCenter.activitySectionTitle")}
+              subtitle={formatUiMessage(locale, "shareCenter.activitySectionSubtitle")}
+              title={formatUiMessage(locale, "shareCenter.activitySectionTitle")}
             />
 
             {accessLogsQuery.data && accessLogsQuery.data.logs.length > 0 ? (
@@ -68,13 +68,13 @@ export function ShareActivityPanel({ center }: { center: ShareCenter }) {
                     >
                       <div style={{ display: "grid", gap: "0.2rem" }}>
                         <span style={{ color: "hsl(var(--muted-foreground))" }}>
-                          {formatSettingsShareMessage(locale, "shareCenter.activityActionLabel")}
+                          {formatUiMessage(locale, "shareCenter.activityActionLabel")}
                         </span>
                         <strong>{log.action}</strong>
                       </div>
                       <div style={{ display: "grid", gap: "0.2rem" }}>
                         <span style={{ color: "hsl(var(--muted-foreground))" }}>
-                          {formatSettingsShareMessage(locale, "shareCenter.activityTimeLabel")}
+                          {formatUiMessage(locale, "shareCenter.activityTimeLabel")}
                         </span>
                         <span>{formatAccessedAt(locale, log.accessed_at)}</span>
                       </div>
@@ -83,9 +83,9 @@ export function ShareActivityPanel({ center }: { center: ShareCenter }) {
               </div>
             ) : (
               <div className="app-inline-surface" style={{ display: "grid", gap: "0.25rem" }}>
-                <strong>{formatSettingsShareMessage(locale, "shareCenter.activityEmptyTitle")}</strong>
+                <strong>{formatUiMessage(locale, "shareCenter.activityEmptyTitle")}</strong>
                 <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
-                  {formatSettingsShareMessage(locale, "shareCenter.activityEmptyBody")}
+                  {formatUiMessage(locale, "shareCenter.activityEmptyBody")}
                 </p>
               </div>
             )}

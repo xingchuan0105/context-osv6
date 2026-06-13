@@ -1,6 +1,6 @@
 "use client";
 
-import { formatSettingsShareMessage } from "../../lib/settings-share-messages";
+import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import { panelChoiceStyle } from "./settings-shared";
 
@@ -12,10 +12,10 @@ export function AppearancePanel() {
       <section className="app-inline-surface" style={{ display: "grid", gap: "1rem" }}>
         <div style={{ display: "grid", gap: "0.35rem" }}>
           <h2 style={{ margin: 0 }}>
-            {formatSettingsShareMessage(locale, "settings.appearance.sectionTitle")}
+            {formatUiMessage(locale, "settings.appearance.sectionTitle")}
           </h2>
           <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
-            {formatSettingsShareMessage(locale, "settings.appearance.sectionSubtitle")}
+            {formatUiMessage(locale, "settings.appearance.sectionSubtitle")}
           </p>
         </div>
         <div
@@ -28,18 +28,18 @@ export function AppearancePanel() {
           {([
             [
               "system",
-              formatSettingsShareMessage(locale, "settings.appearance.theme.system"),
-              formatSettingsShareMessage(locale, "settings.appearance.themeDescription.system"),
+              formatUiMessage(locale, "settings.appearance.theme.system"),
+              formatUiMessage(locale, "settings.appearance.themeDescription.system"),
             ],
             [
               "light",
-              formatSettingsShareMessage(locale, "settings.appearance.theme.light"),
-              formatSettingsShareMessage(locale, "settings.appearance.themeDescription.light"),
+              formatUiMessage(locale, "settings.appearance.theme.light"),
+              formatUiMessage(locale, "settings.appearance.themeDescription.light"),
             ],
             [
               "dark",
-              formatSettingsShareMessage(locale, "settings.appearance.theme.dark"),
-              formatSettingsShareMessage(locale, "settings.appearance.themeDescription.dark"),
+              formatUiMessage(locale, "settings.appearance.theme.dark"),
+              formatUiMessage(locale, "settings.appearance.themeDescription.dark"),
             ],
           ] as const).map(([value, title, description]) => (
             <button
@@ -58,10 +58,10 @@ export function AppearancePanel() {
       <section className="app-inline-surface" style={{ display: "grid", gap: "1rem" }}>
         <div style={{ display: "grid", gap: "0.35rem" }}>
           <h2 style={{ margin: 0 }}>
-            {formatSettingsShareMessage(locale, "settings.appearance.localeLabel")}
+            {formatUiMessage(locale, "settings.appearance.localeLabel")}
           </h2>
           <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
-            {formatSettingsShareMessage(locale, "settings.appearance.sectionSubtitle")}
+            {formatUiMessage(locale, "settings.appearance.sectionSubtitle")}
           </p>
         </div>
         <div
@@ -74,13 +74,13 @@ export function AppearancePanel() {
           {([
             [
               "zh-CN",
-              formatSettingsShareMessage(locale, "workspaceLanguageChinese"),
-              formatSettingsShareMessage(locale, "settings.appearance.localeDescription.zh-CN"),
+              formatUiMessage(locale, "workspaceLanguageChinese"),
+              formatUiMessage(locale, "settings.appearance.localeDescription.zh-CN"),
             ],
             [
               "en",
-              formatSettingsShareMessage(locale, "workspaceLanguageEnglish"),
-              formatSettingsShareMessage(locale, "settings.appearance.localeDescription.en"),
+              formatUiMessage(locale, "workspaceLanguageEnglish"),
+              formatUiMessage(locale, "settings.appearance.localeDescription.en"),
             ],
           ] as const).map(([value, title, description]) => (
             <button
@@ -96,23 +96,23 @@ export function AppearancePanel() {
         </div>
         <div className="app-inline-surface" style={{ display: "grid", gap: "0.45rem" }}>
           <div className="app-inline-row" style={{ marginBottom: 0 }}>
-            <span>{formatSettingsShareMessage(locale, "settings.appearance.currentTheme")}</span>
+            <span>{formatUiMessage(locale, "settings.appearance.currentTheme")}</span>
             <strong>
               {{
-                system: formatSettingsShareMessage(locale, "settings.appearance.theme.system"),
-                light: formatSettingsShareMessage(locale, "settings.appearance.theme.light"),
-                dark: formatSettingsShareMessage(locale, "settings.appearance.theme.dark"),
+                system: formatUiMessage(locale, "settings.appearance.theme.system"),
+                light: formatUiMessage(locale, "settings.appearance.theme.light"),
+                dark: formatUiMessage(locale, "settings.appearance.theme.dark"),
               }[theme]}
             </strong>
           </div>
           <div className="app-inline-row" style={{ marginBottom: 0 }}>
             <span>
-              {formatSettingsShareMessage(locale, "settings.appearance.currentLanguage")}
+              {formatUiMessage(locale, "settings.appearance.currentLanguage")}
             </span>
             <strong>
               {locale === "zh-CN"
-                ? formatSettingsShareMessage(locale, "workspaceLanguageChinese")
-                : formatSettingsShareMessage(locale, "workspaceLanguageEnglish")}
+                ? formatUiMessage(locale, "workspaceLanguageChinese")
+                : formatUiMessage(locale, "workspaceLanguageEnglish")}
             </strong>
           </div>
         </div>

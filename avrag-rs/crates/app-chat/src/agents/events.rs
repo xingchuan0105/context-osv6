@@ -46,7 +46,7 @@ pub enum AgentEvent {
     /// Plan/Decompose phase decision output (white-box observability).
     PlanDecision {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        selected_tools: Vec<common::ToolCall>,
+        selected_tools: Vec<contracts::ToolCall>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         selected_skills: Vec<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -59,7 +59,7 @@ pub enum AgentEvent {
     /// Tool execution result (white-box observability).
     ToolResult {
         tool: String,
-        status: common::ToolStatus,
+        status: contracts::ToolStatus,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         data: Option<serde_json::Value>,
         elapsed_ms: u64,
@@ -292,7 +292,7 @@ mod tests {
                 },
             },
             AgentEvent::PlanDecision {
-                selected_tools: vec![common::ToolCall {
+                selected_tools: vec![contracts::ToolCall {
                     tool: "dense_retrieval".to_string(),
                     version: "1.0".to_string(),
                     args: serde_json::json!({"query": "test"}),
@@ -304,7 +304,7 @@ mod tests {
             },
             AgentEvent::ToolResult {
                 tool: "web_search".to_string(),
-                status: common::ToolStatus::Ok,
+                status: contracts::ToolStatus::Ok,
                 data: Some(serde_json::json!({"results": 5})),
                 elapsed_ms: 1234,
             },

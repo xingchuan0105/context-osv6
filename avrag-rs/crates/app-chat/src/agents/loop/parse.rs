@@ -2,7 +2,7 @@ use avrag_llm::LlmResponse;
 
 #[derive(Debug, Clone)]
 pub enum LlmOutput {
-    NativeToolCalls(Vec<common::ToolCall>),
+    NativeToolCalls(Vec<contracts::ToolCall>),
     CodeBlocks(Vec<String>),
     Content(String),
 }

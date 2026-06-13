@@ -1,4 +1,4 @@
-import { ApiError, buildApiUrl } from "../auth/client";
+import { fetchResponse } from "../http/request";
 import type {
   AnswerBlock,
   ChatActivitySourcePreview,
@@ -32,35 +32,8 @@ export { ToolStatus } from "../contracts";
 /** Frontend alias for generated `ChatActivitySourcePreview`. */
 export type ProgressSourcePreview = ChatActivitySourcePreview;
 
-/**
- * SSE wire JSON uses `event` (generated {@link ChatEvent}); frontend reducers use `kind`.
- * {@link WireToWorkspace} maps the discriminator and narrows fields where runtime parsing
- * is stricter than the wire contract (`citations`, `done.payload`).
- */
-type WireToWorkspace<
-  E extends ChatEvent,
-  Overrides extends object = object,
-> = Omit<E, "event" | keyof Overrides> & { kind: E["event"] } & Overrides;
-
-export type WorkspaceChatStreamEvent =
-  | WireToWorkspace<Extract<ChatEvent, { event: "start" }>>
-  | WireToWorkspace<
-      Extract<ChatEvent, { event: "activity" }>,
-      { sources_preview: ProgressSourcePreview[] }
-    >
-  | WireToWorkspace<Extract<ChatEvent, { event: "answer_start" }>>
-  | WireToWorkspace<Extract<ChatEvent, { event: "trace" }>>
-  | WireToWorkspace<Extract<ChatEvent, { event: "token" }>>
-  | WireToWorkspace<Extract<ChatEvent, { event: "reasoning_summary_delta" }>>
-  | WireToWorkspace<
-      Extract<ChatEvent, { event: "citations" }>,
-      { citations: Citation[] }
-    >
-  | WireToWorkspace<
-      Extract<ChatEvent, { event: "done" }>,
-      { payload: ChatResponse }
-    >
-  | WireToWorkspace<Extract<ChatEvent, { event: "error" }>>;
+/** Stream events consumed by chat reducers (same shape as wire {@link ChatEvent}). */
+export type WorkspaceChatStreamEvent = ChatEvent;
 
 const CHAT_EVENT_NAMES = new Set<ChatEvent["event"]>([
   "start",
@@ -73,21 +46,6 @@ const CHAT_EVENT_NAMES = new Set<ChatEvent["event"]>([
   "done",
   "error",
 ]);
-
-async function decodeError(response: Response) {
-  const raw = await response.text();
-
-  if (!raw.trim()) {
-    return new ApiError(response.status, null, `Request failed with status ${response.status}`);
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as { error?: string | null; message?: string };
-    return new ApiError(response.status, parsed.error ?? null, parsed.message ?? raw);
-  } catch {
-    return new ApiError(response.status, null, raw);
-  }
-}
 
 function parseSourceLocator(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -249,15 +207,20 @@ export function parseWireChatEvent(eventName: string, dataText: string): ChatEve
         message_id: Number(raw.message_id ?? 0),
         content: String(raw.content ?? raw.summary ?? ""),
       };
-    case "citations":
+    case "citations": {
+      const citations = Array.isArray(raw.citations)
+        ? raw.citations
+            .map(parseCitation)
+            .filter((citation): citation is Citation => citation !== null)
+        : [];
+
       return {
         event: "citations",
         request_id: String(raw.request_id ?? ""),
         message_id: Number(raw.message_id ?? 0),
-        citations: Array.isArray(raw.citations)
-          ? (raw.citations as Array<Record<string, unknown>>)
-          : [],
+        citations: citations as unknown as Array<Record<string, unknown>>,
       };
+    }
     case "done":
       return {
         event: "done",
@@ -281,95 +244,30 @@ export function parseWireChatEvent(eventName: string, dataText: string): ChatEve
   }
 }
 
-/** Map wire {@link ChatEvent} (`event`) to frontend {@link WorkspaceChatStreamEvent} (`kind`). */
-export function chatEventToWorkspace(wire: ChatEvent): WorkspaceChatStreamEvent {
-  switch (wire.event) {
-    case "start":
-      return {
-        kind: "start",
-        request_id: wire.request_id,
-        session_id: wire.session_id,
-      };
-    case "activity":
-      return {
-        kind: "activity",
-        request_id: wire.request_id,
-        phase: wire.phase,
-        title: wire.title,
-        detail: wire.detail,
-        counts: wire.counts,
-        sources_preview: wire.sources_preview.map((source) => ({
-          id: source.id,
-          label: source.label,
-          href: source.href == null ? undefined : source.href,
-        })),
-        timestamp: wire.timestamp,
-      };
-    case "answer_start":
-      return {
-        kind: "answer_start",
-        request_id: wire.request_id,
-        session_id: wire.session_id,
-        message_id: wire.message_id,
-        agent_type: wire.agent_type,
-      };
-    case "trace":
-      return {
-        kind: "trace",
-        request_id: wire.request_id,
-        stage: wire.stage,
-        status: wire.status,
-        detail: wire.detail,
-      };
-    case "token":
-      return {
-        kind: "token",
-        request_id: wire.request_id,
-        message_id: wire.message_id,
-        content: wire.content,
-      };
-    case "reasoning_summary_delta":
-      return {
-        kind: "reasoning_summary_delta",
-        request_id: wire.request_id,
-        message_id: wire.message_id,
-        content: wire.content,
-      };
-    case "citations":
-      return {
-        kind: "citations",
-        request_id: wire.request_id,
-        message_id: wire.message_id,
-        citations: wire.citations
-          .map(parseCitation)
-          .filter((citation): citation is Citation => citation !== null),
-      };
-    case "done":
-      return {
-        kind: "done",
-        request_id: wire.request_id,
-        session_id: wire.session_id,
-        message_id: wire.message_id,
-        payload: wire.payload as unknown as ChatResponse,
-      };
-    case "error":
-      return {
-        kind: "error",
-        request_id: wire.request_id,
-        code: wire.code,
-        message: wire.message,
-      };
+/** Normalize wire citation records into UI {@link Citation} objects. */
+export function parseStreamCitations(items: unknown): Citation[] {
+  if (!Array.isArray(items)) {
+    return [];
   }
+
+  return items
+    .map(parseCitation)
+    .filter((citation): citation is Citation => citation !== null);
 }
 
-function decodeChatEvent(eventName: string, dataText: string): WorkspaceChatStreamEvent | null {
-  const wire = parseWireChatEvent(eventName, dataText);
-
-  if (!wire) {
+export function parseIpcChatEvent(payload: unknown): ChatEvent | null {
+  if (payload === null || typeof payload !== "object") {
     return null;
   }
 
-  return chatEventToWorkspace(wire);
+  const raw = payload as Record<string, unknown>;
+  const eventName = typeof raw.event === "string" ? raw.event : null;
+
+  if (!eventName) {
+    return null;
+  }
+
+  return parseWireChatEvent(eventName, JSON.stringify(raw));
 }
 
 function splitLine(buffer: string) {
@@ -388,9 +286,9 @@ function splitLine(buffer: string) {
 async function dispatchEvent(
   eventName: string,
   dataLines: string[],
-  onEvent: (event: WorkspaceChatStreamEvent) => void | Promise<void>,
+  onEvent: (event: ChatEvent) => void | Promise<void>,
 ) {
-  const event = decodeChatEvent(eventName, dataLines.join("\n"));
+  const event = parseWireChatEvent(eventName, dataLines.join("\n"));
 
   if (event) {
     await onEvent(event);
@@ -399,7 +297,7 @@ async function dispatchEvent(
 
 export async function parseWorkspaceChatEventStream(
   stream: ReadableStream<Uint8Array> | null,
-  onEvent: (event: WorkspaceChatStreamEvent) => void | Promise<void>,
+  onEvent: (event: ChatEvent) => void | Promise<void>,
 ): Promise<void> {
   if (!stream) {
     return;
@@ -477,30 +375,29 @@ export async function parseWorkspaceChatEventStream(
   await flush();
 }
 
+/** Web-only SSE chat stream; Tauri uses IPC via `lib/runtime/transport.ts`. */
 export async function streamWorkspaceChat(
   token: string,
   request: ChatRequest,
-  onEvent: (event: WorkspaceChatStreamEvent) => void | Promise<void>,
+  onEvent: (event: ChatEvent) => void | Promise<void>,
   options?: { signal?: AbortSignal },
 ): Promise<void> {
-  const response = await fetch(buildApiUrl("/api/v1/chat"), {
-    method: "POST",
-    cache: "no-store",
-    signal: options?.signal,
-    headers: {
-      Accept: "text/event-stream",
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+  const response = await fetchResponse(
+    "/api/v1/chat",
+    {
+      method: "POST",
+      signal: options?.signal,
+      headers: {
+        Accept: "text/event-stream",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...request,
+        stream: true,
+      }),
     },
-    body: JSON.stringify({
-      ...request,
-      stream: true,
-    }),
-  });
-
-  if (!response.ok) {
-    throw await decodeError(response);
-  }
+    { token },
+  );
 
   await parseWorkspaceChatEventStream(response.body, onEvent);
 }

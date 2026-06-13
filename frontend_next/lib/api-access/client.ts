@@ -1,4 +1,4 @@
-import { ApiError, buildApiUrl, getApiBaseUrl } from "../auth/client";
+import { getApiBaseUrl, request } from "../http/request";
 
 export type ApiKeyRow = {
   id: string;
@@ -32,54 +32,8 @@ export type CreateApiKeyResponse = {
   plaintext_key: string;
 };
 
-type ErrorEnvelope = {
-  error?: string | null;
-  message?: string;
-};
-
 export function getApiAccessBaseUrl() {
   return getApiBaseUrl();
-}
-
-async function decodeError(response: Response) {
-  const raw = await response.text();
-
-  if (!raw.trim()) {
-    return new ApiError(response.status, null, `Request failed with status ${response.status}`);
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as ErrorEnvelope;
-    return new ApiError(response.status, parsed.error ?? null, parsed.message ?? raw);
-  } catch {
-    return new ApiError(response.status, null, raw);
-  }
-}
-
-async function request<T>(path: string, init: RequestInit, token: string) {
-  const headers = new Headers(init.headers);
-
-  if (!headers.has("Accept")) {
-    headers.set("Accept", "application/json");
-  }
-
-  if (init.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  headers.set("Authorization", `Bearer ${token}`);
-
-  const response = await fetch(buildApiUrl(path), {
-    ...init,
-    cache: "no-store",
-    headers,
-  });
-
-  if (!response.ok) {
-    throw await decodeError(response);
-  }
-
-  return (await response.json()) as T;
 }
 
 export async function listApiKeys(token: string, workspaceId: string) {

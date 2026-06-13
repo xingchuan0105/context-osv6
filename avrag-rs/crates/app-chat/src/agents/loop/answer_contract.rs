@@ -1,5 +1,5 @@
 use avrag_llm::ChatMessage;
-use common::ToolResult;
+use contracts::ToolResult;
 use serde::{Deserialize, Serialize};
 
 use super::config::{AnswerContractKind, ModeConfig};
@@ -496,10 +496,10 @@ mod tests {
     #[test]
     fn lifts_rag_prose_with_cite_markers() {
         let mode = super::super::config::load_mode_config("rag").unwrap();
-        let tool_results = vec![common::ToolResult {
+        let tool_results = vec![contracts::ToolResult {
             tool: "dense_retrieval".to_string(),
             version: "1".to_string(),
-            status: common::ToolStatus::Ok,
+            status: contracts::ToolStatus::Ok,
             data: Some(serde_json::json!({"chunks": [{"chunk_id": "abc"}]})),
             trace: None,
         }];

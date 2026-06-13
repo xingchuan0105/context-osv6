@@ -292,7 +292,7 @@ pub struct AgentRunResult {
     pub total_tool_calls: u32,
     /// Atomic tool results accumulated during the run (available in all modes).
     #[serde(default)]
-    pub tool_results: Vec<common::ToolResult>,
+    pub tool_results: Vec<contracts::ToolResult>,
     /// Terminal decision of the loop. `None` for legacy single-shot agents.
     #[serde(default)]
     pub final_decision: Option<FinalDecision>,
@@ -363,7 +363,7 @@ pub struct ToolCallRecord {
     /// Arguments passed to the tool.
     pub args: serde_json::Value,
     /// Execution status.
-    pub status: common::ToolStatus,
+    pub status: contracts::ToolStatus,
     /// Wall-clock time of the call, in milliseconds.
     pub elapsed_ms: u64,
 }
@@ -835,7 +835,7 @@ mod tests {
             tool: "dense_retrieval".to_string(),
             iteration: 0,
             args: serde_json::json!({"query": "rust"}),
-            status: common::ToolStatus::Ok,
+            status: contracts::ToolStatus::Ok,
             elapsed_ms: 42,
         });
 
@@ -870,13 +870,13 @@ mod tests {
             tool: "calculator".to_string(),
             iteration: 0,
             args: serde_json::json!({"expr": "1+1"}),
-            status: common::ToolStatus::Ok,
+            status: contracts::ToolStatus::Ok,
             elapsed_ms: 15,
         };
         let json = serde_json::to_string(&record).unwrap();
         let parsed: ToolCallRecord = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.tool, "calculator");
-        assert!(matches!(parsed.status, common::ToolStatus::Ok));
+        assert!(matches!(parsed.status, contracts::ToolStatus::Ok));
     }
 
     #[test]

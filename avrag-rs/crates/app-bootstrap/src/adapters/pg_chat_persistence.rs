@@ -10,7 +10,7 @@ use app_core::{
 };
 use crate::domain_row_convert::{
     document_asset_row, indexed_chunk, multimodal_chunk_row, notification_create_params,
-    tagged_message, user_profile_row,
+    tagged_message, user_profile_row, user_profile_row_to_pg,
 };
 use crate::pg_error::map_pg_error;
 use avrag_auth::AuthContext;
@@ -281,6 +281,29 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
     ) -> Result<Vec<common::SummaryMetadata>, AppError> {
         self.repo
             .get_summary_metadata(auth, doc_ids)
+            .await
+            .map_err(map_pg_error)
+    }
+
+    async fn update_session_summary(
+        &self,
+        auth: &AuthContext,
+        session_id: Uuid,
+        summary: &str,
+    ) -> Result<(), AppError> {
+        self.repo
+            .update_session_summary(auth, session_id, summary)
+            .await
+            .map_err(map_pg_error)
+    }
+
+    async fn upsert_user_profile(
+        &self,
+        auth: &AuthContext,
+        profile: &UserProfileRow,
+    ) -> Result<(), AppError> {
+        self.repo
+            .upsert_user_profile(auth, &user_profile_row_to_pg(profile))
             .await
             .map_err(map_pg_error)
     }

@@ -36,7 +36,7 @@ mod tests {
 
     #[test]
     fn tool_render_includes_name_version_description_and_schema() {
-        let tool = Tool::new(common::ToolSpec {
+        let tool = Tool::new(contracts::ToolSpec {
             name: "test_tool".to_string(),
             version: "2.0".to_string(),
             description: "A test tool.".to_string(),

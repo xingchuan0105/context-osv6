@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use avrag_auth::AuthContext;
+use contracts::AuthContext;
 use uuid::Uuid;
 
 use crate::{Document, DocumentMetadata, SummaryMetadata, TocEntry};

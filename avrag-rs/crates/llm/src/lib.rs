@@ -38,7 +38,7 @@ pub trait LlmProvider: Send + Sync {
     async fn complete_with_tools(
         &self,
         messages: &[ChatMessage],
-        tools: &[common::ToolSpec],
+        tools: &[contracts::ToolSpec],
         temperature: Option<f32>,
     ) -> anyhow::Result<LlmResponse> {
         let _ = messages;
@@ -62,7 +62,7 @@ impl LlmProvider for LlmClient {
     async fn complete_with_tools(
         &self,
         messages: &[ChatMessage],
-        tools: &[common::ToolSpec],
+        tools: &[contracts::ToolSpec],
         temperature: Option<f32>,
     ) -> anyhow::Result<LlmResponse> {
         self.complete_with_tools(messages, tools, temperature).await

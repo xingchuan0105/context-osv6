@@ -4,7 +4,8 @@
 //! points used by transport-http handlers — without importing lib_impl internals.
 
 use app::{AppConfig, AppState};
-use common::{CreateDocumentRequest, CreateNotebookRequest, ExecutePlanRequest, ExecutePlanBudget, ExecutePlanItem, ExecutePlanSummaryMode};
+use common::{CreateDocumentRequest, CreateNotebookRequest};
+use contracts::{ExecutePlanRequest, ExecutePlanBudget, ExecutePlanItem, ExecutePlanSummaryMode};
 use contracts::documents::{DocumentStatus};
 use contracts::notebooks::{CreateChatSessionRequest};
 use contracts::chat::ChatEvent;

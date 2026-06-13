@@ -1,11 +1,11 @@
 import type { WorkspaceChatMode } from "../../lib/workspace/ui-store";
+import type { ChatEvent, ChatResponse } from "../../lib/contracts";
 import type {
   AnswerBlock,
   Citation,
   DegradeTraceItem,
   ProgressSourcePreview,
   ToolResult,
-  WorkspaceChatStreamEvent,
 } from "../../lib/workspace/stream";
 
 export type UiChatMessage = {
@@ -58,4 +58,6 @@ export type UseChatSessionResult = {
   toggleProgressCollapsed: () => void;
 };
 
-export type PendingDoneEvent = Extract<WorkspaceChatStreamEvent, { kind: "done" }>;
+export type PendingDoneEvent = Extract<ChatEvent, { event: "done" }> & {
+  payload: ChatResponse;
+};

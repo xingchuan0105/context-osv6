@@ -27,11 +27,17 @@ use uuid::Uuid;
 
 const PLAN_FREE: &str = "free";
 
-async fn seed_user_with_plan(pool: &PgPool, plan_id: &str) -> Uuid {
+async fn seed_user_with_plan(pool: &PgPool, plan_id: &str) -> (Uuid, Uuid) {
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+
     let org_id: Uuid =
         sqlx::query_scalar("insert into organizations (name) values ($1) returning id")
             .bind(format!("org-{}", Uuid::new_v4()))
-            .fetch_one(pool)
+            .fetch_one(&mut *tx)
             .await
             .unwrap();
 
@@ -41,7 +47,7 @@ async fn seed_user_with_plan(pool: &PgPool, plan_id: &str) -> Uuid {
     .bind(org_id)
     .bind(format!("u-{}@example.com", Uuid::new_v4()))
     .bind("Test User")
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await
     .unwrap();
 
@@ -54,11 +60,13 @@ async fn seed_user_with_plan(pool: &PgPool, plan_id: &str) -> Uuid {
     )
     .bind(user_id)
     .bind(plan_id)
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .unwrap();
 
-    user_id
+    tx.commit().await.unwrap();
+
+    (user_id, org_id)
 }
 
 #[sqlx::test]
@@ -83,12 +91,7 @@ async fn free_plan_caps_match_pricing_revamp(pool: PgPool) {
 async fn oldest_event_in_window_drives_reset_at(pool: PgPool) {
     sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
 
-    let user_id = seed_user_with_plan(&pool, PLAN_FREE).await;
-    let org_id: Uuid = sqlx::query_scalar("select org_id from users where id = $1")
-        .bind(user_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let (user_id, org_id) = seed_user_with_plan(&pool, PLAN_FREE).await;
 
     let now = Utc::now();
     let oldest = now - Duration::hours(4) - Duration::minutes(30);

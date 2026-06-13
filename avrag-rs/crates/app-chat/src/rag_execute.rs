@@ -5,8 +5,8 @@ use crate::context::{map_anyhow_error, ChatContext};
 impl ChatContext {
     pub async fn execute_rag_execute_plan(
         &self,
-        req: common::ExecutePlanRequest,
-    ) -> Result<common::ExecutePlanResponse, AppError> {
+        req: contracts::ExecutePlanRequest,
+    ) -> Result<contracts::ExecutePlanResponse, AppError> {
         req.validate()
             .map_err(|error| AppError::validation("invalid_execute_plan", error.to_string()))?;
         self.validate_execute_plan_doc_scope(&req).await?;
@@ -26,8 +26,8 @@ impl ChatContext {
 
     pub async fn execute_runtime_tools(
         &self,
-        req: common::RuntimeExecuteRequest,
-    ) -> Result<common::RuntimeExecuteResponse, AppError> {
+        req: contracts::RuntimeExecuteRequest,
+    ) -> Result<contracts::RuntimeExecuteResponse, AppError> {
         if req.calls.is_empty() {
             return Err(AppError::validation(
                 "invalid_calls",
@@ -37,7 +37,7 @@ impl ChatContext {
 
         if let Some(rag_runtime) = self.orchestrator.rag_runtime() {
             let results = rag_runtime.execute_tools(&self.auth, req.calls).await;
-            return Ok(common::RuntimeExecuteResponse { results });
+            return Ok(contracts::RuntimeExecuteResponse { results });
         }
 
         Err(AppError::validation(
@@ -48,7 +48,7 @@ impl ChatContext {
 
     async fn validate_execute_plan_doc_scope(
         &self,
-        req: &common::ExecutePlanRequest,
+        req: &contracts::ExecutePlanRequest,
     ) -> Result<(), AppError> {
         if req.doc_scope.is_empty() {
             return Err(AppError::validation(

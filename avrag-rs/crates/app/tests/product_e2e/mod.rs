@@ -23,7 +23,7 @@ mod persistent_runtime;
 mod pg_queries;
 mod test_context;
 
-pub use fixtures::{ready_rag_context, shared_rag_fixture, shared_ready_rag_context};
+pub(crate) use fixtures::{ready_rag_context, shared_rag_fixture, shared_ready_rag_context};
 
 pub use http_helpers::{
     DEFAULT_TEST_ORG_ID, DEFAULT_TEST_USER_ID, milvus_collection_prefix_for_identity,

@@ -3,6 +3,9 @@
  *
  * 根据运行环境（Tauri 桌面端 vs Web 浏览端）选择不同的传输实现。
  * 每次调用时动态判断环境，避免模块加载时的副作用。
+ *
+ * IPC 路径（`requestViaIPC` / `streamChatViaIPC`）不支持自定义 HTTP headers；
+ * 仅透传 method、path、JSON body 与 token。
  */
 
 import type { ChatRequest, WorkspaceChatStreamEvent } from "../workspace/stream";

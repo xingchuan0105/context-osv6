@@ -5,12 +5,12 @@ use app_core::{
     AuthStorePort, AuthUserCredentials, AuthUserProfile, CreatePasswordResetTicketInput,
     PasswordResetUser, RegisterUserInput, RegisterUserResult,
 };
+use crate::adapters::pg_session::begin_super_admin_tx_sqlx;
 use crate::pg_error::map_pg_error;
 use avrag_storage_pg::PgAppRepository;
 use chrono::{DateTime, Utc};
 use common::AppError;
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
 use uuid::Uuid;
 
 pub struct PgAuthStoreAdapter {
@@ -21,16 +21,6 @@ impl PgAuthStoreAdapter {
     pub fn new(repo: Arc<PgAppRepository>) -> Self {
         Self { repo }
     }
-}
-
-async fn begin_super_admin_tx<'a>(
-    pool: &'a PgPool,
-) -> Result<sqlx::Transaction<'a, sqlx::Postgres>, sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    sqlx::query("select set_config('app.current_role', 'super_admin', true)")
-        .execute(&mut *tx)
-        .await?;
-    Ok(tx)
 }
 
 fn org_name_from_email(email: &str) -> String {
@@ -51,7 +41,7 @@ fn hash_reset_value(secret: &str, scope: &str, value: &str) -> String {
 impl AuthStorePort for PgAuthStoreAdapter {
     async fn register_user(&self, input: &RegisterUserInput) -> Result<RegisterUserResult, AppError> {
         let pool = self.repo.raw();
-        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx_error)?;
 
         match sqlx::query("SELECT id FROM users WHERE email = $1")
             .bind(input.email.trim())
@@ -112,7 +102,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
         email: &str,
     ) -> Result<Option<AuthUserCredentials>, AppError> {
         let pool = self.repo.raw();
-        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx_error)?;
         let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, Option<String>, i32)>(
             "SELECT id, org_id, email, full_name, password_hash, auth_version FROM users WHERE email = $1",
         )
@@ -136,7 +126,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
 
     async fn invalidate_session(&self, user_id: Uuid) -> Result<bool, AppError> {
         let pool = self.repo.raw();
-        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx_error)?;
         let result = sqlx::query(
             r#"
             update users
@@ -157,7 +147,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
 
     async fn get_user_profile(&self, user_id: Uuid) -> Result<Option<AuthUserProfile>, AppError> {
         let pool = self.repo.raw();
-        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx_error)?;
         let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>)>(
             "SELECT id, org_id, email, full_name FROM users WHERE id = $1",
         )
@@ -180,7 +170,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
         full_name: &str,
     ) -> Result<Option<AuthUserProfile>, AppError> {
         let pool = self.repo.raw();
-        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx_error)?;
         let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>)>(
             r#"
             update users
@@ -205,7 +195,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
 
     async fn get_password_hash(&self, user_id: Uuid) -> Result<Option<String>, AppError> {
         let pool = self.repo.raw();
-        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx_error)?;
         let row = sqlx::query_as::<_, (String,)>(
             "SELECT password_hash FROM users WHERE id = $1",
         )
@@ -219,7 +209,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
 
     async fn change_password(&self, user_id: Uuid, password_hash: &str) -> Result<(), AppError> {
         let pool = self.repo.raw();
-        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx_error)?;
         sqlx::query(
             r#"
             update users
@@ -243,7 +233,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
         email: &str,
     ) -> Result<Option<PasswordResetUser>, AppError> {
         let pool = self.repo.raw();
-        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx_error)?;
         let row = sqlx::query_as::<_, (Uuid, Uuid, String)>(
             r#"
             select id, org_id, email
@@ -270,7 +260,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
         input: &CreatePasswordResetTicketInput,
     ) -> Result<(), AppError> {
         let pool = self.repo.raw();
-        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx_error)?;
         sqlx::query(
             r#"
             insert into password_reset_tickets (
@@ -297,7 +287,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
 
     async fn verify_reset_ticket_exists(&self, ticket_hash: &str) -> Result<bool, AppError> {
         let pool = self.repo.raw();
-        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx_error)?;
         let row = sqlx::query(
             r#"
             select 1
@@ -326,7 +316,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
         max_attempts: i32,
     ) -> Result<Option<(Uuid, String)>, AppError> {
         let pool = self.repo.raw();
-        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx_error)?;
         let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, i32, Option<DateTime<Utc>>)>(
             r#"
             select id, user_id, email, code_hash, attempts, code_expires_at
@@ -398,7 +388,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
         password_hash: &str,
     ) -> Result<Uuid, AppError> {
         let pool = self.repo.raw();
-        let mut tx = begin_super_admin_tx(pool).await.map_err(map_sqlx_error)?;
+        let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx_error)?;
         let row = sqlx::query_as::<_, (Uuid, Uuid)>(
             r#"
             select id, user_id

@@ -21,8 +21,8 @@ vi.mock("../../lib/workspace/client", () => ({
   listWorkspaceSessionMessages: mocks.listWorkspaceSessionMessagesMock,
 }));
 
-vi.mock("../../lib/workspace/stream", () => ({
-  streamWorkspaceChat: mocks.streamWorkspaceChatMock,
+vi.mock("../../lib/runtime/transport", () => ({
+  streamChat: mocks.streamWorkspaceChatMock,
 }));
 
 import { mockReducedMotionPreference, resetWorkspaceChatPaneMocks } from "./helpers/workspace-chat-pane.setup";
@@ -49,7 +49,7 @@ describe("WorkspaceChatPane modes", () => {
       requests.push(request);
 
       await onEvent({
-        kind: "done",
+        event: "done",
         request_id: `req-${requests.length}`,
         session_id: `sess-${requests.length}`,
         message_id: requests.length,

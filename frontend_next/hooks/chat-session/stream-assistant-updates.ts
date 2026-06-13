@@ -1,5 +1,6 @@
+import type { ChatEvent, ChatResponse, Citation } from "../../lib/contracts";
+import { parseStreamCitations } from "../../lib/workspace/stream";
 import type { WorkspaceChatMode } from "../../lib/workspace/ui-store";
-import type { WorkspaceChatStreamEvent } from "../../lib/workspace/stream";
 import {
   getAnswerText,
   getAssistantMessageKey,
@@ -60,11 +61,11 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
   }
 
   function ensureStreamingAssistant(
-    event: Extract<WorkspaceChatStreamEvent, { kind: "answer_start" | "token" | "citations" }>,
+    event: Extract<ChatEvent, { event: "answer_start" | "token" | "citations" }>,
   ) {
     const resolvedMessageId = normalizeStreamMessageId(event.message_id);
     const fallbackAssistantId = getAssistantMessageKey(event.message_id);
-    const eventMode = event.kind === "answer_start" ? normalizeMessageMode(event.agent_type) : null;
+    const eventMode = event.event === "answer_start" ? normalizeMessageMode(event.agent_type) : null;
 
     updateStreamingAssistant(
       (current) => ({
@@ -77,13 +78,14 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
         mode: eventMode ?? current?.mode ?? deps.effectiveChatModeRef.current,
         content: current?.content ?? "",
         answerBlocks: current?.answerBlocks ?? [],
-        citations: event.kind === "citations" ? event.citations : current?.citations ?? [],
+        citations:
+          event.event === "citations" ? parseStreamCitations(event.citations) : current?.citations ?? [],
         degradeTrace: current?.degradeTrace ?? [],
         guarded: current?.guarded ?? false,
         messageId: resolvedMessageId ?? current?.messageId ?? null,
         pending: true,
         sessionId:
-          event.kind === "answer_start"
+          event.event === "answer_start"
             ? current?.sessionId ?? event.session_id
             : current?.sessionId ?? deps.streamingSessionIdRef.current,
         toolResults: current?.toolResults ?? [],
@@ -115,7 +117,8 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
   }
 
   function finalizeStreamingDone(event: PendingDoneEvent) {
-    const answer = getAnswerText(event.payload.answer ?? "", event.payload.answer_blocks ?? []);
+    const payload = event.payload as ChatResponse;
+    const answer = getAnswerText(payload.answer ?? "", payload.answer_blocks ?? []);
     const resolvedMessageId = normalizeStreamMessageId(event.message_id);
     const fallbackAssistantId = getAssistantMessageKey(event.message_id);
 
@@ -123,22 +126,22 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
       (current) => ({
         id: resolvedMessageId !== null ? getAssistantMessageKey(resolvedMessageId) : current?.id ?? fallbackAssistantId,
         role: "assistant",
-        mode: normalizeMessageMode(event.payload.agent_type) ?? current?.mode ?? deps.effectiveChatModeRef.current,
+        mode: normalizeMessageMode(payload.agent_type) ?? current?.mode ?? deps.effectiveChatModeRef.current,
         content: answer || current?.content || "",
         answerBlocks:
-          event.payload.answer_blocks && event.payload.answer_blocks.length > 0
-            ? event.payload.answer_blocks
+          payload.answer_blocks && payload.answer_blocks.length > 0
+            ? payload.answer_blocks
             : current?.answerBlocks ?? [],
         citations:
-          event.payload.citations && event.payload.citations.length > 0
-            ? event.payload.citations
+          payload.citations && payload.citations.length > 0
+            ? payload.citations
             : current?.citations ?? [],
-        degradeTrace: event.payload.degrade_trace ?? [],
-        guarded: hasGuardrailIntervention(event.payload.guard_report),
+        degradeTrace: payload.degrade_trace ?? [],
+        guarded: hasGuardrailIntervention(payload.guard_report),
         messageId: resolvedMessageId ?? current?.messageId ?? null,
         pending: false,
         sessionId: event.session_id,
-        toolResults: event.payload.tool_results ?? current?.toolResults ?? [],
+        toolResults: payload.tool_results ?? current?.toolResults ?? [],
       }),
       undefined,
       fallbackAssistantId,
@@ -167,7 +170,7 @@ export function createStreamAssistantUpdates(deps: StreamAssistantUpdateDeps) {
     );
   }
 
-  function beginAnswerStreaming(event: Extract<WorkspaceChatStreamEvent, { kind: "answer_start" }>) {
+  function beginAnswerStreaming(event: Extract<ChatEvent, { event: "answer_start" }>) {
     ensureStreamingAssistant(event);
   }
 

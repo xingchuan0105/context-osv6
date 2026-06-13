@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use uuid::Uuid;
 
-pub use avrag_auth::OrgId;
+pub use contracts::OrgId;
 
 pub fn default_org_id() -> String {
     "00000000-0000-0000-0000-000000000001".to_string()

@@ -986,18 +986,18 @@ mod tests {
             .unwrap();
         let session_id = Uuid::parse_str(&session.id).unwrap();
 
-        let tool_results: Vec<common::ToolResult> = vec![
-            common::ToolResult {
+        let tool_results: Vec<contracts::ToolResult> = vec![
+            contracts::ToolResult {
                 tool: "calculator".to_string(),
                 version: "1.0".to_string(),
-                status: common::ToolStatus::Ok,
+                status: contracts::ToolStatus::Ok,
                 data: Some(serde_json::json!({"result": 42.0, "expression": "6*7"})),
                 trace: None,
             },
-            common::ToolResult {
+            contracts::ToolResult {
                 tool: "code_interpreter".to_string(),
                 version: "1.0".to_string(),
-                status: common::ToolStatus::Error,
+                status: contracts::ToolStatus::Error,
                 data: Some(serde_json::json!({"error": "SyntaxError"})),
                 trace: None,
             },
@@ -1030,13 +1030,13 @@ mod tests {
 
         assert_eq!(assistant_message.tool_results.len(), 2);
         assert_eq!(assistant_message.tool_results[0].tool, "calculator");
-        assert_eq!(assistant_message.tool_results[0].status, common::ToolStatus::Ok);
+        assert_eq!(assistant_message.tool_results[0].status, contracts::ToolStatus::Ok);
         assert_eq!(
             assistant_message.tool_results[0].data.as_ref().unwrap()["result"],
             42.0
         );
         assert_eq!(assistant_message.tool_results[1].tool, "code_interpreter");
-        assert_eq!(assistant_message.tool_results[1].status, common::ToolStatus::Error);
+        assert_eq!(assistant_message.tool_results[1].status, contracts::ToolStatus::Error);
         assert_eq!(
             assistant_message.tool_results[1].data.as_ref().unwrap()["error"],
             "SyntaxError"

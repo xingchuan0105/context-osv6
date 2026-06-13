@@ -1,6 +1,7 @@
 # 入库路由与 OCR 策略 —— 讨论纪要（2026-06-10）
 
 > 本文记录与产品/工程侧关于 PDF 分流、Paddle OCR、Ingestion LLM 的**讨论结论与待定项**。  
+> **路由与 OCR 最终结论（2026-06-13）以 [`liteparse-paddle-ingestion-architecture-2026-06-13.md`](./liteparse-paddle-ingestion-architecture-2026-06-13.md) 为准**；本文保留讨论过程与历史上下文。  
 > 关联：`docs/visual-pdf-ingest-requirements-2026-06-10.md`、`docs/adr/0002-ingestion-routing-and-retrieval.md`  
 > 代码锚点：`crates/ingestion/src/parser/router.rs`、`bins/worker/src/main.rs`
 

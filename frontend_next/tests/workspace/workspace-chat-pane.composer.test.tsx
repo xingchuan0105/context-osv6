@@ -21,8 +21,8 @@ vi.mock("../../lib/workspace/client", () => ({
   listWorkspaceSessionMessages: mocks.listWorkspaceSessionMessagesMock,
 }));
 
-vi.mock("../../lib/workspace/stream", () => ({
-  streamWorkspaceChat: mocks.streamWorkspaceChatMock,
+vi.mock("../../lib/runtime/transport", () => ({
+  streamChat: mocks.streamWorkspaceChatMock,
 }));
 
 import { mockReducedMotionPreference, resetWorkspaceChatPaneMocks } from "./helpers/workspace-chat-pane.setup";

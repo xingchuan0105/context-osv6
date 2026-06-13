@@ -2,11 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatUiMessage } from "../../lib/i18n/messages";
-import {
-  streamWorkspaceChat,
-  type ChatRequest,
-  type WorkspaceChatStreamEvent,
-} from "../../lib/workspace/stream";
+import { streamChat } from "../../lib/runtime/transport";
+import type { ChatEvent } from "../../lib/contracts";
+import type { ChatRequest } from "../../lib/workspace/stream";
 import { dispatchStreamEvent, type StreamEventHandlerDeps } from "./stream-event-handlers";
 import {
   createStreamAssistantUpdates,
@@ -45,7 +43,7 @@ export function useChatStream(
     onSessionChangeRef.current = options.onSessionChange;
     onSessionActivityRef.current = options.onSessionActivity;
     activeSessionIdRef.current = activeSessionId;
-  });
+  }, [options.token, options.workspaceId, options.sessionId, options.selectedSourceIds, options.effectiveChatMode, options.locale, options.onSessionChange, options.onSessionActivity, activeSessionId]);
 
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
@@ -87,7 +85,7 @@ export function useChatStream(
   const { assistant: assistantUpdates, typewriter } = streamEnginesRef.current;
 
   const handleStreamEvent = useCallback(
-    (event: WorkspaceChatStreamEvent) => {
+    (event: ChatEvent) => {
       const deps: StreamEventHandlerDeps = {
         progressTracker,
         setError,
@@ -154,7 +152,7 @@ export function useChatStream(
 
       void (async () => {
         try {
-          await streamWorkspaceChat(
+          await streamChat(
             tokenRef.current,
             {
               query: trimmedQuery,

@@ -73,8 +73,8 @@ vi.mock("../../../lib/workspace/client", () => ({
   updateWorkspaceNote: globalThis.__workspaceSurfaceHarnessMocks.updateWorkspaceNoteMock,
 }));
 
-vi.mock("../../../lib/workspace/stream", () => ({
-  streamWorkspaceChat: globalThis.__workspaceSurfaceHarnessMocks.streamWorkspaceChatMock,
+vi.mock("../../../lib/runtime/transport", () => ({
+  streamChat: globalThis.__workspaceSurfaceHarnessMocks.streamWorkspaceChatMock,
 }));
 
 vi.mock("../../../lib/billing/featureFlag", () => ({

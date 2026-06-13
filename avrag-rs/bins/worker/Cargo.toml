@@ -34,4 +34,5 @@ tokio-util.workspace = true
 telemetry = { path = "../../crates/telemetry" }
 tracing.workspace = true
 uuid.workspace = true
+app-bootstrap = { path = "../../crates/app-bootstrap" }
 avrag-billing = { path = "../../crates/billing" }

@@ -13,7 +13,7 @@
 //! Focus mode is **off by default**. The Evidence Gate decides when
 //! to invoke it; the strategy layer wires that decision through.
 
-use common::AnswerContextChunk;
+use contracts::AnswerContextChunk;
 use std::fmt;
 
 /// Errors emitted by focus-mode implementations.

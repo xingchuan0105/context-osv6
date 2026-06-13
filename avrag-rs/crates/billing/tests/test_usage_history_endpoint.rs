@@ -42,6 +42,10 @@ fn usage_history_response_shape_matches_spec() {
 #[sqlx::test]
 async fn usage_history_aggregates_daily_token_usage_from_llm_usage_events(pool: PgPool) {
     sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+    sqlx::query("select set_config('app.current_role', 'super_admin', false)")
+        .execute(&pool)
+        .await
+        .unwrap();
 
     // Seed user + org.
     let org_id: Uuid =

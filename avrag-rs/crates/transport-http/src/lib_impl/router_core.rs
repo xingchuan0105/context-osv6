@@ -1,7 +1,7 @@
 
 
 use app_bootstrap::AppState;
-use app_core::{AuthStorePort, CreatePasswordResetTicketInput, RegisterUserInput};
+use app_core::{CreatePasswordResetTicketInput, RegisterUserInput};
 use bcrypt::{DEFAULT_COST, hash, verify};
 use axum::{
     Json, Router,

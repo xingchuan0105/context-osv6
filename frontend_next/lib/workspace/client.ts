@@ -1,4 +1,4 @@
-import { ApiError, buildApiUrl } from "../auth/client";
+import { fetchResponse, request } from "../http/request";
 import type {
   WorkspaceNote,
   WorkspaceSession,
@@ -134,55 +134,7 @@ export type WorkspaceMessageFeedbackRequest = {
   rating: "up" | "down";
 };
 
-type ErrorEnvelope = {
-  error: string;
-  message: string;
-};
-
 type EmptyResponse = Record<string, never>;
-
-async function decodeError(response: Response) {
-  const raw = await response.text();
-
-  if (!raw.trim()) {
-    return new ApiError(response.status, null, `Request failed with status ${response.status}`);
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as ErrorEnvelope;
-    return new ApiError(response.status, parsed.error ?? null, parsed.message ?? raw);
-  } catch {
-    return new ApiError(response.status, null, raw);
-  }
-}
-
-async function request<T>(path: string, init: RequestInit = {}, token?: string) {
-  const headers = new Headers(init.headers);
-
-  if (!headers.has("Accept")) {
-    headers.set("Accept", "application/json");
-  }
-
-  if (init.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  const response = await fetch(buildApiUrl(path), {
-    ...init,
-    cache: "no-store",
-    headers,
-  });
-
-  if (!response.ok) {
-    throw await decodeError(response);
-  }
-
-  return (await response.json()) as T;
-}
 
 export async function getWorkspace(token: string, workspace_id: string): Promise<WorkspaceResponse> {
   const resp = await request<{ notebook: Omit<Workspace, "workspace_id"> & { id: string } }>(
@@ -380,23 +332,14 @@ export async function uploadWorkspaceDocumentFile(
   upload_url: string,
   file: Blob,
 ): Promise<void> {
-  const target =
-    upload_url.startsWith("http://") || upload_url.startsWith("https://")
-      ? upload_url
-      : buildApiUrl(upload_url);
   const headers = new Headers();
   headers.set("Content-Type", file.type || "application/octet-stream");
 
-  const response = await fetch(target, {
+  await fetchResponse(upload_url, {
     method: "PUT",
-    cache: "no-store",
     headers,
     body: file,
   });
-
-  if (!response.ok) {
-    throw await decodeError(response);
-  }
 }
 
 export async function completeWorkspaceDocumentUpload(

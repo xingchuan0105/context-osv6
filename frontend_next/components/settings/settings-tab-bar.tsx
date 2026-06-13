@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 
-import { formatSettingsShareMessage } from "../../lib/settings-share-messages";
+import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import { SETTINGS_TABS, type SettingsTab } from "./settings-tabs";
 
 export function SettingsTabBar({ activeTab }: { activeTab: SettingsTab }) {
   const { locale } = useUiPreferences();
-  const tabKeyMap: Record<SettingsTab, Parameters<typeof formatSettingsShareMessage>[1]> = {
+  const tabKeyMap: Record<SettingsTab, Parameters<typeof formatUiMessage>[1]> = {
     billing: "settings.tabs.billing",
     profile: "settings.tabs.profile",
     appearance: "settings.tabs.appearance",
@@ -18,7 +18,7 @@ export function SettingsTabBar({ activeTab }: { activeTab: SettingsTab }) {
 
   return (
     <nav
-      aria-label={formatSettingsShareMessage(locale, "settings.tabsLabel")}
+      aria-label={formatUiMessage(locale, "settings.tabsLabel")}
       className="app-tab-bar"
     >
       {SETTINGS_TABS.map((tab) => (
@@ -28,7 +28,7 @@ export function SettingsTabBar({ activeTab }: { activeTab: SettingsTab }) {
           href={`/settings?tab=${tab}`}
           key={tab}
         >
-          {formatSettingsShareMessage(locale, tabKeyMap[tab])}
+          {formatUiMessage(locale, tabKeyMap[tab])}
         </Link>
       ))}
     </nav>

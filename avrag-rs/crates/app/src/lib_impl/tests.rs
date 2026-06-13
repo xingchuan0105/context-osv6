@@ -250,16 +250,16 @@ use contracts::notebooks::{Notebook};
         }
 
         let error = state
-            .execute_rag_execute_plan(common::ExecutePlanRequest {
+            .execute_rag_execute_plan(contracts::ExecutePlanRequest {
                 plan_version: "rag-execute-v1".to_string(),
                 doc_scope,
-                items: vec![common::ExecutePlanItem {
+                items: vec![contracts::ExecutePlanItem {
                     priority: 1.0,
                     query: Some("atlas".to_string()),
                     bm25_terms: None,
                 }],
-                summary_mode: common::ExecutePlanSummaryMode::All,
-                budget: Some(common::ExecutePlanBudget {
+                summary_mode: contracts::ExecutePlanSummaryMode::All,
+                budget: Some(contracts::ExecutePlanBudget {
                     total_candidate_budget: Some(4),
                     final_chunk_budget: Some(1),
                     graph_hop_limit: None,
@@ -706,6 +706,9 @@ use contracts::notebooks::{Notebook};
             document_store,
             None,
             admin_store,
+            None,
+            None,
+            None,
             None,
             chat_persistence,
             inner,

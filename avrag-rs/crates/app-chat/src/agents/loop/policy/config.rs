@@ -478,7 +478,7 @@ impl ModeConfig {
         &self,
         registry: &crate::agents::capability::CapabilityRegistry,
         ids: &[String],
-    ) -> Vec<common::ToolSpec> {
+    ) -> Vec<contracts::ToolSpec> {
         ids.iter()
             .filter_map(|id| registry.tool(id).map(tool_metadata_to_spec))
             .collect()
@@ -488,7 +488,7 @@ impl ModeConfig {
     pub fn tools_for_retrieve(
         &self,
         registry: &crate::agents::capability::CapabilityRegistry,
-    ) -> Vec<common::ToolSpec> {
+    ) -> Vec<contracts::ToolSpec> {
         if self.tool_pool.is_empty() {
             return vec![];
         }
@@ -496,8 +496,8 @@ impl ModeConfig {
     }
 }
 
-fn tool_metadata_to_spec(meta: &crate::agents::capability::ToolMetadata) -> common::ToolSpec {
-    common::ToolSpec {
+fn tool_metadata_to_spec(meta: &crate::agents::capability::ToolMetadata) -> contracts::ToolSpec {
+    contracts::ToolSpec {
         name: meta.id.clone(),
         version: meta.version.clone(),
         description: meta.description.clone(),

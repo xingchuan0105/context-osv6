@@ -12,7 +12,7 @@ use axum::{
     routing::get,
 };
 use common::{ApiResponse, AppError};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -45,6 +45,12 @@ pub(crate) fn router() -> Router<AppState> {
             axum::routing::post(review_feature_flag_change_request),
         )
         .route("/admin/audit-logs", get(audit_logs))
+}
+
+#[derive(Deserialize)]
+struct ListOrgsQuery {
+    page: Option<usize>,
+    per_page: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -197,10 +203,15 @@ fn audit_query(query: AuditQuery) -> AdminAuditLogQuery {
     }
 }
 
-async fn list_orgs(Extension(RequestState(state)): Extension<RequestState>) -> Response {
+async fn list_orgs(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Query(query): Query<ListOrgsQuery>,
+) -> Response {
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = app_core::admin_clamp_org_list_per_page(query.per_page.unwrap_or(100));
     call_admin_store::<Vec<AdminOrgInfo>, _, _>(&state, |store| {
         let auth = state.auth().clone();
-        async move { store.list_orgs(&auth).await }
+        async move { store.list_orgs(&auth, page, per_page).await }
     })
     .await
 }
@@ -288,8 +299,23 @@ async fn block_org(
     .await
 }
 
+#[derive(Serialize)]
+struct AdminHealthStatus {
+    status: String,
+    version: String,
+    uptime_secs: i64,
+}
+
 async fn health() -> Response {
-    Json(avrag_admin::handle_health().await).into_response()
+    Json(ApiResponse::ok(AdminHealthStatus {
+        status: "ok".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        uptime_secs: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_secs() as i64)
+            .unwrap_or(0),
+    }))
+    .into_response()
 }
 
 async fn billing_overview(Extension(RequestState(state)): Extension<RequestState>) -> Response {

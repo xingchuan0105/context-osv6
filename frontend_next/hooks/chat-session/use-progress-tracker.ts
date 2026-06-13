@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import type { WorkspaceChatMode } from "../../lib/workspace/ui-store";
-import type { WorkspaceChatStreamEvent } from "../../lib/workspace/stream";
+import type { ChatEvent } from "../../lib/contracts";
 import { getInitialProgressEntry, isResearchMode } from "./helpers";
 import type { ProgressEntry } from "./types";
 
@@ -30,7 +30,7 @@ export function useProgressTracker(locale: "zh-CN" | "en") {
   }, []);
 
   const addActivity = useCallback(
-    (event: Extract<WorkspaceChatStreamEvent, { kind: "activity" }>) => {
+    (event: Extract<ChatEvent, { event: "activity" }>) => {
       setActivities((current) => [
         ...current,
         {
@@ -39,7 +39,11 @@ export function useProgressTracker(locale: "zh-CN" | "en") {
           title: event.title,
           detail: event.detail ?? null,
           counts: event.counts,
-          sourcesPreview: event.sources_preview,
+          sourcesPreview: event.sources_preview.map((source) => ({
+            id: source.id,
+            label: source.label,
+            href: source.href ?? undefined,
+          })),
           timestamp: event.timestamp ?? null,
         },
       ]);

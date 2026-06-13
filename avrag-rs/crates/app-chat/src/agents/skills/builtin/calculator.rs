@@ -1,4 +1,4 @@
-use common::{ToolResult, ToolSpec, ToolStatus};
+use contracts::{ToolResult, ToolSpec, ToolStatus};
 use serde_json::Value;
 
 use crate::agents::skills::{ExecutionContext, SkillComponent};

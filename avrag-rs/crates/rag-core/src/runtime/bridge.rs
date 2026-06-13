@@ -5,10 +5,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use avrag_auth::AuthContext;
 use avrag_code_interpreter::HostBridge;
-use common::{
-    DenseRetrievalArgs, DenseRetrievalModality, DocProfileArgs, DocSummaryArgs, DocSummaryLevel,
-    GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs, ToolCall, ToolResult, ToolStatus,
-};
+use contracts::{DenseRetrievalArgs, DenseRetrievalModality, DocProfileArgs, DocSummaryArgs, DocSummaryLevel, GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs, ToolCall, ToolResult, ToolStatus};
 use serde_json::{json, Value};
 use tracing::info;
 

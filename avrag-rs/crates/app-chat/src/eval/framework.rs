@@ -826,7 +826,7 @@ fn compute_metrics(run: &EvalRun) -> (Vec<MetricValue>, Vec<MetricValue>) {
         .cases
         .iter()
         .flat_map(|c| c.result.tool_calls.iter())
-        .filter(|tc| tc.status == common::ToolStatus::Ok)
+        .filter(|tc| tc.status == contracts::ToolStatus::Ok)
         .count();
     if total_tool_calls > 0 {
         system.push(MetricValue {

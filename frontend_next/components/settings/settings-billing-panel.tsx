@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { describeAuthError } from "../../lib/auth/errors";
 import { useAuth } from "../../lib/auth/context";
-import { formatSettingsShareMessage } from "../../lib/settings-share-messages";
+import { formatUiMessage } from "../../lib/i18n/messages";
 import {
   createCheckoutSession,
   createPortalSession,
@@ -141,7 +141,7 @@ export function BillingPanel() {
     } catch (error) {
       setActionError(
         describeAuthError(
-          formatSettingsShareMessage(locale, "settings.saveError"),
+          formatUiMessage(locale, "settings.saveError"),
           error,
         ),
       );
@@ -163,16 +163,16 @@ export function BillingPanel() {
 
       if (subscriptionResult.status === "rejected") {
         failedItems.push(
-          formatSettingsShareMessage(locale, "settings.billing.failedItem.subscription"),
+          formatUiMessage(locale, "settings.billing.failedItem.subscription"),
         );
       }
 
       if (usageResult.status === "rejected") {
-        failedItems.push(formatSettingsShareMessage(locale, "settings.billing.failedItem.usage"));
+        failedItems.push(formatUiMessage(locale, "settings.billing.failedItem.usage"));
       }
 
       if (plansResult.status === "rejected") {
-        failedItems.push(formatSettingsShareMessage(locale, "settings.billing.failedItem.plans"));
+        failedItems.push(formatUiMessage(locale, "settings.billing.failedItem.plans"));
       }
 
       return {
@@ -182,7 +182,7 @@ export function BillingPanel() {
         plans: plansResult.status === "fulfilled" ? plansResult.value.plans : [],
         partialError:
           failedItems.length > 0
-            ? formatSettingsShareMessage(locale, "settings.billing.failedData", {
+            ? formatUiMessage(locale, "settings.billing.failedData", {
                 items: failedItems.join(", "),
               })
             : "",
@@ -192,13 +192,13 @@ export function BillingPanel() {
   const portalMutation = useMutation({
     mutationFn: async () => {
       if (!token) {
-        throw new Error(formatSettingsShareMessage(locale, "settings.profile.notAuthenticated"));
+        throw new Error(formatUiMessage(locale, "settings.profile.notAuthenticated"));
       }
 
       const response = await createPortalSession(token);
 
       if (!response.url.trim()) {
-        throw new Error(formatSettingsShareMessage(locale, "settings.billing.portalEmpty"));
+        throw new Error(formatUiMessage(locale, "settings.billing.portalEmpty"));
       }
 
       return response;
@@ -222,7 +222,7 @@ export function BillingPanel() {
     } catch (error) {
       setActionError(
         describeAuthError(
-          formatSettingsShareMessage(locale, "settings.saveError"),
+          formatUiMessage(locale, "settings.saveError"),
           error,
         ),
       );
@@ -233,7 +233,7 @@ export function BillingPanel() {
     actionError ||
     (billingQuery.error
       ? describeAuthError(
-          formatSettingsShareMessage(locale, "settings.loadError"),
+          formatUiMessage(locale, "settings.loadError"),
           billingQuery.error,
         )
       : billingQuery.data?.partialError ?? "");
@@ -270,10 +270,10 @@ export function BillingPanel() {
         <div className="app-inline-row" style={{ marginBottom: 0, alignItems: "start" }}>
           <div style={{ display: "grid", gap: "0.35rem" }}>
             <h2 style={{ margin: 0 }}>
-              {formatSettingsShareMessage(locale, "settings.billing.sectionTitle")}
+              {formatUiMessage(locale, "settings.billing.sectionTitle")}
             </h2>
             <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
-              {formatSettingsShareMessage(locale, "settings.billing.sectionSubtitle")}
+              {formatUiMessage(locale, "settings.billing.sectionSubtitle")}
             </p>
           </div>
           <button
@@ -283,14 +283,14 @@ export function BillingPanel() {
             onClick={() => void handleManagePlan()}
           >
             {portalMutation.isPending
-              ? formatSettingsShareMessage(locale, "settings.billing.loadingPortal")
-              : formatSettingsShareMessage(locale, "settings.billing.managePlanAction")}
+              ? formatUiMessage(locale, "settings.billing.loadingPortal")
+              : formatUiMessage(locale, "settings.billing.managePlanAction")}
           </button>
         </div>
         {errorMessage ? <p className="app-notice-banner">{errorMessage}</p> : null}
         {billingQuery.isLoading ? (
           <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
-            {formatSettingsShareMessage(locale, "settings.billing.loading")}
+            {formatUiMessage(locale, "settings.billing.loading")}
           </p>
         ) : (
           <div
@@ -300,28 +300,28 @@ export function BillingPanel() {
           >
             <div className="app-inline-row" style={{ marginBottom: 0 }}>
               <span>
-                {formatSettingsShareMessage(locale, "settings.billing.currentPlanLabel")}
+                {formatUiMessage(locale, "settings.billing.currentPlanLabel")}
               </span>
               <strong>
                 {currentPlan?.name ??
-                  formatSettingsShareMessage(locale, "settings.billing.notActive")}
+                  formatUiMessage(locale, "settings.billing.notActive")}
               </strong>
             </div>
             <div className="app-inline-row" style={{ marginBottom: 0 }}>
-              <span>{formatSettingsShareMessage(locale, "settings.billing.statusLabel")}</span>
+              <span>{formatUiMessage(locale, "settings.billing.statusLabel")}</span>
               <strong>
                 {billingQuery.data?.subscription
                   ? subscriptionStatusLabel(locale, billingQuery.data.subscription.status)
-                  : formatSettingsShareMessage(locale, "settings.billing.notActive")}
+                  : formatUiMessage(locale, "settings.billing.notActive")}
               </strong>
             </div>
             <div className="app-inline-row" style={{ marginBottom: 0 }}>
-              <span>{formatSettingsShareMessage(locale, "settings.billing.renewsOnLabel")}</span>
+              <span>{formatUiMessage(locale, "settings.billing.renewsOnLabel")}</span>
               <strong>
                 {formatDate(
                   billingQuery.data?.subscription?.current_period_end ?? null,
                   locale,
-                  formatSettingsShareMessage(locale, "settings.usage.notSet"),
+                  formatUiMessage(locale, "settings.usage.notSet"),
                 )}
               </strong>
             </div>
@@ -331,24 +331,24 @@ export function BillingPanel() {
 
       <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
         <h3 style={{ margin: 0 }}>
-          {formatSettingsShareMessage(locale, "settings.billing.usageTitle")}
+          {formatUiMessage(locale, "settings.billing.usageTitle")}
         </h3>
         {!billingQuery.data?.usage ? (
           <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
             {billingQuery.isLoading
-              ? formatSettingsShareMessage(locale, "settings.billing.loadingUsage")
-              : formatSettingsShareMessage(locale, "settings.billing.noUsageData")}
+              ? formatUiMessage(locale, "settings.billing.loadingUsage")
+              : formatUiMessage(locale, "settings.billing.noUsageData")}
           </p>
         ) : (
           <>
             {[
               {
-                label: formatSettingsShareMessage(locale, "settings.billing.tokensLabel"),
+                label: formatUiMessage(locale, "settings.billing.tokensLabel"),
                 used: billingQuery.data.usage.used_tokens,
                 limit: billingQuery.data.usage.limit_tokens,
               },
               {
-                label: formatSettingsShareMessage(locale, "settings.billing.documentsLabel"),
+                label: formatUiMessage(locale, "settings.billing.documentsLabel"),
                 used: billingQuery.data.usage.used_documents,
                 limit: billingQuery.data.usage.limit_documents,
               },
@@ -365,7 +365,7 @@ export function BillingPanel() {
                       {" / "}
                       {limit > 0
                         ? formatCompactNumber(limit)
-                        : formatSettingsShareMessage(locale, "settings.usage.notSet")}
+                        : formatUiMessage(locale, "settings.usage.notSet")}
                     </strong>
                   </div>
                   <div style={progressTrackStyle()}>
@@ -380,13 +380,13 @@ export function BillingPanel() {
 
       <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
         <h3 style={{ margin: 0 }}>
-          {formatSettingsShareMessage(locale, "settings.billing.availablePlansTitle")}
+          {formatUiMessage(locale, "settings.billing.availablePlansTitle")}
         </h3>
         {billingQuery.data && billingQuery.data.plans.length === 0 ? (
           <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
             {billingQuery.isLoading
-              ? formatSettingsShareMessage(locale, "settings.billing.loadingPlans")
-              : formatSettingsShareMessage(locale, "settings.billing.noPlans")}
+              ? formatUiMessage(locale, "settings.billing.loadingPlans")
+              : formatUiMessage(locale, "settings.billing.noPlans")}
           </p>
         ) : (
           <div
@@ -410,7 +410,7 @@ export function BillingPanel() {
                       <h4 style={{ margin: 0 }}>{plan.name}</h4>
                       {isCurrentPlan ? (
                         <span className="app-status-badge">
-                          {formatSettingsShareMessage(locale, "settings.billing.currentPlanLabel")}
+                          {formatUiMessage(locale, "settings.billing.currentPlanLabel")}
                         </span>
                       ) : null}
                     </div>

@@ -4,8 +4,8 @@ import {
   parseWorkspaceChatEventStream,
   streamWorkspaceChat,
   type ChatRequest,
-  type WorkspaceChatStreamEvent,
 } from "../../lib/workspace/stream";
+import type { ChatEvent } from "../../lib/contracts";
 
 const fetchMock = vi.fn();
 
@@ -36,7 +36,7 @@ afterEach(() => {
 
 describe("workspace chat stream transport", () => {
   it("parses chunked SSE frames into reducer-friendly events", async () => {
-    const events: WorkspaceChatStreamEvent[] = [];
+    const events: ChatEvent[] = [];
 
     await parseWorkspaceChatEventStream(
       makeStream([
@@ -58,12 +58,12 @@ describe("workspace chat stream transport", () => {
 
     expect(events).toEqual([
       {
-        kind: "start",
+        event: "start",
         request_id: "req-1",
         session_id: "sess-1",
       },
       {
-        kind: "activity",
+        event: "activity",
         request_id: "req-1",
         phase: "retrieving",
         title: "正在读取来源",
@@ -81,33 +81,33 @@ describe("workspace chat stream transport", () => {
         timestamp: "10:00",
       },
       {
-        kind: "answer_start",
+        event: "answer_start",
         request_id: "req-1",
         session_id: "sess-1",
         message_id: 0,
         agent_type: "rag",
       },
       {
-        kind: "trace",
+        event: "trace",
         request_id: "req-1",
         stage: "rag",
         status: "started",
         detail: { step: 1 },
       },
       {
-        kind: "reasoning_summary_delta",
+        event: "reasoning_summary_delta",
         request_id: "req-1",
         message_id: 7,
         content: "正在比较候选证据",
       },
       {
-        kind: "token",
+        event: "token",
         request_id: "req-1",
         message_id: 7,
         content: "Hello",
       },
       {
-        kind: "citations",
+        event: "citations",
         request_id: "req-1",
         message_id: 7,
         citations: [
@@ -132,7 +132,7 @@ describe("workspace chat stream transport", () => {
         ],
       },
       {
-        kind: "done",
+        event: "done",
         request_id: "req-1",
         session_id: "sess-1",
         message_id: 7,
@@ -148,7 +148,7 @@ describe("workspace chat stream transport", () => {
         },
       },
       {
-        kind: "error",
+        event: "error",
         request_id: "req-1",
         code: "stream_closed",
         message: "closed",
@@ -158,7 +158,7 @@ describe("workspace chat stream transport", () => {
 
   it("drops invalid source_locator shapes when parsing citations", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const events: WorkspaceChatStreamEvent[] = [];
+    const events: ChatEvent[] = [];
 
     await parseWorkspaceChatEventStream(
       makeStream([
@@ -172,7 +172,7 @@ describe("workspace chat stream transport", () => {
 
     expect(events).toEqual([
       {
-        kind: "citations",
+        event: "citations",
         request_id: "req-3",
         message_id: 8,
         citations: [
@@ -197,7 +197,7 @@ describe("workspace chat stream transport", () => {
         ],
       },
       {
-        kind: "citations",
+        event: "citations",
         request_id: "req-3",
         message_id: 8,
         citations: [
@@ -271,7 +271,7 @@ describe("workspace chat stream transport", () => {
       ),
     );
 
-    const events: WorkspaceChatStreamEvent[] = [];
+    const events: ChatEvent[] = [];
 
     await streamWorkspaceChat("token-123", requestBody, (event) => {
       events.push(event);
@@ -305,19 +305,19 @@ describe("workspace chat stream transport", () => {
 
     expect(events).toEqual([
       {
-        kind: "start",
+        event: "start",
         request_id: "req-2",
         session_id: "sess-2",
       },
       {
-        kind: "answer_start",
+        event: "answer_start",
         request_id: "req-2",
         session_id: "sess-2",
         message_id: 0,
         agent_type: "rag",
       },
       {
-        kind: "done",
+        event: "done",
         request_id: "req-2",
         session_id: "sess-2",
         message_id: 11,

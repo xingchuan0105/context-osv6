@@ -1,6 +1,6 @@
 use super::super::internal::build_rag_envelope;
 use super::super::*;
-use common::{ExecutePlanItem, ExecutePlanRequest, ExecutePlanResponse, ExecutePlanSummaryMode, GraphHint, PlaceholderTriplet, QueryEntity, RetrievalPlannerOutput, ToolCall};
+use contracts::{ExecutePlanItem, ExecutePlanRequest, ExecutePlanResponse, ExecutePlanSummaryMode, GraphHint, PlaceholderTriplet, QueryEntity, RetrievalPlannerOutput, ToolCall};
 use contracts::chat::{ChatRequest};
 
 fn request(agent_type: &str, query: &str, doc_scope: &[&str]) -> ChatRequest {
@@ -22,8 +22,8 @@ fn request(agent_type: &str, query: &str, doc_scope: &[&str]) -> ChatRequest {
 
 fn sample_execute_response() -> ExecutePlanResponse {
     ExecutePlanResponse {
-        bundle: common::RetrievalBundle {
-            chunks: vec![common::RetrievedChunk {
+        bundle: contracts::RetrievalBundle {
+            chunks: vec![contracts::RetrievedChunk {
                 chunk_id: "chunk-1".to_string(),
                 doc_id: "doc-1".to_string(),
                 chunk_type: "text".to_string(),
@@ -61,7 +61,7 @@ fn sample_execute_response() -> ExecutePlanResponse {
             }],
             summary_chunks: Vec::new(),
         },
-        coverage: common::Coverage {
+        coverage: contracts::Coverage {
             requested_doc_count: 1,
             matched_doc_count: 1,
             retrieved_chunk_count: 1,
@@ -69,7 +69,7 @@ fn sample_execute_response() -> ExecutePlanResponse {
             channel_coverage: Default::default(),
         },
         degrade_trace: Vec::new(),
-        backend_trace: common::BackendTrace {
+        backend_trace: contracts::BackendTrace {
             trace: None,
             item_trace: vec![contracts::chat::RagTraceItem {
                 priority: 1.0,
@@ -126,8 +126,8 @@ fn rag_envelope_formats_behavior_skill_profile_without_tools() {
 #[test]
 fn execute_plan_bundle_consumption_preserves_retrieval_then_summary_order() {
     let response = ExecutePlanResponse {
-        bundle: common::RetrievalBundle {
-            chunks: vec![common::RetrievedChunk {
+        bundle: contracts::RetrievalBundle {
+            chunks: vec![contracts::RetrievedChunk {
                 chunk_id: "chunk-1".to_string(),
                 doc_id: "doc-1".to_string(),
                 chunk_type: "text".to_string(),
@@ -143,7 +143,7 @@ fn execute_plan_bundle_consumption_preserves_retrieval_then_summary_order() {
                 parse_run_id: None,
                 score_breakdown: Vec::new(),
             }],
-            graph_supported_chunks: vec![common::RetrievedChunk {
+            graph_supported_chunks: vec![contracts::RetrievedChunk {
                 chunk_id: "graph-chunk-1".to_string(),
                 doc_id: "doc-1".to_string(),
                 chunk_type: "text".to_string(),
@@ -161,7 +161,7 @@ fn execute_plan_bundle_consumption_preserves_retrieval_then_summary_order() {
             }],
             relation_paths: Vec::new(),
             citations: Vec::new(),
-            summary_chunks: vec![common::AnswerContextChunk {
+            summary_chunks: vec![contracts::AnswerContextChunk {
                 chunk_id: "summary-doc-1".to_string(),
                 doc_id: Some("doc-1".to_string()),
                 chunk_type: "summary".to_string(),
@@ -174,7 +174,7 @@ fn execute_plan_bundle_consumption_preserves_retrieval_then_summary_order() {
                 source_locator: None,
             }],
         },
-        coverage: common::Coverage {
+        coverage: contracts::Coverage {
             requested_doc_count: 1,
             matched_doc_count: 1,
             retrieved_chunk_count: 1,
@@ -182,7 +182,7 @@ fn execute_plan_bundle_consumption_preserves_retrieval_then_summary_order() {
             channel_coverage: Default::default(),
         },
         degrade_trace: Vec::new(),
-        backend_trace: common::BackendTrace {
+        backend_trace: contracts::BackendTrace {
             trace: None,
             item_trace: Vec::new(),
             channel_trace: Vec::new(),

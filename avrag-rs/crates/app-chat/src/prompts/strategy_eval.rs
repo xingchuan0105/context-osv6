@@ -4,8 +4,8 @@ use super::types::*;
 pub(crate) fn build_rag_strategy_evaluation_prompt(
     query: &str,
     sub_queries: &[SubQueryItem],
-    tool_results: &[common::ToolResult],
-    chunks: &[common::RetrievedChunk],
+    tool_results: &[contracts::ToolResult],
+    chunks: &[contracts::RetrievedChunk],
     iteration: u8,
     max_chunks: usize,
 ) -> String {
@@ -19,7 +19,7 @@ pub(crate) fn build_rag_strategy_evaluation_prompt(
             let status = tool_results
                 .get(item.tool_index)
                 .map_or("unknown".to_string(), |r| {
-                    if r.status == common::ToolStatus::Ok {
+                    if r.status == contracts::ToolStatus::Ok {
                         format!("{} results", count)
                     } else {
                         format!("{:?}", r.status)
@@ -43,7 +43,7 @@ pub(crate) fn build_rag_strategy_evaluation_prompt(
                 .and_then(|d| d.as_array())
                 .map(|a| a.len())
                 .unwrap_or(0);
-            if r.status == common::ToolStatus::Ok {
+            if r.status == contracts::ToolStatus::Ok {
                 format!("- tool={} -> {} results", r.tool, count)
             } else {
                 format!("- tool={} -> {:?}", r.tool, r.status)
@@ -60,10 +60,10 @@ pub(crate) fn build_rag_strategy_evaluation_prompt(
     let doc_profile_hint = {
         let has_doc_profile = tool_results
             .iter()
-            .any(|r| r.tool == "doc_profile" && r.status == common::ToolStatus::Ok);
+            .any(|r| r.tool == "doc_profile" && r.status == contracts::ToolStatus::Ok);
         let has_index_lookup = tool_results
             .iter()
-            .any(|r| r.tool == "index_lookup" && r.status == common::ToolStatus::Ok);
+            .any(|r| r.tool == "index_lookup" && r.status == contracts::ToolStatus::Ok);
         if has_doc_profile && !has_index_lookup {
             "\n\nNote: Document profile was retrieved but section content (index_lookup) has not been fetched yet. If the user's question requires reading specific sections, recommend Replan and suggest calling index_lookup with the relevant chunk_ids from the profile sections."
         } else {

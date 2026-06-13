@@ -83,3 +83,11 @@ e2e_output/
 
 # Graphify generated artifacts (graph.json alone is 21MB+)
 /graphify-out/
+
+# =====================
+# Brooks v4 plan hygiene (M0)
+# =====================
+frontend_next/out/
+frontend_next/.serena/
+.code-review/
+.mimocode/

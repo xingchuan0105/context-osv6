@@ -52,6 +52,8 @@ fn memory_storage(org_id: &str, user_id: &str) -> (StorageContext, String, Strin
         None,
         None,
         None,
+        None,
+        None,
         Arc::new(RwLock::new(MemoryState::default())),
         Arc::new(RwLock::new(BTreeMap::new())),
         10 * 1024 * 1024,

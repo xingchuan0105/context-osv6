@@ -76,6 +76,17 @@ pub fn admin_clamp_audit_per_page(value: usize) -> usize {
     value.clamp(1, 200)
 }
 
+pub fn admin_clamp_org_list_per_page(value: usize) -> usize {
+    value.clamp(1, 500)
+}
+
+pub fn admin_escape_ilike_pattern(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
 pub fn admin_audit_window_start(window: Option<&str>) -> Option<DateTime<Utc>> {
     let duration = match window {
         Some("24h") => Some(chrono::TimeDelta::hours(24)),
@@ -87,6 +98,17 @@ pub fn admin_audit_window_start(window: Option<&str>) -> Option<DateTime<Utc>> {
     Some(Utc::now() - duration)
 }
 
+fn admin_csv_cell(value: &str) -> String {
+    let mut escaped = value.replace('"', "\"\"");
+    if escaped.starts_with(['=', '+', '-', '@'])
+        || escaped.starts_with('\t')
+        || escaped.starts_with('\r')
+    {
+        escaped.insert(0, '\'');
+    }
+    escaped
+}
+
 pub fn admin_audit_logs_to_csv(items: &[AdminAuditLogEntry]) -> String {
     let mut lines =
         vec!["id,action,resource_type,resource_id,actor_id,org_id,created_at".to_string()];
@@ -94,18 +116,61 @@ pub fn admin_audit_logs_to_csv(items: &[AdminAuditLogEntry]) -> String {
         lines.push(format!(
             "\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\"",
             item.id,
-            item.action.replace('"', "\"\""),
-            item.resource_type.replace('"', "\"\""),
-            item.resource_id.replace('"', "\"\""),
-            item.actor_id
-                .clone()
-                .unwrap_or_default()
-                .replace('"', "\"\""),
-            item.org_id.clone().unwrap_or_default().replace('"', "\"\""),
+            admin_csv_cell(&item.action),
+            admin_csv_cell(&item.resource_type),
+            admin_csv_cell(&item.resource_id),
+            admin_csv_cell(&item.actor_id.clone().unwrap_or_default()),
+            admin_csv_cell(&item.org_id.clone().unwrap_or_default()),
             item.created_at
         ));
     }
     lines.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn audit_log_query_window_defaults_to_open_range() {
+        assert!(admin_audit_window_start(None).is_none());
+        assert!(admin_audit_window_start(Some("30d")).is_some());
+    }
+
+    #[test]
+    fn clamp_audit_per_page_enforces_bounds() {
+        assert_eq!(admin_clamp_audit_per_page(0), 1);
+        assert_eq!(admin_clamp_audit_per_page(500), 200);
+    }
+
+    #[test]
+    fn clamp_org_list_per_page_enforces_bounds() {
+        assert_eq!(admin_clamp_org_list_per_page(0), 1);
+        assert_eq!(admin_clamp_org_list_per_page(1000), 500);
+    }
+
+    #[test]
+    fn escape_ilike_pattern_escapes_wildcards_and_backslash() {
+        assert_eq!(admin_escape_ilike_pattern(r"a%b_c\d"), r"a\%b\_c\\d");
+    }
+
+    #[test]
+    fn audit_logs_to_csv_prefixes_formula_injection_cells() {
+        let csv = admin_audit_logs_to_csv(&[AdminAuditLogEntry {
+            id: 1,
+            actor_id: Some("=cmd|'/c calc'!A0".to_string()),
+            action: "+SUM(1,1)".to_string(),
+            resource_type: "-bad".to_string(),
+            resource_id: "@evil".to_string(),
+            org_id: Some("\tmacro".to_string()),
+            created_at: 1,
+        }]);
+        assert!(csv.contains("'=cmd|'/c calc'!A0"));
+        assert!(csv.contains("'+SUM(1,1)"));
+        assert!(csv.contains("'-bad"));
+        assert!(csv.contains("'@evil"));
+        assert!(csv.contains("'\tmacro"));
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

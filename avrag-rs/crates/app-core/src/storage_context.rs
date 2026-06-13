@@ -9,7 +9,9 @@ use tokio::sync::RwLock;
 use crate::admin_store::AdminStorePort;
 use crate::auth_store::AuthStorePort;
 use crate::billing_quota::BillingQuotaPort;
+use crate::billing_store::BillingStorePort;
 use crate::chat_persistence::ChatPersistencePort;
+use crate::share_store::ShareStorePort;
 use crate::config_helpers::{
     is_remote_asset_reference, sign_upload_payload, upload_signing_secret,
 };
@@ -27,6 +29,8 @@ pub struct StorageContext {
     auth_store: Option<Arc<dyn AuthStorePort>>,
     admin_store: Option<Arc<dyn AdminStorePort>>,
     billing_quota: Option<Arc<dyn BillingQuotaPort>>,
+    billing_store: Option<Arc<dyn BillingStorePort>>,
+    share_store: Option<Arc<dyn ShareStorePort>>,
     chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
     inner: Arc<RwLock<MemoryState>>,
     api_keys: Arc<RwLock<BTreeMap<String, Vec<ApiKeyRow>>>>,
@@ -48,6 +52,8 @@ impl StorageContext {
         auth_store: Option<Arc<dyn AuthStorePort>>,
         admin_store: Option<Arc<dyn AdminStorePort>>,
         billing_quota: Option<Arc<dyn BillingQuotaPort>>,
+        billing_store: Option<Arc<dyn BillingStorePort>>,
+        share_store: Option<Arc<dyn ShareStorePort>>,
         chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
         inner: Arc<RwLock<MemoryState>>,
         api_keys: Arc<RwLock<BTreeMap<String, Vec<ApiKeyRow>>>>,
@@ -66,6 +72,8 @@ impl StorageContext {
             auth_store,
             admin_store,
             billing_quota,
+            billing_store,
+            share_store,
             chat_persistence,
             inner,
             api_keys,
@@ -93,6 +101,14 @@ impl StorageContext {
 
     pub fn billing_quota(&self) -> Option<Arc<dyn BillingQuotaPort>> {
         self.billing_quota.clone()
+    }
+
+    pub fn billing_store(&self) -> Option<Arc<dyn BillingStorePort>> {
+        self.billing_store.clone()
+    }
+
+    pub fn share_store(&self) -> Option<Arc<dyn ShareStorePort>> {
+        self.share_store.clone()
     }
 
     pub fn chat_persistence(&self) -> Option<Arc<dyn ChatPersistencePort>> {

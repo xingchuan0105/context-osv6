@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use anyhow::Result;
 use avrag_auth::AuthContext;
-use common::{ExecutePlanResponse};
+use contracts::{ExecutePlanResponse};
 use contracts::chat::{ChatRequest, ChatResponse, Citation, DegradeTraceItem, ModeDebug, PlannerOutput, RagModeDebug, RagPlan, RagTraceItem, RagTraceSummary, SourceRef, SummaryInjectionTrace, TraceInfo};
 use uuid::Uuid;
 
@@ -102,7 +102,7 @@ impl RagRuntime {
         &self,
         summary_chunks: &[(Uuid, String)],
         retrieval_chunks: &[ScoredChunk],
-    ) -> Vec<common::AnswerContextChunk> {
+    ) -> Vec<contracts::AnswerContextChunk> {
         let context_budget = answer_context_budget_tokens();
         let mut context_chunks = Vec::new();
         let mut used_tokens = 0usize;
@@ -113,7 +113,7 @@ impl RagRuntime {
             if used_tokens + tokens > context_budget {
                 break;
             }
-            context_chunks.push(common::AnswerContextChunk {
+            context_chunks.push(contracts::AnswerContextChunk {
                 chunk_id: chunk.chunk_id.to_string(),
                 doc_id: Some(chunk.doc_id.to_string()),
                 chunk_type: chunk.chunk_type.clone(),
@@ -134,7 +134,7 @@ impl RagRuntime {
             if used_tokens + tokens > context_budget {
                 break;
             }
-            context_chunks.push(common::AnswerContextChunk {
+            context_chunks.push(contracts::AnswerContextChunk {
                 chunk_id: format!("summary-{}", doc_id),
                 doc_id: Some(doc_id.to_string()),
                 chunk_type: "summary".to_string(),

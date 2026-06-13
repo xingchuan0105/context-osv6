@@ -1,6 +1,6 @@
 # 文档索引
 
-> 最后更新：2026-04-26。
+> 最后更新：2026-06-13。
 
 ## 当前架构
 
@@ -25,6 +25,11 @@
 - 作为历史计划/报告保留，其旧检索栈描述仅代表当时实现状态。
 
 除非文档明确说明是在描述当前兼容实现，否则不要把旧 Qdrant/Tantivy 方案视为当前目标。
+
+## 入库 / Ingestion
+
+- [LiteParse + Paddle Jobs 统一入库架构（2026-06-13）](/home/chuan/context-osv6/avrag-rs/docs/liteparse-paddle-ingestion-architecture-2026-06-13.md) — **当前目标方案**：LiteParse 主解析、Paddle Jobs OCR、MM 示意图、Excel-only Office；MinerU/Paddle 慢线退役。
+- [入库路由讨论纪要（2026-06-10，部分已被上文取代）](/home/chuan/context-osv6/avrag-rs/docs/ingestion-routing-discussion-2026-06-10.md)
 
 ## 历史与外部资料
 

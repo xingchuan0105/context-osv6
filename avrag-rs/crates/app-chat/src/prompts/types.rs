@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use avrag_llm::LlmUsage;
-use common::ToolCall;
+use contracts::ToolCall;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RagStrategyEvaluation {

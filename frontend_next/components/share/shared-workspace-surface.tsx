@@ -11,9 +11,11 @@ import {
 } from "../../lib/share/client";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
+import type { ChatResponse } from "../../lib/contracts";
 import {
   type AnswerBlock,
   type Citation,
+  parseStreamCitations,
   type SourceRef,
   type WorkspaceChatStreamEvent,
 } from "../../lib/workspace/stream";
@@ -160,26 +162,29 @@ export function SharedWorkspaceSurface({ shareToken }: { shareToken: string }) {
   }, [shareToken]);
 
   function handleStreamEvent(event: WorkspaceChatStreamEvent) {
-    switch (event.kind) {
+    switch (event.event) {
       case "token":
         setStreamingAnswer((current) => `${current}${event.content}`);
         break;
-      case "citations":
-        setCitations(event.citations);
-        setSources(sourcesFromCitations(event.citations));
+      case "citations": {
+        const parsedCitations = parseStreamCitations(event.citations);
+        setCitations(parsedCitations);
+        setSources(sourcesFromCitations(parsedCitations));
         break;
+      }
       case "done": {
-        const nextCitations = event.payload.citations ?? [];
+        const payload = event.payload as unknown as ChatResponse;
+        const nextCitations = payload.citations ?? [];
         const nextSources =
-          event.payload.sources && event.payload.sources.length > 0
-            ? dedupeSources(event.payload.sources)
+          payload.sources && payload.sources.length > 0
+            ? dedupeSources(payload.sources)
             : sourcesFromCitations(nextCitations);
 
-        setAnswer(getAnswerText(event.payload.answer ?? "", event.payload.answer_blocks ?? []));
+        setAnswer(getAnswerText(payload.answer ?? "", payload.answer_blocks ?? []));
         setStreamingAnswer("");
         setCitations(nextCitations);
         setSources(nextSources);
-        setDegradeReasons((event.payload.degrade_trace ?? []).map((item) => item.reason).filter(Boolean));
+        setDegradeReasons((payload.degrade_trace ?? []).map((item) => item.reason).filter(Boolean));
         setAnswering(false);
         break;
       }

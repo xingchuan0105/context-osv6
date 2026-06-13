@@ -156,13 +156,13 @@ describe("SharedWorkspaceSurface", () => {
         expect(query).toBe("What changed?");
 
         onEvent({
-          kind: "token",
+          event: "token",
           request_id: "req-1",
           message_id: 1,
           content: "Draft answer",
         });
         onEvent({
-          kind: "citations",
+          event: "citations",
           request_id: "req-1",
           message_id: 1,
           citations: [
@@ -181,7 +181,7 @@ describe("SharedWorkspaceSurface", () => {
         await new Promise<void>((resolve) => {
           releaseDone = () => {
             onEvent({
-              kind: "done",
+              event: "done",
               request_id: "req-1",
               session_id: "session-1",
               message_id: 1,
@@ -255,7 +255,7 @@ describe("SharedWorkspaceSurface", () => {
     mocks.getSharedWorkspaceMock.mockResolvedValue(buildPayload());
     mocks.streamSharedChatMock.mockImplementation(async (_shareToken, _notebookId, _query, onEvent) => {
       onEvent({
-        kind: "error",
+        event: "error",
         request_id: "req-2",
         code: "stream_failed",
         message: "share stream failed",

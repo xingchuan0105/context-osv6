@@ -1,4 +1,4 @@
-import { formatSettingsShareMessage } from "../../../lib/settings-share-messages";
+import { formatUiMessage } from "../../../lib/i18n/messages";
 import type { AccessLogsResponse, MemberRow, ShareAnalyticsResponse, ShareSettings } from "../../../lib/share/client";
 
 type WorkspaceShareCenterSurfaceProps = {
@@ -80,34 +80,34 @@ export function resolveShareStatus(settings: ShareSettings | null | undefined): 
 
 export function shareStatusLabel(locale: "zh-CN" | "en", status: ShareStatus | null) {
   if (status === "inactive") {
-    return formatSettingsShareMessage(locale, "shareCenter.statusInactive");
+    return formatUiMessage(locale, "shareCenter.statusInactive");
   }
 
   if (status === "expired") {
-    return formatSettingsShareMessage(locale, "shareCenter.statusExpired");
+    return formatUiMessage(locale, "shareCenter.statusExpired");
   }
 
   if (status === "active") {
-    return formatSettingsShareMessage(locale, "shareCenter.statusActive");
+    return formatUiMessage(locale, "shareCenter.statusActive");
   }
 
-  return formatSettingsShareMessage(locale, "shareCenter.metricUnavailable");
+  return formatUiMessage(locale, "shareCenter.metricUnavailable");
 }
 
 export function shareValidityLabel(locale: "zh-CN" | "en", option: ShareValidityOption) {
   if (option === "7d") {
-    return formatSettingsShareMessage(locale, "shareCenter.validityOption7d");
+    return formatUiMessage(locale, "shareCenter.validityOption7d");
   }
 
   if (option === "30d") {
-    return formatSettingsShareMessage(locale, "shareCenter.validityOption30d");
+    return formatUiMessage(locale, "shareCenter.validityOption30d");
   }
 
   if (option === "90d") {
-    return formatSettingsShareMessage(locale, "shareCenter.validityOption90d");
+    return formatUiMessage(locale, "shareCenter.validityOption90d");
   }
 
-  return formatSettingsShareMessage(locale, "shareCenter.validityOptionNever");
+  return formatUiMessage(locale, "shareCenter.validityOptionNever");
 }
 
 export function parseAccessedAt(value: string) {
@@ -125,7 +125,7 @@ export function formatAccessedAt(locale: "zh-CN" | "en", value: string) {
   const timestamp = parseAccessedAt(value);
 
   if (timestamp === null) {
-    return value || formatSettingsShareMessage(locale, "shareCenter.notSet");
+    return value || formatUiMessage(locale, "shareCenter.notSet");
   }
 
   return new Intl.DateTimeFormat(locale === "zh-CN" ? "zh-CN" : "en-US", {
@@ -227,26 +227,26 @@ function shareStatusBadgeStyle(status: ShareStatus | null) {
 
 export function memberRoleLabel(locale: "zh-CN" | "en", role: string) {
   if (role === "editor") {
-    return formatSettingsShareMessage(locale, "shareCenter.memberRole.editor");
+    return formatUiMessage(locale, "shareCenter.memberRole.editor");
   }
 
   if (role === "owner") {
-    return formatSettingsShareMessage(locale, "shareCenter.memberRole.owner");
+    return formatUiMessage(locale, "shareCenter.memberRole.owner");
   }
 
-  return formatSettingsShareMessage(locale, "shareCenter.memberRole.viewer");
+  return formatUiMessage(locale, "shareCenter.memberRole.viewer");
 }
 
 export function memberStatusLabel(locale: "zh-CN" | "en", status: string) {
   if (status === "accepted") {
-    return formatSettingsShareMessage(locale, "shareCenter.memberStatus.accepted");
+    return formatUiMessage(locale, "shareCenter.memberStatus.accepted");
   }
 
   if (status === "revoked") {
-    return formatSettingsShareMessage(locale, "shareCenter.memberStatus.revoked");
+    return formatUiMessage(locale, "shareCenter.memberStatus.revoked");
   }
 
-  return formatSettingsShareMessage(locale, "shareCenter.memberStatus.pending");
+  return formatUiMessage(locale, "shareCenter.memberStatus.pending");
 }
 
 export function memberDisplayName(member: MemberRow) {

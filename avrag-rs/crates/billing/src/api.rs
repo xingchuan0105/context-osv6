@@ -1,5 +1,5 @@
 use anyhow::Result;
-use avrag_storage_pg::PgAppRepository;
+use app_core::BillingStorePort;
 use common::{ApiResponse, UserId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -61,16 +61,16 @@ pub struct QuotaDecision {
 }
 
 pub async fn handle_get_plans(
-    repo: Arc<PgAppRepository>,
+    store: Arc<dyn BillingStorePort>,
     user_id: UserId,
 ) -> ApiResponse<serde_json::Value> {
     let config = BillingConfig::from_env();
-    let subscription = match get_current_subscription(repo.clone(), user_id).await {
+    let subscription = match get_current_subscription(store.clone(), user_id).await {
         Ok(sub) => sub,
         Err(error) => return ApiResponse::err("billing_plans_failed", &error.to_string()),
     };
     let current_plan_id = subscription.plan_id.clone();
-    let quotas = match load_plan_quotas(repo).await {
+    let quotas = match load_plan_quotas(store).await {
         Ok(quotas) => quotas,
         Err(error) => return ApiResponse::err("billing_plans_failed", &error.to_string()),
     };
@@ -104,58 +104,58 @@ pub async fn handle_get_plans(
 }
 
 pub async fn handle_get_subscription(
-    repo: Arc<PgAppRepository>,
+    store: Arc<dyn BillingStorePort>,
     user_id: UserId,
 ) -> ApiResponse<SubscriptionResponse> {
-    match get_current_subscription(repo, user_id).await {
+    match get_current_subscription(store, user_id).await {
         Ok(subscription) => ApiResponse::ok(SubscriptionResponse { subscription }),
         Err(error) => ApiResponse::err("billing_subscription_failed", &error.to_string()),
     }
 }
 
 pub async fn handle_get_usage(
-    repo: Arc<PgAppRepository>,
+    store: Arc<dyn BillingStorePort>,
     user_id: UserId,
 ) -> ApiResponse<UsageResponse> {
-    match load_usage(repo, user_id).await {
+    match load_usage(store, user_id).await {
         Ok(usage) => ApiResponse::ok(UsageResponse { usage }),
         Err(error) => ApiResponse::err("billing_usage_failed", &error.to_string()),
     }
 }
 
 pub async fn handle_get_usage_window(
-    repo: Arc<PgAppRepository>,
+    store: Arc<dyn BillingStorePort>,
     user_id: UserId,
 ) -> ApiResponse<UsageWindowResponse> {
-    match load_usage_window(repo, user_id).await {
+    match load_usage_window(store, user_id).await {
         Ok(window) => ApiResponse::ok(window),
         Err(error) => ApiResponse::err("billing_usage_window_failed", &error.to_string()),
     }
 }
 
 pub async fn handle_get_usage_history(
-    repo: Arc<PgAppRepository>,
+    store: Arc<dyn BillingStorePort>,
     user_id: UserId,
     days: i32,
 ) -> ApiResponse<UsageHistoryResponse> {
-    match load_usage_history(repo, user_id, days).await {
+    match load_usage_history(store, user_id, days).await {
         Ok(history) => ApiResponse::ok(history),
         Err(error) => ApiResponse::err("billing_usage_history_failed", &error.to_string()),
     }
 }
 
 pub async fn handle_get_usage_forecast(
-    repo: Arc<PgAppRepository>,
+    store: Arc<dyn BillingStorePort>,
     user_id: UserId,
 ) -> ApiResponse<UsageForecastResponse> {
-    match load_usage_forecast(repo, user_id).await {
+    match load_usage_forecast(store, user_id).await {
         Ok(forecast) => ApiResponse::ok(forecast),
         Err(error) => ApiResponse::err("billing_usage_forecast_failed", &error.to_string()),
     }
 }
 
 pub async fn handle_create_checkout(
-    repo: Arc<PgAppRepository>,
+    store: Arc<dyn BillingStorePort>,
     user_id: UserId,
     body: CreateCheckoutRequest,
 ) -> ApiResponse<CheckoutResponse> {
@@ -189,7 +189,7 @@ pub async fn handle_create_checkout(
                 );
             };
 
-            match ensure_customer(repo.clone(), &client, user_id).await {
+            match ensure_customer(store.clone(), &client, user_id).await {
                 Ok(customer_id) => {
                     match client
                         .create_checkout_session(&customer_id, &price_id, user_id, requested_plan)
@@ -266,37 +266,10 @@ pub async fn handle_create_checkout(
 
             let out_trade_no = uuid::Uuid::new_v4().to_string();
 
-            // Insert pending order in transaction
-            let mut tx = match repo.raw().begin().await {
-                Ok(tx) => tx,
-                Err(error) => {
-                    return ApiResponse::err("billing_checkout_failed", &error.to_string());
-                }
-            };
-            if let Err(error) =
-                sqlx::query("select set_config('app.current_role', 'super_admin', true)")
-                    .execute(tx.as_mut())
-                    .await
+            if let Err(error) = store
+                .insert_pending_alipay_order(user_id, &out_trade_no, requested_plan, amount_cents)
+                .await
             {
-                return ApiResponse::err("billing_checkout_failed", &error.to_string());
-            }
-            let insert_res = sqlx::query(
-                r#"
-                insert into billing_orders (user_id, provider, provider_order_id, plan_id, status, amount_cents, currency)
-                values ($1, 'alipay', $2, $3, 'pending', $4, 'CNY')
-                "#,
-            )
-            .bind(user_id.into_uuid())
-            .bind(&out_trade_no)
-            .bind(requested_plan)
-            .bind(amount_cents)
-            .execute(tx.as_mut())
-            .await;
-
-            if let Err(error) = insert_res {
-                return ApiResponse::err("billing_checkout_failed", &error.to_string());
-            }
-            if let Err(error) = tx.commit().await {
                 return ApiResponse::err("billing_checkout_failed", &error.to_string());
             }
 
@@ -327,7 +300,7 @@ pub async fn handle_create_checkout(
 }
 
 pub async fn handle_create_portal(
-    repo: Arc<PgAppRepository>,
+    store: Arc<dyn BillingStorePort>,
     user_id: UserId,
 ) -> ApiResponse<PortalResponse> {
     let config = BillingConfig::from_env();
@@ -335,7 +308,7 @@ pub async fn handle_create_portal(
     if !config.stripe_enabled() {
         return ApiResponse::err("billing_unconfigured", "billing portal is not configured");
     }
-    match load_customer_id(repo, user_id).await {
+    match load_customer_id(store, user_id).await {
         Ok(Some(customer_id)) => match client.create_portal_session(&customer_id).await {
             Ok(url) => ApiResponse::ok(PortalResponse { url }),
             Err(error) => ApiResponse::err("billing_portal_failed", &error.to_string()),
@@ -382,19 +355,10 @@ fn percent_decode(s: &str) -> String {
 }
 
 fn webhook_db_unavailable(error: &anyhow::Error) -> bool {
-    if let Some(sqlx_err) = error.downcast_ref::<sqlx::Error>() {
-        return matches!(
-            sqlx_err,
-            sqlx::Error::PoolTimedOut
-                | sqlx::Error::PoolClosed
-                | sqlx::Error::Io(_)
-                | sqlx::Error::Tls(_)
-        ) || matches!(sqlx_err, sqlx::Error::Database(db) if matches!(
-            db.code().as_deref(),
-            Some("08000") | Some("08006") | Some("57P01") | Some("57P03")
-        ));
-    }
-    false
+    let message = error.to_string();
+    message.contains("PoolTimedOut")
+        || message.contains("PoolClosed")
+        || message.contains("connection")
 }
 
 fn webhook_error_response(error: anyhow::Error) -> ApiResponse<serde_json::Value> {
@@ -420,7 +384,7 @@ fn alipay_payload_to_json(payload: &[u8]) -> serde_json::Value {
 }
 
 pub async fn handle_webhook(
-    repo: Arc<PgAppRepository>,
+    store: Arc<dyn BillingStorePort>,
     provider: BillingProvider,
     signature: Option<&str>,
     payload: &[u8],
@@ -521,7 +485,7 @@ pub async fn handle_webhook(
     }
 
     // 3. Lease-based idempotence check
-    let claim = match claim_webhook_with_lease(repo.clone(), provider, &event_id).await {
+    let claim = match claim_webhook_with_lease(store.clone(), provider, &event_id).await {
         Ok(claim) => claim,
         Err(error) => return webhook_error_response(error),
     };
@@ -534,9 +498,9 @@ pub async fn handle_webhook(
     }
 
     // 4. Process event
-    if let Err(error) = process_webhook_event(repo.clone(), provider, &json, &config).await {
+    if let Err(error) = process_webhook_event(store.clone(), provider, &json, &config).await {
         let _ = update_webhook_lease_status(
-            repo,
+            store,
             provider,
             &claim.event_id,
             "failed",
@@ -547,7 +511,7 @@ pub async fn handle_webhook(
     }
 
     if let Err(error) =
-        update_webhook_lease_status(repo, provider, &claim.event_id, "processed", None).await
+        update_webhook_lease_status(store, provider, &claim.event_id, "processed", None).await
     {
         return webhook_error_response(error);
     }
@@ -556,15 +520,15 @@ pub async fn handle_webhook(
 }
 
 pub async fn check_quota(
-    repo: Arc<PgAppRepository>,
+    store: Arc<dyn BillingStorePort>,
     user_id: UserId,
     metric_type: &str,
     requested: i64,
 ) -> Result<QuotaDecision> {
-    let subscription = get_current_subscription(repo.clone(), user_id).await?;
+    let subscription = get_current_subscription(store.clone(), user_id).await?;
     let plan_id = subscription.plan_id;
-    let quota = load_quota_limit(repo.clone(), &plan_id, metric_type).await?;
-    let current_usage = current_metric_usage(repo, user_id, metric_type).await?;
+    let quota = load_quota_limit(store.clone(), &plan_id, metric_type).await?;
+    let current_usage = current_metric_usage(store, user_id, metric_type).await?;
     let hard_limit = quota.as_ref().and_then(|value| value.1);
     let soft_limit = quota.as_ref().and_then(|value| value.0);
     let allowed = hard_limit

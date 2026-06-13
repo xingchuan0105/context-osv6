@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use common::{AnswerContextChunk, ExecutePlanResponse};
+use contracts::{AnswerContextChunk, ExecutePlanResponse};
 
 pub fn answer_context(response: &ExecutePlanResponse) -> Vec<AnswerContextChunk> {
     response.bundle.answer_context_chunks()

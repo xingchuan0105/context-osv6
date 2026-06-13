@@ -8,7 +8,7 @@ use avrag_auth::AuthContext;
 use avrag_retrieval_data_plane::{
     GraphRelationHint, GraphSearchOutput, GraphSearchRequest, WeightedChunkList,
 };
-use common::{BackendTrace, ChannelCoverage, ChannelTraceItem, Coverage, ExecutePlanRequest, ExecutePlanResponse, PlaceholderTriplet, RelationPath, RetrievalBundle, RetrievedChunk};
+use contracts::{BackendTrace, ChannelCoverage, ChannelTraceItem, Coverage, ExecutePlanRequest, ExecutePlanResponse, PlaceholderTriplet, RelationPath, RetrievalBundle, RetrievedChunk};
 use contracts::chat::{DegradeReason, DegradeTraceItem};
 use sha2::{Digest, Sha256};
 
@@ -138,7 +138,7 @@ pub(super) fn graph_final_context_budget(
 
 fn filter_retrieved_chunks_for_context(
     retrieved_chunks: &[ScoredChunk],
-    context_chunks: &[common::AnswerContextChunk],
+    context_chunks: &[contracts::AnswerContextChunk],
 ) -> Vec<ScoredChunk> {
     let allowed_chunk_ids = context_chunks
         .iter()

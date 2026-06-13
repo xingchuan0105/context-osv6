@@ -18,7 +18,7 @@ describe("WorkspaceChatPane streaming status hints", () => {
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
     mocks.streamWorkspaceChatMock.mockImplementation(async (_token, _request, onEvent) => {
       await onEvent({
-        kind: "done",
+        event: "done",
         request_id: "req-allow",
         session_id: "sess-allow",
         message_id: 12,
@@ -79,13 +79,13 @@ describe("WorkspaceChatPane streaming status hints", () => {
       });
 
       await onEvent({
-        kind: "start",
+        event: "start",
         request_id: "req-chat",
         session_id: "sess-chat",
       });
 
       await onEvent({
-        kind: "answer_start",
+        event: "answer_start",
         request_id: "req-chat",
         session_id: "sess-chat",
         message_id: 0,
@@ -98,14 +98,14 @@ describe("WorkspaceChatPane streaming status hints", () => {
       });
 
       await onEvent({
-        kind: "token",
+        event: "token",
         request_id: "req-chat",
         message_id: 0,
         content: "Hi",
       });
 
       await onEvent({
-        kind: "done",
+        event: "done",
         request_id: "req-chat",
         session_id: "sess-chat",
         message_id: 7,

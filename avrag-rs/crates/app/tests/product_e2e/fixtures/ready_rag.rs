@@ -30,7 +30,9 @@ pub(crate) struct RagSharedFixture {
     pub(crate) search_should_429: Option<Arc<AtomicBool>>,
     pub(crate) embedding_should_503: Option<Arc<AtomicBool>>,
     pub(crate) embedding_call_count: Option<Arc<AtomicUsize>>,
-    object_store_guard: Arc<tempfile::TempDir>,
+    /// Keeps the object-store tempdir alive for the test binary (side-effect only).
+    #[allow(dead_code)]
+    _object_store_guard: Arc<tempfile::TempDir>,
 }
 
 impl RagSharedFixture {
@@ -105,7 +107,7 @@ impl RagSharedFixture {
             search_should_429,
             embedding_should_503,
             embedding_call_count,
-            object_store_guard,
+            _object_store_guard: object_store_guard,
         }
     }
 }
@@ -128,7 +130,7 @@ pub async fn ready_rag_context() -> (TestContext, UploadResponse) {
 static SHARED_RAG_FIXTURE: OnceCell<RagSharedFixture> = OnceCell::const_new();
 
 /// Module-scoped ingested document + infra (one cold path per test binary).
-pub async fn shared_rag_fixture() -> &'static RagSharedFixture {
+pub(crate) async fn shared_rag_fixture() -> &'static RagSharedFixture {
     SHARED_RAG_FIXTURE
         .get_or_init(|| async {
             let (ctx, upload) = ready_rag_context().await;

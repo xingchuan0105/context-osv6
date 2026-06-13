@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "../../../lib/auth/context";
-import { formatSettingsShareMessage } from "../../../lib/settings-share-messages";
+import { formatUiMessage } from "../../../lib/i18n/messages";
 import {
   buildShareUrl,
   createShareLink,
@@ -72,7 +72,7 @@ export function useShareCenter(workspaceId: string) {
   const toggleShareMutation = useMutation({
     mutationFn: async () => {
       if (!auth.token) {
-        throw new Error(formatSettingsShareMessage(locale, "shareCenter.loginRequired"));
+        throw new Error(formatUiMessage(locale, "shareCenter.loginRequired"));
       }
 
       if (!workspaceReady) {
@@ -117,7 +117,7 @@ export function useShareCenter(workspaceId: string) {
   const refreshShareMutation = useMutation({
     mutationFn: async () => {
       if (!auth.token) {
-        throw new Error(formatSettingsShareMessage(locale, "shareCenter.loginRequired"));
+        throw new Error(formatUiMessage(locale, "shareCenter.loginRequired"));
       }
 
       if (!workspaceReady) {
@@ -151,7 +151,7 @@ export function useShareCenter(workspaceId: string) {
   const inviteMemberMutation = useMutation({
     mutationFn: async () => {
       if (!auth.token) {
-        throw new Error(formatSettingsShareMessage(locale, "shareCenter.loginRequired"));
+        throw new Error(formatUiMessage(locale, "shareCenter.loginRequired"));
       }
 
       if (!workspaceReady) {
@@ -171,7 +171,7 @@ export function useShareCenter(workspaceId: string) {
   const removeMemberMutation = useMutation({
     mutationFn: async (memberId: string) => {
       if (!auth.token) {
-        throw new Error(formatSettingsShareMessage(locale, "shareCenter.loginRequired"));
+        throw new Error(formatUiMessage(locale, "shareCenter.loginRequired"));
       }
 
       if (!workspaceReady) {
@@ -204,19 +204,19 @@ export function useShareCenter(workspaceId: string) {
   const trendSeries = trendWindowDays === 7 ? sevenDaySeries : thirtyDaySeries;
   const totalViewsValue =
     analyticsQuery.data?.total_views.toLocaleString() ??
-    formatSettingsShareMessage(locale, "shareCenter.metricUnavailable");
+    formatUiMessage(locale, "shareCenter.metricUnavailable");
   const recentViewsValue = analyticsQuery.data
     ? sumViews(sevenDaySeries).toLocaleString()
-    : formatSettingsShareMessage(locale, "shareCenter.metricUnavailable");
+    : formatUiMessage(locale, "shareCenter.metricUnavailable");
   const activeDaysValue = analyticsQuery.data
     ? String(countActiveDays(thirtyDaySeries))
-    : formatSettingsShareMessage(locale, "shareCenter.metricUnavailable");
+    : formatUiMessage(locale, "shareCenter.metricUnavailable");
   const latestAccessLog = getLatestAccessLog(accessLogsQuery.data);
   const latestAccessValue = accessLogsQuery.data
     ? latestAccessLog
       ? formatAccessedAt(locale, latestAccessLog.accessed_at)
-      : formatSettingsShareMessage(locale, "shareCenter.notSet")
-    : formatSettingsShareMessage(locale, "shareCenter.metricUnavailable");
+      : formatUiMessage(locale, "shareCenter.notSet")
+    : formatUiMessage(locale, "shareCenter.metricUnavailable");
   const canUseShareLink = shareStatus === "active" && Boolean(shareUrl);
   const shareSwitchChecked = shareStatus === "active";
   const validityOptions: ShareValidityOption[] = ["7d", "30d", "90d", "never"];
@@ -231,7 +231,7 @@ export function useShareCenter(workspaceId: string) {
       setActionError(
         error instanceof Error
           ? error.message
-          : formatSettingsShareMessage(locale, "shareCenter.saveError"),
+          : formatUiMessage(locale, "shareCenter.saveError"),
       );
     }
   }
@@ -242,15 +242,15 @@ export function useShareCenter(workspaceId: string) {
     setActionMessage("");
 
     if (!canUseShareLink) {
-      setActionError(formatSettingsShareMessage(locale, "shareCenter.shareLinkUnavailable"));
+      setActionError(formatUiMessage(locale, "shareCenter.shareLinkUnavailable"));
       return;
     }
 
     try {
       await navigator.clipboard.writeText(shareUrl);
-      setActionMessage(formatSettingsShareMessage(locale, "shareCenter.copyLinkSuccess"));
+      setActionMessage(formatUiMessage(locale, "shareCenter.copyLinkSuccess"));
     } catch {
-      setActionError(formatSettingsShareMessage(locale, "shareCenter.copyLinkError"));
+      setActionError(formatUiMessage(locale, "shareCenter.copyLinkError"));
     }
   }
 
@@ -259,7 +259,7 @@ export function useShareCenter(workspaceId: string) {
     setActionMessage("");
 
     if (!canUseShareLink) {
-      setActionError(formatSettingsShareMessage(locale, "shareCenter.shareLinkUnavailable"));
+      setActionError(formatUiMessage(locale, "shareCenter.shareLinkUnavailable"));
       return;
     }
 
@@ -272,12 +272,12 @@ export function useShareCenter(workspaceId: string) {
 
     try {
       await refreshShareMutation.mutateAsync();
-      setActionMessage(formatSettingsShareMessage(locale, "shareCenter.updateShareSuccess"));
+      setActionMessage(formatUiMessage(locale, "shareCenter.updateShareSuccess"));
     } catch (error) {
       setActionError(
         error instanceof Error
           ? error.message
-          : formatSettingsShareMessage(locale, "shareCenter.saveError"),
+          : formatUiMessage(locale, "shareCenter.saveError"),
       );
     }
   }
@@ -286,12 +286,12 @@ export function useShareCenter(workspaceId: string) {
     setInviteError("");
 
     if (!inviteEmail.trim()) {
-      setInviteError(formatSettingsShareMessage(locale, "shareCenter.inviteEmailRequired"));
+      setInviteError(formatUiMessage(locale, "shareCenter.inviteEmailRequired"));
       return;
     }
 
     if (!isValidInviteEmail(inviteEmail)) {
-      setInviteError(formatSettingsShareMessage(locale, "shareCenter.inviteEmailInvalid"));
+      setInviteError(formatUiMessage(locale, "shareCenter.inviteEmailInvalid"));
       return;
     }
 
@@ -301,7 +301,7 @@ export function useShareCenter(workspaceId: string) {
       setInviteError(
         error instanceof Error
           ? error.message
-          : formatSettingsShareMessage(locale, "shareCenter.membersLoadError"),
+          : formatUiMessage(locale, "shareCenter.membersLoadError"),
       );
     }
   }
@@ -315,7 +315,7 @@ export function useShareCenter(workspaceId: string) {
       setActionError(
         error instanceof Error
           ? error.message
-          : formatSettingsShareMessage(locale, "shareCenter.removeError"),
+          : formatUiMessage(locale, "shareCenter.removeError"),
       );
     }
   }

@@ -20,7 +20,7 @@ pub struct DisclosedState {
 #[derive(Debug, Clone)]
 pub struct AssembledContext {
     pub system_content: String,
-    pub tools: Vec<common::ToolSpec>,
+    pub tools: Vec<contracts::ToolSpec>,
     pub newly_disclosed_skills: Vec<String>,
 }
 

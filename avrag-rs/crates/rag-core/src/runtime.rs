@@ -57,7 +57,7 @@ impl RagRuntime {
     }
 
     /// Access chat persistence if configured on the runtime.
-    pub fn chat_persistence(&self) -> Option<Arc<dyn app_core::ChatPersistencePort>> {
+    pub fn chat_persistence(&self) -> Option<Arc<dyn avrag_rag_core_ports::ChatPersistencePort>> {
         self.config.chat_persistence.clone()
     }
 
@@ -70,8 +70,8 @@ impl RagRuntime {
     pub async fn execute_tools(
         &self,
         auth: &avrag_auth::AuthContext,
-        calls: Vec<common::ToolCall>,
-    ) -> Vec<common::ToolResult> {
+        calls: Vec<contracts::ToolCall>,
+    ) -> Vec<contracts::ToolResult> {
         tools::dispatch_all(self, auth, calls).await
     }
 }

@@ -5,7 +5,7 @@ use avrag_retrieval_data_plane::{
     Bm25SearchOutput, Bm25SearchRequest, GraphSearchOutput, GraphSearchRequest,
     MultimodalSearchRequest, RetrievalDataPlane, ScoredChunk, TextDenseSearchRequest,
 };
-use common::{GraphHint, GraphRetrievalArgs, ToolResult, ToolStatus};
+use contracts::{GraphHint, GraphRetrievalArgs, ToolResult, ToolStatus};
 use std::sync::Arc;
 use uuid::Uuid;
 

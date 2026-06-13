@@ -18,7 +18,7 @@ pub mod memory_dispatch;
 
 pub use registry::{ExecutionContext, SkillRegistry};
 
-use common::{ToolResult, ToolSpec};
+use contracts::{ToolResult, ToolSpec};
 use serde_json::Value;
 
 /// A declarative Skill component that bundles description, schema, gotchas,

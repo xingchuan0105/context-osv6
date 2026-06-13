@@ -1,4 +1,4 @@
-import { ApiError, buildApiUrl } from "../auth/client";
+import { ApiError, request } from "../http/request";
 
 export type UsageWindowBucket = {
   used: number;
@@ -69,41 +69,6 @@ type Envelope<T> = {
   error?: { code?: string; message?: string } | null;
 };
 
-async function decodeError(response: Response): Promise<ApiError> {
-  const raw = await response.text();
-
-  if (!raw.trim()) {
-    return new ApiError(response.status, null, `Request failed with status ${response.status}`);
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as { error?: string; message?: string };
-    return new ApiError(response.status, parsed.error ?? null, parsed.message ?? raw);
-  } catch {
-    return new ApiError(response.status, null, raw);
-  }
-}
-
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (!headers.has("Accept")) {
-    headers.set("Accept", "application/json");
-  }
-
-  const response = await fetch(buildApiUrl(path), {
-    ...init,
-    cache: "no-store",
-    credentials: "include",
-    headers,
-  });
-
-  if (!response.ok) {
-    throw await decodeError(response);
-  }
-
-  return (await response.json()) as T;
-}
-
 function unwrap<T>(envelope: Envelope<T>, fallback: string, status = 200): T {
   if (envelope.ok && envelope.data) {
     return envelope.data;
@@ -116,7 +81,10 @@ function unwrap<T>(envelope: Envelope<T>, fallback: string, status = 200): T {
 export const billingApi = {
   async getPlans() {
     return unwrap<BillingPlansResponse>(
-      await request<Envelope<BillingPlansResponse>>("/api/v1/billing/plans", { method: "GET" }),
+      await request<Envelope<BillingPlansResponse>>("/api/v1/billing/plans", {
+        method: "GET",
+        credentials: "include",
+      }),
       "Failed to load billing plans",
     );
   },
@@ -125,6 +93,7 @@ export const billingApi = {
     return unwrap<UsageWindowResponse>(
       await request<Envelope<UsageWindowResponse>>("/api/v1/billing/usage/window", {
         method: "GET",
+        credentials: "include",
       }),
       "Failed to load usage window",
     );
@@ -134,7 +103,7 @@ export const billingApi = {
     return unwrap<UsageHistoryResponse>(
       await request<Envelope<UsageHistoryResponse>>(
         `/api/v1/billing/usage/history?days=${days}`,
-        { method: "GET" },
+        { method: "GET", credentials: "include" },
       ),
       "Failed to load usage history",
     );
@@ -144,6 +113,7 @@ export const billingApi = {
     return unwrap<UsageForecastResponse>(
       await request<Envelope<UsageForecastResponse>>("/api/v1/billing/usage/forecast", {
         method: "GET",
+        credentials: "include",
       }),
       "Failed to load usage forecast",
     );

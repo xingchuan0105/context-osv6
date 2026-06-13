@@ -7,7 +7,7 @@ import { WorkspaceSourcesPane } from "../workspace-sources-pane";
 import {
   type WorkspaceContextRailProps,
   useWorkspaceContextRail,
-} from "./use-workspace-context-rail";
+} from "../../../hooks/use-workspace-context-rail";
 
 export function WorkspaceContextRail(props: WorkspaceContextRailProps) {
   const {

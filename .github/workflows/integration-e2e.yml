@@ -1,0 +1,89 @@
+name: Integration E2E
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'avrag-rs/crates/**'
+      - 'avrag-rs/bins/**'
+      - 'avrag-rs/prompts/**'
+      - 'avrag-rs/scripts/**'
+      - 'contracts/**'
+      - '.github/workflows/integration-e2e.yml'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  integration-e2e:
+    name: Product Integration E2E (full suite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: avrag-rs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: avrag-rs/target
+          key: ${{ runner.os }}-cargo-build-integration-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
+
+      - name: Start Milvus stack
+        run: |
+          COMPOSE_FILE="$(find . -path '*/docker-compose.milvus.yml' -print -quit)"
+          if [ -z "$COMPOSE_FILE" ]; then
+            echo "docker-compose.milvus.yml not found" >&2
+            exit 1
+          fi
+          docker compose -f "$COMPOSE_FILE" up -d --wait
+
+      - name: Clean orphaned E2E containers
+        run: |
+          # Test-owned ephemeral names only (matches setup::cleanup_orphaned_test_containers).
+          # Milvus uses docker-compose (milvus-standalone); not force-removed — collection
+          # isolation uses MILVUS_COLLECTION_PREFIX + teardown drops, not dedicated containers.
+          docker ps -a --filter name=avrag-test-pg --format '{{.Names}}' | xargs -r docker rm -f
+          docker ps -a --filter name=avrag-test-redis --format '{{.Names}}' | xargs -r docker rm -f
+
+      - name: Compile tests
+        run: |
+          cargo test --no-run --test product_e2e -p app --features product-e2e
+          cargo test --no-run -p transport-http
+
+      # --test-threads=1: required for module-scoped fixtures (e.g. streaming_chat::shared_rag_fixture)
+      - name: Run transport-http contract tests
+        run: cargo test -p transport-http
+
+      - name: Run full Product E2E suite
+        run: cargo test --test product_e2e -p app --features product-e2e -- --test-threads=1 --nocapture
+        env:
+          E2E_MODE: integration
+        timeout-minutes: 40
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-e2e-failure-${{ github.run_id }}
+          path: avrag-rs/crates/app/tests/e2e_output/**/**
+          retention-days: 14

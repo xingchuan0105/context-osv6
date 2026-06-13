@@ -1,6 +1,6 @@
 "use client";
 
-import { formatSettingsShareMessage } from "../../../lib/settings-share-messages";
+import { formatUiMessage } from "../../../lib/i18n/messages";
 import { shareStatusBadgeStyle } from "./share-center-ui";
 import { shareValidityLabel, type ShareValidityOption } from "./share-center-utils";
 import type { useShareCenter } from "./use-share-center";
@@ -39,7 +39,7 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
                     justifyContent: "space-between",
                   }}
                 >
-                  <strong>{formatSettingsShareMessage(locale, "shareCenter.controlBarTitle")}</strong>
+                  <strong>{formatUiMessage(locale, "shareCenter.controlBarTitle")}</strong>
                   <span
                     style={{
                       ...shareStatusBadgeStyle(shareStatus),
@@ -62,7 +62,7 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
                     lineHeight: 1.5,
                   }}
                 >
-                  {formatSettingsShareMessage(locale, "shareCenter.controlBarSubtitle")}
+                  {formatUiMessage(locale, "shareCenter.controlBarSubtitle")}
                 </p>
               </div>
 
@@ -85,12 +85,12 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
                 >
                   <div style={{ display: "grid", gap: "0.2rem" }}>
                     <span style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.82rem" }}>
-                      {formatSettingsShareMessage(locale, "shareCenter.shareSwitchLabel")}
+                      {formatUiMessage(locale, "shareCenter.shareSwitchLabel")}
                     </span>
                     <strong style={{ fontSize: "0.92rem", letterSpacing: "-0.01em" }}>
                       {shareSwitchChecked
-                        ? formatSettingsShareMessage(locale, "shareCenter.statusActive")
-                        : formatSettingsShareMessage(locale, "shareCenter.statusInactive")}
+                        ? formatUiMessage(locale, "shareCenter.statusActive")
+                        : formatUiMessage(locale, "shareCenter.statusInactive")}
                     </strong>
                   </div>
                   <button
@@ -130,7 +130,7 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
                 </div>
                 <div style={{ display: "grid", gap: "0.35rem" }}>
                   <label className="app-form-label" htmlFor="share-validity">
-                    {formatSettingsShareMessage(locale, "shareCenter.validityLabel")}
+                    {formatUiMessage(locale, "shareCenter.validityLabel")}
                   </label>
                   <select
                     className="app-input"
@@ -148,7 +148,7 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
                     ))}
                   </select>
                   <p className="app-form-footnote" style={{ fontSize: "0.82rem", margin: 0 }}>
-                    {formatSettingsShareMessage(locale, "shareCenter.validityHint")}
+                    {formatUiMessage(locale, "shareCenter.validityHint")}
                   </p>
                 </div>
                 <div
@@ -159,7 +159,7 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
                   }}
                 >
                   <span style={{ fontSize: "0.82rem" }}>
-                    {formatSettingsShareMessage(locale, "shareCenter.shareUrlLabel")}
+                    {formatUiMessage(locale, "shareCenter.shareUrlLabel")}
                   </span>
                   <div
                     style={{
@@ -170,7 +170,7 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
                     }}
                   >
                     {shareUrl ||
-                      formatSettingsShareMessage(locale, "shareCenter.controlBarNoLink")}
+                      formatUiMessage(locale, "shareCenter.controlBarNoLink")}
                   </div>
                 </div>
               </div>
@@ -196,7 +196,7 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
                   type="button"
                   onClick={() => void handleCopyShareLink()}
                 >
-                  {formatSettingsShareMessage(locale, "shareCenter.copyLinkAction")}
+                  {formatUiMessage(locale, "shareCenter.copyLinkAction")}
                 </button>
                 <button
                   className="app-button-secondary"
@@ -211,7 +211,7 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
                   type="button"
                   onClick={() => handleOpenSharePage()}
                 >
-                  {formatSettingsShareMessage(locale, "shareCenter.openShareAction")}
+                  {formatUiMessage(locale, "shareCenter.openShareAction")}
                 </button>
                 <button
                   className="app-button-primary"
@@ -231,8 +231,8 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
                   onClick={() => void handleRefreshShare()}
                 >
                   {refreshShareMutation.isPending
-                    ? formatSettingsShareMessage(locale, "shareCenter.saving")
-                    : formatSettingsShareMessage(locale, "shareCenter.updateShareAction")}
+                    ? formatUiMessage(locale, "shareCenter.saving")
+                    : formatUiMessage(locale, "shareCenter.updateShareAction")}
                 </button>
               </div>
     </>

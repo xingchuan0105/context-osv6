@@ -223,7 +223,7 @@ fn insert_tool_from_skill<S: SkillComponent>(
 }
 
 fn tool_metadata_from_spec(
-    spec: &common::ToolSpec,
+    spec: &contracts::ToolSpec,
     applicable_strategies: Vec<String>,
     permissions: Vec<Permission>,
 ) -> ToolMetadata {

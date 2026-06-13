@@ -8,7 +8,7 @@ pub mod lexical;
 
 use avrag_auth::AuthContext;
 use avrag_retrieval_data_plane::ScoredChunk;
-use common::{ToolCall, ToolResult, ToolStatus};
+use contracts::{ToolCall, ToolResult, ToolStatus};
 
 use crate::RagRuntime;
 
