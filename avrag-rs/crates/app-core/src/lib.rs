@@ -40,7 +40,7 @@ pub use admin_store::AdminStorePort;
 pub use auth_store::{
     AuthStorePort, AuthUserCredentials, AuthUserProfile, CreatePasswordResetTicketInput,
     PasswordResetUser, RecordLegalAcceptanceInput, RegisterLegalAcceptance, RegisterUserInput,
-    RegisterUserResult,
+    RegisterUserResult, UserLegalStatus,
 };
 pub use legal_versions::{
     validate_published_legal_versions, PUBLISHED_PRIVACY_VERSION, PUBLISHED_TERMS_VERSION,

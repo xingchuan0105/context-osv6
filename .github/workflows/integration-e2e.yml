@@ -66,6 +66,24 @@ jobs:
           docker ps -a --filter name=avrag-test-pg --format '{{.Names}}' | xargs -r docker rm -f
           docker ps -a --filter name=avrag-test-redis --format '{{.Names}}' | xargs -r docker rm -f
 
+      - name: Start Postgres for legal contract tests
+        run: |
+          docker run -d --rm --name avrag-ci-pg \
+            -e POSTGRES_USER=test \
+            -e POSTGRES_PASSWORD=test \
+            -e POSTGRES_DB=test \
+            -p 5432:5432 \
+            postgres:16-alpine
+          for i in $(seq 1 30); do
+            if docker exec avrag-ci-pg pg_isready -U test -d test >/dev/null 2>&1; then
+              echo "Postgres is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Postgres failed to become ready" >&2
+          exit 1
+
       - name: Compile tests
         run: |
           cargo test --no-run --test product_e2e -p app --features product-e2e
@@ -74,6 +92,8 @@ jobs:
       # --test-threads=1: required for module-scoped fixtures (e.g. streaming_chat::shared_rag_fixture)
       - name: Run transport-http contract tests
         run: cargo test -p transport-http
+        env:
+          DATABASE_URL: postgres://test:test@127.0.0.1:5432/test
 
       - name: Run full Product E2E suite
         run: cargo test --test product_e2e -p app --features product-e2e -- --test-threads=1 --nocapture

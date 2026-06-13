@@ -244,6 +244,52 @@ async fn auth_change_password_handler(
         }
     }
 }
+async fn auth_legal_status_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+) -> Response {
+    let Some(user_id) = state.auth().actor_id() else {
+        return handlers::error_response(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Not authenticated",
+        );
+    };
+
+    let Some(store) = state.auth_store() else {
+        return handlers::error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "service_unavailable",
+            "Database not available",
+        );
+    };
+
+    match store.get_user_legal_status(user_id.into_uuid()).await {
+        Ok(status) => (
+            StatusCode::OK,
+            Json(LegalStatusEnvelope {
+                success: true,
+                data: Some(LegalStatusPayload {
+                    needs_re_acceptance: status.needs_re_acceptance,
+                    accepted_terms_version: status.accepted_terms_version,
+                    accepted_privacy_version: status.accepted_privacy_version,
+                    published_terms_version: status.published_terms_version,
+                    published_privacy_version: status.published_privacy_version,
+                }),
+                error: None,
+            }),
+        )
+            .into_response(),
+        Err(error) => {
+            warn!(error = %error, "failed to load legal status");
+            handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Failed to load legal status",
+            )
+        }
+    }
+}
+
 async fn auth_record_legal_acceptance_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     headers: HeaderMap,

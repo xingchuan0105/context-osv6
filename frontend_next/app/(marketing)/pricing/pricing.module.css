@@ -84,3 +84,16 @@
   color: hsl(var(--muted-foreground));
   font-size: var(--font-size-body);
 }
+
+.consentSection {
+  max-width: 48rem;
+  margin: 0 auto;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.checkoutError {
+  margin: 0;
+  color: hsl(var(--destructive));
+  font-size: var(--font-size-caption-strong);
+}

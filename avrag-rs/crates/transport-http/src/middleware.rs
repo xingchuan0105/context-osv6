@@ -351,6 +351,8 @@ fn normalize_route(path: &str) -> &'static str {
         "/api/auth/reset/verify-code" => "/api/auth/reset/verify-code",
         "/api/auth/reset/confirm" => "/api/auth/reset/confirm",
         "/api/auth/usage-limit" => "/api/auth/usage-limit",
+        "/api/auth/legal-acceptance" => "/api/auth/legal-acceptance",
+        "/api/auth/legal-status" => "/api/auth/legal-status",
         "/api/v1/notebooks" => "/api/v1/notebooks",
         "/api/v1/chat" => "/api/v1/chat",
         "/api/v1/chat/sessions" => "/api/v1/chat/sessions",

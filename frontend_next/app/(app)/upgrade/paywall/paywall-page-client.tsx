@@ -4,12 +4,15 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { PaywallModal } from "@/components/billing/PaywallModal";
+import ConsentCheckbox from "@/components/legal/ConsentCheckbox";
 import { billingApi } from "@/lib/billing/api";
 import type { BillingPlan, UsageWindowResponse } from "@/lib/billing/api";
 import { ApiError } from "@/lib/auth/client";
 import { isPricingRevampFeatureDisabledError } from "@/lib/billing/featureFlag";
 import { usePricingRevampGateResult } from "@/components/billing/PricingRevampGate";
 import { createCheckoutSession } from "@/lib/settings/client";
+import { recordPaymentLegalAcceptance } from "@/lib/legal/client";
+import { describeAuthError } from "@/lib/auth/errors";
 import { useAuth } from "@/lib/auth/context";
 import { formatUiMessage } from "@/lib/i18n/messages";
 import { useUiPreferences } from "@/lib/ui-preferences";
@@ -26,6 +29,8 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
   const { locale } = useUiPreferences();
   const { ssrEnabled, enabled, ready } = usePricingRevampGateResult();
   const [state, setState] = useState<PaywallLoadState>({ kind: "loading" });
+  const [paymentConsented, setPaymentConsented] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
 
   useEffect(() => {
     if (!ready || !enabled) {
@@ -95,9 +100,21 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
     if (planId === "free" || !auth.token) {
       return;
     }
-    const checkout = await createCheckoutSession(auth.token, { plan_id: planId });
-    if (checkout.url) {
-      router.push(checkout.url);
+    setCheckoutError("");
+    try {
+      await recordPaymentLegalAcceptance(auth.token, paymentConsented);
+      const checkout = await createCheckoutSession(auth.token, { plan_id: planId });
+      if (checkout.url) {
+        router.push(checkout.url);
+      }
+    } catch (error) {
+      setCheckoutError(
+        describeAuthError(
+          formatUiMessage(locale, "authErrorConsentRequired"),
+          error,
+          locale,
+        ),
+      );
     }
   }
 
@@ -106,14 +123,20 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
   }
 
   return (
-    <PaywallModal
-      reason={reason}
-      locale={locale}
-      plans={plans}
-      rolling5h={window.rolling_5h}
-      rolling7d={window.rolling_7d}
-      onSelect={handleSelect}
-      onContinueFree={handleContinueFree}
-    />
+    <>
+      <PaywallModal
+        reason={reason}
+        locale={locale}
+        plans={plans}
+        rolling5h={window.rolling_5h}
+        rolling7d={window.rolling_7d}
+        onSelect={handleSelect}
+        onContinueFree={handleContinueFree}
+      />
+      <div className={styles.statePage} style={{ marginTop: "1rem" }}>
+        <ConsentCheckbox onConsentChange={setPaymentConsented} />
+        {checkoutError ? <p className={styles.errorText}>{checkoutError}</p> : null}
+      </div>
+    </>
   );
 }

@@ -32,6 +32,14 @@ export function describeAuthError(fallback: string, error: unknown, locale: UiLo
       return fallbackAuthError(locale);
     case "validation_error":
       return error.message.trim() || fallback;
+    case "invalid_terms_version":
+      return formatUiMessage(locale, "authErrorInvalidTermsVersion");
+    case "invalid_privacy_version":
+      return formatUiMessage(locale, "authErrorInvalidPrivacyVersion");
+    case "invalid_context":
+      return formatUiMessage(locale, "authErrorInvalidLegalContext");
+    case "consent_required":
+      return formatUiMessage(locale, "authErrorConsentRequired");
     default:
       return error.message.trim() || fallback;
   }

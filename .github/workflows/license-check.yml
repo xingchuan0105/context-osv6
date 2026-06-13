@@ -12,6 +12,12 @@ on:
       - 'scripts/generate-third-party-notices.sh'
       - 'scripts/sync-legal-assets.sh'
       - 'scripts/check-legal-publish-gate.sh'
+      - 'scripts/verify-legal-p0.sh'
+      - 'frontend_next/components/legal/**'
+      - 'frontend_next/lib/legal/**'
+      - 'avrag-rs/crates/transport-http/**'
+      - 'avrag-rs/crates/app-core/src/legal_versions.rs'
+      - 'avrag-rs/migrations/*legal*'
       - 'THIRD_PARTY_NOTICES.md'
       - 'LICENSE'
       - 'frontend_next/content/legal/**'
@@ -27,6 +33,12 @@ on:
       - 'scripts/generate-third-party-notices.sh'
       - 'scripts/sync-legal-assets.sh'
       - 'scripts/check-legal-publish-gate.sh'
+      - 'scripts/verify-legal-p0.sh'
+      - 'frontend_next/components/legal/**'
+      - 'frontend_next/lib/legal/**'
+      - 'avrag-rs/crates/transport-http/**'
+      - 'avrag-rs/crates/app-core/src/legal_versions.rs'
+      - 'avrag-rs/migrations/*legal*'
       - 'THIRD_PARTY_NOTICES.md'
       - 'LICENSE'
       - 'frontend_next/content/legal/**'
@@ -100,3 +112,14 @@ jobs:
 
       - name: Check legal document publish status
         run: bash scripts/check-legal-publish-gate.sh
+
+  legal-p0-verify:
+    name: Legal P0 acceptance checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run verify-legal-p0.sh
+        run: bash scripts/verify-legal-p0.sh

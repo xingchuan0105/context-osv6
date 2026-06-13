@@ -17,14 +17,32 @@ test.describe("Pricing page", () => {
     await expect(page.getByText(/DeepSeek 公开计费/)).toBeVisible();
   });
 
+  test("clicking upgrade without consent shows error", async ({ page }) => {
+    const pricing = new PricingPage(page);
+    await pricing.goto();
+    await pricing.clickUpgrade("plus");
+    const alert = page.locator("[role='alert'], .app-notice-banner, .consent-error");
+    await expect(alert.first()).toBeVisible({ timeout: 5_000 });
+  });
+
   test("clicking 升级 Plus triggers checkout redirect (mocked)", async ({ page }) => {
+    await page.route("**/api/auth/legal-acceptance", (route) =>
+      route.fulfill({ json: { success: true } }),
+    );
     await page.route("**/api/v1/billing/checkout-session", (route) =>
       route.fulfill({
-        json: { ok: true, data: { checkout_url: "/upgrade/success?mock=1", url: "/upgrade/success?mock=1" } },
+        json: {
+          ok: true,
+          data: {
+            checkout_url: "/upgrade/success?mock=1",
+            url: "/upgrade/success?mock=1",
+          },
+        },
       }),
     );
     const pricing = new PricingPage(page);
     await pricing.goto();
+    await page.locator(".consent-input").check();
     await pricing.clickUpgrade("plus");
     await expect(page).toHaveURL(/\/upgrade\/success/);
   });

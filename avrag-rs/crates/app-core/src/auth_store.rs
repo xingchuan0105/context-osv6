@@ -30,6 +30,15 @@ pub struct RecordLegalAcceptanceInput {
     pub user_agent: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UserLegalStatus {
+    pub needs_re_acceptance: bool,
+    pub accepted_terms_version: Option<String>,
+    pub accepted_privacy_version: Option<String>,
+    pub published_terms_version: String,
+    pub published_privacy_version: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct RegisterUserResult {
     pub user_id: Uuid,
@@ -82,6 +91,12 @@ pub trait AuthStorePort: Send + Sync {
 
     /// Standalone consent for payment or re-acceptance flows (not registration).
     async fn record_legal_acceptance(&self, input: &RecordLegalAcceptanceInput) -> Result<(), AppError>;
+
+    /// Latest acceptance vs published versions — drives re-acceptance UI.
+    async fn get_user_legal_status(&self, user_id: Uuid) -> Result<UserLegalStatus, AppError>;
+
+    /// Whether the user recorded a `payment` context acceptance at current published versions.
+    async fn has_payment_legal_acceptance(&self, user_id: Uuid) -> Result<bool, AppError>;
 
     async fn find_user_for_login(&self, email: &str) -> Result<Option<AuthUserCredentials>, AppError>;
 

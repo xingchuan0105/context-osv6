@@ -233,4 +233,20 @@ export const authMessages = {
     zh: "服务暂时不可用，请稍后再试。",
     en: "The service is temporarily unavailable. Try again later.",
   },
+  authErrorConsentRequired: {
+    zh: "请先阅读并同意用户协议与隐私政策。",
+    en: "Read and accept the Terms of Service and Privacy Policy first.",
+  },
+  authErrorInvalidTermsVersion: {
+    zh: "用户协议版本已更新，请刷新页面后重试。",
+    en: "The Terms of Service were updated. Refresh the page and try again.",
+  },
+  authErrorInvalidPrivacyVersion: {
+    zh: "隐私政策版本已更新，请刷新页面后重试。",
+    en: "The Privacy Policy was updated. Refresh the page and try again.",
+  },
+  authErrorInvalidLegalContext: {
+    zh: "法律同意记录无效，请刷新页面后重试。",
+    en: "The legal acceptance request was invalid. Refresh the page and try again.",
+  },
 } satisfies Record<string, UiMessageDescriptor>;

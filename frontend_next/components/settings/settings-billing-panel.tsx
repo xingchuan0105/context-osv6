@@ -5,6 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { describeAuthError } from "../../lib/auth/errors";
 import { useAuth } from "../../lib/auth/context";
+import ConsentCheckbox from "../legal/ConsentCheckbox";
+import { recordPaymentLegalAcceptance } from "../../lib/legal/client";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import {
   createCheckoutSession,
@@ -71,6 +73,7 @@ export function BillingPanel() {
   const [alipayOrderId, setAlipayOrderId] = useState<string | null>(null);
   const [pendingPlanId, setPendingPlanId] = useState<string | null>(null);
   const [checkoutPendingPlan, setCheckoutPendingPlan] = useState<string | null>(null);
+  const [paymentConsented, setPaymentConsented] = useState(false);
   
   const queryClient = useQueryClient();
   const t = TRANSLATIONS[locale === "zh-CN" ? "zh-CN" : "en"];
@@ -118,6 +121,7 @@ export function BillingPanel() {
     const provider = selectedProviders[planId] || "stripe";
     
     try {
+      await recordPaymentLegalAcceptance(token, paymentConsented);
       const response = await createCheckoutSession(token, {
         plan_id: planId,
         provider: provider
@@ -382,6 +386,7 @@ export function BillingPanel() {
         <h3 style={{ margin: 0 }}>
           {formatUiMessage(locale, "settings.billing.availablePlansTitle")}
         </h3>
+        <ConsentCheckbox onConsentChange={setPaymentConsented} />
         {billingQuery.data && billingQuery.data.plans.length === 0 ? (
           <p style={{ margin: 0, color: "hsl(var(--muted-foreground))" }}>
             {billingQuery.isLoading

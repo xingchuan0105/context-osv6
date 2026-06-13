@@ -47,7 +47,8 @@ struct ApiDoc;
 
 use auth_types::{
     AuthEnvelope, AuthPayload, AuthUserDto, ChangePasswordRequest,
-    ConfirmResetPasswordRequest, LoginRequest, RecordLegalAcceptanceRequest, RegisterRequest,
+    ConfirmResetPasswordRequest, LegalStatusEnvelope, LegalStatusPayload, LoginRequest,
+    RecordLegalAcceptanceRequest, RegisterRequest,
     ResetPasswordRequest, ResetRequest, SendResetCodeRequest, UpdateProfileRequest,
     UserPreferencesPayload, VerifyResetCodeRequest, VerifyResetTokenRequest,
 };

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 
 import { PricingPageClient } from "../../app/(marketing)/pricing/pricing-page-client";
@@ -23,6 +23,19 @@ vi.mock("../../lib/settings/client", () => ({
   createCheckoutSession: vi.fn(),
 }));
 
+vi.mock("../../lib/legal/client", () => ({
+  recordPaymentLegalAcceptance: vi.fn(),
+  PaymentConsentRequiredError: class PaymentConsentRequiredError extends Error {
+    constructor(message = "请先阅读并同意用户协议与隐私政策") {
+      super(message);
+      this.name = "PaymentConsentRequiredError";
+    }
+  },
+}));
+
+import { createCheckoutSession } from "../../lib/settings/client";
+import { recordPaymentLegalAcceptance } from "../../lib/legal/client";
+
 vi.mock("../../lib/billing/api", () => ({
   billingApi: {
     getPlans: vi.fn().mockResolvedValue({ plans: mockPlans, current_plan_id: "free" }),
@@ -35,5 +48,23 @@ describe("PricingPage", () => {
     expect(await screen.findByText(/选择适合你的方案/)).toBeTruthy();
     expect(screen.getByText("Plus")).toBeTruthy();
     expect(screen.getByText(/token 用量怎么算/)).toBeTruthy();
+  });
+
+  it("does not start checkout when payment consent is missing", async () => {
+    vi.mocked(recordPaymentLegalAcceptance).mockRejectedValueOnce(
+      new (class extends Error {
+        name = "PaymentConsentRequiredError";
+      })(),
+    );
+
+    render(<PricingPageClient />);
+    await screen.findByText(/选择适合你的方案/);
+
+    screen.getByRole("button", { name: /升级 Plus/ }).click();
+
+    await waitFor(() => {
+      expect(recordPaymentLegalAcceptance).toHaveBeenCalledWith("token-1", false);
+    });
+    expect(createCheckoutSession).not.toHaveBeenCalled();
   });
 });

@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use app_core::{
     AuthStorePort, AuthUserCredentials, AuthUserProfile,
     CreatePasswordResetTicketInput, PasswordResetUser, RecordLegalAcceptanceInput,
-    RegisterUserInput, RegisterUserResult,
+    RegisterUserInput, RegisterUserResult, UserLegalStatus,
 };
 use crate::adapters::pg_session::begin_super_admin_tx_sqlx;
 use crate::pg_error::map_pg_error;
@@ -130,6 +130,64 @@ impl AuthStorePort for PgAuthStoreAdapter {
         .await
         .map_err(map_sqlx_error)?;
         Ok(())
+    }
+
+    async fn get_user_legal_status(&self, user_id: Uuid) -> Result<UserLegalStatus, AppError> {
+        let pool = self.repo.raw();
+        let row = sqlx::query_as::<_, (String, String)>(
+            "SELECT terms_version, privacy_version
+             FROM legal_acceptances
+             WHERE user_id = $1
+             ORDER BY accepted_at DESC
+             LIMIT 1",
+        )
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(map_sqlx_error)?;
+
+        let (accepted_terms_version, accepted_privacy_version) = row
+            .map(|(terms, privacy)| (Some(terms), Some(privacy)))
+            .unwrap_or((None, None));
+
+        let published_terms_version = app_core::PUBLISHED_TERMS_VERSION.to_string();
+        let published_privacy_version = app_core::PUBLISHED_PRIVACY_VERSION.to_string();
+        let needs_re_acceptance = match (&accepted_terms_version, &accepted_privacy_version) {
+            (Some(terms), Some(privacy)) => {
+                terms != &published_terms_version || privacy != &published_privacy_version
+            }
+            _ => true,
+        };
+
+        Ok(UserLegalStatus {
+            needs_re_acceptance,
+            accepted_terms_version,
+            accepted_privacy_version,
+            published_terms_version,
+            published_privacy_version,
+        })
+    }
+
+    async fn has_payment_legal_acceptance(&self, user_id: Uuid) -> Result<bool, AppError> {
+        let pool = self.repo.raw();
+        let published_terms_version = app_core::PUBLISHED_TERMS_VERSION;
+        let published_privacy_version = app_core::PUBLISHED_PRIVACY_VERSION;
+        let exists = sqlx::query_scalar::<_, i32>(
+            "SELECT 1
+             FROM legal_acceptances
+             WHERE user_id = $1
+               AND context = 'payment'
+               AND terms_version = $2
+               AND privacy_version = $3
+             LIMIT 1",
+        )
+        .bind(user_id)
+        .bind(published_terms_version)
+        .bind(published_privacy_version)
+        .fetch_optional(pool)
+        .await
+        .map_err(map_sqlx_error)?;
+        Ok(exists.is_some())
     }
 
     async fn find_user_for_login(

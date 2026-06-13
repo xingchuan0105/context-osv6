@@ -4,7 +4,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { PricingCards } from "@/components/billing/PricingCards";
+import ConsentCheckbox from "@/components/legal/ConsentCheckbox";
 import { createCheckoutSession } from "@/lib/settings/client";
+import { recordPaymentLegalAcceptance } from "@/lib/legal/client";
+import { describeAuthError } from "@/lib/auth/errors";
 import { useAuth } from "@/lib/auth/context";
 import type { BillingPlan } from "@/lib/billing/api";
 import { billingApi } from "@/lib/billing/api";
@@ -18,6 +21,8 @@ export function PricingPageClient() {
   const router = useRouter();
   const { locale } = useUiPreferences();
   const [plans, setPlans] = useState<BillingPlan[]>(MARKETING_BILLING_PLANS);
+  const [paymentConsented, setPaymentConsented] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
 
   useEffect(() => {
     void billingApi
@@ -31,9 +36,21 @@ export function PricingPageClient() {
       return;
     }
 
-    const checkout = await createCheckoutSession(auth.token, { plan_id: planId });
-    if (checkout.url) {
-      router.push(checkout.url);
+    setCheckoutError("");
+    try {
+      await recordPaymentLegalAcceptance(auth.token, paymentConsented);
+      const checkout = await createCheckoutSession(auth.token, { plan_id: planId });
+      if (checkout.url) {
+        router.push(checkout.url);
+      }
+    } catch (error) {
+      setCheckoutError(
+        describeAuthError(
+          formatUiMessage(locale, "authErrorConsentRequired"),
+          error,
+          locale,
+        ),
+      );
     }
   }
 
@@ -52,6 +69,13 @@ export function PricingPageClient() {
       </header>
 
       <PricingCards plans={plans} highlightTier="plus" locale={locale} onSelect={handleSelect} />
+
+      {auth.token ? (
+        <div className={styles.consentSection}>
+          <ConsentCheckbox onConsentChange={setPaymentConsented} />
+          {checkoutError ? <p className={styles.checkoutError}>{checkoutError}</p> : null}
+        </div>
+      ) : null}
 
       <section className={styles.faq}>
         <h2 className={styles.faqTitle}>{formatUiMessage(locale, "pricingFaqTitle")}</h2>

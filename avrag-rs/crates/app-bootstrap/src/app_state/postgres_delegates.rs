@@ -126,7 +126,25 @@ impl AppState {
                 "billing checkout requires an authenticated user",
             );
         };
-        avrag_billing::handle_create_checkout(store, UserId::from(actor_id.into_uuid()), body).await
+        let user_id = UserId::from(actor_id.into_uuid());
+        if let Some(auth_store) = self.auth_store() {
+            match auth_store.has_payment_legal_acceptance(user_id.into_uuid()).await {
+                Ok(true) => {}
+                Ok(false) => {
+                    return ApiResponse::err(
+                        "consent_required",
+                        "payment legal acceptance is required before checkout",
+                    );
+                }
+                Err(error) => {
+                    return ApiResponse::err(
+                        "internal_error",
+                        &format!("failed to verify payment legal acceptance: {error}"),
+                    );
+                }
+            }
+        }
+        avrag_billing::handle_create_checkout(store, user_id, body).await
     }
 
     pub async fn billing_create_portal(&self) -> ApiResponse<avrag_billing::PortalResponse> {

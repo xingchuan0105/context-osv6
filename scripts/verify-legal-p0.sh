@@ -347,6 +347,78 @@ fi
 
 echo ""
 
+# ─── P1 产品链路（Phase 1 增量）───
+echo "── P1 产品链路 (P1-*) ──"
+
+# P1-API-1: GET /api/auth/legal-status
+if grep -q '"/legal-status"' "$REPO_ROOT/avrag-rs/crates/transport-http/src/routes/auth.rs"; then
+  pass "P1-API-1: GET /api/auth/legal-status 已接线"
+else
+  fail "P1-API-1: 缺少 legal-status 路由"
+fi
+
+# P1-FE-1: 前端 legal client
+if [ -f "$FE_DIR/lib/legal/client.ts" ] && \
+   grep -q "fetchLegalStatus" "$FE_DIR/lib/legal/client.ts" && \
+   grep -q "recordLegalAcceptance" "$FE_DIR/lib/legal/client.ts" && \
+   grep -q "recordPaymentLegalAcceptance" "$FE_DIR/lib/legal/client.ts"; then
+  pass "P1-FE-1: lib/legal/client.ts API 封装完整"
+else
+  fail "P1-FE-1: lib/legal/client.ts 不完整"
+fi
+
+# P1-FE-2: 登录后强制重签门控
+if [ -f "$FE_DIR/components/legal/LegalReacceptanceGate.tsx" ] && \
+   grep -q "LegalReacceptanceGate" "$FE_DIR/components/auth-gates.tsx"; then
+  pass "P1-FE-2: LegalReacceptanceGate 已接入 ProtectedRouteGate"
+else
+  fail "P1-FE-2: 重签门控未接入"
+fi
+
+# P1-FE-3: 支付/checkout 前记录 payment 同意
+PAYMENT_WIRED=0
+for f in \
+  "$FE_DIR/app/(app)/upgrade/paywall/paywall-page-client.tsx" \
+  "$FE_DIR/app/(marketing)/pricing/pricing-page-client.tsx" \
+  "$FE_DIR/components/settings/settings-billing-panel.tsx"; do
+  if grep -q "recordPaymentLegalAcceptance" "$f" 2>/dev/null; then
+    PAYMENT_WIRED=$((PAYMENT_WIRED + 1))
+  fi
+done
+if [ "$PAYMENT_WIRED" -eq 3 ]; then
+  pass "P1-FE-3: 三处 checkout 已接线 payment 同意"
+else
+  fail "P1-FE-3: checkout 同意接线不完整 ($PAYMENT_WIRED/3)"
+fi
+
+# P1-FE-4: describeAuthError 覆盖 legal 错误码
+if grep -q "invalid_terms_version" "$FE_DIR/lib/auth/errors.ts" && \
+   grep -q "invalid_privacy_version" "$FE_DIR/lib/auth/errors.ts" && \
+   grep -q "invalid_context" "$FE_DIR/lib/auth/errors.ts" && \
+   grep -q "consent_required" "$FE_DIR/lib/auth/errors.ts"; then
+  pass "P1-FE-4: describeAuthError 含 legal 错误码"
+else
+  fail "P1-FE-4: describeAuthError 缺少 legal 错误码"
+fi
+
+# P1-PIPE-1: verify-legal-p0 进 CI
+if [ -f "$REPO_ROOT/.github/workflows/license-check.yml" ] && \
+   grep -q "verify-legal-p0" "$REPO_ROOT/.github/workflows/license-check.yml"; then
+  pass "P1-PIPE-1: license-check CI 含 verify-legal-p0"
+else
+  fail "P1-PIPE-1: CI 未接入 verify-legal-p0"
+fi
+
+# P1-PIPE-2: smoke-e2e transport-http 带 DATABASE_URL
+if grep -q "DATABASE_URL" "$REPO_ROOT/.github/workflows/smoke-e2e.yml" && \
+   grep -q "avrag-ci-pg\|postgres:16" "$REPO_ROOT/.github/workflows/smoke-e2e.yml"; then
+  pass "P1-PIPE-2: smoke-e2e 为 legal HTTP 测试提供 Postgres"
+else
+  fail "P1-PIPE-2: smoke-e2e 未配置 legal 测试数据库"
+fi
+
+echo ""
+
 # ─── 发布门控检查 ───
 echo "── 发布门控 (P0-CNT-2) ──"
 bash "$REPO_ROOT/scripts/check-legal-publish-gate.sh" || true

@@ -7,6 +7,7 @@ import { dashboardMessages } from "./dashboard";
 import { gateMessages } from "./gate";
 import { helpMessages } from "./help";
 import { homeMessages } from "./home";
+import { legalMessages } from "./legal";
 import { paywallMessages } from "./paywall";
 import { pricingMessages } from "./pricing";
 import { settingsMessages } from "./settings";
@@ -25,6 +26,7 @@ export const UI_MESSAGES = {
   ...gateMessages,
   ...helpMessages,
   ...homeMessages,
+  ...legalMessages,
   ...paywallMessages,
   ...pricingMessages,
   ...settingsMessages,

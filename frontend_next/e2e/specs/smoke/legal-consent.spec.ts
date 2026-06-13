@@ -1,5 +1,10 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 
+import {
+  PUBLISHED_PRIVACY_VERSION,
+  PUBLISHED_TERMS_VERSION,
+} from "../../../lib/legal/versions";
+
 /**
  * legal-consent.spec.ts — 覆盖 P1/P2 法律合规页与同意链路的端到端验证。
  *
@@ -16,9 +21,6 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
-const PUBLISHED_TERMS = "2026-06-13";
-const PUBLISHED_PRIVACY = "2026-06-13";
-
 async function registerUser(
   request: APIRequestContext,
   email: string,
@@ -29,8 +31,8 @@ async function registerUser(
       email,
       password: "E2eTest123!",
       full_name: fullName,
-      terms_version: PUBLISHED_TERMS,
-      privacy_version: PUBLISHED_PRIVACY,
+      terms_version: PUBLISHED_TERMS_VERSION,
+      privacy_version: PUBLISHED_PRIVACY_VERSION,
     },
   });
   expect(resp.status(), `registration for ${email} should succeed`).toBe(201);
@@ -59,7 +61,7 @@ test.describe("Legal pages accessibility (P0-IA / P0-UX)", () => {
 
   test("terms page exposes version date and at least 10 chapters", async ({ page }) => {
     await page.goto("/legal/terms");
-    await expect(page.getByText(PUBLISHED_TERMS).first()).toBeVisible();
+    await expect(page.getByText(PUBLISHED_TERMS_VERSION).first()).toBeVisible();
     const headings = page.locator("article h2, .legal-document h2");
     const count = await headings.count();
     expect(count, "ToS should have ≥ 10 h2 chapters").toBeGreaterThanOrEqual(10);
@@ -116,7 +118,7 @@ test.describe("Backend legal-version validation (P0-CON-4)", () => {
         password: "E2eTest123!",
         full_name: "Stale Version",
         terms_version: "2025-01-01",
-        privacy_version: PUBLISHED_PRIVACY,
+        privacy_version: PUBLISHED_PRIVACY_VERSION,
       },
     });
     expect(response.status()).toBe(400);
@@ -133,10 +135,36 @@ test.describe("Backend legal-version validation (P0-CON-4)", () => {
         password: "E2eTest123!",
         full_name: "Missing Terms",
         // terms_version 故意缺失
-        privacy_version: PUBLISHED_PRIVACY,
+        privacy_version: PUBLISHED_PRIVACY_VERSION,
       },
     });
     expect(response.status()).toBe(400);
+  });
+});
+
+test.describe("Legal status endpoint (P1-API-1)", () => {
+  test("unauthenticated GET /api/auth/legal-status is 401", async ({ request }) => {
+    const response = await request.get("/api/auth/legal-status");
+    expect(response.status()).toBe(401);
+  });
+
+  test("authenticated GET /api/auth/legal-status returns published versions", async ({
+    request,
+  }) => {
+    const token = await registerUser(
+      request,
+      `status-${Date.now()}@test.local`,
+      "Legal Status",
+    );
+    const response = await request.get("/api/auth/legal-status", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    const status = body.data ?? body;
+    expect(status.published_terms_version).toBe(PUBLISHED_TERMS_VERSION);
+    expect(status.published_privacy_version).toBe(PUBLISHED_PRIVACY_VERSION);
+    expect(typeof status.needs_re_acceptance).toBe("boolean");
   });
 });
 
@@ -144,8 +172,8 @@ test.describe("Re-acceptance endpoint (§9.3.5)", () => {
   test("unauthenticated request to /api/auth/legal-acceptance is 401", async ({ request }) => {
     const response = await request.post("/api/auth/legal-acceptance", {
       data: {
-        terms_version: PUBLISHED_TERMS,
-        privacy_version: PUBLISHED_PRIVACY,
+        terms_version: PUBLISHED_TERMS_VERSION,
+        privacy_version: PUBLISHED_PRIVACY_VERSION,
         context: "payment",
       },
     });
@@ -161,8 +189,8 @@ test.describe("Re-acceptance endpoint (§9.3.5)", () => {
     const resp = await request.post("/api/auth/legal-acceptance", {
       headers: { Authorization: `Bearer ${token}` },
       data: {
-        terms_version: PUBLISHED_TERMS,
-        privacy_version: PUBLISHED_PRIVACY,
+        terms_version: PUBLISHED_TERMS_VERSION,
+        privacy_version: PUBLISHED_PRIVACY_VERSION,
         context: "bogus",
       },
     });
@@ -178,11 +206,76 @@ test.describe("Re-acceptance endpoint (§9.3.5)", () => {
     const resp = await request.post("/api/auth/legal-acceptance", {
       headers: { Authorization: `Bearer ${token}` },
       data: {
-        terms_version: PUBLISHED_TERMS,
-        privacy_version: PUBLISHED_PRIVACY,
+        terms_version: PUBLISHED_TERMS_VERSION,
+        privacy_version: PUBLISHED_PRIVACY_VERSION,
         context: "payment",
       },
     });
     expect(resp.status()).toBe(201);
+  });
+
+  test("authenticated re-acceptance with re_acceptance context is 201", async ({
+    request,
+  }) => {
+    const token = await registerUser(
+      request,
+      `reacc-ctx-${Date.now()}@test.local`,
+      "Re-accept Ctx",
+    );
+    const resp = await request.post("/api/auth/legal-acceptance", {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        terms_version: PUBLISHED_TERMS_VERSION,
+        privacy_version: PUBLISHED_PRIVACY_VERSION,
+        context: "re_acceptance",
+      },
+    });
+    expect(resp.status()).toBe(201);
+  });
+});
+
+test.describe("Re-acceptance gate UI (P1-FE-2)", () => {
+  test("dashboard shows re-acceptance panel when legal-status requires it", async ({
+    page,
+  }) => {
+    const token = "e2e-mock-token";
+    await page.addInitScript((value) => {
+      window.localStorage.setItem("avrag.auth.token", value);
+    }, token);
+
+    await page.route("**/api/auth/legal-status", (route) =>
+      route.fulfill({
+        json: {
+          success: true,
+          data: {
+            needs_re_acceptance: true,
+            published_terms_version: PUBLISHED_TERMS_VERSION,
+            published_privacy_version: PUBLISHED_PRIVACY_VERSION,
+          },
+        },
+      }),
+    );
+
+    await page.goto("/dashboard");
+    await expect(page.getByText(/协议已更新|Terms updated/i)).toBeVisible();
+    await expect(page.locator(".consent-input")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /确认并继续|Confirm and continue/i }),
+    ).toBeVisible();
+  });
+});
+
+test.describe("Payment consent UI (P1-FE-3)", () => {
+  test("pricing upgrade without consent shows error", async ({ page }) => {
+    await page.route("**/api/v1/billing/checkout-session", (route) =>
+      route.fulfill({
+        status: 400,
+        json: { ok: false, error: "consent_required" },
+      }),
+    );
+    await page.goto("/pricing");
+    await page.getByRole("button", { name: /升级 Plus|Upgrade Plus/i }).first().click();
+    const alert = page.locator("[role='alert'], .app-notice-banner, .consent-error");
+    await expect(alert.first()).toBeVisible({ timeout: 5_000 });
   });
 });

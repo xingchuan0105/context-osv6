@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "../lib/auth/context";
 import { formatUiMessage } from "../lib/i18n/messages";
 import { useUiPreferences } from "../lib/ui-preferences";
+import { LegalReacceptanceGate } from "./legal/LegalReacceptanceGate";
 
 function FullscreenMessage({ message }: { message: string }) {
   return (
@@ -36,7 +37,11 @@ export function ProtectedRouteGate({ children }: { children: ReactNode }) {
     return <FullscreenMessage message={formatUiMessage(locale, "gateRedirectingLogin")} />;
   }
 
-  return <>{children}</>;
+  return (
+    <LegalReacceptanceGate>
+      {children}
+    </LegalReacceptanceGate>
+  );
 }
 
 export function GuestOnlyGate({ children }: { children: ReactNode }) {

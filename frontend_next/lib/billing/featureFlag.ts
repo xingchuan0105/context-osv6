@@ -1,4 +1,4 @@
-import { ApiError, buildApiUrl } from "../http/request";
+import { ApiError, request } from "../http/request";
 import type { UsageWindowResponse } from "./api";
 
 /**
@@ -45,15 +45,10 @@ export async function probePricingRevampUsageWindow(): Promise<PricingRevampProb
   }
 
   try {
-    const response = await fetch(buildApiUrl("/api/v1/billing/usage/window"), {
-      credentials: "include",
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
-    if (!response.ok) {
-      return { enabled: false };
-    }
-    const envelope = (await response.json()) as UsageWindowProbeEnvelope;
+    const envelope = await request<UsageWindowProbeEnvelope>(
+      "/api/v1/billing/usage/window",
+      { method: "GET", credentials: "include" },
+    );
     if (envelope.ok !== true || !envelope.data) {
       return { enabled: false };
     }

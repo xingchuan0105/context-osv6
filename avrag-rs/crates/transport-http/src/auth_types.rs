@@ -45,6 +45,26 @@ pub(crate) struct RecordLegalAcceptanceRequest {
     pub context: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct LegalStatusPayload {
+    pub needs_re_acceptance: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepted_terms_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accepted_privacy_version: Option<String>,
+    pub published_terms_version: String,
+    pub published_privacy_version: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct LegalStatusEnvelope {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<LegalStatusPayload>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub(crate) struct LoginRequest {
     pub email: String,
