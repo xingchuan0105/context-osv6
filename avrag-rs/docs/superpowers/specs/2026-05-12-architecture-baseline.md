@@ -76,14 +76,16 @@ Milvus: 检索数据面
 - kg_entities, kg_relations, graph passages / chunk evidence
 
 Redis: 短时辅助（注意分工差异）
-- bins/worker:   `avrag-cache-redis::DocumentLock` —— 分布式文档锁
-- crates/app:    `adapters/redis_rate_limiter.rs` 直接使用 `redis` crate —— API 限流
-- 注：`avrag-cache-redis` 不在 API 请求路径上；app 与 worker 共享 Redis 实例但各走一套客户端
+- bins/worker:        `avrag-cache-redis::DocumentLock` —— 分布式文档锁
+- crates/app-bootstrap: `adapters/redis_rate_limiter.rs` 直接使用 `redis` crate —— API 限流；由 `transport-http/middleware.rs` 通过 `Arc<dyn RateLimiter>` 注入
+- 注：`avrag-cache-redis` 不在 API 请求路径上；app-bootstrap 与 worker 共享 Redis 实例但各走一套客户端
 ```
 
 > **Note**：`semantic memory vectors` 在 `2026-04-26 §10` 中列出，但 `2026-05-10` 明确标记为 P3-1 "不修复（长期画像全存 md 文档）"。当前代码未实现。
 
 > **2026-05-13 修订**：补充 Redis 分工说明（cache-redis 仅 worker / app 走 redis 直连），与 §17 文档冲突清单第 14 项配套。
+
+> **2026-06-13 修订**：Brooks v6 hardening 将 `RedisFixedWindowRateLimiter` 从 `crates/app/adapters/` 迁到 `crates/app-bootstrap/src/adapters/redis_rate_limiter.rs`，`app-core` 仅保留 `RateLimiter` port，不再依赖 `redis` crate。`transport-http` 通过 `AppState` 注入 `Arc<dyn RateLimiter>`，不直接引用具体实现。
 
 ---
 

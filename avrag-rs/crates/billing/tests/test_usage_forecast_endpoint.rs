@@ -13,9 +13,8 @@
 mod support;
 
 use avrag_billing::UsageForecastResponse;
-use chrono::{Duration, TimeZone, Utc};
-use support::{pg_pool_or_skip, run_migrations};
-use uuid::Uuid;
+use chrono::{Duration, Utc};
+use support::{pg_pool_or_skip, run_migrations, seed_llm_usage_events, seed_user_with_plan};
 
 #[test]
 fn usage_forecast_response_shape_matches_spec() {
@@ -58,51 +57,12 @@ async fn usage_forecast_aggregates_30d_token_usage_from_llm_usage_events() {
         .await
         .unwrap();
 
-    // Seed user + org.
-    let org_id: Uuid =
-        sqlx::query_scalar("insert into organizations (name) values ($1) returning id")
-            .bind(format!("org-{}", Uuid::new_v4()))
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-
-    let user_id: Uuid = sqlx::query_scalar(
-        "insert into users (org_id, email, full_name) values ($1, $2, $3) returning id",
-    )
-    .bind(org_id)
-    .bind(format!("u-{}@example.com", Uuid::new_v4()))
-    .bind("Test User")
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-
-    // Seed 3 distinct days of usage (10K units per day) within the last
-    // 30-day window. Use UTC midday offsets to keep date_trunc deterministic.
-    let now = Utc::now();
-    let base_day = now.date_naive();
-    for offset_days in 0..3_i64 {
-        let day = base_day - chrono::Days::new(offset_days as u64);
-        let when = Utc.from_utc_datetime(&day.and_hms_opt(12, 0, 0).unwrap());
-        sqlx::query(
-            r#"
-            insert into llm_usage_events
-                (org_id, user_id, feature, stage, provider, model,
-                 prompt_tokens, completion_tokens, total_tokens,
-                 usage_units, usage_source, created_at)
-            values ($1, $2, 'chat', 'unknown', 'dashscope', 'qwen3.5-flash',
-                    0, 0, 0, 10000, 'actual', $3)
-            "#,
-        )
-        .bind(org_id)
-        .bind(user_id)
-        .bind(when)
-        .execute(&pool)
-        .await
-        .unwrap();
-    }
+    let (user_id, org_id) = seed_user_with_plan(&pool, "free").await;
+    seed_llm_usage_events(&pool, org_id, user_id, 3, 10_000).await;
 
     // Sanity: aggregate the same SQL the handler uses. 3 days x 10K = 30K
     // total over the last 30 days. avg_daily = 30K / 30 = 1K.
+    let now = Utc::now();
     let total: i64 = sqlx::query_scalar(
         r#"
         select coalesce(sum(usage_units), 0)::bigint

@@ -19,6 +19,7 @@ pub mod smoke;
 pub mod tenants;
 
 mod mock_servers;
+mod mock_rag_state;
 mod persistent_runtime;
 mod pg_queries;
 mod test_context;

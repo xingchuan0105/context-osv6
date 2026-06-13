@@ -1,11 +1,11 @@
 # Brooks-Lint Review
 
-**Mode:** Architecture Audit  
-**Scope:** `avrag-rs` active Rust workspace（34 members）+ `desktop/` Tauri shell + `frontend_next` transport seam；深度复查 `cargo metadata` 生产依赖图、关键 crate manifest、现有 Brooks 报告与高风险源码。`frontend_rust/` 为废弃目录，本轮不纳入当前架构结论。  
-**Health Score:** 88/100  
-**Trend:** 97 -> 88 (-9) over last 3 runs
+**Mode:** Architecture Audit
+**Scope:** `avrag-rs` 主 Rust workspace（34 members，按 `cargo metadata --no-deps` 实测） + `desktop/` Tauri 独立 workspace + `frontend_next` 传输/合约接缝 + `contracts/` 跨语言边界。`avrag-rs/crates/web-sdk` 与 `avrag-rs/crates/web-ui` 含 `ARCHIVED.md` 且未列入 workspace members，已排除；`frontend_rust/` 按 CLAUDE.md 标记为废弃目录，本轮不纳入结论。
+**Health Score:** 87/100
+**Trend:** 88 → 87 (−1) over last 4 runs；旧两条 Warning（`app-core` Redis adapter / `app-chat` 千行文件）已核销，新两条 Warning 是 v5 之前未识别的结构性卫生项，整体复杂度净下降。
 
-生产依赖图继续保持无环，`common -> avrag-auth` 与 `rag-core -> app-core` 两个旧 Warning 已核销；当前主要风险集中在 `app-core` 仍承载 Redis 具体实现，以及 `app-chat` 主循环/eval 文件仍过大。
+生产依赖图继续无环；`app-core` 已回收为纯 ports/config/domain，Redis adapter 迁到 `app-bootstrap`；`app-chat/loop/mod.rs` 与 `eval/framework.rs` 从千行级降至骨架级（218 行 / 8 行）。当前主要风险是两项结构性卫生 — 死的 `avrag-test-kit` workspace 成员，以及 `app-chat → app-bootstrap` 这条**未使用且制造 Cargo 环**的 dev-dependency。
 
 ---
 
@@ -14,13 +14,19 @@
 ```mermaid
 graph TD
   subgraph Clients
-    Frontend["frontend_next (Web / desktop export)"]
-    Desktop["desktop Tauri shell"]
+    Frontend["frontend_next<br/>(Next.js 16 / pnpm)"]
+    Desktop["desktop<br/>(Tauri 2 独立 workspace)"]
+  end
+
+  subgraph CrossLanguage["Cross-language boundary"]
+    Contracts["contracts<br/>(typeshare DTO 单源)"]
   end
 
   subgraph Entrypoints
-    API["avrag-api"]
-    Worker["avrag-worker (fan-out: 13)"]
+    API["avrag-api (bin)"]
+    Worker["avrag-worker (bin, fan-out: 13)"]
+    OfficeJVM["office-parser-jvm (sidecar HTTP)"]
+    E2EAnalyzer["e2e-analyzer (bin)"]
   end
 
   subgraph Transport
@@ -28,23 +34,40 @@ graph TD
   end
 
   subgraph Composition
-    Bootstrap["app-bootstrap (composition root, fan-out: 20)"]
-    App["app facade (fan-out: 16)"]
+    Bootstrap["app-bootstrap<br/>(composition root, fan-out: 20)"]
+    AppFacade["app (HTTP facade, fan-out: 16)"]
   end
 
-  subgraph DomainApps
-    AppCore["app-core (ports/config/domain, fan-in: 11, fan-out: 9)"]
+  subgraph DomainApps["Domain apps (use-case orchestration)"]
+    AppCore["app-core<br/>(ports/config/domain, fan-in: 11)"]
     AppChat["app-chat (fan-out: 16)"]
     AppDocs["app-documents"]
     AppAdmin["app-admin"]
     AppBilling["app-billing"]
   end
 
-  subgraph PortContracts
-    Contracts["contracts"]
-    RagPorts["avrag-rag-core-ports"]
-    Common["common (fan-in: 22, no prod deps)"]
-    Auth["avrag-auth (fan-in: 18, no prod deps)"]
+  subgraph Ports["Lightweight port crates"]
+    RagPorts["avrag-rag-core-ports<br/>(无重 infra 依赖)"]
+    IngestionTypes["ingestion-types"]
+  end
+
+  subgraph Core["Core types (no infra dep)"]
+    Common["common<br/>(fan-in: 22)"]
+    Auth["avrag-auth<br/>(fan-in: 18)"]
+  end
+
+  subgraph CrossCut["Cross-cutting"]
+    Analytics["analytics (fan-in: 9)"]
+    Telemetry["telemetry (fan-in: 9)"]
+  end
+
+  subgraph ProductCtx["Product contexts"]
+    Share["avrag-share"]
+    Billing["avrag-billing"]
+    CodeInt["avrag-code-interpreter"]
+    Memory["avrag-chatmemory"]
+    Guard["avrag-guardrails"]
+    Search["avrag-search"]
   end
 
   subgraph RagPipeline
@@ -53,7 +76,7 @@ graph TD
     Ingestion["ingestion"]
   end
 
-  subgraph Infrastructure
+  subgraph Infra
     StoragePG["avrag-storage-pg"]
     StorageMilvus["avrag-storage-milvus"]
     StorageLocal["storage-local"]
@@ -61,42 +84,72 @@ graph TD
     LLM["avrag-llm"]
   end
 
-  subgraph ProductContexts
-    Share["avrag-share"]
-    Billing["avrag-billing"]
-    CodeInterpreter["avrag-code-interpreter"]
+  subgraph Hygiene["Workspace hygiene"]
+    TestKit["avrag-test-kit<br/>(fan-in: 0, dev-dep: 0) ⚠️"]
+    RagQuality["rag_quality (integration tests)"]
   end
 
-  Frontend -.->|"HTTP/SSE"| API
-  Frontend -.->|"Tauri IPC seam"| Desktop
+  Frontend -.->|HTTP/SSE| API
+  Frontend -.->|Tauri IPC seam| Desktop
+  Frontend --> Contracts
 
-  Desktop --> StorageLocal
   Desktop --> Common
-  Desktop --> Auth
   Desktop --> Contracts
+  Desktop --> StorageLocal
+  Desktop --> Auth
 
-  API --> App
+  API --> AppFacade
   API --> TH
+  Worker --> Bootstrap
+  Worker --> AppCore
+  Worker --> Ingestion
+  Worker --> StoragePG
+  Worker --> StorageMilvus
+  Worker --> CacheRedis
+  OfficeJVM --> Ingestion
+
   TH --> Bootstrap
   TH --> AppChat
   TH --> AppCore
   TH --> Share
   TH --> Billing
+  TH -.->|dev-dep ok| Bootstrap
 
-  App --> Bootstrap
-  App -.->|"feature/product-e2e + re-export"| TH
+  AppFacade --> Bootstrap
+  AppFacade -.->|feature=product-e2e| TH
 
-  Bootstrap --> StoragePG
-  Bootstrap --> StorageMilvus
-  Bootstrap --> CacheRedis
-  Bootstrap --> AppCore
   Bootstrap --> AppChat
   Bootstrap --> AppDocs
   Bootstrap --> AppAdmin
   Bootstrap --> AppBilling
+  Bootstrap --> AppCore
   Bootstrap --> Share
   Bootstrap --> RagCore
   Bootstrap --> LLM
+  Bootstrap --> StoragePG
+  Bootstrap --> StorageMilvus
+  Bootstrap --> CacheRedis
+  Bootstrap --> Memory
+  Bootstrap --> Guard
+  Bootstrap --> Search
+
+  AppChat --> AppCore
+  AppChat --> AppDocs
+  AppChat --> RagCore
+  AppChat --> RDP
+  AppChat --> CodeInt
+  AppChat --> LLM
+  AppChat --> Memory
+  AppChat --> Guard
+  AppChat -.->|unused dev-dep, cycle| Bootstrap
+
+  AppDocs --> AppCore
+  AppDocs --> Ingestion
+  AppAdmin --> AppCore
+  AppBilling --> AppCore
+  Share --> AppCore
+  Billing --> AppCore
+  Memory --> AppCore
 
   AppCore --> Auth
   AppCore --> Common
@@ -105,48 +158,50 @@ graph TD
   AppCore --> Ingestion
   AppCore --> LLM
 
-  AppChat --> AppCore
-  AppChat --> AppDocs
-  AppChat --> RagCore
-  AppChat --> RDP
-  AppChat --> CodeInterpreter
-  AppChat --> LLM
-  AppChat -.->|"dev-dependency only"| Bootstrap
-
-  AppDocs --> AppCore
-  AppDocs --> Ingestion
-  AppAdmin --> AppCore
-  AppBilling --> AppCore
-  Share --> AppCore
-  Billing --> AppCore
-
-  Worker --> AppCore
-  Worker --> Ingestion
-  Worker --> StoragePG
-  Worker --> StorageMilvus
-
   RagCore --> RagPorts
   RagCore --> RDP
-  RagCore --> Auth
-  RagCore --> Common
   RagCore --> CacheRedis
   RagCore --> LLM
-  RagCore --> CodeInterpreter
+  RagCore --> CodeInt
+  RagCore --> Auth
+  RagCore --> Common
   RDP --> Auth
   StoragePG --> Common
   StoragePG --> Auth
+  StoragePG --> IngestionTypes
   StorageMilvus --> RDP
   StorageLocal --> Common
+  StorageLocal --> RagPorts
+  Ingestion --> IngestionTypes
+  Ingestion --> Common
+  LLM --> CacheRedis
+  LLM --> Common
+  LLM --> Telemetry
+  RagPorts --> Common
+  RagPorts --> IngestionTypes
+
+  TestKit --> Common
+  RagQuality --> RagCore
+  RagQuality --> LLM
+  RagQuality --> Common
 
   classDef critical fill:#ff6b6b,stroke:#c92a2a,color:#fff
   classDef warning fill:#ffd43b,stroke:#e67700
   classDef clean fill:#51cf66,stroke:#2b8a3e,color:#fff
+  classDef archived fill:#adb5bd,stroke:#495057,color:#fff,stroke-dasharray: 4 4
 
-  class AppCore,AppChat warning
-  class Frontend,Desktop,API,Worker,TH,Bootstrap,App,AppDocs,AppAdmin,AppBilling,Contracts,RagPorts,Common,Auth,RagCore,RDP,Ingestion,StoragePG,StorageMilvus,StorageLocal,CacheRedis,LLM,Share,Billing,CodeInterpreter clean
+  class TestKit warning
+  class AppChat warning
+  class Frontend,Desktop,Contracts,API,Worker,OfficeJVM,E2EAnalyzer,TH,Bootstrap,AppFacade,AppCore,AppDocs,AppAdmin,AppBilling,RagPorts,IngestionTypes,Common,Auth,Analytics,Telemetry,Share,Billing,CodeInt,Memory,Guard,Search,RagCore,RDP,Ingestion,StoragePG,StorageMilvus,StorageLocal,CacheRedis,LLM,RagQuality clean
 ```
 
-`cargo metadata --no-deps` 验证：生产依赖图无环；全边图只有 `app-chat -> app-bootstrap -> app-chat` 这一条 dev-dependency 测试环。
+`cargo metadata --format-version 1 --no-deps` 复核：
+
+- workspace members = 34
+- 生产边图：**0 环**
+- 全边图（含 dev）：仅一条 `app-bootstrap → app-chat → app-bootstrap`，来源是 `app-chat/Cargo.toml` 的 dev-dep
+- 顶部生产 fan-in：`common:22`、`avrag-auth:18`、`app-core:11`、`analytics:9`、`avrag-llm:9`、`telemetry:9`
+- 顶部生产 fan-out：`app-bootstrap:20`、`app:16`、`app-chat:16`、`avrag-worker:13`、`app-core:9`、`transport-http:9`
 
 ---
 
@@ -154,51 +209,74 @@ graph TD
 
 ### 🟡 Warning
 
-**Dependency Disorder — `app-core` 同时是 Port 层和 Redis 具体实现宿主**
+**Accidental Complexity — `avrag-test-kit` 是死的 workspace 成员**
 
-Symptom: `app-core/Cargo.toml` 生产依赖 `redis`，并在 `crates/app-core/src/adapters/redis_rate_limiter.rs` 实现 `RedisFixedWindowRateLimiter`；`transport-http/src/middleware.rs` 直接 `use app_core::adapters::redis_rate_limiter::RedisFixedWindowRateLimiter`。与此同时，`app-core/src/ports/rate_limit/rate_limiter.rs` 又定义了 `RateLimiter` port，形成“接口和具体 Redis 细节同住核心层”的结构。
+Symptom: `crates/test-kit/Cargo.toml` 声明 `name = "avrag-test-kit"`，但 `cargo metadata` 显示其生产 fan-in = 0 且**无任何 `dev-dependencies` 引用**它（在整个 workspace 跑 `rg "avrag-test-kit|test-kit|avrag_test_kit" -t toml -t rust` 后只命中自身定义和根 `Cargo.toml` 成员列表）。该 crate 暴露 `test_org_id()` / `test_user_id()` 等通用测试夹具，但所有 crate 都在自身 `tests/` 目录中各自构造测试数据。
 
-Source: Martin — Clean Architecture — Dependency Inversion Principle
+Source: Fowler — *Refactoring* — Lazy Class；Ousterhout — *A Philosophy of Software Design* — Ch. 3: Strategic vs. Tactical Programming（“代码作为投资”的反例）
 
-Consequence: `app-core` 本应是高层 ports/config/domain 类型中心，但 Redis crate 升级、连接策略、窗口算法变更会触发 `app-core` 及其 11 个生产消费者重编译；后续若接入非 Redis 限流，调用方已经依赖具体类路径，替换成本会高于必要水平。
+Consequence: 1）误导新成员（“是不是应该用 test-kit？”却找不到任何调用范例）；2）`cargo check --workspace` / `cargo test --workspace` / CI 都要构建并跑它的内部 unit 测试，浪费时间且阻挡 `-D warnings` 收紧；3）一旦后续真要建共享测试工具，需要先迁移旧定义、再判定旧 API 是否要保留，凭空增加一轮决策。
 
-Remedy: 保留 `RateLimiter` / `RateLimitDecision` 在 `app-core`；把 `RedisFixedWindowRateLimiter` 移到 `app-bootstrap` adapter、`transport-http` 内部 adapter，或独立 infra crate；由 `AppState`/middleware 注入 `Arc<dyn RateLimiter>`，不要从 `transport-http` 直接引用 `app_core::adapters::*`。
+Remedy: 任选一项并落实：
+- 若确认未来 90 天没有共享夹具需求 → 删除 `crates/test-kit/` 目录、从 `avrag-rs/Cargo.toml` 移除 `crates/test-kit` 行；
+- 若决定保留 → 至少在 `transport-http`、`app-bootstrap`、`storage-pg` 中各添加一个真实 `dev-dependencies` 引用并用 `test_org_id()` 替换硬编码 UUID，建立“有人在用”的证据。
 
 ---
 
-**Cognitive Overload — `app-chat` 主循环与 eval 框架仍是千行级文件**
+**Change Propagation — `app-chat → app-bootstrap` 是未使用且制造 Cargo 环的 dev-dependency**
 
-Symptom: 当前实测 `crates/app-chat/src/agents/loop/mod.rs` 1289 行，`crates/app-chat/src/eval/framework.rs` 1633 行；`iteration.rs` 已从旧报告的 1147 行降到 767 行，但 `loop/mod.rs` 仍同时承载请求预处理、上下文初始化、检索循环、合成退出和测试。
+Symptom: `crates/app-chat/Cargo.toml` 的 `[dev-dependencies]` 包含 `app-bootstrap = { path = "../app-bootstrap" }`，但：1）`crates/app-chat/tests/` 目录不存在；2）`rg "app_bootstrap" crates/app-chat` 只命中一行注释（`atomic_tools/tests/memory.rs:    // skip when no in-crate adapter is wired (app-bootstrap adapters are private).`）。同时 `app-bootstrap` 生产依赖 `app-chat`，结果 `cargo metadata` 全边图唯一一条环就是 `app-bootstrap → app-chat → app-bootstrap`。
 
-Source: Ousterhout — A Philosophy of Software Design — Ch. 4: Modules Should Be Deep
+Source: Martin — *Clean Architecture* — Acyclic Dependencies Principle (ADP)；Fowler — *Refactoring* — Speculative Generality
 
-Consequence: Agent loop 是产品核心路径，新成员修改 retrieval/synthesis/policy 中任一块时仍要跨越过多局部状态；eval 框架把数据结构、比较、运行器、指标计算、LLM judge 解析和测试放在一个文件里，回归定位慢。
+Consequence: 1）`cargo test -p app-chat` 必须先构建 `app-bootstrap` 整条链路（含 sqlx/redis/milvus），编译时间无谓上升；2）申报了一条不存在的协作关系，给后续打算往 `app-chat/tests/` 加测试夹具的人留下“可以直接 use app_bootstrap”的错觉，下一步就会把测试环升级为生产环；3）违反“生产图无环、测试图理应也指向生产”的方向性约束，且该违反不会被任何 lint 抓住。
 
-Remedy: 延续已完成的 `iteration_codegen` / `iteration_tools` 拆分方向：`loop/mod.rs` 只保留 `ReActLoop` 编排骨架，把 run preparation、retrieval loop、synthesis/fallback 分到同层子模块；`eval/framework.rs` 拆成 `types`、`compare`、`runner`、`metrics`、`llm_judge`，测试随模块迁移。
+Remedy: 删除 `app-chat/Cargo.toml [dev-dependencies]` 里的 `app-bootstrap = ...` 行。配合 v5 已经提到的方向：未来真要写跨 crate 测试夹具，统一搬到 `crates/test-kit`（先按上一条 Warning 给 `test-kit` 找到真实消费者）或 `app-chat/tests/support/` 模式，禁止 dev-dep 回指 composition root。
 
 ### 🟢 Suggestion
 
-**Domain Model Distortion — `avrag-share` 领域 handler 返回 `axum::Json`**
+**Knowledge Duplication — `NotebookStore` trait 在 `app-core` 与 `app` 各暴露在两条路径**
 
-Symptom: `crates/share/src/handlers.rs` 的 `handle_create_share_link` 返回 `Result<axum::Json<ShareTokenResponse>, AppError>`，且 `avrag-share/Cargo.toml` 生产依赖 `axum`；同文件其他 handler 已返回纯领域/API 类型。
+Symptom: 同一个 `NotebookStore` trait 在 `avrag-rs/crates/app-core` 同时存在于：
 
-Source: Martin — Clean Architecture — Policy vs Detail boundaries
+- `src/ports/notebook_store.rs`（**唯一真定义**）
+- `src/ports/notebooks/notebook_store.rs`（一行 `pub use crate::ports::notebook_store::NotebookStore;`）
 
-Consequence: Share 逻辑被 HTTP 框架类型污染，worker、CLI 或 desktop IPC 若复用创建分享链接能力，会被迫携带 `axum` 依赖或再包一层转换。
+并在 `crates/app` 镜像出第二份相同的“别名包装层”。`app-core/src/adapters/memory.rs` 走第一条路径，`crates/app/src/services/notebooks/service.rs` 与 `crates/app/tests/notebook_service_contract.rs` 走第二条。`ports/notebooks/mod.rs` 整个文件只有 `pub mod notebook_store;` 一行，是空壳目录。
 
-Remedy: 让 `handle_create_share_link` 返回 `Result<ShareTokenResponse, AppError>`；由 `transport-http` 路由层统一包装 `Json(...)`，与当前大多数 app/bootstrap delegate 的纯类型返回风格对齐。
+Source: Hunt & Thomas — *The Pragmatic Programmer* — DRY；Fowler — *Refactoring* — Alternative Classes with Different Interfaces（同一接口、两条 import 路径的弱型版本）
+
+Consequence: IDE/code search 同时给出两条命中；后续如果有人按其中一条路径加新方法到包装文件中（误以为是个独立 trait），就会出现“同名 trait 的两份”实际定义。这是典型的“正在做但没收尾”的 colocation 改造残骸。
+
+Remedy: 选一条路径作为公共出口（建议保留 `ports::notebooks::notebook_store::NotebookStore`，与 `app/src/services/notebooks/` 命名空间对齐），把另一条删掉；同步更新 `adapters/memory.rs` 等少数现存 `use` 语句。
 
 ---
 
-**Change Propagation — `app-chat` 与 `app-bootstrap` 仍存在测试依赖环**
+**Knowledge Duplication — Legal 版本号常量前后端各一份**
 
-Symptom: 生产边无环，但全依赖边存在 `app-chat -> app-bootstrap -> app-chat`；来源是 `app-chat/Cargo.toml` 的 `dev-dependencies` 依赖 `app-bootstrap` 测试夹具，而 `app-bootstrap` 生产依赖 `app-chat` 组装 `ChatContext`。
+Symptom: `avrag-rs/crates/app-core/src/legal_versions.rs` 与 `frontend_next/lib/legal/versions.ts` 各定义一份 `PUBLISHED_TERMS_VERSION = "2026-06-13"` / `PUBLISHED_PRIVACY_VERSION = "2026-06-13"`，两边文件头注释互相 "keep in sync"。该项已在 `brooks-tech-debt-assessment-2026-06-13.md` 列为 Monitored（Pain 1 × Spread 2 = 2），本轮架构视角再确认未落地修复。
 
-Source: Martin — Clean Architecture — Acyclic Dependencies Principle (ADP)
+Source: Hunt & Thomas — *The Pragmatic Programmer* — DRY；Ousterhout — *A Philosophy of Software Design* — Ch. 5: Information Leakage
 
-Consequence: 当前不影响生产构建，但测试依赖会让 crate 边界更难讲清；后续如果有人把测试夹具提升到生产依赖，会立即生成生产环。
+Consequence: 协议版本升级时漏改一边，会出现“前端记录旧版本但后端拒收”或“后端认为已升级但前端不弹再确认”。`validate_published_legal_versions` 只能验证后端自洽，无法跨语言守护。
 
-Remedy: 将相关测试夹具迁入 `crates/test-kit` 或 `app-chat/tests/support`，让 `app-chat` 的 dev 边不再回指 composition root。
+Remedy: 与 tech-debt 报告口径一致的两个动作：（a）短期，CI 加 `scripts/verify-legal-versions.sh`，比较两文件字面值；（b）长期，把版本常量搬到 `contracts/src/legal.rs`，与 `chat.rs` / `billing.rs` 一样走 typeshare 生成到 `frontend_next/lib/contracts/generated/`。这是架构层 vs tech debt 层口径同源，本轮不重复扣分。
+
+---
+
+**Conceptual Integrity — 架构基准 / docs README 文本与现实漂移**
+
+Symptom: 三处文档把已经发生的迁移当成未发生：
+
+- `avrag-rs/docs/superpowers/specs/2026-05-12-architecture-baseline.md §2` 仍写 `crates/app: adapters/redis_rate_limiter.rs 直接使用 redis crate —— API 限流`；实测路径已是 `crates/app-bootstrap/src/adapters/redis_rate_limiter.rs`。
+- `avrag-rs/docs/README.md` 把 v5 报告称为“当前架构健康分 88/100，重点风险为 app-core Redis adapter 泄漏与 app-chat 千行文件”，但这两条 Warning 已在 v6 hardening 流程中核销。
+- 同 README 入库章节注脚仍把 v5 `brooks-architecture-audit-2026-06-13.md` 当作 current；本轮归档后链接将断。
+
+Source: Brooks — *The Mythical Man-Month* — Ch. 4: Conceptual Integrity；Winters et al. — *Software Engineering at Google* — Ch. 11: Documentation as Code（“文档与代码一起变更”）
+
+Consequence: 新成员读 baseline 会去 `crates/app` 找 Redis adapter；读 README 会以为 `app-chat/loop/mod.rs` 仍是千行文件并据此规划迁移工作。
+
+Remedy: 1）随本轮报告同时更新 `docs/README.md` 指向 v6 report；2）在 baseline §2 加 2026-06-13 修订说明，把 Redis adapter 路径改为 `app-bootstrap`；3）保留旧 v5 报告在 `docs/archive/brooks-architecture-audit-2026-06-13-v5.md`（本轮已 mv）。
 
 ---
 
@@ -206,41 +284,44 @@ Remedy: 将相关测试夹具迁入 `crates/test-kit` 或 `app-chat/tests/suppor
 
 | 边界 | 状态 | 说明 |
 |------|------|------|
-| Auth | ✅ 保持 | `AuthStorePort` + `PgAuthStoreAdapter`；`avrag-auth` 本身已是轻量类型 crate |
-| Admin | ✅ 保持 | `AdminStorePort` 落在 `app-core`，PG adapter 已拆到 `app-bootstrap/adapters/pg_admin_store/` |
-| Documents/Object | ✅ 保持 | `DocumentStorePort` / `ObjectStorePort` 抽象清楚，PG/local 对象存储通过 bootstrap 接线 |
-| Chat persistence | ✅ 改进 | canonical `ChatPersistencePort` 已迁到 `avrag-rag-core-ports`，`app-core` 只 re-export |
-| RAG cache | ✅ 保持 | `CachePort` 在轻量 `avrag-rag-core-ports`，desktop 不直接依赖 `avrag-rag-core` |
-| Share persistence | ✅ 改进 | `ShareStorePort` + `PgShareStoreAdapter` 已存在；剩余问题是 share handler 的 `axum::Json` 泄漏 |
-| Rate limiting | ⚠️ 部分塌陷 | Port 已存在，但 Redis 实现放在 `app-core::adapters` 并由 `transport-http` 直接引用，infra seam 未完全闭合 |
-| Desktop transport | ✅ 保持 | `frontend_next/lib/runtime/transport.ts` 区分 Web SSE 与 Tauri IPC；desktop 仍按阶段路线图推进 |
+| Auth | ✅ 保持 | `AuthStorePort` + `PgAuthStoreAdapter`；`avrag-auth` 是无 infra 的轻量 crate（fan-in 18） |
+| Admin | ✅ 保持 | `AdminStorePort` 落 `app-core`，PG adapter 在 `app-bootstrap/adapters/pg_admin_store/` 按业务域分片 |
+| Documents / Object | ✅ 保持 | `DocumentStorePort` / `ObjectStorePort` 清晰，`PgContentStore` / `PgDocumentStoreAdapter` / `ObjectStorePortAdapter` 分离 |
+| Chat persistence | ✅ 保持 | `ChatPersistencePort` canonical 定义在 `avrag-rag-core-ports`，`app-core` 仅 re-export，desktop 不被拖入 rag-core 重链 |
+| RAG cache | ✅ 保持 | `CachePort` 在 `avrag-rag-core-ports`；`storage-local` 依赖此 ports crate，桌面不接触 rag-core / llm / redis |
+| Share persistence | ✅ 改善（清账） | `ShareStorePort` + `PgShareStoreAdapter` 保留；handler 已不再返回 `axum::Json`，`avrag-share/Cargo.toml` 移除 axum 依赖 |
+| Rate limiting | ✅ 改善（清账） | `RateLimiter` port 留在 `app-core/ports/rate_limit/`，`RedisFixedWindowRateLimiter` 已迁到 `app-bootstrap/adapters/redis_rate_limiter.rs`，`transport-http/middleware.rs` 通过 `Arc<dyn RateLimiter>` 注入 |
+| Desktop transport | ✅ 保持 | `frontend_next/lib/runtime/transport.ts` 在 Web SSE 与 Tauri IPC 之间分叉；UI 层不感知 |
+| Layering 守护 | ✅ 自动化 | `scripts/check_layer_dependencies.sh` 守住「`transport-http` 不依赖 storage_pg/redis/storage_milvus；`app` 不依赖 transport_http（除 feature flag）」两条规则 |
 
-Source: Feathers — Working Effectively with Legacy Code — Ch. 4: The Seam Model
+Source: Feathers — *Working Effectively with Legacy Code* — Ch. 4: The Seam Model
+
+无新增 seam 塌陷。`app` facade 的 `product-e2e` feature 允许 dev/test 时打开 `transport-http`，是受控的破例，由 layer check 脚本明确允许。
 
 ---
 
 ## Conway's Law
 
-当前没有可验证的多团队所有权信息；按现有上下文看是单一 monorepo/单团队维护。没有证据表明模块边界正在制造跨团队协调成本，本轮跳过 Conway's Law finding。
+当前无可验证的多团队所有权信息（单 monorepo / 单团队），未观察到模块边界制造跨团队协调成本。Conway's Law 本轮跳过。
 
 ---
 
 ## Summary
 
-本轮最重要的动作是把 `app-core` 重新收窄为真正的 ports/config/domain 层：Redis 限流器应迁出核心层，只保留接口。第二优先级是继续拆 `app-chat` 的主循环与 eval 框架；生产依赖图已经无环，`common` 与 `rag-core-ports` 的方向比旧报告更健康。
+本轮最重要的两个动作都是**结构性卫生**而非架构修复：1）决定 `avrag-test-kit` 的去留并落实（删除或补真实消费者）；2）删掉 `app-chat` 那条未使用却制造 Cargo 环的 dev-dep。v5 标记的两条主要 Warning（`app-core` Redis adapter、`app-chat` 千行文件）以及 `share` 的 axum 泄漏均已核销，依赖图保持无环、`app-chat/loop/mod.rs` 从 1289 行降至 218 行、`eval/framework.rs` 从 1633 行降至 8 行的成绩可固化为基线。
 
 ---
 
 ## 本轮核销对照
 
-| 旧报告项 | 本轮状态 |
+| v5 报告项 | 本轮状态 |
 |----------|----------|
-| `common` 直接耦合 `avrag-auth` | ✅ 已核销：`common` 当前无生产依赖，源码无 `avrag_auth` 命中 |
-| `rag-core` 生产依赖 `app-core` | ✅ 已核销：`ChatPersistencePort` canonical 定义在 `avrag-rag-core-ports`，`rag-core` 不再依赖 `app-core` |
-| 生产依赖环 | ✅ 生产无环；仅余 dev-dependency 测试环 |
-| desktop 依赖链过重 | ✅ 保持轻量：`desktop/src-tauri` 只 path 依赖 `common`、`contracts`、`storage-local`、`avrag-auth` |
-| `app-chat` 千行文件 | ⚠️ 部分改善：`iteration.rs` 降至 767 行，但 `loop/mod.rs` 与 `eval/framework.rs` 仍需拆 |
-| `share` Port 化 | ⚠️ 持续改善：持久化 port 已建立，但 handler 仍泄漏 HTTP 类型 |
+| Warning：`app-core` 同时承载 Redis adapter | ✅ 核销：`crates/app-core/src/adapters/` 只剩 `memory.rs`；Redis 实现迁到 `app-bootstrap/src/adapters/redis_rate_limiter.rs`；`app-core/Cargo.toml` 移除 `redis` 依赖 |
+| Warning：`app-chat` 主循环与 eval 千行文件 | ✅ 核销：`agents/loop/mod.rs` 218 行，`eval/framework.rs` 8 行；`policy/config.rs` 拆为 `policy/config/{config_types,mode_loader,skill_catalog,tests,mod}.rs`；`iteration.rs` 拆为 `iteration/{assemble,content_dispatch,state,tests,mod}.rs`；`eval/` 拆为 `types/compare/runner/runner_tests/metrics/llm_judge/evaluator/mod.rs` |
+| Suggestion：`avrag-share` handler 返回 `axum::Json` | ✅ 核销：所有 handler 返回纯领域类型，`avrag-share/Cargo.toml` 不再依赖 axum；`transport-http/routes/share.rs` 在路由层 `Json(...)` 包装 |
+| Suggestion：`app-chat → app-bootstrap` dev-dep 测试环 | 🟡 升格为 Warning：进一步发现该 dev-dep 已 100% 未使用，应直接删除而非搬迁 |
+| 生产依赖环 | ✅ 保持 0 环；唯一全图环是上一条 dev-dep |
+| desktop 轻量依赖 | ✅ 保持：`desktop/src-tauri/Cargo.toml` 仍只 path 依赖 `common`、`contracts`、`storage-local`、`avrag-auth` |
 
 ---
 
@@ -248,20 +329,35 @@ Source: Feathers — Working Effectively with Legacy Code — Ch. 4: The Seam Mo
 
 ```bash
 cd avrag-rs
-cargo metadata --format-version 1 --no-deps
-# workspace_members=34
-# top_prod_fan_in=common:22, avrag-auth:18, app-core:11
-# top_prod_fan_out=app-bootstrap:20, app:16, app-chat:16
-# prod_cycles=none
-# all_cycles=app-chat->app-bootstrap->app-chat
+cargo metadata --format-version 1 --no-deps | python3 - <<'PY'
+import json, sys
+data = json.load(sys.stdin)
+members = {p['name']: p for p in data['packages']}
+print("members:", len(members))
+PY
+# members: 34
+
+# 生产/全图 环检测
+# prod_cycles=0
+# all_cycles=1 (app-bootstrap -> app-chat -> app-bootstrap)
 ```
 
 ```bash
-# 文件规模实测
-# crates/app-chat/src/agents/loop/mod.rs = 1289 lines
-# crates/app-chat/src/agents/loop/iteration.rs = 767 lines
-# crates/app-chat/src/eval/framework.rs = 1633 lines
-# crates/common/src = 1443 lines across 14 files
+# 文件规模实测（与 v5 对比）
+crates/app-chat/src/agents/loop/mod.rs               1289 -> 218  ✅
+crates/app-chat/src/agents/loop/iteration.rs         767  -> 0 (拆为 iteration/ 4 文件)
+crates/app-chat/src/agents/loop/policy/config.rs     669  -> 0 (拆为 policy/config/ 4 文件)
+crates/app-chat/src/eval/framework.rs                1633 -> 8 (拆为 7 文件)
+```
+
+```bash
+# 关键观察
+rg -t toml -t rust "avrag[-_]test[-_]kit|test[-_]kit" avrag-rs
+#   -> 只命中 crates/test-kit/Cargo.toml 与根 Cargo.toml workspace 成员行
+rg "app_bootstrap" avrag-rs/crates/app-chat
+#   -> 只命中 1 行注释；无生产/测试代码引用
+ls avrag-rs/crates/app-core/src/ports/
+#   -> chat/  mod.rs  notebook_store.rs  notebooks/  rate_limit/  (notebooks/ 是 1 行 re-export 空壳)
 ```
 
 ---
@@ -270,8 +366,9 @@ cargo metadata --format-version 1 --no-deps
 
 | 日期 | 说明 |
 |------|------|
-| 2026-06-13 v5 | 本轮：旧 v4 归档；生产图无环；核销 `common->auth` 与 `rag-core->app-core`；新增/保留 `app-core` Redis adapter、`app-chat` 千行文件、`share` HTTP 类型泄漏、dev-dep 测试环 |
-| 2026-06-13 v4 | 旧当前报告，已归档到 [archive/brooks-architecture-audit-2026-06-13-v4.md](./archive/brooks-architecture-audit-2026-06-13-v4.md) |
+| 2026-06-13 v6 | 本轮：v5 → archive；核销 `app-core` Redis、`app-chat` 千行文件、`share` axum 泄漏；新增 `avrag-test-kit` 死成员、`app-chat` 未用 dev-dep、`NotebookStore` 双路径、文档漂移 |
+| 2026-06-13 v5 | 已归档 [archive/brooks-architecture-audit-2026-06-13-v5.md](./archive/brooks-architecture-audit-2026-06-13-v5.md) |
+| 2026-06-13 v4 | [archive/brooks-architecture-audit-2026-06-13-v4.md](./archive/brooks-architecture-audit-2026-06-13-v4.md) |
 | 2026-06-12 v3 | [archive/brooks-architecture-audit-2026-06-12-v3.md](./archive/brooks-architecture-audit-2026-06-12-v3.md) |
 | 2026-06-12 v2 | [archive/brooks-architecture-audit-2026-06-12-v2.md](./archive/brooks-architecture-audit-2026-06-12-v2.md) |
 | 2026-06-12 v1 | [archive/brooks-architecture-audit-2026-06-12-v1.md](./archive/brooks-architecture-audit-2026-06-12-v1.md) |

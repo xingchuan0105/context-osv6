@@ -35,12 +35,12 @@
 
 ## Brooks-Lint 当前报告
 
-- [架构审计（2026-06-13 v5）](/home/chuan/context-osv6/avrag-rs/docs/brooks-architecture-audit-2026-06-13.md) — 当前架构健康分 88/100；生产依赖图无环，重点风险为 `app-core` Redis adapter 泄漏与 `app-chat` 千行文件。
+- [架构审计（2026-06-13 v6）](/home/chuan/context-osv6/avrag-rs/docs/brooks-architecture-audit-2026-06-13.md) — 当前架构健康分 87/100；生产依赖图无环，v5 主要 Warning（`app-core` Redis adapter、`app-chat` 千行文件、`share` axum 泄漏）已核销；剩余风险集中在结构性卫生（死的 `avrag-test-kit`、未用且制造 Cargo 环的 dev-dep、`NotebookStore` 双路径、文档漂移）。
 - [PR 审查（2026-06-13 v6）](/home/chuan/context-osv6/avrag-rs/docs/brooks-pr-review-2026-06-13-v6.md) — 当前 PR 健康分 48/100；blocker 为 Git 变更集分裂与 smoke runner 清单解析失效。
 - [测试质量审查（2026-06-13 round6）](/home/chuan/context-osv6/avrag-rs/docs/brooks-test-quality-review-2026-06-13.md)
 - [技术债评估（2026-06-13 v6）](/home/chuan/context-osv6/avrag-rs/docs/brooks-tech-debt-assessment-2026-06-13.md)
 
-旧版 Brooks 报告放在 `docs/archive/`；本轮已归档 [PR 审查 v5](/home/chuan/context-osv6/avrag-rs/docs/archive/brooks-pr-review-2026-06-13-v5.md) 与 [架构审计 v4](/home/chuan/context-osv6/avrag-rs/docs/archive/brooks-architecture-audit-2026-06-13-v4.md)。
+旧版 Brooks 报告放在 `docs/archive/`；本轮已归档 [架构审计 v5](/home/chuan/context-osv6/avrag-rs/docs/archive/brooks-architecture-audit-2026-06-13-v5.md)；先前批次归档了 [PR 审查 v5](/home/chuan/context-osv6/avrag-rs/docs/archive/brooks-pr-review-2026-06-13-v5.md) 与 [架构审计 v4](/home/chuan/context-osv6/avrag-rs/docs/archive/brooks-architecture-audit-2026-06-13-v4.md)。
 
 ## 历史与外部资料
 

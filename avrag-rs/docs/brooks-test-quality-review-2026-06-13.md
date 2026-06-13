@@ -1,11 +1,11 @@
 # Brooks-Lint Review
 
 **Mode:** Test Quality Review
-**Scope:** avrag-rs + frontend_next + contracts + desktop（全仓库深度复测，第六轮；Round 5 stale report 已归档）
-**Health Score:** 68/100
-**Trend:** Stable at 68 over last 6 runs
+**Scope:** avrag-rs + frontend_next + contracts + desktop（全仓库深度复测，第七轮；Round 6 报告已归档）
+**Health Score:** 74/100
+**Trend:** 68 → 74 (+6) — Round 6 三项 fix 已落地，但同一波重构又新增一个会让 smoke 编译步红灯的 dead re-export
 
-Product E2E 的编译回归已经修复，前端 Vitest 也保持全绿；但 PR smoke 脚本的模块清单守卫会在真正跑测试前误报退出，所以托管 smoke 门禁仍然不能保护 PR。
+Round 6 的 smoke runner 模块解析、billing PG 跳过、share port 行为契约、桌面 Tauri 单测四项都已修好；不过本轮 agent loop 拆分留下的 `pub(crate) use ... merge_request_doc_scope` 是 dead import，叠加 smoke/integration workflow 的 `RUSTFLAGS=-D warnings`，会让 PR 上 smoke 在第一步 `cargo build` 直接 red。
 
 ---
 
@@ -13,24 +13,30 @@ Product E2E 的编译回归已经修复，前端 Vitest 也保持全绿；但 PR
 
 ```
 Unit tests:
-  Frontend Vitest:     263 tests / 63 files（实测全绿，26.11s）
-  Rust targeted subset: app-admin 10 pass；avrag-billing 29 pass 后在 migration_0037 失败
-  Product E2E unit guards: setup / e2e_gate / test_context / mock_routing 已列入 smoke 脚本
+  Frontend Vitest:       287 tests / 68 files（实测全绿，19.82s；Round 6 为 263/63/26.11s）
+  Rust src/ inline:      872 #[test] / #[tokio::test] / #[sqlx::test]（含 app-chat 428 lib，30s）
+  Desktop Tauri lib:     13 tests（registry 2 / api 2 / backend 2 / chat 7，<1s 全绿）
+  Product E2E unit:      setup / e2e_gate / test_context / mock_routing 已串联到 smoke 脚本
 
 Integration tests:
-  Product E2E compile: PASS
-    cargo test --no-run -p app --test product_e2e --features product-e2e
-  Product smoke list:  20 tests discovered under product_e2e::smoke::*
-  Product smoke run:   FAIL before execution（script module coverage guard parses no modules）
-  Billing sqlx tests:  FAIL locally without live PG（PoolTimedOut）
+  Rust integration:      111 tests/*.rs files across 34 workspace crates
+  Product E2E binary:    73 tests (cargo test --test product_e2e --features product-e2e -- --list)
+  Product smoke modules: 11 modules（auth_boundary / share_boundary / chat_smoke / search_smoke /
+                          ingestion_smoke / rag_smoke / rag_fallback_smoke / rag_codegen_multitool_smoke /
+                          memory_multiturn_smoke / paddle_image_smoke / paddle_pdf_smoke）
+  Smoke runner guard:    PASS（./scripts/run-product-smoke-e2e.sh --check-modules ⇒
+                          OK: smoke module coverage guard passed (11 modules match cargo --list)）
+  Billing migration:     2 tests skip cleanly without DATABASE_URL；定义于 support::pg_pool_or_skip
+  Share port behavior:   storage_port_contract.rs 4 测 + share_behavior.rs 6 测 + access_level_contract.rs 3 测
 
 E2E tests:
-  Playwright:          24 spec files（journey / billing / skills / visual；本轮未跑）
-  llm_real:            ignored nightly tests（本轮未跑）
+  Playwright specs:      25 spec files（journey / billing / skills / smoke / visual；本轮未触发）
+  llm_real:              ignored nightly tests（本轮未触发）
 
 Ratio:
-  Suite shape remains broadly healthy, but execution reliability is not:
-  the highest-value Rust PR smoke path is currently blocked by runner parsing.
+  Suite shape: ~Unit 76% : Integration 22% : E2E 2%（按测试方法数粗算）
+  Feedback loop: Vitest 20s + app-chat lib 31s + desktop lib <1s = 单包反馈 < 60s。
+                  Smoke runner 在 -D warnings 下当前会卡在 cargo build。
 ```
 
 ---
@@ -39,93 +45,130 @@ Ratio:
 
 ### 🔴 Critical
 
-**Coverage Illusion — PR smoke 脚本在清单守卫处失败，真正 smoke 测试没有执行**
+**Coverage Illusion — `merge_request_doc_scope` dead re-export 让 smoke + integration CI 在 -D warnings 下编译失败**
 
-Symptom: `cargo test --no-run -p app --test product_e2e --features product-e2e` 已通过；`cargo test --test product_e2e -p app --features product-e2e smoke:: -- --list` 也能列出 20 个 smoke 测试。但实际 `./scripts/run-product-smoke-e2e.sh` 退出在清单守卫：`ERROR: run-product-smoke-e2e.sh lists smoke module 'auth_boundary' but cargo --list found no tests under smoke::auth_boundary::`。根因是 `--list` 输出带完整前缀 `product_e2e::smoke::auth_boundary::...`，脚本的解析只接受行首 `smoke::...`。
-Source: Google — *How Google Tests Software*, Ch. 11（change coverage：门禁必须实际执行才有保护）; Meszaros — *xUnit Test Patterns*, Erratic Test（测试运行器与发现机制不一致）
-Consequence: `smoke-e2e.yml` 的核心命令当前会红在“模块发现”步骤，PR smoke 无法覆盖 auth/share/chat/search/RAG；文档里“module list single source of truth”的说法会给出错误安全感。
-Remedy: 修正 `assert_smoke_module_coverage` 的解析，接受 `product_e2e::smoke::<module>::...` 前缀（或按 `::smoke::` 分割而不是行首匹配）；给脚本解析加一个轻量测试/检查，之后重跑 `./scripts/run-product-smoke-e2e.sh` 并确认至少进入非 RAG smoke 阶段。
+Symptom: 工作树修改 `crates/app-chat/src/agents/loop/mod.rs:35` 增加了 `pub(crate) use rag_bridge::{dispatch_rag_tool, merge_request_doc_scope};`，但 `rg merge_request_doc_scope` 显示 `merge_request_doc_scope` 仅在 `rag_bridge.rs` 内部使用，re-export 没有任何 callsite。`.github/workflows/smoke-e2e.yml:17` 与 `integration-e2e.yml:18` 都设置了 `RUSTFLAGS: "-D warnings"`，复刻 smoke 的预编译命令：
+```
+RUSTFLAGS="-D warnings" cargo build -p avrag-worker -p app --features product-e2e --tests
+```
+确认报错：`error: unused import: merge_request_doc_scope ... -D unused-imports implied by -D warnings`，编译退出码 101。
+Source: Google — *How Google Tests Software*, Ch. 11（change coverage：CI 守门必须能跑过去才有保护）；Meszaros — *xUnit Test Patterns*, Erratic Test（local cargo build 通过、CI -D warnings 红：行为依赖隐式环境变量）。
+Consequence: 任何把当前工作树推到 PR 都会让 smoke-e2e gate 在 "Compile tests" 步骤直接 red，PR 完全无法验证 auth/share/chat/search/RAG smoke。Round 6 修好的 smoke gate 等于又被一行 dead `pub(crate) use` 切断；`integration-e2e.yml` 也会一同 red。
+Remedy: 把 `pub(crate) use rag_bridge::{dispatch_rag_tool, merge_request_doc_scope};` 改为 `pub(crate) use rag_bridge::dispatch_rag_tool;`（`merge_request_doc_scope` 只在 `rag_bridge.rs` 内部调用，无需 re-export）。验收：
+```
+cd avrag-rs
+RUSTFLAGS="-D warnings" cargo build -p avrag-worker -p app --features product-e2e --tests
+./scripts/run-product-smoke-e2e.sh --check-modules
+```
+两条命令都返回零警告/零错误。
 
 ---
 
 ### 🟡 Warning
 
-**Test Obscurity — Billing migration 测试依赖隐式外部 PG，本地包级测试不可复现**
+**Test Obscurity — Product E2E mock 层 ~1,914 行 + 8 个进程级 OnceLock 仍是 Mystery Guest**
 
-Symptom: `cargo test -p ingestion -p avrag-worker -p app-admin -p avrag-billing -p avrag-share` 编译完成后，`app-admin` 与大部分 billing 测试通过，但 `crates/billing/tests/test_migration_0037.rs` 的两个 `#[sqlx::test]` 均 `PoolTimedOut`。同目录部分测试注释写着 “CI-only (requires a live PG)”，但这些 `#[sqlx::test]` 没有本地 skip / precheck；相比之下，`storage-pg` 里的 PG 测试会显式检查 `DATABASE_URL`，缺失时直接返回。
-Source: Meszaros — *xUnit Test Patterns*, Mystery Guest (p.411); Osherove — *The Art of Unit Testing*, 测试隔离原则
-Consequence: 开发者运行 `cargo test -p avrag-billing` 会得到环境型红灯，难以区分真实迁移回归和数据库未启动；这会降低团队运行包级测试的意愿。
-Remedy: 二选一：把这些 PG migration 测试移到明确的 CI/DB gate 脚本并在普通包级测试中跳过；或改为显式读取 `DATABASE_URL` / 启动测试 PG，失败时给出可操作的 precheck 信息，而不是等待 pool timeout。
+Symptom: `crates/app/tests/product_e2e/mock_servers.rs` 1,277 行（Round 6: 1,180）+ `test_context/builder.rs` 637 行（Round 6: 620）。`mock_servers.rs:15-22` 用 8 个 `OnceLock<Mutex<Option<...>>>` / `AtomicBool` 协调跨 mock route 的状态（`MOCK_RAG_CODEGEN_CHUNK_ID`、`MOCK_RAG_CODEGEN_DOC_ID`、`MOCK_RAG_MULTIROUND_PROFILE` 等），由 `reset_mock_rag_state()` 在 `TestContext::build_smoke`（builder.rs:312, 523）手动复位。`smoke/rag_codegen_multitool_smoke.rs` 一个 happy-path 测试就要在 `ctx.chat_*` 之前 pin 三个全局 cell：
+```rust
+ctx.set_mock_rag_multiround_profile(true);
+ctx.set_mock_rag_codegen_doc_id(&upload.document_id);
+ctx.set_mock_rag_chunk_id(&chunk_ids[0]);
+```
+读测试体看不出 mock LLM 为什么这样回答；要追到 `mock_servers.rs` 1,000+ 行后才能拼出路由。
+Source: Meszaros — *xUnit Test Patterns*, Mystery Guest (p.411); General Fixture (p.316); Erratic Test。
+Consequence: (1) 进程级共享状态强制所有 smoke 模块 `--test-threads=1`（`scripts/run-product-smoke-e2e.sh:80,83,89`），feedback 拉长；(2) 任何忘记 `set_mock_*` 的新测试可能依赖前一次测试的残留 → 偶发性绿/红难以复现；(3) 新贡献者无法仅看测试体判断 mock 行为是否反映了产品行为。
+Remedy: 把 `MockLlmRoute` 路由表 + canned responses 从 `mock_servers.rs` 拆为独立子模块，并把 8 个 OnceLock 全局收敛成显式 `MockState { multiround_profile, codegen_doc_id, chunk_id, ... }` 注入进 mock router；每个 smoke 测试在 setup 阶段声明它依赖的 MockState，`reset_mock_rag_state` 退化为构造一个新 `MockState`，让"未声明就读全局"的反模式不复存在。
 
-**Test Obscurity — Product E2E mock 层仍是 1,800+ 行 Mystery Guest**
+**Coverage Illusion — 新增 `LegalReacceptanceGate` 包裹整个登录后路由，但零单测**
 
-Symptom: `mock_servers.rs`（约 1,180 行）+ `test_context/builder.rs`（约 620 行）承载 mock LLM 路由、RAG 合成、embedding/search 桩逻辑。路由注释和 `mock_routing_tests` 已补强，但 smoke 失败时仍要跨 mock server、builder、HTTP helper 才能理解“为什么返回这个答案”。
-Source: Meszaros — *xUnit Test Patterns*, Mystery Guest; General Fixture
-Consequence: 这类基础设施改动容易再次出现“编译通过但 smoke runner 不执行/误路由”的问题，新贡献者也很难判断 mock 行为是不是产品行为。
-Remedy: 将 `MockLlmRoute` 路由表与 canned responses 拆成小模块，并让 smoke 测试显式声明所需 mock route；保留现有 `mock_routing_tests` 作为拆分后的 contract。
-
-**Architecture Mismatch — 桌面 Rust command handler 仍只有 `cargo check`，没有行为测试**
-
-Symptom: `frontend_next` 已有 `tauri-ipc.test.ts` 6 测和 `transport.test.ts` 4 测，验证前端 IPC 适配层；但 `desktop/src-tauri/src/` 仍没有 Rust 单测，CI 只做 `cargo check --manifest-path desktop/src-tauri/Cargo.toml`。
-Source: Google — *How Google Tests Software*, 测试金字塔; Feathers — Seam Model
-Consequence: 前端 mock 契约与 Rust command 实现可能漂移，尤其是 body 序列化、错误码映射、stream/cancel 行为；桌面端真实 bug 仍主要靠手测发现。
-Remedy: 把 Tauri command handler 中可纯函数化的 body 构造、错误映射、stream event 转换提取出来，加 Rust `#[test]`；再把 CI 从 `cargo check` 提升到 `cargo test`。
+Symptom: 工作树新增两个文件 `frontend_next/components/legal/LegalReacceptanceGate.tsx`（131 行）+ `frontend_next/lib/legal/client.ts`（77 行）。`auth-gates.tsx:41` 把 `LegalReacceptanceGate` 插入到 `ProtectedRouteGate` 内层，意味着所有已登录路由的子树都先经过它。组件包含 loading / blocked / ready 三态、token-gated `useEffect`、`fetchLegalStatus` 失败回退（`describeAuthError`）、`recordLegalAcceptance` 提交错误处理；`client.ts` 还导出 `PaymentConsentRequiredError` + `recordPaymentLegalAcceptance` 同意预检。`rg LegalReacceptanceGate|fetchLegalStatus|recordLegalAcceptance|PaymentConsentRequiredError frontend_next/tests` 命中 0；Vitest 287 测全绿但根本没覆盖此组件。
+Source: Feathers — *Working Effectively with Legacy Code*, Ch. 1（"legacy code is code without tests"）；Osherove — *The Art of Unit Testing*, 测试完整性原则；Google — *How Google Tests Software*, change coverage（高风险变更必须有对应测试）。
+Consequence: 任何回归——fetch 失败渲染、token 缺失短路、提交按钮 loading 闪烁、未同意时 payment 拦截抛错——都要等到 Playwright 或人工点击才暴露；最坏情况是 Gate 自身报错时整个登录后界面白屏。
+Remedy: 至少补 4 个 Vitest unit test：
+1. `fetchLegalStatus` 返回 `needs_re_acceptance: false` ⇒ children 直接渲染；
+2. 返回 `true` ⇒ 渲染 `ConsentCheckbox` + 提交按钮 + 标题文案；
+3. 提交失败 ⇒ 显示 `describeAuthError` 错误条；
+4. `recordPaymentLegalAcceptance(token, false)` 必须抛 `PaymentConsentRequiredError`。
+建议放在 `frontend_next/tests/legal/LegalReacceptanceGate.test.tsx` + `frontend_next/tests/legal/client.test.ts`，与现有 `tests/legal/ConsentCheckbox.test.tsx` 同目录。
 
 ---
 
 ### 🟢 Suggestion
 
-**Coverage Illusion — Share port contract 已补 token 行为，但公开读/邀请路径仍缺快速单测**
+**Test Duplication — billing usage 测试中 user+org+event seed 块在 3 个文件复制**
 
-Symptom: `crates/share/tests/storage_port_contract.rs` 现在覆盖 `create_share_token` → `validate_token` 和 unknown token，比上一轮“零行为测试”明显改善。但 fake store 里的 `load_shared_notebook`、`resolve_public_share_chat_context`、`invite_member` 仍返回 `None` / `not implemented`，这些 handler/service 映射主要靠 `smoke::share_boundary` 和前端 mock 间接覆盖；而当前 smoke 脚本又还未能执行。
-Source: Feathers — Characterization Tests; Osherove — 测试完整性原则
-Consequence: public share payload 映射、公共聊天上下文、invite 权限错误可能等到慢 E2E 或手测才暴露。
-Remedy: 在现有 in-memory fake 上补 3–5 个 service-level tests：shared notebook payload mapping、public chat context mapping、owner invite 成功、非 owner invite 被拒。
-
-**Test Obscurity（反馈噪声）— 编译 warning 常驻，遮住真正测试信号**
-
-Symptom: Product E2E 编译和目标 Rust 测试输出仍包含 `ingestion` 10 条 warning、`product_e2e` 2 条 warning、`avrag-worker` 20+ 条 warning。上一轮 Product E2E 编译失败就是混在这些 warning 后面出现的。
-Source: McConnell — *Code Complete*, construction cleanliness
-Consequence: 测试失败时输出噪声很高，开发者容易跳过关键 error；也让 `-D warnings` 这类更强 CI 门禁暂时无法启用。
-Remedy: 先清理本轮新增的 unused/dead warning；确认无噪声后再考虑在 smoke compile 步启用 `RUSTFLAGS=-D warnings`。
+Symptom: `crates/billing/tests/test_usage_window_endpoint.rs:33-73` 把 org+user+subscription 的 seed 提到了 helper `seed_user_with_plan`，但相邻的 `test_usage_forecast_endpoint.rs:62-77` 与 `test_usage_history_endpoint.rs:57-72` 内联了几乎相同的 `insert into organizations` + `insert into users` 块；每个文件还各自重复了 `for offset_days in 0..3 { sqlx::query("insert into llm_usage_events ...") }` 的 seed loop（仅 `usage_units` 和窗口长度参数不同）。`tests/support/mod.rs` 当前只提供 `pg_pool_or_skip` + `run_migrations`，没有共享 fixture。
+Source: Meszaros — *xUnit Test Patterns*, Test Code Duplication (p.213)；Hunt & Thomas — *The Pragmatic Programmer*, DRY。
+Consequence: schema 改动（如新增 `users.tenant_id` 列）需要在 3 处同步；新人改一处就过本地，CI 才暴露另两处仍按旧 schema seed。
+Remedy: 把 `seed_user_with_plan` 提到 `crates/billing/tests/support/mod.rs`，并新增 `seed_llm_usage_events(pool, org_id, user_id, days, units_per_day)` helper；三个测试文件改为 `let (user_id, org_id) = support::seed_user_with_plan(&pool, "free").await;` + `support::seed_llm_usage_events(&pool, org_id, user_id, 3, 50_000).await;`。
 
 ---
 
-## Round 5 闭环核对
+## Round 6 闭环核对
 
-| Round 5 发现 | 本轮实测状态 |
+| Round 6 发现 | 本轮实测状态 |
 |---|---|
-| 🔴 Product E2E 测试二进制编译失败 | ✅ 已修复；`cargo test --no-run -p app --test product_e2e --features product-e2e` 通过 |
-| 🟡 share 模块仅枚举契约 | ✅ 部分修复；新增 in-memory `ShareStorePort` token round-trip，但公开读/邀请仍是缺口 |
-| 🟡 Product E2E mock 层 Mystery Guest | ⏳ 仍存在；已有 route doc 与 `mock_routing_tests`，但体量/隐式预条件仍高 |
-| 🟡 桌面 Rust command 零单测 | ⏳ 仍存在；前端 IPC 单测通过，Rust handler 仍仅 `cargo check` |
-| 🟢 编译 warning 噪声 | ⏳ 仍存在，且本轮 Rust 目标输出更明显 |
-| 🟢 storage-local 零 inline 测试 | ⏳ 本轮未复测，低优先级保留 |
+| 🔴 PR smoke 脚本模块清单守卫解析失败 | ✅ FIXED — `sed -n 's/.*::smoke::\([^:]*\)::.*/\1/p'` 接受完整路径前缀；`./scripts/run-product-smoke-e2e.sh --check-modules` ⇒ "OK: smoke module coverage guard passed (11 modules match cargo --list)" |
+| 🟡 Billing migration 测试隐式依赖外部 PG | ✅ FIXED — `crates/billing/tests/support/mod.rs::pg_pool_or_skip` 显式读 `DATABASE_URL`，缺失时 `eprintln!("skip: ... DATABASE_URL not set")` 并直接返回 `None`；`unset DATABASE_URL && cargo test -p avrag-billing --test test_migration_0037` ⇒ 2 tests 全 pass（skip 走绿色） |
+| 🟡 Product E2E mock 层 ~1,800 行 Mystery Guest | ⏳ STILL — 增至 1,914 行（mock_servers 1,277 + builder 637），8 个 OnceLock 全局未变；本轮升级为更详细的 🟡 Warning |
+| 🟡 桌面 Rust command handler 仅 `cargo check` | ✅ FIXED — `desktop/src-tauri/src/{registry,api,backend,chat}.rs` 共 13 个 `#[test]`（chat::* 7、registry::* 2、api::* 2、backend::* 2）；`smoke-e2e.yml::desktop-check` job 已升级为 `cargo test --manifest-path desktop/src-tauri/Cargo.toml --quiet`（line 130） |
+| 🟢 Share port 公开读/邀请仅 token round-trip | ✅ FIXED — `share/tests/share_behavior.rs` 6 测覆盖 `load_shared_notebook` payload 映射、`resolve_public_share_chat_context`、`owner_can_invite_member` + `non_owner_invite_is_rejected_before_store`；MemoryShareStore 现在跟踪 invite 列表 |
+| 🟢 编译 warning 噪声（ingestion 10 / product_e2e 2 / worker 20+） | ⚠️ 部分 REGRESSED — `cargo build -p ingestion -p avrag-worker --tests` 已是零警告；`cargo test --no-run -p app --test product_e2e` 也是零警告；但 `app-chat` 出现 1 条新的 `unused import: merge_request_doc_scope`，正是本轮 🔴 Critical 的根因 |
 
 ---
 
 ## 本轮实测记录（2026-06-13）
 
 ```bash
-cd avrag-rs
-cargo test --no-run -p app --test product_e2e --features product-e2e
-# PASS, 17.47s；仍有 ingestion/product_e2e warnings
+cd /home/chuan/context-osv6/avrag-rs
 
-./scripts/run-product-smoke-e2e.sh
-# FAIL before smoke execution:
-# ERROR: run-product-smoke-e2e.sh lists smoke module 'auth_boundary' but cargo --list found no tests under smoke::auth_boundary::
+# 1. Smoke runner 模块守卫（Round 6 修复验证）
+./scripts/run-product-smoke-e2e.sh --check-modules
+# OK: smoke module coverage guard passed (11 modules match cargo --list)
 
-cargo test --test product_e2e -p app --features product-e2e smoke:: -- --list
-# PASS；20 tests listed as product_e2e::smoke::<module>::<test>
+cargo test --test product_e2e -p app --features product-e2e smoke:: -- --list \
+  | sed -n 's/.*::smoke::\([^:]*\)::.*/\1/p' | sort -u
+# auth_boundary chat_smoke ingestion_smoke memory_multiturn_smoke paddle_image_smoke
+# paddle_pdf_smoke rag_codegen_multitool_smoke rag_fallback_smoke rag_smoke
+# search_smoke share_boundary
 
-cargo test -p ingestion -p avrag-worker -p app-admin -p avrag-billing -p avrag-share
-# FAIL in avrag-billing migration_0037: 2 PoolTimedOut failures after app-admin/billing subset passes
+# 2. Billing PG 跳过（Round 6 修复验证）
+unset DATABASE_URL
+cargo test -p avrag-billing --test test_migration_0037 -- --nocapture | tail
+# skip: migration_0037_sets_pricing_revamp_quotas — DATABASE_URL not set; ...
+# skip: migration_0037_preserves_enterprise_unlimited_policy — ...
+# test result: ok. 2 passed; 0 failed; ...
 
-cd ../frontend_next && pnpm vitest run
-# Test Files 63 passed / Tests 263 passed / Duration 26.11s
+# 3. Share / billing 行为测试
+cargo test -p avrag-share --tests
+# share_behavior 6 / storage_port_contract 4 / access_level_contract 3 / module_surface 1 全绿
 
-docker ps --filter name=avrag-test- --format '{{.Names}}'
-# empty after smoke-script trap
+cargo test -p avrag-billing --tests
+# 28 tests across 9 binaries 全绿（在无 PG 时 sqlx 测试走 skip 路径）
+
+# 4. 桌面 Tauri 单测（Round 6 修复验证）
+cd ../desktop/src-tauri
+cargo test --lib | tail
+# test result: ok. 13 passed; 0 failed; 0 ignored; ...
+
+# 5. app-chat 全 lib 测试（reorg 后 sanity）
+cd ../../avrag-rs
+cargo test -p app-chat --lib | tail
+# test result: ok. 428 passed; 0 failed; ...; finished in 31.10s
+
+# 6. Frontend Vitest
+cd ../frontend_next
+pnpm vitest run | tail
+# Test Files  68 passed (68)
+# Tests       287 passed (287)
+# Duration    19.82s
+
+# 7. -D warnings smoke pre-build 复刻（本轮 🔴 Critical 复现）
+cd ../avrag-rs
+RUSTFLAGS="-D warnings" cargo build -p avrag-worker -p app --features product-e2e --tests
+# error: unused import: `merge_request_doc_scope`
+#   --> crates/app-chat/src/agents/loop/mod.rs:35:48
+# error: could not compile `app-chat` (lib) due to 1 previous error
 ```
 
 ---
@@ -133,26 +176,29 @@ docker ps --filter name=avrag-test- --format '{{.Names}}'
 ## 验收命令（修复 Critical 后）
 
 ```bash
-cd avrag-rs
+cd /home/chuan/context-osv6/avrag-rs
 
-# 1. Smoke runner must reach actual tests
-./scripts/run-product-smoke-e2e.sh
+# 1. -D warnings 下 smoke 预编译必须绿
+RUSTFLAGS="-D warnings" cargo build -p avrag-worker -p app --features product-e2e --tests
 
-# 2. Keep compile gate green
-cargo test --no-run -p app --test product_e2e --features product-e2e
+# 2. Smoke runner 模块守卫保持绿
+./scripts/run-product-smoke-e2e.sh --check-modules
 
-# 3. Billing DB tests must be explicitly gated or backed by a live PG
-cargo test -p avrag-billing
+# 3. Frontend Vitest 引入新增的 LegalReacceptanceGate 测试后保持绿
+cd ../frontend_next
+pnpm vitest run
 
-# 4. Frontend regression baseline
-cd ../frontend_next && pnpm vitest run
+# 4. Billing 在没有 PG 时也保持绿
+cd ../avrag-rs
+unset DATABASE_URL
+cargo test -p avrag-billing --tests
 ```
 
 ---
 
 ## 相关文档
 
-- Round 1–5（已归档）：[`round1`](./archive/brooks-test-quality-review-2026-06-12-round1.md) / [`round2`](./archive/brooks-test-quality-review-2026-06-12-round2.md) / [`round3`](./archive/brooks-test-quality-review-2026-06-12-round3.md) / [`round4`](./archive/brooks-test-quality-review-2026-06-12-round4.md) / [`round5`](./archive/brooks-test-quality-review-2026-06-13-round5.md)
+- Round 1–6（已归档）：[`round1`](./archive/brooks-test-quality-review-2026-06-12-round1.md) / [`round2`](./archive/brooks-test-quality-review-2026-06-12-round2.md) / [`round3`](./archive/brooks-test-quality-review-2026-06-12-round3.md) / [`round4`](./archive/brooks-test-quality-review-2026-06-12-round4.md) / [`round5`](./archive/brooks-test-quality-review-2026-06-13-round5.md) / [`round6`](./archive/brooks-test-quality-review-2026-06-13-round6.md)
 - [E2E Quality Gates](./e2e-gates.md)
 - 历史分数：[`../../.brooks-lint-history.json`](../../.brooks-lint-history.json)
 
@@ -160,6 +206,6 @@ cd ../frontend_next && pnpm vitest run
 
 ## Summary
 
-本轮不是“测试覆盖倒退”，而是“门禁执行链还没闭合”：Product E2E 编译恢复了，前端 263 个 Vitest 全绿，share 也补上了第一批 service-level contract；但 PR smoke runner 现在会被自己的模块清单解析误伤，导致最重要的 Rust smoke gate 仍然不可用。
+本轮不是 Round 6 →7 的全面退步：smoke runner 模块守卫、billing PG 跳过、share port 行为契约、桌面 Tauri 单测四项 Round 6 发现都被关闭。但同一波 agent loop 重构留下了一行 `pub(crate) use rag_bridge::{dispatch_rag_tool, merge_request_doc_scope};` 是 dead import，与 `RUSTFLAGS=-D warnings` 的 CI 设置正面碰撞——任何 PR 推上来 smoke 都会在第一步 cargo build 直接 red。
 
-优先级很明确：先修 `run-product-smoke-e2e.sh` 的 `--list` 解析并跑通 smoke；随后处理 billing 的 PG 依赖测试，让本地包级测试不要因为隐式外部状态而红。
+优先级很明确：先把 `crates/app-chat/src/agents/loop/mod.rs:35` 的 dead `merge_request_doc_scope` 删掉，恢复 smoke 守门链路；随后给 `LegalReacceptanceGate` 补 4 个 Vitest 单测（这是当前未受任何测试守护、却被注入到所有登录后路由的关键组件）；最后再处理 Product E2E mock 层的拆分以彻底消除 Mystery Guest。

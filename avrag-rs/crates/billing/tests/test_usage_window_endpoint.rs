@@ -24,53 +24,9 @@ mod support;
 
 use avrag_billing::{LimitHits, UsageWindowBucket, UsageWindowResponse};
 use chrono::{Duration, Utc};
-use sqlx::PgPool;
-use support::{pg_pool_or_skip, run_migrations};
-use uuid::Uuid;
+use support::{pg_pool_or_skip, run_migrations, seed_user_with_plan};
 
 const PLAN_FREE: &str = "free";
-
-async fn seed_user_with_plan(pool: &PgPool, plan_id: &str) -> (Uuid, Uuid) {
-    let mut tx = pool.begin().await.unwrap();
-    sqlx::query("select set_config('app.current_role', 'super_admin', true)")
-        .execute(&mut *tx)
-        .await
-        .unwrap();
-
-    let org_id: Uuid =
-        sqlx::query_scalar("insert into organizations (name) values ($1) returning id")
-            .bind(format!("org-{}", Uuid::new_v4()))
-            .fetch_one(&mut *tx)
-            .await
-            .unwrap();
-
-    let user_id: Uuid = sqlx::query_scalar(
-        "insert into users (org_id, email, full_name) values ($1, $2, $3) returning id",
-    )
-    .bind(org_id)
-    .bind(format!("u-{}@example.com", Uuid::new_v4()))
-    .bind("Test User")
-    .fetch_one(&mut *tx)
-    .await
-    .unwrap();
-
-    sqlx::query(
-        r#"
-        insert into subscriptions
-            (user_id, plan_id, status, billing_provider, cancel_at_period_end)
-        values ($1, $2, 'active', 'stripe', false)
-        "#,
-    )
-    .bind(user_id)
-    .bind(plan_id)
-    .execute(&mut *tx)
-    .await
-    .unwrap();
-
-    tx.commit().await.unwrap();
-
-    (user_id, org_id)
-}
 
 #[tokio::test]
 async fn free_plan_caps_match_pricing_revamp() {

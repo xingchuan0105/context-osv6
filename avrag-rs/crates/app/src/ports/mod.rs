@@ -1,1 +1,1 @@
-pub use app_core::ports::{chat, notebook_store, notebooks, rate_limit};
+pub use app_core::ports::{chat, notebooks, rate_limit};

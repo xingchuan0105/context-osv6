@@ -8,6 +8,23 @@ use support::MemoryShareStore;
 use uuid::Uuid;
 
 #[test]
+fn handlers_do_not_leak_http_framework_types() {
+    let handlers = include_str!("../src/handlers.rs");
+    assert!(
+        !handlers.contains("axum::"),
+        "avrag-share handlers must return domain types, not axum::Json"
+    );
+    let manifest = include_str!("../Cargo.toml");
+    assert!(
+        !manifest.lines().any(|line| {
+            let trimmed = line.trim();
+            trimmed.starts_with("axum") || trimmed.contains("axum =")
+        }),
+        "avrag-share must not depend on axum"
+    );
+}
+
+#[test]
 fn share_modules_do_not_call_storage_pg_escape_hatch() {
     let forbidden = concat!("storage.", "pg(");
     let sources = [

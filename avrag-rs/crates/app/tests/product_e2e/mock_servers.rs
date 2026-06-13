@@ -1,5 +1,13 @@
 //! Mock HTTP servers for Product E2E (LLM, Embedding, Search, Paddle OCR).
 
+pub use super::mock_rag_state::{
+    reset_mock_rag_state, set_mock_emit_memory_tool, set_mock_rag_codegen_chunk_id,
+    set_mock_rag_codegen_chunk_ids, set_mock_rag_codegen_doc_id, set_mock_rag_codegen_query,
+    set_mock_rag_multiround_profile, set_mock_rag_skill_request_memory, set_mock_rag_skip_codegen,
+};
+
+use super::mock_rag_state::read_mock_rag_state;
+
 use super::persistent_runtime::{bind_persistent_listener, spawn_persistent};
 use axum::{
     Json, Router,
@@ -10,105 +18,6 @@ use axum::{
 use serde_json::json;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock};
-
-static MOCK_RAG_CODEGEN_CHUNK_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
-static MOCK_RAG_CODEGEN_CHUNK_IDS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
-static MOCK_RAG_CODEGEN_DOC_ID: OnceLock<Mutex<Option<String>>> = OnceLock::new();
-static MOCK_RAG_CODEGEN_QUERY: OnceLock<Mutex<Option<String>>> = OnceLock::new();
-static MOCK_RAG_SKIP_CODEGEN: OnceLock<AtomicBool> = OnceLock::new();
-static MOCK_RAG_MULTIROUND_PROFILE: OnceLock<AtomicBool> = OnceLock::new();
-static MOCK_RAG_SKILL_REQUEST_MEMORY: OnceLock<AtomicBool> = OnceLock::new();
-static MOCK_EMIT_MEMORY_TOOL: OnceLock<Mutex<Option<String>>> = OnceLock::new();
-
-fn mock_rag_chunk_id_cell() -> &'static Mutex<Option<String>> {
-    MOCK_RAG_CODEGEN_CHUNK_ID.get_or_init(|| Mutex::new(None))
-}
-
-fn mock_rag_chunk_ids_cell() -> &'static Mutex<Vec<String>> {
-    MOCK_RAG_CODEGEN_CHUNK_IDS.get_or_init(|| Mutex::new(Vec::new()))
-}
-
-fn mock_rag_codegen_query_cell() -> &'static Mutex<Option<String>> {
-    MOCK_RAG_CODEGEN_QUERY.get_or_init(|| Mutex::new(None))
-}
-
-fn mock_rag_skip_codegen_flag() -> &'static AtomicBool {
-    MOCK_RAG_SKIP_CODEGEN.get_or_init(|| AtomicBool::new(false))
-}
-
-fn mock_rag_codegen_doc_id_cell() -> &'static Mutex<Option<String>> {
-    MOCK_RAG_CODEGEN_DOC_ID.get_or_init(|| Mutex::new(None))
-}
-
-fn mock_rag_multiround_profile_flag() -> &'static AtomicBool {
-    MOCK_RAG_MULTIROUND_PROFILE.get_or_init(|| AtomicBool::new(false))
-}
-
-fn mock_rag_skill_request_memory_flag() -> &'static AtomicBool {
-    MOCK_RAG_SKILL_REQUEST_MEMORY.get_or_init(|| AtomicBool::new(false))
-}
-
-fn mock_emit_memory_tool_cell() -> &'static Mutex<Option<String>> {
-    MOCK_EMIT_MEMORY_TOOL.get_or_init(|| Mutex::new(None))
-}
-
-/// Reset per-test mock RAG state (call from TestContext setup).
-pub fn reset_mock_rag_state() {
-    *mock_rag_chunk_id_cell().lock().unwrap() = None;
-    mock_rag_chunk_ids_cell().lock().unwrap().clear();
-    *mock_rag_codegen_doc_id_cell().lock().unwrap() = None;
-    *mock_rag_codegen_query_cell().lock().unwrap() = None;
-    mock_rag_skip_codegen_flag().store(false, Ordering::SeqCst);
-    mock_rag_multiround_profile_flag().store(false, Ordering::SeqCst);
-    mock_rag_skill_request_memory_flag().store(false, Ordering::SeqCst);
-    *mock_emit_memory_tool_cell().lock().unwrap() = None;
-}
-
-/// Pin the chunk id embedded in mock codegen stdout (RAG smoke happy path).
-pub fn set_mock_rag_codegen_chunk_id(id: impl Into<String>) {
-    let id = id.into();
-    *mock_rag_chunk_id_cell().lock().unwrap() = Some(id.clone());
-    *mock_rag_chunk_ids_cell().lock().unwrap() = vec![id];
-}
-
-/// Pin multiple chunk ids for multi-document mock synthesis.
-pub fn set_mock_rag_codegen_chunk_ids(ids: Vec<String>) {
-    if let Some(first) = ids.first() {
-        *mock_rag_chunk_id_cell().lock().unwrap() = Some(first.clone());
-    }
-    *mock_rag_chunk_ids_cell().lock().unwrap() = ids;
-}
-
-/// Force RAG retrieve rounds to return empty content (exercises auto_fallback).
-pub fn set_mock_rag_skip_codegen(skip: bool) {
-    mock_rag_skip_codegen_flag().store(skip, Ordering::SeqCst);
-}
-
-/// Pin the dense_search query embedded in mock codegen (defaults to `"antifragility"`).
-pub fn set_mock_rag_codegen_query(query: impl Into<String>) {
-    *mock_rag_codegen_query_cell().lock().unwrap() = Some(query.into());
-}
-
-/// Pin the doc_id embedded in multiround mock codegen round0 (`doc_profile`).
-pub fn set_mock_rag_codegen_doc_id(id: impl Into<String>) {
-    *mock_rag_codegen_doc_id_cell().lock().unwrap() = Some(id.into());
-}
-
-/// Enable multiround RAG codegen script: round0 `doc_profile` → round1 `chunk_fetch` → synthesis.
-pub fn set_mock_rag_multiround_profile(enabled: bool) {
-    mock_rag_multiround_profile_flag().store(enabled, Ordering::SeqCst);
-}
-
-/// When set, the first RAG retrieve turn returns `{"skill_request":["memory"]}` to disclose the cluster.
-pub fn set_mock_rag_skill_request_memory(enabled: bool) {
-    mock_rag_skill_request_memory_flag().store(enabled, Ordering::SeqCst);
-}
-
-/// When set, the next tools-enabled retrieve turn emits this memory tool call instead of codegen.
-pub fn set_mock_emit_memory_tool(tool: Option<impl Into<String>>) {
-    *mock_emit_memory_tool_cell().lock().unwrap() = tool.map(Into::into);
-}
 
 fn latest_user_message_content(messages: &[serde_json::Value]) -> Option<&str> {
     messages
@@ -130,7 +39,7 @@ fn dense_search_query_from_messages(messages: &[serde_json::Value]) -> Option<St
 
 fn resolve_dense_search_query(messages: &[serde_json::Value]) -> String {
     dense_search_query_from_messages(messages)
-        .or_else(|| mock_rag_codegen_query_cell().lock().unwrap().clone())
+        .or_else(|| read_mock_rag_state(|state| state.codegen_query.clone()))
         .unwrap_or_else(|| "antifragility".to_string())
 }
 
@@ -152,11 +61,12 @@ print(json.dumps(chunks))
 /// `antifragile.txt`. Override via [`set_mock_rag_codegen_query`] when using other fixtures.
 pub fn format_mock_rag_codegen_response(_chunk_id: &str) -> String {
     format_mock_rag_codegen_response_for_query(
-        &mock_rag_codegen_query_cell()
-            .lock()
-            .unwrap()
-            .clone()
-            .unwrap_or_else(|| "antifragility".to_string()),
+        &read_mock_rag_state(|state| {
+            state
+                .codegen_query
+                .clone()
+                .unwrap_or_else(|| "antifragility".to_string())
+        }),
     )
 }
 
@@ -216,26 +126,28 @@ fn mock_memory_tool_call(tool: &str) -> Option<serde_json::Value> {
 }
 
 fn mock_rag_retrieve_codegen_content(messages: &[serde_json::Value]) -> String {
-    if mock_rag_skip_codegen_flag().load(Ordering::SeqCst) {
+    if read_mock_rag_state(|state| state.skip_codegen) {
         return String::new();
     }
-    if mock_rag_multiround_profile_flag().load(Ordering::SeqCst) {
+    if read_mock_rag_state(|state| state.multiround_profile) {
         let rounds = count_code_execution_results(messages);
         return match rounds {
             0 => {
-                let doc_id = mock_rag_codegen_doc_id_cell()
-                    .lock()
-                    .unwrap()
-                    .clone()
-                    .unwrap_or_else(|| "00000000-0000-4000-8000-000000000001".to_string());
+                let doc_id = read_mock_rag_state(|state| {
+                    state
+                        .codegen_doc_id
+                        .clone()
+                        .unwrap_or_else(|| "00000000-0000-4000-8000-000000000001".to_string())
+                });
                 format_mock_rag_doc_profile_codegen(&doc_id)
             }
             1 => {
-                let chunk_id = mock_rag_chunk_id_cell()
-                    .lock()
-                    .unwrap()
-                    .clone()
-                    .unwrap_or_else(|| "00000000-0000-4000-8000-000000000001".to_string());
+                let chunk_id = read_mock_rag_state(|state| {
+                    state
+                        .codegen_chunk_id
+                        .clone()
+                        .unwrap_or_else(|| "00000000-0000-4000-8000-000000000001".to_string())
+                });
                 format_mock_rag_chunk_fetch_codegen(&chunk_id)
             }
             _ => String::new(),
@@ -252,7 +164,7 @@ fn try_memory_tool_response(tool_names: &[String], has_tool_results: bool) -> Op
     if has_tool_results {
         return None;
     }
-    let requested = mock_emit_memory_tool_cell().lock().unwrap().clone()?;
+    let requested = read_mock_rag_state(|state| state.emit_memory_tool.clone())?;
     if !tool_names.iter().any(|name| name == &requested) {
         return None;
     }
@@ -685,7 +597,7 @@ fn mock_synthesis_json_rag(transcript: &str, system_prompt: &str) -> String {
     let chunk_ids = collect_unique_chunk_ids_from_transcript(transcript);
     let mut chunk_ids = if chunk_ids.is_empty() {
         vec![extract_retrieval_chunk_id(transcript)
-            .or_else(|| mock_rag_chunk_id_cell().lock().unwrap().clone())
+            .or_else(|| read_mock_rag_state(|state| state.codegen_chunk_id.clone()))
             .unwrap_or_else(|| {
                 let preview: String = transcript.chars().take(500).collect();
                 panic!(
@@ -695,7 +607,7 @@ fn mock_synthesis_json_rag(transcript: &str, system_prompt: &str) -> String {
     } else {
         chunk_ids
     };
-    for pinned in mock_rag_chunk_ids_cell().lock().unwrap().iter() {
+    for pinned in read_mock_rag_state(|state| state.codegen_chunk_ids.clone()).iter() {
         if !chunk_ids.contains(pinned) {
             chunk_ids.push(pinned.clone());
         }
@@ -860,7 +772,7 @@ async fn mock_llm_handler(
     // On-demand memory cluster disclosure (smoke helper): one-shot skill_request before tools attach.
     if !is_stream
         && is_rag_retrieve
-        && mock_rag_skill_request_memory_flag().load(Ordering::SeqCst)
+        && read_mock_rag_state(|state| state.skill_request_memory)
         && !messages_have_memory_skill_request(&messages)
     {
         return axum::Json(json!({

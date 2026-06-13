@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-06-13",
+    "mode": "Architecture Audit",
+    "score": 87,
+    "findings": { "critical": 0, "warning": 2, "suggestion": 3 },
+    "scope": "v6 deep reprobe: v5 warnings (app-core Redis adapter, app-chat千行文件, share axum::Json) all cleared; remaining hygiene findings — dead avrag-test-kit, unused app-chat→app-bootstrap dev-dep creating Cargo cycle, NotebookStore exposed at two paths, legal version constants duplicated, docs drift"
+  },
+  {
+    "date": "2026-06-13",
     "mode": "PR Review",
     "score": 96,
     "findings": { "critical": 0, "warning": 1, "suggestion": 0 },
@@ -27,6 +34,10 @@
     "findings": { "critical": 0, "warning": 0, "suggestion": 1 },
     "scope": "post review-fix: adapter dead-code drift removed; Redis/app-chat/share splits intact; pg port_impl size remains"
   },
+  {
+    "date": "2026-06-13",
+    "mode": "Architecture Audit",
+    "score": 88,
     "findings": { "critical": 0, "warning": 2, "suggestion": 2 },
     "scope": "avrag-rs active Rust workspace (34 members) + desktop Tauri shell + frontend_next transport seam; deep reprobe v5, deprecated frontend_rust excluded"
   },
@@ -204,5 +215,19 @@
     "score": 48,
     "findings": { "critical": 2, "warning": 4, "suggestion": 2 },
     "scope": "staged 360 files (+46118/-12813) + unstaged 61 files (+1910/-3058); sampled LiteParse/Paddle P4, smoke runner, docs archive, frontend transport residual"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Tech Debt Assessment",
+    "score": 86,
+    "findings": { "critical": 0, "warning": 2, "suggestion": 4 },
+    "scope": "v7 deep reprobe vs v6 (57): all 6 v6 paydown items closed (PaddleOcrImage E2E, LiteParse parse snapshot, execute_pdf_parse 4-stage split, docs aligned to P4, billing featureFlag HTTP unify, loop/mod.rs 1289→218); residual: dead re-export breaks -D warnings gate (M9 split leftover), M12 desktop tauri 0 behavior tests, legal version constants duplicated FE/BE, share contract M11 only 1/4 done, working tree 38 files (legal feature + M9 split tail untracked), LegalReacceptanceGate hardcoded zh strings"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Test Quality Review",
+    "score": 74,
+    "findings": { "critical": 1, "warning": 2, "suggestion": 1 },
+    "scope": "Round 7 deep reprobe: Round 6 fixes verified (smoke module guard, billing PG skip, share port behavior 13 tests, desktop Tauri 13 unit tests); critical regression — dead pub(crate) use merge_request_doc_scope in app-chat/loop/mod.rs:35 makes RUSTFLAGS=-D warnings smoke pre-build red on PR; LegalReacceptanceGate (131 LOC) + lib/legal/client.ts (77 LOC) zero unit tests despite wrapping all post-login routes; mock_servers.rs grew 1180→1277 LOC; billing usage seed 3-way duplicated"
   }
 ]
