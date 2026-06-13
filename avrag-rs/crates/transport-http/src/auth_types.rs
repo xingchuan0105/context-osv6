@@ -31,6 +31,10 @@ pub(crate) struct RegisterRequest {
     pub password: String,
     #[serde(default)]
     pub full_name: Option<String>,
+    /// 用户服务协议版本号，注册时必填
+    pub terms_version: Option<String>,
+    /// 隐私政策版本号，注册时必填
+    pub privacy_version: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

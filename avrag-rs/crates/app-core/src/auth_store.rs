@@ -11,6 +11,16 @@ pub struct RegisterUserInput {
 }
 
 #[derive(Debug, Clone)]
+pub struct RecordLegalAcceptanceInput {
+    pub user_id: Uuid,
+    pub terms_version: String,
+    pub privacy_version: String,
+    pub context: String,
+    pub ip_address: Option<String>,
+    pub user_agent: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct RegisterUserResult {
     pub user_id: Uuid,
     pub org_id: Uuid,
@@ -59,6 +69,8 @@ pub struct CreatePasswordResetTicketInput {
 #[async_trait]
 pub trait AuthStorePort: Send + Sync {
     async fn register_user(&self, input: &RegisterUserInput) -> Result<RegisterUserResult, AppError>;
+
+    async fn record_legal_acceptance(&self, input: &RecordLegalAcceptanceInput) -> Result<(), AppError>;
 
     async fn find_user_for_login(&self, email: &str) -> Result<Option<AuthUserCredentials>, AppError>;
 
