@@ -32,10 +32,10 @@ export default async function ThirdPartyNotices() {
     generationDate = new Date().toISOString().split('T')[0];
   }
 
-  const { html } = await renderLegalMarkdown(noticesContent);
+  const { html, toc } = await renderLegalMarkdown(noticesContent);
 
   return (
-    <LegalLayout title="完整第三方组件声明">
+    <LegalLayout title="完整第三方组件声明" toc={toc}>
       <div className="third-party-notices">
         <div className="notices-header">
           <div className="notices-stats">

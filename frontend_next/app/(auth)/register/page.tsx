@@ -151,11 +151,7 @@ export default function RegisterPage() {
               value={confirmPassword}
             />
           </div>
-          <ConsentCheckbox
-            onConsentChange={setConsented}
-            termsVersion={PUBLISHED_TERMS_VERSION}
-            privacyVersion={PUBLISHED_PRIVACY_VERSION}
-          />
+          <ConsentCheckbox onConsentChange={setConsented} />
           {error ? <p className="app-notice-banner">{error}</p> : null}
           <button className="app-button-primary app-button-block" disabled={loading} type="submit">
             {loading ? formatUiMessage(locale, "authCreatingAccount") : formatUiMessage(locale, "authCreateAccount")}

@@ -2,10 +2,6 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import ConsentCheckbox from "@/components/legal/ConsentCheckbox";
-import {
-  PUBLISHED_PRIVACY_VERSION,
-  PUBLISHED_TERMS_VERSION,
-} from "@/lib/legal/versions";
 
 vi.mock("next/link", () => {
   return {
@@ -61,44 +57,6 @@ describe("ConsentCheckbox", () => {
     fireEvent.click(screen.getByRole("checkbox"));
 
     expect(onConsentChange).toHaveBeenLastCalledWith(false);
-  });
-
-  it("renders hidden fields with default version values", () => {
-    render(<ConsentCheckbox onConsentChange={vi.fn()} />);
-
-    const termsVersion = document.querySelector(
-      'input[name="terms_version"]',
-    ) as HTMLInputElement;
-    const privacyVersion = document.querySelector(
-      'input[name="privacy_version"]',
-    ) as HTMLInputElement;
-    const acceptedAt = document.querySelector(
-      'input[name="accepted_at"]',
-    ) as HTMLInputElement;
-
-    expect(termsVersion.value).toBe(PUBLISHED_TERMS_VERSION);
-    expect(privacyVersion.value).toBe(PUBLISHED_PRIVACY_VERSION);
-    expect(acceptedAt.value).toBeTruthy();
-  });
-
-  it("renders hidden fields with custom version values", () => {
-    render(
-      <ConsentCheckbox
-        onConsentChange={vi.fn()}
-        termsVersion="2025-01-01"
-        privacyVersion="2025-02-01"
-      />,
-    );
-
-    const termsVersion = document.querySelector(
-      'input[name="terms_version"]',
-    ) as HTMLInputElement;
-    const privacyVersion = document.querySelector(
-      'input[name="privacy_version"]',
-    ) as HTMLInputElement;
-
-    expect(termsVersion.value).toBe("2025-01-01");
-    expect(privacyVersion.value).toBe("2025-02-01");
   });
 
   it("sets checkbox as required by default", () => {

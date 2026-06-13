@@ -3,23 +3,14 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
-import {
-  PUBLISHED_PRIVACY_VERSION,
-  PUBLISHED_TERMS_VERSION,
-} from '@/lib/legal/versions';
-
 interface ConsentCheckboxProps {
   onConsentChange: (consented: boolean) => void;
   required?: boolean;
-  termsVersion?: string;
-  privacyVersion?: string;
 }
 
 export default function ConsentCheckbox({
   onConsentChange,
   required = true,
-  termsVersion = PUBLISHED_TERMS_VERSION,
-  privacyVersion = PUBLISHED_PRIVACY_VERSION,
 }: ConsentCheckboxProps) {
   const [consented, setConsented] = useState(false);
   const [error, setError] = useState('');
@@ -29,14 +20,6 @@ export default function ConsentCheckbox({
     setConsented(isChecked);
     setError('');
     onConsentChange(isChecked);
-  };
-
-  const handleSubmit = () => {
-    if (required && !consented) {
-      setError('请先阅读并同意用户协议与隐私政策');
-      return false;
-    }
-    return true;
   };
 
   return (
@@ -61,9 +44,8 @@ export default function ConsentCheckbox({
         </span>
       </label>
       {error && <p className="consent-error">{error}</p>}
-      <input type="hidden" name="terms_version" value={termsVersion} />
-      <input type="hidden" name="privacy_version" value={privacyVersion} />
-      <input type="hidden" name="accepted_at" value={new Date().toISOString()} />
+      {/* 注：版本号 / 同意时间由父组件在 submit 时附带，不通过 hidden 字段传递。
+          原 hidden 输入每次 re-render 会刷新 accepted_at，且不参与 form submit，移除避免漂移。 */}
     </div>
   );
 }
