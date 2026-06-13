@@ -38,7 +38,7 @@
 | 独立图片路径 | v5 未覆盖 | 当前已路由到 `PaddleOcrImage`，但缺少 image E2E/asset contract | 🟢 PR Review v6 已收窄 |
 | LiteParse PDF 解析次数 | v5 未覆盖 | 路由 probe + `page_dimensions` + `extract_blocks`，失败/预算降级还会再 parse | 🟡 新性能债 |
 | P4 警告门禁 | v5 未覆盖 | `cargo test -p ingestion -p avrag-worker` 绿但有 30+ warning | 🟡 与 `-D warnings` 目标漂移 |
-| 当前架构文档 | v5 未覆盖 | 仍描述 `LITEPARSE_ENABLED` / shadow / MinerU 删除前阶段 | 🟡 文档真相源漂移 |
+| 当前架构文档 | v5 未覆盖 | `liteparse-paddle-ingestion-architecture-2026-06-13.md` v1.2 + `worker-dev.md` 已对齐 P4；开关仅留 archive | ✅ M6 已关闭 |
 | 前端 HTTP 统一 | v5 说基本完成 | `billing/featureFlag.ts` 仍从 `auth/client` 拿 `buildApiUrl` 并手写 fetch | 🟢 小残留 |
 
 ---
@@ -87,17 +87,15 @@ Remedy: 删除未用 `router/stages` 旧分阶段路由或重新接回；清理 
 
 Priority: Pain 2 × Spread 3 = **6**（Scheduled） | Intent: **[accidental]**
 
-**Knowledge Duplication — 当前 LiteParse 架构文档仍描述已删除的 shadow/灰度/MinerU 阶段**
+**[Resolved — M6] Knowledge Duplication — LiteParse 架构文档与 runbook 已对齐 P4**
 
-Symptom: `docs/liteparse-paddle-ingestion-architecture-2026-06-13.md` 仍包含 `LITEPARSE_ENABLED`、`LITEPARSE_SHADOW_MODE`、`LITEPARSE_ROLLOUT_PERCENT`、“先 shadow 再切流再删代码”、“保留一键回退至 lopdf + 现网路由”等内容。但代码已经删除 shadow diff CLI、shadow runtime、rollout 判断和 MinerU 模块；`.env.example` 也已去掉这些开关。旧 `visual-pdf-ingest-requirements` 与 runbook 还在说明 MinerU 配置。
+Symptom（历史）: 架构文档曾把 shadow/灰度/MinerU 开关写成现行部署路径。
 
-Source: Hunt & Thomas — *The Pragmatic Programmer*, DRY；Ousterhout — *A Philosophy of Software Design*, Information Leakage
+现状（2026-06-13）: `docs/liteparse-paddle-ingestion-architecture-2026-06-13.md` v1.2 标明 P4 已实现；§0/§14 明确无 shadow/灰度；删除项指向 `archive/p4-mineru-shadow-migration-historical.md`；`docs/runbooks/worker-dev.md` 已标注 MinerU 与 `LITEPARSE_*` 已删除。
 
-Consequence: 文档作为“当前目标方案”的真相源时会误导部署和回滚：按文档配置 `LITEPARSE_ENABLED=0` 已经没有效果，按文档寻找 shadow artifact 也找不到。后续排障会浪费在不存在的切流路径上。
+验收: `rg 'LITEPARSE_ENABLED|LITEPARSE_SHADOW|MINERU_' docs/*.md docs/runbooks` 命中仅限 archive/历史说明或「已删除」标注行。
 
-Remedy: 把 LiteParse 架构文档升级为 P4 后状态：删除 shadow/rollout 章节，保留“历史迁移路径”到 archive；runbook 中 MinerU 配置改为历史说明或归档；`docs/README.md` 链接说明从“目标方案”改为“当前实现 + 已知缺口”。
-
-Priority: Pain 2 × Spread 2 = **4**（Scheduled） | Intent: **[accidental]**
+Priority: ~~Pain 2 × Spread 2 = **4**~~ → **已偿还**
 
 **Cognitive Overload — `execute_pdf_parse` 同时编排路由、OCR、降级、metadata 与状态写入**
 
@@ -194,7 +192,7 @@ Priority: Pain 1 × Spread 2 = **2**（Monitored） | Intent: **[accidental]**
 |---|------|------|
 | 2 | LiteParse parse pass 缓存/合并，避免同一 PDF 正常路径 parse 3 次 | 单 PDF 正常路径 LiteParse parse 次数 ≤1 或 ≤2；大文件耗时基线下降 |
 | 3 | 清理 ingestion/worker warning，恢复 `-D warnings` 可用性 | `RUSTFLAGS="-D warnings" cargo check -p ingestion -p avrag-worker` 通过 |
-| 4 | 更新 LiteParse 架构文档与 runbook，删除 shadow/rollout/MinerU 现行描述 | `rg 'LITEPARSE_ENABLED|LITEPARSE_SHADOW|MINERU_' docs/*.md docs/runbooks` 只剩 archive/历史说明 |
+| 4 | 更新 LiteParse 架构文档与 runbook，删除 shadow/rollout/MinerU 现行描述 | ✅ M6：`rg` 命中仅限 archive/「已删除」标注 |
 | 5 | 拆 `execute_pdf_parse` 阶段函数 | 主函数 <120 行；各阶段有单元测试或现有 worker tests 通过 |
 | 6 | 前端 `billing/featureFlag.ts` 接统一 HTTP 层 | `rg 'from "../auth/client"' frontend_next/lib/billing` 为 0 |
 
