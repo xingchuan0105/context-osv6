@@ -33,6 +33,25 @@ async fn auth_register_handler(
         }
     };
 
+    if let Err(error) =
+        app_core::validate_published_legal_versions(&terms_version, &privacy_version)
+    {
+        return handlers::error_response(
+            StatusCode::BAD_REQUEST,
+            error.code(),
+            error.message(),
+        );
+    }
+
+    let ip_address = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
     let Some(store) = state.auth_store() else {
         return handlers::error_response(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -58,6 +77,13 @@ async fn auth_register_handler(
             email: req.email.trim().to_string(),
             password_hash,
             full_name: req.full_name.clone(),
+            legal_acceptance: app_core::RegisterLegalAcceptance {
+                terms_version,
+                privacy_version,
+                context: "register".to_string(),
+                ip_address,
+                user_agent,
+            },
         })
         .await
     {
@@ -78,31 +104,6 @@ async fn auth_register_handler(
             );
         }
     };
-
-    // 记录法律协议同意（P0-CON-3: 落库 version + accepted_at）
-    let ip_address = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
-    let user_agent = headers
-        .get("user-agent")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
-
-    if let Err(error) = store
-        .record_legal_acceptance(&RecordLegalAcceptanceInput {
-            user_id: result.user_id,
-            terms_version,
-            privacy_version,
-            context: "register".to_string(),
-            ip_address,
-            user_agent,
-        })
-        .await
-    {
-        // 法律记录失败不阻塞注册，但记录警告
-        warn!(error = %error, user_id = %result.user_id, "failed to record legal acceptance");
-    }
 
     let token = issue_jwt_for_auth_version(&result.user_id, &result.org_id, result.auth_version);
     record_api_product_event_if_available(

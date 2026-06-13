@@ -8,6 +8,10 @@ import { flushSync } from "react-dom";
 import { GuestOnlyGate } from "@/components/auth-gates";
 import ConsentCheckbox from "@/components/legal/ConsentCheckbox";
 import { AuthFrame } from "@/components/page-frame";
+import {
+  PUBLISHED_PRIVACY_VERSION,
+  PUBLISHED_TERMS_VERSION,
+} from "@/lib/legal/versions";
 import { register } from "@/lib/auth/client";
 import { useAuth } from "@/lib/auth/context";
 import { describeAuthError } from "@/lib/auth/errors";
@@ -62,8 +66,8 @@ export default function RegisterPage() {
         email: email.trim(),
         password,
         full_name: fullName.trim() ? fullName.trim() : null,
-        terms_version: "2026-06-13",
-        privacy_version: "2026-06-13",
+        terms_version: PUBLISHED_TERMS_VERSION,
+        privacy_version: PUBLISHED_PRIVACY_VERSION,
       });
 
       if (!response.success || !response.data) {
@@ -149,8 +153,8 @@ export default function RegisterPage() {
           </div>
           <ConsentCheckbox
             onConsentChange={setConsented}
-            termsVersion="2026-06-13"
-            privacyVersion="2026-06-13"
+            termsVersion={PUBLISHED_TERMS_VERSION}
+            privacyVersion={PUBLISHED_PRIVACY_VERSION}
           />
           {error ? <p className="app-notice-banner">{error}</p> : null}
           <button className="app-button-primary app-button-block" disabled={loading} type="submit">

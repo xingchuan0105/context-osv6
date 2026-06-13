@@ -15,6 +15,7 @@ mod config_helpers;
 pub mod domain_ports;
 pub mod domain_rows;
 pub mod document_store;
+pub mod legal_versions;
 pub mod object_store_port;
 pub mod postgres_health;
 pub mod ports;
@@ -38,7 +39,11 @@ pub use admin_domain::{
 pub use admin_store::AdminStorePort;
 pub use auth_store::{
     AuthStorePort, AuthUserCredentials, AuthUserProfile, CreatePasswordResetTicketInput,
-    PasswordResetUser, RecordLegalAcceptanceInput, RegisterUserInput, RegisterUserResult,
+    PasswordResetUser, RecordLegalAcceptanceInput, RegisterLegalAcceptance, RegisterUserInput,
+    RegisterUserResult,
+};
+pub use legal_versions::{
+    validate_published_legal_versions, PUBLISHED_PRIVACY_VERSION, PUBLISHED_TERMS_VERSION,
 };
 pub use billing_quota::BillingQuotaPort;
 pub use billing_domain::{

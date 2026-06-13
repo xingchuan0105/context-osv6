@@ -2,6 +2,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import ConsentCheckbox from "@/components/legal/ConsentCheckbox";
+import {
+  PUBLISHED_PRIVACY_VERSION,
+  PUBLISHED_TERMS_VERSION,
+} from "@/lib/legal/versions";
 
 vi.mock("next/link", () => {
   return {
@@ -72,8 +76,8 @@ describe("ConsentCheckbox", () => {
       'input[name="accepted_at"]',
     ) as HTMLInputElement;
 
-    expect(termsVersion.value).toBe("2026-06-13");
-    expect(privacyVersion.value).toBe("2026-06-13");
+    expect(termsVersion.value).toBe(PUBLISHED_TERMS_VERSION);
+    expect(privacyVersion.value).toBe(PUBLISHED_PRIVACY_VERSION);
     expect(acceptedAt.value).toBeTruthy();
   });
 

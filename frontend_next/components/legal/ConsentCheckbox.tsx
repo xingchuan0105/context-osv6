@@ -3,6 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 
+import {
+  PUBLISHED_PRIVACY_VERSION,
+  PUBLISHED_TERMS_VERSION,
+} from '@/lib/legal/versions';
+
 interface ConsentCheckboxProps {
   onConsentChange: (consented: boolean) => void;
   required?: boolean;
@@ -13,8 +18,8 @@ interface ConsentCheckboxProps {
 export default function ConsentCheckbox({
   onConsentChange,
   required = true,
-  termsVersion = '2026-06-13',
-  privacyVersion = '2026-06-13',
+  termsVersion = PUBLISHED_TERMS_VERSION,
+  privacyVersion = PUBLISHED_PRIVACY_VERSION,
 }: ConsentCheckboxProps) {
   const [consented, setConsented] = useState(false);
   const [error, setError] = useState('');

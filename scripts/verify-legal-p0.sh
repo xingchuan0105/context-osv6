@@ -20,7 +20,7 @@ skip() { echo "  ⏭️  $1 [需人工验证]"; SKIP=$((SKIP + 1)); }
 
 echo "========================================"
 echo "  P0 验收标准逐项检查"
-echo "  设计文档: docs/legal-compliance-pages-design-2026-06-13.md §9.3"
+echo "  设计文档: avrag-rs/docs/legal-compliance-pages-design-2026-06-13.md §9.3"
 echo "========================================"
 echo ""
 
@@ -100,6 +100,13 @@ TOS_STATUS=$(grep -m1 '^status:' "$CONTENT_DIR/terms.mdx" 2>/dev/null | sed 's/s
 PRIVACY_STATUS=$(grep -m1 '^status:' "$CONTENT_DIR/privacy.mdx" 2>/dev/null | sed 's/status:\s*//' | tr -d ' "')
 if [ "$TOS_STATUS" = "published" ] && [ "$PRIVACY_STATUS" = "published" ]; then
   pass "P0-CNT-2: ToS/Privacy status=published"
+  TOS_LEGAL=$(grep -m1 '^legal_review:' "$CONTENT_DIR/terms.mdx" 2>/dev/null | sed 's/legal_review:\s*//' | tr -d ' "')
+  PRIVACY_LEGAL=$(grep -m1 '^legal_review:' "$CONTENT_DIR/privacy.mdx" 2>/dev/null | sed 's/legal_review:\s*//' | tr -d ' "')
+  if [ "$TOS_LEGAL" = "approved" ] && [ "$PRIVACY_LEGAL" = "approved" ]; then
+    pass "        ✅ 法务审阅 approved（§9.11 签 off 完成）"
+  else
+    echo "  ⏳        法务审阅 ToS=$TOS_LEGAL, Privacy=$PRIVACY_LEGAL（§9.11 签 off 待法务完成，但技术 P0-CNT-2 已通过）"
+  fi
 else
   blocked "P0-CNT-2: ToS=$TOS_STATUS, Privacy=$PRIVACY_STATUS (需法务签字改 published)" "法务审阅"
 fi
@@ -272,6 +279,29 @@ if grep -q "terms_version" "$REPO_ROOT/avrag-rs/crates/transport-http/src/auth_t
   pass "P0-CON-4: 后端接收并存储 terms_version/privacy_version"
 else
   fail "P0-CON-4: 后端缺少版本字段"
+fi
+
+# P0-CON-5: MDX / TS / Rust 版本单一事实源一致
+mdx_version() {
+  grep -m1 '^version:' "$1" 2>/dev/null | sed 's/version:\s*//' | tr -d ' "'
+}
+ts_version() {
+  grep "$1" "$FE_DIR/lib/legal/versions.ts" 2>/dev/null | sed -n 's/.*= "\([^"]*\)".*/\1/p'
+}
+rust_version() {
+  grep "$1" "$REPO_ROOT/avrag-rs/crates/app-core/src/legal_versions.rs" 2>/dev/null | sed -n 's/.*= "\([^"]*\)";/\1/p'
+}
+TOS_MDX=$(mdx_version "$CONTENT_DIR/terms.mdx")
+PRIV_MDX=$(mdx_version "$CONTENT_DIR/privacy.mdx")
+TOS_TS=$(ts_version PUBLISHED_TERMS_VERSION)
+PRIV_TS=$(ts_version PUBLISHED_PRIVACY_VERSION)
+TOS_RS=$(rust_version PUBLISHED_TERMS_VERSION)
+PRIV_RS=$(rust_version PUBLISHED_PRIVACY_VERSION)
+if [ -n "$TOS_MDX" ] && [ "$TOS_MDX" = "$TOS_TS" ] && [ "$TOS_MDX" = "$TOS_RS" ] && \
+   [ -n "$PRIV_MDX" ] && [ "$PRIV_MDX" = "$PRIV_TS" ] && [ "$PRIV_MDX" = "$PRIV_RS" ]; then
+  pass "P0-CON-5: MDX/TS/Rust 版本一致 (terms=$TOS_MDX, privacy=$PRIV_MDX)"
+else
+  fail "P0-CON-5: 版本漂移 (MDX $TOS_MDX/$PRIV_MDX, TS $TOS_TS/$PRIV_TS, Rust $TOS_RS/$PRIV_RS)"
 fi
 
 echo ""

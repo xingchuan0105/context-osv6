@@ -406,20 +406,20 @@ use contracts::notebooks::{Notebook};
             _request: crate::agents::runtime::AgentRequest,
             sink: &dyn crate::agents::events::AgentEventSink,
         ) -> Result<crate::agents::runtime::AgentRunResult, common::AppError> {
-            sink.emit(crate::agents::events::AgentEvent::Activity {
+            let _ = sink.emit(crate::agents::events::AgentEvent::Activity {
                 stage: "chat".to_string(),
                 message: "Scripted chat".to_string(),
             })
             .await;
-            sink.emit(crate::agents::events::AgentEvent::MessageDelta {
+            let _ = sink.emit(crate::agents::events::AgentEvent::MessageDelta {
                 text: "agent ".to_string(),
             })
             .await;
-            sink.emit(crate::agents::events::AgentEvent::MessageDelta {
+            let _ = sink.emit(crate::agents::events::AgentEvent::MessageDelta {
                 text: "answer".to_string(),
             })
             .await;
-            sink.emit(crate::agents::events::AgentEvent::Done {
+            let _ = sink.emit(crate::agents::events::AgentEvent::Done {
                 final_message: Some("agent answer".to_string()),
                 usage: None,
             })
@@ -450,7 +450,7 @@ use contracts::notebooks::{Notebook};
             _request: crate::agents::runtime::AgentRequest,
             sink: &dyn crate::agents::events::AgentEventSink,
         ) -> Result<crate::agents::runtime::AgentRunResult, common::AppError> {
-            sink.emit(crate::agents::events::AgentEvent::Activity {
+            let _ = sink.emit(crate::agents::events::AgentEvent::Activity {
                 stage: "chat".to_string(),
                 message: "Buffered chat".to_string(),
             })
@@ -706,7 +706,6 @@ use contracts::notebooks::{Notebook};
             document_store,
             None,
             admin_store,
-            None,
             None,
             None,
             None,

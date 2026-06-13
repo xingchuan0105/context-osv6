@@ -28,6 +28,10 @@ vi.mock("../../lib/ui-preferences", () => ({
 
 import LoginPage from "../../app/(auth)/login/page";
 import RegisterPage from "../../app/(auth)/register/page";
+import {
+  PUBLISHED_PRIVACY_VERSION,
+  PUBLISHED_TERMS_VERSION,
+} from "../../lib/legal/versions";
 
 const mocks = vi.hoisted(() => globalThis.__mockProviders.createLoginRegisterMocks());
 
@@ -148,8 +152,8 @@ describe("login and register pages", () => {
         email: "new@example.com",
         password: "password123",
         full_name: "New User",
-        terms_version: "2026-06-13",
-        privacy_version: "2026-06-13",
+        terms_version: PUBLISHED_TERMS_VERSION,
+        privacy_version: PUBLISHED_PRIVACY_VERSION,
       });
     });
 

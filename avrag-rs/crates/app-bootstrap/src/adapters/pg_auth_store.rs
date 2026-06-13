@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use app_core::{
-    auth_store::RecordLegalAcceptanceInput, AuthStorePort, AuthUserCredentials, AuthUserProfile,
-    CreatePasswordResetTicketInput, PasswordResetUser, RegisterUserInput, RegisterUserResult,
+    AuthStorePort, AuthUserCredentials, AuthUserProfile,
+    CreatePasswordResetTicketInput, PasswordResetUser, RecordLegalAcceptanceInput,
+    RegisterUserInput, RegisterUserResult,
 };
 use crate::adapters::pg_session::begin_super_admin_tx_sqlx;
 use crate::pg_error::map_pg_error;
@@ -83,6 +84,22 @@ impl AuthStorePort for PgAuthStoreAdapter {
         .bind(&input.password_hash)
         .execute(tx.as_mut())
         .await
+        {
+            return Err(map_sqlx_error(error));
+        }
+
+        if let Err(error) = sqlx::query(
+                "INSERT INTO legal_acceptances (user_id, terms_version, privacy_version, context, ip_address, user_agent)
+                 VALUES ($1, $2, $3, $4, $5, $6)",
+            )
+            .bind(user_id)
+            .bind(&input.legal_acceptance.terms_version)
+            .bind(&input.legal_acceptance.privacy_version)
+            .bind(&input.legal_acceptance.context)
+            .bind(&input.legal_acceptance.ip_address)
+            .bind(&input.legal_acceptance.user_agent)
+            .execute(tx.as_mut())
+            .await
         {
             return Err(map_sqlx_error(error));
         }

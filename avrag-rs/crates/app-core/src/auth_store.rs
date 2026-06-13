@@ -4,10 +4,20 @@ use common::AppError;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
+pub struct RegisterLegalAcceptance {
+    pub terms_version: String,
+    pub privacy_version: String,
+    pub context: String,
+    pub ip_address: Option<String>,
+    pub user_agent: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct RegisterUserInput {
     pub email: String,
     pub password_hash: String,
     pub full_name: Option<String>,
+    pub legal_acceptance: RegisterLegalAcceptance,
 }
 
 #[derive(Debug, Clone)]
@@ -70,6 +80,7 @@ pub struct CreatePasswordResetTicketInput {
 pub trait AuthStorePort: Send + Sync {
     async fn register_user(&self, input: &RegisterUserInput) -> Result<RegisterUserResult, AppError>;
 
+    /// Standalone consent for payment or re-acceptance flows (not registration).
     async fn record_legal_acceptance(&self, input: &RecordLegalAcceptanceInput) -> Result<(), AppError>;
 
     async fn find_user_for_login(&self, email: &str) -> Result<Option<AuthUserCredentials>, AppError>;
