@@ -45,6 +45,5 @@ tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-app-bootstrap = { path = "../app-bootstrap" }
 app-core = { path = "../app-core" }
 avrag-storage-pg = { path = "../storage-pg" }

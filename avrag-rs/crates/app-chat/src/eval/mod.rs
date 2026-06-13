@@ -2,6 +2,7 @@
 #![cfg(feature = "eval")]
 
 mod compare;
+mod evaluator;
 mod llm_judge;
 mod metrics;
 mod runner;
@@ -10,6 +11,7 @@ mod types;
 pub mod framework;
 
 pub use compare::*;
+pub use evaluator::*;
 pub use llm_judge::LlmAsJudgeEvaluator;
 pub use runner::*;
 pub use types::*;

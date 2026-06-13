@@ -1,6 +1,6 @@
 //! LLM-as-judge evaluator and response parsing.
 
-use super::runner::Evaluator;
+use super::evaluator::Evaluator;
 use super::types::{EvalCase, EvalMetric, EvalScore};
 
 /// LLM-as-judge evaluator.
