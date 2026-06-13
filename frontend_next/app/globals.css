@@ -1502,3 +1502,38 @@ textarea {
   font-size: 0.875rem;
   color: #94a3b8;
 }
+
+.licenses-summary section {
+  margin-bottom: 2rem;
+}
+
+.licenses-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.licenses-table th,
+.licenses-table td {
+  padding: 0.75rem;
+  border: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.licenses-table th {
+  background-color: #f8fafc;
+  font-weight: 600;
+}
+
+.license-badge {
+  background-color: #e2e8f0;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.licenses-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
