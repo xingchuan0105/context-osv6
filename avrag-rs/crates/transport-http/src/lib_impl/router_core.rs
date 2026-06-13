@@ -47,9 +47,9 @@ struct ApiDoc;
 
 use auth_types::{
     AuthEnvelope, AuthPayload, AuthUserDto, ChangePasswordRequest,
-    ConfirmResetPasswordRequest, LoginRequest, RegisterRequest, ResetPasswordRequest,
-    ResetRequest, SendResetCodeRequest, UpdateProfileRequest, UserPreferencesPayload,
-    VerifyResetCodeRequest, VerifyResetTokenRequest,
+    ConfirmResetPasswordRequest, LoginRequest, RecordLegalAcceptanceRequest, RegisterRequest,
+    ResetPasswordRequest, ResetRequest, SendResetCodeRequest, UpdateProfileRequest,
+    UserPreferencesPayload, VerifyResetCodeRequest, VerifyResetTokenRequest,
 };
 
 pub(crate) use middleware::RequestState;

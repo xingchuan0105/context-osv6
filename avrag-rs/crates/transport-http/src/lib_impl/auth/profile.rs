@@ -244,6 +244,86 @@ async fn auth_change_password_handler(
         }
     }
 }
+async fn auth_record_legal_acceptance_handler(
+    Extension(RequestState(state)): Extension<RequestState>,
+    headers: HeaderMap,
+    Json(req): Json<RecordLegalAcceptanceRequest>,
+) -> Response {
+    let Some(user_id) = state.auth().actor_id() else {
+        return handlers::error_response(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Not authenticated",
+        );
+    };
+
+    let context = req.context.trim();
+    if context != "payment" && context != "re_acceptance" {
+        return handlers::error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_context",
+            "context must be payment or re_acceptance",
+        );
+    }
+
+    if let Err(error) =
+        app_core::validate_published_legal_versions(&req.terms_version, &req.privacy_version)
+    {
+        return handlers::error_response(
+            StatusCode::BAD_REQUEST,
+            error.code(),
+            error.message(),
+        );
+    }
+
+    let Some(store) = state.auth_store() else {
+        return handlers::error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "service_unavailable",
+            "Database not available",
+        );
+    };
+
+    let ip_address = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    match store
+        .record_legal_acceptance(&app_core::RecordLegalAcceptanceInput {
+            user_id: user_id.into_uuid(),
+            terms_version: req.terms_version,
+            privacy_version: req.privacy_version,
+            context: context.to_string(),
+            ip_address,
+            user_agent,
+        })
+        .await
+    {
+        Ok(()) => (
+            StatusCode::CREATED,
+            Json(AuthEnvelope {
+                success: true,
+                data: None,
+                error: None,
+            }),
+        )
+            .into_response(),
+        Err(error) => {
+            warn!(error = %error, "failed to record legal acceptance");
+            handlers::error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "Failed to record legal acceptance",
+            )
+        }
+    }
+}
+
 async fn usage_limit_handler(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {

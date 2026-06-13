@@ -22,6 +22,14 @@ mod tests {
         AppState::bootstrap(config).await.ok()
     }
 
+    fn register_body(email: &str, full_name: &str) -> String {
+        format!(
+            r#"{{"email":"{email}","password":"password123","full_name":"{full_name}","terms_version":"{}","privacy_version":"{}"}}"#,
+            app_core::PUBLISHED_TERMS_VERSION,
+            app_core::PUBLISHED_PRIVACY_VERSION,
+        )
+    }
+
     #[tokio::test]
     async fn health_handler_returns_ok() {
         let state = test_app_state();
@@ -232,9 +240,7 @@ mod tests {
             .uri("/api/auth/register")
             .method("POST")
             .header("Content-Type", "application/json")
-            .body(Body::from(format!(
-                r#"{{"email":"{email}","password":"password123","full_name":"Routes User"}}"#
-            )))
+            .body(Body::from(register_body(&email, "Routes User")))
             .unwrap();
         let register_resp = app.clone().oneshot(register_req).await.unwrap();
         assert_eq!(register_resp.status(), StatusCode::CREATED);
@@ -527,9 +533,7 @@ mod tests {
             .uri("/api/auth/register")
             .method("POST")
             .header("Content-Type", "application/json")
-            .body(Body::from(format!(
-                r#"{{"email":"{email}","password":"password123","full_name":"Initial Name"}}"#
-            )))
+            .body(Body::from(register_body(&email, "Initial Name")))
             .unwrap();
         let register_resp = app.clone().oneshot(register_req).await.unwrap();
         assert_eq!(register_resp.status(), StatusCode::CREATED);
@@ -576,9 +580,7 @@ mod tests {
             .uri("/api/auth/register")
             .method("POST")
             .header("Content-Type", "application/json")
-            .body(Body::from(format!(
-                r#"{{"email":"{email}","password":"password123","full_name":"Prefs User"}}"#
-            )))
+            .body(Body::from(register_body(&email, "Prefs User")))
             .unwrap();
         let register_resp = app.clone().oneshot(register_req).await.unwrap();
         assert_eq!(register_resp.status(), StatusCode::CREATED);
@@ -630,9 +632,7 @@ mod tests {
             .uri("/api/auth/register")
             .method("POST")
             .header("Content-Type", "application/json")
-            .body(Body::from(format!(
-                r#"{{"email":"{email}","password":"password123","full_name":"Password User"}}"#
-            )))
+            .body(Body::from(register_body(&email, "Password User")))
             .unwrap();
         let register_resp = app.clone().oneshot(register_req).await.unwrap();
         assert_eq!(register_resp.status(), StatusCode::CREATED);
@@ -710,9 +710,7 @@ mod tests {
             .uri("/api/auth/register")
             .method("POST")
             .header("Content-Type", "application/json")
-            .body(Body::from(format!(
-                r#"{{"email":"{email}","password":"password123","full_name":"Password User"}}"#
-            )))
+            .body(Body::from(register_body(&email, "Password User")))
             .unwrap();
         let register_resp = app.clone().oneshot(register_req).await.unwrap();
         assert_eq!(register_resp.status(), StatusCode::CREATED);
@@ -749,9 +747,7 @@ mod tests {
             .uri("/api/auth/register")
             .method("POST")
             .header("Content-Type", "application/json")
-            .body(Body::from(format!(
-                r#"{{"email":"{email}","password":"password123","full_name":"Logout User"}}"#
-            )))
+            .body(Body::from(register_body(&email, "Logout User")))
             .unwrap();
         let register_resp = app.clone().oneshot(register_req).await.unwrap();
         assert_eq!(register_resp.status(), StatusCode::CREATED);
@@ -795,9 +791,7 @@ mod tests {
             .uri("/api/auth/register")
             .method("POST")
             .header("Content-Type", "application/json")
-            .body(Body::from(format!(
-                r#"{{"email":"{email}","password":"password123","full_name":"Reset User"}}"#
-            )))
+            .body(Body::from(register_body(&email, "Reset User")))
             .unwrap();
         let register_resp = app.clone().oneshot(register_req).await.unwrap();
         assert_eq!(register_resp.status(), StatusCode::CREATED);
@@ -869,12 +863,77 @@ mod tests {
             .uri("/api/auth/register")
             .method("POST")
             .header("Content-Type", "application/json")
-            .body(Body::from(format!(
-                r#"{{"email":"{email}","password":"password123","full_name":"Events User"}}"#
-            )))
+            .body(Body::from(register_body(&email, "Events User")))
             .unwrap();
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn auth_register_rejects_stale_legal_versions_when_database_available() {
+        let Some(state) = pg_test_app_state().await else {
+            return;
+        };
+        let app = build_router(state);
+        let email = format!("stale-legal-{}@example.test", uuid::Uuid::new_v4());
+
+        let req = Request::builder()
+            .uri("/api/auth/register")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(format!(
+                r#"{{"email":"{email}","password":"password123","full_name":"Stale","terms_version":"2025-01-01","privacy_version":"{}"}}"#,
+                app_core::PUBLISHED_PRIVACY_VERSION
+            )))
+            .unwrap();
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            payload["error"].as_str(),
+            Some("invalid_terms_version")
+        );
+    }
+
+    #[tokio::test]
+    async fn auth_legal_acceptance_records_payment_context_when_database_available() {
+        let Some(state) = pg_test_app_state().await else {
+            return;
+        };
+        let app = build_router(state);
+        let email = format!("legal-pay-{}@example.test", uuid::Uuid::new_v4());
+
+        let register_req = Request::builder()
+            .uri("/api/auth/register")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(register_body(&email, "Payment User")))
+            .unwrap();
+        let register_resp = app.clone().oneshot(register_req).await.unwrap();
+        assert_eq!(register_resp.status(), StatusCode::CREATED);
+        let register_body = to_bytes(register_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let register_payload: serde_json::Value = serde_json::from_slice(&register_body).unwrap();
+        let token = register_payload["data"]["token"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let legal_req = Request::builder()
+            .uri("/api/auth/legal-acceptance")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {token}"))
+            .body(Body::from(format!(
+                r#"{{"terms_version":"{}","privacy_version":"{}","context":"payment"}}"#,
+                app_core::PUBLISHED_TERMS_VERSION,
+                app_core::PUBLISHED_PRIVACY_VERSION,
+            )))
+            .unwrap();
+        let legal_resp = app.oneshot(legal_req).await.unwrap();
+        assert_eq!(legal_resp.status(), StatusCode::CREATED);
     }
 
     #[tokio::test]
@@ -889,9 +948,7 @@ mod tests {
             .uri("/api/auth/register")
             .method("POST")
             .header("Content-Type", "application/json")
-            .body(Body::from(format!(
-                r#"{{"email":"{email}","password":"password123","full_name":"Admin Billing User"}}"#
-            )))
+            .body(Body::from(register_body(&email, "Admin Billing User")))
             .unwrap();
         let register_resp = app.clone().oneshot(register_req).await.unwrap();
         assert_eq!(register_resp.status(), StatusCode::CREATED);
@@ -935,9 +992,7 @@ mod tests {
             .uri("/api/auth/register")
             .method("POST")
             .header("Content-Type", "application/json")
-            .body(Body::from(format!(
-                r#"{{"email":"{email}","password":"password123","full_name":"Share Chat User"}}"#
-            )))
+            .body(Body::from(register_body(&email, "Share Chat User")))
             .unwrap();
         let register_resp = app.clone().oneshot(register_req).await.unwrap();
         assert_eq!(register_resp.status(), StatusCode::CREATED);

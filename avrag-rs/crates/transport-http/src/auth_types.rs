@@ -38,6 +38,14 @@ pub(crate) struct RegisterRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub(crate) struct RecordLegalAcceptanceRequest {
+    pub terms_version: String,
+    pub privacy_version: String,
+    /// `payment` or `re_acceptance` (registration uses `/register`)
+    pub context: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct LoginRequest {
     pub email: String,
     pub password: String,

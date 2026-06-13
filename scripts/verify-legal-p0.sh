@@ -281,6 +281,13 @@ else
   fail "P0-CON-4: 后端缺少版本字段"
 fi
 
+# P0-CON-4b: 支付/重签 HTTP 端点
+if grep -q '"/legal-acceptance"' "$REPO_ROOT/avrag-rs/crates/transport-http/src/routes/auth.rs"; then
+  pass "P0-CON-4b: POST /api/auth/legal-acceptance 已接线"
+else
+  fail "P0-CON-4b: 缺少 legal-acceptance 路由"
+fi
+
 # P0-CON-5: MDX / TS / Rust 版本单一事实源一致
 mdx_version() {
   grep -m1 '^version:' "$1" 2>/dev/null | sed 's/version:\s*//' | tr -d ' "'

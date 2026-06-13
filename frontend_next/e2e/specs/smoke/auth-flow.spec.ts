@@ -20,6 +20,8 @@ test.describe("Auth Flow", () => {
     await page.locator("#register-password").fill("E2eTest123!");
     await page.locator("#register-password-confirm").fill("E2eTest123!");
     await page.locator("#register-name").fill("E2E User");
+    // P0-CON-1: 必须勾选同意条款才能注册
+    await page.locator(".consent-input").check();
     await page.getByRole("button", { name: /创建账号|Create account/i }).click();
     // 注册成功后前端自动完成登录并跳转到 dashboard
     await page.waitForURL(/\/dashboard$/, { timeout: 15_000 });

@@ -54,5 +54,9 @@ pub(crate) fn protected_router() -> Router<AppState> {
             "/change-password",
             post(crate::auth_change_password_handler),
         )
+        .route(
+            "/legal-acceptance",
+            post(crate::auth_record_legal_acceptance_handler),
+        )
         .route("/usage-limit", get(crate::usage_limit_handler))
 }
