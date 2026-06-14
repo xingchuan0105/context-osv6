@@ -113,6 +113,14 @@ export class ChatPanelPage {
   }
 
   async citationCount(): Promise<number> {
-    return this.page.locator('[data-testid="workspace-citation"]').count();
+    const bubble = this.page
+      .locator(
+        '[data-testid="chat-message"][data-role="assistant"] [data-testid="workspace-answer-bubble"]',
+      )
+      .last();
+    const workspace = await bubble.locator('[data-testid="workspace-citation"]').count();
+    const webSources = await bubble.locator('[data-testid="citation-button"]').count();
+    const htmlInline = await bubble.locator("button[data-inline-citation-token-index]").count();
+    return workspace + webSources + htmlInline;
   }
 }
