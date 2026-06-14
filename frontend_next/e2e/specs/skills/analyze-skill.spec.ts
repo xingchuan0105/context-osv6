@@ -1,11 +1,11 @@
 import { test, expect } from "../../fixtures/run-context";
 import { DashboardPage } from "../../pom/dashboard-page";
 import { ChatPanelPage } from "../../pom/chat-panel-page";
-import { resetTestUserData } from "../../utils/api-helpers";
+import { resetAndPrepareTestUser } from "../../utils/api-helpers";
 
 test.describe("Analyze Skill", () => {
   test.beforeAll(async ({ request }) => {
-    await resetTestUserData(request);
+    await resetAndPrepareTestUser(request);
   });
 
   test("analysis query triggers analyze result", async ({ page, runId }) => {

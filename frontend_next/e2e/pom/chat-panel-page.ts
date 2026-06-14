@@ -8,6 +8,21 @@ export class ChatPanelPage {
     await this.ask(text);
   }
 
+  /** 受控 textarea：fill 在第二轮对话后可能不触发 React onChange，需走 native setter。 */
+  private async setComposerDraft(question: string) {
+    const composerInput = this.page.locator('[data-testid="workspace-chat-composer"]');
+    await composerInput.evaluate((el, value) => {
+      const textarea = el as HTMLTextAreaElement;
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype,
+        "value",
+      )?.set;
+      setter?.call(textarea, value);
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      textarea.dispatchEvent(new Event("change", { bubbles: true }));
+    }, question);
+  }
+
   /** 完整消息发送：可选前置设置对话模式 */
   async ask(question: string, mode?: "rag" | "search" | "chat") {
     if (mode) {
@@ -15,8 +30,12 @@ export class ChatPanelPage {
     }
     const composerInput = this.page.locator('[data-testid="workspace-chat-composer"]');
     await composerInput.waitFor({ timeout: 10_000 });
-    await composerInput.fill(question);
-    await this.page.locator('[data-testid="workspace-chat-send"]').click();
+    await expect(composerInput).toBeEnabled({ timeout: 120_000 });
+    await composerInput.click();
+    await this.setComposerDraft(question);
+    const sendButton = this.page.locator('[data-testid="workspace-chat-send"]');
+    await expect(sendButton).toBeEnabled({ timeout: 10_000 });
+    await sendButton.click();
   }
 
   async setMode(mode: "rag" | "search" | "chat") {

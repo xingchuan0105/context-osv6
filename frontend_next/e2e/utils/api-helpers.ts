@@ -9,6 +9,35 @@ import { TEST_USER } from "../fixtures/test-user";
 const AUTH_STORAGE_STATE_PATH = "playwright/.auth/user.json";
 const AUTH_STORAGE_KEY = "avrag.auth.v1";
 const AUTH_PERSISTED_COOKIE = "avrag.auth.persisted";
+const AUTH_SESSION_COOKIE = "avrag.auth.session";
+
+type AuthUser = {
+  id: string;
+  email: string;
+  full_name: string;
+};
+
+type AuthPayload = {
+  token: string;
+  user: AuthUser;
+};
+
+type StorageState = {
+  cookies: Array<{
+    name: string;
+    value: string;
+    domain: string;
+    path: string;
+    expires: number;
+    httpOnly: boolean;
+    secure: boolean;
+    sameSite: "Lax" | "Strict" | "None";
+  }>;
+  origins: Array<{
+    origin: string;
+    localStorage: Array<{ name: string; value: string }>;
+  }>;
+};
 
 /**
  * 从 globalSetup 生成的 storageState 读取 JWT，供 APIRequestContext 使用。
@@ -40,6 +69,125 @@ export function readAuthToken(): string {
 
 export function authHeaders(): Record<string, string> {
   return { Authorization: `Bearer ${readAuthToken()}` };
+}
+
+/**
+ * 将 API 登录结果写回 Playwright storageState。
+ * spec 的 beforeAll 在 reset-user-data（删除用户）后必须调用，否则页面仍携带失效 JWT。
+ */
+export function writeAuthStorageState(payload: AuthPayload) {
+  const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000";
+  const origin = new URL(baseURL).origin;
+  const domain = new URL(baseURL).hostname;
+  const expires = Date.now() / 1000 + 60 * 60 * 24 * 365;
+  const persistedCookieValue = encodeURIComponent(
+    JSON.stringify({ token: payload.token, user: payload.user }),
+  );
+  const localStorageValue = JSON.stringify({
+    token: payload.token,
+    user: payload.user,
+  });
+
+  let state: StorageState = { cookies: [], origins: [] };
+  try {
+    state = JSON.parse(readFileSync(AUTH_STORAGE_STATE_PATH, "utf-8")) as StorageState;
+  } catch {
+    // First run: bootstrap a minimal storageState shell.
+  }
+
+  const upsertCookie = (
+    name: string,
+    value: string,
+  ) => {
+    const existing = state.cookies.find((cookie) => cookie.name === name);
+    const cookie = {
+      name,
+      value,
+      domain,
+      path: "/",
+      expires,
+      httpOnly: false,
+      secure: false,
+      sameSite: "Lax" as const,
+    };
+    if (existing) {
+      Object.assign(existing, cookie);
+    } else {
+      state.cookies.push(cookie);
+    }
+  };
+
+  upsertCookie(AUTH_PERSISTED_COOKIE, persistedCookieValue);
+  upsertCookie(AUTH_SESSION_COOKIE, "1");
+
+  let originEntry = state.origins.find((entry) => entry.origin === origin);
+  if (!originEntry) {
+    originEntry = { origin, localStorage: [] };
+    state.origins.push(originEntry);
+  }
+
+  const authItem = originEntry.localStorage.find((item) => item.name === AUTH_STORAGE_KEY);
+  if (authItem) {
+    authItem.value = localStorageValue;
+  } else {
+    originEntry.localStorage.push({ name: AUTH_STORAGE_KEY, value: localStorageValue });
+  }
+
+  const fs = require("fs") as typeof import("fs");
+  fs.mkdirSync("playwright/.auth", { recursive: true });
+  fs.writeFileSync(AUTH_STORAGE_STATE_PATH, JSON.stringify(state, null, 2));
+}
+
+async function loginTestUserViaAPI(request: APIRequestContext): Promise<AuthPayload> {
+  const loginResp = await request.post("/api/auth/login", {
+    data: { email: TEST_USER.email, password: TEST_USER.password },
+    timeout: 30_000,
+  });
+  if (!loginResp.ok()) {
+    throw new Error(`login failed: ${loginResp.status()} ${await loginResp.text()}`);
+  }
+
+  const body = (await loginResp.json()) as {
+    success?: boolean;
+    data?: AuthPayload | null;
+    error?: string | null;
+  };
+  if (!body.success || !body.data?.token || !body.data.user) {
+    throw new Error(`login response invalid: ${JSON.stringify(body)}`);
+  }
+  return body.data;
+}
+
+async function ensureLegalAcceptance(request: APIRequestContext, token: string) {
+  const resp = await request.post("/api/auth/legal-acceptance", {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      terms_version: PUBLISHED_TERMS_VERSION,
+      privacy_version: PUBLISHED_PRIVACY_VERSION,
+      context: "re_acceptance",
+    },
+    timeout: 30_000,
+  });
+  if (!resp.ok()) {
+    throw new Error(`legal-acceptance failed: ${resp.status()} ${await resp.text()}`);
+  }
+}
+
+/** 用 API 重新登录并刷新 storageState（globalSetup 之后、spec beforeAll 内使用）。 */
+export async function refreshE2eAuthStorageState(request: APIRequestContext) {
+  const payload = await loginTestUserViaAPI(request);
+  await ensureLegalAcceptance(request, payload.token);
+  writeAuthStorageState(payload);
+}
+
+/**
+ * 重置预置账号数据并刷新浏览器 storageState。
+ * reset-user-data 会级联删除用户；必须在 spec beforeAll 中用它替代裸 resetTestUserData。
+ */
+export async function resetAndPrepareTestUser(request: APIRequestContext) {
+  await resetTestUserData(request);
+  await ensureTestUserAccount(request);
+  await refreshE2eAuthStorageState(request);
 }
 
 function sleep(ms: number) {

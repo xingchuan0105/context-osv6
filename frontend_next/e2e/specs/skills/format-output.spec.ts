@@ -1,7 +1,7 @@
 import { test, expect } from "../../fixtures/run-context";
 import { DashboardPage } from "../../pom/dashboard-page";
 import { ChatPanelPage } from "../../pom/chat-panel-page";
-import { resetTestUserData } from "../../utils/api-helpers";
+import { resetAndPrepareTestUser } from "../../utils/api-helpers";
 import goldenSet from "../../fixtures/golden_set.json";
 
 test.describe("Format Output Skill Availability", () => {
@@ -9,7 +9,7 @@ test.describe("Format Output Skill Availability", () => {
   if (!entry.query) throw new Error("golden entry missing query");
 
   test.beforeAll(async ({ request }) => {
-    await resetTestUserData(request);
+    await resetAndPrepareTestUser(request);
   });
 
   test("HTML format request returns structured output", async ({ page, runId }) => {

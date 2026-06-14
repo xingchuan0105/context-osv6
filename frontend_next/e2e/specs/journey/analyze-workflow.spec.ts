@@ -2,12 +2,12 @@ import { test, expect } from "../../fixtures/run-context";
 import { DashboardPage } from "../../pom/dashboard-page";
 import { WorkspacePage } from "../../pom/workspace-page";
 import { AnalyzePage } from "../../pom/analyze-page";
-import { resetTestUserData } from "../../utils/api-helpers";
+import { resetAndPrepareTestUser } from "../../utils/api-helpers";
 import path from "path";
 
 test.describe("Analyze Workflow", () => {
   test.beforeAll(async ({ request }) => {
-    await resetTestUserData(request);
+    await resetAndPrepareTestUser(request);
   });
 
   test("upload document and view analyze insights", async ({ page }) => {

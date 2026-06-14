@@ -2,12 +2,12 @@ import { test, expect } from "../../fixtures/run-context";
 import { DashboardPage } from "../../pom/dashboard-page";
 import { WorkspacePage } from "../../pom/workspace-page";
 import { ChatPanelPage } from "../../pom/chat-panel-page";
-import { resetTestUserData } from "../../utils/api-helpers";
+import { resetAndPrepareTestUser } from "../../utils/api-helpers";
 import path from "path";
 
 test.describe("Notebook Skill", () => {
   test.beforeAll(async ({ request }) => {
-    await resetTestUserData(request);
+    await resetAndPrepareTestUser(request);
   });
 
   test("notebook-related query shows document reference after upload", async ({ page, runId }) => {

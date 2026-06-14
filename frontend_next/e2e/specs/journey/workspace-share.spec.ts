@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
 import { DashboardPage } from "../../pom/dashboard-page";
 import { SharePage } from "../../pom/share-page";
-import { resetTestUserData } from "../../utils/api-helpers";
+import { resetAndPrepareTestUser } from "../../utils/api-helpers";
 
 test.describe("Share & Collaboration Journey", () => {
   test.beforeAll(async ({ request }) => {
-    await resetTestUserData(request);
+    await resetAndPrepareTestUser(request);
   });
 
   test("user can enable share and visitor gets read-only access", async ({ page, browser }) => {

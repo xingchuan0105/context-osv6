@@ -1,10 +1,10 @@
 import { test, expect } from "../../fixtures/run-context";
 import { SettingsPage } from "../../pom/settings-page";
-import { resetTestUserData } from "../../utils/api-helpers";
+import { resetAndPrepareTestUser } from "../../utils/api-helpers";
 
 test.describe("Billing Settings Smoke", () => {
   test.beforeAll(async ({ request }) => {
-    await resetTestUserData(request);
+    await resetAndPrepareTestUser(request);
   });
 
   test("settings billing tab shows plan and usage sections", async ({ page }) => {

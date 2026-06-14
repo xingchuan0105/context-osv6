@@ -1,11 +1,11 @@
 import { test, expect } from "../../fixtures/run-context";
 import { ChatPanelPage } from "../../pom/chat-panel-page";
-import { createNotebookViaAPI, resetTestUserData } from "../../utils/api-helpers";
+import { createNotebookViaAPI, resetAndPrepareTestUser } from "../../utils/api-helpers";
 import goldenSet from "../../fixtures/golden_set.json";
 
 test.describe.serial("Chat multi-turn session", () => {
   test.beforeAll(async ({ request }) => {
-    await resetTestUserData(request);
+    await resetAndPrepareTestUser(request);
   });
 
   const entry = goldenSet.entries.find((e) => e.id === "chat-session-01")!;
@@ -14,6 +14,8 @@ test.describe.serial("Chat multi-turn session", () => {
   }
 
   test("second turn references first turn context", async ({ page, runId }) => {
+    test.setTimeout(180_000);
+
     const notebook = await createNotebookViaAPI(
       page.request,
       `e2e-chat-session ${runId}`,

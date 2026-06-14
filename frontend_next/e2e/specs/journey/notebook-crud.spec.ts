@@ -1,11 +1,11 @@
 import { test, expect } from "../../fixtures/run-context";
 import { NotebookPage } from "../../pom/notebook-page";
 import { DashboardPage } from "../../pom/dashboard-page";
-import { resetTestUserData } from "../../utils/api-helpers";
+import { resetAndPrepareTestUser } from "../../utils/api-helpers";
 
 test.describe("Notebook CRUD", () => {
   test.beforeAll(async ({ request }) => {
-    await resetTestUserData(request);
+    await resetAndPrepareTestUser(request);
   });
 
   test("create rename and delete notebook via UI", async ({ page, runId }) => {

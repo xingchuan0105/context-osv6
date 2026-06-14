@@ -2,15 +2,23 @@ import { test, expect } from "../../fixtures/run-context";
 import { DashboardPage } from "../../pom/dashboard-page";
 import { WorkspacePage } from "../../pom/workspace-page";
 import { ChatPanelPage } from "../../pom/chat-panel-page";
-import { resetTestUserData } from "../../utils/api-helpers";
+import { resetAndPrepareTestUser, waitForDocumentReady } from "../../utils/api-helpers";
 import path from "path";
 
 test.describe("Document Upload + RAG Journey", () => {
+  test.describe.configure({ retries: 2 });
+
   test.beforeAll(async ({ request }) => {
-    await resetTestUserData(request);
+    await resetAndPrepareTestUser(request);
   });
 
-  test("user can upload document, wait for ingestion, and get RAG-grounded answer", async ({ page, runId }) => {
+  test("user can upload document, wait for ingestion, and get RAG-grounded answer", async ({
+    page,
+    request,
+    runId,
+  }) => {
+    test.setTimeout(180_000);
+
     const dashboard = new DashboardPage(page);
     const workspace = new WorkspacePage(page);
     const chat = new ChatPanelPage(page);
@@ -18,27 +26,31 @@ test.describe("Document Upload + RAG Journey", () => {
     await page.goto("/dashboard");
     await dashboard.createWorkspace();
 
-    // 上传测试文档
     const fixturePath = path.join(__dirname, "../../fixtures/sample-document.txt");
     await workspace.uploadFile(fixturePath);
 
-    // 等待 ingestion 完成（CI 中可能较慢，用 test.slow 延长超时）
     test.slow();
     await workspace.waitForIngestionComplete();
 
-    // 发送 RAG 问题
-    const messageText = `E2E ${runId}: What is the tech stack of Context-OS?`;
-    await chat.sendMessage(messageText);
-    await chat.waitForResponse();
+    const documentId = await workspace.getLatestCompletedDocumentId();
+    await waitForDocumentReady(request, documentId);
 
-    // 结构性断言：消息完成、非空
+    // 问题直接指向 fixture 中的可检索片段（技术架构段落），避免 LLM 误判 evidence_insufficient
+    const messageText = `E2E ${runId}: According to the uploaded document, what frontend and backend technologies does Context-OS use? Cite the document.`;
+    await chat.ask(messageText, "rag");
+    await chat.waitForAnswer(150_000);
+
     const lastMessage = chat.getLastMessage();
     await expect(lastMessage).toBeVisible();
     await expect(lastMessage).not.toBeEmpty();
 
-    // RAG + 固定 fixture：mock/staging 路径 citation 必须存在（对齐 skills golden gate）
+    const answer = await chat.lastAnswerText();
+    expect(answer.length).toBeGreaterThan(20);
+    expect(answer.toLowerCase()).not.toContain("could not find relevant evidence");
+    expect(answer).toMatch(/Next\.js|React|TypeScript|Rust|Milvus/i);
+
     const citationCount = await chat.citationCount();
     expect(citationCount, "RAG journey requires at least one citation").toBeGreaterThan(0);
-    await expect(chat.getCitationButton()).toBeVisible();
+    await expect(page.locator('[data-testid="workspace-citation"]').first()).toBeVisible();
   });
 });

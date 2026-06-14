@@ -1,10 +1,10 @@
 import { test, expect } from "../../fixtures/run-context";
 import { ChatPanelPage } from "../../pom/chat-panel-page";
-import { createNotebookViaAPI, resetTestUserData } from "../../utils/api-helpers";
+import { createNotebookViaAPI, resetAndPrepareTestUser } from "../../utils/api-helpers";
 
 test.describe("Session history", () => {
   test.beforeAll(async ({ request }) => {
-    await resetTestUserData(request);
+    await resetAndPrepareTestUser(request);
   });
 
   test("messages survive page refresh", async ({ page, runId }) => {
