@@ -60,12 +60,9 @@ pub fn resolve_baseline(
     if let Some(branch) = meta.as_ref().and_then(|m| m.git_branch_from_anywhere()) {
         let commit = meta.as_ref().and_then(|m| m.git_commit_from_anywhere());
         if let Some(dir) =
-            crate::loader::find_latest_run_on_branch(output_dir, branch, commit)
+            crate::loader::find_latest_run_on_branch(output_dir, branch, commit, Some(current_run_dir))
         {
-            // A run should not be its own baseline.
-            if dir != current_run_dir {
-                return Some(dir);
-            }
+            return Some(dir);
         }
     }
 

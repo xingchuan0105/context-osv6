@@ -117,7 +117,7 @@ pub fn discover_runs(output_dir: &Path) -> Vec<PathBuf> {
         let mt_b = fs::metadata(b)
             .and_then(|m| m.modified())
             .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-        mt_a.cmp(&mt_b)
+        mt_a.cmp(&mt_b).then_with(|| a.file_name().cmp(&b.file_name()))
     });
 
     runs
@@ -142,7 +142,7 @@ pub fn discover_all_runs(output_dir: &Path) -> Vec<PathBuf> {
         let mt_b = fs::metadata(b)
             .and_then(|m| m.modified())
             .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-        mt_a.cmp(&mt_b)
+        mt_a.cmp(&mt_b).then_with(|| a.file_name().cmp(&b.file_name()))
     });
 
     let mut deduped = Vec::new();
@@ -234,6 +234,16 @@ pub fn load_llm_real_run(run_dir: &Path) -> Vec<crate::models::LlmRealTestArtifa
                     .map(str::to_string)
             })
             .unwrap_or_default();
+        let mut extra = meta
+            .get("extra")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
+        if let Some(citation_count) = meta.get("citation_count") {
+            if let Some(obj) = extra.as_object_mut() {
+                obj.entry("citation_count")
+                    .or_insert_with(|| citation_count.clone());
+            }
+        }
         artifacts.push(crate::models::LlmRealTestArtifact {
             run_id: meta
                 .get("run_id")
@@ -260,7 +270,7 @@ pub fn load_llm_real_run(run_dir: &Path) -> Vec<crate::models::LlmRealTestArtifa
                         .and_then(|v| v.get("stream_error_with_done"))
                         .and_then(|v| v.as_bool())
                 }),
-            extra: meta.get("extra").cloned(),
+            extra: Some(extra),
         });
     }
 
@@ -277,15 +287,21 @@ pub fn load_run_record(run_dir: &Path) -> Option<crate::models::RunRecord> {
 
 /// Find the most recent run on the given git branch that has at least one
 /// passed test. When `commit` is set, only runs on that commit are considered.
+/// When `exclude` is set, that run directory is skipped (e.g. the current run).
 pub fn find_latest_run_on_branch(
     output_dir: &Path,
     branch: &str,
     commit: Option<&str>,
+    exclude: Option<&Path>,
 ) -> Option<PathBuf> {
     let runs = discover_runs(output_dir);
 
     // Iterate newest first.
     for run_dir in runs.iter().rev() {
+        if exclude.is_some_and(|dir| dir == run_dir) {
+            continue;
+        }
+
         let meta = load_run_metadata(run_dir);
         let branch_matches =
             meta.as_ref().and_then(|m| m.git_branch_from_anywhere()) == Some(branch);
@@ -302,7 +318,12 @@ pub fn find_latest_run_on_branch(
         let results = load_run_results(run_dir);
         let has_pass = results
             .iter()
-            .any(|r| r.status == crate::models::TestStatus::Passed);
+            .any(|r| r.status == crate::models::TestStatus::Passed)
+            || meta
+                .as_ref()
+                .and_then(|m| m.passed)
+                .unwrap_or(0)
+                > 0;
 
         if has_pass {
             return Some(run_dir.clone());

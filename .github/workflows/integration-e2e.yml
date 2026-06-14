@@ -3,6 +3,7 @@ name: Integration E2E
 on:
   push:
     branches:
+      - master
       - main
     paths:
       - 'avrag-rs/crates/**'

@@ -4,11 +4,15 @@ pub(crate) use crate::product_e2e::e2e_gate::require_integration_suite;
 
 pub mod bad_file;
 pub mod concurrent_query;
+pub mod document_lifecycle;
 pub mod duplicate_upload;
 pub mod embedding_cache;
 pub mod format_output;
 pub mod ingestion_full;
 pub mod liteparse_pdf_e2e;
+pub mod office_doc_liteparse_e2e;
+pub mod office_xlsx_e2e;
+pub mod office_xlsx_staging_e2e;
 pub mod paddle_image_e2e;
 pub mod multi_doc;
 pub mod streaming_chat;

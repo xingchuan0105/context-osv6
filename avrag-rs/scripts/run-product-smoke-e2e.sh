@@ -11,7 +11,13 @@ NON_RAG_MODULES=(
   search_smoke
   auth_boundary
   share_boundary
-  paddle_image_smoke
+  billing_boundary
+)
+
+# Registered for module-guard coverage only; not executed in PR smoke (#[ignore] / staging).
+SMOKE_MANUAL_ONLY_MODULES=(
+  search_real_smoke
+  paddle_pdf_smoke
 )
 
 # PR smoke unit tests (parallel with non-RAG smoke; no Docker).
@@ -28,13 +34,24 @@ RAG_SERIAL_MODULES=(
   rag_fallback_smoke
   rag_codegen_multitool_smoke
   memory_multiturn_smoke
-  paddle_pdf_smoke
+  paddle_image_smoke
 )
+
+is_manual_only_smoke_module() {
+  local module="$1"
+  local m
+  for m in "${SMOKE_MANUAL_ONLY_MODULES[@]}"; do
+    if [[ "$m" == "$module" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
 
 assert_smoke_module_coverage() {
   local -a registered=()
   local module discovered
-  mapfile -t registered < <(printf '%s\n' "${NON_RAG_MODULES[@]}" "${RAG_SERIAL_MODULES[@]}" | sort -u)
+  mapfile -t registered < <(printf '%s\n' "${NON_RAG_MODULES[@]}" "${RAG_SERIAL_MODULES[@]}" "${SMOKE_MANUAL_ONLY_MODULES[@]}" | sort -u)
 
   mapfile -t discovered < <(
     cargo test --test product_e2e -p app --features product-e2e smoke:: -- --list \
@@ -77,6 +94,9 @@ cargo test -p avrag-worker paddle_image_route_metadata_contract --quiet
 
 echo "== Non-RAG smoke + unit tests (parallel) =="
 for t in "${NON_RAG_MODULES[@]}"; do
+  if is_manual_only_smoke_module "$t"; then
+    continue
+  fi
   cargo test --test product_e2e -p app --features product-e2e "smoke::${t}" -- --test-threads=1 --nocapture &
 done
 for f in "${UNIT_TEST_FILTERS[@]}"; do

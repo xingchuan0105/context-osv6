@@ -23,6 +23,10 @@ cargo run -p e2e-analyzer -- report --run crates/app/tests/e2e_output/e2e_202605
 # llm_real runs (bucket layout: llm_real/{run_id}/{test_name}/metadata.json)
 cargo run -p e2e-analyzer -- llm-real list --output crates/app/tests/e2e_output
 cargo run -p e2e-analyzer -- llm-real summary --run crates/app/tests/e2e_output/llm_real/e2e_20260528-XXXXXX
+cargo run -p e2e-analyzer -- llm-real trends --output crates/app/tests/e2e_output --limit 20
+
+# Promote newest llm_real run as regression baseline
+./scripts/promote-llm-real-baseline.sh
 cargo run -p e2e-analyzer -- llm-real summary --run crates/app/tests/e2e_output/llm_real/e2e_20260528-XXXXXX --output llm_real_summary.md
 
 # Legacy flat layout still supported for diff/diagnose/report; trends/coverage also scan buckets

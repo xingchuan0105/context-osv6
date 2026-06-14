@@ -289,3 +289,41 @@ pub fn assert_citations_use_document_chunks(resp: &ChatResponse, document_chunk_
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Ingestion routing (P4 LiteParse + Paddle; no MinerU)
+// ---------------------------------------------------------------------------
+
+/// Assert backend summary reflects P4 LiteParse hybrid PDF routing.
+pub fn assert_liteparse_hybrid_backend_summary(summary: &serde_json::Value) {
+    let summary_text = summary.to_string();
+    assert!(
+        summary_text.contains("liteparse")
+            || summary_text.contains("LiteParse")
+            || summary_text.contains("liteparse-v1"),
+        "expected LiteParse routing in backend_summary: {summary_text}"
+    );
+    assert!(
+        summary.get("page_status").is_some(),
+        "page_status should be present in backend_summary"
+    );
+    let ingest_routing = summary
+        .get("ingest_routing")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(
+        ingest_routing.get("pdf_route_mode").and_then(|v| v.as_str()),
+        Some("liteparse_hybrid"),
+        "expected liteparse_hybrid route mode in ingest_routing: {summary_text}"
+    );
+}
+
+/// Post-P4 ingest must not reference removed MinerU backends.
+pub fn assert_no_mineru_in_backend_summary(summary: &serde_json::Value) {
+    let summary_text = summary.to_string().to_lowercase();
+    assert!(
+        !summary_text.contains("mineru"),
+        "ingest must not reference MinerU: {summary}"
+    );
+}

@@ -466,6 +466,12 @@ pub fn mime_type_for_filename(filename: &str) -> &'static str {
         "image/gif"
     } else if lower.ends_with(".bmp") {
         "image/bmp"
+    } else if lower.ends_with(".xlsx") {
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    } else if lower.ends_with(".xls") {
+        "application/vnd.ms-excel"
+    } else if lower.ends_with(".docx") {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     } else {
         "application/octet-stream"
     }

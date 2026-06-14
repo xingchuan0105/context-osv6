@@ -201,3 +201,34 @@ async fn unauthenticated_request_to_docs_status_returns_401() {
         resp.status()
     );
 }
+
+#[tokio::test]
+async fn chat_with_valid_jwt_bearer_returns_200() {
+    super::require_smoke_suite();
+    let ctx = TestContext::new_smoke().await;
+    let email = format!("jwt-smoke-{}@example.test", uuid::Uuid::new_v4());
+    let token = ctx
+        .register_user_token(&email, "JWT Smoke User")
+        .await
+        .expect("register user for JWT test");
+    let notebook = ctx
+        .create_notebook_with_token(&token, "jwt-chat")
+        .await
+        .expect("create notebook for JWT user");
+
+    let http_resp = ctx
+        .chat_with_bearer_token(&token, "Hello from JWT", &notebook.id)
+        .await
+        .expect("jwt chat");
+
+    assert_eq!(
+        http_resp.status, 200,
+        "valid JWT bearer chat must return 200, body={}",
+        http_resp.body_json
+    );
+    let resp: crate::product_e2e::ChatResponse = http_resp.into_business().unwrap();
+    assert!(
+        !resp.answer.is_empty(),
+        "JWT chat answer should be non-empty"
+    );
+}

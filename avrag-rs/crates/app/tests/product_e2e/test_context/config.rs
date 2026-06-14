@@ -25,6 +25,7 @@ pub(crate) struct E2eBootstrapConfig {
     pub mock_embedding_base_url: Option<String>,
     pub mock_search_base_url: Option<String>,
     pub mock_paddle_ocr_base_url: Option<String>,
+    pub mock_office_parser_base_url: Option<String>,
     pub use_real_llm: bool,
     pub has_real_search: bool,
     pub worker_timeout_secs: u64,
@@ -135,9 +136,18 @@ impl E2eBootstrapConfig {
             config.search.provider = "brave_llm_context".to_string();
             config.search.base_url = url.clone();
             config.search.api_key = "mock".to_string();
+            Self::apply_search_timeout_from_env(&mut config);
         }
 
         config
+    }
+
+    fn apply_search_timeout_from_env(config: &mut AppConfig) {
+        if let Ok(v) = std::env::var("SEARCH_TIMEOUT_MS") {
+            if let Ok(n) = v.parse() {
+                config.search.timeout_ms = n;
+            }
+        }
     }
 
     /// Inject worker process env. `NEXT_PUBLIC_DEV_ORG_ID` / `NEXT_PUBLIC_DEV_USER_ID`
@@ -286,6 +296,13 @@ impl E2eBootstrapConfig {
                     "PADDLE_OCR_RESULT_CACHE_ENABLED",
                 ],
             );
+        }
+
+        if let Some(ref url) = self.mock_office_parser_base_url {
+            cmd.env("OFFICE_PARSER_BASE_URL", url)
+                .env("OFFICE_PARSER_TIMEOUT_MS", "30000");
+        } else {
+            Self::forward_optional_env(cmd, &["OFFICE_PARSER_BASE_URL", "OFFICE_PARSER_TIMEOUT_MS"]);
         }
 
         Self::forward_optional_env(

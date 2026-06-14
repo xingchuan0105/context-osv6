@@ -543,4 +543,273 @@ impl TestContext {
         )
         .await
     }
+
+    /// Register a user via `/api/auth/register` and return the JWT token.
+    pub async fn register_user_token(
+        &self,
+        email: &str,
+        full_name: &str,
+    ) -> anyhow::Result<String> {
+        let body = serde_json::json!({
+            "email": email,
+            "password": "password123",
+            "full_name": full_name,
+            "terms_version": app_core::PUBLISHED_TERMS_VERSION,
+            "privacy_version": app_core::PUBLISHED_PRIVACY_VERSION,
+        });
+        let resp = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()?
+            .post(format!("{}/api/auth/register", self.base_url))
+            .json(&body)
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let payload = resp.json::<serde_json::Value>().await?;
+        if status != 201 {
+            anyhow::bail!("register failed: HTTP {status}, body: {payload}");
+        }
+        payload["data"]["token"]
+            .as_str()
+            .map(str::to_owned)
+            .ok_or_else(|| anyhow::anyhow!("missing token in register response: {payload}"))
+    }
+
+    pub async fn create_notebook_with_token(
+        &self,
+        token: &str,
+        name: &str,
+    ) -> anyhow::Result<NotebookInner> {
+        let resp = reqwest::Client::builder()
+            .timeout(Duration::from_secs(60))
+            .build()?
+            .post(format!("{}/api/v1/notebooks", self.base_url))
+            .header("Authorization", format!("Bearer {token}"))
+            .json(&serde_json::json!({ "name": name, "description": "" }))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body = resp.json::<serde_json::Value>().await?;
+        if status != 201 {
+            anyhow::bail!("create notebook with token failed: HTTP {status}, body: {body}");
+        }
+        let wrapper: NotebookResponse = serde_json::from_value(body)?;
+        Ok(wrapper.notebook)
+    }
+
+    pub async fn chat_with_bearer_token(
+        &self,
+        token: &str,
+        query: &str,
+        notebook_id: &str,
+    ) -> anyhow::Result<HttpResponse> {
+        let resp = reqwest::Client::builder()
+            .timeout(Duration::from_secs(60))
+            .build()?
+            .post(format!("{}/api/v1/chat", self.base_url))
+            .header("Authorization", format!("Bearer {token}"))
+            .json(&serde_json::json!({
+                "query": query,
+                "agent_type": "chat",
+                "notebook_id": notebook_id,
+                "doc_scope": Vec::<String>::new(),
+                "stream": false,
+            }))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body_json = resp.json().await?;
+        Ok(HttpResponse { status, body_json })
+    }
+
+    pub async fn invite_notebook_member(
+        &self,
+        notebook_id: &str,
+        email: &str,
+        role: &str,
+    ) -> anyhow::Result<HttpResponse> {
+        let resp = self
+            .http_client
+            .post(format!(
+                "{}/api/v1/notebooks/{notebook_id}/members/invite",
+                self.base_url
+            ))
+            .json(&serde_json::json!({ "email": email, "role": role }))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body_json = resp.json().await?;
+        Ok(HttpResponse { status, body_json })
+    }
+
+    pub async fn list_notebook_members(
+        &self,
+        notebook_id: &str,
+    ) -> anyhow::Result<serde_json::Value> {
+        let resp = self
+            .http_client
+            .get(format!(
+                "{}/api/v1/notebooks/{notebook_id}/members",
+                self.base_url
+            ))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body = resp.json::<serde_json::Value>().await?;
+        if status != 200 {
+            anyhow::bail!("list members failed: HTTP {status}, body: {body}");
+        }
+        Ok(body)
+    }
+
+    pub async fn delete_document(&self, document_id: &str) -> anyhow::Result<HttpResponse> {
+        let resp = self
+            .http_client
+            .delete(format!(
+                "{}/api/v1/documents/{document_id}",
+                self.base_url
+            ))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body_json = resp.json().await?;
+        Ok(HttpResponse { status, body_json })
+    }
+
+    pub async fn create_checkout_session_with_token(
+        &self,
+        token: &str,
+        plan_id: &str,
+    ) -> anyhow::Result<HttpResponse> {
+        let resp = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()?
+            .post(format!("{}/api/v1/billing/checkout-session", self.base_url))
+            .header("Authorization", format!("Bearer {token}"))
+            .json(&serde_json::json!({ "plan_id": plan_id }))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body_json = resp.json().await?;
+        Ok(HttpResponse { status, body_json })
+    }
+
+    pub async fn reindex_document(&self, document_id: &str) -> anyhow::Result<HttpResponse> {
+        let resp = self
+            .http_client
+            .post(format!(
+                "{}/api/v1/documents/{document_id}/reindex",
+                self.base_url
+            ))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body_json = resp.json().await?;
+        Ok(HttpResponse { status, body_json })
+    }
+
+    /// Start SSE chat, read until `start` (or first chunk), then drop the connection.
+    pub async fn chat_stream_abort_capture_session(
+        &self,
+        query: &str,
+        notebook_id: &str,
+        doc_scope: &[String],
+    ) -> anyhow::Result<(Vec<SseEvent>, Option<String>)> {
+        let body = serde_json::json!({
+            "query": query,
+            "agent_type": "rag",
+            "notebook_id": notebook_id,
+            "doc_scope": doc_scope,
+            "stream": true,
+        });
+        if !doc_scope.is_empty() {
+            set_mock_rag_codegen_query(query);
+            if let Ok(chunk_id) = self.query_first_chunk_id(&doc_scope[0]).await {
+                set_mock_rag_codegen_chunk_id(chunk_id);
+            }
+        }
+        let resp = self
+            .http_client
+            .post(format!("{}/api/v1/chat", self.base_url))
+            .header(reqwest::header::ACCEPT, "text/event-stream")
+            .json(&body)
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        if status != 200 {
+            let body_text = resp.text().await.unwrap_or_default();
+            anyhow::bail!("chat_stream_abort: HTTP {status}, body: {body_text}");
+        }
+        let mut resp = resp;
+        let mut parser = SseParser::new();
+        let mut events = Vec::new();
+        for _ in 0..4 {
+            match resp.chunk().await {
+                Ok(Some(chunk)) => {
+                    events.extend(parser.feed(&chunk));
+                    if events.iter().any(|e| e.event == "start") {
+                        break;
+                    }
+                }
+                Ok(None) => break,
+                Err(_) => break,
+            }
+        }
+        drop(resp);
+        let session_id = events
+            .iter()
+            .find_map(|e| {
+                if e.event == "start" {
+                    e.data.get("session_id").and_then(|v| v.as_str())
+                } else {
+                    None
+                }
+            })
+            .map(str::to_owned);
+        Ok((events, session_id))
+    }
+
+    /// Start a streaming chat and drop the connection after the first SSE chunk.
+    pub async fn chat_stream_abort_after_start(
+        &self,
+        query: &str,
+        notebook_id: &str,
+        doc_scope: &[String],
+    ) -> anyhow::Result<Vec<SseEvent>> {
+        let body = serde_json::json!({
+            "query": query,
+            "agent_type": "rag",
+            "notebook_id": notebook_id,
+            "doc_scope": doc_scope,
+            "stream": true,
+        });
+        if !doc_scope.is_empty() {
+            set_mock_rag_codegen_query(query);
+            if let Ok(chunk_id) = self.query_first_chunk_id(&doc_scope[0]).await {
+                set_mock_rag_codegen_chunk_id(chunk_id);
+            }
+        }
+        let resp = self
+            .http_client
+            .post(format!("{}/api/v1/chat", self.base_url))
+            .header(reqwest::header::ACCEPT, "text/event-stream")
+            .json(&body)
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        if status != 200 {
+            let body_text = resp.text().await.unwrap_or_default();
+            anyhow::bail!("chat_stream_abort: HTTP {status}, body: {body_text}");
+        }
+        let mut resp = resp;
+        let mut parser = SseParser::new();
+        let mut events = Vec::new();
+        if let Ok(Some(chunk)) = resp.chunk().await {
+            for evt in parser.feed(&chunk) {
+                events.push(evt);
+            }
+        }
+        drop(resp);
+        Ok(events)
+    }
 }

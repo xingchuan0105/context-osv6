@@ -7,10 +7,13 @@
 //! All smoke tests call [`require_smoke_suite`]. Use `--test-threads=1` for
 //! `auth_boundary` (shared PG + fixed notebook ids).
 //! PR CI module list: [`scripts/run-product-smoke-e2e.sh`](../../../../../scripts/run-product-smoke-e2e.sh).
+//! `search_real_smoke` and `paddle_pdf_smoke` are registered under
+//! `SMOKE_MANUAL_ONLY_MODULES` (guard only; `#[ignore]`).
 
 pub(crate) use crate::product_e2e::e2e_gate::require_smoke_suite;
 
 pub mod auth_boundary;
+pub mod billing_boundary;
 pub mod chat_smoke;
 pub mod ingestion_smoke;
 pub mod paddle_image_smoke;
@@ -20,6 +23,7 @@ pub mod rag_codegen_multitool_smoke;
 pub mod rag_fallback_smoke;
 pub mod rag_smoke;
 pub mod search_smoke;
+pub mod search_real_smoke;
 pub mod share_boundary;
 
 use crate::product_e2e::TestContext;

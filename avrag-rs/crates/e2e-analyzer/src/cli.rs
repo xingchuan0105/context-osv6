@@ -133,6 +133,21 @@ pub enum LlmRealCommands {
         #[arg(long)]
         output: Option<PathBuf>,
     },
+
+    /// Aggregate llm_real metadata across sparse runs (one test per run dir).
+    Trends {
+        /// Base e2e_output directory (default: crates/app/tests/e2e_output).
+        #[arg(long, default_value = "crates/app/tests/e2e_output")]
+        output: PathBuf,
+
+        /// Max recent llm_real runs to scan.
+        #[arg(long, default_value = "20")]
+        limit: usize,
+
+        /// Optional output path (default: stdout).
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]

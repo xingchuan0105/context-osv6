@@ -28,7 +28,7 @@ pub(crate) struct RagSharedFixture {
     pub(crate) object_root: String,
     pub(crate) api_base_url: String,
     pub(crate) worker_bootstrap: E2eBootstrapConfig,
-    pub(crate) search_should_429: Option<Arc<AtomicBool>>,
+    pub(crate) search_controls: Option<crate::product_e2e::mock_servers::MockSearchControls>,
     pub(crate) embedding_should_503: Option<Arc<AtomicBool>>,
     pub(crate) embedding_call_count: Option<Arc<AtomicUsize>>,
     /// Keeps the object-store tempdir alive for the test binary (side-effect only).
@@ -66,7 +66,7 @@ impl RagSharedFixture {
             .milvus_collection_prefix
             .take()
             .expect("rag fixture expects milvus collection prefix");
-        let search_should_429 = ctx.search_should_429.take();
+        let search_controls = ctx.search_controls.take();
         let embedding_should_503 = ctx.embedding_should_503.take();
         let embedding_call_count = ctx.embedding_call_count.take();
         let object_store_guard = Arc::new(std::mem::replace(
@@ -108,7 +108,7 @@ impl RagSharedFixture {
             object_root,
             api_base_url,
             worker_bootstrap,
-            search_should_429,
+            search_controls,
             embedding_should_503,
             embedding_call_count,
             _object_store_guard: object_store_guard,

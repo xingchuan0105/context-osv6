@@ -17,7 +17,7 @@ use axum::{
 };
 use serde_json::json;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
 fn latest_user_message_content(messages: &[serde_json::Value]) -> Option<&str> {
     messages
@@ -992,16 +992,36 @@ async fn mock_embedding_handler(
     Json(json!({ "data": data, "model": "mock-embedding" })).into_response()
 }
 
+/// Runtime toggles for the mock Brave Search server.
+#[derive(Clone)]
+pub(crate) struct MockSearchControls {
+    pub should_429: Arc<AtomicBool>,
+    pub should_empty: Arc<AtomicBool>,
+    pub delay_ms: Arc<AtomicU64>,
+}
+
+impl MockSearchControls {
+    pub fn new() -> Self {
+        Self {
+            should_429: Arc::new(AtomicBool::new(false)),
+            should_empty: Arc::new(AtomicBool::new(false)),
+            delay_ms: Arc::new(AtomicU64::new(0)),
+        }
+    }
+}
+
 /// Start a mock Brave Search HTTP server on an ephemeral port.
 ///
-/// Returns (base_url, abort_sender, search_should_429_flag).
-pub(crate) async fn start_mock_search_server()
--> (String, tokio::sync::oneshot::Sender<()>, Arc<AtomicBool>) {
-    let search_should_429 = Arc::new(AtomicBool::new(false));
-    let flag = search_should_429.clone();
-
-    let flag2 = flag.clone();
-    let flag3 = flag.clone();
+/// Returns (base_url, abort_sender, controls).
+pub(crate) async fn start_mock_search_server() -> (
+    String,
+    tokio::sync::oneshot::Sender<()>,
+    MockSearchControls,
+) {
+    let controls = MockSearchControls::new();
+    let flag = controls.clone();
+    let flag2 = controls.clone();
+    let flag3 = controls.clone();
     let app = Router::new()
         .route(
             "/res/v1/llm/context",
@@ -1026,7 +1046,7 @@ pub(crate) async fn start_mock_search_server()
         }
     });
 
-    (base_url, abort_tx, search_should_429)
+    (base_url, abort_tx, controls)
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -1036,14 +1056,18 @@ struct MockNewsQuery {
 
 fn mock_news_search_handler(
     params: MockNewsQuery,
-    search_should_429: Arc<AtomicBool>,
+    controls: MockSearchControls,
 ) -> axum::response::Response {
-    if search_should_429.load(Ordering::SeqCst) {
+    if controls.should_429.load(Ordering::SeqCst) {
         return (
             axum::http::StatusCode::TOO_MANY_REQUESTS,
             Json(json!({ "error": "rate limit exceeded" })),
         )
             .into_response();
+    }
+
+    if controls.should_empty.load(Ordering::SeqCst) {
+        return Json(json!({ "results": [] })).into_response();
     }
 
     let _query = params.q.as_deref().unwrap_or("unknown");
@@ -1061,14 +1085,27 @@ fn mock_news_search_handler(
 
 async fn mock_search_handler(
     Json(req): Json<serde_json::Value>,
-    search_should_429: Arc<AtomicBool>,
+    controls: MockSearchControls,
 ) -> axum::response::Response {
-    if search_should_429.load(Ordering::SeqCst) {
+    if controls.should_429.load(Ordering::SeqCst) {
         return (
             axum::http::StatusCode::TOO_MANY_REQUESTS,
             Json(json!({ "error": "rate limit exceeded" })),
         )
             .into_response();
+    }
+
+    let delay_ms = controls.delay_ms.load(Ordering::SeqCst);
+    if delay_ms > 0 {
+        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+    }
+
+    if controls.should_empty.load(Ordering::SeqCst) {
+        return Json(json!({
+            "grounding": { "generic": [], "map": [] },
+            "sources": {}
+        }))
+        .into_response();
     }
 
     let _query = req["q"].as_str().unwrap_or("unknown");
@@ -1186,4 +1223,102 @@ pub(crate) async fn start_mock_paddle_ocr_server() -> (
         abort_tx,
         jobs_submitted,
     )
+}
+
+/// Fixed cell text returned by the mock Office Parser xlsx endpoint.
+pub(crate) const MOCK_OFFICE_XLSX_TEXT: &str = "Revenue Q1 42";
+
+fn mock_office_xlsx_document_ir(document_id: &str) -> ingestion::ir::DocumentIr {
+    use ingestion::ir::{
+        BlockIr, BlockModality, BlockType, DocumentIr, DocumentType, PageIr, ParseBackend,
+        SourceLocator,
+    };
+    DocumentIr {
+        document_id: document_id.to_string(),
+        title: "contract-xlsx.xlsx".to_string(),
+        doc_type: DocumentType::Xlsx,
+        primary_backend: ParseBackend::PoiXlsx,
+        backend_version: Some("mock-office-parser".to_string()),
+        language: Some("en".to_string()),
+        metadata: Default::default(),
+        pages: vec![PageIr {
+            page_number: 1,
+            text_char_count: MOCK_OFFICE_XLSX_TEXT.len(),
+            image_count: 0,
+            ..Default::default()
+        }],
+        blocks: vec![BlockIr {
+            block_id: "sheet-a1".to_string(),
+            page: Some(1),
+            block_type: BlockType::SheetCellRange,
+            modality: BlockModality::TextOnly,
+            text: MOCK_OFFICE_XLSX_TEXT.to_string(),
+            alt_text: None,
+            asset_refs: vec![],
+            caption: None,
+            section_path: vec![],
+            source_locator: SourceLocator {
+                page: Some(1),
+                ..Default::default()
+            },
+            parser_backend: ParseBackend::PoiXlsx,
+            metadata: Default::default(),
+        }],
+        assets: vec![],
+        warnings: vec![],
+    }
+}
+
+async fn mock_office_parse_xlsx(mut multipart: Multipart) -> axum::response::Response {
+    let mut document_id = "mock-doc".to_string();
+    while let Ok(Some(part)) = multipart.next_field().await {
+        match part.name().unwrap_or_default() {
+            "document_id" => {
+                if let Ok(text) = part.text().await {
+                    if !text.trim().is_empty() {
+                        document_id = text;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let body = ingestion::parser::OfficeParserParseResponse {
+        document_ir: mock_office_xlsx_document_ir(&document_id),
+        warnings: vec![],
+        stats: ingestion::parser::OfficeParserParseStats {
+            duration_ms: 1,
+            block_count: 1,
+            asset_count: 0,
+        },
+    };
+    Json(body).into_response()
+}
+
+async fn mock_office_healthz() -> axum::response::Response {
+    Json(ingestion::parser::OfficeParserHealthz {
+        ok: true,
+        service: "mock-office-parser".to_string(),
+    })
+    .into_response()
+}
+
+/// Start a mock Office Parser HTTP server (`/v1/parse/xlsx`, `/v1/healthz`).
+pub(crate) async fn start_mock_office_parser_server() -> (
+    String,
+    tokio::sync::oneshot::Sender<()>,
+) {
+    let (listener, base_url) = bind_persistent_listener().await;
+    let app = Router::new()
+        .route("/v1/healthz", get(mock_office_healthz))
+        .route("/v1/parse/xlsx", post(mock_office_parse_xlsx));
+    let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
+    spawn_persistent(async move {
+        let server = axum::serve(listener, app);
+        tokio::select! {
+            _ = server => {},
+            _ = abort_rx => {},
+        }
+    });
+    (base_url, abort_tx)
 }

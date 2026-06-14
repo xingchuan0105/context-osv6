@@ -122,3 +122,82 @@ async fn chat_stream_debug_emits_prompt_snapshot() {
         "prompt_snapshot should include non-empty system_content"
     );
 }
+
+/// Client disconnect during SSE should not hang the test harness; we expect at
+/// least one early event before the connection is dropped.
+#[tokio::test]
+async fn chat_stream_client_disconnect_aborts_without_hang() {
+    super::require_integration_suite();
+
+    let events = stream_rag_events(false).await.expect("baseline stream");
+    assert!(
+        events.iter().any(|e| e.event == "start" || e.event == "trace"),
+        "baseline stream should emit early events"
+    );
+
+    let fixture = crate::product_e2e::fixtures::shared_rag_fixture().await;
+    let upload = &fixture.upload;
+    let ctx = shared_ready_rag_context().await;
+    let aborted = ctx
+        .chat_stream_abort_after_start(
+            QUERY,
+            &upload.notebook_id,
+            &[upload.document_id.clone()],
+        )
+        .await
+        .expect("abort stream");
+    assert!(
+        !aborted.is_empty(),
+        "abort path should read at least one SSE event before drop"
+    );
+}
+
+/// After an SSE disconnect, the client can resume the same chat session via a
+/// new HTTP request carrying the `session_id` from the `start` event.
+#[tokio::test]
+async fn chat_stream_disconnect_reconnect_continues_session() {
+    super::require_integration_suite();
+
+    let fixture = crate::product_e2e::fixtures::shared_rag_fixture().await;
+    let upload = &fixture.upload;
+    let ctx = shared_ready_rag_context().await;
+
+    let (events, session_id) = ctx
+        .chat_stream_abort_capture_session(
+            QUERY,
+            &upload.notebook_id,
+            &[upload.document_id.clone()],
+        )
+        .await
+        .expect("abort capture session");
+    assert!(
+        events.iter().any(|e| e.event == "start" || e.event == "trace"),
+        "disconnect test should observe early SSE events"
+    );
+    let session_id = session_id.expect("start event should include session_id");
+
+    let follow_up = "Can you elaborate on that in one sentence?";
+    let http_resp = ctx
+        .chat_with_session(
+            follow_up,
+            &upload.notebook_id,
+            &[upload.document_id.clone()],
+            &session_id,
+        )
+        .await
+        .expect("reconnect chat with session_id");
+    assert_eq!(
+        http_resp.status, 200,
+        "session reconnect must return HTTP 200, body={}",
+        http_resp.body_json
+    );
+    let resp: crate::product_e2e::ChatResponse = http_resp.into_business().unwrap();
+    assert_eq!(
+        resp.session_id, session_id,
+        "reconnected chat should stay on the same session"
+    );
+    assert!(
+        !resp.answer.is_empty(),
+        "reconnected chat should return a non-empty answer"
+    );
+}

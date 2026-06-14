@@ -48,8 +48,20 @@ impl TestContext {
     }
 
     pub fn set_search_429(&self, value: bool) {
-        if let Some(ref flag) = self.search_should_429 {
-            flag.store(value, Ordering::SeqCst);
+        if let Some(ref controls) = self.search_controls {
+            controls.should_429.store(value, Ordering::SeqCst);
+        }
+    }
+
+    pub fn set_search_empty(&self, value: bool) {
+        if let Some(ref controls) = self.search_controls {
+            controls.should_empty.store(value, Ordering::SeqCst);
+        }
+    }
+
+    pub fn set_search_delay_ms(&self, delay_ms: u64) {
+        if let Some(ref controls) = self.search_controls {
+            controls.delay_ms.store(delay_ms, Ordering::SeqCst);
         }
     }
 

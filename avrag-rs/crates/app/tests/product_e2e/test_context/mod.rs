@@ -41,7 +41,8 @@ pub struct TestContext {
     pub(crate) mock_search_abort: Option<Sender<()>>,
     pub(crate) mock_paddle_abort: Option<Sender<()>>,
     pub(crate) mock_paddle_jobs_submitted: Option<Arc<AtomicUsize>>,
-    pub(crate) search_should_429: Option<Arc<AtomicBool>>,
+    pub(crate) mock_office_abort: Option<Sender<()>>,
+    pub(crate) search_controls: Option<crate::product_e2e::mock_servers::MockSearchControls>,
     pub(crate) embedding_should_503: Option<Arc<AtomicBool>>,
     pub(crate) embedding_call_count: Option<Arc<AtomicUsize>>,
     pub(crate) redis_container_name: Option<String>,
@@ -67,6 +68,9 @@ impl Drop for TestContext {
             let _ = tx.send(());
         }
         if let Some(tx) = self.mock_paddle_abort.take() {
+            let _ = tx.send(());
+        }
+        if let Some(tx) = self.mock_office_abort.take() {
             let _ = tx.send(());
         }
         if let Some(pg) = self.shared_pg.take() {

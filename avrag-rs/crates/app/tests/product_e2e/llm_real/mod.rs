@@ -8,7 +8,10 @@
 //! - may hit provider rate limits under parallel execution.
 //!
 //! Run serially with:
-//!   E2E_MODE=nightly cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1 --nocapture
+//!   E2E_MODE=nightly cargo test -p app --test product_e2e --features product-e2e llm_real -- --ignored --test-threads=1 --nocapture
+//!
+//! PDF ingest RAG (`pdf_corpus`, `pdf_rag_e2e`) uses P4 LiteParse hybrid routing on bundled
+//! `phase0-mini.pdf` by default; txt RAG (`rag_real`, etc.) uses `antifragile.txt` local parse.
 //!
 //! Artifacts: `crates/app/tests/e2e_output/llm_real/{run_id}/{test_name}/`
 //!   - `response.json`, `reasoning_summary.txt`, `trace_reasoning.jsonl`, `prompt_snapshots.json`, `metadata.json`
@@ -415,6 +418,23 @@ pub async fn chat_with_citations_retry(
     notebook_id: &str,
     doc_scope: &[String],
 ) -> LlmRealChatResult {
+    chat_with_citations_retry_attempts(
+        ctx,
+        query,
+        notebook_id,
+        doc_scope,
+        REAL_LLM_MAX_ATTEMPTS,
+    )
+    .await
+}
+
+pub async fn chat_with_citations_retry_attempts(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+    doc_scope: &[String],
+    max_attempts: usize,
+) -> LlmRealChatResult {
     chat_stream_with_retry_inner(
         ctx,
         ChatStreamParams {
@@ -432,7 +452,7 @@ pub async fn chat_with_citations_retry(
                 && answer_rejects_synthesis_fallback(&resp.answer)
         },
         "rag chat with citations",
-        REAL_LLM_MAX_ATTEMPTS,
+        max_attempts,
     )
     .await
 }
@@ -535,6 +555,30 @@ pub async fn chat_with_session_retry(
     .await
 }
 
+/// Retry streaming general chat until a non-empty answer.
+pub async fn chat_general_with_retry(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+) -> LlmRealChatResult {
+    chat_stream_with_retry_inner(
+        ctx,
+        ChatStreamParams {
+            query,
+            agent_type: "chat",
+            notebook_id,
+            doc_scope: &[],
+            session_id: None,
+            format_hint: None,
+            debug: true,
+        },
+        |resp| !resp.answer.is_empty(),
+        "general chat",
+        REAL_LLM_MAX_ATTEMPTS,
+    )
+    .await
+}
+
 /// Retry streaming search until a non-empty, non-degraded answer.
 pub async fn search_with_retry(
     ctx: &TestContext,
@@ -578,9 +622,11 @@ pub(crate) fn require_real_llm_config() {
     }
 }
 
+pub mod chat_real;
 pub mod format_real;
 pub mod multi_turn;
 pub mod pdf_corpus;
+pub mod pdf_rag_e2e;
 pub mod rag_real;
 pub mod search_real;
 

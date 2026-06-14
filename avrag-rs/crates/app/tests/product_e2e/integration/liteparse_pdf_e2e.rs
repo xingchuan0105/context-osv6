@@ -3,7 +3,10 @@
 use std::time::Duration;
 
 use crate::product_e2e::setup;
-use crate::product_e2e::{DocumentStatus, TestContext};
+use crate::product_e2e::{
+    DocumentStatus, TestContext,
+    assertions::{assert_liteparse_hybrid_backend_summary, assert_no_mineru_in_backend_summary},
+};
 
 fn apply_liteparse_staging_profile() {
     unsafe {
@@ -71,17 +74,9 @@ async fn phase0_mini_liteparse_pdf_ingest_e2e() {
         .query_latest_backend_summary(&upload.document_id)
         .await
         .expect("backend_summary");
+    assert_liteparse_hybrid_backend_summary(&summary);
+    assert_no_mineru_in_backend_summary(&summary);
     let summary_text = summary.to_string();
-    assert!(
-        summary_text.contains("liteparse")
-            || summary_text.contains("LiteParse")
-            || summary_text.contains("liteparse-v1"),
-        "expected LiteParse routing in backend_summary: {summary_text}"
-    );
-    assert!(
-        summary.get("page_status").is_some(),
-        "page_status should be present in backend_summary"
-    );
 
     let ingest_routing = summary
         .get("ingest_routing")

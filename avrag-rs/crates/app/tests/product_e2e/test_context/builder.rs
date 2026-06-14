@@ -11,8 +11,8 @@ use uuid::Uuid;
 use super::super::{
     http_helpers::{milvus_collection_prefix_for_identity, test_auth_headers_for, unique_test_identity},
     mock_servers::{
-        reset_mock_rag_state, start_mock_embedding_server, start_mock_llm_server,
-        start_mock_paddle_ocr_server, start_mock_search_server,
+        reset_mock_rag_state,         start_mock_embedding_server, start_mock_llm_server,
+        start_mock_office_parser_server, start_mock_paddle_ocr_server, start_mock_search_server,
     },
     persistent_runtime::{bind_persistent_listener, spawn_persistent},
     setup,
@@ -314,7 +314,7 @@ impl TestContext {
             (url, Some(abort))
         };
 
-        let (mock_search_url, mock_search_abort, search_should_429) =
+        let (mock_search_url, mock_search_abort, search_controls) =
             start_mock_search_server().await;
 
         let (mock_paddle_url, mock_paddle_abort, mock_paddle_jobs_submitted) = if use_real_llm {
@@ -324,10 +324,14 @@ impl TestContext {
             (url, Some(abort), Some(jobs))
         };
 
-        let mut has_real_search = Self::resolve_use_real_search(use_real_llm).await;
-        if !use_real_llm {
-            has_real_search = false;
-        }
+        let (mock_office_url, mock_office_abort) = if use_real_llm {
+            (String::new(), None)
+        } else {
+            let (url, abort) = start_mock_office_parser_server().await;
+            (url, Some(abort))
+        };
+
+        let has_real_search = Self::resolve_use_real_search(use_real_llm).await;
 
         let (mock_embedding_url, mock_embedding_abort, embedding_should_503, embedding_call_count) =
             if enable_rag && !use_real_llm {
@@ -376,6 +380,11 @@ impl TestContext {
                 None
             } else {
                 Some(mock_paddle_url.clone())
+            },
+            mock_office_parser_base_url: if use_real_llm {
+                None
+            } else {
+                Some(mock_office_url.clone())
             },
             use_real_llm,
             has_real_search,
@@ -507,7 +516,8 @@ impl TestContext {
             mock_search_abort: Some(mock_search_abort),
             mock_paddle_abort,
             mock_paddle_jobs_submitted,
-            search_should_429: Some(search_should_429),
+            mock_office_abort,
+            search_controls: Some(search_controls),
             embedding_should_503,
             embedding_call_count,
             redis_container_name,
@@ -626,7 +636,8 @@ impl TestContext {
             mock_search_abort: None,
             mock_paddle_abort: None,
             mock_paddle_jobs_submitted: None,
-            search_should_429: fixture.search_should_429.clone(),
+            mock_office_abort: None,
+            search_controls: fixture.search_controls.clone(),
             embedding_should_503: fixture.embedding_should_503.clone(),
             embedding_call_count: fixture.embedding_call_count.clone(),
             redis_container_name: None,

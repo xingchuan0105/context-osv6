@@ -7,6 +7,7 @@ mod coverage;
 mod diff;
 mod fingerprint;
 mod loader;
+mod llm_real_trends;
 mod models;
 mod report;
 mod stability;
@@ -378,18 +379,34 @@ fn main() -> anyhow::Result<()> {
             }
 
             if all_reports.is_empty() {
-                println!("Not enough data for stability analysis.");
+                let llm_root = history
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .filter(|name| *name == "llm_real")
+                    .map(|_| history.parent().unwrap_or(&history).to_path_buf())
+                    .unwrap_or_else(|| history.clone());
+                let llm_series =
+                    llm_real_trends::collect_llm_real_series(&llm_root, limit);
+                if llm_series.is_empty() {
+                    println!("Not enough data for stability analysis.");
+                } else {
+                    let report = llm_real_trends::generate_llm_real_trends_report(&llm_series);
+                    println!("{report}");
+                    if let Some(out) = output {
+                        fs::write(&out, &report)?;
+                        println!("Report written to {}", out.display());
+                    }
+                }
             } else {
                 for report in &all_reports {
                     println!("{}", report);
                     println!("---\n");
                 }
-            }
-
-            if let Some(out) = output {
-                let combined = all_reports.join("\n---\n");
-                fs::write(&out, combined)?;
-                println!("Report written to {}", out.display());
+                if let Some(out) = output {
+                    let combined = all_reports.join("\n---\n");
+                    fs::write(&out, combined)?;
+                    println!("Report written to {}", out.display());
+                }
             }
         }
 
@@ -472,6 +489,17 @@ fn main() -> anyhow::Result<()> {
                     } else {
                         println!("{report}");
                     }
+                }
+            },
+
+            cli::LlmRealCommands::Trends { output, limit, out } => {
+                let series = llm_real_trends::collect_llm_real_series(&output, limit);
+                let report = llm_real_trends::generate_llm_real_trends_report(&series);
+                if let Some(path) = out {
+                    fs::write(&path, &report)?;
+                    println!("Report written to {}", path.display());
+                } else {
+                    println!("{report}");
                 }
             }
         },

@@ -41,7 +41,7 @@ jobs:
           key: ${{ runner.os }}-cargo-build-llm-real-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
 
       - name: Run llm_real E2E
-        run: cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1 --nocapture
+        run: cargo test -p app --test product_e2e --features product-e2e llm_real -- --ignored --test-threads=1 --nocapture
         env:
           E2E_MODE: nightly
           AGENT_LLM_BASE_URL: ${{ secrets.AGENT_LLM_BASE_URL }}

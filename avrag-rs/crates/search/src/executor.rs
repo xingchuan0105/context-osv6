@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use avrag_auth::AuthContext;
 use contracts::chat::ChatRequest;
 use reqwest::Client;
@@ -27,7 +29,16 @@ pub struct SearchExecutor {
 impl SearchExecutor {
     pub fn new(config: SearchConfig) -> Self {
         crate::proxy::sync_resolved_proxy_env();
-        let client = crate::proxy::build_http_client_with_proxy();
+        let timeout = Duration::from_millis(config.timeout_ms.max(1));
+        let mut builder = Client::builder().timeout(timeout);
+        if let Some(proxy_url) = crate::proxy::resolved_proxy_url() {
+            if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
+                builder = builder.proxy(proxy);
+            }
+        }
+        let client = builder
+            .build()
+            .unwrap_or_else(|_| Client::new());
         Self { config, client }
     }
 

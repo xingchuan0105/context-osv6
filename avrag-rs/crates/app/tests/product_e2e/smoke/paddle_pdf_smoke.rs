@@ -22,7 +22,7 @@ fn apply_paddle_smoke_profile() {
 }
 
 #[tokio::test]
-#[ignore = "requires Black Swan PDF, office-parser, pdf-renderer, PaddleOCR; run with --ignored --test-threads=1"]
+#[ignore = "requires Black Swan PDF + real Paddle Jobs; manual staging — ./scripts/run-staging-ingest-e2e.sh"]
 async fn black_swan_paddle_pdf_smoke() {
 
     super::require_smoke_suite();
