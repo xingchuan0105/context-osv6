@@ -31,6 +31,7 @@ vi.mock("../../lib/workspace/client", () => ({
 }));
 
 import { WorkspaceHistoryPane } from "../../components/workspace/workspace-history-pane";
+import { queryLibraryStore } from "../../lib/workspace/query-library/store";
 
 const mocks = vi.hoisted(() => globalThis.__mockProviders.createWorkspaceHistoryPaneMocks());
 
@@ -61,6 +62,8 @@ const sessions = [
 
 beforeEach(() => {
   document.body.innerHTML = "";
+  window.localStorage.clear();
+  queryLibraryStore.setState({ workspaces: {} });
   mocks.listWorkspaceSessionMessagesMock.mockReset();
   mocks.listWorkspaceSessionMessagesMock.mockImplementation(async (_token: string, sessionId: string) => ({
     messages:
@@ -95,6 +98,61 @@ afterEach(() => {
 });
 
 describe("WorkspaceHistoryPane", () => {
+  it("mounts the query library panel in the history rail", () => {
+    render(
+      <WorkspaceHistoryPane
+        activeSessionId="sess-1"
+        onDeleteSession={vi.fn()}
+        onInsert={vi.fn()}
+        onNewThread={vi.fn()}
+        onRenameSession={vi.fn()}
+        onSelectSession={vi.fn()}
+        onTogglePinSession={vi.fn()}
+        sessions={sessions}
+        workspaceId="ws-test"
+      />,
+    );
+
+    expect(screen.getByTestId("query-library-panel")).toBeTruthy();
+  });
+
+  it("keeps session threads and query library visible together in the history rail", () => {
+    const manySessions = Array.from({ length: 8 }, (_, index) => ({
+      id: `sess-${index + 1}`,
+      workspace_id: "ws-1",
+      title: `Thread ${index + 1}`,
+      agent_type: "rag",
+      summary: null,
+      pinned: index === 0,
+      created_at: `2026-04-${String(index + 1).padStart(2, "0")}T00:00:00Z`,
+      updated_at: `2026-04-${String(index + 2).padStart(2, "0")}T00:00:00Z`,
+    }));
+
+    for (let index = 0; index < 6; index += 1) {
+      queryLibraryStore.getState().capture("ws-layout", `Saved prompt ${index + 1}`);
+    }
+
+    render(
+      <WorkspaceHistoryPane
+        activeSessionId="sess-1"
+        onDeleteSession={vi.fn()}
+        onInsert={vi.fn(() => true)}
+        onNewThread={vi.fn()}
+        onRenameSession={vi.fn()}
+        onSelectSession={vi.fn()}
+        onTogglePinSession={vi.fn()}
+        sessions={manySessions}
+        workspaceId="ws-layout"
+      />,
+    );
+
+    expect(screen.getByText("Thread 1")).toBeTruthy();
+    expect(screen.getByText("Thread 8")).toBeTruthy();
+    expect(screen.getByTestId("query-library-panel")).toBeTruthy();
+    expect(screen.getByText("Saved prompt 1")).toBeTruthy();
+    expect(screen.getByText("Saved prompt 6")).toBeTruthy();
+  });
+
   it("opens and closes the session kebab menu on outside click and Escape, then auto-closes after actions", async () => {
     const user = userEvent.setup();
     const onTogglePinSession = vi.fn();

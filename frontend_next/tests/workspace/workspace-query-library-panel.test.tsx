@@ -12,6 +12,7 @@ vi.mock("../../lib/ui-preferences", () => ({
 }));
 
 import { WorkspaceQueryLibraryPanel } from "../../components/workspace/workspace-query-library-panel";
+import { insertAtCursor } from "../../lib/workspace/query-library/logic";
 import { queryLibraryStore } from "../../lib/workspace/query-library/store";
 
 describe("WorkspaceQueryLibraryPanel", () => {
@@ -91,5 +92,26 @@ describe("WorkspaceQueryLibraryPanel", () => {
 
     expect(screen.getByRole("searchbox", { name: "Search prompts…" })).toHaveValue("");
     expect(screen.getByText("Rewrite in formal tone")).toBeTruthy();
+  });
+
+  it("concatenates prompts when two items are clicked in sequence", async () => {
+    const user = userEvent.setup();
+    let draft = "";
+    const onInsert = vi.fn((text: string) => {
+      const { nextDraft } = insertAtCursor(draft, text, draft.length, draft.length);
+      draft = nextDraft;
+      return true;
+    });
+
+    queryLibraryStore.getState().capture("ws-1", "Prompt alpha");
+    queryLibraryStore.getState().capture("ws-1", "Prompt beta");
+
+    render(<WorkspaceQueryLibraryPanel workspaceId="ws-1" onInsert={onInsert} />);
+
+    await user.click(screen.getByText("Prompt beta"));
+    await user.click(screen.getByText("Prompt alpha"));
+
+    expect(onInsert).toHaveBeenCalledTimes(2);
+    expect(draft).toBe("Prompt betaPrompt alpha");
   });
 });

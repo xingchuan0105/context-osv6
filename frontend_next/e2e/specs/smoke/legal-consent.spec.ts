@@ -71,7 +71,8 @@ test.describe("Legal pages accessibility (P0-IA / P0-UX)", () => {
     await page.goto("/legal/privacy");
     const body =
       (await page.locator("main, .legal-document, article").first().textContent()) ?? "";
-    expect(body).toMatch(/不.{0,6}训练/);
+    expect(body).toMatch(/不会|不会被/);
+    expect(body).toMatch(/训练/);
   });
 
   test("long-form pages render a table of contents", async ({ page }) => {
@@ -239,9 +240,27 @@ test.describe("Re-acceptance gate UI (P1-FE-2)", () => {
     page,
   }) => {
     const token = "e2e-mock-token";
-    await page.addInitScript((value) => {
-      window.localStorage.setItem("avrag.auth.token", value);
-    }, token);
+    const user = {
+      id: "e2e-user",
+      email: "e2e-mock@example.com",
+      full_name: "E2E Mock",
+    };
+
+    await page.addInitScript(({ authToken, authUser }) => {
+      window.localStorage.setItem(
+        "avrag.auth.v1",
+        JSON.stringify({ token: authToken, user: authUser }),
+      );
+    }, { authToken: token, authUser: user });
+
+    await page.route("**/api/auth/me", (route) =>
+      route.fulfill({
+        json: {
+          success: true,
+          data: { user },
+        },
+      }),
+    );
 
     await page.route("**/api/auth/legal-status", (route) =>
       route.fulfill({

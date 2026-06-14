@@ -48,6 +48,19 @@ function readWorkspaceItems(workspaces: Record<string, QueryLibraryItem[]>, work
   );
 }
 
+function sanitizeQueryLibraryWorkspaces(workspaces: Record<string, QueryLibraryItem[]>) {
+  const sanitized: Record<string, QueryLibraryItem[]> = {};
+
+  for (const workspaceId of Object.keys(workspaces)) {
+    const items = readWorkspaceItems(workspaces, workspaceId);
+    if (items.length > 0) {
+      sanitized[workspaceId] = items;
+    }
+  }
+
+  return sanitized;
+}
+
 function updateWorkspaceItems(
   workspaces: Record<string, QueryLibraryItem[]>,
   workspaceId: string,
@@ -75,7 +88,7 @@ export function createQueryLibraryStore({
   name = QUERY_LIBRARY_STORAGE_KEY,
   storage = createQueryLibraryStorage(),
 }: QueryLibraryStoreOptions = {}) {
-  return createStore<QueryLibraryStore>()(
+  const store = createStore<QueryLibraryStore>()(
     persist(
       (set) => ({
         workspaces: {},
@@ -106,9 +119,43 @@ export function createQueryLibraryStore({
         name,
         storage,
         partialize: (state) => ({ workspaces: state.workspaces }),
+        merge: (persistedState, currentState) => ({
+          ...currentState,
+          workspaces: sanitizeQueryLibraryWorkspaces(
+            (persistedState as QueryLibraryData | undefined)?.workspaces ?? {},
+          ),
+        }),
+        onRehydrateStorage: () => (state, error) => {
+          if (error || !state) {
+            return;
+          }
+
+          state.workspaces = sanitizeQueryLibraryWorkspaces(state.workspaces);
+
+          if (typeof window === "undefined") {
+            return;
+          }
+
+          try {
+            const raw = window.localStorage.getItem(name);
+            if (!raw) {
+              return;
+            }
+
+            const persisted = JSON.parse(raw) as { version?: number };
+            window.localStorage.setItem(
+              name,
+              JSON.stringify({ state: { workspaces: state.workspaces }, version: persisted.version ?? 0 }),
+            );
+          } catch {
+            // Corrupt storage: in-memory state is still sanitized.
+          }
+        },
       },
     ),
   );
+
+  return store;
 }
 
 export const queryLibraryStore = createQueryLibraryStore();

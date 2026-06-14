@@ -1,5 +1,5 @@
 import { request } from "@playwright/test";
-import { resetTestUserData } from "./utils/api-helpers";
+import { resetTestUserData, waitForBackendHealth } from "./utils/api-helpers";
 
 /**
  * setup-env 职责：纯环境准备，无浏览器参与。
@@ -45,6 +45,7 @@ export default async function setupEnv() {
   });
 
   try {
+    await waitForBackendHealth();
     await resetTestUserData(reqCtx);
     console.log("[setup-env] reset-user-data succeeded");
   } catch (e) {

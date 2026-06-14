@@ -42,6 +42,34 @@ export function authHeaders(): Record<string, string> {
   return { Authorization: `Bearer ${readAuthToken()}` };
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Poll avrag-api /health before globalSetup calls E2E reset endpoints.
+ * Playwright marks Next.js ready before Rust backends finish cold starts on repeat runs.
+ */
+export async function waitForBackendHealth(timeoutMs = 90_000) {
+  const healthUrl = `${process.env.E2E_API_HEALTH_URL ?? "http://127.0.0.1:8080/health"}`;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(healthUrl);
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      // Backend still starting.
+    }
+
+    await sleep(500);
+  }
+
+  throw new Error(`backend health check failed: ${healthUrl}`);
+}
+
 /**
  * 重置预置测试账号的所有数据。
  * 主要用于 globalSetup/teardown，也可在 spec 的 beforeAll 中使用。
@@ -51,13 +79,27 @@ export async function resetTestUserData(request: APIRequestContext) {
   if (!secret) {
     throw new Error("E2E_RESET_SECRET is required for globalSetup. Set it in .env or environment.");
   }
-  const resp = await request.post("/api/e2e/reset-user-data", {
-    headers: { "X-E2E-Secret": secret },
-    data: { email: TEST_USER.email },
-    timeout: 30_000,
-  });
-  if (!resp.ok()) {
-    throw new Error(`reset-user-data failed: ${resp.status()} ${await resp.text()}`);
+
+  const maxAttempts = 4;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const resp = await request.post("/api/e2e/reset-user-data", {
+      headers: { "X-E2E-Secret": secret },
+      data: { email: TEST_USER.email },
+      timeout: 30_000,
+    });
+
+    if (resp.ok()) {
+      return;
+    }
+
+    const body = await resp.text();
+    const retryable = resp.status() >= 500 || resp.status() === 429;
+    if (retryable && attempt < maxAttempts) {
+      await sleep(500 * attempt);
+      continue;
+    }
+
+    throw new Error(`reset-user-data failed: ${resp.status()} ${body}`);
   }
 }
 

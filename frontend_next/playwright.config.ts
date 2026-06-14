@@ -35,9 +35,12 @@ const DEFAULT_LOCAL_E2E_DATABASE_URL = "postgres://test:test@127.0.0.1:5432/test
 const playwrightDatabaseUrl =
   process.env.E2E_DATABASE_URL ??
   (process.env.CI ? process.env.DATABASE_URL : DEFAULT_LOCAL_E2E_DATABASE_URL);
-const backendServerEnv: Record<string, string> = playwrightDatabaseUrl
-  ? { DATABASE_URL: playwrightDatabaseUrl, POSTGRES_URL: playwrightDatabaseUrl }
-  : {};
+const backendServerEnv: Record<string, string> = {
+  E2E_ENABLED: process.env.E2E_ENABLED ?? "true",
+  ...(playwrightDatabaseUrl
+    ? { DATABASE_URL: playwrightDatabaseUrl, POSTGRES_URL: playwrightDatabaseUrl }
+    : {}),
+};
 
 export default defineConfig({
   testDir: "./e2e",

@@ -178,4 +178,43 @@ describe("WorkspaceChatPane composer", () => {
       expect((composer as HTMLTextAreaElement).value).toBe("helloINSERT world");
     });
   });
+
+  it("appends text on consecutive composer inserts", async () => {
+    mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
+    const registerComposerInsert = vi.fn();
+
+    render(
+      <WorkspaceChatPane
+        registerComposerInsert={registerComposerInsert}
+        selectedSourceIds={[]}
+        sessionId={null}
+        workspaceId="ws-multi-insert"
+      />,
+    );
+
+    const composer = await screen.findByRole("textbox", { name: "工作区对话输入框" });
+    const insertHandler = registerComposerInsert.mock.calls.at(-1)?.[0] as
+      | ((text: string) => boolean)
+      | null;
+    expect(insertHandler).toBeTypeOf("function");
+
+    fireEvent.change(composer, { target: { value: "hello world" } });
+    (composer as HTMLTextAreaElement).setSelectionRange(5, 5);
+
+    await act(async () => {
+      expect(insertHandler?.(" FIRST")).toBe(true);
+    });
+
+    await waitFor(() => {
+      expect((composer as HTMLTextAreaElement).value).toBe("hello FIRST world");
+    });
+
+    await act(async () => {
+      expect(insertHandler?.(" SECOND")).toBe(true);
+    });
+
+    await waitFor(() => {
+      expect((composer as HTMLTextAreaElement).value).toBe("hello FIRST SECOND world");
+    });
+  });
 });

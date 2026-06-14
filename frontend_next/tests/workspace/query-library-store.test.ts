@@ -113,6 +113,45 @@ describe("queryLibraryStore", () => {
     expect(getQueryLibraryItems("ws-1")[0]?.text).toBe("Valid query");
   });
 
+  it("sanitizes invalid persisted entries on rehydrate", async () => {
+    const name = "query-library-test-sanitize-rehydrate";
+    window.localStorage.setItem(
+      name,
+      JSON.stringify({
+        state: {
+          workspaces: {
+            "ws-1": [
+              {
+                id: "valid",
+                text: "Valid query",
+                createdAt: 1,
+                lastUsedAt: 2,
+                useCount: 1,
+              },
+              {
+                id: "",
+                text: "bad",
+                createdAt: 1,
+                lastUsedAt: 2,
+                useCount: 1,
+              },
+            ],
+          },
+        },
+        version: 0,
+      }),
+    );
+
+    const store = createQueryLibraryStore({ name });
+    await waitForQueryLibraryHydration(store);
+
+    expect(store.getState().workspaces["ws-1"]).toHaveLength(1);
+    expect(store.getState().workspaces["ws-1"]?.[0]?.text).toBe("Valid query");
+
+    const persisted = JSON.parse(window.localStorage.getItem(name)!);
+    expect(persisted.state.workspaces["ws-1"]).toHaveLength(1);
+  });
+
   it("filters invalid persisted entries on read", () => {
     const store = createQueryLibraryStore({ name: "query-library-test-normalize" });
 
