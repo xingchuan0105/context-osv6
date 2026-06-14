@@ -1,6 +1,34 @@
 [
   {
     "date": "2026-06-13",
+    "mode": "PR Review",
+    "score": 98,
+    "findings": { "critical": 0, "warning": 0, "suggestion": 2 },
+    "scope": "post v7 plan S0-S9+M15: 3 themed commits, smoke --check-modules green, verify-legal-p0 40/40, vitest 293; residual: full parallel product smoke not re-run, playwright runtime dir untracked"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Tech Debt Assessment",
+    "score": 99,
+    "findings": { "critical": 0, "warning": 0, "suggestion": 1 },
+    "scope": "post v7 S9: desktop 13 tests + share 14 tests核销技术债过时项; dead re-export/i18n/worktree closed; residual: legal versions typeshare long-term"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Test Quality Review",
+    "score": 99,
+    "findings": { "critical": 0, "warning": 0, "suggestion": 1 },
+    "scope": "post v7: -D warnings green, legal gate unit tests, billing seed helpers, mock_rag_state extract; residual: mock_servers.rs still large"
+  },
+  {
+    "date": "2026-06-13",
+    "mode": "Architecture Audit",
+    "score": 99,
+    "findings": { "critical": 0, "warning": 0, "suggestion": 1 },
+    "scope": "post v7 S3/S8: test-kit removed, app-chat dev-dep cycle broken, NotebookStore single export, docs aligned; residual: pg port_impl monolith"
+  },
+  {
+    "date": "2026-06-13",
     "mode": "Architecture Audit",
     "score": 87,
     "findings": { "critical": 0, "warning": 2, "suggestion": 3 },

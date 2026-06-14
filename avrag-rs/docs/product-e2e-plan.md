@@ -1,5 +1,7 @@
 # Product E2E Test Plan (Executable Version)
 
+> **2026-06-13**：全功能覆盖、并行编排、真实依赖四件套与 Agent 勾选表已迁移至 [`full-functional-e2e-guide.md`](full-functional-e2e-guide.md)。本文档保留分层设计与 P0–P14 历史矩阵。
+
 ## 1. 现状与问题
 
 ### 1.1 当前测试的真实定位

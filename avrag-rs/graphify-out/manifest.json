@@ -60,8 +60,8 @@
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/tests/rag_quality/src/bin/quality_runner.rs": {
-    "mtime": 1781166998.9510398,
-    "ast_hash": "802e83cb5af593394f8ae51123ac8d4e",
+    "mtime": 1781337520.9090292,
+    "ast_hash": "45089211cef15e7a53b00cbd08321c19",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/scripts/pdf-renderer-up.sh": {
@@ -90,8 +90,8 @@
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/scripts/run-product-smoke-e2e.sh": {
-    "mtime": 1781334711.907644,
-    "ast_hash": "754f4fea2ad42dafd5735eebb66dd64a",
+    "mtime": 1781337351.821376,
+    "ast_hash": "133513c120af98a7818dcd98e40aa08c",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/scripts/dev-services-up.sh": {
@@ -930,13 +930,13 @@
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/mod.rs": {
-    "mtime": 1781334850.4929795,
-    "ast_hash": "87096fa37bd71273c7aa8eb6dddf88c6",
+    "mtime": 1781339174.574587,
+    "ast_hash": "1596bd7f23b382a6399533ac1791290b",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_auth_store.rs": {
-    "mtime": 1781321319.1112146,
-    "ast_hash": "9de565cda75df01d2ae875179da5061f",
+    "mtime": 1781339271.1015053,
+    "ast_hash": "5f03dd22137ef0e34e113f1b7e3e1c49",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_content_store.rs": {
@@ -969,104 +969,64 @@
     "ast_hash": "220b51de3e9f9a247917d58265fd0619",
     "semantic_hash": ""
   },
-  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_admin_store/impl_footer.rs": {
-    "mtime": 1781320682.920803,
-    "ast_hash": "7d9d25f71cb8a5aba86202540a20d405",
-    "semantic_hash": ""
-  },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_admin_store/port_impl.rs": {
-    "mtime": 1781320821.414954,
-    "ast_hash": "523f2f56e05a45ad60571ada590546b8",
+    "mtime": 1781338571.078471,
+    "ast_hash": "55721807dbc6de395dfbb90ff7f0c6f3",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_admin_store/mod.rs": {
-    "mtime": 1781320822.390992,
-    "ast_hash": "5356634541504ebef93d4296ba54a014",
+    "mtime": 1781339180.5024374,
+    "ast_hash": "0376061f0547f5302a1b3f312dde1017",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_admin_store/feature_flags.rs": {
-    "mtime": 1781320682.9048018,
-    "ast_hash": "618aab188adb4e531109adcc559fc3dc",
+    "mtime": 1781338565.1581311,
+    "ast_hash": "8f2f8e80df5e77a6b25f99802323bf39",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_admin_store/orgs.rs": {
-    "mtime": 1781320682.9128025,
-    "ast_hash": "09c5d3d7bdd46a1e0a4585c8ae6700c9",
-    "semantic_hash": ""
-  },
-  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_admin_store/impl_header.rs": {
-    "mtime": 1781320814.0866969,
-    "ast_hash": "9375f26c26ebd4f17e31a79d03c2ffa2",
+    "mtime": 1781338565.1581311,
+    "ast_hash": "0b19915fd7dfcd3fb11a221f1ee065b2",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_admin_store/audit.rs": {
-    "mtime": 1781320682.9168026,
-    "ast_hash": "a1a23720c73b18ba22b9c9bb7f0acd5d",
-    "semantic_hash": ""
-  },
-  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_admin_store/delegates.rs": {
-    "mtime": 1781320682.908802,
-    "ast_hash": "ddb1474d9fe501391cc7bd1e7daddb67",
+    "mtime": 1781338565.1581311,
+    "ast_hash": "75243a6fb23d36e1d922c6aebe690c6b",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_admin_store/health.rs": {
-    "mtime": 1781320814.4987109,
-    "ast_hash": "1f4d012f717e6d8a2ee48cf225f13267",
-    "semantic_hash": ""
-  },
-  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/impl_footer.rs": {
-    "mtime": 1781320682.920803,
-    "ast_hash": "7d9d25f71cb8a5aba86202540a20d405",
+    "mtime": 1781338565.1581311,
+    "ast_hash": "3866caea6d236f2f19b06cc0be73d241",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/port_impl.rs": {
-    "mtime": 1781320821.414954,
-    "ast_hash": "27b31cd423f6c6c469af284e7fd80c54",
-    "semantic_hash": ""
-  },
-  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/members_mutate.rs": {
-    "mtime": 1781320682.8888006,
-    "ast_hash": "68551d826b1b434abc7bf96cb3882f72",
+    "mtime": 1781338529.6603072,
+    "ast_hash": "60ae18bf65d340ab2a4d6465b89938a8",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/mod.rs": {
-    "mtime": 1781320821.8149695,
-    "ast_hash": "2d60ec09f9f4e625826870ffb516dc10",
+    "mtime": 1781339176.666688,
+    "ast_hash": "6fe8fcdda14fdf12d5e1353cd63acbc3",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/public_read.rs": {
-    "mtime": 1781320682.8808002,
+    "mtime": 1781338502.4418938,
     "ast_hash": "2f1595ee9ab180aabd1d84a4c9bffbbe",
     "semantic_hash": ""
   },
-  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/product_events.rs": {
-    "mtime": 1781320682.8968012,
-    "ast_hash": "673c3cd7ca790245964e2030f8325a1b",
-    "semantic_hash": ""
-  },
-  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/members_list.rs": {
-    "mtime": 1781320682.8848004,
-    "ast_hash": "9ce4f15608414c290a68469eda1e537d",
-    "semantic_hash": ""
-  },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/access.rs": {
-    "mtime": 1781320682.864799,
+    "mtime": 1781338502.4218926,
     "ast_hash": "0b083ead9c80831e58ca5396c59881b1",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/analytics.rs": {
-    "mtime": 1781320682.8767998,
-    "ast_hash": "cefc9cc78157e9519f376b6787f4e9d3",
+    "mtime": 1781338502.4378936,
+    "ast_hash": "c253a1f2c8ea584edd056ea6f2c4eb34",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/settings.rs": {
-    "mtime": 1781320803.010251,
-    "ast_hash": "1f4e88772bb2ef0af956846bd92eb23c",
-    "semantic_hash": ""
-  },
-  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/impl_header.rs": {
-    "mtime": 1781320682.920803,
-    "ast_hash": "88dba411163e1c6ff965a9553d7474f4",
+    "mtime": 1781338502.4258928,
+    "ast_hash": "6de3de4524df4f7f5e505524a50e5d99",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/mappers.rs": {
@@ -1125,8 +1085,8 @@
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/e2e-analyzer/src/report.rs": {
-    "mtime": 1781166998.9110382,
-    "ast_hash": "ccc4654ada836bc7b7ca788ec1fef2b0",
+    "mtime": 1781337396.3079762,
+    "ast_hash": "942fcc423f381c381d644ce360dabf9d",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/e2e-analyzer/src/stability.rs": {
@@ -1145,13 +1105,13 @@
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/e2e-analyzer/src/baseline.rs": {
-    "mtime": 1780651966.9015195,
-    "ast_hash": "f28bd48d1257047fc067113ff2cd9cfc",
+    "mtime": 1781337310.2897465,
+    "ast_hash": "c64e5d906de2d2cf2ce1e1ebff7abdfa",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/e2e-analyzer/src/loader.rs": {
-    "mtime": 1781166998.9110382,
-    "ast_hash": "7b7c068e31124a4c235f90ce9b46bc58",
+    "mtime": 1781337309.7937238,
+    "ast_hash": "51b54283eda01b2c12d2b20625b4634e",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/e2e-analyzer/src/diff.rs": {
@@ -1160,8 +1120,8 @@
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/e2e-analyzer/src/main.rs": {
-    "mtime": 1781166998.9110382,
-    "ast_hash": "28a56e7b750992d58a0313aeac945800",
+    "mtime": 1781337358.9097204,
+    "ast_hash": "04d0334a4d688582dbf255beb994d173",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/telemetry/src/prometheus.rs": {
@@ -1210,8 +1170,8 @@
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/transport-http/src/auth_types.rs": {
-    "mtime": 1781255021.607856,
-    "ast_hash": "79e091d5cfac45d6e4319f9d13c680ef",
+    "mtime": 1781338673.9196532,
+    "ast_hash": "ec1344aa9e753a61da0f74900d24d03b",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/transport-http/src/lib.rs": {
@@ -1260,13 +1220,13 @@
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/transport-http/src/lib_impl/auth_primary.rs": {
-    "mtime": 1781247992.5023105,
-    "ast_hash": "e94ebd3b7b15783e0df96d80385396f8",
+    "mtime": 1781338781.7669744,
+    "ast_hash": "4a4d3ae688a350a9684ce50edbe7a65a",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/transport-http/src/lib_impl/router_core.rs": {
-    "mtime": 1781321022.5700355,
-    "ast_hash": "a90d0ec6c8b9ce621585468cb3199ecc",
+    "mtime": 1781338758.565736,
+    "ast_hash": "7eb922bce2ff4205611d44602099dd14",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/transport-http/src/lib_impl/infra_handlers.rs": {
@@ -1745,8 +1705,8 @@
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-core/src/auth_store.rs": {
-    "mtime": 1781247783.1124227,
-    "ast_hash": "7d25f0a3afc2123cec27a077ca33f788",
+    "mtime": 1781338686.900396,
+    "ast_hash": "409ba7e11fbdfee52f7a186fcde9a776",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-core/src/config_helpers.rs": {
@@ -1840,8 +1800,8 @@
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-core/src/lib.rs": {
-    "mtime": 1781282284.1348891,
-    "ast_hash": "569c7c049378eb9c86f32ce4f3baf04e",
+    "mtime": 1781339376.4178283,
+    "ast_hash": "383f9a93f84a5ecdfbfa69b90c2b3d11",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app-core/src/domain_ports.rs": {
@@ -2845,8 +2805,8 @@
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app/tests/product_e2e/smoke/mod.rs": {
-    "mtime": 1781247892.6562994,
-    "ast_hash": "789d5ef12d46a7dbc6e901eeae01e0f4",
+    "mtime": 1781337358.9097204,
+    "ast_hash": "4411d8f80cad0e7a9ff05be12c45ea67",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/crates/app/tests/product_e2e/smoke/rag_fallback_smoke.rs": {
@@ -12714,11 +12674,6 @@
     "ast_hash": "8e0affafda65bfceff8f01a60ac3494b",
     "semantic_hash": ""
   },
-  "/home/chuan/context-osv6/.remember/today-2026-06-12.md": {
-    "mtime": 1781252418.4700842,
-    "ast_hash": "cdbdb35baaf14e76de69bc01ff8acd88",
-    "semantic_hash": ""
-  },
   "/home/chuan/context-osv6/.remember/today-2026-05-11.done.md": {
     "mtime": 1778500931.9405694,
     "ast_hash": "f644ee8cdb50b72e444f3a245190236d",
@@ -13945,8 +13900,8 @@
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/docs/brooks-tech-debt-assessment-2026-06-13.md": {
-    "mtime": 1781333003.707917,
-    "ast_hash": "bb36bb360c8b0fd117c3ef265a0b02ca",
+    "mtime": 1781339188.5148382,
+    "ast_hash": "6e01e0bae45376ea5601991747154657",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/docs/t13-app-split-inventory.md": {
@@ -19375,8 +19330,8 @@
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/docs/brooks-merged-fix-plan-2026-06-13-v6.md": {
-    "mtime": 1781333497.0841126,
-    "ast_hash": "49457f0a3246fcfda3da38db4ff20d98",
+    "mtime": 1781339188.486837,
+    "ast_hash": "8e735269e6674c22d4ecbd06d7cafcb8",
     "semantic_hash": ""
   },
   "/home/chuan/context-osv6/avrag-rs/docs/brooks-architecture-audit-2026-06-13.md": {
@@ -19427,6 +19382,71 @@
   "/home/chuan/context-osv6/avrag-rs/crates/app/tests/product_e2e/fixtures/paddle-contract.png": {
     "mtime": 1781334912.9698732,
     "ast_hash": "2cd8bde463f5d82aae0f0cec061d6b8f",
+    "semantic_hash": ""
+  },
+  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/build.rs": {
+    "mtime": 1781339171.6584394,
+    "ast_hash": "38032b647521875bc6df78332eea5485",
+    "semantic_hash": ""
+  },
+  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_admin_store/billing.rs": {
+    "mtime": 1781338565.1581311,
+    "ast_hash": "5097fded7ce411c316be7119de011ad8",
+    "semantic_hash": ""
+  },
+  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_admin_store/gate.rs": {
+    "mtime": 1781338565.1581311,
+    "ast_hash": "b71f4c18b0f385f250e48c3467e6e67e",
+    "semantic_hash": ""
+  },
+  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_admin_store/account.rs": {
+    "mtime": 1781338565.1581311,
+    "ast_hash": "dd26996be1bc6fc2aeec7f8b6ea24d6c",
+    "semantic_hash": ""
+  },
+  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_admin_store/mappers.rs": {
+    "mtime": 1781338570.71045,
+    "ast_hash": "5b9a41d5f4c6523829a5709e59e06c49",
+    "semantic_hash": ""
+  },
+  "/home/chuan/context-osv6/avrag-rs/crates/app/tests/product_e2e/smoke/paddle_image_smoke.rs": {
+    "mtime": 1781337347.177172,
+    "ast_hash": "0eb61c2859b56124c381428685d202f2",
+    "semantic_hash": ""
+  },
+  "/home/chuan/context-osv6/avrag-rs/migrations/0041_legal_acceptances.down.sql": {
+    "mtime": 1781338666.1480515,
+    "ast_hash": "d5bbf18019be4598e04933c94a830ba7",
+    "semantic_hash": ""
+  },
+  "/home/chuan/context-osv6/avrag-rs/migrations/0041_legal_acceptances.up.sql": {
+    "mtime": 1781338665.260001,
+    "ast_hash": "56eff114153a60b9b09a6727c66e1c3e",
+    "semantic_hash": ""
+  },
+  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/port_shard_guard.rs": {
+    "mtime": 1781339174.238571,
+    "ast_hash": "3ada22f728b2121c68cd742743bc6fb3",
+    "semantic_hash": ""
+  },
+  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/invite_decline.rs": {
+    "mtime": 1781339162.6059706,
+    "ast_hash": "63efa49a99a67edb09e99d99912d536f",
+    "semantic_hash": ""
+  },
+  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/members_mutate.rs": {
+    "mtime": 1781339165.710132,
+    "ast_hash": "32bf27e2acf9dbbd04adad30becfd61c",
+    "semantic_hash": ""
+  },
+  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/invite_accept.rs": {
+    "mtime": 1781339159.5098095,
+    "ast_hash": "e1d29e60fb40633e1601b60ef67eefdf",
+    "semantic_hash": ""
+  },
+  "/home/chuan/context-osv6/avrag-rs/crates/app-bootstrap/src/adapters/pg_share_store/invite.rs": {
+    "mtime": 1781339157.301695,
+    "ast_hash": "a48df9b944b9e1508c9447e0d6d363b3",
     "semantic_hash": ""
   }
 }

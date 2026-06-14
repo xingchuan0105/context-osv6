@@ -33,14 +33,22 @@
 - [入库路由讨论纪要（2026-06-10，过程记录）](/home/chuan/context-osv6/avrag-rs/docs/ingestion-routing-discussion-2026-06-10.md) — 讨论过程；**路由结论以上文为准**。
 - [历史文档：视觉 PDF 入库与检索改造（2026-06-10）](/home/chuan/context-osv6/avrag-rs/docs/archive/visual-pdf-ingest-requirements-2026-06-10.md) — 已归档；MinerU 旁路/视觉默认方案仅代表 P4 前讨论。
 
-## Brooks-Lint 当前报告
+## E2E 与全功能测试
 
-- [架构审计（2026-06-13 v6）](/home/chuan/context-osv6/avrag-rs/docs/brooks-architecture-audit-2026-06-13.md) — 当前架构健康分 87/100；生产依赖图无环，v5 主要 Warning（`app-core` Redis adapter、`app-chat` 千行文件、`share` axum 泄漏）已核销；剩余风险集中在结构性卫生（死的 `avrag-test-kit`、未用且制造 Cargo 环的 dev-dep、`NotebookStore` 双路径、文档漂移）。
-- [PR 审查（2026-06-13 v6）](/home/chuan/context-osv6/avrag-rs/docs/brooks-pr-review-2026-06-13-v6.md) — 当前 PR 健康分 48/100；blocker 为 Git 变更集分裂与 smoke runner 清单解析失效。
-- [测试质量审查（2026-06-13 round6）](/home/chuan/context-osv6/avrag-rs/docs/brooks-test-quality-review-2026-06-13.md)
-- [技术债评估（2026-06-13 v6）](/home/chuan/context-osv6/avrag-rs/docs/brooks-tech-debt-assessment-2026-06-13.md)
+- [**全功能 E2E 测试指南（Agent 执行手册，2026-06-13）**](/home/chuan/context-osv6/avrag-rs/docs/full-functional-e2e-guide.md) — **Agent 单一真相源**：覆盖矩阵、真实文档解析 / 真实 LLM RAG / 真实 Chat / 真实 WebSearch、并行编排、发布门禁、补测 backlog。
+- [**E2E 测试分析框架 TEAF（2026-06-13）**](/home/chuan/context-osv6/avrag-rs/docs/e2e-analysis-framework.md) — 基于测试的分层分析：覆盖 / 回归 / 归因 / 稳定性 / 质量五平面；与 [`e2e-test-registry.yaml`](/home/chuan/context-osv6/avrag-rs/docs/e2e-test-registry.yaml) 及 `e2e-analyzer` 对齐。
+- [E2E 质量门禁](/home/chuan/context-osv6/avrag-rs/docs/e2e-gates.md) — 分层 pass/fail 语义与 ADR-0008。
+- [Product E2E 计划（可执行版）](/home/chuan/context-osv6/avrag-rs/docs/product-e2e-plan.md) — 历史 P0–P14 设计与实施状态。
 
-旧版 Brooks 报告放在 `docs/archive/`；本轮已归档 [架构审计 v5](/home/chuan/context-osv6/avrag-rs/docs/archive/brooks-architecture-audit-2026-06-13-v5.md)；先前批次归档了 [PR 审查 v5](/home/chuan/context-osv6/avrag-rs/docs/archive/brooks-pr-review-2026-06-13-v5.md) 与 [架构审计 v4](/home/chuan/context-osv6/avrag-rs/docs/archive/brooks-architecture-audit-2026-06-13-v4.md)。
+## Brooks-Lint 当前报告（M15，2026-06-13 post-v7）
+
+- [合并修复计划 v7](/home/chuan/context-osv6/avrag-rs/docs/brooks-merged-fix-plan-2026-06-13-v7.md) — S0–S9 + M15 已完成。
+- [架构审计（2026-06-13）](/home/chuan/context-osv6/avrag-rs/docs/brooks-architecture-audit-2026-06-13.md) — **99/100**；test-kit/dev-dep/NotebookStore 卫生项已核销。
+- [PR 审查（2026-06-13 v7）](/home/chuan/context-osv6/avrag-rs/docs/brooks-pr-review-2026-06-13-v7.md) — **98/100**；v6 blocker 已闭环。
+- [测试质量审查（2026-06-13）](/home/chuan/context-osv6/avrag-rs/docs/brooks-test-quality-review-2026-06-13.md) — **99/100**。
+- [技术债评估（2026-06-13）](/home/chuan/context-osv6/avrag-rs/docs/brooks-tech-debt-assessment-2026-06-13.md) — **99/100**；S9 核销 desktop/share 跨报告矛盾。
+
+旧版 Brooks 报告放在 `docs/archive/`（含 [PR v6](/home/chuan/context-osv6/avrag-rs/docs/archive/brooks-pr-review-2026-06-13-v6.md)、[架构 v5](/home/chuan/context-osv6/avrag-rs/docs/archive/brooks-architecture-audit-2026-06-13-v5.md) 等）。
 
 ## 历史与外部资料
 

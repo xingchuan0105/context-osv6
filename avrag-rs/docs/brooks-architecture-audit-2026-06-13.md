@@ -2,10 +2,10 @@
 
 **Mode:** Architecture Audit
 **Scope:** `avrag-rs` 主 Rust workspace（34 members，按 `cargo metadata --no-deps` 实测） + `desktop/` Tauri 独立 workspace + `frontend_next` 传输/合约接缝 + `contracts/` 跨语言边界。`avrag-rs/crates/web-sdk` 与 `avrag-rs/crates/web-ui` 含 `ARCHIVED.md` 且未列入 workspace members，已排除；`frontend_rust/` 按 CLAUDE.md 标记为废弃目录，本轮不纳入结论。
-**Health Score:** 87/100
-**Trend:** 88 → 87 (−1) over last 4 runs；旧两条 Warning（`app-core` Redis adapter / `app-chat` 千行文件）已核销，新两条 Warning 是 v5 之前未识别的结构性卫生项，整体复杂度净下降。
+**Health Score:** 99/100
+**Trend:** 87 → 99 (+12) — v7 S3/S8 核销 test-kit、app-chat dev-dep 环、NotebookStore 双路径、文档漂移
 
-生产依赖图继续无环；`app-core` 已回收为纯 ports/config/domain，Redis adapter 迁到 `app-bootstrap`；`app-chat/loop/mod.rs` 与 `eval/framework.rs` 从千行级降至骨架级（218 行 / 8 行）。当前主要风险是两项结构性卫生 — 死的 `avrag-test-kit` workspace 成员，以及 `app-chat → app-bootstrap` 这条**未使用且制造 Cargo 环**的 dev-dependency。
+生产依赖图继续无环。v7 卫生项（删除 `avrag-test-kit`、移除 `app-chat → app-bootstrap` dev-dep、`NotebookStore` 单一出口、README/baseline 对齐）均已落地。剩余 1 分：`pg_*_store` port_impl 单体体量（历史 Suggestion，非本轮回归）。
 
 ---
 
@@ -308,7 +308,21 @@ Source: Feathers — *Working Effectively with Legacy Code* — Ch. 4: The Seam 
 
 ## Summary
 
-本轮最重要的两个动作都是**结构性卫生**而非架构修复：1）决定 `avrag-test-kit` 的去留并落实（删除或补真实消费者）；2）删掉 `app-chat` 那条未使用却制造 Cargo 环的 dev-dep。v5 标记的两条主要 Warning（`app-core` Redis adapter、`app-chat` 千行文件）以及 `share` 的 axum 泄漏均已核销，依赖图保持无环、`app-chat/loop/mod.rs` 从 1289 行降至 218 行、`eval/framework.rs` 从 1633 行降至 8 行的成绩可固化为基线。
+v7 S3/S8 完成两项结构性 Warning 与文档 Suggestion：`avrag-test-kit` 已删除、`app-chat` dev-dep 环已断、`NotebookStore` 只保留 `ports::notebooks::notebook_store` 出口。legal 版本双源短期由 P0-CON-5 守护（架构层 typeshare 化为可选长期项）。依赖图无环，分层守护脚本仍绿。
+
+---
+
+## v7 核销对照（M15）
+
+| v7 项 | 状态 |
+|-------|------|
+| B2 删除 `avrag-test-kit` | ✅ `avrag-rs/Cargo.toml` members 已移除 |
+| B3 删除 `app-chat → app-bootstrap` dev-dep | ✅ `cargo metadata` 无 app-chat↔app-bootstrap 环 |
+| B7 `NotebookStore` 单一出口 | ✅ trait 定义仅在 `ports/notebooks/notebook_store.rs` |
+| B9 README / baseline 漂移 | ✅ 指向 v7 计划与 post-hardening 事实 |
+| legal 版本双源 | ✅ P0-CON-5 CI（长期 typeshare 仍 Suggestion） |
+
+*M15 复测：2026-06-13 post-v7 · Health 99/100*
 
 ---
 

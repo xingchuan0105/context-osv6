@@ -699,7 +699,7 @@ tests:
     parallel_group: G-serial-llm
     ci_default: false
     ignore: true
-    note: "bundled phase0-mini.pdf P4 routing + optional E2E_LLM_REAL_STAGING_PDF manual probe"
+    note: "E2E_LLM_REAL_STAGING_PDF local book PDF; manual staging only"
   - id: product_e2e::llm_real::pdf_rag_e2e::real_llm_rag_after_liteparse_pdf_ingest_returns_citation
     layer: L3
     module: pdf_rag_e2e

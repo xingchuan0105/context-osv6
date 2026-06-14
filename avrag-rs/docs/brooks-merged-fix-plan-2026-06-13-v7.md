@@ -215,9 +215,20 @@ flowchart TD
 - **B9**：`docs/README.md` 指向本计划/最新四维报告；architecture-baseline §2 Redis 路径改 `app-bootstrap`。
 - **B10**：billing `seed_user_with_plan` + `seed_llm_usage_events` 提到 `tests/support/mod.rs`。
 
-### S9 — 核实跨报告矛盾（P2）= §1.3
+### S9 — 核实跨报告矛盾（P2）= §1.3 ✅ 已完成
 
-实测 desktop Tauri 测试数与 share contract 覆盖，确认技术债 v7 两条 Warning/Suggestion 是否已被测试 Round 7 核销；若是，更新技术债报告并 +分。
+实测 desktop Tauri 测试数与 share contract 覆盖，确认技术债 v7 两条 Warning/Suggestion 已被测试 Round 7 核销；技术债报告 §1.3 已更新，Health **99/100**。
+
+### M15 — 四维重跑记分 ✅ 已完成
+
+| 维度 | v7 初稿 | M15 实测 | findings |
+|------|---------|----------|----------|
+| PR Review | 48 | **98** | 0C / 0W / 2S |
+| 技术债 | 86 | **99** | 0C / 0W / 1S |
+| 测试 | 74 | **99** | 0C / 0W / 1S |
+| 架构 | 87 | **99** | 0C / 0W / 1S |
+
+报告：`brooks-pr-review-2026-06-13-v7.md`；其余三维更新于同名 `2026-06-13.md` 文件。
 
 ---
 
@@ -248,6 +259,6 @@ bash scripts/verify-legal-p0.sh                           # 维持 40/40
 
 | 日期 | 说明 |
 |------|------|
-| 2026-06-13 v7 | 本轮：合并 Legal P1 review × Brooks 四维；v6 → archive；§1 核销 PR v6 五条 + legal 版本双源（已被 P0-CON-5 闭环）；§1.3 标注 desktop/share 跨报告矛盾；新增 9 项 Legal 增补（L1–L9），其中 L1 为支付同意接线引入的 billing E2E 回归 |
+| 2026-06-13 v7 | 本轮：合并 Legal P1 review × Brooks 四维；v6 → archive；S0–S9 + **M15** 完成；四维 Health PR **98** / 债 **99** / 测 **99** / 架 **99** |
 | 2026-06-13 v6 | [archive/brooks-merged-fix-plan-2026-06-13-v6.md](./archive/brooks-merged-fix-plan-2026-06-13-v6.md)（P4 后满分冲刺，M0–M15） |
 | 2026-06-12 v3 | [archive/brooks-merged-fix-plan-2026-06-12-v3.md](./archive/brooks-merged-fix-plan-2026-06-12-v3.md) |

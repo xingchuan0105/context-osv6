@@ -3,10 +3,10 @@
 **Mode:** Tech Debt Assessment
 **Scope:** `avrag-rs`（34 workspace members）+ `frontend_next` + `contracts` + `desktop`；v7 深度复查，重点验证 v6 罗列的偿还路线图是否全部闭环、以及 v6 之后引入的 legal 再确认功能与 M9 拆分尾期工作是否带来新债务。
 **Config:** 无 `.brooks-lint.yaml`，六类衰减风险全部启用
-**Health Score:** 86/100
-**Trend:** 57 → 86 (+29) vs v6
+**Health Score:** 99/100
+**Trend:** 86 → 99 (+13) vs v7 初稿；S9 跨报告矛盾核实后核销 desktop/share 两条过时 Warning
 
-**一句话结论：** v6 罗列的 6 个 Critical/Warning 几乎全部闭环（Paddle image E2E、LiteParse parse snapshot、execute_pdf_parse 拆分、文档对齐 P4、HTTP 统一、warning 门禁），`agents/loop/mod.rs` 与 `eval/framework.rs` 千行文件也分别降到 218 行与 8 行；剩余债务集中在 v6 偿还路线图未覆盖的几处（desktop Tauri 缺少 Rust 行为测试、share contract 行为测试只完成一半），以及最近 legal 再确认新功能引入的版本号硬编码双源。
+**一句话结论：** v7 计划 S0–S9 已全部落地；v6 偿还路线图 9/9 闭环；技术债 v7 初稿中 desktop「0 行为测试」与 share「contract 只完成一半」经实测为**测试 Round 7 已覆盖、技术债报告过时**；剩余唯一 Monitored 项是 legal 版本号长期 typeshare 化（短期已由 `verify-legal-p0.sh` P0-CON-5 跨语言守护）。
 
 > **归档：**
 > - v1 → [`archive/brooks-tech-debt-assessment-2026-06-12-v1.md`](./archive/brooks-tech-debt-assessment-2026-06-12-v1.md)（Health 34）
@@ -54,126 +54,63 @@
 | `app-core` Redis 限流器迁出（v6 架构 Warning） | ✅ 闭环 | `app-core/src/adapters/` 仅余 `memory.rs` / `mod.rs`；`redis_rate_limiter` 已迁到 `app-bootstrap/src/adapters/`，`app-core/Cargo.toml` 不再 `redis.workspace = true` |
 | `avrag-share` handler 去 `axum::Json`（v6 架构 Suggestion） | ✅ 闭环并加门禁 | `crates/share/tests/storage_port_contract.rs::handlers_do_not_leak_http_framework_types` 用 `include_str!` 把 `axum::` 字串检查写成 compile-time-style 守护；`Cargo.toml` 不再依赖 axum |
 | `pg_share_store` / `pg_admin_store` 拆分 | ✅ 闭环并加守护 | 每个业务域一个 .rs 文件（share 9 个 + 共用 mappers/mod，admin 7 个）；`build.rs` 按 `shards.lst` 拼装单一 `impl ...Port` 块写入 OUT_DIR（绕开 Rust 2024 `impl` 内 `include!` 限制）；`port_shard_guard` 测试守护：(a) `shards.lst` 存在、(b) 每个 shard 文件存在、(c) `port_impl.rs` 通过 `include!(concat!(env!("OUT_DIR"), ...))` 加载、(d) 无孤立 `.rs` 文件未列入清单 |
-| smoke runner 模块清单解析 | ✅ 闭环 | `scripts/run-product-smoke-e2e.sh` 使用 `sed -n 's/.*::smoke::\([^:]*\)::.*/\1/p'` 正确剥离 `product_e2e::smoke::<module>::` 前缀；`assert_smoke_module_coverage` 双向校验注册 vs 发现 |
+| smoke runner 模块清单解析 | ✅ 闭环 | `scripts/run-product-smoke-e2e.sh` 使用 `sed -n 's/.*::smoke::\([^:]*\)::.*/\1/p'` 正确剥离前缀；`assert_smoke_module_coverage` 双向校验注册 vs 发现 |
+
+### 1.3 跨报告矛盾核实（S9，2026-06-13 实测）
+
+技术债 v7 初稿与测试 Round 7 报告对 desktop / share 的结论不一致。本轮按 v7 §1.3 命令实测后核销如下：
+
+| 技术债 v7 声称 | 测试 Round 7 / 实测 | S9 结论 |
+|----------------|----------------------|---------|
+| desktop `src-tauri` **0** 个 `#[test]`；CI 仅 `cargo check` | `registry` 2 + `api` 2 + `backend` 2 + `chat` 7 = **13** 测；`smoke-e2e.yml:130` 为 `cargo test --manifest-path desktop/src-tauri/Cargo.toml` | ✅ **核销** — 技术债 Warning 过时 |
+| share contract 只 4 测、invite/public-read 缺失 | `share_behavior.rs` **6** + `storage_port_contract.rs` **4** + `access_level_contract.rs` **3** + `module_surface.rs` **1** = **14** 测；`owner_can_invite_member` / `non_owner_invite_is_rejected_before_store` / `load_shared_notebook` / `resolve_public_share_chat_context` 均已覆盖 | ✅ **核销** — 技术债只数了 `storage_port_contract.rs` |
+| legal 版本号双源、无 CI 守护 | `scripts/verify-legal-p0.sh` **P0-CON-5** 三源字面值比对 + `license-check.yml` `legal-p0-verify` job | ✅ **核销** — Brooks 架构/技术债「无守护」结论不准确 |
+| `agents/loop/mod.rs` dead `merge_request_doc_scope` re-export | S1 已删；`RUSTFLAGS="-D warnings" cargo check --workspace` 全绿 | ✅ **核销** |
+| 工作树 38 文件未分层 | S0 三分支 commit（legal / app-chat / hygiene）已入库 | ✅ **核销** |
+| `LegalReacceptanceGate` 硬编码中文 | S7 `messages/legal.ts` + `formatUiMessage` 全量替换 | ✅ **核销** |
+
+```bash
+# S9 验收命令（2026-06-13 复跑）
+cargo test --manifest-path desktop/src-tauri/Cargo.toml --quiet
+# running 13 tests ... ok. 13 passed
+
+cargo test -p avrag-share --tests
+# share_behavior 6 + storage_port_contract 4 + access_level_contract 3 + module_surface 1
+
+rg '#\[test\]' desktop/src-tauri/src -c
+# commands/chat.rs:7 registry.rs:2 commands/api.rs:2 commands/backend.rs:2
+```
 
 ---
 
 ## Findings
 
-### 🟡 Warning
+### 🟢 Suggestion（唯一剩余项）
 
-**Accidental Complexity — `agents/loop/mod.rs` 残留 dead re-export 击穿 `-D warnings` 门禁（M9 拆分回退）**
+**Knowledge Duplication — legal 版本号长期仍建议 typeshare 化（短期已 CI 守护）**
 
-Symptom: `cargo check --workspace` 仅 1 warning：
-```
-warning: unused import: `merge_request_doc_scope`
-  --> crates/app-chat/src/agents/loop/mod.rs:35:48
-   |
-35 | pub(crate) use rag_bridge::{dispatch_rag_tool, merge_request_doc_scope};
-```
-`merge_request_doc_scope` 在 `rag_bridge.rs` 内部被 `dispatch_rag_tool` 调用；M9 把 `iteration.rs` / `policy/config.rs` 等拆出来后，外部不再有调用方，但 mod.rs 这一行 re-export 没同步清理。`RUSTFLAGS="-D warnings" cargo check -p ingestion -p avrag-worker` 因为 app-chat 是其 lib 依赖链，命中此 warning 即失败。
+Symptom: `frontend_next/lib/legal/versions.ts` 与 `app-core/src/legal_versions.rs` 仍各维护一份常量；但 `scripts/verify-legal-p0.sh` **P0-CON-5** 已在 CI 做三源字面值比对（MDX frontmatter + TS + Rust），与 Brooks 初稿「无守护」结论不同。
 
-Source: McConnell — *Code Complete*, construction hygiene；Winters et al. — *Software Engineering at Google*, code sustainability
+Source: Hunt & Thomas — *The Pragmatic Programmer*, DRY
 
-Consequence: v6 第二档第 3 项明确要求"恢复 `-D warnings` 可用性"；当前回退状态会让 M2 的验收命令再次失败，掩盖未来更多 unused/dead 项。
+Consequence: 无 CI 时仍可能人手漏改；有 CI 时漏改会在 `license-check` 红灯。
 
-Remedy: 把第 35 行改成 `pub(crate) use rag_bridge::dispatch_rag_tool;`（不再 re-export `merge_request_doc_scope`，因为它是 `rag_bridge.rs` 模块内部的私有 helper），随后跑一次 `RUSTFLAGS="-D warnings" cargo check -p ingestion -p avrag-worker -p app-chat` 收尾。
-
-Priority: Pain 2 × Spread 1 = **2**（Monitored），按 v6 偿还路线图判定为 **Warning**（因为回退了已闭环的 gate） | Intent: **[accidental]**
-
----
-
-**Coverage Illusion — desktop Tauri 命令处理器 0 行为测试，CI 仍仅 `cargo check`**
-
-Symptom: `find desktop/src-tauri/src -name "*.rs" -exec grep -l "#[test]"` 完全为空；`desktop/src-tauri/src/` 下没有任何 `#[test]` / `#[tokio::test]`。M12 计划要求"抽纯函数测试 body 构造、错误映射、stream event 转换"，未执行。
-
-Source: Feathers — *Working Effectively with Legacy Code*, Sensing & Separation；Google — *How Google Tests Software*, change coverage
-
-Consequence: desktop 走 Tauri IPC 而非 HTTP；任何 IPC body 构造、SSE 转换、错误映射变化，只在手动启动 Tauri shell 时才能发现。一旦回归，调试成本远高于纯函数 unit test。
-
-Remedy: 按 v6 M12 计划：(a) 把 IPC payload 构造、`reqwest` 错误到 IPC 错误的映射、SSE event → Tauri event 的转换抽成纯函数；(b) 在同 crate 加 `#[test]`；(c) `smoke-e2e.yml` 的 desktop job 把 `cargo check` 升级到 `cargo test --manifest-path desktop/src-tauri/Cargo.toml`。
-
-Priority: Pain 2 × Spread 2 = **4**（Scheduled） | Intent: **[accidental]**
-
----
-
-### 🟢 Suggestion
-
-**Knowledge Duplication — legal 协议版本号在前后端各硬编码一份，无单一事实源**
-
-Symptom: 两处独立常量：
-- `frontend_next/lib/legal/versions.ts`: `export const PUBLISHED_TERMS_VERSION = "2026-06-13"`
-- `avrag-rs/crates/app-core/src/legal_versions.rs`: `pub const PUBLISHED_TERMS_VERSION: &str = "2026-06-13"`
-
-前端在 `lib/legal/client.ts::recordLegalAcceptance` 把 `PUBLISHED_TERMS_VERSION` 作为 `terms_version` 字段提交给 `/api/auth/legal-acceptance`；后端 `auth_legal_status_handler` 又把自己的 `PUBLISHED_TERMS_VERSION` 通过 `LegalStatusPayload.published_terms_version` 返给前端。两侧常量本应永远一致但靠人手同步。
-
-Source: Hunt & Thomas — *The Pragmatic Programmer*, DRY；Ousterhout — *A Philosophy of Software Design*, Information Leakage
-
-Consequence: 升级协议时一边改、另一边漏改，会出现 (a) 前端显示新版本但记录旧版本，或 (b) 后端认为已是新版本但前端拒不显示再确认页。`validate_published_legal_versions`（已在 `app-core/lib.rs` re-export）只能验证后端自洽，无法跨语言守护。
-
-Remedy: 短期 — 加 frontend lint：CI 跑 `node` 小脚本读 `crates/app-core/src/legal_versions.rs` 与 `frontend_next/lib/legal/versions.ts`，断言两个常量字面值相等。长期 — 把版本号搬到 `contracts/` 并用 `typeshare` 同步生成（与现有 `contracts → frontend_next/lib/contracts/` 流程一致）。
-
-Priority: Pain 1 × Spread 2 = **2**（Monitored） | Intent: **[accidental]**
-
----
-
-**Coverage Illusion — share port contract 只完成一半（v6 M11 partial）**
-
-Symptom: `crates/share/tests/storage_port_contract.rs` 只有 4 个测试：
-1. `handlers_do_not_leak_http_framework_types`（M13 静态守护）
-2. `share_modules_do_not_call_storage_pg_escape_hatch`（端口纪律守护）
-3. `create_share_token_round_trips_through_validate_token`（行为）
-4. `validate_token_returns_none_for_unknown_token`（行为）
-
-v6 M11 计划要求 4 个行为测试：(a) shared notebook payload mapping、(b) public chat context mapping、(c) owner invite 成功、(d) non-owner invite 被拒。当前只覆盖 (a) 的 token round-trip 一面，invite 路径与 public read 路径完全没有 in-memory fake 行为测试。
-
-Source: Meszaros — *xUnit Test Patterns*, Test Code Duplication / Behavior Verification
-
-Consequence: PG adapter 已经按业务域拆分（`access.rs` / `invite.rs` / `invite_accept.rs` / `invite_decline.rs` / `members_mutate.rs` / `public_read.rs`），但 contract 层没有对应行为锚。任何 invite/public read 行为变更，只能依赖 PG 集成测试发现。
-
-Remedy: 在现有 `support::MemoryShareStore` 上补 3 个 `#[tokio::test]`：(a) `owner_can_invite_member`、(b) `non_owner_invite_is_rejected_with_forbidden`、(c) `public_read_returns_chat_context_for_valid_token`。
-
-Priority: Pain 1 × Spread 2 = **2**（Monitored） | Intent: **[accidental]**
-
----
-
-**Change Propagation — 工作树仍有 10 个 untracked 与 28 个 modified 文件未分层（legal 新功能 + M9 拆分尾期）**
-
-Symptom: `git status --short` 显示：
-- 28 modified（auth/profile/lib.rs、pg_auth_store、transport-http auth/router_core、share contract test、frontend auth/billing/pricing/legal-gate 等）
-- 10 untracked（`iteration/` 目录、`policy/config/` 目录、`tests.rs`、`message_format.rs`、`rag_bridge.rs`、`eval/evaluator.rs`、`eval/runner_tests.rs`、`legal/LegalReacceptanceGate.tsx`、`legal/client.ts`、`playwright/`）
-
-两个独立主题（legal 再确认 + M9 拆分尾期）混在同一工作树。比起 v6 的 421 文件已大幅收敛（-91%），但 v6 D0 担心的"删旧录新不在同一层"问题以更小规模再现。
-
-Source: Brooks — *The Mythical Man-Month*, coordination cost；Feathers — change set safety
-
-Consequence: 当前 commit 历史会让 reviewer 看到不完整的 legal 功能或不完整的 M9 拆分；CI 也只能针对当前 staged 状态跑（譬如 `agents/loop/iteration/`、`policy/config/` 是 untracked，意味着 master 还没有这些目录的合规 commit）。
-
-Remedy: 按主题分批：
-1. **Legal 再确认 PR**：`frontend_next/{components/legal,lib/legal,lib/auth/errors.ts,lib/i18n/messages/auth.ts,app/(app)/upgrade/paywall,app/(marketing)/pricing,components/auth-gates,components/settings/settings-billing-panel}.tsx` + `avrag-rs/crates/{app-bootstrap/src/adapters/pg_auth_store.rs,app-core/src/auth_store.rs,app-core/src/lib.rs,transport-http/src/{auth_types.rs,lib_impl/auth/profile.rs,lib_impl/router_core.rs,lib_impl/tests.rs,routes/auth.rs}}` + `.github/workflows/*` + `scripts/verify-legal-p0.sh`。
-2. **M9 拆分尾期 PR**：`avrag-rs/crates/app-chat/src/agents/loop/{mod.rs,iteration/,policy/config/,tests.rs,message_format.rs,rag_bridge.rs}` + `avrag-rs/crates/app-chat/src/eval/{mod.rs,llm_judge.rs,runner.rs,evaluator.rs,runner_tests.rs}`。
-3. **graphify-out/manifest.json** 跟随对应 PR 自动更新。
-4. **frontend_next/playwright/** 若为空目录，先 `rmdir` 或加 `.gitkeep` + 子文件。
-
-Priority: Pain 1 × Spread 2 = **2**（Monitored） | Intent: **[intentional]**（功能未完成）
-
----
-
-**Domain Model Distortion — `LegalReacceptanceGate.tsx` 混用 i18n 与硬编码中文字符串**
-
-Symptom: 同一组件内：
-- ✅ 用 `formatUiMessage(locale, "gateCheckingSession")` / `formatUiMessage(locale, "authRegisterFailed")` / `describeAuthError(formatUiMessage(...), error, locale)`
-- ❌ 硬编码：`"协议已更新"`、`"我们更新了用户服务协议或隐私政策。继续使用前，请阅读并确认最新版本。"`、`"提交中..."`、`"确认并继续"`、`"请先阅读并同意最新版用户协议与隐私政策"`
-
-`lib/legal/client.ts::PaymentConsentRequiredError` 也硬编码默认 `"请先阅读并同意用户协议与隐私政策"`。同时该组件内联 `style={{ maxWidth: "28rem", textAlign: "center" }}` 与 `className="app-surface-card"` 并存，与项目其他组件用 Tailwind/CSS Module 的风格不一致。
-
-Source: Evans — *Domain-Driven Design*, Ubiquitous Language；Fowler — *Refactoring*, Inconsistent Naming（这里是 i18n 通道不一致）
-
-Consequence: 多语言切换时这一面板永远显示中文；后续如果产品做 zh/en 切换，gate 是阻断登录后首屏的组件，会成为最显眼的不一致点。
-
-Remedy: 把所有硬编码字符串落到 `lib/i18n/messages/auth.ts`（或新建 `messages/legal.ts`），通过 `formatUiMessage(locale, key)` 渲染；`PaymentConsentRequiredError` 接受外部 message 注入，不在错误类内硬编码默认中文。
+Remedy: 长期把版本常量迁入 `contracts/` 并 typeshare 生成；短期维持 P0-CON-5 即可，不阻塞合并。
 
 Priority: Pain 1 × Spread 1 = **1**（Monitored） | Intent: **[accidental]**
+
+---
+
+### S9 已核销项（原 v7 Warning/Suggestion，不再计分）
+
+| 原 Finding | 核销证据 |
+|------------|----------|
+| dead `merge_request_doc_scope` re-export | S1 删除；`-D warnings` workspace 全绿 |
+| desktop 0 行为测试 / CI 仅 check | 13 `#[test]`；`cargo test --manifest-path desktop/src-tauri/Cargo.toml` 全绿 |
+| share contract 只完成一半 | `share_behavior.rs` 6 测覆盖 invite + public-read |
+| 工作树未分层 | 3 commits：`acda6da` legal / `dfdaac2` app-chat / `317fb3f` hygiene |
+| LegalReacceptanceGate i18n 混用 | `lib/i18n/messages/legal.ts` 接入 |
+| legal 版本双源无守护 | P0-CON-5 + `legal-p0-verify` CI job |
 
 ---
 
@@ -182,78 +119,54 @@ Priority: Pain 1 × Spread 1 = **1**（Monitored） | Intent: **[accidental]**
 | Risk | Findings | Avg Priority | Classification | Intent |
 |------|----------|--------------|----------------|--------|
 | Cognitive Overload | 0 | — | Clean | — |
-| Change Propagation | 1 | 2.0 | Monitored | intentional |
-| Knowledge Duplication | 1 | 2.0 | Monitored | accidental |
-| Accidental Complexity | 1 | 2.0 | Monitored（gate 回退） | accidental |
+| Change Propagation | 0 | — | Clean（S0 分层入库） | — |
+| Knowledge Duplication | 1 | 1.0 | Monitored | accidental |
+| Accidental Complexity | 0 | — | Clean | — |
 | Dependency Disorder | 0 | — | Clean | — |
-| Domain Model Distortion | 1 | 1.0 | Monitored | accidental |
-| Coverage Illusion（跨多类） | 2 | 3.0 | Monitored/Scheduled | accidental |
+| Domain Model Distortion | 0 | — | Clean（S7 i18n） | — |
+| Coverage Illusion | 0 | — | Clean（S9 核销 desktop/share） | — |
 
-**Recommended focus:** 先 1 行修 `mod.rs` 的 dead re-export 把 `-D warnings` gate 重新关上；接着把 desktop Tauri 命令补行为测试（M12 一直没动），并把 legal 版本号双源加 CI 校验。share contract 行为测试与工作树分层属于卫生项，可在下一个 PR 顺手完成。
-
----
-
-## 2. 偿还路线图（v7，目标 86 → 100）
-
-### 2.1 第一档：必须先修（86 → 91）
-
-| # | 任务 | 验收 |
-|---|------|------|
-| 1 | 移除 `agents/loop/mod.rs:35` 对 `merge_request_doc_scope` 的死 re-export | `RUSTFLAGS="-D warnings" cargo check -p ingestion -p avrag-worker -p app-chat` 全绿 |
-
-### 2.2 第二档：测试与版本守护（91 → 96）
-
-| # | 任务 | 验收 |
-|---|------|------|
-| 2 | 补 desktop Tauri Rust 行为测试（M12） | `cargo test --manifest-path desktop/src-tauri/Cargo.toml` 至少含 3 个 `#[test]`；CI desktop job 从 `cargo check` 升 `cargo test` |
-| 3 | legal 版本号前后端一致性 CI 守护 | 加一段 `scripts/verify-legal-versions.sh` 或 `frontend_next` vitest，比较前端 `versions.ts` 与后端 `app-core::legal_versions` 字面值；CI 失败时给出明确 diff |
-
-### 2.3 第三档：卫生收尾（96 → 100）
-
-| # | 任务 | 验收 |
-|---|------|------|
-| 4 | `share` contract 补 invite / public-read 行为测试 | `cargo test -p avrag-share storage_port_contract` 含 3 个新 tokio test |
-| 5 | 把当前工作树按"Legal 再确认 PR" / "M9 拆分尾期 PR" 拆 commit | `git status --short` 在每个 PR 落地后 untracked=0、modified 与该 PR 主题完全对应 |
-| 6 | `LegalReacceptanceGate.tsx` 全部走 `formatUiMessage`；删除内联 style 与硬编码中文 | `rg "协议已更新\|请先阅读\|提交中" frontend_next/components/legal` 0 命中 |
+**Recommended focus:** 无阻塞项。可选长期把 legal 版本常量 typeshare 化；`pg_*_store` port_impl 体量仍是架构层 Suggestion，不重复计入技术债 Critical/Warning。
 
 ---
 
-## 3. 验证记录
+## 2. 偿还路线图（v7 → 已完成）
+
+| 档 | 任务 | 状态 |
+|----|------|------|
+| 第一档 | B1 dead re-export | ✅ S1 |
+| 第二档 | desktop Tauri 行为测试 + legal CI 守护 | ✅ M12 + P0-CON-5（S9 核实） |
+| 第三档 | share contract / 工作树分层 / LegalReacceptanceGate i18n | ✅ S0/S7/S9 |
+
+---
+
+## 3. 验证记录（M15，2026-06-13 post-v7）
 
 ```bash
 cd avrag-rs
-cargo check --workspace
-# Finished `dev` profile in 23.55s
-# warning (1): unused import `merge_request_doc_scope` at crates/app-chat/src/agents/loop/mod.rs:35:48
+RUSTFLAGS="-D warnings" cargo check --workspace
+# Finished `dev` profile — 零 warning
 
-RUSTFLAGS="-D warnings" cargo check -p ingestion -p avrag-worker
-# error: unused import: `merge_request_doc_scope`
-# error: could not compile `app-chat` (lib) due to 1 previous error
+RUSTFLAGS="-D warnings" cargo build -p avrag-worker -p app --features product-e2e --tests
+# Finished — 零 warning
 
-# 文件大小实测
-wc -l crates/app-chat/src/agents/loop/mod.rs
-#  218 crates/app-chat/src/agents/loop/mod.rs    （v6 报告 1289 行）
+./scripts/run-product-smoke-e2e.sh --check-modules
+# OK: smoke module coverage guard passed (11 modules match cargo --list)
 
-wc -l crates/app-chat/src/eval/framework.rs
-#    8 crates/app-chat/src/eval/framework.rs     （v6 架构审计 1633 行）
+cargo test -p transport-http --lib auth_legal
+# 5 passed
 
-wc -l bins/worker/src/pdf/parse.rs
-#  551 bins/worker/src/pdf/parse.rs              （含 4 个阶段函数 + 单元测试）
+cargo test -p avrag-share --tests
+# 14 passed (6 behavior + 4 contract + 3 access_level + 1 module_surface)
 
-# v6 偿还核销证据
-rg "execute_paddle_ocr_image|PaddleOcrImage" crates/app/tests/product_e2e/
-# crates/app/tests/product_e2e/integration/paddle_image_e2e.rs:1
-# crates/app/tests/product_e2e/smoke/paddle_image_smoke.rs:1
+cd ../desktop/src-tauri && cargo test --quiet
+# 13 passed
 
-rg "Mineru|EdgeParse|LiteParseImage" crates/ingestion/src/parser/*.rs crates/ingestion/src/parser/router/*.rs
-# 0 hits（M14 已闭环）
+cd ../../frontend_next && pnpm vitest run
+# 70 files / 293 tests passed
 
-rg "shadow diff|parse_json|to_pdf_page_probe" crates/ingestion/src/parser
-# 0 hits（M14 shadow-era API 已删除）
-
-# 工作树规模
-git status --short | wc -l    # 38（v6 报告 421）
-git status --short | grep -c '^??'   # 10
+cd .. && bash scripts/verify-legal-p0.sh
+# 40/40 passed
 ```
 
 ---
@@ -271,19 +184,18 @@ git status --short | grep -c '^??'   # 10
 | `crates/app-bootstrap/src/adapters/pg_share_store/` | 9 业务域 shard + `mappers.rs` + `mod.rs` + 1-line `port_impl.rs` + `shards.lst`；`build.rs` 按清单拼装 trait impl 到 OUT_DIR；`tests` 守护无孤儿 |
 | `crates/app-bootstrap/src/adapters/pg_admin_store/` | 7 业务域 shard，结构同上 |
 | `crates/app-bootstrap/src/adapters/redis_rate_limiter.rs` | Redis 限流器从 `app-core` 迁出后的当前归属 |
-| `crates/share/tests/storage_port_contract.rs` | 2 静态守护 + 2 行为测试；M11 4 个行为测试只完成 1 个 |
-| `frontend_next/lib/billing/featureFlag.ts` | 已统一走 `lib/http/request::request<>` |
-| `frontend_next/lib/legal/versions.ts` ↔ `avrag-rs/crates/app-core/src/legal_versions.rs` | 协议版本号双源，靠人手同步 |
-| `frontend_next/components/legal/LegalReacceptanceGate.tsx` | i18n 通道与硬编码中文混用 |
-| `desktop/src-tauri/src/` | 0 `#[test]`；CI 仅 `cargo check` |
-| `scripts/run-product-smoke-e2e.sh` | 模块清单解析正确（`.*::smoke::\([^:]*\)::.*`）；`assert_smoke_module_coverage` 双向守护 |
+| `crates/share/tests/share_behavior.rs` | 6 行为测：public notebook / public chat context / invite 授权 |
+| `desktop/src-tauri/src/` | 13 `#[test]`；CI `cargo test --manifest-path desktop/src-tauri/Cargo.toml` |
+| `scripts/verify-legal-p0.sh` | 40 项含 P0-CON-5 三源版本比对 |
+| `frontend_next/lib/i18n/messages/legal.ts` | LegalReacceptanceGate 全量 i18n |
+| `crates/app/tests/product_e2e/mock_rag_state.rs` | S6：8 个 OnceLock 收敛为 `MockRagState` |
 
 ---
 
 ## Summary
 
-v6→v7 期间 Brooks 第二档/第三档 6 项偿还任务（独立图片 E2E、LiteParse parse 缓存、`execute_pdf_parse` 拆分、LiteParse 文档对齐、`billing/featureFlag.ts` HTTP 统一、`agents/loop/mod.rs` 薄化）全部闭环；附带完成 v6 架构审计提的 `app-core` Redis 迁出、`avrag-share` 去 axum、`eval/framework.rs` 千行拆分、`pg_*_store` shards.lst+build.rs 持久化分片。工作树从 421 文件降到 38 文件，trend +29 分。剩余债务全部是"v6 计划未覆盖的卫生项"+"legal 新功能小漂移"：1 个 `-D warnings` 回退（1 行修复）、desktop Tauri 测试缺口（结构性，待 M12 完成）、legal 版本号双源、share contract 行为测试完成度一半、工作树分层、legal i18n 一致性。无 Critical、无 Dependency Disorder、无 Cognitive Overload。
+v7 计划 S0–S9 执行完毕后，技术债从初稿 86 升至 **99/100**。S9 核实确认：desktop 与 share 两条 Warning 是技术债报告未同步测试 Round 7 的**过时结论**；legal 版本双源已有 P0-CON-5 CI 守护。剩余 1 分留给 legal 常量长期 typeshare 化（可选 P3）。无 Critical、无 Warning、无 Dependency Disorder。
 
 ---
 
-*生成工具：Brooks-Lint Tech Debt Assessment · 2026-06-13 v7（v6 偿还路线图深度复查 + legal 新功能债务扫描）*
+*生成工具：Brooks-Lint Tech Debt Assessment · 2026-06-13 v7 post-S9/M15*
