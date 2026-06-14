@@ -22,15 +22,16 @@ export function LegalReacceptanceGate({ children }: { children: ReactNode }) {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!token) {
+    const activeToken = token;
+    if (!activeToken) {
       return;
     }
 
     let cancelled = false;
 
-    async function loadStatus() {
+    async function loadStatus(authToken: string) {
       try {
-        const status = await fetchLegalStatus(token);
+        const status = await fetchLegalStatus(authToken);
         if (cancelled) {
           return;
         }
@@ -54,7 +55,7 @@ export function LegalReacceptanceGate({ children }: { children: ReactNode }) {
       }
     }
 
-    void loadStatus();
+    void loadStatus(activeToken);
 
     return () => {
       cancelled = true;

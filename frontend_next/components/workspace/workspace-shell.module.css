@@ -921,10 +921,131 @@
 
 .historyList {
   display: grid;
+  flex: 1 1 0;
   gap: 0.18rem;
   min-height: 0;
   overflow: auto;
   padding-right: 0.15rem;
+}
+
+.queryLibrarySection {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-height: 0;
+  max-height: min(40%, 280px);
+  padding-top: 0.55rem;
+  border-top: 1px solid hsl(var(--border));
+}
+
+.queryLibraryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.queryLibraryTitle {
+  font-size: var(--font-size-meta);
+  font-weight: 600;
+  line-height: var(--line-height-meta);
+  color: hsl(var(--foreground));
+}
+
+.queryLibraryClearButton {
+  border: 0;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--font-size-meta);
+  line-height: var(--line-height-meta);
+  cursor: pointer;
+  padding: 0.15rem 0.35rem;
+}
+
+.queryLibraryClearButton:hover {
+  color: hsl(var(--foreground));
+}
+
+.queryLibraryList {
+  display: grid;
+  gap: 0.18rem;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.queryLibraryItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.18rem;
+  align-items: stretch;
+  border-radius: var(--radius-control);
+  padding: 0.12rem;
+  background: transparent;
+}
+
+.queryLibraryItem:hover {
+  background: hsl(var(--surface-muted));
+}
+
+.queryLibraryItemButton {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  padding: 0.35rem 0.45rem;
+  color: hsl(var(--foreground));
+}
+
+.queryLibraryItemText {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  white-space: normal;
+}
+
+.queryLibraryDeleteButton {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.queryLibraryItem:hover .queryLibraryDeleteButton,
+.queryLibraryDeleteButton:focus-visible {
+  opacity: 1;
+}
+
+.queryLibraryDeleteButton:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--surface-muted));
+}
+
+.queryLibraryHoverPreview {
+  position: fixed;
+  z-index: 60;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-control);
+  background: hsl(var(--card));
+  box-shadow: var(--shadow-popover, 0 12px 32px rgba(15, 23, 42, 0.12));
+  color: hsl(var(--foreground));
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  white-space: pre-wrap;
+  pointer-events: auto;
 }
 
 .historyItem,
@@ -1143,9 +1264,18 @@
   .desktopRailResizer {
     display: block;
   }
+
+  .desktopHistoryRail {
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 767px) {
+  .queryLibrarySection {
+    display: none;
+  }
+
   .panePanel {
     padding: 0.75rem;
   }

@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import type { createWorkspaceChatPaneMocks } from "../../helpers/mock-providers";
+import { queryLibraryStore } from "../../../lib/workspace/query-library/store";
 import { workspaceUiStore } from "../../../lib/workspace/ui-store";
 
 export function mockReducedMotionPreference(matches: boolean) {
@@ -34,6 +35,7 @@ export function resetWorkspaceChatPaneMocks(
 ) {
   window.localStorage.clear();
   workspaceUiStore.setState((state) => ({ ...state, workspaces: {} }));
+  queryLibraryStore.setState({ workspaces: {} });
   mocks.listWorkspaceSessionMessagesMock.mockReset();
   mocks.streamWorkspaceChatMock.mockReset();
   mocks.useAuthMock.mockReset();

@@ -8,6 +8,16 @@ export class WorkspacePage {
     await this.page.waitForSelector("[data-testid='desktop-history-rail']", { state: "visible" });
   }
 
+  getQueryLibraryPanel() {
+    return this.page.getByTestId("query-library-panel");
+  }
+
+  async clickQueryLibraryItem(text: string) {
+    const panel = this.getQueryLibraryPanel();
+    await panel.waitFor({ state: "visible" });
+    await panel.getByText(text, { exact: true }).click();
+  }
+
   async uploadFile(filePath: string) {
     // 打开"添加内容源"dialog（file input 在 dialog 内，必须先打开）
     await this.page.getByRole("button", { name: /添加内容源|New source|上传文件/i }).click();

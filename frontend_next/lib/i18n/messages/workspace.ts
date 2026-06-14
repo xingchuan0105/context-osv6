@@ -117,6 +117,34 @@ export const workspaceMessages = {
     zh: "工作区历史",
     en: "Workspace history",
   },
+  workspaceQueryLibraryTitle: {
+    zh: "提示词库",
+    en: "Prompt library",
+  },
+  workspaceQueryLibrarySearchPlaceholder: {
+    zh: "搜索提示词…",
+    en: "Search prompts…",
+  },
+  workspaceQueryLibraryEmpty: {
+    zh: "发送过的提问会自动出现在这里",
+    en: "Your sent prompts will appear here",
+  },
+  workspaceQueryLibraryNoMatch: {
+    zh: "没有匹配的提示词",
+    en: "No matching prompts",
+  },
+  workspaceQueryLibraryInsert: {
+    zh: "插入到输入框",
+    en: "Insert into composer",
+  },
+  workspaceQueryLibraryDelete: {
+    zh: "删除",
+    en: "Delete",
+  },
+  workspaceQueryLibraryClear: {
+    zh: "清空",
+    en: "Clear all",
+  },
   workspaceHistorySearch: {
     zh: "搜索会话",
     en: "Search sessions",

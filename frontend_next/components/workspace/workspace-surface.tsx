@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -150,6 +151,15 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
   } | null>(null);
   const activeResizeCleanupRef = useRef<(() => void) | null>(null);
   const recheckUsageRef = useRef<(() => void) | null>(null);
+  const composerInsertRef = useRef<((text: string) => boolean) | null>(null);
+
+  const handleInsertIntoComposer = useCallback((text: string): boolean => {
+    return composerInsertRef.current?.(text) ?? false;
+  }, []);
+
+  const registerComposerInsert = useCallback((handler: ((text: string) => boolean) | null) => {
+    composerInsertRef.current = handler;
+  }, []);
 
   useEffect(() => {
     if (!auth.initialized || !auth.token || !auth.user?.id) {
@@ -232,6 +242,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
     <WorkspaceHistoryPane
       activeSessionId={activeSessionId}
       onDeleteSession={(session) => void removeSession(session)}
+      onInsert={handleInsertIntoComposer}
       onNewThread={() => void startNewThread()}
       onRenameSession={(session) => {
         renameSession(session);
@@ -240,6 +251,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
       onSelectSession={setActiveSessionId}
       onTogglePinSession={(session) => void toggleSessionPin(session)}
       sessions={sessions}
+      workspaceId={workspaceId}
     />
   );
 
@@ -424,6 +436,7 @@ export function WorkspaceSurface({ workspaceId }: { workspaceId: string }) {
                   workspaceUi.setActiveCitation(null);
                   void reloadSessions(sessionId);
                 }}
+                registerComposerInsert={registerComposerInsert}
                 selectedSourceIds={workspaceUi.selectedSourceIds}
                 sessionId={activeSessionId}
                 workspaceId={workspaceId}

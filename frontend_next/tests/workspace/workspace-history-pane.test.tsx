@@ -105,11 +105,13 @@ describe("WorkspaceHistoryPane", () => {
       <WorkspaceHistoryPane
         activeSessionId="sess-1"
         onDeleteSession={onDeleteSession}
+        onInsert={vi.fn()}
         onNewThread={vi.fn()}
         onRenameSession={onRenameSession}
         onSelectSession={vi.fn()}
         onTogglePinSession={onTogglePinSession}
         sessions={sessions}
+        workspaceId="ws-test"
       />,
     );
 
@@ -163,11 +165,13 @@ describe("WorkspaceHistoryPane", () => {
       <WorkspaceHistoryPane
         activeSessionId="sess-1"
         onDeleteSession={vi.fn()}
+        onInsert={vi.fn()}
         onNewThread={vi.fn()}
         onRenameSession={vi.fn()}
         onSelectSession={onSelectSession}
         onTogglePinSession={vi.fn()}
         sessions={sessions}
+        workspaceId="ws-test"
       />,
     );
 

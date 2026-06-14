@@ -1,5 +1,9 @@
 import { type APIRequestContext } from "@playwright/test";
 import { readFileSync } from "fs";
+import {
+  PUBLISHED_PRIVACY_VERSION,
+  PUBLISHED_TERMS_VERSION,
+} from "../../lib/legal/versions";
 import { TEST_USER } from "../fixtures/test-user";
 
 const AUTH_STORAGE_STATE_PATH = "playwright/.auth/user.json";
@@ -73,6 +77,8 @@ export async function ensureTestUserAccount(request: APIRequestContext) {
         email: TEST_USER.email,
         password: TEST_USER.password,
         full_name: TEST_USER.fullName,
+        terms_version: PUBLISHED_TERMS_VERSION,
+        privacy_version: PUBLISHED_PRIVACY_VERSION,
       },
       timeout: 30_000,
     });

@@ -7,7 +7,10 @@ import { afterEach, beforeEach, expect, vi } from "vitest";
 import { WorkspaceChatPane } from "../../../components/workspace/workspace-chat-pane";
 
 import { resetWorkspaceChatPaneMocks } from "./workspace-chat-pane.setup";
-import { workspaceChatPaneMocks } from "../workspace-chat-pane.shared-mocks";
+import {
+  queryLibraryCaptureHarnessMock,
+  workspaceChatPaneMocks,
+} from "../workspace-chat-pane.shared-mocks";
 
 export { workspaceChatPaneMocks };
 
@@ -68,6 +71,7 @@ export async function flushChatPaneMicrotasks() {
 export function setupWorkspaceChatPaneTestLifecycle() {
   beforeEach(() => {
     resetWorkspaceChatPaneMocks(workspaceChatPaneMocks);
+    queryLibraryCaptureHarnessMock.mockReset();
   });
 
   afterEach(() => {

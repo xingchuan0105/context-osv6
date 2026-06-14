@@ -11,18 +11,33 @@ function webServerEnv(extra: Record<string, string> = {}): Record<string, string
   return { ...env, ...extra };
 }
 
-// Load .env so env vars are available in globalSetup / specs
-for (const envFile of [".env.local", ".env"]) {
+function loadDotEnv(path: string) {
   try {
-    const content = readFileSync(envFile, "utf-8");
+    const content = readFileSync(path, "utf-8");
     for (const line of content.split("\n")) {
       const m = line.match(/^([A-Za-z_]\w*)=(.*)$/);
       if (m && process.env[m[1]] === undefined) {
         process.env[m[1]] = m[2].replace(/^["'](.*)["']$/, "$1");
       }
     }
-  } catch { /* file missing, skip */ }
+  } catch {
+    /* file missing, skip */
+  }
 }
+
+// Load .env so env vars are available in globalSetup / specs
+for (const envFile of [".env.local", ".env", "../avrag-rs/.env"]) {
+  loadDotEnv(envFile);
+}
+
+// Local avrag-ci-pg uses test:test; dev .env often has avrag/avrag — override for webServer only.
+const DEFAULT_LOCAL_E2E_DATABASE_URL = "postgres://test:test@127.0.0.1:5432/test";
+const playwrightDatabaseUrl =
+  process.env.E2E_DATABASE_URL ??
+  (process.env.CI ? process.env.DATABASE_URL : DEFAULT_LOCAL_E2E_DATABASE_URL);
+const backendServerEnv: Record<string, string> = playwrightDatabaseUrl
+  ? { DATABASE_URL: playwrightDatabaseUrl, POSTGRES_URL: playwrightDatabaseUrl }
+  : {};
 
 export default defineConfig({
   testDir: "./e2e",
@@ -54,6 +69,7 @@ export default defineConfig({
             reuseExistingServer: !process.env.CI,
             env: webServerEnv({
               PRICING_REVAMP_ROLLOUT: "100",
+              ...backendServerEnv,
             }),
           },
           {
@@ -61,7 +77,7 @@ export default defineConfig({
             url: "http://127.0.0.1:8081/health",
             timeout: 120_000,
             reuseExistingServer: !process.env.CI,
-            env: webServerEnv(),
+            env: webServerEnv(backendServerEnv),
           },
         ]),
     {
