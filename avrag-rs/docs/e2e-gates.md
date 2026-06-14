@@ -1,7 +1,13 @@
 # E2E Quality Gates
 
 This document defines pass/fail semantics across Rust Product E2E and Playwright
-suites. See also [`product-e2e-plan.md`](product-e2e-plan.md).
+suites.
+
+**Agent-oriented full coverage matrix** (what to test, parallel groups, real doc parse / LLM RAG / chat / websearch): [`full-functional-e2e-guide.md`](full-functional-e2e-guide.md).
+
+**Post-run analysis** (coverage / regression / attribution / stability / quality): [`e2e-analysis-framework.md`](e2e-analysis-framework.md) + [`e2e-test-registry.yaml`](e2e-test-registry.yaml).
+
+See also [`product-e2e-plan.md`](product-e2e-plan.md).
 
 ## Layer overview
 
@@ -9,7 +15,7 @@ suites. See also [`product-e2e-plan.md`](product-e2e-plan.md).
 |-------|--------|---------|-------------|---------------|
 | PR smoke | `smoke-e2e.yml` | PR | `./scripts/run-product-smoke-e2e.sh` (root `.github/workflows/smoke-e2e.yml`, `defaults.run.working-directory: avrag-rs`) | N/A (mock LLM) |
 | Integration | `integration-e2e.yml` | main / manual | `E2E_MODE=integration cargo test -p app --test product_e2e --features product-e2e -- --test-threads=1` | Hard in integration tests |
-| llm_real | `nightly-llm-real.yml` | schedule / manual | `E2E_MODE=nightly cargo test -p app --test product_e2e llm_real -- --ignored --test-threads=1` | **Hard** — `assert_citations_non_empty` |
+| llm_real | `nightly-llm-real.yml` | schedule / manual | `E2E_MODE=nightly cargo test -p app --test product_e2e --features product-e2e llm_real -- --ignored --test-threads=1` | **Hard** — `assert_citations_non_empty` |
 | Playwright skills | `frontend-skills.yml` | schedule / manual | `cd frontend_next && npx playwright test --project=skills` | **Hard** — `must_have_citation` golden entries |
 | Playwright judge | `nightly-playwright-judge.yml` | schedule / manual | root workflow + `RUN_QUALITY_JUDGE=1` | Score &lt; 6 → **warn only** |
 
@@ -17,7 +23,8 @@ suites. See also [`product-e2e-plan.md`](product-e2e-plan.md).
 
 ### Smoke (PR)
 
-- **Smoke integration modules** (`smoke::`, serial for RAG): `ingestion_smoke`, `rag_smoke`, `rag_fallback_smoke`, `rag_codegen_multitool_smoke`, `memory_multiturn_smoke`, `paddle_pdf_smoke`
+- **Smoke integration modules** (`smoke::`, serial for RAG): `ingestion_smoke`, `rag_smoke`, `rag_fallback_smoke`, `rag_codegen_multitool_smoke`, `memory_multiturn_smoke`, `paddle_image_smoke`
+- **Smoke manual-only** (module guard only; `#[ignore]`): `search_real_smoke`, `paddle_pdf_smoke`
 - **Non-RAG smoke modules** (parallel): `chat_smoke`, `search_smoke`, `auth_boundary`, `share_boundary`
 - **Unit tests** (parallel with non-RAG smoke; no Docker):
   - `setup::tests` (6) — docker port/timestamp parsing, active-container registry, docker id
@@ -27,7 +34,7 @@ suites. See also [`product-e2e-plan.md`](product-e2e-plan.md).
 - Non-RAG smoke + unit tests run **in parallel** (`run-product-smoke-e2e.sh`); RAG smoke modules run **serial** after `wait`
 - Orphan Docker cleanup removes only test-owned `avrag-test-pg-*` / `avrag-test-redis-*` names; skips active/young containers (see `setup::cleanup_orphaned_test_containers`). **Milvus** uses the shared compose stack (`milvus-standalone`); CI does not force-remove it — isolation is per-context `MILVUS_COLLECTION_PREFIX` + teardown collection drops
 - Gated by `require_smoke_suite()` — fails under `E2E_MODE=nightly`
-- CI/local runner: [`scripts/run-product-smoke-e2e.sh`](../scripts/run-product-smoke-e2e.sh) (module list single source of truth; **module coverage guard** compares `cargo test … smoke:: -- --list` against `NON_RAG_MODULES` + `RAG_SERIAL_MODULES` and exits 1 on mismatch; quick check: `./scripts/run-product-smoke-e2e.sh --check-modules`; **EXIT trap** removes `avrag-test-*` containers)
+- CI/local runner: [`scripts/run-product-smoke-e2e.sh`](../scripts/run-product-smoke-e2e.sh) (module list single source of truth; **module coverage guard** compares `cargo test … smoke:: -- --list` against `NON_RAG_MODULES` + `RAG_SERIAL_MODULES` + `SMOKE_MANUAL_ONLY_MODULES` and exits 1 on mismatch; `search_real_smoke` and `paddle_pdf_smoke` are manual-only — registered for guard, skipped in PR execution; quick check: `./scripts/run-product-smoke-e2e.sh --check-modules`; **EXIT trap** removes `avrag-test-*` containers)
 - **Module coverage guard (2026-06-13): green.** Parser matches `product_e2e::smoke::<module>::…` via `sed -n 's/.*::smoke::\([^:]*\)::.*/\1/p'`; `backend_launcher` (no submodule segment) is intentionally excluded.
 - Mock LLM / Search / Embedding only; E2E bootstrap forces **local** `object_root` (ignores `.env` MinIO/S3 for API)
 - Protocol + HTTP assertions; SSE event-order (`start` first, `done` terminal, no post-`done` events) and `done` payload shape in [`transport-http` contract tests](../crates/transport-http/tests/chat_stream_contract.rs) (`cargo test -p transport-http`)
@@ -106,6 +113,18 @@ Aligned with golden set `must_have_citation` semantics:
 1. **Hard**: HTTP 200, non-empty answer, mode indicator, keyword match, **`citationCount > 0`**
 2. **API confirmation**: `waitForDocumentReady` after upload before chat (RAG)
 
+### Functional (Playwright `functional` project)
+
+PR 级 smoke（`testMatch: specs/smoke/*`，排除 `auth*`；预置 `storageState`）：
+
+| Spec | Path | Gate |
+|------|------|------|
+| Query library | `smoke/query-library.spec.ts` | 发送入库、单次插入、连点拼接、streaming 期间插入忽略 |
+| Legal consent | `smoke/legal-consent.spec.ts` | 法律页 / 注册同意 / 重签 gate |
+| Admin navigation | `smoke/admin-navigation.spec.ts` | 管理入口可达 |
+
+Vitest 配套：`tests/workspace/query-library-*.test.ts`、`workspace-history-pane.test.tsx`（挂载 + 布局烟测）。
+
 ### Journey (Playwright `journey` project)
 
 | Spec | Path | Citation gate | Rationale |
@@ -127,7 +146,7 @@ Nightly workflow uploads judge attachments; score below 6 does **not** fail the 
 | `AVRAG_WORKER_HEALTH_PORT` | Worker: `0` = bind ephemeral port; publishes to `AVRAG_WORKER_HEALTH_PORT_FILE` (E2E) |
 | `SEARCH_REQUIRE_REAL=1` | Fail when Brave Search unreachable (llm_real / nightly) |
 | `SEARCH_FORCE_MOCK=1` | Force mock search even with credentials |
-| `SEARCH_USE_REAL=1` | Use real Brave Search in smoke tests (**ignored** when `!use_real_llm` — mock search forced for integration stability) |
+| `SEARCH_USE_REAL=1` | 在 smoke 层启用真实 Brave（需 `SEARCH_API_KEY`；`smoke::search_real_smoke` 为 `#[ignore]` 预发用例） |
 | `RUN_QUALITY_JUDGE=1` | Enable Playwright LLM judge attachments |
 | `RUN_CROSS_BROWSER=1` | Enable Firefox/WebKit journey projects |
 | `E2E_TIER` | `nightly` or `staging` — journey web-search citation **hard** gate in `workspace-chat.spec.ts` |

@@ -6,7 +6,7 @@
 > - `prompts-memory-doc-profile-optimization-2026-06-10.md`（记忆分层重构 + `resolved_query` 一等列）
 > - `e2e-codegen-memory-tests-design-2026-06-10.md`（记忆 E2E 测试设计，§3.3 / Case S3）
 > - `superpowers/specs/2026-05-28-e2e-analysis-framework-design.md:230`（曾零散提及 "Missing `conversation_history_tag` in tool catalog"，本文档系统化记录）
-> - `query-library-design-2026-06-14.md`（**交互侧解法**：用户主动组织的"提示词库"前端设计，对应 §6 选项 3）
+> - `query-library-design-2026-06-14.md`（**交互侧解法 · 已落地 V1**：`frontend_next` 提示词库 — 自动存 user query + 搜索 + 点击插入光标，对应 §6 选项 3）
 
 ---
 
@@ -107,7 +107,7 @@ Agent「按 tag 定向调阅历史」这条能力是**断的**：写标签的工
 
 1. **诚实下线**：移除/隐藏 `conversation_history_tag` 注册，避免误导 agent；保留不带 tag 的最近 N 条召回。成本最低。
 2. **接线闭环**：`ConversationHistoryTag::execute` 接到 `apply_tag_operations`，把 tag 工具补进 memory 簇 `SKILL.md`，并补 §4 的端到端测试。让定向召回真正可用。
-3. **改范式（另议）**：若判定"agent 自动打 tag"本身 ROI 不高，可放弃 tag 路线，改走用户侧主动组织——见 `query-library-design-2026-06-14.md`（自动「提示词库」：自动存 user query + 模糊搜索 + 点击插入光标，把"复用历史表达"的控制权交还用户）。
+3. **改范式（前端 V1 已 ship）**：用户侧主动组织——`frontend_next` 提示词库（`query-library-design-2026-06-14.md`）：自动存 user query + 模糊搜索 + 点击插入光标。与 agent tag 路线互斥的产品取舍仍待定；**不等同于**本 gap（按需 tag 调阅）已修复。
 4. **清理 L2 残留**：移除 §5 列出的 session summary 死代码与 `summary` 入参/列（或确认保留作为未来扩展位）。
 
 > 注意：选项 2 与选项 3 路线互斥，需先定方向再动手。
