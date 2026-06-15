@@ -2,12 +2,14 @@ use ingestion::parser::{
     PageRouteKind, PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteReason,
 };
 use ingestion::{
-    BlockIr, BlockModality, BlockType, DocumentIr, DocumentType, PageIr, ParseBackend,
+    BlockIr, BlockModality, BlockType, DocumentIr, DocumentType, LiteParseService, PageIr,
+    ParseBackend,
 };
 use uuid::Uuid;
 
 use super::merge::merge_pdf_ir;
 use super::paddle::group_contiguous_pages;
+use super::parse::{collect_page_routes, probe_pdf_content_from_snapshot, PdfPageRoutes};
 
 #[test]
 fn test_group_contiguous_pages() {
@@ -373,5 +375,80 @@ fn merge_pdf_ir_combined_text_and_table_ocr() {
     assert_eq!(
         merged.metadata.get("pdf_route_mode").map(String::as_str),
         Some("liteparse_hybrid")
+    );
+}
+
+#[test]
+fn collect_page_routes_splits_text_and_ocr_pages() {
+    let plan = PdfParsePlan {
+        pages: vec![
+            PdfPagePlan {
+                page_number: 1,
+                backend: PdfPageBackend::EdgeParse,
+                reason: RouteReason::SimplePdf,
+                route_kinds: vec![PageRouteKind::Text],
+            },
+            PdfPagePlan {
+                page_number: 2,
+                backend: PdfPageBackend::PaddleOcr,
+                reason: RouteReason::ScannedPdf,
+                route_kinds: vec![PageRouteKind::ScanOcr],
+            },
+            PdfPagePlan {
+                page_number: 3,
+                backend: PdfPageBackend::PaddleOcr,
+                reason: RouteReason::SlowOcr,
+                route_kinds: vec![PageRouteKind::TableOcr],
+            },
+        ],
+    };
+
+    let routes = collect_page_routes(&plan);
+    assert_eq!(routes.text_pages, vec![1]);
+    assert_eq!(routes.ocr_pages, vec![2, 3]);
+    assert_eq!(routes.table_ocr_pages, std::collections::HashSet::from([3]));
+}
+
+#[tokio::test]
+async fn probe_pdf_content_from_snapshot_builds_digital_ir_without_reparse() {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docs/spike/fixtures/phase0-mini.pdf");
+    if !path.exists() {
+        return;
+    }
+    let bytes = std::fs::read(path).expect("read fixture");
+    let snapshot = LiteParseService::from_env()
+        .parse_pdf_document(&bytes)
+        .await
+        .expect("parse snapshot once");
+
+    let routes = PdfPageRoutes {
+        text_pages: snapshot
+            .probes()
+            .iter()
+            .map(|probe| probe.page_number)
+            .collect(),
+        ocr_pages: Vec::new(),
+        table_ocr_pages: std::collections::HashSet::new(),
+    };
+    let document_id = Uuid::new_v4();
+    let outcome = probe_pdf_content_from_snapshot(
+        &snapshot,
+        "phase0-mini.pdf",
+        document_id,
+        &routes,
+    );
+
+    assert_eq!(
+        outcome.page_dimensions.len(),
+        snapshot.page_dimensions().len(),
+        "dimensions should come from cached snapshot"
+    );
+    let digital_ir = outcome
+        .digital_ir
+        .expect("digital IR from snapshot blocks");
+    assert!(
+        !digital_ir.blocks.is_empty(),
+        "text blocks should be materialized from snapshot without a second parse"
     );
 }

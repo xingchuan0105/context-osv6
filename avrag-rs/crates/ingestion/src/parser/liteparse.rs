@@ -81,11 +81,17 @@ impl LiteParseService {
     }
 
     /// Fast probe: parse and map page signals for routing.
+    ///
+    /// **Hot path:** prefer [`Self::parse_pdf_document`] and read [`ParsedPdfSnapshot::probes`].
+    /// Each call performs a full LiteParse parse.
     pub async fn probe(&self, pdf_bytes: &[u8]) -> Result<Vec<LiteParsePageProbe>> {
-        Ok(self.parse_pdf_document(pdf_bytes).await?.probes)
+        Ok(self.parse_pdf_document(pdf_bytes).await?.probes().to_vec())
     }
 
     /// Extract text blocks with bbox for selected pages.
+    ///
+    /// **Hot path:** prefer [`Self::parse_pdf_document`] and
+    /// [`ParsedPdfSnapshot::extract_blocks_for_pages`]. Each call performs a full LiteParse parse.
     pub async fn extract_blocks(
         &self,
         pdf_bytes: &[u8],
@@ -108,6 +114,9 @@ impl LiteParseService {
     }
 
     /// Export page dimensions from a parse pass (width/height in PDF points).
+    ///
+    /// **Hot path:** prefer [`Self::parse_pdf_document`] and
+    /// [`ParsedPdfSnapshot::page_dimensions`]. Each call performs a full LiteParse parse.
     pub async fn page_dimensions(
         &self,
         pdf_bytes: &[u8],

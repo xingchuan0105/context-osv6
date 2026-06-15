@@ -28,7 +28,7 @@
 
 ## 入库 / Ingestion
 
-- [LiteParse + Paddle Jobs 统一入库架构（2026-06-13）](/home/chuan/context-osv6/avrag-rs/docs/liteparse-paddle-ingestion-architecture-2026-06-13.md) — **当前实现真相源**：LiteParse hybrid 探针 + `router/page_routes` 页内分拣 + Paddle Jobs OCR；Office 全格式经 `office-parser-jvm`（doc/docx/xls/xlsx/ppt/pptx）；已知缺口见 §0.1（Brooks M3/M5）。
+- [LiteParse + Paddle Jobs 统一入库架构（2026-06-13）](/home/chuan/context-osv6/avrag-rs/docs/liteparse-paddle-ingestion-architecture-2026-06-13.md) — **当前实现真相源**：LiteParse hybrid 探针 + `router/page_routes` 页内分拣 + Paddle Jobs OCR；Office 全格式经 `office-parser-jvm`（doc/docx/xls/xlsx/ppt/pptx）；M3/M4/M5 已闭环（见该文 §0.1）。
 - [P4 前 MinerU / shadow / 灰度迁移（历史归档）](/home/chuan/context-osv6/avrag-rs/docs/archive/p4-mineru-shadow-migration-historical.md) — 已删除的 `LITEPARSE_*` / `MINERU_*` 开关与跳过的 Shadow/灰度阶段。
 - [入库路由讨论纪要（2026-06-10，过程记录）](/home/chuan/context-osv6/avrag-rs/docs/ingestion-routing-discussion-2026-06-10.md) — 讨论过程；**路由结论以上文为准**。
 - [历史文档：视觉 PDF 入库与检索改造（2026-06-10）](/home/chuan/context-osv6/avrag-rs/docs/archive/visual-pdf-ingest-requirements-2026-06-10.md) — 已归档；MinerU 旁路/视觉默认方案仅代表 P4 前讨论。

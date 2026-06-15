@@ -59,6 +59,39 @@ async fn liteparse_probe_and_extract_mini_pdf() {
 }
 
 #[test]
+fn router_snapshot_handoff_preserves_probe_and_block_counts() {
+    use ingestion::parser::{ParsePlan, ParseRouter, probe_pdf_hybrid, ParseProbeConfig};
+
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docs/spike/fixtures/phase0-mini.pdf");
+    if !path.exists() {
+        return;
+    }
+    let bytes = std::fs::read(&path).expect("read fixture pdf");
+    let config = ParseProbeConfig::from_env();
+
+    let hybrid = probe_pdf_hybrid(&bytes, "phase0-mini.pdf", &config).expect("hybrid probe");
+    let decision =
+        ParseRouter::route(&bytes, "phase0-mini.pdf", "application/pdf").expect("route pdf");
+    let snapshot = decision
+        .liteparse_snapshot
+        .as_ref()
+        .expect("router should attach liteparse snapshot");
+
+    assert_eq!(
+        snapshot.probes().len(),
+        hybrid.liteparse_snapshot.probes().len(),
+        "router snapshot should match hybrid probe page count"
+    );
+    assert_eq!(
+        snapshot.text_blocks().len(),
+        hybrid.liteparse_snapshot.text_blocks().len(),
+        "router snapshot should reuse hybrid parse blocks"
+    );
+    assert!(matches!(decision.plan, ParsePlan::Pdf(_)));
+}
+
+#[test]
 fn mini_pdf_page_routes_include_scan_and_text_pages() {
     use ingestion::parser::{PageRouteKind, ParsePlan, ParseRouter};
 

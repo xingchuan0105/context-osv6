@@ -14,10 +14,10 @@
 
 | 阶段 | 模块 | 职责 |
 |------|------|------|
-| **Hybrid 探针** | `liteparse_probe_bridge.rs` + `probe.rs` | `probe_pdf_hybrid`：lopdf 结构 hint + LiteParse 字数/质量 overlay → `ParseProbeResult.pdf_page_probes` |
+| **Hybrid 探针** | `liteparse_probe_bridge.rs` + `probe.rs` | `probe_pdf_hybrid`：lopdf 结构 hint + LiteParse 字数/质量 overlay → `ParseProbeResult.pdf_page_probes`；产出可复用 `ParsedPdfSnapshot` |
 | **页级分拣** | `router/page_routes.rs` | `classify_page_routes` 按 §5.2 优先级（D→C→B→A，可叠加）产出 `PageRouteKind` |
 | **执行计划** | `router/pdf_plan.rs` | `build_pdf_parse_plan` → 每页 `PdfPagePlan`（`backend` + `route_kinds`） |
-| **Worker 执行** | `bins/worker/src/pdf/parse.rs` | `execute_pdf_parse`：LiteParse 抽字、Paddle Jobs OCR、VisualRaster 兜底、metadata |
+| **Worker 执行** | `bins/worker/src/pdf/parse.rs` | 薄编排：`collect_page_routes` → `probe_pdf_content_from_snapshot` → `run_ocr_pages` → `apply_text_fallbacks` → `attach_ingest_metadata_and_status` |
 
 **无 shadow / 灰度 / 回滚开关。** MinerU 与 `LITEPARSE_*` 切流 env 已删除；历史说明见 [archive/p4-mineru-shadow-migration-historical.md](./archive/p4-mineru-shadow-migration-historical.md)。
 
@@ -25,9 +25,18 @@
 
 | Stream | 缺口 | 状态 |
 |--------|------|------|
-| [M3](./brooks-merged-fix-plan-2026-06-13-v6.md#m3--liteparse-单次解析快照-p1) | 同一 PDF 在 probe / `page_dimensions` / `extract_blocks` 多次 `parse_input` | 待优化 |
-| [M4](./brooks-merged-fix-plan-2026-06-13-v6.md#m4--独立图片-paddle-产物保护-p1) | 独立图片 `PaddleOcrImage` Product E2E 产物 contract | ✅ `integration::paddle_image_e2e` + `smoke::paddle_image_smoke`（2026-06-15） |
-| [M5](./brooks-merged-fix-plan-2026-06-13-v6.md#m5--execute_pdf_parse-阶段拆分-p1) | `execute_pdf_parse` 混合路由、OCR、fallback、metadata | 待拆分 |
+| [M3](./archive/brooks-merged-fix-plan-2026-06-13-v6.md#m3--liteparse-单次解析快照-p1) | 同一 PDF 在 probe / `page_dimensions` / `extract_blocks` 多次 `parse_input` | ✅ `ParsedPdfSnapshot` + router `liteparse_snapshot` → worker 复用；正常路径 **1 次** LiteParse parse（2026-06-15） |
+| [M4](./archive/brooks-merged-fix-plan-2026-06-13-v6.md#m4--独立图片-paddle-产物保护-p1) | 独立图片 `PaddleOcrImage` Product E2E 产物 contract | ✅ `integration::paddle_image_e2e` + `smoke::paddle_image_smoke`（2026-06-15） |
+| [M5](./archive/brooks-merged-fix-plan-2026-06-13-v6.md#m5--execute_pdf_parse-阶段拆分-p1) | `execute_pdf_parse` 混合路由、OCR、fallback、metadata | ✅ 四阶段函数 + 薄 `execute_pdf_parse` 编排（2026-06-15） |
+
+**实现锚点（M3/M5）：**
+
+- `crates/ingestion/src/parser/liteparse.rs` — `parse_pdf_document` → `ParsedPdfSnapshot`（probes + dimensions + blocks）
+- `crates/ingestion/src/parser/liteparse_probe_bridge.rs` — `probe_pdf_hybrid` 附带 snapshot；`ParseRouteDecision.liteparse_snapshot` 传入 worker
+- `bins/worker/src/pdf/parse.rs` — `probe_pdf_content_from_snapshot` / `apply_text_fallbacks` 从 snapshot 取块，无二次 `parse_input`
+- Office→PDF 重路由等无 snapshot 场景：worker 本地 **至多 1 次** `parse_pdf_document`
+
+> `LiteParseService::probe` / `page_dimensions` / `extract_blocks` 仍保留兼容壳，各自触发独立 parse；**生产热路径应使用 snapshot**，勿在单请求内串联调用三者。
 
 ---
 
