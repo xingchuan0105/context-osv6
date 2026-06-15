@@ -18,6 +18,8 @@ pub mod llm_real;
 pub mod smoke;
 pub mod tenants;
 
+mod mock_office_server;
+mod mock_paddle_server;
 mod mock_servers;
 mod mock_rag_state;
 mod persistent_runtime;
