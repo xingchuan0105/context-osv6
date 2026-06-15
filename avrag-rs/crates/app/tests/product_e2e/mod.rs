@@ -19,8 +19,10 @@ pub mod smoke;
 pub mod tenants;
 
 mod mock_embedding_server;
+mod mock_llm_server;
 mod mock_office_server;
 mod mock_paddle_server;
+mod mock_rag_codegen;
 mod mock_search_server;
 mod mock_servers;
 mod mock_rag_state;
