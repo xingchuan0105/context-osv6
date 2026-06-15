@@ -7,6 +7,8 @@ import { isPricingRevampEnabled, isPricingRevampEnabledSSR } from "./featureFlag
 
 export type PricingRevampGateOptions = {
   redirectTo: string;
+  /** Marketing /pricing only needs the SSR env gate; skip usage/window bucket probe. */
+  requireUsageProbe?: boolean;
 };
 
 export type PricingRevampGateState = {
@@ -17,16 +19,22 @@ export type PricingRevampGateState = {
 
 export function usePricingRevampGate({
   redirectTo,
+  requireUsageProbe = true,
 }: PricingRevampGateOptions): PricingRevampGateState {
   const router = useRouter();
   const ssrEnabled = isPricingRevampEnabledSSR();
   const [probeState, setProbeState] = useState<"pending" | "passed" | "failed">(
-    ssrEnabled ? "pending" : "failed",
+    ssrEnabled ? (requireUsageProbe ? "pending" : "passed") : "failed",
   );
 
   useEffect(() => {
     if (!ssrEnabled) {
       router.replace(redirectTo);
+      return;
+    }
+
+    if (!requireUsageProbe) {
+      setProbeState("passed");
       return;
     }
 
@@ -47,7 +55,7 @@ export function usePricingRevampGate({
     return () => {
       cancelled = true;
     };
-  }, [redirectTo, router, ssrEnabled]);
+  }, [redirectTo, requireUsageProbe, router, ssrEnabled]);
 
   return {
     ssrEnabled,

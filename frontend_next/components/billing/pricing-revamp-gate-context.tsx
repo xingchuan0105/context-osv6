@@ -12,9 +12,10 @@ const PricingRevampGateContext = createContext<PricingRevampGateState | null>(nu
 
 export function PricingRevampGateProvider({
   redirectTo,
+  requireUsageProbe,
   children,
 }: PricingRevampGateOptions & { children: ReactNode }) {
-  const state = usePricingRevampGate({ redirectTo });
+  const state = usePricingRevampGate({ redirectTo, requireUsageProbe });
 
   if (!state.ssrEnabled) {
     return null;

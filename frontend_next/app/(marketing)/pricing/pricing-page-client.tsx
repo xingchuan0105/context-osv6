@@ -73,7 +73,11 @@ export function PricingPageClient() {
       {auth.token ? (
         <div className={styles.consentSection}>
           <ConsentCheckbox onConsentChange={setPaymentConsented} />
-          {checkoutError ? <p className={styles.checkoutError}>{checkoutError}</p> : null}
+          {checkoutError ? (
+            <p className={styles.checkoutError} role="alert">
+              {checkoutError}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

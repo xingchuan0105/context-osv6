@@ -5,19 +5,24 @@ export class PricingPage {
 
   async goto() {
     await this.page.goto("/pricing");
+    await expect(this.page.getByRole("heading", { name: /选择适合你的方案/ })).toBeVisible({
+      timeout: 30_000,
+    });
+    await this.page.waitForLoadState("networkidle").catch(() => {});
   }
 
   async expectVisible() {
     await expect(this.page.getByRole("heading", { name: /选择适合你的方案/ })).toBeVisible();
-    await expect(this.page.getByText("Plus")).toBeVisible();
-    await expect(this.page.getByText("Free")).toBeVisible();
-    await expect(this.page.getByText("Pro")).toBeVisible();
+    await expect(this.page.getByRole("heading", { name: "Plus" })).toBeVisible();
+    await expect(this.page.getByRole("heading", { name: "Free" })).toBeVisible();
+    await expect(this.page.getByRole("heading", { name: "Pro" })).toBeVisible();
   }
 
   async clickUpgrade(plan: "plus" | "pro") {
-    await this.page
-      .getByRole("button", { name: new RegExp(`升级 ${plan === "plus" ? "Plus" : "Pro"}`) })
-      .click();
+    const label = plan === "plus" ? "Plus" : "Pro";
+    const button = this.page.getByRole("button", { name: new RegExp(`升级 ${label}`) });
+    await expect(button).toBeVisible();
+    await button.click();
   }
 }
 

@@ -21,8 +21,9 @@ test.describe("Pricing page", () => {
     const pricing = new PricingPage(page);
     await pricing.goto();
     await pricing.clickUpgrade("plus");
-    const alert = page.locator("[role='alert'], .app-notice-banner, .consent-error");
-    await expect(alert.first()).toBeVisible({ timeout: 5_000 });
+    await expect(
+      page.locator('[role="alert"]').filter({ hasText: /请先阅读并同意|consent/i }),
+    ).toBeVisible();
   });
 
   test("clicking 升级 Plus triggers checkout redirect (mocked)", async ({ page }) => {
