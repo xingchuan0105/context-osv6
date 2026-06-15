@@ -253,6 +253,102 @@ impl AppState {
             })
     }
 
+    /// Place `member_email` into `owner_email`'s organization for invite-accept E2E.
+    pub async fn ensure_e2e_org_member(
+        &self,
+        owner_email: &str,
+        member_email: &str,
+        password: &str,
+        full_name: &str,
+    ) -> Result<(), String> {
+        use app_core::{PUBLISHED_PRIVACY_VERSION, PUBLISHED_TERMS_VERSION};
+        use bcrypt::{hash, DEFAULT_COST};
+
+        let repo = self
+            .postgres_repo()
+            .ok_or_else(|| "database not available".to_string())?;
+        let owner_row: Option<(Uuid, Uuid)> = sqlx::query_as::<_, (Uuid, Uuid)>(
+            "select id, org_id from users where email = $1 limit 1",
+        )
+        .bind(owner_email)
+        .fetch_optional(repo.raw())
+        .await
+        .map_err(|error| {
+            tracing::warn!(error = %error, "E2E org member: owner lookup failed");
+            "owner lookup failed".to_string()
+        })?;
+        let (_owner_id, org_id) = owner_row.ok_or_else(|| "owner not found".to_string())?;
+
+        if let Some((existing_id,)) = sqlx::query_as::<_, (Uuid,)>(
+            "select id from users where email = $1 limit 1",
+        )
+        .bind(member_email)
+        .fetch_optional(repo.raw())
+        .await
+        .map_err(|error| {
+            tracing::warn!(error = %error, "E2E org member: member lookup failed");
+            "member lookup failed".to_string()
+        })? {
+            repo.delete_user_cascade(self.auth(), existing_id)
+                .await
+                .map_err(|error| {
+                    tracing::warn!(error = %error, "E2E org member: failed to delete existing member");
+                    "member cleanup failed".to_string()
+                })?;
+        }
+
+        let password_hash = hash(password, DEFAULT_COST).map_err(|error| {
+            tracing::warn!(error = %error, "E2E org member: password hash failed");
+            "password hash failed".to_string()
+        })?;
+        let user_id = Uuid::new_v4();
+        let mut tx = repo
+            .raw()
+            .begin()
+            .await
+            .map_err(|error| {
+                tracing::warn!(error = %error, "E2E org member: begin tx failed");
+                "member provisioning failed".to_string()
+            })?;
+        sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+            .execute(&mut *tx)
+            .await
+            .map_err(|error| {
+                tracing::warn!(error = %error, "E2E org member: set super_admin failed");
+                "member provisioning failed".to_string()
+            })?;
+        sqlx::query(
+            "insert into users (id, org_id, email, full_name, password_hash, role) values ($1, $2, $3, $4, $5, 'user')",
+        )
+        .bind(user_id)
+        .bind(org_id)
+        .bind(member_email)
+        .bind(full_name)
+        .bind(password_hash)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| {
+            tracing::warn!(error = %error, "E2E org member: insert user failed");
+            "member provisioning failed".to_string()
+        })?;
+        sqlx::query(
+            "insert into legal_acceptances (user_id, terms_version, privacy_version, context) values ($1, $2, $3, 'registration')",
+        )
+        .bind(user_id)
+        .bind(PUBLISHED_TERMS_VERSION)
+        .bind(PUBLISHED_PRIVACY_VERSION)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| {
+            tracing::warn!(error = %error, "E2E org member: legal acceptance failed");
+            "member provisioning failed".to_string()
+        })?;
+        tx.commit().await.map_err(|error| {
+            tracing::warn!(error = %error, "E2E org member: commit failed");
+            "member provisioning failed".to_string()
+        })
+    }
+
     /// Checks if the JWT's auth_version matches the user's current auth_version.
     ///
     /// Returns `false` when PostgreSQL is not configured unless

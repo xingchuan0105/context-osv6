@@ -16,6 +16,15 @@ pub(crate) struct ResetUserDataRequest {
     email: String,
 }
 
+#[derive(Deserialize)]
+pub(crate) struct EnsureOrgMemberRequest {
+    owner_email: String,
+    member_email: String,
+    password: String,
+    #[serde(default)]
+    full_name: String,
+}
+
 #[derive(Serialize)]
 pub(crate) struct ResetUserDataResponse {
     success: bool,
@@ -31,6 +40,10 @@ pub(crate) fn router() -> axum::Router<AppState> {
         .route(
             "/grant-admin-role",
             axum::routing::post(grant_admin_role_handler),
+        )
+        .route(
+            "/ensure-org-member",
+            axum::routing::post(ensure_org_member_handler),
         )
 }
 
@@ -163,6 +176,61 @@ async fn grant_admin_role_handler(
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "error": "admin role grant failed" })),
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn ensure_org_member_handler(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Json(body): Json<EnsureOrgMemberRequest>,
+) -> Response {
+    let owner_email = match validate_e2e_request(&headers, &body.owner_email) {
+        Ok(email) => email,
+        Err(response) => return response,
+    };
+    let member_email = match validate_e2e_request(&headers, &body.member_email) {
+        Ok(email) => email,
+        Err(response) => return response,
+    };
+    let full_name = if body.full_name.trim().is_empty() {
+        "E2E Collaborator".to_string()
+    } else {
+        body.full_name.trim().to_string()
+    };
+
+    match state
+        .ensure_e2e_org_member(&owner_email, &member_email, &body.password, &full_name)
+        .await
+    {
+        Ok(()) => {
+            info!(owner_email = %owner_email, member_email = %member_email, "e2e ensure-org-member succeeded");
+            (
+                StatusCode::OK,
+                Json(ResetUserDataResponse {
+                    success: true,
+                    message: "org member provisioned".to_string(),
+                }),
+            )
+                .into_response()
+        }
+        Err(error) if error == "owner not found" => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "owner not found" })),
+        )
+            .into_response(),
+        Err(error) => {
+            warn!(
+                error = %error,
+                owner_email = %owner_email,
+                member_email = %member_email,
+                "e2e ensure-org-member failed"
+            );
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "org member provisioning failed" })),
             )
                 .into_response()
         }

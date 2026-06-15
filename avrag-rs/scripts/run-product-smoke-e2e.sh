@@ -11,6 +11,7 @@ NON_RAG_MODULES=(
   search_smoke
   auth_boundary
   share_boundary
+  notebook_crud
   billing_boundary
 )
 

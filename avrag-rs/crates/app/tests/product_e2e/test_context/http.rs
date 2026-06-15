@@ -812,4 +812,87 @@ impl TestContext {
         drop(resp);
         Ok(events)
     }
+
+    pub async fn get_notebook(&self, notebook_id: &str) -> anyhow::Result<HttpResponse> {
+        let resp = self
+            .http_client
+            .get(format!(
+                "{}/api/v1/notebooks/{notebook_id}",
+                self.base_url
+            ))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body_json = resp.json().await?;
+        Ok(HttpResponse { status, body_json })
+    }
+
+    pub async fn list_notebooks(&self) -> anyhow::Result<HttpResponse> {
+        let resp = self
+            .http_client
+            .get(format!("{}/api/v1/notebooks", self.base_url))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body_json = resp.json().await?;
+        Ok(HttpResponse { status, body_json })
+    }
+
+    pub async fn update_notebook(
+        &self,
+        notebook_id: &str,
+        name: &str,
+        description: &str,
+    ) -> anyhow::Result<HttpResponse> {
+        let resp = self
+            .http_client
+            .patch(format!(
+                "{}/api/v1/notebooks/{notebook_id}",
+                self.base_url
+            ))
+            .json(&serde_json::json!({ "name": name, "description": description }))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body_json = resp.json().await?;
+        Ok(HttpResponse { status, body_json })
+    }
+
+    pub async fn delete_notebook(&self, notebook_id: &str) -> anyhow::Result<HttpResponse> {
+        let resp = self
+            .http_client
+            .delete(format!(
+                "{}/api/v1/notebooks/{notebook_id}",
+                self.base_url
+            ))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body_json = resp.json().await?;
+        Ok(HttpResponse { status, body_json })
+    }
+
+    pub async fn accept_notebook_invite(
+        &self,
+        notebook_id: &str,
+        member_id: &str,
+    ) -> anyhow::Result<HttpResponse> {
+        let resp = self
+            .http_client
+            .post(format!(
+                "{}/api/v1/notebooks/{notebook_id}/members/{member_id}/accept",
+                self.base_url
+            ))
+            .json(&serde_json::json!({}))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        let body_json = resp.json().await?;
+        Ok(HttpResponse { status, body_json })
+    }
+}
+
+/// Email assigned by PG `ensure_org_and_actor` for proxy-header E2E users.
+pub fn local_dev_email(user_id: &str) -> String {
+    format!("{user_id}@local.dev")
 }

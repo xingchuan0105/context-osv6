@@ -1,11 +1,14 @@
 //! Share-link collaboration boundary (mode A: cross-user read via token only).
 
 use crate::product_e2e::{ChatResponse, TestContext, assertions::*};
+use crate::product_e2e::test_context::local_dev_email;
 
 const ORG_A: &str = "55555555-5555-5555-5555-555555555555";
-const USER_A: &str = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+const USER_OWNER: &str = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+const USER_COLLAB: &str = "ffffffff-ffff-ffff-ffff-ffffffffffff";
+const USER_A: &str = USER_OWNER;
+const USER_B: &str = USER_COLLAB;
 const ORG_B: &str = "66666666-6666-6666-6666-666666666666";
-const USER_B: &str = "ffffffff-ffff-ffff-ffff-ffffffffffff";
 
 #[tokio::test]
 async fn share_token_allows_cross_user_readonly_chat() {
@@ -84,7 +87,7 @@ async fn owner_can_invite_member_via_http() {
     let notebook = ctx_a.create_notebook("invite-notebook").await.unwrap();
 
     let invite_resp = ctx_a
-        .invite_notebook_member(&notebook.id, "collaborator@example.test", "write")
+        .invite_notebook_member(&notebook.id, &local_dev_email(USER_COLLAB), "write")
         .await
         .expect("invite member");
     assert_eq!(invite_resp.status, 200, "invite should succeed");
@@ -98,9 +101,71 @@ async fn owner_can_invite_member_via_http() {
         .expect("members array");
     assert!(
         members.iter().any(|m| {
-            m.get("email").and_then(|v| v.as_str()) == Some("collaborator@example.test")
+            m.get("email").and_then(|v| v.as_str()) == Some(local_dev_email(USER_COLLAB).as_str())
                 && m.get("status").and_then(|v| v.as_str()) == Some("pending")
         }),
-        "expected pending invite for collaborator@example.test, got {members_body}"
+        "expected pending invite for collaborator, got {members_body}"
+    );
+}
+
+#[tokio::test]
+async fn invited_member_can_accept_and_access_notebook() {
+    super::require_smoke_suite();
+    let ctx_owner = TestContext::new_smoke_with_org(ORG_A, USER_OWNER).await;
+    let notebook = ctx_owner
+        .create_notebook("invite-accept-notebook")
+        .await
+        .unwrap();
+
+    let collab_email = local_dev_email(USER_COLLAB);
+    let invite_resp = ctx_owner
+        .invite_notebook_member(&notebook.id, &collab_email, "write")
+        .await
+        .expect("invite member");
+    assert_eq!(invite_resp.status, 200);
+
+    let members_body = ctx_owner
+        .list_notebook_members(&notebook.id)
+        .await
+        .expect("list members");
+    let member_id = members_body["members"]
+        .as_array()
+        .expect("members array")
+        .iter()
+        .find(|m| m.get("email").and_then(|v| v.as_str()) == Some(collab_email.as_str()))
+        .and_then(|m| m.get("member_id").and_then(|v| v.as_str()))
+        .expect("pending member row")
+        .to_string();
+
+    let ctx_collab = TestContext::new_smoke_with_org(ORG_A, USER_COLLAB).await;
+    // Touch collab context so PG seeds `{USER_COLLAB}@local.dev` before accept.
+    let _ = ctx_collab.list_notebooks().await;
+
+    let accept_resp = ctx_collab
+        .accept_notebook_invite(&notebook.id, &member_id)
+        .await
+        .expect("accept invite");
+    assert_eq!(accept_resp.status, 200, "accept invite: {accept_resp:?}");
+
+    let access_resp = ctx_collab.get_notebook(&notebook.id).await.unwrap();
+    assert_eq!(
+        access_resp.status, 200,
+        "accepted member should read notebook, got {access_resp:?}"
+    );
+
+    let members_after = ctx_owner
+        .list_notebook_members(&notebook.id)
+        .await
+        .expect("list members after accept");
+    assert!(
+        members_after["members"]
+            .as_array()
+            .expect("members array")
+            .iter()
+            .any(|m| {
+                m.get("member_id").and_then(|v| v.as_str()) == Some(member_id.as_str())
+                    && m.get("status").and_then(|v| v.as_str()) == Some("accepted")
+            }),
+        "member should be accepted, got {members_after}"
     );
 }

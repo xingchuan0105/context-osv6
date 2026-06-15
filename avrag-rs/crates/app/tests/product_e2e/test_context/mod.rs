@@ -8,6 +8,8 @@ pub(crate) mod config;
 mod http;
 mod profiles;
 
+pub(crate) use http::local_dev_email;
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use tokio::sync::oneshot::Sender;
