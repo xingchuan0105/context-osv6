@@ -152,7 +152,6 @@ impl ChatContext {
             notebook_id: notebook.id,
             title: req.title,
             agent_type: req.agent_type,
-            summary: None,
             pinned: false,
             created_at: now.clone(),
             updated_at: now,

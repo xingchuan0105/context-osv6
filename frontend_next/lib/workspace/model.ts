@@ -24,7 +24,6 @@ export type WorkspaceSession = {
   workspace_id: string;
   title: string | null;
   agent_type: string;
-  summary: string | null;
   pinned: boolean;
   created_at: string;
   updated_at: string;

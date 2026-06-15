@@ -1,9 +1,9 @@
-use contracts::{ToolResult, ToolSpec, ToolStatus};
+use contracts::{ToolResult, ToolSpec};
 use serde_json::Value;
 
 use crate::agents::skills::{ExecutionContext, SkillComponent};
 
-/// Load conversation history for targeted or full recall.
+/// Load conversation history via recency + FTS hybrid search.
 pub struct ConversationHistoryLoad;
 
 #[async_trait::async_trait]
@@ -17,24 +17,29 @@ impl SkillComponent for ConversationHistoryLoad {
     }
 
     fn description(&self) -> &str {
-        "Load when the agent needs to recall previous messages from this session. \
-         Use without tags for full history analysis. Use with tags for targeted recall."
+        "Load when the agent needs to recall previous user messages beyond runtime-injected recent turns. \
+         Searches by query (jieba-segmented FTS) merged with recency; default scope is notebook (cross-session)."
     }
 
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: "conversation_history_load".to_string(),
             version: "1.0".to_string(),
-            description: "Load previous messages from the current conversation session. \
-                          Optionally filter by tags or limit the number of messages."
+            description: "Search prior user messages in the current notebook (or session-only). \
+                          Combines recent messages with full-text search on segmented query tokens."
                 .to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "tags": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Optional tags to filter messages by."
+                    "query": {
+                        "type": "string",
+                        "description": "Keywords or phrases to match in prior user messages. Empty returns recent messages only."
+                    },
+                    "scope": {
+                        "type": "string",
+                        "enum": ["notebook", "session"],
+                        "description": "Search within the current notebook (default) or current session only.",
+                        "default": "notebook"
                     },
                     "limit": {
                         "type": "integer",
@@ -46,18 +51,22 @@ impl SkillComponent for ConversationHistoryLoad {
             output_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "tags": {
+                    "query": { "type": "string" },
+                    "scope": { "type": "string" },
+                    "limit": { "type": "integer" },
+                    "message_count": { "type": "integer" },
+                    "messages": {
                         "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Tags that were used for filtering."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Maximum number of messages requested."
-                    },
-                    "message_count": {
-                        "type": "integer",
-                        "description": "Number of messages returned."
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "message_id": { "type": "integer" },
+                                "session_id": { "type": "string" },
+                                "role": { "type": "string" },
+                                "content": { "type": "string" },
+                                "created_at": { "type": "string" }
+                            }
+                        }
                     }
                 }
             }),
@@ -139,91 +148,5 @@ impl SkillComponent for UserProfileLoad {
             }
         };
         crate::agents::skills::memory_dispatch::user_profile_load(auth, repo).await
-    }
-}
-
-/// Tag conversation messages for future recall.
-pub struct ConversationHistoryTag;
-
-#[async_trait::async_trait]
-impl SkillComponent for ConversationHistoryTag {
-    fn id(&self) -> &str {
-        "conversation_history_tag"
-    }
-
-    fn version(&self) -> &str {
-        "1.0"
-    }
-
-    fn description(&self) -> &str {
-        "Load when the agent needs to label messages with descriptive tags for future recall. \
-         Every analyzed message should receive at least one specific, distinguishable tag."
-    }
-
-    fn spec(&self) -> ToolSpec {
-        ToolSpec {
-            name: "conversation_history_tag".to_string(),
-            version: "1.0".to_string(),
-            description: "Label messages with descriptive tags for future targeted recall. \
-                          Supports add, remove, and replace operations on message tags."
-                .to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "operations": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "message_id": {
-                                    "type": "integer",
-                                    "description": "ID of the message to tag."
-                                },
-                                "action": {
-                                    "type": "string",
-                                    "enum": ["add", "remove", "replace"],
-                                    "description": "Tag operation to perform."
-                                },
-                                "tags": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                    "description": "Tags to apply."
-                                }
-                            },
-                            "required": ["message_id", "action", "tags"]
-                        },
-                        "description": "List of tagging operations to perform."
-                    }
-                },
-                "required": ["operations"]
-            }),
-            output_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "operation_count": {
-                        "type": "integer",
-                        "description": "Number of operations processed."
-                    }
-                }
-            }),
-        }
-    }
-
-    async fn execute<'a>(&self, args: &Value, _ctx: &'a ExecutionContext<'a>) -> ToolResult {
-        let operations = args
-            .get("operations")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.len())
-            .unwrap_or(0);
-
-        ToolResult {
-            tool: self.id().to_string(),
-            version: self.version().to_string(),
-            status: ToolStatus::Ok,
-            data: Some(serde_json::json!({
-                "operation_count": operations,
-            })),
-            trace: None,
-        }
     }
 }

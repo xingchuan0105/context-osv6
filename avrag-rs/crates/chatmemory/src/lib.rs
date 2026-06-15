@@ -17,13 +17,6 @@ pub struct Layer1Messages {
     pub messages: Vec<contracts::chat::ChatMessage>,
 }
 
-/// Layer 2: Session summary
-pub struct Layer2Summary {
-    pub session_id: Uuid,
-    pub summary: String,
-    pub updated_at: DateTime<Utc>,
-}
-
 /// Layer 3: User profile across sessions
 pub struct Layer3Profile {
     pub user_id: Uuid,
@@ -51,8 +44,6 @@ impl ChatMemory {
         session_id: Uuid,
     ) -> anyhow::Result<ChatMemoryData> {
         let messages = self.persistence.list_messages(auth, session_id).await?;
-        let session = self.persistence.get_session(auth, session_id).await?;
-        let summary = session.and_then(|s| s.summary);
 
         let actor_id = auth.actor_id().map(|value| value.into_uuid());
         let profile = if let Some(user_id) = actor_id {
@@ -66,25 +57,8 @@ impl ChatMemory {
 
         Ok(ChatMemoryData {
             layer1: Layer1Messages { messages },
-            layer2: summary.map(|value| Layer2Summary {
-                session_id,
-                summary: value,
-                updated_at: Utc::now(),
-            }),
             layer3: profile,
         })
-    }
-
-    pub async fn update_summary(
-        &self,
-        auth: &AuthContext,
-        session_id: Uuid,
-        new_summary: &str,
-    ) -> anyhow::Result<()> {
-        self.persistence
-            .update_session_summary(auth, session_id, new_summary)
-            .await?;
-        Ok(())
     }
 }
 
@@ -124,7 +98,6 @@ impl ChatMemory {
 
 pub struct ChatMemoryData {
     pub layer1: Layer1Messages,
-    pub layer2: Option<Layer2Summary>,
     pub layer3: Option<Layer3Profile>,
 }
 

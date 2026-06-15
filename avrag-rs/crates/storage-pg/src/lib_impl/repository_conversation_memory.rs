@@ -1,148 +1,235 @@
-/// Tag operation sent by the agent.
+/// A user message hit from hybrid conversation memory search.
 #[derive(Debug, Clone)]
-pub enum TagOperation {
-    AddTag { message_id: i64, tag: String },
-    RemoveTag { message_id: i64, tag: String },
-    ReplaceTags { message_id: i64, tags: Vec<String> },
-}
-
-/// A chat message with its tags.
-#[derive(Debug, Clone)]
-pub struct TaggedMessage {
+pub struct ConversationHistoryHit {
     pub message_id: i64,
+    pub session_id: Uuid,
     pub role: String,
     pub content: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub tags: Vec<String>,
+    pub created_at: DateTime<Utc>,
 }
 
-impl PgAppRepository {
-    /// Load messages from a session, optionally filtered by tags.
-    pub async fn load_history_by_tags(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConversationHistoryScope {
+    Session,
+    Notebook,
+}
+
+const RECENT_CANDIDATE_LIMIT: i64 = 50;
+const FTS_CANDIDATE_LIMIT: i64 = 30;
+
+impl crate::PgAppRepository {
+    pub async fn search_conversation_history(
         &self,
         auth: &AuthContext,
         session_id: Uuid,
-        tags: Option<Vec<String>>,
+        query: &str,
+        scope: ConversationHistoryScope,
         limit: i64,
-    ) -> Result<Vec<TaggedMessage>, PgStorageError> {
-        let rows = if let Some(ref tag_list) = tags {
+        exclude_message_ids: &[i64],
+    ) -> Result<Vec<ConversationHistoryHit>, PgStorageError> {
+        let limit = limit.clamp(1, 50);
+        let notebook_id = self.resolve_session_notebook_id(auth, session_id).await?;
+        let user_id = auth
+            .actor_id()
+            .map(|actor| actor.into_uuid())
+            .ok_or_else(|| PgStorageError::NotFound("authenticated user required".to_string()))?;
+
+        let recent = self.load_recent_user_messages(
+            auth,
+            session_id,
+            notebook_id,
+            user_id,
+            scope,
+            RECENT_CANDIDATE_LIMIT,
+            exclude_message_ids,
+        )
+        .await?;
+
+        let segmented_query = segment_for_fts(query);
+        let fts = if segmented_query.is_empty() {
+            Vec::new()
+        } else {
+            self.search_user_messages_fts(
+                auth,
+                session_id,
+                notebook_id,
+                user_id,
+                scope,
+                &segmented_query,
+                FTS_CANDIDATE_LIMIT,
+                exclude_message_ids,
+            )
+            .await?
+        };
+
+        if fts.is_empty() {
+            return Ok(recent.into_iter().take(limit as usize).collect());
+        }
+
+        let merged = rrf_merge(
+            &[&recent, &fts],
+            |hit: &ConversationHistoryHit| hit.message_id,
+            limit as usize,
+        );
+        Ok(merged)
+    }
+
+    async fn resolve_session_notebook_id(
+        &self,
+        auth: &AuthContext,
+        session_id: Uuid,
+    ) -> Result<Uuid, PgStorageError> {
+        let mut tx = self.pool.begin(auth).await?;
+        let row = sqlx::query(
+            r#"
+            select notebook_id
+            from chat_sessions
+            where id = $1 and org_id = $2
+            "#,
+        )
+        .bind(session_id)
+        .bind(auth.org_id().into_uuid())
+        .fetch_optional(tx.inner())
+        .await?;
+        tx.commit().await?;
+        let notebook_id = row
+            .and_then(|r| r.try_get::<Uuid, _>("notebook_id").ok())
+            .ok_or_else(|| PgStorageError::NotFound("session not found".to_string()))?;
+        Ok(notebook_id)
+    }
+
+    async fn load_recent_user_messages(
+        &self,
+        auth: &AuthContext,
+        session_id: Uuid,
+        notebook_id: Uuid,
+        user_id: Uuid,
+        scope: ConversationHistoryScope,
+        limit: i64,
+        exclude_message_ids: &[i64],
+    ) -> Result<Vec<ConversationHistoryHit>, PgStorageError> {
+        let mut tx = self.pool.begin(auth).await?;
+        let rows = if scope == ConversationHistoryScope::Session {
             sqlx::query(
                 r#"
-                SELECT
-                    m.id as message_id,
-                    m.role,
-                    m.content,
-                    m.created_at,
-                    COALESCE(
-                        ARRAY_AGG(mt.tag) FILTER (WHERE mt.tag IS NOT NULL),
-                        ARRAY[]::TEXT[]
-                    ) as tags
-                FROM chat_messages m
-                LEFT JOIN message_tags mt ON m.id = mt.message_id
-                WHERE m.session_id = $1 AND m.org_id = $2
-                  AND EXISTS (
-                      SELECT 1 FROM message_tags mt2
-                      WHERE mt2.message_id = m.id AND mt2.tag = ANY($3)
-                  )
-                GROUP BY m.id
-                ORDER BY m.id DESC
-                LIMIT $4
-                "#
+                select m.id as message_id, m.session_id, m.role, m.content, m.created_at
+                from chat_messages m
+                where m.org_id = $1
+                  and m.session_id = $2
+                  and m.role = 'user'
+                  and not (m.id = any($3))
+                order by m.id desc
+                limit $4
+                "#,
             )
-            .bind(session_id)
             .bind(auth.org_id().into_uuid())
-            .bind(tag_list)
+            .bind(session_id)
+            .bind(exclude_message_ids)
             .bind(limit)
-            .fetch_all(self.pool.raw())
+            .fetch_all(tx.inner())
             .await?
         } else {
             sqlx::query(
                 r#"
-                SELECT
-                    m.id as message_id,
-                    m.role,
-                    m.content,
-                    m.created_at,
-                    COALESCE(
-                        ARRAY_AGG(mt.tag) FILTER (WHERE mt.tag IS NOT NULL),
-                        ARRAY[]::TEXT[]
-                    ) as tags
-                FROM chat_messages m
-                LEFT JOIN message_tags mt ON m.id = mt.message_id
-                WHERE m.session_id = $1 AND m.org_id = $2
-                GROUP BY m.id
-                ORDER BY m.id DESC
-                LIMIT $3
-                "#
+                select m.id as message_id, m.session_id, m.role, m.content, m.created_at
+                from chat_messages m
+                join chat_sessions s on s.id = m.session_id
+                where m.org_id = $1
+                  and s.notebook_id = $2
+                  and s.user_id = $3
+                  and m.role = 'user'
+                  and not (m.id = any($4))
+                order by m.id desc
+                limit $5
+                "#,
             )
-            .bind(session_id)
             .bind(auth.org_id().into_uuid())
+            .bind(notebook_id)
+            .bind(user_id)
+            .bind(exclude_message_ids)
             .bind(limit)
-            .fetch_all(self.pool.raw())
+            .fetch_all(tx.inner())
             .await?
         };
-
-        let mut messages = Vec::new();
-        for row in rows {
-            let tags: Vec<String> = row.try_get("tags").unwrap_or_default();
-            messages.push(TaggedMessage {
-                message_id: row.try_get("message_id")?,
-                role: row.try_get("role")?,
-                content: row.try_get("content")?,
-                created_at: row.try_get("created_at")?,
-                tags,
-            });
-        }
-        Ok(messages)
-    }
-
-    /// Apply tag operations (add/remove/replace).
-    pub async fn apply_tag_operations(
-        &self,
-        _auth: &AuthContext,
-        operations: Vec<TagOperation>,
-    ) -> Result<(), PgStorageError> {
-        let mut tx = self.pool.raw().begin().await?;
-
-        for op in operations {
-            match op {
-                TagOperation::AddTag { message_id, tag } => {
-                    sqlx::query(
-                        "INSERT INTO message_tags (message_id, tag) VALUES ($1, $2) ON CONFLICT DO NOTHING"
-                    )
-                    .bind(message_id)
-                    .bind(&tag)
-                    .execute(&mut *tx)
-                    .await?;
-                }
-                TagOperation::RemoveTag { message_id, tag } => {
-                    sqlx::query(
-                        "DELETE FROM message_tags WHERE message_id = $1 AND tag = $2"
-                    )
-                    .bind(message_id)
-                    .bind(&tag)
-                    .execute(&mut *tx)
-                    .await?;
-                }
-                TagOperation::ReplaceTags { message_id, tags } => {
-                    sqlx::query("DELETE FROM message_tags WHERE message_id = $1")
-                        .bind(message_id)
-                        .execute(&mut *tx)
-                        .await?;
-                    for tag in tags {
-                        sqlx::query(
-                            "INSERT INTO message_tags (message_id, tag) VALUES ($1, $2) ON CONFLICT DO NOTHING"
-                        )
-                        .bind(message_id)
-                        .bind(&tag)
-                        .execute(&mut *tx)
-                        .await?;
-                    }
-                }
-            }
-        }
-
         tx.commit().await?;
-        Ok(())
+        rows.into_iter().map(map_history_hit).collect()
     }
+
+    async fn search_user_messages_fts(
+        &self,
+        auth: &AuthContext,
+        session_id: Uuid,
+        notebook_id: Uuid,
+        user_id: Uuid,
+        scope: ConversationHistoryScope,
+        segmented_query: &str,
+        limit: i64,
+        exclude_message_ids: &[i64],
+    ) -> Result<Vec<ConversationHistoryHit>, PgStorageError> {
+        let mut tx = self.pool.begin(auth).await?;
+        let rows = if scope == ConversationHistoryScope::Session {
+            sqlx::query(
+                r#"
+                select m.id as message_id, m.session_id, m.role, m.content, m.created_at,
+                       ts_rank_cd(m.search_vector, plainto_tsquery('simple', $3)) as rank
+                from chat_messages m
+                where m.org_id = $1
+                  and m.session_id = $2
+                  and m.role = 'user'
+                  and not (m.id = any($4))
+                  and m.search_vector @@ plainto_tsquery('simple', $3)
+                order by rank desc, m.id desc
+                limit $5
+                "#,
+            )
+            .bind(auth.org_id().into_uuid())
+            .bind(session_id)
+            .bind(segmented_query)
+            .bind(exclude_message_ids)
+            .bind(limit)
+            .fetch_all(tx.inner())
+            .await?
+        } else {
+            sqlx::query(
+                r#"
+                select m.id as message_id, m.session_id, m.role, m.content, m.created_at,
+                       ts_rank_cd(m.search_vector, plainto_tsquery('simple', $4)) as rank
+                from chat_messages m
+                join chat_sessions s on s.id = m.session_id
+                where m.org_id = $1
+                  and s.notebook_id = $2
+                  and s.user_id = $3
+                  and m.role = 'user'
+                  and not (m.id = any($5))
+                  and m.search_vector @@ plainto_tsquery('simple', $4)
+                order by rank desc, m.id desc
+                limit $6
+                "#,
+            )
+            .bind(auth.org_id().into_uuid())
+            .bind(notebook_id)
+            .bind(user_id)
+            .bind(segmented_query)
+            .bind(exclude_message_ids)
+            .bind(limit)
+            .fetch_all(tx.inner())
+            .await?
+        };
+        tx.commit().await?;
+        rows.into_iter().map(map_history_hit).collect()
+    }
+}
+
+fn map_history_hit(row: sqlx::postgres::PgRow) -> Result<ConversationHistoryHit, PgStorageError> {
+    Ok(ConversationHistoryHit {
+        message_id: row.try_get("message_id")?,
+        session_id: row.try_get("session_id")?,
+        role: row.try_get("role")?,
+        content: row.try_get("content")?,
+        created_at: row.try_get("created_at")?,
+    })
+}
+
+pub fn build_user_message_search_tokens(content: &str, resolved_query: Option<&str>) -> String {
+    merge_search_tokens(content, resolved_query)
 }

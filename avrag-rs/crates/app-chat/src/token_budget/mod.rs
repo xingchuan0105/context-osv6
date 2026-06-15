@@ -35,7 +35,6 @@ pub struct Scenario {
     pub mode: &'static str,
     pub query: &'static str,
     pub history: Vec<(&'static str, &'static str)>,
-    pub session_summary: Option<&'static str>,
     pub user_preferences: Option<serde_json::Value>,
     /// Simulated search results (title + snippet).
     pub search_results: Vec<(&'static str, &'static str)>,
@@ -55,7 +54,6 @@ pub fn default_scenarios() -> Vec<Scenario> {
             mode: "chat",
             query: "你好",
             history: vec![],
-            session_summary: None,
             user_preferences: None,
             search_results: vec![],
             rag_chunks: vec![],
@@ -68,7 +66,6 @@ pub fn default_scenarios() -> Vec<Scenario> {
                 ("user", "什么是量子比特？"),
                 ("assistant", "量子比特是量子计算的基本单位..."),
             ],
-            session_summary: Some("User is learning quantum computing basics."),
             user_preferences: Some(serde_json::json!({"style": "concise"})),
             search_results: vec![],
             rag_chunks: vec![],
@@ -78,7 +75,6 @@ pub fn default_scenarios() -> Vec<Scenario> {
             mode: "chat",
             query: "Compare the memory safety guarantees of Rust, Swift, and ATS, focusing on how each language handles dangling pointers and use-after-free. Provide concrete code examples.",
             history: vec![],
-            session_summary: None,
             user_preferences: None,
             search_results: vec![],
             rag_chunks: vec![],
@@ -89,7 +85,6 @@ pub fn default_scenarios() -> Vec<Scenario> {
             mode: "search",
             query: "Rust async runtime comparison",
             history: vec![],
-            session_summary: None,
             user_preferences: None,
             search_results: vec![
                 (
@@ -112,7 +107,6 @@ pub fn default_scenarios() -> Vec<Scenario> {
             mode: "search",
             query: "2026年最新的大语言模型推理优化技术有哪些？对比 DeepSeek、Qwen 和 Gemini 的推理架构差异",
             history: vec![],
-            session_summary: Some("User works on LLM inference optimization."),
             user_preferences: Some(serde_json::json!({"style": "detailed", "language": "zh"})),
             search_results: vec![
                 (
@@ -144,7 +138,6 @@ pub fn default_scenarios() -> Vec<Scenario> {
             mode: "rag",
             query: "这份合同中的违约责任条款是什么？",
             history: vec![],
-            session_summary: None,
             user_preferences: None,
             search_results: vec![],
             rag_chunks: vec![
@@ -164,7 +157,6 @@ pub fn default_scenarios() -> Vec<Scenario> {
                     "该方案采用微服务架构，数据库层使用 PostgreSQL 主从复制...",
                 ),
             ],
-            session_summary: Some("User is reviewing a technical architecture document."),
             user_preferences: Some(
                 serde_json::json!({"style": "structured", "expertise": "senior engineer"}),
             ),
@@ -216,10 +208,6 @@ fn simulate_chat(scenario: &Scenario) -> SimulationResult {
     let mut system = String::from(
         "You are a direct chat assistant. Answer from the current conversation and general knowledge only. Do not invent document or web citations; if the user asks for document evidence or fresh web facts, explain that they should switch to RAG or WebSearch mode.",
     );
-    if let Some(summary) = scenario.session_summary {
-        system.push_str("\n\nSession summary:\n");
-        system.push_str(summary);
-    }
     if let Some(prefs) = scenario.user_preferences.as_ref() {
         system.push_str("\n\nUser preferences:\n");
         system.push_str(&prefs.to_string());
@@ -354,10 +342,6 @@ fn simulate_rag(scenario: &Scenario) -> SimulationResult {
 
         // Add memory to planner system (same as recent change)
         let mut plan_system_text = plan_system.to_string();
-        if let Some(summary) = scenario.session_summary {
-            plan_system_text.push_str("\n\nSession summary:\n");
-            plan_system_text.push_str(summary);
-        }
         if let Some(prefs) = scenario.user_preferences.as_ref() {
             plan_system_text.push_str("\n\nUser preferences:\n");
             plan_system_text.push_str(&prefs.to_string());

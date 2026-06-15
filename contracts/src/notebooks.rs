@@ -61,8 +61,6 @@ pub struct ChatSession {
     pub title: Option<String>,
     pub agent_type: String,
     #[serde(default)]
-    pub summary: Option<String>,
-    #[serde(default)]
     pub pinned: bool,
     pub created_at: String,
     pub updated_at: String,

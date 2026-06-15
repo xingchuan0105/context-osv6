@@ -95,11 +95,9 @@ async fn on_demand_conversation_history_load_returns_pg_messages() {
         .unwrap();
     assert_http_ok(&turn2_http);
 
-    ctx.set_mock_rag_skill_request_memory(true);
-    ctx.set_mock_emit_memory_tool(Some("conversation_history_load"));
     let turn3_http = ctx
         .chat_with_session(
-            "Please recall our earlier discussion.",
+            "Can you give one more example of antifragility?",
             &notebook_id,
             &doc_scope,
             &session_id,
@@ -107,18 +105,31 @@ async fn on_demand_conversation_history_load_returns_pg_messages() {
         .await
         .unwrap();
     assert_http_ok(&turn3_http);
-    let turn3: ChatResponse = turn3_http.into_business().unwrap();
 
-    let history = turn3
+    ctx.set_mock_rag_skill_request_memory(true);
+    ctx.set_mock_emit_memory_tool(Some("conversation_history_load"));
+    let turn4_http = ctx
+        .chat_with_session(
+            "Please recall our earlier discussion about antifragility.",
+            &notebook_id,
+            &doc_scope,
+            &session_id,
+        )
+        .await
+        .unwrap();
+    assert_http_ok(&turn4_http);
+    let turn4: ChatResponse = turn4_http.into_business().unwrap();
+
+    let history = turn4
         .tool_results
         .iter()
         .find(|r| r.tool == "conversation_history_load")
         .expect("conversation_history_load in tool_results");
     assert_eq!(history.status, contracts::chat::ToolStatus::Ok);
-    let data = history.data.as_ref().expect("history tool data");
+    let data: &serde_json::Value = history.data.as_ref().expect("history tool data");
     let message_count = data
         .get("message_count")
-        .and_then(|v| v.as_i64())
+        .and_then(|v: &serde_json::Value| v.as_i64())
         .unwrap_or(0);
     assert!(
         message_count > 0,
@@ -126,12 +137,103 @@ async fn on_demand_conversation_history_load_returns_pg_messages() {
     );
     let messages = data
         .get("messages")
-        .and_then(|v| v.as_array())
+        .and_then(|v: &serde_json::Value| v.as_array())
         .cloned()
         .unwrap_or_default();
     assert!(
         !messages.is_empty(),
         "expected non-empty messages array, got data: {data}"
+    );
+    assert_eq!(
+        data.get("scope").and_then(|v: &serde_json::Value| v.as_str()),
+        Some("notebook"),
+        "expected default notebook scope, got: {data}"
+    );
+}
+
+#[tokio::test]
+async fn notebook_scope_conversation_history_load_spans_sessions() {
+    super::require_smoke_suite();
+    let mut ctx = TestContext::new_smoke_with_rag().await;
+    let (notebook_id, doc_id) = ingest_antifragile(&mut ctx).await;
+    let doc_scope = vec![doc_id];
+
+    let session_a_http = ctx
+        .chat("What is antifragility?", &notebook_id, &doc_scope)
+        .await
+        .unwrap();
+    assert_http_ok(&session_a_http);
+    let session_a: ChatResponse = session_a_http.into_business().unwrap();
+    let session_a = session_a.session_id;
+
+    let search_tokens = ctx
+        .query_latest_user_search_tokens(&session_a)
+        .await
+        .unwrap();
+    assert!(
+        search_tokens.as_ref().is_some_and(|t| !t.trim().is_empty()),
+        "user messages should store jieba search_tokens"
+    );
+
+    let session_b_http = ctx
+        .chat("Start a fresh session in the same notebook.", &notebook_id, &doc_scope)
+        .await
+        .unwrap();
+    assert_http_ok(&session_b_http);
+    let session_b: ChatResponse = session_b_http.into_business().unwrap();
+    let session_b = session_b.session_id;
+    assert_ne!(
+        session_a, session_b,
+        "second chat without session_id should open a new session"
+    );
+
+    ctx.set_mock_rag_skill_request_memory(true);
+    ctx.set_mock_emit_memory_tool(Some("conversation_history_load"));
+    let recall_http = ctx
+        .chat_with_session(
+            "Search notebook history for antifragility.",
+            &notebook_id,
+            &doc_scope,
+            &session_b,
+        )
+        .await
+        .unwrap();
+    assert_http_ok(&recall_http);
+    let recall: ChatResponse = recall_http.into_business().unwrap();
+
+    let history = recall
+        .tool_results
+        .iter()
+        .find(|r| r.tool == "conversation_history_load")
+        .expect("conversation_history_load in tool_results");
+    assert_eq!(history.status, contracts::chat::ToolStatus::Ok);
+    let data: &serde_json::Value = history.data.as_ref().expect("history tool data");
+    assert_eq!(
+        data.get("scope").and_then(|v: &serde_json::Value| v.as_str()),
+        Some("notebook")
+    );
+    let messages = data
+        .get("messages")
+        .and_then(|v: &serde_json::Value| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        !messages.is_empty(),
+        "expected notebook-scoped hits, got: {data}"
+    );
+    let spans_sessions = messages.iter().any(|msg: &serde_json::Value| {
+        msg.get("session_id")
+            .and_then(|v: &serde_json::Value| v.as_str())
+            .is_some_and(|sid| sid == session_a)
+    });
+    let mentions_antifragility = messages.iter().any(|msg: &serde_json::Value| {
+        msg.get("content")
+            .and_then(|v: &serde_json::Value| v.as_str())
+            .is_some_and(|c: &str| c.to_lowercase().contains("antifragil"))
+    });
+    assert!(
+        spans_sessions || mentions_antifragility,
+        "expected cross-session recall from session_a, got: {data}"
     );
 }
 

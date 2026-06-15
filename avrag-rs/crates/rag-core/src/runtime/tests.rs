@@ -57,7 +57,6 @@ fn test_config() -> RagConfig {
 
 fn make_session_context() -> SessionContext {
     SessionContext {
-        summary: Some("The user is discussing Rust ownership rules.".to_string()),
         messages: vec![
             ChatMessage {
                 id: 1,
@@ -526,10 +525,8 @@ async fn plan_without_llm_planner_falls_back_to_default_query_item() {
 }
 
 #[test]
-fn planner_session_context_includes_summary_and_recent_messages() {
+fn planner_session_context_includes_recent_messages() {
     let context = planner::planner_session_context(Some(&make_session_context())).unwrap();
-    assert!(context.contains("Conversation summary:"));
-    assert!(context.contains("Rust ownership rules"));
     assert!(context.contains("user: Can you explain ownership?"));
     assert!(context.contains("assistant: Ownership controls who frees memory."));
 }

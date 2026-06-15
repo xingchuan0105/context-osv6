@@ -15,3 +15,4 @@ thiserror.workspace = true
 url = "2"
 utoipa.workspace = true
 uuid.workspace = true
+jieba-rs = { workspace = true }

@@ -407,7 +407,6 @@ export interface ChatSession {
 	notebook_id: string;
 	title?: string;
 	agent_type: string;
-	summary?: string;
 	pinned?: boolean;
 	created_at: string;
 	updated_at: string;

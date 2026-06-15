@@ -152,7 +152,23 @@ impl TestContext {
         Ok(row)
     }
 
-    /// Latest ingestion task row for debugging E2E failures.
+    /// Latest user message jieba search tokens for a session (post-0043 migration).
+    pub async fn query_latest_user_search_tokens(
+        &self,
+        session_id: &str,
+    ) -> anyhow::Result<Option<String>> {
+        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
+        let sid = Uuid::parse_str(session_id)?;
+        let row: Option<(Option<String>,)> = sqlx::query_as(
+            "SELECT search_tokens FROM chat_messages \
+             WHERE session_id = $1 AND role = 'user' \
+             ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(sid)
+        .fetch_optional(&pool)
+        .await?;
+        Ok(row.and_then(|(tokens,)| tokens))
+    }
     pub async fn query_ingestion_task_debug(
         &self,
         document_id: &str,

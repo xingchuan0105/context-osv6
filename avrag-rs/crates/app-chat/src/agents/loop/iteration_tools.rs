@@ -32,7 +32,7 @@ impl ReActLoop {
             "web_fetch" | "web_search" => {
                 self.dispatch_search(call, auth, session_id).await
             }
-            "conversation_history_load" | "user_profile_load" | "conversation_history_tag"
+            "conversation_history_load" | "user_profile_load"
             | "calculator" | "code_interpreter" | "weather_query" => {
                 self.dispatch_native(call, auth, session_id).await
             }

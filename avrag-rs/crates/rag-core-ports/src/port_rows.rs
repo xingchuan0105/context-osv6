@@ -63,11 +63,18 @@ pub struct UserProfileRow {
     pub inference_version: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ConversationHistoryScope {
+    Session,
+    #[default]
+    Notebook,
+}
+
 #[derive(Debug, Clone)]
-pub struct TaggedMessage {
+pub struct ConversationHistoryHit {
     pub message_id: i64,
+    pub session_id: Uuid,
     pub role: String,
     pub content: String,
     pub created_at: DateTime<Utc>,
-    pub tags: Vec<String>,
 }

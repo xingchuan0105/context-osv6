@@ -2,9 +2,12 @@
 
 use app_core::ChatPersistencePort;
 use avrag_auth::AuthContext;
+use app_core::domain_rows::{ConversationHistoryHit, ConversationHistoryScope};
 use contracts::{ToolResult, ToolStatus};
 use serde_json::Value;
 use uuid::Uuid;
+
+use crate::agents::runtime::MAX_PROMPT_HISTORY_TURNS;
 
 pub async fn conversation_history_load(
     args: &Value,
@@ -12,39 +15,40 @@ pub async fn conversation_history_load(
     session_id: Uuid,
     repo: &dyn ChatPersistencePort,
 ) -> ToolResult {
-    let tags: Option<Vec<String>> = args
-        .get("tags")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect()
-        });
-    let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(20);
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let scope = parse_history_scope(args.get("scope"));
+    let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(20).clamp(1, 50);
+
+    let exclude_ids = collect_excluded_message_ids(repo, auth, session_id).await;
 
     match repo
-        .load_history_by_tags(auth, session_id, tags.clone(), limit)
+        .search_conversation_history(
+            auth,
+            session_id,
+            &query,
+            scope,
+            limit,
+            &exclude_ids,
+        )
         .await
     {
         Ok(messages) => {
+            let scope_label = scope_label(scope);
             let msg_json: Vec<Value> = messages
                 .into_iter()
-                .map(|m| {
-                    serde_json::json!({
-                        "message_id": m.message_id,
-                        "role": m.role,
-                        "content": m.content,
-                        "tags": m.tags,
-                        "created_at": m.created_at.to_rfc3339(),
-                    })
-                })
+                .map(history_hit_json)
                 .collect();
             ToolResult {
                 tool: "conversation_history_load".to_string(),
                 version: "1.0".to_string(),
                 status: ToolStatus::Ok,
                 data: Some(serde_json::json!({
-                    "tags": tags.unwrap_or_default(),
+                    "query": query,
+                    "scope": scope_label,
                     "limit": limit,
                     "message_count": msg_json.len(),
                     "messages": msg_json,
@@ -59,6 +63,56 @@ pub async fn conversation_history_load(
             data: Some(serde_json::json!({ "error": e.to_string() })),
             trace: None,
         },
+    }
+}
+
+fn parse_history_scope(value: Option<&Value>) -> ConversationHistoryScope {
+    match value.and_then(|v| v.as_str()).map(str::trim).map(str::to_lowercase) {
+        Some(scope) if scope == "session" => ConversationHistoryScope::Session,
+        _ => ConversationHistoryScope::Notebook,
+    }
+}
+
+fn scope_label(scope: ConversationHistoryScope) -> &'static str {
+    match scope {
+        ConversationHistoryScope::Session => "session",
+        ConversationHistoryScope::Notebook => "notebook",
+    }
+}
+
+fn history_hit_json(hit: ConversationHistoryHit) -> Value {
+    serde_json::json!({
+        "message_id": hit.message_id,
+        "session_id": hit.session_id.to_string(),
+        "role": hit.role,
+        "content": hit.content,
+        "created_at": hit.created_at.to_rfc3339(),
+    })
+}
+
+async fn collect_excluded_message_ids(
+    repo: &dyn ChatPersistencePort,
+    auth: &AuthContext,
+    session_id: Uuid,
+) -> Vec<i64> {
+    match repo.list_messages(auth, session_id).await {
+        Ok(messages) => {
+            let mut ids: Vec<i64> = messages
+                .into_iter()
+                .filter(|m| m.role == "user")
+                .map(|m| m.id)
+                .collect();
+            // Mirror runtime injection: current query + last MAX prior user turns.
+            // If the in-flight user row is already persisted, drop the latest before taking priors.
+            if ids.len() > MAX_PROMPT_HISTORY_TURNS + 1 {
+                ids.pop();
+            }
+            if ids.len() > MAX_PROMPT_HISTORY_TURNS {
+                ids = ids.split_off(ids.len() - MAX_PROMPT_HISTORY_TURNS);
+            }
+            ids
+        }
+        Err(_) => Vec::new(),
     }
 }
 
@@ -98,11 +152,11 @@ pub async fn user_profile_load(
             version,
             status: ToolStatus::Ok,
             data: Some(serde_json::json!({
-                "structured_profile": {},
+                "structured_profile": serde_json::json!({}),
                 "expertise_domains": [],
                 "preferred_answer_style": null,
                 "frequently_asked_topics": [],
-                "custom_preferences": {},
+                "custom_preferences": serde_json::json!({}),
             })),
             trace: None,
         },

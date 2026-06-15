@@ -59,7 +59,7 @@ impl ChatContext {
             return Ok(None);
         }
 
-        Ok(Self::build_rag_session_context(messages, None))
+        Ok(Self::build_rag_session_context(messages))
     }
 
     pub async fn get_notebook(&self, notebook_id: &str) -> Option<contracts::notebooks::Notebook> {

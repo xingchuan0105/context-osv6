@@ -110,7 +110,8 @@ fn mock_memory_tool_call(tool: &str) -> Option<serde_json::Value> {
     let (id, arguments) = match tool {
         "conversation_history_load" => (
             "call_mem_history_0",
-            serde_json::to_string(&json!({"limit": 20})).unwrap_or_else(|_| "{}".to_string()),
+            serde_json::to_string(&json!({"query": "antifragility", "scope": "notebook", "limit": 20}))
+                .unwrap_or_else(|_| "{}".to_string()),
         ),
         "user_profile_load" => ("call_mem_profile_0", "{}".to_string()),
         _ => return None,

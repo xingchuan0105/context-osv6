@@ -1115,6 +1115,102 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn search_conversation_history_notebook_scope_spans_sessions_when_database_available() {
+        let Some(database_url) = env::var("DATABASE_URL").ok() else {
+            return;
+        };
+        let repo = PgAppRepository::connect(&database_url).await.unwrap();
+        repo.migrate().await.unwrap();
+
+        let org_id = OrgId::from(Uuid::new_v4());
+        let user_id = Uuid::new_v4();
+        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+            .with_actor_id(ActorId::new(user_id));
+
+        let notebook = repo
+            .create_notebook(&ctx, "memory-search", "memory search test")
+            .await
+            .unwrap();
+        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+
+        let session_a = repo
+            .create_session(&ctx, notebook_id, Some("session-a"), "rag")
+            .await
+            .unwrap();
+        let session_a_id = Uuid::parse_str(&session_a.id).unwrap();
+        let session_b = repo
+            .create_session(&ctx, notebook_id, Some("session-b"), "rag")
+            .await
+            .unwrap();
+        let session_b_id = Uuid::parse_str(&session_b.id).unwrap();
+
+        repo.append_chat_turn(
+            &ctx,
+            session_a_id,
+            ChatTurn {
+                user_content: "What is antifragility?",
+                assistant_content: "Antifragility gains from disorder.",
+                assistant_answer_blocks: &[],
+                agent_type: "rag",
+                citations: &[],
+                tool_results: &[],
+                user_turn_metadata: None,
+                user_resolved_query: Some("What is antifragility?"),
+            },
+        )
+        .await
+        .unwrap();
+
+        repo.append_chat_turn(
+            &ctx,
+            session_b_id,
+            ChatTurn {
+                user_content: "Open a second session.",
+                assistant_content: "Sure.",
+                assistant_answer_blocks: &[],
+                agent_type: "rag",
+                citations: &[],
+                tool_results: &[],
+                user_turn_metadata: None,
+                user_resolved_query: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let tokens_row: Option<(Option<String>,)> = sqlx::query_as(
+            "SELECT search_tokens FROM chat_messages WHERE session_id = $1 AND role = 'user' ORDER BY id DESC LIMIT 1",
+        )
+        .bind(session_a_id)
+        .fetch_optional(repo.raw())
+        .await
+        .unwrap();
+        assert!(
+            tokens_row
+                .and_then(|(t,)| t)
+                .is_some_and(|t| !t.trim().is_empty()),
+            "search_tokens should be populated on insert"
+        );
+
+        let hits = repo
+            .search_conversation_history(
+                &ctx,
+                session_b_id,
+                "antifragility",
+                ConversationHistoryScope::Notebook,
+                10,
+                &[],
+            )
+            .await
+            .unwrap();
+
+        assert!(
+            hits.iter().any(|hit| hit.session_id == session_a_id),
+            "notebook scope should return messages from another session in the same notebook"
+        );
+    }
+
+    #[tokio::test]
     async fn get_notebook_returns_none_for_other_org_when_database_available() {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;

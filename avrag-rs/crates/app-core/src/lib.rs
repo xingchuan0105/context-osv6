@@ -71,7 +71,7 @@ pub use document_store::DocumentStorePort;
 pub use domain_rows::{
     DocumentAssetRow, DocumentDeletionOutcome, DocumentScopeState, DocumentTaskSeed,
     DocumentUploadMutationOutcome, DocumentUploadQueueOutcome, IndexedChunk, MultimodalChunkRow,
-    NotificationCreateParams, TaggedMessage, UserProfileRow,
+    NotificationCreateParams, ConversationHistoryHit, ConversationHistoryScope, UserProfileRow,
 };
 pub use storage_context::StorageContext;
 

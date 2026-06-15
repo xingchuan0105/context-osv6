@@ -7,7 +7,8 @@ use ingestion_types::AuditRecord;
 use uuid::Uuid;
 
 use crate::port_rows::{
-    DocumentAssetRow, MultimodalChunkRow, NotificationCreateParams, TaggedMessage, UserProfileRow,
+    ConversationHistoryHit, ConversationHistoryScope, DocumentAssetRow, MultimodalChunkRow,
+    NotificationCreateParams, UserProfileRow,
 };
 
 /// User + assistant turn persisted as one atomic chat write.
@@ -105,13 +106,15 @@ pub trait ChatPersistencePort: Send + Sync {
         user_id: Uuid,
     ) -> Result<Option<UserProfileRow>, AppError>;
 
-    async fn load_history_by_tags(
+    async fn search_conversation_history(
         &self,
         auth: &AuthContext,
         session_id: Uuid,
-        tags: Option<Vec<String>>,
+        query: &str,
+        scope: ConversationHistoryScope,
         limit: i64,
-    ) -> Result<Vec<TaggedMessage>, AppError>;
+        exclude_message_ids: &[i64],
+    ) -> Result<Vec<ConversationHistoryHit>, AppError>;
 
     async fn create_notification(
         &self,
@@ -152,13 +155,6 @@ pub trait ChatPersistencePort: Send + Sync {
         auth: &AuthContext,
         doc_ids: &[Uuid],
     ) -> Result<Vec<common::SummaryMetadata>, AppError>;
-
-    async fn update_session_summary(
-        &self,
-        auth: &AuthContext,
-        session_id: Uuid,
-        summary: &str,
-    ) -> Result<(), AppError>;
 
     async fn upsert_user_profile(
         &self,

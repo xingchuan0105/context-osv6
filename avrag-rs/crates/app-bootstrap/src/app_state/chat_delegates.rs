@@ -155,8 +155,7 @@ impl AppState {
 
     pub fn build_rag_session_context(
         messages: Vec<contracts::chat::ChatMessage>,
-        summary: Option<String>,
     ) -> Option<avrag_rag_core::context::SessionContext> {
-        app_chat::ChatContext::build_rag_session_context(messages, summary)
+        app_chat::ChatContext::build_rag_session_context(messages)
     }
 }

@@ -122,7 +122,7 @@ function extractSessionTitleFromMessages(messages: WorkspaceChatMessage[]) {
 
 function buildSearchSnippet(session: WorkspaceSession, query: string, documentText: string) {
   const normalizedQuery = normalizeSearchText(query);
-  const candidates = [documentText, session.summary ?? "", session.title ?? ""]
+  const candidates = [documentText, session.title ?? ""]
     .map(collapseWhitespace)
     .filter(Boolean);
 
@@ -210,9 +210,7 @@ export function WorkspaceHistoryPane({
       .map((session) => {
         const title = session.title?.trim() || derivedSessionTitles[session.id] || "";
         const documentText = searchDocuments[session.id]?.text ?? "";
-        const searchableText = normalizeSearchText(
-          [title, session.summary ?? "", documentText].join(" "),
-        );
+        const searchableText = normalizeSearchText([title, documentText].join(" "));
 
         if (!searchableText.includes(normalizedQuery)) {
           return null;

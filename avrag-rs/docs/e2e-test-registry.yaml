@@ -1200,6 +1200,20 @@ tests:
       - I
     parallel_group: G-serial-rag
     ci_default: true
+  - id: product_e2e::smoke::memory_multiturn_smoke::notebook_scope_conversation_history_load_spans_sessions
+    layer: L1
+    module: memory_multiturn_smoke
+    suite: smoke
+    capabilities:
+      - CAP-MEMORY
+    evidence:
+      - E-P
+      - E-Prod
+    deps:
+      - M
+      - I
+    parallel_group: G-serial-rag
+    ci_default: true
   - id: product_e2e::smoke::memory_multiturn_smoke::on_demand_user_profile_load_returns_profile_shape
     layer: L1
     module: memory_multiturn_smoke

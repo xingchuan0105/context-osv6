@@ -1,6 +1,9 @@
 use avrag_auth::{ActorId, AuthContext, AuthError, OrgId};
 use chrono::{DateTime, Utc};
-use common::{ApiKeyRow, Document, DocumentContentResponse, NotificationRow, ParsedPreviewItem, ParsedPreviewResponse, SourceRow};
+use common::{
+    merge_search_tokens, rrf_merge, segment_for_fts, ApiKeyRow, Document, DocumentContentResponse,
+    NotificationRow, ParsedPreviewItem, ParsedPreviewResponse, SourceRow,
+};
 use contracts::chat::{ChatMessage, Citation};
 use contracts::documents::{DocumentStatus};
 use contracts::notebooks::{ChatSession, Notebook};

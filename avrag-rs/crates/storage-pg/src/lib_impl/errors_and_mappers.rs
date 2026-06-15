@@ -196,7 +196,6 @@ fn map_session(row: PgRow) -> Result<ChatSession, PgStorageError> {
     let notebook_id: Uuid = row.try_get("notebook_id")?;
     let title: Option<String> = row.try_get("title")?;
     let agent_type: String = row.try_get("agent_type")?;
-    let summary: Option<String> = row.try_get("summary").ok();
     let pinned: bool = row.try_get("pinned").unwrap_or(false);
     let created_at: DateTime<Utc> = row.try_get("created_at")?;
     let updated_at: DateTime<Utc> = row.try_get("updated_at")?;
@@ -205,7 +204,6 @@ fn map_session(row: PgRow) -> Result<ChatSession, PgStorageError> {
         notebook_id: notebook_id.to_string(),
         title,
         agent_type,
-        summary,
         pinned,
         created_at: created_at.to_rfc3339(),
         updated_at: updated_at.to_rfc3339(),

@@ -121,31 +121,27 @@ use contracts::notebooks::{Notebook};
     }
 
     #[test]
-    fn build_rag_session_context_drops_blank_summary_and_empty_payload() {
-        assert!(AppState::build_rag_session_context(Vec::new(), Some("   ".to_string())).is_none());
+    fn build_rag_session_context_returns_none_for_empty_messages() {
+        assert!(AppState::build_rag_session_context(Vec::new()).is_none());
 
-        let context = AppState::build_rag_session_context(
-            vec![ChatMessage {
-                id: 1,
-                session_id: "s1".to_string(),
-                role: "user".to_string(),
-                content: "hello".to_string(),
-                answer_blocks: Vec::new(),
-                agent_id: None,
-                agent_name: None,
-                agent_icon: None,
-                citations: Vec::new(),
-                tool_results: Vec::new(),
-                turn_metadata: None,
-                resolved_query: None,
-                created_at: "2026-03-25T00:00:00Z".to_string(),
-            }],
-            Some("  carry this forward  ".to_string()),
-        )
+        let context = AppState::build_rag_session_context(vec![ChatMessage {
+            id: 1,
+            session_id: "s1".to_string(),
+            role: "user".to_string(),
+            content: "hello".to_string(),
+            answer_blocks: Vec::new(),
+            agent_id: None,
+            agent_name: None,
+            agent_icon: None,
+            citations: Vec::new(),
+            tool_results: Vec::new(),
+            turn_metadata: None,
+            resolved_query: None,
+            created_at: "2026-03-25T00:00:00Z".to_string(),
+        }])
         .unwrap();
 
         assert_eq!(context.messages.len(), 1);
-        assert_eq!(context.summary.as_deref(), Some("carry this forward"));
     }
 
     #[test]

@@ -290,14 +290,6 @@ pub(super) fn planner_session_context(session_context: Option<&SessionContext>) 
     let session_context = session_context?;
 
     let mut parts = Vec::new();
-    if let Some(summary) = session_context
-        .summary
-        .as_deref()
-        .map(str::trim)
-        .filter(|summary| !summary.is_empty())
-    {
-        parts.push(format!("Conversation summary:\n{summary}"));
-    }
 
     let recent_messages = session_context
         .messages

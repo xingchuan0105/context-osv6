@@ -10,15 +10,11 @@ use crate::context::ChatContext;
 impl ChatContext {
     pub fn build_rag_session_context(
         messages: Vec<ChatMessage>,
-        summary: Option<String>,
     ) -> Option<RagSessionContext> {
-        let summary = summary
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty());
-        if messages.is_empty() && summary.is_none() {
+        if messages.is_empty() {
             None
         } else {
-            Some(RagSessionContext { messages, summary })
+            Some(RagSessionContext { messages })
         }
     }
 

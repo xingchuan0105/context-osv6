@@ -126,7 +126,6 @@ use contracts::notebooks::{ChatSession, Notebook};
             notebook_id: "notebook-1".to_string(),
             title: None,
             agent_type: agent_type.to_string(),
-            summary: None,
             pinned: false,
             created_at: now.clone(),
             updated_at: now,

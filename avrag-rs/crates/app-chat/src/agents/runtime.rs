@@ -143,8 +143,8 @@ impl AgentTrace {
     }
 }
 
-/// Guaranteed recent user turns injected unconditionally (memory floor).
-pub const MAX_PROMPT_HISTORY_TURNS: usize = 3;
+/// Guaranteed recent user turns injected unconditionally (memory floor): current query + 2 prior.
+pub const MAX_PROMPT_HISTORY_TURNS: usize = 2;
 
 /// Return the most recent `max_turns` messages from the history slice.
 pub fn recent_messages(messages: &[ChatTurnInput], max_turns: usize) -> &[ChatTurnInput] {
@@ -606,9 +606,9 @@ mod tests {
             })
             .collect();
         let recent = super::recent_messages(&messages, super::MAX_PROMPT_HISTORY_TURNS);
-        assert_eq!(recent.len(), 3);
-        assert_eq!(recent[0].content, "msg-9");
-        assert_eq!(recent[2].content, "msg-11");
+        assert_eq!(recent.len(), 2);
+        assert_eq!(recent[0].content, "msg-10");
+        assert_eq!(recent[1].content, "msg-11");
     }
 
     #[test]

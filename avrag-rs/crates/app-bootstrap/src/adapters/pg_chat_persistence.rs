@@ -4,13 +4,13 @@ use async_trait::async_trait;
 use app_core::{
     chat_persistence::{AppendChatTurn, ChatPersistencePort},
     domain_rows::{
-        DocumentAssetRow, IndexedChunk, MultimodalChunkRow, NotificationCreateParams, TaggedMessage,
-        UserProfileRow,
+        ConversationHistoryHit, ConversationHistoryScope, DocumentAssetRow, IndexedChunk,
+        MultimodalChunkRow, NotificationCreateParams, UserProfileRow,
     },
 };
 use crate::domain_row_convert::{
-    document_asset_row, indexed_chunk, multimodal_chunk_row, notification_create_params,
-    tagged_message, user_profile_row, user_profile_row_to_pg,
+    conversation_history_hit, document_asset_row, indexed_chunk, multimodal_chunk_row,
+    notification_create_params, user_profile_row, user_profile_row_to_pg,
 };
 use crate::pg_error::map_pg_error;
 use avrag_auth::AuthContext;
@@ -192,18 +192,35 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
             .map(|profile| profile.map(user_profile_row))
     }
 
-    async fn load_history_by_tags(
+    async fn search_conversation_history(
         &self,
         auth: &AuthContext,
         session_id: Uuid,
-        tags: Option<Vec<String>>,
+        query: &str,
+        scope: ConversationHistoryScope,
         limit: i64,
-    ) -> Result<Vec<TaggedMessage>, AppError> {
+        exclude_message_ids: &[i64],
+    ) -> Result<Vec<ConversationHistoryHit>, AppError> {
+        let pg_scope = match scope {
+            ConversationHistoryScope::Session => {
+                avrag_storage_pg::ConversationHistoryScope::Session
+            }
+            ConversationHistoryScope::Notebook => {
+                avrag_storage_pg::ConversationHistoryScope::Notebook
+            }
+        };
         self.repo
-            .load_history_by_tags(auth, session_id, tags, limit)
+            .search_conversation_history(
+                auth,
+                session_id,
+                query,
+                pg_scope,
+                limit,
+                exclude_message_ids,
+            )
             .await
             .map_err(map_pg_error)
-            .map(|rows| rows.into_iter().map(tagged_message).collect())
+            .map(|rows| rows.into_iter().map(conversation_history_hit).collect())
     }
 
     async fn create_notification(
@@ -281,18 +298,6 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
     ) -> Result<Vec<common::SummaryMetadata>, AppError> {
         self.repo
             .get_summary_metadata(auth, doc_ids)
-            .await
-            .map_err(map_pg_error)
-    }
-
-    async fn update_session_summary(
-        &self,
-        auth: &AuthContext,
-        session_id: Uuid,
-        summary: &str,
-    ) -> Result<(), AppError> {
-        self.repo
-            .update_session_summary(auth, session_id, summary)
             .await
             .map_err(map_pg_error)
     }

@@ -84,7 +84,12 @@ impl AgentPreferenceConsolidationJobRunner {
                  and profiles.user_id = sessions.user_id
                 where sessions.org_id = $1
                   and sessions.user_id is not null
-                  and sessions.summary is not null
+                  and exists (
+                    select 1
+                    from chat_messages messages
+                    where messages.session_id = sessions.id
+                      and messages.role = 'user'
+                  )
                 "#,
             )
             .bind(org_id)
@@ -115,15 +120,16 @@ impl AgentPreferenceConsolidationJobRunner {
                         }
                     });
 
-                let summaries = sqlx::query(
+                let user_messages = sqlx::query(
                     r#"
-                    select summary
-                    from chat_sessions
-                    where org_id = $1
-                      and user_id = $2
-                      and summary is not null
-                      and updated_at > $3
-                    order by updated_at asc
+                    select messages.content
+                    from chat_messages messages
+                    join chat_sessions sessions on sessions.id = messages.session_id
+                    where sessions.org_id = $1
+                      and sessions.user_id = $2
+                      and messages.role = 'user'
+                      and messages.created_at > $3
+                    order by messages.created_at asc
                     "#,
                 )
                 .bind(org_id)
@@ -132,12 +138,12 @@ impl AgentPreferenceConsolidationJobRunner {
                 .fetch_all(tx.as_mut())
                 .await?
                 .into_iter()
-                .filter_map(|row| row.try_get::<Option<String>, _>("summary").ok().flatten())
+                .filter_map(|row| row.try_get::<String, _>("content").ok())
                 .collect::<Vec<_>>();
 
-                let additions = summaries
+                let additions = user_messages
                     .iter()
-                    .flat_map(|summary| extract_explicit_interaction_preferences(summary))
+                    .flat_map(|content| extract_explicit_interaction_preferences(content))
                     .filter(|text| !is_existing_or_blocked(&preferences, text))
                     .collect::<Vec<_>>();
 
@@ -148,7 +154,7 @@ impl AgentPreferenceConsolidationJobRunner {
                         text: text.clone(),
                         category: "interaction".to_string(),
                         scope: "global".to_string(),
-                        confidence: "explicit_summary".to_string(),
+                        confidence: "explicit_message".to_string(),
                         source: "daily_consolidation".to_string(),
                         updated_at: now_text.clone(),
                     });
@@ -194,8 +200,8 @@ impl AgentPreferenceConsolidationJobRunner {
     }
 }
 
-fn extract_explicit_interaction_preferences(summary: &str) -> Vec<String> {
-    summary
+fn extract_explicit_interaction_preferences(text: &str) -> Vec<String> {
+    text
         .lines()
         .filter_map(explicit_agent_preference_text)
         .collect()

@@ -34,7 +34,7 @@ impl PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select id, notebook_id, title, agent_type, COALESCE(summary, NULL) as summary, pinned, created_at, updated_at
+            select id, notebook_id, title, agent_type, pinned, created_at, updated_at
             from chat_sessions
             where ($1::uuid is null or notebook_id = $1)
             order by pinned desc, updated_at desc, created_at desc
@@ -55,7 +55,7 @@ impl PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, notebook_id, title, agent_type, COALESCE(summary, NULL) as summary, pinned, created_at, updated_at
+            select id, notebook_id, title, agent_type, pinned, created_at, updated_at
             from chat_sessions
             where id = $1
             "#,
@@ -65,28 +65,6 @@ impl PgAppRepository {
         .await?;
         tx.commit().await?;
         row.map(map_session).transpose()
-    }
-
-    pub async fn update_session_summary(
-        &self,
-        context: &AuthContext,
-        session_id: Uuid,
-        summary: &str,
-    ) -> Result<(), PgStorageError> {
-        let mut tx = self.pool.begin(context).await?;
-        sqlx::query(
-            r#"
-            update chat_sessions
-            set summary = $1, updated_at = now()
-            where id = $2
-            "#,
-        )
-        .bind(summary)
-        .bind(session_id)
-        .execute(tx.inner())
-        .await?;
-        tx.commit().await?;
-        Ok(())
     }
 
     pub async fn update_session(
@@ -104,7 +82,7 @@ impl PgAppRepository {
                 pinned = COALESCE($3, pinned),
                 updated_at = now()
             where id = $1
-            returning id, notebook_id, title, agent_type, COALESCE(summary, NULL) as summary, pinned, created_at, updated_at
+            returning id, notebook_id, title, agent_type, pinned, created_at, updated_at
             "#,
         )
         .bind(session_id)
@@ -129,7 +107,7 @@ impl PgAppRepository {
             r#"
             insert into chat_sessions (org_id, notebook_id, user_id, title, agent_type)
             values ($1, $2, $3, $4, $5)
-            returning id, notebook_id, title, agent_type, summary, pinned, created_at, updated_at
+            returning id, notebook_id, title, agent_type, pinned, created_at, updated_at
             "#,
         )
         .bind(context.org_id().into_uuid())
@@ -193,10 +171,14 @@ impl PgAppRepository {
             .user_turn_metadata
             .clone()
             .unwrap_or_else(|| json!({}));
+        let search_tokens = crate::build_user_message_search_tokens(
+            turn.user_content,
+            turn.user_resolved_query,
+        );
         sqlx::query(
             r#"
-            insert into chat_messages (org_id, session_id, role, content, citations, turn_metadata, resolved_query)
-            values ($1, $2, 'user', $3, '[]'::jsonb, $4, $5)
+            insert into chat_messages (org_id, session_id, role, content, citations, turn_metadata, resolved_query, search_tokens)
+            values ($1, $2, 'user', $3, '[]'::jsonb, $4, $5, $6)
             "#,
         )
         .bind(context.org_id().into_uuid())
@@ -204,6 +186,7 @@ impl PgAppRepository {
         .bind(turn.user_content)
         .bind(user_turn_metadata)
         .bind(turn.user_resolved_query)
+        .bind(search_tokens)
         .execute(tx.inner())
         .await?;
 
@@ -919,7 +902,7 @@ impl PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select id, notebook_id, title, agent_type, COALESCE(summary, NULL) as summary, pinned, created_at, updated_at
+            select id, notebook_id, title, agent_type, pinned, created_at, updated_at
             from chat_sessions
             where title ilike $1
             order by updated_at desc, created_at desc

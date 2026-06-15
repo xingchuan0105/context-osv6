@@ -10,8 +10,6 @@ use crate::retrieval::ScoredChunk;
 pub struct SessionContext {
     /// Recent chat messages in the session
     pub messages: Vec<ChatMessage>,
-    /// Optional summary of the conversation
-    pub summary: Option<String>,
 }
 
 /// Citation validation result

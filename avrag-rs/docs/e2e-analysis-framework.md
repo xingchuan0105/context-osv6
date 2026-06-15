@@ -25,7 +25,7 @@
 4. **最小归因链**：失败先判「基础设施 flake → 断言 → 工具 → LLM → 渲染」，与 `e2e-analyzer` 归因优先级一致。
 5. **机读 + 人读**：`e2e-test-registry.yaml` 供脚本/Agent 查询；Markdown 供人工决策。
 
-**Staging 入库（非 PR）**：[`scripts/run-staging-ingest-e2e.sh`](../scripts/run-staging-ingest-e2e.sh) — LiteParse PDF、docx（LibreOffice）、真实 Office xlsx、Black Swan Paddle PDF、可选本地大书 llm_real。
+**Staging 入库（非 PR）**：[`scripts/run-staging-ingest-e2e.sh`](../scripts/run-staging-ingest-e2e.sh) — LiteParse PDF、docx/xlsx office-parser、Black Swan Paddle PDF、可选本地大书 llm_real。
 
 ---
 

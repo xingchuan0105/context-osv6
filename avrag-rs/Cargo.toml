@@ -85,3 +85,4 @@ rayon = "1.12"
 sea-query = { version = "0.32", features = ["backend-postgres", "with-chrono", "with-uuid"] }
 syn = { version = "2.0", features = ["full", "extra-traits"] }
 evalexpr = "11"
+jieba-rs = "0.7"

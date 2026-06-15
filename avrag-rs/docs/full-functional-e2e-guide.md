@@ -69,7 +69,7 @@
 | **真实 Chat（端到端）** | 浏览器发消息；历史持久化；模式指示器 | `journey/workspace-chat.spec.ts`（general） | L5 | R+I | Playwright 项目内串行 |
 | 流式 SSE 契约 | 事件顺序、`done` 载荷 | `transport-http` `chat_stream_contract` | L6 | 轻量 | 并行 |
 | 流式可观测性 | reasoning delta、trace、debug prompt_snapshot | `integration::streaming_chat`（6，含断线取消/重连） | L2 | M+I | **G-serial-integration** |
-| 多轮记忆 / 指代 | `resolved_query` 写 PG；memory tool | `smoke::memory_multiturn_smoke`（4） | L1 | M+I | **G-serial-rag** |
+| 多轮记忆 / 指代 | `resolved_query` 写 PG；memory tool；notebook 跨 session 检索 | `smoke::memory_multiturn_smoke`（5） | L1 | M+I | **G-serial-rag** |
 | 多轮（真实 LLM） | 第二轮引用第一轮上下文 | `llm_real::multi_turn` | L3 | R+I | **G-serial-llm** |
 | 格式输出 HTML | 有效 HTML 结构 | `integration::format_output`；`llm_real::format_real` | L2/L3 | M / R | integration 串行 |
 

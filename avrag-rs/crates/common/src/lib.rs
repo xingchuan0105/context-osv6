@@ -14,6 +14,7 @@ pub mod identity;
 pub mod key_vault;
 pub mod notebook_requests;
 pub mod ssrf;
+pub mod text_segment;
 pub mod util;
 
 pub use chat::{
@@ -36,6 +37,7 @@ pub use identity::{OrgId, UserId, default_org_id, default_rag_agent, default_use
 pub use notebook_requests::{CreateNotebookRequest, UpdateNotebookRequest};
 pub use content_store::{ContentStore, ContentStoreError, IndexedChunk};
 pub use ssrf::{validate_http_url, validate_http_url_with_dns, SsrfError};
+pub use text_segment::{merge_search_tokens, rrf_merge, segment_for_fts};
 pub use util::{
     estimate_token_count, infer_image_extension, infer_mime_type, is_remote_url, new_id,
     now_rfc3339,

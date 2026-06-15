@@ -1,7 +1,7 @@
 use app_core::domain_rows::{
     DocumentAssetRow, DocumentDeletionOutcome, DocumentScopeState, DocumentTaskSeed,
     DocumentUploadMutationOutcome, DocumentUploadQueueOutcome, IndexedChunk, MultimodalChunkRow,
-    NotificationCreateParams, TaggedMessage, UserProfileRow,
+    NotificationCreateParams, ConversationHistoryHit, UserProfileRow,
 };
 
 pub fn document_task_seed(value: avrag_storage_pg::DocumentTaskSeed) -> DocumentTaskSeed {
@@ -101,13 +101,15 @@ pub fn user_profile_row(value: avrag_storage_pg::UserProfileRow) -> UserProfileR
     }
 }
 
-pub fn tagged_message(value: avrag_storage_pg::TaggedMessage) -> TaggedMessage {
-    TaggedMessage {
+pub fn conversation_history_hit(
+    value: avrag_storage_pg::ConversationHistoryHit,
+) -> ConversationHistoryHit {
+    ConversationHistoryHit {
         message_id: value.message_id,
+        session_id: value.session_id,
         role: value.role,
         content: value.content,
         created_at: value.created_at,
-        tags: value.tags,
     }
 }
 

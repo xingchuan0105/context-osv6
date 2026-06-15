@@ -21,7 +21,6 @@ impl ChatSessionStore for MemoryChatSessionStore {
                 .unwrap_or_else(|| "nb-1".to_string()),
             title: Some("Chat".to_string()),
             agent_type: req.agent_type.clone(),
-            summary: None,
             pinned: false,
             created_at: now_rfc3339(),
             updated_at: now_rfc3339(),
