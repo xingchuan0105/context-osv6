@@ -893,25 +893,49 @@ impl PgAppRepository {
         rows.into_iter().map(map_notebook).collect()
     }
 
-    /// Global search: chat sessions by title using ILIKE.
+    /// Global search: chat sessions by title (ILIKE) or user message body (FTS).
     pub async fn search_sessions(
         &self,
         context: &AuthContext,
         pattern: &str,
     ) -> Result<Vec<ChatSession>, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
-        let rows = sqlx::query(
-            r#"
-            select id, notebook_id, title, agent_type, pinned, created_at, updated_at
-            from chat_sessions
-            where title ilike $1
-            order by updated_at desc, created_at desc
-            limit 50
-            "#,
-        )
-        .bind(pattern)
-        .fetch_all(tx.inner())
-        .await?;
+        let segmented_query = common::segment_for_fts(pattern.trim_matches('%'));
+        let rows = if segmented_query.is_empty() {
+            sqlx::query(
+                r#"
+                select id, notebook_id, title, agent_type, pinned, created_at, updated_at
+                from chat_sessions
+                where title ilike $1
+                order by updated_at desc, created_at desc
+                limit 50
+                "#,
+            )
+            .bind(pattern)
+            .fetch_all(tx.inner())
+            .await?
+        } else {
+            sqlx::query(
+                r#"
+                select distinct s.id, s.notebook_id, s.title, s.agent_type, s.pinned, s.created_at, s.updated_at
+                from chat_sessions s
+                where s.title ilike $1
+                   or exists (
+                       select 1
+                       from chat_messages m
+                       where m.session_id = s.id
+                         and m.role = 'user'
+                         and m.search_vector @@ plainto_tsquery('simple', $2)
+                   )
+                order by s.updated_at desc, s.created_at desc
+                limit 50
+                "#,
+            )
+            .bind(pattern)
+            .bind(&segmented_query)
+            .fetch_all(tx.inner())
+            .await?
+        };
         tx.commit().await?;
         rows.into_iter().map(map_session).collect()
     }

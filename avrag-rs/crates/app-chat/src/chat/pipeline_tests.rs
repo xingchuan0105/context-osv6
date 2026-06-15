@@ -170,7 +170,7 @@ use contracts::notebooks::{ChatSession, Notebook};
     }
 
     #[tokio::test]
-    async fn dispatch_rag_with_memory_adapters_uses_memory_chat_compat() {
+    async fn dispatch_rag_with_notebook_docscope_runs_rag_pipeline() {
         let notebook_id = new_id();
         let notebook = Notebook {
             id: notebook_id.clone(),
