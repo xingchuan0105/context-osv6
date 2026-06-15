@@ -498,7 +498,7 @@ Job 预算耗尽
 | **P1** | A/B 类：LiteParse 抽字 + 抠图 MM | ✅ 已完成 |
 | **P2** | C/D 类：`PaddleJobsOcrService` 按页 Job；§9 合并 | ✅ 已完成 |
 | **P4** | 删 MinerU、全量 LiteParse、png→Paddle、删 shadow/rollout | ✅ 已完成 |
-| **P5** | 监控大盘、扩展 E2E 样本；M3/M5 技术债 | 进行中 |
+| **P5** | 监控大盘、扩展 E2E 样本；M3/M5 技术债 | M3/M5 ✅（2026-06-15）；监控大盘与更多 E2E 样本待办 |
 
 > **历史说明：** 原计划 P2.5（Shadow）与 P3（灰度）已跳过，直接以 product E2E 门禁进入 P4。见 [archive/p4-mineru-shadow-migration-historical.md](./archive/p4-mineru-shadow-migration-historical.md)。
 

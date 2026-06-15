@@ -93,7 +93,7 @@
 |3.1|直接对话 (无检索)|✅|`app/src/agents/chat\_agent.rs`|
 |3.2|SSE 流式响应|✅|`transport-http/src/handlers.rs` `sse\_response\_from\_receiver`|
 |3.3|非流式响应|✅|`chat\_post\_handler` 支持两种模式|
-|3.4|三层记忆 (L1/L2/L3)|✅|L1 `ChatMemory::load`, L2 `update_summary`, L3 `update_user_profile`；L3 24h throttle `chat_private.rs:112` `since_last.num_hours() >= 24` + `service_postprocess.rs:139` 同样节流|
+|3.4|记忆 (L1/L3)|✅|L1 `ChatMemory::load`（PG messages）；L3 `update_user_profile` + dream 层 24h 节流（`service_postprocess` 最近 12 轮原文输入）。**L2 session summary 已移除**（migration `0044`）|
 |3.5|Session Summary 注入|✅|`prompts/session\_summary\_system.txt`|
 |3.6|User Profile 注入|✅|`prompts/user\_profile\_extraction\_system.txt`|
 |3.7|历史压缩 (10轮/20K token 阈值)|✅|`runtime.rs:12` `MAX_PROMPT_HISTORY_TURNS=10` 已实现；20K token 压缩触发器产品决策不实现|
@@ -357,7 +357,7 @@
 ### 前端审查
 
 * 前端 (`frontend\_next/`) 基于 Next.js App Router，已完成功能验收审查
-* 18 项功能中 14 项已实现，2 项部分实现（引用跳转锚点定位、乐观更新），2 项未实现（Notebook CRUD、引用一致性校验）
+* 18 项功能中 15 项已实现，2 项部分实现（引用跳转锚点定位、乐观更新），1 项未实现（引用一致性校验）；Notebook CRUD 已有 Product E2E smoke + Playwright journey 覆盖（2026-06-15）
 
 ### 建议后续动作
 
