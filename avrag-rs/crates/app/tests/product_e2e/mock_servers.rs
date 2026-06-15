@@ -5,6 +5,8 @@ pub use super::mock_office_server::{
     start_mock_office_parser_server,
 };
 pub use super::mock_paddle_server::{MOCK_PADDLE_IMAGE_OCR_TEXT, start_mock_paddle_ocr_server};
+pub use super::mock_embedding_server::start_mock_embedding_server;
+pub use super::mock_search_server::{MockSearchControls, start_mock_search_server};
 
 pub use super::mock_rag_state::{
     reset_mock_rag_state, set_mock_emit_memory_tool, set_mock_rag_codegen_chunk_id,
@@ -17,13 +19,10 @@ use super::mock_rag_state::read_mock_rag_state;
 use super::persistent_runtime::{bind_persistent_listener, spawn_persistent};
 use axum::{
     Json, Router,
-    extract::Query,
     response::IntoResponse,
-    routing::{get, post},
+    routing::post,
 };
 use serde_json::json;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
 fn latest_user_message_content(messages: &[serde_json::Value]) -> Option<&str> {
     messages
@@ -299,50 +298,6 @@ pub(crate) async fn start_mock_llm_server() -> (String, tokio::sync::oneshot::Se
     });
 
     (base_url, abort_tx)
-}
-
-/// Start a mock Embedding HTTP server on an ephemeral port.
-///
-/// Returns (base_url, abort_sender, embedding_should_503_flag, call_count).
-pub(crate) async fn start_mock_embedding_server() -> (
-    String,
-    tokio::sync::oneshot::Sender<()>,
-    Arc<AtomicBool>,
-    Arc<AtomicUsize>,
-) {
-    let embedding_should_503 = Arc::new(AtomicBool::new(false));
-    let embedding_call_count = Arc::new(AtomicUsize::new(0));
-    let flag = embedding_should_503.clone();
-    let call_count = embedding_call_count.clone();
-
-    let flag_mm = embedding_should_503.clone();
-    let call_count_mm = embedding_call_count.clone();
-    let app = Router::new()
-        .route(
-            "/embeddings",
-            post(move |req| mock_embedding_handler(req, flag.clone(), call_count.clone())),
-        )
-        .fallback(post(move |req| {
-            mock_dashscope_multimodal_embedding_handler(req, flag_mm.clone(), call_count_mm.clone())
-        }));
-
-    let (listener, base_url) = bind_persistent_listener().await;
-
-    let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
-    spawn_persistent(async move {
-        let server = axum::serve(listener, app);
-        tokio::select! {
-            _ = server => {},
-            _ = abort_rx => {},
-        }
-    });
-
-    (
-        base_url,
-        abort_tx,
-        embedding_should_503,
-        embedding_call_count,
-    )
 }
 
 fn mock_tool_names(req: &serde_json::Value) -> Vec<String> {
@@ -915,224 +870,4 @@ async fn mock_llm_handler(
         }))
         .into_response()
     }
-}
-async fn mock_dashscope_multimodal_embedding_handler(
-    Json(req): Json<serde_json::Value>,
-    embedding_should_503: Arc<AtomicBool>,
-    embedding_call_count: Arc<AtomicUsize>,
-) -> axum::response::Response {
-    embedding_call_count.fetch_add(1, Ordering::SeqCst);
-
-    if embedding_should_503.load(Ordering::SeqCst) {
-        return (
-            axum::http::StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({ "code": "ServiceUnavailable", "message": "embedding service unavailable" })),
-        )
-            .into_response();
-    }
-
-    let dim = req["parameters"]["dimension"]
-        .as_u64()
-        .or_else(|| req["parameters"]["dimensions"].as_u64())
-        .unwrap_or(1024) as usize;
-    let fused = req["parameters"]["enable_fusion"].as_bool().unwrap_or(false);
-    let contents_len = req["input"]["contents"]
-        .as_array()
-        .map(|arr| arr.len())
-        .unwrap_or(1)
-        .max(1);
-    let embedding_type = if fused || contents_len > 1 {
-        "fusion"
-    } else {
-        "text"
-    };
-    // Stable vector so multimodal dense retrieval always matches indexed chunks.
-    let embedding: Vec<f32> = (0..dim)
-        .map(|j| 0.1_f32 + (j % 10) as f32 * 0.01)
-        .collect();
-
-    Json(json!({
-        "output": {
-            "embeddings": [{
-                "index": 0,
-                "embedding": embedding,
-                "type": embedding_type
-            }]
-        },
-        "usage": {
-            "input_tokens": 10,
-            "input_tokens_details": {
-                "image_tokens": 0,
-                "text_tokens": 10
-            },
-            "output_tokens": 1,
-            "total_tokens": 11
-        }
-    }))
-    .into_response()
-}
-
-async fn mock_embedding_handler(
-    Json(req): Json<serde_json::Value>,
-    embedding_should_503: Arc<AtomicBool>,
-    embedding_call_count: Arc<AtomicUsize>,
-) -> axum::response::Response {
-    embedding_call_count.fetch_add(1, Ordering::SeqCst);
-
-    if embedding_should_503.load(Ordering::SeqCst) {
-        return (
-            axum::http::StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({ "error": "embedding service unavailable" })),
-        )
-            .into_response();
-    }
-
-    let texts = req["input"]
-        .as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
-        .unwrap_or_default();
-    let dim = req["dimensions"].as_u64().unwrap_or(1024) as usize;
-    // All vectors identical so dense retrieval always returns high similarity.
-    let vec: Vec<f32> = (0..dim).map(|j| 0.1_f32 + (j % 10) as f32 * 0.01).collect();
-    let data: Vec<serde_json::Value> = texts.iter().map(|_| json!({"embedding": vec})).collect();
-
-    Json(json!({ "data": data, "model": "mock-embedding" })).into_response()
-}
-
-/// Runtime toggles for the mock Brave Search server.
-#[derive(Clone)]
-pub(crate) struct MockSearchControls {
-    pub should_429: Arc<AtomicBool>,
-    pub should_empty: Arc<AtomicBool>,
-    pub delay_ms: Arc<AtomicU64>,
-}
-
-impl MockSearchControls {
-    pub fn new() -> Self {
-        Self {
-            should_429: Arc::new(AtomicBool::new(false)),
-            should_empty: Arc::new(AtomicBool::new(false)),
-            delay_ms: Arc::new(AtomicU64::new(0)),
-        }
-    }
-}
-
-/// Start a mock Brave Search HTTP server on an ephemeral port.
-///
-/// Returns (base_url, abort_sender, controls).
-pub(crate) async fn start_mock_search_server() -> (
-    String,
-    tokio::sync::oneshot::Sender<()>,
-    MockSearchControls,
-) {
-    let controls = MockSearchControls::new();
-    let flag = controls.clone();
-    let flag2 = controls.clone();
-    let flag3 = controls.clone();
-    let app = Router::new()
-        .route(
-            "/res/v1/llm/context",
-            post(move |req| mock_search_handler(req, flag.clone())),
-        )
-        .route(
-            "/res/v1/news/search",
-            get(move |Query(params): Query<MockNewsQuery>| async move {
-                mock_news_search_handler(params, flag2.clone())
-            })
-            .post(move |req| mock_search_handler(req, flag3.clone())),
-        );
-
-    let (listener, base_url) = bind_persistent_listener().await;
-
-    let (abort_tx, abort_rx) = tokio::sync::oneshot::channel::<()>();
-    spawn_persistent(async move {
-        let server = axum::serve(listener, app);
-        tokio::select! {
-            _ = server => {},
-            _ = abort_rx => {},
-        }
-    });
-
-    (base_url, abort_tx, controls)
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct MockNewsQuery {
-    q: Option<String>,
-}
-
-fn mock_news_search_handler(
-    params: MockNewsQuery,
-    controls: MockSearchControls,
-) -> axum::response::Response {
-    if controls.should_429.load(Ordering::SeqCst) {
-        return (
-            axum::http::StatusCode::TOO_MANY_REQUESTS,
-            Json(json!({ "error": "rate limit exceeded" })),
-        )
-            .into_response();
-    }
-
-    if controls.should_empty.load(Ordering::SeqCst) {
-        return Json(json!({ "results": [] })).into_response();
-    }
-
-    let _query = params.q.as_deref().unwrap_or("unknown");
-    Json(json!({
-        "results": [
-            {
-                "title": "Tokyo Weather Today",
-                "url": "https://example.com/weather-tokyo",
-                "description": "Sunny with a high of 25°C in Tokyo today."
-            }
-        ]
-    }))
-    .into_response()
-}
-
-async fn mock_search_handler(
-    Json(req): Json<serde_json::Value>,
-    controls: MockSearchControls,
-) -> axum::response::Response {
-    if controls.should_429.load(Ordering::SeqCst) {
-        return (
-            axum::http::StatusCode::TOO_MANY_REQUESTS,
-            Json(json!({ "error": "rate limit exceeded" })),
-        )
-            .into_response();
-    }
-
-    let delay_ms = controls.delay_ms.load(Ordering::SeqCst);
-    if delay_ms > 0 {
-        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
-    }
-
-    if controls.should_empty.load(Ordering::SeqCst) {
-        return Json(json!({
-            "grounding": { "generic": [], "map": [] },
-            "sources": {}
-        }))
-        .into_response();
-    }
-
-    let _query = req["q"].as_str().unwrap_or("unknown");
-    Json(json!({
-        "grounding": {
-            "generic": [
-                {
-                    "url": "https://example.com/weather-tokyo",
-                    "title": "Tokyo Weather Today",
-                    "snippets": ["Sunny with a high of 25°C in Tokyo today."]
-                }
-            ],
-            "map": []
-        },
-        "sources": {
-            "https://example.com/weather-tokyo": {
-                "title": "Tokyo Weather Today",
-                "hostname": "example.com"
-            }
-        }
-    }))
-    .into_response()
 }
