@@ -94,14 +94,14 @@
 |3.2|SSE 流式响应|✅|`transport-http/src/handlers.rs` `sse\_response\_from\_receiver`|
 |3.3|非流式响应|✅|`chat\_post\_handler` 支持两种模式|
 |3.4|记忆 (L1/L3)|✅|L1 `ChatMemory::load`（PG messages）；L3 `update_user_profile` + dream 层 24h 节流（`service_postprocess` 最近 12 轮原文输入）。**L2 session summary 已移除**（migration `0044`）|
-|3.5|Session Summary 注入|✅|`prompts/session\_summary\_system.txt`|
+|3.5|Session Summary 注入|🚫|**已移除**（migration `0044`；L2 不再注入；见 ADR-0007）|
 |3.6|User Profile 注入|✅|`prompts/user\_profile\_extraction\_system.txt`|
-|3.7|历史压缩 (10轮/20K token 阈值)|✅|`runtime.rs:12` `MAX_PROMPT_HISTORY_TURNS=10` 已实现；20K token 压缩触发器产品决策不实现|
+|3.7|历史窗口 + 按需检索|✅|`MAX_PROMPT_HISTORY_TURNS=2` 保底 prior user；更早历史 `conversation_history_load`（PG FTS）；20K token 压缩触发器产品决策不实现|
 |3.8|Query Rewriting (Intent Refiner)|🚫|产品决策：重写逻辑由现有模块覆盖，不实现独立 Intent Refiner|
 |3.9|User Profile 被动推断|✅|`user\_profile\_extraction\_system.txt`|
 |3.10|Intent 状态机|🚫|产品决策：不实现独立 Intent 状态机|
 
-**小计**: 已实现 8 / 部分实现 0 / 未实现 0 / 待确认 0 / 产品决策不实现 2
+**小计**: 已实现 7 / 部分实现 0 / 未实现 0 / 待确认 0 / 产品决策不实现 3
 
 \---
 
@@ -152,8 +152,8 @@
 |-|-|-|-|
 |6.1|Session 模型|✅|`common::ChatSession`|
 |6.2|Session 切换|✅|`transport-http` chat session handlers|
-|6.3|10 轮/20K token 压缩阈值|✅|10 轮限制 `MAX_PROMPT_HISTORY_TURNS=10` 已实现；20K token 压缩触发器产品决策不实现|
-|6.4|最近 4 轮保留|🚫|产品决策：采用 10 轮统一截断（与 session summary 触发阈值对齐），不单独实现「最近 4 轮保留 + 更早轮次摘要」的滑动窗口|
+|6.3|保底 2 轮 + 按需历史检索|✅|`MAX_PROMPT_HISTORY_TURNS=2`；`search_conversation_history` / `conversation_history_load`；20K token 压缩触发器产品决策不实现|
+|6.4|最近 4 轮保留|🚫|产品决策：2 轮保底注入 + 工具按需加载；不实现「最近 4 轮保留 + 更早轮次摘要」滑动窗口|
 |6.5|结构化用户画像 (JSON)|✅|migration `0030\_user\_profile\_structured`|
 |6.6|Profile Delta 更新 (add/reinforce/revise/weaken/remove)|✅|`user\_profile\_extraction\_system.txt`|
 |6.7|24 小时更新节流|✅|`chat_private.rs:103` `since_last.num_hours() >= 24` 控制 structured profile 更新频率；`service_postprocess.rs:112` 同样 24h 节流 general profile|
@@ -290,7 +290,7 @@
 |12.6|失败/降级率监控|✅|`telemetry/src/prometheus.rs` 暴露 `degrades_total`（按 agent_type+reason）和 `dependency_failures_total`；RAG/WebSearch agent 降级路径调用 `observe_degrade()`。Grafana dashboard/alert rule 属运维基础设施层，不在本期代码范围；degradation rate % 可通过 PromQL 在 Grafana 中计算（如 `rate(degrades_total[5m])`），无需代码逻辑|
 |12.7|延迟与成本监控|✅|Prometheus: `llm_calls_total`/`llm_call_duration_ms`/`llm_usage_tokens_total`/`http_request_duration_ms`；analytics: `cost_events` 表六类成本事件（`CostEventName`）。已清理 `telemetry/src/lib.rs` 死代码 `record_planner_latency()`/`record_rag_query()`，指标双轨已完整|
 
-**小计**: 已实现 7 / 部分实现 0 / 未实现 0 / 待确认 0
+**小计**: 已实现 5 / 部分实现 2 / 未实现 0 / 待确认 0
 
 \---
 
@@ -325,9 +325,9 @@
 |9. 前端|18|17|0|0|0|1|
 |10. 计费与 SaaS|5|3|0|0|0|2|
 |11. 共享与协作|8|8|0|0|0|0|
-|12. 评估与质量|7|7|0|0|0|0|
+|12. 评估与质量|7|5|2|0|0|0|
 |13. 文件存储|7|7|0|0|0|0|
-|**总计**|**176**|**157 (89%)**|**0 (0%)**|**0 (0%)**|**0 (0%)**|**19 (11%)**|
+|**总计**|**176**|**155 (88%)**|**2 (1%)**|**0 (0%)**|**0 (0%)**|**19 (11%)**|
 
 \---
 
@@ -349,9 +349,9 @@
 
 ### 需要关注 (❌ + ⚠️ 较多)
 
-* **API/基础设施**: 5 项未实现 (LLM 双限流、L1-L4 缓存)，2 项部分实现 (分层限流缺 Edge 层、429 缺 Retry-After header)，7 项产品决策不实现
-* **评估与质量**: 3 项未实现 (黄金集回归、发布门禁、每周回归)，2 项部分实现
-* **Chat Agent**: Intent 状态机缺失 (1 项未实现)
+* **API/基础设施**: L1–L4 缓存与 LLM 双限流已实现（§8.10–8.17）；剩余缺口为分层限流 Edge 层与 429 `Retry-After` header（部分实现）
+* **评估与质量**: 黄金集回归与发布门禁仍为骨架（§12.1–12.2）；每周回归 workflow 已绿
+* **Chat Agent**: Intent 状态机为产品决策不实现（§3.10 🚫）
 * **记忆系统**: 24h throttle、TTL 清理部分实现
 
 ### 前端审查
@@ -361,7 +361,7 @@
 
 ### 建议后续动作
 
-1. 补齐 API/基础设施 5 项未实现中的 P0 项（L1-L4 缓存）
-2. 建立评估与质量体系（黄金集回归测试、发布门禁）
+1. 将 `rag_quality` 的 `evaluate_example` 接入真实 `RagRuntime`，并在 CI 发布门禁中启用 §12.2 三门禁
+2. 补齐分层限流 Edge 层与 429 `Retry-After`（若产品要求）
 3. 建立持续的自动化验收测试，与本文档联动
 

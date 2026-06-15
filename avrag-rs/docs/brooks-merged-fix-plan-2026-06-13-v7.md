@@ -77,6 +77,24 @@
 | L8 | P2 | Legal review | `RegisterRequest.terms_version/privacy_version` 类型为 `Option` 但 handler 实际必填，API 契约不清 | S7 |
 | L9 | P2 | Legal review | 设计文档仍写“33 项 P0”，未记录 verify-legal-p0.sh 已扩到 40 项（含 P1 段） | S7 |
 
+### 2.1 核销进度（2026-06-15 本轮）
+
+| ID | 状态 | 证据 / 备注 |
+|----|------|-------------|
+| B1 | ✅ | `agents/loop/mod.rs` 死 re-export 已删；`RUSTFLAGS="-D warnings" cargo check -p app-chat` 绿 |
+| L1 | ✅ | 营销页 `requireUsageProbe={false}` + billing Playwright 4/4 绿 |
+| B4 | 🟡 | Legal / M9 / memory 等已分批入库；工作树仍有 docs / harness 计划等待整理 |
+| B2 | ✅ | `crates/test-kit` / `avrag-test-kit` 已从 workspace 移除 |
+| B3 | ✅ | `app-chat/Cargo.toml` 无 `app-bootstrap` dev-dep |
+| B5 | 🟡 | 已拆 `mock_office_server` / `mock_paddle_server` / `mock_embedding_server` / `mock_search_server`；`mock_servers.rs` 仍 ~870 行（LLM + RAG helpers），OnceLock → `MockState` 注入待续 |
+| B6 | ✅ | `tests/legal/*` 29/29 绿 |
+| L2 | ✅ | `integration-e2e.yml` 已配 PG + `DATABASE_URL` |
+| L3 | ✅ | `transport-http` legal HTTP 测试补强 |
+| L4 | ✅ | `legal-consent.spec.ts` + 版本号引 `versions.ts` |
+| L5 | ✅ | `postgres_delegates.rs` checkout 前 `has_payment_legal_acceptance` |
+| L7 | ✅ | `middleware.rs::normalize_route` 收录 legal 路由 |
+| B7–B10, L6, L8, L9 | ⏳ | P2 收尾仍 open |
+
 ---
 
 ## 3. 满分差额账本

@@ -498,7 +498,19 @@ Job 预算耗尽
 | **P1** | A/B 类：LiteParse 抽字 + 抠图 MM | ✅ 已完成 |
 | **P2** | C/D 类：`PaddleJobsOcrService` 按页 Job；§9 合并 | ✅ 已完成 |
 | **P4** | 删 MinerU、全量 LiteParse、png→Paddle、删 shadow/rollout | ✅ 已完成 |
-| **P5** | 监控大盘、扩展 E2E 样本；M3/M5 技术债 | M3/M5 ✅（2026-06-15）；监控大盘与更多 E2E 样本待办 |
+| **P5** | 监控大盘、扩展 E2E 样本；M3/M5 技术债 | M3/M5 ✅（2026-06-15）；**监控大盘规划**（见下）与更多 E2E 样本待办 |
+
+**P5 监控大盘（规划，未实施）**
+
+| 面板 | PromQL / 数据源 | 目的 |
+|------|-----------------|------|
+| Ingestion 吞吐 | `rate(worker_tasks_completed_total{task="ingestion"}[5m])` | LiteParse/Paddle 队列健康 |
+| 解析失败率 | `rate(worker_tasks_completed_total{status="failed"}[5m])` / completed | 回归告警 |
+| OCR 延迟 | `histogram_quantile(0.95, worker_task_duration_ms_bucket{task="paddle_ocr"})` | Paddle 路径 SLO |
+| 依赖 503 | `rate(dependency_failures_total[5m])` by dependency | 外部服务降级 |
+| 降级率 | `rate(degrades_total[5m])` by reason | RAG/WebSearch 质量 |
+
+实施顺序：先复用 `telemetry/src/prometheus.rs` 已有指标做 Grafana JSON；ingestion 任务 label 不足时再补 exporter。
 
 > **历史说明：** 原计划 P2.5（Shadow）与 P3（灰度）已跳过，直接以 product E2E 门禁进入 P4。见 [archive/p4-mineru-shadow-migration-historical.md](./archive/p4-mineru-shadow-migration-historical.md)。
 
