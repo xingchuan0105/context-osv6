@@ -36,10 +36,6 @@ pub(crate) async fn dispatch_mode(
             .await;
     }
 
-    if matches!(agent_kind, Some(crate::agents::AgentKind::Rag)) && state.uses_memory_adapters() {
-        return state.execute_memory_chat_compat(request, session).await;
-    }
-
     match agent_kind {
         Some(crate::agents::AgentKind::Chat) | None => {
             run_general_mode(
