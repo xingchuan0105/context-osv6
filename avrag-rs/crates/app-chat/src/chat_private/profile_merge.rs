@@ -406,7 +406,9 @@ fn apply_hint_updates_from_typed(
         }
     }
 
-    let cutoff = (chrono::Utc::now() - chrono::Duration::days(7))
+    let cutoff = (chrono::NaiveDate::parse_from_str(today, "%Y-%m-%d")
+        .unwrap_or_else(|_| chrono::Utc::now().date_naive())
+        - chrono::Duration::days(7))
         .format("%Y-%m-%d")
         .to_string();
     slot_arr.retain(|h| {

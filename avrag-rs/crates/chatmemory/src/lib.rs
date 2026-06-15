@@ -12,7 +12,7 @@ pub use v1::{
     dedupe_adjacent_assistant_messages, should_refresh_long_term_memory,
 };
 
-/// Layer 1: Raw messages (last N messages)
+/// Layer 1: recent PG messages. Layer 3: cross-session user profile (no L2 session summary).
 pub struct Layer1Messages {
     pub messages: Vec<contracts::chat::ChatMessage>,
 }

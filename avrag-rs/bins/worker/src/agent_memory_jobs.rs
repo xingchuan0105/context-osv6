@@ -147,6 +147,39 @@ impl AgentPreferenceConsolidationJobRunner {
                     .filter(|text| !is_existing_or_blocked(&preferences, text))
                     .collect::<Vec<_>>();
 
+                if additions.is_empty() {
+                    let now_text = now.to_rfc3339();
+                    preferences.agent_memory.last_consolidated_at = Some(now_text);
+                    preferences.agent_memory.daily_log.push(DailyPreferenceLog {
+                        date: now.date_naive().to_string(),
+                        added: Vec::new(),
+                        no_change: vec!["no new explicit preferences".to_string()],
+                    });
+
+                    sqlx::query(
+                        r#"
+                        insert into user_profiles (
+                            user_id, org_id, expertise_domains, preferred_answer_style,
+                            frequently_asked_topics, custom_preferences, inferred_at, inference_version
+                        )
+                        values ($1, $2, '[]'::jsonb, null, '[]'::jsonb, $3, $4, 'agent-preference-memory-v1')
+                        on conflict (user_id) do update
+                        set custom_preferences = excluded.custom_preferences,
+                            inferred_at = excluded.inferred_at,
+                            inference_version = excluded.inference_version,
+                            updated_at = now()
+                        "#,
+                    )
+                    .bind(user_id)
+                    .bind(org_id)
+                    .bind(serde_json::to_value(&preferences)?)
+                    .bind(now)
+                    .execute(tx.as_mut())
+                    .await?;
+                    updated_profiles += 1;
+                    continue;
+                }
+
                 let now_text = now.to_rfc3339();
                 for text in &additions {
                     preferences.agent_memory.active.push(AgentPreference {
@@ -159,15 +192,10 @@ impl AgentPreferenceConsolidationJobRunner {
                         updated_at: now_text.clone(),
                     });
                 }
-                preferences.agent_memory.last_consolidated_at = Some(now_text);
                 preferences.agent_memory.daily_log.push(DailyPreferenceLog {
                     date: now.date_naive().to_string(),
                     added: additions.clone(),
-                    no_change: if additions.is_empty() {
-                        vec!["no new explicit preferences".to_string()]
-                    } else {
-                        Vec::new()
-                    },
+                    no_change: Vec::new(),
                 });
 
                 sqlx::query(
