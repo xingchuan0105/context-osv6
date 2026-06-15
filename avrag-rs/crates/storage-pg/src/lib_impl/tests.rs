@@ -1211,6 +1211,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn search_sessions_matches_assistant_message_body_when_database_available() {
+        let Some(database_url) = env::var("DATABASE_URL").ok() else {
+            return;
+        };
+        let repo = PgAppRepository::connect(&database_url).await.unwrap();
+        repo.migrate().await.unwrap();
+
+        let org_id = OrgId::from(Uuid::new_v4());
+        let user_id = Uuid::new_v4();
+        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+            .with_actor_id(ActorId::new(user_id));
+
+        let notebook = repo
+            .create_notebook(&ctx, "session-search", "session search test")
+            .await
+            .unwrap();
+        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+
+        let session = repo
+            .create_session(&ctx, notebook_id, Some("generic title"), "rag")
+            .await
+            .unwrap();
+        let session_id = Uuid::parse_str(&session.id).unwrap();
+
+        repo.append_chat_turn(
+            &ctx,
+            session_id,
+            ChatTurn {
+                user_content: "Tell me something.",
+                assistant_content: "The secret roadmap keyword is zephyrneedle2026.",
+                assistant_answer_blocks: &[],
+                agent_type: "rag",
+                citations: &[],
+                tool_results: &[],
+                user_turn_metadata: None,
+                user_resolved_query: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let pattern = "%zephyrneedle2026%";
+        let matches = repo.search_sessions(&ctx, pattern).await.unwrap();
+        assert!(
+            matches.iter().any(|item| item.id == session.id),
+            "search_sessions should match assistant message FTS, not only session title"
+        );
+    }
+
+    #[tokio::test]
     async fn get_notebook_returns_none_for_other_org_when_database_available() {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;

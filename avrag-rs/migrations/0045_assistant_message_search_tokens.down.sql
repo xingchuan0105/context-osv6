@@ -1,0 +1,1 @@
+-- search_tokens backfill is not reversible without losing segmented tokens.

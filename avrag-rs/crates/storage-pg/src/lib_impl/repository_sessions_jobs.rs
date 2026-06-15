@@ -192,10 +192,12 @@ impl PgAppRepository {
 
         let tool_results_value =
             serde_json::to_value(turn.tool_results).unwrap_or_else(|_| json!([]));
+        let assistant_search_tokens =
+            crate::build_user_message_search_tokens(turn.assistant_content, None);
         let assistant_row = sqlx::query(
             r#"
-            insert into chat_messages (org_id, session_id, role, content, answer_blocks, agent_id, agent_name, agent_icon, citations, tool_results)
-            values ($1, $2, 'assistant', $3, $4, $5, $6, $7, $8, $9)
+            insert into chat_messages (org_id, session_id, role, content, answer_blocks, agent_id, agent_name, agent_icon, citations, tool_results, search_tokens)
+            values ($1, $2, 'assistant', $3, $4, $5, $6, $7, $8, $9, $10)
             returning id
             "#,
         )
@@ -208,6 +210,7 @@ impl PgAppRepository {
         .bind(agent_icon(turn.agent_type))
         .bind(serde_json::to_value(turn.citations).unwrap_or_else(|_| json!([])))
         .bind(tool_results_value)
+        .bind(assistant_search_tokens)
         .fetch_one(tx.inner())
         .await?;
 
@@ -924,7 +927,7 @@ impl PgAppRepository {
                        select 1
                        from chat_messages m
                        where m.session_id = s.id
-                         and m.role = 'user'
+                         and m.role in ('user', 'assistant')
                          and m.search_vector @@ plainto_tsquery('simple', $2)
                    )
                 order by s.updated_at desc, s.created_at desc

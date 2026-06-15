@@ -7,6 +7,27 @@ use uuid::Uuid;
 use crate::context::ChatContext;
 use crate::{status_label, ChatService};
 
+fn memory_session_matches_search(
+    messages: &std::collections::BTreeMap<String, Vec<ChatMessage>>,
+    session: &ChatSession,
+    query: &str,
+) -> bool {
+    if session
+        .title
+        .as_ref()
+        .is_some_and(|title| title.to_lowercase().contains(query))
+    {
+        return true;
+    }
+    messages
+        .get(&session.id)
+        .is_some_and(|session_messages| {
+            session_messages
+                .iter()
+                .any(|message| message.content.to_lowercase().contains(query))
+        })
+}
+
 impl ChatContext {
     pub async fn search(&self, pattern: &str) -> (Vec<Notebook>, Vec<ChatSession>, Vec<SourceRow>) {
         let like_pattern = format!("%{}%", pattern);
@@ -42,11 +63,7 @@ impl ChatContext {
                 .values()
                 .filter(|session| {
                     self.memory_session_visible(&state, session)
-                        && session
-                            .title
-                            .as_ref()
-                            .map(|t| t.to_lowercase().contains(&q))
-                            .unwrap_or(false)
+                        && memory_session_matches_search(&state.messages, session, &q)
                 })
                 .cloned()
                 .collect();
