@@ -31,6 +31,6 @@ test.describe("Analyze Skill", () => {
     const hasAnalysisSignal = /趋势|数据|分析|insight|pattern|summary/i.test(answer);
     expect(hasAnalysisSignal).toBe(true);
 
-    // TODO: 待 UI 补充 data-testid="analyze-chart" 后，添加图表可见性断言
+    await expect(page.locator('[data-testid="analyze-chart"]')).toBeVisible();
   });
 });

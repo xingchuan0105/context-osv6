@@ -335,6 +335,7 @@ export function WorkspaceApiAccessSurface({ workspaceId }: WorkspaceApiAccessSur
             {keys.map((key) => (
               <div
                 className="app-inline-surface"
+                data-testid="api-key-item"
                 key={key.id}
                 style={{
                   alignItems: "start",

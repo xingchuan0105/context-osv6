@@ -155,6 +155,7 @@ export function ShareInsightsPanel({ center }: { center: ShareCenter }) {
             {trendSeries.some((entry) => entry.views > 0) ? (
               <div
                 className="app-inline-surface"
+                data-testid="analyze-chart"
                 style={{
                   display: "grid",
                   gap: "0.52rem",

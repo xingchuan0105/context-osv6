@@ -37,6 +37,6 @@ test.describe("Notebook Skill", () => {
     const hasDocReference = /antifragile|上传|文件|来源|文档/i.test(answer);
     expect(hasDocReference).toBe(true);
 
-    // TODO: 待 UI 补充 notebook 引用 data-testid 后，添加引用可见性断言
+    await expect(lastMessage.locator('[data-testid="workspace-citation"]').first()).toBeVisible();
   });
 });

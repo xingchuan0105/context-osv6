@@ -10,9 +10,7 @@ export class AnalyzePage {
   }
 
   async expectChartVisible() {
-    // TODO: 当前 share#insights 页面使用纯 CSS 条形图渲染趋势，没有 <canvas>
-    // 或 data-testid="analyze-chart" 等稳定 selector。待 UI 侧补充后替换为精确断言。
-    await expect(this.page.locator("section#insights")).toBeVisible();
+    await expect(this.page.locator('[data-testid="analyze-chart"]')).toBeVisible();
   }
 
   async expectInsightVisible() {
