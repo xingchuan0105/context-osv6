@@ -472,6 +472,12 @@ pub fn mime_type_for_filename(filename: &str) -> &'static str {
         "application/vnd.ms-excel"
     } else if lower.ends_with(".docx") {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    } else if lower.ends_with(".doc") {
+        "application/msword"
+    } else if lower.ends_with(".pptx") {
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    } else if lower.ends_with(".ppt") {
+        "application/vnd.ms-powerpoint"
     } else {
         "application/octet-stream"
     }

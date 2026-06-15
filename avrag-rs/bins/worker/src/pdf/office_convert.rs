@@ -4,7 +4,7 @@ use std::process::Stdio;
 use anyhow::{Context, Result};
 use tokio::process::Command;
 
-const OFFICE_EXTENSIONS: &[&str] = &["doc", "docx", "ppt", "pptx"];
+const OFFICE_EXTENSIONS: &[&str] = &[];
 
 pub fn needs_office_to_pdf(filename: &str) -> bool {
     filename
@@ -14,7 +14,7 @@ pub fn needs_office_to_pdf(filename: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Convert Office documents to PDF via LibreOffice headless (doc/ppt only).
+/// Convert Office documents to PDF via LibreOffice headless (legacy; office types now use office-parser).
 pub async fn maybe_convert_office_to_pdf(
     bytes: &[u8],
     filename: &str,

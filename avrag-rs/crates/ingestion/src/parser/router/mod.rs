@@ -338,10 +338,16 @@ impl ParseRouter {
                 liteparse_snapshot: None,
             }),
             "ppt" | "pptx" => Ok(ParseRouteDecision {
-                route: ParseRoute::Pdf,
+                route: ParseRoute::OfficeService,
                 reason: RouteReason::OfficeDocument,
                 probe_result: None,
-                plan: ParsePlan::Pdf(PdfParsePlan { pages: vec![] }),
+                plan: ParsePlan::Office(OfficeParsePlan {
+                    doc_type: if extension == "ppt" {
+                        OfficeDocType::Ppt
+                    } else {
+                        OfficeDocType::Pptx
+                    },
+                }),
                 liteparse_snapshot: None,
             }),
             "pdf" => {

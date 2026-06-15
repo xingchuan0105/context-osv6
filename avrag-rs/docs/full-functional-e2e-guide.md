@@ -146,7 +146,8 @@ SEARCH_REQUIRE_REAL=1          # llm_real 强制；Brave 不可达则失败
 | **docx Office（真实 JVM）** | 真实 office-parser | `integration::office_docx_staging_e2e`（`#[ignore]`） | staging | **I+P** | staging 脚本 |
 | **PNG Paddle 路由（mock Jobs）** | mock Paddle jobs→text/figure chunks | `smoke::paddle_image_smoke`（PR）；`integration::paddle_image_e2e`（路由元数据） | L2/L1 | **I+P** | **G-serial-rag** |
 | **Black Swan PDF（真实 Paddle Jobs）** | 20 页 hybrid；`slow_ocr`/paddle | `smoke::paddle_pdf_smoke`（`#[ignore]`，manual-only） | staging | **I+P** | `./scripts/run-staging-ingest-e2e.sh` |
-| **xlsx Office（mock）** | mock office-parser → chunks | `integration::office_xlsx_e2e` | L2 | **M+I** | 串行 |
+| **pptx Office（mock）** | mock office-parser → chunks | `integration::office_pptx_e2e` | L2 | **M+I** | 串行 |
+| **pptx Office（真实 JVM）** | 真实 office-parser | `integration::office_pptx_staging_e2e`（`#[ignore]`） | staging | **I+P** | staging 脚本 |
 | **xlsx Office（真实 JVM）** | 真实 office-parser | `integration::office_xlsx_staging_e2e`（`#[ignore]`） | staging | **I+P** | staging 脚本 |
 | 损坏文件 | failed / 4xx | `integration::bad_file` | L2 | M+I | 串行 |
 | Worker 超时 | failed，不挂死 | `failure::timeout` | L2 | M+I | 串行 |

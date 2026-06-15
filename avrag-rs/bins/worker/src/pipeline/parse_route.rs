@@ -99,10 +99,15 @@ pub(crate) async fn execute_office_parse(
                 .parse_xls(bytes, filename, &document_id.to_string())
                 .await
         }
-        other => {
-            return Err(IngestionError::StateSink(format!(
-                "office parse unsupported for {filename}: {other:?}"
-            )));
+        OfficeDocType::Pptx => {
+            client
+                .parse_pptx(bytes, filename, &document_id.to_string())
+                .await
+        }
+        OfficeDocType::Ppt => {
+            client
+                .parse_ppt(bytes, filename, &document_id.to_string())
+                .await
         }
     }
     .map_err(|error| {

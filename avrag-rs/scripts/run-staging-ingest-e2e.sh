@@ -33,12 +33,17 @@ if curl -sf "${OFFICE_PARSER_BASE_URL:-http://127.0.0.1:9090}/v1/healthz" >/dev/
     integration::office_docx_staging_e2e::office_docx_staging_ingest_e2e \
     -- --ignored --test-threads=1 --nocapture
 
+  echo "== Real Office pptx (staging) =="
+  E2E_MODE=integration cargo test --test product_e2e -p app --features product-e2e \
+    integration::office_pptx_staging_e2e::office_pptx_staging_ingest_e2e \
+    -- --ignored --test-threads=1 --nocapture
+
   echo "== Real Office xlsx (staging) =="
   E2E_MODE=integration cargo test --test product_e2e -p app --features product-e2e \
     integration::office_xlsx_staging_e2e::office_xlsx_staging_ingest_e2e \
     -- --ignored --test-threads=1 --nocapture
 else
-  echo "SKIP: office docx/xlsx staging (office-parser-jvm not on :9090)"
+  echo "SKIP: office docx/pptx/xlsx staging (office-parser-jvm not on :9090)"
 fi
 
 black_swan_default="/mnt/e/OneDrive/桌面/知境笔记/the-black-swan_-the-impact-of-the-highly-improbable-second-edition-pdfdrive.com-.pdf"

@@ -41,15 +41,38 @@ fn docx_file_routing_uses_office_service() {
 }
 
 #[test]
-fn presentation_file_routing_uses_pdf_after_conversion() {
+fn pptx_file_routing_uses_office_service() {
     let decision = ParseRouter::route(
-        b"fake ppt",
+        b"fake pptx",
         "test.pptx",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     )
     .unwrap();
-    assert_eq!(decision.route, ParseRoute::Pdf);
+    assert_eq!(decision.route, ParseRoute::OfficeService);
     assert!(matches!(decision.reason, RouteReason::OfficeDocument));
+    assert!(matches!(
+        decision.plan,
+        ParsePlan::Office(OfficeParsePlan {
+            doc_type: OfficeDocType::Pptx
+        })
+    ));
+}
+
+#[test]
+fn presentation_file_routing_uses_pdf_after_conversion() {
+    let decision = ParseRouter::route(
+        b"fake ppt",
+        "legacy.ppt",
+        "application/vnd.ms-powerpoint",
+    )
+    .unwrap();
+    assert_eq!(decision.route, ParseRoute::OfficeService);
+    assert!(matches!(
+        decision.plan,
+        ParsePlan::Office(OfficeParsePlan {
+            doc_type: OfficeDocType::Ppt
+        })
+    ));
 }
 
 #[test]

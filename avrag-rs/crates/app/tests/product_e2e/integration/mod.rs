@@ -12,6 +12,8 @@ pub mod ingestion_full;
 pub mod liteparse_pdf_e2e;
 pub mod office_docx_e2e;
 pub mod office_docx_staging_e2e;
+pub mod office_pptx_e2e;
+pub mod office_pptx_staging_e2e;
 pub mod office_xlsx_e2e;
 pub mod office_xlsx_staging_e2e;
 pub mod paddle_image_e2e;
