@@ -1,18 +1,24 @@
 import { test, expect } from "../../fixtures/run-context";
+import { COLLAB_USER } from "../../fixtures/test-user";
 import { DashboardPage } from "../../pom/dashboard-page";
+import { LoginPage } from "../../pom/login-page";
 import { SharePage } from "../../pom/share-page";
-import { resetAndPrepareTestUser } from "../../utils/api-helpers";
+import {
+  ensureE2eOrgMember,
+  listNotebookMembers,
+  resetAndPrepareTestUser,
+} from "../../utils/api-helpers";
 
-// TODO: 当前测试验证的是 share-link 公开访问，不是 /invite/ 协作邀请。
-// 真正的 invite 流程（user A 发邀请 → user B 注册/登录 → 接受成为 member）待补充。
-test.describe("Share Collaboration", () => {
+test.describe("Invite Collaboration", () => {
   test.beforeAll(async ({ request }) => {
     await resetAndPrepareTestUser(request);
+    await ensureE2eOrgMember(request);
   });
 
-  test("user A creates workspace and user B accesses via share link", async ({
+  test("user A invites user B and B accepts via invite page", async ({
     browser,
     page,
+    request,
   }) => {
     const dashboard = new DashboardPage(page);
     const share = new SharePage(page);
@@ -25,24 +31,36 @@ test.describe("Share Collaboration", () => {
       throw new Error("Failed to extract workspaceId from URL");
     }
 
-    // User A: 进入分享中心，开启公开分享，提取链接
     await share.goto(workspaceId);
-    await share.enableShare();
-    const shareUrl = await share.copyShareLink();
-    if (!shareUrl) {
-      throw new Error("Share URL not found in page");
+    await share.inviteMember(COLLAB_USER.email);
+
+    const members = await listNotebookMembers(request, workspaceId);
+    const pendingMember = members.members.find(
+      (member) =>
+        member.email.trim().toLowerCase() === COLLAB_USER.email.toLowerCase() &&
+        member.status === "pending",
+    );
+    if (!pendingMember) {
+      throw new Error(`pending invite for ${COLLAB_USER.email} not found in members list`);
     }
 
-    // User B: 在全新 browser context 中打开分享链接（无需登录）
+    const inviteUrl = `/invite/${workspaceId}/${pendingMember.member_id}`;
+
     const userBContext = await browser.newContext();
     const userBPage = await userBContext.newPage();
     try {
-      await userBPage.goto(shareUrl);
-      await userBPage.waitForLoadState("networkidle");
-      // 验证共享页面加载成功（标题可见，且不是无效链接提示）
-      const title = userBPage.locator("h1.app-page-title");
-      await expect(title).toBeVisible();
-      await expect(title).not.toContainText(/invalid|无效|邀请异常/i);
+      const login = new LoginPage(userBPage);
+      await login.login(COLLAB_USER.email, COLLAB_USER.password);
+
+      await userBPage.goto(inviteUrl);
+      await expect(userBPage.locator('[data-testid="invite-surface"]')).toBeVisible();
+
+      await userBPage.locator('[data-testid="invite-accept-button"]').click();
+      await expect(userBPage.getByText(/已接受邀请|accepted/i)).toBeVisible();
+
+      await userBPage.getByRole("link", { name: /打开 Workspace|Open Workspace/i }).click();
+      await userBPage.waitForURL(new RegExp(`/dashboard/${workspaceId}`));
+      await expect(userBPage.locator('[data-testid="workspace-top-bar"]')).toBeVisible();
     } finally {
       await userBContext.close();
     }

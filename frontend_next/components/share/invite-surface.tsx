@@ -114,7 +114,7 @@ export function InviteSurface({ memberId, workspaceId }: InviteSurfaceProps) {
   }
 
   return (
-    <main className="app-auth-shell">
+    <main className="app-auth-shell" data-testid="invite-surface">
       <section className="app-surface-card" style={{ display: "grid", gap: "1rem", maxWidth: "34rem" }}>
         {loading ? (
           <p style={{ margin: 0 }}>正在加载邀请...</p>
@@ -176,10 +176,22 @@ export function InviteSurface({ memberId, workspaceId }: InviteSurfaceProps) {
               </div>
             ) : (
               <div className="app-button-row">
-                <button className="app-button-primary" disabled={actionLoading} type="button" onClick={() => void handleAccept()}>
+                <button
+                  className="app-button-primary"
+                  data-testid="invite-accept-button"
+                  disabled={actionLoading}
+                  type="button"
+                  onClick={() => void handleAccept()}
+                >
                   {actionLoading ? "处理中..." : "接受邀请"}
                 </button>
-                <button className="app-button-secondary" disabled={actionLoading} type="button" onClick={() => void handleDecline()}>
+                <button
+                  className="app-button-secondary"
+                  data-testid="invite-decline-button"
+                  disabled={actionLoading}
+                  type="button"
+                  onClick={() => void handleDecline()}
+                >
                   拒绝邀请
                 </button>
               </div>

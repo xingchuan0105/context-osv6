@@ -32,6 +32,7 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
   return (
         <section
           className="app-surface-card"
+          data-testid="share-invite-panel"
           style={{
             display: "grid",
             gap: "0.95rem",
@@ -53,6 +54,7 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
               </label>
               <input
                 className="app-input"
+                data-testid="share-invite-email"
                 id="invite-email"
                 type="email"
                 value={inviteEmail}
@@ -75,6 +77,7 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
             </div>
             <button
               className="app-button-primary"
+              data-testid="share-invite-send"
               disabled={inviteMemberMutation.isPending}
               style={{ justifyContent: "center" }}
               type="button"
@@ -106,6 +109,8 @@ export function ShareInvitePanel({ center }: { center: ShareCenter }) {
                 return (
                   <article
                     className="app-inline-surface"
+                    data-member-id={member.member_id}
+                    data-testid="share-invite-member"
                     key={member.member_id}
                     style={{ display: "grid", gap: "0.65rem", padding: "0.72rem 0.82rem 0.78rem" }}
                   >

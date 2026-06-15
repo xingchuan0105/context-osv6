@@ -4,7 +4,7 @@ import {
   PUBLISHED_PRIVACY_VERSION,
   PUBLISHED_TERMS_VERSION,
 } from "../../lib/legal/versions";
-import { TEST_USER } from "../fixtures/test-user";
+import { TEST_USER, COLLAB_USER } from "../fixtures/test-user";
 
 const AUTH_STORAGE_STATE_PATH = "playwright/.auth/user.json";
 const AUTH_STORAGE_KEY = "avrag.auth.v1";
@@ -296,6 +296,51 @@ export async function grantTestUserAdminRole(request: APIRequestContext) {
   if (!resp.ok()) {
     throw new Error(`grant-admin-role failed: ${resp.status()} ${await resp.text()}`);
   }
+}
+
+/**
+ * 将协作者账号放入 owner 所在 org，供 invite-accept E2E 使用。
+ * 须在 owner 账号存在（reset + ensureTestUserAccount）之后调用。
+ */
+export async function ensureE2eOrgMember(
+  request: APIRequestContext,
+  ownerEmail: string = TEST_USER.email,
+  member = COLLAB_USER,
+) {
+  const secret = process.env.E2E_RESET_SECRET;
+  if (!secret) {
+    throw new Error("E2E_RESET_SECRET is required. Set it in .env or environment.");
+  }
+  const resp = await request.post("/api/e2e/ensure-org-member", {
+    headers: { "X-E2E-Secret": secret },
+    data: {
+      owner_email: ownerEmail,
+      member_email: member.email,
+      password: member.password,
+      full_name: member.fullName,
+    },
+    timeout: 30_000,
+  });
+  if (!resp.ok()) {
+    throw new Error(`ensure-org-member failed: ${resp.status()} ${await resp.text()}`);
+  }
+}
+
+export async function listNotebookMembers(request: APIRequestContext, notebookId: string) {
+  const resp = await request.get(`/api/v1/notebooks/${notebookId}/members`, {
+    headers: authHeaders(),
+  });
+  if (!resp.ok()) {
+    throw new Error(`list members failed: ${resp.status()} ${await resp.text()}`);
+  }
+  return resp.json() as Promise<{
+    members: Array<{
+      member_id: string;
+      email: string;
+      status: string;
+      role: string;
+    }>;
+  }>;
 }
 
 /**

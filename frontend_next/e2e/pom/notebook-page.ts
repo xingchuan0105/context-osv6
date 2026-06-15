@@ -10,26 +10,24 @@ export class NotebookPage {
     await this.page.goto("/dashboard");
     await this.page.waitForLoadState("networkidle");
 
-    // 点击 dashboard 上的新建按钮（自动创建并跳转到新 workspace）
     await this.page.locator('[data-testid="dashboard-create-workspace"]').click();
     await this.page.waitForURL(/\/dashboard\/[^/]+$/);
 
-    // 等待顶部标题编辑触发器可见
+    await this.page.locator('[data-testid="workspace-top-bar"]').waitFor({ state: "visible" });
     const titleTrigger = this.page.locator("#workspace-title");
     await titleTrigger.waitFor({ state: "visible", timeout: 10_000 });
 
-    // 进入编辑模式、填写新名称、提交
     await titleTrigger.click();
     await titleTrigger.fill(name);
     await titleTrigger.press("Enter");
 
-    // 提交后触发器恢复为 button，验证文本已更新
     await expect(this.page.locator("#workspace-title")).toHaveText(name);
     this.lastCreatedName = name;
   }
 
   /** 要求在 workspace 页面（已定位到目标 workspace） */
   async renameNotebook(newName: string) {
+    await this.page.locator('[data-testid="workspace-top-bar"]').waitFor({ state: "visible" });
     const titleTrigger = this.page.locator("#workspace-title");
     await titleTrigger.waitFor({ state: "visible", timeout: 10_000 });
 
@@ -50,14 +48,12 @@ export class NotebookPage {
     if (!targetName) {
       throw new Error("deleteNotebook called but no notebook was created in this test. Call createNotebook first.");
     }
-    const cardLocator = this.page.locator(".dashboard-workspace-card", {
-      has: this.page.getByText(targetName),
+    const cardLocator = this.page.locator('[data-testid="dashboard-workspace-item"]', {
+      has: this.page.getByText(targetName, { exact: true }),
     });
 
-    // 打开 action menu（三点按钮）
     await cardLocator.locator(".dashboard-menu-trigger").click();
 
-    // 处理 window.confirm 确认框
     this.page.once("dialog", (dialog) => dialog.accept());
 
     await this.page.getByRole("menuitem", { name: /删除|Delete/i }).click();

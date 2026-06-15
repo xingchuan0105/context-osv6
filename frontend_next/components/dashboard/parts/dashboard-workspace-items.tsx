@@ -221,7 +221,7 @@ export function WorkspaceListItem({
   if (mode === "list") {
     return (
       <li className="dashboard-list-item animate-card-enter" style={{ animationDelay: `${index * 50}ms` }}>
-        <article className="dashboard-workspace-card">
+        <article className="dashboard-workspace-card" data-testid="dashboard-workspace-item" data-workspace-id={workspace.id}>
           <DashboardWorkspaceCardLink
             className="dashboard-workspace-card-link dashboard-workspace-card-link-list"
             title={title}
@@ -259,7 +259,7 @@ export function WorkspaceListItem({
 
   return (
     <li className={`${mode === "card" ? "dashboard-card-item" : "dashboard-list-item"} animate-card-enter`} role={mode === "card" ? "gridcell" : undefined} style={{ animationDelay: `${index * 50}ms` }}>
-      <article className="dashboard-workspace-card">
+      <article className="dashboard-workspace-card" data-testid="dashboard-workspace-item" data-workspace-id={workspace.id}>
         <DashboardWorkspaceCardLink
           className="dashboard-workspace-card-link dashboard-workspace-card-link-card"
           title={title}

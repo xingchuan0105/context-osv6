@@ -115,7 +115,7 @@ export function WorkspaceTopBar({
   }
 
   return (
-    <header className={styles.topBar}>
+    <header className={styles.topBar} data-testid="workspace-top-bar">
       <div className={styles.topBarBrand}>
         <Link className={styles.topBarBrandBlock} href="/dashboard">
           <ContextOsMark className={styles.topBarMark} />

@@ -278,7 +278,7 @@ export function DashboardSurface() {
             </button>
           </section>
         ) : viewMode === "card" ? (
-          <section aria-label={formatUiMessage(locale, "dashboardViewGridLabel")} className="dashboard-grid" role="grid">
+          <section aria-label={formatUiMessage(locale, "dashboardViewGridLabel")} className="dashboard-grid" data-testid="notebook-list" role="grid">
             <DashboardCreateTile creating={creatingWorkspace} delay={visibleWorkspaces.length * 50} onCreate={() => void handleCreateWorkspace()} />
             {visibleWorkspaces.map((workspace, index) => {
               return (
@@ -302,7 +302,7 @@ export function DashboardSurface() {
               <div>{formatUiMessage(locale, "dashboardCreatedAtColumn")}</div>
               <div>{formatUiMessage(locale, "dashboardRoleColumn")}</div>
             </div>
-            <ul aria-label={formatUiMessage(locale, "dashboardListLabel")} className="dashboard-list">
+            <ul aria-label={formatUiMessage(locale, "dashboardListLabel")} className="dashboard-list" data-testid="notebook-list">
               {visibleWorkspaces.map((workspace, index) => (
                 <WorkspaceListItem
                   key={workspace.id}

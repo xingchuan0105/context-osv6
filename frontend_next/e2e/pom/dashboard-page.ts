@@ -9,12 +9,12 @@ export class DashboardPage {
   }
 
   async openWorkspace(name: string) {
-    const card = this.page.locator(".dashboard-workspace-card", {
+    const card = this.page.locator('[data-testid="dashboard-workspace-item"]', {
       has: this.page.getByText(name, { exact: true }),
     });
     await card.locator(".dashboard-workspace-card-link").click();
     await this.page.waitForURL(/\/dashboard\/[^/]+$/);
-    await this.page.locator("#workspace-title").waitFor({ state: "visible", timeout: 10_000 });
+    await this.page.locator('[data-testid="workspace-top-bar"]').waitFor({ state: "visible", timeout: 10_000 });
   }
 
   getWorkspaceList() {

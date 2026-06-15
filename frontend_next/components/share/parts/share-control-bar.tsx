@@ -28,7 +28,7 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
   } = center;
 
   return (
-    <>
+    <div data-testid="share-control-bar">
       <div style={{ display: "grid", gap: "0.25rem" }}>
                 <div
                   style={{
@@ -162,6 +162,7 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
                     {formatUiMessage(locale, "shareCenter.shareUrlLabel")}
                   </span>
                   <div
+                    data-testid="share-link"
                     style={{
                       fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
                       fontSize: "0.84rem",
@@ -235,6 +236,6 @@ export function ShareControlBar({ center }: { center: ShareCenter }) {
                     : formatUiMessage(locale, "shareCenter.updateShareAction")}
                 </button>
               </div>
-    </>
+    </div>
   );
 }
