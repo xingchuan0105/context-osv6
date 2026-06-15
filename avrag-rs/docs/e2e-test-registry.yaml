@@ -426,9 +426,24 @@ tests:
       - I
     parallel_group: G-serial-integration
     ci_default: true
-  - id: product_e2e::integration::office_doc_liteparse_e2e::minimal_docx_liteparse_pdf_ingest_e2e
+  - id: product_e2e::integration::office_docx_e2e::office_docx_ingest_e2e
     layer: L2
-    module: office_doc_liteparse_e2e
+    module: office_docx_e2e
+    suite: integration
+    capabilities:
+      - CAP-INGEST
+    evidence:
+      - E-P
+      - E-Prod
+    deps:
+      - M
+      - I
+    parallel_group: G-serial-integration
+    ci_default: true
+    note: "mock office-parser docx direct ingest"
+  - id: product_e2e::integration::office_docx_staging_e2e::office_docx_staging_ingest_e2e
+    layer: L2
+    module: office_docx_staging_e2e
     suite: integration
     capabilities:
       - CAP-INGEST
@@ -440,7 +455,7 @@ tests:
     parallel_group: G-serial-integration
     ci_default: false
     ignore: true
-    note: "docx→pdf LiteParse; #[ignore] requires libreoffice"
+    note: "real office-parser-jvm docx; staging only"
   - id: product_e2e::integration::office_xlsx_e2e::office_xlsx_ingest_e2e
     layer: L2
     module: office_xlsx_e2e

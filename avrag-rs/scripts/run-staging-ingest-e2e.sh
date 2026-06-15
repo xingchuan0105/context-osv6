@@ -27,22 +27,18 @@ E2E_MODE=integration cargo test --test product_e2e -p app --features product-e2e
   integration::liteparse_pdf_e2e::phase0_mini_liteparse_pdf_ingest_e2e \
   -- --test-threads=1 --nocapture
 
-if command -v libreoffice >/dev/null 2>&1; then
-  echo "== docx → LiteParse (integration, ignored test) =="
+if curl -sf "${OFFICE_PARSER_BASE_URL:-http://127.0.0.1:9090}/v1/healthz" >/dev/null 2>&1; then
+  echo "== Real Office docx (staging) =="
   E2E_MODE=integration cargo test --test product_e2e -p app --features product-e2e \
-    integration::office_doc_liteparse_e2e::minimal_docx_liteparse_pdf_ingest_e2e \
+    integration::office_docx_staging_e2e::office_docx_staging_ingest_e2e \
     -- --ignored --test-threads=1 --nocapture
-else
-  echo "SKIP: docx LiteParse (libreoffice not on PATH)"
-fi
 
-if curl -sf "http://127.0.0.1:9090/v1/healthz" >/dev/null 2>&1; then
   echo "== Real Office xlsx (staging) =="
   E2E_MODE=integration cargo test --test product_e2e -p app --features product-e2e \
     integration::office_xlsx_staging_e2e::office_xlsx_staging_ingest_e2e \
     -- --ignored --test-threads=1 --nocapture
 else
-  echo "SKIP: office xlsx staging (office-parser-jvm not on :9090)"
+  echo "SKIP: office docx/xlsx staging (office-parser-jvm not on :9090)"
 fi
 
 black_swan_default="/mnt/e/OneDrive/桌面/知境笔记/the-black-swan_-the-impact-of-the-highly-improbable-second-edition-pdfdrive.com-.pdf"

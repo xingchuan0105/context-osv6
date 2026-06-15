@@ -79,6 +79,16 @@ pub(crate) async fn execute_office_parse(
     })?;
 
     let response = match doc_type {
+        OfficeDocType::Docx => {
+            client
+                .parse_docx(bytes, filename, &document_id.to_string())
+                .await
+        }
+        OfficeDocType::Doc => {
+            client
+                .parse_doc(bytes, filename, &document_id.to_string())
+                .await
+        }
         OfficeDocType::Xlsx => {
             client
                 .parse_xlsx(bytes, filename, &document_id.to_string())

@@ -23,6 +23,24 @@ fn image_file_routing_uses_paddle_ocr_image_route() {
 }
 
 #[test]
+fn docx_file_routing_uses_office_service() {
+    let decision = ParseRouter::route(
+        b"fake docx",
+        "test.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+    .unwrap();
+    assert_eq!(decision.route, ParseRoute::OfficeService);
+    assert!(matches!(decision.reason, RouteReason::OfficeDocument));
+    assert!(matches!(
+        decision.plan,
+        ParsePlan::Office(OfficeParsePlan {
+            doc_type: OfficeDocType::Docx
+        })
+    ));
+}
+
+#[test]
 fn presentation_file_routing_uses_pdf_after_conversion() {
     let decision = ParseRouter::route(
         b"fake ppt",

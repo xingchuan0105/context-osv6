@@ -324,7 +324,20 @@ impl ParseRouter {
                 }),
                 liteparse_snapshot: None,
             }),
-            "ppt" | "pptx" | "doc" | "docx" => Ok(ParseRouteDecision {
+            "doc" | "docx" => Ok(ParseRouteDecision {
+                route: ParseRoute::OfficeService,
+                reason: RouteReason::OfficeDocument,
+                probe_result: None,
+                plan: ParsePlan::Office(OfficeParsePlan {
+                    doc_type: if extension == "doc" {
+                        OfficeDocType::Doc
+                    } else {
+                        OfficeDocType::Docx
+                    },
+                }),
+                liteparse_snapshot: None,
+            }),
+            "ppt" | "pptx" => Ok(ParseRouteDecision {
                 route: ParseRoute::Pdf,
                 reason: RouteReason::OfficeDocument,
                 probe_result: None,

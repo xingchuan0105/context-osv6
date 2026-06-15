@@ -142,7 +142,8 @@ SEARCH_REQUIRE_REAL=1          # llm_real 强制；Brave 不可达则失败
 |------|----------|----------|-----|------|--------|
 | TXT 上传解析 | completed；chunks>0 | `smoke::ingestion_smoke` | L1 | M+I | **G-serial-rag** |
 | **LiteParse PDF（真实解析）** | `phase0-mini.pdf`→chunks>0；`liteparse_hybrid` | `integration::liteparse_pdf_e2e` | L2 | **I+P** | **G-serial-integration** |
-| **docx → PDF → LiteParse** | LibreOffice 转 PDF 后同 hybrid 路由 | `integration::office_doc_liteparse_e2e`（`#[ignore]`） | staging | **I** | 手动 |
+| **docx Office（mock）** | mock office-parser → chunks | `integration::office_docx_e2e` | L2 | **M+I** | 串行 |
+| **docx Office（真实 JVM）** | 真实 office-parser | `integration::office_docx_staging_e2e`（`#[ignore]`） | staging | **I+P** | staging 脚本 |
 | **PNG Paddle 路由（mock Jobs）** | mock Paddle jobs→text/figure chunks | `smoke::paddle_image_smoke`（PR）；`integration::paddle_image_e2e`（路由元数据） | L2/L1 | **I+P** | **G-serial-rag** |
 | **Black Swan PDF（真实 Paddle Jobs）** | 20 页 hybrid；`slow_ocr`/paddle | `smoke::paddle_pdf_smoke`（`#[ignore]`，manual-only） | staging | **I+P** | `./scripts/run-staging-ingest-e2e.sh` |
 | **xlsx Office（mock）** | mock office-parser → chunks | `integration::office_xlsx_e2e` | L2 | **M+I** | 串行 |
@@ -182,7 +183,7 @@ E2E_MODE=smoke cargo test -p app --test product_e2e --features product-e2e \
 - [x] **P2** 文档重新处理（reindex）HTTP 黑盒：`document_lifecycle::reindex_completed_document_requeues_ingestion` ✅ 2026-06-13
 - [x] **P0** `pdf_corpus` 对齐 P4 LiteParse（bundled PDF，去 MinerU/office 前置）✅ 2026-06-14
 - [x] **P0** `paddle_pdf_smoke` 迁入 `SMOKE_MANUAL_ONLY_MODULES` ✅ 2026-06-14
-- [x] **P1** docx→LiteParse：`integration::office_doc_liteparse_e2e` + staging 脚本 ✅ 2026-06-14
+- [x] **P1** docx office-parser：`integration::office_docx_e2e` + staging 脚本 ✅ 2026-06-15
 - [x] **P1** Playwright PDF 上传：`journey/workspace-upload-pdf-rag.spec.ts` ✅ 2026-06-14
 
 ---
