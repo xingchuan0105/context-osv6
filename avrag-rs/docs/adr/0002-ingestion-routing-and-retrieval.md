@@ -1,8 +1,9 @@
 # ADR 0002: 文件解析路由与多模态检索召回优化
 
-> Status: historical ADR, partially superseded on 2026-04-26 and again on 2026-06-13 (P4 LiteParse).
-> The parser routing, DocumentIR, text/multimodal evidence, and citation ideas remain valid.
-> **MinerU 精准解析路由、本地 lopdf 主路径、shadow/灰度切流** 已由 [LiteParse + Paddle Jobs 统一入库架构（2026-06-13）](/home/chuan/context-osv6/avrag-rs/docs/liteparse-paddle-ingestion-architecture-2026-06-13.md) 取代；历史迁移见 [P4 MinerU/shadow 归档](/home/chuan/context-osv6/avrag-rs/docs/archive/p4-mineru-shadow-migration-historical.md).
+> Status: **superseded** for parser routing on 2026-06-13 (P4 LiteParse) and again on 2026-06-15 (Office full-format office-parser).
+> The DocumentIR, text/multimodal evidence, and citation ideas in this ADR remain valid as design history.
+> **Current routing truth source:** [LiteParse + Paddle Jobs 统一入库架构（2026-06-13）](/home/chuan/context-osv6/avrag-rs/docs/liteparse-paddle-ingestion-architecture-2026-06-13.md) — PDF → LiteParse hybrid + Paddle Jobs; Office (doc/docx/xls/xlsx/ppt/pptx) → `office-parser-jvm`; standalone images → Paddle Jobs OCR.
+> MinerU 精准解析路由、本地 lopdf 主路径、shadow/灰度切流 已由上述文档取代；历史迁移见 [P4 MinerU/shadow 归档](/home/chuan/context-osv6/avrag-rs/docs/archive/p4-mineru-shadow-migration-historical.md).
 > Storage and retrieval target descriptions that mention Qdrant or PostgreSQL BM25 are superseded by [Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md): Milvus is the retrieval data plane for BM25 sparse, text dense, multimodal dense, and graph relation retrieval; Postgres remains the product control plane.
 
 ## 背景
@@ -101,15 +102,13 @@ pub struct ParseProbeResult {
 }
 ```
 
-路由规则建议如下：
+路由规则建议如下（**历史草案；当前实现见 LiteParse 架构文档 §3**）：
 
 1. `.txt/.md/.csv/.json/.rs/.py/...` 等纯文本与代码文件直接走 `Local`
-2. `.png/.jpg/.jpeg/.webp` 等纯图片文件直接走 `MineruPrecise`
-3. `.ppt/.pptx` 直接走 `MineruPrecise`
-4. `.pdf` 先走探针：
-   - 前 1-3 页可稳定提取高密度文本，且复杂图表/表格提示较低，走 `Local`
-   - 文本极少、疑似扫描件、图像密集、表格密集时，走 `MineruPrecise`
-5. `.doc/.docx/.xls/.xlsx` 初期默认走本地解析；若后续发现图文损失明显，再为 Office 增加复杂度探针和 MinerU 分流
+2. `.png/.jpg/.jpeg/.webp` 等纯图片文件 → **当前：** `PaddleOcrImage`（Paddle Jobs）
+3. `.ppt/.pptx` → **当前：** `OfficeService`（office-parser-jvm）；**本 ADR 草案：** `MineruPrecise`
+4. `.pdf` → **当前：** LiteParse hybrid 探针 + 页内 `page_routes`；**本 ADR 草案：** 本地 lopdf vs MinerU 二选一
+5. `.doc/.docx/.xls/.xlsx` → **当前：** `OfficeService`（office-parser-jvm）；**本 ADR 草案：** 本地解析为主
 
 这一定义的核心原则是：先用低成本探针判定，再决定是否调用高成本外部解析。
 

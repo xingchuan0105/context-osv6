@@ -185,6 +185,7 @@ E2E_MODE=smoke cargo test -p app --test product_e2e --features product-e2e \
 - [x] **P0** `pdf_corpus` 对齐 P4 LiteParse（bundled PDF，去 MinerU/office 前置）✅ 2026-06-14
 - [x] **P0** `paddle_pdf_smoke` 迁入 `SMOKE_MANUAL_ONLY_MODULES` ✅ 2026-06-14
 - [x] **P1** docx office-parser：`integration::office_docx_e2e` + staging 脚本 ✅ 2026-06-15
+- [x] **P1** pptx office-parser：`integration::office_pptx_e2e` + staging 脚本 ✅ 2026-06-15
 - [x] **P1** Playwright PDF 上传：`journey/workspace-upload-pdf-rag.spec.ts` ✅ 2026-06-14
 
 ---

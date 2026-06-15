@@ -26,7 +26,7 @@
 | Stream | 缺口 | 状态 |
 |--------|------|------|
 | [M3](./brooks-merged-fix-plan-2026-06-13-v6.md#m3--liteparse-单次解析快照-p1) | 同一 PDF 在 probe / `page_dimensions` / `extract_blocks` 多次 `parse_input` | 待优化 |
-| [M4](./brooks-merged-fix-plan-2026-06-13-v6.md#m4--独立图片-paddle-产物保护-p1) | 独立图片 `PaddleOcrImage` 缺 Product E2E 产物 contract | 待补测 |
+| [M4](./brooks-merged-fix-plan-2026-06-13-v6.md#m4--独立图片-paddle-产物保护-p1) | 独立图片 `PaddleOcrImage` Product E2E 产物 contract | ✅ `integration::paddle_image_e2e` + `smoke::paddle_image_smoke`（2026-06-15） |
 | [M5](./brooks-merged-fix-plan-2026-06-13-v6.md#m5--execute_pdf_parse-阶段拆分-p1) | `execute_pdf_parse` 混合路由、OCR、fallback、metadata | 待拆分 |
 
 ---
@@ -489,7 +489,7 @@ Job 预算耗尽
 | **P1** | A/B 类：LiteParse 抽字 + 抠图 MM | ✅ 已完成 |
 | **P2** | C/D 类：`PaddleJobsOcrService` 按页 Job；§9 合并 | ✅ 已完成 |
 | **P4** | 删 MinerU、全量 LiteParse、png→Paddle、删 shadow/rollout | ✅ 已完成 |
-| **P5** | 监控大盘、扩展 E2E 样本；M3/M4/M5 技术债 | 进行中 |
+| **P5** | 监控大盘、扩展 E2E 样本；M3/M5 技术债 | 进行中 |
 
 > **历史说明：** 原计划 P2.5（Shadow）与 P3（灰度）已跳过，直接以 product E2E 门禁进入 P4。见 [archive/p4-mineru-shadow-migration-historical.md](./archive/p4-mineru-shadow-migration-historical.md)。
 
