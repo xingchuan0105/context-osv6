@@ -277,3 +277,48 @@ Total examples: {}
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::future::Future;
+    use std::pin::Pin;
+
+    struct StubEvaluator;
+
+    impl RagEvaluator for StubEvaluator {
+        fn retrieve(
+            &self,
+            _query: &str,
+            _k: usize,
+        ) -> Pin<Box<dyn Future<Output = anyhow::Result<Vec<String>>> + Send + '_>> {
+            Box::pin(async { Ok(vec!["Atlas rollback checklist".to_string()]) })
+        }
+
+        fn synthesize(
+            &self,
+            _query: &str,
+            chunks: &[String],
+        ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + '_>> {
+            let cite = chunks.first().cloned().unwrap_or_default();
+            Box::pin(async move { Ok(format!("Answer cites [[cite:{cite}]]")) })
+        }
+    }
+
+    #[tokio::test]
+    async fn run_all_exercises_evaluator_against_sample_golden_set() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("golden_set.sample.json");
+        let config = HarnessConfig {
+            max_examples_per_subset: Some(1),
+            verbose: false,
+            ..HarnessConfig::default()
+        };
+        let harness = EvaluationHarness::from_file(&path, config)
+            .expect("sample golden set")
+            .with_evaluator(Box::new(StubEvaluator));
+
+        let report = harness.run_all().await.expect("evaluation run");
+        assert!(report.metrics.total_examples > 0);
+        assert!(report.failures.is_empty(), "{:?}", report.failures);
+    }
+}

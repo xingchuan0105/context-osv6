@@ -61,7 +61,9 @@ export async function recordLegalAcceptance(
 }
 
 export class PaymentConsentRequiredError extends Error {
-  constructor(message = "请先阅读并同意用户协议与隐私政策") {
+  readonly code = "payment_consent_required";
+
+  constructor(message = "Payment consent required") {
     super(message);
     this.name = "PaymentConsentRequiredError";
   }

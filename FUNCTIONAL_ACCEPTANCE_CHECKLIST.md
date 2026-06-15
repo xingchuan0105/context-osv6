@@ -282,7 +282,7 @@
 
 |#|功能点|状态|代码证据|
 |-|-|-|-|
-|12.1|黄金集回归测试 (100-500 样本)|⚠️|`tests/rag_quality/src/` 评估框架完整：`RagEvaluator` trait、`GoldenDataset`/`GoldenExample` 类型、`EvaluationMetrics::recall_at_k()`/`citation_accuracy()`/`hallucination_check()`。`golden_set.sample.json` 含 20 条样本。缺：`evaluate_example` 为骨架实现，未接入真实 `RagRuntime` 跑完整流水线|
+|12.1|黄金集回归测试 (100-500 样本)|⚠️|`EvaluationHarness::with_evaluator` + 样本集单测已绿；生产 `RagRuntime` 全流水线接线与 CI 发布门禁仍待接|
 |12.2|发布门禁 (Recall@15 ≤3% 下降等)|⚠️|`tests/rag_quality/src/metrics.rs:258` `assert_passing(baseline_recall=0.97)` 三门禁：Recall@15 下降≤3%、Citation Accuracy≥95%、Hallucination Rate≤2%。缺：未在 `.github/workflows/` 发布流程中强制阻断，仅在 `weekly-regression.yml` 跑单元测试|
 |12.3|每周回归运行|✅|`.github/workflows/weekly-regression.yml` `cron: '0 2 * * 0'` 每周日 02:00 UTC，跑 `cargo test -p rag_quality`，支持 `workflow_dispatch` 手动触发|
 |12.4|用户反馈收集|✅|前后端闭环：后端 `transport-http/src/handlers.rs:1727` `message_feedback_handler` → `analytics/src/service.rs` `record_product_event()` 写入 `product_events`；前端 `workspace-chat-pane.tsx` 👍/👎 按钮 → `lib/workspace/client.ts` `submitWorkspaceMessageFeedback()`|

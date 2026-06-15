@@ -897,6 +897,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn auth_register_requires_legal_versions_when_database_available() {
+        let Some(state) = pg_test_app_state().await else {
+            return;
+        };
+        let app = build_router(state);
+        let email = format!("missing-legal-{}@example.test", uuid::Uuid::new_v4());
+
+        let req = Request::builder()
+            .uri("/api/auth/register")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(format!(
+                r#"{{"email":"{email}","password":"password123","full_name":"No Legal"}}"#
+            )))
+            .unwrap();
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["error"].as_str(), Some("consent_required"));
+    }
+
+    #[tokio::test]
     async fn auth_legal_acceptance_records_payment_context_when_database_available() {
         let Some(state) = pg_test_app_state().await else {
             return;

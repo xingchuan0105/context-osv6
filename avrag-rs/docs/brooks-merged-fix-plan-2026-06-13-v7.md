@@ -77,23 +77,27 @@
 | L8 | P2 | Legal review | `RegisterRequest.terms_version/privacy_version` 类型为 `Option` 但 handler 实际必填，API 契约不清 | S7 |
 | L9 | P2 | Legal review | 设计文档仍写“33 项 P0”，未记录 verify-legal-p0.sh 已扩到 40 项（含 P1 段） | S7 |
 
-### 2.1 核销进度（2026-06-15 本轮）
+### 2.1 核销进度（2026-06-15，**全部 closed**）
 
 | ID | 状态 | 证据 / 备注 |
 |----|------|-------------|
-| B1 | ✅ | `agents/loop/mod.rs` 死 re-export 已删；`RUSTFLAGS="-D warnings" cargo check -p app-chat` 绿 |
-| L1 | ✅ | 营销页 `requireUsageProbe={false}` + billing Playwright 4/4 绿 |
-| B4 | 🟡 | Legal / M9 / memory 等已分批入库；工作树仍有 docs / harness 计划等待整理 |
-| B2 | ✅ | `crates/test-kit` / `avrag-test-kit` 已从 workspace 移除 |
-| B3 | ✅ | `app-chat/Cargo.toml` 无 `app-bootstrap` dev-dep |
-| B5 | 🟡 | 已拆 `mock_office_server` / `mock_paddle_server` / `mock_embedding_server` / `mock_search_server`；`mock_servers.rs` 仍 ~870 行（LLM + RAG helpers），OnceLock → `MockState` 注入待续 |
+| B1 | ✅ | `agents/loop/mod.rs` 死 re-export 已删；`-D warnings` 绿 |
+| L1 | ✅ | billing Playwright 4/4 绿 |
+| B4 | ✅ | Legal / M9 / memory / session-search 已分批入库 |
+| B2 | ✅ | `test-kit` 已从 workspace 移除 |
+| B3 | ✅ | `app-chat` 无 `app-bootstrap` dev-dep |
+| B5 | ✅ | mock 拆为 `office` / `paddle` / `embedding` / `search` / `rag_codegen` / `llm_server` + `MockRagState` |
 | B6 | ✅ | `tests/legal/*` 29/29 绿 |
-| L2 | ✅ | `integration-e2e.yml` 已配 PG + `DATABASE_URL` |
-| L3 | ✅ | `transport-http` legal HTTP 测试补强 |
-| L4 | ✅ | `legal-consent.spec.ts` + 版本号引 `versions.ts` |
-| L5 | ✅ | `postgres_delegates.rs` checkout 前 `has_payment_legal_acceptance` |
-| L7 | ✅ | `middleware.rs::normalize_route` 收录 legal 路由 |
-| B7–B10, L6, L8, L9 | ⏳ | P2 收尾仍 open |
+| L2–L4 | ✅ | integration PG + HTTP + Playwright legal |
+| B7 | ✅ | 仅 `ports::notebooks::notebook_store::NotebookStore` 单一路径 |
+| B8 | ✅ | `LegalReacceptanceGate` 全 i18n；`PaymentConsentRequiredError` 默认英文 + `code` |
+| B9 | ✅ | `docs/README.md` 指向 v7 / M15 报告 |
+| B10 | ✅ | `billing/tests/support/mod.rs` 共享 seed helpers |
+| L5–L7 | ✅ | checkout 二次同意 + `ApiError` + metrics 路由 |
+| L8 | ✅ | `RegisterRequest` 文档 + `auth_register_requires_legal_versions` 测试 |
+| L9 | ✅ | `legal-compliance-pages-design` 记 40 项自动化检查 |
+
+**无 open 项。** 后续仅为 P5 监控大盘实施（规划见 liteparse 架构 §17）与 `rag_quality` 生产 `RagRuntime` 接线（样本 harness 已绿）。
 
 ---
 
