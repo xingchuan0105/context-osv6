@@ -25,7 +25,7 @@ impl LoopPolicy {
         loop_exit: &LoopExitConfig,
         has_evidence: bool,
         direct_answer: Option<&str>,
-        tool_results: &[contracts::ToolResult],
+        tool_results: &mut [contracts::ToolResult],
         query: &str,
     ) -> SynthesisGate {
         exit_policy::decide_synthesis_gate(

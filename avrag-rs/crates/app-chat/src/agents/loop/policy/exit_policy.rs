@@ -1,6 +1,8 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use avrag_llm::ChatMessage;
+use avrag_rag_core::{FocusMode, ScoreBasedFocusMode};
+use contracts::documents::AnswerContextChunk;
 use contracts::{ToolResult, ToolStatus};
 
 use super::config::{EvidenceGateConfig, LoopExitConfig, ModeConfig};
@@ -94,6 +96,155 @@ pub fn evaluate_evidence_gate(
     EvidenceGateResult::Pass
 }
 
+fn chunk_text_field(value: &serde_json::Value) -> Option<&str> {
+    value
+        .get("text")
+        .or_else(|| value.get("content"))
+        .and_then(|v| v.as_str())
+}
+
+fn chunk_from_json(value: &serde_json::Value) -> Option<AnswerContextChunk> {
+    let text = chunk_text_field(value)?.to_string();
+    Some(AnswerContextChunk {
+        chunk_id: value
+            .get("chunk_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        doc_id: value
+            .get("doc_id")
+            .or_else(|| value.get("document_id"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        chunk_type: value
+            .get("chunk_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("text")
+            .to_string(),
+        page: value.get("page").and_then(|v| v.as_i64()),
+        text,
+        asset_id: None,
+        caption: None,
+        image_url: None,
+        parser_backend: None,
+        source_locator: None,
+    })
+}
+
+fn chunk_score(value: &serde_json::Value) -> f32 {
+    value
+        .get("score")
+        .and_then(|s| s.as_f64())
+        .map(|s| s as f32)
+        .unwrap_or(0.0)
+}
+
+fn filter_chunks_in_array(
+    chunks: &mut Vec<serde_json::Value>,
+    kept_ids: &HashSet<String>,
+    trimmed_text: &HashMap<String, String>,
+) {
+    chunks.retain(|chunk| {
+        chunk
+            .get("chunk_id")
+            .and_then(|v| v.as_str())
+            .is_some_and(|id| kept_ids.contains(id))
+    });
+    for chunk in chunks.iter_mut() {
+        if let Some(id) = chunk.get("chunk_id").and_then(|v| v.as_str())
+            && let Some(text) = trimmed_text.get(id)
+        {
+            if let Some(obj) = chunk.as_object_mut() {
+                if obj.contains_key("text") {
+                    obj.insert("text".to_string(), serde_json::Value::String(text.clone()));
+                } else {
+                    obj.insert("content".to_string(), serde_json::Value::String(text.clone()));
+                }
+            }
+        }
+    }
+}
+
+fn apply_focus_filter_to_data(
+    data: &mut serde_json::Value,
+    kept_ids: &HashSet<String>,
+    trimmed_text: &HashMap<String, String>,
+) {
+    if let Some(arr) = data.as_array_mut() {
+        filter_chunks_in_array(arr, kept_ids, trimmed_text);
+        return;
+    }
+    if let Some(obj) = data.as_object_mut()
+        && let Some(chunks) = obj.get_mut("chunks").and_then(|v| v.as_array_mut())
+    {
+        filter_chunks_in_array(chunks, kept_ids, trimmed_text);
+    }
+}
+
+/// Compress retrieval chunks when the evidence gate requests focus mode.
+pub fn apply_score_based_focus_mode(
+    tool_results: &mut [ToolResult],
+    query: &str,
+    gate_config: &EvidenceGateConfig,
+) -> bool {
+    if evaluate_evidence_gate(tool_results, query, gate_config)
+        != EvidenceGateResult::FocusModeNeeded
+    {
+        return false;
+    }
+
+    let focus = ScoreBasedFocusMode::default();
+    let mut pairs: Vec<(AnswerContextChunk, f32)> = Vec::new();
+
+    for result in tool_results.iter() {
+        let Some(data) = result.data.as_ref() else {
+            continue;
+        };
+        let chunk_values: Vec<&serde_json::Value> = if let Some(arr) = data.as_array() {
+            arr.iter().collect()
+        } else if let Some(arr) = data.get("chunks").and_then(|c| c.as_array()) {
+            arr.iter().collect()
+        } else {
+            continue;
+        };
+
+        for chunk in chunk_values {
+            if let Some(ctx) = chunk_from_json(chunk) {
+                pairs.push((ctx, chunk_score(chunk)));
+            }
+        }
+    }
+
+    if pairs.is_empty() {
+        return false;
+    }
+
+    let compressed = match focus.compress(&pairs, query, focus.keep_top_n) {
+        Ok(items) => items,
+        Err(error) => {
+            tracing::warn!(error = %error, "evidence gate: focus mode compression failed");
+            return false;
+        }
+    };
+
+    let kept_ids: HashSet<String> = compressed
+        .iter()
+        .map(|item| item.chunk.chunk_id.clone())
+        .collect();
+    let trimmed_text: HashMap<String, String> = compressed
+        .iter()
+        .map(|item| (item.chunk.chunk_id.clone(), item.chunk.text.clone()))
+        .collect();
+
+    for result in tool_results.iter_mut() {
+        if let Some(data) = result.data.as_mut() {
+            apply_focus_filter_to_data(data, &kept_ids, &trimmed_text);
+        }
+    }
+
+    true
+}
+
 fn topic_overlap(query: &str, chunks: &[&serde_json::Value]) -> bool {
     let query_words: HashSet<&str> = query
         .split_whitespace()
@@ -143,7 +294,7 @@ pub fn decide_synthesis_gate(
     loop_exit: &LoopExitConfig,
     has_evidence: bool,
     direct_answer: Option<&str>,
-    tool_results: &[ToolResult],
+    tool_results: &mut [ToolResult],
     query: &str,
 ) -> SynthesisGate {
     if let Some(answer) = direct_answer {
@@ -162,10 +313,13 @@ pub fn decide_synthesis_gate(
                     return SynthesisGate::DegradedNoEvidence;
                 }
                 EvidenceGateResult::FocusModeNeeded => {
-                    // focus mode not implemented yet, proceed to synthesis
-                    tracing::warn!(
-                        "evidence gate: focus mode needed but not implemented, proceeding"
-                    );
+                    if apply_score_based_focus_mode(tool_results, query, gate_config) {
+                        tracing::info!("evidence gate: applied score-based focus mode compression");
+                    } else {
+                        tracing::warn!(
+                            "evidence gate: focus mode needed but compression did not apply"
+                        );
+                    }
                 }
             }
         }
@@ -468,6 +622,39 @@ mod tests {
         assert_eq!(
             evaluate_evidence_gate(&results, "baking bread recipes", &gate_config()),
             EvidenceGateResult::TopicMismatch
+        );
+    }
+
+    #[test]
+    fn focus_mode_compresses_low_score_retrieval_chunks() {
+        let mut results = vec![ToolResult {
+            tool: "dense_retrieval".to_string(),
+            version: "1.0".to_string(),
+            status: ToolStatus::Ok,
+            data: Some(serde_json::json!({"chunks": [
+                {"chunk_id": "c1", "score": 0.2, "content": "alpha text", "document_name": "a.pdf"},
+                {"chunk_id": "c2", "score": 0.15, "content": "beta text", "document_name": "b.pdf"},
+                {"chunk_id": "c3", "score": 0.1, "content": "gamma text", "document_name": "c.pdf"},
+            ]})),
+            trace: None,
+        }];
+
+        assert!(apply_score_based_focus_mode(
+            &mut results,
+            "alpha query",
+            &gate_config(),
+        ));
+
+        let chunks = results[0]
+            .data
+            .as_ref()
+            .and_then(|data| data.get("chunks"))
+            .and_then(|value| value.as_array())
+            .expect("chunks should remain after focus mode");
+        assert!(!chunks.is_empty());
+        assert_eq!(
+            chunks[0].get("chunk_id").and_then(|v| v.as_str()),
+            Some("c1")
         );
     }
 }

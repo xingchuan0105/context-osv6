@@ -1,7 +1,7 @@
-use app_core::{parse_uuid_or_app_error, RetrievedContext};
+use app_core::parse_uuid_or_app_error;
 use chrono::Utc;
 use common::{AppError, now_rfc3339};
-use contracts::chat::{ChatMessage, ChatRequest, ChatResponse, ModeDebug, TraceInfo};
+use contracts::chat::{ChatRequest, ChatResponse, ModeDebug, TraceInfo};
 use contracts::notebooks::{ChatSession, CreateChatSessionRequest};
 use app_documents::{AuditAction, AuditRecord};
 use tracing::info;
@@ -10,10 +10,8 @@ use uuid::Uuid;
 use super::{ChatExecution, ChatPreflight, execute_chat_pipeline};
 use crate::context::ChatContext;
 use crate::{
-    agent_icon, agent_name, build_answer, build_citations, build_degrade_trace, build_mode_debug,
-    build_planner_output, build_sources, derive_profile_domains, derive_profile_topics,
-    detect_preferred_style, estimate_token_count, merge_general_profile_custom_preferences,
-    next_message_id,
+    derive_profile_domains, derive_profile_topics, detect_preferred_style,
+    estimate_token_count, merge_general_profile_custom_preferences,
 };
 
 impl ChatContext {

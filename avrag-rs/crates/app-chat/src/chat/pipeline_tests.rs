@@ -19,6 +19,26 @@ use contracts::notebooks::{ChatSession, Notebook};
     use crate::chat::pipeline_steps::dispatch_mode;
     use crate::{ChatContext, LlmContext, OrchestratorContext};
 
+    use crate::agents::runtime::{Agent, AgentRequest, AgentRunResult};
+    use crate::agents::service::UnifiedAgentService;
+    use async_trait::async_trait;
+
+    struct PipelineEchoAgent;
+
+    #[async_trait]
+    impl Agent for PipelineEchoAgent {
+        async fn run(
+            &self,
+            request: AgentRequest,
+            _sink: &dyn crate::agents::events::AgentEventSink,
+        ) -> Result<AgentRunResult, AppError> {
+            Ok(AgentRunResult {
+                answer: request.query.clone(),
+                ..Default::default()
+            })
+        }
+    }
+
     struct TestObjectStore;
 
     #[async_trait::async_trait]
@@ -90,7 +110,7 @@ use contracts::notebooks::{ChatSession, Notebook};
             ),
             llm_ctx: LlmContext::new(None, None),
             orchestrator: OrchestratorContext::new(
-                None,
+                Some(Arc::new(UnifiedAgentService::new(Box::new(PipelineEchoAgent)))),
                 None,
                 Arc::new(GuardPipeline::new()),
                 None,
@@ -176,6 +196,7 @@ use contracts::notebooks::{ChatSession, Notebook};
 
         assert_eq!(execution.mode, "rag");
         assert_eq!(execution.response.session_id, session.id);
-        assert!(!execution.apply_output_guard);
+        assert!(execution.apply_output_guard);
+        assert_eq!(execution.response.answer, "test");
     }
 }
