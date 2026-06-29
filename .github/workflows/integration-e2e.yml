@@ -32,23 +32,23 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo registry
-        uses: actions/cache@v4
+      # RESTORE-ONLY (`actions/cache/restore@v4`, no post-save): plain `actions/cache@v4`
+      # post-save fails on this workspace — both `avrag-rs/target` and `~/.cargo/git` exceed
+      # the 10GB cache limit, turning the job red even when all tests pass (observed
+      # 2026-06-29: steps 10-12 SUCCESS, Post Cache build/index FAILED). restore@v4 has no
+      # post-save step → no save can fail. `avrag-rs/target` is not restored (also >10GB) →
+      # cold compile each run (~15min, within the 45min job timeout).
+      - name: Restore cargo registry
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
 
-      - name: Cache cargo index
-        uses: actions/cache@v4
+      - name: Restore cargo index
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cargo/git
           key: ${{ runner.os }}-cargo-index-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
-
-      # `avrag-rs/target` is intentionally NOT cached: a full debug build of this workspace
-      # exceeds the 10GB actions/cache limit, so the post-save step fails and turns the job red
-      # even when all tests pass (observed 2026-06-29: steps 10-12 SUCCESS, step 23 Post Cache
-      # FAILED). The registry + git caches above still skip dep downloads; only compiled
-      # artifacts rebuild each run (~15min cold build, within the 45min job timeout).
       - name: Start Milvus stack
         run: |
           COMPOSE_FILE="$(find . -path '*/docker-compose.milvus.yml' -print -quit)"
