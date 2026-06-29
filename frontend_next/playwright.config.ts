@@ -96,7 +96,10 @@ export default defineConfig({
       // 统一由 Playwright webServer 启动前端；CI用 build+start，本地用 dev
       command: process.env.CI ? "pnpm build && pnpm start" : "pnpm dev",
       url: "http://127.0.0.1:3000",
-      timeout: 60_000,
+      // 300s: `pnpm build` (Next.js production build) on a 2-core CI runner takes
+      // 90–180s, far exceeding the prior 60s timeout — which made the webServer fail
+      // to start and red-flagged every journey/billing spec (observed 2026-06-29).
+      timeout: 300_000,
       reuseExistingServer,
       env: webServerEnv({
         NEXT_PUBLIC_PRICING_REVAMP_ENABLED: "1",
