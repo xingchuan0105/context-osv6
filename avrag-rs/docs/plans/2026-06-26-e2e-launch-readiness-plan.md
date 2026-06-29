@@ -337,7 +337,7 @@ pnpm exec playwright test --project=functional e2e/specs/smoke/api-access.spec.t
 | **PR-2** | MCP Product E2E | `product_e2e/integration/mcp_*.rs`, 指南 §2 | integration 全绿 |
 | **PR-3** | OpenAI + 限流/配额 E2E | `transport-http/tests/openai_*`, `product_e2e/**/quota_*`, `rate_limit_*` | smoke 或 integration 全绿 |
 | **PR-4** | Billing master CI | `.github/workflows/frontend-journey.yml` 或新 billing workflow | master 上 billing spec 绿 |
-| **PR-5** | Playwright api-access + citation | `frontend_next/e2e/specs/**` | functional + journey 本地绿 ✅（§7.1 4.7s / §7.2 46.5s，2026-06-29）+ journey-e2e CI 注入 RAG key（3 secret） |
+| **PR-5** | Playwright api-access + citation | `frontend_next/e2e/specs/**` | functional + journey 本地绿 ✅（§7.1 4.7s / §7.2 46.5s，2026-06-29）+ journey-e2e CI 注入 RAG key（3 secret）+ **CI secret 注入机制本地模拟验证通过**（.env 挪开 + process env 传 3 key，§7.2 1.4m passed，2026-06-29）；真实 GitHub journey CI 待推 master（origin/master 落后 207 提交且 CI 被 `4cb8f67` 移除，journey workflow 不在默认分支、无法 `workflow_dispatch`） |
 | **PR-6** | rag_quality + release gate | `tests/rag_quality/`, `.github/workflows/` | 故意降 recall 时 CI 红 |
 
 **依赖顺序**：PR-1 → PR-2 → PR-5；PR-3、PR-4、PR-6 可与 PR-2 之后并行。
