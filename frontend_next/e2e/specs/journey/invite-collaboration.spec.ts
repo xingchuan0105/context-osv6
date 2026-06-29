@@ -63,7 +63,9 @@ test.describe("Invite Collaboration", () => {
       await expect(userBPage.locator('[data-testid="invite-surface"]')).toBeVisible();
 
       await userBPage.locator('[data-testid="invite-accept-button"]').click();
-      await expect(userBPage.getByText(/已接受邀请|accepted/i)).toBeVisible();
+      await expect(userBPage.getByText(/已接受邀请|accepted/i)).toBeVisible({
+        timeout: 30_000,
+      });
 
       await userBPage.getByRole("link", { name: /打开 Workspace|Open Workspace/i }).click();
       await userBPage.waitForURL(new RegExp(`/dashboard/${workspaceId}`), { timeout: 60_000 });

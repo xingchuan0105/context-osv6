@@ -119,7 +119,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-journey-report
-          path: frontend_next/playwright-report/
+          path: |
+            frontend_next/playwright-report/
+            frontend_next/test-results/
           retention-days: 7
 
   billing-e2e:
@@ -211,5 +213,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-billing-report
-          path: frontend_next/playwright-report/
+          path: |
+            frontend_next/playwright-report/
+            frontend_next/test-results/
           retention-days: 7
