@@ -43,13 +43,16 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo
-        uses: actions/cache@v4
+      - name: Restore cargo cache
+        # cache/restore (not actions/cache): no post-step save, which avoids the
+        # hashFiles('avrag-rs/**/Cargo.lock') template error in the post-save step
+        # and the 10GB cache limit from caching avrag-rs/target. ~/.cargo/registry +
+        # ~/.cargo/git still speed the cold build; target is rebuilt each run.
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            avrag-rs/target
           key: ${{ runner.os }}-cargo-journey-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
 
       - name: Pre-build Rust backend
@@ -154,13 +157,14 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo
-        uses: actions/cache@v4
+      - name: Restore cargo cache
+        # See journey-e2e: cache/restore avoids the post-save hashFiles template
+        # error and the 10GB limit from caching avrag-rs/target.
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            avrag-rs/target
           key: ${{ runner.os }}-cargo-billing-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
 
       - name: Pre-build Rust backend
