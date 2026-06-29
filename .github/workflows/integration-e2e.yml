@@ -44,12 +44,11 @@ jobs:
           path: ~/.cargo/git
           key: ${{ runner.os }}-cargo-index-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
 
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: avrag-rs/target
-          key: ${{ runner.os }}-cargo-build-integration-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
-
+      # `avrag-rs/target` is intentionally NOT cached: a full debug build of this workspace
+      # exceeds the 10GB actions/cache limit, so the post-save step fails and turns the job red
+      # even when all tests pass (observed 2026-06-29: steps 10-12 SUCCESS, step 23 Post Cache
+      # FAILED). The registry + git caches above still skip dep downloads; only compiled
+      # artifacts rebuild each run (~15min cold build, within the 45min job timeout).
       - name: Start Milvus stack
         run: |
           COMPOSE_FILE="$(find . -path '*/docker-compose.milvus.yml' -print -quit)"
