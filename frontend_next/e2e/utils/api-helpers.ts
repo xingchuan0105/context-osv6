@@ -138,9 +138,13 @@ export function writeAuthStorageState(payload: AuthPayload) {
   fs.writeFileSync(AUTH_STORAGE_STATE_PATH, JSON.stringify(state, null, 2));
 }
 
-async function loginTestUserViaAPI(request: APIRequestContext): Promise<AuthPayload> {
+async function loginUserViaAPI(
+  request: APIRequestContext,
+  email: string,
+  password: string,
+): Promise<AuthPayload> {
   const loginResp = await request.post("/api/auth/login", {
-    data: { email: TEST_USER.email, password: TEST_USER.password },
+    data: { email, password },
     timeout: 30_000,
   });
   if (!loginResp.ok()) {
@@ -156,6 +160,44 @@ async function loginTestUserViaAPI(request: APIRequestContext): Promise<AuthPayl
     throw new Error(`login response invalid: ${JSON.stringify(body)}`);
   }
   return body.data;
+}
+
+async function loginTestUserViaAPI(request: APIRequestContext): Promise<AuthPayload> {
+  return loginUserViaAPI(request, TEST_USER.email, TEST_USER.password);
+}
+
+/** API login + legal acceptance for secondary E2E users (e.g. invite collaborator). */
+export async function loginAndPrepareUserSession(
+  request: APIRequestContext,
+  email: string,
+  password: string,
+): Promise<AuthPayload> {
+  const payload = await loginUserViaAPI(request, email, password);
+  await ensureLegalAcceptance(request, payload.token);
+  return payload;
+}
+
+/** Seed a fresh browser context/page with JWT + persisted auth cookies. */
+export async function seedBrowserPageAuth(
+  page: import("@playwright/test").Page,
+  payload: AuthPayload,
+) {
+  const localStorageValue = JSON.stringify({ token: payload.token, user: payload.user });
+  const persistedCookieValue = encodeURIComponent(localStorageValue);
+  await page.goto("/login");
+  await page.evaluate(
+    ({ storageKey, storageValue, persistedValue }) => {
+      localStorage.setItem(storageKey, storageValue);
+      const maxAge = 60 * 60 * 24 * 365;
+      document.cookie = `avrag.auth.persisted=${persistedValue}; Path=/; SameSite=Lax; Max-Age=${maxAge}`;
+      document.cookie = `avrag.auth.session=1; Path=/; SameSite=Lax; Max-Age=${maxAge}`;
+    },
+    {
+      storageKey: AUTH_STORAGE_KEY,
+      storageValue: localStorageValue,
+      persistedValue: persistedCookieValue,
+    },
+  );
 }
 
 async function ensureLegalAcceptance(request: APIRequestContext, token: string) {

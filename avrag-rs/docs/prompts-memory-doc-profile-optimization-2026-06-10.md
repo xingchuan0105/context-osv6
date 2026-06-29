@@ -54,21 +54,21 @@
 
 ## 3. 记忆机制改造
 
-### 现状（核实）
-三层，且**读回是 runtime 直接注入，不是 skill 调取**：
-- L1 原始轮次：PG `messages`（`prior_turns`）。
-- L2 会话摘要：`session-summary.system.md`，消息 ≥10 触发，`cm.update_summary` 写 PG（`chat_private.rs:44/209`、`service_postprocess.rs:113`）。
-- L3 用户画像（dream 层）：`user-profile-extraction.system.md`，≤1 次/24h，确定性 merge 后写 `structured_profile`（`chat_private.rs:76` `maybe_update_structured_profile`）。**L3 的输入当前是 L2 的摘要**（`service_postprocess.rs:181→184`）。
-- 读回：L3 → `AgentRequest.user_preferences`（runtime.rs:178）→ `rag_prompts.rs:200 user_preference_memory`；L2 → `RagSessionContext.summary`。
-- 指代消解：`query_normalize.rs` 已是 **raw + resolved 双轨**，`resolved_query` 存于 `user_turn_metadata.query_resolution`（`service_postprocess.rs:91-94`），`prior_user_turns` 取历史时已优先 resolved（`query_normalize.rs:74-92`）。
+### 现状（2026-06-14 更新）
+读回与写入路径（L2 已移除）：
+- L1 原始轮次：PG `messages`（`prior_turns` + 保底 prior user 注入）。
+- ~~L2 会话摘要~~：**已删除**（`chat_sessions.summary`、`update_session_summary`；migrations `0043`–`0045`）。
+- L3 用户画像（dream 层）：`user-profile-extraction.system.md`，≤1 次/24h，输入为最近 **12 轮**原文（`build_recent_turns_context`，`service_postprocess.rs`）。
+- 读回：L3 → `AgentRequest.user_preferences`；更早历史 → `conversation_history_load`（PG 近序 + jieba FTS，notebook scope）。
+- 指代消解：`resolved_query` 一等列 + `user_turn_metadata`（ADR-0008）。
 
 ### 目标设计（已认）
 
 1. **删除 L2 session-summary** —— ☑
    - 移除 `maybe_update_session_summary` / `build_session_summary` 调用与 `session-summary.system.md` 引用（`chat_private.rs`、`service_postprocess.rs`；并清理 `guardrails/.../prompt_leak.rs:32` 的 include）。
 
-2. **保留 L3 画像层，输入改接最近 12 轮原文** —— ☑（keep_repoint，窗口 = 12 轮）
-   - `maybe_update_structured_profile` 的 `session_summary` 入参，改为由最近 **12 轮**原始对话拼装（不再依赖 L2）。
+2. **保留 L3 画像层，输入改接最近 12 轮原文** —— ☑
+   - `maybe_update_structured_profile` 使用 `build_recent_turns_context`（12 轮窗口），不依赖 L2。
 
 3. **近 3 轮保底注入 + 按需 skill 调取** —— ☑
    - 默认无条件注入最近 **3 轮**（保底下限，保障指代消解与连续性）。
@@ -136,7 +136,7 @@
 
 ## 6. 待决项
 
-（已无未决项：`rerank` 已定为从 codegen 提示词删除；L3 画像输入窗口已定为 12 轮；保底注入 3 轮。）
+（已无未决项：`rerank` 已定为从 codegen 提示词删除；L3 画像输入窗口已定为 12 轮；保底注入 **2** 轮 prior user。）
 
 ---
 

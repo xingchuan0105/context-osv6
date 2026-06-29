@@ -105,7 +105,12 @@ async fn auth_register_handler(
         }
     };
 
-    let token = issue_jwt_for_auth_version(&result.user_id, &result.org_id, result.auth_version);
+    let token = issue_jwt_for_auth_version(
+        &result.user_id,
+        &result.org_id,
+        result.auth_version,
+        &result.role,
+    );
     record_api_product_event_if_available(
         &state,
         result.user_id,
@@ -194,6 +199,7 @@ async fn auth_login_handler(
         &credentials.user_id,
         &credentials.org_id,
         credentials.auth_version,
+        &credentials.role,
     );
     record_api_product_event_if_available(
         &state,

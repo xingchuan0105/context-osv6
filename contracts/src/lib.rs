@@ -1,4 +1,5 @@
 pub mod admin;
+pub mod agent_permissions;
 pub mod auth;
 pub mod auth_runtime;
 pub mod billing;
@@ -12,6 +13,11 @@ pub mod share;
 pub mod tool_call;
 pub mod usage_limit;
 
+pub use agent_permissions::{
+    normalize_api_key_permissions, ORG_KEY_DEFAULT_PERMISSIONS, PERM_ADMIN, PERM_INDEX, PERM_QUERY,
+    PERM_WORKSPACE_CREATE, PERM_WORKSPACE_LIST, USER_ROLE_ORG_ADMIN,
+    WORKSPACE_KEY_DEFAULT_PERMISSIONS, user_role_grants_org_admin,
+};
 pub use admin::{
     AdminUsageResponse, AuditLogEntry, AuditLogListResponse, AuditLogQuery,
     DegradationStatusResponse, FeatureFlagChangeRequest, FeatureFlagEntry, HealthResponse,

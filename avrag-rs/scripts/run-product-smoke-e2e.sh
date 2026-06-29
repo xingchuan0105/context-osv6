@@ -94,16 +94,28 @@ cargo test -p ingestion image_file_routing_uses_paddle_ocr_image_route --quiet
 cargo test -p avrag-worker paddle_image_route_metadata_contract --quiet
 
 echo "== Non-RAG smoke + unit tests (parallel) =="
+parallel_pids=()
 for t in "${NON_RAG_MODULES[@]}"; do
   if is_manual_only_smoke_module "$t"; then
     continue
   fi
   cargo test --test product_e2e -p app --features product-e2e "smoke::${t}" -- --test-threads=1 --nocapture &
+  parallel_pids+=("$!")
 done
 for f in "${UNIT_TEST_FILTERS[@]}"; do
   cargo test --test product_e2e -p app --features product-e2e "$f" -- --test-threads=1 --nocapture &
+  parallel_pids+=("$!")
 done
-wait
+parallel_fail=0
+for pid in "${parallel_pids[@]}"; do
+  if ! wait "$pid"; then
+    parallel_fail=1
+  fi
+done
+if [[ "$parallel_fail" -ne 0 ]]; then
+  echo "ERROR: one or more non-RAG smoke / unit test jobs failed" >&2
+  exit 1
+fi
 
 echo "== RAG smoke (serial) =="
 for t in "${RAG_SERIAL_MODULES[@]}"; do

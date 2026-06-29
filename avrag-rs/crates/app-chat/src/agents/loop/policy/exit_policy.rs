@@ -34,11 +34,31 @@ pub enum EvidenceGateResult {
 /// Pure-code evidence quality gate. No LLM calls.
 /// Examines tool_results metadata: retrieval count, score concentration,
 /// context budget, topic relevance.
+fn search_tool_results_non_empty(tool_results: &[ToolResult]) -> bool {
+    tool_results.iter().any(|result| {
+        if result.status != ToolStatus::Ok
+            || !SEARCH_EVIDENCE_TOOLS.contains(&result.tool.as_str())
+        {
+            return false;
+        }
+        result.data.as_ref().is_some_and(|data| {
+            data.get("results")
+                .and_then(|v| v.as_array())
+                .is_some_and(|items| !items.is_empty())
+        })
+    })
+}
+
 pub fn evaluate_evidence_gate(
     tool_results: &[ToolResult],
     query: &str,
     config: &EvidenceGateConfig,
 ) -> EvidenceGateResult {
+    // Web search returns {"results": [...]}, not RAG chunks — pass when non-empty.
+    if search_tool_results_non_empty(tool_results) {
+        return EvidenceGateResult::Pass;
+    }
+
     // 1. Extract all chunks from tool results (flat array or {"chunks": [...]}).
     let mut chunks: Vec<&serde_json::Value> = Vec::new();
     for result in tool_results {
@@ -554,6 +574,30 @@ mod tests {
         assert_eq!(
             evaluate_evidence_gate(&results, "test query", &gate_config()),
             EvidenceGateResult::InsufficientEvidence
+        );
+    }
+
+    #[test]
+    fn evidence_gate_web_search_results_pass() {
+        let results = vec![ToolResult {
+            tool: "web_search".to_string(),
+            version: "1.0".to_string(),
+            status: ToolStatus::Ok,
+            data: Some(serde_json::json!({
+                "query_type": "brave_llm_context",
+                "sub_queries": ["tokyo weather"],
+                "results": [{
+                    "title": "Tokyo Weather",
+                    "url": "https://example.com/weather",
+                    "snippet": "Sunny today in Tokyo."
+                }],
+                "synthesized_answer": ""
+            })),
+            trace: None,
+        }];
+        assert_eq!(
+            evaluate_evidence_gate(&results, "tokyo weather", &gate_config()),
+            EvidenceGateResult::Pass
         );
     }
 

@@ -40,6 +40,14 @@ pub(crate) fn router() -> Router<AppState> {
             "/agent/capabilities",
             get(handlers::agent_capabilities_handler),
         )
+        .route(
+            "/agent/operation-guides/{mode}",
+            get(handlers::agent_operation_guide_handler),
+        )
+        .route(
+            "/mcp",
+            get(crate::mcp::unified_mcp_sse_handler).post(crate::mcp::unified_mcp_jsonrpc_handler),
+        )
 }
 
 pub(crate) fn compat_router() -> Router<AppState> {
@@ -48,9 +56,12 @@ pub(crate) fn compat_router() -> Router<AppState> {
             "/v1/notebooks/{notebook_id}/chat/completions",
             post(crate::openai_chat_completions_handler),
         )
-        .route("/mcp/notebooks/{notebook_id}", get(crate::mcp_sse_handler))
+        .route(
+            "/mcp/notebooks/{notebook_id}",
+            get(crate::mcp::compat_mcp_sse_handler).post(crate::mcp::compat_mcp_jsonrpc_handler),
+        )
         .route(
             "/mcp/notebooks/{notebook_id}/tools/call",
-            post(crate::mcp_tool_call_handler),
+            post(crate::mcp::compat_mcp_tool_call_handler),
         )
 }

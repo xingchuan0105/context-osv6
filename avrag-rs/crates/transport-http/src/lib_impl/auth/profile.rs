@@ -1,6 +1,12 @@
 async fn auth_logout_handler(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "logout requires a signed-in user session",
+    ) {
+        return handlers::app_error_response(error);
+    }
     let Some(user_id) = state.auth().actor_id() else {
         return handlers::error_response(
             StatusCode::UNAUTHORIZED,
@@ -45,6 +51,12 @@ async fn auth_logout_handler(
 async fn auth_me_handler(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "profile requires a signed-in user session",
+    ) {
+        return handlers::app_error_response(error);
+    }
     let Some(user_id) = state.auth().actor_id() else {
         return handlers::error_response(
             StatusCode::UNAUTHORIZED,
@@ -100,6 +112,12 @@ async fn auth_update_profile_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(req): Json<UpdateProfileRequest>,
 ) -> Response {
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "profile updates require a signed-in user session",
+    ) {
+        return handlers::app_error_response(error);
+    }
     let Some(user_id) = state.auth().actor_id() else {
         return handlers::error_response(
             StatusCode::UNAUTHORIZED,
@@ -158,6 +176,12 @@ async fn auth_change_password_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(req): Json<ChangePasswordRequest>,
 ) -> Response {
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "password changes require a signed-in user session",
+    ) {
+        return handlers::app_error_response(error);
+    }
     let Some(user_id) = state.auth().actor_id() else {
         return handlers::error_response(
             StatusCode::UNAUTHORIZED,
@@ -247,6 +271,12 @@ async fn auth_change_password_handler(
 async fn auth_legal_status_handler(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "legal status requires a signed-in user session",
+    ) {
+        return handlers::app_error_response(error);
+    }
     let Some(user_id) = state.auth().actor_id() else {
         return handlers::error_response(
             StatusCode::UNAUTHORIZED,
@@ -295,6 +325,12 @@ async fn auth_record_legal_acceptance_handler(
     headers: HeaderMap,
     Json(req): Json<RecordLegalAcceptanceRequest>,
 ) -> Response {
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "legal acceptance requires a signed-in user session",
+    ) {
+        return handlers::app_error_response(error);
+    }
     let Some(user_id) = state.auth().actor_id() else {
         return handlers::error_response(
             StatusCode::UNAUTHORIZED,
@@ -373,6 +409,12 @@ async fn auth_record_legal_acceptance_handler(
 async fn usage_limit_handler(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "usage limits require a signed-in user session",
+    ) {
+        return handlers::app_error_response(error);
+    }
     match state.get_user_usage_limit().await {
         Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
         Err(_) => (

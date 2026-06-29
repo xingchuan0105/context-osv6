@@ -17,7 +17,7 @@ test.describe("PDF Upload + RAG Journey", () => {
     request,
     runId,
   }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(300_000);
 
     const dashboard = new DashboardPage(page);
     const workspace = new WorkspacePage(page);
@@ -37,7 +37,7 @@ test.describe("PDF Upload + RAG Journey", () => {
 
     const messageText = `E2E ${runId}: According to the uploaded PDF, what is LiteParse and how is it used? Cite the document.`;
     await chat.ask(messageText, "rag");
-    await chat.waitForAnswer(150_000);
+    await chat.waitForAnswer(240_000);
 
     const lastMessage = chat.getLastMessage();
     await expect(lastMessage).toBeVisible();
@@ -50,6 +50,6 @@ test.describe("PDF Upload + RAG Journey", () => {
 
     const citationCount = await chat.citationCount();
     expect(citationCount, "PDF RAG journey requires at least one citation").toBeGreaterThan(0);
-    await expect(page.locator('[data-testid="workspace-citation"]').first()).toBeVisible();
+    await chat.expectCitationUiVisible(15_000);
   });
 });

@@ -17,9 +17,10 @@
         )
         .bind(actor_id)
         .bind(auth.org_id().into_uuid())
-        .fetch_one(tx.as_mut())
+        .fetch_optional(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?
+        .ok_or_else(|| AppError::not_found("actor_not_found", "user not found"))?
         .try_get::<String, _>("email")
         .map_err(|error| AppError::internal(error.to_string()))?;
         let row = sqlx::query(

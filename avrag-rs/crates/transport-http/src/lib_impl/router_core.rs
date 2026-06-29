@@ -125,19 +125,33 @@ async fn record_api_product_event_if_available(
 
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn issue_jwt(user_id: &Uuid, org_id: &Uuid) -> String {
-    issue_jwt_for_auth_version(user_id, org_id, default_auth_version())
+    issue_jwt_for_auth_version(user_id, org_id, default_auth_version(), "user")
 }
 
-pub(crate) fn issue_jwt_for_auth_version(
+pub(crate) fn jwt_permissions_for_user_role(user_role: &str) -> Vec<String> {
+    let mut permissions = vec![
+        "read".to_string(),
+        "write".to_string(),
+        "external_network".to_string(),
+    ];
+    if contracts::user_role_grants_org_admin(user_role) {
+        permissions.push(contracts::PERM_ADMIN.to_string());
+    }
+    permissions
+}
+
+#[doc(hidden)]
+pub fn issue_jwt_for_auth_version(
     user_id: &Uuid,
     org_id: &Uuid,
     auth_version: i32,
+    user_role: &str,
 ) -> String {
     let now = chrono::Utc::now();
     let claims = JwtClaims {
         sub: user_id.to_string(),
         org_id: org_id.to_string(),
-        permissions: vec!["read".to_string(), "write".to_string(), "external_network".to_string()],
+        permissions: jwt_permissions_for_user_role(user_role),
         jti: Uuid::new_v4().to_string(),
         auth_version,
         exp: (now + chrono::Duration::hours(24)).timestamp() as usize,

@@ -54,6 +54,7 @@ fn storage_context_exposes_typed_ports() {
         None,
         Arc::new(RwLock::new(MemoryState::default())),
         Arc::new(RwLock::new(BTreeMap::new())),
+        Arc::new(RwLock::new(BTreeMap::new())),
         10 * 1024 * 1024,
         true,
         Arc::new(NoopObjectStore),

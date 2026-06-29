@@ -15,7 +15,7 @@ export class LoginPage {
 
   async goto() {
     await this.page.goto("/login");
-    await expect(this.page.locator("form").first()).toBeVisible();
+    await expect(this.emailInput).toBeVisible({ timeout: 15_000 });
   }
 
   async login(email: string, password: string) {

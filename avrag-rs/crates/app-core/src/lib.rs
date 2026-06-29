@@ -1,4 +1,5 @@
 pub mod adapters;
+pub mod api_key;
 pub mod admin_domain;
 pub mod admin_store;
 pub mod auth_store;
@@ -72,6 +73,10 @@ pub use domain_rows::{
     DocumentAssetRow, DocumentDeletionOutcome, DocumentScopeState, DocumentTaskSeed,
     DocumentUploadMutationOutcome, DocumentUploadQueueOutcome, IndexedChunk, MultimodalChunkRow,
     NotificationCreateParams, ConversationHistoryHit, ConversationHistoryScope, UserProfileRow,
+};
+pub use api_key::{
+    deactivate_memory_api_key, hash_api_key, register_memory_api_key, validate_memory_api_key,
+    MemoryApiKeyRecord,
 };
 pub use storage_context::StorageContext;
 

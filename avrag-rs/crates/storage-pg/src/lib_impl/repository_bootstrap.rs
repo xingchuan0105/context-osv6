@@ -25,6 +25,22 @@ impl PgAppRepository {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../migrations");
         let migrator = sqlx::migrate::Migrator::new(migrations_path.as_path()).await?;
         migrator.run(self.pool.raw()).await?;
+        if std::env::var("AVRAG_SKIP_SEARCH_TOKEN_RESEGMENT")
+            .map(|value| matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            ))
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
+        let updated = self.resegment_chat_message_search_tokens().await?;
+        if updated > 0 {
+            tracing::info!(
+                updated_rows = updated,
+                "resegmented chat_messages.search_tokens with jieba"
+            );
+        }
         Ok(())
     }
 

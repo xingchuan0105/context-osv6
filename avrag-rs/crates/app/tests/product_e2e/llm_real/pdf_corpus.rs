@@ -239,9 +239,10 @@ async fn real_llm_rag_staging_local_book_pdf() {
     super::require_nightly_suite();
     apply_p4_pdf_ingestion_profile();
     let Some(path) = staging_pdf_path() else {
-        panic!(
-            "set E2E_LLM_REAL_STAGING_PDF to an existing PDF for staging book probe"
+        eprintln!(
+            "SKIP: real_llm_rag_staging_local_book_pdf (set E2E_LLM_REAL_STAGING_PDF to an existing PDF)"
         );
+        return;
     };
 
     let mut ctx = TestContext::new_with_real_llm_pdf().await;

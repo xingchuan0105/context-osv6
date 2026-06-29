@@ -19,6 +19,27 @@ impl AppState {
             .await
     }
 
+    pub async fn list_org_api_keys(&self) -> Result<Vec<ApiKeyRow>, AppError> {
+        self.admin
+            .list_org_api_keys(&self.auth, &self.storage)
+            .await
+    }
+
+    pub async fn create_org_api_key(
+        &self,
+        req: CreateApiKeyRequest,
+    ) -> Result<CreateApiKeyResponse, AppError> {
+        self.admin
+            .create_org_api_key(&self.auth, &self.storage, req)
+            .await
+    }
+
+    pub async fn revoke_org_api_key(&self, key_id: &str) -> Result<StatusOnlyResponse, AppError> {
+        self.admin
+            .revoke_org_api_key(&self.auth, &self.storage, key_id)
+            .await
+    }
+
     pub async fn revoke_api_key(
         &self,
         notebook_id: &str,

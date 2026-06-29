@@ -91,6 +91,7 @@ async fn openapi_handler() -> Response {
                 "/metrics": {},
                 "/api/auth/usage-limit": {},
                 "/api/v1/chat": {},
+                "/api/v1/mcp": {},
                 "/v1/notebooks/{notebook_id}/chat/completions": {},
                 "/mcp/notebooks/{notebook_id}": {},
                 "/mcp/notebooks/{notebook_id}/tools/call": {},
@@ -252,164 +253,12 @@ async fn openai_chat_completions_handler(
     Json(mut req): Json<contracts::chat::ChatRequest>,
 ) -> Response {
     req.notebook_id = Some(notebook_id.clone());
-    if let Err(error) = expand_external_notebook_rag_scope(&state, &notebook_id, &mut req).await {
+    if let Err(error) =
+        crate::mcp::expand_external_notebook_rag_scope(&state, &notebook_id, &mut req).await
+    {
         return handlers::app_error_response(error);
     }
     handlers::chat_post_handler(Extension(RequestState(state)), headers, Json(req)).await
-}
-
-async fn mcp_sse_handler(
-    Path(notebook_id): Path<String>,
-    Extension(RequestState(state)): Extension<RequestState>,
-) -> Response {
-    let request_id = state
-        .auth()
-        .request_id()
-        .map(str::to_string)
-        .unwrap_or_else(|| Uuid::new_v4().to_string());
-    let payload = json!({
-        "jsonrpc": "2.0",
-        "method": "ready",
-        "params": {
-            "request_id": request_id,
-            "notebook_id": notebook_id,
-            "tools": [
-                {
-                    "name": "notebook.chat",
-                    "description": "Run a notebook-scoped chat completion"
-                }
-            ]
-        }
-    });
-    (
-        StatusCode::OK,
-        [("content-type", "text/event-stream")],
-        format!("event: ready\ndata: {payload}\n\n"),
-    )
-        .into_response()
-}
-
-async fn mcp_tool_call_handler(
-    Path(notebook_id): Path<String>,
-    Extension(RequestState(state)): Extension<RequestState>,
-    body: Bytes,
-) -> Response {
-    let request_json: serde_json::Value = match serde_json::from_slice(body.as_ref()) {
-        Ok(value) => value,
-        Err(error) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "error": "invalid_json",
-                    "message": format!("invalid MCP payload: {}", error),
-                })),
-            )
-                .into_response();
-        }
-    };
-
-    let query = request_json
-        .pointer("/params/arguments/query")
-        .and_then(|value| value.as_str())
-        .or_else(|| request_json.get("query").and_then(|value| value.as_str()))
-        .unwrap_or_default()
-        .trim()
-        .to_string();
-    if query.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "error": "query_required",
-                "message": "MCP tool call requires params.arguments.query",
-            })),
-        )
-            .into_response();
-    }
-
-    let agent_type = request_json
-        .pointer("/params/arguments/agent_type")
-        .and_then(|value| value.as_str())
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or("rag")
-        .to_string();
-    let doc_scope = request_json
-        .pointer("/params/arguments/doc_scope")
-        .and_then(|value| value.as_array())
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|item| item.as_str().map(str::to_string))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-
-    let mut req = contracts::chat::ChatRequest {
-        query,
-        notebook_id: Some(notebook_id.clone()),
-        session_id: None,
-        agent_type,
-        source_type: None,
-        source_token: None,
-        doc_scope,
-        messages: vec![],
-        stream: false,
-        debug: false,
-        language: None,
-        format_hint: None,
-    };
-    if let Err(error) = expand_external_notebook_rag_scope(&state, &notebook_id, &mut req).await {
-        return handlers::app_error_response(error);
-    }
-
-    match state.execute_chat(req).await {
-        Ok(response) => {
-            if request_json.get("id").is_some() {
-                (
-                    StatusCode::OK,
-                    Json(json!({
-                        "jsonrpc": "2.0",
-                        "id": request_json.get("id").cloned().unwrap_or(serde_json::Value::Null),
-                        "result": response,
-                    })),
-                )
-                    .into_response()
-            } else {
-                (StatusCode::OK, Json(response)).into_response()
-            }
-        }
-        Err(error) => handlers::app_error_response(error),
-    }
-}
-
-async fn expand_external_notebook_rag_scope(
-    state: &AppState,
-    notebook_id: &str,
-    req: &mut contracts::chat::ChatRequest,
-) -> Result<(), common::AppError> {
-    if req.agent_type != "rag" || !req.doc_scope.is_empty() {
-        return Ok(());
-    }
-
-    state
-        .get_notebook(notebook_id)
-        .await
-        .ok_or_else(|| common::AppError::not_found("notebook_not_found", "notebook not found"))?;
-    let doc_scope = state
-        .list_documents(Some(notebook_id), None)
-        .await
-        .into_iter()
-        .filter(|document| matches!(document.status, contracts::documents::DocumentStatus::Completed))
-        .map(|document| document.id)
-        .collect::<Vec<_>>();
-    if doc_scope.is_empty() {
-        return Err(common::AppError::validation(
-            "docscope_required",
-            "No ready documents are available in this notebook for RAG.",
-        ));
-    }
-
-    req.doc_scope = doc_scope;
-    Ok(())
 }
 
 async fn shared_notebook_handler(

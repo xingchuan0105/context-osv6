@@ -299,7 +299,7 @@ async fn get_rag_execute_plan_is_not_allowed() {
 
 #[tokio::test]
 async fn mcp_notebook_tool_call_expands_empty_doc_scope_to_ready_documents() {
-    let (app, notebook_id, document_id, org_id) = test_app_with_ready_notebook_document().await;
+    let (app, notebook_id, _document_id, org_id) = test_app_with_ready_notebook_document().await;
     let response = app
         .oneshot(
             Request::builder()
@@ -324,14 +324,25 @@ async fn mcp_notebook_tool_call_expands_empty_doc_scope_to_ready_documents() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    let status = response.status();
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let payload = serde_json::from_slice::<serde_json::Value>(&body).unwrap();
     assert_eq!(
+        status,
+        StatusCode::OK,
+        "unexpected MCP response: {payload}"
+    );
+    assert_eq!(
         payload
-            .pointer("/result/citations/0/doc_id")
+            .pointer("/error/data/error")
             .and_then(|value| value.as_str()),
-        Some(document_id.as_str())
+        Some("rag_runtime_not_configured")
+    );
+    assert_eq!(
+        payload
+            .pointer("/error/data/agent_operation_guide/mode")
+            .and_then(|value| value.as_str()),
+        Some("rag")
     );
 }
 
@@ -362,11 +373,13 @@ async fn mcp_notebook_tool_call_rejects_empty_doc_scope_without_ready_documents(
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::OK);
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let payload = serde_json::from_slice::<serde_json::Value>(&body).unwrap();
     assert_eq!(
-        payload.get("error").and_then(|value| value.as_str()),
+        payload
+            .pointer("/error/data/error")
+            .and_then(|value| value.as_str()),
         Some("docscope_required")
     );
 }

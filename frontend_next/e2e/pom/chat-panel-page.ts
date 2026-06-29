@@ -123,4 +123,31 @@ export class ChatPanelPage {
     const htmlInline = await bubble.locator("button[data-inline-citation-token-index]").count();
     return workspace + webSources + htmlInline;
   }
+
+  /** Web search may render inline citations or an aggregate "N sources" button. */
+  async expectCitationUiVisible(timeoutMs = 10_000) {
+    const bubble = this.page
+      .locator(
+        '[data-testid="chat-message"][data-role="assistant"] [data-testid="workspace-answer-bubble"]',
+      )
+      .last();
+    const inlineCitation = bubble.locator('[data-testid="workspace-citation"]').first();
+    const sourceButton = bubble.locator('[data-testid="citation-button"]').first();
+    const inlineToken = bubble.locator("button[data-inline-citation-token-index]").first();
+
+    if ((await inlineCitation.count()) > 0) {
+      await expect(inlineCitation).toBeVisible({ timeout: timeoutMs });
+      return;
+    }
+    if ((await sourceButton.count()) > 0) {
+      await expect(sourceButton).toBeVisible({ timeout: timeoutMs });
+      return;
+    }
+    if ((await inlineToken.count()) > 0) {
+      await expect(inlineToken).toBeVisible({ timeout: timeoutMs });
+      return;
+    }
+
+    throw new Error("expected at least one citation UI element in the last assistant bubble");
+  }
 }

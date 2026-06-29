@@ -39,7 +39,9 @@ export type PricingRevampProbe = {
 };
 
 /** Authenticated probe: env prerequisite + usage/window fetch (bucket-aware). */
-export async function probePricingRevampUsageWindow(): Promise<PricingRevampProbe> {
+export async function probePricingRevampUsageWindow(
+  token?: string | null,
+): Promise<PricingRevampProbe> {
   if (!isPricingRevampEnabledSSR()) {
     return { enabled: false };
   }
@@ -48,6 +50,7 @@ export async function probePricingRevampUsageWindow(): Promise<PricingRevampProb
     const envelope = await request<UsageWindowProbeEnvelope>(
       "/api/v1/billing/usage/window",
       { method: "GET", credentials: "include" },
+      token ?? undefined,
     );
     if (envelope.ok !== true || !envelope.data) {
       return { enabled: false };
@@ -59,8 +62,8 @@ export async function probePricingRevampUsageWindow(): Promise<PricingRevampProb
 }
 
 /** Canonical authenticated check: env prerequisite + usage/window probe (bucket-aware). */
-export async function isPricingRevampEnabled(): Promise<boolean> {
-  const probe = await probePricingRevampUsageWindow();
+export async function isPricingRevampEnabled(token?: string | null): Promise<boolean> {
+  const probe = await probePricingRevampUsageWindow(token);
   return probe.enabled;
 }
 

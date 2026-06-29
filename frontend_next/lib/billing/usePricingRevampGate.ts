@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { useAuth } from "../auth/context";
 import { isPricingRevampEnabled, isPricingRevampEnabledSSR } from "./featureFlag";
 
 export type PricingRevampGateOptions = {
@@ -22,6 +23,7 @@ export function usePricingRevampGate({
   requireUsageProbe = true,
 }: PricingRevampGateOptions): PricingRevampGateState {
   const router = useRouter();
+  const { token } = useAuth();
   const ssrEnabled = isPricingRevampEnabledSSR();
   const [probeState, setProbeState] = useState<"pending" | "passed" | "failed">(
     ssrEnabled ? (requireUsageProbe ? "pending" : "passed") : "failed",
@@ -38,9 +40,13 @@ export function usePricingRevampGate({
       return;
     }
 
+    if (!token) {
+      return;
+    }
+
     let cancelled = false;
 
-    void isPricingRevampEnabled().then((enabled) => {
+    void isPricingRevampEnabled(token).then((enabled) => {
       if (cancelled) {
         return;
       }
@@ -55,7 +61,7 @@ export function usePricingRevampGate({
     return () => {
       cancelled = true;
     };
-  }, [redirectTo, requireUsageProbe, router, ssrEnabled]);
+  }, [redirectTo, requireUsageProbe, router, ssrEnabled, token]);
 
   return {
     ssrEnabled,

@@ -3,7 +3,7 @@
 # Regenerate: ./scripts/generate-e2e-test-registry.py
 
 schema_version: 1
-generated_test_count: 90
+generated_test_count: 102
 
 capability_domains:
   CAP-CHAT:
@@ -93,12 +93,6 @@ playwright_specs:
     layer: L5
     capabilities: [CAP-AUTH]
     evidence: [E-P, E-Prod]
-  - path: frontend_next/e2e/specs/smoke/query-library.spec.ts
-    layer: L5
-    capabilities: [CAP-CHAT, CAP-MEMORY]
-    evidence: [E-P, E-Prod]
-    citation_gate: none
-    note: workspace prompt library capture/insert; Vitest in tests/workspace/query-library-*
   - path: frontend_next/e2e/specs/billing/paywall-flow.spec.ts
     layer: L5
     capabilities: [CAP-BILLING]
@@ -134,6 +128,27 @@ contract_tests:
     capabilities: [CAP-RAG]
     evidence: [E-P, E-Prod]
     package: app
+  - id: transport-http::api_key_security_contract::workspace_api_key_cannot_create_org_api_key
+    layer: L6
+    capabilities: [CAP-AUTH]
+    evidence: [E-P, E-Prod]
+    package: transport-http
+    path: crates/transport-http/tests/api_key_security_contract.rs
+    note: API key scope/permission boundary (workspace vs org, admin strip)
+  - id: transport-http::mcp_unified_contract::mcp_ingestion_flow_create_upload_complete_status
+    layer: L6
+    capabilities: [CAP-AUTH, CAP-INGEST]
+    evidence: [E-P, E-Prod]
+    package: transport-http
+    path: crates/transport-http/tests/mcp_unified_contract.rs
+    note: MCP tools/call envelope + create_upload -> complete -> status flow
+  - id: transport-http::openai_completions_contract::openai_completions_with_workspace_key_returns_200_body
+    layer: L6
+    capabilities: [CAP-CHAT, CAP-AUTH]
+    evidence: [E-P, E-Prod]
+    package: transport-http
+    path: crates/transport-http/tests/openai_completions_contract.rs
+    note: OpenAI-compatible chat completions route — 401 / 200+body / SSE / 403 boundary
 
 tests:
   - id: product_e2e::e2e_gate::tests::integration_mode_includes_smoke_and_integration
@@ -412,6 +427,61 @@ tests:
       - P
     parallel_group: G-serial-integration
     ci_default: true
+  - id: product_e2e::integration::mcp_agent_flow::mcp_agent_flow_create_upload_complete_query_returns_citations
+    layer: L2
+    module: mcp_agent_flow
+    suite: integration
+    capabilities: []
+    evidence:
+      - E-P
+    deps:
+      - M
+      - I
+    ci_default: true
+  - id: product_e2e::integration::mcp_auth_boundary::api_key_cannot_list_notebook_notes
+    layer: L2
+    module: mcp_auth_boundary
+    suite: integration
+    capabilities: []
+    evidence:
+      - E-P
+    deps:
+      - M
+      - I
+    ci_default: true
+  - id: product_e2e::integration::mcp_auth_boundary::org_key_cannot_call_workspace_mcp_tool
+    layer: L2
+    module: mcp_auth_boundary
+    suite: integration
+    capabilities: []
+    evidence:
+      - E-P
+    deps:
+      - M
+      - I
+    ci_default: true
+  - id: product_e2e::integration::mcp_auth_boundary::workspace_key_cannot_call_org_mcp_tool
+    layer: L2
+    module: mcp_auth_boundary
+    suite: integration
+    capabilities: []
+    evidence:
+      - E-P
+    deps:
+      - M
+      - I
+    ci_default: true
+  - id: product_e2e::integration::mcp_auth_boundary::workspace_key_cannot_query_other_workspace
+    layer: L2
+    module: mcp_auth_boundary
+    suite: integration
+    capabilities: []
+    evidence:
+      - E-P
+    deps:
+      - M
+      - I
+    ci_default: true
   - id: product_e2e::integration::multi_doc::multi_doc_rag_returns_citations_from_both_docs
     layer: L2
     module: multi_doc
@@ -430,62 +500,46 @@ tests:
     layer: L2
     module: office_docx_e2e
     suite: integration
-    capabilities:
-      - CAP-INGEST
+    capabilities: []
     evidence:
       - E-P
-      - E-Prod
     deps:
       - M
       - I
-    parallel_group: G-serial-integration
     ci_default: true
-    note: "mock office-parser docx direct ingest"
   - id: product_e2e::integration::office_docx_staging_e2e::office_docx_staging_ingest_e2e
     layer: L2
     module: office_docx_staging_e2e
     suite: integration
-    capabilities:
-      - CAP-INGEST
+    capabilities: []
     evidence:
       - E-P
-      - E-Prod
     deps:
+      - M
       - I
-    parallel_group: G-serial-integration
-    ci_default: false
-    ignore: true
-    note: "real office-parser-jvm docx; staging only"
+    ci_default: true
   - id: product_e2e::integration::office_pptx_e2e::office_pptx_ingest_e2e
     layer: L2
     module: office_pptx_e2e
     suite: integration
-    capabilities:
-      - CAP-INGEST
+    capabilities: []
     evidence:
       - E-P
-      - E-Prod
     deps:
       - M
       - I
-    parallel_group: G-serial-integration
     ci_default: true
-    note: "mock office-parser pptx direct ingest"
   - id: product_e2e::integration::office_pptx_staging_e2e::office_pptx_staging_ingest_e2e
     layer: L2
     module: office_pptx_staging_e2e
     suite: integration
-    capabilities:
-      - CAP-INGEST
+    capabilities: []
     evidence:
       - E-P
-      - E-Prod
     deps:
+      - M
       - I
-    parallel_group: G-serial-integration
-    ci_default: false
-    ignore: true
-    note: "real office-parser-jvm pptx; staging only"
+    ci_default: true
   - id: product_e2e::integration::office_xlsx_e2e::office_xlsx_ingest_e2e
     layer: L2
     module: office_xlsx_e2e
@@ -534,6 +588,28 @@ tests:
     parallel_group: G-serial-integration
     ci_default: true
     note: "routing metadata contract; full path in smoke::paddle_image_smoke"
+  - id: product_e2e::integration::quota_boundary::exhausted_quota_blocks_chat_with_quota_exceeded
+    layer: L2
+    module: quota_boundary
+    suite: integration
+    capabilities: []
+    evidence:
+      - E-P
+    deps:
+      - M
+      - I
+    ci_default: true
+  - id: product_e2e::integration::rate_limit_boundary::workspace_key_rate_limit_rpm_2_blocks_third_request_with_429
+    layer: L2
+    module: rate_limit_boundary
+    suite: integration
+    capabilities: []
+    evidence:
+      - E-P
+    deps:
+      - M
+      - I
+    ci_default: true
   - id: product_e2e::integration::streaming_chat::chat_stream_client_disconnect_aborts_without_hang
     layer: L2
     module: streaming_chat
@@ -744,7 +820,7 @@ tests:
     parallel_group: G-serial-llm
     ci_default: false
     ignore: true
-    note: "E2E_LLM_REAL_STAGING_PDF local book PDF; manual staging only"
+    note: "bundled phase0-mini.pdf P4 routing + optional E2E_LLM_REAL_STAGING_PDF manual probe"
   - id: product_e2e::llm_real::pdf_rag_e2e::real_llm_rag_after_liteparse_pdf_ingest_returns_citation
     layer: L3
     module: pdf_rag_e2e
@@ -1186,7 +1262,7 @@ tests:
       - I
     parallel_group: G-serial-rag
     ci_default: true
-  - id: product_e2e::smoke::memory_multiturn_smoke::on_demand_conversation_history_load_returns_pg_messages
+  - id: product_e2e::smoke::memory_multiturn_smoke::notebook_scope_conversation_history_load_spans_sessions
     layer: L1
     module: memory_multiturn_smoke
     suite: smoke
@@ -1200,7 +1276,7 @@ tests:
       - I
     parallel_group: G-serial-rag
     ci_default: true
-  - id: product_e2e::smoke::memory_multiturn_smoke::notebook_scope_conversation_history_load_spans_sessions
+  - id: product_e2e::smoke::memory_multiturn_smoke::on_demand_conversation_history_load_returns_pg_messages
     layer: L1
     module: memory_multiturn_smoke
     suite: smoke
@@ -1227,6 +1303,17 @@ tests:
       - M
       - I
     parallel_group: G-serial-rag
+    ci_default: true
+  - id: product_e2e::smoke::notebook_crud::notebook_crud_lifecycle_via_http
+    layer: L1
+    module: notebook_crud
+    suite: smoke
+    capabilities: []
+    evidence:
+      - E-P
+    deps:
+      - M
+      - I
     ci_default: true
   - id: product_e2e::smoke::paddle_image_smoke::paddle_ocr_image_ingest_smoke
     layer: L1
@@ -1335,6 +1422,20 @@ tests:
     parallel_group: G-parallel-smoke
     ci_default: true
   - id: product_e2e::smoke::share_boundary::cross_user_direct_get_notebook_without_token_returns_4xx
+    layer: L1
+    module: share_boundary
+    suite: smoke
+    capabilities:
+      - CAP-SHARE
+    evidence:
+      - E-P
+      - E-Prod
+    deps:
+      - M
+      - I
+    parallel_group: G-parallel-smoke
+    ci_default: true
+  - id: product_e2e::smoke::share_boundary::invited_member_can_accept_and_access_notebook
     layer: L1
     module: share_boundary
     suite: smoke

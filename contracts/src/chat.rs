@@ -605,6 +605,21 @@ pub struct ChatResponse {
     pub tool_results: Vec<ToolResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage: Option<ChatTokenUsage>,
+    /// Per-invocation instructions for external agents (RAG codegen / Search tool schema).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_operation_guide: Option<AgentOperationGuide>,
+}
+
+#[typeshare]
+#[derive(TS, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[ts(export, export_to = "../../frontend_next/lib/contracts/generated/agent_operation_guide.ts")]
+pub struct AgentOperationGuide {
+    pub mode: String,
+    pub summary: String,
+    pub instructions: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(type = "Array<Record<string, unknown>>")]
+    pub tool_schemas: Vec<crate::tool_call::ToolSpec>,
 }
 
 #[typeshare]
@@ -636,6 +651,10 @@ pub enum ChatEvent {
     Start {
         request_id: String,
         session_id: String,
+    },
+    OperationGuide {
+        request_id: String,
+        guide: AgentOperationGuide,
     },
     Activity {
         request_id: String,

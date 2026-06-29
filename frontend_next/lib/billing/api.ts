@@ -79,42 +79,55 @@ function unwrap<T>(envelope: Envelope<T>, fallback: string, status = 200): T {
 }
 
 export const billingApi = {
-  async getPlans() {
+  async getPlans(token?: string | null) {
     return unwrap<BillingPlansResponse>(
-      await request<Envelope<BillingPlansResponse>>("/api/v1/billing/plans", {
-        method: "GET",
-        credentials: "include",
-      }),
+      await request<Envelope<BillingPlansResponse>>(
+        "/api/v1/billing/plans",
+        {
+          method: "GET",
+          credentials: "include",
+        },
+        token ?? undefined,
+      ),
       "Failed to load billing plans",
     );
   },
 
-  async getUsageWindow() {
+  async getUsageWindow(token?: string | null) {
     return unwrap<UsageWindowResponse>(
-      await request<Envelope<UsageWindowResponse>>("/api/v1/billing/usage/window", {
-        method: "GET",
-        credentials: "include",
-      }),
+      await request<Envelope<UsageWindowResponse>>(
+        "/api/v1/billing/usage/window",
+        {
+          method: "GET",
+          credentials: "include",
+        },
+        token ?? undefined,
+      ),
       "Failed to load usage window",
     );
   },
 
-  async getUsageHistory(days = 7) {
+  async getUsageHistory(days = 7, token?: string | null) {
     return unwrap<UsageHistoryResponse>(
       await request<Envelope<UsageHistoryResponse>>(
         `/api/v1/billing/usage/history?days=${days}`,
         { method: "GET", credentials: "include" },
+        token ?? undefined,
       ),
       "Failed to load usage history",
     );
   },
 
-  async getUsageForecast() {
+  async getUsageForecast(token?: string | null) {
     return unwrap<UsageForecastResponse>(
-      await request<Envelope<UsageForecastResponse>>("/api/v1/billing/usage/forecast", {
-        method: "GET",
-        credentials: "include",
-      }),
+      await request<Envelope<UsageForecastResponse>>(
+        "/api/v1/billing/usage/forecast",
+        {
+          method: "GET",
+          credentials: "include",
+        },
+        token ?? undefined,
+      ),
       "Failed to load usage forecast",
     );
   },

@@ -135,7 +135,13 @@ pub(crate) async fn request_context_middleware(
     let share_chat_notebook_scope = share_chat_notebook_scope_from_request(&state, &mut req).await;
     let auth = auth_from_bearer(&state, &headers)
         .await
-        .or_else(|| auth_from_proxy_headers(&headers))
+        .or_else(|| {
+            if proxy_auth_allowed(&state) {
+                auth_from_proxy_headers(&headers)
+            } else {
+                None
+            }
+        })
         .map(|auth| {
             if let Some(notebook_scope) = share_chat_notebook_scope {
                 auth.with_notebook_scope(notebook_scope)
@@ -166,7 +172,9 @@ pub(crate) async fn request_context_middleware(
             .map(|actor| actor.into_uuid())
             .unwrap_or(Uuid::nil())
     );
-    let mut limit_rpm = DEFAULT_RATE_LIMIT_RPM;
+    let mut limit_rpm = auth
+        .rate_limit_rpm()
+        .unwrap_or(DEFAULT_RATE_LIMIT_RPM);
     if std::env::var("E2E_ENABLED").unwrap_or_default() == "true" {
         limit_rpm = 1000;
     }
@@ -294,24 +302,51 @@ async fn check_rate_limit_with_fallback(
 
 async fn auth_from_bearer(state: &AppState, headers: &HeaderMap) -> Option<AuthContext> {
     let token = crate::extract_bearer(headers)?;
-    let claims = crate::verify_jwt(token)?;
-    let org_uuid = Uuid::parse_str(&claims.org_id).ok()?;
-    let user_uuid = Uuid::parse_str(&claims.sub).ok()?;
 
-    if state.postgres_configured()
-        && !state
-            .jwt_auth_version_matches(user_uuid, org_uuid, claims.auth_version)
-            .await
-    {
-        return None;
+    if let Some(claims) = crate::verify_jwt(token) {
+        let org_uuid = Uuid::parse_str(&claims.org_id).ok()?;
+        let user_uuid = Uuid::parse_str(&claims.sub).ok()?;
+
+        if state.postgres_configured()
+            && !state
+                .jwt_auth_version_matches(user_uuid, org_uuid, claims.auth_version)
+                .await
+        {
+            return None;
+        }
+
+        let mut ctx = AuthContext::new(OrgId::from(org_uuid), SubjectKind::User)
+            .with_actor_id(ActorId::new(user_uuid));
+        for perm in &claims.permissions {
+            ctx = ctx.grant(perm);
+        }
+        return Some(ctx);
     }
 
-    let mut ctx = AuthContext::new(OrgId::from(org_uuid), SubjectKind::User)
-        .with_actor_id(ActorId::new(user_uuid));
-    for perm in &claims.permissions {
+    let validated = state.validate_workspace_api_key(token).await.ok()??;
+    let mut ctx = AuthContext::new(validated.org_id, SubjectKind::ApiKey)
+        .with_actor_id(ActorId::new(validated.key_id))
+        .with_rate_limit_rpm(validated.rate_limit_rpm);
+    if let Some(notebook_id) = validated.notebook_id {
+        ctx = ctx.with_notebook_scope(notebook_id);
+    }
+    for perm in validated.permissions {
         ctx = ctx.grant(perm);
     }
     Some(ctx)
+}
+
+fn proxy_auth_allowed(state: &AppState) -> bool {
+    if std::env::var("E2E_ENABLED").unwrap_or_default() == "true" {
+        return true;
+    }
+    if matches!(
+        std::env::var("TRUST_PROXY_AUTH").as_deref(),
+        Ok("true") | Ok("1") | Ok("yes")
+    ) {
+        return true;
+    }
+    !state.postgres_configured()
 }
 
 fn auth_from_proxy_headers(headers: &HeaderMap) -> Option<AuthContext> {
@@ -355,6 +390,7 @@ fn normalize_route(path: &str) -> &'static str {
         "/api/auth/legal-status" => "/api/auth/legal-status",
         "/api/v1/notebooks" => "/api/v1/notebooks",
         "/api/v1/chat" => "/api/v1/chat",
+        "/api/v1/mcp" => "/api/v1/mcp",
         "/api/v1/chat/sessions" => "/api/v1/chat/sessions",
         "/api/v1/chat/citations/lookup" => "/api/v1/chat/citations/lookup",
         _ if path.starts_with("/api/v1/chat/citations/assets/") => {

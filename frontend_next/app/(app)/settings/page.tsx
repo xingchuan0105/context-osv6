@@ -2,11 +2,12 @@ import { SettingsSurface } from "../../../components/settings/settings-surface";
 import { normalizeSettingsTab } from "../../../components/settings/settings-tabs";
 
 type SettingsPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     tab?: string | string[];
-  };
+  }>;
 };
 
-export default function SettingsPage({ searchParams }: SettingsPageProps) {
-  return <SettingsSurface activeTab={normalizeSettingsTab(searchParams?.tab)} />;
+export default async function SettingsPage({ searchParams }: SettingsPageProps) {
+  const params = searchParams ? await searchParams : undefined;
+  return <SettingsSurface activeTab={normalizeSettingsTab(params?.tab)} />;
 }

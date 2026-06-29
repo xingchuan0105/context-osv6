@@ -1,5 +1,8 @@
 # 三个 Agent 的 Prompt 注入机制分析
 
+> **状态：历史文档（部分机制已废弃）**  
+> 文中 `session_summary`、L2 会话摘要、`ChatAgent`/`RagAgent`/`WebSearchAgent` 三分 agent 等描述**不再反映当前实现**。记忆与上下文以 `avrag-rs/docs/adr/0007-react-phased-context-disclosure.md` 与 `avrag-rs/docs/memory-recall-gap-2026-06-13.md` 为准。仅供安全审计与演进历史参考。
+
 > 分析时间: 2026-05-13
 > 分析范围: ChatAgent / RagAgent / WebSearchAgent
 > 代码基线: master 分支 HEAD

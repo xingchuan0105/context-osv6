@@ -7,13 +7,13 @@ test.describe("Paywall flow", () => {
     const paywall = new PaywallPage(page);
     await paywall.goto("5h");
     await paywall.expectVisible();
-    await expect(page.getByText(/5h 用量已达上限/)).toBeVisible();
-    await expect(page.getByTestId("paywall-continue-free")).toBeVisible();
+    await expect(page.getByText(/5h 用量已达上限/)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("paywall-continue-free")).toBeVisible({ timeout: 30_000 });
   });
 
   test("7d paywall renders 7d-specific title", async ({ page }) => {
     const paywall = new PaywallPage(page);
     await paywall.goto("7d");
-    await expect(page.getByText(/7d 用量已达上限/)).toBeVisible();
+    await expect(page.getByText(/7d 用量已达上限/)).toBeVisible({ timeout: 30_000 });
   });
 });

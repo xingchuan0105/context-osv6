@@ -3,6 +3,7 @@
 > **状态：已废弃**
 > **原因**：产品定位调整，Agent Harness 升级已全部回撤（commit `f8407c1`）
 > **历史**：本文记录原计划的实施步骤，保留作参考。
+> **补充**：L2 `session_summary` 已于 2026-06 移除，见 `avrag-rs/docs/adr/0007-react-phased-context-disclosure.md`。
 
 ---
 

@@ -162,5 +162,6 @@ pub(super) fn no_chunks_response(
         guard_report: None,
         tool_results: Vec::new(),
         usage: None,
+        agent_operation_guide: None,
     }
 }

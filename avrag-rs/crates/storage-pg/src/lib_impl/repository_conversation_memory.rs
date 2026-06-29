@@ -1,4 +1,4 @@
-/// A user message hit from hybrid conversation memory search.
+/// A conversation message hit from hybrid memory search.
 #[derive(Debug, Clone)]
 pub struct ConversationHistoryHit {
     pub message_id: i64,
@@ -34,7 +34,7 @@ impl crate::PgAppRepository {
             .map(|actor| actor.into_uuid())
             .ok_or_else(|| PgStorageError::NotFound("authenticated user required".to_string()))?;
 
-        let recent = self.load_recent_user_messages(
+        let recent = self.load_recent_messages(
             auth,
             session_id,
             notebook_id,
@@ -49,7 +49,7 @@ impl crate::PgAppRepository {
         let fts = if segmented_query.is_empty() {
             Vec::new()
         } else {
-            self.search_user_messages_fts(
+            self.search_messages_fts(
                 auth,
                 session_id,
                 notebook_id,
@@ -98,7 +98,7 @@ impl crate::PgAppRepository {
         Ok(notebook_id)
     }
 
-    async fn load_recent_user_messages(
+    async fn load_recent_messages(
         &self,
         auth: &AuthContext,
         session_id: Uuid,
@@ -116,7 +116,7 @@ impl crate::PgAppRepository {
                 from chat_messages m
                 where m.org_id = $1
                   and m.session_id = $2
-                  and m.role = 'user'
+                  and m.role in ('user', 'assistant')
                   and not (m.id = any($3))
                 order by m.id desc
                 limit $4
@@ -137,7 +137,7 @@ impl crate::PgAppRepository {
                 where m.org_id = $1
                   and s.notebook_id = $2
                   and s.user_id = $3
-                  and m.role = 'user'
+                  and m.role in ('user', 'assistant')
                   and not (m.id = any($4))
                 order by m.id desc
                 limit $5
@@ -155,7 +155,7 @@ impl crate::PgAppRepository {
         rows.into_iter().map(map_history_hit).collect()
     }
 
-    async fn search_user_messages_fts(
+    async fn search_messages_fts(
         &self,
         auth: &AuthContext,
         session_id: Uuid,
@@ -175,7 +175,7 @@ impl crate::PgAppRepository {
                 from chat_messages m
                 where m.org_id = $1
                   and m.session_id = $2
-                  and m.role = 'user'
+                  and m.role in ('user', 'assistant')
                   and not (m.id = any($4))
                   and m.search_vector @@ plainto_tsquery('simple', $3)
                 order by rank desc, m.id desc
@@ -199,7 +199,7 @@ impl crate::PgAppRepository {
                 where m.org_id = $1
                   and s.notebook_id = $2
                   and s.user_id = $3
-                  and m.role = 'user'
+                  and m.role in ('user', 'assistant')
                   and not (m.id = any($5))
                   and m.search_vector @@ plainto_tsquery('simple', $4)
                 order by rank desc, m.id desc
@@ -232,4 +232,47 @@ fn map_history_hit(row: sqlx::postgres::PgRow) -> Result<ConversationHistoryHit,
 
 pub fn build_user_message_search_tokens(content: &str, resolved_query: Option<&str>) -> String {
     merge_search_tokens(content, resolved_query)
+}
+
+impl crate::PgAppRepository {
+    /// Re-segment `search_tokens` with jieba for all chat messages (post-migrate backfill).
+    pub async fn resegment_chat_message_search_tokens(&self) -> Result<u64, PgStorageError> {
+        let rows = sqlx::query(
+            r#"
+            select id, content, resolved_query, role
+            from chat_messages
+            where coalesce(content, '') <> ''
+            order by id
+            "#,
+        )
+        .fetch_all(self.pool.raw())
+        .await?;
+
+        let mut updated = 0u64;
+        for row in rows {
+            let id: i64 = row.try_get("id")?;
+            let content: String = row.try_get("content")?;
+            let resolved_query: Option<String> = row.try_get("resolved_query")?;
+            let role: String = row.try_get("role")?;
+            let tokens = if role == "user" {
+                build_user_message_search_tokens(&content, resolved_query.as_deref())
+            } else {
+                build_user_message_search_tokens(&content, None)
+            };
+            let result = sqlx::query(
+                r#"
+                update chat_messages
+                set search_tokens = $2
+                where id = $1
+                  and search_tokens is distinct from $2
+                "#,
+            )
+            .bind(id)
+            .bind(tokens)
+            .execute(self.pool.raw())
+            .await?;
+            updated += result.rows_affected();
+        }
+        Ok(updated)
+    }
 }

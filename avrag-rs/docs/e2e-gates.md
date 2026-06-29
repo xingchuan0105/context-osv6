@@ -18,6 +18,7 @@ See also [`product-e2e-plan.md`](product-e2e-plan.md).
 | llm_real | `nightly-llm-real.yml` | schedule / manual | `E2E_MODE=nightly cargo test -p app --test product_e2e --features product-e2e llm_real -- --ignored --test-threads=1` | **Hard** — `assert_citations_non_empty` |
 | Playwright skills | `frontend-skills.yml` | schedule / manual | `cd frontend_next && npx playwright test --project=skills` | **Hard** — `must_have_citation` golden entries |
 | Playwright judge | `nightly-playwright-judge.yml` | schedule / manual | root workflow + `RUN_QUALITY_JUDGE=1` | Score &lt; 6 → **warn only** |
+| Playwright billing | `frontend-journey.yml` (`billing-e2e` job) | master push / manual | `cd frontend_next && pnpm exec playwright test --project=billing e2e/specs/billing/paywall-flow.spec.ts e2e/specs/billing/usage-dashboard.spec.ts` | N/A |
 
 ## Rust Product E2E
 
@@ -122,6 +123,7 @@ PR 级 smoke（`testMatch: specs/smoke/*`，排除 `auth*`；预置 `storageStat
 | Query library | `smoke/query-library.spec.ts` | 发送入库、单次插入、连点拼接、streaming 期间插入忽略 |
 | Legal consent | `smoke/legal-consent.spec.ts` | 法律页 / 注册同意 / 重签 gate |
 | Admin navigation | `smoke/admin-navigation.spec.ts` | 管理入口可达 |
+| API Access | `smoke/api-access.spec.ts` | 创建 key → 明文仅显一次 → 列表见 prefix/RPM/生效中 → 撤销回空态 |
 
 Vitest 配套：`tests/workspace/query-library-*.test.ts`、`workspace-history-pane.test.tsx`（挂载 + 布局烟测）。
 
@@ -129,9 +131,19 @@ Vitest 配套：`tests/workspace/query-library-*.test.ts`、`workspace-history-p
 
 | Spec | Path | Citation gate | Rationale |
 |------|------|---------------|-----------|
-| `workspace-upload-rag.spec.ts` | Upload fixture → RAG Q&A | **Hard** — `citationCount > 0` + citation button visible | Fixed `sample-document.txt`; mock/staging stack guarantees retrieval |
+| `workspace-upload-rag.spec.ts` | Upload fixture → RAG Q&A | **Hard** — `citationCount > 0` + citation button visible | Fixed `sample-document.txt`; 需真实 embedding + ingestion/answer LLM（CI 经 `frontend-journey.yml` 注入 `DASHSCOPE_API_KEY`/`DMX_API_KEY`/`DEEPSEEK_API_KEY` secret，PR-5 2026-06-29） |
 | `workspace-chat.spec.ts` (general) | General chat | N/A | No citation expected |
 | `workspace-chat.spec.ts` (web search) | Brave / external search | **Soft** (PR journey) / **Hard** when `E2E_TIER=nightly\|staging` | PR: external API variability; nightly/staging: `citationCount > 0` + citation button visible (skills project also hard-gates search) |
+| `citation-interaction.spec.ts` | Upload fixture → RAG Q&A → 点击 `workspace-citation` → "引用片段"预览 → 👍 反馈 | **Hard** — `citationCount > 0` + dialog 可见 + 反馈 POST 200 / UI disabled | 复用 `workspace-upload-rag` fixture；需真实 embedding（`EMBEDDING_API_KEY` 有效）+ ingestion LLM（dmxapi.cn `gemini-3.1-flash-lite-preview`）。本地 1 passed 46.5s ✅ 2026-06-29 |
+
+- **master push 自动门禁**：`frontend-journey.yml` 的 `journey-e2e` job 跑 `--project=journey`（含 `workspace-upload-rag` + `citation-interaction`），先起 Milvus stack（`scripts/ci-start-milvus.sh`），timeout 45min，失败上传 `playwright-journey-report` 并阻断。RAG spec 需真实 embedding + ingestion/answer LLM key——PR-5（2026-06-29）在 "Run journey E2E" step 注入 3 个 repo secret：`DASHSCOPE_API_KEY`（embedding/mm_embedding/mm_rerank/rerank）、`DMX_API_KEY`（ingestion_llm）、`DEEPSEEK_API_KEY`（agent_llm/memory_llm）；base_url/model 走 config.rs 默认（与工作 .env 一致），仅 `AGENT_LLM_MODEL` 覆盖为 `deepseek-v4-flash`（默认 v4-pro）。
+
+### Billing (Playwright `billing` project)
+
+- **master push 自动门禁**（PR-4，2026-06-29）：`frontend-journey.yml` 的 `billing-e2e` job 与 `journey-e2e` 并行，自动跑 `e2e/specs/billing/paywall-flow.spec.ts` + `usage-dashboard.spec.ts`（`--project=billing`），env `PRICING_REVAMP_ROLLOUT=100` + `NEXT_PUBLIC_PRICING_REVAMP_ENABLED=1` + `E2E_RESET_SECRET`，timeout 30min，失败上传 `playwright-billing-report` 并阻断（与 journey 同级）。
+- 不需 Milvus（billing 无 RAG 路径，`MilvusDataPlane::new` 懒构造）；CI 未设 `DATABASE_URL` → avrag-api in-memory 启动，`/health` 始终 200。
+- 完整 `--project=billing`（含 `pricing-page` / `usage-meter` / `usage-settings` / `dark-mode`，排除 `visual-regression`）仍走 manual：`playwright-extended-e2e.yml`（`suite: billing`，`--project=billing --project=billing-visual`）。
+- `visual-regression` / `cross-browser` 保持 manual（`playwright-extended-e2e.yml`），不进 master 自动门禁。
 
 ### Quality judge (optional)
 

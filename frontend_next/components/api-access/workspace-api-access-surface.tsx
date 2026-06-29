@@ -31,8 +31,8 @@ function apiPermissionLabel(permission: string) {
   switch (permission) {
     case "index":
       return "索引";
-    case "admin":
-      return "管理员";
+    case "query":
+      return "查询";
     default:
       return permission;
   }
@@ -74,7 +74,8 @@ export function WorkspaceApiAccessSurface({ workspaceId }: WorkspaceApiAccessSur
   const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [nameDraft, setNameDraft] = useState("");
-  const [permissionDraft, setPermissionDraft] = useState<"index" | "admin">("index");
+  const [indexPermissionEnabled, setIndexPermissionEnabled] = useState(true);
+  const [queryPermissionEnabled, setQueryPermissionEnabled] = useState(true);
   const [rateLimitDraft, setRateLimitDraft] = useState("60");
   const [expiresAtDraft, setExpiresAtDraft] = useState("");
   const [plaintextKey, setPlaintextKey] = useState("");
@@ -153,9 +154,19 @@ export function WorkspaceApiAccessSurface({ workspaceId }: WorkspaceApiAccessSur
       return;
     }
 
+    const permissions = [
+      indexPermissionEnabled ? "index" : null,
+      queryPermissionEnabled ? "query" : null,
+    ].filter((permission): permission is string => permission !== null);
+
+    if (permissions.length === 0) {
+      setError("请至少选择一种权限。");
+      return;
+    }
+
     const requestBody: CreateApiKeyRequest = {
       name: trimmedName,
-      permissions: [permissionDraft],
+      permissions,
       rate_limit_rpm: parsedRateLimit,
     };
     const trimmedExpiresAt = expiresAtDraft.trim();
@@ -259,18 +270,27 @@ export function WorkspaceApiAccessSurface({ workspaceId }: WorkspaceApiAccessSur
                   onChange={(event) => setNameDraft(event.target.value)}
                 />
               </label>
-              <label>
-                <span className="app-form-label">权限</span>
-                <select
-                  aria-label="权限"
-                  className="app-input"
-                  value={permissionDraft}
-                  onChange={(event) => setPermissionDraft(event.target.value as "index" | "admin")}
-                >
-                  <option value="index">索引</option>
-                  <option value="admin">管理员</option>
-                </select>
-              </label>
+              <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
+                <legend className="app-form-label">权限</legend>
+                <div style={{ display: "grid", gap: "0.5rem", marginTop: "0.35rem" }}>
+                  <label style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                    <input
+                      checked={indexPermissionEnabled}
+                      type="checkbox"
+                      onChange={(event) => setIndexPermissionEnabled(event.target.checked)}
+                    />
+                    <span>索引（index）</span>
+                  </label>
+                  <label style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
+                    <input
+                      checked={queryPermissionEnabled}
+                      type="checkbox"
+                      onChange={(event) => setQueryPermissionEnabled(event.target.checked)}
+                    />
+                    <span>查询（query）</span>
+                  </label>
+                </div>
+              </fieldset>
               <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.92rem", margin: 0 }}>
                 API 密钥只支持资料管理与 RAG 查询，聊天和搜索代理默认不可用。
               </p>

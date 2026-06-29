@@ -138,8 +138,11 @@ async fn invited_member_can_accept_and_access_notebook() {
         .to_string();
 
     let ctx_collab = TestContext::new_smoke_with_org(ORG_A, USER_COLLAB).await;
-    // Touch collab context so PG seeds `{USER_COLLAB}@local.dev` before accept.
-    let _ = ctx_collab.list_notebooks().await;
+    // Write path seeds `{USER_COLLAB}@local.dev` via ensure_org_and_actor (list is read-only).
+    let _ = ctx_collab
+        .create_notebook("collab-seed-notebook")
+        .await
+        .expect("seed collaborator user");
 
     let accept_resp = ctx_collab
         .accept_notebook_invite(&notebook.id, &member_id)

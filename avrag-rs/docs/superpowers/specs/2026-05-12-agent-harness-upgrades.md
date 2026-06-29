@@ -3,6 +3,7 @@
 > 状态：**已回撤** (2026-05-12)
 > 原因：产品定位调整，核心聚焦知识库检索+网络检索，Agent 协作由用户自选的 Claude Code/Hermes 提供。
 > 历史：本文记录 2026-05-12 对照 `shareAI-lab/learn-claude-code` 的调研结论，曾作为实施依据，现已废弃。
+> 补充：L2 `session_summary` 已于 2026-06 移除，见 `avrag-rs/docs/adr/0007-react-phased-context-disclosure.md`。
 
 ---
 

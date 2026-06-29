@@ -33,6 +33,7 @@ impl ChatContext {
                 guard_report: None,
                 tool_results: Vec::new(),
                 usage: None,
+                agent_operation_guide: None,
             },
             llm_usage: None,
             debug_metadata: None,
@@ -105,6 +106,7 @@ pub(crate) fn build_chat_execution_from_result(
                 contracts::chat::ToolResult::from(r.clone())
             }).collect(),
             usage: response_usage,
+            agent_operation_guide: None,
         },
         llm_usage,
         debug_metadata: params.debug_metadata,

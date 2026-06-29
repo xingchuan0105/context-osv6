@@ -52,10 +52,33 @@ jobs:
             avrag-rs/target
           key: ${{ runner.os }}-cargo-journey-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
 
+      - name: Start Milvus stack
+        # journey specs include upload -> RAG; the Playwright webServer (avrag-api)
+        # connects to Milvus on startup, so Milvus must be ready before tests run.
+        # Script resolves its own path -> avrag-rs/docker-compose.milvus.yml.
+        run: bash "$GITHUB_WORKSPACE/scripts/ci-start-milvus.sh"
+        timeout-minutes: 5
+
       - name: Run journey E2E
         run: pnpm exec playwright test --project=journey
         env:
           E2E_RESET_SECRET: ${{ secrets.E2E_RESET_SECRET }}
+          # RAG journey specs (upload-rag, citation-interaction) need real embedding
+          # + ingestion/answer LLM keys. avrag-rs/.env is gitignored, so inject 3 repo
+          # secrets here; webServerEnv forwards process env to avrag-api/worker. Base
+          # URLs/models fall back to config.rs defaults (which match the working .env),
+          # except AGENT_LLM_MODEL whose default is deepseek-v4-pro — override to
+          # deepseek-v4-flash to match local. Requires repo secrets: DASHSCOPE_API_KEY,
+          # DMX_API_KEY, DEEPSEEK_API_KEY.
+          EMBEDDING_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          MM_EMBEDDING_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          MM_RERANK_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          RERANK_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          INGESTION_LLM_API_KEY: ${{ secrets.DMX_API_KEY }}
+          AGENT_LLM_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          AGENT_LLM_MODEL: deepseek-v4-flash
+          MEMORY_LLM_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         timeout-minutes: 45
 
       - name: Upload Playwright report
@@ -63,5 +86,66 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-journey-report
+          path: frontend_next/playwright-report/
+          retention-days: 7
+
+  billing-e2e:
+    name: Frontend Billing E2E
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend_next
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          cache-dependency-path: frontend_next/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            avrag-rs/target
+          key: ${{ runner.os }}-cargo-billing-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
+
+      # Billing specs (paywall / usage-dashboard) exercise the billing UI against
+      # the avrag-api webServer; no RAG path -> Milvus not required (avrag-api starts
+      # in-memory when DATABASE_URL unset, /health returns 200 without Milvus).
+      - name: Run billing E2E
+        run: |
+          pnpm exec playwright test --project=billing \
+            e2e/specs/billing/paywall-flow.spec.ts \
+            e2e/specs/billing/usage-dashboard.spec.ts
+        env:
+          E2E_RESET_SECRET: ${{ secrets.E2E_RESET_SECRET }}
+          PRICING_REVAMP_ROLLOUT: '100'
+          NEXT_PUBLIC_PRICING_REVAMP_ENABLED: '1'
+        timeout-minutes: 30
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-billing-report
           path: frontend_next/playwright-report/
           retention-days: 7

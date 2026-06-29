@@ -529,6 +529,27 @@ contract_tests:
     capabilities: [CAP-RAG]
     evidence: [E-P, E-Prod]
     package: app
+  - id: transport-http::api_key_security_contract::workspace_api_key_cannot_create_org_api_key
+    layer: L6
+    capabilities: [CAP-AUTH]
+    evidence: [E-P, E-Prod]
+    package: transport-http
+    path: crates/transport-http/tests/api_key_security_contract.rs
+    note: API key scope/permission boundary (workspace vs org, admin strip)
+  - id: transport-http::mcp_unified_contract::mcp_ingestion_flow_create_upload_complete_status
+    layer: L6
+    capabilities: [CAP-AUTH, CAP-INGEST]
+    evidence: [E-P, E-Prod]
+    package: transport-http
+    path: crates/transport-http/tests/mcp_unified_contract.rs
+    note: MCP tools/call envelope + create_upload -> complete -> status flow
+  - id: transport-http::openai_completions_contract::openai_completions_with_workspace_key_returns_200_body
+    layer: L6
+    capabilities: [CAP-CHAT, CAP-AUTH]
+    evidence: [E-P, E-Prod]
+    package: transport-http
+    path: crates/transport-http/tests/openai_completions_contract.rs
+    note: OpenAI-compatible chat completions route — 401 / 200+body / SSE / 403 boundary
 
 tests:
 """.format(

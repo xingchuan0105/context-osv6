@@ -8,24 +8,6 @@ fn hash_api_key(value: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
-fn normalize_permissions(permissions: &[String]) -> Vec<String> {
-    let mut normalized = if permissions.is_empty() {
-        vec!["query".to_string()]
-    } else {
-        permissions
-            .iter()
-            .map(|item| item.trim().to_lowercase())
-            .filter(|item| matches!(item.as_str(), "query" | "index" | "admin"))
-            .collect::<Vec<_>>()
-    };
-    normalized.sort();
-    normalized.dedup();
-    if normalized.is_empty() {
-        normalized.push("query".to_string());
-    }
-    normalized
-}
-
 #[derive(Debug, Error)]
 pub enum PgStorageError {
     #[error("authorization failure: {0}")]

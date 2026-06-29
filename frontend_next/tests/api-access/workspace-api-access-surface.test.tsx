@@ -63,8 +63,8 @@ describe("WorkspaceApiAccessSurface", () => {
         org_id: "org-1",
         notebook_id: workspaceId,
         key_prefix: "sk_live_456",
-        name: "Admin Key",
-        permissions: ["admin"],
+        name: "Agent Key",
+        permissions: ["index", "query"],
         rate_limit_rpm: 60,
         expires_at: null,
         last_used_at: null,
@@ -94,20 +94,19 @@ describe("WorkspaceApiAccessSurface", () => {
     render(<WorkspaceApiAccessSurface workspaceId={workspaceId} />);
 
     await screen.findByText("Existing Key");
-    await user.type(screen.getByLabelText("密钥名称"), "Admin Key");
-    await user.selectOptions(screen.getByLabelText("权限"), "admin");
+    await user.type(screen.getByLabelText("密钥名称"), "Agent Key");
     await user.click(screen.getByRole("button", { name: "创建密钥" }));
 
     await waitFor(() => {
       expect(mocks.createApiKeyMock).toHaveBeenCalledWith("token-123", workspaceId, {
-        name: "Admin Key",
-        permissions: ["admin"],
+        name: "Agent Key",
+        permissions: ["index", "query"],
         rate_limit_rpm: 60,
       });
     });
 
     expect(await screen.findByText("sk_workspace_plaintext")).toBeTruthy();
-    expect(screen.getByText("Admin Key")).toBeTruthy();
+    expect(screen.getByText("Agent Key")).toBeTruthy();
   });
 
   it("revokes a listed api key from the active workspace", async () => {

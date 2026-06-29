@@ -119,6 +119,177 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn workspace_api_key_can_access_its_notebook_sources() {
+        let state = test_app_state();
+        let notebook = state
+            .create_notebook(CreateNotebookRequest {
+                name: "API Key Notebook".to_string(),
+                description: String::new(),
+            })
+            .await
+            .expect("notebook should create");
+        let key = state
+            .create_api_key(
+                &notebook.id,
+                common::CreateApiKeyRequest {
+                    name: "agent".to_string(),
+                    permissions: vec!["query".to_string()],
+                    rate_limit_rpm: Some(30),
+                    expires_at: None,
+                },
+            )
+            .await
+            .expect("api key should create");
+        let app = build_router(state);
+
+        let req = Request::builder()
+            .uri(format!("/api/v1/sources?notebook_id={}", notebook.id))
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", key.plaintext_key))
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(req).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(payload["sources"].is_array());
+    }
+
+    #[tokio::test]
+    async fn mcp_jsonrpc_initialize_and_tools_list() {
+        let state = test_app_state();
+        let notebook = state
+            .create_notebook(CreateNotebookRequest {
+                name: "MCP Notebook".to_string(),
+                description: String::new(),
+            })
+            .await
+            .expect("notebook should create");
+        let app = build_router(state);
+        let org_id = "00000000-0000-0000-0000-000000000001";
+        let user_id = "00000000-0000-0000-0000-000000000002";
+
+        let init_req = Request::builder()
+            .uri(format!("/mcp/notebooks/{}", notebook.id))
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .header(middleware::HEADER_ORG_ID, org_id)
+            .header(middleware::HEADER_USER_ID, user_id)
+            .body(Body::from(
+                r#"{"jsonrpc":"2.0","id":"1","method":"initialize","params":{}}"#,
+            ))
+            .unwrap();
+        let init_resp = app.clone().oneshot(init_req).await.unwrap();
+        assert_eq!(init_resp.status(), StatusCode::OK);
+        let init_body = to_bytes(init_resp.into_body(), usize::MAX).await.unwrap();
+        let init_payload: serde_json::Value = serde_json::from_slice(&init_body).unwrap();
+        assert_eq!(init_payload["result"]["serverInfo"]["name"], "context-os");
+
+        let list_req = Request::builder()
+            .uri(format!("/mcp/notebooks/{}", notebook.id))
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .header(middleware::HEADER_ORG_ID, org_id)
+            .header(middleware::HEADER_USER_ID, user_id)
+            .body(Body::from(
+                r#"{"jsonrpc":"2.0","id":"2","method":"tools/list","params":{}}"#,
+            ))
+            .unwrap();
+        let list_resp = app.oneshot(list_req).await.unwrap();
+        assert_eq!(list_resp.status(), StatusCode::OK);
+        let list_body = to_bytes(list_resp.into_body(), usize::MAX).await.unwrap();
+        let list_payload: serde_json::Value = serde_json::from_slice(&list_body).unwrap();
+        let tool_names: Vec<&str> = list_payload["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|tool| tool["name"].as_str())
+            .collect();
+        assert!(tool_names.contains(&"workspace.rag_query"));
+        assert!(tool_names.contains(&"workspace.search_query"));
+    }
+
+    #[tokio::test]
+    async fn unified_mcp_lists_org_and_workspace_tools() {
+        let state = test_app_state();
+        let app = build_router(state);
+        let org_id = "00000000-0000-0000-0000-000000000001";
+        let user_id = "00000000-0000-0000-0000-000000000002";
+
+        let list_req = Request::builder()
+            .uri("/api/v1/mcp")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .header(middleware::HEADER_ORG_ID, org_id)
+            .header(middleware::HEADER_USER_ID, user_id)
+            .body(Body::from(
+                r#"{"jsonrpc":"2.0","id":"1","method":"tools/list","params":{}}"#,
+            ))
+            .unwrap();
+        let list_resp = app.oneshot(list_req).await.unwrap();
+        assert_eq!(list_resp.status(), StatusCode::OK);
+        let list_body = to_bytes(list_resp.into_body(), usize::MAX).await.unwrap();
+        let list_payload: serde_json::Value = serde_json::from_slice(&list_body).unwrap();
+        let tool_names: Vec<&str> = list_payload["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|tool| tool["name"].as_str())
+            .collect();
+        assert!(tool_names.contains(&"org.create_workspace"));
+        assert!(tool_names.contains(&"workspace.create_upload"));
+        assert!(tool_names.contains(&"workspace.rag_query"));
+    }
+
+    #[tokio::test]
+    async fn org_mcp_create_workspace_returns_notebook_id() {
+        let state = test_app_state();
+        let app = build_router(state);
+        let org_id = "00000000-0000-0000-0000-000000000001";
+        let user_id = "00000000-0000-0000-0000-000000000002";
+
+        let call_req = Request::builder()
+            .uri("/api/v1/mcp")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .header(middleware::HEADER_ORG_ID, org_id)
+            .header(middleware::HEADER_USER_ID, user_id)
+            .body(Body::from(
+                serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "1",
+                    "method": "tools/call",
+                    "params": {
+                        "name": "org.create_workspace",
+                        "arguments": {
+                            "name": "Agent Workspace",
+                            "description": "created via MCP"
+                        }
+                    }
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let call_resp = app.oneshot(call_req).await.unwrap();
+        assert_eq!(call_resp.status(), StatusCode::OK);
+        let body = to_bytes(call_resp.into_body(), usize::MAX).await.unwrap();
+        let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(
+            payload
+                .pointer("/result/structuredContent/data/notebook/id")
+                .and_then(|value| value.as_str())
+                .is_some()
+        );
+        assert_eq!(
+            payload
+                .pointer("/result/structuredContent/agent_operation_guide/mode")
+                .and_then(|value| value.as_str()),
+            Some("workspace.create")
+        );
+    }
+
+    #[tokio::test]
     async fn agent_preferences_api_can_get_put_and_delete_preferences() {
         let state = test_app_state();
         let app = build_router(state);
@@ -1215,7 +1386,7 @@ mod tests {
             .await
             .unwrap();
         let register_payload: serde_json::Value = serde_json::from_slice(&register_body).unwrap();
-        let token = register_payload["data"]["token"]
+        let _register_token = register_payload["data"]["token"]
             .as_str()
             .unwrap()
             .to_string();
@@ -1224,6 +1395,29 @@ mod tests {
             .grant_e2e_admin_role(&email)
             .await
             .expect("admin role grant should succeed");
+
+        let login_req = Request::builder()
+            .uri("/api/auth/login")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                serde_json::json!({
+                    "email": email,
+                    "password": "password123"
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let login_resp = app.clone().oneshot(login_req).await.unwrap();
+        assert_eq!(login_resp.status(), StatusCode::OK);
+        let login_body = to_bytes(login_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let login_payload: serde_json::Value = serde_json::from_slice(&login_body).unwrap();
+        let token = login_payload["data"]["token"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         let admin_req = Request::builder()
             .uri("/api/v1/admin/billing")
@@ -1329,6 +1523,21 @@ mod tests {
         let claims = verify_jwt(&token).expect("token should be valid");
         assert_eq!(claims.sub, user_id.to_string());
         assert_eq!(claims.org_id, org_id.to_string());
+        assert!(!claims.permissions.iter().any(|perm| perm == "admin"));
+    }
+
+    #[test]
+    fn jwt_org_admin_includes_admin_permission() {
+        let user_id = Uuid::new_v4();
+        let org_id = Uuid::new_v4();
+        let token = issue_jwt_for_auth_version(
+            &user_id,
+            &org_id,
+            1,
+            contracts::USER_ROLE_ORG_ADMIN,
+        );
+        let claims = verify_jwt(&token).expect("token should be valid");
+        assert!(claims.permissions.iter().any(|perm| perm == "admin"));
     }
 
     #[test]

@@ -88,7 +88,9 @@ fn validate_e2e_request(headers: &axum::http::HeaderMap, email: &str) -> Result<
     }
 
     let email = email.trim().to_lowercase();
-    let allowed = email.starts_with("e2e-") || email.ends_with("@test.local");
+    let allowed = email.starts_with("e2e-")
+        || email.ends_with("@test.local")
+        || email.ends_with("@example.com");
     if !allowed {
         warn!(email = %email, "e2e request rejected: account prefix gate failed");
         return Err((

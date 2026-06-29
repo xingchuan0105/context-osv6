@@ -1261,6 +1261,88 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn search_conversation_history_matches_assistant_message_when_database_available() {
+        let Some(database_url) = env::var("DATABASE_URL").ok() else {
+            return;
+        };
+        let repo = PgAppRepository::connect(&database_url).await.unwrap();
+        repo.migrate().await.unwrap();
+
+        let org_id = OrgId::from(Uuid::new_v4());
+        let user_id = Uuid::new_v4();
+        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+            .with_actor_id(ActorId::new(user_id));
+
+        let notebook = repo
+            .create_notebook(&ctx, "assistant-history", "assistant history test")
+            .await
+            .unwrap();
+        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+
+        let session_a = repo
+            .create_session(&ctx, notebook_id, Some("session-a"), "rag")
+            .await
+            .unwrap();
+        let session_a_id = Uuid::parse_str(&session_a.id).unwrap();
+        let session_b = repo
+            .create_session(&ctx, notebook_id, Some("session-b"), "rag")
+            .await
+            .unwrap();
+        let session_b_id = Uuid::parse_str(&session_b.id).unwrap();
+
+        repo.append_chat_turn(
+            &ctx,
+            session_a_id,
+            ChatTurn {
+                user_content: "Explain a concept.",
+                assistant_content: "Antifragility gains from volatility and stressors.",
+                assistant_answer_blocks: &[],
+                agent_type: "rag",
+                citations: &[],
+                tool_results: &[],
+                user_turn_metadata: None,
+                user_resolved_query: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        repo.append_chat_turn(
+            &ctx,
+            session_b_id,
+            ChatTurn {
+                user_content: "Another topic.",
+                assistant_content: "Sure.",
+                assistant_answer_blocks: &[],
+                agent_type: "rag",
+                citations: &[],
+                tool_results: &[],
+                user_turn_metadata: None,
+                user_resolved_query: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let hits = repo
+            .search_conversation_history(
+                &ctx,
+                session_b_id,
+                "antifragility",
+                ConversationHistoryScope::Notebook,
+                10,
+                &[],
+            )
+            .await
+            .unwrap();
+
+        assert!(
+            hits.iter().any(|hit| hit.session_id == session_a_id && hit.role == "assistant"),
+            "conversation_history should match assistant message body across sessions"
+        );
+    }
+
+    #[tokio::test]
     async fn get_notebook_returns_none_for_other_org_when_database_available() {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;

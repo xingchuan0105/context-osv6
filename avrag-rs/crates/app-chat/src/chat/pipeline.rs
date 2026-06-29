@@ -89,6 +89,12 @@ async fn run_pipeline(
             request_id: config.request_id.clone(),
             session_id: session.id.clone(),
         });
+        if let Some(guide) = crate::external_agent_guide::load_invoke_operation_guide(&request.agent_type) {
+            let _ = config.sender.send(contracts::chat::ChatEvent::OperationGuide {
+                request_id: config.request_id.clone(),
+                guide,
+            });
+        }
     }
 
     let mut execution = crate::chat::pipeline_steps::dispatch_mode(
@@ -158,5 +164,5 @@ async fn run_pipeline(
 
     crate::chat::pipeline_steps::emit_terminal_stream_events(stream_config.as_ref(), &execution);
 
-    Ok(execution.response)
+    Ok(crate::external_agent_guide::attach_operation_guide(execution.response))
 }

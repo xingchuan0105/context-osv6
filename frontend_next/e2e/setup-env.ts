@@ -13,10 +13,30 @@ import { resetTestUserData, waitForBackendHealth } from "./utils/api-helpers";
  * Pricing revamp 开关由 playwright.config.ts webServer.env 在进程启动时注入：
  *   - avrag-api: PRICING_REVAMP_ROLLOUT=100（E2E 用户通过 hash 桶）
  *   - Next.js: NEXT_PUBLIC_PRICING_REVAMP_ENABLED=1（须在 dev/build 前设置，globalSetup 太晚）
+ * 本地默认不复用已有 webServer（见 PLAYWRIGHT_REUSE_SERVER）；避免 rollout 环境丢失。
  */
 const RUN_ID_MAX_AGE_MS = 10 * 60 * 1000; // 10 分钟
 
+async function ensureEnvLocalEntry(key: string, value: string) {
+  const fs = await import("fs");
+  const envLocalPath = ".env.local";
+  const lines = fs.existsSync(envLocalPath)
+    ? fs.readFileSync(envLocalPath, "utf-8").split("\n")
+    : [];
+  const filtered = lines.filter((line) => line.trim() && !line.startsWith(`${key}=`));
+  filtered.push(`${key}=${value}`);
+  fs.writeFileSync(envLocalPath, `${filtered.join("\n")}\n`);
+}
+
 export default async function setupEnv() {
+  // globalSetup runs before Playwright webServer; persist flag for `pnpm dev` / `next build`.
+  await ensureEnvLocalEntry(
+    "NEXT_PUBLIC_PRICING_REVAMP_ENABLED",
+    process.env.NEXT_PUBLIC_PRICING_REVAMP_ENABLED ?? "1",
+  );
+  process.env.NEXT_PUBLIC_PRICING_REVAMP_ENABLED =
+    process.env.NEXT_PUBLIC_PRICING_REVAMP_ENABLED ?? "1";
+
   const runId = `r${Date.now()}`;
   const authDir = "playwright/.auth";
   const runIdPath = `${authDir}/run-id.txt`;

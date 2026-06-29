@@ -34,6 +34,7 @@ pub struct StorageContext {
     chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
     inner: Arc<RwLock<MemoryState>>,
     api_keys: Arc<RwLock<BTreeMap<String, Vec<ApiKeyRow>>>>,
+    api_key_hashes: Arc<RwLock<BTreeMap<String, crate::api_key::MemoryApiKeyRecord>>>,
     max_upload_file_size_bytes: u64,
     uses_memory_adapters: bool,
     object_store: Arc<dyn ObjectStorePort>,
@@ -57,6 +58,7 @@ impl StorageContext {
         chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
         inner: Arc<RwLock<MemoryState>>,
         api_keys: Arc<RwLock<BTreeMap<String, Vec<ApiKeyRow>>>>,
+        api_key_hashes: Arc<RwLock<BTreeMap<String, crate::api_key::MemoryApiKeyRecord>>>,
         max_upload_file_size_bytes: u64,
         uses_memory_adapters: bool,
         object_store: Arc<dyn ObjectStorePort>,
@@ -77,6 +79,7 @@ impl StorageContext {
             chat_persistence,
             inner,
             api_keys,
+            api_key_hashes,
             max_upload_file_size_bytes,
             uses_memory_adapters,
             object_store,
@@ -155,6 +158,12 @@ impl StorageContext {
 
     pub fn api_keys(&self) -> &Arc<RwLock<BTreeMap<String, Vec<ApiKeyRow>>>> {
         &self.api_keys
+    }
+
+    pub fn api_key_hashes(
+        &self,
+    ) -> &Arc<RwLock<BTreeMap<String, crate::api_key::MemoryApiKeyRecord>>> {
+        &self.api_key_hashes
     }
 
     pub fn current_org_id(auth: &AuthContext) -> String {

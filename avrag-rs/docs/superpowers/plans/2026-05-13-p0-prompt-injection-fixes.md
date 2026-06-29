@@ -1,5 +1,8 @@
 # P0 Prompt Injection Fixes — Implementation Plan
 
+> **状态：历史计划（部分上下文已过时）**  
+> 配套分析文档 `AGENT_PROMPT_INJECTION_ANALYSIS.md` 中的 `session_summary` / L2 记忆注入描述已废弃。记忆架构见 `avrag-rs/docs/adr/0007-react-phased-context-disclosure.md`。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix 4 P0 security vulnerabilities identified in `AGENT_PROMPT_INJECTION_ANALYSIS.md`: R1 (history messages bypass input guard), R3 (RAG chunk text injection), R6 (web search snippet injection), R8 (chat mode lacks output guard).

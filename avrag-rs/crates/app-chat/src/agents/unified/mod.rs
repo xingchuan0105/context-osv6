@@ -174,7 +174,10 @@ impl Agent for UnifiedAgent {
                                 message: "RAG runtime is not configured".to_string(),
                             })
                             .await;
-                        return Err(AppError::internal("RAG runtime is not configured"));
+                        return Err(AppError::validation(
+                            "rag_runtime_not_configured",
+                            "RAG runtime is not configured",
+                        ));
                     }
                 };
 

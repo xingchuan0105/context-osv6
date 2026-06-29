@@ -301,6 +301,7 @@ impl RagRuntime {
             guard_report: None,
             tool_results: Vec::new(),
             usage: None,
+            agent_operation_guide: None,
         })
     }
 
@@ -442,6 +443,7 @@ impl RagRuntime {
             guard_report: None,
             tool_results: Vec::new(),
             usage: None,
+            agent_operation_guide: None,
         })
     }
 }

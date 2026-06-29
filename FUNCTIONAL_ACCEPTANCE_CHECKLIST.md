@@ -93,7 +93,7 @@
 |3.1|直接对话 (无检索)|✅|`app/src/agents/chat\_agent.rs`|
 |3.2|SSE 流式响应|✅|`transport-http/src/handlers.rs` `sse\_response\_from\_receiver`|
 |3.3|非流式响应|✅|`chat\_post\_handler` 支持两种模式|
-|3.4|记忆 (L1/L3)|✅|L1 `ChatMemory::load`（PG messages）；L3 `update_user_profile` + dream 层 24h 节流（`service_postprocess` 最近 12 轮原文输入）。**L2 session summary 已移除**（migration `0044`）|
+|3.4|记忆 (L1/L3)|✅|L1 `ChatMemory::load`（PG messages）；L3 `update_user_profile` + dream 层 24h 节流（`service_postprocess` 最近 12 轮原文输入）。**L2 session summary 已移除**（migrations `0043`–`0045`）|
 |3.5|Session Summary 注入|🚫|**已移除**（migration `0044`；L2 不再注入；见 ADR-0007）|
 |3.6|User Profile 注入|✅|`prompts/user\_profile\_extraction\_system.txt`|
 |3.7|历史窗口 + 按需检索|✅|`MAX_PROMPT_HISTORY_TURNS=2` 保底 prior user；更早历史 `conversation_history_load`（PG FTS）；20K token 压缩触发器产品决策不实现|

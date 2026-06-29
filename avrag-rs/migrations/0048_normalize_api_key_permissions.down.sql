@@ -1,0 +1,1 @@
+-- Permission normalization is not reverted.

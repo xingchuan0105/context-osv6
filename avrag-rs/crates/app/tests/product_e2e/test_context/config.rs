@@ -136,6 +136,7 @@ impl E2eBootstrapConfig {
             config.search.provider = "brave_llm_context".to_string();
             config.search.base_url = url.clone();
             config.search.api_key = "mock".to_string();
+            config.search.mode = "brave_llm_context".to_string();
             Self::apply_search_timeout_from_env(&mut config);
         }
 
@@ -275,7 +276,13 @@ impl E2eBootstrapConfig {
         } else if let Some(ref url) = self.mock_search_base_url {
             cmd.env("SEARCH_PROVIDER", "brave_llm_context")
                 .env("SEARCH_BASE_URL", url)
-                .env("SEARCH_API_KEY", "mock");
+                .env("SEARCH_API_KEY", "mock")
+                .env("SEARCH_MODE", "brave_llm_context");
+            if let Some(ref mock_llm) = self.mock_llm_base_url {
+                cmd.env("SEARCH_LLM_BASE_URL", mock_llm)
+                    .env("SEARCH_LLM_API_KEY", "mock")
+                    .env("SEARCH_LLM_MODEL", "mock-llm");
+            }
         }
 
         if let Some(ref url) = self.mock_paddle_ocr_base_url {

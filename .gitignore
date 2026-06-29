@@ -24,6 +24,7 @@ desktop/src-tauri/gen/
 # Secrets (never commit)
 # =====================
 .env
+.env*.local
 !.env.example
 
 # =====================
@@ -45,6 +46,7 @@ __pycache__/
 test-results/
 playwright-report/
 playwright/.auth/
+frontend_next/playwright/
 
 # =====================
 # Claude Code / AI worktrees

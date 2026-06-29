@@ -33,7 +33,7 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
   const [checkoutError, setCheckoutError] = useState("");
 
   useEffect(() => {
-    if (!ready || !enabled) {
+    if (!ready || !enabled || !auth.token) {
       return;
     }
 
@@ -42,8 +42,8 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
     async function loadPaywall() {
       try {
         const [windowData, plansData] = await Promise.all([
-          billingApi.getUsageWindow(),
-          billingApi.getPlans(),
+          billingApi.getUsageWindow(auth.token),
+          billingApi.getPlans(auth.token),
         ]);
         if (cancelled) {
           return;
@@ -69,7 +69,7 @@ export function PaywallPageClient({ reason }: { reason: "5h" | "7d" }) {
     return () => {
       cancelled = true;
     };
-  }, [enabled, ready, router]);
+  }, [auth.token, enabled, ready, router]);
 
   if (!ssrEnabled) {
     return null;

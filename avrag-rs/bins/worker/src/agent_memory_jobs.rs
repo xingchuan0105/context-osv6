@@ -155,6 +155,7 @@ impl AgentPreferenceConsolidationJobRunner {
 
                 if additions.is_empty() {
                     let now_text = now.to_rfc3339();
+                    truncate_agent_daily_log(&mut preferences, now.date_naive());
                     preferences.agent_memory.last_consolidated_at = Some(now_text);
 
                     sqlx::query(

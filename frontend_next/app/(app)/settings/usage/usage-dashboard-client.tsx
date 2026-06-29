@@ -13,6 +13,7 @@ import type {
   UsageWindowResponse,
 } from "@/lib/billing/api";
 import { ApiError } from "@/lib/auth/client";
+import { useAuth } from "@/lib/auth/context";
 import { isPricingRevampFeatureDisabledError } from "@/lib/billing/featureFlag";
 import { usePricingRevampGateResult } from "@/components/billing/PricingRevampGate";
 import { formatUiMessage } from "@/lib/i18n/messages";
@@ -26,12 +27,13 @@ type DashboardState =
 
 export function UsageDashboardClient() {
   const router = useRouter();
+  const { token } = useAuth();
   const { locale } = useUiPreferences();
   const { ssrEnabled, enabled, ready } = usePricingRevampGateResult();
   const [state, setState] = useState<DashboardState>({ kind: "loading" });
 
   useEffect(() => {
-    if (!ready || !enabled) {
+    if (!ready || !enabled || !token) {
       return;
     }
 
@@ -40,9 +42,9 @@ export function UsageDashboardClient() {
     async function loadDashboard() {
       try {
         const [windowData, historyData, forecastData] = await Promise.all([
-          billingApi.getUsageWindow(),
-          billingApi.getUsageHistory(7),
-          billingApi.getUsageForecast(),
+          billingApi.getUsageWindow(token),
+          billingApi.getUsageHistory(7, token),
+          billingApi.getUsageForecast(token),
         ]);
         if (cancelled) {
           return;
@@ -76,7 +78,7 @@ export function UsageDashboardClient() {
     return () => {
       cancelled = true;
     };
-  }, [enabled, ready, router]);
+  }, [enabled, ready, router, token]);
 
   if (!ssrEnabled) {
     return null;

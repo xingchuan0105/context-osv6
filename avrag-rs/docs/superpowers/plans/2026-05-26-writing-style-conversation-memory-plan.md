@@ -1,5 +1,8 @@
 # 写作风格库 + Brainstorming + 多轮记忆 + 三问题修复 实施计划
 
+> **状态：历史计划（L2 `session_summary` 已移除）**  
+> 文中多轮记忆 / `session_summary` 注入相关步骤**不再反映当前实现**。见 `avrag-rs/docs/adr/0007-react-phased-context-disclosure.md` 与 `avrag-rs/docs/memory-recall-gap-2026-06-13.md`。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 实现写作风格库（Skill 系统扩展）、Brainstorming 行为模式、Agent 自治多轮对话记忆，同时修复 Plan prompt tool catalog 策略隔离、Format Skills E2E 验证、doc_index/index_lookup 评估三个遗留问题。

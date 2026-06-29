@@ -62,9 +62,9 @@ test.describe("Workspace Chat Journey", () => {
         citationCount,
         "nightly/staging (E2E_TIER) requires at least one web-search citation",
       ).toBeGreaterThan(0);
-      await expect(page.locator('[data-testid="workspace-citation"]').first()).toBeVisible();
-    } else if (citationCount > 0) {
-      await expect(page.locator('[data-testid="workspace-citation"]').first()).toBeVisible();
+    }
+    if (citationCount > 0) {
+      await chat.expectCitationUiVisible();
     }
   });
 });

@@ -1,5 +1,8 @@
 # E2E Test Upgrade Implementation Plan
 
+> **状态：历史计划（部分夹具字段已过时）**  
+> 文中 `session_summary` 等 eval/redteam 夹具字段已移除。当前记忆与检索见 `avrag-rs/docs/memory-recall-gap-2026-06-13.md`。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a layered E2E test suite with Playwright screenshot capture, artifact persistence, and regression report generation for format outputs and ingestion-answer pipelines.

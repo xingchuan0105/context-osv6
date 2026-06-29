@@ -43,7 +43,6 @@ mod tests {
             notebook_id: "nb-1".to_string(),
             title: Some(format!("session-{id}")),
             agent_type: "rag".to_string(),
-            summary: None,
             pinned: false,
             created_at: "2026-03-29T10:00:00Z".to_string(),
             updated_at: updated_at.to_string(),

@@ -6,6 +6,7 @@ mod documents;
 mod notebooks;
 pub use documents::*;
 mod admin_delegates;
+mod auth_delegates;
 mod citation_delegates;
 mod chat_delegates;
 mod preferences;

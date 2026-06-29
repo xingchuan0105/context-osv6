@@ -58,8 +58,8 @@ describe("api access client", () => {
               org_id: "org-1",
               notebook_id: "ws-1",
               key_prefix: "sk_live_456",
-              name: "Admin Key",
-              permissions: ["admin"],
+              name: "Agent Key",
+              permissions: ["index", "query"],
               rate_limit_rpm: 120,
               expires_at: "2026-05-01T00:00:00Z",
               last_used_at: null,
@@ -105,8 +105,8 @@ describe("api access client", () => {
 
     await expect(
       createApiKey("token-123", "ws-1", {
-        name: "Admin Key",
-        permissions: ["admin"],
+        name: "Agent Key",
+        permissions: ["index", "query"],
         rate_limit_rpm: 120,
         expires_at: "2026-05-01T00:00:00Z",
       }),
@@ -116,8 +116,8 @@ describe("api access client", () => {
         org_id: "org-1",
         notebook_id: "ws-1",
         key_prefix: "sk_live_456",
-        name: "Admin Key",
-        permissions: ["admin"],
+        name: "Agent Key",
+        permissions: ["index", "query"],
         rate_limit_rpm: 120,
         expires_at: "2026-05-01T00:00:00Z",
         last_used_at: null,
@@ -149,8 +149,8 @@ describe("api access client", () => {
     expect(fetchMock.mock.calls[1]?.[1]).toEqual(
       expect.objectContaining({
         body: JSON.stringify({
-          name: "Admin Key",
-          permissions: ["admin"],
+          name: "Agent Key",
+          permissions: ["index", "query"],
           rate_limit_rpm: 120,
           expires_at: "2026-05-01T00:00:00Z",
         }),

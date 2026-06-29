@@ -8,6 +8,12 @@ async fn auth_get_preferences_handler(
             "Not authenticated",
         );
     }
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "user preferences require a signed-in user session",
+    ) {
+        return handlers::app_error_response(error);
+    }
 
     match state.current_user_preferences().await {
         Ok(preferences) => {
@@ -38,6 +44,12 @@ async fn auth_update_preferences_handler(
             "unauthorized",
             "Not authenticated",
         );
+    }
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "user preferences require a signed-in user session",
+    ) {
+        return handlers::app_error_response(error);
     }
 
     let previous_preferences = match state.current_user_preferences().await {
@@ -118,6 +130,12 @@ async fn auth_get_agent_preferences_handler(
             "Not authenticated",
         );
     }
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "user preferences require a signed-in user session",
+    ) {
+        return handlers::app_error_response(error);
+    }
 
     match state.current_user_preferences().await {
         Ok(preferences) => (StatusCode::OK, Json(preferences.agent_memory)).into_response(),
@@ -142,6 +160,12 @@ async fn auth_update_agent_preferences_handler(
             "unauthorized",
             "Not authenticated",
         );
+    }
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "user preferences require a signed-in user session",
+    ) {
+        return handlers::app_error_response(error);
     }
 
     let mut preferences = match state.current_user_preferences().await {
@@ -180,6 +204,12 @@ async fn auth_delete_agent_preference_handler(
             "unauthorized",
             "Not authenticated",
         );
+    }
+    if let Err(error) = crate::auth_guard::forbid_api_key(
+        state.auth(),
+        "user preferences require a signed-in user session",
+    ) {
+        return handlers::app_error_response(error);
     }
 
     match state.delete_current_agent_preference(&preference_id).await {

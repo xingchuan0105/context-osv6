@@ -11,7 +11,10 @@ impl PgAppRepository {
                    expires_at, last_used_at, is_active, created_by, created_at, updated_at
             from api_keys
             where is_active = true
-              and ($1::uuid is null or notebook_id = $1)
+              and (
+                ($1::uuid is not null and notebook_id = $1)
+                or ($1::uuid is null and notebook_id is null)
+              )
             order by created_at desc
             "#,
         )
@@ -62,7 +65,7 @@ impl PgAppRepository {
         .bind(key_hash)
         .bind(key_prefix)
         .bind(name)
-        .bind(normalize_permissions(permissions))
+        .bind(contracts::normalize_api_key_permissions(permissions, notebook_id))
         .bind(i32::try_from(rate_limit_rpm).unwrap_or(i32::MAX))
         .bind(expires_at)
         .bind(context.actor_id().map(ActorId::into_uuid))
@@ -221,9 +224,12 @@ impl PgAppRepository {
         let id: Uuid = row.try_get("id")?;
         let org_id: Uuid = row.try_get("org_id")?;
         let notebook_id: Option<Uuid> = row.try_get("notebook_id").ok().flatten();
-        let permissions = row
-            .try_get::<Vec<String>, _>("permissions")
-            .unwrap_or_else(|_| vec!["query".to_string()]);
+        let permissions = contracts::normalize_api_key_permissions(
+            &row
+                .try_get::<Vec<String>, _>("permissions")
+                .unwrap_or_else(|_| vec![contracts::PERM_QUERY.to_string()]),
+            notebook_id,
+        );
         let created_by: Option<Uuid> = row.try_get("created_by").ok().flatten();
         let rate_limit_rpm = u32::try_from(row.try_get::<i32, _>("rate_limit_rpm")?).unwrap_or(60);
 

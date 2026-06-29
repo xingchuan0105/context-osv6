@@ -186,6 +186,7 @@ fn chat_response_roundtrips_shared_nested_types() {
         guard_report: None,
         tool_results: Vec::new(),
         usage: None,
+        agent_operation_guide: None,
     };
 
     let json = serde_json::to_value(&response).expect("response should serialize");
@@ -219,6 +220,7 @@ fn done_payload_exposes_terminal_response_fields() {
             guard_report: None,
             tool_results: Vec::new(),
             usage: None,
+            agent_operation_guide: None,
         },
     };
 
@@ -338,6 +340,7 @@ fn export_golden_fixtures() {
         guard_report: None,
         tool_results: Vec::new(),
         usage: None,
+        agent_operation_guide: None,
     };
     write(
         "chat_response_roundtrip.json",
@@ -414,6 +417,7 @@ fn export_golden_fixtures() {
                 guard_report: None,
                 tool_results: Vec::new(),
                 usage: None,
+                agent_operation_guide: None,
             },
         })
         .expect("serialize done payload"),

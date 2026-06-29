@@ -30,12 +30,6 @@ fn WorkspaceHistoryPane(
                     .unwrap_or_default()
                     .to_lowercase()
                     .contains(&query)
-                    || session
-                        .summary
-                        .clone()
-                        .unwrap_or_default()
-                        .to_lowercase()
-                        .contains(&query)
             })
             .collect::<Vec<_>>()
     });
@@ -122,15 +116,12 @@ fn WorkspaceHistoryPane(
                                     let chat_for_session = active_chat.clone();
                                     let active_chat_for_row_state = active_chat.clone();
                                     let active_chat_for_delete = active_chat.clone();
-                                    let summary = session
-                                        .summary
+                                    let subtitle = session
+                                        .title
                                         .clone()
                                         .filter(|text| !text.is_empty())
                                         .unwrap_or_else(|| {
-                                            session
-                                                .title
-                                                .clone()
-                                                .unwrap_or_else(|| choose(locale.get(), "未命名线程", "Untitled thread").to_string())
+                                            choose(locale.get(), "未命名线程", "Untitled thread").to_string()
                                         });
                                     let display_title = session
                                         .title
@@ -194,7 +185,7 @@ fn WorkspaceHistoryPane(
                                                         </Show>
                                                     </div>
                                                     <div class="workspace-list-item-meta">
-                                                        {summary}
+                                                        {subtitle}
                                                     </div>
                                                 </button>
 

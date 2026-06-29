@@ -40,6 +40,13 @@ jobs:
           path: avrag-rs/target
           key: ${{ runner.os }}-cargo-build-llm-real-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
 
+      - name: Start Milvus stack
+        # llm_real tests can bootstrap Milvus in-test, but starting it explicitly
+        # here removes the in-test bootstrap flake (collection init races) and
+        # shortens the real-LLM run.
+        run: bash "$GITHUB_WORKSPACE/scripts/ci-start-milvus.sh"
+        timeout-minutes: 5
+
       - name: Run llm_real E2E
         run: cargo test -p app --test product_e2e --features product-e2e llm_real -- --ignored --test-threads=1 --nocapture
         env:

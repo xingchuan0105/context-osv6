@@ -10,6 +10,7 @@ use contracts::notebooks::{CreateNotebookNoteRequest, UpdateNotebookNoteRequest}
 use uuid::Uuid;
 
 use crate::RequestState;
+use crate::auth_guard::{ensure_user_notebook_access, require_user_session};
 use super::super::{app_error_response, error_response};
 
 fn note_preview(content: &str) -> String {
@@ -136,10 +137,26 @@ pub(super) async fn load_notebook_notes(
     Ok(notes)
 }
 
+async fn require_notebook_notes_access(
+    state: &AppState,
+    notebook_id: &str,
+) -> Result<(), Response> {
+    if let Err(error) = ensure_user_notebook_access(state, notebook_id).await {
+        return Err(app_error_response(error));
+    }
+    Ok(())
+}
+
 pub(crate) async fn list_notebook_notes_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(notebook_id): Path<String>,
 ) -> Response {
+    if let Err(error) = require_user_session(state.auth(), "notebook notes require a signed-in user session") {
+        return app_error_response(error);
+    }
+    if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
+        return response;
+    }
     if state.get_notebook(&notebook_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
@@ -158,6 +175,12 @@ pub(crate) async fn get_notebook_note_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path((notebook_id, note_id)): Path<(String, String)>,
 ) -> Response {
+    if let Err(error) = require_user_session(state.auth(), "notebook notes require a signed-in user session") {
+        return app_error_response(error);
+    }
+    if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
+        return response;
+    }
     if state.get_notebook(&notebook_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
@@ -178,6 +201,12 @@ pub(crate) async fn create_notebook_note_handler(
     Path(notebook_id): Path<String>,
     Json(req): Json<CreateNotebookNoteRequest>,
 ) -> Response {
+    if let Err(error) = require_user_session(state.auth(), "notebook notes require a signed-in user session") {
+        return app_error_response(error);
+    }
+    if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
+        return response;
+    }
     if state.get_notebook(&notebook_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
@@ -216,6 +245,12 @@ pub(crate) async fn update_notebook_note_handler(
     Path((notebook_id, note_id)): Path<(String, String)>,
     Json(req): Json<UpdateNotebookNoteRequest>,
 ) -> Response {
+    if let Err(error) = require_user_session(state.auth(), "notebook notes require a signed-in user session") {
+        return app_error_response(error);
+    }
+    if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
+        return response;
+    }
     if state.get_notebook(&notebook_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
@@ -260,6 +295,12 @@ pub(crate) async fn delete_notebook_note_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path((notebook_id, note_id)): Path<(String, String)>,
 ) -> Response {
+    if let Err(error) = require_user_session(state.auth(), "notebook notes require a signed-in user session") {
+        return app_error_response(error);
+    }
+    if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
+        return response;
+    }
     if state.get_notebook(&notebook_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
@@ -287,6 +328,12 @@ pub(crate) async fn promote_notebook_note_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path((notebook_id, note_id)): Path<(String, String)>,
 ) -> Response {
+    if let Err(error) = require_user_session(state.auth(), "notebook notes require a signed-in user session") {
+        return app_error_response(error);
+    }
+    if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
+        return response;
+    }
     if state.get_notebook(&notebook_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }

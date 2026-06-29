@@ -46,6 +46,7 @@ pub struct RegisterUserResult {
     pub email: String,
     pub full_name: String,
     pub auth_version: i32,
+    pub role: String,
 }
 
 #[derive(Debug, Clone)]
@@ -56,6 +57,7 @@ pub struct AuthUserCredentials {
     pub full_name: Option<String>,
     pub password_hash: Option<String>,
     pub auth_version: i32,
+    pub role: String,
 }
 
 #[derive(Debug, Clone)]

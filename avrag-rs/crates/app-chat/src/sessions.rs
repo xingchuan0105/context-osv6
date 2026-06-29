@@ -403,3 +403,49 @@ impl ChatContext {
         ChatService::new(self.clone()).execute(req).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use contracts::chat::ChatMessage;
+    use contracts::notebooks::ChatSession;
+
+    use super::memory_session_matches_search;
+
+    fn sample_message(session_id: &str, content: &str) -> ChatMessage {
+        ChatMessage {
+            id: 1,
+            session_id: session_id.to_string(),
+            role: "assistant".to_string(),
+            content: content.to_string(),
+            answer_blocks: vec![],
+            agent_id: None,
+            agent_name: None,
+            agent_icon: None,
+            citations: vec![],
+            tool_results: vec![],
+            created_at: "2026-06-14T00:00:00Z".to_string(),
+            turn_metadata: None,
+            resolved_query: None,
+        }
+    }
+
+    #[test]
+    fn memory_session_matches_search_finds_message_body_without_title_hit() {
+        let session = ChatSession {
+            id: "session-1".to_string(),
+            notebook_id: "nb-1".to_string(),
+            title: None,
+            agent_type: "chat".to_string(),
+            pinned: false,
+            created_at: "2026-06-14T00:00:00Z".to_string(),
+            updated_at: "2026-06-14T00:00:00Z".to_string(),
+        };
+        let messages = BTreeMap::from([(
+            "session-1".to_string(),
+            vec![sample_message("session-1", "zephyrneedle2026 in assistant reply")],
+        )]);
+        assert!(memory_session_matches_search(&messages, &session, "zephyrneedle"));
+    }
+}

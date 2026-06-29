@@ -7,6 +7,7 @@ use axum::{
 };
 
 use crate::RequestState;
+use crate::auth_guard::{ensure_user_notebook_access, require_user_session};
 use super::super::{app_error_response, error_response};
 use super::notes::load_notebook_notes;
 
@@ -161,6 +162,12 @@ pub(crate) async fn get_notebook_analysis_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(notebook_id): Path<String>,
 ) -> Response {
+    if let Err(error) = require_user_session(state.auth(), "notebook analysis requires a signed-in user session") {
+        return app_error_response(error);
+    }
+    if let Err(error) = ensure_user_notebook_access(&state, &notebook_id).await {
+        return app_error_response(error);
+    }
     let Some(notebook) = state.get_notebook(&notebook_id).await else {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     };

@@ -58,30 +58,39 @@ impl DocumentContext {
                     format!("document {document_id} is not ready for RAG execution: {status:?}"),
                 ));
             }
-            return Ok(());
+        } else {
+            let state = storage.inner().read().await;
+            let org_id = StorageContext::current_org_id(auth);
+            for doc_id in doc_scope {
+                let Some(stored) = state.documents.get(doc_id) else {
+                    return Err(AppError::validation(
+                        "invalid_doc_scope",
+                        format!("document {doc_id} does not exist"),
+                    ));
+                };
+                if stored.document.org_id != org_id {
+                    return Err(AppError::validation(
+                        "invalid_doc_scope",
+                        format!("document {doc_id} is not accessible"),
+                    ));
+                }
+                if !matches!(stored.document.status, DocumentStatus::Completed) {
+                    return Err(AppError::validation(
+                        "invalid_doc_scope",
+                        format!("document {doc_id} is not ready for RAG execution"),
+                    ));
+                }
+            }
         }
 
-        let state = storage.inner().read().await;
-        let org_id = StorageContext::current_org_id(auth);
-        for doc_id in doc_scope {
-            let Some(stored) = state.documents.get(doc_id) else {
-                return Err(AppError::validation(
-                    "invalid_doc_scope",
-                    format!("document {doc_id} does not exist"),
-                ));
-            };
-            if stored.document.org_id != org_id {
-                return Err(AppError::validation(
-                    "invalid_doc_scope",
-                    format!("document {doc_id} is not accessible"),
-                ));
-            }
-            if !matches!(stored.document.status, DocumentStatus::Completed) {
-                return Err(AppError::validation(
-                    "invalid_doc_scope",
-                    format!("document {doc_id} is not ready for RAG execution"),
-                ));
-            }
+        if let Some(notebook_id) = auth.notebook_id() {
+            self.validate_document_scope(
+                auth,
+                storage,
+                &notebook_id.to_string(),
+                doc_scope,
+            )
+            .await?;
         }
         Ok(())
     }

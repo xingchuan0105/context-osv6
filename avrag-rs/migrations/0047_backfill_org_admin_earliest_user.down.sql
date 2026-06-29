@@ -1,0 +1,1 @@
+-- No-op: cannot reliably revert earliest-user org_admin promotion.

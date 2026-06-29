@@ -20,13 +20,18 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::RequestState;
-use super::{app_error_response, error_response};
+use crate::auth_guard::{
+    authorize_api_key_query_scoped, authorize_session_access, authorize_workspace_notebook_str,
+    authorize_workspace_query_optional_notebook, forbid_api_key, forbid_workspace_api_key,
+    query_permission,
+};
+use super::{app_error_response, app_error_response_for_agent, error_response, operation_guide_agent_type};
 
 pub(crate) async fn rag_execute_plan_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     payload: Result<Json<ExecutePlanRequest>, axum::extract::rejection::JsonRejection>,
 ) -> Response {
-    let Json(req) = match payload {
+    let Json(req) =     match payload {
         Ok(payload) => payload,
         Err(error) => {
             return app_error_response(AppError::validation(
@@ -35,6 +40,9 @@ pub(crate) async fn rag_execute_plan_handler(
             ));
         }
     };
+    if let Err(error) = authorize_api_key_query_scoped(state.auth()) {
+        return app_error_response(error);
+    }
     match state.execute_rag_execute_plan(req).await {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(error) => app_error_response(error),
@@ -45,7 +53,7 @@ pub(crate) async fn runtime_execute_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     payload: Result<Json<RuntimeExecuteRequest>, axum::extract::rejection::JsonRejection>,
 ) -> Response {
-    let Json(req) = match payload {
+    let Json(req) =     match payload {
         Ok(payload) => payload,
         Err(error) => {
             return app_error_response(AppError::validation(
@@ -54,6 +62,9 @@ pub(crate) async fn runtime_execute_handler(
             ));
         }
     };
+    if let Err(error) = authorize_api_key_query_scoped(state.auth()) {
+        return app_error_response(error);
+    }
     match state.execute_runtime_tools(req).await {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(error) => app_error_response(error),
@@ -91,6 +102,13 @@ pub(crate) async fn chat_post_handler(
         })
         .unwrap_or_else(|| Uuid::new_v4().to_string());
     tracing::Span::current().record("request_id", &request_id);
+
+    if let Err(error) = authorize_workspace_query_optional_notebook(
+        state.auth(),
+        req.notebook_id.as_deref(),
+    ) {
+        return app_error_response_for_agent(error, operation_guide_agent_type(&agent_type));
+    }
 
     let started_event = if source_type.as_deref() == Some("share") {
         analytics::ProductEventName::SharedKbChatStarted
@@ -144,8 +162,19 @@ pub(crate) async fn chat_post_handler(
                     }),
                 )
                 .await;
-            app_error_response(e)
+            app_error_response_for_agent(e, operation_guide_agent_type(&agent_type))
         }
+    }
+}
+
+pub(crate) async fn agent_operation_guide_handler(Path(mode): Path<String>) -> Response {
+    match app_chat::load_invoke_operation_guide(&mode) {
+        Some(guide) => (StatusCode::OK, Json(guide)).into_response(),
+        None => error_response(
+            StatusCode::NOT_FOUND,
+            "unsupported_mode",
+            "supported modes: rag, search, index, workspace.create",
+        ),
     }
 }
 
@@ -247,6 +276,7 @@ fn sse_event(event_name: &str, payload: &ChatEvent) -> Event {
 fn sse_event_name(event: &ChatEvent) -> &'static str {
     match event {
         ChatEvent::Start { .. } => "start",
+        ChatEvent::OperationGuide { .. } => "operation_guide",
         ChatEvent::Activity { .. } => "activity",
         ChatEvent::AnswerStart { .. } => "answer_start",
         ChatEvent::Trace { .. } => "trace",
@@ -301,6 +331,12 @@ pub(crate) async fn search_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Query(params): Query<SearchQueryParams>,
 ) -> Response {
+    if let Err(error) = forbid_workspace_api_key(
+        state.auth(),
+        "workspace API keys cannot use org-wide search; use workspace.search_query via MCP",
+    ) {
+        return app_error_response(error);
+    }
     let (notebooks, sessions, sources) = state.search(&params.q).await;
     (
         StatusCode::OK,
@@ -322,6 +358,12 @@ pub(crate) async fn list_chat_sessions_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Query(params): Query<ChatSessionsQuery>,
 ) -> Response {
+    if let Err(error) = authorize_workspace_query_optional_notebook(
+        state.auth(),
+        params.notebook_id.as_deref(),
+    ) {
+        return app_error_response(error);
+    }
     let sessions = state.list_sessions(params.notebook_id.as_deref()).await;
     (
         StatusCode::OK,
@@ -333,6 +375,11 @@ pub(crate) async fn create_chat_session_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(req): Json<CreateChatSessionRequest>,
 ) -> Response {
+    if let Err(error) =
+        authorize_workspace_notebook_str(state.auth(), query_permission(), &req.notebook_id)
+    {
+        return app_error_response(error);
+    }
     match state.create_session(req).await {
         Ok(session) => (StatusCode::CREATED, Json(session)).into_response(),
         Err(error) => app_error_response(error),
@@ -343,13 +390,9 @@ pub(crate) async fn get_chat_session_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(session_id): Path<String>,
 ) -> Response {
-    match state.get_session(&session_id).await {
-        Some(session) => (StatusCode::OK, Json(session)).into_response(),
-        None => error_response(
-            StatusCode::NOT_FOUND,
-            "session_not_found",
-            "session not found",
-        ),
+    match authorize_session_access(&state, &session_id).await {
+        Ok(session) => (StatusCode::OK, Json(session)).into_response(),
+        Err(error) => app_error_response(error),
     }
 }
 
@@ -358,6 +401,9 @@ pub(crate) async fn update_chat_session_handler(
     Path(session_id): Path<String>,
     Json(req): Json<UpdateChatSessionRequest>,
 ) -> Response {
+    if let Err(error) = authorize_session_access(&state, &session_id).await {
+        return app_error_response(error);
+    }
     match state.update_session(&session_id, req).await {
         Ok(session) => (StatusCode::OK, Json(session)).into_response(),
         Err(error) => app_error_response(error),
@@ -368,6 +414,9 @@ pub(crate) async fn delete_chat_session_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(session_id): Path<String>,
 ) -> Response {
+    if let Err(error) = authorize_session_access(&state, &session_id).await {
+        return app_error_response(error);
+    }
     match state.delete_session(&session_id).await {
         Ok(status) => (StatusCode::OK, Json(status)).into_response(),
         Err(error) => app_error_response(error),
@@ -378,6 +427,9 @@ pub(crate) async fn get_chat_messages_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(session_id): Path<String>,
 ) -> Response {
+    if let Err(error) = authorize_session_access(&state, &session_id).await {
+        return app_error_response(error);
+    }
     match state.list_messages(&session_id).await {
         Ok(messages) => (
             StatusCode::OK,
@@ -392,6 +444,12 @@ pub(crate) async fn citation_lookup_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(req): Json<CitationLookupRequest>,
 ) -> Response {
+    if let Err(error) = forbid_workspace_api_key(
+        state.auth(),
+        "workspace API keys cannot use citation lookup; use MCP query tools instead",
+    ) {
+        return app_error_response(error);
+    }
     match state
         .lookup_citation(&req.session_id, req.message_id, req.citation_id)
         .await
@@ -434,6 +492,12 @@ pub(crate) async fn citation_asset_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(asset_id): Path<String>,
 ) -> Response {
+    if let Err(error) = forbid_workspace_api_key(
+        state.auth(),
+        "workspace API keys cannot fetch citation assets directly",
+    ) {
+        return app_error_response(error);
+    }
     match state.get_citation_asset(&asset_id).await {
         Ok((bytes, mime_type)) => {
             (StatusCode::OK, [(header::CONTENT_TYPE, mime_type)], bytes).into_response()
@@ -445,6 +509,12 @@ pub(crate) async fn message_feedback_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(req): Json<contracts::chat::MessageFeedbackRequest>,
 ) -> Response {
+    if let Err(error) = forbid_api_key(
+        state.auth(),
+        "message feedback requires a user session",
+    ) {
+        return app_error_response(error);
+    }
     let rating = match req.rating {
         contracts::chat::MessageFeedbackRating::Up => "up",
         contracts::chat::MessageFeedbackRating::Down => "down",

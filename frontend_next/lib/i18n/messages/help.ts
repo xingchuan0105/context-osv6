@@ -30,16 +30,16 @@ export const helpMessages = {
     en: "API Access shows scopes, rate limits, and one-time plaintext key reveal.",
   },
   helpItemApi3: {
-    zh: "工作区 API 主要面向资料上传、URL 导入和 RAG 查询，不开放聊天与全局搜索代理。",
-    en: "Workspace APIs focus on uploads, URL imports, and RAG queries rather than chat or global search proxies.",
+    zh: "工作区 API 密钥只用于该工作区的资料上传、URL 导入和 RAG 查询；先在 UI 里创建工作区，再在此页创建密钥。",
+    en: "Workspace API keys only cover uploads, URL imports, and RAG for that workspace. Create the workspace in the UI first, then mint a key here.",
   },
   helpApiAccessTitle: {
     zh: "API 访问",
     en: "API Access",
   },
   helpApiAccessSubtitle: {
-    zh: "面向手动接入和调试 API 的开发者。自动化代理请使用单独的 agent 文档。",
-    en: "For developers wiring up and debugging the API by hand. Automated agents should use the separate agent docs.",
+    zh: "面向个人用户的 API 接入说明。每个工作区单独管理密钥；自动化代理请使用 agent 文档。",
+    en: "API access for personal users. Each workspace has its own keys; automated agents should use the agent docs.",
   },
   helpApiAccessOverviewTitle: {
     zh: "你会在这里找到",

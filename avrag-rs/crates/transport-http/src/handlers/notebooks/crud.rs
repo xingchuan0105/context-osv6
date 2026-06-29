@@ -4,11 +4,16 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use common::{CreateNotebookRequest, UpdateNotebookRequest};
+use avrag_auth::SubjectKind;
+use common::{AppError, CreateNotebookRequest, UpdateNotebookRequest};
 use contracts::notebooks::{NotebookListResponse, NotebookResponse};
 use uuid::Uuid;
 
 use crate::RequestState;
+use crate::auth_guard::{
+    authorize_org_tool, authorize_workspace_notebook_str, org_create_permission,
+    org_list_permission, query_permission,
+};
 use super::super::{app_error_response, error_response};
 
 #[utoipa::path(
@@ -22,6 +27,9 @@ use super::super::{app_error_response, error_response};
 pub(crate) async fn list_notebooks(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
+    if let Err(error) = authorize_org_tool(state.auth(), org_list_permission()) {
+        return app_error_response(error);
+    }
     let notebooks = state.list_notebooks().await;
     (
         StatusCode::OK,
@@ -46,6 +54,9 @@ pub(crate) async fn get_notebook(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(id): Path<String>,
 ) -> Response {
+    if let Err(error) = authorize_workspace_notebook_str(state.auth(), query_permission(), &id) {
+        return app_error_response(error);
+    }
     match state.get_notebook(&id).await {
         Some(nb) => {
             state
@@ -87,6 +98,9 @@ pub(crate) async fn create_notebook(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(req): Json<CreateNotebookRequest>,
 ) -> Response {
+    if let Err(error) = authorize_org_tool(state.auth(), org_create_permission()) {
+        return app_error_response(error);
+    }
     match state.create_notebook(req).await {
         Ok(nb) => (
             StatusCode::CREATED,
@@ -115,6 +129,12 @@ pub(crate) async fn update_notebook(
     Path(id): Path<String>,
     Json(req): Json<UpdateNotebookRequest>,
 ) -> Response {
+    if matches!(state.auth().subject_kind(), SubjectKind::ApiKey) {
+        return app_error_response(AppError::forbidden(
+            "api_key_forbidden",
+            "API keys cannot modify workspace metadata",
+        ));
+    }
     match state.update_notebook(&id, req).await {
         Ok(nb) => (
             StatusCode::OK,
@@ -141,6 +161,12 @@ pub(crate) async fn delete_notebook(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(id): Path<String>,
 ) -> Response {
+    if matches!(state.auth().subject_kind(), SubjectKind::ApiKey) {
+        return app_error_response(AppError::forbidden(
+            "api_key_forbidden",
+            "API keys cannot modify workspace metadata",
+        ));
+    }
     match state.delete_notebook(&id).await {
         Ok(_) => (
             StatusCode::OK,

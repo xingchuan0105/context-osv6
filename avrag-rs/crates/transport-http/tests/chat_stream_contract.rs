@@ -581,6 +581,7 @@ async fn collect_sse_events(body: Body) -> Vec<ChatEvent> {
 fn sse_event_name(event: &ChatEvent) -> &'static str {
     match event {
         ChatEvent::Start { .. } => "start",
+        ChatEvent::OperationGuide { .. } => "operation_guide",
         ChatEvent::Activity { .. } => "activity",
         ChatEvent::AnswerStart { .. } => "answer_start",
         ChatEvent::Trace { .. } => "trace",

@@ -48,6 +48,13 @@ jobs:
             avrag-rs/target
           key: ${{ runner.os }}-cargo-skills-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
 
+      - name: Start Milvus stack
+        # skills specs assert hard citations over real RAG/Search; the Playwright
+        # webServer (avrag-api) connects to Milvus on startup, so Milvus must be
+        # ready before tests run.
+        run: bash "$GITHUB_WORKSPACE/scripts/ci-start-milvus.sh"
+        timeout-minutes: 5
+
       - name: Run skills E2E
         run: pnpm exec playwright test --project=skills
         env:

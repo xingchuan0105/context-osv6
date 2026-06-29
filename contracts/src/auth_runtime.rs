@@ -73,6 +73,7 @@ pub struct AuthContext {
     notebook_id: Option<Uuid>,
     permissions: BTreeSet<String>,
     request_id: Option<String>,
+    rate_limit_rpm: Option<u32>,
 }
 
 impl AuthContext {
@@ -84,6 +85,7 @@ impl AuthContext {
             notebook_id: None,
             permissions: BTreeSet::new(),
             request_id: None,
+            rate_limit_rpm: None,
         }
     }
 
@@ -99,6 +101,11 @@ impl AuthContext {
 
     pub fn with_request_id(mut self, request_id: impl Into<String>) -> Self {
         self.request_id = Some(request_id.into());
+        self
+    }
+
+    pub fn with_rate_limit_rpm(mut self, rate_limit_rpm: u32) -> Self {
+        self.rate_limit_rpm = Some(rate_limit_rpm);
         self
     }
 
@@ -125,6 +132,10 @@ impl AuthContext {
 
     pub fn request_id(&self) -> Option<&str> {
         self.request_id.as_deref()
+    }
+
+    pub fn rate_limit_rpm(&self) -> Option<u32> {
+        self.rate_limit_rpm
     }
 
     pub fn has_permission(&self, permission: &str) -> bool {

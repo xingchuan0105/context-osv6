@@ -32,15 +32,15 @@
 
 ### App Crate (`app/src/lib.rs`)
 - ✅ `execute_chat_with_pg()` — 优先走 `rag_runtime`，无 legacy fallback
-- ✅ `execute_general_mode()` — 加载 chatmemory Layer 2/3 + working memory + 最近 12 条消息，真实 LLM 调用，写回 summary/profile/working_memory 到 PG
+- ✅ `execute_general_mode()` — 加载 chatmemory L1/L3 + working memory + 最近消息，真实 LLM 调用，写回 profile/working_memory 到 PG（**无 L2 session summary**）
 - ✅ `execute_search_mode()` — 真实 Exa API + planner + synthesizer
 - ✅ `make_planner/synthesizer/reranker/embedding` — env 有配置就创建真实实例
 
 ### ChatMemory (`chatmemory/src/lib.rs`)
-- ✅ `update_summary()` → `repo.update_session_summary()` 写 PG
-- ✅ `update_user_profile()` → `repo.upsert_user_profile()` 写 PG
-- ✅ `update_working_memory()` → `repo.upsert_dialogue_state()` 写 PG
-- ✅ `load()` 读取全部 3 层 + working memory
+- ✅ L1：`load()` → `list_messages` 原始消息
+- ✅ L3：`update_user_profile()` → `repo.upsert_user_profile()` 写 PG
+- ~~L2 session summary~~ — **已移除**（migration `0044`；`chat_sessions.summary` / `update_session_summary` 已删）
+- 记忆检索 migrations：`0043_chat_message_fts`（user FTS + 删 `message_tags`）、`0045_assistant_message_search_tokens`（assistant `search_tokens`）；`migrate()` 后 jieba 重分段
 
 ### Search (`search/src/lib.rs`)
 - ✅ 真实 Exa API 集成（非 mock）

@@ -689,6 +689,7 @@ use contracts::notebooks::{Notebook};
         );
         let inner = old.inner().clone();
         let api_keys = old.api_keys().clone();
+        let api_key_hashes = old.api_key_hashes().clone();
         let max_upload = old.max_upload_file_size_bytes();
         let object_store = old.object_store().clone();
         let public_base_url = old.public_base_url().to_string();
@@ -708,6 +709,7 @@ use contracts::notebooks::{Notebook};
             chat_persistence,
             inner,
             api_keys,
+            api_key_hashes,
             max_upload,
             false,
             object_store,

@@ -7,7 +7,7 @@ use crate::rag_execute::{
 };
 
 /// Tool catalog entry: describes one callable tool.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolSpec {
     pub name: String,
     pub version: String,

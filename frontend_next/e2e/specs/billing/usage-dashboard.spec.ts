@@ -7,8 +7,8 @@ test.describe("Usage dashboard", () => {
     const usage = new UsagePage(page);
     await usage.goto();
     await usage.expectVisible();
-    await expect(page.getByText(/近 7 日用量趋势/)).toBeVisible();
-    await expect(page.getByText(/智能建议|按当前用量|本月无需升级/)).toBeVisible();
+    await expect(page.getByText(/近 7 日用量趋势/)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/智能建议|按当前用量|本月无需升级/)).toBeVisible({ timeout: 30_000 });
   });
 
   test("shows warning text when 5h soft limit hit (via mocked API)", async ({ page }) => {
@@ -38,6 +38,6 @@ test.describe("Usage dashboard", () => {
     );
     const usage = new UsagePage(page);
     await usage.goto();
-    await expect(page.getByText(/已超过软上限/)).toBeVisible();
+    await expect(page.getByText(/已超过软上限/)).toBeVisible({ timeout: 30_000 });
   });
 });

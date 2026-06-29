@@ -195,9 +195,8 @@ impl TestContext {
         }
 
         if !use_real_llm {
-            return std::env::var("SEARCH_USE_REAL")
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false);
+            // PR smoke always uses mock Brave — real search belongs in llm_real / search_real.
+            return false;
         }
 
         super::super::llm_real::load_env_from_repo_dotenv();

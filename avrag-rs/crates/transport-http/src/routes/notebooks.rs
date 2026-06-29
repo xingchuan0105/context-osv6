@@ -94,6 +94,14 @@ pub(crate) fn router() -> Router<AppState> {
         )
         .route("/sources", get(handlers::list_sources_handler))
         .route(
+            "/org/api-keys",
+            get(handlers::list_org_api_keys_handler).post(handlers::create_org_api_key_handler),
+        )
+        .route(
+            "/org/api-keys/{key_id}",
+            axum::routing::delete(handlers::revoke_org_api_key_handler),
+        )
+        .route(
             "/notebooks/{id}/api-keys",
             get(handlers::list_api_keys_handler).post(handlers::create_api_key_handler),
         )

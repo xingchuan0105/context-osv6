@@ -30,6 +30,10 @@ for (const envFile of [".env.local", ".env", "../avrag-rs/.env"]) {
   loadDotEnv(envFile);
 }
 
+// Billing E2E prerequisite: Next inlines NEXT_PUBLIC_* when dev/build starts (after globalSetup).
+process.env.NEXT_PUBLIC_PRICING_REVAMP_ENABLED =
+  process.env.NEXT_PUBLIC_PRICING_REVAMP_ENABLED ?? "1";
+
 // Local avrag-ci-pg uses test:test; dev .env often has avrag/avrag — override for webServer only.
 const DEFAULT_LOCAL_E2E_DATABASE_URL = "postgres://test:test@127.0.0.1:5432/test";
 const playwrightDatabaseUrl =
@@ -41,6 +45,11 @@ const backendServerEnv: Record<string, string> = {
     ? { DATABASE_URL: playwrightDatabaseUrl, POSTGRES_URL: playwrightDatabaseUrl }
     : {}),
 };
+
+// Billing/journey E2E need PRICING_REVAMP_ROLLOUT + NEXT_PUBLIC_PRICING_REVAMP_ENABLED on
+// freshly started servers. Opt in to reuse via PLAYWRIGHT_REUSE_SERVER=1 (local only).
+const reuseExistingServer =
+  Boolean(process.env.CI) === false && process.env.PLAYWRIGHT_REUSE_SERVER === "1";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -69,7 +78,7 @@ export default defineConfig({
             command: "cd ../avrag-rs && cargo run --bin avrag-api",
             url: "http://127.0.0.1:8080/health",
             timeout: 120_000,
-            reuseExistingServer: !process.env.CI,
+            reuseExistingServer,
             env: webServerEnv({
               PRICING_REVAMP_ROLLOUT: "100",
               ...backendServerEnv,
@@ -79,7 +88,7 @@ export default defineConfig({
             command: "cd ../avrag-rs && cargo run -p avrag-worker",
             url: "http://127.0.0.1:8081/health",
             timeout: 120_000,
-            reuseExistingServer: !process.env.CI,
+            reuseExistingServer,
             env: webServerEnv(backendServerEnv),
           },
         ]),
@@ -88,7 +97,7 @@ export default defineConfig({
       command: process.env.CI ? "pnpm build && pnpm start" : "pnpm dev",
       url: "http://127.0.0.1:3000",
       timeout: 60_000,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer,
       env: webServerEnv({
         NEXT_PUBLIC_PRICING_REVAMP_ENABLED: "1",
       }),

@@ -77,6 +77,7 @@ impl RagExecutor for FakeRagExecutor {
             answer_blocks: Vec::new(),
             guard_report: None,
             usage: None,
+            agent_operation_guide: None,
         })
     }
 }

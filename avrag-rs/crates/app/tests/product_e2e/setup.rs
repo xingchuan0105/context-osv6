@@ -892,6 +892,19 @@ pub async fn redis_ping(url: &str) -> bool {
 pub async fn find_worker_binary() -> anyhow::Result<std::path::PathBuf> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let workspace_root = manifest_dir.join("../..");
+    let target_dir = std::env::var("CARGO_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| workspace_root.join("target"));
+    let candidate = target_dir.join("debug/avrag-worker");
+    if candidate.exists() {
+        return Ok(candidate);
+    }
+
+    let legacy = manifest_dir.join("../../../target/debug/avrag-worker");
+    if legacy.exists() {
+        return Ok(legacy);
+    }
+
     let status = tokio::process::Command::new("cargo")
         .args(["build", "-p", "avrag-worker"])
         .current_dir(&workspace_root)

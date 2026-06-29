@@ -75,13 +75,14 @@ impl AuthStorePort for PgAuthStoreAdapter {
         }
 
         if let Err(error) = sqlx::query(
-            "INSERT INTO users (id, org_id, email, full_name, password_hash, role) VALUES ($1, $2, $3, $4, $5, 'user')",
+            "INSERT INTO users (id, org_id, email, full_name, password_hash, role) VALUES ($1, $2, $3, $4, $5, $6)",
         )
         .bind(user_id)
         .bind(org_id)
         .bind(input.email.trim())
         .bind(full_name)
         .bind(&input.password_hash)
+        .bind(contracts::USER_ROLE_ORG_ADMIN)
         .execute(tx.as_mut())
         .await
         {
@@ -111,6 +112,7 @@ impl AuthStorePort for PgAuthStoreAdapter {
             email: input.email.trim().to_string(),
             full_name: full_name.to_string(),
             auth_version: 1,
+            role: contracts::USER_ROLE_ORG_ADMIN.to_string(),
         })
     }
 
@@ -196,8 +198,8 @@ impl AuthStorePort for PgAuthStoreAdapter {
     ) -> Result<Option<AuthUserCredentials>, AppError> {
         let pool = self.repo.raw();
         let mut tx = begin_super_admin_tx_sqlx(pool).await.map_err(map_sqlx_error)?;
-        let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, Option<String>, i32)>(
-            "SELECT id, org_id, email, full_name, password_hash, auth_version FROM users WHERE email = $1",
+        let row = sqlx::query_as::<_, (Uuid, Uuid, String, Option<String>, Option<String>, i32, String)>(
+            "SELECT id, org_id, email, full_name, password_hash, auth_version, role FROM users WHERE email = $1",
         )
         .bind(email.trim())
         .fetch_optional(tx.as_mut())
@@ -206,13 +208,16 @@ impl AuthStorePort for PgAuthStoreAdapter {
         tx.commit().await.map_err(map_sqlx_error)?;
 
         Ok(row.map(
-            |(user_id, org_id, email, full_name, password_hash, auth_version)| AuthUserCredentials {
-                user_id,
-                org_id,
-                email,
-                full_name,
-                password_hash,
-                auth_version,
+            |(user_id, org_id, email, full_name, password_hash, auth_version, role)| {
+                AuthUserCredentials {
+                    user_id,
+                    org_id,
+                    email,
+                    full_name,
+                    password_hash,
+                    auth_version,
+                    role,
+                }
             },
         ))
     }

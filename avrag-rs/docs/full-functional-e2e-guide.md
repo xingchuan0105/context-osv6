@@ -53,6 +53,8 @@
 | `frontend-journey.yml` / `frontend-smoke.yml` | L5 | 见各 workflow |
 | `frontend-unit.yml` | L6 | Vitest |
 
+> PR-1（2026-06-29）：`frontend-journey` / `frontend-skills` / `frontend-smoke` / `nightly-llm-real` 均通过 `scripts/ci-start-milvus.sh` 在测试前预启 Milvus（修复 journey/skills 上传→RAG 因 Milvus 未就绪导致的假绿/flaky）。
+
 ---
 
 ## 2. 全功能覆盖矩阵
@@ -231,6 +233,51 @@ E2E_MODE=smoke cargo test -p app --test product_e2e --features product-e2e \
 | Search 429 | `failure::provider_down` | L2 |
 | Worker 处理超时 | `failure::timeout` | L2 |
 | Embedding 缓存命中 | `integration::embedding_cache` | L2（需 Redis） |
+
+---
+
+### 2.8 Agent API / MCP（外部代理接入）
+
+外部代理通过 API Key + MCP `tools/call` 接入：建 key → 上传入库 → 提问带引文；越权一律 403/JSON-RPC error。
+
+| 能力 | 验收标准 | 现有测试 | 层 | 依赖 | 并行组 |
+|------|----------|----------|-----|------|--------|
+| MCP 全流程（key→上传→入库→提问） | `citations` 非空、`doc_id` 匹配、answer 有实质内容 | `integration::mcp_agent_flow` | L2 | M+I | **G-serial-integration** |
+| MCP 越权：workspace key 调 org 工具 | 403 `workspace_key_cannot_call_org_tools` | `integration::mcp_auth_boundary` | L2 | M+I | 串行 |
+| MCP 越权：org key 调 workspace 工具 | 403 `org_key_cannot_call_workspace_tools` | `integration::mcp_auth_boundary` | L2 | M+I | 串行 |
+| MCP 越权：跨 notebook 查询 | 403 `notebook_scope_mismatch` | `integration::mcp_auth_boundary` | L2 | M+I | 串行 |
+| API key 访问用户态资源（notes 等） | 403 `api_key_forbidden` | `integration::mcp_auth_boundary` | L2 | M+I | 串行 |
+| API key scope/权限边界（契约） | workspace/org key 各自权限剥离 | `transport-http` `api_key_security_contract`（16） | L6 | 轻量/PG | 并行 |
+| MCP tools/call 信封 + ingestion（契约） | create_upload→complete→status；error 信封 | `transport-http` `mcp_unified_contract`（10） | L6 | 轻量/PG | 并行 |
+
+**缺口（待补）**：
+
+- [x] **P0** Product E2E：MCP agent 全流程（`mcp_agent_flow`）✅ 2026-06-29
+- [x] **P0** Product E2E：MCP/API key 越权边界（`mcp_auth_boundary`，4 用例）✅ 2026-06-29
+- [ ] **P1** `CAP-AGENT` 能力标签：registry 给 `mcp_*` 测试补 `capabilities: [CAP-AUTH, CAP-INGEST]`（PR-2 后续）
+
+---
+
+### 2.9 OpenAI 兼容 API / 限流 / 配额（PR-3）
+
+OpenAI 兼容路由 `POST /v1/notebooks/{notebook_id}/chat/completions` 复用标准 chat 鉴权（API Key Bearer + `query` 权限 + notebook scope）；限流按 API key 的 `rate_limit_rpm` 每 key 计数，配额按用户滚动 5h/7d 用量计。
+
+| 能力 | 验收标准 | 现有测试 | 层 | 依赖 | 并行组 |
+|------|----------|----------|-----|------|--------|
+| OpenAI 路由：无 auth | 401 | `transport-http` `openai_completions_contract` | L6 | 轻量 | 并行 |
+| OpenAI 路由：workspace key + `stream:false` | 200 + 非空 `answer` | `transport-http` `openai_completions_contract` | L6 | 轻量 | 并行 |
+| OpenAI 路由：`stream:true` | 200 + `text/event-stream` + `data:` 帧 | `transport-http` `openai_completions_contract` | L6 | 轻量 | 并行 |
+| OpenAI 路由：notebook scope 不匹配 | 403 | `transport-http` `openai_completions_contract` | L6 | 轻量 | 并行 |
+| 每 key 限流 `rate_limit_rpm:2` | 第 3 次 429 + `Retry-After` + `x-ratelimit-limit:2` + `rate_limit_exceeded` | `integration::rate_limit_boundary` | L2 | M+I | **G-serial-integration** |
+| 配额耗尽 | chat 429 + `quota_exceeded`（区别于 `rate_limit_exceeded`） | `integration::quota_boundary` | L2 | M+I | **G-serial-integration** |
+
+**注意**：`E2E_ENABLED=true`（product_e2e bootstrap 默认）会把每 key 限流覆盖为 1000 RPM、edge 限流放宽到 10000；`rate_limit_boundary` 在测内临时关掉 `E2E_ENABLED`（Drop guard 还原）并用唯一 `x-forwarded-for` 隔离 edge 计数，以强制 2 RPM 每 key 限流。**必须** `--test-threads=1`（`G-serial-integration`）运行，避免 env toggle 与并发测试 race。
+
+**缺口（待补）**：
+
+- [x] **P1** OpenAI 兼容 API 契约（`openai_completions_contract`，4 用例）✅ 2026-06-29
+- [x] **P1** 限流 429 Product E2E（`rate_limit_boundary`）✅ 2026-06-29
+- [x] **P1** 配额 429 Product E2E（`quota_boundary`）✅ 2026-06-29
 
 ---
 
@@ -438,6 +485,7 @@ E2E_MODE=integration cargo test -p app --test product_e2e \
 
 按顺序执行；**阶段 3 与 4 可并行**：
 
+0. **DB migrations**（记忆检索 / L2 清理）：按序执行 `0043_chat_message_fts` → `0044_drop_chat_session_summary` → `0045_assistant_message_search_tokens`；`PgAppRepository::migrate()` 会自动 jieba 重分段 `search_tokens`（可用 `AVRAG_SKIP_SEARCH_TOKEN_RESEGMENT=1` 跳过）
 1. **预检**：`./scripts/e2e-precheck.sh`
 2. **L1 PR Smoke**：`./avrag-rs/scripts/run-product-smoke-e2e.sh`
 3. **L2 Integration 全量**：§4.2
@@ -449,6 +497,16 @@ E2E_MODE=integration cargo test -p app --test product_e2e \
 ---
 
 ## 8. 补测 Backlog（按优先级）
+
+> **准上线补测实施（2026-06-26）**：分阶段任务、PR 拆分、验收命令见 [`plans/2026-06-26-e2e-launch-readiness-plan.md`](plans/2026-06-26-e2e-launch-readiness-plan.md)（**仅测试/CI，不改主程序**）。
+
+> **PR 进度（准上线补测）**：
+> - [x] **PR-1**：Milvus CI（`scripts/ci-start-milvus.sh` + 4 个 workflow）+ 契约测入库（`api_key_security_contract`、`mcp_unified_contract`）+ `e2e-test-registry.yaml` 同步 — ✅ 2026-06-29
+> - [x] **PR-2**：MCP / API Key Product E2E（`integration::mcp_agent_flow` 全流程带引文 + `integration::mcp_auth_boundary` 4 个越权用例）+ 指南 §2.8 Agent API/MCP 行 + registry 同步 — ✅ 2026-06-29
+> - [x] **PR-3**：OpenAI API + 限流/配额 E2E（`transport-http` `openai_completions_contract` 4 用例：401/200+body/SSE/403 + `integration::rate_limit_boundary` 每 key 2 RPM 第 3 次 429/`Retry-After`/`x-ratelimit-limit:2` + `integration::quota_boundary` 配额耗尽 chat 429/`quota_exceeded`）+ 指南 §2.9 + registry 同步（102 tests） — ✅ 2026-06-29
+> - [x] **PR-4**：Billing master 自动门禁（`frontend-journey.yml` 加并行 `billing-e2e` job：master push / `workflow_dispatch` 自动跑 `e2e/specs/billing/paywall-flow.spec.ts` + `usage-dashboard.spec.ts`（`--project=billing`，env `PRICING_REVAMP_ROLLOUT=100` / `NEXT_PUBLIC_PRICING_REVAMP_ENABLED=1` / `E2E_RESET_SECRET`，timeout 30min，失败上传 `playwright-billing-report` 阻断，与 journey 同级；billing 无 RAG 路径 → 不需 Milvus，`DATABASE_URL` 未设 → avrag-api in-memory 启动）+ `e2e-gates.md` Layer overview 加 billing 门禁行） — ✅ 2026-06-29
+> - [x] **PR-5**：Playwright api-access + citation —— §7.1 `smoke/api-access.spec.ts`（创建 key→明文仅显一次→列表见 prefix/RPM/生效中→撤销回空态）本地 1 passed 4.7s ✅ 2026-06-29；§7.2 `journey/citation-interaction.spec.ts`（点 `workspace-citation`→"引用片段" dialog→👍 反馈 POST 200 + 按钮 disabled/👍）本地 1 passed 46.5s ✅ 2026-06-29（更新 `avrag-rs/.env` 的 `EMBEDDING_API_KEY` 为有效 DashScope key、`INGESTION_LLM_MODEL` 校正为 `gemini-3.1-flash-lite-preview` 后入库完成）；e2e-gates.md 已加 Functional/Journey 行
+> - [ ] **PR-6**：`rag_quality` 三门禁 + release gate
 
 Agent 实现新测试时，请同步更新本节与 `run-product-smoke-e2e.sh`（若属 smoke 模块）。
 

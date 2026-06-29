@@ -236,15 +236,25 @@ impl AppState {
             "admin role grant failed".to_string()
         })?;
         let (user_id, org_id) = user_row.ok_or_else(|| "user not found".to_string())?;
-        sqlx::query("update users set role = 'super_admin' where id = $1 and org_id = $2")
-            .bind(user_id)
-            .bind(org_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|error| {
-                tracing::warn!(error = %error, "E2E grant: failed to update user role");
-                "admin role grant failed".to_string()
-            })?;
+        sqlx::query(
+            r#"
+            update users
+            set role = 'super_admin',
+                auth_version = case
+                    when role is distinct from 'super_admin' then auth_version + 1
+                    else auth_version
+                end
+            where id = $1 and org_id = $2
+            "#,
+        )
+        .bind(user_id)
+        .bind(org_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| {
+            tracing::warn!(error = %error, "E2E grant: failed to update user role");
+            "admin role grant failed".to_string()
+        })?;
         tx.commit()
             .await
             .map_err(|error| {

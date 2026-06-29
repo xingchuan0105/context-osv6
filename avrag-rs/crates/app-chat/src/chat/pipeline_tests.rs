@@ -100,6 +100,7 @@ use contracts::notebooks::{ChatSession, Notebook};
                 None,
                 Arc::new(RwLock::new(memory)),
                 Arc::new(RwLock::new(BTreeMap::new())),
+                Arc::new(RwLock::new(BTreeMap::new())),
                 10 * 1024 * 1024,
                 true,
                 Arc::new(TestObjectStore),

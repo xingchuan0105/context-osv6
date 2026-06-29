@@ -26,12 +26,6 @@ pub struct AssembledContext {
 
 pub struct ContextAssembler;
 
-fn memory_cluster_disclosed(disclosed: &DisclosedState) -> bool {
-    disclosed.disclosed_skill_ids.iter().any(|key| {
-        key == "memory" || key.starts_with("memory:")
-    })
-}
-
 impl ContextAssembler {
     pub fn assemble_retrieve(
         iteration: u8,
@@ -56,15 +50,17 @@ impl ContextAssembler {
         let rendered = renderer.render(&plan, mode, request, disclosed);
 
         let tools = if memory_cluster_disclosed(disclosed) {
-            mode.resolve_tool_specs(
+            let mut merged = mode.tools_for_retrieve(registry);
+            merged.extend(mode.resolve_tool_specs(
                 registry,
                 &[
                     "conversation_history_load".to_string(),
                     "user_profile_load".to_string(),
                 ],
-            )
+            ));
+            dedupe_tools(merged)
         } else {
-            vec![]
+            mode.tools_for_retrieve(registry)
         };
 
         AssembledContext {
@@ -121,6 +117,20 @@ impl ContextAssembler {
             newly_disclosed_skills: rendered.newly_disclosed,
         }
     }
+}
+
+fn memory_cluster_disclosed(disclosed: &DisclosedState) -> bool {
+    disclosed.disclosed_skill_ids.iter().any(|key| {
+        key == "memory" || key.starts_with("memory:")
+    })
+}
+
+fn dedupe_tools(tools: Vec<contracts::ToolSpec>) -> Vec<contracts::ToolSpec> {
+    let mut seen = std::collections::BTreeSet::new();
+    tools
+        .into_iter()
+        .filter(|tool| seen.insert(tool.name.clone()))
+        .collect()
 }
 #[cfg(test)]
 mod tests {
@@ -190,6 +200,46 @@ mod tests {
             0,
             "round0 must not expose memory tools until memory cluster is disclosed"
         );
+    }
+
+    #[test]
+    fn search_round_zero_exposes_configured_tool_pool() {
+        let mode = super::super::config::load_mode_config("search").unwrap();
+        let registry = CapabilityRegistry::standard_cached();
+        let mut disclosed = DisclosedState::default();
+        let ctx = ContextAssembler::assemble_retrieve(
+            0,
+            &mode,
+            &crate::agents::runtime::AgentRequest {
+                kind: crate::agents::AgentKind::Search,
+                query: "latest rust release".to_string(),
+                resolved_query: "latest rust release".to_string(),
+                query_resolution: None,
+                notebook_id: None,
+                session_id: None,
+                doc_scope: vec![],
+                messages: vec![],
+                user_preferences: None,
+                debug: false,
+                stream: false,
+                language: None,
+                auth_context: serde_json::json!({}),
+                docscope_metadata: None,
+                metadata: Default::default(),
+                cancellation_token: None,
+                guard_pipeline: None,
+                preferred_tools: vec![],
+                format_hint: None,
+                max_iterations: None,
+            },
+            registry,
+            &mut disclosed,
+            None,
+        );
+
+        let names: Vec<&str> = ctx.tools.iter().map(|tool| tool.name.as_str()).collect();
+        assert!(names.contains(&"web_search"));
+        assert!(names.contains(&"web_fetch"));
     }
 
     #[test]

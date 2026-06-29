@@ -18,9 +18,11 @@ pub mod sessions;
 pub mod token_budget;
 
 mod chat_service;
+mod external_agent_guide;
 
 pub use agents::AgentKind;
 pub use chat_service::ChatService;
+pub use external_agent_guide::{attach_operation_guide, load_invoke_operation_guide};
 pub use chat_streaming::{
     chunk_text_for_stream, emit_buffered_agent_answer_if_needed, chat_done_payload,
     stream_event_message_id, STREAM_PLACEHOLDER_MESSAGE_ID,

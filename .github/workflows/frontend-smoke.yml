@@ -51,6 +51,14 @@ jobs:
             avrag-rs/target
           key: ${{ runner.os }}-cargo-smoke-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
 
+      - name: Start Milvus stack
+        # functional smoke does not run upload -> RAG yet, but the Playwright
+        # webServer still boots avrag-api, which connects to Milvus on startup;
+        # having Milvus ready keeps the backend health check stable and benefits
+        # future smoke specs that exercise RAG.
+        run: bash "$GITHUB_WORKSPACE/scripts/ci-start-milvus.sh"
+        timeout-minutes: 5
+
       - name: Run smoke E2E
         run: pnpm exec playwright test --project=functional --project=auth
         env:
