@@ -169,14 +169,6 @@ jobs:
         run: cargo build -p avrag-api -p avrag-worker
         timeout-minutes: 20
 
-      - name: Start Milvus stack
-        # webServer starts avrag-worker too; in full mode (DATABASE_URL set) the worker
-        # calls build_worker_retrieval_data_plane -> Milvus ensure_schema (enable_rag
-        # defaults true). Billing specs don't use RAG, but the worker still needs Milvus
-        # to boot. Script resolves its own path -> avrag-rs/docker-compose.milvus.yml.
-        run: bash "$GITHUB_WORKSPACE/scripts/ci-start-milvus.sh"
-        timeout-minutes: 5
-
       - name: Start Postgres
         # globalSetup reset-user-data + ensureTestUserAccount need the `users` table;
         # worker auto-runs sqlx migrations on boot. Mirror integration-e2e's avrag-ci-pg.
@@ -205,6 +197,11 @@ jobs:
         env:
           E2E_RESET_SECRET: ${{ secrets.E2E_RESET_SECRET }}
           DATABASE_URL: postgres://test:test@127.0.0.1:5432/test
+          # Billing specs (paywall / usage-dashboard) don't use RAG. Disable RAG so
+          # avrag-api/worker boot without an embedding client or Milvus connection
+          # (app-bootstrap gates rag_runtime on enable_rag; worker gates
+          # build_worker_retrieval_data_plane the same way). No Milvus step needed.
+          AVRAG_ENABLE_RAG: 'false'
           PRICING_REVAMP_ROLLOUT: '100'
           NEXT_PUBLIC_PRICING_REVAMP_ENABLED: '1'
         timeout-minutes: 30
