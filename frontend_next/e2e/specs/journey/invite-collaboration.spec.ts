@@ -50,7 +50,15 @@ test.describe("Invite Collaboration", () => {
 
     const inviteUrl = `/invite/${workspaceId}/${pendingMember.member_id}`;
 
-    const userBContext = await browser.newContext();
+    // Explicit empty storageState: the journey project sets `use.storageState` to
+    // playwright/.auth/user.json (user A). In this Playwright version that storageState
+    // is also applied to contexts created manually inside the test (browser.newContext),
+    // so userBPage would inherit user A's auth cookie/localStorage and seedBrowserPageAuth
+    // would be overridden back to user A. Passing an empty storageState guarantees a
+    // truly clean context for user B.
+    const userBContext = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
     const userBPage = await userBContext.newPage();
     // User B must log in via a fresh APIRequestContext with no inherited storageState.
     // The journey `request` fixture carries user A's session (playwright/.auth/user.json);
@@ -59,6 +67,7 @@ test.describe("Invite Collaboration", () => {
     // with "invite not allowed" (actor email ≠ invite email).
     const collabRequest = await playwrightRequest.newContext({
       baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
+      storageState: { cookies: [], origins: [] },
     });
     try {
       const collabAuth = await loginAndPrepareUserSession(
@@ -68,6 +77,17 @@ test.describe("Invite Collaboration", () => {
       );
       expect(collabAuth.user.email).toBe(COLLAB_USER.email);
       await seedBrowserPageAuth(userBPage, collabAuth);
+      // Verify the seeded cookie is actually user B's. Catches any residual storageState
+      // contamination that would otherwise surface as a 30s accept timeout.
+      const persistedCookie = (await userBContext.cookies()).find(
+        (c) => c.name === "avrag.auth.persisted",
+      );
+      const seededUser = persistedCookie
+        ? (JSON.parse(decodeURIComponent(persistedCookie.value)).user as {
+            email: string;
+          })
+        : null;
+      expect(seededUser?.email).toBe(COLLAB_USER.email);
 
       await userBPage.goto(inviteUrl);
       await expect(userBPage.locator('[data-testid="invite-surface"]')).toBeVisible();
