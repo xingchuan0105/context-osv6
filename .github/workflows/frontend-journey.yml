@@ -69,10 +69,33 @@ jobs:
         run: bash "$GITHUB_WORKSPACE/scripts/ci-start-milvus.sh"
         timeout-minutes: 5
 
+      - name: Start Postgres
+        # globalSetup reset-user-data + ensureTestUserAccount hit the `users` table;
+        # worker auto-runs sqlx migrations on boot. Mirror integration-e2e's avrag-ci-pg.
+        # playwright.config.ts CI branch forwards process.env.DATABASE_URL to the
+        # avrag-api/avrag-worker webServer env.
+        run: |
+          docker run -d --rm --name avrag-ci-pg \
+            -e POSTGRES_USER=test \
+            -e POSTGRES_PASSWORD=test \
+            -e POSTGRES_DB=test \
+            -p 5432:5432 \
+            postgres:16-alpine
+          for i in $(seq 1 30); do
+            if docker exec avrag-ci-pg pg_isready -U test -d test >/dev/null 2>&1; then
+              echo "Postgres is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Postgres failed to become ready" >&2
+          exit 1
+
       - name: Run journey E2E
         run: pnpm exec playwright test --project=journey
         env:
           E2E_RESET_SECRET: ${{ secrets.E2E_RESET_SECRET }}
+          DATABASE_URL: postgres://test:test@127.0.0.1:5432/test
           # RAG journey specs (upload-rag, citation-interaction) need real embedding
           # + ingestion/answer LLM keys. avrag-rs/.env is gitignored, so inject 3 repo
           # secrets here; webServerEnv forwards process env to avrag-api/worker. Base
@@ -146,9 +169,34 @@ jobs:
         run: cargo build -p avrag-api -p avrag-worker
         timeout-minutes: 20
 
-      # Billing specs (paywall / usage-dashboard) exercise the billing UI against
-      # the avrag-api webServer; no RAG path -> Milvus not required (avrag-api starts
-      # in-memory when DATABASE_URL unset, /health returns 200 without Milvus).
+      - name: Start Milvus stack
+        # webServer starts avrag-worker too; in full mode (DATABASE_URL set) the worker
+        # calls build_worker_retrieval_data_plane -> Milvus ensure_schema (enable_rag
+        # defaults true). Billing specs don't use RAG, but the worker still needs Milvus
+        # to boot. Script resolves its own path -> avrag-rs/docker-compose.milvus.yml.
+        run: bash "$GITHUB_WORKSPACE/scripts/ci-start-milvus.sh"
+        timeout-minutes: 5
+
+      - name: Start Postgres
+        # globalSetup reset-user-data + ensureTestUserAccount need the `users` table;
+        # worker auto-runs sqlx migrations on boot. Mirror integration-e2e's avrag-ci-pg.
+        run: |
+          docker run -d --rm --name avrag-ci-pg \
+            -e POSTGRES_USER=test \
+            -e POSTGRES_PASSWORD=test \
+            -e POSTGRES_DB=test \
+            -p 5432:5432 \
+            postgres:16-alpine
+          for i in $(seq 1 30); do
+            if docker exec avrag-ci-pg pg_isready -U test -d test >/dev/null 2>&1; then
+              echo "Postgres is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Postgres failed to become ready" >&2
+          exit 1
+
       - name: Run billing E2E
         run: |
           pnpm exec playwright test --project=billing \
@@ -156,6 +204,7 @@ jobs:
             e2e/specs/billing/usage-dashboard.spec.ts
         env:
           E2E_RESET_SECRET: ${{ secrets.E2E_RESET_SECRET }}
+          DATABASE_URL: postgres://test:test@127.0.0.1:5432/test
           PRICING_REVAMP_ROLLOUT: '100'
           NEXT_PUBLIC_PRICING_REVAMP_ENABLED: '1'
         timeout-minutes: 30
