@@ -52,6 +52,16 @@ jobs:
             avrag-rs/target
           key: ${{ runner.os }}-cargo-journey-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
 
+      - name: Pre-build Rust backend
+        # Playwright webServer runs `cargo run --bin avrag-api` / `cargo run -p avrag-worker`
+        # with a 120s readiness timeout. On a cold CI (cargo cache miss) the workspace
+        # build takes far longer than 120s, so the webServer times out before avrag-api
+        # serves /health and every spec fails. Pre-build here (cached by actions/cache) so
+        # `cargo run` is a no-op build inside Playwright and starts within the timeout.
+        working-directory: avrag-rs
+        run: cargo build -p avrag-api -p avrag-worker
+        timeout-minutes: 20
+
       - name: Start Milvus stack
         # journey specs include upload -> RAG; the Playwright webServer (avrag-api)
         # connects to Milvus on startup, so Milvus must be ready before tests run.
@@ -127,6 +137,14 @@ jobs:
             ~/.cargo/git
             avrag-rs/target
           key: ${{ runner.os }}-cargo-billing-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
+
+      - name: Pre-build Rust backend
+        # Same cold-build webServer timeout issue as journey-e2e: Playwright starts
+        # avrag-api/avrag-worker via `cargo run` with a 120s readiness timeout, which a
+        # cold workspace build far exceeds. Pre-build here so `cargo run` is a no-op.
+        working-directory: avrag-rs
+        run: cargo build -p avrag-api -p avrag-worker
+        timeout-minutes: 20
 
       # Billing specs (paywall / usage-dashboard) exercise the billing UI against
       # the avrag-api webServer; no RAG path -> Milvus not required (avrag-api starts
