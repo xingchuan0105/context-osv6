@@ -37,20 +37,20 @@ impl Agent for ScriptedAgent {
         _request: AgentRequest,
         sink: &dyn AgentEventSink,
     ) -> Result<AgentRunResult, common::AppError> {
-        sink.emit(AgentEvent::Activity {
+        let _ = sink.emit(AgentEvent::Activity {
             stage: "test".to_string(),
             message: "test agent".to_string(),
         })
         .await;
-        sink.emit(AgentEvent::MessageDelta {
+        let _ = sink.emit(AgentEvent::MessageDelta {
             text: "scripted ".to_string(),
         })
         .await;
-        sink.emit(AgentEvent::MessageDelta {
+        let _ = sink.emit(AgentEvent::MessageDelta {
             text: "answer".to_string(),
         })
         .await;
-        sink.emit(AgentEvent::Done {
+        let _ = sink.emit(AgentEvent::Done {
             final_message: Some("scripted answer".to_string()),
             usage: None,
         })

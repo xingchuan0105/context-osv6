@@ -32,7 +32,7 @@ impl Agent for ScriptedAgent {
         // Simulate RAG-specific behaviour so that RAG contract tests can verify
         // end-to-end streaming without a real runtime.
         if request.kind == app_chat::agents::AgentKind::Rag {
-            sink.emit(AgentEvent::Activity {
+            let _ = sink.emit(AgentEvent::Activity {
                 stage: "planning".to_string(),
                 message: "planning".to_string(),
             })
@@ -40,11 +40,11 @@ impl Agent for ScriptedAgent {
 
             if request.doc_scope.is_empty() {
                 let answer = "请选择一个或多个文档以继续。".to_string();
-                sink.emit(AgentEvent::MessageDelta {
+                let _ = sink.emit(AgentEvent::MessageDelta {
                     text: answer.clone(),
                 })
                 .await;
-                sink.emit(AgentEvent::Done {
+                let _ = sink.emit(AgentEvent::Done {
                     final_message: Some(answer.clone()),
                     usage: None,
                 })
@@ -55,7 +55,7 @@ impl Agent for ScriptedAgent {
                 });
             }
 
-            sink.emit(AgentEvent::Activity {
+            let _ = sink.emit(AgentEvent::Activity {
                 stage: "retrieving".to_string(),
                 message: "retrieving".to_string(),
             })
@@ -67,20 +67,20 @@ impl Agent for ScriptedAgent {
             ));
         }
 
-        sink.emit(AgentEvent::Activity {
+        let _ = sink.emit(AgentEvent::Activity {
             stage: "test".to_string(),
             message: "test agent".to_string(),
         })
         .await;
-        sink.emit(AgentEvent::MessageDelta {
+        let _ = sink.emit(AgentEvent::MessageDelta {
             text: "scripted ".to_string(),
         })
         .await;
-        sink.emit(AgentEvent::MessageDelta {
+        let _ = sink.emit(AgentEvent::MessageDelta {
             text: "answer".to_string(),
         })
         .await;
-        sink.emit(AgentEvent::Done {
+        let _ = sink.emit(AgentEvent::Done {
             final_message: Some("scripted answer".to_string()),
             usage: None,
         })
