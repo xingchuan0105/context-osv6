@@ -1,3 +1,4 @@
+import { request as playwrightRequest } from "@playwright/test";
 import { test, expect } from "../../fixtures/run-context";
 import { COLLAB_USER } from "../../fixtures/test-user";
 import { DashboardPage } from "../../pom/dashboard-page";
@@ -51,12 +52,21 @@ test.describe("Invite Collaboration", () => {
 
     const userBContext = await browser.newContext();
     const userBPage = await userBContext.newPage();
+    // User B must log in via a fresh APIRequestContext with no inherited storageState.
+    // The journey `request` fixture carries user A's session (playwright/.auth/user.json);
+    // sending user A's auth cookie to /api/auth/login re-issues user A's token instead of
+    // authenticating user B, so userBPage would act as user A and the accept would fail
+    // with "invite not allowed" (actor email ≠ invite email).
+    const collabRequest = await playwrightRequest.newContext({
+      baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000",
+    });
     try {
       const collabAuth = await loginAndPrepareUserSession(
-        request,
+        collabRequest,
         COLLAB_USER.email,
         COLLAB_USER.password,
       );
+      expect(collabAuth.user.email).toBe(COLLAB_USER.email);
       await seedBrowserPageAuth(userBPage, collabAuth);
 
       await userBPage.goto(inviteUrl);
@@ -74,6 +84,7 @@ test.describe("Invite Collaboration", () => {
       });
     } finally {
       await userBContext.close().catch(() => {});
+      await collabRequest.dispose().catch(() => {});
     }
   });
 });
