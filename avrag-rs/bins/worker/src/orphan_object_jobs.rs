@@ -99,12 +99,21 @@ impl OrphanObjectJobRunner {
     }
 
     async fn fetch_document_object_paths(&self) -> Result<Vec<String>> {
+        // `documents` has forced row-level security keyed on `app.current_org`. The worker
+        // pool has no org context, so a plain select sees zero rows and every object would
+        // be misclassified as orphan and deleted — including in-flight uploads. Run the
+        // scan as `super_admin` (allowed by `admin_access_documents`) inside a transaction
+        // so the setting is scoped to this query only.
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+            .execute(&mut *tx)
+            .await?;
         let rows = sqlx::query_as::<_, (String,)>(
             "select object_path from documents where object_path is not null and object_path != ''",
         )
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *tx)
         .await?;
-
+        tx.commit().await?;
         Ok(rows.into_iter().map(|row| row.0).collect())
     }
 }
