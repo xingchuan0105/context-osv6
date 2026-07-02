@@ -64,9 +64,8 @@ pub(crate) fn scored_chunk_to_json(chunk: &ScoredChunk) -> serde_json::Value {
     });
     if is_page_raster {
         value["modality"] = serde_json::json!("page_raster");
-        value["retrieval_hint"] = serde_json::json!(
-            "该片段来自页图向量，无 OCR 正文；引用请标注页码范围"
-        );
+        value["retrieval_hint"] =
+            serde_json::json!("该片段来自页图向量，无 OCR 正文；引用请标注页码范围");
         if let Some(locator) = &chunk.source_locator {
             for key in ["page_range_start", "page_range_end", "page_numbers"] {
                 if let Some(entry) = locator.get(key).and_then(|v| v.as_str()) {

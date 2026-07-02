@@ -33,12 +33,10 @@ pub fn build_run_result(
         &final_answer,
         citations,
     );
-    let sources = crate::agents::unified::helpers::build_sources_from_tool_results(
-        collected_tool_results,
-    );
-    let degrade_trace = crate::agents::unified::helpers::degrade_trace_from_tool_results(
-        collected_tool_results,
-    );
+    let sources =
+        crate::agents::unified::helpers::build_sources_from_tool_results(collected_tool_results);
+    let degrade_trace =
+        crate::agents::unified::helpers::degrade_trace_from_tool_results(collected_tool_results);
 
     AgentRunResult {
         answer: final_answer,
@@ -90,7 +88,6 @@ pub fn build_run_result(
         total_tool_calls,
         tool_results: collected_tool_results.to_vec(),
         final_decision,
-        query_resolution: request.query_resolution.clone(),
         trace_id: request.session_id.clone(),
         budget_used: Some(BudgetUsage {
             current: iteration,

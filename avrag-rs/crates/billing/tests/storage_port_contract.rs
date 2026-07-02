@@ -114,10 +114,7 @@ impl BillingStorePort for MemoryBillingStore {
         Ok(())
     }
 
-    async fn load_usage_window(
-        &self,
-        _user_id: UserId,
-    ) -> Result<UsageWindowResponse, AppError> {
+    async fn load_usage_window(&self, _user_id: UserId) -> Result<UsageWindowResponse, AppError> {
         Err(AppError::internal("not implemented"))
     }
 

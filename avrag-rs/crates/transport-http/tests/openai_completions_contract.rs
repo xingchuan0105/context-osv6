@@ -37,24 +37,28 @@ impl Agent for ScriptedAgent {
         _request: AgentRequest,
         sink: &dyn AgentEventSink,
     ) -> Result<AgentRunResult, common::AppError> {
-        let _ = sink.emit(AgentEvent::Activity {
-            stage: "test".to_string(),
-            message: "test agent".to_string(),
-        })
-        .await;
-        let _ = sink.emit(AgentEvent::MessageDelta {
-            text: "scripted ".to_string(),
-        })
-        .await;
-        let _ = sink.emit(AgentEvent::MessageDelta {
-            text: "answer".to_string(),
-        })
-        .await;
-        let _ = sink.emit(AgentEvent::Done {
-            final_message: Some("scripted answer".to_string()),
-            usage: None,
-        })
-        .await;
+        let _ = sink
+            .emit(AgentEvent::Activity {
+                stage: "test".to_string(),
+                message: "test agent".to_string(),
+            })
+            .await;
+        let _ = sink
+            .emit(AgentEvent::MessageDelta {
+                text: "scripted ".to_string(),
+            })
+            .await;
+        let _ = sink
+            .emit(AgentEvent::MessageDelta {
+                text: "answer".to_string(),
+            })
+            .await;
+        let _ = sink
+            .emit(AgentEvent::Done {
+                final_message: Some("scripted answer".to_string()),
+                usage: None,
+            })
+            .await;
         Ok(AgentRunResult {
             answer: "scripted answer".to_string(),
             usage: Some(AgentRunUsage {
@@ -83,9 +87,7 @@ fn test_app_state() -> AppState {
 
 /// Build a router with a workspace notebook + a workspace API key, returning
 /// `(app, notebook_id, bearer)`.
-async fn create_workspace_with_key(
-    permissions: Vec<String>,
-) -> (axum::Router, String, String) {
+async fn create_workspace_with_key(permissions: Vec<String>) -> (axum::Router, String, String) {
     let state = test_app_state();
     let notebook = state
         .create_notebook(CreateNotebookRequest {
@@ -151,7 +153,11 @@ async fn openai_completions_with_workspace_key_returns_200_body() {
         ))
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK, "non-stream completion should succeed");
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "non-stream completion should succeed"
+    );
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let payload: serde_json::Value =
         serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);

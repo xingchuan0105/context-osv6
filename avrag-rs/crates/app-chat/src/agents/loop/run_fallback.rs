@@ -5,12 +5,12 @@ use contracts::ToolResult;
 use super::assembler::DisclosedState;
 use super::config::{AutoFallbackConfig, LoopExitConfig, ModeConfig};
 use super::exit_policy::{
-    degraded_no_evidence_answer, has_retrieval_observation, post_fallback_gate, PostLoopAction,
+    PostLoopAction, degraded_no_evidence_answer, has_retrieval_observation, post_fallback_gate,
 };
 use super::reasoning_emit;
 use super::run_result::build_run_result;
 use super::telemetry::ReActIterationRecord;
-use super::{fallback, truncate_preview, ReActLoop};
+use super::{ReActLoop, fallback, truncate_preview};
 use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::react_loop::DegradeReason;
 use crate::agents::runtime::{AgentRequest, AgentRunResult, FinalDecision};
@@ -45,8 +45,7 @@ impl ReActLoop {
             sink,
         )
         .await?;
-        let has_evidence =
-            has_retrieval_observation(messages, collected_tool_results, mode);
+        let has_evidence = has_retrieval_observation(messages, collected_tool_results, mode);
         if post_fallback_gate(loop_exit, has_evidence) != PostLoopAction::DegradedNoEvidence {
             return Ok(None);
         }
@@ -133,11 +132,13 @@ impl ReActLoop {
                 reason: crate::agents::react_loop::DegradeReason::NoResultsAfterAllFallbacks,
             }),
         );
-        result.degrade_trace.push(contracts::chat::DegradeTraceItem {
-            stage: "degraded_no_evidence".to_string(),
-            reason: DegradeReason::NoRetrievalEvidence,
-            impact: "Answer withheld; synthesis skipped".to_string(),
-        });
+        result
+            .degrade_trace
+            .push(contracts::chat::DegradeTraceItem {
+                stage: "degraded_no_evidence".to_string(),
+                reason: DegradeReason::NoRetrievalEvidence,
+                impact: "Answer withheld; synthesis skipped".to_string(),
+            });
         self.emit_run_citations(sink, &result.citations).await;
         Ok(result)
     }
@@ -234,14 +235,9 @@ impl ReActLoop {
             _ => return Ok(()),
         }
         .map_err(|e| AppError::internal(format!("serialize fallback args: {e}")))?;
-        let result = fallback::inject_fallback_observation(
-            runtime,
-            auth,
-            args,
-            &fallback.tool_id,
-            messages,
-        )
-        .await;
+        let result =
+            fallback::inject_fallback_observation(runtime, auth, args, &fallback.tool_id, messages)
+                .await;
         collected_tool_results.push(result);
         Ok(())
     }
@@ -277,7 +273,11 @@ impl ReActLoop {
         Ok(())
     }
 
-    pub(super) async fn emit_unknown_fallback_skipped(&self, sink: &dyn AgentEventSink, tool_id: &str) {
+    pub(super) async fn emit_unknown_fallback_skipped(
+        &self,
+        sink: &dyn AgentEventSink,
+        tool_id: &str,
+    ) {
         let _ = sink
             .emit(AgentEvent::Activity {
                 stage: "fallback_skipped".to_string(),

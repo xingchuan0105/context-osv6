@@ -1,8 +1,8 @@
-use app_core::{domain_rows::DocumentScopeState, DocumentScopeValidator, StorageContext};
+use app_core::{DocumentScopeValidator, StorageContext, domain_rows::DocumentScopeState};
 use async_trait::async_trait;
 use avrag_auth::AuthContext;
-use common::{AppError};
-use contracts::documents::{DocumentStatus};
+use common::AppError;
+use contracts::documents::DocumentStatus;
 use uuid::Uuid;
 
 #[derive(Clone, Default)]
@@ -84,13 +84,8 @@ impl DocumentContext {
         }
 
         if let Some(notebook_id) = auth.notebook_id() {
-            self.validate_document_scope(
-                auth,
-                storage,
-                &notebook_id.to_string(),
-                doc_scope,
-            )
-            .await?;
+            self.validate_document_scope(auth, storage, &notebook_id.to_string(), doc_scope)
+                .await?;
         }
         Ok(())
     }
@@ -116,9 +111,8 @@ impl DocumentScopeValidator for DocumentContext {
         if document_ids.is_empty() {
             return Ok(());
         }
-        let notebook_uuid = Uuid::parse_str(notebook_id).map_err(|_| {
-            AppError::not_found("notebook_not_found", "notebook not found")
-        })?;
+        let notebook_uuid = Uuid::parse_str(notebook_id)
+            .map_err(|_| AppError::not_found("notebook_not_found", "notebook not found"))?;
 
         if let Some(store) = storage.document_store() {
             for document_id in document_ids {
@@ -128,18 +122,14 @@ impl DocumentScopeValidator for DocumentContext {
                         format!("document scope contains an invalid document id: {document_id}"),
                     )
                 })?;
-                let Some(seed) = store
-                    .get_document_task_seed(auth, document_uuid)
-                    .await?
-                else {
+                let Some(seed) = store.get_document_task_seed(auth, document_uuid).await? else {
                     return Err(AppError::validation(
                         "invalid_document_scope",
                         format!("document {document_id} does not exist or is not accessible"),
                     ));
                 };
-                let seed_notebook_uuid = Uuid::parse_str(&seed.notebook_id).map_err(|_| {
-                    AppError::internal("document notebook id is invalid")
-                })?;
+                let seed_notebook_uuid = Uuid::parse_str(&seed.notebook_id)
+                    .map_err(|_| AppError::internal("document notebook id is invalid"))?;
                 if seed_notebook_uuid != notebook_uuid {
                     return Err(AppError::validation(
                         "invalid_document_scope",

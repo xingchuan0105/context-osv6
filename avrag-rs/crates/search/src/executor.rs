@@ -36,9 +36,7 @@ impl SearchExecutor {
                 builder = builder.proxy(proxy);
             }
         }
-        let client = builder
-            .build()
-            .unwrap_or_else(|_| Client::new());
+        let client = builder.build().unwrap_or_else(|_| Client::new());
         Self { config, client }
     }
 

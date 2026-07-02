@@ -10,11 +10,11 @@ pub(crate) use state::disclosed_skill_ids;
 use avrag_llm::LlmUsage;
 use common::AppError;
 
+use super::ReActLoop;
 use super::config::{LoopExitConfig, ModeConfig};
 use super::optimizer::LoopOptimizer;
-use super::parse::{parse_llm_output, LlmOutput};
+use super::parse::{LlmOutput, parse_llm_output};
 use super::skill_request::validate_skill_request;
-use super::ReActLoop;
 use crate::agents::events::AgentEventSink;
 use crate::agents::runtime::AgentRequest;
 
@@ -33,7 +33,7 @@ impl ReActLoop {
         sink: &dyn AgentEventSink,
     ) -> Result<IterationOutcome, AppError> {
         let assembled = self
-            .assemble_retrieve_context(iteration, mode, request, state, sink)
+            .assemble_retrieve_context(iteration, max_iterations, mode, request, state, sink)
             .await;
         let iter_start = std::time::Instant::now();
         let llm_response = self
@@ -42,7 +42,6 @@ impl ReActLoop {
 
         self.apply_llm_output(
             iteration,
-            max_iterations,
             mode,
             request,
             auth,
@@ -59,7 +58,6 @@ impl ReActLoop {
     pub(crate) async fn apply_llm_output(
         &self,
         iteration: u8,
-        max_iterations: u8,
         mode: &ModeConfig,
         request: &AgentRequest,
         auth: &avrag_auth::AuthContext,
@@ -81,7 +79,6 @@ impl ReActLoop {
             LlmOutput::NativeToolCalls(calls) => {
                 self.dispatch_native_tool_calls(
                     iteration,
-                    max_iterations,
                     mode,
                     request,
                     auth,

@@ -8,11 +8,7 @@ impl ChatContext {
         self.auth.org_id().to_string()
     }
 
-    pub fn memory_session_visible(
-        &self,
-        state: &MemoryState,
-        session: &ChatSession,
-    ) -> bool {
+    pub fn memory_session_visible(&self, state: &MemoryState, session: &ChatSession) -> bool {
         state
             .notebooks
             .get(&session.notebook_id)

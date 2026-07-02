@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::documents::AnswerContextChunk;
 use crate::chat::{
     ChatRequest, Citation, DegradeTraceItem, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary,
 };
+use crate::documents::AnswerContextChunk;
 
 fn default_execute_plan_version() -> String {
     "rag-execute-v1".to_string()

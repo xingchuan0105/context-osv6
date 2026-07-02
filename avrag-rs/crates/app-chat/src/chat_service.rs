@@ -1,5 +1,5 @@
 use crate::context::ChatContext;
-use common::{AppError};
+use common::AppError;
 use contracts::chat::{ChatRequest, ChatResponse};
 
 #[derive(Clone)]

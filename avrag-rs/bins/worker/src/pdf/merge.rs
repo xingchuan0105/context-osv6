@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use ingestion::parser::{
-    normalize_parsed_document, pdf_page_route_labels, PageRouteKind, PdfPageBackend, PdfPagePlan,
-    PdfParsePlan, ParsedDocument,
+    PageRouteKind, ParsedDocument, PdfPageBackend, PdfPagePlan, PdfParsePlan,
+    normalize_parsed_document, pdf_page_route_labels,
 };
 use ingestion::{
     BlockIr, BlockType, DocumentIr, DocumentType, IngestionError, PageIr, ParseBackend,
@@ -116,7 +116,11 @@ fn paddle_has_text_on_page(ir: &DocumentIr, page_number: u32) -> bool {
 }
 
 fn upsert_page_row(merged: &mut DocumentIr, page_number: u32, incoming: PageIr) {
-    if let Some(existing) = merged.pages.iter_mut().find(|p| p.page_number == page_number) {
+    if let Some(existing) = merged
+        .pages
+        .iter_mut()
+        .find(|p| p.page_number == page_number)
+    {
         existing.text_char_count = existing
             .text_char_count
             .saturating_add(incoming.text_char_count);
@@ -133,7 +137,11 @@ fn upsert_page_row(merged: &mut DocumentIr, page_number: u32, incoming: PageIr) 
 }
 
 fn set_merged_page_backend(merged: &mut DocumentIr, page_number: u32, backend: ParseBackend) {
-    if let Some(page) = merged.pages.iter_mut().find(|p| p.page_number == page_number) {
+    if let Some(page) = merged
+        .pages
+        .iter_mut()
+        .find(|p| p.page_number == page_number)
+    {
         page.backend = backend;
     }
 }
@@ -217,10 +225,7 @@ fn merge_page_by_route_kinds(
     let mut digital_applied = false;
     let mut visual_applied = false;
 
-    if wants_paddle_ocr(&kinds)
-        && paddle_ir.is_some()
-        && paddle_successful.contains(&page_number)
-    {
+    if wants_paddle_ocr(&kinds) && paddle_ir.is_some() && paddle_successful.contains(&page_number) {
         let page_data = filter_document_ir_to_page(paddle_ir.unwrap(), page_number);
         if !page_data.blocks.is_empty() || !page_data.pages.is_empty() {
             append_page_content(

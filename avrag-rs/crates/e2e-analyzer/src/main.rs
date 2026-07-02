@@ -6,9 +6,10 @@ mod cli;
 mod coverage;
 mod diff;
 mod fingerprint;
-mod loader;
 mod llm_real_trends;
+mod loader;
 mod models;
+mod rag_diag;
 mod report;
 mod stability;
 
@@ -295,6 +296,41 @@ fn main() -> anyhow::Result<()> {
             );
         }
 
+        Commands::RagDiag {
+            run,
+            golden,
+            output,
+        } => {
+            let run_dir = resolve_run_dir(run)?;
+            let report = rag_diag::analyze_run(&run_dir, &golden)?;
+            let markdown = rag_diag::render_markdown(&report);
+            if let Some(out_path) = output {
+                fs::write(&out_path, markdown)?;
+                println!("RAG diagnostic report written to {}", out_path.display());
+            } else {
+                println!("{markdown}");
+            }
+        }
+
+        Commands::RagDrift {
+            baseline,
+            current,
+            golden,
+            output,
+        } => {
+            let baseline_dir = resolve_run_dir(baseline)?;
+            let current_dir = resolve_run_dir(current)?;
+            let baseline_report = rag_diag::analyze_run(&baseline_dir, &golden)?;
+            let current_report = rag_diag::analyze_run(&current_dir, &golden)?;
+            let markdown = rag_diag::render_drift_markdown(&baseline_report, &current_report);
+            if let Some(out_path) = output {
+                fs::write(&out_path, markdown)?;
+                println!("RAG drift report written to {}", out_path.display());
+            } else {
+                println!("{markdown}");
+            }
+        }
+
         Commands::Baseline { run, name, store } => {
             let run_dir = if run.is_dir() {
                 run
@@ -385,8 +421,7 @@ fn main() -> anyhow::Result<()> {
                     .filter(|name| *name == "llm_real")
                     .map(|_| history.parent().unwrap_or(&history).to_path_buf())
                     .unwrap_or_else(|| history.clone());
-                let llm_series =
-                    llm_real_trends::collect_llm_real_series(&llm_root, limit);
+                let llm_series = llm_real_trends::collect_llm_real_series(&llm_root, limit);
                 if llm_series.is_empty() {
                     println!("Not enough data for stability analysis.");
                 } else {
@@ -414,16 +449,15 @@ fn main() -> anyhow::Result<()> {
             cli::LlmRealCommands::List { output, limit } => {
                 let runs = loader::discover_bucket_runs(&output, "llm_real");
                 if runs.is_empty() {
-                    println!("No llm_real runs under {}", output.join("llm_real").display());
+                    println!(
+                        "No llm_real runs under {}",
+                        output.join("llm_real").display()
+                    );
                 } else {
                     let start = runs.len().saturating_sub(limit);
                     for run_dir in &runs[start..] {
                         let artifacts = loader::load_llm_real_run(run_dir);
-                        println!(
-                            "{}  ({} tests)",
-                            run_dir.display(),
-                            artifacts.len()
-                        );
+                        println!("{}  ({} tests)", run_dir.display(), artifacts.len());
                     }
                 }
             }
@@ -490,7 +524,7 @@ fn main() -> anyhow::Result<()> {
                         println!("{report}");
                     }
                 }
-            },
+            }
 
             cli::LlmRealCommands::Trends { output, limit, out } => {
                 let series = llm_real_trends::collect_llm_real_series(&output, limit);
@@ -511,6 +545,16 @@ fn main() -> anyhow::Result<()> {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+fn resolve_run_dir(run: std::path::PathBuf) -> anyhow::Result<std::path::PathBuf> {
+    if run.is_dir() {
+        return Ok(run);
+    }
+    let parent = run.parent().unwrap_or(Path::new("."));
+    let run_id = run.file_name().unwrap_or_default().to_string_lossy();
+    loader::find_run_dir(parent, &run_id)
+        .ok_or_else(|| anyhow::anyhow!("Run not found: {}", run_id))
+}
 
 fn parse_min_severity(s: &str) -> models::DiffSeverity {
     match s.to_lowercase().as_str() {

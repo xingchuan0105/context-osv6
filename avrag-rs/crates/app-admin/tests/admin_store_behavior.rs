@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use app_core::{admin_escape_ilike_pattern, AdminStorePort};
+use app_core::{AdminStorePort, admin_escape_ilike_pattern};
 use async_trait::async_trait;
 use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
 use common::AppError;
@@ -161,7 +161,10 @@ impl AdminStorePort for OrgBlockingStore {
         if self.org_ids.contains(&org_id) {
             Err(AppError::internal("not implemented"))
         } else {
-            Err(AppError::not_found("org_not_found", "Organization not found"))
+            Err(AppError::not_found(
+                "org_not_found",
+                "Organization not found",
+            ))
         }
     }
 

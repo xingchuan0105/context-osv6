@@ -1,6 +1,6 @@
 use common::AppError;
 
-use crate::context::{map_anyhow_error, ChatContext};
+use crate::context::{ChatContext, map_anyhow_error};
 
 impl ChatContext {
     pub async fn execute_rag_execute_plan(

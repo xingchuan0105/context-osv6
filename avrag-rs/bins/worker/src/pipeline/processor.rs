@@ -3,8 +3,7 @@ use avrag_cache_redis::DocumentLock;
 use avrag_retrieval_data_plane::RetrievalDataPlane;
 use avrag_storage_pg::{ObjectStoreHandle, PgAppRepository};
 use ingestion::parser::{
-    OfficeParserServiceClient, ParsePlan, ParseRouter, PdfPageBackend,
-    PdfRendererServiceClient,
+    OfficeParserServiceClient, ParsePlan, ParseRouter, PdfPageBackend, PdfRendererServiceClient,
 };
 use ingestion::{IngestionError, IngestionTask, TaskProcessor};
 use std::path::Path;
@@ -13,13 +12,15 @@ use tokio::time::Duration;
 use tracing::{info, warn};
 use uuid::Uuid;
 
+use super::document_pipeline::{ParseRunState, RunDocumentPipelineParams, run_document_pipeline};
+use super::helpers::{
+    build_parse_backend_summary, build_parse_warning_payload, estimate_token_count,
+};
 use crate::ingestion_guard::{
     ensure_ingestion_side_effects_allowed, spawn_ingestion_task_lock_heartbeat,
     stop_ingestion_task_lock_heartbeat, verify_uploaded_object_bytes, worker_task_kind,
 };
 use crate::pdf;
-use super::document_pipeline::{run_document_pipeline, ParseRunState, RunDocumentPipelineParams};
-use super::helpers::{build_parse_backend_summary, build_parse_warning_payload, estimate_token_count};
 use crate::runtime_support::{fetch_url_content, task_context, url_to_filename};
 
 pub(crate) struct PgTaskProcessor {

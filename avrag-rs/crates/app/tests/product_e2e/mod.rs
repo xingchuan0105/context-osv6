@@ -10,6 +10,7 @@ pub mod bootstrap;
 pub mod e2e_gate;
 pub mod fixtures;
 pub mod http_helpers;
+pub mod preflight;
 pub mod setup;
 
 pub mod failure;
@@ -23,9 +24,9 @@ mod mock_llm_server;
 mod mock_office_server;
 mod mock_paddle_server;
 mod mock_rag_codegen;
+mod mock_rag_state;
 mod mock_search_server;
 mod mock_servers;
-mod mock_rag_state;
 mod persistent_runtime;
 mod pg_queries;
 mod test_context;
@@ -135,7 +136,7 @@ impl SseParser {
 // ---------------------------------------------------------------------------
 
 pub use contracts::chat::{ChatResponse, Citation, DegradeReason, DegradeTraceItem};
-use contracts::documents::{DocumentStatus};
+use contracts::documents::DocumentStatus;
 
 /// A trace event record that carries reasoning text (plan_decision, evaluation, etc.).
 #[derive(Debug, Clone, serde::Serialize)]

@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use avrag_auth::AuthContext;
-use common::{ContentStore, ContentStoreError, IndexedChunk};
 use avrag_storage_pg::{IndexedChunk as PgIndexedChunk, PgAppRepository, PgStorageError};
+use common::{ContentStore, ContentStoreError, IndexedChunk};
 use common::{Document, DocumentMetadata, SummaryMetadata, TocEntry};
 use uuid::Uuid;
 

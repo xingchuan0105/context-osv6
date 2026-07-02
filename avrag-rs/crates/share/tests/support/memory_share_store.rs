@@ -232,9 +232,7 @@ impl ShareStorePort for MemoryShareStore {
             email: Some(email.to_string()),
             access_level,
             invite_status: "pending".to_string(),
-            invited_by: auth
-                .actor_id()
-                .map(|actor| actor.into_uuid().to_string()),
+            invited_by: auth.actor_id().map(|actor| actor.into_uuid().to_string()),
             invited_at: Utc::now().timestamp(),
             accepted_at: None,
         };

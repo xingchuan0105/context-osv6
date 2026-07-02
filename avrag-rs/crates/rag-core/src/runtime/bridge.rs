@@ -5,8 +5,11 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use avrag_auth::AuthContext;
 use avrag_code_interpreter::HostBridge;
-use contracts::{DenseRetrievalArgs, DenseRetrievalModality, DocProfileArgs, DocSummaryArgs, DocSummaryLevel, GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs, ToolCall, ToolResult, ToolStatus};
-use serde_json::{json, Value};
+use contracts::{
+    DenseRetrievalArgs, DenseRetrievalModality, DocProfileArgs, DocSummaryArgs, DocSummaryLevel,
+    GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs, ToolCall, ToolResult, ToolStatus,
+};
+use serde_json::{Value, json};
 use tracing::info;
 
 use super::tools;
@@ -86,10 +89,7 @@ impl RuntimeBridge {
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| Self::bridge_error("invalid_args", "query is required"))?;
                 let top_k = args.get("top_k").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
-                let terms: Vec<String> = query
-                    .split_whitespace()
-                    .map(ToOwned::to_owned)
-                    .collect();
+                let terms: Vec<String> = query.split_whitespace().map(ToOwned::to_owned).collect();
                 let terms = if terms.is_empty() {
                     vec![query.to_string()]
                 } else {
@@ -139,7 +139,13 @@ impl RuntimeBridge {
                             .collect::<Vec<_>>()
                     })
                     .filter(|ids| !ids.is_empty())
-                    .ok_or_else(|| Self::bridge_error("invalid_args", "doc_ids is required"))?;
+                    .unwrap_or_else(|| self.doc_scope.clone());
+                if doc_ids.is_empty() {
+                    return Err(Self::bridge_error(
+                        "invalid_args",
+                        "doc_ids is required when doc_scope is empty",
+                    ));
+                }
                 let level = match args.get("level").and_then(|v| v.as_str()).unwrap_or("doc") {
                     "section" => DocSummaryLevel::Section,
                     _ => DocSummaryLevel::Doc,
@@ -178,7 +184,13 @@ impl RuntimeBridge {
                             .collect::<Vec<_>>()
                     })
                     .filter(|ids| !ids.is_empty())
-                    .ok_or_else(|| Self::bridge_error("invalid_args", "doc_ids is required"))?;
+                    .unwrap_or_else(|| self.doc_scope.clone());
+                if doc_ids.is_empty() {
+                    return Err(Self::bridge_error(
+                        "invalid_args",
+                        "doc_ids is required when doc_scope is empty",
+                    ));
+                }
                 let fields = args
                     .get("fields")
                     .and_then(|v| v.as_array())
@@ -472,7 +484,15 @@ print(json.dumps(chunks))
 "#;
         let result = interpreter.execute_with_bridge(code, bridge).await.unwrap();
         assert!(result.success, "stderr={}", result.stderr);
-        assert!(result.stdout.contains("bridge hit"), "stdout={}", result.stdout);
-        assert!(result.stdout.contains("00000000-0000-0000-0000-000000000001"));
+        assert!(
+            result.stdout.contains("bridge hit"),
+            "stdout={}",
+            result.stdout
+        );
+        assert!(
+            result
+                .stdout
+                .contains("00000000-0000-0000-0000-000000000001")
+        );
     }
 }

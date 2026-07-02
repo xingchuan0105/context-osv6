@@ -1,7 +1,7 @@
 use app_core::domain_rows::{
-    DocumentAssetRow, DocumentDeletionOutcome, DocumentScopeState, DocumentTaskSeed,
-    DocumentUploadMutationOutcome, DocumentUploadQueueOutcome, IndexedChunk, MultimodalChunkRow,
-    NotificationCreateParams, ConversationHistoryHit, UserProfileRow,
+    ConversationHistoryHit, DocumentAssetRow, DocumentDeletionOutcome, DocumentScopeState,
+    DocumentTaskSeed, DocumentUploadMutationOutcome, DocumentUploadQueueOutcome, IndexedChunk,
+    MultimodalChunkRow, NotificationCreateParams, UserProfileRow,
 };
 
 pub fn document_task_seed(value: avrag_storage_pg::DocumentTaskSeed) -> DocumentTaskSeed {

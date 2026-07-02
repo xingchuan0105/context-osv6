@@ -1,7 +1,9 @@
-use app_core::{parse_uuid_or_app_error, AnalyticsServiceCtx, StorageContext};
+use app_core::{AnalyticsServiceCtx, StorageContext, parse_uuid_or_app_error};
 use avrag_auth::AuthContext;
-use common::{AppError, CreateNotebookRequest, StatusOnlyResponse, UpdateNotebookRequest, new_id, now_rfc3339};
-use contracts::notebooks::{Notebook};
+use common::{
+    AppError, CreateNotebookRequest, StatusOnlyResponse, UpdateNotebookRequest, new_id, now_rfc3339,
+};
+use contracts::notebooks::Notebook;
 use uuid::Uuid;
 
 use crate::analytics_helpers::record_product_event_if_available;
@@ -33,11 +35,7 @@ impl DocumentContext {
     ) -> Option<Notebook> {
         if let Some(store) = storage.document_store() {
             let notebook_id = Uuid::parse_str(notebook_id).ok()?;
-            let notebook = store
-                .get_notebook(auth, notebook_id)
-                .await
-                .ok()
-                .flatten()?;
+            let notebook = store.get_notebook(auth, notebook_id).await.ok().flatten()?;
             return (notebook.org_id == StorageContext::current_org_id(auth)).then_some(notebook);
         }
         let state = storage.inner().read().await;

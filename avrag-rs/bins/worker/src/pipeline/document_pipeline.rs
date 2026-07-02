@@ -8,22 +8,22 @@ use ingestion::{
 use tracing::info;
 use uuid::Uuid;
 
-use crate::ingestion_guard::ensure_ingestion_side_effects_allowed;
-use crate::pdf;
-use crate::indexing::{
-    build_multimodal_index_records, maybe_enrich_visual_multimodal_summaries,
-    record_multimodal_degrade, StoredMultimodalChunk,
-};
 use super::helpers::{
-    build_asset_object_key, build_document_block_rows, build_document_chunk_rows,
-    build_document_index_batch, build_graph_index_records, build_text_index_records,
-    build_toc_entries, collect_document_text, enrich_multimodal_source_locator,
-    execute_external_parse, execute_local_parse, execute_office_parse,
-    extract_triplets_for_index, extract_visual_triplets_for_index, maybe_enrich_toc_with_llm,
-    merge_extracted_triplets, mirror_document_asset, triplet_extraction_enabled,
-    visual_triplet_extraction_enabled, GraphIndexRecords, ParseRunOutputs,
+    GraphIndexRecords, ParseRunOutputs, build_asset_object_key, build_document_block_rows,
+    build_document_chunk_rows, build_document_index_batch, build_graph_index_records,
+    build_text_index_records, collect_document_text,
+    enrich_multimodal_source_locator, execute_external_parse, execute_local_parse,
+    execute_office_parse, extract_triplets_for_index, extract_visual_triplets_for_index,
+    generate_document_profile_with_llm, merge_extracted_triplets, mirror_document_asset,
+    triplet_extraction_enabled, visual_triplet_extraction_enabled,
 };
 use super::processor::PgTaskProcessor;
+use crate::indexing::{
+    StoredMultimodalChunk, build_multimodal_index_records,
+    maybe_enrich_visual_multimodal_summaries, record_multimodal_degrade,
+};
+use crate::ingestion_guard::ensure_ingestion_side_effects_allowed;
+use crate::pdf;
 #[derive(Debug, Default, Clone)]
 pub(crate) struct ParseRunState {
     pub(crate) document_ir: Option<DocumentIr>,
@@ -65,14 +65,13 @@ async fn execute_parse_plan(
             .await
         }
         ParsePlan::Pdf(plan) => {
-            let (pdf_bytes, pdf_filename) =
-                pdf::maybe_convert_office_to_pdf(bytes, filename)
-                    .await
-                    .map_err(|e| {
-                        IngestionError::StateSink(format!(
-                            "office to pdf conversion failed for {filename}: {e}"
-                        ))
-                    })?;
+            let (pdf_bytes, pdf_filename) = pdf::maybe_convert_office_to_pdf(bytes, filename)
+                .await
+                .map_err(|e| {
+                    IngestionError::StateSink(format!(
+                        "office to pdf conversion failed for {filename}: {e}"
+                    ))
+                })?;
 
             let (effective_plan, liteparse_snapshot) = if plan.pages.is_empty() {
                 let routed = ParseRouter::route(&pdf_bytes, &pdf_filename, "application/pdf")
@@ -86,10 +85,7 @@ async fn execute_parse_plan(
                     }
                 }
             } else {
-                (
-                    plan.clone(),
-                    route_decision.liteparse_snapshot.clone(),
-                )
+                (plan.clone(), route_decision.liteparse_snapshot.clone())
             };
 
             let ctx = pdf::PdfParseContext::new(
@@ -118,7 +114,8 @@ pub(crate) struct RunDocumentPipelineParams<'a> {
     pub(crate) bytes: &'a [u8],
     pub(crate) filename: &'a str,
     pub(crate) object_path: &'a str,
-    pub(crate) route_decision: &'a ingestion::parser::ParseRouteDecision,}
+    pub(crate) route_decision: &'a ingestion::parser::ParseRouteDecision,
+}
 
 pub(crate) async fn run_document_pipeline(
     processor: &PgTaskProcessor,
@@ -217,9 +214,10 @@ pub(crate) async fn run_document_pipeline(
         .map_err(|error| IngestionError::StateSink(error.to_string()))?;
     let processed_chunk_count = chunks.len().max(1);
 
-    let mut toc_entries = build_toc_entries(&document_ir, &chunks);
-    toc_entries =
-        maybe_enrich_toc_with_llm(processor, &document_ir, &chunks, filename, toc_entries).await;
+    let profile_result =
+        generate_document_profile_with_llm(processor, document_id, &document_ir, &chunks, filename)
+            .await;
+    let toc_entries = profile_result.toc_entries;
     if !toc_entries.is_empty() {
         ensure_ingestion_side_effects_allowed(
             &processor.repo,
@@ -237,6 +235,29 @@ pub(crate) async fn run_document_pipeline(
             info!(document_id = %document_id, error = %error, "failed to write document toc");
         } else {
             info!(document_id = %document_id, toc_count = toc_entries.len(), "document toc written");
+        }
+    }
+    if let Some(profile_metadata) = profile_result.profile_metadata {
+        ensure_ingestion_side_effects_allowed(
+            &processor.repo,
+            context,
+            task,
+            document_id,
+            "profile metadata write",
+        )
+        .await?;
+        if let Err(error) = processor
+            .repo
+            .update_document_profile(
+                context,
+                document_id,
+                &profile_metadata,
+                Some(&task.task_id),
+                task.lock_token.as_deref(),
+            )
+            .await
+        {
+            info!(document_id = %document_id, error = %error, "failed to write document profile metadata");
         }
     }
 
@@ -623,7 +644,8 @@ pub(crate) async fn run_document_pipeline(
         parse_run_state.outputs.multimodal_vector_count = multimodal_index_records.len();
     }
 
-    let graph_records = if processor.retrieval_data_plane.is_some() && triplet_extraction_enabled() {
+    let graph_records = if processor.retrieval_data_plane.is_some() && triplet_extraction_enabled()
+    {
         let mut extraction = extract_triplets_for_index(
             processor,
             document_id,
@@ -639,9 +661,7 @@ pub(crate) async fn run_document_pipeline(
                 parse_run_state,
             )
             .await;
-            extraction.total_tokens = extraction
-                .total_tokens
-                .saturating_add(visual.total_tokens);
+            extraction.total_tokens = extraction.total_tokens.saturating_add(visual.total_tokens);
             extraction.triplets = merge_extracted_triplets(extraction.triplets, visual.triplets);
         }
         if extraction.total_tokens > 0 {

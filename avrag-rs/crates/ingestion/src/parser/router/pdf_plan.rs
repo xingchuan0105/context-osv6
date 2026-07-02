@@ -1,10 +1,8 @@
-use super::page_routes::route_page_with_config;
-use super::{
-    PageRouteKind, ParsePlan, PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteReason,
-};
+use super::super::probe::{ParseProbeConfig, ParseProbeResult, PdfPageProbeResult};
 #[cfg(test)]
 use super::RouteDecision;
-use super::super::probe::{ParseProbeConfig, ParseProbeResult, PdfPageProbeResult};
+use super::page_routes::route_page_with_config;
+use super::{PageRouteKind, ParsePlan, PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteReason};
 
 pub(super) fn build_pdf_parse_plan(
     probe_result: &ParseProbeResult,
@@ -53,7 +51,10 @@ fn build_pdf_page_plan(page_probe: &PdfPageProbeResult, config: &ParseProbeConfi
     }
 }
 
-pub(super) fn summarize_pdf_reason(probe_result: &ParseProbeResult, plan: &ParsePlan) -> RouteReason {
+pub(super) fn summarize_pdf_reason(
+    probe_result: &ParseProbeResult,
+    plan: &ParsePlan,
+) -> RouteReason {
     let ParsePlan::Pdf(pdf_plan) = plan else {
         return RouteReason::SimplePdf;
     };
@@ -84,11 +85,7 @@ pub(super) fn summarize_pdf_reason(probe_result: &ParseProbeResult, plan: &Parse
 }
 
 pub fn pdf_page_route_labels(plan: &PdfPagePlan) -> String {
-    let mut labels: Vec<&str> = plan
-        .route_kinds
-        .iter()
-        .map(|k| k.as_label())
-        .collect();
+    let mut labels: Vec<&str> = plan.route_kinds.iter().map(|k| k.as_label()).collect();
     if labels.is_empty() {
         labels.push(plan.reason.route_label());
     }

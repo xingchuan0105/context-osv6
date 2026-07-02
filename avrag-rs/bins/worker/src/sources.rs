@@ -1,6 +1,9 @@
 use anyhow::Result;
 use avrag_storage_pg::{NotificationCreateParams, PgAppRepository};
-use ingestion::{AuditRecord, AuditSink, IngestionError, IngestionTask, StateSink, TaskCompletionOutcome, TaskFailureOutcome, TaskSource, Transition};
+use ingestion::{
+    AuditRecord, AuditSink, IngestionError, IngestionTask, StateSink, TaskCompletionOutcome,
+    TaskFailureOutcome, TaskSource, Transition,
+};
 use tracing::info;
 use uuid::Uuid;
 
@@ -10,13 +13,14 @@ use crate::runtime_support::task_context;
 pub(crate) struct PgTaskSource {
     pub(crate) repo: PgAppRepository,
     pub(crate) worker_id: String,
+    pub(crate) worker_queue_group: String,
 }
 
 #[async_trait::async_trait]
 impl TaskSource for PgTaskSource {
     async fn fetch_next(&mut self) -> Result<Option<IngestionTask>, IngestionError> {
         self.repo
-            .claim_next_ingestion_task(&self.worker_id)
+            .claim_next_ingestion_task(&self.worker_id, &self.worker_queue_group)
             .await
             .map_err(|error| IngestionError::TaskSource(error.to_string()))
     }
@@ -75,7 +79,8 @@ impl StateSink for PgStateSink {
 
         if matches!(
             transition.to,
-            contracts::documents::DocumentStatus::Processing | contracts::documents::DocumentStatus::Completed
+            contracts::documents::DocumentStatus::Processing
+                | contracts::documents::DocumentStatus::Completed
         ) {
             ensure_ingestion_side_effects_allowed(
                 &self.repo,
@@ -89,7 +94,8 @@ impl StateSink for PgStateSink {
 
         let updated = if matches!(
             transition.to,
-            contracts::documents::DocumentStatus::Processing | contracts::documents::DocumentStatus::Completed
+            contracts::documents::DocumentStatus::Processing
+                | contracts::documents::DocumentStatus::Completed
         ) {
             self.repo
                 .set_document_status_for_ingestion_task(
@@ -134,7 +140,8 @@ impl StateSink for PgStateSink {
 
         if matches!(
             transition.to,
-            contracts::documents::DocumentStatus::Completed | contracts::documents::DocumentStatus::Failed
+            contracts::documents::DocumentStatus::Completed
+                | contracts::documents::DocumentStatus::Failed
         ) {
             if matches!(transition.to, contracts::documents::DocumentStatus::Failed)
                 && let Some(user_id) = task
@@ -169,12 +176,18 @@ impl StateSink for PgStateSink {
                 .as_deref()
                 .and_then(|value| Uuid::parse_str(value).ok())
             {
-                let title = if matches!(transition.to, contracts::documents::DocumentStatus::Completed) {
+                let title = if matches!(
+                    transition.to,
+                    contracts::documents::DocumentStatus::Completed
+                ) {
                     "Document ingestion completed"
                 } else {
                     "Document ingestion failed"
                 };
-                let body = if matches!(transition.to, contracts::documents::DocumentStatus::Completed) {
+                let body = if matches!(
+                    transition.to,
+                    contracts::documents::DocumentStatus::Completed
+                ) {
                     "A document finished ingestion and is ready for retrieval."
                 } else {
                     "A document failed ingestion and needs attention."

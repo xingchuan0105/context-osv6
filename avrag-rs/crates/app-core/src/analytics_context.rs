@@ -23,7 +23,11 @@ impl AnalyticsServiceCtx {
         self.service.as_ref()
     }
 
-    pub fn into_context(&self, actor_id: Option<Uuid>, request_id: Option<String>) -> AnalyticsContext {
+    pub fn into_context(
+        &self,
+        actor_id: Option<Uuid>,
+        request_id: Option<String>,
+    ) -> AnalyticsContext {
         AnalyticsContext {
             analytics: self.service.clone(),
             actor_id,

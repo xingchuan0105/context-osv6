@@ -5,9 +5,9 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::{ExecutionResult, InterpreterError};
 use async_trait::async_trait;
 use serde_json::Value;
-use crate::{ExecutionResult, InterpreterError};
 
 /// Host-side bridge invoked from the sandbox via pipe RPC.
 #[async_trait]
@@ -48,10 +48,15 @@ class _Client:
         return _rpc("graph_search", {"query": query, "depth": depth})["chunks"]
     async def chunk_fetch(self, chunk_id):
         return _rpc("chunk_fetch", {"chunk_id": chunk_id})["chunks"]
-    async def doc_summary(self, doc_ids, level="doc"):
-        return _rpc("doc_summary", {"doc_ids": doc_ids, "level": level})["chunks"]
-    async def doc_profile(self, doc_ids, fields=None):
-        payload = {"doc_ids": doc_ids}
+    async def doc_summary(self, level="doc", doc_ids=None):
+        payload = {"level": level}
+        if doc_ids is not None:
+            payload["doc_ids"] = doc_ids
+        return _rpc("doc_summary", payload)["chunks"]
+    async def doc_profile(self, doc_ids=None, fields=None):
+        payload = {}
+        if doc_ids is not None:
+            payload["doc_ids"] = doc_ids
         if fields:
             payload["fields"] = fields
         return _rpc("doc_profile", payload)["chunks"]
@@ -221,9 +226,8 @@ mod unix_impl {
             libc::fcntl(resp_read_fd, libc::F_SETFD, 0);
         }
 
-        let temp_dir = tempfile::TempDir::new().map_err(|e| {
-            InterpreterError::Io(std::io::Error::other(format!("temp dir: {e}")))
-        })?;
+        let temp_dir = tempfile::TempDir::new()
+            .map_err(|e| InterpreterError::Io(std::io::Error::other(format!("temp dir: {e}"))))?;
 
         let req_file = unsafe { std::fs::File::from_raw_fd(req_reader.into_raw_fd()) };
         let resp_file = unsafe { std::fs::File::from_raw_fd(resp_writer.into_raw_fd()) };
@@ -345,7 +349,11 @@ mod unix_impl {
                         InterpreterError::Io(std::io::Error::other("stderr reader panicked"))
                     })?
                     .unwrap_or_default();
-                Ok((Some(status), String::from_utf8(stdout)?, String::from_utf8(stderr)?))
+                Ok((
+                    Some(status),
+                    String::from_utf8(stdout)?,
+                    String::from_utf8(stderr)?,
+                ))
             })();
             let _ = tx.send(result);
         });
@@ -451,7 +459,11 @@ mod spawn_tests {
             });
         }
         let output = command.output().expect("spawn python");
-        assert!(output.status.success(), "stderr={}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         let mut buf = [0u8; 16];
         let n = read_end.read(&mut buf).expect("read pipe");

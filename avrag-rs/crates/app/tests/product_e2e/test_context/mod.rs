@@ -5,15 +5,18 @@
 mod artifacts;
 mod builder;
 pub(crate) mod config;
+mod diagnostics;
 mod http;
 mod profiles;
 
+pub(crate) use diagnostics::dump_ingestion_failure_diagnostics;
 pub(crate) use http::local_dev_email;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use tokio::sync::oneshot::Sender;
 
+pub(crate) use builder::PersistentSmokeInfra;
 pub use profiles::ChatStreamParams;
 
 use super::setup;
@@ -37,6 +40,7 @@ pub struct TestContext {
     pub(crate) server_abort: Option<Sender<()>>,
     #[allow(dead_code)]
     pub(crate) object_store_dir: tempfile::TempDir,
+    pub(crate) object_root: String,
     pub(crate) pg_url: String,
     pub(crate) mock_llm_abort: Option<Sender<()>>,
     pub(crate) mock_embedding_abort: Option<Sender<()>>,
@@ -92,13 +96,12 @@ impl Drop for TestContext {
 
 #[cfg(test)]
 mod tests {
-    use super::builder::{pg_url_mark_migrated, pg_url_needs_migration};
     use super::super::http_helpers::milvus_collection_prefix_for_identity;
+    use super::builder::{pg_url_mark_migrated, pg_url_needs_migration};
 
     #[test]
     fn milvus_collection_prefix_uses_context_identity_suffix() {
-        let prefix =
-            milvus_collection_prefix_for_identity("12345678-aaaa-bbbb-cccc-dddddddddddd");
+        let prefix = milvus_collection_prefix_for_identity("12345678-aaaa-bbbb-cccc-dddddddddddd");
 
         assert_eq!(prefix, "avrag_e2e_12345678");
     }

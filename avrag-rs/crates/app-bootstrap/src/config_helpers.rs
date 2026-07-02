@@ -1,5 +1,5 @@
-use app_chat::agents::service::UnifiedAgentService;
 use anyhow::Result as AnyResult;
+use app_chat::agents::service::UnifiedAgentService;
 use app_core::{AppConfig, ChatPersistencePort, ModelProviderConfig};
 use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
 use avrag_llm::{EmbeddingClient, LlmClient, RerankerClient, RetrievalPlanner};

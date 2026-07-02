@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub(crate) fn mcp_all_tools() -> Vec<Value> {
     let mut tools = Vec::new();

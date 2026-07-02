@@ -24,7 +24,6 @@ fn apply_paddle_smoke_profile() {
 #[tokio::test]
 #[ignore = "requires Black Swan PDF + real Paddle Jobs; manual staging — ./scripts/run-staging-ingest-e2e.sh"]
 async fn black_swan_paddle_pdf_smoke() {
-
     super::require_smoke_suite();
     apply_paddle_smoke_profile();
     let path = black_swan_pdf_path();
@@ -47,7 +46,10 @@ async fn black_swan_paddle_pdf_smoke() {
         .query_document_chunk_count(&upload.document_id)
         .await
         .expect("text chunk count");
-    assert!(text_chunks > 0, "expected text_chunks > 0, got {text_chunks}");
+    assert!(
+        text_chunks > 0,
+        "expected text_chunks > 0, got {text_chunks}"
+    );
 
     let summary = ctx
         .query_latest_backend_summary(&upload.document_id)
@@ -71,8 +73,7 @@ async fn black_swan_paddle_pdf_smoke() {
         .await
         .expect("page_raster multimodal count");
     assert_eq!(
-        page_raster_mm,
-        0,
+        page_raster_mm, 0,
         "ING-4: page_raster multimodal chunks should be 0 when Paddle OCR succeeds"
     );
 }

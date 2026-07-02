@@ -1,9 +1,11 @@
-use contracts::{ExecutePlanItem, ExecutePlanRequest, ExecutePlanSummaryMode, RetrievalPlannerOutput, ToolCall};
-use contracts::chat::{ChatRequest};
+use contracts::chat::ChatRequest;
+use contracts::{
+    ExecutePlanItem, ExecutePlanRequest, ExecutePlanSummaryMode, RetrievalPlannerOutput, ToolCall,
+};
 
 use super::internal::{
-    build_rag_envelope, extract_json_object, normalize_execute_plan_item, normalize_graph_hints,
-    normalize_placeholder_triplets, normalize_query_entities, RAG_EXECUTE_PLAN_VERSION,
+    RAG_EXECUTE_PLAN_VERSION, build_rag_envelope, extract_json_object, normalize_execute_plan_item,
+    normalize_graph_hints, normalize_placeholder_triplets, normalize_query_entities,
 };
 use super::types::{PlanStrategy, PlanStrategyItem, RagBehaviorSkill, RagContext, RagPlanDecision};
 
@@ -264,4 +266,3 @@ pub(crate) fn normalize_execute_plan_request(
     plan.validate().ok()?;
     Some(plan)
 }
-

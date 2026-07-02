@@ -11,8 +11,9 @@ use super::super::{
     },
     setup,
 };
-use super::profiles::ChatStreamParams;
+use super::diagnostics::dump_ingestion_failure_diagnostics;
 use super::TestContext;
+use super::profiles::ChatStreamParams;
 
 impl TestContext {
     pub async fn create_notebook(&self, name: &str) -> anyhow::Result<NotebookInner> {
@@ -53,8 +54,8 @@ impl TestContext {
         notebook_id: &str,
     ) -> anyhow::Result<UploadResponse> {
         let path = std::path::Path::new(file_path);
-        let bytes = std::fs::read(path)
-            .map_err(|e| anyhow::anyhow!("read {}: {e}", path.display()))?;
+        let bytes =
+            std::fs::read(path).map_err(|e| anyhow::anyhow!("read {}: {e}", path.display()))?;
         let filename = path
             .file_name()
             .and_then(|name| name.to_str())
@@ -112,6 +113,7 @@ impl TestContext {
             let body = upload_resp.text().await.unwrap_or_default();
             anyhow::bail!("upload PUT failed: HTTP {status}, body: {body}");
         }
+        self.verify_uploaded_object_readable(&document_id).await?;
 
         Ok(UploadResponse {
             document_id,
@@ -145,10 +147,14 @@ impl TestContext {
             }
             match status.as_str() {
                 "completed" => return Ok(DocumentStatus::Completed),
-                "failed" => return Ok(DocumentStatus::Failed),
+                "failed" => {
+                    dump_ingestion_failure_diagnostics(self, doc_id).await;
+                    return Ok(DocumentStatus::Failed);
+                }
                 _ => {}
             }
             if tokio::time::Instant::now() > deadline {
+                dump_ingestion_failure_diagnostics(self, doc_id).await;
                 anyhow::bail!(
                     "wait_for_ingestion timed out after {timeout:?}, last status={last_status}"
                 );
@@ -201,6 +207,21 @@ impl TestContext {
             }
         }
         Err(last_err.unwrap_or_else(|| anyhow::anyhow!("fetch_status exhausted retries")))
+    }
+
+    async fn verify_uploaded_object_readable(&self, document_id: &str) -> anyhow::Result<()> {
+        let object_path = self.query_document_object_path(document_id).await?;
+        let object_path_relative = object_path.trim_start_matches('/');
+        let object_full_path = std::path::Path::new(&self.object_root).join(object_path_relative);
+        if !object_full_path.is_file() {
+            anyhow::bail!(
+                "dev-upload succeeded but object missing at {} (object_root={}, object_path={}); possible API/worker object store split (different AVRAG_OBJECT_ROOT)",
+                object_full_path.display(),
+                self.object_root,
+                object_path
+            );
+        }
+        Ok(())
     }
 
     pub async fn chat(
@@ -450,7 +471,7 @@ impl TestContext {
         if params.agent_type == "rag" {
             set_mock_rag_codegen_query(params.query);
         }
-        if params.agent_type == "rag" && !params.doc_scope.is_empty() {
+        if params.pin_mock_chunk_ids && params.agent_type == "rag" && !params.doc_scope.is_empty() {
             let mut chunk_ids = Vec::new();
             for doc_id in params.doc_scope {
                 if let Ok(chunk_id) = self.query_first_chunk_id(doc_id).await {
@@ -537,6 +558,7 @@ impl TestContext {
                 session_id: None,
                 format_hint: None,
                 debug: false,
+                pin_mock_chunk_ids: true,
             },
             max_events,
             max_wait,
@@ -665,10 +687,7 @@ impl TestContext {
     pub async fn delete_document(&self, document_id: &str) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
-            .delete(format!(
-                "{}/api/v1/documents/{document_id}",
-                self.base_url
-            ))
+            .delete(format!("{}/api/v1/documents/{document_id}", self.base_url))
             .send()
             .await?;
         let status = resp.status().as_u16();
@@ -816,10 +835,7 @@ impl TestContext {
     pub async fn get_notebook(&self, notebook_id: &str) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
-            .get(format!(
-                "{}/api/v1/notebooks/{notebook_id}",
-                self.base_url
-            ))
+            .get(format!("{}/api/v1/notebooks/{notebook_id}", self.base_url))
             .send()
             .await?;
         let status = resp.status().as_u16();
@@ -846,10 +862,7 @@ impl TestContext {
     ) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
-            .patch(format!(
-                "{}/api/v1/notebooks/{notebook_id}",
-                self.base_url
-            ))
+            .patch(format!("{}/api/v1/notebooks/{notebook_id}", self.base_url))
             .json(&serde_json::json!({ "name": name, "description": description }))
             .send()
             .await?;
@@ -861,10 +874,7 @@ impl TestContext {
     pub async fn delete_notebook(&self, notebook_id: &str) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
-            .delete(format!(
-                "{}/api/v1/notebooks/{notebook_id}",
-                self.base_url
-            ))
+            .delete(format!("{}/api/v1/notebooks/{notebook_id}", self.base_url))
             .send()
             .await?;
         let status = resp.status().as_u16();

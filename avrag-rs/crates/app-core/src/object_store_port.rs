@@ -5,8 +5,7 @@ use bytes::Bytes;
 use common::AppError;
 use futures::Stream;
 
-pub type ObjectStoreUploadStream =
-    Pin<Box<dyn Stream<Item = Result<Bytes, AppError>> + Send>>;
+pub type ObjectStoreUploadStream = Pin<Box<dyn Stream<Item = Result<Bytes, AppError>> + Send>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectStoreMetadata {
@@ -28,11 +27,8 @@ pub enum ObjectStoreHeadError {
 pub trait ObjectStorePort: Send + Sync {
     async fn put(&self, path: &str, bytes: &[u8]) -> Result<(), AppError>;
 
-    async fn put_stream(
-        &self,
-        path: &str,
-        stream: ObjectStoreUploadStream,
-    ) -> Result<(), AppError>;
+    async fn put_stream(&self, path: &str, stream: ObjectStoreUploadStream)
+    -> Result<(), AppError>;
 
     async fn get(&self, path: &str) -> Result<Vec<u8>, AppError>;
 

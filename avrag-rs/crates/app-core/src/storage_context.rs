@@ -11,14 +11,14 @@ use crate::auth_store::AuthStorePort;
 use crate::billing_quota::BillingQuotaPort;
 use crate::billing_store::BillingStorePort;
 use crate::chat_persistence::ChatPersistencePort;
-use crate::share_store::ShareStorePort;
 use crate::config_helpers::{
     is_remote_asset_reference, sign_upload_payload, upload_signing_secret,
 };
+use crate::document_store::DocumentStorePort;
 use crate::domain_rows::DocumentAssetRow;
 use crate::object_store_port::ObjectStorePort;
 use crate::postgres_health::PostgresHealthPort;
-use crate::document_store::DocumentStorePort;
+use crate::share_store::ShareStorePort;
 use crate::state_types::MemoryState;
 
 #[derive(Clone)]
@@ -245,10 +245,7 @@ impl StorageContext {
         Ok(())
     }
 
-    pub async fn resolve_citation_asset_url(
-        &self,
-        asset: &DocumentAssetRow,
-    ) -> Option<String> {
+    pub async fn resolve_citation_asset_url(&self, asset: &DocumentAssetRow) -> Option<String> {
         let storage_path = asset.storage_path.as_deref()?;
         if is_remote_asset_reference(storage_path) {
             return Some(storage_path.to_string());

@@ -1,6 +1,5 @@
 use avrag_share::{
-    AccessLevel, ShareAccessLog, ShareAnalytics, ShareSettings,
-    SharedNotebookPayload,
+    AccessLevel, ShareAccessLog, ShareAnalytics, ShareSettings, SharedNotebookPayload,
 };
 use common::{AppError, ShareTokenResponse};
 use uuid::Uuid;
@@ -68,8 +67,13 @@ impl AppState {
         let store = self
             .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
-        avrag_share::handle_update_access_level(self.auth().clone(), notebook_id, access_level, store)
-            .await
+        avrag_share::handle_update_access_level(
+            self.auth().clone(),
+            notebook_id,
+            access_level,
+            store,
+        )
+        .await
     }
 
     pub async fn get_share_analytics(
@@ -89,7 +93,8 @@ impl AppState {
         let store = self
             .share_store()
             .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
-        avrag_share::handle_get_share_access_logs(self.auth().clone(), notebook_id, None, store).await
+        avrag_share::handle_get_share_access_logs(self.auth().clone(), notebook_id, None, store)
+            .await
     }
 
     pub async fn validate_share_token(&self, token: &str) -> Result<Option<String>, AppError> {
@@ -194,7 +199,9 @@ impl AppState {
 
     pub async fn resolve_share_chat_notebook_scope(&self, token: &str) -> Option<Uuid> {
         let store = self.share_store()?;
-        let notebook_id = avrag_share::handle_validate_token(token, store).await.ok()??;
+        let notebook_id = avrag_share::handle_validate_token(token, store)
+            .await
+            .ok()??;
         Uuid::parse_str(&notebook_id).ok()
     }
 }

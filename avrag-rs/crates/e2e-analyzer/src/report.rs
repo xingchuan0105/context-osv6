@@ -2,11 +2,11 @@
 //!
 //! Provides Markdown and JSON summary generation from diff results.
 
-use crate::models::{
-    DiffEntry, DiffSeverity, GateStatus, JsonSummary, RunMetadata, SeveritySummary, TestResult,
-    TestFingerprint,
-};
 use crate::fingerprint::{fingerprint_for_test, fingerprint_match};
+use crate::models::{
+    DiffEntry, DiffSeverity, GateStatus, JsonSummary, RunMetadata, SeveritySummary,
+    TestFingerprint, TestResult,
+};
 use chrono::Utc;
 
 // ---------------------------------------------------------------------------

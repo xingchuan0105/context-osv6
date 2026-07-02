@@ -4,8 +4,8 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use liteparse::{LiteParse, LiteParseConfig as LpEngineConfig};
 use liteparse::types::PdfInput;
+use liteparse::{LiteParse, LiteParseConfig as LpEngineConfig};
 use tracing::debug;
 
 use super::liteparse_config::LiteParseConfig;
@@ -117,17 +117,11 @@ impl LiteParseService {
     ///
     /// **Hot path:** prefer [`Self::parse_pdf_document`] and
     /// [`ParsedPdfSnapshot::page_dimensions`]. Each call performs a full LiteParse parse.
-    pub async fn page_dimensions(
-        &self,
-        pdf_bytes: &[u8],
-    ) -> Result<BTreeMap<u32, (f32, f32)>> {
+    pub async fn page_dimensions(&self, pdf_bytes: &[u8]) -> Result<BTreeMap<u32, (f32, f32)>> {
         Ok(self.parse_pdf_document(pdf_bytes).await?.page_dimensions)
     }
 
-    async fn parse_input(
-        &self,
-        pdf_bytes: &[u8],
-    ) -> Result<liteparse::ParseResult, anyhow::Error> {
+    async fn parse_input(&self, pdf_bytes: &[u8]) -> Result<liteparse::ParseResult, anyhow::Error> {
         self.engine
             .parse_input(PdfInput::Bytes(pdf_bytes.to_vec()))
             .await
@@ -199,8 +193,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn phase0_mini_pdf() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../docs/spike/fixtures/phase0-mini.pdf")
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/spike/fixtures/phase0-mini.pdf")
     }
 
     #[tokio::test]

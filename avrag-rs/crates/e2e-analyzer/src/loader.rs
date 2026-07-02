@@ -117,7 +117,8 @@ pub fn discover_runs(output_dir: &Path) -> Vec<PathBuf> {
         let mt_b = fs::metadata(b)
             .and_then(|m| m.modified())
             .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-        mt_a.cmp(&mt_b).then_with(|| a.file_name().cmp(&b.file_name()))
+        mt_a.cmp(&mt_b)
+            .then_with(|| a.file_name().cmp(&b.file_name()))
     });
 
     runs
@@ -142,7 +143,8 @@ pub fn discover_all_runs(output_dir: &Path) -> Vec<PathBuf> {
         let mt_b = fs::metadata(b)
             .and_then(|m| m.modified())
             .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-        mt_a.cmp(&mt_b).then_with(|| a.file_name().cmp(&b.file_name()))
+        mt_a.cmp(&mt_b)
+            .then_with(|| a.file_name().cmp(&b.file_name()))
     });
 
     let mut deduped = Vec::new();
@@ -306,9 +308,7 @@ pub fn find_latest_run_on_branch(
         let branch_matches =
             meta.as_ref().and_then(|m| m.git_branch_from_anywhere()) == Some(branch);
         let commit_matches = commit.is_none_or(|expected| {
-            meta.as_ref()
-                .and_then(|m| m.git_commit_from_anywhere())
-                == Some(expected)
+            meta.as_ref().and_then(|m| m.git_commit_from_anywhere()) == Some(expected)
         });
 
         if !branch_matches || !commit_matches {
@@ -319,11 +319,7 @@ pub fn find_latest_run_on_branch(
         let has_pass = results
             .iter()
             .any(|r| r.status == crate::models::TestStatus::Passed)
-            || meta
-                .as_ref()
-                .and_then(|m| m.passed)
-                .unwrap_or(0)
-                > 0;
+            || meta.as_ref().and_then(|m| m.passed).unwrap_or(0) > 0;
 
         if has_pass {
             return Some(run_dir.clone());

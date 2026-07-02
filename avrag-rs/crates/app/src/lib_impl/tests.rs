@@ -1,15 +1,15 @@
 #[cfg(test)]
 mod tests {
-    use crate::lib_impl::*;
     use crate::AppConfig;
+    use crate::lib_impl::*;
     use app_documents::{
         build_docscope_metadata, build_url_source_filename, infer_url_import_mime_type,
         normalize_imported_text,
     };
     use common::{CreateDocumentRequest, CreateNotebookRequest, UpdateDocumentRequest};
-use contracts::chat::{ChatMessage};
-use contracts::documents::{CreateDocumentUploadResponse, DocumentStatus};
-use contracts::notebooks::{Notebook};
+    use contracts::chat::ChatMessage;
+    use contracts::documents::{CreateDocumentUploadResponse, DocumentStatus};
+    use contracts::notebooks::Notebook;
 
     use uuid::Uuid;
 
@@ -175,15 +175,17 @@ use contracts::notebooks::{Notebook};
     #[test]
     fn general_profile_custom_preferences_preserves_agent_memory() {
         let mut agent_memory = contracts::preferences::AgentPreferenceMemory::default();
-        agent_memory.active.push(contracts::preferences::AgentPreference {
-            id: "pref-1".to_string(),
-            text: "Use concise answers".to_string(),
-            category: "interaction".to_string(),
-            scope: "global".to_string(),
-            confidence: "explicit".to_string(),
-            source: "test".to_string(),
-            updated_at: "2026-04-26T00:00:00Z".to_string(),
-        });
+        agent_memory
+            .active
+            .push(contracts::preferences::AgentPreference {
+                id: "pref-1".to_string(),
+                text: "Use concise answers".to_string(),
+                category: "interaction".to_string(),
+                scope: "global".to_string(),
+                confidence: "explicit".to_string(),
+                source: "test".to_string(),
+                updated_at: "2026-04-26T00:00:00Z".to_string(),
+            });
 
         let merged = merge_general_profile_custom_preferences(
             serde_json::json!({ "theme": "dark" }),
@@ -402,24 +404,28 @@ use contracts::notebooks::{Notebook};
             _request: crate::agents::runtime::AgentRequest,
             sink: &dyn crate::agents::events::AgentEventSink,
         ) -> Result<crate::agents::runtime::AgentRunResult, common::AppError> {
-            let _ = sink.emit(crate::agents::events::AgentEvent::Activity {
-                stage: "chat".to_string(),
-                message: "Scripted chat".to_string(),
-            })
-            .await;
-            let _ = sink.emit(crate::agents::events::AgentEvent::MessageDelta {
-                text: "agent ".to_string(),
-            })
-            .await;
-            let _ = sink.emit(crate::agents::events::AgentEvent::MessageDelta {
-                text: "answer".to_string(),
-            })
-            .await;
-            let _ = sink.emit(crate::agents::events::AgentEvent::Done {
-                final_message: Some("agent answer".to_string()),
-                usage: None,
-            })
-            .await;
+            let _ = sink
+                .emit(crate::agents::events::AgentEvent::Activity {
+                    stage: "chat".to_string(),
+                    message: "Scripted chat".to_string(),
+                })
+                .await;
+            let _ = sink
+                .emit(crate::agents::events::AgentEvent::MessageDelta {
+                    text: "agent ".to_string(),
+                })
+                .await;
+            let _ = sink
+                .emit(crate::agents::events::AgentEvent::MessageDelta {
+                    text: "answer".to_string(),
+                })
+                .await;
+            let _ = sink
+                .emit(crate::agents::events::AgentEvent::Done {
+                    final_message: Some("agent answer".to_string()),
+                    usage: None,
+                })
+                .await;
 
             Ok(crate::agents::runtime::AgentRunResult {
                 answer: "agent answer".to_string(),
@@ -446,11 +452,12 @@ use contracts::notebooks::{Notebook};
             _request: crate::agents::runtime::AgentRequest,
             sink: &dyn crate::agents::events::AgentEventSink,
         ) -> Result<crate::agents::runtime::AgentRunResult, common::AppError> {
-            let _ = sink.emit(crate::agents::events::AgentEvent::Activity {
-                stage: "chat".to_string(),
-                message: "Buffered chat".to_string(),
-            })
-            .await;
+            let _ = sink
+                .emit(crate::agents::events::AgentEvent::Activity {
+                    stage: "chat".to_string(),
+                    message: "Buffered chat".to_string(),
+                })
+                .await;
 
             Ok(crate::agents::runtime::AgentRunResult {
                 answer: "buffered answer".to_string(),
@@ -671,22 +678,20 @@ use contracts::notebooks::{Notebook};
         let mut state = AppState::new(config);
         let old = state.test_storage().clone();
         let pg = Arc::new(repo);
-        let document_store = Some(
-            Arc::new(app_bootstrap::test_support::PgDocumentStoreAdapter::new(pg.clone()))
-                as Arc<dyn app_core::DocumentStorePort>,
-        );
+        let document_store = Some(Arc::new(
+            app_bootstrap::test_support::PgDocumentStoreAdapter::new(pg.clone()),
+        ) as Arc<dyn app_core::DocumentStorePort>);
         let admin_store = Some(
-            Arc::new(app_bootstrap::test_support::PgAdminStoreAdapter::new(pg.clone()))
-                as Arc<dyn app_core::AdminStorePort>,
+            Arc::new(app_bootstrap::test_support::PgAdminStoreAdapter::new(
+                pg.clone(),
+            )) as Arc<dyn app_core::AdminStorePort>,
         );
-        let chat_persistence = Some(
-            Arc::new(app_bootstrap::test_support::PgChatPersistenceAdapter::new(pg.clone()))
-                as Arc<dyn app_core::ChatPersistencePort>,
-        );
-        let postgres_health = Some(
-            Arc::new(app_bootstrap::test_support::PgHealthAdapter::new(pg.clone()))
-                as Arc<dyn app_core::PostgresHealthPort>,
-        );
+        let chat_persistence = Some(Arc::new(
+            app_bootstrap::test_support::PgChatPersistenceAdapter::new(pg.clone()),
+        ) as Arc<dyn app_core::ChatPersistencePort>);
+        let postgres_health = Some(Arc::new(app_bootstrap::test_support::PgHealthAdapter::new(
+            pg.clone(),
+        )) as Arc<dyn app_core::PostgresHealthPort>);
         let inner = old.inner().clone();
         let api_keys = old.api_keys().clone();
         let api_key_hashes = old.api_key_hashes().clone();

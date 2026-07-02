@@ -30,10 +30,7 @@ async fn paddle_ocr_image_ingest_smoke() {
 
     let mut ctx = TestContext::new_smoke_with_rag().await;
     let path = paddle_contract_png_path().to_string_lossy().to_string();
-    let upload = ctx
-        .upload_file_from_path(&path)
-        .await
-        .expect("upload png");
+    let upload = ctx.upload_file_from_path(&path).await.expect("upload png");
     assert_eq!(upload.status, 201);
 
     let status = ctx

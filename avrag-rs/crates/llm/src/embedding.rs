@@ -99,17 +99,12 @@ impl MultiModalEmbeddingInput {
     }
 
     pub fn estimate_tokens(&self) -> usize {
-        let text_tokens = self
-            .text
-            .as_deref()
-            .map(crate::count_tokens)
-            .unwrap_or(0);
+        let text_tokens = self.text.as_deref().map(crate::count_tokens).unwrap_or(0);
         let per_image = default_image_token_estimate();
         let image_tokens = self.image_count() * per_image;
         let video_tokens = usize::from(self.video.is_some()) * per_image;
         text_tokens + image_tokens + video_tokens
     }
-
 }
 
 fn build_dashscope_multimodal_contents(input: &MultiModalEmbeddingInput) -> Vec<serde_json::Value> {
@@ -411,7 +406,8 @@ impl EmbeddingClient {
             Some(crate::ApiStyle::DashScopeMultimodalEmbedding)
         ) || matches!(
             self.config.model.as_str(),
-            "qwen3-vl-embedding" | "tongyi-embedding-vision-plus-2026-03-06"
+            "qwen3-vl-embedding"
+                | "tongyi-embedding-vision-plus-2026-03-06"
                 | "tongyi-embedding-vision-flash-2026-03-06"
         )
     }

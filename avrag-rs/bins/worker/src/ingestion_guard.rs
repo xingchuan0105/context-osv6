@@ -116,7 +116,9 @@ pub(crate) fn spawn_ingestion_task_lock_heartbeat(
     })
 }
 
-pub(crate) async fn stop_ingestion_task_lock_heartbeat(heartbeat: Option<tokio::task::JoinHandle<()>>) {
+pub(crate) async fn stop_ingestion_task_lock_heartbeat(
+    heartbeat: Option<tokio::task::JoinHandle<()>>,
+) {
     let Some(heartbeat) = heartbeat else {
         return;
     };
@@ -163,7 +165,9 @@ pub(crate) fn spawn_document_cleanup_task_lock_heartbeat(
     })
 }
 
-pub(crate) async fn stop_document_cleanup_task_lock_heartbeat(heartbeat: tokio::task::JoinHandle<()>) {
+pub(crate) async fn stop_document_cleanup_task_lock_heartbeat(
+    heartbeat: tokio::task::JoinHandle<()>,
+) {
     heartbeat.abort();
     if let Err(error) = heartbeat.await
         && !error.is_cancelled()
@@ -284,7 +288,8 @@ pub(crate) async fn process_document_cleanup_task(
     };
     if !matches!(
         targets.status,
-        contracts::documents::DocumentStatus::Deleting | contracts::documents::DocumentStatus::Deleted
+        contracts::documents::DocumentStatus::Deleting
+            | contracts::documents::DocumentStatus::Deleted
     ) {
         return Err(anyhow::anyhow!(
             "document {} was not in deleting/deleted status during cleanup",

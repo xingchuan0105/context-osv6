@@ -35,7 +35,11 @@ fn run_liteparse_snapshot_blocking(bytes: &[u8]) -> Result<ParsedPdfSnapshot> {
             .enable_all()
             .build()
             .context("failed to build tokio runtime for liteparse probe")?;
-        rt.block_on(async { LiteParseService::from_env().parse_pdf_document(&pdf_bytes).await })
+        rt.block_on(async {
+            LiteParseService::from_env()
+                .parse_pdf_document(&pdf_bytes)
+                .await
+        })
     })
     .join()
     .map_err(|_| anyhow::anyhow!("liteparse probe thread panicked"))?
@@ -50,10 +54,8 @@ pub fn overlay_liteparse_signals(
         return;
     }
 
-    let lp_by_page: std::collections::HashMap<u32, &LiteParsePageProbe> = lp_pages
-        .iter()
-        .map(|p| (p.page_number, p))
-        .collect();
+    let lp_by_page: std::collections::HashMap<u32, &LiteParsePageProbe> =
+        lp_pages.iter().map(|p| (p.page_number, p)).collect();
 
     let mut total_text_chars = 0usize;
     let mut scanned_pages = 0usize;
@@ -80,8 +82,7 @@ pub fn overlay_liteparse_signals(
         for page_probe in &mut result.pdf_page_probes {
             if let Some(lp) = lp_by_page.get(&page_probe.page_number) {
                 page_probe.extracted_text_chars = lp.extracted_text_chars;
-                page_probe.likely_scanned =
-                    lp.extracted_text_chars < config.scanned_page_threshold;
+                page_probe.likely_scanned = lp.extracted_text_chars < config.scanned_page_threshold;
             }
         }
     }
@@ -106,8 +107,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn phase0_mini_pdf() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../docs/spike/fixtures/phase0-mini.pdf")
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/spike/fixtures/phase0-mini.pdf")
     }
 
     #[test]
@@ -119,8 +119,8 @@ mod tests {
         let bytes = std::fs::read(path).expect("read fixture");
         let config = ParseProbeConfig::from_env();
 
-        let lopdf_only = ParseProbe::probe_with_config(&bytes, "phase0-mini.pdf", &config)
-            .expect("lopdf probe");
+        let lopdf_only =
+            ParseProbe::probe_with_config(&bytes, "phase0-mini.pdf", &config).expect("lopdf probe");
 
         let hybrid = probe_pdf_hybrid(&bytes, "phase0-mini.pdf", &config).expect("hybrid probe");
 

@@ -41,7 +41,10 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
     let content_store = match runtime.config.content_store.as_ref() {
         Some(store) => store,
         None => {
-            return super::error_result("index_lookup", "content_store is not configured".to_string());
+            return super::error_result(
+                "index_lookup",
+                "content_store is not configured".to_string(),
+            );
         }
     };
 

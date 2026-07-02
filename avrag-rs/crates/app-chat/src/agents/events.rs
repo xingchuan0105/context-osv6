@@ -102,13 +102,6 @@ pub enum AgentEvent {
     TurnStart { iteration: u8, phase: String },
     /// ADR-0008: ReAct turn ended.
     TurnEnd { iteration: u8, exit_reason: String },
-    /// ADR-0008: Query normalization completed.
-    QueryResolved {
-        raw: String,
-        resolved: String,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        slots: Vec<String>,
-    },
     /// ADR-0008: Synthesis JSON contract active.
     SynthesisContract { schema_version: String },
 }

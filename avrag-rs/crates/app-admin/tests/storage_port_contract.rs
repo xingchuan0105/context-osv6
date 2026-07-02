@@ -5,7 +5,7 @@ use app_admin::AdminContext;
 use app_core::{AdminStorePort, MemoryState, ObjectStorePort, StorageContext};
 use async_trait::async_trait;
 use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
-use common::{AppError, ApiKeyRow, CreateApiKeyRequest, NotificationRow};
+use common::{ApiKeyRow, AppError, CreateApiKeyRequest, NotificationRow};
 use contracts::UserPreferences;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -234,7 +234,10 @@ impl AdminStorePort for RecordingAdminStore {
         _auth: &AuthContext,
         _org_id: OrgId,
     ) -> Result<app_core::AdminOrgInfo, AppError> {
-        Err(AppError::not_found("org_not_found", "Organization not found"))
+        Err(AppError::not_found(
+            "org_not_found",
+            "Organization not found",
+        ))
     }
 
     async fn list_users(
@@ -260,7 +263,10 @@ impl AdminStorePort for RecordingAdminStore {
         _org_id: OrgId,
         _period: &str,
     ) -> Result<app_core::AdminUsageStats, AppError> {
-        Err(AppError::not_found("org_not_found", "Organization not found"))
+        Err(AppError::not_found(
+            "org_not_found",
+            "Organization not found",
+        ))
     }
 
     async fn set_org_blocked(

@@ -364,7 +364,9 @@ fn chunk_ids_one_per_doc_from_transcript(transcript: &str) -> Vec<String> {
             if is_placeholder_chunk_id(chunk_id) || chunk_id.is_empty() || doc_id.is_empty() {
                 continue;
             }
-            by_doc.entry(doc_id.to_string()).or_insert_with(|| chunk_id.to_string());
+            by_doc
+                .entry(doc_id.to_string())
+                .or_insert_with(|| chunk_id.to_string());
         }
     }
     by_doc.into_values().collect()
@@ -394,11 +396,7 @@ fn mock_synthesis_json_rag(transcript: &str, system_prompt: &str) -> String {
             .first()
             .map(|id| format!(" [[cite:{id}]]"))
             .unwrap_or_default();
-        format!(
-            "{}{}",
-            MockLlmRoute::FormatSkillPpt.canned_response(),
-            cite
-        )
+        format!("{}{}", MockLlmRoute::FormatSkillPpt.canned_response(), cite)
     } else if system_prompt.contains("User prefers format skill: html-renderer") {
         let cite = chunk_ids
             .first()

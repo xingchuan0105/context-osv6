@@ -12,3 +12,11 @@ pub fn env_flag_enabled(key: &str, default: bool) -> bool {
 pub fn vlm_summary_enabled() -> bool {
     env_flag_enabled("INGESTION_VLM_SUMMARY_ENABLED", true)
 }
+
+pub fn triplet_batch_token_budget() -> i64 {
+    std::env::var("INGESTION_TRIPLET_TOKEN_BUDGET")
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(3_000)
+}

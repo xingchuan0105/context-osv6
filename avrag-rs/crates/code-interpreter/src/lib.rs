@@ -17,7 +17,7 @@
 
 mod bridge;
 
-pub use bridge::{bridge_shim_client_method_names, HostBridge};
+pub use bridge::{HostBridge, bridge_shim_client_method_names};
 
 use std::io::Read;
 use std::process::{Command, Stdio};
@@ -340,7 +340,9 @@ print(json.dumps(chunks))
             .unwrap();
         assert!(result.success, "stderr: {}", result.stderr);
         assert!(
-            result.stdout.contains("00000000-0000-4000-8000-000000000001"),
+            result
+                .stdout
+                .contains("00000000-0000-4000-8000-000000000001"),
             "stdout: {}",
             result.stdout
         );

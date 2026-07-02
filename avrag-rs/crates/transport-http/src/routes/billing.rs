@@ -69,7 +69,11 @@ async fn get_usage_history(
     Extension(RequestState(state)): Extension<RequestState>,
     Query(params): Query<HistoryParams>,
 ) -> Json<ApiResponse<avrag_billing::UsageHistoryResponse>> {
-    Json(state.billing_get_usage_history(params.days.unwrap_or(7)).await)
+    Json(
+        state
+            .billing_get_usage_history(params.days.unwrap_or(7))
+            .await,
+    )
 }
 
 async fn get_usage_forecast(

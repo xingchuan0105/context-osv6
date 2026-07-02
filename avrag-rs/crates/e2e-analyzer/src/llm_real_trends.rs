@@ -30,13 +30,11 @@ pub fn collect_llm_real_series(
             .to_string();
         for artifact in loader::load_llm_real_run(run_dir) {
             let total_tokens = artifact.usage.as_ref().and_then(|u| {
-                u.get("total_tokens")
-                    .and_then(|v| v.as_u64())
-                    .or_else(|| {
-                        let prompt = u.get("prompt_tokens")?.as_u64()?;
-                        let completion = u.get("completion_tokens")?.as_u64()?;
-                        Some(prompt + completion)
-                    })
+                u.get("total_tokens").and_then(|v| v.as_u64()).or_else(|| {
+                    let prompt = u.get("prompt_tokens")?.as_u64()?;
+                    let completion = u.get("completion_tokens")?.as_u64()?;
+                    Some(prompt + completion)
+                })
             });
             let citation_count = artifact
                 .extra
@@ -77,8 +75,12 @@ pub fn generate_llm_real_trends_report(
     }
 
     let mut out = String::from("# llm_real Trends\n\n");
-    out.push_str("| test | runs | empty_warn_rate | error+done_rate | avg_tokens | citation_ok_rate |\n");
-    out.push_str("|------|------|-----------------|-----------------|------------|----------------|\n");
+    out.push_str(
+        "| test | runs | empty_warn_rate | error+done_rate | avg_tokens | citation_ok_rate |\n",
+    );
+    out.push_str(
+        "|------|------|-----------------|-----------------|------------|----------------|\n",
+    );
 
     for (test_name, points) in series {
         let n = points.len().max(1) as f64;

@@ -57,9 +57,9 @@ impl ChatContext {
 #[cfg(test)]
 mod tests {
     use super::profile_merge::{
-        apply_hint_updates, apply_profile_delta, apply_profile_delta_from_value,
-        apply_singleton_update, apply_slot_updates, parse_profile_delta_response, truncate_text,
-        MAX_DESCRIPTION_LEN, MAX_EVIDENCE_ITEMS, MAX_EVIDENCE_LEN,
+        MAX_DESCRIPTION_LEN, MAX_EVIDENCE_ITEMS, MAX_EVIDENCE_LEN, apply_hint_updates,
+        apply_profile_delta, apply_profile_delta_from_value, apply_singleton_update,
+        apply_slot_updates, parse_profile_delta_response, truncate_text,
     };
     use super::profile_types::ProfileDelta;
 

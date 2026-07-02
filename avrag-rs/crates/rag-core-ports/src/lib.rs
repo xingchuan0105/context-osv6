@@ -5,8 +5,8 @@ pub mod port_rows;
 
 pub use chat_persistence::{AppendChatTurn, ChatPersistencePort};
 pub use port_rows::{
-    DocumentAssetRow, MultimodalChunkRow, NotificationCreateParams, ConversationHistoryHit,
-    ConversationHistoryScope, UserProfileRow,
+    ConversationHistoryHit, ConversationHistoryScope, DocumentAssetRow, MultimodalChunkRow,
+    NotificationCreateParams, UserProfileRow,
 };
 
 #[async_trait]

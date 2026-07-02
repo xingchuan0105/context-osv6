@@ -1,8 +1,8 @@
 //! Shared dispatch for on-demand memory tools (conversation history + user profile).
 
 use app_core::ChatPersistencePort;
-use avrag_auth::AuthContext;
 use app_core::domain_rows::{ConversationHistoryHit, ConversationHistoryScope};
+use avrag_auth::AuthContext;
 use contracts::{ToolResult, ToolStatus};
 use serde_json::Value;
 use uuid::Uuid;
@@ -21,27 +21,21 @@ pub async fn conversation_history_load(
         .unwrap_or("")
         .to_string();
     let scope = parse_history_scope(args.get("scope"));
-    let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(20).clamp(1, 50);
+    let limit = args
+        .get("limit")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(20)
+        .clamp(1, 50);
 
     let exclude_ids = collect_excluded_message_ids(repo, auth, session_id).await;
 
     match repo
-        .search_conversation_history(
-            auth,
-            session_id,
-            &query,
-            scope,
-            limit,
-            &exclude_ids,
-        )
+        .search_conversation_history(auth, session_id, &query, scope, limit, &exclude_ids)
         .await
     {
         Ok(messages) => {
             let scope_label = scope_label(scope);
-            let msg_json: Vec<Value> = messages
-                .into_iter()
-                .map(history_hit_json)
-                .collect();
+            let msg_json: Vec<Value> = messages.into_iter().map(history_hit_json).collect();
             ToolResult {
                 tool: "conversation_history_load".to_string(),
                 version: "1.0".to_string(),
@@ -67,7 +61,11 @@ pub async fn conversation_history_load(
 }
 
 fn parse_history_scope(value: Option<&Value>) -> ConversationHistoryScope {
-    match value.and_then(|v| v.as_str()).map(str::trim).map(str::to_lowercase) {
+    match value
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .map(str::to_lowercase)
+    {
         Some(scope) if scope == "session" => ConversationHistoryScope::Session,
         _ => ConversationHistoryScope::Notebook,
     }
@@ -116,10 +114,7 @@ async fn collect_excluded_message_ids(
     }
 }
 
-pub async fn user_profile_load(
-    auth: &AuthContext,
-    repo: &dyn ChatPersistencePort,
-) -> ToolResult {
+pub async fn user_profile_load(auth: &AuthContext, repo: &dyn ChatPersistencePort) -> ToolResult {
     let tool = "user_profile_load".to_string();
     let version = "1.0".to_string();
 

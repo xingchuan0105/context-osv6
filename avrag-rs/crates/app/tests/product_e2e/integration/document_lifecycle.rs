@@ -8,7 +8,10 @@ use crate::product_e2e::TestContext;
 async fn delete_document_hides_status_and_content() {
     super::require_integration_suite();
     let mut ctx = TestContext::new_smoke_with_rag().await;
-    let upload = ctx.upload_document("antifragile.txt").await.expect("upload");
+    let upload = ctx
+        .upload_document("antifragile.txt")
+        .await
+        .expect("upload");
     let status = ctx
         .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
         .await
@@ -26,8 +29,7 @@ async fn delete_document_hides_status_and_content() {
         .await
         .expect_err("deleted document status should not be reachable");
     assert!(
-        status_resp.to_string().contains("404")
-            || status_resp.to_string().contains("client error"),
+        status_resp.to_string().contains("404") || status_resp.to_string().contains("client error"),
         "expected 404 after delete, got {status_resp}"
     );
 }
@@ -36,7 +38,10 @@ async fn delete_document_hides_status_and_content() {
 async fn reindex_completed_document_requeues_ingestion() {
     super::require_integration_suite();
     let mut ctx = TestContext::new_smoke_with_rag().await;
-    let upload = ctx.upload_document("antifragile.txt").await.expect("upload");
+    let upload = ctx
+        .upload_document("antifragile.txt")
+        .await
+        .expect("upload");
     let status = ctx
         .wait_for_ingestion(&upload.document_id, Duration::from_secs(120))
         .await

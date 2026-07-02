@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use common::{AppError};
+use common::AppError;
 use contracts::chat::{ChatRequest, ModeDebug};
-use contracts::notebooks::{ChatSession};
+use contracts::notebooks::ChatSession;
 
 use crate::agents::runtime::AgentRequest;
 use crate::chat_streaming::STREAM_PLACEHOLDER_MESSAGE_ID;
@@ -29,8 +29,7 @@ pub(crate) async fn dispatch_mode(
     let agent_kind = crate::agents::AgentKind::parse(&request.agent_type);
 
     if matches!(agent_kind, Some(crate::agents::AgentKind::Rag)) && request.doc_scope.is_empty() {
-        let message =
-            crate::i18n::clarify::need_doc_scope(request.language.as_deref()).to_string();
+        let message = crate::i18n::clarify::need_doc_scope(request.language.as_deref()).to_string();
         return state
             .execute_clarify_mode_core(request, session, &message)
             .await;
@@ -69,8 +68,12 @@ async fn run_general_mode(
         return Err(AppError::internal("agent service is not configured"));
     };
 
-    let mut agent_request =
-        agent_request_with_resolved_session(state.build_agent_request(request, kind, Some(session.id.clone())).await, session);
+    let mut agent_request = agent_request_with_resolved_session(
+        state
+            .build_agent_request(request, kind, Some(session.id.clone()))
+            .await,
+        session,
+    );
     if let Some(config) = stream_config {
         agent_request.stream = true;
         agent_request.cancellation_token = Some(config.token.clone());
@@ -164,7 +167,11 @@ async fn run_search_mode(
 
     let mut agent_request = agent_request_with_resolved_session(
         state
-            .build_agent_request(request, crate::agents::AgentKind::Search, Some(session.id.clone()))
+            .build_agent_request(
+                request,
+                crate::agents::AgentKind::Search,
+                Some(session.id.clone()),
+            )
             .await,
         session,
     );
@@ -271,7 +278,11 @@ async fn run_rag_mode(
 
     let mut agent_request = agent_request_with_resolved_session(
         state
-            .build_agent_request(request, crate::agents::AgentKind::Rag, Some(session.id.clone()))
+            .build_agent_request(
+                request,
+                crate::agents::AgentKind::Rag,
+                Some(session.id.clone()),
+            )
             .await,
         session,
     );

@@ -76,16 +76,10 @@ impl ChatContext {
         let tool_results: Vec<contracts::ToolResult> = execution.response.tool_results.iter().map(|r| {
             contracts::ToolResult::from(r.clone())
         }).collect();
-        let user_turn_metadata = execution
-            .query_resolution
-            .clone()
-            .map(|meta| serde_json::json!({ "query_resolution": meta }));
-        let user_resolved_query = execution
-            .query_resolution
-            .as_ref()
-            .and_then(|meta| meta.get("resolved_query"))
-            .and_then(|v| v.as_str())
-            .filter(|q| !q.trim().is_empty());
+        // ADR-0010: server-side query normalization removed; no per-turn
+        // resolved_query or query_resolution metadata is persisted.
+        let user_turn_metadata: Option<serde_json::Value> = None;
+        let user_resolved_query: Option<&str> = None;
         let assistant_message_id = chat_persistence
             .append_chat_turn(
                 &self.auth,

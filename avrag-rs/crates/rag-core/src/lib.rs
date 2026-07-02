@@ -11,6 +11,6 @@ pub use evidence_gate::{
     EvidenceGateOutcome,
 };
 pub use focus_mode::{CompressedChunk, FocusError, FocusMode, ScoreBasedFocusMode};
-pub use retrieval::ScoredChunk;
 pub use ports::{CachePort, ContentStore, ContentStoreError, IndexedChunk};
+pub use retrieval::ScoredChunk;
 pub use runtime::{RagConfig, RagRuntime, RetrievalDataPlane};

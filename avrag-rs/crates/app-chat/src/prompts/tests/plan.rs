@@ -1,7 +1,10 @@
 use super::super::internal::build_rag_envelope;
 use super::super::*;
-use contracts::{ExecutePlanItem, ExecutePlanRequest, ExecutePlanResponse, ExecutePlanSummaryMode, GraphHint, PlaceholderTriplet, QueryEntity, RetrievalPlannerOutput, ToolCall};
-use contracts::chat::{ChatRequest};
+use contracts::chat::ChatRequest;
+use contracts::{
+    ExecutePlanItem, ExecutePlanRequest, ExecutePlanResponse, ExecutePlanSummaryMode, GraphHint,
+    PlaceholderTriplet, QueryEntity, RetrievalPlannerOutput, ToolCall,
+};
 
 fn request(agent_type: &str, query: &str, doc_scope: &[&str]) -> ChatRequest {
     ChatRequest {
@@ -413,4 +416,3 @@ fn plan_strategy_to_tool_calls_handles_empty_strategy() {
     let calls = plan_strategy_to_tool_calls(&strategy);
     assert!(calls.is_empty());
 }
-

@@ -8,8 +8,11 @@ use avrag_auth::AuthContext;
 use avrag_retrieval_data_plane::{
     GraphRelationHint, GraphSearchOutput, GraphSearchRequest, WeightedChunkList,
 };
-use contracts::{BackendTrace, ChannelCoverage, ChannelTraceItem, Coverage, ExecutePlanRequest, ExecutePlanResponse, PlaceholderTriplet, RelationPath, RetrievalBundle, RetrievedChunk};
 use contracts::chat::{DegradeReason, DegradeTraceItem};
+use contracts::{
+    BackendTrace, ChannelCoverage, ChannelTraceItem, Coverage, ExecutePlanRequest,
+    ExecutePlanResponse, PlaceholderTriplet, RelationPath, RetrievalBundle, RetrievedChunk,
+};
 use sha2::{Digest, Sha256};
 
 const RETRIEVAL_CACHE_TTL_SECS: u64 = 30 * 60; // 30 minutes
@@ -482,7 +485,9 @@ impl RagRuntime {
             Ok(Err(error)) => {
                 let degrade_trace = vec![DegradeTraceItem {
                     stage: "multimodal_dense".to_string(),
-                    reason: DegradeReason::Other(format!("Multimodal dense channel failed: {error}")),
+                    reason: DegradeReason::Other(format!(
+                        "Multimodal dense channel failed: {error}"
+                    )),
                     impact: "Skipping multimodal dense retrieval channel".to_string(),
                 }];
                 MultimodalChannelOutput {
@@ -755,11 +760,13 @@ impl RagRuntime {
             let names = content_store
                 .get_document_names(auth, &unique_doc_ids)
                 .await
-                .inspect_err(|e| tracing::warn!(
-                    error = %e,
-                    doc_ids = ?unique_doc_ids,
-                    "content_store.get_document_names failed, degrading"
-                ))
+                .inspect_err(|e| {
+                    tracing::warn!(
+                        error = %e,
+                        doc_ids = ?unique_doc_ids,
+                        "content_store.get_document_names failed, degrading"
+                    )
+                })
                 .unwrap_or_default();
             if names.len() < unique_doc_ids.len() {
                 tracing::info!(

@@ -6,7 +6,6 @@ use crate::product_e2e::{
 
 #[tokio::test]
 async fn rag_multiround_profile_codegen_doc_profile_then_chunk_fetch() {
-
     super::require_smoke_suite();
     let fixture = crate::product_e2e::fixtures::shared_rag_fixture().await;
     let upload = &fixture.upload;
@@ -17,10 +16,7 @@ async fn rag_multiround_profile_codegen_doc_profile_then_chunk_fetch() {
         .query_document_chunk_ids(&upload.document_id)
         .await
         .unwrap();
-    assert!(
-        !chunk_ids.is_empty(),
-        "expected chunk ids after ingestion"
-    );
+    assert!(!chunk_ids.is_empty(), "expected chunk ids after ingestion");
 
     ctx.set_mock_rag_multiround_profile(true);
     ctx.set_mock_rag_codegen_doc_id(&upload.document_id);

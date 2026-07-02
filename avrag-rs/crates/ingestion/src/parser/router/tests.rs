@@ -1,6 +1,6 @@
+use super::pdf_plan::{build_pdf_parse_plan, route_page, summarize_pdf_reason};
 use super::*;
 use crate::parser::probe::{ParseProbeConfig, PdfPageProbeResult};
-use super::pdf_plan::{build_pdf_parse_plan, route_page, summarize_pdf_reason};
 
 #[test]
 fn text_file_routing_uses_local_text_parser() {
@@ -60,12 +60,8 @@ fn pptx_file_routing_uses_office_service() {
 
 #[test]
 fn presentation_file_routing_uses_pdf_after_conversion() {
-    let decision = ParseRouter::route(
-        b"fake ppt",
-        "legacy.ppt",
-        "application/vnd.ms-powerpoint",
-    )
-    .unwrap();
+    let decision =
+        ParseRouter::route(b"fake ppt", "legacy.ppt", "application/vnd.ms-powerpoint").unwrap();
     assert_eq!(decision.route, ParseRoute::OfficeService);
     assert!(matches!(
         decision.plan,

@@ -31,6 +31,8 @@ pub(crate) struct E2eBootstrapConfig {
     pub worker_timeout_secs: u64,
     /// Worker writes its bound health port here when `AVRAG_WORKER_HEALTH_PORT=0`.
     pub worker_health_port_file: String,
+    /// Ingestion queue group for worker claim + API enqueue alignment (smoke uses `e2e-smoke`).
+    pub ingestion_queue_group: String,
 }
 
 impl E2eBootstrapConfig {
@@ -39,6 +41,31 @@ impl E2eBootstrapConfig {
         config.object_storage.bucket.clear();
         config.object_storage.access_key.clear();
         config.object_storage.secret_key.clear();
+    }
+
+    /// Worker loads `AppConfig::from_env()` and inherits the repo `.env` MinIO/S3 keys.
+    /// Clear them so the subprocess uses `AVRAG_OBJECT_ROOT` local storage like the API bootstrap.
+    fn force_local_object_store_env(cmd: &mut tokio::process::Command) {
+        for key in [
+            "S3_ENDPOINT",
+            "S3_BUCKET",
+            "S3_ACCESS_KEY",
+            "S3_SECRET_KEY",
+            "MINIO_ENDPOINT",
+            "MINIO_BUCKET",
+            "MINIO_ACCESS_KEY",
+            "MINIO_SECRET_KEY",
+        ] {
+            cmd.env(key, "");
+        }
+    }
+
+    fn e2e_prompt_dir() -> String {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../prompts");
+        path.canonicalize()
+            .unwrap_or(path)
+            .to_string_lossy()
+            .into_owned()
     }
 
     fn apply_infra_overrides(&self, config: &mut AppConfig, base_url: &str) {
@@ -106,6 +133,7 @@ impl E2eBootstrapConfig {
                 &mut config.agent_llm,
                 &mut config.memory_llm,
                 &mut config.ingestion_llm,
+                &mut config.triplet_llm,
             ] {
                 llm.base_url = url.clone();
                 llm.api_key = "mock".to_string();
@@ -124,8 +152,7 @@ impl E2eBootstrapConfig {
             config.mm_embedding.base_url = url.clone();
             config.mm_embedding.api_key = "mock".to_string();
             config.mm_embedding.model = mm_model.clone();
-            config.mm_embedding.api_style =
-                Some("dashscope_multimodal_embedding".to_string());
+            config.mm_embedding.api_style = Some("dashscope_multimodal_embedding".to_string());
             config.mm_embedding.dimensions = Some(1024);
             config.milvus.multimodal_vector_dim = 1024;
         }
@@ -155,7 +182,14 @@ impl E2eBootstrapConfig {
     /// are shared with `AppConfig::from_env` (see `app-core` config) — worker has no
     /// separate `AVRAG_ORG_ID` / `AVRAG_USER_ID` keys; E2E must keep API headers,
     /// bootstrap config, and worker env aligned on the same pair.
-    pub(crate) fn apply_worker_env(&self, cmd: &mut tokio::process::Command, base_url: &str) {
+    pub(crate) fn apply_worker_env(
+        &self,
+        cmd: &mut tokio::process::Command,
+        base_url: &str,
+        worker_id: Option<&str>,
+    ) {
+        let worker_id = worker_id.unwrap_or("test-worker");
+        Self::force_local_object_store_env(cmd);
         cmd.env("E2E_ENABLED", "true")
             .env("NEXT_PUBLIC_DEV_ORG_ID", &self.org_id)
             .env("NEXT_PUBLIC_DEV_USER_ID", &self.user_id)
@@ -165,15 +199,20 @@ impl E2eBootstrapConfig {
                 if self.auto_migrate { "true" } else { "false" },
             )
             .env("AVRAG_OBJECT_ROOT", &self.object_root)
+            .env("PROMPT_DIR", Self::e2e_prompt_dir())
             .env(
                 "AVRAG_ENABLE_RAG",
                 if self.enable_rag { "true" } else { "false" },
             )
             .env("REDIS_URL", &self.redis_url)
             .env("AVRAG_PUBLIC_BASE_URL", base_url)
-            .env("AVRAG_WORKER_ID", "test-worker")
+            .env("AVRAG_WORKER_ID", worker_id)
+            .env("AVRAG_WORKER_QUEUE_GROUP", &self.ingestion_queue_group)
             .env("AVRAG_WORKER_HEALTH_PORT", "0")
-            .env("AVRAG_WORKER_HEALTH_PORT_FILE", &self.worker_health_port_file)
+            .env(
+                "AVRAG_WORKER_HEALTH_PORT_FILE",
+                &self.worker_health_port_file,
+            )
             .env("AVRAG_WORKER_POLL_MILLIS", "200")
             .env(
                 "AVRAG_INGESTION_TASK_TIMEOUT_SECS",
@@ -199,6 +238,11 @@ impl E2eBootstrapConfig {
                 "INGESTION_LLM_BASE_URL",
                 "INGESTION_LLM_API_KEY",
                 "INGESTION_LLM_MODEL",
+                "TRIPLET_LLM_BASE_URL",
+                "TRIPLET_LLM_API_KEY",
+                "TRIPLET_LLM_MODEL",
+                "TRIPLET_LLM_TIMEOUT_MS",
+                "TRIPLET_LLM_ENABLE_THINKING",
                 "EMBEDDING_BASE_URL",
                 "EMBEDDING_API_KEY",
                 "EMBEDDING_MODEL",
@@ -212,6 +256,7 @@ impl E2eBootstrapConfig {
                 "PDF_VISUAL_PAGES_PER_CHUNK",
                 "INGESTION_PDF_MAX_PAGES",
                 "INGESTION_TRIPLET_ENABLED",
+                "INGESTION_TRIPLET_TOKEN_BUDGET",
                 "INGESTION_VLM_TRIPLET_ENABLED",
                 "INGESTION_VLM_SUMMARY_ENABLED",
                 "INGESTION_TRIPLET_MIN_CONFIDENCE",
@@ -309,7 +354,10 @@ impl E2eBootstrapConfig {
             cmd.env("OFFICE_PARSER_BASE_URL", url)
                 .env("OFFICE_PARSER_TIMEOUT_MS", "30000");
         } else {
-            Self::forward_optional_env(cmd, &["OFFICE_PARSER_BASE_URL", "OFFICE_PARSER_TIMEOUT_MS"]);
+            Self::forward_optional_env(
+                cmd,
+                &["OFFICE_PARSER_BASE_URL", "OFFICE_PARSER_TIMEOUT_MS"],
+            );
         }
 
         Self::forward_optional_env(
@@ -328,6 +376,7 @@ impl E2eBootstrapConfig {
                 "PDF_RENDERER_BASE_URL",
                 "INGESTION_PDF_MAX_PAGES",
                 "INGESTION_TRIPLET_ENABLED",
+                "INGESTION_TRIPLET_TOKEN_BUDGET",
                 "INGESTION_VLM_TRIPLET_ENABLED",
                 "INGESTION_VLM_SUMMARY_ENABLED",
             ],

@@ -1,5 +1,5 @@
 use avrag_guardrails::GuardPipeline;
-use contracts::{ToolResult};
+use contracts::ToolResult;
 use contracts::chat::{DegradeReason, DegradeTraceItem};
 
 const REDACTED_PLACEHOLDER: &str = "[REDACTED: content flagged by security guard]";

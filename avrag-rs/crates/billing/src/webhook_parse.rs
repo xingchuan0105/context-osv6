@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
 
-use crate::types::{BillingConfig, StripeSubscriptionSnapshot, STATUS_ACTIVE};
+use crate::types::{BillingConfig, STATUS_ACTIVE, StripeSubscriptionSnapshot};
 
 fn string_or_nested_id(value: Option<&serde_json::Value>) -> Option<String> {
     let value = value?;

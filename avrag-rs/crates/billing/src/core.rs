@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::types::{
-    BillingConfig, BillingProvider, Subscription, UsageForecastResponse, UsageHistoryResponse,
-    UsageWindowResponse, WebhookClaim, PLAN_FREE, PLAN_PLUS, PLAN_PRO,
+    BillingConfig, BillingProvider, PLAN_FREE, PLAN_PLUS, PLAN_PRO, Subscription,
+    UsageForecastResponse, UsageHistoryResponse, UsageWindowResponse, WebhookClaim,
 };
 
 pub(crate) fn build_plan_payloads(

@@ -66,7 +66,10 @@ pub fn parse_page_status_from_ir(document_ir: &DocumentIr) -> HashMap<u32, PageP
     // Backward compatibility: tolerate loosely-typed JSON arrays.
     if let Ok(entries) = serde_json::from_str::<Vec<serde_json::Value>>(raw) {
         for entry in entries {
-            let page_no = entry.get("page_no").and_then(|v| v.as_u64()).map(|n| n as u32);
+            let page_no = entry
+                .get("page_no")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as u32);
             let status = entry
                 .get("status")
                 .and_then(|v| v.as_str())

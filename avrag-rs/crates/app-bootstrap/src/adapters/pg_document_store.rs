@@ -1,22 +1,21 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use app_core::{
-    domain_rows::DocumentDeletionOutcome,
-    domain_rows::DocumentScopeState, domain_rows::DocumentTaskSeed,
-    domain_rows::DocumentUploadMutationOutcome, domain_rows::DocumentUploadQueueOutcome,
-    DocumentStorePort,
-};
 use crate::domain_row_convert::{
     document_deletion_outcome, document_scope_state, document_task_seed,
     document_upload_mutation_outcome, document_upload_queue_outcome,
 };
 use crate::pg_error::map_pg_error;
+use app_core::{
+    DocumentStorePort, domain_rows::DocumentDeletionOutcome, domain_rows::DocumentScopeState,
+    domain_rows::DocumentTaskSeed, domain_rows::DocumentUploadMutationOutcome,
+    domain_rows::DocumentUploadQueueOutcome,
+};
+use async_trait::async_trait;
 use avrag_auth::AuthContext;
 use avrag_storage_pg::PgAppRepository;
 use common::{AppError, Document, DocumentContentResponse, ParsedPreviewResponse, SourceRow};
-use contracts::documents::{DocumentStatus};
-use contracts::notebooks::{Notebook};
+use contracts::documents::DocumentStatus;
+use contracts::notebooks::Notebook;
 use ingestion_types::{AuditRecord, IngestionTask};
 use uuid::Uuid;
 

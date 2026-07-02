@@ -1,11 +1,7 @@
 //! Mock Embedding HTTP server for Product E2E.
 
 use super::persistent_runtime::{bind_persistent_listener, spawn_persistent};
-use axum::{
-    Json, Router,
-    response::IntoResponse,
-    routing::post,
-};
+use axum::{Json, Router, response::IntoResponse, routing::post};
 use serde_json::json;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -64,7 +60,9 @@ async fn mock_dashscope_multimodal_embedding_handler(
     if embedding_should_503.load(Ordering::SeqCst) {
         return (
             axum::http::StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({ "code": "ServiceUnavailable", "message": "embedding service unavailable" })),
+            Json(
+                json!({ "code": "ServiceUnavailable", "message": "embedding service unavailable" }),
+            ),
         )
             .into_response();
     }
@@ -73,7 +71,9 @@ async fn mock_dashscope_multimodal_embedding_handler(
         .as_u64()
         .or_else(|| req["parameters"]["dimensions"].as_u64())
         .unwrap_or(1024) as usize;
-    let fused = req["parameters"]["enable_fusion"].as_bool().unwrap_or(false);
+    let fused = req["parameters"]["enable_fusion"]
+        .as_bool()
+        .unwrap_or(false);
     let contents_len = req["input"]["contents"]
         .as_array()
         .map(|arr| arr.len())
@@ -85,9 +85,7 @@ async fn mock_dashscope_multimodal_embedding_handler(
         "text"
     };
     // Stable vector so multimodal dense retrieval always matches indexed chunks.
-    let embedding: Vec<f32> = (0..dim)
-        .map(|j| 0.1_f32 + (j % 10) as f32 * 0.01)
-        .collect();
+    let embedding: Vec<f32> = (0..dim).map(|j| 0.1_f32 + (j % 10) as f32 * 0.01).collect();
 
     Json(json!({
         "output": {

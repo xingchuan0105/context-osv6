@@ -6,9 +6,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use crate::RequestState;
-use crate::auth_guard::{ensure_user_notebook_access, forbid_api_key, require_user_admin, require_user_session};
 use super::super::{app_error_response, error_response};
+use crate::RequestState;
+use crate::auth_guard::{
+    ensure_user_notebook_access, forbid_api_key, require_user_admin, require_user_session,
+};
 
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct CreateShareRequest {
@@ -50,10 +52,7 @@ fn postgres_unavailable_response() -> Response {
     )
 }
 
-async fn require_notebook_user_access(
-    state: &AppState,
-    notebook_id: &str,
-) -> Result<(), Response> {
+async fn require_notebook_user_access(state: &AppState, notebook_id: &str) -> Result<(), Response> {
     if let Err(error) = ensure_user_notebook_access(state, notebook_id).await {
         return Err(app_error_response(error));
     }
@@ -65,7 +64,10 @@ pub(crate) async fn create_share_handler(
     Path(notebook_id): Path<String>,
     Json(req): Json<CreateShareRequest>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "this endpoint requires a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
@@ -89,7 +91,10 @@ pub(crate) async fn revoke_share_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path((notebook_id, token)): Path<(String, String)>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "this endpoint requires a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
@@ -108,7 +113,10 @@ pub(crate) async fn get_share_settings_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(notebook_id): Path<String>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "this endpoint requires a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
@@ -128,7 +136,10 @@ pub(crate) async fn update_share_settings_handler(
     Path(notebook_id): Path<String>,
     Json(req): Json<UpdateShareSettingsBody>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "this endpoint requires a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
@@ -151,7 +162,10 @@ pub(crate) async fn update_access_level_handler(
     Path(notebook_id): Path<String>,
     Json(req): Json<AccessLevelBody>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "this endpoint requires a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
@@ -177,7 +191,10 @@ pub(crate) async fn get_share_analytics_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(notebook_id): Path<String>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "this endpoint requires a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
@@ -214,7 +231,10 @@ pub(crate) async fn get_share_access_logs_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(notebook_id): Path<String>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "this endpoint requires a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
@@ -413,7 +433,10 @@ pub(crate) async fn list_members_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(notebook_id): Path<String>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "this endpoint requires a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
@@ -450,7 +473,10 @@ pub(crate) async fn invite_member_handler(
     Path(notebook_id): Path<String>,
     Json(req): Json<InviteMemberBody>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "this endpoint requires a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
@@ -473,7 +499,10 @@ pub(crate) async fn accept_member_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path((notebook_id, member_id)): Path<(String, String)>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "this endpoint requires a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if !state.postgres_configured() {
@@ -489,7 +518,10 @@ pub(crate) async fn decline_member_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path((notebook_id, member_id)): Path<(String, String)>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "this endpoint requires a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if !state.postgres_configured() {
@@ -505,7 +537,10 @@ pub(crate) async fn remove_member_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path((notebook_id, member_id)): Path<(String, String)>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "this endpoint requires a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
@@ -523,7 +558,10 @@ pub(crate) async fn remove_member_handler(
 pub(crate) async fn list_notifications_handler(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "this endpoint requires a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     match state.list_notifications(100, 0).await {
@@ -540,7 +578,10 @@ pub(crate) async fn mark_notification_read_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(notification_id): Path<String>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "this endpoint requires a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     match state.mark_notification_read(&notification_id).await {

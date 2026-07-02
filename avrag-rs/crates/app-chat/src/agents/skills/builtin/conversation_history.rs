@@ -80,7 +80,7 @@ impl SkillComponent for ConversationHistoryLoad {
                 return crate::agents::skills::memory_dispatch::memory_tool_error(
                     self.id(),
                     "conversation history requires auth, session_id, and pg repository",
-                )
+                );
             }
         };
         crate::agents::skills::memory_dispatch::conversation_history_load(
@@ -144,7 +144,7 @@ impl SkillComponent for UserProfileLoad {
                 return crate::agents::skills::memory_dispatch::memory_tool_error(
                     self.id(),
                     "user profile load requires auth and pg repository",
-                )
+                );
             }
         };
         crate::agents::skills::memory_dispatch::user_profile_load(auth, repo).await

@@ -9,13 +9,13 @@ mod core;
 mod creem_client;
 pub mod quota_service;
 mod stripe_client;
-mod tier;
 #[cfg(test)]
 mod tests_impl;
-#[allow(dead_code)]
-mod webhook_parse;
+mod tier;
 mod types;
 pub mod usage_limit;
+#[allow(dead_code)]
+mod webhook_parse;
 
 pub use quota_service::{QuotaDenyReason, QuotaManager, UnifiedQuotaDecision};
 

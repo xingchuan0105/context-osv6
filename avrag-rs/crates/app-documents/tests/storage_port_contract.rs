@@ -1,13 +1,15 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use app_core::{AnalyticsServiceCtx, DocumentStorePort, MemoryState, ObjectStorePort, StorageContext};
+use app_core::{
+    AnalyticsServiceCtx, DocumentStorePort, MemoryState, ObjectStorePort, StorageContext,
+};
 use app_documents::DocumentContext;
 use async_trait::async_trait;
 use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
 use common::{AppError, CreateNotebookRequest, Document, SourceRow, now_rfc3339};
-use contracts::documents::{DocumentStatus};
-use contracts::notebooks::{Notebook};
+use contracts::documents::DocumentStatus;
+use contracts::notebooks::Notebook;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 

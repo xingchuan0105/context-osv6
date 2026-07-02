@@ -1,6 +1,9 @@
 use avrag_auth::AuthContext;
-use contracts::{DenseRetrievalArgs, DenseRetrievalModality, LexicalRetrievalArgs, ToolResult, ToolStatus, ToolTrace};
 use contracts::chat::{ChatRequest, DegradeReason, DegradeTraceItem, RagPlan, RagPlanItem};
+use contracts::{
+    DenseRetrievalArgs, DenseRetrievalModality, LexicalRetrievalArgs, ToolResult, ToolStatus,
+    ToolTrace,
+};
 
 use crate::RagRuntime;
 

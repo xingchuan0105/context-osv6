@@ -13,8 +13,8 @@ use avrag_retrieval_data_plane::{
     Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, GraphSearchOutput, GraphSearchRequest,
     MultimodalSearchRequest, RelationPathCandidate, TextDenseSearchRequest,
 };
-use contracts::{BackendTrace, Coverage, ExecutePlanResponse, RetrievalBundle, RetrievedChunk};
 use contracts::chat::{ChatMessage, ChatRequest, Citation, RagPlan, RagPlanItem};
+use contracts::{BackendTrace, Coverage, ExecutePlanResponse, RetrievalBundle, RetrievedChunk};
 use std::sync::Arc;
 use tokio::sync::Barrier;
 use uuid::Uuid;

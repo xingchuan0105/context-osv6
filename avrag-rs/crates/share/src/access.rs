@@ -7,11 +7,7 @@ use crate::{AccessLevel, ShareService};
 impl ShareService {
     pub async fn check_access(&self, ctx: &AuthContext, notebook_id: &str) -> Result<AccessLevel> {
         let notebook_uuid = Uuid::parse_str(notebook_id)?;
-        let Some(snapshot) = self
-            .store
-            .query_notebook_access(ctx, notebook_uuid)
-            .await?
-        else {
+        let Some(snapshot) = self.store.query_notebook_access(ctx, notebook_uuid).await? else {
             return Ok(AccessLevel::None);
         };
 

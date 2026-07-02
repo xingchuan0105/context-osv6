@@ -18,6 +18,8 @@ sha2.workspace = true
 chrono.workspace = true
 walkdir = "2.5"
 anyhow.workspace = true
+contracts = { path = "../../../contracts" }
+rag_quality = { path = "../../tests/rag_quality" }
 
 [dev-dependencies]
 tempfile = "3"

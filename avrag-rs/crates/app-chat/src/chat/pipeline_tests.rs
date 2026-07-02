@@ -10,9 +10,9 @@ mod tests {
     use app_documents::DocumentContext;
     use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
     use avrag_guardrails::GuardPipeline;
-    use common::{AppError, now_rfc3339, new_id};
-use contracts::chat::{ChatRequest};
-use contracts::notebooks::{ChatSession, Notebook};
+    use common::{AppError, new_id, now_rfc3339};
+    use contracts::chat::ChatRequest;
+    use contracts::notebooks::{ChatSession, Notebook};
     use tokio::sync::RwLock;
     use uuid::Uuid;
 
@@ -111,7 +111,9 @@ use contracts::notebooks::{ChatSession, Notebook};
             ),
             llm_ctx: LlmContext::new(None, None),
             orchestrator: OrchestratorContext::new(
-                Some(Arc::new(UnifiedAgentService::new(Box::new(PipelineEchoAgent)))),
+                Some(Arc::new(UnifiedAgentService::new(Box::new(
+                    PipelineEchoAgent,
+                )))),
                 None,
                 Arc::new(GuardPipeline::new()),
                 None,

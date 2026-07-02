@@ -351,8 +351,9 @@ impl ParseRouter {
                 liteparse_snapshot: None,
             }),
             "pdf" => {
-                let hybrid = super::liteparse_probe_bridge::probe_pdf_hybrid(bytes, filename, config)
-                    .map_err(|error| ParseRouteError::unsupported(error.to_string()))?;
+                let hybrid =
+                    super::liteparse_probe_bridge::probe_pdf_hybrid(bytes, filename, config)
+                        .map_err(|error| ParseRouteError::unsupported(error.to_string()))?;
                 let plan = ParsePlan::Pdf(build_pdf_parse_plan(&hybrid.probe_result, config));
                 Ok(ParseRouteDecision {
                     route: ParseRoute::Pdf,
@@ -392,4 +393,3 @@ pub fn pdf_parse_plan_for_probe(
 
 #[cfg(test)]
 mod tests;
-

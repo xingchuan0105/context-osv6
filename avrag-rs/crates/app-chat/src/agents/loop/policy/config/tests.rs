@@ -1,6 +1,4 @@
-use super::{
-    load_mode_config, AutoFallbackConfig, BudgetConfig, ModeConfig,
-};
+use super::{AutoFallbackConfig, BudgetConfig, ModeConfig, load_mode_config};
 
 #[test]
 fn rag_mode_config_deserializes_with_tool_pool_and_clusters() {
@@ -89,11 +87,13 @@ budget:
 fn rag_mode_has_mandatory_retrieve_codegen() {
     let config = load_mode_config("rag").expect("rag mode should load");
     assert!(config.inject_retrieval_query);
-    assert!(config
-        .skill_catalog
-        .mandatory
-        .retrieve
-        .contains(&"codegen".to_string()));
+    assert!(
+        config
+            .skill_catalog
+            .mandatory
+            .retrieve
+            .contains(&"codegen".to_string())
+    );
 }
 
 #[test]

@@ -32,8 +32,6 @@ fn base_request(kind: AgentKind) -> AgentRequest {
     AgentRequest {
         kind,
         query: "hello".to_string(),
-        resolved_query: "hello".to_string(),
-        query_resolution: None,
         notebook_id: None,
         session_id: None,
         doc_scope: vec![],
@@ -149,7 +147,9 @@ async fn chat_emits_routing_decision_event() {
 
     let events = sink.events();
     assert!(
-        events.iter().any(|e| matches!(e, AgentEvent::RoutingDecision { mode_id, .. } if mode_id == "chat")),
+        events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::RoutingDecision { mode_id, .. } if mode_id == "chat")),
         "expected RoutingDecision event for chat mode, got events: {:?}",
         events
     );

@@ -86,10 +86,10 @@ mod tests {
 
     #[test]
     fn embedded_json_in_prose_is_unsupported() {
-        assert!(parse_skill_request(
-            "I need memory context.\n{\"skill_request\":[\"memory\"]}"
-        )
-        .is_empty());
+        assert!(
+            parse_skill_request("I need memory context.\n{\"skill_request\":[\"memory\"]}")
+                .is_empty()
+        );
     }
 
     #[test]

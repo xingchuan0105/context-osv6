@@ -325,6 +325,8 @@ pnpm exec playwright test --project=functional e2e/specs/smoke/api-access.spec.t
   - Hallucination Rate ≤ 2%
 - **失败 = job fail**（不再 warn-only）
 
+> **实现偏差（2026-06-29 PR-6）**：实际落地的 [`release-e2e-gate.yml`](../../../.github/workflows/release-e2e-gate.yml) 只**硬门禁 Recall@15 drop ≤3% from baseline 0.80**；Citation ≥95% + Hallucination ≤2% **上报不阻断**。原因：定基线测得 Citation=80%（Q1 "谁提出 antifragility" 检索缺口 → agent refusal → 0 引文，拖累均值低于 ≥95% 期望，需更丰富 golden chunk 或 NLI，超 PR-6 范围）；Hallucination 为词重叠启发式（`GOTCHAS.md`：15–30% 误报，NLI 前是噪音）。Recall 硬门禁已双向验证：基线 80% 绿、`wrong doc_scope → 0 chunks → Recall 0%` 红。
+
 **关联验收清单**：[`FUNCTIONAL_ACCEPTANCE_CHECKLIST.md`](../../../FUNCTIONAL_ACCEPTANCE_CHECKLIST.md) §12.1–12.2
 
 ---
@@ -338,7 +340,7 @@ pnpm exec playwright test --project=functional e2e/specs/smoke/api-access.spec.t
 | **PR-3** | OpenAI + 限流/配额 E2E | `transport-http/tests/openai_*`, `product_e2e/**/quota_*`, `rate_limit_*` | smoke 或 integration 全绿 |
 | **PR-4** | Billing master CI | `.github/workflows/frontend-journey.yml` 或新 billing workflow | master 上 billing spec 绿 |
 | **PR-5** | Playwright api-access + citation | `frontend_next/e2e/specs/**` | functional + journey 本地绿 ✅（§7.1 4.7s / §7.2 46.5s，2026-06-29）+ journey-e2e CI 注入 RAG key（3 secret）+ **CI secret 注入机制本地模拟验证通过**（.env 挪开 + process env 传 3 key，§7.2 1.4m passed，2026-06-29）；真实 GitHub journey CI 待推 master（origin/master 落后 207 提交且 CI 被 `4cb8f67` 移除，journey workflow 不在默认分支、无法 `workflow_dispatch`） |
-| **PR-6** | rag_quality + release gate | `tests/rag_quality/`, `.github/workflows/` | 故意降 recall 时 CI 红 |
+| **PR-6** | rag_quality + release gate | `crates/app/tests/product_e2e/llm_real/rag_quality_prod.rs`, `tests/rag_quality/`, `.github/workflows/release-e2e-gate.yml` | ✅ ProductionRagEvaluator 接真实 RagRuntime（llm_real tier，真实 embedding+LLM，复用 `shared_rag_fixture` 冷入库 `antifragile.txt`）定基线 Recall@15=80%/Citation=80%/Halluc=80%（Q1 "谁提出 antifragility" 检索缺口→refusal 0%，Q2-Q5 单 rich chunk 100%）；非流式 answer 载 `[[cite:CHUNK_ID]]`（UUID），evaluator 用 `chat.citations` 建 `chunk_to_cite` map 改写为 `[citation:N]` 再打分；`release-e2e-gate.yml` 阻断式（`workflow_dispatch`/`release.published`，写 `.env` 注入 3 RAG secret）；**硬门禁 Recall drop ≤3% from baseline 0.80**，Citation ≥95% + Hallucination ≤2% 上报不阻断；p8 双向验证：基线 80% 绿 + wrong doc_scope→Recall 0%→FAILED 红 ✅ 2026-06-29 |
 
 **依赖顺序**：PR-1 → PR-2 → PR-5；PR-3、PR-4、PR-6 可与 PR-2 之后并行。
 

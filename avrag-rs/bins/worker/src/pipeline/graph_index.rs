@@ -6,9 +6,9 @@ use avrag_retrieval_data_plane::{
 use uuid::Uuid;
 
 use super::document_pipeline::ParseRunState;
+use super::helpers::record_graph_degrade;
 use super::index_dispatch::embed_text_vectors;
 use super::processor::PgTaskProcessor;
-use super::helpers::record_graph_degrade;
 use super::triplet_extraction::ExtractedTriplet;
 
 #[derive(Debug, Default)]

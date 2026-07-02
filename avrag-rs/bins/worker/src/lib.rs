@@ -10,25 +10,26 @@ mod runtime_support;
 mod sources;
 
 use anyhow::Result;
-use app_core::{load_prompt_template, AppConfig};
+use app_core::{AppConfig, load_prompt_template};
 use avrag_cache_redis::DocumentLock;
 use avrag_llm::SummaryGenerator;
 use avrag_storage_pg::PgAppRepository;
 use ingestion::parser::{
-    OfficeParserServiceClient, OfficeParserServiceConfig,
-    PdfRendererServiceClient, PdfRendererServiceConfig,
+    OfficeParserServiceClient, OfficeParserServiceConfig, PdfRendererServiceClient,
+    PdfRendererServiceConfig,
 };
 use ingestion::{
     NoopAuditSink, NoopStateSink, NoopTaskProcessor, NoopTaskSource, WorkerRuntime, WorkerTick,
 };
 use std::sync::Arc;
-use tokio::time::{interval, Duration};
-use tracing::{info, warn};
+use tokio::time::{Duration, interval};
+use tracing::{error, info, warn};
 
 use ingestion_guard::run_document_cleanup_once;
 use pipeline::PgTaskProcessor;
 use runtime_support::{
-    build_worker_object_store, build_worker_retrieval_data_plane, build_worker_triplet_llm,
+    build_worker_object_store, build_worker_retrieval_data_plane, build_worker_ingestion_llm,
+    build_worker_triplet_llm, describe_object_store_config, probe_object_store,
     spawn_health_listener, worker_health_port, worker_poll_interval, worker_runtime_mode,
 };
 use sources::{PgAuditSink, PgStateSink, PgTaskSource};
@@ -50,6 +51,8 @@ pub async fn run() -> Result<()> {
     let poll_secs = poll_interval_duration.as_secs().max(1);
     let worker_id =
         std::env::var("AVRAG_WORKER_ID").unwrap_or_else(|_| format!("worker-{}", common::new_id()));
+    let worker_queue_group =
+        std::env::var("AVRAG_WORKER_QUEUE_GROUP").unwrap_or_else(|_| "default".to_string());
     let task_timeout_secs = std::env::var("AVRAG_INGESTION_TASK_TIMEOUT_SECS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
@@ -59,9 +62,7 @@ pub async fn run() -> Result<()> {
 
     info!(
         runtime_mode = worker_runtime_mode(&config.database_url),
-        heartbeat_secs,
-        poll_secs,
-        "avrag worker skeleton started"
+        heartbeat_secs, poll_secs, "avrag worker skeleton started"
     );
 
     if let Some(database_url) = database_url {
@@ -82,6 +83,55 @@ pub async fn run() -> Result<()> {
             std::sync::Arc::new(repo.clone()),
         )) as std::sync::Arc<dyn app_core::UsageLimitStorePort>;
         let worker_object_store = build_worker_object_store(&config).await?;
+        let object_store_config = describe_object_store_config(&config);
+        let queue_group = std::env::var("AVRAG_WORKER_QUEUE_GROUP")
+            .ok()
+            .filter(|value| !value.trim().is_empty());
+        if !config.object_root.trim().is_empty()
+            && !config.object_storage.endpoint.trim().is_empty()
+            && !config.object_storage.bucket.trim().is_empty()
+            && !config.object_storage.access_key.trim().is_empty()
+            && !config.object_storage.secret_key.trim().is_empty()
+        {
+            warn!(
+                "object storage config ambiguous; S3 takes precedence per build_object_store rules"
+            );
+        }
+        if let Some(queue_group) = queue_group.as_deref() {
+            info!(
+                worker_id,
+                runtime_mode = worker_runtime_mode(&config.database_url),
+                object_store = %object_store_config,
+                queue_group,
+                "worker storage startup config"
+            );
+        } else {
+            info!(
+                worker_id,
+                runtime_mode = worker_runtime_mode(&config.database_url),
+                object_store = %object_store_config,
+                "worker storage startup config"
+            );
+        }
+        let skip_storage_probe = std::env::var("AVRAG_WORKER_SKIP_STORAGE_PROBE")
+            .ok()
+            .map(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+            .unwrap_or(false);
+        if skip_storage_probe {
+            info!("worker storage probe skipped by AVRAG_WORKER_SKIP_STORAGE_PROBE");
+        } else if let Err(probe_error) = probe_object_store(&config).await {
+            error!(
+                error = %probe_error,
+                worker_id,
+                "worker storage probe failed; exiting"
+            );
+            std::process::exit(1);
+        }
         let cleanup_object_store = build_worker_object_store(&config).await?;
         let orphan_object_store = Arc::new(build_worker_object_store(&config).await?);
         let mut orphan_object_job_runner = orphan_object_jobs::OrphanObjectJobRunner::from_env(
@@ -95,6 +145,7 @@ pub async fn run() -> Result<()> {
             PgTaskSource {
                 repo: repo.clone(),
                 worker_id: worker_id.clone(),
+                worker_queue_group: worker_queue_group.clone(),
             },
             PgAuditSink { repo: repo.clone() },
             PgStateSink { repo: repo.clone() },
@@ -174,7 +225,7 @@ pub async fn run() -> Result<()> {
                     .map(OfficeParserServiceClient::new),
                 pdf_renderer_client: PdfRendererServiceConfig::from_env()
                     .map(PdfRendererServiceClient::new),
-                ingestion_llm: build_worker_triplet_llm(&config),
+                ingestion_llm: build_worker_ingestion_llm(&config),
                 task_timeout_secs,
             },
         );

@@ -189,11 +189,7 @@ fn register_llm_facing_tools() -> HashMap<String, ToolMetadata> {
     };
 
     let mut tools = HashMap::new();
-    let all_modes = vec![
-        "rag".to_string(),
-        "search".to_string(),
-        "chat".to_string(),
-    ];
+    let all_modes = vec!["rag".to_string(), "search".to_string(), "chat".to_string()];
     let search = vec!["search".to_string()];
     let perms = vec![Permission::ExternalNetwork];
 
@@ -578,10 +574,7 @@ mod tests {
         let registry = CapabilityRegistry::standard();
         let plan_tools = registry.plan_tools("rag");
         let ids: Vec<&str> = plan_tools.iter().map(|t| t.id.as_str()).collect();
-        assert_eq!(
-            ids,
-            vec!["conversation_history_load", "user_profile_load"]
-        );
+        assert_eq!(ids, vec!["conversation_history_load", "user_profile_load"]);
     }
 
     #[test]

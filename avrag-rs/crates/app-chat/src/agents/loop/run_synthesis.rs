@@ -5,13 +5,13 @@ use contracts::ToolResult;
 use super::assembler::{ContextAssembler, DisclosedState};
 use super::config::{LoopExitConfig, ModeConfig};
 use super::exit_policy::{
-    decide_synthesis_gate, degraded_no_evidence_answer, has_retrieval_observation, SynthesisGate,
+    SynthesisGate, decide_synthesis_gate, degraded_no_evidence_answer, has_retrieval_observation,
 };
 use super::reasoning_emit;
 use super::run_result::build_run_result;
 use super::synthesis::SynthesisPhase;
 use super::telemetry::ReActIterationRecord;
-use super::{truncate_preview, ReActLoop};
+use super::{ReActLoop, truncate_preview};
 use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::runtime::{AgentRequest, AgentRunResult, FinalDecision};
 
@@ -36,8 +36,7 @@ impl ReActLoop {
         reasoning_summary_acc: &str,
         start_time: std::time::Instant,
     ) -> Result<Option<AgentRunResult>, AppError> {
-        let mut has_evidence =
-            has_retrieval_observation(messages, collected_tool_results, mode);
+        let mut has_evidence = has_retrieval_observation(messages, collected_tool_results, mode);
 
         match decide_synthesis_gate(
             loop_exit,
@@ -91,8 +90,7 @@ impl ReActLoop {
                 {
                     return Ok(Some(result));
                 }
-                has_evidence =
-                    has_retrieval_observation(messages, collected_tool_results, mode);
+                has_evidence = has_retrieval_observation(messages, collected_tool_results, mode);
             }
             SynthesisGate::DegradedNoEvidence => {
                 return Ok(Some(
@@ -237,8 +235,11 @@ impl ReActLoop {
             )
             .await?;
 
-        let disclosed_skills: Vec<String> =
-            disclosed_state.disclosed_skill_ids.iter().cloned().collect();
+        let disclosed_skills: Vec<String> = disclosed_state
+            .disclosed_skill_ids
+            .iter()
+            .cloned()
+            .collect();
         let observation_preview = truncate_preview(&final_answer, 200);
         reasoning_emit::emit_evaluation_telemetry(
             sink,
@@ -266,7 +267,11 @@ impl ReActLoop {
         )
         .await
     }
-    pub(super) async fn emit_run_citations(&self, sink: &dyn AgentEventSink, citations: &[contracts::chat::Citation]) {
+    pub(super) async fn emit_run_citations(
+        &self,
+        sink: &dyn AgentEventSink,
+        citations: &[contracts::chat::Citation],
+    ) {
         if !citations.is_empty() {
             let _ = sink
                 .emit(AgentEvent::Citations {

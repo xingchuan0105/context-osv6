@@ -1,8 +1,8 @@
 use crate::ports::chat::chat_session_store::ChatSessionStore;
 use async_trait::async_trait;
 use common::{AppError, now_rfc3339};
-use contracts::notebooks::{ChatSession};
 use contracts::chat::ChatRequest;
+use contracts::notebooks::ChatSession;
 
 #[derive(Clone, Default)]
 pub struct MemoryChatSessionStore;

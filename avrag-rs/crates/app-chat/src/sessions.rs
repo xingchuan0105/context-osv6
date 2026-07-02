@@ -1,11 +1,13 @@
 use app_core::parse_uuid_or_app_error;
 use common::{AppError, SourceRow, StatusOnlyResponse, new_id, now_rfc3339};
 use contracts::chat::{ChatMessage, ChatRequest, ChatResponse};
-use contracts::notebooks::{ChatSession, CreateChatSessionRequest, Notebook, UpdateChatSessionRequest};
+use contracts::notebooks::{
+    ChatSession, CreateChatSessionRequest, Notebook, UpdateChatSessionRequest,
+};
 use uuid::Uuid;
 
 use crate::context::ChatContext;
-use crate::{status_label, ChatService};
+use crate::{ChatService, status_label};
 
 fn memory_session_matches_search(
     messages: &std::collections::BTreeMap<String, Vec<ChatMessage>>,
@@ -19,13 +21,11 @@ fn memory_session_matches_search(
     {
         return true;
     }
-    messages
-        .get(&session.id)
-        .is_some_and(|session_messages| {
-            session_messages
-                .iter()
-                .any(|message| message.content.to_lowercase().contains(query))
-        })
+    messages.get(&session.id).is_some_and(|session_messages| {
+        session_messages
+            .iter()
+            .any(|message| message.content.to_lowercase().contains(query))
+    })
 }
 
 impl ChatContext {
@@ -126,10 +126,7 @@ impl ChatContext {
                 "notebook_not_found",
                 "notebook not found",
             )?;
-            let notebook = pg
-                .get_notebook(&self.auth, notebook_id)
-                .await
-                ?;
+            let notebook = pg.get_notebook(&self.auth, notebook_id).await?;
             if notebook.is_none() {
                 return Err(AppError::not_found(
                     "notebook_not_found",
@@ -143,8 +140,7 @@ impl ChatContext {
                     req.title.as_deref(),
                     &req.agent_type,
                 )
-                .await
-                ?;
+                .await?;
             self.record_product_event_if_available(
                 analytics::ProductEventName::SessionCreated,
                 analytics::Surface::Workspace,
@@ -213,8 +209,7 @@ impl ChatContext {
                 .filter(|value| !value.is_empty());
             let session = pg
                 .update_session(&self.auth, session_id, title, pinned)
-                .await
-                ?;
+                .await?;
             let session = session
                 .ok_or_else(|| AppError::not_found("session_not_found", "session not found"))?;
             if renamed {
@@ -316,10 +311,7 @@ impl ChatContext {
         if let Some(pg) = self.storage.chat_persistence() {
             let session_id =
                 parse_uuid_or_app_error(session_id, "session_not_found", "session not found")?;
-            let deleted = pg
-                .delete_session(&self.auth, session_id)
-                .await
-                ?;
+            let deleted = pg.delete_session(&self.auth, session_id).await?;
             if !deleted {
                 return Err(AppError::not_found(
                     "session_not_found",
@@ -373,10 +365,7 @@ impl ChatContext {
         if let Some(pg) = self.storage.chat_persistence() {
             let session_id =
                 parse_uuid_or_app_error(session_id, "session_not_found", "session not found")?;
-            return pg
-                .list_messages(&self.auth, session_id)
-                .await
-                ;
+            return pg.list_messages(&self.auth, session_id).await;
         }
 
         let state = self.storage.inner().read().await;
@@ -444,8 +433,15 @@ mod tests {
         };
         let messages = BTreeMap::from([(
             "session-1".to_string(),
-            vec![sample_message("session-1", "zephyrneedle2026 in assistant reply")],
+            vec![sample_message(
+                "session-1",
+                "zephyrneedle2026 in assistant reply",
+            )],
         )]);
-        assert!(memory_session_matches_search(&messages, &session, "zephyrneedle"));
+        assert!(memory_session_matches_search(
+            &messages,
+            &session,
+            "zephyrneedle"
+        ));
     }
 }

@@ -9,9 +9,9 @@ use common::{AppError, CreateDocumentRequest};
 use contracts::notebooks::{CreateNotebookNoteRequest, UpdateNotebookNoteRequest};
 use uuid::Uuid;
 
+use super::super::{app_error_response, error_response};
 use crate::RequestState;
 use crate::auth_guard::{ensure_user_notebook_access, require_user_session};
-use super::super::{app_error_response, error_response};
 
 fn note_preview(content: &str) -> String {
     let collapsed = content
@@ -57,7 +57,9 @@ fn slugify_note_filename(title: &str) -> String {
     }
 }
 
-fn notebook_note_from_pref(note: &contracts::preferences::NotebookNotePreference) -> contracts::notebooks::NotebookNote {
+fn notebook_note_from_pref(
+    note: &contracts::preferences::NotebookNotePreference,
+) -> contracts::notebooks::NotebookNote {
     contracts::notebooks::NotebookNote {
         id: note.note_id.clone(),
         notebook_id: note.notebook_id.clone(),
@@ -151,7 +153,10 @@ pub(crate) async fn list_notebook_notes_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(notebook_id): Path<String>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "notebook notes require a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "notebook notes require a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
@@ -175,7 +180,10 @@ pub(crate) async fn get_notebook_note_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path((notebook_id, note_id)): Path<(String, String)>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "notebook notes require a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "notebook notes require a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
@@ -187,9 +195,11 @@ pub(crate) async fn get_notebook_note_handler(
 
     match load_notebook_notes(&state, &notebook_id).await {
         Ok(notes) => match notes.into_iter().find(|note| note.id == note_id) {
-            Some(note) => {
-                (StatusCode::OK, Json(contracts::notebooks::NotebookNoteResponse { note })).into_response()
-            }
+            Some(note) => (
+                StatusCode::OK,
+                Json(contracts::notebooks::NotebookNoteResponse { note }),
+            )
+                .into_response(),
             None => error_response(StatusCode::NOT_FOUND, "not_found", "Note not found"),
         },
         Err(error) => app_error_response(error),
@@ -201,7 +211,10 @@ pub(crate) async fn create_notebook_note_handler(
     Path(notebook_id): Path<String>,
     Json(req): Json<CreateNotebookNoteRequest>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "notebook notes require a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "notebook notes require a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
@@ -245,7 +258,10 @@ pub(crate) async fn update_notebook_note_handler(
     Path((notebook_id, note_id)): Path<(String, String)>,
     Json(req): Json<UpdateNotebookNoteRequest>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "notebook notes require a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "notebook notes require a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
@@ -295,7 +311,10 @@ pub(crate) async fn delete_notebook_note_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path((notebook_id, note_id)): Path<(String, String)>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "notebook notes require a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "notebook notes require a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
@@ -328,7 +347,10 @@ pub(crate) async fn promote_notebook_note_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path((notebook_id, note_id)): Path<(String, String)>,
 ) -> Response {
-    if let Err(error) = require_user_session(state.auth(), "notebook notes require a signed-in user session") {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "notebook notes require a signed-in user session",
+    ) {
         return app_error_response(error);
     }
     if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {

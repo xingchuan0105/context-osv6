@@ -402,10 +402,7 @@ pub fn build_ir_chunk_plan(doc: &DocumentIr, filename: &str, policy: &ChunkPolic
 
             let mut metadata = block.metadata.clone();
             if block.block_type == BlockType::PageRaster && block.asset_refs.len() > 1 {
-                metadata.insert(
-                    "fusion_asset_refs".to_string(),
-                    block.asset_refs.join(","),
-                );
+                metadata.insert("fusion_asset_refs".to_string(), block.asset_refs.join(","));
                 metadata.insert("ingest_route".to_string(), "visual".to_string());
             }
 

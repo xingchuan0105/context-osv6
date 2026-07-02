@@ -152,20 +152,50 @@ impl SummaryGenerator {
             response.content
         };
 
-        // Extract metadata and clean up text
-        let (summary_text, metadata) =
-            parse_summary_and_metadata(doc_id, title, filename, &final_text);
+        // Summary ingestion stores prose only; metadata lives in profile chunk.
+        let summary_text = parse_summary_text(&final_text);
 
         Ok((
             SummaryOutput {
                 summary_text,
-                summary_metadata: metadata,
+                summary_metadata: default_summary_metadata(doc_id, title, filename),
             },
             total_usage,
         ))
     }
 }
 
+pub(crate) fn parse_summary_text(raw_output: &str) -> String {
+    let trimmed_output = raw_output.trim();
+
+    if let Some(summary_text) = extract_first_code_block(trimmed_output, SUMMARY_BLOCK_LABELS) {
+        return summary_text;
+    }
+
+    if let Ok(envelope) = serde_json::from_str::<ModelSummaryEnvelope>(trimmed_output) {
+        return envelope.summary_text.trim().to_string();
+    }
+
+    if let Some(json) = extract_last_code_block(trimmed_output, "json") {
+        if let Ok(envelope) = serde_json::from_str::<ModelSummaryEnvelope>(&json) {
+            return envelope.summary_text.trim().to_string();
+        }
+        if let Ok(envelope) = serde_json::from_str::<ModelSummaryEnvelope>(trimmed_output) {
+            return envelope.summary_text.trim().to_string();
+        }
+    }
+
+    if let Some(json_start) = trimmed_output.rfind("```json") {
+        let summary_text = trimmed_output[..json_start].trim();
+        if !summary_text.is_empty() {
+            return summary_text.to_string();
+        }
+    }
+
+    trimmed_output.to_string()
+}
+
+#[allow(dead_code)]
 fn parse_summary_and_metadata(
     doc_id: &str,
     title: &str,

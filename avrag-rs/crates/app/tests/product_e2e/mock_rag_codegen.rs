@@ -14,7 +14,10 @@ pub(super) fn latest_user_message_content(messages: &[serde_json::Value]) -> Opt
 
 pub(super) fn dense_search_query_from_messages(messages: &[serde_json::Value]) -> Option<String> {
     let content = latest_user_message_content(messages)?;
-    let query = content.trim().trim_start_matches("[prior_user_query]").trim();
+    let query = content
+        .trim()
+        .trim_start_matches("[prior_user_query]")
+        .trim();
     if query.is_empty() {
         None
     } else {
@@ -45,14 +48,12 @@ print(json.dumps(chunks))
 /// The query defaults to `"antifragility"`, which matches the standard smoke fixture
 /// `antifragile.txt`. Override via [`set_mock_rag_codegen_query`] when using other fixtures.
 pub fn format_mock_rag_codegen_response(_chunk_id: &str) -> String {
-    format_mock_rag_codegen_response_for_query(
-        &read_mock_rag_state(|state| {
-            state
-                .codegen_query
-                .clone()
-                .unwrap_or_else(|| "antifragility".to_string())
-        }),
-    )
+    format_mock_rag_codegen_response_for_query(&read_mock_rag_state(|state| {
+        state
+            .codegen_query
+            .clone()
+            .unwrap_or_else(|| "antifragility".to_string())
+    }))
 }
 
 /// Round0 multiround codegen: fetch document profile (sections + metadata).
@@ -95,8 +96,10 @@ pub(super) fn mock_memory_tool_call(tool: &str) -> Option<serde_json::Value> {
     let (id, arguments) = match tool {
         "conversation_history_load" => (
             "call_mem_history_0",
-            serde_json::to_string(&json!({"query": "antifragility", "scope": "notebook", "limit": 20}))
-                .unwrap_or_else(|_| "{}".to_string()),
+            serde_json::to_string(
+                &json!({"query": "antifragility", "scope": "notebook", "limit": 20}),
+            )
+            .unwrap_or_else(|_| "{}".to_string()),
         ),
         "user_profile_load" => ("call_mem_profile_0", "{}".to_string()),
         _ => return None,
@@ -155,7 +158,10 @@ pub(super) fn mock_rag_retrieve_codegen_content(messages: &[serde_json::Value]) 
     }
 }
 
-pub(super) fn try_memory_tool_response(tool_names: &[String], has_tool_results: bool) -> Option<axum::response::Response> {
+pub(super) fn try_memory_tool_response(
+    tool_names: &[String],
+    has_tool_results: bool,
+) -> Option<axum::response::Response> {
     if has_tool_results {
         return None;
     }
@@ -179,4 +185,3 @@ pub(super) fn try_memory_tool_response(tool_names: &[String], has_tool_results: 
         .into_response(),
     )
 }
-

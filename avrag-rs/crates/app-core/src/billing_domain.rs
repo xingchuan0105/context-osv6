@@ -62,14 +62,12 @@ impl BillingConfig {
             // Creem Config
             creem_api_key: std::env::var("CREEM_API_KEY").unwrap_or_default(),
             creem_webhook_secret: std::env::var("CREEM_WEBHOOK_SECRET").unwrap_or_default(),
-            creem_price_pro: std::env::var("CREEM_PRICE_PRO").unwrap_or_default(),
-            creem_price_plus: std::env::var("CREEM_PRICE_PLUS").unwrap_or_default(),
-            creem_product_pro: std::env::var("CREEM_PRODUCT_PRO")
-                .or_else(|_| std::env::var("CREEM_PRICE_PRO"))
-                .unwrap_or_default(),
-            creem_product_plus: std::env::var("CREEM_PRODUCT_PLUS")
-                .or_else(|_| std::env::var("CREEM_PRICE_PLUS"))
-                .unwrap_or_default(),
+            creem_product_pro: std::env::var("CREEM_PRODUCT_PRO").unwrap_or_default(),
+            creem_product_plus: std::env::var("CREEM_PRODUCT_PLUS").unwrap_or_default(),
+            creem_price_pro: std::env::var("CREEM_PRICE_PRO")
+                .unwrap_or_else(|_| "5.99".to_string()),
+            creem_price_plus: std::env::var("CREEM_PRICE_PLUS")
+                .unwrap_or_else(|_| "3.19".to_string()),
 
             // Alipay Config
             alipay_app_id: std::env::var("ALIPAY_APP_ID").unwrap_or_default(),
@@ -82,9 +80,9 @@ impl BillingConfig {
                 .ok()
                 .filter(|s| !s.trim().is_empty()),
             alipay_price_pro: std::env::var("ALIPAY_PRICE_PRO")
-                .unwrap_or_else(|_| "129.00".to_string()),
+                .unwrap_or_else(|_| "39.00".to_string()),
             alipay_price_plus: std::env::var("ALIPAY_PRICE_PLUS")
-                .unwrap_or_else(|_| "49.00".to_string()),
+                .unwrap_or_else(|_| "19.00".to_string()),
         }
     }
 
@@ -161,40 +159,59 @@ impl BillingConfig {
     }
 
     pub fn checkout_available(&self, plan_id: &str) -> bool {
-        self.stripe_enabled() && self.checkout_price_for_plan(plan_id).is_some()
+        if plan_id.trim() == PLAN_FREE {
+            return false;
+        }
+        (self.creem_enabled() && self.creem_checkout_product_for_plan(plan_id).is_some())
+            || (self.alipay_enabled() && self.alipay_checkout_price_for_plan(plan_id).is_some())
+    }
+
+    pub fn default_checkout_provider(&self) -> BillingProvider {
+        if self.creem_enabled() {
+            BillingProvider::Creem
+        } else if self.alipay_enabled() {
+            BillingProvider::Alipay
+        } else {
+            BillingProvider::Creem
+        }
     }
 
     pub fn price_label_for_plan(&self, plan_id: &str) -> String {
         match plan_id.trim() {
             PLAN_FREE => "Free".to_string(),
-            PLAN_PRO => self.billing_price_label_pro.clone(),
-            PLAN_PLUS => self.billing_price_label_plus.clone(),
+            PLAN_PLUS | PLAN_PRO => format!(
+                "{} · {}",
+                self.price_label_cny_for_plan(plan_id),
+                self.price_label_usd_for_plan(plan_id)
+            ),
             _ => String::new(),
         }
     }
 
-    /// CNY-only price label for a plan (e.g. "¥49 / 月").
-    ///
-    /// Hard-coded per the Phase-1 spec (Task 3); environment overrides for
-    /// CNY labels are intentionally out of scope. The Free plan returns the
-    /// empty string so the UI can render "Free" without a currency glyph.
+    /// CNY price label sourced from `ALIPAY_PRICE_*`.
     pub fn price_label_cny_for_plan(&self, plan_id: &str) -> String {
         match plan_id.trim() {
-            PLAN_PLUS => "¥49 / 月".to_string(),
-            PLAN_PRO => "¥129 / 月".to_string(),
+            PLAN_PLUS => format!("¥{} / 月", self.alipay_price_plus.trim()),
+            PLAN_PRO => format!("¥{} / 月", self.alipay_price_pro.trim()),
             _ => String::new(),
         }
     }
 
-    /// USD-only price label for a plan (e.g. "$9 / 月").
-    ///
-    /// See [`Self::price_label_cny_for_plan`] for the rationale on hard-coding.
+    /// USD price label sourced from `CREEM_PRICE_*`.
     pub fn price_label_usd_for_plan(&self, plan_id: &str) -> String {
         match plan_id.trim() {
-            PLAN_PLUS => "$9 / 月".to_string(),
-            PLAN_PRO => "$19 / 月".to_string(),
+            PLAN_PLUS => format!("${} / 月", self.creem_price_plus.trim()),
+            PLAN_PRO => format!("${} / 月", self.creem_price_pro.trim()),
             _ => String::new(),
         }
+    }
+
+    pub fn decimal_price_to_cents(price: &str) -> i64 {
+        price
+            .trim()
+            .parse::<f64>()
+            .map(|amount| (amount * 100.0).round() as i64)
+            .unwrap_or(0)
     }
 
     pub fn plan_id_by_price_id(&self, price_id: &str) -> Option<&'static str> {

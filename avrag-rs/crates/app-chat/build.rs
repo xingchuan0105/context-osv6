@@ -3,9 +3,9 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-    /// ADR-0007: scan prompt disclosure assets at compile time.
-    /// Scanned: prompts/clusters/, prompts/synthesis/, prompts/orchestrators/.
-    /// Excluded by design: prompts/deprecated/atomic-tools/ (legacy docs; tools via mode config + SkillComponent).
+/// ADR-0007: scan prompt disclosure assets at compile time.
+/// Scanned: prompts/clusters/, prompts/synthesis/, prompts/orchestrators/.
+/// Excluded by design: prompts/deprecated/atomic-tools/ (legacy docs; tools via mode config + SkillComponent).
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let out_dir = env::var("OUT_DIR").unwrap();

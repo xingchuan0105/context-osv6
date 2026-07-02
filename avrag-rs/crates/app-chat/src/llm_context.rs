@@ -7,10 +7,7 @@ pub struct LlmContext {
 }
 
 impl LlmContext {
-    pub fn new(
-        llm_client: Option<LlmClient>,
-        memory_llm_client: Option<LlmClient>,
-    ) -> Self {
+    pub fn new(llm_client: Option<LlmClient>, memory_llm_client: Option<LlmClient>) -> Self {
         Self {
             llm_client,
             memory_llm_client,

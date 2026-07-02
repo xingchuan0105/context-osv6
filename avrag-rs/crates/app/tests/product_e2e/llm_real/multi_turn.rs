@@ -15,7 +15,6 @@ use crate::product_e2e::{
 #[tokio::test]
 #[ignore = "requires real LLM API key; run with --ignored --test-threads=1"]
 async fn real_llm_multi_turn_rag_follow_up_remembers_context() {
-
     super::require_nightly_suite();
     let mut ctx = TestContext::new_with_real_llm().await;
 
@@ -74,19 +73,9 @@ async fn real_llm_multi_turn_rag_follow_up_remembers_context() {
         resp2.degrade_trace
     );
 
-    let follow_up = "Who wrote the book about it?";
-    let (raw_content, resolved) = ctx
-        .query_latest_user_resolved_query(&session_id)
-        .await
-        .expect("query resolved_query from PG");
-    assert_eq!(raw_content, follow_up);
-    let resolved = resolved.unwrap_or_else(|| {
-        panic!("expected resolved_query DB write-back for anaphoric turn-2 query")
-    });
-    assert_ne!(
-        resolved, follow_up,
-        "resolved_query should differ from raw pronoun query, got: {resolved}"
-    );
+    // ADR-0010: server-side query normalization removed; no resolved_query
+    // DB write-back to assert. The turn-2 answer mentioning "taleb" above
+    // is now the sole proof that the LLM resolved the anaphora on its own.
 
     let out_dir = ctx.llm_real_artifact_dir("real_llm_multi_turn_rag_follow_up_remembers_context");
     let _ = std::fs::create_dir_all(&out_dir);

@@ -8,10 +8,10 @@ use std::sync::Arc;
 use hmac::Mac;
 
 use crate::core::{
-    build_plan_payloads, claim_webhook_with_lease, current_metric_usage, ensure_customer,
-    get_current_subscription, load_customer_id, load_plan_quotas, load_quota_limit, load_usage,
-    load_usage_forecast, load_usage_history, load_usage_window, process_webhook_event,
-    seconds_until_next_month, update_webhook_lease_status,
+    build_plan_payloads, claim_webhook_with_lease, current_metric_usage, get_current_subscription,
+    load_plan_quotas, load_quota_limit, load_usage, load_usage_forecast, load_usage_history,
+    load_usage_window, process_webhook_event, seconds_until_next_month,
+    update_webhook_lease_status,
 };
 use crate::types::{
     BillingProvider, PLAN_FREE, PLAN_PLUS, PLAN_PRO, UsageForecastResponse, UsageHistoryResponse,
@@ -168,47 +168,15 @@ pub async fn handle_create_checkout(
         );
     }
 
-    let requested_provider = body.provider.unwrap_or(BillingProvider::Stripe);
+    let requested_provider = body
+        .provider
+        .unwrap_or_else(|| config.default_checkout_provider());
 
     match requested_provider {
-        BillingProvider::Stripe => {
-            if !config.stripe_enabled() {
-                return ApiResponse::err(
-                    "billing_unconfigured",
-                    "Stripe billing checkout is not configured",
-                );
-            }
-            let client = StripeClient::new(config.clone());
-            let Some(price_id) = config
-                .checkout_price_for_plan(requested_plan)
-                .map(str::to_string)
-            else {
-                return ApiResponse::err(
-                    "invalid_billing_plan",
-                    "requested billing plan is not configured for checkout",
-                );
-            };
-
-            match ensure_customer(store.clone(), &client, user_id).await {
-                Ok(customer_id) => {
-                    match client
-                        .create_checkout_session(&customer_id, &price_id, user_id, requested_plan)
-                        .await
-                    {
-                        Ok((url, session_id)) => ApiResponse::ok(CheckoutResponse {
-                            url,
-                            session_id,
-                            qr_code: None,
-                            order_id: None,
-                        }),
-                        Err(error) => {
-                            ApiResponse::err("billing_checkout_failed", &error.to_string())
-                        }
-                    }
-                }
-                Err(error) => ApiResponse::err("billing_customer_failed", &error.to_string()),
-            }
-        }
+        BillingProvider::Stripe => ApiResponse::err(
+            "billing_provider_deprecated",
+            "Stripe checkout is deprecated; use Creem (international) or Alipay (China)",
+        ),
         BillingProvider::Creem => {
             if !config.creem_enabled() {
                 return ApiResponse::err(
@@ -246,28 +214,32 @@ pub async fn handle_create_checkout(
                     "Alipay billing checkout is not configured",
                 );
             }
-            let amount_cents = match requested_plan {
-                PLAN_PRO => 2000,
-                PLAN_PLUS => 10000,
-                _ => {
-                    return ApiResponse::err(
-                        "invalid_billing_plan",
-                        "requested billing plan is not supported",
-                    );
-                }
-            };
-            let amount_str = config
+            let Some(amount_str) = config
                 .alipay_checkout_price_for_plan(requested_plan)
-                .unwrap_or(if requested_plan == PLAN_PRO {
-                    "20.00"
-                } else {
-                    "100.00"
-                });
+                .map(str::to_string)
+            else {
+                return ApiResponse::err(
+                    "invalid_billing_plan",
+                    "requested billing plan is not configured for Alipay checkout",
+                );
+            };
+            let amount_cents = BillingConfig::decimal_price_to_cents(&amount_str);
+            if amount_cents <= 0 {
+                return ApiResponse::err(
+                    "invalid_billing_plan",
+                    "Alipay price for requested plan is invalid",
+                );
+            }
 
             let out_trade_no = uuid::Uuid::new_v4().to_string();
 
             if let Err(error) = store
-                .insert_pending_alipay_order(user_id, &out_trade_no, requested_plan, amount_cents)
+                .insert_pending_alipay_order(
+                    user_id,
+                    &out_trade_no,
+                    requested_plan,
+                    amount_cents as i32,
+                )
                 .await
             {
                 return ApiResponse::err("billing_checkout_failed", &error.to_string());
@@ -284,7 +256,7 @@ pub async fn handle_create_checkout(
             let client = AlipayClient::new(config.clone());
             let subject = format!("Context OS - {} Subscription", requested_plan);
             match client
-                .create_precreate_order(amount_str, &subject, &out_trade_no, &notify_url)
+                .create_precreate_order(&amount_str, &subject, &out_trade_no, &notify_url)
                 .await
             {
                 Ok(qr_code) => ApiResponse::ok(CheckoutResponse {
@@ -300,25 +272,13 @@ pub async fn handle_create_checkout(
 }
 
 pub async fn handle_create_portal(
-    store: Arc<dyn BillingStorePort>,
-    user_id: UserId,
+    _store: Arc<dyn BillingStorePort>,
+    _user_id: UserId,
 ) -> ApiResponse<PortalResponse> {
-    let config = BillingConfig::from_env();
-    let client = StripeClient::new(config.clone());
-    if !config.stripe_enabled() {
-        return ApiResponse::err("billing_unconfigured", "billing portal is not configured");
-    }
-    match load_customer_id(store, user_id).await {
-        Ok(Some(customer_id)) => match client.create_portal_session(&customer_id).await {
-            Ok(url) => ApiResponse::ok(PortalResponse { url }),
-            Err(error) => ApiResponse::err("billing_portal_failed", &error.to_string()),
-        },
-        Ok(None) => ApiResponse::err(
-            "billing_portal_unavailable",
-            "billing portal is unavailable before an active Stripe customer exists",
-        ),
-        Err(error) => ApiResponse::err("billing_customer_failed", &error.to_string()),
-    }
+    ApiResponse::err(
+        "billing_portal_unavailable",
+        "Self-service billing portal is unavailable; manage subscriptions via Creem or contact support",
+    )
 }
 
 fn percent_decode(s: &str) -> String {
@@ -363,7 +323,10 @@ fn webhook_db_unavailable(error: &anyhow::Error) -> bool {
 
 fn webhook_error_response(error: anyhow::Error) -> ApiResponse<serde_json::Value> {
     if webhook_db_unavailable(&error) {
-        ApiResponse::err("billing_webhook_unavailable", "billing database unavailable")
+        ApiResponse::err(
+            "billing_webhook_unavailable",
+            "billing database unavailable",
+        )
     } else {
         ApiResponse::err("billing_webhook_failed", &error.to_string())
     }

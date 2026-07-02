@@ -1,10 +1,10 @@
+pub mod bridge;
 mod config;
 mod execute;
 mod planner;
 mod response;
 mod response_utils;
 mod retrieval;
-pub mod bridge;
 pub mod tools;
 
 #[cfg(test)]

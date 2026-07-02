@@ -1,9 +1,12 @@
 use app_core::{
-    parse_uuid_or_app_error, register_memory_api_key, validate_memory_api_key,
-    deactivate_memory_api_key, MemoryApiKeyRecord, StorageContext,
+    MemoryApiKeyRecord, StorageContext, deactivate_memory_api_key, parse_uuid_or_app_error,
+    register_memory_api_key, validate_memory_api_key,
 };
 use avrag_auth::{AuthContext, OrgId, SubjectKind};
-use common::{new_id, now_rfc3339, ApiKeyRow, AppError, CreateApiKeyRequest, CreateApiKeyResponse, NotificationRow, StatusOnlyResponse};
+use common::{
+    ApiKeyRow, AppError, CreateApiKeyRequest, CreateApiKeyResponse, NotificationRow,
+    StatusOnlyResponse, new_id, now_rfc3339,
+};
 use uuid::Uuid;
 
 #[derive(Clone, Default)]
@@ -18,10 +21,7 @@ fn ensure_org_api_key_admin(auth: &AuthContext) -> Result<(), AppError> {
     }
     auth.ensure_permission(contracts::agent_permissions::PERM_ADMIN)
         .map_err(|_| {
-            AppError::forbidden(
-                "admin_required",
-                "organization admin permission required",
-            )
+            AppError::forbidden("admin_required", "organization admin permission required")
         })
 }
 
@@ -58,7 +58,8 @@ impl AdminContext {
         }
         let notebook_uuid =
             parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
-        let permissions = contracts::normalize_api_key_permissions(&req.permissions, Some(notebook_uuid));
+        let permissions =
+            contracts::normalize_api_key_permissions(&req.permissions, Some(notebook_uuid));
         let rate_limit_rpm = req.rate_limit_rpm.unwrap_or(60);
         let expires_at = req
             .expires_at
@@ -319,9 +320,7 @@ impl AdminContext {
                 .actor_id()
                 .map(|value| value.into_uuid())
                 .ok_or_else(|| AppError::unauthorized("notification access requires a user"))?;
-            return store
-                .list_notifications(auth, user_id, limit, offset)
-                .await;
+            return store.list_notifications(auth, user_id, limit, offset).await;
         }
 
         let state = storage.inner().read().await;

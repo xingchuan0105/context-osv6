@@ -415,7 +415,7 @@ impl PgAppRepository {
         }
 
         let mut tx = self.pool.begin(context).await?;
-        let metadata = serde_json::to_value(&summary.summary_metadata).unwrap_or_default();
+        let metadata = serde_json::json!({});
         let org_id = context.org_id().into_uuid();
         let result = sqlx::query(
             r#"
@@ -486,6 +486,113 @@ impl PgAppRepository {
             )
             .bind(document_id)
             .bind(&summary.summary_text)
+            .bind(&metadata)
+            .bind(org_id)
+            .bind(task_id)
+            .bind(lock_token)
+            .execute(tx.inner())
+            .await?;
+            if result.rows_affected() == 0 {
+                tx.rollback().await?;
+                return Err(PgStorageError::NotFound("document not found".to_string()));
+            }
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn update_document_profile(
+        &self,
+        context: &AuthContext,
+        document_id: Uuid,
+        profile: &common::SummaryMetadata,
+        task_id: Option<&str>,
+        lock_token: Option<&str>,
+    ) -> Result<(), PgStorageError> {
+        let task_id = task_id
+            .map(Uuid::parse_str)
+            .transpose()
+            .map_err(|_| PgStorageError::NotFound("ingestion task not found".to_string()))?;
+        let lock_token = lock_token
+            .map(Uuid::parse_str)
+            .transpose()
+            .map_err(|_| PgStorageError::NotFound("ingestion task lease not found".to_string()))?;
+        if task_id.is_some() && lock_token.is_none() {
+            return Err(PgStorageError::NotFound(
+                "ingestion task lease not found".to_string(),
+            ));
+        }
+
+        let mut tx = self.pool.begin(context).await?;
+        let metadata = serde_json::to_value(profile).unwrap_or_default();
+        let org_id = context.org_id().into_uuid();
+        let result = sqlx::query(
+            r#"
+            update chunks c
+            set metadata = $2
+            where c.document_id = $1
+              and c.chunk_type = 'profile'
+              and c.org_id = $3
+              and exists (
+                  select 1
+                  from documents d
+                  where d.id = c.document_id
+                    and d.org_id = c.org_id
+                    and d.status not in ('deleting', 'deleted')
+                  for update
+              )
+              and (
+                  $4::uuid is null
+                  or exists (
+                      select 1
+                      from ingestion_tasks it
+                      where it.org_id = c.org_id
+                        and it.document_id = c.document_id
+                        and it.task_id = $4
+                        and it.lock_token = $5
+                        and it.status = 'processing'
+                        and it.dead_lettered_at is null
+                  )
+              )
+            "#,
+        )
+        .bind(document_id)
+        .bind(&metadata)
+        .bind(org_id)
+        .bind(task_id)
+        .bind(lock_token)
+        .execute(tx.inner())
+        .await?;
+
+        if result.rows_affected() == 0 {
+            let result = sqlx::query(
+                r#"
+                insert into chunks (id, org_id, document_id, chunk_type, content, metadata)
+                select gen_random_uuid(), $3, $1, 'profile', '', $2
+                where exists (
+                    select 1
+                    from documents d
+                    where d.id = $1
+                      and d.org_id = $3
+                      and d.status not in ('deleting', 'deleted')
+                    for update
+                )
+                  and (
+                      $4::uuid is null
+                      or exists (
+                          select 1
+                          from ingestion_tasks it
+                          where it.org_id = $3
+                            and it.document_id = $1
+                            and it.task_id = $4
+                            and it.lock_token = $5
+                            and it.status = 'processing'
+                            and it.dead_lettered_at is null
+                      )
+                  )
+                "#,
+            )
+            .bind(document_id)
             .bind(&metadata)
             .bind(org_id)
             .bind(task_id)

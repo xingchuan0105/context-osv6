@@ -1,5 +1,5 @@
-use avrag_rag_core::context::SessionContext as RagSessionContext;
 use app_core::ChatPersistencePort;
+use avrag_rag_core::context::SessionContext as RagSessionContext;
 use contracts::chat::ChatMessage;
 use contracts::notebooks::ChatSession;
 
@@ -8,9 +8,7 @@ use super::profile_types::ProfileDelta;
 use crate::context::ChatContext;
 
 impl ChatContext {
-    pub fn build_rag_session_context(
-        messages: Vec<ChatMessage>,
-    ) -> Option<RagSessionContext> {
+    pub fn build_rag_session_context(messages: Vec<ChatMessage>) -> Option<RagSessionContext> {
         if messages.is_empty() {
             None
         } else {
@@ -113,8 +111,14 @@ impl ChatContext {
         );
 
         for (llm, temperature) in [
-            (self.llm_ctx.memory_client(), self.llm_ctx.memory_llm_temperature()),
-            (self.llm_ctx.agent_client(), self.llm_ctx.agent_llm_temperature()),
+            (
+                self.llm_ctx.memory_client(),
+                self.llm_ctx.memory_llm_temperature(),
+            ),
+            (
+                self.llm_ctx.agent_client(),
+                self.llm_ctx.agent_llm_temperature(),
+            ),
         ] {
             if let Some(client) = llm
                 && let Ok(response) = client
@@ -129,8 +133,10 @@ impl ChatContext {
             {
                 let trimmed = response.content.trim();
                 if !trimmed.is_empty() {
-                    let (sanitized, guard_report) =
-                        self.orchestrator.guard_pipeline().check_output(trimmed, None);
+                    let (sanitized, guard_report) = self
+                        .orchestrator
+                        .guard_pipeline()
+                        .check_output(trimmed, None);
                     if guard_report.blocked {
                         tracing::warn!(
                             "dream layer output blocked by guard pipeline: {:?}",

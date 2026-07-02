@@ -1,7 +1,7 @@
 //! Share-link collaboration boundary (mode A: cross-user read via token only).
 
-use crate::product_e2e::{ChatResponse, TestContext, assertions::*};
 use crate::product_e2e::test_context::local_dev_email;
+use crate::product_e2e::{ChatResponse, TestContext, assertions::*};
 
 const ORG_A: &str = "55555555-5555-5555-5555-555555555555";
 const USER_OWNER: &str = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
@@ -12,7 +12,6 @@ const ORG_B: &str = "66666666-6666-6666-6666-666666666666";
 
 #[tokio::test]
 async fn share_token_allows_cross_user_readonly_chat() {
-
     super::require_smoke_suite();
     let ctx_a = TestContext::new_smoke_with_org(ORG_A, USER_A).await;
     let notebook = ctx_a.create_notebook("shared-notebook").await.unwrap();
@@ -32,7 +31,6 @@ async fn share_token_allows_cross_user_readonly_chat() {
 
 #[tokio::test]
 async fn cross_user_direct_get_notebook_without_token_returns_4xx() {
-
     super::require_smoke_suite();
     let ctx_a = TestContext::new_smoke_with_org(ORG_A, USER_A).await;
     let notebook = ctx_a.create_notebook("private-notebook").await.unwrap();
@@ -57,7 +55,6 @@ async fn cross_user_direct_get_notebook_without_token_returns_4xx() {
 
 #[tokio::test]
 async fn share_chat_with_invalid_token_returns_401_or_403() {
-
     super::require_smoke_suite();
     let ctx_a = TestContext::new_smoke_with_org(ORG_A, USER_A).await;
     let notebook = ctx_a.create_notebook("bad-token-notebook").await.unwrap();
@@ -96,9 +93,7 @@ async fn owner_can_invite_member_via_http() {
         .list_notebook_members(&notebook.id)
         .await
         .expect("list members");
-    let members = members_body["members"]
-        .as_array()
-        .expect("members array");
+    let members = members_body["members"].as_array().expect("members array");
     assert!(
         members.iter().any(|m| {
             m.get("email").and_then(|v| v.as_str()) == Some(local_dev_email(USER_COLLAB).as_str())

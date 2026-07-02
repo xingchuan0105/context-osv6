@@ -158,14 +158,10 @@ pub fn recent_messages(messages: &[ChatTurnInput], max_turns: usize) -> &[ChatTu
 pub struct AgentRequest {
     /// Canonical agent kind (already normalized from user input).
     pub kind: AgentKind,
-    /// User's natural language query.
+    /// User's natural language query. Also used as retrieval/fallback query
+    /// (ADR-0010: server-side query normalization removed; LLM resolves anaphora
+    /// on its own via the memory cluster).
     pub query: String,
-    /// Server-resolved query for retrieval/fallback (ADR-0008). Defaults to `query`.
-    #[serde(default)]
-    pub resolved_query: String,
-    /// Metadata from query normalization (ADR-0008).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub query_resolution: Option<crate::agents::r#loop::query_normalize::QueryResolutionMeta>,
     /// Notebook / workspace context.
     pub notebook_id: Option<String>,
     /// Session ID for continuity.
@@ -210,41 +206,13 @@ pub struct AgentRequest {
     pub guard_pipeline: Option<Arc<avrag_guardrails::GuardPipeline>>,
 }
 
-impl AgentRequest {
-    /// Query used for retrieval and server-side fallback.
-    pub fn effective_query(&self) -> &str {
-        if self.resolved_query.is_empty() {
-            &self.query
-        } else {
-            &self.resolved_query
-        }
-    }
-
-    pub fn with_resolved_query(
-        mut self,
-        resolved: String,
-        meta: Option<crate::agents::r#loop::query_normalize::QueryResolutionMeta>,
-    ) -> Self {
-        self.resolved_query = resolved;
-        self.query_resolution = meta;
-        self
-    }
-
-    /// Initialize `resolved_query` from `query` when unset.
-    pub fn ensure_resolved_query_defaults(&mut self) {
-        if self.resolved_query.is_empty() {
-            self.resolved_query = self.query.clone();
-        }
-    }
-}
+impl AgentRequest {}
 
 impl std::fmt::Debug for AgentRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AgentRequest")
             .field("kind", &self.kind)
             .field("query", &self.query)
-            .field("resolved_query", &self.resolved_query)
-            .field("query_resolution", &self.query_resolution)
             .field("notebook_id", &self.notebook_id)
             .field("session_id", &self.session_id)
             .field("doc_scope", &self.doc_scope)
@@ -296,9 +264,6 @@ pub struct AgentRunResult {
     /// Terminal decision of the loop. `None` for legacy single-shot agents.
     #[serde(default)]
     pub final_decision: Option<FinalDecision>,
-    /// Query normalization metadata from pre-loop normalizer (ADR-0008).
-    #[serde(default)]
-    pub query_resolution: Option<crate::agents::r#loop::query_normalize::QueryResolutionMeta>,
 
     // ===== v5 white-box fields (all serde(default) for backward compat) =====
     /// Trace ID for distributed tracing.
@@ -447,8 +412,6 @@ mod tests {
         let req = AgentRequest {
             kind: AgentKind::Chat,
             query: "hello".to_string(),
-            resolved_query: "hello".to_string(),
-            query_resolution: None,
             notebook_id: Some("nb-1".to_string()),
             session_id: Some("sess-1".to_string()),
             doc_scope: vec!["doc-1".to_string()],

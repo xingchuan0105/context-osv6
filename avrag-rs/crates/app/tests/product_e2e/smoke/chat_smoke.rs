@@ -4,7 +4,6 @@ use crate::product_e2e::{ChatResponse, TestContext, assertions::*};
 
 #[tokio::test]
 async fn general_agent_returns_non_empty_answer() {
-
     super::require_smoke_suite();
     let ctx = TestContext::new_smoke().await;
     let notebook = ctx.create_notebook("chat-smoke").await.unwrap();
@@ -19,6 +18,10 @@ async fn general_agent_returns_non_empty_answer() {
 
     let resp: ChatResponse = http_resp.into_business().unwrap();
     assert_observability_contract(&resp);
-    assert_eq!(resp.agent_type, "chat", "chat agent_type expected, got {}", resp.agent_type);
+    assert_eq!(
+        resp.agent_type, "chat",
+        "chat agent_type expected, got {}",
+        resp.agent_type
+    );
     assert_answer_substantive(&resp, 10);
 }

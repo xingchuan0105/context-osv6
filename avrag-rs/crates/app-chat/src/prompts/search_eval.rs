@@ -69,4 +69,3 @@ pub(crate) fn parse_search_strategy_evaluation(raw: &str) -> Option<SearchStrate
     let json = extract_json_object(raw).unwrap_or_else(|| raw.trim().to_string());
     serde_json::from_str::<SearchStrategyEvaluation>(&json).ok()
 }
-

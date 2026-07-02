@@ -1,0 +1,148 @@
+{
+ "version": "1.0.0-tools-v1",
+ "created_at": "2026-07-01T00:00:00Z",
+ "description": "8-probe tool-coverage set for RAG codegen SDK routing. Corpus: thesis_y_refrigeration.txt + baiyao_it_planning.txt (smoke v5 3-doc sub-corpus). Scores tool invocation coverage only — not answer correctness. Graph probes (G1/G2) require INGESTION_TRIPLET_ENABLED=1 re-ingest.",
+ "subsets": [
+  {
+   "name": "tools_v1",
+   "description": "Ordered probes; run sequentially. Labels: tool_summary / tool_metadata / tool_index / tool_graph / tool_section_titles.",
+   "examples": [
+    {
+     "query": "请用一段话概括 Y冷冻设备公司论文的核心内容和结论",
+     "expected_answer": "（工具覆盖探针：期望调用 doc_summary level=doc，非答案质检）",
+     "source_chunks": [],
+     "expected_citations": [],
+     "mode": "rag",
+     "description": "tool_summary — S1 thesis doc-level summary",
+     "expected_should_answer": true,
+     "must_include": [],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [],
+     "difficulty": "medium",
+     "relevance_grades": {},
+     "expected_tool": "doc_summary"
+    },
+    {
+     "query": "云南白药 IT 规划这份文档主要讲了什么？",
+     "expected_answer": "（工具覆盖探针：期望调用 doc_summary level=doc，非答案质检）",
+     "source_chunks": [],
+     "expected_citations": [],
+     "mode": "rag",
+     "description": "tool_summary — S2 baiyao doc-level summary",
+     "expected_should_answer": true,
+     "must_include": [],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [],
+     "difficulty": "medium",
+     "relevance_grades": {},
+     "expected_tool": "doc_summary"
+    },
+    {
+     "query": "Y冷冻设备公司论文的作者、年代和领域分别是什么？",
+     "expected_answer": "（工具覆盖探针：期望调用 doc_profile 读 metadata 字段，非答案质检）",
+     "source_chunks": [],
+     "expected_citations": [],
+     "mode": "rag",
+     "description": "tool_metadata — P1 thesis author/era/domain",
+     "expected_should_answer": true,
+     "must_include": [],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [],
+     "difficulty": "easy",
+     "relevance_grades": {},
+     "expected_tool": "doc_profile"
+    },
+    {
+     "query": "云南白药 IT 规划文档的元信息（标题、领域、类型）是什么？",
+     "expected_answer": "（工具覆盖探针：期望调用 doc_profile 读 metadata 字段，非答案质检）",
+     "source_chunks": [],
+     "expected_citations": [],
+     "mode": "rag",
+     "description": "tool_metadata — P2 baiyao title/domain/genre",
+     "expected_should_answer": true,
+     "must_include": [],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [],
+     "difficulty": "easy",
+     "relevance_grades": {},
+     "expected_tool": "doc_profile"
+    },
+    {
+     "query": "Y冷冻设备公司论文里「4R策略」那一章讲了什么？",
+     "expected_answer": "（工具覆盖探针：期望 doc_profile → index_lookup 两步，非答案质检）",
+     "source_chunks": [],
+     "expected_citations": [],
+     "mode": "rag",
+     "description": "tool_index — I1 section two-step (doc_profile → chunk_fetch/index_lookup)",
+     "expected_should_answer": true,
+     "must_include": [],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [
+      "4R策略"
+     ],
+     "difficulty": "medium",
+     "relevance_grades": {},
+     "expected_tool_sequence": [
+      "doc_profile",
+      "index_lookup"
+     ]
+    },
+    {
+     "query": "Y冷冻设备公司和它的韩方投资者是什么关系？请梳理这条关系链。",
+     "expected_answer": "（工具覆盖探针：期望 graph_retrieval；需三元组重灌，非答案质检）",
+     "source_chunks": [],
+     "expected_citations": [],
+     "mode": "rag",
+     "description": "tool_graph — G1 thesis entity relation chain",
+     "expected_should_answer": true,
+     "must_include": [],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [],
+     "difficulty": "hard",
+     "relevance_grades": {},
+     "expected_tool": "graph_retrieval",
+     "requires_triplet_reingest": true
+    },
+    {
+     "query": "云南白药 IT 规划中 4A 架构和数据资产目录（11/100/638）之间是什么关系？",
+     "expected_answer": "（工具覆盖探针：期望 graph_retrieval；需三元组重灌，非答案质检）",
+     "source_chunks": [],
+     "expected_citations": [],
+     "mode": "rag",
+     "description": "tool_graph — G2 baiyao 4A vs data catalog relation",
+     "expected_should_answer": true,
+     "must_include": [],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [],
+     "difficulty": "hard",
+     "relevance_grades": {},
+     "expected_tool": "graph_retrieval",
+     "requires_triplet_reingest": true
+    },
+    {
+     "query": "Y冷冻设备公司论文有哪些章节标题？请列出目录。",
+     "expected_answer": "（工具覆盖探针：doc_summary level=section 返回章节标题列表，非散文摘要；非答案质检）",
+     "source_chunks": [],
+     "expected_citations": [],
+     "mode": "rag",
+     "description": "tool_section_titles — C1 spare: section title list via doc_summary(section) or doc_profile",
+     "expected_should_answer": true,
+     "must_include": [],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [],
+     "difficulty": "easy",
+     "relevance_grades": {},
+     "expected_tool": "doc_summary"
+    }
+   ]
+  }
+ ]
+}

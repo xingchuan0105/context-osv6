@@ -1,8 +1,10 @@
-use app_core::{domain_rows::UserProfileRow, StorageContext};
+use app_core::{StorageContext, domain_rows::UserProfileRow};
 use avrag_auth::AuthContext;
-use common::{new_id, now_rfc3339, AppError};
-use contracts::preferences::{AgentPreference, AgentPreferenceMemory, BlockedAgentPreference, DailyPreferenceLog};
+use common::{AppError, new_id, now_rfc3339};
 use contracts::UserPreferences;
+use contracts::preferences::{
+    AgentPreference, AgentPreferenceMemory, BlockedAgentPreference, DailyPreferenceLog,
+};
 use uuid::Uuid;
 
 use crate::AdminContext;
@@ -126,11 +128,14 @@ impl AdminContext {
             .iter()
             .any(|blocked| blocked.id == removed.id)
         {
-            preferences.agent_memory.blocked.push(BlockedAgentPreference {
-                id: removed.id,
-                text: removed.text,
-                blocked_at: now_rfc3339(),
-            });
+            preferences
+                .agent_memory
+                .blocked
+                .push(BlockedAgentPreference {
+                    id: removed.id,
+                    text: removed.text,
+                    blocked_at: now_rfc3339(),
+                });
         }
 
         let saved = self

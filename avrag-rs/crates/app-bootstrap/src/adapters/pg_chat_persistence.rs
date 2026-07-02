@@ -1,6 +1,10 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
+use crate::domain_row_convert::{
+    conversation_history_hit, document_asset_row, indexed_chunk, multimodal_chunk_row,
+    notification_create_params, user_profile_row, user_profile_row_to_pg,
+};
+use crate::pg_error::map_pg_error;
 use app_core::{
     chat_persistence::{AppendChatTurn, ChatPersistencePort},
     domain_rows::{
@@ -8,15 +12,11 @@ use app_core::{
         MultimodalChunkRow, NotificationCreateParams, UserProfileRow,
     },
 };
-use crate::domain_row_convert::{
-    conversation_history_hit, document_asset_row, indexed_chunk, multimodal_chunk_row,
-    notification_create_params, user_profile_row, user_profile_row_to_pg,
-};
-use crate::pg_error::map_pg_error;
+use async_trait::async_trait;
 use avrag_auth::AuthContext;
 use avrag_storage_pg::{ChatTurn, PgAppRepository};
 use common::{AppError, SourceRow};
-use contracts::chat::{ChatMessage};
+use contracts::chat::ChatMessage;
 use contracts::notebooks::{ChatSession, Notebook};
 use ingestion_types::AuditRecord;
 use uuid::Uuid;

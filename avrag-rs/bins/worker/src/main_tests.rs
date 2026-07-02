@@ -1,21 +1,26 @@
-use app_core::{load_prompt_template, AppConfig};
+use app_core::{AppConfig, load_prompt_template};
 use avrag_auth::{AuthContext, OrgId, SubjectKind};
 use avrag_retrieval_data_plane::{
     EntityIndexRecord, GraphPassageIndexRecord, RelationIndexRecord, TextChunkIndexRecord,
 };
-use ingestion::parser::{ParsePlan, ParseRoute, ParseRouteDecision, PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteReason};
 use ingestion::SourceLocator;
+use ingestion::parser::{
+    ParsePlan, ParseRoute, ParseRouteDecision, PdfPageBackend, PdfPagePlan, PdfParsePlan,
+    RouteReason,
+};
 use std::{env, fs};
 use uuid::Uuid;
 
-use crate::pipeline::helpers::{
-    build_document_index_batch, build_parse_backend_summary, enrich_multimodal_source_locator,
-    record_graph_degrade, validate_mirror_source_path, GraphIndexRecords,
-};
-#[cfg(test)]
-use crate::pipeline::helpers::{embed_text_vectors_with_client, parse_triplet_response, ExtractedTriplet};
-use crate::runtime_support::{fetch_url_content, safe_relative_object_key, url_to_filename};
 use crate::ParseRunOutputs;
+#[cfg(test)]
+use crate::pipeline::helpers::{
+    ExtractedTriplet, embed_text_vectors_with_client, parse_triplet_response,
+};
+use crate::pipeline::helpers::{
+    GraphIndexRecords, build_document_index_batch, build_parse_backend_summary,
+    enrich_multimodal_source_locator, record_graph_degrade, validate_mirror_source_path,
+};
+use crate::runtime_support::{fetch_url_content, safe_relative_object_key, url_to_filename};
 
 #[test]
 fn cleanup_asset_object_key_safety_rejects_remote_and_path_traversal_values() {
@@ -173,12 +178,89 @@ fn parse_triplet_response_rejects_invalid_chunk_id() {
 }
 
 #[test]
+fn parse_triplet_response_strips_markdown_json_fence() {
+    let chunk_id = Uuid::from_u128(42);
+    let triplets = parse_triplet_response(
+        "```json\n{\"triplets\":[{\"chunk_id\":\"00000000-0000-0000-0000-00000000002a\",\"subject\":\"Alice\",\"predicate\":\"founded\",\"object\":\"Acme\"}]}\n```",
+        &[chunk_id],
+    )
+    .unwrap();
+
+    assert_eq!(triplets.len(), 1);
+    assert_eq!(triplets[0].subject, "Alice");
+}
+
+#[test]
+fn parse_triplet_response_salvages_truncated_json() {
+    let chunk_id = Uuid::from_u128(42);
+    let truncated = r#"{"triplets":[{"chunk_id":"00000000-0000-0000-0000-00000000002a","subject":"Alice","predicate":"founded","object":"Acme"},{"chunk_id":"00000000-0000-0000-0000-00000000002a","subject":"Alice","predicate":"leads","object":"Acme"#;
+    let triplets = parse_triplet_response(truncated, &[chunk_id]).unwrap();
+
+    assert_eq!(triplets.len(), 1);
+    assert_eq!(triplets[0].predicate, "founded");
+}
+
+#[test]
+fn parse_triplet_response_salvages_truncated_json_with_multibyte_chars() {
+    let chunk_id = Uuid::from_u128(42);
+    let truncated = r#"{"triplets":[{"chunk_id":"00000000-0000-0000-0000-00000000002a","subject":"概念启动","predicate":"属于","object":"概念阶段"},{"chunk_id":"00000000-0000-0000-0000-00000000002a","subject":"PAC-05","predicate":"标识为","object":"概念启"#;
+    let triplets = parse_triplet_response(truncated, &[chunk_id]).unwrap();
+
+    assert_eq!(triplets.len(), 1);
+    assert_eq!(triplets[0].predicate, "属于");
+}
+
+#[test]
 fn parse_triplet_response_rejects_malformed_json() {
     let chunk_id = Uuid::from_u128(42);
     let triplets =
         parse_triplet_response(r#"{"triplets":[{"subject":"Alice"}]}"#, &[chunk_id]).unwrap();
 
     assert_eq!(triplets, vec![]);
+}
+
+#[test]
+fn triplet_semantics_eval_cases_match_column_semantic_lint() {
+    use crate::pipeline::triplet_semantic_lint::triplet_semantic_violation;
+
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../prompts/pipeline/evals/triplet_semantics_cases.json"
+    );
+    let raw = fs::read_to_string(path).expect("triplet_semantics_cases.json");
+    let doc: serde_json::Value = serde_json::from_str(&raw).expect("valid eval JSON");
+    let cases = doc["cases"].as_array().expect("cases array");
+
+    for case in cases {
+        let id = case["id"].as_str().unwrap_or("?");
+        let t = &case["triplet"];
+        let subject = t["subject"].as_str().expect("subject");
+        let predicate = t["predicate"].as_str().expect("predicate");
+        let object = t["object"].as_str().expect("object");
+        let expect = case["expect"].as_str().expect("expect");
+        let violation = triplet_semantic_violation(subject, predicate, object);
+        match expect {
+            "allow" => assert!(violation.is_none(), "case {id} should allow"),
+            "reject" => assert!(violation.is_some(), "case {id} should reject"),
+            other => panic!("unknown expect={other} in case {id}"),
+        }
+    }
+}
+
+#[test]
+fn parse_triplet_response_applies_column_semantic_lint() {
+    let chunk_id = Uuid::from_u128(42);
+    let triplets = parse_triplet_response(
+        r#"{"triplets":[
+            {"chunk_id":"00000000-0000-0000-0000-00000000002a","subject":"ME-10","predicate":"标识为","object":"探索可选概念和提供技术可选方案"},
+            {"chunk_id":"00000000-0000-0000-0000-00000000002a","subject":"ACT-100","predicate":"标识为","object":"概念启动"}
+        ]}"#,
+        &[chunk_id],
+    )
+    .unwrap();
+
+    assert_eq!(triplets.len(), 1);
+    assert_eq!(triplets[0].subject, "ACT-100");
 }
 
 #[test]

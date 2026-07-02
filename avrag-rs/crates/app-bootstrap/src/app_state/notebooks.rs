@@ -1,5 +1,5 @@
 use common::{AppError, CreateNotebookRequest, StatusOnlyResponse, UpdateNotebookRequest};
-use contracts::notebooks::{Notebook};
+use contracts::notebooks::Notebook;
 
 use super::AppState;
 

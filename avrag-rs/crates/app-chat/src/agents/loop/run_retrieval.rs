@@ -1,6 +1,7 @@
 use avrag_llm::LlmUsage;
 use common::AppError;
 
+use super::ReActLoop;
 use super::assembler::LoopPhase;
 use super::config::{LoopExitConfig, ModeConfig};
 use super::exit_policy::has_retrieval_observation;
@@ -9,7 +10,6 @@ use super::iteration::{IterationControl, IterationOutcome, IterationState};
 use super::optimizer::LoopOptimizer;
 use super::reasoning_emit;
 use super::telemetry::ReActIterationRecord;
-use super::ReActLoop;
 use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::runtime::AgentRequest;
 

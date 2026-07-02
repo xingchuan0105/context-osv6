@@ -45,13 +45,10 @@ async fn phase0_mini_liteparse_pdf_ingest_e2e() {
             let task_debug = ctx
                 .query_ingestion_task_debug(&upload.document_id)
                 .await
-                .unwrap_or_else(|query_error| {
-                    serde_json::json!({ "query_error": query_error.to_string() })
-                });
-            eprintln!(
-                "[liteparse_e2e] ingestion task debug: {}",
-                task_debug
-            );
+                .unwrap_or_else(
+                    |query_error| serde_json::json!({ "query_error": query_error.to_string() }),
+                );
+            eprintln!("[liteparse_e2e] ingestion task debug: {}", task_debug);
             eprintln!(
                 "[liteparse_e2e] worker log tail:\n{}",
                 ctx.worker_log_tail(120)
@@ -84,7 +81,9 @@ async fn phase0_mini_liteparse_pdf_ingest_e2e() {
         .cloned()
         .unwrap_or_default();
     assert_eq!(
-        ingest_routing.get("pdf_route_mode").and_then(|v| v.as_str()),
+        ingest_routing
+            .get("pdf_route_mode")
+            .and_then(|v| v.as_str()),
         Some("liteparse_hybrid"),
         "expected liteparse_hybrid route mode in ingest_routing: {summary_text}"
     );
@@ -95,15 +94,15 @@ async fn phase0_mini_liteparse_pdf_ingest_e2e() {
             Some("paddle_jobs"),
             "paddle OCR pages should record ocr_backend=paddle_jobs"
         );
-    } else if let Some(warnings) = ingest_routing.get("paddle_warnings").and_then(|v| v.as_array())
+    } else if let Some(warnings) = ingest_routing
+        .get("paddle_warnings")
+        .and_then(|v| v.as_array())
     {
         assert!(
             warnings.iter().any(|w| {
-                w.get("code")
-                    .and_then(|c| c.as_str())
-                    .is_some_and(|code| {
-                        code == "paddle_job_failed" || code == "paddle_job_budget_exhausted"
-                    })
+                w.get("code").and_then(|c| c.as_str()).is_some_and(|code| {
+                    code == "paddle_job_failed" || code == "paddle_job_budget_exhausted"
+                })
             }),
             "when paddle jobs did not run, ingest_routing should record a paddle warning"
         );

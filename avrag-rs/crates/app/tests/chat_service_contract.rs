@@ -6,8 +6,8 @@ use app::ports::{
 use app::services::chat::service::ChatService;
 use async_trait::async_trait;
 use common::{AppError, CreateNotebookRequest};
-use contracts::notebooks::{ChatSession, Notebook};
 use contracts::chat::{ChatRequest, ChatResponse, TraceInfo};
+use contracts::notebooks::{ChatSession, Notebook};
 use std::sync::Arc;
 
 #[derive(Clone, Default)]

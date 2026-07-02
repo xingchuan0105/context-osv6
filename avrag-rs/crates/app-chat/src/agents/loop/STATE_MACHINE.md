@@ -8,7 +8,7 @@ breaks to synthesis, or returns a direct answer.
 
 | State | Entry | Exit transitions |
 |-------|-------|------------------|
-| **NormalizeQuery** | `run()` starts | Clarify → terminal `Clarified`; else → **RetrieveRound** |
+| **RetrieveRound** | `run()` starts (ADR-0010: NormalizeQuery state removed) | Budget exhausted → **EvaluateExit**; iteration outcome → see below |
 | **RetrieveRound** | `iteration < max_iterations` | Budget exhausted → **EvaluateExit**; iteration outcome → see below |
 | **EvaluateExit** | budget exhausted or break signal | `LoopPolicy::synthesis_gate` → **Synthesize** or **Degrade** |
 | **Synthesize** | gate allows synthesis | **FinishRun** with composed answer |
@@ -21,14 +21,34 @@ breaks to synthesis, or returns a direct answer.
 ```
 RetrieveRound
   ├─ assemble context (DisclosurePlanner + ContextAssembler)
+  │    └─ injects <iteration_budget round="X" max="Y" remaining="Z" /> every round
   ├─ LLM call (retrieve phase)
   ├─ parse output
   │    ├─ tool calls → dispatch tools → Continue (next iteration)
   │    ├─ skill request → validate → Continue
   │    ├─ direct answer prose → DirectAnswer
   │    └─ empty / blocked early-stop → BreakToSynthesis
-  └─ optimizer hints (duplicate chunks, budget warning) → Continue
+  └─ optimizer hints (duplicate chunks) → Continue
 ```
+
+### Per-round iteration budget injection
+
+`ContextAssembler::assemble_retrieve` appends an `<iteration_budget>` element
+to every retrieve-phase system prompt so the LLM can plan retrieval strategy
+against the actual round budget (which varies by user tier — see `BudgetConfig`):
+
+```
+<iteration_budget round="1" max="4" remaining="3" />
+```
+
+- `round` — 1-indexed current iteration
+- `max` — `BudgetConfig.resolve_max_iterations` output for the request's tier
+- `remaining` — `max - round` (saturating)
+
+The previous `LoopOptimizer::BudgetWarning` variant (last-round hint) was
+removed in favour of this per-round injection. `DuplicateChunksHint` remains
+as a separate mid-round system message when cross-iteration duplicate chunks
+are detected.
 
 ## Iteration module layout (`loop/iteration/`)
 

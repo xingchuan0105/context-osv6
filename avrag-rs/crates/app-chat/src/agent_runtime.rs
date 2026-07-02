@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use crate::agents::service::UnifiedAgentService;
 use avrag_rag_core::context::SessionContext as RagSessionContext;
-use common::{AppError};
-use contracts::chat::{ChatTurnInput};
+use common::AppError;
+use contracts::chat::ChatTurnInput;
 use uuid::Uuid;
 
 use crate::agents;
@@ -30,10 +30,7 @@ impl ChatContext {
             .filter_map(|id| Uuid::parse_str(id).ok())
             .collect();
 
-        let metadata = pg
-            .get_summary_metadata(&self.auth, &doc_uuids)
-            .await
-            ?;
+        let metadata = pg.get_summary_metadata(&self.auth, &doc_uuids).await?;
 
         Ok(build_docscope_metadata(metadata))
     }
@@ -86,16 +83,17 @@ impl ChatContext {
             .await
     }
 
-    pub async fn current_user_preferences(
-        &self,
-    ) -> Result<contracts::UserPreferences, AppError> {
+    pub async fn current_user_preferences(&self) -> Result<contracts::UserPreferences, AppError> {
         self.admin
             .current_user_preferences(&self.auth, &self.storage)
             .await
     }
 
     /// Resolve conversation history for agent prompts.
-    pub async fn resolve_agent_messages(&self, req: &contracts::chat::ChatRequest) -> Vec<ChatTurnInput> {
+    pub async fn resolve_agent_messages(
+        &self,
+        req: &contracts::chat::ChatRequest,
+    ) -> Vec<ChatTurnInput> {
         if !req.messages.is_empty() {
             return req.messages.clone();
         }
@@ -120,33 +118,17 @@ impl ChatContext {
             .filter(|message| message.role == "user")
             .filter(|message| !message.content.trim().is_empty())
             .filter(|message| message.content.trim() != current_query)
-            .map(|message| {
-                let resolved_query = message
-                    .resolved_query
-                    .clone()
-                    .filter(|q| !q.trim().is_empty())
-                    .or_else(|| {
-                        message
-                            .turn_metadata
-                            .as_ref()
-                            .and_then(|meta| meta.get("query_resolution"))
-                            .and_then(|qr| qr.get("resolved_query"))
-                            .and_then(|v| v.as_str())
-                            .map(str::to_string)
-                    });
-                ChatTurnInput {
-                    role: message.role,
-                    content: message.content,
-                    resolved_query,
-                }
+            .map(|message| ChatTurnInput {
+                role: message.role,
+                content: message.content,
+                // ADR-0010: resolved_query no longer computed; field retained
+                // for backward-compatible deserialization of older clients.
+                resolved_query: None,
             })
             .collect();
 
-        agents::runtime::recent_messages(
-            &history,
-            agents::runtime::MAX_PROMPT_HISTORY_TURNS,
-        )
-        .to_vec()
+        agents::runtime::recent_messages(&history, agents::runtime::MAX_PROMPT_HISTORY_TURNS)
+            .to_vec()
     }
 
     pub async fn build_agent_request(
@@ -177,8 +159,6 @@ impl ChatContext {
         agents::runtime::AgentRequest {
             kind,
             query: req.query.clone(),
-            resolved_query: req.query.clone(),
-            query_resolution: None,
             notebook_id,
             session_id,
             doc_scope,

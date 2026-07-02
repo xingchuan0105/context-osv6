@@ -2,8 +2,8 @@
 //!
 //! Release gates:
 //! - Recall@15 not decreasing more than 3%
-//! - Citation Accuracy >= 95%
-//! - Hallucination Rate <= 2%
+//! - Citation Accuracy and Hallucination Rate are reported, not hard-gated
+//!   here. Generation-layer gates live in `metrics_v2::ScorecardSummary`.
 
 use crate::golden_set::GoldenExample;
 use serde::{Deserialize, Serialize};
@@ -309,10 +309,12 @@ impl EvaluationMetrics {
     ///
     /// Returns `Ok(())` if all gates pass, `Err(String)` listing failures.
     ///
-    /// Gates:
-    /// - Recall@15 not decreasing more than 3% (baseline: 0.97)
-    /// - Citation Accuracy >= 95%
-    /// - Hallucination Rate <= 2%
+    /// Gate:
+    /// - Recall@15 not decreasing more than 3% from the supplied baseline.
+    ///
+    /// Citation Accuracy and the legacy Hallucination Rate are reported only:
+    /// citation selection is now scored by `metrics_v2::SelectionScore`, and
+    /// generation faithfulness by `metrics_v2` / `judge`.
     pub fn assert_passing(&self, baseline_recall: f64) -> Result<(), String> {
         let mut errors = Vec::new();
 
@@ -322,20 +324,6 @@ impl EvaluationMetrics {
                 "Recall@15 regression: {:.1}% drop (gate: ≤3%). Current: {:.2}%",
                 recall_drop * 100.0,
                 self.recall_at_15 * 100.0
-            ));
-        }
-
-        if self.citation_accuracy < 0.95 {
-            errors.push(format!(
-                "Citation Accuracy: {:.2}% (gate: ≥95%)",
-                self.citation_accuracy * 100.0
-            ));
-        }
-
-        if self.hallucination_rate > 0.02 {
-            errors.push(format!(
-                "Hallucination Rate: {:.2}% (gate: ≤2%)",
-                self.hallucination_rate * 100.0
             ));
         }
 

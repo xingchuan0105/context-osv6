@@ -1,9 +1,9 @@
+use async_trait::async_trait;
 use avrag_auth::{AuthContext, OrgId, SubjectKind};
 use avrag_retrieval_data_plane::{
-    DocumentIndexBatch, FALLBACK_RETRIEVAL_WEIGHT, MultimodalChunkIndexRecord,
-    RetrievalDataPlane, TextDenseSearchRequest, multimodal_retrieval_weight,
+    DocumentIndexBatch, FALLBACK_RETRIEVAL_WEIGHT, MultimodalChunkIndexRecord, RetrievalDataPlane,
+    TextDenseSearchRequest, multimodal_retrieval_weight,
 };
-use async_trait::async_trait;
 use uuid::Uuid;
 
 struct StubDataPlane;
@@ -152,7 +152,10 @@ fn scored_chunk_with_metadata_preserves_parser_backend_and_locator() {
 
     assert_eq!(chunk.chunk_type, "page_raster");
     assert_eq!(chunk.parser_backend.as_deref(), Some("paddle"));
-    assert_eq!(chunk.source_locator.as_ref().and_then(|v| v.get("page")), Some(&serde_json::json!(2)));
+    assert_eq!(
+        chunk.source_locator.as_ref().and_then(|v| v.get("page")),
+        Some(&serde_json::json!(2))
+    );
 }
 
 #[test]

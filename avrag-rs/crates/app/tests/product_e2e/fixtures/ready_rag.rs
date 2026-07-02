@@ -9,9 +9,9 @@ use std::sync::atomic::{AtomicBool, AtomicUsize};
 
 use tokio::sync::OnceCell;
 
+use super::super::setup;
 use super::super::test_context::config::E2eBootstrapConfig;
 use super::super::{DocumentStatus, TestContext, UploadResponse};
-use super::super::setup;
 
 /// Infra captured after one cold upload + ingestion (lives for the test binary).
 #[allow(dead_code)]

@@ -519,8 +519,6 @@ mod tests {
             request: crate::agents::runtime::AgentRequest {
                 kind: crate::agents::AgentKind::Chat,
                 query: "hello".to_string(),
-                resolved_query: "hello".to_string(),
-                query_resolution: None,
                 notebook_id: None,
                 session_id: None,
                 doc_scope: vec![],
@@ -600,8 +598,6 @@ mod tests {
             .request(crate::agents::runtime::AgentRequest {
                 kind: crate::agents::AgentKind::Chat,
                 query: "q".to_string(),
-                resolved_query: "q".to_string(),
-                query_resolution: None,
                 notebook_id: None,
                 session_id: None,
                 doc_scope: vec![],

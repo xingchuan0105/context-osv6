@@ -2,7 +2,7 @@ use app_core::{
     DocumentDeletionOutcome, DocumentUploadMutationOutcome, DocumentUploadQueueOutcome,
 };
 use common::{AppError, ParsedPreviewItem};
-use contracts::documents::{DocumentStatus};
+use contracts::documents::DocumentStatus;
 
 pub fn status_label(status: &DocumentStatus) -> &'static str {
     match status {
@@ -87,7 +87,9 @@ pub fn upload_status_conflict_error(status: &DocumentStatus) -> AppError {
     )
 }
 
-pub fn handle_upload_invalid_outcome(outcome: DocumentUploadMutationOutcome) -> Result<(), AppError> {
+pub fn handle_upload_invalid_outcome(
+    outcome: DocumentUploadMutationOutcome,
+) -> Result<(), AppError> {
     match outcome {
         DocumentUploadMutationOutcome::Updated => Ok(()),
         DocumentUploadMutationOutcome::NotFound => Err(AppError::not_found(
@@ -113,9 +115,7 @@ pub fn handle_upload_queue_outcome(outcome: DocumentUploadQueueOutcome) -> Resul
     }
 }
 
-pub fn build_docscope_metadata(
-    metadata: Vec<common::SummaryMetadata>,
-) -> common::DocScopeMetadata {
+pub fn build_docscope_metadata(metadata: Vec<common::SummaryMetadata>) -> common::DocScopeMetadata {
     let mut languages = Vec::new();
     let mut domains = Vec::new();
     let mut genres = Vec::new();

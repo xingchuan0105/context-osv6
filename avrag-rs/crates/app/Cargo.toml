@@ -50,6 +50,7 @@ app-core = { path = "../app-core" }
 axum = { version = "0.8", features = ["macros", "multipart"] }
 avrag-storage-pg = { path = "../storage-pg" }
 ingestion = { path = "../ingestion" }
+rag_quality = { path = "../../tests/rag_quality" }
 redis.workspace = true
 tempfile = "3"
 tokio = { workspace = true, features = ["process"] }

@@ -1,7 +1,13 @@
 use app_billing::BillingContext;
-use app_core::{ObjectStoreHeadError, parse_uuid_or_app_error, AnalyticsServiceCtx, StorageContext, StoredDocument};
+use app_core::{
+    AnalyticsServiceCtx, ObjectStoreHeadError, StorageContext, StoredDocument,
+    parse_uuid_or_app_error,
+};
 use avrag_auth::AuthContext;
-use common::{AppError, CreateDocumentRequest, Document, DocumentContentResponse, ParsedPreviewResponse, StatusOnlyResponse, UpdateDocumentRequest, new_id, now_rfc3339};
+use common::{
+    AppError, CreateDocumentRequest, Document, DocumentContentResponse, ParsedPreviewResponse,
+    StatusOnlyResponse, UpdateDocumentRequest, new_id, now_rfc3339,
+};
 use contracts::documents::{CreateDocumentUploadResponse, DocumentStatus};
 use ingestion::{AuditAction, IngestDocumentPayload, build_ingest_task, task_audit};
 use tokio::time::{Duration, sleep};
@@ -529,9 +535,7 @@ impl DocumentContext {
         if let Some(store) = storage.document_store() {
             let document_id =
                 parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
-            let updated = store
-                .set_document_status(auth, document_id, status)
-                .await?;
+            let updated = store.set_document_status(auth, document_id, status).await?;
             if !updated {
                 return Err(AppError::not_found(
                     "document_not_found",
@@ -571,12 +575,7 @@ impl DocumentContext {
     ) {
         info!(document_id, "starting simulated ingestion");
         let _ = self
-            .transition_document_status(
-                auth,
-                storage,
-                &document_id,
-                DocumentStatus::Processing,
-            )
+            .transition_document_status(auth, storage, &document_id, DocumentStatus::Processing)
             .await;
         sleep(Duration::from_secs(1)).await;
         let _ = self

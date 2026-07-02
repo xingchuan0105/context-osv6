@@ -21,14 +21,7 @@ fn memory_test_auth() -> avrag_auth::AuthContext {
 async fn test_conversation_history_load_without_memory_context_errors() {
     let auth = memory_test_auth();
     let call = tool_call("conversation_history_load", serde_json::json!({}));
-    let result = dispatch_atomic_tool_with_enforcement(
-        &call,
-        None,
-        Some(&auth),
-        None,
-        None,
-    )
-    .await;
+    let result = dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
     assert_eq!(result.status, ToolStatus::Error);
     let data = result.data.unwrap();
     let err = data["error"].as_str().unwrap();
@@ -42,14 +35,7 @@ async fn test_conversation_history_load_without_memory_context_errors() {
 async fn test_user_profile_load_without_memory_context_errors() {
     let auth = memory_test_auth();
     let call = tool_call("user_profile_load", serde_json::json!({}));
-    let result = dispatch_atomic_tool_with_enforcement(
-        &call,
-        None,
-        Some(&auth),
-        None,
-        None,
-    )
-    .await;
+    let result = dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
     assert_eq!(result.status, ToolStatus::Error);
     let data = result.data.unwrap();
     let err = data["error"].as_str().unwrap();
@@ -91,10 +77,7 @@ async fn test_conversation_history_load_with_pg_context_succeeds() {
     };
     let auth = memory_test_auth();
     let session_id = uuid::Uuid::new_v4();
-    let call = tool_call(
-        "conversation_history_load",
-        serde_json::json!({"limit": 5}),
-    );
+    let call = tool_call("conversation_history_load", serde_json::json!({"limit": 5}));
     let result = dispatch_atomic_tool_with_enforcement(
         &call,
         None,
@@ -137,8 +120,9 @@ async fn test_user_profile_load_with_pg_context_succeeds() {
     );
     let data = result.data.unwrap();
     assert!(data.get("structured_profile").is_some());
-    assert!(data
-        .get("expertise_domains")
-        .and_then(|v| v.as_array())
-        .is_some());
+    assert!(
+        data.get("expertise_domains")
+            .and_then(|v| v.as_array())
+            .is_some()
+    );
 }

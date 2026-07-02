@@ -590,7 +590,10 @@ fn compute_table_garbled_ratio(text: &str) -> f32 {
         .iter()
         .filter(|w| {
             let len = w.chars().count();
-            len <= 2 && !["a", "an", "is", "in", "on", "of", "to", "or", "at", "by", "no", "it"]
+            len <= 2
+                && ![
+                    "a", "an", "is", "in", "on", "of", "to", "or", "at", "by", "no", "it",
+                ]
                 .contains(&w.to_lowercase().as_str())
         })
         .count();
@@ -642,9 +645,16 @@ pub fn compute_quality_signals(text: &str) -> (f32, f32, f32, bool) {
     };
 
     let text_lower = text.to_lowercase();
-    let watermark_hit = WATERMARK_PATTERNS.iter().any(|pat| text_lower.contains(pat));
+    let watermark_hit = WATERMARK_PATTERNS
+        .iter()
+        .any(|pat| text_lower.contains(pat));
 
-    (readable_ratio, bigram_repeat_ratio, unique_token_ratio, watermark_hit)
+    (
+        readable_ratio,
+        bigram_repeat_ratio,
+        unique_token_ratio,
+        watermark_hit,
+    )
 }
 
 #[cfg(test)]
@@ -685,8 +695,14 @@ mod tests {
     fn test_compute_quality_signals_normal_text() {
         let text = "The Black Swan is a book about uncertainty and rare events in history.";
         let (rr, _br, ut, wm) = compute_quality_signals(text);
-        assert!(rr > 0.3, "normal text readable_ratio should be > 0.3, got {rr}");
-        assert!(ut > 0.4, "normal text unique_token_ratio should be > 0.4, got {ut}");
+        assert!(
+            rr > 0.3,
+            "normal text readable_ratio should be > 0.3, got {rr}"
+        );
+        assert!(
+            ut > 0.4,
+            "normal text unique_token_ratio should be > 0.4, got {ut}"
+        );
         assert!(!wm);
     }
 
@@ -701,8 +717,14 @@ mod tests {
     fn test_compute_quality_signals_low_quality_garbage() {
         let text = "aaaaaaaaaaaaaaaa aaaaaaaaaaaaaaaa aaaaaaaaaaaaaaaa";
         let (_rr, br, ut, wm) = compute_quality_signals(text);
-        assert!(br > 0.3, "repeating text should have high bigram_repeat_ratio, got {br}");
-        assert!(ut < 0.5, "repeating tokens should have low unique_token_ratio, got {ut}");
+        assert!(
+            br > 0.3,
+            "repeating text should have high bigram_repeat_ratio, got {br}"
+        );
+        assert!(
+            ut < 0.5,
+            "repeating tokens should have low unique_token_ratio, got {ut}"
+        );
         assert!(!wm);
     }
 

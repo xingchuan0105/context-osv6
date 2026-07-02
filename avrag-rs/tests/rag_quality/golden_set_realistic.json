@@ -1,0 +1,2381 @@
+{
+  "version": "2.0.0-realistic-corpus",
+  "created_at": "2026-06-29T00:00:00Z",
+  "description": "Realistic RAG golden set built on 7 private documents the LLM has never seen in training (no parametric-knowledge contamination). Corpus: (1) MBA thesis on Y Refrigeration Company marketing strategy (3.7万字, 6 chapters, DOCX), (2) ADR-0004 RAG Agent Loop (MD), (3) ADR-0009 Codegen Sandbox Bridge (MD), (4) consulting article on platform network effects (1.5万字, DOCX), (5) compensation design article (2.7K字, DOCX), (6) Huawei IPD 370 activities (372-row spreadsheet, XLSX), (7) Yunnan Baiyao IT planning (1.9MB, PDF). Subsets: thesis_factual, thesis_synthesis, thesis_numeric, thesis_adversarial, adr_factual, cross_adr, consulting_factual, ipd_table, baiyao_pdf, cross_document. Total: 110 examples. All source_chunks substrings verified present in corpus. Adversarial questions verified absent.",
+  "subsets": [
+    {
+      "name": "thesis_factual",
+      "description": "Single-fact lookups from the thesis. Each answer requires finding the specific chunk containing the fact. Tests dense retrieval precision on a long Chinese document.",
+      "examples": [
+        {
+          "query": "Y冷冻设备公司是哪一年在大连投资建厂的？",
+          "expected_answer": "2019年",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "2019年于大连市投资建厂"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "公司成立年份",
+          "expected_should_answer": true,
+          "must_include": [
+            "2019年"
+          ]
+        },
+        {
+          "query": "Y冷冻设备公司的前身是在哪个城市成立的？",
+          "expected_answer": "南京",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "前身在2016年于南京成立"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "公司前身成立地点",
+          "expected_should_answer": true,
+          "must_include": [
+            "南京"
+          ]
+        },
+        {
+          "query": "Y冷冻设备公司的主要产品有哪两种速冻机？",
+          "expected_answer": "螺旋式速冻机和隧道式速冻机",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "螺旋式速冻机和隧道式速冻机"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "主营产品类型",
+          "expected_should_answer": true,
+          "must_include": [
+            "螺旋式速冻机和隧道式速冻机"
+          ]
+        },
+        {
+          "query": "速冻机使食品的中心温度需要达到多少度？",
+          "expected_answer": "-18℃",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "-18℃"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "速冻核心温度指标",
+          "expected_should_answer": true,
+          "must_include": [
+            "-18℃"
+          ]
+        },
+        {
+          "query": "Y冷冻设备公司的指导教师是谁？",
+          "expected_answer": "林海芬",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "林海芬"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "论文导师姓名",
+          "expected_should_answer": true,
+          "must_include": [
+            "林海芬"
+          ]
+        },
+        {
+          "query": "这篇论文的作者是谁？学号是多少？",
+          "expected_answer": "邢川，学号41911407",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "41911407"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "作者及学号",
+          "expected_should_answer": true,
+          "must_include": [
+            "邢川，学号41911407"
+          ]
+        },
+        {
+          "query": "Y冷冻设备公司的厂房面积是多少？",
+          "expected_answer": "2000㎡",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "厂房面积2000㎡"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "厂房面积",
+          "expected_should_answer": true,
+          "must_include": [
+            "2000㎡"
+          ]
+        },
+        {
+          "query": "截至2020年，Y冷冻设备公司有多少名员工？",
+          "expected_answer": "25人",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "各类员工25人"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "员工数量",
+          "expected_should_answer": true,
+          "must_include": [
+            "25人"
+          ]
+        },
+        {
+          "query": "Y冷冻设备公司每年可以生产多少台速冻机？",
+          "expected_answer": "10台",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "每年10台速冻机的生产要求"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "年产能",
+          "expected_should_answer": true,
+          "must_include": [
+            "10台"
+          ]
+        },
+        {
+          "query": "速冻机行业中的两家领军企业是哪两家？",
+          "expected_answer": "南通四方和烟台冰轮",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "南通四方、烟台冰轮"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "行业领军企业名称",
+          "expected_should_answer": true,
+          "must_include": [
+            "南通四方和烟台冰轮"
+          ]
+        },
+        {
+          "query": "论文使用了哪四个理论工具来分析营销环境？",
+          "expected_answer": "PEST分析、波特五力模型、STP理论、4R营销策略",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "PEST分析方法"
+            },
+            {
+              "type": "substring",
+              "text": "波特五力模型"
+            },
+            {
+              "type": "substring",
+              "text": "STP理论"
+            },
+            {
+              "type": "substring",
+              "text": "4R营销策略"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "四个分析理论工具",
+          "expected_should_answer": true,
+          "must_include": [
+            "PEST分析、波特五力模型、STP理论、4R营销策略"
+          ]
+        },
+        {
+          "query": "4R策略包括哪四个方面？",
+          "expected_answer": "关联、反应、关系、回报",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "关联、反应、关系、回报"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "4R策略四个维度",
+          "expected_should_answer": true,
+          "must_include": [
+            "关联、反应、关系、回报"
+          ]
+        },
+        {
+          "query": "Y冷冻设备公司的韩方投资者最早在韩国哪里成立公司？",
+          "expected_answer": "韩国京畿道始兴市",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "韩国京畿道始兴市"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "韩方投资者起源地",
+          "expected_should_answer": true,
+          "must_include": [
+            "韩国京畿道始兴市"
+          ]
+        },
+        {
+          "query": "论文中提到的速冻机替代品是什么？",
+          "expected_answer": "速冻库",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "速冻库和速冻机之间形成了相互替代的关系"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "速冻机替代品",
+          "expected_should_answer": true,
+          "must_include": [
+            "速冻库"
+          ]
+        },
+        {
+          "query": "Y冷冻设备公司选择的目标市场是什么类型的市场？",
+          "expected_answer": "专业化市场",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "专业化市场作为其目标市场"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "目标市场类型",
+          "expected_should_answer": true,
+          "must_include": [
+            "专业化市场"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "thesis_synthesis",
+      "description": "Cross-section reasoning requiring information from multiple chapters or sections. Tests multi-chunk retrieval and synthesis ability.",
+      "examples": [
+        {
+          "query": "Y冷冻设备公司2019年和2020年的营业收入分别是多少？为什么会出现亏损？",
+          "expected_answer": "2019年550万，2020年370万；因为缺少大项目支撑，营业收入急速下滑，导致两年累计亏损700万元",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "2019年全年收入550万"
+            },
+            {
+              "type": "substring",
+              "text": "2020年全年收入370万"
+            },
+            {
+              "type": "substring",
+              "text": "两年累计亏损700万元"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "跨段营收与亏损综合",
+          "expected_should_answer": true,
+          "must_include": [
+            "2019年550万，2020年370万",
+            "因为缺少大项目支撑，营业收入急速下滑，导致两年累计亏损700万元"
+          ]
+        },
+        {
+          "query": "论文指出Y冷冻设备公司营销人员存在哪些主要问题？",
+          "expected_answer": "获取客户看重数量轻视质量、不重视渠道和推广、设计团队过于主观、过于追求短期利益",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "获取客户看重数量轻视质量"
+            },
+            {
+              "type": "substring",
+              "text": "不重视渠道和推广"
+            },
+            {
+              "type": "substring",
+              "text": "设计团队过于主观"
+            },
+            {
+              "type": "substring",
+              "text": "过于追求短期利益"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "营销人员四类问题综合",
+          "expected_should_answer": true,
+          "must_include": [
+            "获取客户看重数量轻视质量、不重视渠道和推广、设计团队过于主观、过于追求短期利益"
+          ]
+        },
+        {
+          "query": "Y冷冻设备公司的反应策略包括哪三个具体措施？",
+          "expected_answer": "对产品进行模块化设计、建立零部件信息资料库、组建多功能团队",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "对产品进行模块化设计"
+            },
+            {
+              "type": "substring",
+              "text": "建立零部件信息资料库"
+            },
+            {
+              "type": "substring",
+              "text": "组建多功能团队"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "反应策略三项措施",
+          "expected_should_answer": true,
+          "must_include": [
+            "对产品进行模块化设计、建立零部件信息资料库、组建多功能团队"
+          ]
+        },
+        {
+          "query": "论文提出Y冷冻设备公司应该从哪三个方面进行能力建设？",
+          "expected_answer": "信息系统建设、研发能力建设（含研发硬件设施、大数据指导研发、增强研发团队能力）",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "信息系统建设"
+            },
+            {
+              "type": "substring",
+              "text": "研发能力建设"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "能力建设维度综合",
+          "expected_should_answer": true,
+          "must_include": [
+            "信息系统建设、研发能力建设（含研发硬件设施、大数据指导研发、增强研发团队能力）"
+          ]
+        },
+        {
+          "query": "根据论文，Y冷冻设备公司为什么选择专业化市场而不是地区性市场或边缘市场？",
+          "expected_answer": "因为专业化市场客户较为聚集，符合资金有限的条件；单个客户成交额大回报高；需要螺旋式速冻机产品较为单一；门槛较高竞争对手少；对产品综合条件要求高而非单一考虑价格",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "专业化市场的客户较为聚集"
+            },
+            {
+              "type": "substring",
+              "text": "单个客户的成交额大"
+            },
+            {
+              "type": "substring",
+              "text": "专业化市场门槛较高"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "目标市场选择原因综合",
+          "expected_should_answer": true,
+          "must_include": [
+            "因为专业化市场客户较为聚集，符合资金有限的条件",
+            "单个客户成交额大回报高",
+            "需要螺旋式速冻机产品较为单一",
+            "门槛较高竞争对手少",
+            "对产品综合条件要求高而非单一考虑价格"
+          ]
+        },
+        {
+          "query": "论文中关系策略包含哪三个具体措施来强化与客户的互动？",
+          "expected_answer": "利用自媒体保持与客户沟通、开放技术资料促进相互信任、开展与客户共同研究课题",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "利用自媒体保持与客户沟通"
+            },
+            {
+              "type": "substring",
+              "text": "开放技术资料促进相互信任"
+            },
+            {
+              "type": "substring",
+              "text": "开展与客户共同研究课题"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "关系策略三项措施",
+          "expected_should_answer": true,
+          "must_include": [
+            "利用自媒体保持与客户沟通、开放技术资料促进相互信任、开展与客户共同研究课题"
+          ]
+        },
+        {
+          "query": "论文中营销活动的量化管理提出了哪四类指标？",
+          "expected_answer": "客户接触指标、客户满意指标、客户互动指标、客户回报指标",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "客户接触指标"
+            },
+            {
+              "type": "substring",
+              "text": "客户满意指标"
+            },
+            {
+              "type": "substring",
+              "text": "客户互动指标"
+            },
+            {
+              "type": "substring",
+              "text": "客户回报指标"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "四类量化管理指标",
+          "expected_should_answer": true,
+          "must_include": [
+            "客户接触指标、客户满意指标、客户互动指标、客户回报指标"
+          ]
+        },
+        {
+          "query": "根据波特五力分析，速冻机行业的供应商分为哪五大部分？",
+          "expected_answer": "原材料、制冷组件、电控组件、网带、电机",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "原材料、制冷组件、电控组件、网带、电机五大部分"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "五力分析中供方分类",
+          "expected_should_answer": true,
+          "must_include": [
+            "原材料、制冷组件、电控组件、网带、电机"
+          ]
+        },
+        {
+          "query": "论文提到速冻机按结构可以分为哪四类？按冻结方式又可以分为哪四类？",
+          "expected_answer": "按结构：隧道式、螺旋式、液化床式、平板式；按冻结方式：空气循环式、接触式、喷淋式、浸渍式",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "隧道式、螺旋式、液化床式和平板式四类"
+            },
+            {
+              "type": "substring",
+              "text": "空气循环式、接触式、喷淋式和浸渍式"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "速冻机两种分类方式",
+          "expected_should_answer": true,
+          "must_include": [
+            "按结构：隧道式、螺旋式、液化床式、平板式",
+            "按冻结方式：空气循环式、接触式、喷淋式、浸渍式"
+          ]
+        },
+        {
+          "query": "Y冷冻设备公司在2016至2019年间的总收入和总利润大约是多少？",
+          "expected_answer": "总收入约3000万元，总利润接近1000万元",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "总收入约为3000万元"
+            },
+            {
+              "type": "substring",
+              "text": "总利润接近1000万元"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "前身期间营收利润",
+          "expected_should_answer": true,
+          "must_include": [
+            "总收入约3000万元，总利润接近1000万元"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "thesis_numeric",
+      "description": "Questions targeting specific numbers, percentages, and calculated figures. Tests precise retrieval of quantitative data from a long document with many interleaved figures.",
+      "examples": [
+        {
+          "query": "2019年我国速冻食品行业规模是多少亿元人民币？",
+          "expected_answer": "1467亿元",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "1467亿元人民币"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "速冻食品行业规模",
+          "expected_should_answer": true,
+          "must_include": [
+            "1467亿元"
+          ]
+        },
+        {
+          "query": "2019年速冻食品行业中速冻米面制品、速冻火锅料、速冻菜肴及其他各自的份额是多少？",
+          "expected_answer": "速冻米面制品52.4%，速冻火锅料33.3%，速冻菜肴及其他14.3%",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "52.4%、33.3%和14.3%"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "三类速冻食品份额",
+          "expected_should_answer": true,
+          "must_include": [
+            "速冻米面制品52.4%，速冻火锅料33.3%，速冻菜肴及其他14.3%"
+          ]
+        },
+        {
+          "query": "根据电商数据，速冻米面类产品均价是多少元每千克？",
+          "expected_answer": "10.56元/kg",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "10.56元/kg"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "速冻米面均价",
+          "expected_should_answer": true,
+          "must_include": [
+            "10.56元/kg"
+          ]
+        },
+        {
+          "query": "三大类速冻食品加权平均后的均价是多少元每吨？",
+          "expected_answer": "17709.23元/吨",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "17709.23元/吨"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "加权均价",
+          "expected_should_answer": true,
+          "must_include": [
+            "17709.23元/吨"
+          ]
+        },
+        {
+          "query": "按照1T/H型号速冻机每天生产8小时、每年工作350天计算，一台速冻机一年能生产多少吨速冻食品？",
+          "expected_answer": "2800吨",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "2800吨速冻食品"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "单台年产量",
+          "expected_should_answer": true,
+          "must_include": [
+            "2800吨"
+          ]
+        },
+        {
+          "query": "论文预测2021年至2025年期间速冻机市场总需求约为多少台？市场规模约为多少亿元？",
+          "expected_answer": "总需求约1849台，市场规模约16.64亿元",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "1849台"
+            },
+            {
+              "type": "substring",
+              "text": "16.64亿元"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "市场需求预测",
+          "expected_should_answer": true,
+          "must_include": [
+            "总需求约1849台，市场规模约16.64亿元"
+          ]
+        },
+        {
+          "query": "2020年我国GDP达到多少万亿美元？",
+          "expected_answer": "14.72万亿美元",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "14.72万亿美元"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "2020年GDP",
+          "expected_should_answer": true,
+          "must_include": [
+            "14.72万亿美元"
+          ]
+        },
+        {
+          "query": "美国速冻食品年产量达到多少万吨？人均年消费量是多少千克？",
+          "expected_answer": "年产量2000万吨，人均年消费量60千克以上",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "2000 万吨"
+            },
+            {
+              "type": "substring",
+              "text": "60 千克以上"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "美国速冻食品数据",
+          "expected_should_answer": true,
+          "must_include": [
+            "年产量2000万吨，人均年消费量60千克以上"
+          ]
+        },
+        {
+          "query": "我国劳动力人口数量在2015年达到峰值是多少？2020年下降到了多少？",
+          "expected_answer": "2015年峰值9.96亿，2020年下降到9.86亿",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "9.96亿"
+            },
+            {
+              "type": "substring",
+              "text": "9.86亿"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "劳动力人口变化",
+          "expected_should_answer": true,
+          "must_include": [
+            "2015年峰值9.96亿，2020年下降到9.86亿"
+          ]
+        },
+        {
+          "query": "根据论文，Y冷冻设备公司的典型产品2T速冻机中，零部件成本占设备成本的比例约为多少？",
+          "expected_answer": "88.51%",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "88.51%"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "零部件成本占比",
+          "expected_should_answer": true,
+          "must_include": [
+            "88.51%"
+          ]
+        },
+        {
+          "query": "我国速冻米面市场从2015年到2019年的年均复合增长率约为多少？速冻火锅料市场的年均复合增长率约为多少？",
+          "expected_answer": "速冻米面约6%，速冻火锅料约13%",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "年均复合增长率约为6%"
+            },
+            {
+              "type": "substring",
+              "text": "年均复合增长率约为13%"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "两类速冻食品增长率对比",
+          "expected_should_answer": true,
+          "must_include": [
+            "速冻米面约6%，速冻火锅料约13%"
+          ]
+        },
+        {
+          "query": "截至2020年末，我国登记注册的食品加工企业大约有多少家？",
+          "expected_answer": "38万家",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "38万家"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "食品加工企业总数",
+          "expected_should_answer": true,
+          "must_include": [
+            "38万家"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "thesis_adversarial",
+      "description": "Questions that sound plausible but have NO answer in the thesis. The correct behavior is to refuse (answer 'not mentioned in the document'). Tests hallucination resistance — the LLM must not fabricate facts from parametric knowledge.",
+      "examples": [
+        {
+          "query": "Y冷冻设备公司的注册资本是多少万元？",
+          "expected_answer": "论文中未提及注册资本",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "description": "编造注册资本数字",
+          "expected_should_answer": false,
+          "must_include": [
+            "论文中未提及注册资本"
+          ]
+        },
+        {
+          "query": "Y冷冻设备公司的韩方投资者叫什么名字？",
+          "expected_answer": "论文中未提及韩方投资者姓名",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "description": "编造韩方投资者姓名",
+          "expected_should_answer": false,
+          "must_include": [
+            "论文中未提及韩方投资者姓名"
+          ]
+        },
+        {
+          "query": "南通四方公司在2020年的营业收入是多少？",
+          "expected_answer": "论文中未提及南通四方的营业收入",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "description": "编造竞争对手营收",
+          "expected_should_answer": false,
+          "must_include": [
+            "论文中未提及南通四方的营业收入"
+          ]
+        },
+        {
+          "query": "Y冷冻设备公司的速冻机产品保修期是几年？",
+          "expected_answer": "论文中提到了保修期的概念（指出行业通常停留在保修期内），但未说明Y冷冻设备公司产品的具体保修年限",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "description": "编造保修期",
+          "expected_should_answer": false,
+          "must_include": [
+            "论文中提到了保修期的概念（指出行业通常停留在保修期内），但未说明Y冷冻设备公司产品的具体保修年限"
+          ]
+        },
+        {
+          "query": "论文调研中访谈了多少名营销人员？",
+          "expected_answer": "论文中未提及具体访谈人数",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "description": "编造访谈样本量",
+          "expected_should_answer": false,
+          "must_include": [
+            "论文中未提及具体访谈人数"
+          ]
+        },
+        {
+          "query": "Y冷冻设备公司2021年实施营销策略后的营收增长了多少？",
+          "expected_answer": "论文中未提及策略实施后的实际效果数据",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "description": "编造策略实施效果",
+          "expected_should_answer": false,
+          "must_include": [
+            "论文中未提及策略实施后的实际效果数据"
+          ]
+        },
+        {
+          "query": "论文中提到的螺旋式速冻机转毂直径是多少毫米？",
+          "expected_answer": "论文中未提及转毂直径具体数值",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "description": "编造技术参数",
+          "expected_should_answer": false,
+          "must_include": [
+            "论文中未提及转毂直径具体数值"
+          ]
+        },
+        {
+          "query": "Y冷冻设备公司主要竞争对手烟台冰轮的总部在哪个城市？",
+          "expected_answer": "论文中未提及烟台冰轮总部所在城市",
+          "source_chunks": [],
+          "expected_citations": [],
+          "mode": "rag",
+          "description": "编造竞争对手地址",
+          "expected_should_answer": false,
+          "must_include": [
+            "论文中未提及烟台冰轮总部所在城市"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "adr_factual",
+      "description": "Single-fact lookups from two project ADRs (technical architecture decision records). Tests retrieval on structured Markdown documents with code references, component names, and design decisions.",
+      "examples": [
+        {
+          "query": "ADR-0004的决策日期是哪一天？",
+          "expected_answer": "2026年6月6日",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "Date"
+            },
+            {
+              "type": "substring",
+              "text": "2026-06-06"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "ADR-0004日期",
+          "expected_should_answer": true,
+          "must_include": [
+            "2026年6月6日"
+          ]
+        },
+        {
+          "query": "ADR-0004提出将RAG管道转变成由什么驱动的真正的Agent Loop？",
+          "expected_answer": "由原生工具调用（native tool calling）驱动",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "native tool calling"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "Agent Loop驱动方式",
+          "expected_should_answer": true,
+          "must_include": [
+            "由原生工具调用（native tool calling）驱动"
+          ]
+        },
+        {
+          "query": "根据ADR-0004，RAG Agent Loop的状态机包含哪几个状态？",
+          "expected_answer": "Plan、ExecuteRetrieve、Answer",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "Plan"
+            },
+            {
+              "type": "substring",
+              "text": "ExecuteRetrieve"
+            },
+            {
+              "type": "substring",
+              "text": "Answer"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "状态机三个状态",
+          "expected_should_answer": true,
+          "must_include": [
+            "Plan、ExecuteRetrieve、Answer"
+          ]
+        },
+        {
+          "query": "ADR-0004中被废弃（DEPRECATE）的组件是什么？",
+          "expected_answer": "parse_rag_plan_decision XML解析代码",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "parse_rag_plan_decision"
+            },
+            {
+              "type": "substring",
+              "text": "DEPRECATE"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "废弃组件",
+          "expected_should_answer": true,
+          "must_include": [
+            "parse_rag_plan_decision XML解析代码"
+          ]
+        },
+        {
+          "query": "ADR-0004中被保留（RETAIN）的组件是什么？",
+          "expected_answer": "EvidenceGate",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "EvidenceGate"
+            },
+            {
+              "type": "substring",
+              "text": "RETAIN"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "保留组件",
+          "expected_should_answer": true,
+          "must_include": [
+            "EvidenceGate"
+          ]
+        },
+        {
+          "query": "ADR-0004在LlmProvider trait中新增了什么方法来支持结构化工具调用？",
+          "expected_answer": "complete_with_tools方法",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "complete_with_tools"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "新增方法名",
+          "expected_should_answer": true,
+          "must_include": [
+            "complete_with_tools方法"
+          ]
+        },
+        {
+          "query": "ADR-0009的沙箱检索桥接使用哪两个管道文件描述符进行通信？",
+          "expected_answer": "fd3（Python到Host）和fd4（Host到Python）",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "fd3"
+            },
+            {
+              "type": "substring",
+              "text": "fd4"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "桥接管道fd",
+          "expected_should_answer": true,
+          "must_include": [
+            "fd3（Python到Host）和fd4（Host到Python）"
+          ]
+        },
+        {
+          "query": "根据ADR-0009，沙箱检索桥接暴露了哪些检索方法？",
+          "expected_answer": "dense_search、lexical_search、graph_search、rerank、chunk_fetch、doc_summary",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "dense_search"
+            },
+            {
+              "type": "substring",
+              "text": "lexical_search"
+            },
+            {
+              "type": "substring",
+              "text": "graph_search"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "桥接方法列表",
+          "expected_should_answer": true,
+          "must_include": [
+            "dense_search、lexical_search、graph_search、rerank、chunk_fetch、doc_summary"
+          ]
+        },
+        {
+          "query": "ADR-0009拒绝了哪些备选方案？",
+          "expected_answer": "方案A（解封socket+真HTTP）和方案C（预取+变量注入）",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "方案 A"
+            },
+            {
+              "type": "substring",
+              "text": "方案 C"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "拒绝的备选方案",
+          "expected_should_answer": true,
+          "must_include": [
+            "方案A（解封socket+真HTTP）和方案C（预取+变量注入）"
+          ]
+        },
+        {
+          "query": "根据ADR-0009，桥接协议中doc_scope由谁强制注入？为什么不由模型传入？",
+          "expected_answer": "由宿主从request.doc_scope强制注入，防止越权",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "doc_scope"
+            },
+            {
+              "type": "substring",
+              "text": "防止越权"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "doc_scope安全控制",
+          "expected_should_answer": true,
+          "must_include": [
+            "由宿主从request.doc_scope强制注入，防止越权"
+          ]
+        },
+        {
+          "query": "ADR-0009中实现HostBridge trait的结构体叫什么名字？它持有哪些字段？",
+          "expected_answer": "RuntimeBridge，持有runtime（Arc<RagRuntime>）、auth（AuthContext）、doc_scope（Vec<String>）",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "RuntimeBridge"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "RuntimeBridge结构体",
+          "expected_should_answer": true,
+          "must_include": [
+            "RuntimeBridge，持有runtime（Arc<RagRuntime>）、auth（AuthContext）、doc_scope（Vec<String>）"
+          ]
+        },
+        {
+          "query": "根据ADR-0009，哪个文件在落地时被废除？",
+          "expected_answer": "code_gen_query.rs",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "code_gen_query.rs"
+            },
+            {
+              "type": "substring",
+              "text": "废除"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "废除的文件",
+          "expected_should_answer": true,
+          "must_include": [
+            "code_gen_query.rs"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "cross_adr",
+      "description": "Questions spanning both ADR-0004 and ADR-0009. Tests cross-document retrieval — the answer requires information from both technical documents in a single response.",
+      "examples": [
+        {
+          "query": "ADR-0004和ADR-0009分别解决了什么问题？",
+          "expected_answer": "ADR-0004解决了RAG管道从线性流水线转向Agent Loop+原生工具调用的问题；ADR-0009解决了codegen沙箱封禁网络与SDK走HTTP冲突导致检索主路径不可用的问题",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "Agent Loop"
+            },
+            {
+              "type": "substring",
+              "text": "native tool calling"
+            },
+            {
+              "type": "substring",
+              "text": "Sandbox Retrieval Bridge"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "两篇ADR解决的问题对比",
+          "expected_should_answer": true,
+          "must_include": [
+            "ADR-0004解决了RAG管道从线性流水线转向Agent Loop+原生工具调用的问题",
+            "ADR-0009解决了codegen沙箱封禁网络与SDK走HTTP冲突导致检索主路径不可用的问题"
+          ]
+        },
+        {
+          "query": "ADR-0004和ADR-0009各自的决策日期是什么？",
+          "expected_answer": "ADR-0004是2026年6月6日，ADR-0009是2026年6月9日",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "2026-06-06"
+            },
+            {
+              "type": "substring",
+              "text": "2026-06-09"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "两篇ADR日期对比",
+          "expected_should_answer": true,
+          "must_include": [
+            "ADR-0004是2026年6月6日，ADR-0009是2026年6月9日"
+          ]
+        },
+        {
+          "query": "ADR-0004中保留了EvidenceGate作为质量过滤器，ADR-0009中保留的兜底机制叫什么？",
+          "expected_answer": "run_auto_fallback（dense/lexical兜底）",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "EvidenceGate"
+            },
+            {
+              "type": "substring",
+              "text": "run_auto_fallback"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "两篇ADR保留的组件对比",
+          "expected_should_answer": true,
+          "must_include": [
+            "run_auto_fallback（dense/lexical兜底）"
+          ]
+        },
+        {
+          "query": "ADR-0004的验证计划分为几个Slice？ADR-0009的分阶段实施分为几个Phase？",
+          "expected_answer": "ADR-0004分为3个Slice（native tools、loop flow、multi-iteration testing），ADR-0009分为4个Phase（P1 interpreter bridge、P2 rag-core bridge、P3 mock/e2e、P4 telemetry）",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "Slice 1"
+            },
+            {
+              "type": "substring",
+              "text": "P1"
+            },
+            {
+              "type": "substring",
+              "text": "P4"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "两篇ADR实施阶段对比",
+          "expected_should_answer": true,
+          "must_include": [
+            "ADR-0004分为3个Slice（native tools、loop flow、multi-iteration testing），ADR-0009分为4个Phase（P1 interpreter bridge、P2 rag-core bridge、P3 mock/e2e、P4 telemetry）"
+          ]
+        },
+        {
+          "query": "ADR-0004废弃了parse_rag_plan_decision，ADR-0009废弃了什么文件？",
+          "expected_answer": "ADR-0009废弃了code_gen_query.rs",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "parse_rag_plan_decision"
+            },
+            {
+              "type": "substring",
+              "text": "code_gen_query.rs"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "两篇ADR废弃项对比",
+          "expected_should_answer": true,
+          "must_include": [
+            "ADR-0009废弃了code_gen_query.rs"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "consulting_factual",
+      "description": "Single-fact and synthesis lookups from two consulting articles (platform network effects + compensation design). Tests retrieval on business/management prose with mixed narrative and analytical styles.",
+      "examples": [
+        {
+          "query": "网络效应贡献了科技企业多少比例的价值创造？",
+          "expected_answer": "70%",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "70%的价值创造"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "网络效应价值贡献比例",
+          "expected_should_answer": true,
+          "must_include": [
+            "70%"
+          ]
+        },
+        {
+          "query": "平台网络效应系列文章的观点源自哪家机构发布的什么报告？",
+          "expected_answer": "硅谷风投机构NFX发布的《网络效应圣经》（The Network Effects Bible）",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "NFX"
+            },
+            {
+              "type": "substring",
+              "text": "Network Effects Bible"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "观点来源",
+          "expected_should_answer": true,
+          "must_include": [
+            "硅谷风投机构NFX发布的《网络效应圣经》（The Network Effects Bible）"
+          ]
+        },
+        {
+          "query": "Salesforce占据全球CRM市场多少份额？",
+          "expected_answer": "23%",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "23%份额"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "Salesforce市场份额",
+          "expected_should_answer": true,
+          "must_include": [
+            "23%"
+          ]
+        },
+        {
+          "query": "Salesforce生态中开发者需支付多少比例的分成？可获得多少企业客户流量？",
+          "expected_answer": "分成15%-25%，可获得超300万企业客户流量",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "15%-25%"
+            },
+            {
+              "type": "substring",
+              "text": "300万企业客户"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "开发者分成与客户规模",
+          "expected_should_answer": true,
+          "must_include": [
+            "分成15%-25%，可获得超300万企业客户流量"
+          ]
+        },
+        {
+          "query": "Salesforce的年收入突破了多少美元？",
+          "expected_answer": "300亿美元",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "300亿美元"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "Salesforce年收入",
+          "expected_should_answer": true,
+          "must_include": [
+            "300亿美元"
+          ]
+        },
+        {
+          "query": "文章提到企业业务流程有多少比例运行在Salesforce生态内时迁移成本将不可承受？",
+          "expected_answer": "80%",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "80%业务流程"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "迁移成本临界点",
+          "expected_should_answer": true,
+          "must_include": [
+            "80%"
+          ]
+        },
+        {
+          "query": "2024年全年中国电影票房是多少亿元？比2023年下跌了多少？",
+          "expected_answer": "425.02亿元，比2023年的549.15亿元大跌22.6%",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "425.02亿元"
+            },
+            {
+              "type": "substring",
+              "text": "22.6%"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "电影票房数据",
+          "expected_should_answer": true,
+          "must_include": [
+            "425.02亿元，比2023年的549.15亿元大跌22.6%"
+          ]
+        },
+        {
+          "query": "2024年平安夜单日票房是多少万元？是什么水平的低点？",
+          "expected_answer": "3846.74万元，为十多年来的最低点",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "3846.74万元"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "平安夜票房",
+          "expected_should_answer": true,
+          "must_include": [
+            "3846.74万元，为十多年来的最低点"
+          ]
+        },
+        {
+          "query": "薪酬设计需要遵从哪三个原则？",
+          "expected_answer": "竞争性原则、公平性原则、一致性原则",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "竞争性原则"
+            },
+            {
+              "type": "substring",
+              "text": "公平性原则"
+            },
+            {
+              "type": "substring",
+              "text": "一致性原则"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "薪酬三原则",
+          "expected_should_answer": true,
+          "must_include": [
+            "竞争性原则、公平性原则、一致性原则"
+          ]
+        },
+        {
+          "query": "薪酬的物质部分可以拆解为哪几个构成？",
+          "expected_answer": "固定部分+浮动部分+补偿部分，其中浮动部分分为短期激励和长期激励",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "固定部分+浮动部分+补偿部分"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "薪酬构成",
+          "expected_should_answer": true,
+          "must_include": [
+            "固定部分+浮动部分+补偿部分，其中浮动部分分为短期激励和长期激励"
+          ]
+        },
+        {
+          "query": "薪酬解构案例中，文员小王的固定薪酬是多少？在什么岗位？",
+          "expected_answer": "6000元（6千），前台文员岗位",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "6千的固定薪酬"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "小王案例薪酬",
+          "expected_should_answer": true,
+          "must_include": [
+            "6000元（6千），前台文员岗位"
+          ]
+        },
+        {
+          "query": "薪酬解构案例中小王转岗后的固定薪资是多少？为什么她离职了？",
+          "expected_answer": "7000元；因为违背了竞争性原则（对市场专员岗位不是高薪酬）、公平性原则（市场岗位应有浮动薪酬但小王仍是纯固薪）和一致性原则",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "7000的固定薪资"
+            },
+            {
+              "type": "substring",
+              "text": "竞争性原则"
+            },
+            {
+              "type": "substring",
+              "text": "公平性原则"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "小王离职原因综合",
+          "expected_should_answer": true,
+          "must_include": [
+            "7000元",
+            "因为违背了竞争性原则（对市场专员岗位不是高薪酬）、公平性原则（市场岗位应有浮动薪酬但小王仍是纯固薪）和一致性原则"
+          ]
+        },
+        {
+          "query": "文章提到教培行业估计有多少比例的企业财务能力仅限于理清账目？",
+          "expected_answer": "90%以上",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "90%以上"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "教培行业财务能力比例",
+          "expected_should_answer": true,
+          "must_include": [
+            "90%以上"
+          ]
+        },
+        {
+          "query": "RBF合同通常设定基于本金多少倍的抽成上限？",
+          "expected_answer": "2~5倍",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "2～5倍"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "RBF抽成上限",
+          "expected_should_answer": true,
+          "must_include": [
+            "2~5倍"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ipd_table",
+      "description": "Questions targeting the Huawei IPD spreadsheet (372 rows, 6 columns: 编号/阶段/活动/活动号/活动描述/角色). Tests structured-data retrieval from XLSX — the RAG system must parse tabular data, not just prose. Questions require finding specific rows by phase, activity number, or role.",
+      "examples": [
+        {
+          "query": "华为IPD流程包含哪几个阶段？",
+          "expected_answer": "概念阶段、计划阶段、开发阶段、验证阶段、发布阶段、生命周期",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "概念阶段"
+            },
+            {
+              "type": "substring",
+              "text": "计划阶段"
+            },
+            {
+              "type": "substring",
+              "text": "开发阶段"
+            },
+            {
+              "type": "substring",
+              "text": "验证阶段"
+            },
+            {
+              "type": "substring",
+              "text": "发布阶段"
+            },
+            {
+              "type": "substring",
+              "text": "生命周期"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "IPD六个阶段",
+          "expected_should_answer": true,
+          "must_include": [
+            "概念阶段、计划阶段、开发阶段、验证阶段、发布阶段、生命周期"
+          ]
+        },
+        {
+          "query": "华为IPD流程中概念阶段有多少个活动？",
+          "expected_answer": "81个",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "概念阶段"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "概念阶段活动数",
+          "expected_should_answer": true,
+          "must_include": [
+            "81个"
+          ]
+        },
+        {
+          "query": "华为IPD流程中开发阶段有多少个活动？哪个阶段活动最多？",
+          "expected_answer": "开发阶段92个活动，是所有阶段中最多的",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "开发阶段"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "开发阶段活动数",
+          "expected_should_answer": true,
+          "must_include": [
+            "开发阶段92个活动，是所有阶段中最多的"
+          ]
+        },
+        {
+          "query": "华为IPD流程中活动号为PAC-05的活动是什么？在哪个阶段？",
+          "expected_answer": "概念启动，在概念阶段",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "PAC-05"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "按活动号查活动",
+          "expected_should_answer": true,
+          "must_include": [
+            "概念启动，在概念阶段"
+          ]
+        },
+        {
+          "query": "华为IPD流程中概念决策评审的活动号是什么？",
+          "expected_answer": "PAC-20",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "PAC-20"
+            },
+            {
+              "type": "substring",
+              "text": "概念决策评审"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "概念决策评审活动号",
+          "expected_should_answer": true,
+          "must_include": [
+            "PAC-20"
+          ]
+        },
+        {
+          "query": "华为IPD流程中可获得性决策评审的活动号是什么？",
+          "expected_answer": "PAC-60",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "PAC-60"
+            },
+            {
+              "type": "substring",
+              "text": "可获得性决策评审"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "可获得性决策评审",
+          "expected_should_answer": true,
+          "must_include": [
+            "PAC-60"
+          ]
+        },
+        {
+          "query": "华为IPD流程中生命终止决策评审的活动号是什么？",
+          "expected_answer": "PAC-100",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "PAC- 100"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "生命终止决策评审",
+          "expected_should_answer": true,
+          "must_include": [
+            "PAC-100"
+          ]
+        },
+        {
+          "query": "华为IPD流程中解散PDT团队的活动号是什么？",
+          "expected_answer": "PAC-90",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "PAC-90"
+            },
+            {
+              "type": "substring",
+              "text": "解散PDT团队"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "解散PDT活动号",
+          "expected_should_answer": true,
+          "must_include": [
+            "PAC-90"
+          ]
+        },
+        {
+          "query": "华为IPD流程中计划决策评审的活动号是什么？",
+          "expected_answer": "PAC-40",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "PAC-40"
+            },
+            {
+              "type": "substring",
+              "text": "计划决策评审"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "计划决策评审",
+          "expected_should_answer": true,
+          "must_include": [
+            "PAC-40"
+          ]
+        },
+        {
+          "query": "华为IPD流程中LPDT角色在概念阶段负责的第一个活动是什么？活动号是多少？",
+          "expected_answer": "接受概念阶段任务书、立项通知书，活动号LPDT-03",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "LPDT-03"
+            },
+            {
+              "type": "substring",
+              "text": "接受概念阶段任务书"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "LPDT首个活动",
+          "expected_should_answer": true,
+          "must_include": [
+            "接受概念阶段任务书、立项通知书，活动号LPDT-03"
+          ]
+        },
+        {
+          "query": "华为IPD流程中组建LMT团队的活动号是什么？",
+          "expected_answer": "PAC-170",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "PAC- 170"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "组建LMT团队",
+          "expected_should_answer": true,
+          "must_include": [
+            "PAC-170"
+          ]
+        },
+        {
+          "query": "华为IPD流程中验证阶段有多少个活动？发布阶段有多少个活动？",
+          "expected_answer": "验证阶段59个，发布阶段30个",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "验证阶段"
+            },
+            {
+              "type": "substring",
+              "text": "发布阶段"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "验证和发布阶段活动数",
+          "expected_should_answer": true,
+          "must_include": [
+            "验证阶段59个，发布阶段30个"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "baiyao_pdf",
+      "description": "Questions targeting the Yunnan Baiyao IT planning PDF (1.9MB). Tests PDF text extraction + retrieval on a consulting proposal with complex layout (tables, architecture diagrams, multi-column text). Questions focus on specific numbers, framework names, and project phases.",
+      "examples": [
+        {
+          "query": "云南白药IT规划基于什么架构进行整体设计？",
+          "expected_answer": "4A架构",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "4A架构"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "4A架构",
+          "expected_should_answer": true,
+          "must_include": [
+            "4A架构"
+          ]
+        },
+        {
+          "query": "云南白药IT规划分为几个阶段？每个阶段的时间是什么？",
+          "expected_answer": "三个阶段：第一阶段4月18日-4月19日，第二阶段5月6日-5月10日，第三阶段5月13日-5月17日",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "第一阶段：4月18日-4月19日"
+            },
+            {
+              "type": "substring",
+              "text": "第二阶段：5月6日-5月10日"
+            },
+            {
+              "type": "substring",
+              "text": "第三阶段：5月13日-5月17日"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "三阶段时间",
+          "expected_should_answer": true,
+          "must_include": [
+            "三个阶段：第一阶段4月18日-4月19日，第二阶段5月6日-5月10日，第三阶段5月13日-5月17日"
+          ]
+        },
+        {
+          "query": "云南白药数据资产目录中有多少个主题域分组（L1）？多少个主题域（L2）？多少个业务对象（L3）？",
+          "expected_answer": "11大主题域分组（L1），100大主题域（L2），638个业务对象（L3）",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "11大主题域分组"
+            },
+            {
+              "type": "substring",
+              "text": "100大主题域"
+            },
+            {
+              "type": "substring",
+              "text": "638个业务对象"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "数据资产目录层级数量",
+          "expected_should_answer": true,
+          "must_include": [
+            "11大主题域分组（L1），100大主题域（L2），638个业务对象（L3）"
+          ]
+        },
+        {
+          "query": "云南白药IT规划的冒烟通过率要求是多少？验证通过率和试点通过率分别是多少？",
+          "expected_answer": "冒烟通过率≥95%，验证通过率≥90%，试点通过率≥90%",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "冒烟通过率≥95%"
+            },
+            {
+              "type": "substring",
+              "text": "验证通过率≥90%"
+            },
+            {
+              "type": "substring",
+              "text": "试点通过率≥90%"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "通过率指标",
+          "expected_should_answer": true,
+          "must_include": [
+            "冒烟通过率≥95%，验证通过率≥90%，试点通过率≥90%"
+          ]
+        },
+        {
+          "query": "云南白药IT规划中立项通过率要求是多少？立项驳回率是多少？",
+          "expected_answer": "立项通过率≥80%，立项驳回率≥50%",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "立项通过率≥80%"
+            },
+            {
+              "type": "substring",
+              "text": "立项驳回率≥50%"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "立项通过/驳回率",
+          "expected_should_answer": true,
+          "must_include": [
+            "立项通过率≥80%，立项驳回率≥50%"
+          ]
+        },
+        {
+          "query": "云南白药IT规划中项目预算偏差率和项目计划偏差率的控制标准是多少？",
+          "expected_answer": "项目预算偏差率≤20%，项目计划偏差率≤20%",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "项目预算偏差率≤20%"
+            },
+            {
+              "type": "substring",
+              "text": "项目计划偏差率≤20%"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "偏差率控制标准",
+          "expected_should_answer": true,
+          "must_include": [
+            "项目预算偏差率≤20%，项目计划偏差率≤20%"
+          ]
+        },
+        {
+          "query": "云南白药IT规划中S级项目的定义标准是什么？",
+          "expected_answer": "项目投入≥500万或跨一级流程且项目投入≥300万",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "S级：项目投入≥500万"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "S级项目标准",
+          "expected_should_answer": true,
+          "must_include": [
+            "项目投入≥500万或跨一级流程且项目投入≥300万"
+          ]
+        },
+        {
+          "query": "云南白药IT规划中A级项目的定义标准是什么？",
+          "expected_answer": "300万≤项目投入<500万或跨一级流程且100万≤项目投入<300万",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "A级：300W≤项目投入<500W"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "A级项目标准",
+          "expected_should_answer": true,
+          "must_include": [
+            "300万≤项目投入<500万或跨一级流程且100万≤项目投入<300万"
+          ]
+        },
+        {
+          "query": "云南白药IT规划的L1流程架构包含哪些一级流程？至少列举5个。",
+          "expected_answer": "包括LTC、IPD、ISC、D&S、HRM、财经、BP&DT、MCR、工自仪等",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "2.0LTC"
+            },
+            {
+              "type": "substring",
+              "text": "3.0IPD"
+            },
+            {
+              "type": "substring",
+              "text": "6.0ISC"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "L1一级流程",
+          "expected_should_answer": true,
+          "must_include": [
+            "包括LTC、IPD、ISC、D&S、HRM、财经、BP&DT、MCR、工自仪等"
+          ]
+        },
+        {
+          "query": "云南白药IT规划提到业务对象最多的主题域分组是哪个？有多少个业务对象？",
+          "expected_answer": "财经运营，共110个业务对象",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "110个"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "业务对象最多的分组",
+          "expected_should_answer": true,
+          "must_include": [
+            "财经运营，共110个业务对象"
+          ]
+        },
+        {
+          "query": "云南白药数字化集成解决方案开发流程的核心要点是什么？",
+          "expected_answer": "引入4A架构，数据工作前移，以客户价值为中心，遵从企业架构",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "引入4A架构"
+            },
+            {
+              "type": "substring",
+              "text": "以客户价值为中心"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "核心要点综合",
+          "expected_should_answer": true,
+          "must_include": [
+            "引入4A架构，数据工作前移，以客户价值为中心，遵从企业架构"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "cross_document",
+      "description": "Questions spanning multiple documents across different formats and topics. Tests doc_scope filtering, disambiguation, and multi-document retrieval — the answer may require distinguishing between similar concepts in different documents or combining facts from unrelated corpora.",
+      "examples": [
+        {
+          "query": "Y冷冻设备公司的4R策略和云南白药IT规划的4A架构，分别是什么意思？",
+          "expected_answer": "4R策略是关联、反应、关系、回报的营销策略框架；4A架构是企业架构设计方法（业务架构、数据架构、应用架构、技术架构）",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "关联、反应、关系、回报"
+            },
+            {
+              "type": "substring",
+              "text": "4A架构"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "4R vs 4A 跨文档消歧",
+          "expected_should_answer": true,
+          "must_include": [
+            "4R策略是关联、反应、关系、回报的营销策略框架",
+            "4A架构是企业架构设计方法（业务架构、数据架构、应用架构、技术架构）"
+          ]
+        },
+        {
+          "query": "论文中Y冷冻设备公司的营销问题和咨询文章中国内企业软件市场的问题，有什么共同的根源？",
+          "expected_answer": "两者都指向'生产者导向/销售导向'而非'客户价值导向'的问题——Y冷冻公司以产定销忽视客户需求，国内软件商追求短期签约金额而非客户全生命周期价值",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "以产定销"
+            },
+            {
+              "type": "substring",
+              "text": "项目贩子"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "跨文档主题关联",
+          "expected_should_answer": true,
+          "must_include": [
+            "两者都指向'生产者导向/销售导向'而非'客户价值导向'的问题——Y冷冻公司以产定销忽视客户需求，国内软件商追求短期签约金额而非客户全生命周期价值"
+          ]
+        },
+        {
+          "query": "薪酬解构文章中提到的'竞争性原则'和Y冷冻设备公司论文中的目标市场选择，有什么联系？",
+          "expected_answer": "薪酬的竞争性原则要求薪资水平与岗位市场水平匹配；Y冷冻公司选择专业化市场也是基于自身资源条件与市场竞争格局的匹配，两者都强调'定位与自身条件相称'",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "竞争性原则"
+            },
+            {
+              "type": "substring",
+              "text": "专业化市场作为其目标市场"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "跨文档概念关联",
+          "expected_should_answer": true,
+          "must_include": [
+            "薪酬的竞争性原则要求薪资水平与岗位市场水平匹配",
+            "Y冷冻公司选择专业化市场也是基于自身资源条件与市场竞争格局的匹配，两者都强调'定位与自身条件相称'"
+          ]
+        },
+        {
+          "query": "华为IPD流程中的PAC角色和云南白药IT规划中的项目分级，分别涉及什么决策机制？",
+          "expected_answer": "华为IPD中PAC是产品审批委员会，负责各阶段决策评审（PAC-05/20/40/60/100等）；云南白药按项目投入金额分S/A/B级，不同级别有不同审批要求",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "PAC"
+            },
+            {
+              "type": "substring",
+              "text": "S级：项目投入≥500万"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "IPD PAC vs 白药项目分级",
+          "expected_should_answer": true,
+          "must_include": [
+            "华为IPD中PAC是产品审批委员会，负责各阶段决策评审（PAC-05/20/40/60/100等）",
+            "云南白药按项目投入金额分S/A/B级，不同级别有不同审批要求"
+          ]
+        },
+        {
+          "query": "在这7份文档中，哪些文档提到了'客户'的重要性？分别从什么角度？",
+          "expected_answer": "Y冷冻论文从4R营销策略角度强调关联和回应客户需求；智遥咨询文章从平台效应角度强调用户生态价值；薪酬解构从薪酬一致性原则角度强调岗位职责与薪酬匹配；云南白药从IT规划角度强调以客户价值为中心",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "关联客户"
+            },
+            {
+              "type": "substring",
+              "text": "用户生态价值"
+            },
+            {
+              "type": "substring",
+              "text": "以客户价值为中心"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "跨多文档主题综合",
+          "expected_should_answer": true,
+          "must_include": [
+            "Y冷冻论文从4R营销策略角度强调关联和回应客户需求",
+            "智遥咨询文章从平台效应角度强调用户生态价值",
+            "薪酬解构从薪酬一致性原则角度强调岗位职责与薪酬匹配",
+            "云南白药从IT规划角度强调以客户价值为中心"
+          ]
+        },
+        {
+          "query": "Salesforce的平台网络效应和Y冷冻设备公司的目标市场定位，在'专注细分市场'方面有什么相似之处？",
+          "expected_answer": "Salesforce通过生态锁定深耕CRM细分领域占据23%份额；Y冷冻公司选择专业化市场（肉制品加工企业）集中资源，两者都是聚焦细分市场建立竞争优势",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "23%份额"
+            },
+            {
+              "type": "substring",
+              "text": "专业化市场作为其目标市场"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "细分市场策略跨文档对比",
+          "expected_should_answer": true,
+          "must_include": [
+            "Salesforce通过生态锁定深耕CRM细分领域占据23%份额",
+            "Y冷冻公司选择专业化市场（肉制品加工企业）集中资源，两者都是聚焦细分市场建立竞争优势"
+          ]
+        },
+        {
+          "query": "华为IPD流程有多少个活动？云南白药IT规划有多少个业务对象？两者在'体系化'方面有什么共同特点？",
+          "expected_answer": "华为IPD有370个活动（372行含标题），云南白药有638个业务对象；两者都将复杂业务拆解为大量结构化要素进行体系化管理",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "370"
+            },
+            {
+              "type": "substring",
+              "text": "638个业务对象"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "结构化拆解跨文档",
+          "expected_should_answer": true,
+          "must_include": [
+            "华为IPD有370个活动（372行含标题），云南白药有638个业务对象",
+            "两者都将复杂业务拆解为大量结构化要素进行体系化管理"
+          ]
+        },
+        {
+          "query": "ADR-0009中的沙箱检索桥接和华为IPD流程中的模块化设计，在'解耦'思想上有什么联系？",
+          "expected_answer": "ADR-0009通过管道fd3/fd4将沙箱与宿主解耦，沙箱不联网而通过RPC获取检索能力；华为IPD模块化设计将速冻机拆为8个系统模块减少相互干涉，两者都是通过解耦降低复杂性",
+          "source_chunks": [
+            {
+              "type": "substring",
+              "text": "fd3"
+            },
+            {
+              "type": "substring",
+              "text": "模块化设计"
+            }
+          ],
+          "expected_citations": [
+            1
+          ],
+          "mode": "rag",
+          "description": "解耦思想跨文档",
+          "expected_should_answer": true,
+          "must_include": [
+            "ADR-0009通过管道fd3/fd4将沙箱与宿主解耦，沙箱不联网而通过RPC获取检索能力",
+            "华为IPD模块化设计将速冻机拆为8个系统模块减少相互干涉，两者都是通过解耦降低复杂性"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,7 +1,9 @@
 use crate::ports::notebooks::notebook_store::NotebookStore;
 use async_trait::async_trait;
-use common::{AppError, CreateNotebookRequest, default_org_id, default_user_id, new_id, now_rfc3339};
-use contracts::notebooks::{Notebook};
+use common::{
+    AppError, CreateNotebookRequest, default_org_id, default_user_id, new_id, now_rfc3339,
+};
+use contracts::notebooks::Notebook;
 
 #[derive(Default, Clone)]
 pub struct MemoryNotebookStore;

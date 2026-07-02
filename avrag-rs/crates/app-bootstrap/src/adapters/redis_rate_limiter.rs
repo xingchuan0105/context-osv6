@@ -36,9 +36,7 @@ pub fn build_rate_limit_backend(redis_url: &str) -> Option<Arc<RedisRateLimitBac
     if redis_url.trim().is_empty() {
         return None;
     }
-    RedisRateLimitBackend::new(redis_url)
-        .ok()
-        .map(Arc::new)
+    RedisRateLimitBackend::new(redis_url).ok().map(Arc::new)
 }
 
 #[derive(Clone)]

@@ -1,9 +1,7 @@
 use async_trait::async_trait;
 use avrag_auth::AuthContext;
 use chrono::{DateTime, Utc};
-use common::{
-    ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow,
-};
+use common::{ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow};
 use uuid::Uuid;
 
 use avrag_auth::OrgId;

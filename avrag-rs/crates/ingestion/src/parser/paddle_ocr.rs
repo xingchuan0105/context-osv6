@@ -449,7 +449,9 @@ mod tests {
         assert_ne!(default_hash, disabled_hash);
         let payload = optional_payload_json();
         assert_eq!(
-            payload.get("useDocOrientationClassify").and_then(|v| v.as_bool()),
+            payload
+                .get("useDocOrientationClassify")
+                .and_then(|v| v.as_bool()),
             Some(true)
         );
     }
@@ -467,7 +469,8 @@ mod tests {
 
     #[test]
     fn test_parse_jsonl_direct_layout() {
-        let body = r#"{"layoutParsingResults": [{"markdown": {"text": "Page text", "images": {}}}]}"#;
+        let body =
+            r#"{"layoutParsingResults": [{"markdown": {"text": "Page text", "images": {}}}]}"#;
         let pages = parse_jsonl_or_json_pages(body, 5).unwrap();
         assert_eq!(pages.len(), 1);
         assert_eq!(pages[0].page_number, 5);

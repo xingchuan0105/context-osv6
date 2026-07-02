@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use avrag_auth::AuthContext;
 use common::{AppError, Document, DocumentContentResponse, ParsedPreviewResponse, SourceRow};
-use contracts::documents::{DocumentStatus};
-use contracts::notebooks::{Notebook};
+use contracts::documents::DocumentStatus;
+use contracts::notebooks::Notebook;
 use ingestion_types::{AuditRecord, IngestionTask};
 use uuid::Uuid;
 

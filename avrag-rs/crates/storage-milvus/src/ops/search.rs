@@ -72,7 +72,9 @@ impl MilvusDataPlane {
         for row in rows {
             match scored_text_chunk(row, "milvus_text_dense") {
                 Ok(chunk) => chunks.push(chunk),
-                Err(e) => warn!(error = %e, channel = "milvus_text_dense", "skipped malformed search row"),
+                Err(e) => {
+                    warn!(error = %e, channel = "milvus_text_dense", "skipped malformed search row")
+                }
             }
         }
         Ok(chunks)
@@ -109,7 +111,9 @@ impl MilvusDataPlane {
         for row in rows {
             match scored_text_chunk(row, "milvus_bm25") {
                 Ok(chunk) => chunks.push(chunk),
-                Err(e) => warn!(error = %e, channel = "milvus_bm25", "skipped malformed search row"),
+                Err(e) => {
+                    warn!(error = %e, channel = "milvus_bm25", "skipped malformed search row")
+                }
             }
         }
         let hydrated_hit_count = chunks.len();
@@ -146,7 +150,9 @@ impl MilvusDataPlane {
         for row in rows {
             match scored_multimodal_chunk(row, "milvus_multimodal_dense") {
                 Ok(chunk) => chunks.push(chunk),
-                Err(e) => warn!(error = %e, channel = "milvus_multimodal_dense", "skipped malformed search row"),
+                Err(e) => {
+                    warn!(error = %e, channel = "milvus_multimodal_dense", "skipped malformed search row")
+                }
             }
         }
         Ok(chunks)
@@ -230,11 +236,9 @@ mod search_tests {
 
     #[test]
     fn scored_multimodal_applies_fallback_weight() {
-        let chunk = scored_multimodal_chunk(
-            sample_multimodal_row(Some(0.4)),
-            "milvus_multimodal_dense",
-        )
-        .expect("row should parse");
+        let chunk =
+            scored_multimodal_chunk(sample_multimodal_row(Some(0.4)), "milvus_multimodal_dense")
+                .expect("row should parse");
         assert!((chunk.score - 0.36).abs() < 1e-6);
     }
 
@@ -247,8 +251,8 @@ mod search_tests {
 
     #[test]
     fn scored_multimodal_without_weight_uses_base_score() {
-        let chunk = scored_multimodal_chunk(sample_multimodal_row(None), "test")
-            .expect("row should parse");
+        let chunk =
+            scored_multimodal_chunk(sample_multimodal_row(None), "test").expect("row should parse");
         assert!((chunk.score - 0.9).abs() < 1e-6);
     }
 }

@@ -10,9 +10,7 @@ use request::build_chat_completion_request_body;
 use stream_parser::{ApiUsageRaw, ChatCompletionStreamParser};
 use tokio_util::sync::CancellationToken;
 
-pub use types::{
-    ChatMessage, ContentPart, ImageUrlDetail, LlmResponse, LlmUsage,
-};
+pub use types::{ChatMessage, ContentPart, ImageUrlDetail, LlmResponse, LlmUsage};
 
 struct CompletionCall {
     started_at: std::time::Instant,
@@ -68,9 +66,17 @@ impl LlmClient {
         temperature: Option<f32>,
         stream: bool,
         tools: Option<&[contracts::ToolSpec]>,
+        json_mode: bool,
+        max_tokens: Option<u32>,
     ) -> serde_json::Value {
-        let mut request_body =
-            build_chat_completion_request_body(&self.config, messages, temperature, stream);
+        let mut request_body = build_chat_completion_request_body(
+            &self.config,
+            messages,
+            temperature,
+            stream,
+            json_mode,
+            max_tokens,
+        );
 
         if let Some(tools) = tools {
             if !tools.is_empty() {
@@ -96,11 +102,7 @@ impl LlmClient {
 
     fn record_call_failure(call: &CompletionCall) {
         Self::record_dependency_failure(&call.provider);
-        Self::record_completion_failure(
-            &call.provider,
-            &call.configured_model,
-            call.started_at,
-        );
+        Self::record_completion_failure(&call.provider, &call.configured_model, call.started_at);
     }
 
     fn record_completion_failure(
@@ -205,9 +207,18 @@ impl LlmClient {
         messages: &[ChatMessage],
         temperature: Option<f32>,
         tools: Option<&[contracts::ToolSpec]>,
+        json_mode: bool,
+        max_tokens: Option<u32>,
     ) -> anyhow::Result<LlmResponse> {
         let call = self.prepare_completion(messages)?;
-        let request_body = self.build_completion_request_body(messages, temperature, false, tools);
+        let request_body = self.build_completion_request_body(
+            messages,
+            temperature,
+            false,
+            tools,
+            json_mode,
+            max_tokens,
+        );
 
         let response = self
             .post_chat_completions(&call, &request_body, false, None)
@@ -313,7 +324,7 @@ impl LlmClient {
         tools: &[contracts::ToolSpec],
         temperature: Option<f32>,
     ) -> anyhow::Result<LlmResponse> {
-        self.complete_non_stream(messages, temperature, Some(tools))
+        self.complete_non_stream(messages, temperature, Some(tools), false, None)
             .await
     }
 
@@ -323,7 +334,34 @@ impl LlmClient {
         messages: &[ChatMessage],
         temperature: Option<f32>,
     ) -> anyhow::Result<LlmResponse> {
-        self.complete_non_stream(messages, temperature, None).await
+        self.complete_non_stream(messages, temperature, None, false, None)
+            .await
+    }
+
+    /// Send a chat completion request with an explicit output token cap.
+    pub async fn complete_with_max_tokens(
+        &self,
+        messages: &[ChatMessage],
+        temperature: Option<f32>,
+        max_tokens: u32,
+    ) -> anyhow::Result<LlmResponse> {
+        self.complete_non_stream(messages, temperature, None, false, Some(max_tokens))
+            .await
+    }
+
+    /// Send a chat completion request with DeepSeek JSON Output enabled
+    /// (`response_format: json_object`). Use this for synthesis turns that must
+    /// emit a structured `internal_answer_v1` / `internal_search_answer_v1`
+    /// JSON object. The prompt must already contain the word "json" and a
+    /// format example (see `synthesis_contract_block`). On non-DeepSeek
+    /// providers this silently falls back to a normal completion.
+    pub async fn complete_json_mode(
+        &self,
+        messages: &[ChatMessage],
+        temperature: Option<f32>,
+    ) -> anyhow::Result<LlmResponse> {
+        self.complete_non_stream(messages, temperature, None, true, None)
+            .await
     }
 
     pub async fn complete_stream(
@@ -335,7 +373,14 @@ impl LlmClient {
         mut on_reasoning_delta: impl FnMut(&str),
     ) -> anyhow::Result<LlmResponse> {
         let call = self.prepare_completion(messages)?;
-        let request_body = self.build_completion_request_body(messages, temperature, true, None);
+        let request_body = self.build_completion_request_body(
+            messages,
+            temperature,
+            true,
+            None,
+            false,
+            None,
+        );
 
         let mut response = self
             .post_chat_completions(&call, &request_body, true, Some(&token))

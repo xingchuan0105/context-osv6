@@ -1,5 +1,5 @@
-mod org;
 mod ingest;
+mod org;
 mod query;
 
 pub(crate) use ingest::{

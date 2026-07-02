@@ -5,13 +5,13 @@ mod domain_row_convert;
 mod pg_error;
 
 pub use app_state::{
-    agent_icon, agent_name, build_answer, build_citations, build_degrade_trace, build_docscope_metadata,
-    build_mode_debug, build_parsed_preview, build_planner_output, build_redis_url,
-    build_sources, build_summary, derive_profile_domains, derive_profile_topics,
-    detect_preferred_style, document_is_deleting_or_deleted, estimate_token_count,
-    infer_mime_type_from_path, is_remote_asset_reference, merge_general_profile_custom_preferences,
-    next_message_id, status_label, AppState, CostEventRecord, MemoryState, RetrievedContext,
-    StoredDocument,
+    AppState, CostEventRecord, MemoryState, RetrievedContext, StoredDocument, agent_icon,
+    agent_name, build_answer, build_citations, build_degrade_trace, build_docscope_metadata,
+    build_mode_debug, build_parsed_preview, build_planner_output, build_redis_url, build_sources,
+    build_summary, derive_profile_domains, derive_profile_topics, detect_preferred_style,
+    document_is_deleting_or_deleted, estimate_token_count, infer_mime_type_from_path,
+    is_remote_asset_reference, merge_general_profile_custom_preferences, next_message_id,
+    status_label,
 };
 
 pub use adapters::{
@@ -117,11 +117,10 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         None,
         &config.prompts.dir,
     ));
-    let object_store: Arc<dyn app_core::ObjectStorePort> = Arc::new(ObjectStorePortAdapter::new(
-        Arc::new(ObjectStoreHandle::local(PathBuf::from(
-            config.object_root.clone(),
-        ))),
-    ));
+    let object_store: Arc<dyn app_core::ObjectStorePort> =
+        Arc::new(ObjectStorePortAdapter::new(Arc::new(
+            ObjectStoreHandle::local(PathBuf::from(config.object_root.clone())),
+        )));
     let storage = StorageContext::new(
         None,
         false,
@@ -150,10 +149,7 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         None,
     );
 
-    let billing = BillingContext::new(
-        None,
-        config.usage_limit.enforcement_phase.clone(),
-    );
+    let billing = BillingContext::new(None, config.usage_limit.enforcement_phase.clone());
     let admin = AdminContext::new();
     let documents = DocumentContext::new();
     let analytics = AnalyticsServiceCtx::new(None);
@@ -237,20 +233,21 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
             as Arc<dyn app_core::UsageLimitStorePort>
     });
 
-    let quota_manager = billing_store.as_ref().zip(usage_limit_store.as_ref()).map(
-        |(billing, usage_limit)| {
-            Arc::new(avrag_billing::QuotaManager::new(
-                billing.clone(),
-                usage_limit.clone(),
-            ))
-        },
-    );
+    let quota_manager =
+        billing_store
+            .as_ref()
+            .zip(usage_limit_store.as_ref())
+            .map(|(billing, usage_limit)| {
+                Arc::new(avrag_billing::QuotaManager::new(
+                    billing.clone(),
+                    usage_limit.clone(),
+                ))
+            });
 
     let rag_runtime = if config.enable_rag && pg.is_some() {
         let pg_repo = pg.as_ref().unwrap();
-        let embedding = make_embedding_client(&config.embedding, cache_store.clone()).ok_or_else(
-            || anyhow::anyhow!("embedding client is required when enable_rag=true"),
-        )?;
+        let embedding = make_embedding_client(&config.embedding, cache_store.clone())
+            .ok_or_else(|| anyhow::anyhow!("embedding client is required when enable_rag=true"))?;
         let mm_embedding = make_embedding_client(&config.mm_embedding, cache_store.clone());
         let planner = make_planner(&config.agent_llm, cache_store.clone());
         let reranker = make_reranker(&config.rerank);
@@ -289,8 +286,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
             multimodal_vector_dim: config.milvus.multimodal_vector_dim,
             metric_type: config.milvus.metric_type.clone(),
         };
-        let data_plane: Arc<dyn RetrievalDataPlane> =
-            Arc::new(MilvusDataPlane::new(milvus_config));
+        let data_plane: Arc<dyn RetrievalDataPlane> = Arc::new(MilvusDataPlane::new(milvus_config));
         data_plane.ensure_schema().await?;
         Some(Arc::new(RagRuntime::with_data_plane(
             rag_config, data_plane,
@@ -299,19 +295,16 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         None
     };
 
-    let billing = BillingContext::new(
-        quota_manager,
-        config.usage_limit.enforcement_phase.clone(),
-    );
+    let billing = BillingContext::new(quota_manager, config.usage_limit.enforcement_phase.clone());
     let analytics = AnalyticsServiceCtx::new(
         pg.as_ref()
             .map(|p| Arc::new(analytics::AnalyticsService::new(p.raw().clone()))),
     );
     let object_store: Arc<dyn app_core::ObjectStorePort> =
         Arc::new(ObjectStorePortAdapter::new(object_store_handle));
-    let postgres_health = pg
-        .as_ref()
-        .map(|repo| Arc::new(PgHealthAdapter::new(repo.clone())) as Arc<dyn app_core::PostgresHealthPort>);
+    let postgres_health = pg.as_ref().map(|repo| {
+        Arc::new(PgHealthAdapter::new(repo.clone())) as Arc<dyn app_core::PostgresHealthPort>
+    });
     let uses_memory_adapters = pg.is_none();
     let document_store: Option<Arc<dyn DocumentStorePort>> = pg.as_ref().map(|repository| {
         Arc::new(PgDocumentStoreAdapter::new(repository.clone())) as Arc<dyn DocumentStorePort>
@@ -322,11 +315,10 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     let auth_store: Option<Arc<dyn AuthStorePort>> = pg.as_ref().map(|repository| {
         Arc::new(PgAuthStoreAdapter::new(repository.clone())) as Arc<dyn AuthStorePort>
     });
-    let billing_quota: Option<Arc<dyn BillingQuotaPort>> =
-        document_store.as_ref().map(|store| {
-            Arc::new(PgBillingQuotaAdapter::new(billing.clone(), store.clone()))
-                as Arc<dyn BillingQuotaPort>
-        });
+    let billing_quota: Option<Arc<dyn BillingQuotaPort>> = document_store.as_ref().map(|store| {
+        Arc::new(PgBillingQuotaAdapter::new(billing.clone(), store.clone()))
+            as Arc<dyn BillingQuotaPort>
+    });
     let agent_service = Some(build_unified_agent_service(
         llm_ctx.agent_client().cloned(),
         search_executor.clone(),

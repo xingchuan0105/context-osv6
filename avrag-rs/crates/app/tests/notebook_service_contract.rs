@@ -2,7 +2,7 @@ use app::ports::notebooks::notebook_store::NotebookStore;
 use app::services::notebooks::service::NotebookService;
 use async_trait::async_trait;
 use common::{AppError, CreateNotebookRequest};
-use contracts::notebooks::{Notebook};
+use contracts::notebooks::Notebook;
 
 #[derive(Clone, Default)]
 struct FakeNotebookStore;

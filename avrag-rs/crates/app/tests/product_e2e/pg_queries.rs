@@ -9,11 +9,10 @@ impl TestContext {
     pub async fn assert_ingestion_completed(&self, document_id: &str) -> anyhow::Result<()> {
         let pool = sqlx::PgPool::connect(&self.pg_url).await?;
         let doc_id = Uuid::parse_str(document_id)?;
-        let row: (String,) =
-            sqlx::query_as("SELECT status FROM documents WHERE id = $1")
-                .bind(doc_id)
-                .fetch_one(&pool)
-                .await?;
+        let row: (String,) = sqlx::query_as("SELECT status FROM documents WHERE id = $1")
+            .bind(doc_id)
+            .fetch_one(&pool)
+            .await?;
         anyhow::ensure!(
             row.0 == "completed",
             "expected document status completed, got {}",
@@ -30,6 +29,22 @@ impl TestContext {
             .fetch_one(&pool)
             .await?;
         Ok(row.0 as usize)
+    }
+
+    /// Wall-clock ingestion duration (documents.updated_at - created_at) in seconds.
+    pub async fn query_document_ingest_duration_secs(
+        &self,
+        document_id: &str,
+    ) -> anyhow::Result<f64> {
+        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
+        let doc_id = Uuid::parse_str(document_id)?;
+        let row: (f64,) = sqlx::query_as(
+            "SELECT EXTRACT(EPOCH FROM (updated_at - created_at))::float8 FROM documents WHERE id = $1",
+        )
+        .bind(doc_id)
+        .fetch_one(&pool)
+        .await?;
+        Ok(row.0)
     }
 
     /// Latest parse run backend_summary JSON for a document.
@@ -68,11 +83,21 @@ impl TestContext {
     pub async fn query_document_mime_type(&self, document_id: &str) -> anyhow::Result<String> {
         let pool = sqlx::PgPool::connect(&self.pg_url).await?;
         let doc_id = Uuid::parse_str(document_id)?;
-        let row: (String,) =
-            sqlx::query_as("SELECT mime_type FROM documents WHERE id = $1")
-                .bind(doc_id)
-                .fetch_one(&pool)
-                .await?;
+        let row: (String,) = sqlx::query_as("SELECT mime_type FROM documents WHERE id = $1")
+            .bind(doc_id)
+            .fetch_one(&pool)
+            .await?;
+        Ok(row.0)
+    }
+
+    /// Object storage path stored on the document row after upload.
+    pub async fn query_document_object_path(&self, document_id: &str) -> anyhow::Result<String> {
+        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
+        let doc_id = Uuid::parse_str(document_id)?;
+        let row: (String,) = sqlx::query_as("SELECT object_path FROM documents WHERE id = $1")
+            .bind(doc_id)
+            .fetch_one(&pool)
+            .await?;
         Ok(row.0)
     }
 
@@ -96,11 +121,10 @@ impl TestContext {
     pub async fn query_ingested_chunk_units(&self, document_id: &str) -> anyhow::Result<usize> {
         let pool = sqlx::PgPool::connect(&self.pg_url).await?;
         let doc_id = Uuid::parse_str(document_id)?;
-        let text: (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM chunks WHERE document_id = $1")
-                .bind(doc_id)
-                .fetch_one(&pool)
-                .await?;
+        let text: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM chunks WHERE document_id = $1")
+            .bind(doc_id)
+            .fetch_one(&pool)
+            .await?;
         let multimodal: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM document_multimodal_chunks WHERE document_id = $1",
         )
@@ -114,11 +138,12 @@ impl TestContext {
     pub async fn query_first_chunk_id(&self, document_id: &str) -> anyhow::Result<String> {
         let pool = sqlx::PgPool::connect(&self.pg_url).await?;
         let doc_id = Uuid::parse_str(document_id)?;
-        let row: (Uuid,) =
-            sqlx::query_as("SELECT id FROM chunks WHERE document_id = $1 ORDER BY created_at LIMIT 1")
-                .bind(doc_id)
-                .fetch_one(&pool)
-                .await?;
+        let row: (Uuid,) = sqlx::query_as(
+            "SELECT id FROM chunks WHERE document_id = $1 ORDER BY created_at LIMIT 1",
+        )
+        .bind(doc_id)
+        .fetch_one(&pool)
+        .await?;
         Ok(row.0.to_string())
     }
 

@@ -12,6 +12,10 @@ fn ingestion_retry_backoff_seconds(attempt_count: i32) -> i32 {
     retry_backoff_seconds(attempt_count)
 }
 
+fn ingestion_queue_group_from_env() -> String {
+    std::env::var("AVRAG_INGESTION_QUEUE_GROUP").unwrap_or_else(|_| "default".to_string())
+}
+
 pub struct ChatTurn<'a> {
     pub user_content: &'a str,
     pub assistant_content: &'a str,
@@ -253,6 +257,7 @@ impl PgAppRepository {
         &self,
         task: &IngestionTask,
     ) -> Result<bool, PgStorageError> {
+        let queue_group = ingestion_queue_group_from_env();
         let org_id = OrgId::from(
             Uuid::parse_str(&task.org_id)
                 .map_err(|_| PgStorageError::NotFound("invalid task org id".to_string()))?,
@@ -274,9 +279,9 @@ impl PgAppRepository {
             r#"
             insert into ingestion_tasks (
                 task_id, org_id, notebook_id, document_id, kind, requested_by, idempotency_key,
-                payload, status, attempt_count, max_attempts, available_at, enqueued_at, updated_at
+                queue_group, payload, status, attempt_count, max_attempts, available_at, enqueued_at, updated_at
             )
-            values ($1, $2, $3, $4, $5, $6, $7, $8, 'queued', $9, $10, now(), $11, now())
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $10, $11, now(), $12, now())
             on conflict (idempotency_key) do nothing
             "#,
         )
@@ -300,6 +305,7 @@ impl PgAppRepository {
                 .and_then(|value| Uuid::parse_str(value).ok()),
         )
         .bind(&task.idempotency_key)
+        .bind(&queue_group)
         .bind(serde_json::to_value(&task.payload)?)
         .bind(task.attempt_count.max(0))
         .bind(task.max_attempts.max(1))
@@ -318,6 +324,7 @@ impl PgAppRepository {
         sha256_hex: Option<&str>,
         task: &IngestionTask,
     ) -> Result<DocumentUploadQueueOutcome, PgStorageError> {
+        let queue_group = ingestion_queue_group_from_env();
         let mut tx = self.pool.begin(context).await?;
         ensure_org_and_actor(tx.inner(), context).await?;
 
@@ -362,9 +369,9 @@ impl PgAppRepository {
             r#"
             insert into ingestion_tasks (
                 task_id, org_id, notebook_id, document_id, kind, requested_by, idempotency_key,
-                payload, status, attempt_count, max_attempts, available_at, enqueued_at, updated_at
+                queue_group, payload, status, attempt_count, max_attempts, available_at, enqueued_at, updated_at
             )
-            values ($1, $2, $3, $4, $5, $6, $7, $8, 'queued', $9, $10, now(), $11, now())
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $10, $11, now(), $12, now())
             on conflict (idempotency_key) do nothing
             "#,
         )
@@ -388,6 +395,7 @@ impl PgAppRepository {
                 .and_then(|value| Uuid::parse_str(value).ok()),
         )
         .bind(&task.idempotency_key)
+        .bind(&queue_group)
         .bind(serde_json::to_value(&task.payload)?)
         .bind(task.attempt_count.max(0))
         .bind(task.max_attempts.max(1))
@@ -422,6 +430,7 @@ impl PgAppRepository {
     pub async fn claim_next_ingestion_task(
         &self,
         worker_id: &str,
+        worker_queue_group: &str,
     ) -> Result<Option<IngestionTask>, PgStorageError> {
         let row = sqlx::query(
             r#"
@@ -440,7 +449,7 @@ impl PgAppRepository {
                   and attempt_count >= max_attempts
                   and (
                     (status = 'queued' and available_at <= now())
-                    or (status = 'processing' and locked_at <= now() - ($2::int * interval '1 second'))
+                    or (status = 'processing' and locked_at <= now() - ($3::int * interval '1 second'))
                   )
                 returning task_id
             ),
@@ -448,11 +457,12 @@ impl PgAppRepository {
                 select task_id
                 from ingestion_tasks
                 where dead_lettered_at is null
+                  and queue_group = $2
                   and status <> 'dead_letter'
                   and attempt_count < max_attempts
                   and (
                     (status = 'queued' and available_at <= now() and locked_at is null)
-                    or (status = 'processing' and locked_at <= now() - ($2::int * interval '1 second'))
+                    or (status = 'processing' and locked_at <= now() - ($3::int * interval '1 second'))
                   )
                 order by case when status = 'processing' then 0 else 1 end, enqueued_at asc
                 limit 1
@@ -473,6 +483,7 @@ impl PgAppRepository {
             "#,
         )
         .bind(worker_id)
+        .bind(worker_queue_group)
         .bind(STALE_PROCESSING_TIMEOUT_SECS)
         .fetch_optional(self.pool.raw())
         .await?;

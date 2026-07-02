@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use app_admin::AdminContext;
 use app_billing::{BillingContext, CostEventRecord};
+use app_core::ChatPersistencePort;
 use app_core::{AnalyticsServiceCtx, StorageContext};
 use app_documents::DocumentContext;
 use avrag_auth::AuthContext;
-use app_core::ChatPersistencePort;
 use common::AppError;
 use uuid::Uuid;
 
@@ -117,10 +117,7 @@ impl ChatContext {
         .await;
     }
 
-    pub async fn validate_rag_doc_scope(
-        &self,
-        doc_scope: &[String],
-    ) -> Result<(), AppError> {
+    pub async fn validate_rag_doc_scope(&self, doc_scope: &[String]) -> Result<(), AppError> {
         self.documents
             .validate_rag_doc_scope(&self.auth, &self.storage, doc_scope)
             .await
@@ -129,7 +126,8 @@ impl ChatContext {
     pub fn document_is_deleting_or_deleted(status: &contracts::documents::DocumentStatus) -> bool {
         matches!(
             status,
-            contracts::documents::DocumentStatus::Deleting | contracts::documents::DocumentStatus::Deleted
+            contracts::documents::DocumentStatus::Deleting
+                | contracts::documents::DocumentStatus::Deleted
         )
     }
 }

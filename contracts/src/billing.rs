@@ -1,17 +1,17 @@
-use typeshare::typeshare;
 use serde::{Deserialize, Serialize};
+use typeshare::typeshare;
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageResponse {
     #[typeshare(serialized_as = "number")]
-    pub used_tokens:        i64,
+    pub used_tokens: i64,
     #[typeshare(serialized_as = "number")]
-    pub limit_tokens:        i64,
+    pub limit_tokens: i64,
     #[typeshare(serialized_as = "number")]
-    pub used_documents:        i64,
+    pub used_documents: i64,
     #[typeshare(serialized_as = "number")]
-    pub limit_documents:        i64,
+    pub limit_documents: i64,
 }
 
 #[typeshare]
@@ -20,7 +20,7 @@ pub struct PlanRow {
     pub id: String,
     pub name: String,
     #[typeshare(serialized_as = "number")]
-    pub price:        i64,
+    pub price: i64,
     pub features: Vec<String>,
 }
 
@@ -42,11 +42,11 @@ pub struct SubscriptionResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BillingOverview {
     #[typeshare(serialized_as = "number")]
-    pub active_subscriptions:        i64,
+    pub active_subscriptions: i64,
     #[typeshare(serialized_as = "number")]
-    pub past_due_subscriptions:        i64,
+    pub past_due_subscriptions: i64,
     #[typeshare(serialized_as = "number")]
-    pub unpaid_subscriptions:        i64,
+    pub unpaid_subscriptions: i64,
     #[typeshare(serialized_as = "number")]
-    pub canceled_subscriptions:        i64,
+    pub canceled_subscriptions: i64,
 }

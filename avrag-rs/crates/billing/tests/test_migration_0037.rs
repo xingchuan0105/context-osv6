@@ -64,8 +64,7 @@ async fn migration_0037_sets_pricing_revamp_quotas() {
 
 #[tokio::test]
 async fn migration_0037_preserves_enterprise_unlimited_policy() {
-    let Some(pool) =
-        pg_pool_or_skip("migration_0037_preserves_enterprise_unlimited_policy").await
+    let Some(pool) = pg_pool_or_skip("migration_0037_preserves_enterprise_unlimited_policy").await
     else {
         return;
     };

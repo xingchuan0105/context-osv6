@@ -33,7 +33,8 @@ pub(crate) fn app_error_response_for_agent(e: AppError, agent_type: Option<&str>
     if let Some(agent_type) = agent_type
         && let Some(guide) = app_chat::load_invoke_operation_guide(agent_type)
     {
-        body["agent_operation_guide"] = serde_json::to_value(guide).unwrap_or(serde_json::Value::Null);
+        body["agent_operation_guide"] =
+            serde_json::to_value(guide).unwrap_or(serde_json::Value::Null);
     }
     let retry_after = e.retry_after_secs();
     if let Some(secs) = retry_after {

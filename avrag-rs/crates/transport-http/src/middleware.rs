@@ -172,9 +172,7 @@ pub(crate) async fn request_context_middleware(
             .map(|actor| actor.into_uuid())
             .unwrap_or(Uuid::nil())
     );
-    let mut limit_rpm = auth
-        .rate_limit_rpm()
-        .unwrap_or(DEFAULT_RATE_LIMIT_RPM);
+    let mut limit_rpm = auth.rate_limit_rpm().unwrap_or(DEFAULT_RATE_LIMIT_RPM);
     if std::env::var("E2E_ENABLED").unwrap_or_default() == "true" {
         limit_rpm = 1000;
     }

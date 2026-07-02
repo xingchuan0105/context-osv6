@@ -68,8 +68,6 @@ mod tests {
         let req = AgentRequest {
             kind: crate::agents::AgentKind::Chat,
             query: "hello".to_string(),
-            resolved_query: "hello".to_string(),
-            query_resolution: None,
             notebook_id: None,
             session_id: None,
             doc_scope: vec![],
@@ -99,8 +97,6 @@ mod tests {
         let req = AgentRequest {
             kind: crate::agents::AgentKind::Search,
             query: "q".to_string(),
-            resolved_query: "q".to_string(),
-            query_resolution: None,
             notebook_id: None,
             session_id: None,
             doc_scope: vec![],
@@ -130,8 +126,6 @@ mod tests {
         let req = AgentRequest {
             kind: crate::agents::AgentKind::Rag,
             query: "q".to_string(),
-            resolved_query: "q".to_string(),
-            query_resolution: None,
             notebook_id: None,
             session_id: None,
             doc_scope: vec!["doc1".to_string()],

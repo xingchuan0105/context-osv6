@@ -45,11 +45,7 @@ fn parse_retrieval_items_from_code_execution(observation: &str) -> Option<Vec<se
             _ => {}
         }
     }
-    if items.is_empty() {
-        None
-    } else {
-        Some(items)
-    }
+    if items.is_empty() { None } else { Some(items) }
 }
 
 fn normalize_retrieval_items(items: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
@@ -60,7 +56,10 @@ fn normalize_retrieval_items(items: Vec<serde_json::Value>) -> Vec<serde_json::V
             if !obj.contains_key("text")
                 && let Some(content) = obj.get("content").and_then(|v| v.as_str())
             {
-                obj.insert("text".to_string(), serde_json::Value::String(content.to_string()));
+                obj.insert(
+                    "text".to_string(),
+                    serde_json::Value::String(content.to_string()),
+                );
             }
             obj.get("chunk_id")
                 .and_then(|v| v.as_str())
@@ -136,10 +135,10 @@ mod tests {
         let stdout = codegen_observation_stdout("", &bridge);
         assert!(stdout.contains("c1"), "stdout={stdout}");
         assert!(stdout.contains("hello"));
-        let observation = format!("<code_execution_result>\n[block 0] stdout: {stdout}\nstderr: \n</code_execution_result>");
-        assert!(crate::agents::r#loop::exit_policy::code_execution_has_evidence(
-            &observation
-        ));
+        let observation = format!(
+            "<code_execution_result>\n[block 0] stdout: {stdout}\nstderr: \n</code_execution_result>"
+        );
+        assert!(crate::agents::r#loop::exit_policy::code_execution_has_evidence(&observation));
     }
 
     #[test]

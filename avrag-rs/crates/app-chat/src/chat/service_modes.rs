@@ -39,7 +39,6 @@ impl ChatContext {
             debug_metadata: None,
             tokens_emitted: false,
             citations_emitted: false,
-            query_resolution: None,
         })
     }
 
@@ -112,9 +111,5 @@ pub(crate) fn build_chat_execution_from_result(
         debug_metadata: params.debug_metadata,
         tokens_emitted: false,
         citations_emitted: false,
-        query_resolution: agent_result
-            .query_resolution
-            .as_ref()
-            .and_then(|meta| serde_json::to_value(meta).ok()),
     }
 }

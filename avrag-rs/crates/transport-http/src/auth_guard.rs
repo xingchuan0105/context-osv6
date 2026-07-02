@@ -19,9 +19,10 @@ pub(crate) fn auth_error_to_app_error(error: AuthError) -> AppError {
         AuthError::MissingNotebookScope => {
             AppError::forbidden("missing_notebook_scope", "workspace API key scope required")
         }
-        AuthError::CrossTenantAccess => {
-            AppError::forbidden("cross_tenant_access", "resource belongs to another organization")
-        }
+        AuthError::CrossTenantAccess => AppError::forbidden(
+            "cross_tenant_access",
+            "resource belongs to another organization",
+        ),
         AuthError::MissingOrgScope => AppError::unauthorized("organization scope required"),
     }
 }
@@ -135,13 +136,9 @@ pub(crate) fn require_user_admin(auth: &AuthContext) -> Result<(), AppError> {
             "organization admin permission required",
         ));
     }
-    auth.ensure_permission(PERM_ADMIN)
-        .map_err(|_| {
-            AppError::forbidden(
-                "admin_required",
-                "organization admin permission required",
-            )
-        })
+    auth.ensure_permission(PERM_ADMIN).map_err(|_| {
+        AppError::forbidden("admin_required", "organization admin permission required")
+    })
 }
 
 pub(crate) fn authorize_session_notebook(
@@ -205,12 +202,14 @@ pub(crate) fn authorize_workspace_query_optional_notebook(
     if !matches!(auth.subject_kind(), SubjectKind::ApiKey) {
         return Ok(());
     }
-    let notebook_id = notebook_id.filter(|value| !value.trim().is_empty()).ok_or_else(|| {
-        AppError::validation(
-            "notebook_id_required",
-            "notebook_id is required for workspace API keys",
-        )
-    })?;
+    let notebook_id = notebook_id
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            AppError::validation(
+                "notebook_id_required",
+                "notebook_id is required for workspace API keys",
+            )
+        })?;
     authorize_workspace_notebook_str(auth, PERM_QUERY, notebook_id)
 }
 
@@ -295,9 +294,7 @@ pub(crate) async fn ensure_user_notebook_access(
         return Ok(());
     }
     if state.postgres_configured() && state.share_store().is_none() {
-        return Err(AppError::internal(
-            "share access verification unavailable",
-        ));
+        return Err(AppError::internal("share access verification unavailable"));
     }
     let Some(store) = state.share_store() else {
         return Ok(());
@@ -306,7 +303,9 @@ pub(crate) async fn ensure_user_notebook_access(
     let access = service
         .check_access(state.auth(), notebook_id)
         .await
-        .map_err(|error| AppError::internal(format!("failed to verify workspace access: {error}")))?;
+        .map_err(|error| {
+            AppError::internal(format!("failed to verify workspace access: {error}"))
+        })?;
     if access == avrag_share::AccessLevel::None {
         return Err(AppError::forbidden(
             "notebook_access_required",
@@ -332,8 +331,8 @@ mod tests {
 
     #[test]
     fn org_key_rejected_for_workspace_tools() {
-        let auth = AuthContext::new(OrgId::from(Uuid::new_v4()), SubjectKind::ApiKey)
-            .grant(PERM_QUERY);
+        let auth =
+            AuthContext::new(OrgId::from(Uuid::new_v4()), SubjectKind::ApiKey).grant(PERM_QUERY);
         let err = authorize_workspace_tool(&auth, PERM_QUERY, Uuid::new_v4()).unwrap_err();
         assert_eq!(err.code(), "org_key_cannot_call_workspace_tools");
     }

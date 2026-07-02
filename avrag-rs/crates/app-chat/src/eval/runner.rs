@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use super::compare::{compare_eval_runs, EvalComparison};
+use super::compare::{EvalComparison, compare_eval_runs};
 use super::evaluator::Evaluator;
 use super::metrics::compute_metrics;
 use super::types::{

@@ -9,16 +9,24 @@ use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
 use super::super::{
-    http_helpers::{milvus_collection_prefix_for_identity, test_auth_headers_for, unique_test_identity},
+    http_helpers::{
+        milvus_collection_prefix_for_identity, test_auth_headers_for, unique_test_identity,
+    },
     mock_servers::{
-        reset_mock_rag_state,         start_mock_embedding_server, start_mock_llm_server,
+        reset_mock_rag_state, start_mock_embedding_server, start_mock_llm_server,
         start_mock_office_parser_server, start_mock_paddle_ocr_server, start_mock_search_server,
     },
     persistent_runtime::{bind_persistent_listener, spawn_persistent},
     setup,
 };
-use super::config::E2eBootstrapConfig;
 use super::TestContext;
+use super::config::E2eBootstrapConfig;
+
+/// Persistent PG + object store for long-lived RAG smoke corpora (survives `cargo test` reruns).
+pub(crate) struct PersistentSmokeInfra {
+    pub postgres_url: String,
+    pub object_store_path: std::path::PathBuf,
+}
 
 /// HTTP client timeout for mock RAG paths (ingestion + retrieval + synthesis).
 pub(crate) const HTTP_TIMEOUT_RAG_SECS: u64 = 120;
@@ -35,6 +43,11 @@ fn http_client_timeout_secs(use_real_llm: bool, enable_rag: bool) -> u64 {
     } else {
         HTTP_TIMEOUT_DEFAULT_SECS
     }
+}
+
+fn smoke_worker_id() -> String {
+    let short_uuid = Uuid::new_v4().simple().to_string();
+    format!("e2e-smoke-v5-{}", &short_uuid[..8])
 }
 
 /// Cross-process registry: one marker per migrated database URL (see setup.rs container registry).
@@ -141,10 +154,7 @@ async fn wait_for_worker_health_port_file(
             }
         }
         if tokio::time::Instant::now() >= deadline {
-            anyhow::bail!(
-                "worker health port file not ready: {}",
-                port_file.display()
-            );
+            anyhow::bail!("worker health port file not ready: {}", port_file.display());
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
@@ -266,6 +276,7 @@ impl TestContext {
         use_real_llm: bool,
         redis_url: Option<String>,
         start_redis_container: bool,
+        persistent_infra: Option<&PersistentSmokeInfra>,
     ) -> Self {
         run_orphan_cleanup_once().await;
 
@@ -285,9 +296,15 @@ impl TestContext {
         let milvus_collection_prefix =
             enable_rag.then(|| milvus_collection_prefix_for_identity(org_id));
 
-        let (pg_url, shared_pg) = setup::acquire_shared_postgres()
-            .await
-            .expect("start shared postgres");
+        let (pg_url, shared_pg) = if let Some(infra) = persistent_infra {
+            setup::acquire_external_postgres(&infra.postgres_url)
+                .await
+                .expect("acquire external postgres for persistent smoke corpus")
+        } else {
+            setup::acquire_shared_postgres()
+                .await
+                .expect("start shared postgres")
+        };
 
         let (milvus_url, shared_milvus) = if enable_rag {
             let (url, shared) = setup::acquire_shared_milvus()
@@ -299,7 +316,13 @@ impl TestContext {
         };
 
         let object_store_dir = setup::create_temp_object_store();
-        let object_root = object_store_dir.path().to_string_lossy().to_string();
+        let object_root = if let Some(infra) = persistent_infra {
+            std::fs::create_dir_all(&infra.object_store_path)
+                .expect("create persistent object store");
+            infra.object_store_path.to_string_lossy().into_owned()
+        } else {
+            object_store_dir.path().to_string_lossy().to_string()
+        };
 
         let (mock_llm_url, mock_llm_abort) = if use_real_llm {
             (String::new(), None)
@@ -354,6 +377,14 @@ impl TestContext {
             .join("worker-health.port")
             .to_string_lossy()
             .into_owned();
+        let ingestion_queue_group = if persistent_infra.is_some() {
+            unsafe {
+                std::env::set_var("AVRAG_INGESTION_QUEUE_GROUP", "e2e-smoke");
+            }
+            "e2e-smoke".to_string()
+        } else {
+            "default".to_string()
+        };
         let bootstrap = E2eBootstrapConfig {
             org_id: org_id.clone(),
             user_id: user_id.clone(),
@@ -389,6 +420,7 @@ impl TestContext {
             has_real_search,
             worker_timeout_secs,
             worker_health_port_file,
+            ingestion_queue_group,
         };
 
         let (listener, base_url) = bind_persistent_listener().await;
@@ -426,7 +458,8 @@ impl TestContext {
         let mut cmd = tokio::process::Command::new(&worker_binary);
         let mut worker_bootstrap = bootstrap.clone();
         worker_bootstrap.auto_migrate = false;
-        worker_bootstrap.apply_worker_env(&mut cmd, &base_url);
+        let worker_id = smoke_worker_id();
+        worker_bootstrap.apply_worker_env(&mut cmd, &base_url, Some(&worker_id));
         cmd.stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
@@ -509,6 +542,7 @@ impl TestContext {
             worker: Some(worker),
             server_abort: Some(abort_tx),
             object_store_dir,
+            object_root,
             pg_url,
             mock_llm_abort,
             mock_embedding_abort,
@@ -520,6 +554,127 @@ impl TestContext {
             embedding_should_503,
             embedding_call_count,
             redis_container_name,
+            worker_log_path: Some(worker_log_path),
+            artifact_run_id,
+        }
+    }
+
+    /// Attach a fresh worker to the module-scoped smoke-v5 corpus infra (real LLM timeouts).
+    pub(crate) async fn spawn_from_smoke_v5_fixture(
+        fixture: &super::super::fixtures::SmokeV5CorpusFixture,
+    ) -> Self {
+        reset_mock_rag_state();
+
+        let base_url = fixture.api_base_url.clone();
+        let placeholder_dir = tempfile::tempdir().expect("placeholder object store");
+        let worker_health_port_file = placeholder_dir
+            .path()
+            .join(format!("worker-health-{}.port", Uuid::new_v4().simple()))
+            .to_string_lossy()
+            .into_owned();
+
+        let mut bootstrap = fixture.worker_bootstrap.clone();
+        bootstrap.auto_migrate = false;
+        bootstrap.worker_health_port_file = worker_health_port_file;
+
+        let worker_binary = setup::find_worker_binary()
+            .await
+            .expect("find worker binary");
+        let worker_log_path = placeholder_dir.path().join("worker.log");
+        let mut cmd = tokio::process::Command::new(&worker_binary);
+        let mut worker_bootstrap = bootstrap.clone();
+        worker_bootstrap.auto_migrate = false;
+        let worker_id = smoke_worker_id();
+        worker_bootstrap.apply_worker_env(&mut cmd, &base_url, Some(&worker_id));
+        cmd.stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true);
+
+        let mut worker = cmd.spawn().expect("spawn worker");
+
+        let log_path = worker_log_path.clone();
+        if let Some(stdout) = worker.stdout.take() {
+            let mut reader = tokio::io::BufReader::new(stdout).lines();
+            tokio::spawn(async move {
+                let mut file = match tokio::fs::File::create(&log_path).await {
+                    Ok(f) => f,
+                    Err(_) => return,
+                };
+                while let Ok(Some(line)) = reader.next_line().await {
+                    let _ = file.write_all(line.as_bytes()).await;
+                    let _ = file.write_all(b"\n").await;
+                }
+            });
+        }
+        if let Some(stderr) = worker.stderr.take() {
+            let log_path = worker_log_path.clone();
+            let mut reader = tokio::io::BufReader::new(stderr).lines();
+            tokio::spawn(async move {
+                let mut file = match tokio::fs::OpenOptions::new()
+                    .append(true)
+                    .create(true)
+                    .open(&log_path)
+                    .await
+                {
+                    Ok(f) => f,
+                    Err(_) => return,
+                };
+                while let Ok(Some(line)) = reader.next_line().await {
+                    let _ = file.write_all(line.as_bytes()).await;
+                    let _ = file.write_all(b"\n").await;
+                }
+            });
+        }
+
+        let worker_health_port = wait_for_worker_health_port_file(
+            std::path::Path::new(&worker_bootstrap.worker_health_port_file),
+            Duration::from_secs(10),
+        )
+        .await
+        .expect("worker health port file ready");
+        wait_for_worker_health(worker_health_port, Duration::from_secs(10))
+            .await
+            .expect("worker health ready");
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(HTTP_TIMEOUT_REAL_LLM_SECS))
+            .default_headers(test_auth_headers_for(&fixture.org_id, &fixture.user_id))
+            .build()
+            .expect("reqwest client build");
+
+        let now = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+        let short_commit = option_env!("GITHUB_SHA")
+            .map(|s| &s[..s.len().min(8)])
+            .unwrap_or("local");
+        let artifact_run_id = format!("e2e_{now}_{short_commit}_{}", Uuid::new_v4().simple());
+        let object_root = bootstrap.object_root.clone();
+
+        Self {
+            http_client: client,
+            base_url,
+            org_id: fixture.org_id.clone(),
+            user_id: fixture.user_id.clone(),
+            app_state: Some(fixture.app_state.clone()),
+            bootstrap: Some(bootstrap),
+            shared_pg: None,
+            shared_milvus: None,
+            milvus_url: Some(fixture.milvus_url.clone()),
+            milvus_collection_prefix: None,
+            worker: Some(worker),
+            server_abort: None,
+            object_store_dir: placeholder_dir,
+            object_root,
+            pg_url: fixture.pg_url.clone(),
+            mock_llm_abort: None,
+            mock_embedding_abort: None,
+            mock_search_abort: None,
+            mock_paddle_abort: None,
+            mock_paddle_jobs_submitted: None,
+            mock_office_abort: None,
+            search_controls: None,
+            embedding_should_503: None,
+            embedding_call_count: None,
+            redis_container_name: None,
             worker_log_path: Some(worker_log_path),
             artifact_run_id,
         }
@@ -550,7 +705,8 @@ impl TestContext {
         let mut cmd = tokio::process::Command::new(&worker_binary);
         let mut worker_bootstrap = bootstrap.clone();
         worker_bootstrap.auto_migrate = false;
-        worker_bootstrap.apply_worker_env(&mut cmd, &base_url);
+        let worker_id = smoke_worker_id();
+        worker_bootstrap.apply_worker_env(&mut cmd, &base_url, Some(&worker_id));
         cmd.stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
@@ -612,6 +768,7 @@ impl TestContext {
             .map(|s| &s[..s.len().min(8)])
             .unwrap_or("local");
         let artifact_run_id = format!("e2e_{now}_{short_commit}_{}", Uuid::new_v4().simple());
+        let object_root = bootstrap.object_root.clone();
 
         Self {
             http_client: client,
@@ -629,6 +786,7 @@ impl TestContext {
             worker: Some(worker),
             server_abort: None,
             object_store_dir: placeholder_dir,
+            object_root,
             pg_url: fixture.pg_url.clone(),
             mock_llm_abort: None,
             mock_embedding_abort: None,

@@ -129,7 +129,9 @@ pub(crate) fn normalize_graph_hints(hints: Vec<GraphHint>) -> Vec<GraphHint> {
         .collect()
 }
 
-pub(crate) fn normalize_placeholder_triplets(triplets: Vec<PlaceholderTriplet>) -> Vec<PlaceholderTriplet> {
+pub(crate) fn normalize_placeholder_triplets(
+    triplets: Vec<PlaceholderTriplet>,
+) -> Vec<PlaceholderTriplet> {
     let mut seen = HashSet::new();
     triplets
         .into_iter()
@@ -164,10 +166,11 @@ fn build_chunk_id_reference_table(
         return "No chunks available.".to_string();
     }
 
-    let citation_by_chunk: std::collections::HashMap<String, &contracts::chat::Citation> = citations
-        .iter()
-        .filter_map(|c| c.chunk_id.as_ref().map(|id| (id.clone(), c)))
-        .collect();
+    let citation_by_chunk: std::collections::HashMap<String, &contracts::chat::Citation> =
+        citations
+            .iter()
+            .filter_map(|c| c.chunk_id.as_ref().map(|id| (id.clone(), c)))
+            .collect();
 
     let mut lines = vec!["Available chunk IDs for citation:".to_string()];
     for chunk in answer_context.iter().take(20) {
@@ -193,4 +196,3 @@ fn build_chunk_id_reference_table(
     lines.push("  [[image:CHUNK_ID]] - reference an image chunk".to_string());
     lines.join("\n")
 }
-

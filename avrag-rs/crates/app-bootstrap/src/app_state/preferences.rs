@@ -1,6 +1,6 @@
-use common::{AppError};
-use contracts::preferences::{AgentPreferenceMemory};
+use common::AppError;
 use contracts::UserPreferences;
+use contracts::preferences::AgentPreferenceMemory;
 use uuid::Uuid;
 
 use super::AppState;
@@ -46,10 +46,7 @@ impl AppState {
             .await
     }
 
-    pub async fn remember_explicit_agent_preference(
-        &self,
-        query: &str,
-    ) -> Result<(), AppError> {
+    pub async fn remember_explicit_agent_preference(&self, query: &str) -> Result<(), AppError> {
         self.admin
             .remember_explicit_agent_preference(&self.auth, &self.storage, query)
             .await

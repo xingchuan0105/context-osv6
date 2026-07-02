@@ -1,8 +1,10 @@
 use contracts::chat::AgentOperationGuide;
 
 use crate::agents::capability::CapabilityRegistry;
-use crate::agents::progressive::{DisclosureContext, DisclosureTier, DisclosureUnit, PromptRegistry};
 use crate::agents::r#loop::config::load_mode_config;
+use crate::agents::progressive::{
+    DisclosureContext, DisclosureTier, DisclosureUnit, PromptRegistry,
+};
 
 const RAG_SUMMARY: &str = "RAG uses Python SDK codegen only. Emit <code language=\"python\"> blocks calling client.dense_search, client.chunk_fetch, etc. Do not call native retrieval tool schemas.";
 const SEARCH_SUMMARY: &str = "Search uses native tool calls (web_search, web_fetch). Do not use codegen/SDK blocks in search mode.";
@@ -19,7 +21,9 @@ pub fn load_invoke_operation_guide(mode: &str) -> Option<AgentOperationGuide> {
     }
 }
 
-pub fn attach_operation_guide(mut response: contracts::chat::ChatResponse) -> contracts::chat::ChatResponse {
+pub fn attach_operation_guide(
+    mut response: contracts::chat::ChatResponse,
+) -> contracts::chat::ChatResponse {
     response.agent_operation_guide = load_invoke_operation_guide(&response.agent_type);
     response
 }
@@ -106,7 +110,8 @@ mod tests {
 
     #[test]
     fn workspace_create_invoke_guide_is_available() {
-        let guide = load_invoke_operation_guide("workspace.create").expect("workspace.create guide");
+        let guide =
+            load_invoke_operation_guide("workspace.create").expect("workspace.create guide");
         assert_eq!(guide.mode, "workspace.create");
         assert!(guide.summary.contains("workspace API key"));
     }
@@ -133,7 +138,10 @@ mod tests {
             agent_operation_guide: None,
         });
         assert_eq!(
-            response.agent_operation_guide.as_ref().map(|g| g.mode.as_str()),
+            response
+                .agent_operation_guide
+                .as_ref()
+                .map(|g| g.mode.as_str()),
             Some("search")
         );
     }

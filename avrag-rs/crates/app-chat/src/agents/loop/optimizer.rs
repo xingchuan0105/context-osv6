@@ -20,8 +20,6 @@ pub enum ContextAdjustment {
         chunk_ids: Vec<String>,
         first_seen_at: Vec<u8>,
     },
-    /// Budget warning: inform LLM this is the last N iterations, forcing careful thinking.
-    BudgetWarning { remaining: u8, max: u8 },
 }
 
 impl IterationProgress {
@@ -51,8 +49,6 @@ impl LoopOptimizer {
         &self,
         progress: &IterationProgress,
         current_chunk_ids: &[String],
-        remaining_iterations: u8,
-        max_iterations: u8,
     ) -> ContextAdjustment {
         // Rule 1 (high priority): duplicate chunk detection
         let mut dup_ids = Vec::new();
@@ -72,14 +68,6 @@ impl LoopOptimizer {
             };
         }
 
-        // Rule 2 (medium priority): budget warning when remaining == 1
-        if remaining_iterations == 1 {
-            return ContextAdjustment::BudgetWarning {
-                remaining: 1,
-                max: max_iterations,
-            };
-        }
-
         ContextAdjustment::None
     }
 }
@@ -95,17 +83,6 @@ pub(crate) fn build_duplicate_hint(chunk_ids: &[String], first_seen_at: &[u8]) -
          If you believe these chunks are sufficient to answer, you may proceed to synthesis; \
          if you need additional evidence, consider using different queries or tools.",
         pairs.join(", ")
-    )
-}
-
-pub(crate) fn build_budget_warning(remaining: u8, max: u8) -> String {
-    format!(
-        "[System hint] This is the final iteration ({} of {}). \
-         Please evaluate whether current evidence is sufficient: \
-         if yes, prioritize a complete answer; \
-         if not, choose the highest-confidence retrieval strategy this round.",
-        max - remaining + 1,
-        max
     )
 }
 
@@ -139,7 +116,7 @@ mod tests {
         let mut progress = IterationProgress::new();
         progress.record_iteration(0, &["c1".to_string(), "c2".to_string()]);
         let optimizer = LoopOptimizer::new();
-        let adjustment = optimizer.advise(&progress, &["c1".to_string(), "c2".to_string()], 3, 4);
+        let adjustment = optimizer.advise(&progress, &["c1".to_string(), "c2".to_string()]);
         assert!(matches!(adjustment, ContextAdjustment::None));
     }
 
@@ -149,9 +126,12 @@ mod tests {
         progress.record_iteration(0, &["c1".to_string(), "c2".to_string()]);
         progress.record_iteration(1, &["c2".to_string(), "c3".to_string()]);
         let optimizer = LoopOptimizer::new();
-        let adjustment = optimizer.advise(&progress, &["c2".to_string(), "c3".to_string()], 2, 4);
+        let adjustment = optimizer.advise(&progress, &["c2".to_string(), "c3".to_string()]);
         match adjustment {
-            ContextAdjustment::DuplicateChunksHint { chunk_ids, first_seen_at } => {
+            ContextAdjustment::DuplicateChunksHint {
+                chunk_ids,
+                first_seen_at,
+            } => {
                 assert_eq!(chunk_ids, vec!["c2"]);
                 assert_eq!(first_seen_at, vec![0]);
             }
@@ -166,10 +146,15 @@ mod tests {
         progress.record_iteration(1, &["c2".to_string()]);
         progress.record_iteration(2, &["c1".to_string(), "c2".to_string(), "c3".to_string()]);
         let optimizer = LoopOptimizer::new();
-        let adjustment =
-            optimizer.advise(&progress, &["c1".to_string(), "c2".to_string(), "c3".to_string()], 1, 4);
+        let adjustment = optimizer.advise(
+            &progress,
+            &["c1".to_string(), "c2".to_string(), "c3".to_string()],
+        );
         match adjustment {
-            ContextAdjustment::DuplicateChunksHint { chunk_ids, first_seen_at } => {
+            ContextAdjustment::DuplicateChunksHint {
+                chunk_ids,
+                first_seen_at,
+            } => {
                 assert_eq!(chunk_ids, vec!["c1", "c2"]);
                 assert_eq!(first_seen_at, vec![0, 1]);
             }
@@ -182,42 +167,7 @@ mod tests {
         let mut progress = IterationProgress::new();
         progress.record_iteration(0, &["c1".to_string(), "c1".to_string()]);
         let optimizer = LoopOptimizer::new();
-        let adjustment = optimizer.advise(&progress, &["c1".to_string()], 3, 4);
-        assert!(matches!(adjustment, ContextAdjustment::None));
-    }
-
-    #[test]
-    fn budget_warning_when_remaining_is_one() {
-        let progress = IterationProgress::new();
-        let optimizer = LoopOptimizer::new();
-        let adjustment = optimizer.advise(&progress, &[], 1, 4);
-        match adjustment {
-            ContextAdjustment::BudgetWarning { remaining, max } => {
-                assert_eq!(remaining, 1);
-                assert_eq!(max, 4);
-            }
-            other => panic!("expected BudgetWarning, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn duplicate_takes_priority_over_budget_warning() {
-        let mut progress = IterationProgress::new();
-        progress.record_iteration(0, &["c1".to_string()]);
-        progress.record_iteration(1, &["c1".to_string()]);
-        let optimizer = LoopOptimizer::new();
-        let adjustment = optimizer.advise(&progress, &["c1".to_string()], 1, 4);
-        assert!(
-            matches!(adjustment, ContextAdjustment::DuplicateChunksHint { .. }),
-            "expected DuplicateChunksHint to take priority over BudgetWarning"
-        );
-    }
-
-    #[test]
-    fn budget_not_warning_when_remaining_is_two() {
-        let progress = IterationProgress::new();
-        let optimizer = LoopOptimizer::new();
-        let adjustment = optimizer.advise(&progress, &[], 2, 4);
+        let adjustment = optimizer.advise(&progress, &["c1".to_string()]);
         assert!(matches!(adjustment, ContextAdjustment::None));
     }
 

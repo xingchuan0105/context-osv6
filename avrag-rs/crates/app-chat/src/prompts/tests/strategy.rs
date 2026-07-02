@@ -127,14 +127,8 @@ fn build_rag_strategy_evaluation_prompt_maps_multi_query_tool_correctly() {
 
     let chunks: Vec<contracts::RetrievedChunk> = vec![];
 
-    let prompt = build_rag_strategy_evaluation_prompt(
-        "test",
-        &sub_queries,
-        &tool_results,
-        &chunks,
-        0,
-        15,
-    );
+    let prompt =
+        build_rag_strategy_evaluation_prompt("test", &sub_queries, &tool_results, &chunks, 0, 15);
 
     // Both q1 and q2 should report 3 results (from the same tool_result at index 0)
     assert!(prompt.contains("- q1: \"query A\" -> 3 results"));

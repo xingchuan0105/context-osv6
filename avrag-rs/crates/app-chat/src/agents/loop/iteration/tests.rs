@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use super::{IterationControl, IterationOutcome, IterationState};
+use crate::agents::AgentKind;
 use crate::agents::capability::CapabilityRegistry;
 use crate::agents::events::CollectingSink;
+use crate::agents::r#loop::ReActLoop;
 use crate::agents::r#loop::assembler::DisclosedState;
 use crate::agents::r#loop::optimizer::{IterationProgress, LoopOptimizer};
-use crate::agents::r#loop::ReActLoop;
-use crate::agents::AgentKind;
 use avrag_llm::{ChatMessage, LlmClient, LlmResponse, LlmUsage, ModelProviderConfig};
 
 fn rag_mode() -> super::super::config::ModeConfig {
@@ -21,8 +21,6 @@ fn base_request(kind: AgentKind) -> crate::agents::runtime::AgentRequest {
     crate::agents::runtime::AgentRequest {
         kind,
         query: "test".to_string(),
-        resolved_query: "test".to_string(),
-        query_resolution: None,
         notebook_id: None,
         session_id: None,
         doc_scope: vec![],
@@ -109,7 +107,6 @@ async fn native_tool_call_returns_continue_with_record() {
     let outcome = loop_
         .apply_llm_output(
             0,
-            3,
             &mode,
             &base_request(AgentKind::Search),
             &auth,
@@ -233,7 +230,6 @@ async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chu
     let _outcome = loop_
         .apply_llm_output(
             0,
-            4,
             &mode,
             &request,
             &auth,
@@ -281,7 +277,6 @@ async fn code_block_success_returns_continue() {
     let outcome = loop_
         .apply_llm_output(
             0,
-            4,
             &mode,
             &base_request(AgentKind::Rag),
             &auth,
@@ -297,10 +292,12 @@ async fn code_block_success_returns_continue() {
 
     assert!(matches!(outcome.control, IterationControl::Continue));
     assert_eq!(outcome.record.as_ref().unwrap().exit_reason, "code_gen");
-    assert!(state
-        .messages
-        .iter()
-        .any(|m| m.content.contains("code_execution_result")));
+    assert!(
+        state
+            .messages
+            .iter()
+            .any(|m| m.content.contains("code_execution_result"))
+    );
 }
 
 #[tokio::test]
@@ -318,7 +315,6 @@ async fn consecutive_code_errors_break_to_synthesis() {
     let outcome = loop_
         .apply_llm_output(
             1,
-            4,
             &mode,
             &base_request(AgentKind::Rag),
             &auth,
@@ -353,7 +349,6 @@ async fn content_with_evidence_in_chat_returns_direct_answer() {
     let outcome = loop_
         .apply_llm_output(
             0,
-            2,
             &mode,
             &base_request(AgentKind::Chat),
             &auth,
@@ -371,7 +366,10 @@ async fn content_with_evidence_in_chat_returns_direct_answer() {
         outcome.control,
         IterationControl::DirectAnswer { content } if content == "Here is your answer."
     ));
-    assert_eq!(outcome.record.as_ref().unwrap().exit_reason, "direct_content");
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "direct_content"
+    );
 }
 
 #[tokio::test]
@@ -387,7 +385,6 @@ async fn content_without_evidence_in_rag_is_blocked() {
     let outcome = loop_
         .apply_llm_output(
             0,
-            4,
             &mode,
             &base_request(AgentKind::Rag),
             &auth,
@@ -406,9 +403,12 @@ async fn content_without_evidence_in_rag_is_blocked() {
         outcome.record.as_ref().unwrap().exit_reason,
         "content_blocked_no_evidence"
     );
-    assert!(state.messages.iter().any(|m| {
-        m.role == "user" && m.content.contains("retrieve evidence")
-    }));
+    assert!(
+        state
+            .messages
+            .iter()
+            .any(|m| { m.role == "user" && m.content.contains("retrieve evidence") })
+    );
 }
 
 #[tokio::test]
@@ -424,7 +424,6 @@ async fn skill_request_json_in_chat_is_not_direct_answer() {
     let outcome = loop_
         .apply_llm_output(
             0,
-            2,
             &mode,
             &base_request(AgentKind::Chat),
             &auth,
@@ -439,7 +438,10 @@ async fn skill_request_json_in_chat_is_not_direct_answer() {
         .unwrap();
 
     assert!(matches!(outcome.control, IterationControl::Continue));
-    assert_eq!(outcome.record.as_ref().unwrap().exit_reason, "skill_request");
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "skill_request"
+    );
     assert_eq!(
         state.disclosed.last_skill_request,
         Some(vec!["memory".to_string()])

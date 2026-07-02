@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use crate::ir::{
-    BlockIr, BlockModality, BlockType, DocumentIr, DocumentType, PageIr, ParseBackend, SourceLocator,
+    BlockIr, BlockModality, BlockType, DocumentIr, DocumentType, PageIr, ParseBackend,
+    SourceLocator,
 };
 
 /// Per-page probe signals from LiteParse (mirrors [`PdfPageProbeResult`](super::probe::PdfPageProbeResult) + routing fields).
@@ -45,8 +46,10 @@ pub fn blocks_to_document_ir(
         DocumentType::Pdf,
         ParseBackend::LiteParsePdf,
     );
-    ir.metadata
-        .insert("ingest_route_version".to_string(), "liteparse-v1".to_string());
+    ir.metadata.insert(
+        "ingest_route_version".to_string(),
+        "liteparse-v1".to_string(),
+    );
     ir.metadata
         .insert("pdf_route_mode".to_string(), "liteparse_hybrid".to_string());
 
@@ -125,10 +128,7 @@ pub fn append_liteparse_blocks_to_ir(ir: &mut DocumentIr, blocks: &[LiteParseTex
                 text_char_count: char_count,
                 image_count: 0,
                 backend: ParseBackend::LiteParsePdf,
-                metadata: BTreeMap::from([(
-                    "backend".to_string(),
-                    "liteparse_pdf".to_string(),
-                )]),
+                metadata: BTreeMap::from([("backend".to_string(), "liteparse_pdf".to_string())]),
             });
         }
     }
@@ -163,9 +163,9 @@ pub fn append_liteparse_blocks_to_ir(ir: &mut DocumentIr, blocks: &[LiteParseTex
 }
 
 pub fn page_has_searchable_text(ir: &DocumentIr, page_number: u32) -> bool {
-    ir.blocks.iter().any(|block| {
-        block.page == Some(page_number) && !block.text.trim().is_empty()
-    })
+    ir.blocks
+        .iter()
+        .any(|block| block.page == Some(page_number) && !block.text.trim().is_empty())
 }
 
 #[cfg(test)]

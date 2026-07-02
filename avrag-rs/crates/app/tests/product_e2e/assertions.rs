@@ -158,7 +158,9 @@ pub fn assert_observability_contract(resp: &ChatResponse) {
 /// Assert degrade_trace contains an expected reason (stable enum match).
 pub fn assert_degrade_reason(resp: &ChatResponse, expected: DegradeReason) {
     assert!(
-        resp.degrade_trace.iter().any(|item| item.reason == expected),
+        resp.degrade_trace
+            .iter()
+            .any(|item| item.reason == expected),
         "expected degrade reason {expected:?}, got: {:?}",
         resp.degrade_trace
     );
@@ -234,8 +236,7 @@ pub fn assert_tool_result_ok(resp: &ChatResponse, tool: &str) {
             result.tool == tool && result.status == contracts::chat::ToolStatus::Ok
         }),
         "expected successful tool result '{tool}', got: {:?}",
-        resp
-            .tool_results
+        resp.tool_results
             .iter()
             .map(|r| (&r.tool, &r.status))
             .collect::<Vec<_>>()
@@ -266,8 +267,7 @@ pub fn assert_codegen_bridge_dense_retrieval(resp: &ChatResponse) {
     assert!(
         has_dense,
         "expected dense_retrieval from codegen bridge in tool_results, got: {:?}",
-        resp
-            .tool_results
+        resp.tool_results
             .iter()
             .map(|r| (&r.tool, &r.status))
             .collect::<Vec<_>>()
@@ -313,7 +313,9 @@ pub fn assert_liteparse_hybrid_backend_summary(summary: &serde_json::Value) {
         .cloned()
         .unwrap_or_default();
     assert_eq!(
-        ingest_routing.get("pdf_route_mode").and_then(|v| v.as_str()),
+        ingest_routing
+            .get("pdf_route_mode")
+            .and_then(|v| v.as_str()),
         Some("liteparse_hybrid"),
         "expected liteparse_hybrid route mode in ingest_routing: {summary_text}"
     );

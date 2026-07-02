@@ -1,6 +1,4 @@
-use ingestion::parser::{
-    PageRouteKind, PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteReason,
-};
+use ingestion::parser::{PageRouteKind, PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteReason};
 use ingestion::{
     BlockIr, BlockModality, BlockType, DocumentIr, DocumentType, LiteParseService, PageIr,
     ParseBackend,
@@ -9,7 +7,7 @@ use uuid::Uuid;
 
 use super::merge::merge_pdf_ir;
 use super::paddle::group_contiguous_pages;
-use super::parse::{collect_page_routes, probe_pdf_content_from_snapshot, PdfPageRoutes};
+use super::parse::{PdfPageRoutes, collect_page_routes, probe_pdf_content_from_snapshot};
 
 #[test]
 fn test_group_contiguous_pages() {
@@ -81,8 +79,16 @@ fn merge_pdf_ir_paddle_fallback_to_visual() {
     )
     .unwrap();
 
-    assert_eq!(merged.pages.len(), 2, "should have 2 pages from visual fallback");
-    assert_eq!(merged.blocks.len(), 1, "should have 1 block from visual fallback");
+    assert_eq!(
+        merged.pages.len(),
+        2,
+        "should have 2 pages from visual fallback"
+    );
+    assert_eq!(
+        merged.blocks.len(),
+        1,
+        "should have 1 block from visual fallback"
+    );
     assert_eq!(merged.pages[0].backend, ParseBackend::VisualRasterPdf);
 }
 
@@ -355,9 +361,17 @@ fn merge_pdf_ir_combined_text_and_table_ocr() {
     )
     .unwrap();
 
-    assert_eq!(merged.pages.len(), 1, "combined page should merge to one page row");
+    assert_eq!(
+        merged.pages.len(),
+        1,
+        "combined page should merge to one page row"
+    );
     assert_eq!(merged.pages[0].backend, ParseBackend::PaddleOcrPdf);
-    assert_eq!(merged.blocks.len(), 2, "A+C page should keep digital text + paddle table");
+    assert_eq!(
+        merged.blocks.len(),
+        2,
+        "A+C page should keep digital text + paddle table"
+    );
     assert!(
         merged
             .blocks
@@ -432,21 +446,15 @@ async fn probe_pdf_content_from_snapshot_builds_digital_ir_without_reparse() {
         table_ocr_pages: std::collections::HashSet::new(),
     };
     let document_id = Uuid::new_v4();
-    let outcome = probe_pdf_content_from_snapshot(
-        &snapshot,
-        "phase0-mini.pdf",
-        document_id,
-        &routes,
-    );
+    let outcome =
+        probe_pdf_content_from_snapshot(&snapshot, "phase0-mini.pdf", document_id, &routes);
 
     assert_eq!(
         outcome.page_dimensions.len(),
         snapshot.page_dimensions().len(),
         "dimensions should come from cached snapshot"
     );
-    let digital_ir = outcome
-        .digital_ir
-        .expect("digital IR from snapshot blocks");
+    let digital_ir = outcome.digital_ir.expect("digital IR from snapshot blocks");
     assert!(
         !digital_ir.blocks.is_empty(),
         "text blocks should be materialized from snapshot without a second parse"

@@ -5,10 +5,10 @@
 
 use app::{AppConfig, AppState};
 use common::{CreateDocumentRequest, CreateNotebookRequest};
-use contracts::{ExecutePlanRequest, ExecutePlanBudget, ExecutePlanItem, ExecutePlanSummaryMode};
-use contracts::documents::{DocumentStatus};
-use contracts::notebooks::{CreateChatSessionRequest};
 use contracts::chat::ChatEvent;
+use contracts::documents::DocumentStatus;
+use contracts::notebooks::CreateChatSessionRequest;
+use contracts::{ExecutePlanBudget, ExecutePlanItem, ExecutePlanRequest, ExecutePlanSummaryMode};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -220,7 +220,9 @@ async fn execute_chat_stream_memory_rag_emits_done_event() {
     }
 
     assert!(
-        events.iter().any(|event| matches!(event, ChatEvent::Done { .. })),
+        events
+            .iter()
+            .any(|event| matches!(event, ChatEvent::Done { .. })),
         "expected Done event, got {events:?}"
     );
 }

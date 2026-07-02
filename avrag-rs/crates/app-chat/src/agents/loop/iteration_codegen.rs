@@ -6,11 +6,13 @@ use contracts::ToolResult;
 
 use super::reasoning_emit;
 use super::telemetry::ReActIterationRecord;
-use super::{truncate_preview, ReActLoop};
+use super::{ReActLoop, truncate_preview};
 use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::runtime::AgentRequest;
 
-use super::iteration::{disclosed_skill_ids, iteration_llm_usage, IterationControl, IterationOutcome, IterationState};
+use super::iteration::{
+    IterationControl, IterationOutcome, IterationState, disclosed_skill_ids, iteration_llm_usage,
+};
 
 impl ReActLoop {
     pub(super) async fn dispatch_codegen(
@@ -53,13 +55,11 @@ impl ReActLoop {
         }
 
         let elapsed_ms = code_start.elapsed().as_millis() as u64;
-        self.append_codegen_messages(state, llm_response, &combined_result);
+        let observation = format_codegen_observation(&combined_result, any_error);
+        self.append_codegen_messages(state, llm_response, &observation);
 
         if any_error {
-            if let Some(outcome) = self
-                .handle_codegen_error(iteration, state, sink)
-                .await
-            {
+            if let Some(outcome) = self.handle_codegen_error(iteration, state, sink).await {
                 return Ok(outcome);
             }
         } else {
@@ -78,7 +78,7 @@ impl ReActLoop {
                 iteration,
                 disclosed_skills: disclosed_skill_ids(&state.disclosed),
                 action_type: exit_reason.clone(),
-                observation_preview: truncate_preview(&combined_result, 200),
+                observation_preview: truncate_preview(&observation, 200),
                 llm_usage: Some(llm_usage),
                 elapsed_ms,
                 exit_reason,
@@ -175,12 +175,7 @@ impl ReActLoop {
         request: &AgentRequest,
         auth: &avrag_auth::AuthContext,
         interpreter_lock: &Arc<std::sync::Mutex<Option<avrag_code_interpreter::CodeInterpreter>>>,
-    ) -> (
-        contracts::ToolStatus,
-        String,
-        bool,
-        Vec<ToolResult>,
-    ) {
+    ) -> (contracts::ToolStatus, String, bool, Vec<ToolResult>) {
         let code = code.to_string();
         let interpreter_lock = Arc::clone(interpreter_lock);
         let exec_result: Result<
@@ -203,12 +198,11 @@ impl ReActLoop {
             {
                 Ok(exec) => {
                     block_bridge_results = bridge.take_captured_results();
-                    block_observation_stdout = Some(
-                        crate::agents::unified::helpers::codegen_observation_stdout(
+                    block_observation_stdout =
+                        Some(crate::agents::unified::helpers::codegen_observation_stdout(
                             &exec.stdout,
                             &block_bridge_results,
-                        ),
-                    );
+                        ));
                     Ok(exec)
                 }
                 Err(e) => Err(e),
@@ -233,9 +227,8 @@ impl ReActLoop {
 
         match exec_result {
             Ok(exec) => {
-                let is_err = !exec.success
-                    || !exec.stderr.is_empty()
-                    || exec.exit_code.unwrap_or(0) != 0;
+                let is_err =
+                    !exec.success || !exec.stderr.is_empty() || exec.exit_code.unwrap_or(0) != 0;
                 let status = if is_err {
                     contracts::ToolStatus::Error
                 } else {
@@ -252,8 +245,46 @@ impl ReActLoop {
             }
             Err(e) => {
                 let text = format!("[block {}] Execution failed: {e}", idx);
-                (contracts::ToolStatus::Error, text, true, block_bridge_results)
+                (
+                    contracts::ToolStatus::Error,
+                    text,
+                    true,
+                    block_bridge_results,
+                )
             }
         }
+    }
+}
+
+const CODEGEN_CLIENT_METHODS: &str =
+    "dense_search, lexical_search, graph_search, chunk_fetch, doc_profile, doc_summary";
+
+/// Append sandbox error recovery hints so the next LLM turn can fix bad API calls.
+fn format_codegen_observation(combined_result: &str, had_error: bool) -> String {
+    if !had_error {
+        return combined_result.to_string();
+    }
+    format!(
+        "{combined_result}\n\n\
+         [sandbox_error]\n\
+         Code execution failed. Read stderr in the block above and fix your next code block.\n\
+         Allowed client methods ONLY: {CODEGEN_CLIENT_METHODS}.\n\
+         NOT available: hybrid_search, dense_retrieval, lexical_retrieval, graph_retrieval, \
+         rerank, or any internal host tool name.\n\
+         [/sandbox_error]"
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sandbox_error_observation_includes_sdk_reminder() {
+        let raw = "[block 0] stdout: \nstderr: AttributeError: no attribute 'hybrid_search'\n";
+        let obs = format_codegen_observation(raw, true);
+        assert!(obs.contains("hybrid_search"));
+        assert!(obs.contains("dense_search"));
+        assert!(obs.contains("[sandbox_error]"));
     }
 }

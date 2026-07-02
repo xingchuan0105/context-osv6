@@ -1,7 +1,5 @@
 use super::config::ModeConfig;
-use super::disclosure_plan::{
-    DisclosurePlanner, DisclosureRenderer, parse_synthesis_choices,
-};
+use super::disclosure_plan::{DisclosurePlanner, DisclosureRenderer, parse_synthesis_choices};
 use crate::agents::capability::CapabilityRegistry;
 use crate::agents::runtime::AgentRequest;
 
@@ -29,6 +27,7 @@ pub struct ContextAssembler;
 impl ContextAssembler {
     pub fn assemble_retrieve(
         iteration: u8,
+        max_iterations: u8,
         mode: &ModeConfig,
         request: &AgentRequest,
         registry: &CapabilityRegistry,
@@ -63,12 +62,15 @@ impl ContextAssembler {
             mode.tools_for_retrieve(registry)
         };
 
+        let budget_hint = build_iteration_budget_hint(iteration, max_iterations);
+        let system_content = if rendered.text.is_empty() {
+            format!("{base}\n\n{budget_hint}")
+        } else {
+            format!("{base}\n\n{}\n\n{budget_hint}", rendered.text)
+        };
+
         AssembledContext {
-            system_content: if rendered.text.is_empty() {
-                base
-            } else {
-                format!("{base}\n\n{}", rendered.text)
-            },
+            system_content,
             tools,
             newly_disclosed_skills: rendered.newly_disclosed,
         }
@@ -100,8 +102,12 @@ impl ContextAssembler {
         }
 
         let choices = parse_synthesis_choices(request);
-        let plan =
-            DisclosurePlanner::plan_synthesis(mode, request, &choices, &disclosed.disclosed_skill_ids);
+        let plan = DisclosurePlanner::plan_synthesis(
+            mode,
+            request,
+            &choices,
+            &disclosed.disclosed_skill_ids,
+        );
         let renderer = DisclosureRenderer::new(registry);
         let rendered = renderer.render(&plan, mode, request, disclosed);
 
@@ -120,9 +126,10 @@ impl ContextAssembler {
 }
 
 fn memory_cluster_disclosed(disclosed: &DisclosedState) -> bool {
-    disclosed.disclosed_skill_ids.iter().any(|key| {
-        key == "memory" || key.starts_with("memory:")
-    })
+    disclosed
+        .disclosed_skill_ids
+        .iter()
+        .any(|key| key == "memory" || key.starts_with("memory:"))
 }
 
 fn dedupe_tools(tools: Vec<contracts::ToolSpec>) -> Vec<contracts::ToolSpec> {
@@ -132,6 +139,20 @@ fn dedupe_tools(tools: Vec<contracts::ToolSpec>) -> Vec<contracts::ToolSpec> {
         .filter(|tool| seen.insert(tool.name.clone()))
         .collect()
 }
+
+/// Build the per-round iteration budget hint injected into every retrieve-phase
+/// system prompt. `iteration` is 0-indexed; `round` and `remaining` are derived
+/// for LLM consumption.
+///
+/// Format: `<iteration_budget round="1" max="4" remaining="3" />`
+pub fn build_iteration_budget_hint(iteration: u8, max_iterations: u8) -> String {
+    let round = iteration + 1;
+    let remaining = max_iterations.saturating_sub(round);
+    format!(
+        "<iteration_budget round=\"{round}\" max=\"{max_iterations}\" remaining=\"{remaining}\" />"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,12 +186,11 @@ mod tests {
         let mut disclosed = DisclosedState::default();
         let ctx = ContextAssembler::assemble_retrieve(
             0,
+            4,
             &mode,
             &crate::agents::runtime::AgentRequest {
                 kind: crate::agents::AgentKind::Rag,
                 query: "test".to_string(),
-                resolved_query: "test".to_string(),
-                query_resolution: None,
                 notebook_id: None,
                 session_id: None,
                 doc_scope: vec![],
@@ -195,10 +215,59 @@ mod tests {
         assert!(ctx.system_content.contains("dense_search"));
         assert!(!ctx.system_content.contains("rag-codegen-guide"));
         assert!(ctx.system_content.contains("Retrieval query: test"));
+        assert!(
+            ctx.system_content
+                .contains("<iteration_budget round=\"1\" max=\"4\" remaining=\"3\" />")
+        );
         assert_eq!(
             ctx.tools.len(),
             0,
             "round0 must not expose memory tools until memory cluster is disclosed"
+        );
+    }
+
+    #[test]
+    fn rag_round_one_re_injects_codegen_skill() {
+        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let registry = CapabilityRegistry::standard_cached();
+        let mut disclosed = DisclosedState::default();
+        disclosed.disclosed_skill_ids.insert("codegen".to_string());
+        let request = crate::agents::runtime::AgentRequest {
+            kind: crate::agents::AgentKind::Rag,
+            query: "test".to_string(),
+            notebook_id: None,
+            session_id: None,
+            doc_scope: vec![],
+            messages: vec![],
+            user_preferences: None,
+            debug: false,
+            stream: false,
+            language: None,
+            auth_context: serde_json::json!({}),
+            docscope_metadata: None,
+            metadata: Default::default(),
+            cancellation_token: None,
+            guard_pipeline: None,
+            preferred_tools: vec![],
+            format_hint: None,
+            max_iterations: None,
+        };
+        let ctx = ContextAssembler::assemble_retrieve(
+            1,
+            4,
+            &mode,
+            &request,
+            &registry,
+            &mut disclosed,
+            None,
+        );
+        assert!(
+            ctx.system_content.contains("dense_search"),
+            "iteration 1 must still include codegen SDK signatures"
+        );
+        assert!(
+            !ctx.system_content.contains("Retrieval query:"),
+            "retrieval query injection is first-round only"
         );
     }
 
@@ -209,12 +278,11 @@ mod tests {
         let mut disclosed = DisclosedState::default();
         let ctx = ContextAssembler::assemble_retrieve(
             0,
+            4,
             &mode,
             &crate::agents::runtime::AgentRequest {
                 kind: crate::agents::AgentKind::Search,
                 query: "latest rust release".to_string(),
-                resolved_query: "latest rust release".to_string(),
-                query_resolution: None,
                 notebook_id: None,
                 session_id: None,
                 doc_scope: vec![],
@@ -250,12 +318,11 @@ mod tests {
         disclosed.last_skill_request = Some(vec!["memory".to_string()]);
         let ctx = ContextAssembler::assemble_retrieve(
             1,
+            4,
             &mode,
             &crate::agents::runtime::AgentRequest {
                 kind: crate::agents::AgentKind::Rag,
                 query: "test".to_string(),
-                resolved_query: "test".to_string(),
-                query_resolution: None,
                 notebook_id: None,
                 session_id: None,
                 doc_scope: vec![],

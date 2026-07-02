@@ -10,21 +10,12 @@
 5. 输出格式必须与单批压缩格式保持一致。
 6. 不要写成综述口吻，不要面向读者解释。
 
-最终输出必须严格遵守以下双块契约，不要在这两个代码块之外输出任何解释：
+最终输出必须严格遵守以下格式，不要在这之外输出任何解释：
 
-1. 先输出一个 `summary_text` 代码块。
-- 代码块内只放最终整合后的 `summary_text`
-- 仍然保持与单批压缩一致的结构化正文
+只输出一个 `summary_text` 代码块。
+- 代码块内只放最终整合后的结构化摘要正文
+- 不要输出 metadata 或 JSON
 - 不要在 `summary_text` 内再嵌套三反引号代码块
-
-2. 再输出一个 `json` 代码块。
-- 代码块内只放 `summary_metadata`
-- 仅包含以下四个字段：
-  - `language`
-  - `domain`
-  - `genre`
-  - `era`
-- 字段值未知时写 `"unknown"`
 
 输出示例：
 ```summary_text
@@ -33,13 +24,4 @@
 
 【压缩目标】
 ...
-```
-
-```json
-{
-  "language": "zh",
-  "domain": "technology",
-  "genre": "technical_report",
-  "era": "contemporary"
-}
 ```

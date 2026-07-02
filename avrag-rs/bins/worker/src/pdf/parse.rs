@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, HashSet};
 
 use ingestion::parser::{
-    append_liteparse_blocks_to_ir, blocks_to_document_ir, page_has_searchable_text,
     LiteParseService, PageRouteKind, ParsedPdfSnapshot, PdfPageBackend, PdfParsePlan,
-    VisualPdfParser,
+    VisualPdfParser, append_liteparse_blocks_to_ir, blocks_to_document_ir,
+    page_has_searchable_text,
 };
 use ingestion::{
     DocumentIr, IngestionError, LiteParseConfig, PageParseStatus, PageStatusEntry, ParseBackend,
@@ -14,7 +14,7 @@ use uuid::Uuid;
 use super::b_class::enrich_b_class_figures;
 use super::context::PdfParseContext;
 use super::merge::merge_pdf_ir;
-use super::paddle::{execute_paddle_ocr_per_page, PaddlePerPageOcrOutcome};
+use super::paddle::{PaddlePerPageOcrOutcome, execute_paddle_ocr_per_page};
 
 // ---------------------------------------------------------------------------
 // route: page sets derived from the parse plan
@@ -32,9 +32,9 @@ pub fn collect_page_routes(plan: &PdfParsePlan) -> PdfPageRoutes {
         .pages
         .iter()
         .filter(|p| {
-            p.route_kinds.iter().any(|k| {
-                matches!(k, PageRouteKind::Text | PageRouteKind::Figure)
-            })
+            p.route_kinds
+                .iter()
+                .any(|k| matches!(k, PageRouteKind::Text | PageRouteKind::Figure))
         })
         .map(|p| p.page_number)
         .collect();
@@ -43,9 +43,9 @@ pub fn collect_page_routes(plan: &PdfParsePlan) -> PdfPageRoutes {
         .pages
         .iter()
         .filter(|p| {
-            p.route_kinds.iter().any(|k| {
-                matches!(k, PageRouteKind::ScanOcr | PageRouteKind::TableOcr)
-            })
+            p.route_kinds
+                .iter()
+                .any(|k| matches!(k, PageRouteKind::ScanOcr | PageRouteKind::TableOcr))
         })
         .map(|p| p.page_number)
         .collect();
@@ -303,9 +303,10 @@ pub async fn attach_ingest_metadata_and_status(
     ocr: &OcrPagesOutcome,
     mut merged: DocumentIr,
 ) -> DocumentIr {
-    merged
-        .metadata
-        .insert("ingest_route_version".to_string(), "liteparse-v1".to_string());
+    merged.metadata.insert(
+        "ingest_route_version".to_string(),
+        "liteparse-v1".to_string(),
+    );
     merged
         .metadata
         .insert("pdf_route_mode".to_string(), "liteparse_hybrid".to_string());
@@ -318,18 +319,17 @@ pub async fn attach_ingest_metadata_and_status(
             "paddle_jobs_count".to_string(),
             ocr.jobs_submitted.to_string(),
         );
+        merged.metadata.insert(
+            "paddle_jobs_used".to_string(),
+            ocr.jobs_submitted.to_string(),
+        );
         merged
             .metadata
-            .insert("paddle_jobs_used".to_string(), ocr.jobs_submitted.to_string());
-        merged.metadata.insert(
-            "ocr_backend".to_string(),
-            "paddle_jobs".to_string(),
-        );
+            .insert("ocr_backend".to_string(), "paddle_jobs".to_string());
         if ocr.cache_hits > 0 {
-            merged.metadata.insert(
-                "paddle_cache_hits".to_string(),
-                ocr.cache_hits.to_string(),
-            );
+            merged
+                .metadata
+                .insert("paddle_cache_hits".to_string(), ocr.cache_hits.to_string());
         }
         if !ocr.budget_skipped.is_empty() {
             merged.metadata.insert(
@@ -350,9 +350,7 @@ pub async fn attach_ingest_metadata_and_status(
         for page in &ocr.failed_pages {
             merged.warnings.push(ParseWarning {
                 code: "paddle_job_failed".to_string(),
-                message: format!(
-                    "page {page} Paddle Job failed; degraded to LiteParse or visual"
-                ),
+                message: format!("page {page} Paddle Job failed; degraded to LiteParse or visual"),
                 page: Some(*page),
                 backend: ParseBackend::PaddleOcrPdf,
             });
@@ -437,10 +435,7 @@ pub async fn execute_pdf_parse(
         &ocr_meta.successful_pages,
     )?;
 
-    Ok(attach_ingest_metadata_and_status(
-        ctx, bytes, plan, &routes, &ocr_meta, merged,
-    )
-    .await)
+    Ok(attach_ingest_metadata_and_status(ctx, bytes, plan, &routes, &ocr_meta, merged).await)
 }
 
 fn page_route_label(plan_page: &ingestion::parser::PdfPagePlan) -> String {
@@ -468,10 +463,15 @@ fn attach_page_status(
         .pages
         .iter()
         .map(|p| {
-            let needs_ocr = p.route_kinds.iter().any(|k| {
-                matches!(k, PageRouteKind::ScanOcr | PageRouteKind::TableOcr)
-            }) || p.backend == PdfPageBackend::PaddleOcr;
-            let actual_page = merged.pages.iter().find(|mp| mp.page_number == p.page_number);
+            let needs_ocr = p
+                .route_kinds
+                .iter()
+                .any(|k| matches!(k, PageRouteKind::ScanOcr | PageRouteKind::TableOcr))
+                || p.backend == PdfPageBackend::PaddleOcr;
+            let actual_page = merged
+                .pages
+                .iter()
+                .find(|mp| mp.page_number == p.page_number);
             let status = if budget_skipped.contains(&p.page_number) {
                 if page_has_searchable_text(merged, p.page_number) || actual_page.is_some() {
                     PageParseStatus::Partial

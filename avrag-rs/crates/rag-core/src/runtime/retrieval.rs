@@ -195,7 +195,10 @@ impl RagRuntime {
                     if let Some(reason) = output.trace.fallback_reason.as_ref() {
                         degrade_trace.push(DegradeTraceItem {
                             stage: "bm25".to_string(),
-                            reason: DegradeReason::Other(format!("Sparse retrieval fallback: {}", reason)),
+                            reason: DegradeReason::Other(format!(
+                                "Sparse retrieval fallback: {}",
+                                reason
+                            )),
                             impact: "Used a fallback sparse retrieval path for one lexical item"
                                 .to_string(),
                         });
@@ -279,7 +282,10 @@ impl RagRuntime {
                 Err(error) => {
                     degrade_trace.push(DegradeTraceItem {
                         stage: "multimodal_dense".to_string(),
-                        reason: DegradeReason::Other(format!("Multimodal embedding failed: {}", error)),
+                        reason: DegradeReason::Other(format!(
+                            "Multimodal embedding failed: {}",
+                            error
+                        )),
                         impact: "Skipping multimodal dense retrieval for one query item"
                             .to_string(),
                     });
@@ -300,7 +306,10 @@ impl RagRuntime {
                 Ok(results) => chunks.extend(results),
                 Err(error) => degrade_trace.push(DegradeTraceItem {
                     stage: "multimodal_dense".to_string(),
-                    reason: DegradeReason::Other(format!("Multimodal dense retrieval failed: {}", error)),
+                    reason: DegradeReason::Other(format!(
+                        "Multimodal dense retrieval failed: {}",
+                        error
+                    )),
                     impact: "Skipping multimodal dense retrieval for one query item".to_string(),
                 }),
             }
@@ -443,7 +452,10 @@ impl RagRuntime {
                 Err(error) => {
                     degrade_trace.push(DegradeTraceItem {
                         stage: "mm_reranker".to_string(),
-                        reason: DegradeReason::Other(format!("Multimodal reranker call failed: {}", error)),
+                        reason: DegradeReason::Other(format!(
+                            "Multimodal reranker call failed: {}",
+                            error
+                        )),
                         impact: "Falling back to text rerank or pre-rerank ordering".to_string(),
                     });
                 }

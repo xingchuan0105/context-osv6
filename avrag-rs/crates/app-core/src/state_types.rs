@@ -1,7 +1,7 @@
 use common::{Document, NotificationRow, ParsedPreviewItem};
-use contracts::chat::{ChatMessage};
-use contracts::notebooks::{ChatSession, Notebook};
 use contracts::UserPreferences;
+use contracts::chat::ChatMessage;
+use contracts::notebooks::{ChatSession, Notebook};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Default)]

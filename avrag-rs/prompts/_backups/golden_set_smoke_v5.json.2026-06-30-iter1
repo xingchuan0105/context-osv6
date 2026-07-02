@@ -1,0 +1,379 @@
+{
+ "version": "1.0.0-smoke-v5",
+ "created_at": "2026-06-30T00:00:00Z",
+ "description": "Curated 12-probe smoke set for rag_system_prompt_smoke_v5. Corpus: thesis_y_refrigeration.txt + huawei_ipd_370_activities.txt + baiyao_it_planning.txt (3 docs, cached). Targets ~6-12 min with full observability (~30-60s per query). Coverage: factual lookup, table row, PDF numbers, multi-chunk synthesis, buried numeric, cross-doc disambiguation, adversarial refusal.",
+ "subsets": [
+  {
+   "name": "smoke_v5",
+   "description": "Ordered probes; run sequentially in examples array order.",
+   "examples": [
+    {
+     "query": "Y冷冻设备公司是哪一年在大连投资建厂的？",
+     "expected_answer": "2019年",
+     "source_chunks": [
+      {
+       "type": "keywords",
+       "keywords": [
+        "2019",
+        "大连"
+       ]
+      }
+     ],
+     "expected_citations": [
+      1
+     ],
+     "mode": "rag",
+     "description": "thesis_factual — 公司成立年份",
+     "expected_should_answer": true,
+     "must_include": [
+      "2019年"
+     ],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [
+      "2019年",
+      "大连"
+     ],
+     "difficulty": "easy",
+     "relevance_grades": {
+      "成立于2019年": 2
+     }
+    },
+    {
+     "query": "4R策略包括哪四个方面？",
+     "expected_answer": "关联、反应、关系、回报",
+     "source_chunks": [
+      {
+       "type": "substring",
+       "text": "关联、反应、关系、回报"
+      }
+     ],
+     "expected_citations": [
+      1
+     ],
+     "mode": "rag",
+     "description": "thesis_factual — 4R策略四个维度",
+     "expected_should_answer": true,
+     "must_include": [
+      "关联、反应、关系、回报"
+     ],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [
+      "关联、反应、关系、回报"
+     ],
+     "difficulty": "hard",
+     "relevance_grades": {}
+    },
+    {
+     "query": "华为IPD流程中活动号为PAC-05的活动是什么？在哪个阶段？",
+     "expected_answer": "概念启动，在概念阶段",
+     "source_chunks": [
+      {
+       "type": "substring",
+       "text": "PAC-05"
+      }
+     ],
+     "expected_citations": [
+      1
+     ],
+     "mode": "rag",
+     "description": "ipd_table — 按活动号查活动",
+     "expected_should_answer": true,
+     "must_include": [
+      "概念启动，在概念阶段"
+     ],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [
+      "PAC-05"
+     ],
+     "difficulty": "hard",
+     "relevance_grades": {}
+    },
+    {
+     "query": "云南白药IT规划基于什么架构进行整体设计？",
+     "expected_answer": "4A架构",
+     "source_chunks": [
+      {
+       "type": "substring",
+       "text": "业务、数据、应用、技术"
+      }
+     ],
+     "expected_citations": [
+      1
+     ],
+     "mode": "rag",
+     "description": "baiyao_pdf — 4A架构",
+     "expected_should_answer": true,
+     "must_include": [
+      "4A架构"
+     ],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [
+      "4A架构",
+      "业务、数据、应用、技术"
+     ],
+     "difficulty": "medium",
+     "relevance_grades": {
+      "基于4A架构": 2
+     }
+    },
+    {
+     "query": "云南白药数据资产目录中有多少个主题域分组（L1）？多少个主题域（L2）？多少个业务对象（L3）？",
+     "expected_answer": "11大主题域分组（L1），100大主题域（L2），638个业务对象（L3）",
+     "source_chunks": [
+      {
+       "type": "substring",
+       "text": "11大主题域分组"
+      },
+      {
+       "type": "substring",
+       "text": "100大主题域"
+      },
+      {
+       "type": "substring",
+       "text": "638个业务对象"
+      }
+     ],
+     "expected_citations": [
+      1
+     ],
+     "mode": "rag",
+     "description": "baiyao_pdf — 数据资产目录层级数量",
+     "expected_should_answer": true,
+     "must_include": [
+      "11大主题域分组",
+      "100大主题域",
+      "638个业务对象"
+     ],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [
+      "11大主题域分组",
+      "100大主题域",
+      "638个业务对象"
+     ],
+     "difficulty": "hard",
+     "relevance_grades": {}
+    },
+    {
+     "query": "Y冷冻设备公司2019年和2020年的营业收入分别是多少？为什么会出现亏损？",
+     "expected_answer": "2019年550万，2020年370万；因为缺少大项目支撑，营业收入急速下滑，导致两年累计亏损700万元",
+     "source_chunks": [
+      {
+       "type": "substring",
+       "text": "2019年全年收入550万"
+      },
+      {
+       "type": "substring",
+       "text": "2020年全年收入370万"
+      },
+      {
+       "type": "substring",
+       "text": "两年累计亏损700万元"
+      }
+     ],
+     "expected_citations": [
+      1
+     ],
+     "mode": "rag",
+     "description": "thesis_synthesis — 跨段营收与亏损综合",
+     "expected_should_answer": true,
+     "must_include": [
+      "550万",
+      "370万",
+      "700万",
+      "缺少大项目"
+     ],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [
+      "2019年全年收入550万",
+      "2020年全年收入370万",
+      "两年累计亏损700万元"
+     ],
+     "difficulty": "hard",
+     "relevance_grades": {}
+    },
+    {
+     "query": "2019年我国速冻食品行业规模是多少亿元人民币？",
+     "expected_answer": "文档未给出2019年整个速冻食品行业规模（仅有2019年速冻米面市场677亿；1467亿元是2020年行业规模）",
+     "source_chunks": [],
+     "expected_citations": [
+      1
+     ],
+     "mode": "rag",
+     "description": "thesis_numeric — 速冻食品行业规模",
+     "expected_should_answer": false,
+     "must_include": [],
+     "must_not_include": [
+      "1467亿"
+     ],
+     "refusal_keywords": [
+      "未给出",
+      "未说明",
+      "仅提供",
+      "仅提到",
+      "只有",
+      "仅有"
+     ],
+     "retrieval_hints": [
+      "677亿",
+      "速冻米面"
+     ],
+     "difficulty": "hard",
+     "relevance_grades": {}
+    },
+    {
+     "query": "华为IPD流程中概念决策评审的活动号是什么？",
+     "expected_answer": "PAC-20",
+     "source_chunks": [
+      {
+       "type": "substring",
+       "text": "PAC-20"
+      },
+      {
+       "type": "substring",
+       "text": "概念决策评审"
+      }
+     ],
+     "expected_citations": [
+      1
+     ],
+     "mode": "rag",
+     "description": "ipd_table — 概念决策评审活动号",
+     "expected_should_answer": true,
+     "must_include": [
+      "PAC-20"
+     ],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [
+      "PAC-20",
+      "概念决策评审"
+     ],
+     "difficulty": "medium",
+     "relevance_grades": {}
+    },
+    {
+     "query": "Y冷冻设备公司的4R策略和云南白药IT规划的4A架构，分别是什么意思？",
+     "expected_answer": "4R策略是关联、反应、关系、回报的营销策略框架；4A架构是企业架构设计方法（业务架构、数据架构、应用架构、技术架构）",
+     "source_chunks": [
+      {
+       "type": "substring",
+       "text": "关联、反应、关系、回报"
+      },
+      {
+       "type": "substring",
+       "text": "业务、数据、应用、技术"
+      }
+     ],
+     "expected_citations": [
+      1
+     ],
+     "mode": "rag",
+     "description": "cross_document — 4R vs 4A 跨文档消歧",
+     "expected_should_answer": true,
+     "must_include": [
+      "关联、反应、关系、回报",
+      "业务、数据、应用、技术"
+     ],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [
+      "关联、反应、关系、回报",
+      "业务、数据、应用、技术"
+     ],
+     "difficulty": "hard",
+     "relevance_grades": {
+      "基于4A架构": 2
+     }
+    },
+    {
+     "query": "华为IPD流程有多少个活动？云南白药IT规划有多少个业务对象？两者在'体系化'方面有什么共同特点？",
+     "expected_answer": "华为IPD有370个活动（372行含标题），云南白药有638个业务对象；两者都将复杂业务拆解为大量结构化要素进行体系化管理",
+     "source_chunks": [
+      {
+       "type": "substring",
+       "text": "370"
+      },
+      {
+       "type": "substring",
+       "text": "638个业务对象"
+      }
+     ],
+     "expected_citations": [
+      1
+     ],
+     "mode": "rag",
+     "description": "cross_document — 结构化拆解跨文档",
+     "expected_should_answer": true,
+     "must_include": [
+      "370个活动",
+      "638个业务对象"
+     ],
+     "must_not_include": [],
+     "refusal_keywords": [],
+     "retrieval_hints": [
+      "370",
+      "638个业务对象"
+     ],
+     "difficulty": "hard",
+     "relevance_grades": {
+      "活动号": 1
+     }
+    },
+    {
+     "query": "Y冷冻设备公司的速冻机产品保修期是几年？",
+     "expected_answer": "论文中提到了保修期的概念（指出行业通常停留在保修期内），但未说明Y冷冻设备公司产品的具体保修年限",
+     "source_chunks": [],
+     "expected_citations": [],
+     "mode": "rag",
+     "description": "thesis_adversarial — 编造保修期",
+     "expected_should_answer": false,
+     "must_include": [
+      "论文中提到了保修期的概念（指出行业通常停留在保修期内），但未说明Y冷冻设备公司产品的具体保修年限"
+     ],
+     "must_not_include": [],
+     "refusal_keywords": [
+      "未提及",
+      "未说明",
+      "未找到",
+      "无法确认"
+     ],
+     "retrieval_hints": [
+      "Y冷冻设备公司的速冻机产品保修期是几年？"
+     ],
+     "difficulty": "adversarial",
+     "relevance_grades": {}
+    },
+    {
+     "query": "Y冷冻设备公司的注册资本是多少万元？",
+     "expected_answer": "论文中未提及注册资本",
+     "source_chunks": [],
+     "expected_citations": [],
+     "mode": "rag",
+     "description": "thesis_adversarial — 编造注册资本数字",
+     "expected_should_answer": false,
+     "must_include": [
+      "论文中未提及注册资本"
+     ],
+     "must_not_include": [],
+     "refusal_keywords": [
+      "未提及",
+      "未说明",
+      "未找到",
+      "无法确认"
+     ],
+     "retrieval_hints": [
+      "Y冷冻设备公司的注册资本是多少万元？"
+     ],
+     "difficulty": "adversarial",
+     "relevance_grades": {}
+    }
+   ]
+  }
+ ]
+}

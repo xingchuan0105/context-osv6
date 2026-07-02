@@ -3,13 +3,16 @@
 use std::time::Duration;
 
 use crate::product_e2e::{
-    DocumentStatus, TestContext, setup,
+    DocumentStatus, TestContext,
     assertions::{
         assert_answer_has_doc_citation, assert_answer_substantive, assert_citation_doc_id,
         assert_citation_referenced_in_answer, assert_has_citations,
         assert_liteparse_hybrid_backend_summary, assert_no_mineru_in_backend_summary,
     },
-    llm_real::{chat_with_citations_retry_attempts, merge_llm_real_extra, REAL_LLM_MULTITOOL_MAX_ATTEMPTS},
+    llm_real::{
+        REAL_LLM_MULTITOOL_MAX_ATTEMPTS, chat_with_citations_retry_attempts, merge_llm_real_extra,
+    },
+    setup,
 };
 
 fn phase0_mini_fixture_path() -> std::path::PathBuf {
@@ -62,7 +65,10 @@ async fn real_llm_rag_after_liteparse_pdf_ingest_returns_citation() {
         .query_document_chunk_count(&upload.document_id)
         .await
         .expect("chunk count");
-    assert!(chunk_count > 0, "expected chunks after LiteParse PDF ingest");
+    assert!(
+        chunk_count > 0,
+        "expected chunks after LiteParse PDF ingest"
+    );
 
     let result = chat_with_citations_retry_attempts(
         &ctx,

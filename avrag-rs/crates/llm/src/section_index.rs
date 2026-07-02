@@ -1,5 +1,6 @@
 use crate::client::{ChatMessage, LlmClient};
 use anyhow::Context;
+use common::{Domain, Era, Genre, SummaryMetadata};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -8,8 +9,20 @@ const DEFAULT_SECTION_INDEX_SYSTEM: &str =
 const DEFAULT_SECTION_INDEX_USER: &str =
     include_str!("../../../prompts/templates/section-index-user.tmpl");
 
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct DocumentProfileMetadata {
+    pub language: Option<String>,
+    pub domain: Option<String>,
+    pub genre: Option<String>,
+    pub era: Option<String>,
+    pub author: Option<String>,
+    pub publication_date: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct SectionIndexOutput {
+    #[serde(default)]
+    pub document_metadata: DocumentProfileMetadata,
     pub sections: Vec<SectionIndexSection>,
 }
 
@@ -62,7 +75,10 @@ impl SectionIndexGenerator {
         chunks: &[SectionIndexChunk],
     ) -> anyhow::Result<SectionIndexOutput> {
         if chunks.is_empty() {
-            return Ok(SectionIndexOutput { sections: vec![] });
+            return Ok(SectionIndexOutput {
+                document_metadata: DocumentProfileMetadata::default(),
+                sections: vec![],
+            });
         }
 
         let chunk_ids: Vec<String> = chunks.iter().map(|c| c.chunk_id.to_string()).collect();
@@ -98,6 +114,60 @@ impl SectionIndexGenerator {
     }
 }
 
+pub fn build_profile_metadata(
+    doc_id: &str,
+    title: &str,
+    filename: &str,
+    metadata: &DocumentProfileMetadata,
+) -> SummaryMetadata {
+    SummaryMetadata {
+        doc_id: doc_id.to_string(),
+        filename: filename.to_string(),
+        docname: title.to_string(),
+        language: metadata
+            .language
+            .as_deref()
+            .map(normalize_metadata_field)
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "unknown".to_string()),
+        domain: metadata
+            .domain
+            .as_deref()
+            .map(normalize_metadata_field)
+            .filter(|value| !value.is_empty())
+            .map(|value| Domain::from(value.as_str()))
+            .unwrap_or(Domain::Unknown),
+        genre: metadata
+            .genre
+            .as_deref()
+            .map(normalize_metadata_field)
+            .filter(|value| !value.is_empty())
+            .map(|value| Genre::from(value.as_str()))
+            .unwrap_or(Genre::Unknown),
+        era: metadata
+            .era
+            .as_deref()
+            .map(normalize_metadata_field)
+            .filter(|value| !value.is_empty())
+            .map(|value| Era::from(value.as_str()))
+            .unwrap_or(Era::Unknown),
+        author: metadata
+            .author
+            .as_deref()
+            .map(normalize_metadata_field)
+            .filter(|value| !value.is_empty()),
+        publication_date: metadata
+            .publication_date
+            .as_deref()
+            .map(normalize_metadata_field)
+            .filter(|value| !value.is_empty()),
+    }
+}
+
+fn normalize_metadata_field(value: &str) -> String {
+    value.trim().trim_matches('"').to_string()
+}
+
 pub fn parse_section_index_response(
     content: &str,
     valid_chunk_ids: &[String],
@@ -125,7 +195,6 @@ mod tests {
 
     #[test]
     fn chunk_preview_truncation_respects_utf8_boundaries() {
-        // Em-dash is 3 bytes in UTF-8; slicing at a byte inside it must not panic.
         let em_dash = "—";
         let text = format!("{}{}", "x".repeat(1198), em_dash);
         assert!(text.len() > 1200);
@@ -137,10 +206,28 @@ mod tests {
 
     #[test]
     fn parse_section_index_filters_invalid_chunk_ids() {
-        let raw =
-            r#"{"sections":[{"title":"Intro","heading_level":1,"rank":0,"chunk_ids":["a","b"]}]}"#;
+        let raw = r#"{"document_metadata":{"language":"zh"},"sections":[{"title":"Intro","heading_level":1,"rank":0,"chunk_ids":["a","b"]}]}"#;
         let out = parse_section_index_response(raw, &["a".to_string()]).unwrap();
         assert_eq!(out.sections.len(), 1);
         assert_eq!(out.sections[0].chunk_ids, vec!["a"]);
+        assert_eq!(out.document_metadata.language.as_deref(), Some("zh"));
+    }
+
+    #[test]
+    fn build_profile_metadata_maps_enums() {
+        let metadata = DocumentProfileMetadata {
+            language: Some("zh".to_string()),
+            domain: Some("technology".to_string()),
+            genre: Some("thesis".to_string()),
+            era: Some("contemporary".to_string()),
+            author: Some("Alice".to_string()),
+            publication_date: Some("2021".to_string()),
+        };
+        let profile = build_profile_metadata("doc-1", "Title", "file.txt", &metadata);
+        assert_eq!(profile.doc_id, "doc-1");
+        assert_eq!(profile.language, "zh");
+        assert_eq!(profile.domain, Domain::Technology);
+        assert_eq!(profile.genre, Genre::Thesis);
+        assert_eq!(profile.author.as_deref(), Some("Alice"));
     }
 }

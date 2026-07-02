@@ -3,11 +3,11 @@
 use std::sync::atomic::Ordering;
 
 use super::super::{
-    ChatResponse, StreamReasoningCapture,
+    ChatResponse, SseEvent, StreamReasoningCapture,
     mock_servers::{
         reset_mock_rag_state, set_mock_emit_memory_tool, set_mock_rag_codegen_chunk_id,
-        set_mock_rag_codegen_doc_id, set_mock_rag_multiround_profile, set_mock_rag_skill_request_memory,
-        set_mock_rag_skip_codegen,
+        set_mock_rag_codegen_doc_id, set_mock_rag_multiround_profile,
+        set_mock_rag_skill_request_memory, set_mock_rag_skip_codegen,
     },
 };
 use super::TestContext;
@@ -97,10 +97,7 @@ impl TestContext {
         }
     }
 
-    fn write_reasoning_capture_files(
-        out_dir: &std::path::Path,
-        capture: &StreamReasoningCapture,
-    ) {
+    fn write_reasoning_capture_files(out_dir: &std::path::Path, capture: &StreamReasoningCapture) {
         let _ = std::fs::write(out_dir.join("reasoning_summary.txt"), &capture.summary);
 
         let trace_lines: String = capture
@@ -115,6 +112,90 @@ impl TestContext {
             out_dir.join("prompt_snapshots.json"),
             serde_json::to_string_pretty(&capture.prompt_snapshots).unwrap_or_default(),
         );
+    }
+
+    fn write_sse_events(out_dir: &std::path::Path, events: &[SseEvent]) {
+        let lines: String = events
+            .iter()
+            .filter_map(|event| {
+                serde_json::to_string(&serde_json::json!({
+                    "event": event.event,
+                    "data": event.data,
+                }))
+                .ok()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let _ = std::fs::write(out_dir.join("sse_events.jsonl"), lines);
+    }
+
+    /// Artifact directory for a single RAG smoke v5 probe query.
+    pub fn smoke_v5_probe_artifact_dir(&self, subset_name: &str) -> std::path::PathBuf {
+        self.artifact_dir(subset_name, "rag_quality_smoke_v5")
+    }
+
+    /// Persist full observability artifacts for one smoke v5 probe query.
+    pub fn save_smoke_v5_probe_artifact(
+        &self,
+        subset_name: &str,
+        resp: &ChatResponse,
+        capture: &StreamReasoningCapture,
+        sse_events: &[SseEvent],
+        extra: Option<&serde_json::Value>,
+    ) {
+        let out_dir = self.smoke_v5_probe_artifact_dir(subset_name);
+        let _ = std::fs::create_dir_all(&out_dir);
+
+        let _ = std::fs::write(
+            out_dir.join("response.json"),
+            serde_json::to_string_pretty(resp).unwrap_or_default(),
+        );
+
+        Self::write_reasoning_capture_files(&out_dir, capture);
+        Self::write_sse_events(&out_dir, sse_events);
+
+        let stream_error_with_done = extra
+            .and_then(|v| v.get("stream_error_with_done"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let reasoning_empty_warning =
+            capture.summary.is_empty() && capture.trace_reasoning.is_empty();
+
+        let metadata = serde_json::json!({
+            "subset": subset_name,
+            "run_id": self.artifact_run_id,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "degrade_trace_count": resp.degrade_trace.len(),
+            "degrade_trace": resp.degrade_trace,
+            "tool_results": resp.tool_results.iter().map(|r| serde_json::json!({
+                "tool": r.tool,
+                "status": r.status,
+            })).collect::<Vec<_>>(),
+            "usage": resp.usage,
+            "citation_count": resp.citations.len(),
+            "agent_type": resp.agent_type,
+            "session_id": resp.session_id,
+            "message_id": resp.message_id,
+            "sse_event_count": sse_events.len(),
+            "reasoning_delta_count": capture.delta_count,
+            "reasoning_summary_chars": capture.summary.chars().count(),
+            "reasoning_summary_present": !capture.summary.is_empty(),
+            "trace_reasoning_count": capture.trace_reasoning.len(),
+            "prompt_snapshot_count": capture.prompt_snapshots.len(),
+            "reasoning_empty_warning": reasoning_empty_warning,
+            "stream_error_with_done": stream_error_with_done,
+            "extra": extra.cloned().unwrap_or(serde_json::Value::Null),
+        });
+        let _ = std::fs::write(
+            out_dir.join("metadata.json"),
+            serde_json::to_string_pretty(&metadata).unwrap_or_default(),
+        );
+
+        if let Some(ref log_path) = self.worker_log_path {
+            if log_path.exists() {
+                let _ = std::fs::copy(log_path, out_dir.join("worker_logs.txt"));
+            }
+        }
     }
 
     pub fn save_observability_artifact(

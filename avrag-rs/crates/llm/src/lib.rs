@@ -20,6 +20,7 @@ pub use reranker::{
 };
 pub use section_index::{
     SectionIndexChunk, SectionIndexGenerator, SectionIndexOutput, SectionIndexSection,
+    build_profile_metadata,
 };
 pub use summary::SummaryGenerator;
 pub use synthesizer::{SynthesisOutput, parse_synthesis_output};

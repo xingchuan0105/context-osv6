@@ -8,9 +8,7 @@ pub(crate) fn db_err(error: sqlx::Error) -> AppError {
     AppError::internal(error.to_string())
 }
 
-pub(crate) async fn begin_tx<'a>(
-    pool: &'a PgPool,
-) -> Result<Transaction<'a, Postgres>, AppError> {
+pub(crate) async fn begin_tx<'a>(pool: &'a PgPool) -> Result<Transaction<'a, Postgres>, AppError> {
     pool.begin().await.map_err(db_err)
 }
 
@@ -40,7 +38,10 @@ pub(crate) async fn set_current_role(conn: &mut PgConnection, role: &str) -> Res
         .map_err(db_err)
 }
 
-pub(crate) async fn set_current_user(conn: &mut PgConnection, user_id: &str) -> Result<(), AppError> {
+pub(crate) async fn set_current_user(
+    conn: &mut PgConnection,
+    user_id: &str,
+) -> Result<(), AppError> {
     set_config(conn, "app.current_user", user_id)
         .await
         .map_err(db_err)

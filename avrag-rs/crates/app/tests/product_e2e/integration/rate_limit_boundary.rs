@@ -91,7 +91,10 @@ async fn workspace_key_rate_limit_rpm_2_blocks_third_request_with_429() {
     let ctx = TestContext::new_smoke().await;
     // Setup runs while E2E_ENABLED is still "true" (set by the bootstrap), so
     // the proxy-header auth used by `create_notebook` works.
-    let notebook = ctx.create_notebook("rate-limit").await.expect("create notebook");
+    let notebook = ctx
+        .create_notebook("rate-limit")
+        .await
+        .expect("create notebook");
 
     let state = ctx
         .app_state
@@ -128,7 +131,10 @@ async fn workspace_key_rate_limit_rpm_2_blocks_third_request_with_429() {
     let s2 = r2.status().as_u16();
     let s3 = r3.status().as_u16();
     assert_ne!(s1, 429, "first request must not be rate-limited (got {s1})");
-    assert_ne!(s2, 429, "second request must not be rate-limited (got {s2})");
+    assert_ne!(
+        s2, 429,
+        "second request must not be rate-limited (got {s2})"
+    );
     assert_eq!(s3, 429, "third request must be rate-limited");
 
     let retry_after = r3

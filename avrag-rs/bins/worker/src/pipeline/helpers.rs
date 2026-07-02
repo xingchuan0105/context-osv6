@@ -2,32 +2,32 @@ use ingestion::parser::{ParsePlan, PdfPageBackend};
 use ingestion::{DocumentIr, ParseBackend, SourceLocator};
 
 pub(crate) use super::graph_index::{
-    build_document_index_batch, build_graph_index_records, GraphIndexRecords,
+    GraphIndexRecords, build_document_index_batch, build_graph_index_records,
 };
 pub(crate) use super::index_dispatch::build_text_index_records;
 pub(crate) use super::parse_route::{
     execute_external_parse, execute_local_parse, execute_office_parse,
 };
 pub(crate) use super::pg_side_effects::{
-    build_asset_object_key, build_document_block_rows, build_document_chunk_rows, build_toc_entries,
-    collect_document_text, maybe_enrich_toc_with_llm,
+    build_asset_object_key, build_document_block_rows, build_document_chunk_rows,
+    collect_document_text, generate_document_profile_with_llm,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use avrag_auth::AuthContext;
 use avrag_storage_pg::ObjectStoreHandle;
 use std::path::{Component, Path};
 use uuid::Uuid;
 
-use crate::runtime_support::safe_relative_object_key;
 pub(crate) use super::triplet_extraction::{
     extract_triplets_for_index, extract_visual_triplets_for_index, merge_extracted_triplets,
     triplet_extraction_enabled, visual_triplet_extraction_enabled,
 };
+use crate::runtime_support::safe_relative_object_key;
 
 #[cfg(test)]
 pub(crate) use super::index_dispatch::embed_text_vectors_with_client;
 #[cfg(test)]
-pub(crate) use super::triplet_extraction::{parse_triplet_response, ExtractedTriplet};
+pub(crate) use super::triplet_extraction::{ExtractedTriplet, parse_triplet_response};
 
 pub(crate) fn estimate_token_count(text: &str) -> i64 {
     common::estimate_token_count(text)
@@ -45,9 +45,7 @@ pub(crate) fn validate_mirror_source_path(source_path: &str) -> Result<()> {
         return validate_temporary_mirror_path(local_path);
     }
     if !safe_relative_object_key(source_path) {
-        return Err(anyhow!(
-            "mirror local asset path rejected: {source_path}"
-        ));
+        return Err(anyhow!("mirror local asset path rejected: {source_path}"));
     }
     Ok(())
 }
@@ -109,8 +107,7 @@ pub(crate) fn enrich_multimodal_source_locator(
     source_locator: &SourceLocator,
     metadata: &std::collections::BTreeMap<String, String>,
 ) -> serde_json::Value {
-    let mut value =
-        serde_json::to_value(source_locator).unwrap_or_else(|_| serde_json::json!({}));
+    let mut value = serde_json::to_value(source_locator).unwrap_or_else(|_| serde_json::json!({}));
     let Some(obj) = value.as_object_mut() else {
         return value;
     };

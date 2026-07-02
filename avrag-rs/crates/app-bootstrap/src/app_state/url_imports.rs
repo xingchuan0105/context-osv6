@@ -1,5 +1,5 @@
 use common::{AddUrlSourceRequest, AppError, SourceRow};
-use contracts::documents::{CreateDocumentUploadResponse};
+use contracts::documents::CreateDocumentUploadResponse;
 
 use super::AppState;
 

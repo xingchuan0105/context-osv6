@@ -1,9 +1,9 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
+use app_core::AppConfig;
 use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
 use avrag_retrieval_data_plane::RetrievalDataPlane;
 use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
-use avrag_storage_pg::{DocumentCleanupTask, ObjectStoreHandle, S3ObjectStore};
-use app_core::AppConfig;
+use avrag_storage_pg::{DocumentCleanupTask, ObjectStoreHandle, ObjectStoreHeadError, S3ObjectStore};
 use ingestion::IngestionTask;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -33,11 +33,7 @@ pub(crate) fn document_cleanup_task_context(task: &DocumentCleanupTask) -> AuthC
 }
 
 pub(crate) async fn build_worker_object_store(config: &AppConfig) -> Result<ObjectStoreHandle> {
-    if !config.object_storage.endpoint.trim().is_empty()
-        && !config.object_storage.bucket.trim().is_empty()
-        && !config.object_storage.access_key.trim().is_empty()
-        && !config.object_storage.secret_key.trim().is_empty()
-    {
+    if has_complete_s3_config(config) {
         let store = S3ObjectStore::new(
             config.object_storage.endpoint.clone(),
             config.object_storage.bucket.clone(),
@@ -52,6 +48,55 @@ pub(crate) async fn build_worker_object_store(config: &AppConfig) -> Result<Obje
     Ok(ObjectStoreHandle::local(PathBuf::from(
         config.object_root.clone(),
     )))
+}
+
+pub(crate) fn describe_object_store_config(config: &AppConfig) -> String {
+    if has_complete_s3_config(config) {
+        return format!(
+            "backend=s3 endpoint={} bucket={}",
+            mask_endpoint(&config.object_storage.endpoint),
+            config.object_storage.bucket.trim()
+        );
+    }
+    format!("backend=local root={}", config.object_root.trim())
+}
+
+pub(crate) async fn probe_object_store(config: &AppConfig) -> Result<()> {
+    if worker_skip_storage_probe() {
+        return Ok(());
+    }
+
+    if has_complete_s3_config(config) {
+        let store = build_worker_object_store(config).await?;
+        return match store.head(".worker-probe").await {
+            Ok(_) | Err(ObjectStoreHeadError::NotFound { .. }) => Ok(()),
+            Err(error) => Err(anyhow::anyhow!(error)).context("s3 object store probe failed"),
+        };
+    }
+
+    let root = PathBuf::from(config.object_root.trim());
+    tokio::fs::create_dir_all(&root)
+        .await
+        .with_context(|| format!("failed to create local object root {}", root.display()))?;
+
+    let probe_path = root.join(".worker-probe");
+    let payload = b"ok";
+    tokio::fs::write(&probe_path, payload)
+        .await
+        .with_context(|| format!("failed to write probe file {}", probe_path.display()))?;
+    let readback = tokio::fs::read(&probe_path)
+        .await
+        .with_context(|| format!("failed to read probe file {}", probe_path.display()))?;
+    if readback != payload {
+        return Err(anyhow::anyhow!(
+            "local object store probe readback mismatch for {}",
+            probe_path.display()
+        ));
+    }
+    tokio::fs::remove_file(&probe_path)
+        .await
+        .with_context(|| format!("failed to delete probe file {}", probe_path.display()))?;
+    Ok(())
 }
 
 pub(crate) async fn fetch_url_content(url: &str) -> Result<Vec<u8>> {
@@ -96,12 +141,19 @@ pub(crate) async fn build_worker_retrieval_data_plane(
 
 pub(crate) fn build_worker_triplet_llm(config: &AppConfig) -> Option<Arc<avrag_llm::LlmClient>> {
     config
-        .ingestion_llm
+        .triplet_llm
         .to_llm_config()
         .map(avrag_llm::LlmClient::new)
         .map(Arc::new)
 }
 
+pub(crate) fn build_worker_ingestion_llm(config: &AppConfig) -> Option<Arc<avrag_llm::LlmClient>> {
+    config
+        .ingestion_llm
+        .to_llm_config()
+        .map(avrag_llm::LlmClient::new)
+        .map(Arc::new)
+}
 
 pub(crate) fn safe_relative_object_key(value: &str) -> bool {
     if value.is_empty()
@@ -199,4 +251,41 @@ pub(crate) fn worker_runtime_mode(database_url: &Option<String>) -> &'static str
     } else {
         "memory"
     }
+}
+
+fn has_complete_s3_config(config: &AppConfig) -> bool {
+    !config.object_storage.endpoint.trim().is_empty()
+        && !config.object_storage.bucket.trim().is_empty()
+        && !config.object_storage.access_key.trim().is_empty()
+        && !config.object_storage.secret_key.trim().is_empty()
+}
+
+fn worker_skip_storage_probe() -> bool {
+    std::env::var("AVRAG_WORKER_SKIP_STORAGE_PROBE")
+        .ok()
+        .map(|value| is_truthy(&value))
+        .unwrap_or(false)
+}
+
+fn is_truthy(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
+fn mask_endpoint(endpoint: &str) -> String {
+    let trimmed = endpoint.trim();
+    if trimmed.is_empty() {
+        return "(empty)".to_string();
+    }
+    if let Ok(mut url) = reqwest::Url::parse(trimmed) {
+        if !url.username().is_empty() || url.password().is_some() {
+            let _ = url.set_username("****");
+            let _ = url.set_password(Some("****"));
+        }
+        url.set_query(None);
+        return url.to_string();
+    }
+    trimmed.to_string()
 }

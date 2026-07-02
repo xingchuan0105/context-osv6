@@ -6,7 +6,7 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use common::{CreateDocumentRequest, CreateNotebookRequest};
-use contracts::documents::{DocumentStatus};
+use contracts::documents::DocumentStatus;
 use tower::ServiceExt;
 use transport_http::build_router;
 use uuid::Uuid;
@@ -327,11 +327,7 @@ async fn mcp_notebook_tool_call_expands_empty_doc_scope_to_ready_documents() {
     let status = response.status();
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let payload = serde_json::from_slice::<serde_json::Value>(&body).unwrap();
-    assert_eq!(
-        status,
-        StatusCode::OK,
-        "unexpected MCP response: {payload}"
-    );
+    assert_eq!(status, StatusCode::OK, "unexpected MCP response: {payload}");
     assert_eq!(
         payload
             .pointer("/error/data/error")

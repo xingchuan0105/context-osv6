@@ -11,8 +11,7 @@ async fn test_enforcement_blocks_web_search_without_external_network_perm() {
         avrag_auth::OrgId::new(uuid::Uuid::nil()),
         avrag_auth::SubjectKind::User,
     );
-    let result =
-        dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
+    let result = dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
     assert_eq!(result.status, ToolStatus::Error);
     let data = result.data.unwrap();
     assert!(data["error"].as_str().unwrap().contains("external network"));
@@ -27,14 +26,9 @@ async fn test_enforcement_allows_web_search_with_external_network_perm() {
     )
     .grant("external_network");
     let provider = FakeSearchProvider;
-    let result = dispatch_atomic_tool_with_enforcement(
-        &call,
-        Some(&provider),
-        Some(&auth),
-        None,
-        None,
-    )
-    .await;
+    let result =
+        dispatch_atomic_tool_with_enforcement(&call, Some(&provider), Some(&auth), None, None)
+            .await;
     assert_eq!(result.status, ToolStatus::Ok);
 }
 
@@ -48,8 +42,7 @@ async fn test_enforcement_blocks_web_fetch_without_external_network_perm() {
         avrag_auth::OrgId::new(uuid::Uuid::nil()),
         avrag_auth::SubjectKind::User,
     );
-    let result =
-        dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
+    let result = dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
     assert_eq!(result.status, ToolStatus::Error);
     let data = result.data.unwrap();
     assert!(data["error"].as_str().unwrap().contains("external network"));
@@ -66,8 +59,7 @@ async fn test_enforcement_allows_web_fetch_with_external_network_perm() {
         avrag_auth::SubjectKind::User,
     )
     .grant("external_network");
-    let result =
-        dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
+    let result = dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
     // Without a real HTTP client the fetch may fail, but policy should allow it.
     assert!(matches!(result.status, ToolStatus::Ok | ToolStatus::Error));
 }
@@ -79,8 +71,7 @@ async fn test_enforcement_blocks_code_interpreter_without_code_execution_perm() 
         avrag_auth::OrgId::new(uuid::Uuid::nil()),
         avrag_auth::SubjectKind::User,
     );
-    let result =
-        dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
+    let result = dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
     assert_eq!(result.status, ToolStatus::Error);
     let data = result.data.unwrap();
     assert!(data["error"].as_str().unwrap().contains("code execution"));

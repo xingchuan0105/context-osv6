@@ -1,7 +1,7 @@
 use app_bootstrap::AppState;
 use common::{AddUrlSourceRequest, AppError, CreateDocumentRequest};
 use contracts::documents::DocumentStatus;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::auth_guard::{
     authorize_workspace_index_or_query, authorize_workspace_tool, ensure_document_in_notebook,
@@ -9,10 +9,7 @@ use crate::auth_guard::{
 };
 use crate::mcp::catalog;
 
-pub(crate) async fn create_upload(
-    state: &AppState,
-    arguments: &Value,
-) -> Result<Value, AppError> {
+pub(crate) async fn create_upload(state: &AppState, arguments: &Value) -> Result<Value, AppError> {
     let notebook_id = require_notebook_id_arg(arguments)?;
     authorize_workspace_tool(state.auth(), index_permission(), notebook_id)?;
     let notebook_id_str = notebook_id.to_string();
@@ -141,10 +138,7 @@ pub(crate) async fn document_status(
     ))
 }
 
-pub(crate) async fn add_url_source(
-    state: &AppState,
-    arguments: &Value,
-) -> Result<Value, AppError> {
+pub(crate) async fn add_url_source(state: &AppState, arguments: &Value) -> Result<Value, AppError> {
     let notebook_id = require_notebook_id_arg(arguments)?;
     authorize_workspace_tool(state.auth(), index_permission(), notebook_id)?;
     let notebook_id_str = notebook_id.to_string();
@@ -165,14 +159,14 @@ pub(crate) async fn add_url_source(
         "workspace.add_url_source",
         Some(&notebook_id_str),
         json!(source),
-        vec!["workspace.document_status until completed", "workspace.rag_query"],
+        vec![
+            "workspace.document_status until completed",
+            "workspace.rag_query",
+        ],
     ))
 }
 
-pub(crate) async fn list_sources(
-    state: &AppState,
-    arguments: &Value,
-) -> Result<Value, AppError> {
+pub(crate) async fn list_sources(state: &AppState, arguments: &Value) -> Result<Value, AppError> {
     let notebook_id = require_notebook_id_arg(arguments)?;
     authorize_workspace_tool(state.auth(), query_permission(), notebook_id)?;
     let notebook_id_str = notebook_id.to_string();

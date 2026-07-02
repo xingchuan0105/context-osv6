@@ -7,7 +7,8 @@
 use std::time::Duration;
 
 use crate::product_e2e::{
-    ChatStreamParams, fixtures::shared_ready_rag_context, llm_real::collect_observability_from_events,
+    ChatStreamParams, fixtures::shared_ready_rag_context,
+    llm_real::collect_observability_from_events,
 };
 
 const STREAM_DEADLINE: Duration = Duration::from_secs(60);
@@ -28,6 +29,7 @@ async fn stream_rag_events(debug: bool) -> anyhow::Result<Vec<crate::product_e2e
             session_id: None,
             format_hint: None,
             debug,
+            pin_mock_chunk_ids: true,
         },
         MAX_EVENTS,
         STREAM_DEADLINE,
@@ -131,7 +133,9 @@ async fn chat_stream_client_disconnect_aborts_without_hang() {
 
     let events = stream_rag_events(false).await.expect("baseline stream");
     assert!(
-        events.iter().any(|e| e.event == "start" || e.event == "trace"),
+        events
+            .iter()
+            .any(|e| e.event == "start" || e.event == "trace"),
         "baseline stream should emit early events"
     );
 
@@ -139,11 +143,7 @@ async fn chat_stream_client_disconnect_aborts_without_hang() {
     let upload = &fixture.upload;
     let ctx = shared_ready_rag_context().await;
     let aborted = ctx
-        .chat_stream_abort_after_start(
-            QUERY,
-            &upload.notebook_id,
-            &[upload.document_id.clone()],
-        )
+        .chat_stream_abort_after_start(QUERY, &upload.notebook_id, &[upload.document_id.clone()])
         .await
         .expect("abort stream");
     assert!(
@@ -171,7 +171,9 @@ async fn chat_stream_disconnect_reconnect_continues_session() {
         .await
         .expect("abort capture session");
     assert!(
-        events.iter().any(|e| e.event == "start" || e.event == "trace"),
+        events
+            .iter()
+            .any(|e| e.event == "start" || e.event == "trace"),
         "disconnect test should observe early SSE events"
     );
     let session_id = session_id.expect("start event should include session_id");
