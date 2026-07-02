@@ -364,17 +364,29 @@ impl RagRuntime {
             })
             .collect::<HashMap<_, _>>();
 
+        // Preserve the stable `citation_id` assigned to each citation when the
+        // retrieval bundle was built (see `citation_from_scored` in execute.rs).
+        // Renumbering to `index + 1` here would diverge from the ids embedded in
+        // the rendered answer markup and stored on the persisted message, which
+        // `lookup_citation` matches against by `citation_id`. The answer markup
+        // is materialized below from this same `citations` slice, so internal
+        // consistency is what matters, not contiguity.
         let citations = ordered_chunks
             .iter()
-            .enumerate()
-            .filter_map(|(index, chunk)| {
-                citation_by_chunk_id
-                    .get(&chunk.chunk_id)
-                    .cloned()
-                    .map(|mut citation| {
-                        citation.citation_id = (index + 1) as i64;
-                        citation
-                    })
+            .filter_map(|chunk| {
+                if let Some(citation) = citation_by_chunk_id.get(&chunk.chunk_id).cloned() {
+                    Some(citation)
+                } else {
+                    // Chunks without a matching citation (e.g. synthetic summary
+                    // chunks with a non-uuid `chunk_id`) genuinely have no
+                    // citation to surface. Skip them but make the drop observable.
+                    tracing::warn!(
+                        chunk_id = %chunk.chunk_id,
+                        doc_id = %chunk.doc_id,
+                        "ordered chunk has no matching retrieval citation; omitting from response citations"
+                    );
+                    None
+                }
             })
             .collect::<Vec<_>>();
 

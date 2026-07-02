@@ -4,9 +4,7 @@ use contracts::ToolResult;
 
 use super::assembler::{ContextAssembler, DisclosedState};
 use super::config::{LoopExitConfig, ModeConfig};
-use super::exit_policy::{
-    SynthesisGate, decide_synthesis_gate, degraded_no_evidence_answer, has_retrieval_observation,
-};
+use super::exit_policy::{SynthesisGate, decide_synthesis_gate, has_retrieval_observation};
 use super::reasoning_emit;
 use super::run_result::build_run_result;
 use super::synthesis::SynthesisPhase;
@@ -91,29 +89,6 @@ impl ReActLoop {
                     return Ok(Some(result));
                 }
                 has_evidence = has_retrieval_observation(messages, collected_tool_results, mode);
-            }
-            SynthesisGate::DegradedNoEvidence => {
-                return Ok(Some(
-                    self.finish_direct_answer_run(
-                        degraded_no_evidence_answer(&mode.id),
-                        request,
-                        disclosed_state,
-                        collected_tool_results,
-                        sink,
-                        iteration,
-                        max_iterations,
-                        total_tool_calls,
-                        telemetry_records,
-                        total_usage,
-                        reasoning_summary_acc,
-                        start_time,
-                        "degraded_no_evidence",
-                        FinalDecision::Degraded {
-                            reason: crate::agents::react_loop::DegradeReason::NoResultsAfterAllFallbacks,
-                        },
-                    )
-                    .await?,
-                ));
             }
             SynthesisGate::EnterSynthesis => {}
         }

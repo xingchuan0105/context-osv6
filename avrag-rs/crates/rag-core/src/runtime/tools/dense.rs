@@ -7,6 +7,8 @@ use contracts::{
 
 use crate::RagRuntime;
 
+use super::super::{dynamic_final_feed, dynamic_rough_recall};
+
 pub(crate) fn embedding_failure_in_trace(degrade_trace: &[DegradeTraceItem]) -> bool {
     degrade_trace.iter().any(|item| {
         matches!(item.reason, DegradeReason::EmbeddingUnavailable)
@@ -99,9 +101,29 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
         DenseRetrievalModality::Mm | DenseRetrievalModality::Both
     );
 
+    // Dynamic rough-recall sizing: rough = clamp(docscope_chunk_total × 30%, 50, 200);
+    // final fed to LLM = clamp(rough × 30%, 10, 30). The LLM-supplied top_k is
+    // intentionally overridden so a small top_k (e.g. 10) cannot starve the
+    // reranker of candidates.
+    let doc_ids: Vec<uuid::Uuid> = args
+        .doc_scope
+        .iter()
+        .filter_map(|id| uuid::Uuid::parse_str(id).ok())
+        .collect();
+    let chunk_total = if doc_ids.is_empty() {
+        0
+    } else {
+        runtime
+            .count_text_chunks(auth, &doc_ids)
+            .await
+            .unwrap_or(0)
+    };
+    let rough_budget = dynamic_rough_recall(chunk_total);
+    let final_budget = dynamic_final_feed(rough_budget);
+
     let text_result = if include_text {
         runtime
-            .retrieve_text_dense_stage(&request, auth, &rag_plan)
+            .retrieve_text_dense_stage_with_budget(&request, auth, &rag_plan, rough_budget)
             .await
     } else {
         Ok((Vec::new(), Vec::new()))
@@ -109,37 +131,64 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
 
     match text_result {
         Ok((lists, mut degrade_trace)) => {
-            let mut chunks: Vec<crate::ScoredChunk> =
-                lists.into_iter().flat_map(|list| list.chunks).collect();
-
-            if include_multimodal {
+            let mm_chunks: Vec<crate::ScoredChunk> = if include_multimodal {
                 match runtime
-                    .retrieve_multimodal_dense_stage(&request, auth, &rag_plan)
+                    .retrieve_multimodal_dense_stage_with_budget(
+                        &request,
+                        auth,
+                        &rag_plan,
+                        rough_budget,
+                    )
                     .await
                 {
                     Ok((mm_chunks, mm_degrade)) => {
-                        chunks.extend(mm_chunks);
                         degrade_trace.extend(mm_degrade);
+                        mm_chunks
                     }
-                    Err(error) => degrade_trace.push(DegradeTraceItem {
-                        stage: "dense_retrieval".to_string(),
-                        reason: DegradeReason::Other(format!(
-                            "multimodal dense retrieval failed: {error}"
-                        )),
-                        impact: "skip multimodal dense".to_string(),
-                    }),
+                    Err(error) => {
+                        degrade_trace.push(DegradeTraceItem {
+                            stage: "dense_retrieval".to_string(),
+                            reason: DegradeReason::Other(format!(
+                                "multimodal dense retrieval failed: {error}"
+                            )),
+                            impact: "skip multimodal dense".to_string(),
+                        });
+                        Vec::new()
+                    }
                 }
-            }
+            } else {
+                Vec::new()
+            };
 
-            chunks.sort_by(|left, right| {
-                right
-                    .score
-                    .partial_cmp(&left.score)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-            if args.top_k > 0 && chunks.len() > args.top_k {
-                chunks.truncate(args.top_k);
-            }
+            // Merge dense lists (no bm25 here) into a text pool, rerank the
+            // combined text + multimodal pool, then cut to the dynamic final budget.
+            let text_pool =
+                runtime.merge_text_stage_with_budget(lists, Vec::new(), rough_budget);
+            let reranked = match runtime
+                .multimodal_rerank_stage_with_budget(
+                    &query,
+                    text_pool,
+                    mm_chunks,
+                    rough_budget,
+                    rough_budget,
+                )
+                .await
+            {
+                Ok((reranked, rerank_degrade)) => {
+                    degrade_trace.extend(rerank_degrade);
+                    reranked
+                }
+                Err(error) => {
+                    degrade_trace.push(DegradeTraceItem {
+                        stage: "dense_retrieval".to_string(),
+                        reason: DegradeReason::Other(format!("rerank failed: {error}")),
+                        impact: "no reranked candidates; lexical fallback may trigger".to_string(),
+                    });
+                    Vec::new()
+                }
+            };
+            let mut chunks =
+                runtime.cut_final_candidates_stage_with_budget(reranked, final_budget);
 
             if chunks.is_empty()
                 && (embedding_failure_in_trace(&degrade_trace) || !degrade_trace.is_empty())

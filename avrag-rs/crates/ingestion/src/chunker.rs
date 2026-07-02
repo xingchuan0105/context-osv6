@@ -82,7 +82,7 @@ fn chunk_page(
         return Vec::new();
     }
 
-    let segments = split_text_segments(content, mode);
+    let segments = split_text_segments(content, mode, policy);
 
     let mut items: Vec<ParsedPreviewItem> = Vec::new();
     for segment in segments {
@@ -111,9 +111,37 @@ fn chunk_page(
     items
 }
 
-fn token_chunk_config() -> ChunkConfig<CoreBPE> {
+/// Approximate number of characters per cl100k token. cl100k_base averages
+/// roughly 4 chars/token for English text; this is only used to translate the
+/// char-based `overlap_chars`/`max_chars` policy into token units so that the
+/// token-sized `ChunkConfig` can honour them.
+const CHARS_PER_TOKEN: usize = 4;
+
+/// Build a token-based [`ChunkConfig`] that honours `policy.overlap_chars`.
+///
+/// The capacity (`TARGET_CHUNK_TOKENS`) and the overlap are both measured in
+/// *tokens* because the config uses a tokenizer sizer. `policy.overlap_chars`
+/// is in characters, so it is converted to tokens with [`CHARS_PER_TOKEN`].
+/// `with_overlap` rejects values `>= capacity`, so we clamp to stay below it.
+fn token_chunk_config(policy: &ChunkPolicy) -> ChunkConfig<CoreBPE> {
     let tokenizer = cl100k_base().expect("cl100k tokenizer should load");
-    ChunkConfig::new(TARGET_CHUNK_TOKENS).with_sizer(tokenizer)
+    let mut config = ChunkConfig::new(TARGET_CHUNK_TOKENS).with_sizer(tokenizer);
+
+    if policy.overlap_chars > 0 {
+        // Overlap shares the same unit (tokens) as the capacity. Convert the
+        // char-based policy into tokens, then clamp strictly below capacity.
+        let overlap_tokens = policy.overlap_chars / CHARS_PER_TOKEN;
+        if overlap_tokens > 0 && overlap_tokens < TARGET_CHUNK_TOKENS {
+            // `with_overlap` only errors when overlap >= capacity, which we guard
+            // against above, so unwrapping is safe.
+            config = config.with_overlap(overlap_tokens).expect(
+                "overlap is clamped to be strictly less than the chunk capacity, \
+                 so with_overlap cannot fail here",
+            );
+        }
+    }
+
+    config
 }
 
 fn split_mode_for_file(filename: &str) -> SplitMode {
@@ -272,7 +300,7 @@ pub fn build_chunk_plan(
     for unit in &doc.units {
         match unit.kind {
             ParsedUnitKind::Text => {
-                let segments = split_text_segments(&unit.text, mode);
+                let segments = split_text_segments(&unit.text, mode, policy);
 
                 for segment in segments {
                     let char_count = segment.chars().count();
@@ -359,7 +387,7 @@ pub fn build_ir_chunk_plan(doc: &DocumentIr, filename: &str, policy: &ChunkPolic
 
     for block in &doc.blocks {
         if block.block_type.supports_text_chunking() {
-            let segments = split_text_segments(&block.text, mode);
+            let segments = split_text_segments(&block.text, mode, policy);
             for segment in segments {
                 let char_count = segment.chars().count();
                 if char_count < policy.min_chars && !text_chunks.is_empty() {
@@ -429,8 +457,8 @@ pub fn build_ir_chunk_plan(doc: &DocumentIr, filename: &str, policy: &ChunkPolic
     }
 }
 
-fn split_text_segments(text: &str, mode: SplitMode) -> Vec<String> {
-    let config = token_chunk_config();
+fn split_text_segments(text: &str, mode: SplitMode, policy: &ChunkPolicy) -> Vec<String> {
+    let config = token_chunk_config(policy);
     match mode {
         SplitMode::Markdown => MarkdownSplitter::new(config)
             .chunks(text)
@@ -445,7 +473,7 @@ fn split_text_segments(text: &str, mode: SplitMode) -> Vec<String> {
                 .filter(|segment| !segment.is_empty())
                 .map(ToOwned::to_owned)
                 .collect(),
-            None => TextSplitter::new(token_chunk_config())
+            None => TextSplitter::new(token_chunk_config(policy))
                 .chunks(text)
                 .map(str::trim)
                 .filter(|segment| !segment.is_empty())

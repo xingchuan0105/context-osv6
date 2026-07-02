@@ -95,6 +95,22 @@ impl RetrievalDataPlane for MilvusDataPlane {
     async fn search_graph(&self, request: GraphSearchRequest) -> anyhow::Result<GraphSearchOutput> {
         self.search_graph(request).await
     }
+
+    async fn count_text_chunks(
+        &self,
+        auth: &AuthContext,
+        doc_ids: &[uuid::Uuid],
+    ) -> anyhow::Result<usize> {
+        self.count_text_chunks(auth, doc_ids).await
+    }
+
+    async fn list_text_chunks(
+        &self,
+        auth: &AuthContext,
+        doc_ids: &[uuid::Uuid],
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
+        self.list_text_chunks(auth, doc_ids).await
+    }
 }
 
 impl MilvusDataPlane {

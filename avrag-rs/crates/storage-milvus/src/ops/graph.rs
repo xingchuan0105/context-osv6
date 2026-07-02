@@ -8,6 +8,12 @@ use avrag_retrieval_data_plane::{
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+/// Score assigned to graph-derived relation/supporting chunks.
+/// Kept below the dense rerank ceiling (0.7-1.0) so graph chunks don't dominate
+/// citation ordering and threshold filtering. Graph chunks bypass the cross-encoder
+/// reranker, so this is a fixed confidence proxy, not a calibrated similarity.
+const GRAPH_CHUNK_SCORE: f64 = 0.85;
+
 impl MilvusDataPlane {
     pub(crate) async fn query_entities(
         &self,
@@ -171,7 +177,8 @@ pub(crate) fn relation_path_candidate(row: &Value) -> anyhow::Result<RelationPat
         subject: string_field(row, "subject").unwrap_or_default(),
         predicate: string_field(row, "predicate").unwrap_or_default(),
         object: string_field(row, "object").unwrap_or_default(),
-        score: 1.0,
+        // Fixed confidence proxy for graph-derived relations; see GRAPH_CHUNK_SCORE.
+        score: GRAPH_CHUNK_SCORE as f32,
         supporting_chunk_ids: row
             .get("supporting_chunk_ids")
             .and_then(|v| v.as_array())
@@ -189,7 +196,8 @@ pub(crate) fn scored_relation_chunk(row: &Value, channel: &str) -> anyhow::Resul
         chunk_id: uuid_field(row, "relation_id")?,
         doc_id: uuid_field(row, "doc_id")?,
         content: string_field(row, "relation_text").unwrap_or_default(),
-        score: 1.0, // Graph matches are treated as strong matches
+        // Fixed confidence proxy for graph-derived chunks; see GRAPH_CHUNK_SCORE.
+        score: GRAPH_CHUNK_SCORE as f32,
         source: channel.to_string(),
         page: None,
         chunk_type: "graph_relation".to_string(),

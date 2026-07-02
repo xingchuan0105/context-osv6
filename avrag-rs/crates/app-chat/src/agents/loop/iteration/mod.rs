@@ -12,7 +12,6 @@ use common::AppError;
 
 use super::ReActLoop;
 use super::config::{LoopExitConfig, ModeConfig};
-use super::optimizer::LoopOptimizer;
 use super::parse::{LlmOutput, parse_llm_output};
 use super::skill_request::validate_skill_request;
 use crate::agents::events::AgentEventSink;
@@ -29,7 +28,6 @@ impl ReActLoop {
         loop_exit: &LoopExitConfig,
         state: &mut IterationState,
         total_usage: &mut LlmUsage,
-        optimizer: &LoopOptimizer,
         sink: &dyn AgentEventSink,
     ) -> Result<IterationOutcome, AppError> {
         let assembled = self
@@ -47,7 +45,6 @@ impl ReActLoop {
             auth,
             loop_exit,
             state,
-            optimizer,
             sink,
             &llm_response,
             iter_start,
@@ -63,7 +60,6 @@ impl ReActLoop {
         auth: &avrag_auth::AuthContext,
         loop_exit: &LoopExitConfig,
         state: &mut IterationState,
-        optimizer: &LoopOptimizer,
         sink: &dyn AgentEventSink,
         llm_response: &avrag_llm::LlmResponse,
         iter_start: std::time::Instant,
@@ -84,7 +80,6 @@ impl ReActLoop {
                     auth,
                     loop_exit,
                     state,
-                    optimizer,
                     sink,
                     llm_response,
                     iter_start,

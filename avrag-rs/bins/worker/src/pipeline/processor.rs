@@ -16,12 +16,63 @@ use super::document_pipeline::{ParseRunState, RunDocumentPipelineParams, run_doc
 use super::helpers::{
     build_parse_backend_summary, build_parse_warning_payload, estimate_token_count,
 };
+use crate::indexing::env_flag_enabled;
 use crate::ingestion_guard::{
     ensure_ingestion_side_effects_allowed, spawn_ingestion_task_lock_heartbeat,
     stop_ingestion_task_lock_heartbeat, verify_uploaded_object_bytes, worker_task_kind,
 };
 use crate::pdf;
 use crate::runtime_support::{fetch_url_content, task_context, url_to_filename};
+
+/// Derive a stable, document-scoped i64 advisory-lock key from a document id.
+///
+/// UUIDs are 128-bit; `pg_try_advisory_lock` takes a single i64. We mask to the
+/// positive i64 range to avoid the Postgres negative-key edge cases and to keep
+/// the key document-scoped with low collision probability.
+fn document_advisory_key(document_id: Uuid) -> i64 {
+    (document_id.as_u128() & 0x7fffffffffffffff) as i64
+}
+
+/// RAII guard that releases a Postgres advisory lock on drop.
+///
+/// Mirrors the semantics of [`avrag_cache_redis::DocumentLockGuard`]: releasing
+/// is best-effort and logged on failure. The lock is acquired via the worker's
+/// repository pool as a fallback when no Redis document lock is configured.
+struct PgAdvisoryLockGuard {
+    pool: sqlx::PgPool,
+    key: i64,
+}
+
+impl PgAdvisoryLockGuard {
+    async fn try_acquire(pool: sqlx::PgPool, key: i64) -> Option<Self> {
+        let acquired = sqlx::query_scalar::<_, bool>("select pg_try_advisory_lock($1)")
+            .bind(key)
+            .fetch_one(&pool)
+            .await
+            .ok()?;
+        if acquired {
+            Some(Self { pool, key })
+        } else {
+            None
+        }
+    }
+}
+
+impl Drop for PgAdvisoryLockGuard {
+    fn drop(&mut self) {
+        let pool = self.pool.clone();
+        let key = self.key;
+        tokio::spawn(async move {
+            if let Err(error) = sqlx::query_scalar::<_, bool>("select pg_advisory_unlock($1)")
+                .bind(key)
+                .fetch_one(&pool)
+                .await
+            {
+                info!(key, error = %error, "failed to release document advisory lock");
+            }
+        });
+    }
+}
 
 pub(crate) struct PgTaskProcessor {
     pub(crate) repo: PgAppRepository,
@@ -63,14 +114,35 @@ impl TaskProcessor for PgTaskProcessor {
                 let document_id = Uuid::parse_str(&task.document_id)
                     .map_err(|error| IngestionError::StateSink(error.to_string()))?;
 
-            let _lock_guard = if let Some(ref lock) = self.redis_lock {
+            // Acquire a per-document lock so two workers cannot process the same
+            // document concurrently. Prefer the Redis-backed distributed lock when
+            // configured; otherwise fall back to a Postgres advisory lock derived
+            // from the document id so the guarantee still holds without Redis.
+            let _redis_lock_guard = if let Some(ref lock) = self.redis_lock {
                 match lock.try_acquire(document_id).await {
                     Ok(Some(guard)) => Some(guard),
                     Ok(None) => {
                         info!(%document_id, "skipping document — lock held by another worker");
                         return Ok(());
                     }
-                    Err(_) => None,
+                    Err(error) => {
+                        warn!(%document_id, error = %error, "redis document lock acquire failed; falling back to advisory lock");
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+            // When no Redis lock is held, acquire the advisory fallback. If the
+            // advisory lock is already held by another worker, skip this document.
+            let _pg_lock_guard = if _redis_lock_guard.is_none() {
+                let key = document_advisory_key(document_id);
+                match PgAdvisoryLockGuard::try_acquire(self.repo.raw().clone(), key).await {
+                    Some(guard) => Some(guard),
+                    None => {
+                        info!(%document_id, advisory_key = key, "skipping document — advisory lock held by another worker");
+                        return Ok(());
+                    }
                 }
             } else {
                 None
@@ -134,7 +206,13 @@ impl TaskProcessor for PgTaskProcessor {
                         )));
                     }
                     Err(error) => {
-                        warn!(error = %error, "security scan encountered an error, allowing processing to continue");
+                        if env_flag_enabled("SECURITY_SCAN_FAIL_OPEN", false) {
+                            warn!(error = %error, "security scan encountered an error; SECURITY_SCAN_FAIL_OPEN=true, allowing processing to continue");
+                        } else {
+                            return Err(IngestionError::StateSink(format!(
+                                "security scan failed (scanner unavailable): {error}"
+                            )));
+                        }
                     }
                 }
             }
@@ -237,6 +315,7 @@ impl TaskProcessor for PgTaskProcessor {
                     let warnings_json = build_parse_warning_payload(
                         parse_run_state.document_ir.as_ref(),
                         &parse_run_state.validation_warnings,
+                        &parse_run_state.outputs,
                     );
                     self.repo
                         .finish_document_parse_run(
@@ -294,6 +373,7 @@ impl TaskProcessor for PgTaskProcessor {
                     let failure_warnings = build_parse_warning_payload(
                         parse_run_state.document_ir.as_ref(),
                         &parse_run_state.validation_warnings,
+                        &parse_run_state.outputs,
                     );
                     let failure_error = serde_json::json!({ "message": error.to_string() });
                     let _ = self

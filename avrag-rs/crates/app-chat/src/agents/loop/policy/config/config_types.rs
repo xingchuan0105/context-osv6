@@ -77,10 +77,6 @@ impl Default for SynthesisOutputConfig {
     }
 }
 
-fn default_true() -> bool {
-    true
-}
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BudgetConfig {
     pub max_iterations: u8,

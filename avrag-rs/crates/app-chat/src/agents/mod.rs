@@ -49,7 +49,6 @@ pub use crate::eval::framework as eval_framework;
 pub mod events;
 pub mod r#loop;
 pub mod progressive;
-pub mod react_loop;
 #[cfg(feature = "eval")]
 pub mod redteam;
 pub mod replay;

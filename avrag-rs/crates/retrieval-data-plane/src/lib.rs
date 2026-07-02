@@ -291,6 +291,34 @@ pub trait RetrievalDataPlane: Send + Sync {
     ) -> anyhow::Result<GraphSearchOutput> {
         Err(retrieval_data_plane_method_not_implemented("search_graph"))
     }
+
+    /// Count indexed text (body) chunks for the given doc scope.
+    ///
+    /// Used by the retrieval runtime to size the dynamic rough-recall budget
+    /// (docscope chunk total × fraction). Returns 0 by default so stubs and
+    /// adapters without a count capability fall back to the configured floor.
+    async fn count_text_chunks(
+        &self,
+        _auth: &AuthContext,
+        _doc_ids: &[Uuid],
+    ) -> anyhow::Result<usize> {
+        Ok(0)
+    }
+
+    /// List ALL text (body) chunks for the given doc scope with full content.
+    ///
+    /// Backs the `doc_chunks` agent tool: lets the codegen sandbox run arbitrary
+    /// traversal/aggregate operators (re, collections, set, ...) over a doc's
+    /// entire chunk set — for "how many / count / distribution" queries that
+    /// dense/lexical top-K cannot answer. Returns empty by default so stubs and
+    /// adapters without a scan capability degrade gracefully.
+    async fn list_text_chunks(
+        &self,
+        _auth: &AuthContext,
+        _doc_ids: &[Uuid],
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
+        Ok(Vec::new())
+    }
 }
 
 fn retrieval_data_plane_method_not_implemented(method: &str) -> anyhow::Error {

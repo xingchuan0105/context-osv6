@@ -39,7 +39,27 @@ pub async fn emit_buffered_agent_answer_if_needed(
 }
 
 pub fn chat_done_payload(response: &contracts::chat::ChatResponse) -> serde_json::Value {
-    serde_json::to_value(response).unwrap_or_else(|_| serde_json::json!({}))
+    // The terminal `done` event carries the full ChatResponse so clients can finalize.
+    // Three fields carry large payloads that are redundant at done time:
+    //   - `citations[].content` (full chunk text) — already in the `citations` SSE event
+    //   - `tool_results[].data` (raw retrieval output, all chunks) — internal/debug only
+    //   - `sources[].snippet` (search result excerpts)
+    // Together these can be ~1.5 MB, landing in a single HTTP chunked frame that exceeds
+    // the client's stream-read window — so the done event is dropped intermittently
+    // (verified via tcpdump: server emits done, client reqwest never delivers it).
+    // Strip them here; clients that need citation content already have it from the
+    // `citations` event. Structural fields (tool name/status, citation ids, scores) stay.
+    let mut trimmed = response.clone();
+    for citation in &mut trimmed.citations {
+        citation.content = None;
+    }
+    for tool_result in &mut trimmed.tool_results {
+        tool_result.data = None;
+    }
+    for source in &mut trimmed.sources {
+        source.snippet = None;
+    }
+    serde_json::to_value(&trimmed).unwrap_or_else(|_| serde_json::json!({}))
 }
 
 impl ChatContext {

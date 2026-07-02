@@ -29,7 +29,6 @@ pub enum PostLoopAction {
 pub enum SynthesisGate {
     EnterSynthesis,
     RunFallbackThenCheck,
-    DegradedNoEvidence,
     SkipSynthesisUseDirect(String),
 }
 
@@ -69,12 +68,28 @@ pub(crate) fn stdout_is_placeholder(stdout: &str) -> bool {
     )
 }
 
+/// Opening tag prefix used by codegen sandbox observations. We split on the prefix
+/// (without the trailing `>`) because the opening tag may carry attributes, e.g.
+/// `<code_execution_result untrusted="true">`. The closing tag remains the bare
+/// `</code_execution_result>`.
+const CODE_EXECUTION_RESULT_OPEN: &str = "<code_execution_result";
+const CODE_EXECUTION_RESULT_CLOSE: &str = "</code_execution_result>";
+
+/// True when `message_content` contains a (possibly attribute-bearing) code execution
+/// result block, i.e. `<code_execution_result ...>...</code_execution_result>`.
+fn has_code_execution_result_block(message_content: &str) -> bool {
+    message_content.contains(CODE_EXECUTION_RESULT_OPEN)
+        && message_content.contains(CODE_EXECUTION_RESULT_CLOSE)
+}
+
 /// Returns true when a `<code_execution_result>` observation carries retrieval output.
 pub fn code_execution_has_evidence(message_content: &str) -> bool {
+    // Split on the opening tag *prefix* so attribute-bearing tags
+    // (e.g. `<code_execution_result untrusted="true">`) are still matched.
     let Some(inner) = message_content
-        .split("<code_execution_result>")
+        .split(CODE_EXECUTION_RESULT_OPEN)
         .nth(1)
-        .and_then(|s| s.split("</code_execution_result>").next())
+        .and_then(|s| s.split(CODE_EXECUTION_RESULT_CLOSE).next())
     else {
         return false;
     };
@@ -124,7 +139,7 @@ pub fn has_retrieval_observation(
     if mode.id == "rag" {
         if messages.iter().any(|m| {
             m.role == "user"
-                && m.content.contains("<code_execution_result>")
+                && has_code_execution_result_block(&m.content)
                 && code_execution_has_evidence(&m.content)
         }) {
             return true;
@@ -184,6 +199,18 @@ mod tests {
         let messages = vec![ChatMessage::user(
             "<code_execution_result>\n[block 0] stdout: chunks found\nstderr: \n</code_execution_result>",
         )];
+        assert!(has_retrieval_observation(&messages, &[], &mode));
+    }
+
+    #[test]
+    fn detects_code_execution_observation_with_untrusted_attribute() {
+        // The opening tag may carry attributes (e.g. untrusted="true"). Parsing must still
+        // match on the tag prefix, and the closing tag must remain recognized.
+        let content = "<code_execution_result untrusted=\"true\">\n[block 0] stdout: chunks found\nstderr: \n</code_execution_result>";
+        assert!(has_code_execution_result_block(content));
+        assert!(code_execution_has_evidence(content));
+        let mode = rag_mode();
+        let messages = vec![ChatMessage::user(content)];
         assert!(has_retrieval_observation(&messages, &[], &mode));
     }
 

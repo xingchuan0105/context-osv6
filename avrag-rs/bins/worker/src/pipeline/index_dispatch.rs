@@ -15,6 +15,14 @@ pub(crate) async fn build_text_index_records(
         .collect::<Vec<_>>();
     let vectors = embed_text_vectors(processor, &texts).await?;
 
+    if vectors.len() != chunks.len() {
+        return Err(IngestionError::StateSink(format!(
+            "embedding count ({}) != chunk count ({}) — refusing to silently drop chunks",
+            vectors.len(),
+            chunks.len()
+        )));
+    }
+
     chunks
         .iter()
         .zip(vectors)

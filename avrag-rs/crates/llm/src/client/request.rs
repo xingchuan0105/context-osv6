@@ -69,14 +69,17 @@ pub(super) fn build_chat_completion_request_body(
         request_body["prompt_cache"] = serde_json::json!(true);
     }
 
-    // DeepSeek JSON Output (`response_format: json_object`) constrains the
-    // model to emit a valid JSON string, eliminating the code-block-on-
-    // synthesis failure mode at the API layer. Gated to DeepSeek base URLs
-    // (same pattern as `thinking`) since not every OpenAI-compatible provider
-    // honors this field. The prompt must already contain "json" + a format
-    // example. See https://api-docs.deepseek.com/zh-cn/guides/json_mode.
-    if json_mode && config.base_url.to_ascii_lowercase().contains("deepseek") {
-        request_body["response_format"] = serde_json::json!({ "type": "json_object" });
+    // JSON Output (`response_format: json_object`) constrains the model to emit
+    // a valid JSON string, eliminating the code-block-on-synthesis failure mode
+    // at the API layer. Gated to OpenAI-compatible providers that honor this
+    // field (DeepSeek, SiliconFlow). The prompt must already contain "json" +
+    // a format example. See https://api-docs.deepseek.com/zh-cn/guides/json_mode
+    // and https://api-docs.siliconflow.cn/docs/api/chat-completions-post.
+    if json_mode {
+        let base = config.base_url.to_ascii_lowercase();
+        if base.contains("deepseek") || base.contains("siliconflow") {
+            request_body["response_format"] = serde_json::json!({ "type": "json_object" });
+        }
     }
 
     request_body
@@ -273,6 +276,20 @@ mod tests {
     #[test]
     fn deepseek_json_mode_sets_response_format() {
         let config = test_config("https://api.deepseek.com", None);
+        let body = build_chat_completion_request_body(
+            &config,
+            &[ChatMessage::user("return json")],
+            None,
+            false,
+            true,
+            None,
+        );
+        assert_eq!(body["response_format"]["type"], "json_object");
+    }
+
+    #[test]
+    fn siliconflow_json_mode_sets_response_format() {
+        let config = test_config("https://api.siliconflow.cn/v1", None);
         let body = build_chat_completion_request_body(
             &config,
             &[ChatMessage::user("return json")],

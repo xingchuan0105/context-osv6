@@ -8,13 +8,15 @@ pub use policy::LoopPolicy;
 pub use policy::config;
 pub use policy::disclosure_plan;
 pub use policy::exit_policy;
+pub mod cancellation;
+pub use cancellation::DegradeReason;
+pub(crate) use cancellation::cancellation_error;
 pub mod hooks;
 pub mod iteration;
 mod iteration_codegen;
 mod iteration_tools;
 mod message_format;
 pub mod message_queue;
-pub mod optimizer;
 pub mod parse;
 mod rag_bridge;
 pub mod reasoning_emit;
@@ -29,7 +31,8 @@ pub mod synthesis;
 pub mod telemetry;
 
 pub(crate) use message_format::{
-    build_assistant_message_with_tool_calls, build_tool_message, truncate_preview,
+    build_assistant_message_with_tool_calls, build_tool_message, truncate_observation,
+    truncate_preview,
 };
 pub(crate) use rag_bridge::dispatch_rag_tool;
 
@@ -43,7 +46,6 @@ use common::AppError;
 use config::ModeConfig;
 use hooks::StandardLoopHooks;
 use iteration::IterationState;
-use optimizer::IterationProgress;
 
 pub struct ReActLoop {
     llm: Arc<LlmClient>,
@@ -104,7 +106,7 @@ impl ReActLoop {
         let start_time = std::time::Instant::now();
         let cancel = request.cancellation_token.clone().unwrap_or_default();
         if cancel.is_cancelled() {
-            return Err(crate::agents::react_loop::cancellation_error());
+            return Err(cancellation_error());
         }
         let loop_exit = mode.loop_exit_for_mode();
         let hooks = StandardLoopHooks::default();
@@ -116,7 +118,6 @@ impl ReActLoop {
             messages: self.build_initial_messages(mode, &request, &loop_user_query),
             disclosed: DisclosedState::default(),
             tool_results: Vec::new(),
-            progress: IterationProgress::new(),
             total_tool_calls: 0,
             consecutive_sandbox_errors: 0,
             reasoning_acc: String::new(),
@@ -143,7 +144,7 @@ impl ReActLoop {
         let reasoning_summary_acc = state.reasoning_acc;
 
         if cancel.is_cancelled() {
-            return Err(crate::agents::react_loop::cancellation_error());
+            return Err(cancellation_error());
         }
 
         let retrieval_query = request.query.clone();

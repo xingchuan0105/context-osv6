@@ -118,6 +118,7 @@ fn build_parse_backend_summary_uses_fixed_contract_fields() {
             graph_degrade_reasons: vec!["provider error".to_string()],
             multimodal_degrade_count: 0,
             multimodal_degrade_reasons: Vec::new(),
+            failed_mm_chunks: Vec::new(),
         },
     );
 

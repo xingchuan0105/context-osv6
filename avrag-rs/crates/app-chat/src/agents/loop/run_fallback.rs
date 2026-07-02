@@ -12,8 +12,8 @@ use super::run_result::build_run_result;
 use super::telemetry::ReActIterationRecord;
 use super::{ReActLoop, fallback, truncate_preview};
 use crate::agents::events::{AgentEvent, AgentEventSink};
-use crate::agents::react_loop::DegradeReason;
 use crate::agents::runtime::{AgentRequest, AgentRunResult, FinalDecision};
+use super::cancellation::DegradeReason;
 
 impl ReActLoop {
     pub(super) async fn trigger_auto_fallback_and_check_degraded(
@@ -129,7 +129,7 @@ impl ReActLoop {
             total_tool_calls,
             start_time,
             Some(FinalDecision::Degraded {
-                reason: crate::agents::react_loop::DegradeReason::NoResultsAfterAllFallbacks,
+                reason: DegradeReason::NoResultsAfterAllFallbacks,
             }),
         );
         result

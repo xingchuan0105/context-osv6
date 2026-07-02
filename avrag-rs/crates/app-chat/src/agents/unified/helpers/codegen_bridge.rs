@@ -73,7 +73,15 @@ fn normalize_retrieval_items(items: Vec<serde_json::Value>) -> Vec<serde_json::V
 /// `<code_execution_result>` so the model and exit policy see the same evidence as `tool_results`.
 pub fn bridge_tool_results_to_observation_stdout(block_bridge: &[ToolResult]) -> Option<String> {
     let mut items = Vec::new();
+    let mut doc_scan_only = true;
+    let mut doc_scan_chunk_count = 0usize;
+
     for result in block_bridge {
+        if should_skip_bridge_tool_result(result) {
+            doc_scan_chunk_count += count_bridge_tool_chunks(result);
+            continue;
+        }
+        doc_scan_only = false;
         if result.status != ToolStatus::Ok {
             continue;
         }
@@ -90,10 +98,45 @@ pub fn bridge_tool_results_to_observation_stdout(block_bridge: &[ToolResult]) ->
             _ => {}
         }
     }
-    if items.is_empty() {
-        return None;
+    if !items.is_empty() {
+        return serde_json::to_string(&items).ok();
     }
-    serde_json::to_string(&items).ok()
+    if doc_scan_only && doc_scan_chunk_count > 0 {
+        return Some(format!(
+            "doc_chunks loaded {doc_scan_chunk_count} chunks; print compact summary (do not print full chunks)"
+        ));
+    }
+    None
+}
+
+fn should_skip_bridge_tool_result(result: &ToolResult) -> bool {
+    result.tool == "doc_scan"
+        || result
+            .trace
+            .as_ref()
+            .and_then(|t| t.degrade_reason.as_deref())
+            == Some("scan_data")
+}
+
+fn count_bridge_tool_chunks(result: &ToolResult) -> usize {
+    if result.status != ToolStatus::Ok {
+        return 0;
+    }
+    if let Some(count) = result.trace.as_ref().and_then(|t| t.raw_hit_count) {
+        return count;
+    }
+    let Some(data) = &result.data else {
+        return 0;
+    };
+    match data {
+        serde_json::Value::Array(arr) => arr.len(),
+        serde_json::Value::Object(map) => map
+            .get("chunks")
+            .and_then(|v| v.as_array())
+            .map(|a| a.len())
+            .unwrap_or(0),
+        _ => 0,
+    }
 }
 
 /// Resolve stdout text shown to the model after codegen; bridge chunks fill empty stdout.
@@ -165,5 +208,48 @@ stderr:
         let citations = build_citations_from_tool_results(std::slice::from_ref(&result));
         assert_eq!(citations.len(), 1);
         assert_eq!(citations[0].chunk_id.as_deref(), Some("c1"));
+    }
+
+    #[test]
+    fn test_bridge_skips_doc_scan_and_returns_compact_hint() {
+        let bridge = vec![tr(
+            "doc_scan",
+            ToolStatus::Ok,
+            Some(serde_json::json!([
+                {"chunk_id": "c1", "doc_id": "d1", "content": "full body", "score": 0.0},
+                {"chunk_id": "c2", "doc_id": "d1", "content": "more body", "score": 0.0},
+            ])),
+        )];
+        let stdout = codegen_observation_stdout("", &bridge);
+        assert!(
+            stdout.contains("doc_chunks loaded 2 chunks"),
+            "stdout={stdout}"
+        );
+        assert!(stdout.contains("print compact summary"));
+        assert!(!stdout.contains("full body"));
+    }
+
+    #[test]
+    fn test_bridge_skips_scan_data_trace_but_keeps_dense_retrieval() {
+        let bridge = vec![
+            tr(
+                "dense_retrieval",
+                ToolStatus::Ok,
+                Some(serde_json::json!([
+                    {"chunk_id": "c1", "doc_id": "d1", "content": "dense hit", "score": 0.9}
+                ])),
+            ),
+            tr(
+                "doc_scan",
+                ToolStatus::Ok,
+                Some(serde_json::json!([
+                    {"chunk_id": "c2", "doc_id": "d1", "content": "scan body", "score": 0.0}
+                ])),
+            ),
+        ];
+        let stdout = codegen_observation_stdout("", &bridge);
+        assert!(stdout.contains("c1"), "stdout={stdout}");
+        assert!(stdout.contains("dense hit"));
+        assert!(!stdout.contains("scan body"));
     }
 }

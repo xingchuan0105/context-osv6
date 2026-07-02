@@ -28,7 +28,7 @@ impl SynthesisPhase {
         cancel: &CancellationToken,
     ) -> Result<String, AppError> {
         if cancel.is_cancelled() {
-            return Err(crate::agents::react_loop::cancellation_error());
+            return Err(super::cancellation::cancellation_error());
         }
 
         let contract = mode.synthesis_output.contract;
@@ -80,7 +80,7 @@ impl SynthesisPhase {
                 break;
             }
             if cancel.is_cancelled() {
-                return Err(crate::agents::react_loop::cancellation_error());
+                return Err(super::cancellation::cancellation_error());
             }
 
             let validation_errors =
@@ -257,7 +257,7 @@ impl SynthesisPhase {
             tokio::select! {
                 biased;
                 _ = cancel.cancelled() => {
-                    return Err(crate::agents::react_loop::cancellation_error());
+                    return Err(super::cancellation::cancellation_error());
                 }
                 delta = delta_rx.recv() => {
                     if let Some(delta) = delta {

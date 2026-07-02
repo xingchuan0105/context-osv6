@@ -1,6 +1,7 @@
 pub mod dense;
 pub mod doc_metadata;
 pub mod doc_profile;
+pub mod doc_scan;
 pub mod doc_summary;
 pub mod graph;
 pub mod index_lookup;
@@ -22,6 +23,7 @@ pub async fn dispatch(runtime: &RagRuntime, auth: &AuthContext, call: &ToolCall)
         "doc_summary" => doc_summary::run(runtime, auth, &call.args).await,
         "doc_metadata" => doc_metadata::run(runtime, auth, &call.args).await,
         "doc_profile" => doc_profile::run(runtime, auth, &call.args).await,
+        "doc_scan" => doc_scan::run(runtime, auth, &call.args).await,
         other => ToolResult {
             tool: other.to_string(),
             version: call.version.clone(),

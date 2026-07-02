@@ -9,6 +9,18 @@ pub(crate) fn truncate_preview(s: &str, max_chars: usize) -> String {
     }
 }
 
+/// Truncate tool/sandbox observation text to a char budget, appending a marker if truncated.
+/// Used to bound the size of untrusted content re-injected into the LLM context.
+pub(crate) fn truncate_observation(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+    let truncated: String = text.chars().take(max_chars).collect();
+    let original = text.chars().count();
+    format!("{truncated}
+...[truncated, {original} chars total]")
+}
+
 /// Build an OpenAI-format `assistant` message carrying `tool_calls`.
 /// `call_ids` must be parallel to `calls` (e.g. `call_0`, `call_1`, ...).
 /// If the LLM also emitted reasoning text in `content`, it is preserved so

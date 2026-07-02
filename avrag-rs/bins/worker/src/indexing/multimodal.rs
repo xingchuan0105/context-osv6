@@ -92,6 +92,7 @@ pub async fn build_multimodal_index_records(
                     outputs,
                     format!("chunk {chunk_id}: multimodal embed failed: {error}"),
                 );
+                outputs.failed_mm_chunks.push(chunk_id);
                 warn!(
                     chunk_id = %chunk_id,
                     chunk_index = idx,
@@ -104,6 +105,7 @@ pub async fn build_multimodal_index_records(
                     outputs,
                     format!("chunk {chunk_id}: multimodal embed task join failed: {error}"),
                 );
+                outputs.failed_mm_chunks.push(chunk_id);
             }
         }
     }

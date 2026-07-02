@@ -1,6 +1,6 @@
 use super::AgentKind;
 use crate::agents::events::AgentEventSink;
-use crate::agents::react_loop::DegradeReason;
+use crate::agents::r#loop::DegradeReason;
 use contracts::chat::{ChatTurnInput, Citation, DegradeTraceItem};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

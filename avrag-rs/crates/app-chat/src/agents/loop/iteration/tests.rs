@@ -6,7 +6,6 @@ use crate::agents::capability::CapabilityRegistry;
 use crate::agents::events::CollectingSink;
 use crate::agents::r#loop::ReActLoop;
 use crate::agents::r#loop::assembler::DisclosedState;
-use crate::agents::r#loop::optimizer::{IterationProgress, LoopOptimizer};
 use avrag_llm::{ChatMessage, LlmClient, LlmResponse, LlmUsage, ModelProviderConfig};
 
 fn rag_mode() -> super::super::config::ModeConfig {
@@ -73,7 +72,6 @@ fn empty_state() -> IterationState {
         messages: vec![ChatMessage::user("test")],
         disclosed: DisclosedState::default(),
         tool_results: vec![],
-        progress: IterationProgress::new(),
         total_tool_calls: 0,
         consecutive_sandbox_errors: 0,
         reasoning_acc: String::new(),
@@ -95,7 +93,6 @@ async fn native_tool_call_returns_continue_with_record() {
     let mode = super::super::config::load_mode_config("search").unwrap();
     let mut state = empty_state();
     let sink = CollectingSink::new();
-    let optimizer = LoopOptimizer::new();
     let auth = test_auth();
     let mut response = fake_llm_response("");
     response.tool_calls = Some(vec![contracts::ToolCall {
@@ -112,7 +109,6 @@ async fn native_tool_call_returns_continue_with_record() {
             &auth,
             &mode.loop_exit_for_mode(),
             &mut state,
-            &optimizer,
             &sink,
             &response,
             std::time::Instant::now(),
@@ -218,7 +214,6 @@ async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chu
     let mode = rag_mode();
     let mut state = empty_state();
     let sink = CollectingSink::new();
-    let optimizer = LoopOptimizer::new();
     let auth = test_auth();
     let mut request = base_request(AgentKind::Rag);
     request.doc_scope = vec![doc_id.to_string()];
@@ -235,7 +230,6 @@ async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chu
             &auth,
             &mode.loop_exit_for_mode(),
             &mut state,
-            &optimizer,
             &sink,
             &response,
             std::time::Instant::now(),
@@ -246,7 +240,7 @@ async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chu
     let observation = state
         .messages
         .iter()
-        .find(|m| m.content.contains("<code_execution_result>"))
+        .find(|m| m.content.contains("<code_execution_result"))
         .map(|m| m.content.as_str())
         .expect("code_execution_result message");
     assert!(
@@ -270,7 +264,6 @@ async fn code_block_success_returns_continue() {
     let mode = rag_mode();
     let mut state = empty_state();
     let sink = CollectingSink::new();
-    let optimizer = LoopOptimizer::new();
     let auth = test_auth();
     let response = fake_llm_response(r#"<code language="python">print("ok")</code>"#);
 
@@ -282,7 +275,6 @@ async fn code_block_success_returns_continue() {
             &auth,
             &mode.loop_exit_for_mode(),
             &mut state,
-            &optimizer,
             &sink,
             &response,
             std::time::Instant::now(),
@@ -307,7 +299,6 @@ async fn consecutive_code_errors_break_to_synthesis() {
     let mut state = empty_state();
     state.consecutive_sandbox_errors = 1;
     let sink = CollectingSink::new();
-    let optimizer = LoopOptimizer::new();
     let auth = test_auth();
     let response =
         fake_llm_response(r#"<code language="python">raise RuntimeError("fail")</code>"#);
@@ -320,7 +311,6 @@ async fn consecutive_code_errors_break_to_synthesis() {
             &auth,
             &mode.loop_exit_for_mode(),
             &mut state,
-            &optimizer,
             &sink,
             &response,
             std::time::Instant::now(),
@@ -342,7 +332,6 @@ async fn content_with_evidence_in_chat_returns_direct_answer() {
     let mode = chat_mode();
     let mut state = empty_state();
     let sink = CollectingSink::new();
-    let optimizer = LoopOptimizer::new();
     let auth = test_auth();
     let response = fake_llm_response("Here is your answer.");
 
@@ -354,7 +343,6 @@ async fn content_with_evidence_in_chat_returns_direct_answer() {
             &auth,
             &mode.loop_exit_for_mode(),
             &mut state,
-            &optimizer,
             &sink,
             &response,
             std::time::Instant::now(),
@@ -378,7 +366,6 @@ async fn content_without_evidence_in_rag_is_blocked() {
     let mode = rag_mode();
     let mut state = empty_state();
     let sink = CollectingSink::new();
-    let optimizer = LoopOptimizer::new();
     let auth = test_auth();
     let response = fake_llm_response("Answer without retrieval.");
 
@@ -390,7 +377,6 @@ async fn content_without_evidence_in_rag_is_blocked() {
             &auth,
             &mode.loop_exit_for_mode(),
             &mut state,
-            &optimizer,
             &sink,
             &response,
             std::time::Instant::now(),
@@ -417,7 +403,6 @@ async fn skill_request_json_in_chat_is_not_direct_answer() {
     let mode = chat_mode();
     let mut state = empty_state();
     let sink = CollectingSink::new();
-    let optimizer = LoopOptimizer::new();
     let auth = test_auth();
     let response = fake_llm_response(r#"{"skill_request":["memory"]}"#);
 
@@ -429,7 +414,6 @@ async fn skill_request_json_in_chat_is_not_direct_answer() {
             &auth,
             &mode.loop_exit_for_mode(),
             &mut state,
-            &optimizer,
             &sink,
             &response,
             std::time::Instant::now(),

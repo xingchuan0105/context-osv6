@@ -3,7 +3,6 @@ use common::AppError;
 use contracts::ToolResult;
 
 use super::config::ModeConfig;
-use super::optimizer::{ContextAdjustment, LoopOptimizer, build_duplicate_hint, extract_chunk_ids};
 use super::telemetry::ReActIterationRecord;
 use super::{
     ReActLoop, build_assistant_message_with_tool_calls, build_tool_message, dispatch_rag_tool,
@@ -101,7 +100,6 @@ impl ReActLoop {
         auth: &avrag_auth::AuthContext,
         _loop_exit: &super::config::LoopExitConfig,
         state: &mut IterationState,
-        optimizer: &LoopOptimizer,
         sink: &dyn AgentEventSink,
         llm_response: &LlmResponse,
         iter_start: std::time::Instant,
@@ -139,8 +137,6 @@ impl ReActLoop {
 
         self.update_state_after_tool_calls(
             state,
-            optimizer,
-            iteration,
             &calls,
             &call_ids,
             llm_response,
@@ -166,8 +162,6 @@ impl ReActLoop {
     fn update_state_after_tool_calls(
         &self,
         state: &mut IterationState,
-        optimizer: &LoopOptimizer,
-        iteration: u8,
         calls: &[contracts::ToolCall],
         call_ids: &[String],
         llm_response: &LlmResponse,
@@ -181,25 +175,6 @@ impl ReActLoop {
         ));
         for tm in tool_messages {
             state.messages.push(tm);
-        }
-
-        let current_chunk_ids = extract_chunk_ids(&state.tool_results);
-        state
-            .progress
-            .record_iteration(iteration, &current_chunk_ids);
-        match optimizer.advise(&state.progress, &current_chunk_ids) {
-            ContextAdjustment::DuplicateChunksHint {
-                chunk_ids,
-                first_seen_at,
-            } => {
-                state
-                    .messages
-                    .push(ChatMessage::system(build_duplicate_hint(
-                        &chunk_ids,
-                        &first_seen_at,
-                    )));
-            }
-            ContextAdjustment::None => {}
         }
 
         state.total_tool_calls += calls.len() as u32;
