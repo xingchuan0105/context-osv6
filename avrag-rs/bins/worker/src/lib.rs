@@ -28,9 +28,10 @@ use tracing::{error, info, warn};
 use ingestion_guard::run_document_cleanup_once;
 use pipeline::PgTaskProcessor;
 use runtime_support::{
-    build_worker_object_store, build_worker_retrieval_data_plane, build_worker_ingestion_llm,
-    build_worker_triplet_llm, describe_object_store_config, probe_object_store,
-    spawn_health_listener, worker_health_port, worker_poll_interval, worker_runtime_mode,
+    apply_e2e_object_store_overrides, build_worker_object_store,
+    build_worker_retrieval_data_plane, build_worker_ingestion_llm, build_worker_triplet_llm,
+    describe_object_store_config, probe_object_store, spawn_health_listener, worker_health_port,
+    worker_poll_interval, worker_runtime_mode,
 };
 use sources::{PgAuditSink, PgStateSink, PgTaskSource};
 
@@ -40,7 +41,8 @@ pub async fn run() -> Result<()> {
     let _ = dotenvy::dotenv();
     telemetry::init("avrag-worker")?;
     spawn_health_listener(worker_health_port());
-    let config = AppConfig::from_env();
+    let mut config = AppConfig::from_env();
+    apply_e2e_object_store_overrides(&mut config);
     let database_url = config.database_url.clone();
     let embedding_dim = config.embedding.dimensions.unwrap_or(64);
     let heartbeat_secs = std::env::var("AVRAG_WORKER_HEARTBEAT_SECS")

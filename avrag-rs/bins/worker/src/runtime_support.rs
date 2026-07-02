@@ -32,6 +32,27 @@ pub(crate) fn document_cleanup_task_context(task: &DocumentCleanupTask) -> AuthC
     auth
 }
 
+/// E2E subprocesses inherit repo `.env` via `dotenv()`. Mirror API bootstrap by forcing
+/// local object storage and honoring `AVRAG_OBJECT_ROOT` from the test harness.
+pub(crate) fn apply_e2e_object_store_overrides(config: &mut AppConfig) {
+    if !std::env::var("E2E_ENABLED")
+        .ok()
+        .is_some_and(|value| value == "true" || value.eq_ignore_ascii_case("true"))
+    {
+        return;
+    }
+    config.object_storage.endpoint.clear();
+    config.object_storage.bucket.clear();
+    config.object_storage.access_key.clear();
+    config.object_storage.secret_key.clear();
+    if let Ok(root) = std::env::var("AVRAG_OBJECT_ROOT") {
+        let root = root.trim();
+        if !root.is_empty() {
+            config.object_root = root.to_string();
+        }
+    }
+}
+
 pub(crate) async fn build_worker_object_store(config: &AppConfig) -> Result<ObjectStoreHandle> {
     if has_complete_s3_config(config) {
         let store = S3ObjectStore::new(

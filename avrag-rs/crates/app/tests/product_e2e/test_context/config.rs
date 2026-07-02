@@ -190,6 +190,10 @@ impl E2eBootstrapConfig {
     ) {
         let worker_id = worker_id.unwrap_or("test-worker");
         Self::force_local_object_store_env(cmd);
+        eprintln!(
+            "[e2e] worker env object_root={} queue_group={} worker_id={worker_id}",
+            self.object_root, self.ingestion_queue_group
+        );
         cmd.env("E2E_ENABLED", "true")
             .env("NEXT_PUBLIC_DEV_ORG_ID", &self.org_id)
             .env("NEXT_PUBLIC_DEV_USER_ID", &self.user_id)

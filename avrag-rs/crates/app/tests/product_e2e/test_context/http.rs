@@ -113,7 +113,8 @@ impl TestContext {
             let body = upload_resp.text().await.unwrap_or_default();
             anyhow::bail!("upload PUT failed: HTTP {status}, body: {body}");
         }
-        self.verify_uploaded_object_readable(&document_id).await?;
+        self.verify_uploaded_object_readable(&document_id, notebook_id, filename)
+            .await?;
 
         Ok(UploadResponse {
             document_id,
@@ -209,10 +210,14 @@ impl TestContext {
         Err(last_err.unwrap_or_else(|| anyhow::anyhow!("fetch_status exhausted retries")))
     }
 
-    async fn verify_uploaded_object_readable(&self, document_id: &str) -> anyhow::Result<()> {
-        let object_path = self.query_document_object_path(document_id).await?;
-        let object_path_relative = object_path.trim_start_matches('/');
-        let object_full_path = std::path::Path::new(&self.object_root).join(object_path_relative);
+    async fn verify_uploaded_object_readable(
+        &self,
+        document_id: &str,
+        notebook_id: &str,
+        filename: &str,
+    ) -> anyhow::Result<()> {
+        let object_path = format!("{}/{}/{}/{}", self.org_id, notebook_id, document_id, filename);
+        let object_full_path = std::path::Path::new(&self.object_root).join(&object_path);
         if !object_full_path.is_file() {
             anyhow::bail!(
                 "dev-upload succeeded but object missing at {} (object_root={}, object_path={}); possible API/worker object store split (different AVRAG_OBJECT_ROOT)",
