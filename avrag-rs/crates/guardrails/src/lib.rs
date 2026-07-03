@@ -198,11 +198,13 @@ mod tests {
         assert!(!report.blocked);
     }
 
+    /// NOTE: leaked text mirrors current `prompts/orchestrators/rag-system.md`
+    /// (minimal v0). If that prompt is rewritten, update this verbatim.
     #[test]
     fn test_guard_pipeline_check_output_blocks_prompt_leak() {
         let pipeline = GuardPipeline::new();
         let (sanitized, report) = pipeline.check_output(
-            "你是 Context OS 的 **RAG 文档助手**。你基于用户上传到工作区的文档回答问题，通过检索获取证据后再合成回答。",
+            "系统提示要求：你是 **RAG agent**：只根据工作区文档（经检索得到的 chunks）回答用户。事实性结论必须有检索证据支撑；证据中没有的内容不要当作文档事实写出。",
             Some("test-trace".into()),
         );
         assert!(report.blocked);
