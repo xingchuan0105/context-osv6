@@ -4,6 +4,7 @@ use std::sync::atomic::Ordering;
 
 use super::super::{
     ChatResponse, SseEvent, StreamReasoningCapture,
+    llm_real::{LivenessSnapshot, RagObservableProbeFailure},
     mock_servers::{
         reset_mock_rag_state, set_mock_emit_memory_tool, set_mock_rag_codegen_chunk_id,
         set_mock_rag_codegen_doc_id, set_mock_rag_multiround_profile,
@@ -184,6 +185,72 @@ impl TestContext {
             "prompt_snapshot_count": capture.prompt_snapshots.len(),
             "reasoning_empty_warning": reasoning_empty_warning,
             "stream_error_with_done": stream_error_with_done,
+            "extra": extra.cloned().unwrap_or(serde_json::Value::Null),
+        });
+        let _ = std::fs::write(
+            out_dir.join("metadata.json"),
+            serde_json::to_string_pretty(&metadata).unwrap_or_default(),
+        );
+
+        if let Some(ref log_path) = self.worker_log_path {
+            if log_path.exists() {
+                let _ = std::fs::copy(log_path, out_dir.join("worker_logs.txt"));
+            }
+        }
+    }
+
+    /// Persist failure diagnostics for a smoke v5 probe that returned `Err`.
+    ///
+    /// Sibling to [`save_smoke_v5_probe_artifact`]: same bucket and run dir, but the subset
+    /// directory is suffixed `_FAIL` so it sits next to (and is not mistaken for) a
+    /// successful probe. Captures the reqwest error chain, a liveness snapshot of the local
+    /// API, any partial SSE events captured before the stream died, and worker logs.
+    pub fn save_smoke_v5_probe_failure(
+        &self,
+        subset_name: &str,
+        failure: &RagObservableProbeFailure,
+        liveness: &LivenessSnapshot,
+        extra: Option<&serde_json::Value>,
+    ) {
+        let fail_subset = format!("{subset_name}_FAIL");
+        let out_dir = self.smoke_v5_probe_artifact_dir(&fail_subset);
+        let _ = std::fs::create_dir_all(&out_dir);
+
+        let _ = std::fs::write(
+            out_dir.join("failure.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "error_chain": failure.error_chain,
+                "error_category": failure.error_category,
+                "failing_stage": failure.failing_stage,
+            }))
+            .unwrap_or_default(),
+        );
+
+        // Partial SSE events + reasoning capture (may be empty if attempt 1 itself errored).
+        Self::write_reasoning_capture_files(&out_dir, &failure.capture);
+        Self::write_sse_events(&out_dir, &failure.sse_events);
+
+        let _ = std::fs::write(
+            out_dir.join("liveness.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "checked_at": liveness.checked_at,
+                "status_code": liveness.status_code,
+                "body_prefix": liveness.body_prefix,
+                "elapsed_ms": liveness.elapsed_ms,
+            }))
+            .unwrap_or_default(),
+        );
+
+        let metadata = serde_json::json!({
+            "subset": subset_name,
+            "run_id": self.artifact_run_id,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "failing_stage": failure.failing_stage,
+            "error_category": failure.error_category,
+            "sse_event_count": failure.sse_events.len(),
+            "reasoning_delta_count": failure.capture.delta_count,
+            "reasoning_summary_present": !failure.capture.summary.is_empty(),
+            "liveness_status_code": liveness.status_code,
             "extra": extra.cloned().unwrap_or(serde_json::Value::Null),
         });
         let _ = std::fs::write(

@@ -43,7 +43,8 @@ use rag_quality::{
 use regex::Regex;
 
 use super::{
-    ObservabilityMode, chat_rag_observable_probe, count_sse_trace_stage, summarize_tool_activity,
+    ObservabilityMode, chat_rag_observable_probe, count_sse_trace_stage, probe_api_liveness,
+    summarize_tool_activity,
 };
 use crate::product_e2e::fixtures::shared_smoke_v5_context;
 use crate::product_e2e::{ChatResponse, DocumentStatus, TestContext};
@@ -777,9 +778,12 @@ async fn rag_system_prompt_smoke_v5() {
                 .collect();
             eprintln!(
                 "[smoke_v5] SUBSET filter RAG_SMOKE_V5_QUERIES={:?} -> {} queries",
-                idxs, idxs.len()
+                idxs,
+                idxs.len()
             );
-            idxs.iter().map(|i| &smoke_subset.examples[*i - 1]).collect()
+            idxs.iter()
+                .map(|i| &smoke_subset.examples[*i - 1])
+                .collect()
         }
         _ => selected,
     };
@@ -792,7 +796,11 @@ async fn rag_system_prompt_smoke_v5() {
         golden_path.display()
     );
     assert!(
-        if is_subset { selected.len() >= 1 } else { selected.len() >= 10 },
+        if is_subset {
+            selected.len() >= 1
+        } else {
+            selected.len() >= 10
+        },
         "smoke v5 set should have at least {} probes for coverage, got {}",
         if is_subset { 1 } else { 10 },
         selected.len()
@@ -824,9 +832,22 @@ async fn rag_system_prompt_smoke_v5() {
         let probe =
             match chat_rag_observable_probe(&ctx, &example.query, &notebook_id, &doc_scope).await {
                 Ok(p) => p,
-                Err(e) => {
-                    failures.push((example.query.clone(), format!("chat: {e}")));
-                    eprintln!("  FAIL: chat error: {e}");
+                Err(failure) => {
+                    let liveness = probe_api_liveness(&ctx).await;
+                    eprintln!(
+                        "  FAIL: chat {} ({}): {}",
+                        failure.error_category, failure.failing_stage, failure.error_chain
+                    );
+                    ctx.save_smoke_v5_probe_failure(
+                        &artifact_key,
+                        &failure,
+                        &liveness,
+                        Some(&serde_json::json!({ "query": example.query })),
+                    );
+                    failures.push((
+                        example.query.clone(),
+                        format!("chat {}: {}", failure.error_category, failure.error_chain),
+                    ));
                     continue;
                 }
             };
@@ -1109,16 +1130,30 @@ async fn rag_tools_golden_set() {
             example.query.chars().take(70).collect::<String>()
         );
         if example.requires_triplet_reingest {
-            eprintln!("  NOTE: requires_triplet_reingest=true (graph probes need triplet re-ingest)");
+            eprintln!(
+                "  NOTE: requires_triplet_reingest=true (graph probes need triplet re-ingest)"
+            );
         }
 
         let probe =
-            match chat_rag_observable_probe(&ctx, &example.query, &notebook_id, &doc_scope).await
-            {
+            match chat_rag_observable_probe(&ctx, &example.query, &notebook_id, &doc_scope).await {
                 Ok(p) => p,
-                Err(e) => {
-                    failures.push((example.query.clone(), format!("chat: {e}")));
-                    eprintln!("  FAIL: chat error: {e}");
+                Err(failure) => {
+                    let liveness = probe_api_liveness(&ctx).await;
+                    eprintln!(
+                        "  FAIL: chat {} ({}): {}",
+                        failure.error_category, failure.failing_stage, failure.error_chain
+                    );
+                    ctx.save_smoke_v5_probe_failure(
+                        &subset_name,
+                        &failure,
+                        &liveness,
+                        Some(&serde_json::json!({ "query": example.query })),
+                    );
+                    failures.push((
+                        example.query.clone(),
+                        format!("chat {}: {}", failure.error_category, failure.error_chain),
+                    ));
                     continue;
                 }
             };
@@ -1131,9 +1166,7 @@ async fn rag_tools_golden_set() {
         eprintln!(
             "  tools(sse)={sse_tools:?} tools(trace)={trace_tools:?} \
              expected={:?} sequence={:?} covered={}",
-            example.expected_tool,
-            example.expected_tool_sequence,
-            score.covered
+            example.expected_tool, example.expected_tool_sequence, score.covered
         );
     }
 
@@ -1159,7 +1192,10 @@ async fn rag_tools_golden_set() {
     eprintln!("  - tool_summary/metadata/index: should pass on current corpus");
     eprintln!("  - tool_graph (G1/G2): need INGESTION_TRIPLET_ENABLED=1 re-ingest");
 
-    assert!(tool_summary.with_expectations > 0, "should have tool expectations");
+    assert!(
+        tool_summary.with_expectations > 0,
+        "should have tool expectations"
+    );
     assert!(
         failures.len() < selected.len(),
         "all probes failed — check service health. Failures: {failures:?}"
@@ -1191,15 +1227,16 @@ async fn triplet_benchmark_huawei_ipd() {
 
     let model = std::env::var("TRIPLET_BENCHMARK_MODEL")
         .expect("TRIPLET_BENCHMARK_MODEL must be set (e.g. qwen3.5-flash)");
-    let provider = std::env::var("TRIPLET_BENCHMARK_PROVIDER").unwrap_or_else(|_| "unknown".to_string());
+    let provider =
+        std::env::var("TRIPLET_BENCHMARK_PROVIDER").unwrap_or_else(|_| "unknown".to_string());
     let single_doc = std::env::var("RAG_SMOKE_SINGLE_DOC").unwrap_or_default();
     assert_eq!(
         single_doc.trim(),
         "huawei_ipd_370_activities.txt",
         "benchmark requires RAG_SMOKE_SINGLE_DOC=huawei_ipd_370_activities.txt"
     );
-    let token_budget = std::env::var("INGESTION_TRIPLET_TOKEN_BUDGET")
-        .unwrap_or_else(|_| "3000".to_string());
+    let token_budget =
+        std::env::var("INGESTION_TRIPLET_TOKEN_BUDGET").unwrap_or_else(|_| "3000".to_string());
 
     eprintln!("=========================================");
     eprintln!("Triplet Benchmark: huawei_ipd_370_activities.txt");
@@ -1273,9 +1310,22 @@ async fn triplet_benchmark_huawei_ipd() {
         .expect("PAC-05 probe in golden set");
 
     let probe =
-        chat_rag_observable_probe(&ctx, &example.query, &notebook_id, &doc_scope)
-            .await
-            .expect("PAC-05 RAG probe");
+        match chat_rag_observable_probe(&ctx, &example.query, &notebook_id, &doc_scope).await {
+            Ok(p) => p,
+            Err(failure) => {
+                let liveness = probe_api_liveness(&ctx).await;
+                ctx.save_smoke_v5_probe_failure(
+                    "pac05_benchmark",
+                    &failure,
+                    &liveness,
+                    Some(&serde_json::json!({ "query": example.query })),
+                );
+                panic!(
+                    "PAC-05 RAG probe failed: {} ({}): {}",
+                    failure.error_category, failure.failing_stage, failure.error_chain
+                );
+            }
+        };
     let chat = probe.resp;
     let retrieved = extract_retrieved_chunks(&chat.tool_results);
     let cited = extract_cited_chunks(&chat.citations);
@@ -1295,7 +1345,10 @@ async fn triplet_benchmark_huawei_ipd() {
         scorecard.label.as_str(),
         scorecard.faithfulness.faithfulness * 100.0
     );
-    eprintln!("[benchmark] answer: {}", answer.chars().take(200).collect::<String>());
+    eprintln!(
+        "[benchmark] answer: {}",
+        answer.chars().take(200).collect::<String>()
+    );
 
     let result = serde_json::json!({
         "provider": provider,

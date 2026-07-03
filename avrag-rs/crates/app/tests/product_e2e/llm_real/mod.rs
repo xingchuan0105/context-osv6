@@ -273,6 +273,62 @@ pub struct RagObservableProbeResult {
     pub stream_error_with_done: bool,
 }
 
+/// Best-effort snapshot of the local API server's liveness, taken at failure time.
+///
+/// `GET /health` is an unauthenticated route on the test router (it delegates to the
+/// production `transport_http::build_router`). A failed probe leaves this snapshot so an
+/// offline reader can tell whether the API process was still accepting connections when
+/// reqwest reported `error sending request for url`.
+#[derive(Debug, Clone)]
+pub struct LivenessSnapshot {
+    /// RFC3339 timestamp of the probe.
+    pub checked_at: String,
+    /// HTTP status code, or `None` if the request itself errored.
+    pub status_code: Option<u16>,
+    /// First 200 chars of the response body (or the request error text).
+    pub body_prefix: String,
+    /// Elapsed wall time in milliseconds.
+    pub elapsed_ms: u64,
+}
+
+/// Probe failure carrying full diagnostics so the root cause can be read offline.
+///
+/// Replaces the previous `format!("chat: {e}")` that flattened the reqwest error chain and
+/// discarded the SSE events captured before the stream died. See
+/// `prompts/_backups/doc_chunks_e2e_handoff.md` §3.5 for the failure that motivated this.
+#[derive(Debug, Clone)]
+pub struct RagObservableProbeFailure {
+    /// Full anyhow error chain (`{e:#}`), not the flattened one-liner.
+    pub error_chain: String,
+    /// Coarse classification: "connect" | "timeout" | "reset" | "other".
+    pub error_category: String,
+    /// SSE events collected before the stream failed (empty if attempt 1 itself errored).
+    pub sse_events: Vec<SseEvent>,
+    /// Reasoning capture from the (failed) stream.
+    pub capture: StreamReasoningCapture,
+    /// Which step failed last: "fallback_non_stream" (the only return-Err path).
+    pub failing_stage: String,
+}
+
+/// Classify a reqwest error message into a coarse category for triage. Keyword-based;
+/// order matters (most specific first).
+fn classify_reqwest_error(message: &str) -> &'static str {
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("timed out") || lower.contains("deadline") {
+        "timeout"
+    } else if lower.contains("connection reset")
+        || lower.contains("reset by peer")
+        || lower.contains("broken pipe")
+        || lower.contains("connection aborted")
+    {
+        "reset"
+    } else if lower.contains("connect") || lower.contains("connection refused") {
+        "connect"
+    } else {
+        "other"
+    }
+}
+
 fn empty_reasoning_capture() -> StreamReasoningCapture {
     StreamReasoningCapture {
         summary: String::new(),
@@ -322,13 +378,16 @@ pub fn count_sse_trace_stage(events: &[SseEvent], stage: &str) -> usize {
 ///
 /// Uses `debug: true`, `pin_mock_chunk_ids: false` (real retrieval). Retries the
 /// stream up to [`REAL_LLM_MAX_ATTEMPTS`] when the terminal `done` payload is missing;
-/// falls back to non-streaming chat if streaming still fails.
+/// falls back to non-streaming chat if streaming still fails. When the stream carries
+/// an SSE `error` event (e.g. the LLM provider aborted a Chinese query mid-stream),
+/// the product side has already signalled failure, so we skip the retry and fall back
+/// immediately instead of burning another attempt.
 pub async fn chat_rag_observable_probe(
     ctx: &TestContext,
     query: &str,
     notebook_id: &str,
     doc_scope: &[String],
-) -> anyhow::Result<RagObservableProbeResult> {
+) -> Result<RagObservableProbeResult, RagObservableProbeFailure> {
     let params = ChatStreamParams {
         query,
         agent_type: "rag",
@@ -359,6 +418,16 @@ pub async fn chat_rag_observable_probe(
                 });
             }
             Ok((events, None, capture)) => {
+                if stream_had_error(&events) {
+                    eprintln!(
+                        "[rag_observable] attempt {attempt}/{} stream error event without done; skipping retry, falling back; events={}",
+                        REAL_LLM_MAX_ATTEMPTS,
+                        events.len()
+                    );
+                    last_events = events;
+                    last_capture = capture;
+                    break;
+                }
                 eprintln!(
                     "[rag_observable] attempt {attempt}/{} missing done payload; events={}",
                     REAL_LLM_MAX_ATTEMPTS,
@@ -380,10 +449,39 @@ pub async fn chat_rag_observable_probe(
     }
 
     eprintln!("[rag_observable] falling back to non-streaming chat");
-    let http_resp = ctx
+    let http_resp = match ctx
         .chat_without_mock_chunk_pin(query, notebook_id, doc_scope)
-        .await?;
-    let chat = http_resp.into_business()?;
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            let chain = format!("{e:#}");
+            let category = classify_reqwest_error(&chain);
+            eprintln!("[rag_observable] fallback non-stream failed ({category}): {chain}");
+            return Err(RagObservableProbeFailure {
+                error_chain: chain,
+                error_category: category.to_string(),
+                sse_events: last_events,
+                capture: last_capture,
+                failing_stage: "fallback_non_stream".to_string(),
+            });
+        }
+    };
+    let chat = match http_resp.into_business::<ChatResponse>() {
+        Ok(c) => c,
+        Err(e) => {
+            let chain = format!("response parse failed: {e}");
+            let category = classify_reqwest_error(&chain);
+            eprintln!("[rag_observable] fallback parse failed ({category}): {chain}");
+            return Err(RagObservableProbeFailure {
+                error_chain: chain,
+                error_category: category.to_string(),
+                sse_events: last_events,
+                capture: last_capture,
+                failing_stage: "fallback_non_stream_parse".to_string(),
+            });
+        }
+    };
     Ok(RagObservableProbeResult {
         resp: chat,
         capture: last_capture,
@@ -391,6 +489,44 @@ pub async fn chat_rag_observable_probe(
         observability_mode: ObservabilityMode::FallbackNonStream,
         stream_error_with_done: false,
     })
+}
+
+/// Best-effort liveness probe of the local API server at failure time.
+///
+/// Hits the unauthenticated `GET /health` route with a short 5s timeout and records the
+/// status code, a body prefix, and elapsed time. Never returns `Err`: any request failure
+/// is captured into the snapshot so an offline reader can distinguish "API down" from
+/// "API slow / returning errors".
+pub async fn probe_api_liveness(ctx: &TestContext) -> LivenessSnapshot {
+    let url = format!("{}/health", ctx.base_url);
+    let started = std::time::Instant::now();
+    let checked_at = chrono::Utc::now().to_rfc3339();
+
+    let req = ctx
+        .http_client
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(5));
+    match req.send().await {
+        Ok(resp) => {
+            let status = resp.status().as_u16();
+            let body = resp.text().await.unwrap_or_default();
+            LivenessSnapshot {
+                checked_at,
+                status_code: Some(status),
+                body_prefix: body.chars().take(200).collect(),
+                elapsed_ms: started.elapsed().as_millis() as u64,
+            }
+        }
+        Err(e) => {
+            let msg = format!("{e}");
+            LivenessSnapshot {
+                checked_at,
+                status_code: None,
+                body_prefix: msg.chars().take(200).collect(),
+                elapsed_ms: started.elapsed().as_millis() as u64,
+            }
+        }
+    }
 }
 
 async fn chat_stream_once(
@@ -956,6 +1092,22 @@ mod stream_reasoning_tests {
         ];
         let resp = parse_chat_response_from_stream_events(&events).expect("parse done");
         assert_eq!(resp.answer, "final");
+    }
+
+    #[test]
+    fn classify_reqwest_error_categories() {
+        assert_eq!(classify_reqwest_error("operation timed out"), "timeout");
+        assert_eq!(
+            classify_reqwest_error("request timed out after 30s"),
+            "timeout"
+        );
+        assert_eq!(classify_reqwest_error("connection reset by peer"), "reset");
+        assert_eq!(classify_reqwest_error("broken pipe (os error 32)"), "reset");
+        assert_eq!(
+            classify_reqwest_error("error connecting to 127.0.0.1:3645: connection refused"),
+            "connect"
+        );
+        assert_eq!(classify_reqwest_error("dns error: host not found"), "other");
     }
 }
 
