@@ -77,7 +77,7 @@ pub fn band_score(x: f64, b: &Bands) -> f64 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Score {
     pub s: f64,
     pub len: f64,

@@ -7,7 +7,7 @@ use crate::segment::char_len;
 use crate::tokenize::{is_content_word, tokens};
 
 /// Full fingerprint of a draft's sentence-length and lexical statistics.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FingerprintReport {
     pub sentence_lengths: Vec<usize>,
     pub mean_length: f64,
