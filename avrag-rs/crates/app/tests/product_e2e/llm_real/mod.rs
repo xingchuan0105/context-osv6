@@ -898,6 +898,7 @@ pub(crate) fn require_real_llm_config() {
 }
 
 pub mod chat_real;
+pub mod write_real;
 pub mod format_real;
 pub mod multi_turn;
 pub mod pdf_corpus;
