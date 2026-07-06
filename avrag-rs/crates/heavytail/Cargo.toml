@@ -25,3 +25,8 @@ tokio = { workspace = true }
 rand = "0.8"
 rand_chacha = "0.3"
 once_cell = { workspace = true }
+dotenvy = "0.15"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tempfile = "3"
