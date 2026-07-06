@@ -4,7 +4,7 @@ use crate::StyleParams;
 
 pub const CANDIDATE_GRID: &[usize] = &[5, 8, 12, 16, 20, 26, 34, 44, 56, 72, 90];
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SensitivityRow {
     pub sentence_idx: usize,
     pub current_len: usize,
