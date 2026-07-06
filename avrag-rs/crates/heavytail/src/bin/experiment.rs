@@ -216,20 +216,60 @@ async fn run_topic_arm(
     let arm_dir = run_dir.join(arm.dir_name());
     fs::create_dir_all(&arm_dir)?;
 
-    let skeleton = plan_skeleton(llm, topic, target_chars, &[])
+    let mut tokens_used = 0;
+    let skeleton = plan_skeleton(llm, topic, target_chars, &[], &mut tokens_used)
         .await
         .with_context(|| format!("plan_skeleton topic {topic_num} arm {}", arm.dir_name()))?;
 
     let mut ws = DraftWorkspace::new();
     match arm {
         ArmKind::A => {
-            draft_sections(llm, &skeleton, style, &[], &mut ws, false, false, false).await?;
+            draft_sections(
+                llm,
+                &skeleton,
+                style,
+                &[],
+                &mut ws,
+                false,
+                false,
+                None,
+                false,
+                &mut tokens_used,
+                None,
+            )
+            .await?;
         }
         ArmKind::B => {
-            draft_sections(llm, &skeleton, style, &[], &mut ws, true, true, false).await?;
+            draft_sections(
+                llm,
+                &skeleton,
+                style,
+                &[],
+                &mut ws,
+                true,
+                true,
+                None,
+                false,
+                &mut tokens_used,
+                None,
+            )
+            .await?;
         }
         ArmKind::BLines => {
-            draft_sections(llm, &skeleton, style, &[], &mut ws, true, true, true).await?;
+            draft_sections(
+                llm,
+                &skeleton,
+                style,
+                &[],
+                &mut ws,
+                true,
+                true,
+                None,
+                true,
+                &mut tokens_used,
+                None,
+            )
+            .await?;
         }
         ArmKind::C => {
             let seed = topic_seed(topic, topic_num);

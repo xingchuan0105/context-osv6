@@ -55,7 +55,7 @@ pub async fn draft_feedforward(
                 .collect::<Vec<_>>();
 
             let brief = feedforward_brief(topic, paragraph_idx, &accumulated, &sentences);
-            let prose = llm
+            let (prose, _tokens) = llm
                 .prose(FEEDFORWARD_SYSTEM, &brief, 0.7)
                 .await
                 .with_context(|| {

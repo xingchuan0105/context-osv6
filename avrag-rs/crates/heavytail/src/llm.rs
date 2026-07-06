@@ -2,6 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use avrag_llm::{ApiStyle, ChatMessage, LlmClient, ModelProviderConfig};
 
 /// Thin wrapper over [`LlmClient`] for HeavyTail writer stages.
+#[derive(Debug, Clone)]
 pub struct WriterLlm {
     client: LlmClient,
 }
@@ -16,14 +17,21 @@ impl WriterLlm {
         })
     }
 
-    pub async fn prose(&self, system: &str, user: &str, temp: f32) -> Result<String> {
+    /// Tag LLM calls for metering (`ChatUsageRecord.feature` in `crates/llm/src/usage_observer.rs`).
+    pub fn with_phase(&self, phase: &str) -> Self {
+        Self {
+            client: self.client.clone().with_feature(format!("write:{phase}")),
+        }
+    }
+
+    pub async fn prose(&self, system: &str, user: &str, temp: f32) -> Result<(String, u32)> {
         let messages = vec![ChatMessage::system(system), ChatMessage::user(user)];
         let response = self
             .client
             .complete(&messages, Some(temp))
             .await
             .context("writer prose completion failed")?;
-        Ok(response.content)
+        Ok((response.content, response.usage.total_tokens))
     }
 
     /// `complete_json_mode` with one reparse-retry: on parse failure the error is appended
@@ -32,7 +40,7 @@ impl WriterLlm {
         &self,
         system: &str,
         user: &str,
-    ) -> Result<T> {
+    ) -> Result<(T, u32)> {
         let temperature = agent_llm_temperature();
         let messages = vec![ChatMessage::system(system), ChatMessage::user(user)];
         let response = self
@@ -40,9 +48,10 @@ impl WriterLlm {
             .complete_json_mode(&messages, Some(temperature))
             .await
             .context("writer json completion failed")?;
+        let mut total_tokens = response.usage.total_tokens;
 
         match parse_json_response::<T>(&response.content) {
-            Ok(value) => Ok(value),
+            Ok(value) => Ok((value, total_tokens)),
             Err(first_err) => {
                 let repair_user = format!(
                     "{user}\n\nYour previous response was not valid JSON. Parse error: {first_err}\n\
@@ -58,8 +67,10 @@ impl WriterLlm {
                     .complete_json_mode(&repair_messages, Some(temperature))
                     .await
                     .context("writer json repair completion failed")?;
-                parse_json_response(&repaired.content)
-                    .context("writer json parse failed after repair retry")
+                total_tokens += repaired.usage.total_tokens;
+                let value = parse_json_response(&repaired.content)
+                    .context("writer json parse failed after repair retry")?;
+                Ok((value, total_tokens))
             }
         }
     }
@@ -191,7 +202,7 @@ mod tests {
         }
 
         let llm = WriterLlm::from_env().expect("from_env");
-        let out = llm
+        let (out, _tokens) = llm
             .prose(
                 "You are a terse assistant.",
                 "Reply with exactly the word OK and nothing else.",

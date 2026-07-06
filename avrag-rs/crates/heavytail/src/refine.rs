@@ -29,8 +29,13 @@ pub async fn refine(
     reservoir: &[String],
     budget: &WriterBudget,
     state: &mut WriterState,
+    on_round: Option<&dyn Fn(usize, usize)>,
 ) -> Result<()> {
     for round in 0..budget.max_rounds {
+        if let Some(callback) = on_round {
+            callback(round + 1, budget.max_rounds);
+        }
+
         state.phase = WriterPhase::Refining { round: round + 1 };
 
         let fp = fingerprint_from_workspace(ws);
@@ -49,6 +54,7 @@ pub async fn refine(
             &directives.rhythm,
             &directives.allow,
             "rhythm",
+            &mut state.tokens_used,
         )
         .await?;
 
@@ -64,6 +70,7 @@ pub async fn refine(
             &directives.lexical,
             &lexical_allow,
             "lexical",
+            &mut state.tokens_used,
         )
         .await?;
 
@@ -119,6 +126,7 @@ async fn run_patch_pass(
     directives: &[Directive],
     allow: &AllowSet,
     pass_name: &str,
+    tokens_used: &mut usize,
 ) -> Result<(String, bool)> {
     if directives.is_empty() {
         return Ok((String::new(), false));
@@ -128,14 +136,14 @@ async fn run_patch_pass(
     let directive_block = render_directives_zh(directives);
     let mut user = format!("{canonical}\n\n{directive_block}\n\n请仅输出 patch 行。");
 
-    match fetch_and_apply_patch(llm, ws, allow, &user).await {
+    match fetch_and_apply_patch(llm, ws, allow, &user, tokens_used).await {
         Ok(raw) => Ok((raw, true)),
         Err(first_err) => {
             user.push_str("\n\n上一次 patch 解析失败：");
             user.push_str(&patch_error_message(&first_err));
             user.push_str("\n请修正后仅输出合法 patch 行。");
 
-            match fetch_and_apply_patch(llm, ws, allow, &user).await {
+            match fetch_and_apply_patch(llm, ws, allow, &user, tokens_used).await {
                 Ok(raw) => Ok((raw, true)),
                 Err(second_err) => {
                     tracing::warn!(
@@ -155,11 +163,13 @@ async fn fetch_and_apply_patch(
     ws: &mut DraftWorkspace,
     allow: &AllowSet,
     user: &str,
+    tokens_used: &mut usize,
 ) -> Result<String, PatchError> {
-    let raw = llm
+    let (raw, tokens) = llm
         .prose(PATCH_SYSTEM, user, PATCH_TEMPERATURE)
         .await
         .map_err(|_| PatchError::Empty)?;
+    *tokens_used += tokens as usize;
 
     let patch_text = extract_patch_block(&raw);
     let patch = parse_patch(&patch_text, allow)?;
@@ -515,7 +525,7 @@ mod tests {
             .filter(|m| m.passed)
             .count();
 
-        refine(&llm, &mut ws, &style, &reservoir, &budget, &mut state)
+        refine(&llm, &mut ws, &style, &reservoir, &budget, &mut state, None)
             .await
             .expect("refine");
 

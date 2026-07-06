@@ -55,9 +55,11 @@ pub async fn plan_skeleton(
     topic: &str,
     target_chars: usize,
     cards: &[MaterialCard],
+    tokens_used: &mut usize,
 ) -> Result<Skeleton> {
     let user = build_skeleton_user_prompt(topic, target_chars, cards);
-    let raw: LlmSkeleton = llm.json(SKELETON_SYSTEM, &user).await?;
+    let (raw, tokens): (LlmSkeleton, u32) = llm.json(SKELETON_SYSTEM, &user).await?;
+    *tokens_used += tokens as usize;
     normalize_skeleton(raw, target_chars, cards)
 }
 
@@ -264,6 +266,7 @@ mod tests {
             "人工智能在医疗影像中的应用",
             2000,
             &cards,
+            &mut 0,
         )
         .await
         .expect("plan_skeleton");

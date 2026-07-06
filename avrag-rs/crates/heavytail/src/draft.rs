@@ -86,7 +86,9 @@ pub fn deficit_hints(
 ///
 /// - `mpc`: deficit hints (M3 arm a vs b)
 /// - `primed`: style priming in system prompt (arm a = false, arm b = true)
+/// - `priming`: override priming text (or `None` to use [`PRIMING`] when primed)
 /// - `one_sentence_per_line`: R4 line-per-sentence drafting variant on arm b
+/// - `on_section`: called at each section boundary with `(section_index_1based, total_sections)`
 pub async fn draft_sections(
     llm: &WriterLlm,
     skeleton: &Skeleton,
@@ -95,7 +97,10 @@ pub async fn draft_sections(
     ws: &mut DraftWorkspace,
     mpc: bool,
     primed: bool,
+    priming: Option<&str>,
     one_sentence_per_line: bool,
+    tokens_used: &mut usize,
+    on_section: Option<&dyn Fn(usize, usize)>,
 ) -> Result<()> {
     let card_map: std::collections::BTreeMap<&str, &MaterialCard> =
         cards.iter().map(|c| (c.id.as_str(), c)).collect();
@@ -103,8 +108,14 @@ pub async fn draft_sections(
 
     let mut section_prose: Vec<String> = Vec::new();
     let mut running_fp = fingerprint_from_workspace(ws);
+    let total_sections = skeleton.sections.len();
+    let priming_text = priming.unwrap_or(PRIMING);
 
     for (idx, section) in skeleton.sections.iter().enumerate() {
+        if let Some(callback) = on_section {
+            callback(idx + 1, total_sections);
+        }
+
         let user = build_section_brief(
             skeleton,
             idx,
@@ -119,11 +130,16 @@ pub async fn draft_sections(
             one_sentence_per_line,
         );
 
-        let system = if primed { PROMPT_SYSTEM } else { PLAIN_SYSTEM };
-        let prose = llm
-            .prose(system, &user, 0.7)
+        let system = if primed {
+            format!("{PLAIN_SYSTEM}\n\n{priming_text}")
+        } else {
+            PLAIN_SYSTEM.to_string()
+        };
+        let (prose, tokens) = llm
+            .prose(&system, &user, 0.7)
             .await
             .with_context(|| format!("draft section {} ({})", idx + 1, section.heading))?;
+        *tokens_used += tokens as usize;
 
         let rhythms: Vec<RhythmMode> = section
             .paragraphs
@@ -137,8 +153,6 @@ pub async fn draft_sections(
 
     Ok(())
 }
-
-const PROMPT_SYSTEM: &str = PRIMING;
 
 fn build_reservoir(cards: &[MaterialCard]) -> Vec<String> {
     let mut out = Vec::new();
@@ -378,7 +392,10 @@ mod tests {
             &mut ws,
             true,
             true,
+            None,
             false,
+            &mut 0,
+            None,
         )
         .await
         .expect("draft_sections");

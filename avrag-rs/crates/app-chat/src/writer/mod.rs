@@ -14,15 +14,23 @@ use heavytail::metrics::analyze_sentences;
 use heavytail::skeleton;
 use heavytail::state::{WriterBudget, WriterPhase, WriterState};
 use heavytail::validator;
-use heavytail::workspace::DraftWorkspace;
 use heavytail::StyleParams;
 use tracing::warn;
 
+use crate::agents::capability::CapabilityRegistry;
 use crate::agents::events::{AgentEvent, AgentEventSink};
+use crate::agents::progressive::PromptRegistry;
 use crate::agents::runtime::{AgentRequest, AgentRunResult};
 use crate::context::ChatContext;
 
 const DEFAULT_TARGET_CHARS: usize = 2_000;
+const HEAVYTAIL_PRIMING_SKILL_ID: &str = "heavytail-priming";
+
+// TODO(metering): `ChatUsageRecord.stage` is always empty in
+// `crates/llm/src/client/mod.rs::record_completion_success`. Per-phase billing labels
+// should use `write:<phase>` in `stage` once `LlmClient::with_stage()` exists; until then
+// we tag `ChatUsageRecord.feature` via `WriterLlm::with_phase` and accumulate tokens in
+// `WriterState.tokens_used` (see `crates/llm/src/usage_observer.rs`).
 
 pub struct WriterOrchestrator<'a> {
     ctx: &'a ChatContext,
@@ -55,6 +63,7 @@ impl<'a> WriterOrchestrator<'a> {
         let budget = WriterBudget::default();
         let mut state = WriterState::default();
         let checkpoint_dir = writer_checkpoint_dir(request.session_id.as_deref());
+        let priming = load_write_priming();
 
         emit_activity(sink, "research", "Gathering research material").await;
 
@@ -72,44 +81,57 @@ impl<'a> WriterOrchestrator<'a> {
         let llm = WriterLlm::from_env().map_err(|e| {
             AppError::internal(format!("writer LLM configuration error: {e}"))
         })?;
+        let skeleton_llm = llm.with_phase("skeleton");
         let target_chars = DEFAULT_TARGET_CHARS;
-        let skeleton = skeleton::plan_skeleton(&llm, &topic, target_chars, &state.cards)
-            .await
-            .map_err(|e| AppError::internal(format!("skeleton planning failed: {e}")))?;
+        let skeleton = skeleton::plan_skeleton(
+            &skeleton_llm,
+            &topic,
+            target_chars,
+            &state.cards,
+            &mut state.tokens_used,
+        )
+        .await
+        .map_err(|e| AppError::internal(format!("skeleton planning failed: {e}")))?;
         state.skeleton = Some(skeleton.clone());
         state.phase = WriterPhase::Drafting { section: 0 };
         checkpoint_state(&state, &checkpoint_dir)?;
 
-        emit_activity(sink, "draft", "Drafting sections").await;
-
-        let mut workspace = DraftWorkspace::default();
+        let draft_llm = llm.with_phase("draft");
+        let section_sink = sink.clone_boxed();
         draft::draft_sections(
-            &llm,
+            &draft_llm,
             &skeleton,
             &style,
             &state.cards,
-            &mut workspace,
+            &mut state.workspace,
             true,
             true,
+            Some(priming.as_str()),
             false,
+            &mut state.tokens_used,
+            Some(&|section, total| {
+                spawn_section_progress(section_sink.as_ref(), section, total);
+            }),
         )
-            .await
-            .map_err(|e| AppError::internal(format!("section drafting failed: {e}")))?;
-        state.workspace = workspace;
+        .await
+        .map_err(|e| AppError::internal(format!("section drafting failed: {e}")))?;
         state.phase = WriterPhase::Refining { round: 0 };
         checkpoint_state(&state, &checkpoint_dir)?;
 
-        emit_activity(sink, "refine", "Refining draft").await;
-
+        let refine_llm = llm.with_phase("refine");
+        let round_sink = sink.clone_boxed();
         let reservoir = research_outcome.reservoir.clone();
         let mut workspace = std::mem::take(&mut state.workspace);
         heavytail::refine::refine(
-            &llm,
+            &refine_llm,
             &mut workspace,
             &style,
             &reservoir,
             &budget,
             &mut state,
+            Some(&|round, max_rounds| {
+                spawn_round_progress(round_sink.as_ref(), round, max_rounds);
+            }),
         )
         .await
         .map_err(|e| AppError::internal(format!("refinement failed: {e}")))?;
@@ -126,11 +148,7 @@ impl<'a> WriterOrchestrator<'a> {
             .collect();
         let fingerprint = analyze_sentences(&sentences);
         let validation = validator::validate(&fingerprint, &style);
-        state.phase = if validation.passed {
-            WriterPhase::Done
-        } else {
-            WriterPhase::Done
-        };
+        state.phase = WriterPhase::Done;
         checkpoint_state(&state, &checkpoint_dir)?;
 
         let answer = state.workspace.render_plain();
@@ -165,7 +183,7 @@ impl<'a> WriterOrchestrator<'a> {
                 "research_degraded": research_outcome.research_degraded,
                 "validation_warning": !validation.passed,
                 "checkpoint_dir": checkpoint_dir.display().to_string(),
-                "priming": PRIMING,
+                "priming_skill": HEAVYTAIL_PRIMING_SKILL_ID,
             }
         });
 
@@ -185,6 +203,39 @@ impl<'a> WriterOrchestrator<'a> {
             ..Default::default()
         })
     }
+}
+
+fn load_write_priming() -> String {
+    let registry = CapabilityRegistry::standard_cached();
+    let available = registry
+        .answer_writing_styles("write")
+        .into_iter()
+        .any(|skill| skill.id == HEAVYTAIL_PRIMING_SKILL_ID);
+    if available {
+        if let Some(skill) = PromptRegistry::standard_cached().skill(HEAVYTAIL_PRIMING_SKILL_ID) {
+            let body = skill.system_prompt().trim();
+            if !body.is_empty() {
+                return body.to_string();
+            }
+        }
+    }
+    PRIMING.to_string()
+}
+
+fn spawn_section_progress(sink: &dyn AgentEventSink, section: usize, total: usize) {
+    let sink = sink.clone_boxed();
+    let message = format!("Drafting section {section}/{total}");
+    tokio::spawn(async move {
+        emit_activity(sink.as_ref(), "draft", &message).await;
+    });
+}
+
+fn spawn_round_progress(sink: &dyn AgentEventSink, round: usize, max_rounds: usize) {
+    let sink = sink.clone_boxed();
+    let message = format!("Refining round {round}/{max_rounds}");
+    tokio::spawn(async move {
+        emit_activity(sink.as_ref(), "refine", &message).await;
+    });
 }
 
 async fn emit_activity(sink: &dyn AgentEventSink, stage: &str, message: &str) {
@@ -289,4 +340,18 @@ pub(crate) async fn run_write_mode(
         crate::chat::attach_debug_trace_from_sink(&mut execution, &sink);
     }
     Ok(execution)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_write_priming_uses_skill_or_fallback() {
+        let priming = load_write_priming();
+        assert!(
+            priming.contains("长短交错") || priming == PRIMING,
+            "expected heavytail priming content, got: {priming:?}"
+        );
+    }
 }
