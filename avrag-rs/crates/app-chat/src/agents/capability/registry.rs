@@ -532,10 +532,11 @@ mod tests {
     #[test]
     fn registry_can_lookup_all_modes() {
         let registry = CapabilityRegistry::standard();
-        assert_eq!(registry.mode_count(), 3, "expected 3 modes");
+        assert_eq!(registry.mode_count(), 4, "expected 4 modes");
         assert!(registry.mode("chat").is_some());
         assert!(registry.mode("rag").is_some());
         assert!(registry.mode("search").is_some());
+        assert!(registry.mode("write").is_some());
         assert!(registry.mode("nonexistent").is_none());
     }
 
@@ -566,7 +567,7 @@ mod tests {
     fn list_modes_returns_all() {
         let registry = CapabilityRegistry::standard();
         let modes = registry.list_modes();
-        assert_eq!(modes.len(), 3);
+        assert_eq!(modes.len(), 4);
     }
 
     #[test]

@@ -32,9 +32,23 @@ pub fn search_mode_schema() -> ModeSchema {
     }
 }
 
-/// All built-in mode schemas (chat, rag, search).
+/// Write mode schema.
+pub fn write_mode_schema() -> ModeSchema {
+    ModeSchema {
+        id: "write".to_string(),
+        external_tools_used: vec!["web_search".to_string()],
+        requires_internet: true,
+    }
+}
+
+/// All built-in mode schemas (chat, rag, search, write).
 pub fn standard_mode_schemas() -> Vec<ModeSchema> {
-    vec![chat_mode_schema(), rag_mode_schema(), search_mode_schema()]
+    vec![
+        chat_mode_schema(),
+        rag_mode_schema(),
+        search_mode_schema(),
+        write_mode_schema(),
+    ]
 }
 
 #[cfg(test)]
@@ -44,10 +58,11 @@ mod tests {
     #[test]
     fn standard_schemas_match_registry_expectations() {
         let schemas = standard_mode_schemas();
-        assert_eq!(schemas.len(), 3);
+        assert_eq!(schemas.len(), 4);
         assert!(schemas.iter().any(|s| s.id == "chat"));
         assert!(schemas.iter().any(|s| s.id == "rag"));
         assert!(schemas.iter().any(|s| s.id == "search"));
+        assert!(schemas.iter().any(|s| s.id == "write"));
     }
 
     #[test]
@@ -68,5 +83,13 @@ mod tests {
         let schema = search_mode_schema();
         assert_eq!(schema.id, "search");
         assert!(schema.requires_internet);
+    }
+
+    #[test]
+    fn write_mode_schema_has_expected_metadata() {
+        let schema = write_mode_schema();
+        assert_eq!(schema.id, "write");
+        assert!(schema.requires_internet);
+        assert_eq!(schema.external_tools_used, vec!["web_search".to_string()]);
     }
 }

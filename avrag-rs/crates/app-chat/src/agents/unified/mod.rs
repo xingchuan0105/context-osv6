@@ -15,10 +15,11 @@ use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::runtime::{Agent, AgentRequest, AgentRunResult};
 
 use app_core::ChatPersistencePort;
-use avrag_llm::LlmClient;
+use avrag_llm::{LlmClient, TenantContext, UsageObserver};
 use avrag_search::SearchProvider;
 use common::AppError;
 use std::sync::Arc;
+use uuid::Uuid;
 
 pub mod atomic_tools;
 pub mod helpers;
@@ -27,18 +28,28 @@ pub mod weather;
 /// Unified agent that dispatches to Chat / RAG / Search based on `request.kind`.
 pub struct UnifiedAgent {
     llm_client: Option<LlmClient>,
+    chat_llm_client: Option<LlmClient>,
+    search_llm_client: Option<LlmClient>,
     rag_runtime: Option<Arc<avrag_rag_core::RagRuntime>>,
     search_executor: Option<Arc<dyn SearchProvider>>,
     chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
+    usage_observer: Option<Arc<dyn UsageObserver>>,
 }
 
 impl UnifiedAgent {
-    pub fn new(llm_client: Option<LlmClient>) -> Self {
+    pub fn new(
+        llm_client: Option<LlmClient>,
+        chat_llm_client: Option<LlmClient>,
+        search_llm_client: Option<LlmClient>,
+    ) -> Self {
         Self {
             llm_client,
+            chat_llm_client,
+            search_llm_client,
             rag_runtime: None,
             search_executor: None,
             chat_persistence: None,
+            usage_observer: None,
         }
     }
 
@@ -57,6 +68,11 @@ impl UnifiedAgent {
 
     pub fn with_search_executor(mut self, executor: Option<Arc<dyn SearchProvider>>) -> Self {
         self.search_executor = executor;
+        self
+    }
+
+    pub fn with_usage_observer(mut self, observer: Arc<dyn UsageObserver>) -> Self {
+        self.usage_observer = Some(observer);
         self
     }
 }
@@ -110,6 +126,21 @@ impl Agent for UnifiedAgent {
             })
             .await;
 
+        let tenant = TenantContext {
+            org_id: request
+                .auth_context
+                .get("org_id")
+                .and_then(|v| v.as_str())
+                .and_then(|s| Uuid::parse_str(s).ok())
+                .unwrap_or_else(Uuid::nil),
+            user_id: request
+                .auth_context
+                .get("actor_id")
+                .and_then(|v| v.as_str())
+                .and_then(|s| Uuid::parse_str(s).ok())
+                .unwrap_or_else(Uuid::nil),
+        };
+
         match request.kind {
             crate::agents::AgentKind::Chat => {
                 let _ = sink
@@ -131,8 +162,18 @@ impl Agent for UnifiedAgent {
                         return Err(e);
                     }
                 };
-                let llm = match self.llm_client.clone() {
-                    Some(client) => Arc::new(client),
+                let llm = match self.chat_llm_client
+                    .clone()
+                    .or_else(|| self.llm_client.clone())
+                {
+                    Some(client) => {
+                        let client = if let Some(ref observer) = self.usage_observer {
+                            client.with_observer(observer.clone(), tenant.clone())
+                        } else {
+                            client
+                        };
+                        Arc::new(client)
+                    }
                     None => {
                         let _ = sink
                             .emit(AgentEvent::Error {
@@ -166,7 +207,13 @@ impl Agent for UnifiedAgent {
                 }
 
                 let rag = match self.rag_runtime.clone() {
-                    Some(rag) => rag,
+                    Some(rag) => {
+                        // Clone the inner runtime (all fields are Arc-backed, so
+                        // cheap) and attach the per-request tenant identity so the
+                        // agent-loop retrieval tools (dense/graph) meter their
+                        // embedding calls via the configured usage_observer.
+                        Arc::new((*rag).clone().with_tenant(tenant.clone()))
+                    }
                     None => {
                         let _ = sink
                             .emit(AgentEvent::Error {
@@ -194,7 +241,14 @@ impl Agent for UnifiedAgent {
                     }
                 };
                 let llm = match self.llm_client.clone() {
-                    Some(client) => Arc::new(client),
+                    Some(client) => {
+                        let client = if let Some(ref observer) = self.usage_observer {
+                            client.with_observer(observer.clone(), tenant.clone())
+                        } else {
+                            client
+                        };
+                        Arc::new(client)
+                    }
                     None => {
                         let _ = sink
                             .emit(AgentEvent::Error {
@@ -240,8 +294,18 @@ impl Agent for UnifiedAgent {
                         return Err(e);
                     }
                 };
-                let llm = match self.llm_client.clone() {
-                    Some(client) => Arc::new(client),
+                let llm = match self.search_llm_client
+                    .clone()
+                    .or_else(|| self.llm_client.clone())
+                {
+                    Some(client) => {
+                        let client = if let Some(ref observer) = self.usage_observer {
+                            client.with_observer(observer.clone(), tenant.clone())
+                        } else {
+                            client
+                        };
+                        Arc::new(client)
+                    }
                     None => {
                         let _ = sink
                             .emit(AgentEvent::Error {
@@ -261,6 +325,10 @@ impl Agent for UnifiedAgent {
                 result.routing_decision = Some(mode_id.clone());
                 Ok(result)
             }
+            crate::agents::AgentKind::Write => Err(AppError::validation(
+                "write_mode_not_implemented",
+                "Write mode is not yet implemented",
+            )),
         }
     }
 }
@@ -287,7 +355,7 @@ mod tests {
     #[test]
     fn test_unified_agent_builder() {
         let llm = dummy_llm();
-        let agent = UnifiedAgent::new(Some(llm.clone()))
+        let agent = UnifiedAgent::new(Some(llm.clone()), None, None)
             .with_rag_runtime(None)
             .with_search_executor(None);
         assert!(agent.llm_client.is_some());

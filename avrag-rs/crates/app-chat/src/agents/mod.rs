@@ -6,6 +6,7 @@ pub enum AgentKind {
     Chat,
     Rag,
     Search,
+    Write,
 }
 
 impl fmt::Display for AgentKind {
@@ -14,6 +15,7 @@ impl fmt::Display for AgentKind {
             AgentKind::Chat => write!(f, "chat"),
             AgentKind::Rag => write!(f, "rag"),
             AgentKind::Search => write!(f, "search"),
+            AgentKind::Write => write!(f, "write"),
         }
     }
 }
@@ -25,6 +27,7 @@ impl AgentKind {
             "chat" | "general" => Some(AgentKind::Chat),
             "rag" => Some(AgentKind::Rag),
             "search" => Some(AgentKind::Search),
+            "write" => Some(AgentKind::Write),
             _ => None,
         }
     }
@@ -35,6 +38,7 @@ impl AgentKind {
             AgentKind::Chat => "chat",
             AgentKind::Rag => "rag",
             AgentKind::Search => "search",
+            AgentKind::Write => "write",
         }
     }
 }
@@ -88,6 +92,12 @@ mod tests {
     }
 
     #[test]
+    fn test_agent_kind_parse_write() {
+        assert_eq!(AgentKind::parse("write"), Some(AgentKind::Write));
+        assert_eq!(AgentKind::parse("WRITE"), Some(AgentKind::Write));
+    }
+
+    #[test]
     fn test_agent_kind_parse_unknown() {
         assert_eq!(AgentKind::parse("unknown"), None);
         assert_eq!(AgentKind::parse(""), None);
@@ -98,6 +108,7 @@ mod tests {
         assert_eq!(AgentKind::Chat.as_canonical_str(), "chat");
         assert_eq!(AgentKind::Rag.as_canonical_str(), "rag");
         assert_eq!(AgentKind::Search.as_canonical_str(), "search");
+        assert_eq!(AgentKind::Write.as_canonical_str(), "write");
     }
 
     #[test]
@@ -105,11 +116,17 @@ mod tests {
         assert_eq!(AgentKind::Chat.to_string(), "chat");
         assert_eq!(AgentKind::Rag.to_string(), "rag");
         assert_eq!(AgentKind::Search.to_string(), "search");
+        assert_eq!(AgentKind::Write.to_string(), "write");
     }
 
     #[test]
     fn test_agent_kind_serde_roundtrip() {
-        for kind in [AgentKind::Chat, AgentKind::Rag, AgentKind::Search] {
+        for kind in [
+            AgentKind::Chat,
+            AgentKind::Rag,
+            AgentKind::Search,
+            AgentKind::Write,
+        ] {
             let json = serde_json::to_string(&kind).unwrap();
             let parsed: AgentKind = serde_json::from_str(&json).unwrap();
             assert_eq!(kind, parsed);

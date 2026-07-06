@@ -53,6 +53,9 @@ pub(crate) async fn dispatch_mode(
         Some(crate::agents::AgentKind::Rag) => {
             run_rag_mode(state, request, session, stream_config).await
         }
+        Some(crate::agents::AgentKind::Write) => {
+            crate::writer::run_write_mode(state, request, session, stream_config).await
+        }
     }
 }
 
@@ -348,7 +351,7 @@ async fn run_rag_mode(
 /// Extract `DebugTrace` events from a `CollectingSink` and attach them to
 /// `execution.debug_metadata` as `{"agent_debug_trace": [...]}`.
 /// Used by the non-streaming branches of general and search modes.
-fn attach_debug_trace_from_sink(
+pub(crate) fn attach_debug_trace_from_sink(
     execution: &mut ChatExecution,
     sink: &crate::agents::events::CollectingSink,
 ) {

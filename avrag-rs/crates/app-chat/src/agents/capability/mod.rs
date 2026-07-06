@@ -23,4 +23,7 @@ pub use policy::{
 };
 pub use registry::CapabilityRegistry;
 
-pub use schemas::{chat_mode_schema, rag_mode_schema, search_mode_schema, standard_mode_schemas};
+pub use schemas::{
+    chat_mode_schema, rag_mode_schema, search_mode_schema, standard_mode_schemas,
+    write_mode_schema,
+};

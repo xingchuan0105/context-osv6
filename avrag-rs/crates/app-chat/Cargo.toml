@@ -29,6 +29,7 @@ avrag-search = { path = "../search" }
 chrono.workspace = true
 common = { path = "../common" }
 contracts = { path = "../../../contracts" }
+heavytail = { path = "../heavytail" }
 evalexpr.workspace = true
 futures = "0.3"
 regex.workspace = true

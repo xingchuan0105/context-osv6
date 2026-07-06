@@ -16,6 +16,7 @@ pub mod rag_execute;
 pub mod rag_prompts;
 pub mod sessions;
 pub mod token_budget;
+pub mod writer;
 
 mod chat_service;
 mod external_agent_guide;
