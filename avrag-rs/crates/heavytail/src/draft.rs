@@ -14,6 +14,8 @@ pub const PRIMING: &str = "\
 长短交错；不避 10 字以内的极短句；偶用 50 字以上的复合长句；\
 少用高频套话；优先具体名词、数字与术语。";
 
+const PLAIN_SYSTEM: &str = "你是中文长文写作助手。按任务要求输出自然流畅的正文。";
+
 const SHORT_SENTENCE_CHARS: usize = 10;
 const LONG_SENTENCE_CHARS: usize = 50;
 const MAX_DEFICIT_HINTS: usize = 3;
@@ -80,7 +82,11 @@ pub fn deficit_hints(
     hints
 }
 
-/// Draft each skeleton section sequentially; `mpc` toggles deficit hints (M3 arm a vs b).
+/// Draft each skeleton section sequentially.
+///
+/// - `mpc`: deficit hints (M3 arm a vs b)
+/// - `primed`: style priming in system prompt (arm a = false, arm b = true)
+/// - `one_sentence_per_line`: R4 line-per-sentence drafting variant on arm b
 pub async fn draft_sections(
     llm: &WriterLlm,
     skeleton: &Skeleton,
@@ -88,6 +94,8 @@ pub async fn draft_sections(
     cards: &[MaterialCard],
     ws: &mut DraftWorkspace,
     mpc: bool,
+    primed: bool,
+    one_sentence_per_line: bool,
 ) -> Result<()> {
     let card_map: std::collections::BTreeMap<&str, &MaterialCard> =
         cards.iter().map(|c| (c.id.as_str(), c)).collect();
@@ -108,10 +116,12 @@ pub async fn draft_sections(
             } else {
                 Vec::new()
             },
+            one_sentence_per_line,
         );
 
+        let system = if primed { PROMPT_SYSTEM } else { PLAIN_SYSTEM };
         let prose = llm
-            .prose(PROMPT_SYSTEM, &user, 0.7)
+            .prose(system, &user, 0.7)
             .await
             .with_context(|| format!("draft section {} ({})", idx + 1, section.heading))?;
 
@@ -158,6 +168,7 @@ fn build_section_brief(
     prior_prose: &[String],
     cards: &std::collections::BTreeMap<&str, &MaterialCard>,
     deficit: Vec<String>,
+    one_sentence_per_line: bool,
 ) -> String {
     let skeleton_json =
         serde_json::to_string_pretty(skeleton).unwrap_or_else(|_| "{}".to_string());
@@ -232,6 +243,9 @@ fn build_section_brief(
         "\n请直接输出本节正文（自由散文，不要标题、不要句子编号、不要 markdown）。\
          按段落用空行分隔；每句以 。！？ 之一结尾。",
     );
+    if one_sentence_per_line {
+        task.push_str(" 每句单独占一行（一行一句）。");
+    }
 
     format!("{context}{task}")
 }
@@ -363,6 +377,8 @@ mod tests {
             &[],
             &mut ws,
             true,
+            true,
+            false,
         )
         .await
         .expect("draft_sections");

@@ -1,11 +1,158 @@
 //! Arm-C feedforward generator: AR(1) length schedule and v1 §7 Phase A briefs.
 
+use anyhow::{Context, Result};
 use rand::RngCore;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
+use crate::llm::WriterLlm;
+use crate::metrics::analyze_sentences;
 use crate::score::{L_MAX, L_MIN};
+use crate::skeleton::{Skeleton, SkeletonSection};
+use crate::workspace::{DraftWorkspace, RhythmMode};
 use crate::StyleParams;
+
+const FEEDFORWARD_SYSTEM: &str = "\
+你是中文长文写作助手。严格按段落任务中的逐句长度与内容意图写作，\
+保持语义连贯，输出自然流畅的正文。";
+
+/// Open-loop arm-C drafting: one LLM call per paragraph using v1 §7 briefs.
+pub async fn draft_feedforward(
+    llm: &WriterLlm,
+    topic: &str,
+    skeleton: &Skeleton,
+    style: &StyleParams,
+    ws: &mut DraftWorkspace,
+    seed: u64,
+) -> Result<()> {
+    let mut accumulated = String::new();
+    let mut paragraph_idx = 0usize;
+
+    for (section_idx, section) in skeleton.sections.iter().enumerate() {
+        let paragraphs = section_paragraph_plans(section);
+        for (para_in_section, rhythm) in paragraphs.into_iter().enumerate() {
+            paragraph_idx += 1;
+            let sentence_count = estimate_sentence_count(section, paragraphs_len(section));
+            let schedule = ar1_schedule(
+                sentence_count,
+                style,
+                seed
+                    .wrapping_add(section_idx as u64 * 1_000)
+                    .wrapping_add(para_in_section as u64 * 17),
+            );
+            let sentences = schedule
+                .into_iter()
+                .enumerate()
+                .map(|(i, target_length)| FeedforwardSentence {
+                    target_length,
+                    content_intent: if i == 0 {
+                        format!("围绕「{}」展开", section.heading)
+                    } else {
+                        "承接上文，推进论述".to_string()
+                    },
+                    rare_words: vec![],
+                })
+                .collect::<Vec<_>>();
+
+            let brief = feedforward_brief(topic, paragraph_idx, &accumulated, &sentences);
+            let prose = llm
+                .prose(FEEDFORWARD_SYSTEM, &brief, 0.7)
+                .await
+                .with_context(|| {
+                    format!(
+                        "feedforward paragraph {paragraph_idx} (section {})",
+                        section_idx + 1
+                    )
+                })?;
+
+            ws.append_section(prose.trim(), &[rhythm]);
+            accumulated = ws.render_plain();
+        }
+    }
+
+    Ok(())
+}
+
+fn section_paragraph_plans(section: &SkeletonSection) -> Vec<RhythmMode> {
+    if section.paragraphs.is_empty() {
+        vec![RhythmMode::Mixed]
+    } else {
+        section.paragraphs.iter().map(|p| p.rhythm).collect()
+    }
+}
+
+fn paragraphs_len(section: &SkeletonSection) -> usize {
+    section.paragraphs.len().max(1)
+}
+
+fn estimate_sentence_count(section: &SkeletonSection, num_paragraphs: usize) -> usize {
+    let per_para = section.target_chars / num_paragraphs.max(1);
+    (per_para / 20).clamp(3, 8)
+}
+
+/// Count planned LLM calls for dry-run reporting.
+pub fn count_feedforward_calls(skeleton: &Skeleton) -> usize {
+    skeleton
+        .sections
+        .iter()
+        .map(|s| paragraphs_len(s))
+        .sum()
+}
+
+/// Count planned LLM calls for skeleton + section drafting.
+pub fn count_section_draft_calls(skeleton: &Skeleton) -> usize {
+    skeleton.sections.len()
+}
+
+/// Build a deterministic skeleton placeholder for dry-run (no LLM).
+pub fn stub_skeleton(topic: &str, target_chars: usize) -> Skeleton {
+    Skeleton {
+        title: topic.to_string(),
+        sections: vec![
+            SkeletonSection {
+                heading: "引言".into(),
+                key_points: vec!["背景".into(), "问题".into()],
+                card_refs: vec![],
+                target_chars: target_chars / 3,
+                paragraphs: vec![crate::skeleton::ParagraphPlan {
+                    rhythm: RhythmMode::Mixed,
+                }],
+            },
+            SkeletonSection {
+                heading: "主体".into(),
+                key_points: vec!["分析".into(), "案例".into()],
+                card_refs: vec![],
+                target_chars: target_chars / 3,
+                paragraphs: vec![
+                    crate::skeleton::ParagraphPlan {
+                        rhythm: RhythmMode::ShortBurst,
+                    },
+                    crate::skeleton::ParagraphPlan {
+                        rhythm: RhythmMode::LongFlow,
+                    },
+                ],
+            },
+            SkeletonSection {
+                heading: "结语".into(),
+                key_points: vec!["总结".into()],
+                card_refs: vec![],
+                target_chars: target_chars / 3,
+                paragraphs: vec![crate::skeleton::ParagraphPlan {
+                    rhythm: RhythmMode::Mixed,
+                }],
+            },
+        ],
+    }
+}
+
+/// Fingerprint a finished draft workspace.
+pub fn fingerprint_workspace(ws: &DraftWorkspace) -> crate::metrics::FingerprintReport {
+    let sentences: Vec<(String, usize)> = ws
+        .live()
+        .map(|s| (s.text.clone(), s.para))
+        .collect();
+    analyze_sentences(&sentences)
+}
 
 /// One sentence slot in a feedforward paragraph brief (v1 §7).
 #[derive(Debug, Clone, PartialEq, Eq)]

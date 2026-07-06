@@ -16,6 +16,7 @@ pub mod feedforward;
 pub mod compiler;
 pub mod refine;
 pub mod validator;
+pub mod experiment;
 
 /// Carried from v1 spec unchanged (spec §12).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
