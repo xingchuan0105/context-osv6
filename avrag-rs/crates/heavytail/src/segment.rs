@@ -226,6 +226,63 @@ fn split_paragraph(text: &str, para_idx: usize, semicolon_splits: bool) -> Vec<R
     out
 }
 
+/// True when `text` is exactly one sentence: one terminal `。！？!?` at the end and
+/// none mid-line outside quoted spans (patch grammar, spec §5.3).
+pub fn is_single_sentence(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    let chars: Vec<char> = trimmed.chars().collect();
+    let mut quote_stack: Vec<char> = Vec::new();
+    let mut terminator_count = 0usize;
+    let mut last_terminator_end = 0usize;
+
+    let mut i = 0usize;
+    while i < chars.len() {
+        let c = chars[i];
+
+        if is_opener(c) {
+            quote_stack.push(c);
+            i += 1;
+            continue;
+        }
+
+        if is_closer(c) {
+            if quote_stack
+                .last()
+                .and_then(|&op| matching_closer(op))
+                .is_some_and(|cl| cl == c)
+            {
+                quote_stack.pop();
+            }
+            i += 1;
+            continue;
+        }
+
+        if at_ellipsis(&chars, i) {
+            i = skip_ellipsis(&chars, i);
+            continue;
+        }
+
+        if is_sentence_terminator(c, false) {
+            if !quote_stack.is_empty() {
+                i += 1;
+                continue;
+            }
+            terminator_count += 1;
+            last_terminator_end = absorb_trailing_closers(&chars, i + 1);
+            i = last_terminator_end;
+            continue;
+        }
+
+        i += 1;
+    }
+
+    terminator_count == 1 && last_terminator_end == chars.len()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,5 +353,22 @@ mod tests {
     fn semicolon_not_split_by_default() {
         let sents = split_sentences("甲；乙。", false);
         assert_eq!(sents.len(), 1);
+    }
+
+    #[test]
+    fn is_single_sentence_accepts_quote_internal_period() {
+        assert!(is_single_sentence(
+            "这是\u{201c}一半。继续\u{201d}的测试。"
+        ));
+    }
+
+    #[test]
+    fn is_single_sentence_rejects_two_sentences() {
+        assert!(!is_single_sentence("第一句。第二句。"));
+    }
+
+    #[test]
+    fn is_single_sentence_requires_terminal_punct() {
+        assert!(!is_single_sentence("没有句号"));
     }
 }
