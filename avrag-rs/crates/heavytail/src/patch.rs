@@ -6,7 +6,7 @@ use crate::segment::is_single_sentence;
 use crate::workspace::{DraftWorkspace, SentenceId, SentenceRecord};
 
 /// IDs permitted in a refinement patch for one round.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AllowSet {
     /// EXTEND/REWRITE/PROMOTE targets and MERGE keep-id.
     pub replace: BTreeSet<SentenceId>,
