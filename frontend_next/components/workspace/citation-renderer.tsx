@@ -1,7 +1,5 @@
 "use client";
 
-import DOMPurify, { type Config as DOMPurifyConfig } from "dompurify";
-
 import type {
   WorkspaceCitationAnchor,
   WorkspaceWebSourcesRequest,
@@ -13,54 +11,10 @@ import {
 } from "../../lib/workspace/stream";
 import { toSafeHttpUrl } from "../../lib/url/isSafeHttpUrl";
 import { markdownToInlineHtml, markdownToRichTextHtml } from "./workspace-note-rich-text";
+import { sanitizeWorkspaceHtml } from "./workspace-html-sanitize";
 import styles from "./workspace-chat.module.css";
 import type { UiChatMessage } from "../../hooks/use-chat-session";
 import { ToolResultsPanel } from "./tool-result-card";
-
-const WORKSPACE_HTML_SANITIZE_CONFIG = {
-  ALLOWED_TAGS: [
-    "a",
-    "blockquote",
-    "br",
-    "button",
-    "code",
-    "em",
-    "h1",
-    "h2",
-    "h3",
-    "input",
-    "li",
-    "ol",
-    "p",
-    "pre",
-    "span",
-    "strong",
-    "table",
-    "tbody",
-    "td",
-    "th",
-    "thead",
-    "tr",
-    "ul",
-  ],
-  ALLOWED_ATTR: [
-    "aria-label",
-    "checked",
-    "class",
-    "data-inline-citation-token-index",
-    "data-testid",
-    "disabled",
-    "href",
-    "rel",
-    "target",
-    "type",
-  ],
-  ALLOW_DATA_ATTR: false,
-};
-
-function sanitizeWorkspaceHtml(html: string) {
-  return DOMPurify.sanitize(html, WORKSPACE_HTML_SANITIZE_CONFIG);
-}
 
 function getCitationLabel(citation: Citation, index: number) {
   return citation.doc_name.trim().length > 0 ? citation.doc_name : `Source ${index + 1}`;

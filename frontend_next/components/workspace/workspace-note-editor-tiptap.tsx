@@ -8,6 +8,7 @@ import { Markdown } from "@tiptap/markdown";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 
+import { sanitizeWorkspaceHtml } from "./workspace-html-sanitize";
 import styles from "./workspace-right-rail.module.css";
 
 type EditorBlockStyle = "p" | "h1" | "h2";
@@ -45,15 +46,6 @@ type WorkspaceNoteEditorTiptapProps = {
 
 type EditorInstance = NonNullable<ReturnType<typeof useEditor>>;
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 function normalizeLinkHref(value: string) {
   if (!value.trim()) {
     return "";
@@ -70,20 +62,6 @@ function isLikelyUrl(value: string) {
   return /^(https?:\/\/|mailto:|tel:|www\.)\S+$/i.test(value.trim());
 }
 
-function sanitizePastedHref(value: string) {
-  const href = value.trim();
-
-  if (!href) {
-    return "";
-  }
-
-  if (/^(https?:\/\/|mailto:|tel:)/i.test(href) || href.startsWith("/") || href.startsWith("#")) {
-    return href;
-  }
-
-  return "";
-}
-
 function plainTextToHtml(value: string) {
   const normalized = value.replace(/\r\n?/g, "\n").trim();
 
@@ -91,65 +69,18 @@ function plainTextToHtml(value: string) {
     return "";
   }
 
+  const escapeHtml = (s: string) =>
+    s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
   return normalized
     .split(/\n{2,}/)
     .map((paragraph) => `<p>${paragraph.split("\n").map((line) => escapeHtml(line)).join("<br>")}</p>`)
     .join("");
-}
-
-function sanitizePastedNode(node: Node): string {
-  if (node.nodeType === Node.TEXT_NODE) {
-    return escapeHtml(node.textContent ?? "");
-  }
-
-  if (!(node instanceof HTMLElement)) {
-    return "";
-  }
-
-  const tag = node.tagName.toLowerCase();
-  const content = Array.from(node.childNodes).map(sanitizePastedNode).join("");
-
-  if (tag === "br") {
-    return "<br>";
-  }
-
-  if (tag === "strong" || tag === "b") {
-    return content ? `<strong>${content}</strong>` : "";
-  }
-
-  if (tag === "em" || tag === "i") {
-    return content ? `<em>${content}</em>` : "";
-  }
-
-  if (tag === "a") {
-    const href = sanitizePastedHref(node.getAttribute("href") ?? "");
-    return href ? `<a href="${escapeHtml(href)}">${content || escapeHtml(href)}</a>` : content;
-  }
-
-  if (tag === "p" || tag === "h1" || tag === "h2") {
-    return content.trim() ? `<${tag}>${content}</${tag}>` : "";
-  }
-
-  if (tag === "ul" || tag === "ol") {
-    return content.trim() ? `<${tag}>${content}</${tag}>` : "";
-  }
-
-  if (tag === "li") {
-    return content.trim() ? `<li>${content}</li>` : "";
-  }
-
-  if (tag === "div" || tag === "section" || tag === "article" || tag === "main") {
-    return content;
-  }
-
-  return content;
-}
-
-function sanitizePastedHtml(value: string) {
-  const documentFragment = new DOMParser().parseFromString(value, "text/html");
-  const sanitized = Array.from(documentFragment.body.childNodes).map(sanitizePastedNode).join("");
-
-  return sanitized.trim() ? sanitized : plainTextToHtml(documentFragment.body.textContent ?? "");
 }
 
 function resolveBlockStyle(editor: ReturnType<typeof useEditor>): EditorBlockStyle {
@@ -337,9 +268,9 @@ export function WorkspaceNoteEditorTiptap({
         }
 
         if (html.trim()) {
-          const sanitizedHtml = sanitizePastedHtml(html);
+          const sanitizedHtml = sanitizeWorkspaceHtml(html);
 
-          if (sanitizedHtml) {
+          if (sanitizedHtml.trim()) {
             event.preventDefault();
             nextEditor.commands.insertContent(sanitizedHtml, { contentType: "html" });
             syncToolbarState(nextEditor);
