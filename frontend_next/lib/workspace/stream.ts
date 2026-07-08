@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { fetchResponse } from "../http/request";
 import type {
   AnswerBlock,
@@ -121,6 +122,105 @@ function parseSourcePreview(item: unknown): ProgressSourcePreview {
   };
 }
 
+const strField = z.unknown().transform((v) => (v == null ? "" : String(v)));
+const numField = z.unknown().transform((v) => {
+  const n = Number(v);
+  return Number.isNaN(n) ? 0 : n;
+});
+const optStrField = z.unknown().transform((v) => (v == null ? null : String(v)));
+
+const CHAT_EVENT_SCHEMAS: Record<string, z.ZodType> = {
+  start: z.object({
+    event: z.literal("start"),
+    request_id: strField,
+    session_id: strField,
+  }),
+  activity: z.object({
+    event: z.literal("activity"),
+    request_id: strField,
+    phase: strField,
+    title: strField,
+    detail: optStrField,
+    counts: z
+      .record(z.string(), z.unknown())
+      .default({})
+      .transform((obj) =>
+        Object.fromEntries(
+          Object.entries(obj).map(([key, value]) => [key, Number(value ?? 0)]),
+        ),
+      ),
+    sources_preview: z
+      .array(z.unknown())
+      .default([])
+      .transform((arr) => arr.map(parseSourcePreview)),
+    timestamp: optStrField,
+  }),
+  answer_start: z.object({
+    event: z.literal("answer_start"),
+    request_id: strField,
+    session_id: strField,
+    message_id: numField,
+    agent_type: strField,
+  }),
+  trace: z.object({
+    event: z.literal("trace"),
+    request_id: strField,
+    stage: strField,
+    status: strField,
+    detail: z.unknown().transform((v) => (v ?? null)),
+  }),
+  token: z.object({
+    event: z.literal("token"),
+    request_id: strField,
+    message_id: numField,
+    content: strField,
+  }),
+  reasoning_summary_delta: z
+    .object({
+      event: z.literal("reasoning_summary_delta"),
+      request_id: strField,
+      message_id: numField,
+      content: z.unknown(),
+      summary: z.unknown().optional(),
+    })
+    .transform((data) => ({
+      event: data.event,
+      request_id: data.request_id,
+      message_id: data.message_id,
+      content: String(data.content ?? data.summary ?? ""),
+    })),
+  citations: z.object({
+    event: z.literal("citations"),
+    request_id: strField,
+    message_id: numField,
+    citations: z
+      .array(z.unknown())
+      .default([])
+      .transform((arr) =>
+        arr
+          .map(parseCitation)
+          .filter((c): c is Citation => c !== null),
+      ),
+  }),
+  done: z.object({
+    event: z.literal("done"),
+    request_id: strField,
+    session_id: strField,
+    message_id: numField,
+    payload: z
+      .unknown()
+      .transform((v) =>
+        typeof v === "object" && v !== null ? (v as Record<string, unknown>) : {},
+      ),
+  }),
+  error: z.object({
+    event: z.literal("error"),
+    request_id: strField,
+    code: strField,
+    message: strField,
+  }),
+};
+
 /** Parse SSE `data` JSON into the generated wire {@link ChatEvent} shape. */
 export function parseWireChatEvent(eventName: string, dataText: string): ChatEvent | null {
   if (!eventName || !dataText.trim()) {
@@ -149,99 +249,24 @@ export function parseWireChatEvent(eventName: string, dataText: string): ChatEve
     return null;
   }
 
-  switch (eventName as ChatEvent["event"]) {
-    case "start":
-      return {
-        event: "start",
-        request_id: String(raw.request_id ?? ""),
-        session_id: String(raw.session_id ?? ""),
-      };
-    case "activity":
-      return {
-        event: "activity",
-        request_id: String(raw.request_id ?? ""),
-        phase: String(raw.phase ?? ""),
-        title: String(raw.title ?? ""),
-        detail: raw.detail == null ? null : String(raw.detail),
-        counts:
-          typeof raw.counts === "object" && raw.counts !== null
-            ? Object.fromEntries(
-                Object.entries(raw.counts as Record<string, unknown>).map(([key, value]) => [
-                  key,
-                  Number(value ?? 0),
-                ]),
-              )
-            : {},
-        sources_preview: Array.isArray(raw.sources_preview)
-          ? raw.sources_preview.map(parseSourcePreview)
-          : [],
-        timestamp: raw.timestamp == null ? null : String(raw.timestamp),
-      };
-    case "answer_start":
-      return {
-        event: "answer_start",
-        request_id: String(raw.request_id ?? ""),
-        session_id: String(raw.session_id ?? ""),
-        message_id: Number(raw.message_id ?? 0),
-        agent_type: String(raw.agent_type ?? ""),
-      };
-    case "trace":
-      return {
-        event: "trace",
-        request_id: String(raw.request_id ?? ""),
-        stage: String(raw.stage ?? ""),
-        status: String(raw.status ?? ""),
-        detail: raw.detail ?? null,
-      };
-    case "token":
-      return {
-        event: "token",
-        request_id: String(raw.request_id ?? ""),
-        message_id: Number(raw.message_id ?? 0),
-        content: String(raw.content ?? ""),
-      };
-    case "reasoning_summary_delta":
-      return {
-        event: "reasoning_summary_delta",
-        request_id: String(raw.request_id ?? ""),
-        message_id: Number(raw.message_id ?? 0),
-        content: String(raw.content ?? raw.summary ?? ""),
-      };
-    case "citations": {
-      const citations = Array.isArray(raw.citations)
-        ? raw.citations
-            .map(parseCitation)
-            .filter((citation): citation is Citation => citation !== null)
-        : [];
-
-      return {
-        event: "citations",
-        request_id: String(raw.request_id ?? ""),
-        message_id: Number(raw.message_id ?? 0),
-        citations: citations as unknown as Array<Record<string, unknown>>,
-      };
-    }
-    case "done":
-      return {
-        event: "done",
-        request_id: String(raw.request_id ?? ""),
-        session_id: String(raw.session_id ?? ""),
-        message_id: Number(raw.message_id ?? 0),
-        payload:
-          typeof raw.payload === "object" && raw.payload !== null
-            ? (raw.payload as Record<string, unknown>)
-            : {},
-      };
-    case "error":
-      return {
-        event: "error",
-        request_id: String(raw.request_id ?? ""),
-        code: String(raw.code ?? ""),
-        message: String(raw.message ?? ""),
-      };
-    default:
-      return null;
+  if (typeof raw.event !== "string") {
+    raw.event = eventName;
   }
+
+  const schema = CHAT_EVENT_SCHEMAS[eventName as ChatEvent["event"]];
+  if (!schema) {
+    return null;
+  }
+
+  const result = schema.safeParse(raw);
+  if (!result.success) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("parseWireChatEvent: schema validation failed", result.error.issues);
+    }
+    return null;
+  }
+
+  return result.data as ChatEvent;
 }
 
 /** Normalize wire citation records into UI {@link Citation} objects. */
