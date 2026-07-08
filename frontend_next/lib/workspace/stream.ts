@@ -36,18 +36,6 @@ export type ProgressSourcePreview = ChatActivitySourcePreview;
 /** Stream events consumed by chat reducers (same shape as wire {@link ChatEvent}). */
 export type WorkspaceChatStreamEvent = ChatEvent;
 
-const CHAT_EVENT_NAMES = new Set<ChatEvent["event"]>([
-  "start",
-  "activity",
-  "answer_start",
-  "trace",
-  "token",
-  "reasoning_summary_delta",
-  "citations",
-  "done",
-  "error",
-]);
-
 function parseSourceLocator(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     if (process.env.NODE_ENV !== "production" && value != null) {
@@ -129,13 +117,13 @@ const numField = z.unknown().transform((v) => {
 });
 const optStrField = z.unknown().transform((v) => (v == null ? null : String(v)));
 
-const CHAT_EVENT_SCHEMAS: Record<string, z.ZodType> = {
-  start: z.object({
+const CHAT_EVENT_SCHEMA = z.discriminatedUnion("event", [
+  z.object({
     event: z.literal("start"),
     request_id: strField,
     session_id: strField,
   }),
-  activity: z.object({
+  z.object({
     event: z.literal("activity"),
     request_id: strField,
     phase: strField,
@@ -155,27 +143,27 @@ const CHAT_EVENT_SCHEMAS: Record<string, z.ZodType> = {
       .transform((arr) => arr.map(parseSourcePreview)),
     timestamp: optStrField,
   }),
-  answer_start: z.object({
+  z.object({
     event: z.literal("answer_start"),
     request_id: strField,
     session_id: strField,
     message_id: numField,
     agent_type: strField,
   }),
-  trace: z.object({
+  z.object({
     event: z.literal("trace"),
     request_id: strField,
     stage: strField,
     status: strField,
     detail: z.unknown().transform((v) => (v ?? null)),
   }),
-  token: z.object({
+  z.object({
     event: z.literal("token"),
     request_id: strField,
     message_id: numField,
     content: strField,
   }),
-  reasoning_summary_delta: z
+  z
     .object({
       event: z.literal("reasoning_summary_delta"),
       request_id: strField,
@@ -189,7 +177,7 @@ const CHAT_EVENT_SCHEMAS: Record<string, z.ZodType> = {
       message_id: data.message_id,
       content: String(data.content ?? data.summary ?? ""),
     })),
-  citations: z.object({
+  z.object({
     event: z.literal("citations"),
     request_id: strField,
     message_id: numField,
@@ -199,10 +187,11 @@ const CHAT_EVENT_SCHEMAS: Record<string, z.ZodType> = {
       .transform((arr) =>
         arr
           .map(parseCitation)
-          .filter((c): c is Citation => c !== null),
+          .filter((c): c is Citation => c !== null)
+          .map((c) => ({ ...c }) as Record<string, unknown>),
       ),
   }),
-  done: z.object({
+  z.object({
     event: z.literal("done"),
     request_id: strField,
     session_id: strField,
@@ -213,21 +202,17 @@ const CHAT_EVENT_SCHEMAS: Record<string, z.ZodType> = {
         typeof v === "object" && v !== null ? (v as Record<string, unknown>) : {},
       ),
   }),
-  error: z.object({
+  z.object({
     event: z.literal("error"),
     request_id: strField,
     code: strField,
     message: strField,
   }),
-};
+]);
 
 /** Parse SSE `data` JSON into the generated wire {@link ChatEvent} shape. */
 export function parseWireChatEvent(eventName: string, dataText: string): ChatEvent | null {
   if (!eventName || !dataText.trim()) {
-    return null;
-  }
-
-  if (!CHAT_EVENT_NAMES.has(eventName as ChatEvent["event"])) {
     return null;
   }
 
@@ -244,21 +229,9 @@ export function parseWireChatEvent(eventName: string, dataText: string): ChatEve
   }
 
   const raw = parsed as Record<string, unknown>;
+  raw.event = eventName;
 
-  if (typeof raw.event === "string" && raw.event !== eventName) {
-    return null;
-  }
-
-  if (typeof raw.event !== "string") {
-    raw.event = eventName;
-  }
-
-  const schema = CHAT_EVENT_SCHEMAS[eventName as ChatEvent["event"]];
-  if (!schema) {
-    return null;
-  }
-
-  const result = schema.safeParse(raw);
+  const result = CHAT_EVENT_SCHEMA.safeParse(raw);
   if (!result.success) {
     if (process.env.NODE_ENV !== "production") {
       console.warn("parseWireChatEvent: schema validation failed", result.error.issues);
@@ -266,7 +239,7 @@ export function parseWireChatEvent(eventName: string, dataText: string): ChatEve
     return null;
   }
 
-  return result.data as ChatEvent;
+  return result.data;
 }
 
 /** Normalize wire citation records into UI {@link Citation} objects. */

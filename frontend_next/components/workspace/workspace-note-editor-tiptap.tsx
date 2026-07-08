@@ -9,7 +9,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 
 import { sanitizeWorkspaceHtml } from "./workspace-html-sanitize";
-import styles from "./workspace-right-rail.module.css";
+import styles from "./workspace-note-editor.module.css";
 
 type EditorBlockStyle = "p" | "h1" | "h2";
 
