@@ -30,9 +30,4 @@ if [ "$SECONDS" -ge "$deadline" ]; then
   exit 1
 fi
 
-echo "[e2e-precheck] cleaning orphaned E2E containers..."
-docker ps -a --filter name=avrag-test-pg --format '{{.Names}}' | xargs -r docker rm -f
-docker ps -a --filter name=avrag-test-milvus --format '{{.Names}}' | xargs -r docker rm -f
-docker ps -a --filter name=avrag-test-redis --format '{{.Names}}' | xargs -r docker rm -f
-
 echo "[e2e-precheck] OK"

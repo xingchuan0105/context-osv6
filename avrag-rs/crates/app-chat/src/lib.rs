@@ -15,6 +15,7 @@ pub mod prompts;
 pub mod rag_execute;
 pub mod rag_prompts;
 pub mod sessions;
+#[cfg(any(test, feature = "dev-tools"))]
 pub mod token_budget;
 pub mod writer;
 

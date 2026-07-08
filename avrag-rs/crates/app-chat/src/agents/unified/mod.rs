@@ -325,10 +325,7 @@ impl Agent for UnifiedAgent {
                 result.routing_decision = Some(mode_id.clone());
                 Ok(result)
             }
-            crate::agents::AgentKind::Write => Err(AppError::validation(
-                "write_mode_not_implemented",
-                "Write mode is not yet implemented",
-            )),
+            _ => Err(AppError::internal("agent kind not handled by UnifiedAgent")),
         }
     }
 }

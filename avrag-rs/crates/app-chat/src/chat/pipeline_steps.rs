@@ -54,6 +54,7 @@ pub(crate) async fn dispatch_mode(
             run_rag_mode(state, request, session, stream_config).await
         }
         Some(crate::agents::AgentKind::Write) => {
+            // Write mode bypasses UnifiedAgent — routed directly to writer::run_write_mode
             crate::writer::run_write_mode(state, request, session, stream_config).await
         }
     }

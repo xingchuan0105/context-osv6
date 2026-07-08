@@ -7,6 +7,7 @@ version.workspace = true
 
 [features]
 default = []
+dev-tools = []
 eval = []
 write-mode = []  # WIP: gates the unfinished write-mode refine-experiment bin
 
