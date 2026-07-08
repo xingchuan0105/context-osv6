@@ -1,3 +1,4 @@
+use super::*;
 impl PgAppRepository {
     /// Global search: notebooks by title/description using ILIKE.
     pub async fn search_notebooks(

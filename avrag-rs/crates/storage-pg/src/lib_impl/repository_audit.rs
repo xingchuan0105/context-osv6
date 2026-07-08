@@ -1,3 +1,4 @@
+use super::*;
 impl PgAppRepository {
     pub async fn append_audit_record(&self, record: &AuditRecord) -> Result<(), PgStorageError> {
         let org_id = Uuid::parse_str(&record.org_id)

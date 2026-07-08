@@ -1,4 +1,4 @@
-pub use avrag_rag_core_ports::AppendChatTurn;
+use super::*;
 
 impl PgAppRepository {
     pub async fn list_sessions(
@@ -136,7 +136,7 @@ impl PgAppRepository {
         &self,
         context: &AuthContext,
         session_id: Uuid,
-        turn: AppendChatTurn<'_>,
+        turn: &ChatTurn<'_>,
     ) -> Result<i64, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         ensure_org_and_actor(tx.inner(), context).await?;

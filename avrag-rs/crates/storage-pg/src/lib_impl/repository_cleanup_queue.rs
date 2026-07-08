@@ -1,3 +1,4 @@
+use super::*;
 impl PgAppRepository {
     pub async fn claim_next_document_cleanup_task(
         &self,

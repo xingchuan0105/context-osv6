@@ -1007,7 +1007,7 @@ mod tests {
             .append_chat_turn(
                 &ctx,
                 session_id,
-                ChatTurn {
+                &ChatTurn {
                     user_content: "Calculate something",
                     assistant_content: "Here are the results.",
                     assistant_answer_blocks: &[],
@@ -1079,7 +1079,7 @@ mod tests {
             .append_chat_turn(
                 &ctx,
                 session_id,
-                ChatTurn {
+                &ChatTurn {
                     user_content: "Who wrote it?",
                     assistant_content: "Taleb.",
                     assistant_answer_blocks: &[],
@@ -1147,7 +1147,7 @@ mod tests {
         repo.append_chat_turn(
             &ctx,
             session_a_id,
-            ChatTurn {
+            &ChatTurn {
                 user_content: "What is antifragility?",
                 assistant_content: "Antifragility gains from disorder.",
                 assistant_answer_blocks: &[],
@@ -1164,7 +1164,7 @@ mod tests {
         repo.append_chat_turn(
             &ctx,
             session_b_id,
-            ChatTurn {
+            &ChatTurn {
                 user_content: "Open a second session.",
                 assistant_content: "Sure.",
                 assistant_answer_blocks: &[],
@@ -1238,7 +1238,7 @@ mod tests {
         repo.append_chat_turn(
             &ctx,
             session_id,
-            ChatTurn {
+            &ChatTurn {
                 user_content: "Tell me something.",
                 assistant_content: "The secret roadmap keyword is zephyrneedle2026.",
                 assistant_answer_blocks: &[],
@@ -1293,7 +1293,7 @@ mod tests {
         repo.append_chat_turn(
             &ctx,
             session_a_id,
-            ChatTurn {
+            &ChatTurn {
                 user_content: "Explain a concept.",
                 assistant_content: "Antifragility gains from volatility and stressors.",
                 assistant_answer_blocks: &[],
@@ -1310,7 +1310,7 @@ mod tests {
         repo.append_chat_turn(
             &ctx,
             session_b_id,
-            ChatTurn {
+            &ChatTurn {
                 user_content: "Another topic.",
                 assistant_content: "Sure.",
                 assistant_answer_blocks: &[],

@@ -154,7 +154,7 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
             .append_chat_turn(
                 auth,
                 session_id,
-                ChatTurn {
+                &ChatTurn {
                     user_content: turn.user_content,
                     assistant_content: turn.assistant_content,
                     assistant_answer_blocks: turn.assistant_answer_blocks,

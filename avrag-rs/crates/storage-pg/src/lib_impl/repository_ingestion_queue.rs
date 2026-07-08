@@ -1,4 +1,5 @@
-const STALE_PROCESSING_TIMEOUT_SECS: i32 = 30 * 60;
+use super::*;
+pub(crate) const STALE_PROCESSING_TIMEOUT_SECS: i32 = 30 * 60;
 const RETRY_BACKOFF_BASE_SECS: i32 = 30;
 const RETRY_BACKOFF_MAX_SECS: i32 = 60 * 60;
 
