@@ -1,4 +1,4 @@
-import { fetchResponse, request } from "../http/request";
+import { fetchResponse, request, type ApiEnvelope } from "../http/request";
 import {
   parseWorkspaceChatEventStream,
   type WorkspaceChatStreamEvent,
@@ -64,14 +64,6 @@ export type SharedWorkspacePayload = {
   knowledge_base: SharedKnowledgeBase;
   share: SharedShareInfo;
   sources: SharedSource[];
-};
-
-type ApiEnvelope<T> = {
-  ok?: boolean;
-  data?: T | null;
-  error?: {
-    message?: string;
-  } | null;
 };
 
 type SharedWorkspaceEnvelope = {

@@ -145,3 +145,24 @@ export async function requestText(path: string, init: RequestInit = {}, token?: 
   const response = await fetchResponse(path, init, { token });
   return response.text();
 }
+
+export type ApiEnvelope<T> = {
+  ok?: boolean;
+  data?: T | null;
+  error?: {
+    message?: string;
+  } | null;
+};
+
+export async function requestEnvelope<T>(
+  path: string,
+  init: RequestInit = {},
+  token?: string,
+  fallback = "Request failed",
+): Promise<T> {
+  const env = await request<ApiEnvelope<T>>(path, init, token);
+  if (env.ok && env.data) {
+    return env.data;
+  }
+  throw new Error(env.error?.message ?? fallback);
+}

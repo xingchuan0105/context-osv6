@@ -1,4 +1,4 @@
-import { request, requestText } from "../http/request";
+import { request, requestEnvelope, requestText, type ApiEnvelope } from "../http/request";
 
 export type AdminOrgRow = {
   id: string;
@@ -115,14 +115,6 @@ export type AdminAuditLogListResponse = {
   per_page: number;
 };
 
-type ApiEnvelope<T> = {
-  ok?: boolean;
-  data?: T | null;
-  error?: {
-    message?: string;
-  } | null;
-};
-
 type RawOrgRow = {
   id: string;
   name: string;
@@ -155,14 +147,6 @@ type RawHealthResponse = {
   version: string;
   uptime_secs: number;
 };
-
-function unwrapApiData<T>(envelope: ApiEnvelope<T>, fallback: string) {
-  if (envelope.ok && envelope.data) {
-    return envelope.data;
-  }
-
-  throw new Error(envelope.error?.message ?? fallback);
-}
 
 function buildQuery(query: AdminAuditLogQuery) {
   const params = new URLSearchParams();
@@ -210,39 +194,28 @@ function mapUserRow(raw: RawUserRow): AdminUserRow {
 }
 
 export async function listAdminOrganizations(token: string) {
-  const rows = unwrapApiData(
-    await request<ApiEnvelope<RawOrgRow[]>>("/api/v1/admin/organizations", { method: "GET" }, token),
-    "Failed to load organizations",
-  );
+  const rows = await requestEnvelope<RawOrgRow[]>("/api/v1/admin/organizations", { method: "GET" }, token, "Failed to load organizations");
 
   return rows.map(mapOrgRow);
 }
 
 export async function getAdminOrganization(token: string, orgId: string) {
-  const row = unwrapApiData(
-    await request<ApiEnvelope<RawOrgRow>>(`/api/v1/admin/organizations/${orgId}`, { method: "GET" }, token),
-    "Failed to load organization",
-  );
+  const row = await requestEnvelope<RawOrgRow>(`/api/v1/admin/organizations/${orgId}`, { method: "GET" }, token, "Failed to load organization");
 
   return mapOrgRow(row);
 }
 
 export async function listAdminUsersForOrganization(token: string, orgId: string) {
-  const rows = unwrapApiData(
-    await request<ApiEnvelope<RawUserRow[]>>(`/api/v1/admin/users?org_id=${encodeURIComponent(orgId)}`, { method: "GET" }, token),
-    "Failed to load users",
-  );
+  const rows = await requestEnvelope<RawUserRow[]>(`/api/v1/admin/users?org_id=${encodeURIComponent(orgId)}`, { method: "GET" }, token, "Failed to load users");
 
   return rows.map(mapUserRow);
 }
 
 export async function getAdminUsageForOrganization(token: string, orgId: string, period = "30d") {
-  const usage = unwrapApiData(
-    await request<ApiEnvelope<RawUsageResponse>>(
-      `/api/v1/admin/usage?org_id=${encodeURIComponent(orgId)}&period=${encodeURIComponent(period)}`,
-      { method: "GET" },
-      token,
-    ),
+  const usage = await requestEnvelope<RawUsageResponse>(
+    `/api/v1/admin/usage?org_id=${encodeURIComponent(orgId)}&period=${encodeURIComponent(period)}`,
+    { method: "GET" },
+    token,
     "Failed to load usage",
   );
 
@@ -268,10 +241,7 @@ export async function updateAdminOrganizationBlocked(token: string, orgId: strin
 }
 
 export async function getAdminHealth(token: string) {
-  const health = unwrapApiData(
-    await request<ApiEnvelope<RawHealthResponse>>("/api/v1/admin/health", { method: "GET" }, token),
-    "Failed to load health",
-  );
+  const health = await requestEnvelope<RawHealthResponse>("/api/v1/admin/health", { method: "GET" }, token, "Failed to load health");
 
   return {
     status: health.status,
@@ -281,24 +251,15 @@ export async function getAdminHealth(token: string) {
 }
 
 export async function getAdminBillingOverview(token: string) {
-  return unwrapApiData(
-    await request<ApiEnvelope<AdminBillingOverview>>("/api/v1/admin/billing", { method: "GET" }, token),
-    "Failed to load billing overview",
-  );
+  return requestEnvelope<AdminBillingOverview>("/api/v1/admin/billing", { method: "GET" }, token, "Failed to load billing overview");
 }
 
 export async function getAdminRagHealth(token: string) {
-  return unwrapApiData(
-    await request<ApiEnvelope<AdminRagHealthStatus>>("/api/v1/admin/rag-health", { method: "GET" }, token),
-    "Failed to load rag health",
-  );
+  return requestEnvelope<AdminRagHealthStatus>("/api/v1/admin/rag-health", { method: "GET" }, token, "Failed to load rag health");
 }
 
 export async function listAdminFeatureFlags(token: string) {
-  return unwrapApiData(
-    await request<ApiEnvelope<AdminFeatureFlagEntry[]>>("/api/v1/admin/feature-flags", { method: "GET" }, token),
-    "Failed to load feature flags",
-  );
+  return requestEnvelope<AdminFeatureFlagEntry[]>("/api/v1/admin/feature-flags", { method: "GET" }, token, "Failed to load feature flags");
 }
 
 export async function requestAdminFeatureFlagChange(
@@ -307,15 +268,13 @@ export async function requestAdminFeatureFlagChange(
   enabled: boolean,
   reason: string,
 ) {
-  return unwrapApiData(
-    await request<ApiEnvelope<AdminFeatureFlagChangeRequest>>(
-      `/api/v1/admin/feature-flags/${encodeURIComponent(key)}/change-requests`,
-      {
-        method: "POST",
-        body: JSON.stringify({ enabled, reason }),
-      },
-      token,
-    ),
+  return requestEnvelope<AdminFeatureFlagChangeRequest>(
+    `/api/v1/admin/feature-flags/${encodeURIComponent(key)}/change-requests`,
+    {
+      method: "POST",
+      body: JSON.stringify({ enabled, reason }),
+    },
+    token,
     "Failed to request feature flag change",
   );
 }
@@ -326,18 +285,16 @@ export async function reviewAdminFeatureFlagChange(
   approved: boolean,
   reviewNote?: string | null,
 ) {
-  return unwrapApiData(
-    await request<ApiEnvelope<AdminFeatureFlagChangeRequest>>(
-      `/api/v1/admin/feature-flags/change-requests/${encodeURIComponent(requestId)}/review`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          approved,
-          review_note: reviewNote?.trim() ? reviewNote : undefined,
-        }),
-      },
-      token,
-    ),
+  return requestEnvelope<AdminFeatureFlagChangeRequest>(
+    `/api/v1/admin/feature-flags/change-requests/${encodeURIComponent(requestId)}/review`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        approved,
+        review_note: reviewNote?.trim() ? reviewNote : undefined,
+      }),
+    },
+    token,
     "Failed to review feature flag change",
   );
 }
@@ -345,39 +302,29 @@ export async function reviewAdminFeatureFlagChange(
 export async function listAdminFeatureFlagChangeRequests(token: string, status?: string | null) {
   const query = status?.trim() ? `?status=${encodeURIComponent(status)}` : "";
 
-  return unwrapApiData(
-    await request<ApiEnvelope<AdminFeatureFlagChangeRequest[]>>(
-      `/api/v1/admin/feature-flags/change-requests${query}`,
-      { method: "GET" },
-      token,
-    ),
+  return requestEnvelope<AdminFeatureFlagChangeRequest[]>(
+    `/api/v1/admin/feature-flags/change-requests${query}`,
+    { method: "GET" },
+    token,
     "Failed to load feature flag change requests",
   );
 }
 
 export async function getAdminWorkerStatus(token: string) {
-  return unwrapApiData(
-    await request<ApiEnvelope<AdminWorkerStatusResponse>>("/api/v1/admin/system/workers", { method: "GET" }, token),
-    "Failed to load worker status",
-  );
+  return requestEnvelope<AdminWorkerStatusResponse>("/api/v1/admin/system/workers", { method: "GET" }, token, "Failed to load worker status");
 }
 
 export async function getAdminDegradationStatus(token: string) {
-  return unwrapApiData(
-    await request<ApiEnvelope<AdminDegradationStatusResponse>>("/api/v1/admin/system/degradation", { method: "GET" }, token),
-    "Failed to load degradation status",
-  );
+  return requestEnvelope<AdminDegradationStatusResponse>("/api/v1/admin/system/degradation", { method: "GET" }, token, "Failed to load degradation status");
 }
 
 export async function listAdminAuditLogs(token: string, query: AdminAuditLogQuery) {
   const suffix = buildQuery(query);
 
-  return unwrapApiData(
-    await request<ApiEnvelope<AdminAuditLogListResponse>>(
-      suffix ? `/api/v1/admin/audit-logs?${suffix}` : "/api/v1/admin/audit-logs",
-      { method: "GET" },
-      token,
-    ),
+  return requestEnvelope<AdminAuditLogListResponse>(
+    suffix ? `/api/v1/admin/audit-logs?${suffix}` : "/api/v1/admin/audit-logs",
+    { method: "GET" },
+    token,
     "Failed to load audit logs",
   );
 }

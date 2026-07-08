@@ -1,5 +1,5 @@
 import type { AuthEnvelope } from "../auth/client";
-import { request } from "../http/request";
+import { request, requestEnvelope } from "../http/request";
 
 export type NotificationPreferences = {
   email_enabled: boolean;
@@ -100,14 +100,6 @@ export type PortalSessionResponse = {
   url: string;
 };
 
-type ApiEnvelope<T> = {
-  ok?: boolean;
-  data?: T | null;
-  error?: {
-    message?: string;
-  } | null;
-};
-
 type RawPlanQuota = {
   metric_type: string;
   soft_limit?: number | null;
@@ -141,14 +133,6 @@ type RawSubscriptionPayload = {
 type RawUsagePayload = {
   usage: Record<string, number>;
 };
-
-function unwrapApiData<T>(envelope: ApiEnvelope<T>, fallback: string) {
-  if (envelope.ok && envelope.data) {
-    return envelope.data;
-  }
-
-  throw new Error(envelope.error?.message ?? fallback);
-}
 
 function parsePriceToCents(label: string) {
   const amount = Number.parseFloat(
@@ -237,10 +221,7 @@ export async function getUsageLimit(token: string) {
 }
 
 export async function listPlans(token: string) {
-  const payload = unwrapApiData(
-    await request<ApiEnvelope<RawPlansPayload>>("/api/v1/billing/plans", { method: "GET" }, token),
-    "Failed to load billing plans",
-  );
+  const payload = await requestEnvelope<RawPlansPayload>("/api/v1/billing/plans", { method: "GET" }, token, "Failed to load billing plans");
 
   return {
     plans: payload.plans.map((plan) => ({
@@ -253,10 +234,7 @@ export async function listPlans(token: string) {
 }
 
 export async function getUsage(token: string) {
-  const payload = unwrapApiData(
-    await request<ApiEnvelope<RawUsagePayload>>("/api/v1/billing/usage", { method: "GET" }, token),
-    "Failed to load billing usage",
-  );
+  const payload = await requestEnvelope<RawUsagePayload>("/api/v1/billing/usage", { method: "GET" }, token, "Failed to load billing usage");
 
   return {
     used_tokens:
@@ -270,12 +248,10 @@ export async function getUsage(token: string) {
 }
 
 export async function getSubscription(token: string) {
-  const payload = unwrapApiData(
-    await request<ApiEnvelope<RawSubscriptionPayload>>(
-      "/api/v1/billing/subscription",
-      { method: "GET" },
-      token,
-    ),
+  const payload = await requestEnvelope<RawSubscriptionPayload>(
+    "/api/v1/billing/subscription",
+    { method: "GET" },
+    token,
     "Failed to load billing subscription",
   );
 
@@ -287,15 +263,13 @@ export async function getSubscription(token: string) {
 }
 
 export async function createPortalSession(token: string) {
-  return unwrapApiData(
-    await request<ApiEnvelope<PortalSessionResponse>>(
-      "/api/v1/billing/portal-session",
-      {
-        method: "POST",
-        body: JSON.stringify({}),
-      },
-      token,
-    ),
+  return requestEnvelope<PortalSessionResponse>(
+    "/api/v1/billing/portal-session",
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    },
+    token,
     "Failed to create billing portal",
   );
 }
@@ -313,15 +287,13 @@ export type CheckoutResponse = {
 };
 
 export async function createCheckoutSession(token: string, requestPayload: CheckoutRequest) {
-  return unwrapApiData(
-    await request<ApiEnvelope<CheckoutResponse>>(
-      "/api/v1/billing/checkout-session",
-      {
-        method: "POST",
-        body: JSON.stringify(requestPayload),
-      },
-      token,
-    ),
+  return requestEnvelope<CheckoutResponse>(
+    "/api/v1/billing/checkout-session",
+    {
+      method: "POST",
+      body: JSON.stringify(requestPayload),
+    },
+    token,
     "Failed to create checkout session",
   );
 }
