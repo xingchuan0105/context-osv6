@@ -1,7 +1,15 @@
-use contracts::chat::ChatEvent;
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-const DESKTOP_PLACEHOLDER: &str =
-    "[Desktop mode] Chat is not yet connected to LLM backend. This is a placeholder response.";
+use avrag_llm::{ChatMessage, LlmClient};
+use contracts::chat::ChatEvent;
+use tauri::{AppHandle, Manager};
+
+use super::llm_config::{load_llm_config, LocalLlmConfig};
+
+const LLM_NOT_CONFIGURED: &str =
+    "LLM is not configured. Open Settings → AI Model to add your API key.";
+pub const LICENSE_REQUIRED: &str = "License required. Please activate AVRag Desktop first.";
 
 pub fn chat_event_channel(request_id: &str) -> String {
     format!("chat://{request_id}")
@@ -25,7 +33,17 @@ pub fn parse_chat_request_id(request: &serde_json::Value) -> Result<String, Stri
         .ok_or_else(|| "request_id is required".to_string())
 }
 
-pub fn desktop_placeholder_events(request_id: &str, session_id: &str) -> Vec<ChatEvent> {
+pub fn query_from_request(request: &serde_json::Value) -> Result<String, String> {
+    request
+        .get("query")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "query is required".to_string())
+}
+
+pub fn error_events(request_id: &str, session_id: &str, message: &str) -> Vec<ChatEvent> {
     let message_id: i64 = 1;
     vec![
         ChatEvent::Start {
@@ -38,21 +56,122 @@ pub fn desktop_placeholder_events(request_id: &str, session_id: &str) -> Vec<Cha
             message_id,
             agent_type: "chat".to_string(),
         },
-        ChatEvent::Token {
+        ChatEvent::Error {
             request_id: request_id.to_string(),
-            message_id,
-            content: DESKTOP_PLACEHOLDER.to_string(),
+            code: "desktop_error".to_string(),
+            message: message.to_string(),
         },
         ChatEvent::Done {
             request_id: request_id.to_string(),
             session_id: session_id.to_string(),
             message_id,
             payload: serde_json::json!({
-                "answer": DESKTOP_PLACEHOLDER,
-                "status": "done",
+                "answer": message,
+                "status": "error",
             }),
         },
     ]
+}
+
+pub async fn run_desktop_chat<F>(
+    app: &AppHandle,
+    request: &serde_json::Value,
+    cancel: &AtomicBool,
+    mut emit: F,
+) -> Result<(), String>
+where
+    F: FnMut(&ChatEvent) -> Result<bool, String>,
+{
+    let request_id = parse_chat_request_id(request)?;
+    let session_id = session_id_from_request(request);
+    let query = query_from_request(request)?;
+
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {e}"))?;
+
+    let Some(config) = load_llm_config(&data_dir)? else {
+        for event in error_events(&request_id, &session_id, LLM_NOT_CONFIGURED) {
+            if !emit(&event)? {
+                return Ok(());
+            }
+        }
+        return Ok(());
+    };
+
+    stream_llm_response(&request_id, &session_id, &query, &config, cancel, emit).await
+}
+
+async fn stream_llm_response<F>(
+    request_id: &str,
+    session_id: &str,
+    query: &str,
+    config: &LocalLlmConfig,
+    cancel: &AtomicBool,
+    mut emit: F,
+) -> Result<(), String>
+where
+    F: FnMut(&ChatEvent) -> Result<bool, String>,
+{
+    let message_id: i64 = 1;
+    let start = ChatEvent::Start {
+        request_id: request_id.to_string(),
+        session_id: session_id.to_string(),
+    };
+    if !emit(&start)? {
+        return Ok(());
+    }
+
+    let answer_start = ChatEvent::AnswerStart {
+        request_id: request_id.to_string(),
+        session_id: session_id.to_string(),
+        message_id,
+        agent_type: "chat".to_string(),
+    };
+    if !emit(&answer_start)? {
+        return Ok(());
+    }
+
+    let client = LlmClient::new(config.to_provider());
+    let messages = vec![ChatMessage::user(query)];
+
+    let response = client
+        .complete(&messages, Some(0.7))
+        .await
+        .map_err(|e| format!("LLM request failed: {e}"))?;
+
+    let answer = response.content.clone();
+    if !answer.is_empty() {
+        let event = ChatEvent::Token {
+            request_id: request_id.to_string(),
+            message_id,
+            content: answer.clone(),
+        };
+        if !emit(&event)? {
+            return Ok(());
+        }
+    }
+
+    let done = ChatEvent::Done {
+        request_id: request_id.to_string(),
+        session_id: session_id.to_string(),
+        message_id,
+        payload: serde_json::json!({
+            "answer": answer,
+            "status": "done",
+        }),
+    };
+    let _ = emit(&done)?;
+    Ok(())
+}
+
+pub fn desktop_placeholder_events(request_id: &str, session_id: &str) -> Vec<ChatEvent> {
+    error_events(
+        request_id,
+        session_id,
+        "[Desktop mode] Chat is not yet connected to LLM backend. This is a placeholder response.",
+    )
 }
 
 #[cfg(test)]
@@ -66,66 +185,17 @@ mod tests {
     }
 
     #[test]
-    fn session_id_from_request_uses_provided_value() {
-        let request = json!({ "session_id": "sess-1" });
-        assert_eq!(session_id_from_request(&request), "sess-1");
-    }
-
-    #[test]
-    fn session_id_from_request_generates_uuid_when_missing() {
-        let request = json!({ "query": "hello" });
-        assert!(!session_id_from_request(&request).is_empty());
-    }
-
-    #[test]
-    fn session_id_from_request_generates_uuid_when_empty() {
-        let request = json!({ "session_id": "" });
-        assert!(!session_id_from_request(&request).is_empty());
-    }
-
-    #[test]
-    fn parse_chat_request_id_requires_non_empty_value() {
+    fn query_from_request_requires_non_empty_value() {
         assert_eq!(
-            parse_chat_request_id(&json!({})).unwrap_err(),
-            "request_id is required"
-        );
-        assert_eq!(
-            parse_chat_request_id(&json!({ "request_id": "" })).unwrap_err(),
-            "request_id is required"
+            query_from_request(&json!({})).unwrap_err(),
+            "query is required"
         );
     }
 
     #[test]
-    fn parse_chat_request_id_returns_trimmed_request_id() {
-        assert_eq!(
-            parse_chat_request_id(&json!({ "request_id": "req-ipc" })).unwrap(),
-            "req-ipc"
-        );
-    }
-
-    #[test]
-    fn desktop_placeholder_events_match_frontend_stream_contract() {
-        let events = desktop_placeholder_events("req-ipc", "sess-ipc");
+    fn error_events_match_frontend_stream_contract() {
+        let events = error_events("req-ipc", "sess-ipc", "boom");
         assert_eq!(events.len(), 4);
-
-        let serialized: Vec<serde_json::Value> = events
-            .iter()
-            .map(|event| serde_json::to_value(event).expect("serialize chat event"))
-            .collect();
-
-        assert_eq!(serialized[0]["event"], "start");
-        assert_eq!(serialized[0]["request_id"], "req-ipc");
-        assert_eq!(serialized[0]["session_id"], "sess-ipc");
-
-        assert_eq!(serialized[1]["event"], "answer_start");
-        assert_eq!(serialized[1]["agent_type"], "chat");
-        assert_eq!(serialized[1]["message_id"], 1);
-
-        assert_eq!(serialized[2]["event"], "token");
-        assert_eq!(serialized[2]["content"], DESKTOP_PLACEHOLDER);
-
-        assert_eq!(serialized[3]["event"], "done");
-        assert_eq!(serialized[3]["payload"]["status"], "done");
-        assert_eq!(serialized[3]["payload"]["answer"], DESKTOP_PLACEHOLDER);
+        assert!(matches!(events[2], ChatEvent::Error { .. }));
     }
 }

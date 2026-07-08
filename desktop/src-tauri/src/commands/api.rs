@@ -13,6 +13,16 @@ pub fn not_implemented_api_error(method: &str, path: &str) -> IpcApiError {
     }
 }
 
+#[tauri::command]
+pub async fn api_call(
+    method: String,
+    path: String,
+    _body: Option<serde_json::Value>,
+    _token: Option<String>,
+) -> Result<serde_json::Value, IpcApiError> {
+    Err(not_implemented_api_error(&method, &path))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
