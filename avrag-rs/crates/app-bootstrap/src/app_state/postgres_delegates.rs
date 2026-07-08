@@ -336,8 +336,8 @@ impl AppState {
 
     /// Checks if the JWT's auth_version matches the user's current auth_version.
     ///
-    /// Returns `false` when PostgreSQL is not configured unless
-    /// `AVRAG_AUTH_VERSION_BYPASS=true` is set explicitly for local development.
+    /// Returns `true` when PostgreSQL is not configured (memory mode is
+    /// development-only with no security semantics).
     pub async fn jwt_auth_version_matches(
         &self,
         user_uuid: Uuid,
@@ -345,9 +345,7 @@ impl AppState {
         token_auth_version: i32,
     ) -> bool {
         let Some(repo) = self.postgres_repo() else {
-            return std::env::var("AVRAG_AUTH_VERSION_BYPASS")
-                .ok()
-                .is_some_and(|value| matches!(value.as_str(), "true" | "1"));
+            return true;
         };
         let Ok(mut tx) = repo.raw().begin().await else {
             return false;
