@@ -8,7 +8,7 @@ use super::exit_policy::{
     PostLoopAction, degraded_no_evidence_answer, has_retrieval_observation, post_fallback_gate,
 };
 use super::reasoning_emit;
-use super::run_result::build_run_result;
+use super::run_result::{build_run_result, RunContext};
 use super::telemetry::ReActIterationRecord;
 use super::{ReActLoop, fallback, truncate_preview};
 use crate::agents::events::{AgentEvent, AgentEventSink};
@@ -116,18 +116,21 @@ impl ReActLoop {
                 usage: None,
             })
             .await;
+        let ctx = RunContext {
+            iteration,
+            max_iterations,
+            total_tool_calls,
+            telemetry_records,
+            total_usage,
+            reasoning_summary_acc,
+            start_time,
+        };
         let mut result = build_run_result(
             &self.llm,
             answer,
             request,
             collected_tool_results,
-            telemetry_records,
-            total_usage,
-            reasoning_summary_acc,
-            iteration,
-            max_iterations,
-            total_tool_calls,
-            start_time,
+            &ctx,
             Some(FinalDecision::Degraded {
                 reason: DegradeReason::NoResultsAfterAllFallbacks,
             }),

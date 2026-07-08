@@ -6,7 +6,7 @@ use super::assembler::{ContextAssembler, DisclosedState};
 use super::config::{LoopExitConfig, ModeConfig};
 use super::exit_policy::{SynthesisGate, decide_synthesis_gate, has_retrieval_observation};
 use super::reasoning_emit;
-use super::run_result::build_run_result;
+use super::run_result::{build_run_result, RunContext};
 use super::synthesis::SynthesisPhase;
 use super::telemetry::ReActIterationRecord;
 use super::{ReActLoop, truncate_preview};
@@ -271,18 +271,21 @@ impl ReActLoop {
         start_time: std::time::Instant,
         final_decision: Option<FinalDecision>,
     ) -> Result<AgentRunResult, AppError> {
+        let ctx = RunContext {
+            iteration,
+            max_iterations,
+            total_tool_calls,
+            telemetry_records,
+            total_usage,
+            reasoning_summary_acc,
+            start_time,
+        };
         let result = build_run_result(
             &self.llm,
             final_answer,
             request,
             collected_tool_results,
-            telemetry_records,
-            total_usage,
-            reasoning_summary_acc,
-            iteration,
-            max_iterations,
-            total_tool_calls,
-            start_time,
+            &ctx,
             final_decision,
         );
         self.emit_run_citations(sink, &result.citations).await;
