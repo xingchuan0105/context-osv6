@@ -25,6 +25,7 @@ impl From<AppBootstrapResult> for AppState {
             postgres: result.postgres,
             redis_url: result.redis_url,
             rate_limit_backend: result.rate_limit_backend,
+            password_reset_service: crate::services::PasswordResetService::from_env(),
         }
     }
 }
@@ -72,6 +73,10 @@ impl AppState {
 
     pub fn auth_store(&self) -> Option<std::sync::Arc<dyn app_core::AuthStorePort>> {
         self.storage.auth_store()
+    }
+
+    pub fn password_reset_service(&self) -> &crate::services::PasswordResetService {
+        &self.password_reset_service
     }
 
     pub fn postgres_repo(&self) -> Option<Arc<PgAppRepository>> {

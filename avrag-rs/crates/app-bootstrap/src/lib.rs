@@ -3,6 +3,7 @@ mod app_state;
 mod config_helpers;
 mod domain_row_convert;
 mod pg_error;
+mod services;
 
 pub use app_state::{
     AppState, CostEventRecord, MemoryState, RetrievedContext, StoredDocument, agent_icon,
@@ -45,6 +46,11 @@ use tokio::sync::RwLock;
 pub use config_helpers::{
     auth_context_from_config, build_object_store, build_unified_agent_service,
     make_embedding_client, make_llm_client, make_planner, make_reranker,
+};
+
+pub use services::{
+    PasswordResetConfig, PasswordResetError, PasswordResetService, SendResetCodeOutcome,
+    VerifyResetCodeOutcome,
 };
 
 #[cfg(any(test, feature = "test-support"))]

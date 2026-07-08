@@ -1,7 +1,7 @@
 //! Integration tests for the `usage/history` endpoint contract.
 //!
 //! The handler under test is `handle_get_usage_history` in
-//! `crates/billing/src/api.rs`, which wraps `load_usage_history` in
+//! `crates/billing/src/handlers.rs`, which wraps `load_usage_history` in
 //! `crates/billing/src/core_usage.rs`. It is a straight-line SQL function
 //! that aggregates `llm_usage_events.usage_units` per day for the last N
 //! days (default 7) for the authenticated user.

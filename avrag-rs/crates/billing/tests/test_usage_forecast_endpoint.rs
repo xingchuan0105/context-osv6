@@ -1,7 +1,7 @@
 //! Integration tests for the `usage/forecast` endpoint contract.
 //!
 //! The handler under test is `handle_get_usage_forecast` in
-//! `crates/billing/src/api.rs`, which wraps `load_usage_forecast` in
+//! `crates/billing/src/handlers.rs`, which wraps `load_usage_forecast` in
 //! `crates/billing/src/core_usage.rs`. It projects a 30-day average
 //! `llm_usage_events.usage_units` against the user's current 7d plan
 //! limit and emits a bilingual upgrade suggestion.

@@ -34,9 +34,10 @@ avrag-search = { path = "../search" }
 avrag-share = { path = "../share" }
 avrag-storage-milvus = { path = "../storage-milvus" }
 avrag-storage-pg = { path = "../storage-pg" }
-hex.workspace = true
-bcrypt = "0.15"
-redis.workspace = true
+    hex.workspace = true
+    bcrypt = "0.15"
+    lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-native-tls"] }
+    redis.workspace = true
 sha2.workspace = true
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "uuid", "chrono", "json"] }
 telemetry = { path = "../telemetry" }
