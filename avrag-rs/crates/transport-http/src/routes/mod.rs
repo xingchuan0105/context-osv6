@@ -4,5 +4,6 @@ pub mod billing;
 pub mod chat;
 pub mod e2e;
 pub mod infra;
+pub mod license;
 pub mod notebooks;
 pub mod rag;

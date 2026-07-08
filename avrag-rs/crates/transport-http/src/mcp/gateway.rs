@@ -8,7 +8,7 @@ use axum::{
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::RequestState;
+use crate::middleware::RequestState;
 use crate::handlers;
 
 use super::catalog;

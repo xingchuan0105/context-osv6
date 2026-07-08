@@ -299,9 +299,9 @@ async fn check_rate_limit_with_fallback(
 }
 
 async fn auth_from_bearer(state: &AppState, headers: &HeaderMap) -> Option<AuthContext> {
-    let token = crate::extract_bearer(headers)?;
+    let token = crate::lib_impl::extract_bearer(headers)?;
 
-    if let Some(claims) = crate::verify_jwt(token) {
+    if let Some(claims) = crate::lib_impl::verify_jwt(token) {
         let org_uuid = Uuid::parse_str(&claims.org_id).ok()?;
         let user_uuid = Uuid::parse_str(&claims.sub).ok()?;
 

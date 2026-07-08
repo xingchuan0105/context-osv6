@@ -8,7 +8,7 @@ use common::{AddUrlSourceRequest, CreateDocumentRequest, UpdateDocumentRequest};
 
 use super::chat::ChatSessionsQuery;
 use super::{app_error_response, error_response};
-use crate::RequestState;
+use crate::middleware::RequestState;
 use crate::auth_guard::{
     authorize_document_access, authorize_document_access_index_or_query,
     authorize_workspace_notebook_str, authorize_workspace_query_optional_notebook,

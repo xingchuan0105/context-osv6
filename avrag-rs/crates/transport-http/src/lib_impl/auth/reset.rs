@@ -5,6 +5,32 @@ use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Address, AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use sha2::{Digest, Sha256};
 
+use app_bootstrap::AppState;
+use app_core::CreatePasswordResetTicketInput;
+use axum::Json;
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::response::Response;
+use bcrypt::DEFAULT_COST;
+use bcrypt::hash;
+use serde_json::json;
+use tracing::warn;
+use uuid::Uuid;
+
+use crate::auth_types::AuthEnvelope;
+use crate::auth_types::AuthPayload;
+use crate::auth_types::AuthUserDto;
+use crate::auth_types::ConfirmResetPasswordRequest;
+use crate::auth_types::ResetPasswordRequest;
+use crate::auth_types::ResetRequest;
+use crate::auth_types::SendResetCodeRequest;
+use crate::auth_types::VerifyResetCodeRequest;
+use crate::auth_types::VerifyResetTokenRequest;
+use crate::handlers;
+
+use super::super::router_core::record_api_product_event_if_available;
+
 const PASSWORD_RESET_PURPOSE: &str = "password_reset";
 const RESET_CODE_TTL_MINUTES: i64 = 10;
 const RESET_TICKET_TTL_MINUTES: i64 = 15;
@@ -140,7 +166,7 @@ async fn send_reset_email(
     transport.build().send(email).await?;
     Ok(())
 }
-async fn auth_runtime_capabilities_handler() -> Response {
+pub(crate) async fn auth_runtime_capabilities_handler() -> Response {
     let config = PasswordResetConfig::from_env();
     (
         StatusCode::OK,
@@ -150,7 +176,7 @@ async fn auth_runtime_capabilities_handler() -> Response {
     )
         .into_response()
 }
-async fn auth_reset_request_handler(
+pub(crate) async fn auth_reset_request_handler(
     State(state): State<AppState>,
     Json(req): Json<ResetRequest>,
 ) -> Response {
@@ -164,7 +190,7 @@ async fn auth_reset_request_handler(
     .await
 }
 
-async fn auth_verify_reset_token_handler(
+pub(crate) async fn auth_verify_reset_token_handler(
     State(state): State<AppState>,
     Json(req): Json<VerifyResetTokenRequest>,
 ) -> Response {
@@ -211,7 +237,7 @@ async fn auth_verify_reset_token_handler(
     }
 }
 
-async fn auth_reset_password_handler(
+pub(crate) async fn auth_reset_password_handler(
     State(state): State<AppState>,
     Json(req): Json<ResetPasswordRequest>,
 ) -> Response {
@@ -225,7 +251,7 @@ async fn auth_reset_password_handler(
     .await
 }
 
-async fn auth_send_reset_code_handler(
+pub(crate) async fn auth_send_reset_code_handler(
     State(state): State<AppState>,
     Json(req): Json<SendResetCodeRequest>,
 ) -> Response {
@@ -354,7 +380,7 @@ async fn auth_send_reset_code_handler(
     (StatusCode::ACCEPTED, Json(response)).into_response()
 }
 
-async fn auth_verify_reset_code_handler(
+pub(crate) async fn auth_verify_reset_code_handler(
     State(state): State<AppState>,
     Json(req): Json<VerifyResetCodeRequest>,
 ) -> Response {
@@ -452,7 +478,7 @@ async fn auth_verify_reset_code_handler(
         .into_response()
 }
 
-async fn auth_confirm_reset_password_handler(
+pub(crate) async fn auth_confirm_reset_password_handler(
     State(state): State<AppState>,
     Json(req): Json<ConfirmResetPasswordRequest>,
 ) -> Response {

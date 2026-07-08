@@ -1,4 +1,27 @@
-async fn auth_logout_handler(
+use axum::Json;
+use axum::extract::Extension;
+use axum::http::HeaderMap;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::response::Response;
+use bcrypt::DEFAULT_COST;
+use bcrypt::hash;
+use bcrypt::verify;
+use serde_json::json;
+use tracing::warn;
+
+use crate::auth_types::AuthEnvelope;
+use crate::auth_types::AuthPayload;
+use crate::auth_types::AuthUserDto;
+use crate::auth_types::ChangePasswordRequest;
+use crate::auth_types::LegalStatusEnvelope;
+use crate::auth_types::LegalStatusPayload;
+use crate::auth_types::RecordLegalAcceptanceRequest;
+use crate::auth_types::UpdateProfileRequest;
+use crate::handlers;
+use crate::middleware::RequestState;
+
+pub(crate) async fn auth_logout_handler(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
     if let Err(error) = crate::auth_guard::forbid_api_key(
@@ -48,7 +71,7 @@ async fn auth_logout_handler(
     }
 }
 
-async fn auth_me_handler(
+pub(crate) async fn auth_me_handler(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
     if let Err(error) = crate::auth_guard::forbid_api_key(
@@ -108,7 +131,7 @@ async fn auth_me_handler(
     }
 }
 
-async fn auth_update_profile_handler(
+pub(crate) async fn auth_update_profile_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(req): Json<UpdateProfileRequest>,
 ) -> Response {
@@ -172,7 +195,7 @@ async fn auth_update_profile_handler(
         }
     }
 }
-async fn auth_change_password_handler(
+pub(crate) async fn auth_change_password_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(req): Json<ChangePasswordRequest>,
 ) -> Response {
@@ -268,7 +291,7 @@ async fn auth_change_password_handler(
         }
     }
 }
-async fn auth_legal_status_handler(
+pub(crate) async fn auth_legal_status_handler(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
     if let Err(error) = crate::auth_guard::forbid_api_key(
@@ -320,7 +343,7 @@ async fn auth_legal_status_handler(
     }
 }
 
-async fn auth_record_legal_acceptance_handler(
+pub(crate) async fn auth_record_legal_acceptance_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     headers: HeaderMap,
     Json(req): Json<RecordLegalAcceptanceRequest>,
@@ -406,7 +429,7 @@ async fn auth_record_legal_acceptance_handler(
     }
 }
 
-async fn usage_limit_handler(
+pub(crate) async fn usage_limit_handler(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
     if let Err(error) = crate::auth_guard::forbid_api_key(

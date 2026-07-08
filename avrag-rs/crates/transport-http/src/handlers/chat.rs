@@ -22,7 +22,7 @@ use uuid::Uuid;
 use super::{
     app_error_response, app_error_response_for_agent, error_response, operation_guide_agent_type,
 };
-use crate::RequestState;
+use crate::middleware::RequestState;
 use crate::auth_guard::{
     authorize_api_key_query_scoped, authorize_session_access, authorize_workspace_notebook_str,
     authorize_workspace_query_optional_notebook, forbid_api_key, forbid_workspace_api_key,

@@ -10,6 +10,7 @@ anyhow.workspace = true
 analytics = { path = "../analytics" }
 avrag-auth = { path = "../auth" }
 avrag-billing = { path = "../billing" }
+avrag-licensing = { path = "../licensing" }
 avrag-share = { path = "../share" }
 app-bootstrap = { path = "../app-bootstrap" }
 app-chat = { path = "../app-chat" }

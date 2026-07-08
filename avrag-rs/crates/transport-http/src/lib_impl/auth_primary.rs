@@ -1,4 +1,26 @@
-async fn auth_register_handler(
+use app_bootstrap::AppState;
+use app_core::RegisterUserInput;
+use axum::Json;
+use axum::extract::State;
+use axum::http::HeaderMap;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::response::Response;
+use bcrypt::DEFAULT_COST;
+use bcrypt::hash;
+use bcrypt::verify;
+use tracing::warn;
+
+use crate::auth_types::AuthEnvelope;
+use crate::auth_types::AuthPayload;
+use crate::auth_types::AuthUserDto;
+use crate::auth_types::LoginRequest;
+use crate::auth_types::RegisterRequest;
+use crate::handlers;
+
+use super::router_core::{issue_jwt_for_auth_version, record_api_product_event_if_available};
+
+pub(crate) async fn auth_register_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(req): Json<RegisterRequest>,
@@ -141,7 +163,7 @@ async fn auth_register_handler(
         .into_response()
 }
 
-async fn auth_login_handler(
+pub(crate) async fn auth_login_handler(
     State(state): State<AppState>,
     Json(req): Json<LoginRequest>,
 ) -> Response {

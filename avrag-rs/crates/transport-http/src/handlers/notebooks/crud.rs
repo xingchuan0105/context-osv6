@@ -10,7 +10,7 @@ use contracts::notebooks::{NotebookListResponse, NotebookResponse};
 use uuid::Uuid;
 
 use super::super::{app_error_response, error_response};
-use crate::RequestState;
+use crate::middleware::RequestState;
 use crate::auth_guard::{
     authorize_org_tool, authorize_workspace_notebook_str, org_create_permission,
     org_list_permission, query_permission,

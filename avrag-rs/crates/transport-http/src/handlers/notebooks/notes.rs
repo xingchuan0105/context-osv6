@@ -10,7 +10,7 @@ use contracts::notebooks::{CreateNotebookNoteRequest, UpdateNotebookNoteRequest}
 use uuid::Uuid;
 
 use super::super::{app_error_response, error_response};
-use crate::RequestState;
+use crate::middleware::RequestState;
 use crate::auth_guard::{ensure_user_notebook_access, require_user_session};
 
 fn note_preview(content: &str) -> String {

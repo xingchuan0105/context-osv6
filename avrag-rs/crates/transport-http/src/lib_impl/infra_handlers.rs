@@ -1,10 +1,28 @@
+use app_bootstrap::AppState;
+use axum::Json;
+use axum::body::Bytes;
+use axum::extract::Extension;
+use axum::extract::Path;
+use axum::extract::Query;
+use axum::extract::State;
+use axum::http::HeaderMap;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::response::Response;
+use serde::Deserialize;
+use serde_json::json;
+use tracing::warn;
+
+use crate::handlers;
+use crate::middleware::RequestState;
+
 #[derive(Debug, Deserialize)]
-struct SignedUploadQuery {
+pub(crate) struct SignedUploadQuery {
     expires: u64,
     signature: String,
 }
 
-async fn health_handler(State(state): State<AppState>) -> Response {
+pub(crate) async fn health_handler(State(state): State<AppState>) -> Response {
     let mut components = vec!["api".to_string()];
     if state.postgres_configured() {
         if state.pg_ready().await {
@@ -21,7 +39,7 @@ async fn health_handler(State(state): State<AppState>) -> Response {
         .into_response()
 }
 
-async fn ready_handler(State(state): State<AppState>) -> Response {
+pub(crate) async fn ready_handler(State(state): State<AppState>) -> Response {
     let mut ready = true;
     let mut details = Vec::new();
 
@@ -51,7 +69,7 @@ async fn ready_handler(State(state): State<AppState>) -> Response {
     }
 }
 
-async fn metrics_handler() -> Response {
+pub(crate) async fn metrics_handler() -> Response {
     (
         StatusCode::OK,
         [("content-type", "text/plain; version=0.0.4; charset=utf-8")],
@@ -60,7 +78,7 @@ async fn metrics_handler() -> Response {
         .into_response()
 }
 
-async fn docs_handler() -> Response {
+pub(crate) async fn docs_handler() -> Response {
     (
         StatusCode::OK,
         [("content-type", "text/html; charset=utf-8")],
@@ -76,7 +94,7 @@ async fn docs_handler() -> Response {
         .into_response()
 }
 
-async fn openapi_handler() -> Response {
+pub(crate) async fn openapi_handler() -> Response {
     (
         StatusCode::OK,
         Json(json!({
@@ -106,7 +124,7 @@ async fn openapi_handler() -> Response {
 // Stub handlers (JSON 501)
 // ---------------------------------------------------------------------------
 
-async fn dev_upload_handler(
+pub(crate) async fn dev_upload_handler(
     Path(document_id): Path<String>,
     Extension(RequestState(state)): Extension<RequestState>,
     body: Bytes,
@@ -147,7 +165,7 @@ async fn dev_upload_handler(
     }
 }
 
-async fn signed_upload_handler(
+pub(crate) async fn signed_upload_handler(
     Path(document_id): Path<String>,
     Query(query): Query<SignedUploadQuery>,
     State(state): State<AppState>,
@@ -200,7 +218,7 @@ async fn signed_upload_handler(
     }
 }
 
-async fn billing_webhook_handler(
+pub(crate) async fn billing_webhook_handler(
     Path(provider_str): Path<String>,
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -246,7 +264,7 @@ async fn billing_webhook_handler(
     (status, Json(result)).into_response()
 }
 
-async fn openai_chat_completions_handler(
+pub(crate) async fn openai_chat_completions_handler(
     Path(notebook_id): Path<String>,
     Extension(RequestState(state)): Extension<RequestState>,
     headers: HeaderMap,
@@ -261,7 +279,7 @@ async fn openai_chat_completions_handler(
     handlers::chat_post_handler(Extension(RequestState(state)), headers, Json(req)).await
 }
 
-async fn shared_notebook_handler(
+pub(crate) async fn shared_notebook_handler(
     Path(token): Path<String>,
     State(state): State<AppState>,
 ) -> Response {
@@ -335,7 +353,7 @@ struct S3Object {
     key: String,
 }
 
-async fn object_storage_webhook_handler(
+pub(crate) async fn object_storage_webhook_handler(
     State(state): State<AppState>,
     body: Bytes,
 ) -> Response {

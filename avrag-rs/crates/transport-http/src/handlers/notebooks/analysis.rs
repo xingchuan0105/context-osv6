@@ -8,7 +8,7 @@ use axum::{
 
 use super::super::{app_error_response, error_response};
 use super::notes::load_notebook_notes;
-use crate::RequestState;
+use crate::middleware::RequestState;
 use crate::auth_guard::{ensure_user_notebook_access, require_user_session};
 
 fn pinned_source_count(

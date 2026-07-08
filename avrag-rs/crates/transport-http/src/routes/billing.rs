@@ -3,7 +3,7 @@ use axum::{Extension, Json, Router, extract::Query, routing::get};
 use common::ApiResponse;
 use serde::Deserialize;
 
-use crate::RequestState;
+use crate::middleware::RequestState;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()

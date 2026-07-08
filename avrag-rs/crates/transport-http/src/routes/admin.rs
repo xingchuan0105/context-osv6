@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::RequestState;
+use crate::middleware::RequestState;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
