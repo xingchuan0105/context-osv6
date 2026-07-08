@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use typeshare::typeshare;
 
 use crate::rag_execute::{
     ExecutePlanItem, ExecutePlanRequest, ExecutePlanSummaryMode, GraphHint, PlaceholderTriplet,
@@ -7,6 +8,7 @@ use crate::rag_execute::{
 };
 
 /// Tool catalog entry: describes one callable tool.
+#[typeshare]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolSpec {
     pub name: String,

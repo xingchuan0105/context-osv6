@@ -26,6 +26,24 @@ export interface AdminUsageResponse {
 	total_documents: number;
 }
 
+/** Tool catalog entry: describes one callable tool. */
+export interface ToolSpec {
+	name: string;
+	version: string;
+	description: string;
+	/** JSON Schema for the `args` field of a ToolCall. */
+	input_schema: unknown;
+	/** JSON Schema for the `data` field of a ToolResult. */
+	output_schema: unknown;
+}
+
+export interface AgentOperationGuide {
+	mode: string;
+	summary: string;
+	instructions: string;
+	tool_schemas?: ToolSpec[];
+}
+
 export interface AgentPreference {
 	id: string;
 	text: string;
@@ -350,6 +368,8 @@ export interface ChatResponse {
 	guard_report?: GuardReport;
 	tool_results?: ToolResult[];
 	usage?: ChatTokenUsage;
+	/** Per-invocation instructions for external agents (RAG codegen / Search tool schema). */
+	agent_operation_guide?: AgentOperationGuide;
 }
 
 export interface ChatDonePayload {
