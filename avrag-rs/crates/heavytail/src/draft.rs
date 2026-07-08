@@ -84,23 +84,39 @@ pub fn deficit_hints(
 
 /// Draft each skeleton section sequentially.
 ///
-/// - `mpc`: deficit hints (M3 arm a vs b)
-/// - `primed`: style priming in system prompt (arm a = false, arm b = true)
-/// - `priming`: override priming text (or `None` to use [`PRIMING`] when primed)
-/// - `one_sentence_per_line`: R4 line-per-sentence drafting variant on arm b
-/// - `on_section`: called at each section boundary with `(section_index_1based, total_sections)`
+/// - `options.mpc`: deficit hints (M3 arm a vs b)
+/// - `options.primed`: style priming in system prompt (arm a = false, arm b = true)
+/// - `priming`: override priming text (or `None` to use [`PRIMING`] when options.primed)
+/// - `options.one_sentence_per_line`: R4 line-per-sentence drafting variant on arm b
+/// - `options.on_section`: called at each section boundary with `(section_index_1based, total_sections)`
+pub struct DraftOptions<'a> {
+    pub mpc: bool,
+    pub primed: bool,
+    pub priming: Option<&'a str>,
+    pub one_sentence_per_line: bool,
+    pub on_section: Option<&'a (dyn Fn(usize, usize) + Sync)>,
+}
+
+impl<'a> Default for DraftOptions<'a> {
+    fn default() -> Self {
+        Self {
+            mpc: false,
+            primed: false,
+            priming: None,
+            one_sentence_per_line: false,
+            on_section: None,
+        }
+    }
+}
+
 pub async fn draft_sections(
     llm: &WriterLlm,
     skeleton: &Skeleton,
     style: &StyleParams,
     cards: &[MaterialCard],
     ws: &mut DraftWorkspace,
-    mpc: bool,
-    primed: bool,
-    priming: Option<&str>,
-    one_sentence_per_line: bool,
+    options: &DraftOptions<'_>,
     tokens_used: &mut usize,
-    on_section: Option<&(dyn Fn(usize, usize) + Sync)>,
 ) -> Result<()> {
     let card_map: std::collections::BTreeMap<&str, &MaterialCard> =
         cards.iter().map(|c| (c.id.as_str(), c)).collect();
@@ -109,10 +125,10 @@ pub async fn draft_sections(
     let mut section_prose: Vec<String> = Vec::new();
     let mut running_fp = fingerprint_from_workspace(ws);
     let total_sections = skeleton.sections.len();
-    let priming_text = priming.unwrap_or(PRIMING);
+    let priming_text = options.priming.unwrap_or(PRIMING);
 
     for (idx, section) in skeleton.sections.iter().enumerate() {
-        if let Some(callback) = on_section {
+        if let Some(callback) = options.on_section {
             callback(idx + 1, total_sections);
         }
 
@@ -122,15 +138,15 @@ pub async fn draft_sections(
             section,
             &section_prose,
             &card_map,
-            if mpc {
+            if options.mpc {
                 deficit_hints(&running_fp, style, &reservoir)
             } else {
                 Vec::new()
             },
-            one_sentence_per_line,
+            options.one_sentence_per_line,
         );
 
-        let system = if primed {
+        let system = if options.primed {
             format!("{PLAIN_SYSTEM}\n\n{priming_text}")
         } else {
             PLAIN_SYSTEM.to_string()
@@ -390,12 +406,8 @@ mod tests {
             &StyleParams::default(),
             &[],
             &mut ws,
-            true,
-            true,
-            None,
-            false,
+            &DraftOptions { mpc: true, primed: true, ..Default::default() },
             &mut 0,
-            None,
         )
         .await
         .expect("draft_sections");

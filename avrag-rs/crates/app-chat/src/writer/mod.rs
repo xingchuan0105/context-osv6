@@ -104,14 +104,16 @@ impl<'a> WriterOrchestrator<'a> {
             &style,
             &state.cards,
             &mut state.workspace,
-            true,
-            true,
-            Some(priming.as_str()),
-            false,
+            &draft::DraftOptions {
+                mpc: true,
+                primed: true,
+                priming: Some(priming.as_str()),
+                on_section: Some(&|section, total| {
+                    spawn_section_progress(section_sink.as_ref(), section, total);
+                }),
+                ..Default::default()
+            },
             &mut state.tokens_used,
-            Some(&|section, total| {
-                spawn_section_progress(section_sink.as_ref(), section, total);
-            }),
         )
         .await
         .map_err(|e| AppError::internal(format!("section drafting failed: {e}")))?;

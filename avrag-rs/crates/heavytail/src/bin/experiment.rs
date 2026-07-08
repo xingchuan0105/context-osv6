@@ -7,7 +7,7 @@ use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
-use heavytail::draft::draft_sections;
+use heavytail::draft::{draft_sections, DraftOptions};
 use heavytail::experiment::{
     evaluate_m3_decisions, render_summary_markdown, ArmSummary, TopicRunResult,
 };
@@ -225,49 +225,25 @@ async fn run_topic_arm(
     match arm {
         ArmKind::A => {
             draft_sections(
-                llm,
-                &skeleton,
-                style,
-                &[],
-                &mut ws,
-                false,
-                false,
-                None,
-                false,
+                llm, &skeleton, style, &[], &mut ws,
+                &DraftOptions::default(),
                 &mut tokens_used,
-                None,
             )
             .await?;
         }
         ArmKind::B => {
             draft_sections(
-                llm,
-                &skeleton,
-                style,
-                &[],
-                &mut ws,
-                true,
-                true,
-                None,
-                false,
+                llm, &skeleton, style, &[], &mut ws,
+                &DraftOptions { mpc: true, primed: true, ..Default::default() },
                 &mut tokens_used,
-                None,
             )
             .await?;
         }
         ArmKind::BLines => {
             draft_sections(
-                llm,
-                &skeleton,
-                style,
-                &[],
-                &mut ws,
-                true,
-                true,
-                None,
-                true,
+                llm, &skeleton, style, &[], &mut ws,
+                &DraftOptions { mpc: true, primed: true, one_sentence_per_line: true, ..Default::default() },
                 &mut tokens_used,
-                None,
             )
             .await?;
         }
