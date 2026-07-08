@@ -110,19 +110,6 @@ impl CapabilityRegistry {
         tools
     }
 
-    /// Answer 阶段：返回 format 技能目录（按 ID 排序，确保 prompt 确定性）
-    pub fn answer_format_skills(&self, mode_id: &str) -> Vec<&SkillMetadata> {
-        let mode_id = mode_id.to_string();
-        let mut skills: Vec<_> = self
-            .skills
-            .values()
-            .filter(|s| s.activation_phase == ActivationPhase::Answer)
-            .filter(|s| s.applicable_strategies.iter().any(|s| s == &mode_id))
-            .collect();
-        skills.sort_by_key(|s| &s.id);
-        skills
-    }
-
     /// Answer 阶段：返回写作风格技能目录（按 ID 排序，确保 prompt 确定性）
     pub fn answer_writing_styles(&self, mode_id: &str) -> Vec<&SkillMetadata> {
         let mode_id = mode_id.to_string();
@@ -136,18 +123,6 @@ impl CapabilityRegistry {
         skills
     }
 
-    /// Answer 阶段：返回行为模式技能目录（目前只有 brainstorming，按 ID 排序）
-    pub fn answer_behavior_modes(&self, mode_id: &str) -> Vec<&SkillMetadata> {
-        let mode_id = mode_id.to_string();
-        let mut skills: Vec<_> = self
-            .skills
-            .values()
-            .filter(|s| s.category == "behavior")
-            .filter(|s| s.applicable_strategies.iter().any(|s| s == &mode_id))
-            .collect();
-        skills.sort_by_key(|s| &s.id);
-        skills
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -591,36 +566,5 @@ mod tests {
         }
 
         assert_eq!(plan_tools.len(), 2);
-    }
-
-    #[test]
-    fn answer_format_skills_filters_by_phase() {
-        let registry = CapabilityRegistry::standard();
-        let answer_skills = registry.answer_format_skills("rag");
-
-        // 所有返回的技能都应该是 Answer phase
-        for skill in &answer_skills {
-            assert_eq!(
-                skill.activation_phase,
-                super::super::ActivationPhase::Answer
-            );
-        }
-
-        // CDS v1.1: format cluster replaces individual format leaf skills
-        assert!(answer_skills.iter().any(|s| s.id == "format"));
-    }
-
-    #[test]
-    fn answer_format_skills_universal_across_modes() {
-        let registry = CapabilityRegistry::standard();
-
-        // CDS v1.1: format cluster is output-agnostic — available to all modes
-        for mode in ["chat", "rag", "search"] {
-            let skills = registry.answer_format_skills(mode);
-            assert!(
-                skills.iter().any(|s| s.id == "format"),
-                "format cluster should be available to mode '{mode}'"
-            );
-        }
     }
 }

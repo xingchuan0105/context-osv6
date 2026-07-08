@@ -21,6 +21,7 @@ pub use avrag_retrieval_data_plane::{RetrievalDataPlane, WeightedChunkList};
 /// stage-level retrieval operations and tool dispatch for RAG.
 use avrag_llm::EmbeddingClient;
 
+#[derive(Clone)]
 pub struct RagRuntime {
     config: RagConfig,
     data_plane: Arc<dyn RetrievalDataPlane>,
@@ -38,6 +39,11 @@ impl RagRuntime {
 
     pub fn with_embedding_client(mut self, embedding_client: Arc<EmbeddingClient>) -> Self {
         self.embedding_client = Some(embedding_client);
+        self
+    }
+
+    // TODO(write-mode): WIP stub — attaches tenant identity for metering.
+    pub fn with_tenant(self, _tenant: avrag_llm::TenantContext) -> Self {
         self
     }
 

@@ -100,7 +100,7 @@ pub async fn draft_sections(
     priming: Option<&str>,
     one_sentence_per_line: bool,
     tokens_used: &mut usize,
-    on_section: Option<&dyn Fn(usize, usize)>,
+    on_section: Option<&(dyn Fn(usize, usize) + Sync)>,
 ) -> Result<()> {
     let card_map: std::collections::BTreeMap<&str, &MaterialCard> =
         cards.iter().map(|c| (c.id.as_str(), c)).collect();

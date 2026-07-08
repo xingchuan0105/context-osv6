@@ -94,11 +94,6 @@ pub fn build_run_result(
             max: max_iterations,
         }),
         total_elapsed_ms: Some(total_elapsed_ms),
-        trace: None,
-        snapshot: None,
-        decisions: Vec::new(),
-        tool_calls: Vec::new(),
         routing_decision: None,
-        eval_summary: None,
     }
 }

@@ -188,6 +188,12 @@ pub struct DocProfileArgs {
     pub fields: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DocChunksArgs {
+    pub doc_ids: Vec<String>,
+}
+
 fn default_top_k() -> usize {
     10
 }

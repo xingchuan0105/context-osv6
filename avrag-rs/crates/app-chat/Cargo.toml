@@ -8,6 +8,7 @@ version.workspace = true
 [features]
 default = []
 eval = []
+write-mode = []  # WIP: gates the unfinished write-mode refine-experiment bin
 
 [dependencies]
 analytics = { path = "../analytics" }
@@ -48,3 +49,7 @@ uuid.workspace = true
 [dev-dependencies]
 app-core = { path = "../app-core" }
 avrag-storage-pg = { path = "../storage-pg" }
+
+[[bin]]
+name = "refine-experiment"
+required-features = ["write-mode"]

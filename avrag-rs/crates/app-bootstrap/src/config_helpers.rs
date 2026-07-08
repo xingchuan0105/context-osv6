@@ -31,7 +31,7 @@ pub fn build_unified_agent_service(
     let search_provider: Option<Arc<dyn avrag_search::SearchProvider>> =
         search_executor.map(|executor| -> Arc<dyn avrag_search::SearchProvider> { executor });
 
-    let agent = app_chat::agents::unified::UnifiedAgent::new(llm_client.clone())
+    let agent = app_chat::agents::unified::UnifiedAgent::new(llm_client.clone(), None, None)
         .with_rag_runtime(rag_runtime)
         .with_search_executor(search_provider)
         .with_chat_persistence(chat_persistence);

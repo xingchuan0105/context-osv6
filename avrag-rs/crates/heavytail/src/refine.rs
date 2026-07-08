@@ -29,7 +29,7 @@ pub async fn refine(
     reservoir: &[String],
     budget: &WriterBudget,
     state: &mut WriterState,
-    on_round: Option<&dyn Fn(usize, usize)>,
+    on_round: Option<&(dyn Fn(usize, usize) + Sync)>,
 ) -> Result<()> {
     for round in 0..budget.max_rounds {
         if let Some(callback) = on_round {

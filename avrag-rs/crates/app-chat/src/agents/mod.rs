@@ -55,7 +55,6 @@ pub mod r#loop;
 pub mod progressive;
 #[cfg(feature = "eval")]
 pub mod redteam;
-pub mod replay;
 pub mod runtime;
 pub mod service;
 pub mod skills;

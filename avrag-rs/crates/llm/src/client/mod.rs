@@ -40,6 +40,21 @@ impl LlmClient {
         }
     }
 
+    /// Tags this client clone with a feature label (for telemetry/metrics attribution).
+    /// Currently a no-op identity passthrough; reserved for future observability wiring.
+    pub fn with_feature(self, _feature: impl std::fmt::Display) -> Self {
+        self
+    }
+
+    // TODO(write-mode): WIP stub — attaches a usage observer for metering.
+    pub fn with_observer(
+        self,
+        _observer: std::sync::Arc<dyn crate::UsageObserver>,
+        _tenant: crate::TenantContext,
+    ) -> Self {
+        self
+    }
+
     fn prepare_completion(&self, messages: &[ChatMessage]) -> anyhow::Result<CompletionCall> {
         let started_at = std::time::Instant::now();
         let provider = self.config.provider_name();
