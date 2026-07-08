@@ -22,7 +22,7 @@ use crate::indexing::{
     StoredMultimodalChunk, build_multimodal_index_records,
     maybe_enrich_visual_multimodal_summaries, record_multimodal_degrade,
 };
-use crate::ingestion_guard::ensure_ingestion_side_effects_allowed;
+use crate::ingestion_guard::{ensure_ingestion_side_effects_allowed, from_storage_error};
 use crate::pdf;
 #[derive(Debug, Default, Clone)]
 pub(crate) struct ParseRunState {
@@ -167,7 +167,7 @@ pub(crate) async fn run_document_pipeline(
         .documents()
         .clear_document_ir_projection(context, document_id)
         .await
-        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+        .map_err(from_storage_error)?;
     processor
         .repo
         .documents()
@@ -178,7 +178,7 @@ pub(crate) async fn run_document_pipeline(
             &build_document_block_rows(&document_ir, parse_run_id),
         )
         .await
-        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+        .map_err(from_storage_error)?;
 
     let chunk_plan =
         ingestion::chunker::build_ir_chunk_plan(&document_ir, filename, &ChunkPolicy::default());
@@ -214,7 +214,7 @@ pub(crate) async fn run_document_pipeline(
             &body_chunks,
         )
         .await
-        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+        .map_err(from_storage_error)?;
     let processed_chunk_count = chunks.len().max(1);
 
     let profile_result =
@@ -425,7 +425,7 @@ pub(crate) async fn run_document_pipeline(
                 },
             )
             .await
-            .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+            .map_err(from_storage_error)?;
 
         let fusion_asset_refs = multimodal_chunk
             .metadata

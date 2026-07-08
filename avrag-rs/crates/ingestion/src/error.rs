@@ -14,3 +14,9 @@ pub enum IngestionError {
     #[error("state sink error: {0}")]
     StateSink(String),
 }
+
+impl From<uuid::Error> for IngestionError {
+    fn from(error: uuid::Error) -> Self {
+        IngestionError::StateSink(error.to_string())
+    }
+}

@@ -18,8 +18,9 @@ use super::helpers::{
 };
 use crate::indexing::env_flag_enabled;
 use crate::ingestion_guard::{
-    ensure_ingestion_side_effects_allowed, spawn_ingestion_task_lock_heartbeat,
-    stop_ingestion_task_lock_heartbeat, verify_uploaded_object_bytes, worker_task_kind,
+    ensure_ingestion_side_effects_allowed, from_storage_error,
+    spawn_ingestion_task_lock_heartbeat, stop_ingestion_task_lock_heartbeat,
+    verify_uploaded_object_bytes, worker_task_kind,
 };
 use crate::pdf;
 use crate::runtime_support::{fetch_url_content, task_context, url_to_filename};
@@ -112,7 +113,7 @@ impl TaskProcessor for PgTaskProcessor {
             async {
                 let context = task_context(task);
                 let document_id = Uuid::parse_str(&task.document_id)
-                    .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+                    .map_err(IngestionError::from)?;
 
             // Acquire a per-document lock so two workers cannot process the same
             // document concurrently. Prefer the Redis-backed distributed lock when
@@ -158,7 +159,7 @@ impl TaskProcessor for PgTaskProcessor {
                         .bootstrap()
                         .get_document_task_seed(&context, document_id)
                         .await
-                        .map_err(|error| IngestionError::StateSink(error.to_string()))?
+                        .map_err(from_storage_error)?
                         .ok_or_else(|| {
                             IngestionError::StateSink("document seed not found".to_string())
                         })?;
@@ -281,7 +282,7 @@ impl TaskProcessor for PgTaskProcessor {
                     },
                 )
                 .await
-                .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+                .map_err(from_storage_error)?;
 
             let pipeline_metrics = match run_document_pipeline(
                 self,
@@ -339,7 +340,7 @@ impl TaskProcessor for PgTaskProcessor {
                             },
                         )
                         .await
-                        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+                        .map_err(from_storage_error)?;
 
                     if let Some(document_ir) = parse_run_state.document_ir.as_ref() {
                         info!(

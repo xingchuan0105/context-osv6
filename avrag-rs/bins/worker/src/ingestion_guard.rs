@@ -3,7 +3,7 @@ use avrag_auth::AuthContext;
 use avrag_retrieval_data_plane::RetrievalDataPlane;
 use avrag_storage_pg::{
     DocumentCleanupTask, DocumentCleanupTaskCompletionOutcome, DocumentCleanupTaskFailureOutcome,
-    ObjectStoreHandle, PgAppRepository,
+    ObjectStoreHandle, PgAppRepository, PgStorageError,
 };
 use ingestion::{IngestionError, IngestionTask};
 use sha2::{Digest, Sha256};
@@ -16,6 +16,10 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::runtime_support::{document_cleanup_task_context, safe_relative_object_key};
+
+pub(crate) fn from_storage_error(error: PgStorageError) -> IngestionError {
+    IngestionError::StateSink(error.to_string())
+}
 
 pub(crate) async fn ensure_ingestion_side_effects_allowed(
     repo: &PgAppRepository,
@@ -33,7 +37,7 @@ pub(crate) async fn ensure_ingestion_side_effects_allowed(
             task.lock_token.as_deref(),
         )
         .await
-        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+        .map_err(from_storage_error)?;
     if allowed {
         Ok(())
     } else {
@@ -53,7 +57,7 @@ pub(crate) async fn verify_uploaded_object_bytes(
         .documents()
         .get_document_upload_validation(context, document_id)
         .await
-        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+        .map_err(from_storage_error)?;
     let Some(validation) = validation else {
         return Ok(());
     };

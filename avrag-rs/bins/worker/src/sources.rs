@@ -7,7 +7,7 @@ use ingestion::{
 use tracing::info;
 use uuid::Uuid;
 
-use crate::ingestion_guard::ensure_ingestion_side_effects_allowed;
+use crate::ingestion_guard::{ensure_ingestion_side_effects_allowed, from_storage_error};
 use crate::runtime_support::task_context;
 
 pub(crate) struct PgTaskSource {
@@ -79,7 +79,7 @@ impl StateSink for PgStateSink {
         ingestion::DocumentStateMachine::validate(&transition)?;
         let context = task_context(task);
         let document_id = Uuid::parse_str(&task.document_id)
-            .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+            .map_err(IngestionError::from)?;
 
         if matches!(
             transition.to,
@@ -111,13 +111,13 @@ impl StateSink for PgStateSink {
                     task.lock_token.as_deref(),
                 )
                 .await
-                .map_err(|error| IngestionError::StateSink(error.to_string()))?
+                .map_err(from_storage_error)?
         } else {
             self.repo
                 .documents()
                 .set_document_status(&context, document_id, transition.to.clone())
                 .await
-                .map_err(|error| IngestionError::StateSink(error.to_string()))?
+                .map_err(from_storage_error)?
         };
         if !updated {
             return Err(IngestionError::StateSink(format!(
@@ -143,7 +143,7 @@ impl StateSink for PgStateSink {
                 created_at: chrono::Utc::now().to_rfc3339(),
             })
             .await
-            .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+            .map_err(from_storage_error)?;
 
         if matches!(
             transition.to,
