@@ -25,6 +25,7 @@ pub(crate) async fn ensure_ingestion_side_effects_allowed(
     phase: &str,
 ) -> Result<(), IngestionError> {
     let allowed = repo
+        .documents()
         .document_allows_ingestion_side_effects(
             context,
             document_id,
@@ -49,6 +50,7 @@ pub(crate) async fn verify_uploaded_object_bytes(
     bytes: &[u8],
 ) -> Result<(), IngestionError> {
     let validation = repo
+        .documents()
         .get_document_upload_validation(context, document_id)
         .await
         .map_err(|error| IngestionError::StateSink(error.to_string()))?;
@@ -100,7 +102,7 @@ pub(crate) fn spawn_ingestion_task_lock_heartbeat(
 
         loop {
             heartbeat.tick().await;
-            match repo.renew_ingestion_task_lock(&task_id, &lock_token).await {
+            match repo.ingestion_queue().renew_ingestion_task_lock(&task_id, &lock_token).await {
                 Ok(true) => {}
                 Ok(false) => warn!(
                     task_id = %task_id,
@@ -143,6 +145,7 @@ pub(crate) fn spawn_document_cleanup_task_lock_heartbeat(
         loop {
             heartbeat.tick().await;
             match repo
+                .ingestion_queue()
                 .renew_document_cleanup_task_lock(task_id, lock_token)
                 .await
             {
@@ -183,6 +186,7 @@ pub(crate) async fn run_document_cleanup_once(
     worker_id: &str,
 ) -> Result<bool> {
     let Some(task) = repo
+        .ingestion_queue()
         .claim_next_document_cleanup_task(worker_id, None)
         .await?
     else {
@@ -215,6 +219,7 @@ pub(crate) async fn run_document_cleanup_once(
 
     match result {
         Ok(()) => match repo
+            .ingestion_queue()
             .complete_document_cleanup_task(task.task_id, lock_token)
             .await?
         {
@@ -226,6 +231,7 @@ pub(crate) async fn run_document_cleanup_once(
             }
         },
         Err(error) => match repo
+            .ingestion_queue()
             .fail_document_cleanup_task(task.task_id, lock_token, &error.to_string())
             .await?
         {
@@ -258,6 +264,7 @@ async fn ensure_document_cleanup_task_can_continue(
         .lock_token
         .ok_or_else(|| anyhow::anyhow!("cleanup task missing lock token before {phase}"))?;
     if repo
+        .chunks()
         .document_cleanup_task_lease_is_current(task.task_id, lock_token)
         .await?
     {
@@ -280,6 +287,7 @@ pub(crate) async fn process_document_cleanup_task(
     let context = document_cleanup_task_context(task);
     ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "target lookup").await?;
     let Some(targets) = repo
+        .chunks()
         .get_document_cleanup_targets(&context, task.document_id, &task.payload)
         .await?
     else {
@@ -357,6 +365,7 @@ pub(crate) async fn process_document_cleanup_task(
     ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "derived row cleanup")
         .await?;
     if !repo
+        .chunks()
         .cleanup_document_derived_rows(&context, task.document_id)
         .await?
     {
@@ -368,6 +377,7 @@ pub(crate) async fn process_document_cleanup_task(
     ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "mark document deleted")
         .await?;
     if !repo
+        .chunks()
         .mark_document_deleted(&context, task.document_id)
         .await?
     {

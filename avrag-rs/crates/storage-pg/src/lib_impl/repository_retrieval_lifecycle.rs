@@ -1,5 +1,5 @@
 use super::*;
-impl PgAppRepository {
+impl DocumentRepository {
     pub async fn set_document_status(
         &self,
         context: &AuthContext,

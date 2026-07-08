@@ -13,7 +13,7 @@ mod tests {
 
     use uuid::Uuid;
 
-    use avrag_storage_pg::PgAppRepository;
+    use avrag_storage_pg::{BootstrapRepository, PgAppRepository};
     use reqwest::Url;
     use std::sync::Arc;
     use tokio::fs;
@@ -667,8 +667,7 @@ mod tests {
             "avrag-app-upload-validation-test-{}",
             Uuid::new_v4()
         ));
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let repo = { let __b = BootstrapRepository::connect(&database_url).await.unwrap(); __b.migrate().await.unwrap(); PgAppRepository::from_pool(__b.raw().clone()) };
 
         let mut config = AppConfig::default();
         config.org_id = Uuid::new_v4().to_string();
@@ -772,7 +771,7 @@ mod tests {
             .postgres_repo()
             .as_ref()
             .unwrap()
-            .count_ingestion_tasks_for_document(state.auth(), document_uuid)
+            .ingestion_queue().count_ingestion_tasks_for_document(state.auth(), document_uuid)
             .await
             .unwrap()
     }
@@ -852,7 +851,7 @@ mod tests {
             .postgres_repo()
             .as_ref()
             .unwrap()
-            .get_document_upload_validation(
+            .documents().get_document_upload_validation(
                 state.auth(),
                 Uuid::parse_str(&upload.document_id).unwrap(),
             )

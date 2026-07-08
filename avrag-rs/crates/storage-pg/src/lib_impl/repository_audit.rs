@@ -1,5 +1,5 @@
 use super::*;
-impl PgAppRepository {
+impl AuditRepository {
     pub async fn append_audit_record(&self, record: &AuditRecord) -> Result<(), PgStorageError> {
         let org_id = Uuid::parse_str(&record.org_id)
             .map_err(|_| PgStorageError::NotFound("invalid audit org id".to_string()))?;

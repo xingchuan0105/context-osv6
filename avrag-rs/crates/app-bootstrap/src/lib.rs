@@ -38,7 +38,7 @@ use avrag_guardrails::GuardPipeline;
 use avrag_rag_core::{RagConfig, RagRuntime, RetrievalDataPlane};
 use avrag_search::SearchExecutor;
 use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
-use avrag_storage_pg::{ObjectStoreHandle, PgAppRepository};
+use avrag_storage_pg::{BootstrapRepository, ObjectStoreHandle, PgAppRepository, TenantPgPool};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
 
@@ -184,10 +184,13 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     let auth = auth_context_from_config(&config);
     let object_store_handle = Arc::new(build_object_store(&config).await?);
     let pg = if let Some(database_url) = config.database_url.as_deref() {
-        let repository = PgAppRepository::connect(database_url).await?;
+        let bootstrap = BootstrapRepository::connect(database_url).await?;
         if config.auto_migrate {
-            repository.migrate().await?;
+            bootstrap.migrate().await?;
         }
+        let repository = PgAppRepository {
+            pool: TenantPgPool::new(bootstrap.raw().clone()),
+        };
         Some(Arc::new(repository))
     } else {
         None

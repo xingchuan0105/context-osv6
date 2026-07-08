@@ -164,11 +164,13 @@ pub(crate) async fn run_document_pipeline(
     .await?;
     processor
         .repo
+        .documents()
         .clear_document_ir_projection(context, document_id)
         .await
         .map_err(|error| IngestionError::StateSink(error.to_string()))?;
     processor
         .repo
+        .documents()
         .replace_document_blocks(
             context,
             notebook_id,
@@ -203,6 +205,7 @@ pub(crate) async fn run_document_pipeline(
     .await?;
     let chunks = processor
         .repo
+        .bootstrap()
         .store_document_body_chunks(
             context,
             document_id,
@@ -229,6 +232,7 @@ pub(crate) async fn run_document_pipeline(
         .await?;
         if let Err(error) = processor
             .repo
+            .bootstrap()
             .replace_document_toc(context, notebook_id, document_id, &toc_entries)
             .await
         {
@@ -248,6 +252,7 @@ pub(crate) async fn run_document_pipeline(
         .await?;
         if let Err(error) = processor
             .repo
+            .documents()
             .update_document_profile(
                 context,
                 document_id,
@@ -324,6 +329,7 @@ pub(crate) async fn run_document_pipeline(
 
         let store_result = processor
             .repo
+            .assets()
             .store_document_asset(
                 context,
                 avrag_storage_pg::StoreDocumentAssetParams {
@@ -389,6 +395,7 @@ pub(crate) async fn run_document_pipeline(
 
         processor
             .repo
+            .assets()
             .store_multimodal_chunk(
                 context,
                 avrag_storage_pg::StoreMultimodalChunkParams {
@@ -528,6 +535,7 @@ pub(crate) async fn run_document_pipeline(
                     .await?;
                     if let Err(error) = processor
                         .repo
+                        .documents()
                         .update_document_summary(
                             context,
                             document_id,
@@ -667,6 +675,7 @@ pub(crate) async fn run_document_pipeline(
         if extraction.total_tokens > 0 {
             let _ = processor
                 .repo
+                .sessions()
                 .record_usage_event(
                     context,
                     "triplet_extraction_tokens",

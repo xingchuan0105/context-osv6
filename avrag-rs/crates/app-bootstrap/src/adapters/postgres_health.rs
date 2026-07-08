@@ -17,6 +17,10 @@ impl PgHealthAdapter {
 #[async_trait]
 impl PostgresHealthPort for PgHealthAdapter {
     async fn ping(&self) -> Result<(), String> {
-        self.repo.ping().await.map_err(|error| error.to_string())
+        self.repo
+            .bootstrap()
+            .ping()
+            .await
+            .map_err(|error| error.to_string())
     }
 }

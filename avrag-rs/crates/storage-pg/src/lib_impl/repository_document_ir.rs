@@ -1,5 +1,5 @@
 use super::*;
-impl PgAppRepository {
+impl DocumentRepository {
     pub async fn clear_document_ir_projection(
         &self,
         context: &AuthContext,
@@ -68,7 +68,7 @@ pub struct FinishDocumentParseRunParams<'a> {
     pub lock_token: Option<&'a str>,
 }
 
-impl PgAppRepository {
+impl DocumentRepository {
     pub async fn create_document_parse_run(
         &self,
         context: &AuthContext,

@@ -1,6 +1,6 @@
 use super::*;
 
-impl PgAppRepository {
+impl SessionRepository {
     pub async fn list_sessions(
         &self,
         context: &AuthContext,

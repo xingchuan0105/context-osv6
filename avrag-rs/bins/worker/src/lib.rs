@@ -13,7 +13,7 @@ use anyhow::Result;
 use app_core::{AppConfig, load_prompt_template};
 use avrag_cache_redis::DocumentLock;
 use avrag_llm::SummaryGenerator;
-use avrag_storage_pg::PgAppRepository;
+use avrag_storage_pg::{BootstrapRepository, PgAppRepository, TenantPgPool};
 use ingestion::parser::{
     OfficeParserServiceClient, OfficeParserServiceConfig, PdfRendererServiceClient,
     PdfRendererServiceConfig,
@@ -68,10 +68,13 @@ pub async fn run() -> Result<()> {
     );
 
     if let Some(database_url) = database_url {
-        let repo = PgAppRepository::connect(&database_url).await?;
+        let bootstrap = BootstrapRepository::connect(&database_url).await?;
         if config.auto_migrate {
-            repo.migrate().await?;
+            bootstrap.migrate().await?;
         }
+        let repo = PgAppRepository {
+            pool: TenantPgPool::new(bootstrap.raw().clone()),
+        };
         let analytics_pool = repo.raw().clone();
         let mut analytics_job_runner =
             analytics_jobs::AnalyticsJobRunner::from_env(analytics_pool.clone());

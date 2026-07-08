@@ -129,7 +129,7 @@ fn env_bool(key: &str, default: bool) -> bool {
 mod tests {
     use super::*;
     use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
-    use avrag_storage_pg::PgAppRepository;
+    use avrag_storage_pg::{BootstrapRepository, PgAppRepository};
     use uuid::Uuid;
 
     // Regression: `documents` has forced RLS keyed on `app.current_org`. The scan runs on
@@ -140,25 +140,24 @@ mod tests {
         let Some(database_url) = std::env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let repo = { let __b = BootstrapRepository::connect(&database_url).await.unwrap(); __b.migrate().await.unwrap(); PgAppRepository::from_pool(__b.raw().clone()) };
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
         let ctx = AuthContext::new(org_id, SubjectKind::User).with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
-            .create_notebook(&ctx, "orphan-scan-test", "orphan scan test")
+            .bootstrap().create_notebook(&ctx, "orphan-scan-test", "orphan scan test")
             .await
             .unwrap();
         let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
         let document = repo
-            .create_document(&ctx, notebook_id, "in-flight.txt", 7, "text/plain")
+            .bootstrap().create_document(&ctx, notebook_id, "in-flight.txt", 7, "text/plain")
             .await
             .unwrap();
         let document_id = Uuid::parse_str(&document.id).unwrap();
         let seed = repo
-            .get_document_task_seed(&ctx, document_id)
+            .bootstrap().get_document_task_seed(&ctx, document_id)
             .await
             .unwrap()
             .expect("document seed");

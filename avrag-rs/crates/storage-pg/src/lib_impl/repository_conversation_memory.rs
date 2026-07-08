@@ -18,7 +18,7 @@ pub enum ConversationHistoryScope {
 const RECENT_CANDIDATE_LIMIT: i64 = 50;
 const FTS_CANDIDATE_LIMIT: i64 = 30;
 
-impl crate::PgAppRepository {
+impl ConversationMemoryRepository {
     pub async fn search_conversation_history(
         &self,
         auth: &AuthContext,
@@ -235,7 +235,7 @@ pub fn build_user_message_search_tokens(content: &str, resolved_query: Option<&s
     merge_search_tokens(content, resolved_query)
 }
 
-impl crate::PgAppRepository {
+impl ConversationMemoryRepository {
     /// Re-segment `search_tokens` with jieba for all chat messages (post-migrate backfill).
     pub async fn resegment_chat_message_search_tokens(&self) -> Result<u64, PgStorageError> {
         let rows = sqlx::query(

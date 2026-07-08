@@ -1,5 +1,5 @@
 use super::*;
-impl PgAppRepository {
+impl ChunkRepository {
     pub async fn get_document_scope_states(
         &self,
         context: &AuthContext,

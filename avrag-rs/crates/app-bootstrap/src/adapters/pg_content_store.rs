@@ -44,6 +44,7 @@ impl ContentStore for PgContentStore {
         chunk_ids: &[Uuid],
     ) -> Result<std::collections::HashMap<Uuid, IndexedChunk>, ContentStoreError> {
         self.repo
+            .assets()
             .get_chunks_by_ids(auth, chunk_ids)
             .await
             .map(|chunks| {
@@ -61,6 +62,7 @@ impl ContentStore for PgContentStore {
         doc_ids: &[Uuid],
     ) -> Result<Vec<DocumentMetadata>, ContentStoreError> {
         self.repo
+            .chunks()
             .get_document_metadata_by_ids(auth, doc_ids)
             .await
             .map_err(map_pg_error)
@@ -72,6 +74,7 @@ impl ContentStore for PgContentStore {
         doc_ids: &[Uuid],
     ) -> Result<Vec<SummaryMetadata>, ContentStoreError> {
         self.repo
+            .chunks()
             .get_summary_metadata(auth, doc_ids)
             .await
             .map_err(map_pg_error)
@@ -83,6 +86,7 @@ impl ContentStore for PgContentStore {
         doc_ids: &[Uuid],
     ) -> Result<Vec<(Uuid, TocEntry)>, ContentStoreError> {
         self.repo
+            .bootstrap()
             .get_document_toc_entries(auth, doc_ids)
             .await
             .map_err(map_pg_error)
@@ -94,6 +98,7 @@ impl ContentStore for PgContentStore {
         doc_ids: &[Uuid],
     ) -> Result<Vec<(Uuid, String)>, ContentStoreError> {
         self.repo
+            .chunks()
             .get_summary_chunks(auth, doc_ids)
             .await
             .map_err(map_pg_error)
@@ -117,6 +122,7 @@ impl ContentStore for PgContentStore {
         doc_ids: &[Uuid],
     ) -> Result<std::collections::HashMap<Uuid, String>, ContentStoreError> {
         self.repo
+            .chunks()
             .get_document_names(auth, doc_ids)
             .await
             .map_err(map_pg_error)

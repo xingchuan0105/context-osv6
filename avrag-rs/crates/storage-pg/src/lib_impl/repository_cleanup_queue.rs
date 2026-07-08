@@ -1,5 +1,5 @@
 use super::*;
-impl PgAppRepository {
+impl IngestionQueueRepository {
     pub async fn claim_next_document_cleanup_task(
         &self,
         worker_id: &str,

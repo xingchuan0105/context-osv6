@@ -34,3 +34,10 @@ pub use {
     repository_cleanup_queue::*, repository_search::*, repository_audit::*,
     repository_conversation_memory::*, dynamic_queries::*,
 };
+
+#[allow(unused_imports)]
+pub use core::{
+    AssetRepository, AuditRepository, AuthRepository, BootstrapRepository,
+    ChunkRepository, ConversationMemoryRepository, DocumentRepository,
+    IngestionQueueRepository, SessionRepository,
+};

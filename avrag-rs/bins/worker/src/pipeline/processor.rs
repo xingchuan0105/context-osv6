@@ -155,6 +155,7 @@ impl TaskProcessor for PgTaskProcessor {
                 ingestion::IngestionTaskPayload::ReindexDocument(_) => {
                     let seed = self
                         .repo
+                        .bootstrap()
                         .get_document_task_seed(&context, document_id)
                         .await
                         .map_err(|error| IngestionError::StateSink(error.to_string()))?
@@ -266,6 +267,7 @@ impl TaskProcessor for PgTaskProcessor {
                 &parse_run_state.outputs,
             );
             self.repo
+                .documents()
                 .create_document_parse_run(
                     &context,
                     avrag_storage_pg::CreateDocumentParseRunParams {
@@ -318,6 +320,7 @@ impl TaskProcessor for PgTaskProcessor {
                         &parse_run_state.outputs,
                     );
                     self.repo
+                        .documents()
                         .finish_document_parse_run(
                             &context,
                             avrag_storage_pg::FinishDocumentParseRunParams {
@@ -354,6 +357,7 @@ impl TaskProcessor for PgTaskProcessor {
                 Err(error) => {
                     let may_record_failure = self
                         .repo
+                        .documents()
                         .document_allows_ingestion_side_effects(
                             &context,
                             document_id,
@@ -378,6 +382,7 @@ impl TaskProcessor for PgTaskProcessor {
                     let failure_error = serde_json::json!({ "message": error.to_string() });
                     let _ = self
                         .repo
+                        .documents()
                         .finish_document_parse_run(
                             &context,
                             avrag_storage_pg::FinishDocumentParseRunParams {
@@ -406,6 +411,7 @@ impl TaskProcessor for PgTaskProcessor {
             let embedding_tokens = estimate_token_count(&content);
             let _ = self
                 .repo
+                .sessions()
                 .record_usage_event(
                     &context,
                     "pages_processed",
@@ -415,6 +421,7 @@ impl TaskProcessor for PgTaskProcessor {
                 .await;
             let _ = self
                 .repo
+                .sessions()
                 .record_usage_event(
                     &context,
                     "embedding_tokens",

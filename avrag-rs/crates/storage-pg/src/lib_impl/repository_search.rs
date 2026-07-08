@@ -1,5 +1,5 @@
 use super::*;
-impl PgAppRepository {
+impl ChunkRepository {
     /// Global search: notebooks by title/description using ILIKE.
     pub async fn search_notebooks(
         &self,

@@ -1,5 +1,5 @@
 use super::*;
-impl PgAppRepository {
+impl AuthRepository {
     pub async fn list_api_keys(
         &self,
         context: &AuthContext,

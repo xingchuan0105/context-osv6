@@ -4,7 +4,7 @@
         user_id: Uuid,
     ) -> Result<Option<UserProfileRow>, AppError> {
         self.repo
-            .get_user_profile(auth, user_id)
+            .auth().get_user_profile(auth, user_id)
             .await
             .map_err(map_pg_error)
             .map(|profile| profile.map(user_profile_row))
@@ -16,7 +16,7 @@
         profile: &UserProfileRow,
     ) -> Result<(), AppError> {
         self.repo
-            .upsert_user_profile(auth, &user_profile_row_to_pg(profile))
+            .auth().upsert_user_profile(auth, &user_profile_row_to_pg(profile))
             .await
             .map_err(map_pg_error)
     }
@@ -27,7 +27,7 @@
         notebook_id: Option<Uuid>,
     ) -> Result<Vec<ApiKeyRow>, AppError> {
         self.repo
-            .list_api_keys(auth, notebook_id)
+            .auth().list_api_keys(auth, notebook_id)
             .await
             .map_err(map_pg_error)
     }
@@ -43,7 +43,7 @@
     ) -> Result<CreateApiKeyResponse, AppError> {
         let (api_key, plaintext_key) = self
             .repo
-            .create_api_key(
+            .auth().create_api_key(
                 auth,
                 notebook_id,
                 name,
@@ -66,7 +66,7 @@
         key_id: Uuid,
     ) -> Result<bool, AppError> {
         self.repo
-            .revoke_api_key(auth, notebook_id, key_id)
+            .auth().revoke_api_key(auth, notebook_id, key_id)
             .await
             .map_err(map_pg_error)
     }
@@ -79,7 +79,7 @@
         offset: usize,
     ) -> Result<Vec<NotificationRow>, AppError> {
         self.repo
-            .list_notifications(auth, user_id, limit, offset)
+            .auth().list_notifications(auth, user_id, limit, offset)
             .await
             .map_err(map_pg_error)
     }
@@ -91,7 +91,7 @@
         notification_id: Uuid,
     ) -> Result<bool, AppError> {
         self.repo
-            .mark_notification_read(auth, user_id, notification_id)
+            .auth().mark_notification_read(auth, user_id, notification_id)
             .await
             .map_err(map_pg_error)
     }

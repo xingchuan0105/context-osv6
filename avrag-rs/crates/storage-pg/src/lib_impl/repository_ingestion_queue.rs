@@ -17,7 +17,7 @@ fn ingestion_queue_group_from_env() -> String {
     std::env::var("AVRAG_INGESTION_QUEUE_GROUP").unwrap_or_else(|_| "default".to_string())
 }
 
-impl PgAppRepository {
+impl IngestionQueueRepository {
     pub async fn enqueue_ingestion_task(
         &self,
         task: &IngestionTask,

@@ -182,7 +182,8 @@ impl AppState {
         let Some(user_id) = user_id else {
             return Ok(false);
         };
-        repo.delete_user_cascade(self.auth(), user_id)
+        repo.auth()
+            .delete_user_cascade(self.auth(), user_id)
             .await
             .map_err(|error| {
                 tracing::warn!(error = %error, "E2E reset: failed to delete user");
@@ -277,7 +278,7 @@ impl AppState {
                     "member lookup failed".to_string()
                 })?
         {
-            repo.delete_user_cascade(self.auth(), existing_id)
+            repo.auth().delete_user_cascade(self.auth(), existing_id)
                 .await
                 .map_err(|error| {
                     tracing::warn!(error = %error, "E2E org member: failed to delete existing member");

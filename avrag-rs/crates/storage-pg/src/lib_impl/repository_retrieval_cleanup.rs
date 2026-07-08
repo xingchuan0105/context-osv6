@@ -1,5 +1,5 @@
 use super::*;
-impl PgAppRepository {
+impl ChunkRepository {
     pub async fn count_document_cleanup_tasks_for_document(
         &self,
         context: &AuthContext,

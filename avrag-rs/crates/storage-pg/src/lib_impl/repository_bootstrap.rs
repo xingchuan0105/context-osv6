@@ -13,7 +13,7 @@ pub fn pg_pool_options() -> PgPoolOptions {
     options
 }
 
-impl PgAppRepository {
+impl BootstrapRepository {
     pub async fn connect(database_url: &str) -> Result<Self, PgStorageError> {
         let pool = pg_pool_options().connect(database_url).await?;
         Ok(Self {
@@ -35,7 +35,7 @@ impl PgAppRepository {
         {
             return Ok(());
         }
-        let updated = self.resegment_chat_message_search_tokens().await?;
+        let updated = ConversationMemoryRepository { pool: self.pool.clone() }.resegment_chat_message_search_tokens().await?;
         if updated > 0 {
             tracing::info!(
                 updated_rows = updated,
