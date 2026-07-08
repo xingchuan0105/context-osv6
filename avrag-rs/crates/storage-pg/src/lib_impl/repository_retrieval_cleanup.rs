@@ -1,3 +1,4 @@
+use super::*;
 impl PgAppRepository {
     pub async fn count_document_cleanup_tasks_for_document(
         &self,
@@ -216,7 +217,7 @@ impl PgAppRepository {
     }
 
 }
-async fn insert_document_cleanup_task(
+pub async fn insert_document_cleanup_task(
     tx: &mut PgConnection,
     org_id: Uuid,
     notebook_id: Uuid,

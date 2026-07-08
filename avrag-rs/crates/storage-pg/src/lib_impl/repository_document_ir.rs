@@ -1,3 +1,4 @@
+use super::*;
 impl PgAppRepository {
     pub async fn clear_document_ir_projection(
         &self,

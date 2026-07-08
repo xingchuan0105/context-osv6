@@ -1,124 +1,4 @@
-use super::*;
-pub fn generate_plaintext_api_key() -> String {
-    format!("sk_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
-}
-
-pub fn hash_api_key(value: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(value.as_bytes());
-    hex::encode(hasher.finalize())
-}
-
-#[derive(Debug, Error)]
-pub enum PgStorageError {
-    #[error("authorization failure: {0}")]
-    Auth(#[from] AuthError),
-    #[error("postgres error: {0}")]
-    Sqlx(#[from] sqlx::Error),
-    #[error("migration error: {0}")]
-    Migration(#[from] sqlx::migrate::MigrateError),
-    #[error("serialization error: {0}")]
-    Serde(#[from] serde_json::Error),
-    #[error("{0}")]
-    NotFound(String),
-}
-
-#[derive(Debug, Clone)]
-pub struct DocumentTaskSeed {
-    pub document_id: String,
-    pub org_id: String,
-    pub notebook_id: String,
-    pub filename: String,
-    pub mime_type: String,
-    pub file_size: u64,
-    pub object_path: String,
-    pub status: DocumentStatus,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DocumentUploadMutationOutcome {
-    Updated,
-    NotFound,
-    StatusConflict(DocumentStatus),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DocumentUploadQueueOutcome {
-    Queued { task_inserted: bool },
-    NotFound,
-    StatusConflict(DocumentStatus),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DocumentDeletionOutcome {
-    Queued { task_inserted: bool },
-    AlreadyDeleting { task_inserted: bool },
-    AlreadyDeleted,
-    NotFound,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DocumentCleanupTaskCompletionOutcome {
-    Completed,
-    LeaseLost,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DocumentCleanupTaskFailureOutcome {
-    Requeued,
-    DeadLettered,
-    LeaseLost,
-}
-
-#[derive(Debug, Clone)]
-pub struct DocumentCleanupTask {
-    pub task_id: Uuid,
-    pub org_id: Uuid,
-    pub notebook_id: Uuid,
-    pub document_id: Uuid,
-    pub requested_by: Option<Uuid>,
-    pub idempotency_key: String,
-    pub payload: serde_json::Value,
-    pub lock_token: Option<Uuid>,
-    pub attempt_count: i32,
-    pub max_attempts: i32,
-}
-
-#[derive(Debug, Clone)]
-pub struct DocumentCleanupTargets {
-    pub org_id: Uuid,
-    pub notebook_id: Uuid,
-    pub document_id: Uuid,
-    pub status: DocumentStatus,
-    pub object_path: Option<String>,
-    pub asset_storage_paths: Vec<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct DocumentUploadValidation {
-    pub upload_size_bytes: Option<u64>,
-    pub upload_sha256: Option<String>,
-    pub upload_validated_at: Option<DateTime<Utc>>,
-    pub upload_validation_error: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct DocumentScopeState {
-    pub document_id: Uuid,
-    pub status: DocumentStatus,
-}
-
-#[derive(Debug, Clone)]
-pub struct IndexedChunk {
-    pub chunk_id: String,
-    pub doc_id: String,
-    pub page: Option<i64>,
-    pub content: String,
-    pub score: Option<f32>,
-    pub metadata: serde_json::Value,
-}
-
-pub fn map_notebook(row: PgRow) -> Result<Notebook, PgStorageError> {
+fn map_notebook(row: PgRow) -> Result<Notebook, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
     let org_id: Uuid = row.try_get("org_id")?;
     let owner_id: Option<Uuid> = row.try_get("owner_id")?;
@@ -148,7 +28,7 @@ pub fn map_notebook(row: PgRow) -> Result<Notebook, PgStorageError> {
     })
 }
 
-pub fn map_document(row: PgRow) -> Result<Document, PgStorageError> {
+fn map_document(row: PgRow) -> Result<Document, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
     let org_id: Uuid = row.try_get("org_id")?;
     let notebook_id: Uuid = row.try_get("notebook_id")?;
@@ -174,7 +54,7 @@ pub fn map_document(row: PgRow) -> Result<Document, PgStorageError> {
     })
 }
 
-pub fn map_session(row: PgRow) -> Result<ChatSession, PgStorageError> {
+fn map_session(row: PgRow) -> Result<ChatSession, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
     let notebook_id: Uuid = row.try_get("notebook_id")?;
     let title: Option<String> = row.try_get("title")?;
@@ -193,7 +73,7 @@ pub fn map_session(row: PgRow) -> Result<ChatSession, PgStorageError> {
     })
 }
 
-pub fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
+fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
     let citations_value: serde_json::Value = row.try_get("citations")?;
     let citations = serde_json::from_value::<Vec<Citation>>(citations_value)?;
     let created_at: DateTime<Utc> = row.try_get("created_at")?;
@@ -247,7 +127,7 @@ pub fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
     })
 }
 
-pub fn map_api_key(row: PgRow) -> Result<ApiKeyRow, PgStorageError> {
+fn map_api_key(row: PgRow) -> Result<ApiKeyRow, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
     let org_id: Uuid = row.try_get("org_id")?;
     let notebook_id: Option<Uuid> = row.try_get("notebook_id").ok().flatten();
@@ -280,7 +160,7 @@ pub fn map_api_key(row: PgRow) -> Result<ApiKeyRow, PgStorageError> {
     })
 }
 
-pub fn map_notification(row: PgRow) -> Result<NotificationRow, PgStorageError> {
+fn map_notification(row: PgRow) -> Result<NotificationRow, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
     let org_id: Uuid = row.try_get("org_id")?;
     let user_id: Uuid = row.try_get("user_id")?;
@@ -306,7 +186,7 @@ pub fn map_notification(row: PgRow) -> Result<NotificationRow, PgStorageError> {
     })
 }
 
-pub fn map_user_profile(row: PgRow) -> Result<UserProfileRow, PgStorageError> {
+fn map_user_profile(row: PgRow) -> Result<UserProfileRow, PgStorageError> {
     let user_id: Uuid = row.try_get("user_id")?;
     let org_id: Uuid = row.try_get("org_id")?;
     let expertise_domains = json_string_vec(row.try_get("expertise_domains")?);
@@ -325,7 +205,7 @@ pub fn map_user_profile(row: PgRow) -> Result<UserProfileRow, PgStorageError> {
     })
 }
 
-pub fn map_indexed_chunk(row: PgRow) -> Result<IndexedChunk, PgStorageError> {
+fn map_indexed_chunk(row: PgRow) -> Result<IndexedChunk, PgStorageError> {
     let chunk_id: Uuid = row.try_get("id")?;
     let doc_id: Uuid = row.try_get("document_id")?;
     let page = row
@@ -346,7 +226,7 @@ pub fn map_indexed_chunk(row: PgRow) -> Result<IndexedChunk, PgStorageError> {
     })
 }
 
-pub fn map_document_task_seed(row: PgRow) -> Result<DocumentTaskSeed, PgStorageError> {
+fn map_document_task_seed(row: PgRow) -> Result<DocumentTaskSeed, PgStorageError> {
     let document_id: Uuid = row.try_get("id")?;
     let org_id: Uuid = row.try_get("org_id")?;
     let notebook_id: Uuid = row.try_get("notebook_id")?;
@@ -367,7 +247,7 @@ pub fn map_document_task_seed(row: PgRow) -> Result<DocumentTaskSeed, PgStorageE
     })
 }
 
-pub fn map_document_upload_validation(row: PgRow) -> Result<DocumentUploadValidation, PgStorageError> {
+fn map_document_upload_validation(row: PgRow) -> Result<DocumentUploadValidation, PgStorageError> {
     let upload_size_bytes: Option<i64> = row.try_get("upload_size_bytes")?;
     Ok(DocumentUploadValidation {
         upload_size_bytes: upload_size_bytes.and_then(|value| u64::try_from(value).ok()),
@@ -377,7 +257,7 @@ pub fn map_document_upload_validation(row: PgRow) -> Result<DocumentUploadValida
     })
 }
 
-pub fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
+fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
     let task_id: Uuid = row.try_get("task_id")?;
     let org_id: Uuid = row.try_get("org_id")?;
     let notebook_id: Uuid = row.try_get("notebook_id")?;
@@ -403,7 +283,7 @@ pub fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
     })
 }
 
-pub fn map_document_cleanup_task(row: PgRow) -> Result<DocumentCleanupTask, PgStorageError> {
+fn map_document_cleanup_task(row: PgRow) -> Result<DocumentCleanupTask, PgStorageError> {
     Ok(DocumentCleanupTask {
         task_id: row.try_get("task_id")?,
         org_id: row.try_get("org_id")?,
@@ -416,34 +296,4 @@ pub fn map_document_cleanup_task(row: PgRow) -> Result<DocumentCleanupTask, PgSt
         attempt_count: row.try_get("attempt_count").unwrap_or(0),
         max_attempts: row.try_get("max_attempts").unwrap_or(5),
     })
-}
-
-pub fn build_preview_items(content: &str) -> Vec<ParsedPreviewItem> {
-    let mut items = Vec::new();
-    for (index, line) in content.lines().enumerate() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        items.push(ParsedPreviewItem {
-            kind: "paragraph".to_string(),
-            text: trimmed.to_string(),
-            page: 1,
-            cursor: index,
-        });
-    }
-    if items.is_empty() {
-        items.push(ParsedPreviewItem {
-            kind: "paragraph".to_string(),
-            text: "Document uploaded but no previewable text was extracted.".to_string(),
-            page: 1,
-            cursor: 0,
-        });
-    }
-    items
-}
-
-pub fn build_summary(content: &str) -> String {
-    let compact = content.split_whitespace().collect::<Vec<_>>().join(" ");
-    compact.chars().take(180).collect()
 }

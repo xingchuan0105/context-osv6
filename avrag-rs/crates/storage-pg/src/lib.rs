@@ -3,4 +3,5 @@ pub mod documents;
 pub mod notebooks;
 pub mod object_store;
 
-include!("lib_impl.rs");
+mod lib_impl;
+pub use lib_impl::*;

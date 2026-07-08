@@ -1,3 +1,4 @@
+use super::*;
 impl PgAppRepository {
     pub async fn set_document_status(
         &self,

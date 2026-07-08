@@ -1,3 +1,4 @@
+use super::*;
 /// A conversation message hit from hybrid memory search.
 #[derive(Debug, Clone)]
 pub struct ConversationHistoryHit {
@@ -220,7 +221,7 @@ impl crate::PgAppRepository {
     }
 }
 
-fn map_history_hit(row: sqlx::postgres::PgRow) -> Result<ConversationHistoryHit, PgStorageError> {
+pub fn map_history_hit(row: sqlx::postgres::PgRow) -> Result<ConversationHistoryHit, PgStorageError> {
     Ok(ConversationHistoryHit {
         message_id: row.try_get("message_id")?,
         session_id: row.try_get("session_id")?,

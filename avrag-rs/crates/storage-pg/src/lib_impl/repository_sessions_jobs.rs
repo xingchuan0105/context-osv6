@@ -1,18 +1,19 @@
+use super::*;
 const STALE_PROCESSING_TIMEOUT_SECS: i32 = 30 * 60;
 const RETRY_BACKOFF_BASE_SECS: i32 = 30;
 const RETRY_BACKOFF_MAX_SECS: i32 = 60 * 60;
 
-fn retry_backoff_seconds(attempt_count: i32) -> i32 {
+pub fn retry_backoff_seconds(attempt_count: i32) -> i32 {
     let exponent = attempt_count.saturating_sub(1).clamp(0, 7) as u32;
     let seconds = RETRY_BACKOFF_BASE_SECS.saturating_mul(1_i32 << exponent);
     seconds.clamp(RETRY_BACKOFF_BASE_SECS, RETRY_BACKOFF_MAX_SECS)
 }
 
-fn ingestion_retry_backoff_seconds(attempt_count: i32) -> i32 {
+pub fn ingestion_retry_backoff_seconds(attempt_count: i32) -> i32 {
     retry_backoff_seconds(attempt_count)
 }
 
-fn ingestion_queue_group_from_env() -> String {
+pub fn ingestion_queue_group_from_env() -> String {
     std::env::var("AVRAG_INGESTION_QUEUE_GROUP").unwrap_or_else(|_| "default".to_string())
 }
 

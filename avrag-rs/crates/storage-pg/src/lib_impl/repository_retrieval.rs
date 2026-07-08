@@ -1,3 +1,4 @@
+use super::*;
 impl PgAppRepository {
     pub async fn get_document_scope_states(
         &self,

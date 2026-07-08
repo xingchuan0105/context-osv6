@@ -1,4 +1,5 @@
-fn pg_pool_options() -> PgPoolOptions {
+use super::*;
+pub fn pg_pool_options() -> PgPoolOptions {
     let mut options = PgPoolOptions::new();
     if std::env::var("E2E_ENABLED").unwrap_or_default() == "true" {
         // Real-LLM E2E runs API server + worker pools concurrently; default 10

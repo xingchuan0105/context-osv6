@@ -1,3 +1,4 @@
+use super::*;
 impl PgAppRepository {
     pub async fn store_document_asset(
         &self,

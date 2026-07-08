@@ -1,34 +1,35 @@
-use avrag_auth::{ActorId, AuthContext, AuthError, OrgId};
-use chrono::{DateTime, Utc};
-use common::{
+use super::*;
+pub use avrag_auth::{ActorId, AuthContext, AuthError, OrgId};
+pub use chrono::{DateTime, Utc};
+pub use common::{
     merge_search_tokens, rrf_merge, segment_for_fts, ApiKeyRow, Document, DocumentContentResponse,
     NotificationRow, ParsedPreviewItem, ParsedPreviewResponse, SourceRow,
 };
-use contracts::chat::{ChatMessage, Citation};
-use contracts::documents::{DocumentStatus};
-use contracts::notebooks::{ChatSession, Notebook};
-use ingestion_types::{
+pub use contracts::chat::{ChatMessage, Citation};
+pub use contracts::documents::{DocumentStatus};
+pub use contracts::notebooks::{ChatSession, Notebook};
+pub use ingestion_types::{
     AuditRecord, IngestionTask, IngestionTaskKind, IngestionTaskPayload, TaskCompletionOutcome,
     TaskFailureOutcome,
 };
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use sha2::{Digest, Sha256};
-use sqlx::{
+pub use serde::{Deserialize, Serialize};
+pub use serde_json::json;
+pub use sha2::{Digest, Sha256};
+pub use sqlx::{
     PgPool, Postgres, Row, Transaction,
     postgres::{PgConnection, PgPoolOptions, PgRow},
 };
-use std::collections::HashMap;
-use thiserror::Error;
-use uuid::Uuid;
+pub use std::collections::HashMap;
+pub use thiserror::Error;
+pub use uuid::Uuid;
 
-pub use object_store::{
+pub use crate::object_store::{
     LocalObjectStore, ObjectStoreHandle, ObjectStoreHeadError, ObjectStoreMetadata, S3ObjectStore,
 };
 
 #[derive(Debug, Clone)]
 pub struct TenantPgPool {
-    pool: PgPool,
+    pub pool: PgPool,
 }
 
 impl TenantPgPool {
@@ -115,5 +116,5 @@ pub struct UserProfileRow {
 
 #[derive(Debug, Clone)]
 pub struct PgAppRepository {
-    pool: TenantPgPool,
+    pub pool: TenantPgPool,
 }

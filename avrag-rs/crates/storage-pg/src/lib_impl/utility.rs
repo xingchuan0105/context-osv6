@@ -1,4 +1,5 @@
-fn parse_document_status(value: &str) -> DocumentStatus {
+use super::*;
+pub fn parse_document_status(value: &str) -> DocumentStatus {
     match value {
         "enqueueing" => DocumentStatus::Enqueueing,
         "queued" => DocumentStatus::Queued,
@@ -16,7 +17,7 @@ fn parse_document_status(value: &str) -> DocumentStatus {
     }
 }
 
-fn document_status_str(status: &DocumentStatus) -> &'static str {
+pub fn document_status_str(status: &DocumentStatus) -> &'static str {
     match status {
         DocumentStatus::Pending => "pending",
         DocumentStatus::Enqueueing => "enqueueing",
@@ -30,14 +31,14 @@ fn document_status_str(status: &DocumentStatus) -> &'static str {
     }
 }
 
-fn document_upload_status_is_mutable(status: &DocumentStatus) -> bool {
+pub fn document_upload_status_is_mutable(status: &DocumentStatus) -> bool {
     matches!(
         status,
         DocumentStatus::Pending | DocumentStatus::UploadInvalid
     )
 }
 
-fn agent_name(agent_type: &str) -> &'static str {
+pub fn agent_name(agent_type: &str) -> &'static str {
     match agent_type {
         "search" => "网络搜索助手",
         "general" => "通用聊天助手",
@@ -45,7 +46,7 @@ fn agent_name(agent_type: &str) -> &'static str {
     }
 }
 
-fn agent_icon(agent_type: &str) -> &'static str {
+pub fn agent_icon(agent_type: &str) -> &'static str {
     match agent_type {
         "search" => "🔍",
         "general" => "💬",
@@ -53,7 +54,7 @@ fn agent_icon(agent_type: &str) -> &'static str {
     }
 }
 
-fn build_object_path(
+pub fn build_object_path(
     context: &AuthContext,
     notebook_id: Uuid,
     document_id: Uuid,
@@ -68,7 +69,7 @@ fn build_object_path(
     )
 }
 
-fn sanitize_filename(filename: &str) -> String {
+pub fn sanitize_filename(filename: &str) -> String {
     filename
         .chars()
         .map(|ch| match ch {
@@ -78,13 +79,13 @@ fn sanitize_filename(filename: &str) -> String {
         .collect()
 }
 
-fn parse_rfc3339(value: &str) -> Result<DateTime<Utc>, PgStorageError> {
+pub fn parse_rfc3339(value: &str) -> Result<DateTime<Utc>, PgStorageError> {
     DateTime::parse_from_rfc3339(value)
         .map(|dt| dt.with_timezone(&Utc))
         .map_err(|_| PgStorageError::NotFound("invalid timestamp".to_string()))
 }
 
-fn json_string_vec(value: serde_json::Value) -> Vec<String> {
+pub fn json_string_vec(value: serde_json::Value) -> Vec<String> {
     match value {
         serde_json::Value::Array(items) => items
             .into_iter()
@@ -94,7 +95,7 @@ fn json_string_vec(value: serde_json::Value) -> Vec<String> {
     }
 }
 
-fn ingestion_kind_str(kind: &IngestionTaskKind) -> &'static str {
+pub fn ingestion_kind_str(kind: &IngestionTaskKind) -> &'static str {
     match kind {
         IngestionTaskKind::IngestDocument => "ingest_document",
         IngestionTaskKind::ReindexDocument => "reindex_document",
@@ -102,7 +103,7 @@ fn ingestion_kind_str(kind: &IngestionTaskKind) -> &'static str {
     }
 }
 
-fn parse_ingestion_kind(value: &str) -> IngestionTaskKind {
+pub fn parse_ingestion_kind(value: &str) -> IngestionTaskKind {
     match value {
         "reindex_document" => IngestionTaskKind::ReindexDocument,
         "ingest_url" => IngestionTaskKind::IngestUrl,

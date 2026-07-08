@@ -1,18 +1,29 @@
-include!("lib_impl/core.rs");
-include!("lib_impl/utility.rs");
-include!("lib_impl/asset_types.rs");
-include!("lib_impl/document_ir_types.rs");
-include!("lib_impl/asset_mappers.rs");
-include!("lib_impl/errors_and_mappers.rs");
-include!("lib_impl/repository_bootstrap.rs");
-include!("lib_impl/repository_support.rs");
-include!("lib_impl/repository_auth_user.rs");
-include!("lib_impl/repository_assets.rs");
-include!("lib_impl/repository_document_ir.rs");
-include!("lib_impl/repository_retrieval.rs");
-include!("lib_impl/repository_retrieval_lifecycle.rs");
-include!("lib_impl/repository_retrieval_cleanup.rs");
-include!("lib_impl/repository_sessions_jobs.rs");
-include!("lib_impl/repository_conversation_memory.rs");
-include!("lib_impl/dynamic_queries.rs");
-include!("lib_impl/tests.rs");
+mod core;
+mod utility;
+mod asset_types;
+mod document_ir_types;
+mod asset_mappers;
+mod errors_and_mappers;
+mod repository_bootstrap;
+mod repository_support;
+mod repository_auth_user;
+mod repository_assets;
+mod repository_document_ir;
+mod repository_retrieval;
+mod repository_retrieval_lifecycle;
+mod repository_retrieval_cleanup;
+mod repository_sessions_jobs;
+mod repository_conversation_memory;
+mod dynamic_queries;
+
+#[cfg(test)]
+mod tests;
+
+#[allow(unused_imports)]
+pub use {
+    core::*, utility::*, asset_types::*, document_ir_types::*, asset_mappers::*,
+    errors_and_mappers::*, repository_bootstrap::*, repository_support::*,
+    repository_auth_user::*, repository_assets::*, repository_document_ir::*,
+    repository_retrieval::*, repository_retrieval_lifecycle::*, repository_retrieval_cleanup::*,
+    repository_sessions_jobs::*, repository_conversation_memory::*, dynamic_queries::*,
+};

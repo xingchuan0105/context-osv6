@@ -1,4 +1,5 @@
-async fn ensure_org_and_actor(
+use super::*;
+pub async fn ensure_org_and_actor(
     conn: &mut PgConnection,
     context: &AuthContext,
 ) -> Result<(), PgStorageError> {
@@ -34,7 +35,7 @@ async fn ensure_org_and_actor(
     Ok(())
 }
 
-async fn insert_notification_row(
+pub async fn insert_notification_row(
     conn: &mut PgConnection,
     org_id: Uuid,
     params: NotificationCreateParams,
@@ -86,7 +87,7 @@ async fn insert_notification_row(
     Ok(row)
 }
 
-async fn set_current_role(conn: &mut PgConnection, role: &str) -> Result<(), PgStorageError> {
+pub async fn set_current_role(conn: &mut PgConnection, role: &str) -> Result<(), PgStorageError> {
     sqlx::query("select set_config('app.current_role', $1, true)")
         .bind(role)
         .execute(conn)
