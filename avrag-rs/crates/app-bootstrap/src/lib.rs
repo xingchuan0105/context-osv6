@@ -127,17 +127,23 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         Arc::new(ObjectStorePortAdapter::new(Arc::new(
             ObjectStoreHandle::local(PathBuf::from(config.object_root.clone())),
         )));
+    let memory_state = Arc::new(RwLock::new(MemoryState::default()));
+    let document_store: Option<Arc<dyn app_core::DocumentStorePort>> = Some(Arc::new(
+        app_core::MemoryDocumentStore::new(memory_state.clone()),
+    ));
+    let billing_quota: Option<Arc<dyn app_core::BillingQuotaPort>> =
+        Some(Arc::new(app_core::MemoryBillingQuotaPort));
     let storage = StorageContext::new(
         None,
         false,
+        document_store,
+        None,
+        None,
+        billing_quota,
         None,
         None,
         None,
-        None,
-        None,
-        None,
-        None,
-        Arc::new(RwLock::new(MemoryState::default())),
+        memory_state,
         Arc::new(RwLock::new(BTreeMap::new())),
         Arc::new(RwLock::new(BTreeMap::new())),
         config.max_upload_file_size_bytes,
