@@ -3,7 +3,7 @@
 import { useAuth } from "../../lib/auth/context";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import {
-  adminMessage,
+  adminText,
   formatAdminError,
   healthStatusLabel,
 } from "./admin-i18n";
@@ -28,32 +28,32 @@ export function AdminHealthSurface() {
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
       <AdminPageHeading
-        title={adminMessage(locale, "admin.health.sectionTitle")}
-        subtitle={adminMessage(locale, "admin.health.sectionSubtitle")}
+        title={adminText(locale, "admin.health.sectionTitle")}
+        subtitle={adminText(locale, "admin.health.sectionSubtitle")}
       />
       {healthQuery.error ? <ErrorState message={formatAdminError(locale, healthQuery.error)} /> : null}
       {loading ? (
-        <LoadingState copy={adminMessage(locale, "common.loading")} />
+        <LoadingState copy={adminText(locale, "common.loading")} />
       ) : !health ? (
-        <EmptyState copy={adminMessage(locale, "common.emptyData")} />
+        <EmptyState copy={adminText(locale, "common.emptyData")} />
       ) : (
         <>
           <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))" }}>
-            <AdminMetricCard label={adminMessage(locale, "common.status")} tone={healthy ? "success" : "danger"} value={healthStatusLabel(locale, health.status)} />
-            <AdminMetricCard label={adminMessage(locale, "common.service")} value={health.service} />
-            <AdminMetricCard label={adminMessage(locale, "common.version")} tone="warning" value={health.version} />
+            <AdminMetricCard label={adminText(locale, "common.status")} tone={healthy ? "success" : "danger"} value={healthStatusLabel(locale, health.status)} />
+            <AdminMetricCard label={adminText(locale, "common.service")} value={health.service} />
+            <AdminMetricCard label={adminText(locale, "common.version")} tone="warning" value={health.version} />
           </div>
           <section className="app-inline-surface" style={{ display: "grid", gap: "0.7rem" }}>
             <div className="app-inline-row" style={{ marginBottom: 0 }}>
-              <span>{adminMessage(locale, "common.serviceStatus")}</span>
+              <span>{adminText(locale, "common.serviceStatus")}</span>
               <strong>{healthStatusLabel(locale, health.status)}</strong>
             </div>
             <div className="app-inline-row" style={{ marginBottom: 0 }}>
-              <span>{adminMessage(locale, "common.service")}</span>
+              <span>{adminText(locale, "common.service")}</span>
               <strong>{health.service}</strong>
             </div>
             <div className="app-inline-row" style={{ marginBottom: 0 }}>
-              <span>{adminMessage(locale, "common.version")}</span>
+              <span>{adminText(locale, "common.version")}</span>
               <strong>{health.version}</strong>
             </div>
           </section>

@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useAuth } from "../../lib/auth/context";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import {
-  adminMessage,
+  adminText,
   formatAdminError,
   orgStatusLabel,
   planLabel,
@@ -83,25 +83,25 @@ export function AdminOrganizationsSurface() {
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
       <AdminPageHeading
-        title={adminMessage(locale, "admin.nav.organizations")}
-        subtitle={adminMessage(locale, "organizations.subtitle")}
+        title={adminText(locale, "admin.nav.organizations")}
+        subtitle={adminText(locale, "organizations.subtitle")}
       />
       {error ? <ErrorState message={formatAdminError(locale, error)} /> : null}
       {loading ? (
-        <LoadingState copy={adminMessage(locale, "organizations.loading")} />
+        <LoadingState copy={adminText(locale, "organizations.loading")} />
       ) : organizations.length === 0 ? (
-        <EmptyState copy={adminMessage(locale, "organizations.empty")} />
+        <EmptyState copy={adminText(locale, "organizations.empty")} />
       ) : (
         <>
           <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))" }}>
-            <AdminMetricCard label={adminMessage(locale, "admin.metrics.totalOrganizations")} tone="primary" value={organizations.length.toString()} />
-            <AdminMetricCard label={adminMessage(locale, "organizations.activeOrganizations")} tone="success" value={activeCount.toString()} />
-            <AdminMetricCard label={adminMessage(locale, "organizations.blockedOrganizations")} tone="danger" value={blockedCount.toString()} />
+            <AdminMetricCard label={adminText(locale, "admin.metrics.totalOrganizations")} tone="primary" value={organizations.length.toString()} />
+            <AdminMetricCard label={adminText(locale, "organizations.activeOrganizations")} tone="success" value={activeCount.toString()} />
+            <AdminMetricCard label={adminText(locale, "organizations.blockedOrganizations")} tone="danger" value={blockedCount.toString()} />
             <AdminMetricCard
-              label={adminMessage(locale, "organizations.totalNotebooks")}
+              label={adminText(locale, "organizations.totalNotebooks")}
               tone="warning"
               value={totalNotebookCount.toString()}
-              detail={`${adminMessage(locale, "organizations.usersCovered")} ${totalUserCount}`}
+              detail={`${adminText(locale, "organizations.usersCovered")} ${totalUserCount}`}
             />
           </div>
 
@@ -109,20 +109,20 @@ export function AdminOrganizationsSurface() {
             <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "minmax(0, 1fr) repeat(2, minmax(12rem, 14rem))" }}>
               <div>
                 <label className="app-form-label" htmlFor="admin-org-search">
-                  {adminMessage(locale, "admin.searchLabel")}
+                  {adminText(locale, "admin.searchLabel")}
                 </label>
                 <input
                   className="app-input"
                   id="admin-org-search"
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder={adminMessage(locale, "organizations.filterByNameIdPlan")}
+                  placeholder={adminText(locale, "organizations.filterByNameIdPlan")}
                   type="text"
                   value={query}
                 />
               </div>
               <div>
                 <label className="app-form-label" htmlFor="admin-org-status-filter">
-                  {adminMessage(locale, "organizations.statusFilterLabel")}
+                  {adminText(locale, "organizations.statusFilterLabel")}
                 </label>
                 <select
                   className="app-input"
@@ -130,45 +130,45 @@ export function AdminOrganizationsSurface() {
                   onChange={(event) => setStatusFilter(event.target.value)}
                   value={statusFilter}
                 >
-                  <option value="all">{adminMessage(locale, "common.allStatuses")}</option>
-                  <option value="active">{adminMessage(locale, "admin.status.active")}</option>
-                  <option value="blocked">{adminMessage(locale, "admin.status.blocked")}</option>
+                  <option value="all">{adminText(locale, "common.allStatuses")}</option>
+                  <option value="active">{adminText(locale, "admin.status.active")}</option>
+                  <option value="blocked">{adminText(locale, "admin.status.blocked")}</option>
                 </select>
               </div>
               <div>
                 <label className="app-form-label" htmlFor="admin-org-sort">
-                  {adminMessage(locale, "admin.filter.sortLabel")}
+                  {adminText(locale, "admin.filter.sortLabel")}
                 </label>
                 <select className="app-input" id="admin-org-sort" onChange={(event) => setSortMode(event.target.value)} value={sortMode}>
-                  <option value="queries_desc">{adminMessage(locale, "organizations.sort.queriesDesc")}</option>
-                  <option value="users_desc">{adminMessage(locale, "organizations.sort.usersDesc")}</option>
-                  <option value="notebooks_desc">{adminMessage(locale, "organizations.sort.notebooksDesc")}</option>
-                  <option value="created_desc">{adminMessage(locale, "users.newestFirst")}</option>
-                  <option value="name_asc">{adminMessage(locale, "organizations.sort.nameAsc")}</option>
+                  <option value="queries_desc">{adminText(locale, "organizations.sort.queriesDesc")}</option>
+                  <option value="users_desc">{adminText(locale, "organizations.sort.usersDesc")}</option>
+                  <option value="notebooks_desc">{adminText(locale, "organizations.sort.notebooksDesc")}</option>
+                  <option value="created_desc">{adminText(locale, "users.newestFirst")}</option>
+                  <option value="name_asc">{adminText(locale, "organizations.sort.nameAsc")}</option>
                 </select>
               </div>
             </div>
             <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "0.82rem", color: "hsl(var(--muted-foreground))" }}>
-              <span>{adminMessage(locale, "organizations.matching")} {filteredOrganizations.length}/{organizations.length}</span>
-              <span>{adminMessage(locale, "organizations.usersCovered")} {filteredOrganizations.reduce((total, organization) => total + organization.user_count, 0)}</span>
+              <span>{adminText(locale, "organizations.matching")} {filteredOrganizations.length}/{organizations.length}</span>
+              <span>{adminText(locale, "organizations.usersCovered")} {filteredOrganizations.reduce((total, organization) => total + organization.user_count, 0)}</span>
             </div>
           </section>
 
           {filteredOrganizations.length === 0 ? (
-            <EmptyState copy={adminMessage(locale, "organizations.noMatch")} />
+            <EmptyState copy={adminText(locale, "organizations.noMatch")} />
           ) : (
             <section className="app-inline-surface" style={{ overflowX: "auto", padding: 0 }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead style={{ background: "hsl(var(--surface-muted))" }}>
                   <tr>
                     {[
-                      adminMessage(locale, "common.name"),
-                      adminMessage(locale, "admin.table.plan"),
-                      adminMessage(locale, "admin.table.users"),
-                      adminMessage(locale, "common.notebooks"),
-                      adminMessage(locale, "admin.table.requests"),
-                      adminMessage(locale, "admin.table.status"),
-                      adminMessage(locale, "common.actions"),
+                      adminText(locale, "common.name"),
+                      adminText(locale, "admin.table.plan"),
+                      adminText(locale, "admin.table.users"),
+                      adminText(locale, "common.notebooks"),
+                      adminText(locale, "admin.table.requests"),
+                      adminText(locale, "admin.table.status"),
+                      adminText(locale, "common.actions"),
                     ].map((heading) => (
                       <th key={heading} style={{ padding: "0.85rem 1rem", textAlign: "left", fontSize: "0.76rem", color: "hsl(var(--muted-foreground))" }}>
                         {heading}
@@ -216,10 +216,10 @@ export function AdminOrganizationsSurface() {
                             onClick={() => void handleToggleBlocked(organization.id, !organization.blocked)}
                           >
                             {isBusy
-                              ? adminMessage(locale, "common.processing")
+                              ? adminText(locale, "common.processing")
                               : organization.blocked
-                                ? adminMessage(locale, "admin.unblockAction")
-                                : adminMessage(locale, "admin.blockAction")}
+                                ? adminText(locale, "admin.unblockAction")
+                                : adminText(locale, "admin.blockAction")}
                           </button>
                         </td>
                       </tr>
