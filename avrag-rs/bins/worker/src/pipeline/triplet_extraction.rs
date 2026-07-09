@@ -70,7 +70,7 @@ pub(crate) async fn extract_visual_triplets_for_index(
     multimodal_chunks: &[StoredMultimodalChunk],
     parse_run_state: &mut ParseRunState,
 ) -> TripletExtractionOutput {
-    let Some(llm) = processor.triplet_llm.clone() else {
+    let Some(llm) = processor.llm.triplet_llm.clone() else {
         return TripletExtractionOutput::default();
     };
 
@@ -83,8 +83,8 @@ pub(crate) async fn extract_visual_triplets_for_index(
     }
 
     let media_ctx = MediaResolveContext {
-        object_store: processor.object_store.clone(),
-        asset_url_ttl_secs: processor.asset_url_ttl_secs,
+        object_store: processor.storage.object_store.clone(),
+        asset_url_ttl_secs: processor.storage.asset_url_ttl_secs,
     };
     let mut output = TripletExtractionOutput::default();
     for chunk in visual_chunks {
@@ -165,7 +165,7 @@ pub(crate) async fn extract_triplets_for_index(
     text_chunks: &[TextChunkIndexRecord],
     parse_run_state: &mut ParseRunState,
 ) -> TripletExtractionOutput {
-    let Some(llm) = processor.triplet_llm.clone() else {
+    let Some(llm) = processor.llm.triplet_llm.clone() else {
         return TripletExtractionOutput::default();
     };
 

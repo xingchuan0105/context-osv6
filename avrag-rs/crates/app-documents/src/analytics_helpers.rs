@@ -1,3 +1,9 @@
+//! Document-crate helpers that **only** forward to the canonical analytics seam.
+//!
+//! Do not add new product-event entry points. The single source of truth is
+//! [`AnalyticsServiceCtx::record_product_event_for_auth`] /
+//! [`AnalyticsContext::record_product_event`].
+
 use app_billing;
 use app_core::AnalyticsServiceCtx;
 use contracts::auth_runtime::AuthContext;

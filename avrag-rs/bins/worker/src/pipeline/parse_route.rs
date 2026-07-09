@@ -72,7 +72,7 @@ pub(crate) async fn execute_office_parse(
     document_id: Uuid,
     doc_type: &OfficeDocType,
 ) -> Result<DocumentIr, IngestionError> {
-    let client = processor.office_parser_client.as_ref().ok_or_else(|| {
+    let client = processor.parse.office_parser_client.as_ref().ok_or_else(|| {
         IngestionError::parse_office(format!(
             "office parse selected for {filename}, but OFFICE_PARSER_BASE_URL is not configured"
         ))

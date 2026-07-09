@@ -51,13 +51,13 @@ pub(crate) async fn embed_text_vectors(
     if texts.is_empty() {
         return Ok(Vec::new());
     }
-    if processor.embedding_client.is_none() {
+    if processor.embedding.embedding_client.is_none() {
         return Err(IngestionError::embedding(format!(
             "text embedding client not configured (expected dim {})",
-            processor.embedding_dim
+            processor.embedding.embedding_dim
         )));
     }
-    embed_text_vectors_with_client(processor.embedding_client.as_ref(), texts).await
+    embed_text_vectors_with_client(processor.embedding.embedding_client.as_ref(), texts).await
 }
 
 pub(crate) async fn embed_text_vectors_with_client(

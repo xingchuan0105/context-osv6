@@ -89,8 +89,8 @@ async fn execute_parse_plan(
             };
 
             let ctx = pdf::PdfParseContext::new(
-                processor.pdf_renderer_client.clone(),
-                processor.ingestion_llm.clone(),
+                processor.parse.pdf_renderer_client.clone(),
+                processor.llm.ingestion_llm.clone(),
             );
             pdf::execute_pdf_parse(
                 &ctx,
@@ -249,21 +249,19 @@ async fn stage_project_document_ir(
     document_ir: &DocumentIr,
 ) -> Result<(), IngestionError> {
     ensure_ingestion_side_effects_allowed(
-        &processor.repo,
+        &processor.storage.repo,
         context,
         task,
         document_id,
         "IR projection writes",
     )
     .await?;
-    processor
-        .repo
+    processor.storage.repo
         .documents()
         .clear_document_ir_projection(context, document_id)
         .await
         .map_err(from_storage_error)?;
-    processor
-        .repo
+    processor.storage.repo
         .documents()
         .replace_document_blocks(
             context,
@@ -385,15 +383,14 @@ async fn persist_body_chunks(
     body_chunks: &[avrag_storage_pg::StoreDocumentChunkParams],
 ) -> Result<Vec<avrag_storage_pg::IndexedChunk>, IngestionError> {
     ensure_ingestion_side_effects_allowed(
-        &processor.repo,
+        &processor.storage.repo,
         context,
         task,
         document_id,
         "body chunk writes",
     )
     .await?;
-    processor
-        .repo
+    processor.storage.repo
         .bootstrap()
         .store_document_body_chunks(
             context,
@@ -421,15 +418,14 @@ async fn persist_profile_and_toc(
             .await;
     if !profile_result.toc_entries.is_empty() {
         ensure_ingestion_side_effects_allowed(
-            &processor.repo,
+            &processor.storage.repo,
             context,
             task,
             document_id,
             "toc writes",
         )
         .await?;
-        if let Err(error) = processor
-            .repo
+        if let Err(error) = processor.storage.repo
             .bootstrap()
             .replace_document_toc(context, notebook_id, document_id, &profile_result.toc_entries)
             .await
@@ -445,15 +441,14 @@ async fn persist_profile_and_toc(
     }
     if let Some(profile_metadata) = profile_result.profile_metadata {
         ensure_ingestion_side_effects_allowed(
-            &processor.repo,
+            &processor.storage.repo,
             context,
             task,
             document_id,
             "profile metadata write",
         )
         .await?;
-        if let Err(error) = processor
-            .repo
+        if let Err(error) = processor.storage.repo
             .documents()
             .update_document_profile(
                 context,
@@ -490,7 +485,7 @@ async fn persist_document_assets(
     let mut stored_asset_path_by_ref = std::collections::HashMap::new();
 
     ensure_ingestion_side_effects_allowed(
-        &processor.repo,
+        &processor.storage.repo,
         context,
         task,
         document_id,
@@ -499,7 +494,7 @@ async fn persist_document_assets(
     .await?;
     for asset in &document_ir.assets {
         ensure_ingestion_side_effects_allowed(
-            &processor.repo,
+            &processor.storage.repo,
             context,
             task,
             document_id,
@@ -517,13 +512,13 @@ async fn persist_document_assets(
         );
 
         let stored_image_path = mirror_document_asset(
-            &processor.object_store,
+            &processor.storage.object_store,
             context,
             &task.notebook_id,
             &task.document_id,
             stored_asset_id,
             &asset.storage_path,
-            processor.asset_url_ttl_secs,
+            processor.storage.asset_url_ttl_secs,
         )
         .await
         .map_err(|error| IngestionError::storage_object(error))?;
@@ -532,7 +527,7 @@ async fn persist_document_assets(
         }
 
         if let Err(error) = ensure_ingestion_side_effects_allowed(
-            &processor.repo,
+            &processor.storage.repo,
             context,
             task,
             document_id,
@@ -540,15 +535,13 @@ async fn persist_document_assets(
         )
         .await
         {
-            let _ = processor
-                .object_store
+            let _ = processor.storage.object_store
                 .delete(&stored_asset_object_key)
                 .await;
             return Err(error);
         }
 
-        let store_result = processor
-            .repo
+        let store_result = processor.storage.repo
             .assets()
             .store_document_asset(
                 context,
@@ -569,8 +562,7 @@ async fn persist_document_assets(
             )
             .await;
         if let Err(error) = store_result {
-            let _ = processor
-                .object_store
+            let _ = processor.storage.object_store
                 .delete(&stored_asset_object_key)
                 .await;
             return Err(IngestionError::storage_database(error));
@@ -593,7 +585,7 @@ async fn persist_multimodal_chunks(
     parse_run_state: &mut ParseRunState,
 ) -> Result<Vec<StoredMultimodalChunk>, IngestionError> {
     ensure_ingestion_side_effects_allowed(
-        &processor.repo,
+        &processor.storage.repo,
         context,
         task,
         document_id,
@@ -603,7 +595,7 @@ async fn persist_multimodal_chunks(
     let mut stored_multimodal_chunks = Vec::new();
     for multimodal_chunk in &chunk_plan.multimodal_chunks {
         ensure_ingestion_side_effects_allowed(
-            &processor.repo,
+            &processor.storage.repo,
             context,
             task,
             document_id,
@@ -627,8 +619,7 @@ async fn persist_multimodal_chunks(
             .flatten()
             .unwrap_or_else(|| multimodal_chunk.image_path.clone());
 
-        processor
-            .repo
+        processor.storage.repo
             .assets()
             .store_multimodal_chunk(
                 context,
@@ -726,7 +717,7 @@ async fn stage_build_and_replace_retrieval_index(
     materialize: &MaterializeOutput,
     parse_run_state: &mut ParseRunState,
 ) -> Result<(), IngestionError> {
-    let needs_text_vector_index = processor.retrieval_data_plane.is_some();
+    let needs_text_vector_index = processor.storage.retrieval_data_plane.is_some();
     let text_index_records = if needs_text_vector_index {
         build_text_index_records(processor, &materialize.chunks).await?
     } else {
@@ -736,7 +727,7 @@ async fn stage_build_and_replace_retrieval_index(
         parse_run_state.outputs.text_vector_count = text_index_records.len();
     }
 
-    let needs_multimodal_vector_index = processor.retrieval_data_plane.is_some();
+    let needs_multimodal_vector_index = processor.storage.retrieval_data_plane.is_some();
     let multimodal_index_records = if needs_multimodal_vector_index {
         build_multimodal_index_records(
             processor,
@@ -752,7 +743,7 @@ async fn stage_build_and_replace_retrieval_index(
         parse_run_state.outputs.multimodal_vector_count = multimodal_index_records.len();
     }
 
-    let graph_records = if processor.retrieval_data_plane.is_some() && triplet_extraction_enabled()
+    let graph_records = if processor.storage.retrieval_data_plane.is_some() && triplet_extraction_enabled()
     {
         let mut extraction = extract_triplets_for_index(
             processor,
@@ -773,8 +764,7 @@ async fn stage_build_and_replace_retrieval_index(
             extraction.triplets = merge_extracted_triplets(extraction.triplets, visual.triplets);
         }
         if extraction.total_tokens > 0 {
-            let _ = processor
-                .repo
+            let _ = processor.storage.repo
                 .sessions()
                 .record_usage_event(
                     context,
@@ -789,9 +779,9 @@ async fn stage_build_and_replace_retrieval_index(
         GraphIndexRecords::default()
     };
 
-    if let Some(data_plane) = &processor.retrieval_data_plane {
+    if let Some(data_plane) = &processor.storage.retrieval_data_plane {
         ensure_ingestion_side_effects_allowed(
-            &processor.repo,
+            &processor.storage.repo,
             context,
             task,
             document_id,
@@ -832,7 +822,7 @@ async fn generate_document_summary(
     content: &str,
     title: &str,
 ) {
-    let Some(ref summary_gen) = processor.summary_generator else {
+    let Some(ref summary_gen) = processor.llm.summary_generator else {
         return;
     };
     let user_uuid = task
@@ -841,7 +831,7 @@ async fn generate_document_summary(
         .and_then(|value| Uuid::parse_str(value).ok());
     let mut skip_llm_summary = false;
 
-    if let (Some(svc), Some(user_id)) = (&processor.usage_limit, user_uuid) {
+    if let (Some(svc), Some(user_id)) = (&processor.metering.usage_limit, user_uuid) {
         match svc.check_quota(context.org_id().into_uuid(), user_id).await {
             Ok(quota) => {
                 if quota.blocked_5h || quota.blocked_7d {
@@ -870,7 +860,7 @@ async fn generate_document_summary(
     };
 
     if ensure_ingestion_side_effects_allowed(
-        &processor.repo,
+        &processor.storage.repo,
         context,
         task,
         document_id,
@@ -879,8 +869,7 @@ async fn generate_document_summary(
     .await
     .is_ok()
     {
-        if let Err(error) = processor
-            .repo
+        if let Err(error) = processor.storage.repo
             .documents()
             .update_document_summary(
                 context,
@@ -895,7 +884,7 @@ async fn generate_document_summary(
         }
     }
 
-    if let (Some(svc), Some(user_id)) = (&processor.usage_limit, user_uuid) {
+    if let (Some(svc), Some(user_id)) = (&processor.metering.usage_limit, user_uuid) {
         let ctx = avrag_billing::usage_limit::MeteringContext {
             user_id,
             org_id: context.org_id().into_uuid(),
@@ -924,7 +913,7 @@ async fn generate_document_summary(
         }
     }
 
-    if let (Some(analytics), Some(user_id)) = (&processor.analytics, user_uuid) {
+    if let (Some(analytics), Some(user_id)) = (&processor.metering.analytics, user_uuid) {
         let event = analytics::CostEvent {
             event_id: Uuid::new_v4(),
             event_time: chrono::Utc::now(),

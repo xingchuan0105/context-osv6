@@ -22,7 +22,7 @@ pub async fn build_multimodal_index_records(
 
     let page_status = parse_page_status_from_ir(document_ir);
 
-    let Some(client) = processor.mm_embedding_client.as_ref() else {
+    let Some(client) = processor.embedding.mm_embedding_client.as_ref() else {
         info!(
             multimodal_chunks = chunks.len(),
             "MM embedding not configured; skipping multimodal vector indexing"
@@ -31,8 +31,8 @@ pub async fn build_multimodal_index_records(
     };
 
     let media_ctx = MediaResolveContext {
-        object_store: processor.object_store.clone(),
-        asset_url_ttl_secs: processor.asset_url_ttl_secs,
+        object_store: processor.storage.object_store.clone(),
+        asset_url_ttl_secs: processor.storage.asset_url_ttl_secs,
     };
     let semaphore = Arc::new(tokio::sync::Semaphore::new(4));
     let client = client.clone();

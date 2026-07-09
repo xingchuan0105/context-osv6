@@ -14,12 +14,103 @@ pub const MAX_EXECUTE_PLAN_ITEMS: usize = ExecutePlanRequest::MAX_ITEMS;
 
 /// Classify a placeholder triplet for graph retrieval strategy selection.
 pub fn classify_placeholder_triplet(triplet: &PlaceholderTriplet) -> PlaceholderTripletType {
-    triplet.classify()
+    let placeholder_count = triplet.subject.starts_with('?') as usize
+        + triplet.predicate.starts_with('?') as usize
+        + triplet.object.starts_with('?') as usize;
+    match placeholder_count {
+        0 => PlaceholderTripletType::Resolved,
+        1 => PlaceholderTripletType::Traceable,
+        _ => PlaceholderTripletType::Fuzzy,
+    }
 }
 
-/// Wire + budget validation for an execute-plan request.
+fn has_structured_graph_input(req: &ExecutePlanRequest) -> bool {
+    req.graph_hints.iter().any(|hint| {
+        hint.subject
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+            || hint
+                .predicate
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty())
+            || hint
+                .object
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty())
+    }) || req.placeholder_triplets.iter().any(|triplet| {
+        !triplet.subject.trim().is_empty()
+            || !triplet.predicate.trim().is_empty()
+            || !triplet.object.trim().is_empty()
+    })
+}
+
+/// Wire + budget validation for an execute-plan request (canonical implementation).
 pub fn validate_execute_plan(req: &ExecutePlanRequest) -> Result<(), ExecutePlanValidationError> {
-    req.validate()
+    if req.doc_scope.is_empty() {
+        return Err(ExecutePlanValidationError::EmptyDocScope);
+    }
+    if req.items.is_empty() {
+        return Err(ExecutePlanValidationError::EmptyItems);
+    }
+    if req.items.len() > MAX_EXECUTE_PLAN_ITEMS {
+        return Err(ExecutePlanValidationError::TooManyItems {
+            max: MAX_EXECUTE_PLAN_ITEMS,
+        });
+    }
+
+    for (index, item) in req.items.iter().enumerate() {
+        if !(0.0..=1.0).contains(&item.priority) {
+            return Err(ExecutePlanValidationError::InvalidPriority { index });
+        }
+
+        let has_query = item
+            .query
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty());
+        let has_bm25_terms = item
+            .bm25_terms
+            .as_ref()
+            .is_some_and(|terms| terms.iter().any(|term| !term.trim().is_empty()));
+        if usize::from(has_query) + usize::from(has_bm25_terms) != 1 {
+            return Err(ExecutePlanValidationError::InvalidPayloadCount { index });
+        }
+    }
+
+    if req
+        .budget
+        .as_ref()
+        .and_then(|budget| budget.total_candidate_budget)
+        .is_some_and(|value| value == 0)
+    {
+        return Err(ExecutePlanValidationError::InvalidTotalCandidateBudget);
+    }
+
+    if req
+        .budget
+        .as_ref()
+        .and_then(|budget| budget.final_chunk_budget)
+        .is_some_and(|value| value == 0)
+    {
+        return Err(ExecutePlanValidationError::InvalidFinalChunkBudget);
+    }
+
+    for (index, triplet) in req.placeholder_triplets.iter().enumerate() {
+        if triplet.placeholder_positions().len() > 2 {
+            return Err(ExecutePlanValidationError::TooManyPlaceholders { index });
+        }
+    }
+
+    if req
+        .channel_budget
+        .as_ref()
+        .and_then(|budget| budget.graph)
+        .is_some_and(|value| value > 0)
+        && !has_structured_graph_input(req)
+    {
+        return Err(ExecutePlanValidationError::GraphBudgetRequiresHints);
+    }
+
+    Ok(())
 }
 
 /// Ensure the original user query is present as a text-dense item (retrieval prep).
@@ -115,5 +206,53 @@ pub fn insert_original_query_item(items: &mut Vec<ExecutePlanItem>, original_que
     );
     while items.len() > MAX_EXECUTE_PLAN_ITEMS {
         items.pop();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use contracts::rag_execute::ExecutePlanItem;
+
+    fn base_request() -> ExecutePlanRequest {
+        ExecutePlanRequest {
+            plan_version: "v1".into(),
+            doc_scope: vec!["doc-1".into()],
+            items: vec![ExecutePlanItem {
+                priority: 1.0,
+                query: Some("hello".into()),
+                bm25_terms: None,
+            }],
+            summary_mode: ExecutePlanSummaryMode::None,
+            budget: None,
+            channel_budget: None,
+            query_entities: vec![],
+            graph_hints: vec![],
+            placeholder_triplets: vec![],
+            trace: None,
+        }
+    }
+
+    #[test]
+    fn validate_rejects_empty_doc_scope() {
+        let mut req = base_request();
+        req.doc_scope.clear();
+        assert!(matches!(
+            validate_execute_plan(&req),
+            Err(ExecutePlanValidationError::EmptyDocScope)
+        ));
+    }
+
+    #[test]
+    fn classify_resolved_triplet() {
+        let t = PlaceholderTriplet {
+            subject: "a".into(),
+            predicate: "b".into(),
+            object: "c".into(),
+        };
+        assert_eq!(
+            classify_placeholder_triplet(&t),
+            PlaceholderTripletType::Resolved
+        );
     }
 }

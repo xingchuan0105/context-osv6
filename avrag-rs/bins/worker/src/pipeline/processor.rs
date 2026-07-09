@@ -76,26 +76,51 @@ impl Drop for PgAdvisoryLockGuard {
     }
 }
 
-pub(crate) struct PgTaskProcessor {
-    pub(crate) repo: PgAppRepository,
-    pub(crate) object_store: ObjectStoreHandle,
-    pub(crate) retrieval_data_plane: Option<Arc<dyn RetrievalDataPlane>>,
+/// Text + multimodal embedding clients and vector dimension.
+pub(crate) struct EmbeddingDeps {
     pub(crate) embedding_dim: usize,
     pub(crate) embedding_client: Option<avrag_llm::EmbeddingClient>,
     pub(crate) mm_embedding_client: Option<avrag_llm::EmbeddingClient>,
-    pub(crate) asset_url_ttl_secs: u64,
-    pub(crate) redis_lock: Option<DocumentLock>,
+}
+
+/// LLM clients used during ingestion (summary, section index, triplets, VLM).
+pub(crate) struct LlmDeps {
     pub(crate) summary_generator: Option<avrag_llm::SummaryGenerator>,
     pub(crate) section_index_generator: Option<avrag_llm::SectionIndexGenerator>,
     pub(crate) triplet_llm: Option<Arc<avrag_llm::LlmClient>>,
-    pub(crate) analytics: Option<analytics::AnalyticsService>,
-    pub(crate) usage_limit: Option<avrag_billing::usage_limit::UsageLimitService>,
+    pub(crate) ingestion_llm: Option<Arc<avrag_llm::LlmClient>>,
+}
+
+/// External parse services (office / PDF renderer).
+pub(crate) struct ParseServiceDeps {
     pub(crate) office_parser_client: Option<OfficeParserServiceClient>,
     pub(crate) pdf_renderer_client: Option<PdfRendererServiceClient>,
-    pub(crate) ingestion_llm: Option<Arc<avrag_llm::LlmClient>>,
-    pub(crate) task_timeout_secs: u64,
-    /// When set, rebound to task org/user at the start of each `process`.
+}
+
+/// Usage metering + product analytics for ingestion tasks.
+pub(crate) struct MeteringDeps {
+    pub(crate) analytics: Option<analytics::AnalyticsService>,
+    pub(crate) usage_limit: Option<avrag_billing::usage_limit::UsageLimitService>,
+    /// Rebound to task org/user at the start of each `process`.
     pub(crate) task_usage_observer: Option<Arc<app_billing::TaskTenantUsageObserver>>,
+}
+
+/// Storage / lock / retrieval infrastructure for a worker task.
+pub(crate) struct StorageDeps {
+    pub(crate) repo: PgAppRepository,
+    pub(crate) object_store: ObjectStoreHandle,
+    pub(crate) retrieval_data_plane: Option<Arc<dyn RetrievalDataPlane>>,
+    pub(crate) asset_url_ttl_secs: u64,
+    pub(crate) redis_lock: Option<DocumentLock>,
+}
+
+pub(crate) struct PgTaskProcessor {
+    pub(crate) storage: StorageDeps,
+    pub(crate) embedding: EmbeddingDeps,
+    pub(crate) llm: LlmDeps,
+    pub(crate) parse: ParseServiceDeps,
+    pub(crate) metering: MeteringDeps,
+    pub(crate) task_timeout_secs: u64,
 }
 
 struct PayloadSource {
@@ -119,8 +144,7 @@ impl PgTaskProcessor {
                 is_url_task: false,
             }),
             ingestion::IngestionTaskPayload::ReindexDocument(_) => {
-                let seed = self
-                    .repo
+                let seed = self.storage.repo
                     .bootstrap()
                     .get_document_task_seed(context, document_id)
                     .await
@@ -167,7 +191,7 @@ impl PgTaskProcessor {
             &parse_run_state.validation_warnings,
             &parse_run_state.outputs,
         );
-        self.repo
+        self.storage.repo
             .documents()
             .finish_document_parse_run(
                 context,
@@ -197,7 +221,7 @@ impl TaskProcessor for PgTaskProcessor {
         telemetry::prometheus::observe_worker_task_started(task_kind);
         let started_at = std::time::Instant::now();
         // Attribute exit-metered LLM/embedding spend to the task org/actor.
-        if let Some(obs) = self.task_usage_observer.as_ref() {
+        if let Some(obs) = self.metering.task_usage_observer.as_ref() {
             let auth = task_context(task);
             let tenant = avrag_llm::TenantContext {
                 org_id: auth.org_id().into_uuid(),
@@ -210,7 +234,7 @@ impl TaskProcessor for PgTaskProcessor {
         }
         let lock_heartbeat = task.lock_token.as_ref().map(|lock_token| {
             spawn_ingestion_task_lock_heartbeat(
-                self.repo.clone(),
+                self.storage.repo.clone(),
                 task.task_id.clone(),
                 lock_token.clone(),
             )
@@ -226,7 +250,7 @@ impl TaskProcessor for PgTaskProcessor {
             // document concurrently. Prefer the Redis-backed distributed lock when
             // configured; otherwise fall back to a Postgres advisory lock derived
             // from the document id so the guarantee still holds without Redis.
-            let _redis_lock_guard = if let Some(ref lock) = self.redis_lock {
+            let _redis_lock_guard = if let Some(ref lock) = self.storage.redis_lock {
                 match lock.try_acquire(document_id).await {
                     Ok(Some(guard)) => Some(guard),
                     Ok(None) => {
@@ -245,7 +269,7 @@ impl TaskProcessor for PgTaskProcessor {
             // advisory lock is already held by another worker, skip this document.
             let _pg_lock_guard = if _redis_lock_guard.is_none() {
                 let key = document_advisory_key(document_id);
-                match PgAdvisoryLockGuard::try_acquire(self.repo.raw().clone(), key).await {
+                match PgAdvisoryLockGuard::try_acquire(self.storage.repo.raw().clone(), key).await {
                     Some(guard) => Some(guard),
                     None => {
                         info!(%document_id, advisory_key = key, "skipping document — advisory lock held by another worker");
@@ -266,13 +290,13 @@ impl TaskProcessor for PgTaskProcessor {
                     .await
                     .map_err(|error| IngestionError::storage_object(error))?
             } else {
-                self.object_store
+                self.storage.object_store
                     .get(&object_path)
                     .await
                     .map_err(|error| IngestionError::storage_object(error))?
             };
             if !is_url_task {
-                verify_uploaded_object_bytes(&self.repo, &context, document_id, &bytes).await?;
+                verify_uploaded_object_bytes(&self.storage.repo, &context, document_id, &bytes).await?;
             }
             let filename = if is_url_task {
                 url_to_filename(&object_path)
@@ -337,7 +361,7 @@ impl TaskProcessor for PgTaskProcessor {
             }
 
             ensure_ingestion_side_effects_allowed(
-                &self.repo,
+                &self.storage.repo,
                 &context,
                 task,
                 document_id,
@@ -352,7 +376,7 @@ impl TaskProcessor for PgTaskProcessor {
                 None,
                 &parse_run_state.outputs,
             );
-            self.repo
+            self.storage.repo
                 .documents()
                 .create_document_parse_run(
                     &context,
@@ -388,7 +412,7 @@ impl TaskProcessor for PgTaskProcessor {
             {
                 Ok(metrics) => {
                     ensure_ingestion_side_effects_allowed(
-                        &self.repo,
+                        &self.storage.repo,
                         &context,
                         task,
                         document_id,
@@ -422,8 +446,7 @@ impl TaskProcessor for PgTaskProcessor {
                     metrics
                 }
                 Err(error) => {
-                    let may_record_failure = self
-                        .repo
+                    let may_record_failure = self.storage.repo
                         .documents()
                         .document_allows_ingestion_side_effects(
                             &context,
@@ -458,8 +481,7 @@ impl TaskProcessor for PgTaskProcessor {
             let processed_chunk_count = pipeline_metrics.processed_chunk_count;
 
             let embedding_tokens = estimate_token_count(&content);
-            let _ = self
-                .repo
+            let _ = self.storage.repo
                 .sessions()
                 .record_usage_event(
                     &context,
@@ -468,8 +490,7 @@ impl TaskProcessor for PgTaskProcessor {
                     "worker_ingestion",
                 )
                 .await;
-            let _ = self
-                .repo
+            let _ = self.storage.repo
                 .sessions()
                 .record_usage_event(
                     &context,
@@ -478,7 +499,7 @@ impl TaskProcessor for PgTaskProcessor {
                     "worker_ingestion",
                 )
                 .await;
-            if let Some(ref analytics) = self.analytics
+            if let Some(ref analytics) = self.metering.analytics
                 && let Some(user_id) = task
                     .requested_by
                     .as_deref()
