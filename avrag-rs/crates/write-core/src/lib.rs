@@ -1,8 +1,9 @@
-//! Write-mode domain crate (ADR 0006).
+//! Write-mode domain crate (ADR 0006 — split plan **Accepted**).
 //!
 //! Owns material-pack / refine types / pure helpers / **WriteRefineLoopRunner**
 //! behind research/mode/activity ports. app-chat supplies adapters
 //! (`SubagentInvoker`, ModeConfig, AgentEventSink) and `run_write_mode` entry.
+//! See `docs/adr/0006-write-heavytail-crate-split-plan.md`.
 
 mod contract;
 mod material_pack;

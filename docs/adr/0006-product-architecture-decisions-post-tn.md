@@ -223,7 +223,7 @@ Thermo-Nuclear 结构债主路径（C1–C3 / H1–H3 / 长尾）落地后，剩
 3. ~~Write 入口用量提示文案~~ ✅ frontend Write mode + usage hint  
 4. ~~Desktop 版本线文档完善 + SLA 响应数字~~ ✅ `docs/desktop/SUPPORT-AND-SLA.md` + `VERSIONING.md`  
 5. ~~CI merge gate / nightly 分流~~ ✅ `avrag-rs/docs/e2e-gates.md`（认领轮值可运营侧再填人）  
-6. Write+heavytail crate 拆分（**测试先行**）— **partial**：`write-core` 已抽出 material/refine 契约；编排仍在 `app-chat`  
+6. ~~Write+heavytail crate 拆分（**测试先行**）~~ ✅ `write-core` 契约/helpers/WriteRefineLoopRunner+ports；app-chat 保留 ChatContext 入口与 agent adapters（见 `0006-write-heavytail-crate-split-plan.md` Accepted）  
 7. ~~Execute-plan 运行时删除~~ ✅ 路由物理删除 + App 方法删除；DTO/内部 harness 过渡保留至 2026-09-30  
 8. ~~用量导出 / 1 年保留~~ ✅ API + worker purge + 删号级联（`0053`/`0054`）
 
