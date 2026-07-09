@@ -70,10 +70,28 @@ pub struct SummaryGenerator {
 impl SummaryGenerator {
     pub fn new(config: crate::ModelProviderConfig) -> Self {
         Self {
-            llm: LlmClient::new(config),
+            llm: LlmClient::new(config).with_feature("summary"),
             prompt_template: None,
             finalize_prompt_template: None,
         }
+    }
+
+    /// Wrap a preconfigured client (observer / feature already applied).
+    pub fn from_client(llm: LlmClient) -> Self {
+        Self {
+            llm: llm.with_feature("summary"),
+            prompt_template: None,
+            finalize_prompt_template: None,
+        }
+    }
+
+    pub fn with_observer(
+        mut self,
+        observer: std::sync::Arc<dyn crate::UsageObserver>,
+        tenant: crate::TenantContext,
+    ) -> Self {
+        self.llm = self.llm.with_observer(observer, tenant);
+        self
     }
 
     pub fn with_prompt_template(mut self, template: impl Into<String>) -> Self {

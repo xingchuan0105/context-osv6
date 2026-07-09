@@ -24,10 +24,14 @@ impl WriterLlm {
         }
     }
 
-    /// Tag LLM calls for metering (`ChatUsageRecord.feature` in `crates/llm/src/usage_observer.rs`).
+    /// Tag LLM calls for metering (`ChatUsageRecord.feature` / `.stage`).
     pub fn with_phase(&self, phase: &str) -> Self {
         Self {
-            client: self.client.clone().with_feature(format!("write:{phase}")),
+            client: self
+                .client
+                .clone()
+                .with_feature(format!("write:{phase}"))
+                .with_stage(phase),
         }
     }
 

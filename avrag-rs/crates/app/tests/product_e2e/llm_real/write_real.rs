@@ -48,11 +48,8 @@ async fn real_llm_write_mode_produces_article_with_fingerprint() {
     assert_eq!(resp.agent_type, "write");
     assert_answer_substantive(&resp, 80);
 
-    let debug = resp
-        .mode_debug
-        .as_ref()
-        .or(resp.planner_output.as_ref().map(|_| &serde_json::Value::Null));
-    let _ = debug;
+    let _ = resp.mode_debug.as_ref();
+    let _ = resp.planner_output.as_ref();
 
     ctx.save_llm_artifact(
         "real_llm_write_mode_produces_article_with_fingerprint",

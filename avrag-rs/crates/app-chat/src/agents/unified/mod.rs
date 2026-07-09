@@ -280,6 +280,8 @@ impl UnifiedAgent {
 
         let llm = match llm_client {
             Some(client) => {
+                // Tag stage with mode id; attach exit metering when configured.
+                let client = client.with_stage(mode_id);
                 let client = if let Some(ref observer) = self.usage_observer {
                     client.with_observer(observer.clone(), tenant.clone())
                 } else {

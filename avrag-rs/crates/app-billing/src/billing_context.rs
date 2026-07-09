@@ -5,7 +5,7 @@ use app_core::{
 };
 use contracts::auth_runtime::AuthContext;
 use avrag_billing::usage_limit::BillableFeature;
-use avrag_llm::LlmUsage;
+use avrag_llm::{LlmUsage, UsageObserver};
 use common::AppError;
 use uuid::Uuid;
 
@@ -13,6 +13,8 @@ use uuid::Uuid;
 pub struct BillingContext {
     quota_manager: Option<Arc<avrag_billing::QuotaManager>>,
     usage_limit_phase: String,
+    /// Exit-metering observer for LLM clients outside UnifiedAgent (e.g. write path).
+    usage_observer: Option<Arc<dyn UsageObserver>>,
 }
 
 impl BillingContext {
@@ -23,7 +25,13 @@ impl BillingContext {
         Self {
             quota_manager,
             usage_limit_phase,
+            usage_observer: None,
         }
+    }
+
+    pub fn with_usage_observer(mut self, observer: Arc<dyn UsageObserver>) -> Self {
+        self.usage_observer = Some(observer);
+        self
     }
 
     pub fn is_available(&self) -> bool {
@@ -36,6 +44,10 @@ impl BillingContext {
 
     pub fn quota_manager(&self) -> Option<&Arc<avrag_billing::QuotaManager>> {
         self.quota_manager.as_ref()
+    }
+
+    pub fn usage_observer(&self) -> Option<&Arc<dyn UsageObserver>> {
+        self.usage_observer.as_ref()
     }
 
     pub async fn get_user_usage_limit(

@@ -37,6 +37,11 @@ impl PgUsageObserver {
             BillableFeature::GraphExtraction
         } else if f.contains("rag") || f.contains("answer") {
             BillableFeature::Answer
+        } else if f.starts_with("write:") || f.contains("writer") || f.contains("section_index") {
+            // Write-mode phases and section-index stay on chat quota buckets.
+            BillableFeature::Chat
+        } else if f.contains("embedding") {
+            BillableFeature::Answer
         } else {
             BillableFeature::Chat
         }

@@ -160,20 +160,66 @@ pub(crate) async fn build_worker_retrieval_data_plane(
     Ok(Some(data_plane))
 }
 
-pub(crate) fn build_worker_triplet_llm(config: &AppConfig) -> Option<Arc<avrag_llm::LlmClient>> {
-    config
-        .triplet_llm
-        .to_llm_config()
-        .map(avrag_llm::LlmClient::new)
-        .map(Arc::new)
+/// Optional exit-metering pair: observer + system-ish tenant (worker bootstrap identity).
+pub(crate) type WorkerUsageObserver =
+    Option<(std::sync::Arc<dyn avrag_llm::UsageObserver>, avrag_llm::TenantContext)>;
+
+pub(crate) fn worker_system_tenant(config: &AppConfig) -> avrag_llm::TenantContext {
+    let org_id = Uuid::parse_str(&config.org_id).unwrap_or_else(|_| Uuid::nil());
+    let user_id = Uuid::parse_str(&config.user_id).unwrap_or_else(|_| Uuid::nil());
+    avrag_llm::TenantContext { org_id, user_id }
 }
 
-pub(crate) fn build_worker_ingestion_llm(config: &AppConfig) -> Option<Arc<avrag_llm::LlmClient>> {
-    config
-        .ingestion_llm
-        .to_llm_config()
-        .map(avrag_llm::LlmClient::new)
-        .map(Arc::new)
+fn apply_worker_observer(
+    mut client: avrag_llm::LlmClient,
+    feature: &str,
+    observer: &WorkerUsageObserver,
+) -> avrag_llm::LlmClient {
+    client = client.with_feature(feature);
+    if let Some((obs, tenant)) = observer {
+        client = client.with_observer(obs.clone(), tenant.clone());
+    }
+    client
+}
+
+pub(crate) fn build_worker_triplet_llm(
+    config: &AppConfig,
+    observer: &WorkerUsageObserver,
+) -> Option<Arc<avrag_llm::LlmClient>> {
+    config.triplet_llm.to_llm_config().map(|cfg| {
+        Arc::new(apply_worker_observer(
+            avrag_llm::LlmClient::new(cfg),
+            "triplet",
+            observer,
+        ))
+    })
+}
+
+pub(crate) fn build_worker_ingestion_llm(
+    config: &AppConfig,
+    observer: &WorkerUsageObserver,
+) -> Option<Arc<avrag_llm::LlmClient>> {
+    config.ingestion_llm.to_llm_config().map(|cfg| {
+        Arc::new(apply_worker_observer(
+            avrag_llm::LlmClient::new(cfg),
+            "ingestion",
+            observer,
+        ))
+    })
+}
+
+pub(crate) fn build_worker_embedding_client(
+    config: &app_core::ModelProviderConfig,
+    feature: &str,
+    observer: &WorkerUsageObserver,
+) -> Option<avrag_llm::EmbeddingClient> {
+    config.to_llm_config().map(|cfg| {
+        let mut client = avrag_llm::EmbeddingClient::new(cfg).with_feature(feature);
+        if let Some((obs, tenant)) = observer {
+            client = client.with_observer(obs.clone(), tenant.clone());
+        }
+        client
+    })
 }
 
 pub(crate) fn safe_relative_object_key(value: &str) -> bool {

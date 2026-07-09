@@ -28,10 +28,10 @@ use tracing::{error, info, warn};
 use ingestion_guard::run_document_cleanup_once;
 use pipeline::PgTaskProcessor;
 use runtime_support::{
-    apply_e2e_object_store_overrides, build_worker_object_store,
+    apply_e2e_object_store_overrides, build_worker_embedding_client, build_worker_object_store,
     build_worker_retrieval_data_plane, build_worker_ingestion_llm, build_worker_triplet_llm,
     describe_object_store_config, probe_object_store, spawn_health_listener, worker_health_port,
-    worker_poll_interval, worker_runtime_mode,
+    worker_poll_interval, worker_runtime_mode, worker_system_tenant,
 };
 use sources::{PgAuditSink, PgStateSink, PgTaskSource};
 
@@ -87,6 +87,12 @@ pub async fn run() -> Result<()> {
         let usage_limit_store = std::sync::Arc::new(app_bootstrap::PgUsageLimitStoreAdapter::new(
             std::sync::Arc::new(repo.clone()),
         )) as std::sync::Arc<dyn app_core::UsageLimitStorePort>;
+        // Exit metering for worker LLM/embedding calls (system tenant = bootstrap org/user).
+        let usage_observer: runtime_support::WorkerUsageObserver = {
+            let obs: std::sync::Arc<dyn avrag_llm::UsageObserver> =
+                std::sync::Arc::new(app_billing::PgUsageObserver::new(usage_limit_store.clone()));
+            Some((obs, worker_system_tenant(&config)))
+        };
         let worker_object_store = build_worker_object_store(&config).await?;
         let object_store_config = describe_object_store_config(&config);
         let queue_group = std::env::var("AVRAG_WORKER_QUEUE_GROUP")
@@ -159,15 +165,17 @@ pub async fn run() -> Result<()> {
                 object_store: worker_object_store,
                 retrieval_data_plane,
                 embedding_dim,
-                embedding_client: {
-                    let ec = &config.embedding;
-                    ec.to_llm_config().map(avrag_llm::EmbeddingClient::new)
-                },
+                embedding_client: build_worker_embedding_client(
+                    &config.embedding,
+                    "document_embedding",
+                    &usage_observer,
+                ),
                 asset_url_ttl_secs: config.object_storage.download_url_expire_sec,
-                mm_embedding_client: {
-                    let ec = &config.mm_embedding;
-                    ec.to_llm_config().map(avrag_llm::EmbeddingClient::new)
-                },
+                mm_embedding_client: build_worker_embedding_client(
+                    &config.mm_embedding,
+                    "document_embedding_mm",
+                    &usage_observer,
+                ),
                 redis_lock: {
                     let url = &config.redis.url;
                     if !url.trim().is_empty() {
@@ -179,7 +187,11 @@ pub async fn run() -> Result<()> {
                 summary_generator: {
                     let sc = &config.ingestion_llm;
                     if let Some(llm_config) = sc.to_llm_config() {
-                        let mut generator = SummaryGenerator::new(llm_config);
+                        let mut llm = avrag_llm::LlmClient::new(llm_config).with_feature("summary");
+                        if let Some((obs, tenant)) = &usage_observer {
+                            llm = llm.with_observer(obs.clone(), tenant.clone());
+                        }
+                        let mut generator = SummaryGenerator::from_client(llm);
                         if let Some(template) = load_prompt_template(
                             &config.prompts.dir,
                             &config.prompts.summary_version,
@@ -206,7 +218,12 @@ pub async fn run() -> Result<()> {
                 section_index_generator: {
                     let sc = &config.ingestion_llm;
                     sc.to_llm_config().map(|cfg| {
-                        let mut section_gen = avrag_llm::SectionIndexGenerator::new(cfg);
+                        let mut llm =
+                            avrag_llm::LlmClient::new(cfg).with_feature("section_index");
+                        if let Some((obs, tenant)) = &usage_observer {
+                            llm = llm.with_observer(obs.clone(), tenant.clone());
+                        }
+                        let mut section_gen = avrag_llm::SectionIndexGenerator::from_client(llm);
                         if let Ok(system) = std::fs::read_to_string(format!(
                             "{}/pipeline/section-index.system.v1.md",
                             config.prompts.dir.trim()
@@ -221,7 +238,7 @@ pub async fn run() -> Result<()> {
                         section_gen
                     })
                 },
-                triplet_llm: build_worker_triplet_llm(&config),
+                triplet_llm: build_worker_triplet_llm(&config, &usage_observer),
                 analytics: Some(analytics::AnalyticsService::new(analytics_pool)),
                 usage_limit: Some(avrag_billing::usage_limit::UsageLimitService::new(
                     usage_limit_store.clone(),
@@ -230,7 +247,7 @@ pub async fn run() -> Result<()> {
                     .map(OfficeParserServiceClient::new),
                 pdf_renderer_client: PdfRendererServiceConfig::from_env()
                     .map(PdfRendererServiceClient::new),
-                ingestion_llm: build_worker_ingestion_llm(&config),
+                ingestion_llm: build_worker_ingestion_llm(&config, &usage_observer),
                 task_timeout_secs,
             },
         );
