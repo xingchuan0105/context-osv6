@@ -253,6 +253,7 @@ Thermo-Nuclear 结构债主路径（C1–C3 / H1–H3 / 长尾）落地后，剩
 | 2026-07-09 | **产品同意评审结论**；张力项升格为 Accepted addenda |
 | 2026-07-09 | 实现进度：#1–#5/#7/#8 文档与代码落地；#6 Write crate 拆分仍待 |
 | 2026-07-09 | #6 partial `write-core`；#7 路由删除；#8 export API + 删号级联 |
+| 2026-07-09 | **#6 Accepted**：runner/ports 在 write-core；Chat 入口留 app-chat；ADR 实现 backlog 全部勾完 |
 
 ---
 
