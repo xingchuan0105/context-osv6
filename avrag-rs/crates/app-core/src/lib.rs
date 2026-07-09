@@ -27,7 +27,8 @@ pub mod storage_context;
 pub mod util;
 
 pub use adapters::{
-    MemoryAdminStore, MemoryBillingQuotaPort, MemoryDocumentStore, MemoryNotebookStore,
+    MemoryAdminStore, MemoryBillingQuotaPort, MemoryChatPersistence, MemoryDocumentStore,
+    MemoryNotebookStore,
 };
 pub use admin_domain::{
     AdminAuditLogEntry, AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview,

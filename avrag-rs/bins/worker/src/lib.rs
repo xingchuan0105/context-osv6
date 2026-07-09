@@ -87,10 +87,14 @@ pub async fn run() -> Result<()> {
         let usage_limit_store = std::sync::Arc::new(app_bootstrap::PgUsageLimitStoreAdapter::new(
             std::sync::Arc::new(repo.clone()),
         )) as std::sync::Arc<dyn app_core::UsageLimitStorePort>;
-        // Exit metering for worker LLM/embedding calls (system tenant = bootstrap org/user).
+        // Exit metering: long-lived clients share TaskTenantUsageObserver; each task
+        // rebinds org/user before LLM/embedding work (see PgTaskProcessor::process).
+        let task_usage_observer = std::sync::Arc::new(app_billing::TaskTenantUsageObserver::new(
+            usage_limit_store.clone(),
+            worker_system_tenant(&config),
+        ));
         let usage_observer: runtime_support::WorkerUsageObserver = {
-            let obs: std::sync::Arc<dyn avrag_llm::UsageObserver> =
-                std::sync::Arc::new(app_billing::PgUsageObserver::new(usage_limit_store.clone()));
+            let obs: std::sync::Arc<dyn avrag_llm::UsageObserver> = task_usage_observer.clone();
             Some((obs, worker_system_tenant(&config)))
         };
         let worker_object_store = build_worker_object_store(&config).await?;
@@ -249,6 +253,7 @@ pub async fn run() -> Result<()> {
                     .map(PdfRendererServiceClient::new),
                 ingestion_llm: build_worker_ingestion_llm(&config, &usage_observer),
                 task_timeout_secs,
+                task_usage_observer: Some(task_usage_observer),
             },
         );
 

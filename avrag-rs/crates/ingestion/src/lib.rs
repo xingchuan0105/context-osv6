@@ -9,7 +9,9 @@ pub mod parser;
 pub mod security_scanner;
 pub mod semantic;
 
-pub use error::IngestionError;
+pub use error::{
+    IngestionError, IndexKind, ParseKind, SecurityKind, StorageKind,
+};
 pub use ingestion_types::{
     AuditAction, AuditRecord, DEFAULT_MAX_ATTEMPTS, IngestDocumentPayload, IngestUrlPayload,
     IngestionTask, IngestionTaskKind, IngestionTaskPayload, ReindexDocumentPayload, ReindexReason,

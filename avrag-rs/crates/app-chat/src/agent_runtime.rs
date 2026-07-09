@@ -20,10 +20,9 @@ impl ChatContext {
         &self,
         doc_scope: &[String],
     ) -> Result<common::DocScopeMetadata, AppError> {
-        let pg_opt = self.storage.chat_persistence();
-        let pg = pg_opt
-            .as_ref()
-            .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
+        let pg = self.storage.chat_persistence().ok_or_else(|| {
+            AppError::internal("chat persistence is not configured")
+        })?;
 
         let doc_uuids: Vec<Uuid> = doc_scope
             .iter()
@@ -43,10 +42,9 @@ impl ChatContext {
             AppError::validation("invalid_session_id", "invalid session UUID format")
         })?;
 
-        let pg_opt = self.storage.chat_persistence();
-        let pg = pg_opt
-            .as_ref()
-            .ok_or_else(|| AppError::internal("postgres backend is not configured"))?;
+        let pg = self.storage.chat_persistence().ok_or_else(|| {
+            AppError::internal("chat persistence is not configured")
+        })?;
 
         let messages = pg
             .list_messages(&self.auth, session_uuid)
@@ -60,21 +58,14 @@ impl ChatContext {
     }
 
     pub async fn get_notebook(&self, notebook_id: &str) -> Option<contracts::notebooks::Notebook> {
-        if let Some(pg) = self.storage.chat_persistence() {
-            let notebook_id = Uuid::parse_str(notebook_id).ok()?;
-            let notebook = pg
-                .get_notebook(&self.auth, notebook_id)
-                .await
-                .ok()
-                .flatten()?;
-            return (notebook.org_id == self.current_org_id()).then_some(notebook);
-        }
-        let state = self.storage.inner().read().await;
-        state
-            .notebooks
-            .get(notebook_id)
-            .filter(|notebook| notebook.org_id == self.current_org_id())
-            .cloned()
+        let pg = self.storage.chat_persistence()?;
+        let notebook_id = Uuid::parse_str(notebook_id).ok()?;
+        let notebook = pg
+            .get_notebook(&self.auth, notebook_id)
+            .await
+            .ok()
+            .flatten()?;
+        (notebook.org_id == self.current_org_id()).then_some(notebook)
     }
 
     pub async fn remember_explicit_agent_preference(&self, query: &str) -> Result<(), AppError> {
