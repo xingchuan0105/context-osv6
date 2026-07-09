@@ -240,53 +240,10 @@ impl ChatContext {
             )
             .await;
 
-        if let Some(usage_svc) = self.billing.quota_manager()
-            && let Some(ref llm_usage) = execution.llm_usage {
-                let feature = match execution.mode.as_str() {
-                    "chat" => avrag_billing::usage_limit::BillableFeature::Chat,
-                    "search" => avrag_billing::usage_limit::BillableFeature::Search,
-                    "rag" => avrag_billing::usage_limit::BillableFeature::Answer,
-                    _ => avrag_billing::usage_limit::BillableFeature::Chat,
-                };
-                let user_id = self
-                    .auth
-                    .actor_id()
-                    .map(|a| a.into_uuid())
-                    .unwrap_or_else(Uuid::nil);
-                let org_id = self.auth.org_id().into_uuid();
-                let ctx = avrag_billing::usage_limit::MeteringContext {
-                    user_id,
-                    org_id,
-                    feature,
-                    stage: format!("{}_chat", execution.mode),
-                    session_id: None,
-                    document_id: None,
-                    request_id: self.auth.request_id().map(|s| s.to_string()),
-                    trace_id: None,
-                };
-                let _ = usage_svc
-                    .rolling_service()
-                    .record_usage(
-                        &ctx,
-                        avrag_billing::usage_limit::UsageRecord {
-                            provider: if llm_usage.provider.trim().is_empty() {
-                                "unknown"
-                            } else {
-                                llm_usage.provider.as_str()
-                            },
-                            model: if llm_usage.model.trim().is_empty() {
-                                "unknown"
-                            } else {
-                                llm_usage.model.as_str()
-                            },
-                            prompt_tokens: llm_usage.prompt_tokens,
-                            completion_tokens: llm_usage.completion_tokens,
-                            total_tokens: llm_usage.total_tokens,
-                            usage_source: avrag_billing::usage_limit::UsageSource::Actual,
-                        },
-                    )
-                    .await;
-            }
+        // Per-call `llm_usage_events` rows are written by exit-metering
+        // (`UsageObserver` on LlmClient). Do not re-insert aggregated usage here
+        // or multi-round agent turns will be double-counted.
+        let _ = execution.llm_usage;
 
         if let Some(ref llm_usage) = execution.llm_usage {
             let feature = match execution.mode.as_str() {

@@ -1,3 +1,4 @@
+use crate::usage_observer::{EmbeddingUsageRecord, TenantContext, UsageObserver};
 use crate::ModelProviderConfig;
 use anyhow::Context;
 use serde::Deserialize;
@@ -151,12 +152,24 @@ fn build_dashscope_multimodal_contents(input: &MultiModalEmbeddingInput) -> Vec<
     contents
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct EmbeddingClient {
     config: ModelProviderConfig,
     client: reqwest::Client,
     rate_limiter: Option<crate::SharedRateLimiter>,
     cache: Option<Arc<avrag_cache_redis::CacheStore>>,
+    feature: String,
+    observer: Option<(Arc<dyn UsageObserver>, TenantContext)>,
+}
+
+impl std::fmt::Debug for EmbeddingClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EmbeddingClient")
+            .field("config", &self.config)
+            .field("feature", &self.feature)
+            .field("has_observer", &self.observer.is_some())
+            .finish_non_exhaustive()
+    }
 }
 
 impl EmbeddingClient {
@@ -177,12 +190,46 @@ impl EmbeddingClient {
             client,
             rate_limiter,
             cache: None,
+            feature: "document_embedding".to_string(),
+            observer: None,
         }
     }
 
     pub fn with_cache(mut self, cache: Arc<avrag_cache_redis::CacheStore>) -> Self {
         self.cache = Some(cache);
         self
+    }
+
+    pub fn with_feature(mut self, feature: impl std::fmt::Display) -> Self {
+        self.feature = feature.to_string();
+        self
+    }
+
+    pub fn with_observer(
+        mut self,
+        observer: Arc<dyn UsageObserver>,
+        tenant: TenantContext,
+    ) -> Self {
+        self.observer = Some((observer, tenant));
+        self
+    }
+
+    async fn record_embedding_usage(
+        &self,
+        estimated_tokens: u32,
+        actual_tokens: Option<u32>,
+    ) {
+        let Some((observer, tenant)) = &self.observer else {
+            return;
+        };
+        let record = EmbeddingUsageRecord {
+            estimated_tokens,
+            actual_tokens,
+            provider: self.config.provider_name(),
+            model: self.config.model.clone(),
+            feature: self.feature.clone(),
+        };
+        observer.record_embedding(tenant, &record).await;
     }
 
     fn estimate_tokens_for_texts(&self, texts: &[&str]) -> usize {
@@ -372,17 +419,19 @@ impl EmbeddingClient {
             .await
             .context("Failed to parse DashScope multimodal embedding response")?;
 
+        let actual_tokens_u32 = resp
+            .usage
+            .as_ref()
+            .and_then(|usage| usage.image_tokens.or(usage.total_tokens))
+            .or_else(|| {
+                resp.output
+                    .embeddings
+                    .first()
+                    .and_then(|item| item.image_tokens)
+            });
+
         if let Some(limiter) = &self.rate_limiter {
-            let actual_tokens = resp
-                .usage
-                .as_ref()
-                .and_then(|usage| usage.image_tokens.or(usage.total_tokens))
-                .or_else(|| {
-                    resp.output
-                        .embeddings
-                        .first()
-                        .and_then(|item| item.image_tokens)
-                })
+            let actual_tokens = actual_tokens_u32
                 .map(|value| value as usize)
                 .unwrap_or(estimated_tokens);
             if actual_tokens > estimated_tokens {
@@ -403,6 +452,9 @@ impl EmbeddingClient {
                 .set_json(&cache_key, &vector, EMBEDDING_CACHE_TTL_SECS)
                 .await;
         }
+
+        self.record_embedding_usage(estimated_tokens as u32, actual_tokens_u32)
+            .await;
 
         Ok(vector)
     }
@@ -472,6 +524,9 @@ impl EmbeddingClient {
             resp.data.len(),
             texts.len()
         );
+
+        let estimated = self.estimate_tokens_for_texts(texts) as u32;
+        self.record_embedding_usage(estimated, None).await;
 
         Ok(resp.data.into_iter().map(|d| d.embedding).collect())
     }

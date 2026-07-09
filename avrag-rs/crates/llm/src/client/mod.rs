@@ -5,10 +5,12 @@ mod types;
 use crate::protocols::Protocol;
 use crate::route::build_route_from_config;
 use crate::schema::{GenerationOptions, LlmEvent, LlmRequest, ToolDefinition};
+use crate::usage_observer::{ChatUsageRecord, TenantContext, UsageObserver};
 use crate::{AnyRoute, ModelProviderConfig};
 use anyhow::Context;
 use futures::StreamExt;
 use rate_limit::ClientRateLimit;
+use std::sync::Arc;
 use stream_parser::ApiUsageRaw;
 use tokio_util::sync::CancellationToken;
 
@@ -21,11 +23,25 @@ struct CompletionCall {
     pre_deducted: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct LlmClient {
     pub config: ModelProviderConfig,
     route: AnyRoute,
     rate_limit: ClientRateLimit,
+    feature: String,
+    stage: String,
+    observer: Option<(Arc<dyn UsageObserver>, TenantContext)>,
+}
+
+impl std::fmt::Debug for LlmClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LlmClient")
+            .field("config", &self.config)
+            .field("feature", &self.feature)
+            .field("stage", &self.stage)
+            .field("has_observer", &self.observer.is_some())
+            .finish_non_exhaustive()
+    }
 }
 
 impl LlmClient {
@@ -40,18 +56,28 @@ impl LlmClient {
             config,
             route,
             rate_limit,
+            feature: "agent_loop".to_string(),
+            stage: String::new(),
+            observer: None,
         }
     }
 
-    pub fn with_feature(self, _feature: impl std::fmt::Display) -> Self {
+    pub fn with_feature(mut self, feature: impl std::fmt::Display) -> Self {
+        self.feature = feature.to_string();
+        self
+    }
+
+    pub fn with_stage(mut self, stage: impl std::fmt::Display) -> Self {
+        self.stage = stage.to_string();
         self
     }
 
     pub fn with_observer(
-        self,
-        _observer: std::sync::Arc<dyn crate::UsageObserver>,
-        _tenant: crate::TenantContext,
+        mut self,
+        observer: Arc<dyn UsageObserver>,
+        tenant: TenantContext,
     ) -> Self {
+        self.observer = Some((observer, tenant));
         self
     }
 
@@ -119,7 +145,7 @@ impl LlmClient {
         telemetry::prometheus::record_dependency_failure(provider);
     }
 
-    fn record_completion_success(
+    async fn record_completion_success(
         &self,
         call: &CompletionCall,
         model: &str,
@@ -143,6 +169,23 @@ impl LlmClient {
         );
         self.rate_limit
             .record_usage(call.pre_deducted, usage.total_tokens() as usize);
+
+        if let Some((observer, tenant)) = &self.observer {
+            let record = ChatUsageRecord {
+                prompt_tokens: usage.prompt_tokens(),
+                completion_tokens: usage.completion_tokens(),
+                total_tokens: usage.total_tokens(),
+                provider: call.provider.clone(),
+                model: model.to_string(),
+                feature: self.feature.clone(),
+                stage: self.stage.clone(),
+                session_id: None,
+                document_id: None,
+                request_id: None,
+                trace_id: None,
+            };
+            observer.record_chat(tenant, &record).await;
+        }
     }
 
     fn map_route_error(err: crate::schema::LlmError) -> anyhow::Error {
@@ -184,7 +227,7 @@ impl LlmClient {
                 response.usage.cached_tokens,
             ),
             response.usage.cached_tokens as u64,
-        );
+        ).await;
 
         Ok(response)
     }
@@ -354,7 +397,7 @@ impl LlmClient {
                 parsed.usage.cached_tokens,
             ),
             parsed.usage.cached_tokens as u64,
-        );
+        ).await;
 
         Ok(parsed)
     }
@@ -438,7 +481,7 @@ impl LlmClient {
             tool_calls: None,
         };
 
-        self.record_completion_success(call, &model, &usage, usage.cached_token_count() as u64);
+        self.record_completion_success(call, &model, &usage, usage.cached_token_count() as u64).await;
 
         Ok(response)
     }
