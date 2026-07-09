@@ -23,6 +23,14 @@ pub fn write_usage_is_unified_billing() -> bool {
     true
 }
 
+/// Internal LLM feature tags for Write phases (`write:refine`, `write:draft`, …).
+/// Used for cost analysis only; must still map into the unified user ledger
+/// (see `app-billing` `map_feature`), never a separate product bill line.
+pub fn is_write_internal_feature_tag(feature: &str) -> bool {
+    let f = feature.trim();
+    f.starts_with("write:") || f.starts_with("write_")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -48,6 +56,17 @@ mod tests {
 
     #[test]
     fn billing_does_not_split_write_sku() {
+        assert!(write_usage_is_unified_billing());
+    }
+
+    #[test]
+    fn write_phase_tags_are_internal_not_sku() {
+        assert!(is_write_internal_feature_tag("write:refine"));
+        assert!(is_write_internal_feature_tag("write:draft"));
+        assert!(is_write_internal_feature_tag("write_research"));
+        assert!(!is_write_internal_feature_tag("agent_loop"));
+        assert!(!is_write_internal_feature_tag("chat"));
+        // High usage does not change the product rule: still unified billing.
         assert!(write_usage_is_unified_billing());
     }
 }

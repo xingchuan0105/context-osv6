@@ -2,11 +2,15 @@
 
 ## Status
 
-**Partial** — 2026-07-09  
+**Partial** — 2026-07-09（本地 `master` 继续）  
 约束（ADR addendum #8）：**先契约/行为测试锁 Write 行为，再搬 crate**。禁止先搬文件后补测试。
 
-**已落地：** `write-core` crate（`MaterialPack`、refine types、empty-topic / unified-billing 契约测试）；`app-chat::writer` 保留编排与 invoker。
+**已落地：**
 
+- `write-core`：`MaterialPack`、refine types、empty-topic / unified-billing / `write:*` 内部 feature 标签契约测试  
+- `app-chat::writer`：编排 + invoker + refine_loop（行为测试仍在此 crate）  
+
+**下一步：** 在不改行为的前提下，把 `run_write_mode` / invoker / refine_loop 迁入 `write-core`（或保持编排在 app-chat 仅再抽依赖边界——以测试全绿为准）。
 ## 现状锚点（勿先搬）
 
 | 区域 | 路径 | 已有测试 |

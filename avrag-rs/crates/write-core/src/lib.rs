@@ -9,7 +9,8 @@ mod material_pack;
 mod refine_types;
 
 pub use contract::{
-    WRITE_AGENT_TYPE, WRITE_MODE, require_non_empty_write_topic, write_usage_is_unified_billing,
+    WRITE_AGENT_TYPE, WRITE_MODE, is_write_internal_feature_tag, require_non_empty_write_topic,
+    write_usage_is_unified_billing,
 };
 pub use material_pack::{MaterialCardView, MaterialPack, ResearchMaterials};
 pub use refine_types::{
