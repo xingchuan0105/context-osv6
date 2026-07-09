@@ -207,7 +207,7 @@ async fn workspace_scope_mismatch_mcp_rag_query() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         mcp_app_error_code(&payload),
-        Some("notebook_scope_mismatch")
+        Some("workspace_scope_mismatch")
     );
     assert_eq!(mcp_guide_mode(&payload), Some("rag"));
 }
@@ -425,7 +425,7 @@ async fn rest_upload_scope_mismatch_returns_forbidden() {
     let payload = serde_json::from_slice::<serde_json::Value>(&body).unwrap();
     assert_eq!(
         payload.get("error").and_then(|value| value.as_str()),
-        Some("notebook_scope_mismatch")
+        Some("workspace_scope_mismatch")
     );
 }
 

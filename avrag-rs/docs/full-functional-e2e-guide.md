@@ -245,7 +245,7 @@ E2E_MODE=smoke cargo test -p app --test product_e2e --features product-e2e \
 | MCP 全流程（key→上传→入库→提问） | `citations` 非空、`doc_id` 匹配、answer 有实质内容 | `integration::mcp_agent_flow` | L2 | M+I | **G-serial-integration** |
 | MCP 越权：workspace key 调 org 工具 | 403 `workspace_key_cannot_call_org_tools` | `integration::mcp_auth_boundary` | L2 | M+I | 串行 |
 | MCP 越权：org key 调 workspace 工具 | 403 `org_key_cannot_call_workspace_tools` | `integration::mcp_auth_boundary` | L2 | M+I | 串行 |
-| MCP 越权：跨 notebook 查询 | 403 `notebook_scope_mismatch` | `integration::mcp_auth_boundary` | L2 | M+I | 串行 |
+| MCP 越权：跨 notebook 查询 | 403 `workspace_scope_mismatch` | `integration::mcp_auth_boundary` | L2 | M+I | 串行 |
 | API key 访问用户态资源（notes 等） | 403 `api_key_forbidden` | `integration::mcp_auth_boundary` | L2 | M+I | 串行 |
 | API key scope/权限边界（契约） | workspace/org key 各自权限剥离 | `transport-http` `api_key_security_contract`（16） | L6 | 轻量/PG | 并行 |
 | MCP tools/call 信封 + ingestion（契约） | create_upload→complete→status；error 信封 | `transport-http` `mcp_unified_contract`（10） | L6 | 轻量/PG | 并行 |

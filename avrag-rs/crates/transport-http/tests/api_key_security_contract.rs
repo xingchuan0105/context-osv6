@@ -225,7 +225,7 @@ async fn workspace_api_key_cannot_read_other_workspace_session() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(
         payload.get("error").and_then(|value| value.as_str()),
-        Some("notebook_scope_mismatch")
+        Some("workspace_scope_mismatch")
     );
 }
 
@@ -418,7 +418,7 @@ async fn workspace_api_key_cannot_update_other_workspace_session() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(
         payload.get("error").and_then(|value| value.as_str()),
-        Some("notebook_scope_mismatch")
+        Some("workspace_scope_mismatch")
     );
 }
 

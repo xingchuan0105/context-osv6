@@ -13,11 +13,11 @@ pub(crate) fn auth_error_to_app_error(error: AuthError) -> AppError {
             format!("missing permission: {permission}"),
         ),
         AuthError::WorkspaceScopeMismatch { expected, actual } => AppError::forbidden(
-            "notebook_scope_mismatch",
-            format!("API key is scoped to notebook {expected}, got {actual}"),
+            "workspace_scope_mismatch",
+            format!("API key is scoped to workspace {expected}, got {actual}"),
         ),
         AuthError::MissingWorkspaceScope => {
-            AppError::forbidden("missing_notebook_scope", "workspace API key scope required")
+            AppError::forbidden("missing_workspace_scope", "workspace API key scope required")
         }
         AuthError::CrossTenantAccess => AppError::forbidden(
             "cross_tenant_access",
@@ -339,6 +339,6 @@ mod tests {
             .with_workspace_scope(scoped)
             .grant(PERM_QUERY);
         let err = authorize_workspace_tool(&auth, PERM_QUERY, other).unwrap_err();
-        assert_eq!(err.code(), "notebook_scope_mismatch");
+        assert_eq!(err.code(), "workspace_scope_mismatch");
     }
 }

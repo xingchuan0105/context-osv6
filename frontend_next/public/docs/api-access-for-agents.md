@@ -111,7 +111,7 @@ REST endpoints keep flat JSON errors with normal HTTP status codes (403/400/etc.
 
 - `org_key_cannot_call_workspace_tools`: account-scoped automation credential called a workspace tool (personal agents should use a workspace key instead)
 - `workspace_key_cannot_call_org_tools`: workspace key called an internal account-provisioning tool (create the workspace in the UI first)
-- `notebook_scope_mismatch`: workspace key used for wrong `workspace_id`
+- `workspace_scope_mismatch`: workspace key used for wrong `workspace_id`
 - `missing_permission`: API key lacks required permission
 - `docscope_required`: RAG with no completed documents
 - `rag_runtime_not_configured`: RAG backend not configured in test/dev environments
@@ -120,4 +120,4 @@ REST endpoints keep flat JSON errors with normal HTTP status codes (403/400/etc.
 
 - `api_key_forbidden`: API key attempted a user-only endpoint (key management, profile, preferences, message feedback)
 - `notebook_access_required`: signed-in user lacks access to manage resources for this workspace
-- `workspace_key_cannot_call_org_tools`, `notebook_scope_mismatch`, `missing_permission`: same semantics as MCP
+- `workspace_key_cannot_call_org_tools`, `workspace_scope_mismatch`, `missing_permission`: same semantics as MCP

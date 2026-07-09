@@ -13,8 +13,7 @@
 
 ## 1. 一句话进度
 
-**TN 主线已关。** 工具执行单点 `ToolCatalog`；Bound 面已拆；workspace 命名主体完成。  
-**TN-3（进行中）**：AppState 停增纪律、FE/Profile 边界、命名漏网、**测试金字塔**（日常 L1；机制 L2；旅程/真 LLM L3）。
+**TN 主线 + TN-3 S4 已关。** 工具执行单点 `ToolCatalog`；Bound 面已拆；workspace 命名主体完成；UserProfile 强类型 merge；测试金字塔入口就绪（日常 L1）。
 
 ---
 

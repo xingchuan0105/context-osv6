@@ -2,6 +2,9 @@
 //!
 //! Product HTTP handlers must use these faces — not raw store accessors on AppState:
 //! `docs()` / `chat()` / `admin_api()` / `admin_ops()` / `share()` / `prefs()` / `billing_api()`.
+//!
+//! **Freeze (TN-3 P0):** do **not** add new business methods on `AppState` or expand these
+//! faces with feature logic. New capabilities land in domain services first; Bound stays thin.
 
 mod documents;
 mod admin;

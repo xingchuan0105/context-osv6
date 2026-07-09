@@ -117,7 +117,7 @@ async fn workspace_key_cannot_query_other_workspace() {
     )
     .await;
     assert_eq!(status, 200, "body: {payload}");
-    assert_eq!(mcp_error_code(&payload), Some("notebook_scope_mismatch"));
+    assert_eq!(mcp_error_code(&payload), Some("workspace_scope_mismatch"));
 }
 
 #[tokio::test]

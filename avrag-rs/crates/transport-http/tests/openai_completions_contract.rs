@@ -198,7 +198,7 @@ async fn openai_completions_with_stream_returns_sse() {
 }
 
 #[tokio::test]
-async fn openai_completions_notebook_scope_mismatch_returns_403() {
+async fn openai_completions_workspace_scope_mismatch_returns_403() {
     let (app, _workspace_id, bearer) = create_workspace_with_key(vec!["query".to_string()]).await;
     let other_notebook = Uuid::new_v4().to_string();
     let response = app
