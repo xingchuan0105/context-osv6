@@ -250,12 +250,12 @@ impl TaskProcessor for PgTaskProcessor {
             let bytes = if is_url_task {
                 fetch_url_content(&object_path)
                     .await
-                    .map_err(|error| IngestionError::storage(error))?
+                    .map_err(|error| IngestionError::storage_object(error))?
             } else {
                 self.object_store
                     .get(&object_path)
                     .await
-                    .map_err(|error| IngestionError::storage(error))?
+                    .map_err(|error| IngestionError::storage_object(error))?
             };
             if !is_url_task {
                 verify_uploaded_object_bytes(&self.repo, &context, document_id, &bytes).await?;
@@ -275,16 +275,16 @@ impl TaskProcessor for PgTaskProcessor {
                 match ingestion::security_scanner::scan_upload(&bytes, &filename).await {
                     Ok(ingestion::security_scanner::ScanResult::Clean) => {}
                     Ok(ingestion::security_scanner::ScanResult::ThreatDetected { threat_name }) => {
-                        return Err(IngestionError::security(format!("malware detected ({threat_name})")));
+                        return Err(IngestionError::malware(threat_name));
                     }
                     Ok(ingestion::security_scanner::ScanResult::ZipBomb { ratio }) => {
-                        return Err(IngestionError::security(format!("ZIP bomb detected (compression ratio {ratio:.1})")));
+                        return Err(IngestionError::zip_bomb(ratio));
                     }
                     Err(error) => {
                         if env_flag_enabled("SECURITY_SCAN_FAIL_OPEN", false) {
                             warn!(error = %error, "security scan encountered an error; SECURITY_SCAN_FAIL_OPEN=true, allowing processing to continue");
                         } else {
-                            return Err(IngestionError::security(format!("scanner unavailable: {error}")));
+                            return Err(IngestionError::scanner_unavailable(error));
                         }
                     }
                 }
@@ -506,9 +506,21 @@ impl TaskProcessor for PgTaskProcessor {
             Err(_) => Err(IngestionError::Timeout(self.task_timeout_secs)),
         };
         stop_ingestion_task_lock_heartbeat(lock_heartbeat).await;
+        let outcome = match &result {
+            Ok(()) => "success",
+            Err(error) => {
+                info!(
+                    task_id = %task.task_id,
+                    error_class = error.class(),
+                    error = %error,
+                    "worker task failed"
+                );
+                "failure"
+            }
+        };
         telemetry::prometheus::observe_worker_task_completed(
             task_kind,
-            if result.is_ok() { "success" } else { "failure" },
+            outcome,
             started_at.elapsed().as_secs_f64() * 1000.0,
         );
         result
