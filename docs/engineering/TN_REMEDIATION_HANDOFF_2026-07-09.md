@@ -2,7 +2,7 @@
 
 | 字段 | 值 |
 |------|-----|
-| 状态 | **Done（TN-1/2）+ TN-3 执行中**（S4：P0–P5，产品拍板 2026-07-09） |
+| 状态 | **TN-3 S4 Done**（P0–P5 产品拍板项已落地） |
 | 分支 | 本地 `master`（solo trunk） |
 | 范围 | `avrag-rs` / `contracts` / `frontend_next` / scripts（**不含** `frontend_rust`） |
 | 主方案 | [`TN_CODE_QUALITY_REMEDIATION_2026-07-09.md`](./TN_CODE_QUALITY_REMEDIATION_2026-07-09.md) |

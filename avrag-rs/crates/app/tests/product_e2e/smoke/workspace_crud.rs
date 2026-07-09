@@ -21,12 +21,12 @@ async fn workspace_crud_lifecycle_via_http() {
     assert_eq!(list_resp.status, 200, "list workspaces: {list_resp:?}");
     let workspaces = list_resp.body_json["workspaces"]
         .as_array()
-        .expect("notebooks array");
+        .expect("workspaces array");
     assert!(
-        notebooks
+        workspaces
             .iter()
             .any(|nb| nb.get("id").and_then(|v| v.as_str()) == Some(workspace_id.as_str())),
-        "created notebook should appear in list"
+        "created workspace should appear in list"
     );
 
     let update_resp = ctx

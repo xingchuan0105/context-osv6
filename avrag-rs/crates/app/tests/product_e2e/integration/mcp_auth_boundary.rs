@@ -55,6 +55,7 @@ async fn org_key(ctx: &TestContext, permissions: &[&str]) -> String {
         .clone();
     let admin_state = state.with_auth(state.auth().clone().grant(PERM_ADMIN));
     let key = admin_state
+        .admin_api()
         .create_org_api_key(CreateApiKeyRequest {
             name: "org-boundary".to_string(),
             permissions: permissions.iter().map(|p| p.to_string()).collect(),

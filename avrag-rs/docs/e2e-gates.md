@@ -12,6 +12,20 @@ suites.
 
 See also [`product-e2e-plan.md`](product-e2e-plan.md).
 
+## Test pyramid (product lock 2026-07-09)
+
+Canonical process: [`docs/engineering/TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09.md`](../../docs/engineering/TN3_P0_P5_AND_TEST_PYRAMID_PLAN_2026-07-09.md), inventory [`TEST_PYRAMID_INVENTORY_2026-07-09.md`](../../docs/engineering/TEST_PYRAMID_INVENTORY_2026-07-09.md), dedup [`TEST_PYRAMID_DEDUP_MAP.md`](../../docs/engineering/TEST_PYRAMID_DEDUP_MAP.md).
+
+| Layer | When | Entry | Contents |
+|-------|------|-------|----------|
+| **L1** | Every commit (solo default) | `scripts/test-l1.sh` | file-size gate + crate `--lib` + `tsc` |
+| **L2** | Mechanism changes / wave | `scripts/test-l2-mechanisms.sh`, `test-l2-integration.sh` | loop/tools/storage lib + mock product smoke/integration |
+| **L3 UI** | Wave end (short) / release (long) | `scripts/test-l3-journey.sh` (`JOURNEY=1` for full) | Playwright smoke / journey |
+| **L3 LLM** | Wave end sample | `scripts/test-l3-llm.sh` | llm_real thin paths (not quality corpus) |
+| **L3 quality/perf** | release / weekly / nightly | existing workflows | `rag_quality_prod`, judge, skills |
+
+**Do not** merge L1+L2+L3 into one daily command. Bench L1: `scripts/bench-test-suites.sh`.
+
 ## Merge gate vs nightly (ADR 0006 §11)
 
 **Process note:** for single-developer workflow, “merge gate” means **commit-stage** checks only. Acceptance smoke is manual until a wave is closed—see SOLO_DISCIPLINE.
