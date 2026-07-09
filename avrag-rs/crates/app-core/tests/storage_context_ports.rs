@@ -80,4 +80,10 @@ fn storage_context_exposes_typed_ports() {
     assert!(storage.billing_quota().is_none());
     assert!(storage.uses_memory_adapters());
     assert!(!storage.postgres_configured());
+    assert!(storage.infra().uses_memory_adapters);
+    assert!(!storage.infra().postgres_configured);
+    assert!(storage.stores().document_store.is_none());
+    assert_eq!(storage.objects().public_base_url, "http://localhost");
+    assert_eq!(storage.objects().upload_expire_sec, 3600);
+    assert!(Arc::ptr_eq(&storage.memory().inner, storage.inner()));
 }

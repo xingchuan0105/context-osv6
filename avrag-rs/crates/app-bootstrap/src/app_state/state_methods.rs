@@ -4,7 +4,7 @@ use crate::adapters::RedisRateLimitBackend;
 use anyhow::Result as AnyResult;
 use app_chat::agents::service::UnifiedAgentService;
 use app_core::{AdminStorePort, AppConfig, BillingStorePort, ShareStorePort};
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::PgAppRepository;
 use common::AppError;
 use std::sync::Arc;
@@ -159,6 +159,16 @@ impl AppState {
         )
     }
 
+    /// Build an analytics context for an explicitly-resolved user id (e.g. an
+    /// auth flow where the actor was just resolved and is not yet on `self.auth`).
+    pub fn analytics_ctx_for_user(
+        &self,
+        user_id: Uuid,
+    ) -> app_core::analytics_context::AnalyticsContext {
+        self.analytics
+            .into_context(Some(user_id), self.auth.request_id().map(str::to_string))
+    }
+
     pub async fn record_product_event_if_available(
         &self,
         event_name: analytics::ProductEventName,
@@ -168,31 +178,9 @@ impl AppState {
         notebook_id: Option<Uuid>,
         metadata: serde_json::Value,
     ) {
-        let Some(ref analytics) = self.analytics.service() else {
-            return;
-        };
-        let Some(user_id) = self.auth.actor_id().map(|actor| actor.into_uuid()) else {
-            return;
-        };
-
-        let event = analytics::ProductEvent {
-            event_id: Uuid::new_v4(),
-            event_time: chrono::Utc::now(),
-            user_id,
-            session_id,
-            notebook_id,
-            surface,
-            event_name,
-            result,
-            request_id: self.auth.request_id().map(str::to_string),
-            trace_id: None,
-            client_platform: "web".to_string(),
-            metadata,
-        };
-        if let Err(error) = analytics.record_product_event(&event).await {
-            telemetry::prometheus::record_dependency_failure("analytics");
-            tracing::warn!(error = %error, event_name = ?event_name, "failed to record product event");
-        }
+        self.analytics_ctx()
+            .record_product_event(event_name, surface, result, session_id, notebook_id, metadata)
+            .await;
     }
 }
 
@@ -268,6 +256,7 @@ impl AppState {
         expires_at_unix: Option<u64>,
     ) -> Result<String, AppError> {
         self.storage
+            .objects()
             .signed_upload_url(document_id, object_path, expires_at_unix)
     }
 
@@ -278,7 +267,11 @@ impl AppState {
         expires: u64,
         signature: &str,
     ) -> Result<(), AppError> {
-        self.storage
-            .verify_upload_signature(document_id, object_path, expires, signature)
+        self.storage.objects().verify_upload_signature(
+            document_id,
+            object_path,
+            expires,
+            signature,
+        )
     }
 }

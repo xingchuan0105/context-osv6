@@ -1,5 +1,6 @@
 use app_core::{
-    DocumentScopeValidator, StorageContext, current_org_id, domain_rows::DocumentScopeState,
+    DocumentScopeValidator, ObjectStoreConfig, StorageContext, current_org_id,
+    domain_rows::DocumentScopeState,
 };
 use async_trait::async_trait;
 use contracts::auth_runtime::AuthContext;
@@ -94,10 +95,10 @@ impl DocumentContext {
 
     pub async fn resolve_citation_asset_url(
         &self,
-        storage: &StorageContext,
+        objects: &ObjectStoreConfig,
         asset: &app_core::DocumentAssetRow,
     ) -> Option<String> {
-        storage.resolve_citation_asset_url(asset).await
+        objects.resolve_citation_asset_url(asset).await
     }
 }
 

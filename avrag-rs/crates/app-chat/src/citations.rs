@@ -52,7 +52,7 @@ impl ChatContext {
                     });
                     let image_url = if let Some(asset) = asset.as_ref() {
                         self.documents
-                            .resolve_citation_asset_url(&self.storage, asset)
+                            .resolve_citation_asset_url(self.storage.objects(), asset)
                             .await
                     } else {
                         None
@@ -194,7 +194,8 @@ impl ChatContext {
 
         let bytes = self
             .storage
-            .object_store()
+            .objects()
+            .object_store
             .get(&storage_path)
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;

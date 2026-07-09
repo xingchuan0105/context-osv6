@@ -164,6 +164,22 @@ impl StorageContext {
         }
     }
 
+    pub fn infra(&self) -> &StorageInfra {
+        &self.infra
+    }
+
+    pub fn stores(&self) -> &StorageStores {
+        &self.stores
+    }
+
+    pub fn memory(&self) -> &MemoryStateHandles {
+        &self.memory
+    }
+
+    pub fn objects(&self) -> &ObjectStoreConfig {
+        &self.objects
+    }
+
     pub fn document_store(&self) -> Option<Arc<dyn DocumentStorePort>> {
         self.stores.document_store.clone()
     }

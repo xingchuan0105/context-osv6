@@ -4,7 +4,7 @@
 > task because it is the highest-risk item in the backlog (the plan rated it
 > "极高风险", 3–5 days, 113 references).
 >
-> **Status:** Steps 0–2 done (2026-07-09). Step 3 optional / deferred.
+> **Status:** Steps 0–3 done (2026-07-09).
 > **Prerequisite:** workspace green, all M3 struct splits stable (met as of
 > 2026-07-09).
 
