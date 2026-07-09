@@ -64,6 +64,7 @@ struct KeygenSingleResponse<T> {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct KeygenLicenseKeyAttributes {
     key: String,
 }

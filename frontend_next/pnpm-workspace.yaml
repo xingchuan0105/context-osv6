@@ -1,0 +1,9 @@
+packages:
+  - "."
+
+# pnpm 11: allow lifecycle scripts for native deps used by Next / Vitest / Playwright toolchain
+allowBuilds:
+  "@parcel/watcher": true
+  "@swc/core": true
+  esbuild: true
+  sharp: true

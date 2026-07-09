@@ -46,6 +46,20 @@ vi.mock("../../lib/ui-preferences", () => ({
   useUiPreferences: () => ({ locale: "zh-CN" as const }),
 }));
 
+vi.mock("../../lib/auth/context", () => ({
+  useAuth: () => ({
+    initialized: true,
+    isAuthenticated: true,
+    token: "test-token",
+    user: { id: "user-1", email: "user@example.com", full_name: "User" },
+    passwordResetEnabled: false,
+    completeAuth: vi.fn(),
+    updateUser: vi.fn(),
+    clearAuth: vi.fn(),
+    logout: vi.fn(),
+  }),
+}));
+
 import { UsageDashboardClient } from "../../app/(app)/settings/usage/usage-dashboard-client";
 import { billingApi } from "../../lib/billing/api";
 import { PricingRevampGate } from "../../components/billing/PricingRevampGate";

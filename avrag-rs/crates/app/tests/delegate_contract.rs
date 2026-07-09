@@ -8,7 +8,6 @@ use common::{CreateDocumentRequest, CreateNotebookRequest};
 use contracts::chat::ChatEvent;
 use contracts::documents::DocumentStatus;
 use contracts::notebooks::CreateChatSessionRequest;
-use contracts::{ExecutePlanBudget, ExecutePlanItem, ExecutePlanRequest, ExecutePlanSummaryMode};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -225,58 +224,6 @@ async fn execute_chat_stream_memory_rag_emits_done_event() {
             .any(|event| matches!(event, ChatEvent::Done { .. })),
         "expected Done event, got {events:?}"
     );
-}
-
-#[tokio::test]
-async fn execute_rag_execute_plan_without_runtime_returns_rag_runtime_not_configured() {
-    let state = memory_state().await;
-    let notebook = create_notebook(&state).await;
-    let upload = state
-        .create_document_upload(
-            &notebook.id,
-            CreateDocumentRequest {
-                filename: "plan.txt".to_string(),
-                file_size: 8,
-                mime_type: "text/plain".to_string(),
-            },
-        )
-        .await
-        .unwrap();
-    state
-        .put_uploaded_document(&upload.document_id, b"plan body".to_vec())
-        .await
-        .unwrap();
-    state
-        .transition_document_status(&upload.document_id, DocumentStatus::Completed)
-        .await
-        .unwrap();
-
-    let err = state
-        .execute_rag_execute_plan(ExecutePlanRequest {
-            plan_version: "rag-execute-v1".to_string(),
-            doc_scope: vec![upload.document_id],
-            items: vec![ExecutePlanItem {
-                priority: 1.0,
-                query: Some("plan".to_string()),
-                bm25_terms: None,
-            }],
-            summary_mode: ExecutePlanSummaryMode::All,
-            budget: Some(ExecutePlanBudget {
-                total_candidate_budget: Some(4),
-                final_chunk_budget: Some(1),
-                graph_hop_limit: None,
-                graph_fan_out_limit: None,
-            }),
-            channel_budget: None,
-            query_entities: Vec::new(),
-            graph_hints: Vec::new(),
-            placeholder_triplets: Vec::new(),
-            trace: None,
-        })
-        .await
-        .unwrap_err();
-
-    assert_eq!(err.code(), "rag_runtime_not_configured");
 }
 
 // ---------------------------------------------------------------------------

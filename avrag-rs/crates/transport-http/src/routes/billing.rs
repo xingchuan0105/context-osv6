@@ -1,7 +1,12 @@
 use app_bootstrap::AppState;
-use axum::{Extension, Json, Router, extract::Query, routing::get};
+use axum::{
+    Extension, Json, Router,
+    extract::{Path, Query},
+    routing::{get, post},
+};
 use common::ApiResponse;
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::middleware::RequestState;
 
@@ -13,6 +18,8 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/billing/usage/window", get(get_usage_window))
         .route("/billing/usage/history", get(get_usage_history))
         .route("/billing/usage/forecast", get(get_usage_forecast))
+        .route("/billing/usage/export", post(create_usage_export))
+        .route("/billing/usage/export/{export_id}", get(get_usage_export))
         .route(
             "/billing/checkout-session",
             axum::routing::post(create_checkout),
@@ -80,4 +87,18 @@ async fn get_usage_forecast(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Json<ApiResponse<avrag_billing::UsageForecastResponse>> {
     Json(state.billing_get_usage_forecast().await)
+}
+
+async fn create_usage_export(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Json(body): Json<avrag_billing::CreateUsageExportRequest>,
+) -> Json<ApiResponse<avrag_billing::UsageExportAccepted>> {
+    Json(state.billing_create_usage_export(body).await)
+}
+
+async fn get_usage_export(
+    Extension(RequestState(state)): Extension<RequestState>,
+    Path(export_id): Path<Uuid>,
+) -> Json<ApiResponse<avrag_billing::UsageExportStatusResponse>> {
+    Json(state.billing_get_usage_export(export_id).await)
 }

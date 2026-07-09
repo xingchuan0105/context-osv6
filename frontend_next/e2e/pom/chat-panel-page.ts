@@ -24,7 +24,7 @@ export class ChatPanelPage {
   }
 
   /** 完整消息发送：可选前置设置对话模式 */
-  async ask(question: string, mode?: "rag" | "search" | "chat") {
+  async ask(question: string, mode?: "rag" | "search" | "chat" | "write") {
     if (mode) {
       await this.setMode(mode);
     }
@@ -38,7 +38,7 @@ export class ChatPanelPage {
     await sendButton.click();
   }
 
-  async setMode(mode: "rag" | "search" | "chat") {
+  async setMode(mode: "rag" | "search" | "chat" | "write") {
     await this.page.locator('[data-testid="workspace-chat-mode-button"]').click();
     await this.page.locator(`[data-testid="workspace-chat-mode-${mode}"]`).click();
   }

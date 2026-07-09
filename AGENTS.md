@@ -106,3 +106,14 @@ These guidelines override your default tendency to be overly helpful, overly ver
 * If the user supplies a **new or updated value** during the conversation, **incrementally write it to `.env`** (and update `.env.example` comments if the key is new) so subsequent sessions persist the configuration.
 * If a test or script expects a differently-prefixed variable (e.g. `E2E_LLM_*` vs `AGENT_LLM_*`) but the production value is already in `.env`, map or alias it rather than asking again.
 
+## 7\. Solo Engineering Discipline (default)
+
+**This monorepo is developed primarily by one person on local disk.** Full write-up: [`docs/engineering/SOLO_DISCIPLINE.md`](docs/engineering/SOLO_DISCIPLINE.md). E2E semantics: [`avrag-rs/docs/e2e-gates.md`](avrag-rs/docs/e2e-gates.md).
+
+* **Default = local trunk (`master`).** Edit and `git commit` on this machine. **Do not** push, open PRs, or wait on GitHub Actions unless the user asks for backup, deploy, or a PR.
+* **Verify locally:** targeted `cargo test -p …` / `pnpm test` / typecheck for packages you touched. That is the commit stage.
+* **Acceptance/E2E** (Product/Frontend smoke, heavy Playwright, real LLM): wave end or pre-ship; local scripts or optional `workflow_dispatch` — not daily, not required to “finish” a feature mid-wave.
+* **GitHub is backup/optional remote**, not the development loop. Do not babysit CI queues as progress.
+* **Do not** re-add smoke as required PR checks or expand CI theater without an explicit request.
+* **Toolchain vs product:** prefer separate local commits for major toolchain bumps.
+

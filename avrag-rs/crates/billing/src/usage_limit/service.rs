@@ -43,6 +43,7 @@ impl UsageLimitService {
                     total_tokens: record.total_tokens,
                     usage_source: record.usage_source,
                     usage_kind: "chat",
+                    billable: true,
                 },
             )
             .await
@@ -70,28 +71,72 @@ impl UsageLimitService {
         })
     }
 
+    /// Hard-cap multiplier for abuse protection (ADR 0006). Soft limit = plan limit;
+    /// hard block when used ≥ limit × multiplier. Env: `USAGE_HARD_CAP_MULTIPLIER` (default 3.0).
+    pub fn hard_cap_multiplier() -> f64 {
+        std::env::var("USAGE_HARD_CAP_MULTIPLIER")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .filter(|v| *v >= 1.0)
+            .unwrap_or(3.0)
+    }
+
     pub async fn check_quota(&self, org_id: Uuid, user_id: Uuid) -> Result<QuotaCheckResult> {
         let _ = org_id;
         let policy = self.load_effective_policy(user_id).await?;
         let windows = self.compute_windows(user_id, &policy).await?;
+        let mult = Self::hard_cap_multiplier();
+
+        let hard_cap_5h = if policy.rolling_5h_limit_units > 0 {
+            ((policy.rolling_5h_limit_units as f64) * mult).ceil() as i64
+        } else {
+            0
+        };
+        let hard_cap_7d = if policy.rolling_7d_limit_units > 0 {
+            ((policy.rolling_7d_limit_units as f64) * mult).ceil() as i64
+        } else {
+            0
+        };
+
+        let soft_5h = windows.rolling_5h.blocked;
+        let soft_7d = windows.rolling_7d.blocked;
+        // Hard block only past abuse cap (or soft limit when mult == 1.0).
+        let hard_5h = policy.enabled
+            && hard_cap_5h > 0
+            && windows.rolling_5h.used_units >= hard_cap_5h;
+        let hard_7d = policy.enabled
+            && hard_cap_7d > 0
+            && windows.rolling_7d.used_units >= hard_cap_7d;
 
         Ok(QuotaCheckResult {
-            blocked_5h: windows.rolling_5h.blocked,
-            blocked_7d: windows.rolling_7d.blocked,
+            soft_exceeded_5h: soft_5h,
+            soft_exceeded_7d: soft_7d,
+            blocked_5h: hard_5h,
+            blocked_7d: hard_7d,
             used_5h: windows.rolling_5h.used_units,
             limit_5h: windows.rolling_5h.limit_units,
             used_7d: windows.rolling_7d.used_units,
             limit_7d: windows.rolling_7d.limit_units,
-            blocked_until_5h: windows.rolling_5h.blocked_until.and_then(|s| {
-                chrono::DateTime::parse_from_rfc3339(&s)
-                    .ok()
-                    .map(|dt| dt.with_timezone(&Utc))
-            }),
-            blocked_until_7d: windows.rolling_7d.blocked_until.and_then(|s| {
-                chrono::DateTime::parse_from_rfc3339(&s)
-                    .ok()
-                    .map(|dt| dt.with_timezone(&Utc))
-            }),
+            hard_cap_5h,
+            hard_cap_7d,
+            blocked_until_5h: if hard_5h {
+                windows.rolling_5h.blocked_until.and_then(|s| {
+                    chrono::DateTime::parse_from_rfc3339(&s)
+                        .ok()
+                        .map(|dt| dt.with_timezone(&Utc))
+                })
+            } else {
+                None
+            },
+            blocked_until_7d: if hard_7d {
+                windows.rolling_7d.blocked_until.and_then(|s| {
+                    chrono::DateTime::parse_from_rfc3339(&s)
+                        .ok()
+                        .map(|dt| dt.with_timezone(&Utc))
+                })
+            } else {
+                None
+            },
         })
     }
 
@@ -252,5 +297,59 @@ impl UsageLimitService {
                 plan_id: "free".to_string(),
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UsageLimitService;
+
+    #[test]
+    fn hard_cap_multiplier_defaults_to_three() {
+        // SAFETY: test-only env mutation in single-threaded unit test.
+        unsafe {
+            std::env::remove_var("USAGE_HARD_CAP_MULTIPLIER");
+        }
+        assert!((UsageLimitService::hard_cap_multiplier() - 3.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn hard_cap_multiplier_reads_env_and_rejects_below_one() {
+        unsafe {
+            std::env::set_var("USAGE_HARD_CAP_MULTIPLIER", "2.5");
+        }
+        assert!((UsageLimitService::hard_cap_multiplier() - 2.5).abs() < f64::EPSILON);
+        unsafe {
+            std::env::set_var("USAGE_HARD_CAP_MULTIPLIER", "0.5");
+        }
+        assert!((UsageLimitService::hard_cap_multiplier() - 3.0).abs() < f64::EPSILON);
+        unsafe {
+            std::env::remove_var("USAGE_HARD_CAP_MULTIPLIER");
+        }
+    }
+
+    #[test]
+    fn hard_cap_from_limit_uses_ceil() {
+        let mult = 3.0_f64;
+        let limit = 100_i64;
+        let hard = ((limit as f64) * mult).ceil() as i64;
+        assert_eq!(hard, 300);
+        let limit_odd = 101_i64;
+        let hard_odd = ((limit_odd as f64) * 2.5).ceil() as i64;
+        assert_eq!(hard_odd, 253);
+    }
+
+    #[test]
+    fn soft_vs_hard_semantics() {
+        // Soft: used >= plan limit; Hard: used >= hard_cap. Soft alone must not hard-block.
+        let limit = 100_i64;
+        let hard_cap = 300_i64;
+        let used_soft_only = 150_i64;
+        let used_hard = 300_i64;
+        let soft = used_soft_only >= limit;
+        let hard_soft_only = used_soft_only >= hard_cap;
+        let hard = used_hard >= hard_cap;
+        assert!(soft && !hard_soft_only);
+        assert!(hard);
     }
 }

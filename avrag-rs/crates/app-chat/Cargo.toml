@@ -31,6 +31,7 @@ chrono.workspace = true
 common = { path = "../common" }
 contracts = { path = "../../../contracts" }
 heavytail = { path = "../heavytail" }
+write-core = { path = "../write-core" }
 evalexpr.workspace = true
 futures = "0.3"
 regex.workspace = true

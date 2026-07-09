@@ -225,6 +225,9 @@ pub async fn revoke_this_device(app: AppHandle) -> Result<(), IpcApiError> {
 
 #[tauri::command]
 pub async fn open_in_browser(url: String, app: AppHandle) -> Result<(), IpcApiError> {
+    // tauri-plugin-shell::open is deprecated in favor of tauri-plugin-opener;
+    // keep shell until opener is wired in this package.
+    #[allow(deprecated)]
     app.shell()
         .open(url, None)
         .map_err(|e| IpcApiError::internal(format!("Failed to open browser: {e}")))

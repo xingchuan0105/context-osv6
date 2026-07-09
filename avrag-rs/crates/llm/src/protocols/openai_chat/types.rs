@@ -15,6 +15,8 @@ pub struct OpenAiChatState {
     pub(crate) usage: Option<LlmUsage>,
     pub(crate) model: String,
     pub(crate) provider: String,
+    /// Kept for request/response correlation and future routing.
+    #[allow(dead_code)]
     pub(crate) configured_model: String,
     pub(crate) tool_calls: Option<Vec<contracts::ToolCall>>,
     pub(crate) text_started: bool,
@@ -31,8 +33,11 @@ pub(crate) struct StreamChoiceDelta {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct OpenAiToolCall {
+    /// Provider tool-call id (deserialized; not all paths read it yet).
+    #[allow(dead_code)]
     pub(crate) id: String,
     #[serde(rename = "type")]
+    #[allow(dead_code)]
     pub(crate) call_type: String,
     #[serde(default)]
     pub(crate) function: Option<OpenAiFunctionCall>,

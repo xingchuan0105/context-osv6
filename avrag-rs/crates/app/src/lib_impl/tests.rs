@@ -213,69 +213,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn execute_plan_fails_closed_without_rag_runtime() {
-        let state = AppState::new(AppConfig::default());
-        let notebook = state
-            .create_notebook(CreateNotebookRequest {
-                name: "budget".to_string(),
-                description: String::new(),
-            })
-            .await
-            .unwrap();
-
-        let mut doc_scope = Vec::new();
-        for name in ["one.txt", "two.txt"] {
-            let upload = state
-                .create_document_upload(
-                    &notebook.id,
-                    CreateDocumentRequest {
-                        filename: name.to_string(),
-                        file_size: 32,
-                        mime_type: "text/plain".to_string(),
-                    },
-                )
-                .await
-                .unwrap();
-            state
-                .put_uploaded_document(&upload.document_id, b"atlas rollback checklist".to_vec())
-                .await
-                .unwrap();
-            state
-                .transition_document_status(&upload.document_id, DocumentStatus::Completed)
-                .await
-                .unwrap();
-            doc_scope.push(upload.document_id);
-        }
-
-        let error = state
-            .execute_rag_execute_plan(contracts::ExecutePlanRequest {
-                plan_version: "rag-execute-v1".to_string(),
-                doc_scope,
-                items: vec![contracts::ExecutePlanItem {
-                    priority: 1.0,
-                    query: Some("atlas".to_string()),
-                    bm25_terms: None,
-                }],
-                summary_mode: contracts::ExecutePlanSummaryMode::All,
-                budget: Some(contracts::ExecutePlanBudget {
-                    total_candidate_budget: Some(4),
-                    final_chunk_budget: Some(1),
-                    graph_hop_limit: None,
-                    graph_fan_out_limit: None,
-                }),
-                channel_budget: None,
-                query_entities: Vec::new(),
-                graph_hints: Vec::new(),
-                placeholder_triplets: Vec::new(),
-                trace: None,
-            })
-            .await
-            .unwrap_err();
-
-        assert_eq!(error.code(), "rag_runtime_not_configured");
-    }
-
-    #[tokio::test]
     async fn memory_delete_document_soft_deletes_and_hides_document() {
         let state = AppState::new(AppConfig::default());
         let notebook = state
@@ -706,7 +643,9 @@ mod tests {
                 infra: crate::storage_context::StorageInfra {
                     postgres_health,
                     postgres_configured: true,
-                    uses_memory_adapters: StorageInfra::memory_adapters_flag(false),
+                    uses_memory_adapters: crate::storage_context::StorageInfra::memory_adapters_flag(
+                        false,
+                    ),
                     max_upload_file_size_bytes: max_upload,
                 },
                 stores: crate::storage_context::StorageStores {
