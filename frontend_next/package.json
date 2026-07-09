@@ -1,8 +1,12 @@
 {
   "name": "frontend-next",
   "private": true,
+  "engines": {
+    "node": ">=22.13.0",
+    "pnpm": ">=11.0.0"
+  },
   "version": "0.0.1",
-  "packageManager": "pnpm@10.34.4",
+  "packageManager": "pnpm@11.10.0",
   "scripts": {
     "build": "next build",
     "build:desktop": "BUILD_TARGET=desktop next build",
