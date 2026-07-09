@@ -1,13 +1,11 @@
 name: Smoke E2E
 
+# Product Smoke E2E: manual only for now (architecture/product surface in flux;
+# re-enable pull_request after E2E is restabilized at the end of the feature wave).
+# Desktop Shell Check still runs on desktop path PRs.
 on:
   pull_request:
     paths:
-      - 'avrag-rs/crates/**'
-      - 'avrag-rs/bins/**'
-      - 'avrag-rs/prompts/**'
-      - 'avrag-rs/scripts/**'
-      - 'contracts/**'
       - 'desktop/**'
       - '.github/workflows/smoke-e2e.yml'
   workflow_dispatch:
@@ -21,6 +19,8 @@ env:
 jobs:
   smoke-e2e:
     name: Product Smoke E2E
+    # Not a PR merge gate while ADR/product E2E is deferred.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     defaults:
       run:

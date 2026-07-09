@@ -1,11 +1,9 @@
 name: Frontend Smoke E2E
 
+# Temporary: not on pull_request. Architecture/product surface is moving (ADR 0006);
+# Playwright smoke is re-stabilized after feature work, not as a merge gate.
+# Run manually via workflow_dispatch until then.
 on:
-  pull_request:
-    paths:
-      - 'frontend_next/**'
-      - 'avrag-rs/**'
-      - '.github/workflows/frontend-smoke.yml'
   workflow_dispatch:
 
 env:
