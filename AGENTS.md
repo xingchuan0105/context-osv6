@@ -106,3 +106,14 @@ These guidelines override your default tendency to be overly helpful, overly ver
 * If the user supplies a **new or updated value** during the conversation, **incrementally write it to `.env`** (and update `.env.example` comments if the key is new) so subsequent sessions persist the configuration.
 * If a test or script expects a differently-prefixed variable (e.g. `E2E_LLM_*` vs `AGENT_LLM_*`) but the production value is already in `.env`, map or alias it rather than asking again.
 
+## 7\. Solo Engineering Discipline (default)
+
+**This monorepo is developed primarily by one person.** Prefer simplified process over multi-team CI theater. Full write-up: [`docs/engineering/SOLO_DISCIPLINE.md`](docs/engineering/SOLO_DISCIPLINE.md). E2E suite semantics: [`avrag-rs/docs/e2e-gates.md`](avrag-rs/docs/e2e-gates.md).
+
+* **Commit stage only on PR/push:** affected unit tests, frontend Vitest/typecheck, fast license/legal gates. Target feedback in minutes.
+* **Acceptance/E2E (Product smoke, Frontend smoke, heavy Playwright, real LLM):** not merge blockers during feature/architecture waves. Run via `workflow_dispatch` or local scripts; restabilize at **wave end** unless the user explicitly asks to fix E2E now.
+* **Do not** re-add smoke E2E as required PR checks, expand CI matrix, or drive product changes just to green a deferred suite—without an explicit user request.
+* **Selective work:** path-filtered CI; re-run only failing commit-stage jobs; avoid stacking duplicate workflow dispatches on one SHA.
+* **When CI is red:** diagnose first; if the failure is deferred acceptance/E2E, report and continue product work (or stop if the user required confirmation)—do not open a multi-hour E2E campaign by default.
+* **Toolchain vs product:** prefer separate commits/branches for major toolchain bumps.
+

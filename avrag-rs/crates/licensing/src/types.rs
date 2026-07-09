@@ -31,6 +31,7 @@ pub(crate) struct KeygenListResponse<T> {
 pub(crate) struct KeygenResource<T> {
     pub id: String,
     #[serde(rename = "type")]
+    #[allow(dead_code)]
     pub resource_type: String,
     pub attributes: T,
 }

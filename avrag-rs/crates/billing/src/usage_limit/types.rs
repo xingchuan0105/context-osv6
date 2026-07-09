@@ -30,12 +30,18 @@ pub struct UsageWindows {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QuotaCheckResult {
+    /// Soft limit exceeded (used ≥ plan limit). Requests may still proceed.
+    pub soft_exceeded_5h: bool,
+    pub soft_exceeded_7d: bool,
+    /// Abuse hard-cap exceeded (used ≥ limit × hard_cap_multiplier). Must hard-block.
     pub blocked_5h: bool,
     pub blocked_7d: bool,
     pub used_5h: i64,
     pub limit_5h: i64,
     pub used_7d: i64,
     pub limit_7d: i64,
+    pub hard_cap_5h: i64,
+    pub hard_cap_7d: i64,
     pub blocked_until_5h: Option<DateTime<Utc>>,
     pub blocked_until_7d: Option<DateTime<Utc>>,
 }

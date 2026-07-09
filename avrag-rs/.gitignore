@@ -9,7 +9,8 @@
 /target/
 /pkg/
 *.wasm
-Cargo.lock
+# Cargo.lock is tracked so CI (rustc 1.93.1) gets a reproducible graph.
+# Do not ignore it for this application workspace.
 
 # Storage / runtime state
 .run/.env.runtime

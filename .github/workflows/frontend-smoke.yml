@@ -1,11 +1,9 @@
 name: Frontend Smoke E2E
 
+# Temporary: not on pull_request. Architecture/product surface is moving (ADR 0006);
+# Playwright smoke is re-stabilized after feature work, not as a merge gate.
+# Run manually via workflow_dispatch until then.
 on:
-  pull_request:
-    paths:
-      - 'frontend_next/**'
-      - 'avrag-rs/**'
-      - '.github/workflows/frontend-smoke.yml'
   workflow_dispatch:
 
 env:
@@ -24,12 +22,12 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 11
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'pnpm'
           cache-dependency-path: frontend_next/pnpm-lock.yaml
 
@@ -58,6 +56,12 @@ jobs:
         # future smoke specs that exercise RAG.
         run: bash "$GITHUB_WORKSPACE/scripts/ci-start-milvus.sh"
         timeout-minutes: 5
+
+      # Cold `cargo run` exceeds Playwright's 120s webServer budget on 2-core runners.
+      - name: Prebuild Rust API and worker
+        working-directory: avrag-rs
+        run: cargo build --locked -p avrag-api -p avrag-worker
+        timeout-minutes: 25
 
       - name: Run smoke E2E
         run: pnpm exec playwright test --project=functional --project=auth

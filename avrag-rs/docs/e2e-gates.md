@@ -3,17 +3,48 @@
 This document defines pass/fail semantics across Rust Product E2E and Playwright
 suites.
 
+**Solo / agent default process** (commit vs acceptance stages, when not to block on smoke):
+[`docs/engineering/SOLO_DISCIPLINE.md`](../../docs/engineering/SOLO_DISCIPLINE.md).
+
 **Agent-oriented full coverage matrix** (what to test, parallel groups, real doc parse / LLM RAG / chat / websearch): [`full-functional-e2e-guide.md`](full-functional-e2e-guide.md).
 
 **Post-run analysis** (coverage / regression / attribution / stability / quality): [`e2e-analysis-framework.md`](e2e-analysis-framework.md) + [`e2e-test-registry.yaml`](e2e-test-registry.yaml).
 
 See also [`product-e2e-plan.md`](product-e2e-plan.md).
 
+## Merge gate vs nightly (ADR 0006 §11)
+
+**Process note:** for single-developer workflow, “merge gate” means **commit-stage** checks only. Acceptance smoke is manual until a wave is closed—see SOLO_DISCIPLINE.
+
+**Merge gate** (must be green to land on `master`):
+
+| Surface | Checks |
+|---------|--------|
+| Rust | `cargo check` + affected crate / contract unit tests |
+| Frontend | `tsc` + affected vitest |
+| Lint/format | existing CI jobs already required for the path |
+
+**Temporarily out of PR CI** (2026-07-09): Product Smoke (`smoke-e2e.yml` job) and Frontend Smoke (`frontend-smoke.yml`) are **workflow_dispatch only**. Architecture and product surfaces are still moving; restabilize E2E at the end of the wave, then restore PR triggers. Desktop Shell Check remains path-filtered on `desktop/**`.
+
+**Nightly / non-blocking** (must have an owner when red):
+
+| Surface | Checks |
+|---------|--------|
+| Integration | full `product_e2e` mock suite |
+| Real LLM | `nightly-llm-real.yml` (cost owned by product) |
+| Quality | `rag_quality` / long soak / Playwright skills+judge |
+| Product / Frontend smoke | manual `workflow_dispatch` until re-enabled as PR gate |
+
+**Escalation into merge gate** (optional, PR-scoped): changes touching LLM protocol, billing/quota core, or auth may require the related integration / real-LLM subset before merge.
+
+**Nightly ownership**: failures on scheduled workflows require claim within **1 business day** by the on-call/product rotation (do not leave red nightlies unowned). Until a named rota exists, default owner is the **last merger to the failing surface** (billing/quota → billing owners; LLM protocol → agent/rag owners; frontend → web owners).
+
 ## Layer overview
 
 | Layer | Runner | Trigger | Execution | Citation gate |
 |-------|--------|---------|-------------|---------------|
-| PR smoke | `smoke-e2e.yml` | PR | `./scripts/run-product-smoke-e2e.sh` (root `.github/workflows/smoke-e2e.yml`, `defaults.run.working-directory: avrag-rs`) | N/A (mock LLM) |
+| Product smoke (manual) | `smoke-e2e.yml` | `workflow_dispatch` only (PR gate deferred 2026-07-09) | `./scripts/run-product-smoke-e2e.sh` (root `.github/workflows/smoke-e2e.yml`, `defaults.run.working-directory: avrag-rs`) | N/A (mock LLM) |
+| Frontend smoke (manual) | `frontend-smoke.yml` | `workflow_dispatch` only (PR gate deferred 2026-07-09) | Playwright `functional` + `auth` projects | N/A |
 | Integration | `integration-e2e.yml` | main / manual | `E2E_MODE=integration cargo test -p app --test product_e2e --features product-e2e -- --test-threads=1` | Hard in integration tests |
 | llm_real | `nightly-llm-real.yml` | schedule / manual | `E2E_MODE=nightly cargo test -p app --test product_e2e --features product-e2e llm_real -- --ignored --test-threads=1` | **Hard** — `assert_citations_non_empty` |
 | Playwright skills | `frontend-skills.yml` | schedule / manual | `cd frontend_next && npx playwright test --project=skills` | **Hard** — `must_have_citation` golden entries |

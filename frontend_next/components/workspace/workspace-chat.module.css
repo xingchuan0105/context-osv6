@@ -555,6 +555,12 @@
   color: hsl(var(--foreground));
 }
 
+.modeBubbleTagWrite {
+  border-color: hsl(var(--warning, 38 92% 50%) / 0.3);
+  background: hsl(var(--warning, 38 92% 50%) / 0.12);
+  color: hsl(var(--foreground));
+}
+
 .modeBubbleTagCode {
   color: hsl(var(--subtle-foreground));
   letter-spacing: 0.04em;
@@ -1091,6 +1097,15 @@
 .modeMenuItemActive {
   background: hsl(var(--surface-soft));
   color: hsl(var(--foreground));
+}
+
+.writeUsageHint {
+  margin: 0;
+  max-width: 14rem;
+  color: hsl(var(--warning, 38 92% 40%));
+  font-size: var(--font-size-meta);
+  font-weight: 600;
+  line-height: var(--line-height-meta);
 }
 
 .hint {

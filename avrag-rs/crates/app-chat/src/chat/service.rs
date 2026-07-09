@@ -45,16 +45,31 @@ impl ChatContext {
                 "Viewing shared content does not require sign-in, but asking questions does.",
             ));
         }
+        // ADR 0006: rolling is the sole usage truth. Monthly metric preflight is soft
+        // (warn only) — do not hard-block on estimated plan metrics.
         let estimated_input_tokens = estimate_token_count(
             &std::iter::once(req.query.as_str())
                 .chain(req.messages.iter().map(|item| item.content.as_str()))
                 .collect::<Vec<_>>()
                 .join("\n"),
         );
-        self.ensure_metric_quota("llm_input_tokens", estimated_input_tokens)
-            .await?;
-        self.ensure_metric_quota("llm_output_tokens", 1024).await?;
+        if let Err(error) = self
+            .ensure_metric_quota("llm_input_tokens", estimated_input_tokens)
+            .await
+        {
+            tracing::warn!(
+                error = %error,
+                "monthly metric soft-limit exceeded; continuing (ADR 0006 soft limit)"
+            );
+        }
+        if let Err(error) = self.ensure_metric_quota("llm_output_tokens", 1024).await {
+            tracing::warn!(
+                error = %error,
+                "monthly metric soft-limit exceeded; continuing (ADR 0006 soft limit)"
+            );
+        }
 
+        // Rolling: soft at plan limit, hard-block only at abuse hard-cap (default 3×).
         let phase = self.billing.usage_limit_phase();
         let enforce_5h = phase == "5h_enforcement" || phase == "7d_enforcement";
         let enforce_7d = phase == "7d_enforcement";
@@ -67,6 +82,20 @@ impl ChatContext {
             }
         };
 
+        if (quota.soft_exceeded_5h || quota.soft_exceeded_7d)
+            && !(quota.blocked_5h || quota.blocked_7d)
+        {
+            tracing::info!(
+                used_5h = quota.used_5h,
+                limit_5h = quota.limit_5h,
+                used_7d = quota.used_7d,
+                limit_7d = quota.limit_7d,
+                hard_cap_5h = quota.hard_cap_5h,
+                hard_cap_7d = quota.hard_cap_7d,
+                "rolling soft limit exceeded; allowing request until hard cap (ADR 0006)"
+            );
+        }
+
         if quota.blocked_5h && enforce_5h {
             telemetry::prometheus::observe_usage_limit_block("5h");
             let blocked_until = quota.blocked_until_5h.map(|dt| dt.to_rfc3339());
@@ -78,8 +107,9 @@ impl ChatContext {
             return Err(AppError::rate_limited(
                 "usage_limit_exceeded",
                 format!(
-                    "Usage limit exceeded for rolling 5h window: used {} / {} units. blocked_until={}.",
+                    "Usage hard cap exceeded for rolling 5h window: used {} / hard_cap {} (plan limit {}). blocked_until={}.",
                     quota.used_5h,
+                    quota.hard_cap_5h,
                     quota.limit_5h,
                     blocked_until.unwrap_or_else(|| "unknown".to_string()),
                 ),
@@ -97,8 +127,9 @@ impl ChatContext {
             return Err(AppError::rate_limited(
                 "usage_limit_exceeded",
                 format!(
-                    "Usage limit exceeded for rolling 7d window: used {} / {} units. blocked_until={}.",
+                    "Usage hard cap exceeded for rolling 7d window: used {} / hard_cap {} (plan limit {}). blocked_until={}.",
                     quota.used_7d,
+                    quota.hard_cap_7d,
                     quota.limit_7d,
                     blocked_until.unwrap_or_else(|| "unknown".to_string()),
                 ),

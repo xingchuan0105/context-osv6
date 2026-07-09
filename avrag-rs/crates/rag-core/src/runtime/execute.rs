@@ -628,6 +628,9 @@ impl RagRuntime {
         }
     }
 
+    /// Internal retrieval harness (unit tests / ToolCall adapter).
+    /// Product HTTP path `POST /rag/execute-plan` is **gone** (ADR 0006).
+    #[doc(hidden)]
     pub async fn execute_plan(
         &self,
         request: &ExecutePlanRequest,

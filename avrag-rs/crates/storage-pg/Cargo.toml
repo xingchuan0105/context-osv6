@@ -9,6 +9,7 @@ rust-version.workspace = true
 contracts = { path = "../../../contracts" }
 anyhow.workspace = true
 async-trait.workspace = true
+# Keep on major "1"; Cargo.lock is tracked so CI stays reproducible.
 aws-config = "1"
 aws-credential-types = "1"
 aws-sdk-s3 = "1"

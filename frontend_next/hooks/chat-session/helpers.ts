@@ -11,7 +11,7 @@ export function normalizeMessageMode(mode: string | null | undefined): Workspace
   if (mode === "general" || mode === "chat") {
     return "chat";
   }
-  if (mode === "rag" || mode === "search") {
+  if (mode === "rag" || mode === "search" || mode === "write") {
     return mode;
   }
   return null;

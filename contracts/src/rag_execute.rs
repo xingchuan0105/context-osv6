@@ -147,6 +147,11 @@ pub struct ExecutePlanItem {
     pub bm25_terms: Option<Vec<String>>,
 }
 
+/// Legacy retrieval plan DTO.
+///
+/// **ADR 0006:** product HTTP `POST /api/v1/rag/execute-plan` is **removed**.
+/// Prefer AgentLoop + `ToolCall`. This type remains for prompt legacy parsing
+/// and internal test harness conversion only.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExecutePlanRequest {

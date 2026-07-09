@@ -7,7 +7,7 @@ import { createStore } from "zustand/vanilla";
 
 import type { WorkspaceCitationRequest } from "./model";
 
-export type WorkspaceChatMode = "rag" | "search" | "chat";
+export type WorkspaceChatMode = "rag" | "search" | "chat" | "write";
 type WorkspaceChatModeInput = WorkspaceChatMode | "general";
 export type WorkspaceChatModePreference = "auto" | "manual";
 
@@ -108,7 +108,7 @@ function normalizeChatMode(mode: string | null | undefined): WorkspaceChatMode {
     return "chat";
   }
 
-  if (mode === "rag" || mode === "search") {
+  if (mode === "rag" || mode === "search" || mode === "write") {
     return mode;
   }
 

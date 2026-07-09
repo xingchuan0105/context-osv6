@@ -13,7 +13,7 @@ use contracts::chat::ChatEvent;
 use contracts::chat::ChatRequest;
 use contracts::documents::CitationLookupRequest;
 use contracts::notebooks::{CreateChatSessionRequest, UpdateChatSessionRequest};
-use contracts::{ExecutePlanRequest, RuntimeExecuteRequest};
+use contracts::RuntimeExecuteRequest;
 use std::{convert::Infallible, time::Duration};
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use tokio_util::sync::CancellationToken;
@@ -28,28 +28,6 @@ use crate::auth_guard::{
     authorize_workspace_query_optional_notebook, forbid_api_key, forbid_workspace_api_key,
     query_permission,
 };
-
-pub(crate) async fn rag_execute_plan_handler(
-    Extension(RequestState(state)): Extension<RequestState>,
-    payload: Result<Json<ExecutePlanRequest>, axum::extract::rejection::JsonRejection>,
-) -> Response {
-    let Json(req) = match payload {
-        Ok(payload) => payload,
-        Err(error) => {
-            return app_error_response(AppError::validation(
-                "invalid_execute_plan",
-                format!("invalid execute-plan JSON: {error}"),
-            ));
-        }
-    };
-    if let Err(error) = authorize_api_key_query_scoped(state.auth()) {
-        return app_error_response(error);
-    }
-    match state.execute_rag_execute_plan(req).await {
-        Ok(response) => (StatusCode::OK, Json(response)).into_response(),
-        Err(error) => app_error_response(error),
-    }
-}
 
 pub(crate) async fn runtime_execute_handler(
     Extension(RequestState(state)): Extension<RequestState>,

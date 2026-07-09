@@ -1,0 +1,17 @@
+[package]
+name = "write-core"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+description = "Write-mode domain types and refine/material contracts (ADR 0006 crate split)"
+
+[dependencies]
+common = { path = "../common" }
+contracts = { path = "../../../contracts" }
+heavytail = { path = "../heavytail" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

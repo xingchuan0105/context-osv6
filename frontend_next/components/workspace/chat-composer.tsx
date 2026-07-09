@@ -5,7 +5,7 @@ import { formatUiMessage } from "../../lib/i18n/messages";
 import { type WorkspaceChatMode } from "../../lib/workspace/ui-store";
 import styles from "./workspace-chat.module.css";
 
-const CHAT_MODE_ORDER: WorkspaceChatMode[] = ["rag", "search", "chat"];
+const CHAT_MODE_ORDER: WorkspaceChatMode[] = ["rag", "search", "chat", "write"];
 const MIN_COMPOSER_TEXTAREA_HEIGHT = 52;
 const AUTO_COMPOSER_TEXTAREA_MAX_HEIGHT = 192;
 const MANUAL_COMPOSER_TEXTAREA_MAX_HEIGHT = 360;
@@ -16,6 +16,8 @@ function getModeLabel(locale: "zh-CN" | "en", mode: WorkspaceChatMode) {
       return formatUiMessage(locale, "workspaceChatModeRag");
     case "search":
       return formatUiMessage(locale, "workspaceChatModeSearch");
+    case "write":
+      return formatUiMessage(locale, "workspaceChatModeWrite");
     case "chat":
     default:
       return formatUiMessage(locale, "workspaceChatModeChat");
@@ -28,6 +30,8 @@ function getModeCode(mode: WorkspaceChatMode) {
       return "RAG";
     case "search":
       return "web_search";
+    case "write":
+      return "write";
     case "chat":
     default:
       return "chat";
@@ -329,6 +333,16 @@ export function ChatComposer({
                 </button>
               ))}
             </div>
+          ) : null}
+
+          {effectiveChatMode === "write" ? (
+            <p
+              className={styles.writeUsageHint}
+              data-testid="workspace-chat-write-usage-hint"
+              role="note"
+            >
+              {formatUiMessage(locale, "workspaceChatModeWriteUsageHint")}
+            </p>
           ) : null}
         </div>
 

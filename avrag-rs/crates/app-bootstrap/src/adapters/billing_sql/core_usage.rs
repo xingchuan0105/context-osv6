@@ -339,7 +339,7 @@ async fn sum_usage_units_window(
         r#"
         select coalesce(sum(usage_units), 0)::bigint as total
         from llm_usage_events
-        where user_id = $1 and created_at >= $2
+        where user_id = $1 and created_at >= $2 and billable = true
         "#,
     )
     .bind(user_id)

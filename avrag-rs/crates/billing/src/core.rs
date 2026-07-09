@@ -104,6 +104,8 @@ pub(crate) async fn load_quota_limit(
         .map_err(map_store_error)
 }
 
+// Stripe customer helpers kept for portal/checkout paths not yet fully wired.
+#[allow(dead_code)]
 pub(crate) async fn load_customer_id(
     store: Arc<dyn BillingStorePort>,
     user_id: UserId,
@@ -114,6 +116,7 @@ pub(crate) async fn load_customer_id(
         .map_err(map_store_error)
 }
 
+#[allow(dead_code)]
 pub(crate) async fn ensure_customer(
     store: Arc<dyn BillingStorePort>,
     client: &crate::StripeClient,

@@ -90,12 +90,14 @@ assert_smoke_module_coverage
 
 export E2E_MODE=smoke
 
+CARGO_LOCKED=(--locked)
+
 echo "== Pre-build shared artifacts (avoid parallel cargo lock contention) =="
-cargo build -p avrag-worker -p app --features product-e2e --tests
+cargo build "${CARGO_LOCKED[@]}" -p avrag-worker -p app --features product-e2e --tests
 
 echo "== Paddle image routing + worker metadata contracts =="
-cargo test -p ingestion image_file_routing_uses_paddle_ocr_image_route --quiet
-cargo test -p avrag-worker paddle_image_route_metadata_contract --quiet
+cargo test "${CARGO_LOCKED[@]}" -p ingestion image_file_routing_uses_paddle_ocr_image_route --quiet
+cargo test "${CARGO_LOCKED[@]}" -p avrag-worker paddle_image_route_metadata_contract --quiet
 
 echo "== Non-RAG smoke + unit tests (parallel) =="
 parallel_pids=()
@@ -103,11 +105,11 @@ for t in "${NON_RAG_MODULES[@]}"; do
   if is_manual_only_smoke_module "$t"; then
     continue
   fi
-  cargo test --test product_e2e -p app --features product-e2e "smoke::${t}" -- --test-threads=1 --nocapture &
+  cargo test "${CARGO_LOCKED[@]}" --test product_e2e -p app --features product-e2e "smoke::${t}" -- --test-threads=1 --nocapture &
   parallel_pids+=("$!")
 done
 for f in "${UNIT_TEST_FILTERS[@]}"; do
-  cargo test --test product_e2e -p app --features product-e2e "$f" -- --test-threads=1 --nocapture &
+  cargo test "${CARGO_LOCKED[@]}" --test product_e2e -p app --features product-e2e "$f" -- --test-threads=1 --nocapture &
   parallel_pids+=("$!")
 done
 parallel_fail=0
@@ -123,5 +125,5 @@ fi
 
 echo "== RAG smoke (serial) =="
 for t in "${RAG_SERIAL_MODULES[@]}"; do
-  cargo test --test product_e2e -p app --features product-e2e "smoke::${t}" -- --test-threads=1 --nocapture
+  cargo test "${CARGO_LOCKED[@]}" --test product_e2e -p app --features product-e2e "smoke::${t}" -- --test-threads=1 --nocapture
 done

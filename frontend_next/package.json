@@ -1,8 +1,12 @@
 {
   "name": "frontend-next",
   "private": true,
+  "engines": {
+    "node": ">=22.13.0",
+    "pnpm": ">=11.0.0"
+  },
   "version": "0.0.1",
-  "packageManager": "pnpm@10.32.1",
+  "packageManager": "pnpm@11.10.0",
   "scripts": {
     "build": "next build",
     "build:desktop": "BUILD_TARGET=desktop next build",
@@ -25,10 +29,10 @@
     "@tiptap/starter-kit": "^3.22.4",
     "dompurify": "^3.4.9",
     "gray-matter": "^4.0.3",
-    "next": "16.2.4",
+    "next": "16.2.10",
     "next-intl": "4.9.1",
-    "react": "19.2.5",
-    "react-dom": "19.2.5",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "react-hook-form": "7.72.1",
     "rehype-autolink-headings": "^7.1.0",
     "rehype-slug": "^6.0.0",
