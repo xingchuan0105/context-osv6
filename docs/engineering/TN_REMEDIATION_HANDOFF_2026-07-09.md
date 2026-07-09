@@ -63,8 +63,9 @@ pnpm -C frontend_next exec tsc --noEmit
 | 主题 | 说明 |
 |------|------|
 | Capability ≠ Skill ≠ Tool | ADR-0006 §5a；禁止「注册表合并为 1」 |
-| 执行单点 | `ToolCatalog` + `dispatch_tool` only |
-| Capabilities API | 仅披露各 mode YAML `tool_pool` 并集 |
+| 执行单点 | `ToolCatalog` + `dispatch_tool` only（**无** atomic_tools） |
+| Capabilities API | 披露 = mode `tool_pool` ∪ `auto_fallback.tool_id`；全表见 `list_catalog_tools` |
+| JSON 信封 | 写 `workspace(s)`；读兼容 `notebook(s)` |
 | Handler | Bound 面：`docs()` / `admin_api()` / `share()` / `prefs()` / `billing_api()` |
 | URL | `/workspaces/*` 产品默认；`/notebooks/*` 兼容同 handler |
 | 不恢复 ExecutePlan | |
@@ -77,9 +78,8 @@ pnpm -C frontend_next exec tsc --noEmit
 | 项 | 说明 |
 |----|------|
 | C4 | **明确不做**（产品分层） |
-| `frontend_rust` | 范围外 |
-| generate-contracts 全量重生 | 契约已 workspace_id；按需再跑 |
-| B2 llm 测试再纯端口化 | 低优先；生产 path 已 CachePort |
+| `frontend_rust` | 范围外（契约字段改动时需自行对齐） |
+| TN-2 B5–B10 | profile Value、测试巨石、crate 再瘦、admin ops 真共享… |
 | CI 挂 file-size gate | solo 默认定向本地 |
 
 ---
@@ -90,3 +90,4 @@ pnpm -C frontend_next exec tsc --noEmit
 |------|------|
 | 2026-07-09 | Wave 0–6 主体 + 再收口 |
 | 2026-07-09 | 产品补裁 §5a；P0–P7 可选全量落地；handoff **Done** |
+| 2026-07-09 | **TN-2**：删 atomic_tools；list_catalog_tools；workspace envelope；disclosure_catalog |
