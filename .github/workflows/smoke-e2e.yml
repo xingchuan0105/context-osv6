@@ -85,11 +85,11 @@ jobs:
 
       - name: Compile tests
         run: |
-          cargo test --no-run --test product_e2e -p app --features product-e2e
-          cargo test --no-run -p transport-http
+          cargo test --locked --no-run --test product_e2e -p app --features product-e2e
+          cargo test --locked --no-run -p transport-http
 
       - name: Run transport-http contract tests
-        run: cargo test -p transport-http
+        run: cargo test --locked -p transport-http
         env:
           DATABASE_URL: postgres://test:test@127.0.0.1:5432/test
 
