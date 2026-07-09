@@ -16,6 +16,7 @@ path = "src/bin/experiment.rs"
 [dependencies]
 avrag-llm = { path = "../llm" }
 common = { path = "../common" }
+contracts = { path = "../../../contracts" }
 jieba-rs = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

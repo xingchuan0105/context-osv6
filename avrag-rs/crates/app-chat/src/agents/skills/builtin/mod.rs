@@ -10,6 +10,7 @@ pub mod conversation_history;
 pub mod weather_query;
 pub mod web_fetch;
 pub mod web_search;
+pub mod write_refine;
 
 use super::SkillRegistry;
 
@@ -22,4 +23,9 @@ pub fn register_all(registry: &mut SkillRegistry) {
     registry.register(Box::new(weather_query::WeatherQuerySkill));
     registry.register(Box::new(web_fetch::WebFetchSkill));
     registry.register(Box::new(web_search::WebSearchSkill));
+    // WriteRefine tools (dispatched inside WriteRefineLoopRunner; still registered for discovery).
+    registry.register(Box::new(write_refine::WriteRefineReviseSkill));
+    registry.register(Box::new(write_refine::WriteRefineResearchSkill));
+    registry.register(Box::new(write_refine::WriteRefineFinishSkill));
+    registry.register(Box::new(write_refine::WriteRefineLexicalSkill));
 }

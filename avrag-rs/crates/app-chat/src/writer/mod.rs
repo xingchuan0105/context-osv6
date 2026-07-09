@@ -2,6 +2,11 @@
 
 mod cards;
 mod invoker;
+mod material_pack;
+mod refine_loop;
+
+pub use material_pack::MaterialPack;
+pub use refine_loop::{RefineContext, RefineLoopBudget, WriteRefineLoopRunner, WRITE_REFINE_HARD_REACT_CAP};
 
 pub use invoker::{research, ResearchOutcome, SubagentInvoker};
 
@@ -120,24 +125,41 @@ impl<'a> WriterOrchestrator<'a> {
         state.phase = WriterPhase::Refining { round: 0 };
         checkpoint_state(&state, &checkpoint_dir)?;
 
+        // Default-on WriteRefine agent loop (replaces fixed-round heavytail::refine).
+        emit_activity(sink, "refine", "Starting WriteRefine agent loop").await;
         let refine_llm = llm.with_phase("refine");
-        let round_sink = sink.clone_boxed();
         let reservoir = research_outcome.reservoir.clone();
         let mut workspace = std::mem::take(&mut state.workspace);
-        heavytail::refine::refine(
+        let material_pack =
+            material_pack::MaterialPack::from_research(&research_outcome, &workspace.render_plain());
+        let diagnosis =
+            heavytail::diagnosis::diagnose_pre_refine(&workspace, &style, &reservoir);
+        let mut refine_ctx = RefineContext::new(
+            std::mem::take(&mut workspace),
+            diagnosis,
+            material_pack,
+            None,
+        );
+        let refine_budget =
+            RefineLoopBudget::from_writer_budget(&budget, WRITE_REFINE_HARD_REACT_CAP);
+        let runner = WriteRefineLoopRunner::new(
             &refine_llm,
-            &mut workspace,
-            &style,
-            &reservoir,
-            &budget,
-            &mut state,
-            Some(&|round, max_rounds| {
-                spawn_round_progress(round_sink.as_ref(), round, max_rounds);
-            }),
-        )
-        .await
-        .map_err(|e| AppError::internal(format!("refinement failed: {e}")))?;
-        state.workspace = workspace;
+            &invoker,
+            &request,
+            style.clone(),
+            refine_budget,
+        );
+        runner
+            .run(
+                &mut refine_ctx,
+                &reservoir,
+                &mut state,
+                sink,
+                &checkpoint_dir,
+            )
+            .await
+            .map_err(|e| AppError::internal(format!("write refine loop failed: {e}")))?;
+        state.workspace = refine_ctx.workspace;
         checkpoint_state(&state, &checkpoint_dir)?;
 
         emit_activity(sink, "validate", "Validating fingerprint bands").await;
