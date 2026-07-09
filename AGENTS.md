@@ -108,12 +108,12 @@ These guidelines override your default tendency to be overly helpful, overly ver
 
 ## 7\. Solo Engineering Discipline (default)
 
-**This monorepo is developed primarily by one person.** Prefer simplified process over multi-team CI theater. Full write-up: [`docs/engineering/SOLO_DISCIPLINE.md`](docs/engineering/SOLO_DISCIPLINE.md). E2E suite semantics: [`avrag-rs/docs/e2e-gates.md`](avrag-rs/docs/e2e-gates.md).
+**This monorepo is developed primarily by one person on local disk.** Full write-up: [`docs/engineering/SOLO_DISCIPLINE.md`](docs/engineering/SOLO_DISCIPLINE.md). E2E semantics: [`avrag-rs/docs/e2e-gates.md`](avrag-rs/docs/e2e-gates.md).
 
-* **Commit stage only on PR/push:** affected unit tests, frontend Vitest/typecheck, fast license/legal gates. Target feedback in minutes.
-* **Acceptance/E2E (Product smoke, Frontend smoke, heavy Playwright, real LLM):** not merge blockers during feature/architecture waves. Run via `workflow_dispatch` or local scripts; restabilize at **wave end** unless the user explicitly asks to fix E2E now.
-* **Do not** re-add smoke E2E as required PR checks, expand CI matrix, or drive product changes just to green a deferred suite—without an explicit user request.
-* **Selective work:** path-filtered CI; re-run only failing commit-stage jobs; avoid stacking duplicate workflow dispatches on one SHA.
-* **When CI is red:** diagnose first; if the failure is deferred acceptance/E2E, report and continue product work (or stop if the user required confirmation)—do not open a multi-hour E2E campaign by default.
-* **Toolchain vs product:** prefer separate commits/branches for major toolchain bumps.
+* **Default = local trunk (`master`).** Edit and `git commit` on this machine. **Do not** push, open PRs, or wait on GitHub Actions unless the user asks for backup, deploy, or a PR.
+* **Verify locally:** targeted `cargo test -p …` / `pnpm test` / typecheck for packages you touched. That is the commit stage.
+* **Acceptance/E2E** (Product/Frontend smoke, heavy Playwright, real LLM): wave end or pre-ship; local scripts or optional `workflow_dispatch` — not daily, not required to “finish” a feature mid-wave.
+* **GitHub is backup/optional remote**, not the development loop. Do not babysit CI queues as progress.
+* **Do not** re-add smoke as required PR checks or expand CI theater without an explicit request.
+* **Toolchain vs product:** prefer separate local commits for major toolchain bumps.
 

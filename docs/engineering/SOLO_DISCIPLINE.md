@@ -10,66 +10,84 @@ This is the project’s default way of working. It fuses industry practice (test
 
 ## One-line rule
 
-> Keep the trunk trustworthy with **fast, stable** checks. Keep **expensive E2E as assets** on a later stage. Prefer path-selective work. Do not build enterprise PR theater for one person.
+> **Default: local trunk.** Code lives on disk; verify locally. Push to GitHub only for backup or deploy. Do not treat remote PR/CI as the daily development loop.
 
 ---
 
-## Pipeline stages
+## Default workflow: local trunk (chosen)
 
-| Stage | Purpose | When | Examples |
-|-------|---------|------|----------|
-| **Commit** | “Did this change obviously break known contracts?” | Every push / PR | Affected `cargo test` / `cargo check`, Frontend Vitest / typecheck, license gate |
-| **Acceptance** | Smoke / product paths still hold | Wave end, pre-demo, `workflow_dispatch` | Product smoke (`smoke-e2e.yml`), Frontend smoke (`frontend-smoke.yml`) |
-| **Release** | Costly or prod-like proof | Before ship | Real LLM, rag quality, release-e2e-gate |
+Trunk branch: **`master`** (local). Primary machine: WSL path `/home/chuan/context-osv6`.
 
-Commit stage should finish in roughly **≤15 minutes**. If a check is slow, flaky, or environment-heavy, it is **not** a commit gate.
+| Step | Where | What |
+|------|--------|------|
+| Edit | Disk | Implement on `master` (or a short local branch you merge the same day) |
+| Record | Local git | `git commit` on this machine — history does **not** require GitHub |
+| Verify | Local | Targeted tests only (see below). **No push required.** |
+| Backup | GitHub (optional) | Occasional `git push origin master` at milestones, tags, or before risky ops |
+| Deploy | As you prefer | scp/rsync/VPS scripts; not “must pass GitHub PR checks first” |
+
+### Agents must follow
+
+* **Do not** start with “push and wait for CI” unless the user explicitly asks for remote backup or a PR.
+* **Do not** open PRs, re-run Actions, or babysit GitHub checks as the default progress loop.
+* **Do** run focused **local** verification after changes (`cargo test -p …`, `pnpm test`, typecheck).
+* **Do** commit locally when the user wants history; push only when asked or at an agreed milestone.
+* Remote CI workflows remain **assets** (manual/`workflow_dispatch`, future multi-dev). They are not the daily gate.
+
+### Local verify (commit stage — on this machine)
+
+```bash
+# Frontend (if frontend_next changed)
+cd frontend_next && pnpm test run
+
+# Rust (pick packages you touched)
+cd avrag-rs && cargo test -p <crate> --lib
+```
+
+Acceptance (smoke/E2E): wave end or pre-ship only — local scripts or `workflow_dispatch`, not every commit.
+
+---
+
+## Pipeline stages (when you use automation at all)
+
+| Stage | Purpose | Default place | Examples |
+|-------|---------|---------------|----------|
+| **Commit** | “Did this change break known contracts?” | **Local** | Affected `cargo test`, Vitest, typecheck |
+| **Acceptance** | Smoke / product paths | Local script or manual CI, wave end | Product/Frontend smoke |
+| **Release** | Prod-like proof | Before ship | Real LLM, rag quality |
+
+If GitHub Actions is used, commit-stage jobs should stay fast. Slow/flaky suites stay off the daily path.
 
 ---
 
 ## Agent / human operating rules
 
-1. **Touch only what the task needs** (surgical changes; YAGNI). Do not expand scope to “fix all CI.”
-2. **Verify at the right layer**
-   - Feature/bug: unit or focused crate/frontend tests first.
-   - Do **not** treat Product/Frontend smoke as merge blockers while architecture or product surface is still moving.
-3. **E2E debt is deferred on purpose during feature waves**
-   - Restabilize smoke/E2E at **wave end**, not mid-ADR unless the user asks.
-   - Prefer documenting debt over drive-by CI rewrites that change product semantics.
-4. **Selective monorepo CI**
-   - Prefer path filters and affected packages over full-workspace smoke on every PR.
-   - Avoid stacking many `workflow_dispatch` runs on the same SHA.
-5. **Flaky or red acceptance suites**
-   - Quarantine (manual/nightly only) beats forced-green patches that hide real breakage.
-   - Fix the suite when the product surface stabilizes, or when shipping depends on it.
-6. **Branch / PR**
-   - Short feature branches or direct trunk are both fine for one developer.
-   - PRs are optional backups / review diffs, not a multi-party approval ritual.
-   - Required GitHub checks should stay **few** (fast commit-stage only). Do not re-add smoke as required without an explicit decision.
-7. **Toolchain upgrades**
-   - Prefer a dedicated commit/branch. Do not mix major toolchain bumps with large product ADRs unless necessary.
-8. **When CI is red**
-   - Diagnose; stop before large fixes if the user asked for confirmation.
-   - Prefer re-running only the failing **commit-stage** job.
-   - Do not expand into full E2E campaigns mid-feature unless requested.
+1. **Touch only what the task needs** (surgical changes; YAGNI).
+2. **Verify at the right layer — locally first**
+   - Feature/bug: unit or focused crate/frontend tests on disk.
+   - Do **not** treat Product/Frontend smoke as blockers mid-wave.
+3. **E2E debt is deferred** during feature/architecture waves; restabilize at wave end unless the user asks now.
+4. **GitHub is optional**
+   - Push = backup / multi-machine / deploy source — not “development completed.”
+   - PRs = optional changelog or future collab — not required to code.
+5. **Selective work**: path-aware local tests; avoid full monorepo smoke by default.
+6. **Flaky acceptance**: quarantine; fix when shipping depends on it.
+7. **Toolchain upgrades**: prefer separate commits; still local-first.
+8. **If user opens a PR anyway**: do not expand into multi-hour E2E CI campaigns; prefer local repro.
 
 ---
 
-## Default PR / push expectations
+## GitHub workflows (reference only)
 
-**Should stay green (commit stage):**
+These exist for optional remote runs / future use — **not** the solo daily loop:
 
-- Frontend Unit Tests (Vitest) when `frontend_next/**` changes
-- License / legal gates when those paths change
-- Desktop Shell Check when `desktop/**` changes (path-filtered)
-- Local: targeted `cargo test` / `pnpm test` / typecheck for edited packages
+| Workflow | Role under local trunk |
+|----------|-------------------------|
+| Frontend Vitest / License | Optional remote recheck |
+| Product / Frontend smoke | Manual only (`workflow_dispatch`); deferred as PR gates |
+| Desktop Shell | Only if you care about desktop path remotely |
 
-**Not PR merge gates (acceptance; manual until re-enabled):**
-
-- Product Smoke E2E (`smoke-e2e.yml` → Product job): `workflow_dispatch` only
-- Frontend Smoke E2E (`frontend-smoke.yml`): `workflow_dispatch` only
-
-Details and suite semantics: [`avrag-rs/docs/e2e-gates.md`](../../avrag-rs/docs/e2e-gates.md).
-
+Details: [`avrag-rs/docs/e2e-gates.md`](../../avrag-rs/docs/e2e-gates.md).
 ---
 
 ## Industry sources (compressed)
@@ -101,3 +119,4 @@ When a product wave settles and smoke is green on `workflow_dispatch`:
 | Date | Note |
 |------|------|
 | 2026-07-09 | Initial solo discipline; product/frontend smoke deferred from PR |
+| 2026-07-09 | **Default = local trunk** (`master` on disk); push only for backup/deploy |

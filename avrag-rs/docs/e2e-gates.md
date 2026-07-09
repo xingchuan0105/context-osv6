@@ -3,7 +3,7 @@
 This document defines pass/fail semantics across Rust Product E2E and Playwright
 suites.
 
-**Solo / agent default process** (commit vs acceptance stages, when not to block on smoke):
+**Solo / agent default process** (local trunk first; commit vs acceptance; when not to block on smoke):
 [`docs/engineering/SOLO_DISCIPLINE.md`](../../docs/engineering/SOLO_DISCIPLINE.md).
 
 **Agent-oriented full coverage matrix** (what to test, parallel groups, real doc parse / LLM RAG / chat / websearch): [`full-functional-e2e-guide.md`](full-functional-e2e-guide.md).
