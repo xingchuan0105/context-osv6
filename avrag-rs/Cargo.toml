@@ -12,7 +12,6 @@ members = [
   "crates/app-chat",
   "crates/app-admin",
   "crates/app-billing",
-  "crates/auth",
   "crates/billing",
   "crates/cache-redis",
   "crates/chatmemory",
