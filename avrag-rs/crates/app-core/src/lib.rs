@@ -61,7 +61,10 @@ pub use billing_store::{
     UsageLimitUsageRecord,
 };
 pub use billing_usage_units::{compute_usage_units, compute_usage_units_with_rates};
-pub use chat_persistence::{AppendChatTurn, ChatPersistencePort};
+pub use chat_persistence::{
+    AppendChatTurn, ChatCatalogPort, ChatContentPort, ChatPersistencePort, ChatSideEffectPort,
+    MessagePort, ProfilePort, SessionPort,
+};
 pub use config::*;
 pub use document_store::DocumentStorePort;
 pub use domain_ports::*;

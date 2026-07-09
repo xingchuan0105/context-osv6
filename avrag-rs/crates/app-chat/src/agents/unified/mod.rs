@@ -1,10 +1,20 @@
 //! UnifiedAgent — single agent implementation that routes between
 //! Chat / RAG / Search modes via `AgentRequest.kind`.
 //!
-//! v6 (ADR-0006): All three modes route through the unified `ReActLoop`
+//! v6 (ADR-0006): Chat / RAG / Search route through the unified `ReActLoop`
 //! (`crate::agents::loop`). Differences between modes are expressed through
 //! YAML `ModeConfig` files (`modes/chat.yaml`, `modes/rag.yaml`, `modes/search.yaml`)
 //! rather than independent Strategy state machines.
+//!
+//! # Write mode (intentional split)
+//!
+//! **Write is not handled here.** Pipeline dispatch routes
+//! `AgentKind::Write` to [`crate::writer::run_write_mode`] in
+//! `chat::pipeline_steps::dispatch_mode` before constructing an
+//! `AgentRequest`. Write needs a full `ChatContext` (session persistence,
+//! draft materialization, refine loop) that the ReAct `UnifiedAgent`
+//! surface does not own. Treat "Unified" as the ReAct family of modes;
+//! Write is a sibling product mode with its own service boundary.
 //!
 //! Static strategy metadata lives in `crate::agents::capability::schemas` for API
 //! discovery; execution no longer uses the removed v5 strategy state machines.
@@ -149,48 +159,15 @@ impl Agent for UnifiedAgent {
                         message: "ReAct chat".to_string(),
                     })
                     .await;
-
-                let mode = match crate::agents::r#loop::config::load_mode_config("chat") {
-                    Ok(m) => m,
-                    Err(e) => {
-                        let _ = sink
-                            .emit(AgentEvent::Error {
-                                code: "mode_config_load_failed".to_string(),
-                                message: format!("Failed to load chat mode config: {e}"),
-                            })
-                            .await;
-                        return Err(e);
-                    }
-                };
-                let llm = match self.chat_llm_client
-                    .clone()
-                    .or_else(|| self.llm_client.clone())
-                {
-                    Some(client) => {
-                        let client = if let Some(ref observer) = self.usage_observer {
-                            client.with_observer(observer.clone(), tenant.clone())
-                        } else {
-                            client
-                        };
-                        Arc::new(client)
-                    }
-                    None => {
-                        let _ = sink
-                            .emit(AgentEvent::Error {
-                                code: "llm_unavailable".to_string(),
-                                message: "LLM client is not configured".to_string(),
-                            })
-                            .await;
-                        return Err(AppError::internal("LLM client is not configured"));
-                    }
-                };
-                let skill_registry =
-                    Arc::new(crate::agents::capability::CapabilityRegistry::standard());
-                let loop_agent = crate::agents::r#loop::ReActLoop::new(llm, skill_registry)
-                    .with_chat_persistence(self.chat_persistence.clone());
-                let mut result = loop_agent.run(&mode, request, sink).await?;
-                result.routing_decision = Some(mode_id.clone());
-                Ok(result)
+                self.run_react_mode(
+                    "chat",
+                    self.chat_llm_client.clone().or_else(|| self.llm_client.clone()),
+                    |lp| lp,
+                    request,
+                    sink,
+                    &tenant,
+                )
+                .await
             }
             crate::agents::AgentKind::Rag => {
                 if request.doc_scope.is_empty() {
@@ -228,45 +205,15 @@ impl Agent for UnifiedAgent {
                     }
                 };
 
-                let mode = match crate::agents::r#loop::config::load_mode_config("rag") {
-                    Ok(m) => m,
-                    Err(e) => {
-                        let _ = sink
-                            .emit(AgentEvent::Error {
-                                code: "mode_config_load_failed".to_string(),
-                                message: format!("Failed to load rag mode config: {e}"),
-                            })
-                            .await;
-                        return Err(e);
-                    }
-                };
-                let llm = match self.llm_client.clone() {
-                    Some(client) => {
-                        let client = if let Some(ref observer) = self.usage_observer {
-                            client.with_observer(observer.clone(), tenant.clone())
-                        } else {
-                            client
-                        };
-                        Arc::new(client)
-                    }
-                    None => {
-                        let _ = sink
-                            .emit(AgentEvent::Error {
-                                code: "llm_unavailable".to_string(),
-                                message: "LLM client is not configured".to_string(),
-                            })
-                            .await;
-                        return Err(AppError::internal("LLM client is not configured"));
-                    }
-                };
-                let skill_registry =
-                    Arc::new(crate::agents::capability::CapabilityRegistry::standard());
-                let loop_agent = crate::agents::r#loop::ReActLoop::new(llm, skill_registry)
-                    .with_rag_runtime(Some(rag))
-                    .with_chat_persistence(self.chat_persistence.clone());
-                let mut result = loop_agent.run(&mode, request, sink).await?;
-                result.routing_decision = Some(mode_id.clone());
-                Ok(result)
+                self.run_react_mode(
+                    "rag",
+                    self.llm_client.clone(),
+                    |lp| lp.with_rag_runtime(Some(rag)),
+                    request,
+                    sink,
+                    &tenant,
+                )
+                .await
             }
             crate::agents::AgentKind::Search => {
                 let search_executor = match self.search_executor.clone() {
@@ -282,51 +229,83 @@ impl Agent for UnifiedAgent {
                     }
                 };
 
-                let mode = match crate::agents::r#loop::config::load_mode_config("search") {
-                    Ok(m) => m,
-                    Err(e) => {
-                        let _ = sink
-                            .emit(AgentEvent::Error {
-                                code: "mode_config_load_failed".to_string(),
-                                message: format!("Failed to load search mode config: {e}"),
-                            })
-                            .await;
-                        return Err(e);
-                    }
-                };
-                let llm = match self.search_llm_client
-                    .clone()
-                    .or_else(|| self.llm_client.clone())
-                {
-                    Some(client) => {
-                        let client = if let Some(ref observer) = self.usage_observer {
-                            client.with_observer(observer.clone(), tenant.clone())
-                        } else {
-                            client
-                        };
-                        Arc::new(client)
-                    }
-                    None => {
-                        let _ = sink
-                            .emit(AgentEvent::Error {
-                                code: "llm_unavailable".to_string(),
-                                message: "LLM client is not configured".to_string(),
-                            })
-                            .await;
-                        return Err(AppError::internal("LLM client is not configured"));
-                    }
-                };
-                let skill_registry =
-                    Arc::new(crate::agents::capability::CapabilityRegistry::standard());
-                let loop_agent = crate::agents::r#loop::ReActLoop::new(llm, skill_registry)
-                    .with_search_executor(Some(search_executor))
-                    .with_chat_persistence(self.chat_persistence.clone());
-                let mut result = loop_agent.run(&mode, request, sink).await?;
-                result.routing_decision = Some(mode_id.clone());
-                Ok(result)
+                self.run_react_mode(
+                    "search",
+                    self.search_llm_client
+                        .clone()
+                        .or_else(|| self.llm_client.clone()),
+                    |lp| lp.with_search_executor(Some(search_executor)),
+                    request,
+                    sink,
+                    &tenant,
+                )
+                .await
             }
-            _ => Err(AppError::internal("agent kind not handled by UnifiedAgent")),
+            crate::agents::AgentKind::Write => Err(AppError::validation(
+                "write_routed_outside_unified_agent",
+                "Write mode is dispatched via chat::pipeline_steps → writer::run_write_mode, not UnifiedAgent",
+            )),
         }
+    }
+}
+
+impl UnifiedAgent {
+    /// Common ReAct-mode execution path shared by Chat / Rag / Search.
+    ///
+    /// Loads the mode config, resolves the supplied `llm_client` (attaching the
+    /// usage observer when present), builds the loop via `configure_loop`, runs
+    /// it, and stamps the routing decision. Per-mode differences are confined to
+    /// the caller: which LLM field is used and how the loop is configured.
+    async fn run_react_mode(
+        &self,
+        mode_id: &str,
+        llm_client: Option<LlmClient>,
+        configure_loop: impl FnOnce(crate::agents::r#loop::ReActLoop) -> crate::agents::r#loop::ReActLoop,
+        request: AgentRequest,
+        sink: &dyn AgentEventSink,
+        tenant: &TenantContext,
+    ) -> Result<AgentRunResult, AppError> {
+        let mode = match crate::agents::r#loop::config::load_mode_config(mode_id) {
+            Ok(m) => m,
+            Err(e) => {
+                let _ = sink
+                    .emit(AgentEvent::Error {
+                        code: "mode_config_load_failed".to_string(),
+                        message: format!("Failed to load {mode_id} mode config: {e}"),
+                    })
+                    .await;
+                return Err(e);
+            }
+        };
+
+        let llm = match llm_client {
+            Some(client) => {
+                let client = if let Some(ref observer) = self.usage_observer {
+                    client.with_observer(observer.clone(), tenant.clone())
+                } else {
+                    client
+                };
+                Arc::new(client)
+            }
+            None => {
+                let _ = sink
+                    .emit(AgentEvent::Error {
+                        code: "llm_unavailable".to_string(),
+                        message: "LLM client is not configured".to_string(),
+                    })
+                    .await;
+                return Err(AppError::internal("LLM client is not configured"));
+            }
+        };
+
+        let skill_registry = Arc::new(crate::agents::capability::CapabilityRegistry::standard());
+        let loop_agent = configure_loop(
+            crate::agents::r#loop::ReActLoop::new(llm, skill_registry)
+                .with_chat_persistence(self.chat_persistence.clone()),
+        );
+        let mut result = loop_agent.run(&mode, request, sink).await?;
+        result.routing_decision = Some(mode_id.to_string());
+        Ok(result)
     }
 }
 

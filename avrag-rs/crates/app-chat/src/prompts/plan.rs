@@ -143,7 +143,7 @@ pub(crate) fn parse_rag_plan_decision(
 
     // 4. Legacy format: ExecutePlanRequest (backward compatibility)
     let plan = serde_json::from_str::<ExecutePlanRequest>(&json).ok()?;
-    if plan.validate().is_err() || plan.doc_scope != request.doc_scope {
+    if avrag_rag_core::validate_execute_plan(&plan).is_err() || plan.doc_scope != request.doc_scope {
         return None;
     }
     match normalize_execute_plan_request(plan, request) {
@@ -263,6 +263,6 @@ pub(crate) fn normalize_execute_plan_request(
     plan.query_entities = normalize_query_entities(plan.query_entities);
     plan.graph_hints = normalize_graph_hints(plan.graph_hints);
     plan.placeholder_triplets = normalize_placeholder_triplets(plan.placeholder_triplets);
-    plan.validate().ok()?;
+    avrag_rag_core::validate_execute_plan(&plan).ok()?;
     Some(plan)
 }

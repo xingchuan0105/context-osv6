@@ -1,11 +1,11 @@
-use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 
 use avrag_llm::{ChatMessage, LlmClient};
 use contracts::chat::ChatEvent;
 use tauri::{AppHandle, Manager};
 
 use super::llm_config::{load_llm_config, LocalLlmConfig};
+use crate::commands::api::IpcApiError;
 
 const LLM_NOT_CONFIGURED: &str =
     "LLM is not configured. Open Settings → AI Model to add your API key.";
@@ -24,23 +24,23 @@ pub fn session_id_from_request(request: &serde_json::Value) -> String {
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
 }
 
-pub fn parse_chat_request_id(request: &serde_json::Value) -> Result<String, String> {
+pub fn parse_chat_request_id(request: &serde_json::Value) -> Result<String, IpcApiError> {
     request
         .get("request_id")
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
         .map(str::to_string)
-        .ok_or_else(|| "request_id is required".to_string())
+        .ok_or_else(|| IpcApiError::bad_request("invalid_request", "request_id is required"))
 }
 
-pub fn query_from_request(request: &serde_json::Value) -> Result<String, String> {
+pub fn query_from_request(request: &serde_json::Value) -> Result<String, IpcApiError> {
     request
         .get("query")
         .and_then(|v| v.as_str())
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string)
-        .ok_or_else(|| "query is required".to_string())
+        .ok_or_else(|| IpcApiError::bad_request("invalid_request", "query is required"))
 }
 
 pub fn error_events(request_id: &str, session_id: &str, message: &str) -> Vec<ChatEvent> {
@@ -78,9 +78,9 @@ pub async fn run_desktop_chat<F>(
     request: &serde_json::Value,
     cancel: &AtomicBool,
     mut emit: F,
-) -> Result<(), String>
+) -> Result<(), IpcApiError>
 where
-    F: FnMut(&ChatEvent) -> Result<bool, String>,
+    F: FnMut(&ChatEvent) -> Result<bool, IpcApiError>,
 {
     let request_id = parse_chat_request_id(request)?;
     let session_id = session_id_from_request(request);
@@ -89,9 +89,9 @@ where
     let data_dir = app
         .path()
         .app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {e}"))?;
+        .map_err(|e| IpcApiError::internal(format!("Failed to get app data dir: {e}")))?;
 
-    let Some(config) = load_llm_config(&data_dir)? else {
+    let Some(config) = load_llm_config(&data_dir).map_err(IpcApiError::from)? else {
         for event in error_events(&request_id, &session_id, LLM_NOT_CONFIGURED) {
             if !emit(&event)? {
                 return Ok(());
@@ -108,11 +108,11 @@ async fn stream_llm_response<F>(
     session_id: &str,
     query: &str,
     config: &LocalLlmConfig,
-    cancel: &AtomicBool,
+    _cancel: &AtomicBool,
     mut emit: F,
-) -> Result<(), String>
+) -> Result<(), IpcApiError>
 where
-    F: FnMut(&ChatEvent) -> Result<bool, String>,
+    F: FnMut(&ChatEvent) -> Result<bool, IpcApiError>,
 {
     let message_id: i64 = 1;
     let start = ChatEvent::Start {
@@ -139,7 +139,7 @@ where
     let response = client
         .complete(&messages, Some(0.7))
         .await
-        .map_err(|e| format!("LLM request failed: {e}"))?;
+        .map_err(|e| IpcApiError::internal(format!("LLM request failed: {e}")))?;
 
     let answer = response.content.clone();
     if !answer.is_empty() {
@@ -186,10 +186,9 @@ mod tests {
 
     #[test]
     fn query_from_request_requires_non_empty_value() {
-        assert_eq!(
-            query_from_request(&json!({})).unwrap_err(),
-            "query is required"
-        );
+        let err = query_from_request(&json!({})).unwrap_err();
+        assert_eq!(err.code, "invalid_request");
+        assert_eq!(err.message, "query is required");
     }
 
     #[test]

@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_retrieval_data_plane::{
     GraphRelationHint, GraphSearchOutput, GraphSearchRequest, WeightedChunkList,
 };
@@ -592,7 +592,7 @@ impl RagRuntime {
             };
         }
 
-        let doc_ids = request_doc_ids(&request.to_chat_request_compat());
+        let doc_ids = request_doc_ids(&crate::execute_plan_to_chat_request(request));
         match self
             .data_plane
             .search_graph(GraphSearchRequest {
@@ -651,9 +651,7 @@ impl RagRuntime {
             }
         }
 
-        request
-            .validate()
-            .map_err(|error| anyhow!(error.to_string()))?;
+        crate::validate_execute_plan(request).map_err(|error| anyhow!(error.to_string()))?;
         let total_candidate_budget = request
             .budget
             .as_ref()
@@ -665,8 +663,8 @@ impl RagRuntime {
             .and_then(|budget| budget.final_chunk_budget)
             .unwrap_or(FINAL_MIN_CHUNKS);
 
-        let compat_request = request.to_chat_request_compat();
-        let compat_plan = request.to_rag_plan_compat();
+        let compat_request = crate::execute_plan_to_chat_request(request);
+        let compat_plan = crate::execute_plan_to_rag_plan(request);
         let item_trace =
             build_item_trace_with_total(&compat_request, &compat_plan, total_candidate_budget);
         let channel_budgets = channel_candidate_budgets(request, total_candidate_budget);

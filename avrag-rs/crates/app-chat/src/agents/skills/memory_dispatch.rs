@@ -1,8 +1,8 @@
 //! Shared dispatch for on-demand memory tools (conversation history + user profile).
 
-use app_core::ChatPersistencePort;
 use app_core::domain_rows::{ConversationHistoryHit, ConversationHistoryScope};
-use avrag_auth::AuthContext;
+use app_core::{MessagePort, ProfilePort};
+use contracts::auth_runtime::AuthContext;
 use contracts::{ToolResult, ToolStatus};
 use serde_json::Value;
 use uuid::Uuid;
@@ -13,7 +13,7 @@ pub async fn conversation_history_load(
     args: &Value,
     auth: &AuthContext,
     session_id: Uuid,
-    repo: &dyn ChatPersistencePort,
+    repo: &dyn MessagePort,
 ) -> ToolResult {
     let query = args
         .get("query")
@@ -89,7 +89,7 @@ fn history_hit_json(hit: ConversationHistoryHit) -> Value {
 }
 
 async fn collect_excluded_message_ids(
-    repo: &dyn ChatPersistencePort,
+    repo: &dyn MessagePort,
     auth: &AuthContext,
     session_id: Uuid,
 ) -> Vec<i64> {
@@ -114,7 +114,7 @@ async fn collect_excluded_message_ids(
     }
 }
 
-pub async fn user_profile_load(auth: &AuthContext, repo: &dyn ChatPersistencePort) -> ToolResult {
+pub async fn user_profile_load(auth: &AuthContext, repo: &dyn ProfilePort) -> ToolResult {
     let tool = "user_profile_load".to_string();
     let version = "1.0".to_string();
 

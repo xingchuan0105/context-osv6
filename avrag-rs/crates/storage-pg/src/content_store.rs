@@ -1,11 +1,17 @@
+//! PostgreSQL-backed [`ContentStore`] for RAG retrieval hydration.
+//!
+//! Lives in storage-pg (not app-bootstrap) so bootstrap does not re-wrap a pure
+//! domain adapter with only error mapping.
+
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use avrag_auth::AuthContext;
-use avrag_storage_pg::{IndexedChunk as PgIndexedChunk, PgAppRepository, PgStorageError};
+use contracts::auth_runtime::AuthContext;
 use common::{ContentStore, ContentStoreError, IndexedChunk};
 use common::{Document, DocumentMetadata, SummaryMetadata, TocEntry};
 use uuid::Uuid;
+
+use crate::{PgAppRepository, PgStorageError};
 
 #[derive(Clone)]
 pub struct PgContentStore {
@@ -25,17 +31,6 @@ fn map_pg_error(error: PgStorageError) -> ContentStoreError {
     }
 }
 
-fn map_indexed_chunk(chunk: PgIndexedChunk) -> IndexedChunk {
-    IndexedChunk {
-        chunk_id: chunk.chunk_id,
-        doc_id: chunk.doc_id,
-        page: chunk.page,
-        content: chunk.content,
-        score: chunk.score,
-        metadata: chunk.metadata,
-    }
-}
-
 #[async_trait]
 impl ContentStore for PgContentStore {
     async fn get_chunks_by_ids(
@@ -47,12 +42,6 @@ impl ContentStore for PgContentStore {
             .assets()
             .get_chunks_by_ids(auth, chunk_ids)
             .await
-            .map(|chunks| {
-                chunks
-                    .into_iter()
-                    .map(|(id, chunk)| (id, map_indexed_chunk(chunk)))
-                    .collect()
-            })
             .map_err(map_pg_error)
     }
 

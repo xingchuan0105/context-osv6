@@ -63,8 +63,9 @@ pub use preferences::{
 pub use rag_execute::{
     BackendTrace, ChannelBudget, ChannelCoverage, ChannelTraceItem, Coverage, ExecutePlanBudget,
     ExecutePlanItem, ExecutePlanRequest, ExecutePlanResponse, ExecutePlanSummaryMode,
-    ExecutePlanTrace, ExecutePlanValidationError, GraphHint, PlaceholderTriplet, QueryEntity,
-    RelationPath, RetrievalBundle, RetrievedChunk, ScoreBreakdown,
+    ExecutePlanTrace, ExecutePlanValidationError, GraphHint, PlaceholderTriplet,
+    PlaceholderTripletType, QueryEntity, RelationPath, RetrievalBundle, RetrievedChunk,
+    ScoreBreakdown,
 };
 pub use share::{
     AccessLogEntry, AccessLogsResponse, MemberRow, MembersResponse, ShareAnalyticsResponse,

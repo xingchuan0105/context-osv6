@@ -1,15 +1,15 @@
 use async_trait::async_trait;
-use avrag_auth::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
 use avrag_retrieval_data_plane::{
     DocumentIndexBatch, FALLBACK_RETRIEVAL_WEIGHT, MultimodalChunkIndexRecord, RetrievalDataPlane,
-    TextDenseSearchRequest, multimodal_retrieval_weight,
+    RetrievalReadPort, TextDenseSearchRequest, multimodal_retrieval_weight,
 };
 use uuid::Uuid;
 
 struct StubDataPlane;
 
 #[async_trait]
-impl RetrievalDataPlane for StubDataPlane {
+impl RetrievalReadPort for StubDataPlane {
     async fn search_text_dense(
         &self,
         _request: TextDenseSearchRequest,
@@ -37,6 +37,34 @@ impl RetrievalDataPlane for StubDataPlane {
         _request: avrag_retrieval_data_plane::MultimodalSearchRequest,
     ) -> anyhow::Result<Vec<avrag_retrieval_data_plane::ScoredChunk>> {
         Ok(Vec::new())
+    }
+}
+
+#[async_trait]
+impl RetrievalDataPlane for StubDataPlane {
+    async fn ensure_schema(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn replace_document_index(
+        &self,
+        _batch: DocumentIndexBatch,
+    ) -> anyhow::Result<avrag_retrieval_data_plane::IndexWriteReport> {
+        Ok(avrag_retrieval_data_plane::IndexWriteReport {
+            text_chunk_count: 0,
+            multimodal_chunk_count: 0,
+            entity_count: 0,
+            relation_count: 0,
+            graph_passage_count: 0,
+        })
+    }
+
+    async fn delete_document_index(
+        &self,
+        _auth: &AuthContext,
+        _document_id: Uuid,
+    ) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
@@ -182,45 +210,32 @@ fn weighted_chunk_list_roundtrip_preserves_weight_and_chunks() {
 }
 
 #[tokio::test]
-async fn default_index_write_methods_fail_with_explicit_adapter_message() {
+async fn write_methods_are_required_and_callable_on_full_data_plane() {
+    // RetrievalDataPlane no longer ships default Err("not implemented") write
+    // methods — implementors must provide them (even as no-ops for stubs).
     let data_plane = StubDataPlane;
     let auth = auth_context();
 
-    for (method, error) in [
-        (
-            "ensure_schema",
-            data_plane.ensure_schema().await.unwrap_err(),
-        ),
-        (
-            "replace_document_index",
-            data_plane
-                .replace_document_index(DocumentIndexBatch {
-                    org_id: auth.org_id(),
-                    workspace_id: None,
-                    document_id: Uuid::from_u128(50),
-                    parse_run_id: Uuid::from_u128(51),
-                    doc_version: 1,
-                    text_chunks: Vec::new(),
-                    multimodal_chunks: Vec::new(),
-                    entities: Vec::new(),
-                    relations: Vec::new(),
-                    graph_passages: Vec::new(),
-                })
-                .await
-                .unwrap_err(),
-        ),
-        (
-            "delete_document_index",
-            data_plane
-                .delete_document_index(&auth, Uuid::from_u128(50))
-                .await
-                .unwrap_err(),
-        ),
-    ] {
-        let message = error.to_string();
-        assert!(message.contains(method), "{message}");
-        assert!(message.contains("not implemented"), "{message}");
-    }
+    data_plane.ensure_schema().await.expect("ensure_schema");
+    data_plane
+        .replace_document_index(DocumentIndexBatch {
+            org_id: auth.org_id(),
+            workspace_id: None,
+            document_id: Uuid::from_u128(50),
+            parse_run_id: Uuid::from_u128(51),
+            doc_version: 1,
+            text_chunks: Vec::new(),
+            multimodal_chunks: Vec::new(),
+            entities: Vec::new(),
+            relations: Vec::new(),
+            graph_passages: Vec::new(),
+        })
+        .await
+        .expect("replace_document_index");
+    data_plane
+        .delete_document_index(&auth, Uuid::from_u128(50))
+        .await
+        .expect("delete_document_index");
 }
 
 #[test]

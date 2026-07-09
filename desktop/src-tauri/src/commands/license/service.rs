@@ -1,3 +1,4 @@
+//! License file I/O, verification, status resolution, and Keygen calls.
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -7,125 +8,10 @@ use keygen_rs::config::{self, KeygenConfig};
 use keygen_rs::errors::Error as KeygenError;
 use keygen_rs::license::SchemeCode;
 use machineid_rs::{Encryption, HWIDComponent, IdBuilder};
-use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
-use tauri_plugin_shell::ShellExt;
 use url::Url;
 
-const LICENSE_FILENAME: &str = "license.json";
-const DEVICE_SALT: &str = "avrag-desktop-salt";
-const TRIAL_DURATION_SECS: i64 = 7 * 24 * 60 * 60;
-const OFFLINE_GRACE_SECS: i64 = 30 * 24 * 60 * 60;
-const HEARTBEAT_INTERVAL_SECS: i64 = 24 * 60 * 60;
-
-const KEYGEN_PUBLIC_KEY: Option<&str> = option_env!("KEYGEN_PUBLIC_KEY");
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum LicenseKind {
-    Trial,
-    Standard,
-    Pro,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum LicenseStatusKind {
-    Unactivated,
-    Trial,
-    Active,
-    Expired,
-    Revoked,
-    OfflineGrace,
-    UpgradeRequired,
-}
-
-pub fn license_allows_chat(kind: LicenseStatusKind) -> bool {
-    matches!(
-        kind,
-        LicenseStatusKind::Active
-            | LicenseStatusKind::Trial
-            | LicenseStatusKind::OfflineGrace
-            | LicenseStatusKind::UpgradeRequired
-    )
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LicenseError {
-    pub code: String,
-    pub message: String,
-}
-
-impl LicenseError {
-    pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            code: code.into(),
-            message: message.into(),
-        }
-    }
-}
-
-impl From<String> for LicenseError {
-    fn from(message: String) -> Self {
-        Self::new("internal_error", message)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CertificateClaims {
-    pub device_id: String,
-    pub expires_at: Option<i64>,
-    pub major_version_included: Option<u32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LicenseFile {
-    pub key: String,
-    pub license_id: String,
-    pub device_id: String,
-    #[serde(default)]
-    pub machine_id: Option<String>,
-    pub certificate: String,
-    pub kind: LicenseKind,
-    pub issued_at: i64,
-    #[serde(default)]
-    pub expires_at: Option<i64>,
-    #[serde(default)]
-    pub last_heartbeat: Option<i64>,
-    #[serde(default)]
-    pub revoked: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrialResult {
-    pub expires_at: i64,
-    pub days_remaining: i32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ActivationResult {
-    pub license_id: String,
-    pub kind: LicenseKind,
-    pub status: LicenseStatusKind,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HeartbeatResult {
-    pub success: bool,
-    pub status: LicenseStatusKind,
-    pub next_heartbeat_at: Option<i64>,
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LicenseStatus {
-    pub kind: LicenseStatusKind,
-    pub days_remaining: Option<i32>,
-    pub offline_grace_days: Option<i32>,
-    pub license_kind: Option<LicenseKind>,
-    pub expires_at: Option<i64>,
-    pub dev_mode: bool,
-}
+use super::types::*;
 
 pub fn is_dev_mode() -> bool {
     KEYGEN_PUBLIC_KEY
@@ -195,7 +81,7 @@ pub fn handle_deep_link_url(app: &AppHandle, raw_url: &str) {
     }
 }
 
-fn license_path(app_data_dir: &Path) -> PathBuf {
+pub fn license_path(app_data_dir: &Path) -> PathBuf {
     app_data_dir.join(LICENSE_FILENAME)
 }
 
@@ -439,7 +325,7 @@ fn status_from_kind(
     }
 }
 
-fn build_dev_certificate(
+pub(crate) fn build_dev_certificate(
     device_id: &str,
     expires_at: Option<i64>,
     major_version_included: u32,
@@ -466,7 +352,7 @@ fn infer_license_kind(metadata: &std::collections::HashMap<String, serde_json::V
         .unwrap_or(LicenseKind::Standard)
 }
 
-fn build_keygen_config(license_key: &str) -> Result<KeygenConfig, LicenseError> {
+pub(crate) fn build_keygen_config(license_key: &str) -> Result<KeygenConfig, LicenseError> {
     let account = std::env::var("KEYGEN_ACCOUNT_ID").map_err(|_| {
         LicenseError::new(
             "keygen_config_missing",
@@ -495,7 +381,7 @@ fn build_keygen_config(license_key: &str) -> Result<KeygenConfig, LicenseError> 
     Ok(config)
 }
 
-async fn keygen_validate_and_activate(
+pub(crate) async fn keygen_validate_and_activate(
     license_key: &str,
     device_id: &str,
 ) -> Result<(keygen_rs::license::License, Option<String>), LicenseError> {
@@ -527,7 +413,7 @@ fn keygen_error_to_license_error(err: KeygenError) -> LicenseError {
     LicenseError { code, message }
 }
 
-async fn activate_with_keygen(
+pub(crate) async fn activate_with_keygen(
     license_key: &str,
     device_id: &str,
     app_data_dir: &Path,
@@ -565,7 +451,7 @@ async fn activate_with_keygen(
     })
 }
 
-async fn mock_activate(
+pub(crate) async fn mock_activate(
     license_key: &str,
     device_id: &str,
     app_data_dir: &Path,
@@ -599,7 +485,7 @@ async fn mock_activate(
     })
 }
 
-async fn request_trial_license(device_id: &str) -> Result<String, LicenseError> {
+pub(crate) async fn request_trial_license(device_id: &str) -> Result<String, LicenseError> {
     let base = std::env::var("AVRAG_API_BASE")
         .unwrap_or_else(|_| "https://app.avrag.com".to_string());
     let response = reqwest::Client::new()
@@ -631,319 +517,9 @@ async fn request_trial_license(device_id: &str) -> Result<String, LicenseError> 
         })
 }
 
-fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
         .map_err(|e| format!("Failed to get app data dir: {e}"))
 }
 
-#[tauri::command]
-pub fn get_device_id() -> Result<String, String> {
-    compute_device_id()
-}
-
-#[tauri::command]
-pub async fn start_trial(app: AppHandle) -> Result<TrialResult, LicenseError> {
-    let device_id = compute_device_id().map_err(|e| LicenseError::new("device_id", e))?;
-    let app_data_dir = app_data_dir(&app).map_err(|e| LicenseError::new("app_data_dir", e))?;
-
-    if let Some(existing) = load_license_file(&app_data_dir)
-        .map_err(|e| LicenseError::new("license_file", e))?
-    {
-        if existing.device_id == device_id && !existing.revoked {
-            let status = resolve_license_status(Some(&existing), &device_id, now_unix(), is_dev_mode());
-            if status.kind != LicenseStatusKind::Unactivated {
-                return Err(LicenseError::new(
-                    "trial_already_used",
-                    "This device already has a license or trial",
-                ));
-            }
-        }
-    }
-
-    if is_dev_mode() {
-        let expires_at = now_unix() + TRIAL_DURATION_SECS;
-        mock_activate(
-            &format!("DEV-TRIAL-{}", uuid::Uuid::new_v4()),
-            &device_id,
-            &app_data_dir,
-            LicenseKind::Trial,
-            Some(expires_at),
-        )
-        .await?;
-        return Ok(TrialResult {
-            expires_at,
-            days_remaining: 7,
-        });
-    }
-
-    let license_key = request_trial_license(&device_id).await?;
-    activate_with_keygen(&license_key, &device_id, &app_data_dir).await?;
-    let expires_at = now_unix() + TRIAL_DURATION_SECS;
-    Ok(TrialResult {
-        expires_at,
-        days_remaining: 7,
-    })
-}
-
-#[tauri::command]
-pub async fn activate_license(
-    license_key: String,
-    app: AppHandle,
-) -> Result<ActivationResult, LicenseError> {
-    let device_id = compute_device_id().map_err(|e| LicenseError::new("device_id", e))?;
-    let app_data_dir = app_data_dir(&app).map_err(|e| LicenseError::new("app_data_dir", e))?;
-
-    if is_dev_mode() {
-        return mock_activate(
-            &license_key,
-            &device_id,
-            &app_data_dir,
-            LicenseKind::Standard,
-            None,
-        )
-        .await;
-    }
-
-    activate_with_keygen(&license_key, &device_id, &app_data_dir).await
-}
-
-#[tauri::command]
-pub async fn get_license_status(app: AppHandle) -> Result<LicenseStatus, String> {
-    let device_id = compute_device_id()?;
-    let app_data_dir = app_data_dir(&app)?;
-    let file = load_license_file(&app_data_dir)?;
-    Ok(resolve_license_status(file.as_ref(), &device_id, now_unix(), is_dev_mode()))
-}
-
-#[tauri::command]
-pub async fn heartbeat_license(app: AppHandle) -> Result<HeartbeatResult, String> {
-    let device_id = compute_device_id()?;
-    let app_data_dir = app_data_dir(&app)?;
-    let mut file = load_license_file(&app_data_dir)?.ok_or_else(|| {
-        "No license file found".to_string()
-    })?;
-
-    let now = now_unix();
-    if file.last_heartbeat.is_some_and(|last| now - last < HEARTBEAT_INTERVAL_SECS) {
-        let status = resolve_license_status(Some(&file), &device_id, now, is_dev_mode());
-        return Ok(HeartbeatResult {
-            success: true,
-            status: status.kind,
-            next_heartbeat_at: file.last_heartbeat.map(|last| last + HEARTBEAT_INTERVAL_SECS),
-            message: Some("Heartbeat skipped; interval not reached".to_string()),
-        });
-    }
-
-    if is_dev_mode() {
-        file.last_heartbeat = Some(now);
-        save_license_file(&app_data_dir, &file)?;
-        let status = resolve_license_status(Some(&file), &device_id, now, true);
-        return Ok(HeartbeatResult {
-            success: true,
-            status: status.kind,
-            next_heartbeat_at: Some(now + HEARTBEAT_INTERVAL_SECS),
-            message: Some("Dev mode heartbeat recorded".to_string()),
-        });
-    }
-
-    match keygen_validate_and_activate(&file.key, &device_id).await {
-        Ok((license, machine_id)) => {
-            file.last_heartbeat = Some(now);
-            file.revoked = false;
-            if let Some(machine_id) = machine_id {
-                file.machine_id = Some(machine_id);
-            }
-            if let Some(expiry) = license.expiry {
-                file.expires_at = Some(expiry.timestamp());
-            }
-            save_license_file(&app_data_dir, &file)?;
-            let status = resolve_license_status(Some(&file), &device_id, now, false);
-            Ok(HeartbeatResult {
-                success: true,
-                status: status.kind,
-                next_heartbeat_at: Some(now + HEARTBEAT_INTERVAL_SECS),
-                message: None,
-            })
-        }
-        Err(err) if err.code.contains("SUSPEND") || err.code.contains("REVOK") => {
-            file.revoked = true;
-            save_license_file(&app_data_dir, &file).ok();
-            Ok(HeartbeatResult {
-                success: false,
-                status: LicenseStatusKind::Revoked,
-                next_heartbeat_at: None,
-                message: Some(err.message),
-            })
-        }
-        Err(err) => {
-            let status = resolve_license_status(Some(&file), &device_id, now, false);
-            Ok(HeartbeatResult {
-                success: false,
-                status: status.kind,
-                next_heartbeat_at: file.last_heartbeat.map(|last| last + HEARTBEAT_INTERVAL_SECS),
-                message: Some(err.message),
-            })
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn revoke_this_device(app: AppHandle) -> Result<(), String> {
-    let device_id = compute_device_id()?;
-    let app_data_dir = app_data_dir(&app)?;
-    let mut file = load_license_file(&app_data_dir)?.ok_or_else(|| {
-        "No license file found".to_string()
-    })?;
-
-    if !is_dev_mode() {
-        if let Some(machine_id) = &file.machine_id {
-            let config = build_keygen_config(&file.key).map_err(|e| e.message)?;
-            let _ = config::set_config(config.clone());
-            let client = reqwest::Client::new();
-            let url = format!("{}/machines/{}", config.api_url.trim_end_matches('/'), machine_id);
-            let response = client
-                .delete(url)
-                .header("Authorization", format!("License {}", file.key))
-                .header("Accept", "application/vnd.api+json")
-                .send()
-                .await
-                .map_err(|e| format!("Failed to revoke device: {e}"))?;
-            if !response.status().is_success() && response.status() != reqwest::StatusCode::NOT_FOUND
-            {
-                return Err(format!(
-                    "Failed to revoke device: HTTP {}",
-                    response.status()
-                ));
-            }
-        }
-    }
-
-    file.revoked = true;
-    save_license_file(&app_data_dir, &file)?;
-    let _ = device_id;
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn open_in_browser(url: String, app: AppHandle) -> Result<(), String> {
-    app.shell()
-        .open(url, None)
-        .map_err(|e| format!("Failed to open browser: {e}"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn get_device_id_is_stable_within_process() {
-        let first = match compute_device_id() {
-            Ok(id) => id,
-            Err(_) => {
-                // WSL/CI environments may not expose drive serial metadata.
-                return;
-            }
-        };
-        let second = compute_device_id().expect("device id should succeed after first success");
-        assert_eq!(first, second);
-        assert!(!first.is_empty());
-    }
-
-    #[test]
-    fn parse_activate_key_extracts_license_key() {
-        let key = parse_activate_key("avrag-desktop://activate?key=AVRG-TEST-KEY").expect("key");
-        assert_eq!(key, "AVRG-TEST-KEY");
-    }
-
-    #[test]
-    fn resolve_status_unactivated_without_file() {
-        let status = resolve_license_status(None, "device-a", 1_700_000_000, true);
-        assert_eq!(status.kind, LicenseStatusKind::Unactivated);
-    }
-
-    #[test]
-    fn resolve_status_trial_with_remaining_days() {
-        let now = 1_700_000_000_i64;
-        let file = LicenseFile {
-            key: "trial-key".to_string(),
-            license_id: "lic-1".to_string(),
-            device_id: "device-a".to_string(),
-            machine_id: None,
-            certificate: build_dev_certificate("device-a", Some(now + 86_400), 1),
-            kind: LicenseKind::Trial,
-            issued_at: now,
-            expires_at: Some(now + 86_400),
-            last_heartbeat: Some(now),
-            revoked: false,
-        };
-
-        let status = resolve_license_status(Some(&file), "device-a", now, true);
-        assert_eq!(status.kind, LicenseStatusKind::Trial);
-        assert_eq!(status.days_remaining, Some(1));
-    }
-
-    #[test]
-    fn resolve_status_expired_after_offline_grace() {
-        let now = 1_700_000_000_i64;
-        let expired_at = now - 10;
-        let file = LicenseFile {
-            key: "paid-key".to_string(),
-            license_id: "lic-2".to_string(),
-            device_id: "device-a".to_string(),
-            machine_id: None,
-            certificate: build_dev_certificate("device-a", Some(expired_at), 1),
-            kind: LicenseKind::Standard,
-            issued_at: now - OFFLINE_GRACE_SECS - 10,
-            expires_at: Some(expired_at),
-            last_heartbeat: Some(now - OFFLINE_GRACE_SECS - 10),
-            revoked: false,
-        };
-
-        let status = resolve_license_status(Some(&file), "device-a", now, true);
-        assert_eq!(status.kind, LicenseStatusKind::Expired);
-    }
-
-    #[test]
-    fn resolve_status_offline_grace_before_expiry_window_ends() {
-        let now = 1_700_000_000_i64;
-        let expired_at = now - 10;
-        let last_heartbeat = now - 86_400;
-        let file = LicenseFile {
-            key: "paid-key".to_string(),
-            license_id: "lic-3".to_string(),
-            device_id: "device-a".to_string(),
-            machine_id: None,
-            certificate: build_dev_certificate("device-a", Some(expired_at), 1),
-            kind: LicenseKind::Standard,
-            issued_at: now - 86_400,
-            expires_at: Some(expired_at),
-            last_heartbeat: Some(last_heartbeat),
-            revoked: false,
-        };
-
-        let status = resolve_license_status(Some(&file), "device-a", now, true);
-        assert_eq!(status.kind, LicenseStatusKind::OfflineGrace);
-        assert!(status.offline_grace_days.unwrap_or(0) > 0);
-    }
-
-    #[test]
-    fn resolve_status_revoked_flag() {
-        let now = 1_700_000_000_i64;
-        let file = LicenseFile {
-            key: "paid-key".to_string(),
-            license_id: "lic-4".to_string(),
-            device_id: "device-a".to_string(),
-            machine_id: None,
-            certificate: build_dev_certificate("device-a", None, 1),
-            kind: LicenseKind::Pro,
-            issued_at: now,
-            expires_at: None,
-            last_heartbeat: Some(now),
-            revoked: true,
-        };
-
-        let status = resolve_license_status(Some(&file), "device-a", now, true);
-        assert_eq!(status.kind, LicenseStatusKind::Revoked);
-    }
-}

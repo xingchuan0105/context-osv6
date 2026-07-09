@@ -2,24 +2,28 @@ use common::ContentStore;
 use tauri::Manager;
 use tauri::State;
 
+use crate::commands::api::IpcApiError;
 use crate::AppLocalState;
 
 #[tauri::command]
-pub async fn init_local_backend(app: tauri::AppHandle) -> Result<String, String> {
+pub async fn init_local_backend(app: tauri::AppHandle) -> Result<String, IpcApiError> {
     if app.try_state::<AppLocalState>().is_some() {
-        return Err("Local backend already initialized".to_string());
+        return Err(IpcApiError::bad_request(
+            "already_initialized",
+            "Local backend already initialized",
+        ));
     }
 
     let data_dir = app
         .path()
         .app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {e}"))?
+        .map_err(|e| IpcApiError::internal(format!("Failed to get app data dir: {e}")))?
         .to_string_lossy()
         .to_string();
 
     tokio::fs::create_dir_all(&data_dir)
         .await
-        .map_err(|e| format!("Failed to create data dir: {e}"))?;
+        .map_err(|e| IpcApiError::internal(format!("Failed to create data dir: {e}")))?;
 
     let content_store = std::sync::Arc::new(storage_local::LocalContentStore::new(format!(
         "{data_dir}/content"
@@ -35,7 +39,7 @@ pub async fn init_local_backend(app: tauri::AppHandle) -> Result<String, String>
 }
 
 #[tauri::command]
-pub async fn get_backend_status(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+pub async fn get_backend_status(app: tauri::AppHandle) -> Result<serde_json::Value, IpcApiError> {
     let initialized = app.try_state::<AppLocalState>().is_some();
     Ok(super::backend::backend_status_payload(initialized))
 }
@@ -43,17 +47,20 @@ pub async fn get_backend_status(app: tauri::AppHandle) -> Result<serde_json::Val
 #[tauri::command]
 pub async fn list_local_documents(
     state: State<'_, AppLocalState>,
-) -> Result<Vec<serde_json::Value>, String> {
-    let auth = avrag_auth::AuthContext::new(
-        avrag_auth::OrgId::from(uuid::Uuid::nil()),
-        avrag_auth::SubjectKind::System,
+) -> Result<Vec<serde_json::Value>, IpcApiError> {
+    let auth = contracts::auth_runtime::AuthContext::new(
+        contracts::auth_runtime::OrgId::from(uuid::Uuid::nil()),
+        contracts::auth_runtime::SubjectKind::System,
     );
 
     let documents = state
         .content_store
         .list_documents(&auth, None, None)
         .await
-        .map_err(|e| format!("Failed to list documents: {e}"))?;
+        .map_err(|e| IpcApiError::internal(format!("Failed to list documents: {e}")))?;
 
-    Ok(documents.iter().map(super::backend::local_document_json).collect())
+    Ok(documents
+        .iter()
+        .map(super::backend::local_document_json)
+        .collect())
 }

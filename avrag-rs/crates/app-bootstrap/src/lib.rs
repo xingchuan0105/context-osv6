@@ -22,8 +22,7 @@ pub use adapters::{
 
 use adapters::{
     ObjectStorePortAdapter, PgAdminStoreAdapter, PgAuthStoreAdapter, PgBillingQuotaAdapter,
-    PgChatPersistenceAdapter, PgContentStore, PgDocumentStoreAdapter, PgHealthAdapter,
-    PgShareStoreAdapter,
+    PgChatPersistenceAdapter, PgDocumentStoreAdapter, PgHealthAdapter, PgShareStoreAdapter,
 };
 use app_admin::AdminContext;
 use app_billing::BillingContext;
@@ -231,12 +230,18 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         make_llm_client(&config.agent_llm),
         make_llm_client(&config.memory_llm),
     );
-    let chat_persistence: Option<Arc<dyn ChatPersistencePort>> = pg.as_ref().map(|repository| {
-        Arc::new(PgChatPersistenceAdapter::new(repository.clone())) as Arc<dyn ChatPersistencePort>
-    });
-    let chatmemory = chat_persistence
+    let chat_persistence_adapter = pg
         .as_ref()
-        .map(|port| Arc::new(ChatMemory::new(port.clone())));
+        .map(|repository| Arc::new(PgChatPersistenceAdapter::new(repository.clone())));
+    let chat_persistence: Option<Arc<dyn ChatPersistencePort>> = chat_persistence_adapter
+        .as_ref()
+        .map(|adapter| adapter.clone() as Arc<dyn ChatPersistencePort>);
+    // ChatMemory only needs MessagePort + ProfilePort (ISP); coerce from concrete adapter.
+    let chatmemory = chat_persistence_adapter.as_ref().map(|adapter| {
+        let messages: Arc<dyn app_core::MessagePort> = adapter.clone();
+        let profile: Arc<dyn app_core::ProfilePort> = adapter.clone();
+        Arc::new(ChatMemory::new(messages, profile))
+    });
     let search_executor = Some(Arc::new(SearchExecutor::new(avrag_search::SearchConfig {
         provider: config.search.provider.clone(),
         base_url: config.search.base_url.clone(),
@@ -308,7 +313,8 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
 
         let rag_config = attach_rag_components(RagConfig::new_for_data_plane(
             embedding,
-            Some(Arc::new(PgContentStore::new(pg_repo.clone())) as Arc<dyn common::ContentStore>),
+            Some(Arc::new(avrag_storage_pg::PgContentStore::new(pg_repo.clone()))
+                as Arc<dyn common::ContentStore>),
         ));
         let milvus_config = StorageMilvusConfig {
             url: config.milvus.url.clone(),

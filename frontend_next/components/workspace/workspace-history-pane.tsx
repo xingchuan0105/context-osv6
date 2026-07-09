@@ -5,12 +5,9 @@ import { Fragment, type FormEvent, useEffect, useMemo, useRef, useState } from "
 import { useAuth } from "../../lib/auth/context";
 import { formatUiMessage } from "../../lib/i18n/messages";
 import { useUiPreferences } from "../../lib/ui-preferences";
-import {
-  listWorkspaceSessionMessages,
-  updateWorkspaceSession,
-  type WorkspaceChatMessage,
-} from "../../lib/workspace/client";
+import { updateWorkspaceSession } from "../../lib/workspace/client";
 import type { WorkspaceSession } from "../../lib/workspace/model";
+import { useSessionMessages } from "../../hooks/use-session-messages";
 import { sortWorkspaceSessions } from "../../lib/workspace/model";
 import {
   buildSearchSnippet,
@@ -51,6 +48,7 @@ export function WorkspaceHistoryPane({
 }: WorkspaceHistoryPaneProps) {
   const auth = useAuth();
   const { locale } = useUiPreferences();
+  const fetchSessionMessages = useSessionMessages(auth.token);
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -169,11 +167,11 @@ export function WorkspaceHistoryPane({
 
     Promise.allSettled(
       sessionsToLoad.map(async (session) => {
-        const response = await listWorkspaceSessionMessages(auth.token!, session.id);
+        const messages = await fetchSessionMessages(session.id);
 
         return {
           sessionId: session.id,
-          title: extractSessionTitleFromMessages(response.messages),
+          title: extractSessionTitleFromMessages(messages),
         };
       }),
     )
@@ -305,12 +303,12 @@ export function WorkspaceHistoryPane({
 
     Promise.allSettled(
       sessionsToLoad.map(async (session) => {
-        const response = await listWorkspaceSessionMessages(auth.token!, session.id);
+        const messages = await fetchSessionMessages(session.id);
 
         return {
           sessionId: session.id,
           updatedAt: session.updated_at,
-          text: response.messages.map(extractMessageSearchText).filter(Boolean).join("\n"),
+          text: messages.map(extractMessageSearchText).filter(Boolean).join("\n"),
         };
       }),
     )

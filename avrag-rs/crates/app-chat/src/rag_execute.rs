@@ -7,7 +7,7 @@ impl ChatContext {
         &self,
         req: contracts::ExecutePlanRequest,
     ) -> Result<contracts::ExecutePlanResponse, AppError> {
-        req.validate()
+        avrag_rag_core::validate_execute_plan(&req)
             .map_err(|error| AppError::validation("invalid_execute_plan", error.to_string()))?;
         self.validate_execute_plan_doc_scope(&req).await?;
 

@@ -16,8 +16,8 @@ use commands::api::api_call;
 use commands::cache::{get_cache_value, set_cache_value};
 use commands::chat_stream::{chat_cancel, chat_stream};
 use commands::license::{
-    activate_license, get_device_id, get_license_status, heartbeat_license, license_allows_chat,
-    open_in_browser, revoke_this_device, start_trial,
+    activate_license, get_device_id, get_license_status, heartbeat_license, open_in_browser,
+    revoke_this_device, start_trial,
 };
 use commands::llm_config::{
     diagnose_llm, get_llm_config, list_available_models, set_llm_config, test_llm_connection,
