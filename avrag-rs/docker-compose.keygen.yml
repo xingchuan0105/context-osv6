@@ -1,0 +1,38 @@
+# Keygen CE self-hosted license server for AVRag Desktop
+# Requires: Postgres with `keygen` database, Redis on db /1
+#
+# Setup:
+#   psql -c "CREATE DATABASE keygen;"
+#   docker compose -f docker-compose.keygen.yml up -d
+
+services:
+  keygen-web:
+    image: keygen/api:latest
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      KEYGEN_EDITION: ${KEYGEN_EDITION:-CE}
+      KEYGEN_MODE: ${KEYGEN_MODE:-singleplayer}
+      KEYGEN_HOST: ${KEYGEN_HOST:-http://127.0.0.1:3001}
+      KEYGEN_ACCOUNT_ID: ${KEYGEN_ACCOUNT_ID}
+      KEYGEN_SECRET_KEY: ${KEYGEN_SECRET_KEY}
+      DATABASE_URL: postgres://${KEYGEN_DB_USER:-avrag}:${KEYGEN_DB_PASSWORD:-avrag}@host.docker.internal:5432/keygen
+      REDIS_URL: redis://host.docker.internal:6379/1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  keygen-worker:
+    image: keygen/api:latest
+    restart: unless-stopped
+    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
+    environment:
+      KEYGEN_EDITION: ${KEYGEN_EDITION:-CE}
+      KEYGEN_MODE: ${KEYGEN_MODE:-singleplayer}
+      KEYGEN_HOST: ${KEYGEN_HOST:-http://127.0.0.1:3001}
+      KEYGEN_ACCOUNT_ID: ${KEYGEN_ACCOUNT_ID}
+      KEYGEN_SECRET_KEY: ${KEYGEN_SECRET_KEY}
+      DATABASE_URL: postgres://${KEYGEN_DB_USER:-avrag}:${KEYGEN_DB_PASSWORD:-avrag}@host.docker.internal:5432/keygen
+      REDIS_URL: redis://host.docker.internal:6379/1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

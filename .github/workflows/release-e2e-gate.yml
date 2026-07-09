@@ -1,0 +1,144 @@
+name: Release E2E Gate (RAG Quality)
+
+# PR-6 Step B: BLOCKING release gate that runs the ProductionRagEvaluator
+# (`rag_quality_prod`) against the golden set with REAL embeddings + LLM, then fails
+# the workflow if the RAG quality gate regresses. Non-streaming chat responses carry
+# raw `[[cite:CHUNK_ID]]` markup; the evaluator rewrites it to `[citation:N]` before
+# scoring citation accuracy.
+#
+# Triggers:
+# - `workflow_dispatch`: manual run (calibration / verification).
+# - `release.published`: run on every published release — the natural blocking point.
+#
+# Requires repo secrets: DASHSCOPE_API_KEY (embedding + MM rerank), DMX_API_KEY
+# (ingestion LLM), DEEPSEEK_API_KEY (agent/memory LLM). Base URLs / models / dimensions
+# are non-secret literals written to avrag-rs/.env (gitignored) so the test's
+# `load_env_from_repo_dotenv` finds them — mirroring the local .env profile.
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  rag-quality-gate:
+    name: RAG Quality Gate (ProductionRagEvaluator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: avrag-rs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-release-gate-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-release-gate-${{ hashFiles('avrag-rs/**/Cargo.lock') }}
+
+      # `avrag-rs/target` is intentionally NOT cached: a full debug build exceeds the 10GB
+      # actions/cache limit, so the post-save step would fail and turn this BLOCKING gate red
+      # even when the RAG quality asserts pass — a false-positive release block. The registry
+      # + git caches above still skip dep downloads; cold build (~15min) fits the 30min timeout.
+      - name: Start Milvus stack
+        run: |
+          COMPOSE_FILE="$(find . -path '*/docker-compose.milvus.yml' -print -quit)"
+          if [ -z "$COMPOSE_FILE" ]; then
+            echo "docker-compose.milvus.yml not found" >&2
+            exit 1
+          fi
+          docker compose -f "$COMPOSE_FILE" up -d --wait
+
+      - name: Clean orphaned E2E containers
+        run: |
+          # Test-owned ephemeral names only (matches setup::cleanup_orphaned_test_containers).
+          docker ps -a --filter name=avrag-test-pg --format '{{.Names}}' | xargs -r docker rm -f
+          docker ps -a --filter name=avrag-test-redis --format '{{.Names}}' | xargs -r docker rm -f
+
+      - name: Write .env for real-LLM RAG
+        # avrag-rs/.env is gitignored; the test's `load_env_from_repo_dotenv` panics if it
+        # is absent. Write the RAG profile here — non-secret literals inline, 3 provider
+        # keys interpolated from repo secrets via the step env. Mirrors the local .env.
+        run: |
+          cat > .env <<EOF
+          EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+          EMBEDDING_API_KEY=${EMBEDDING_API_KEY}
+          EMBEDDING_MODEL=text-embedding-v4
+          EMBEDDING_DIMENSIONS=1024
+          AVRAG_EMBEDDING_DIM=1024
+          DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+          MM_EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding
+          MM_EMBEDDING_API_KEY=${MM_EMBEDDING_API_KEY}
+          MM_EMBEDDING_MODEL=tongyi-embedding-vision-plus-2026-03-06
+          MM_EMBEDDING_API_STYLE=dashscope_multimodal_embedding
+          MM_EMBEDDING_DIMENSIONS=1024
+          MM_RERANK_BASE_URL=https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank
+          MM_RERANK_API_KEY=${MM_RERANK_API_KEY}
+          MM_RERANK_MODEL=qwen3-vl-rerank
+          MM_RERANK_API_STYLE=dashscope_vl_rerank
+          INGESTION_LLM_BASE_URL=https://www.dmxapi.cn/v1
+          INGESTION_LLM_API_KEY=${INGESTION_LLM_API_KEY}
+          INGESTION_LLM_MODEL=gemini-3.1-flash-lite-preview
+          AGENT_LLM_BASE_URL=https://api.deepseek.com
+          AGENT_LLM_API_KEY=${AGENT_LLM_API_KEY}
+          AGENT_LLM_MODEL=deepseek-v4-flash
+          AGENT_LLM_TIMEOUT_MS=180000
+          AGENT_LLM_TEMPERATURE=0.2
+          MEMORY_LLM_BASE_URL=https://api.deepseek.com
+          MEMORY_LLM_API_KEY=${MEMORY_LLM_API_KEY}
+          MEMORY_LLM_MODEL=deepseek-v4-flash
+          MILVUS_URL=http://127.0.0.1:19530
+          MILVUS_TEXT_VECTOR_DIM=1024
+          MILVUS_MULTIMODAL_VECTOR_DIM=1024
+          MILVUS_METRIC_TYPE=COSINE
+          RAG_GRAPH_RETRIEVAL_ENABLED=true
+          RAG_PARALLEL_CHANNELS_ENABLED=true
+          INGESTION_TRIPLET_ENABLED=0
+          INGESTION_VLM_TRIPLET_ENABLED=0
+          INGESTION_VLM_SUMMARY_ENABLED=0
+          E2E_ENABLED=true
+          EOF
+        env:
+          EMBEDDING_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          MM_EMBEDDING_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          MM_RERANK_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          INGESTION_LLM_API_KEY: ${{ secrets.DMX_API_KEY }}
+          AGENT_LLM_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          MEMORY_LLM_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+
+      - name: Compile tests
+        run: cargo test --no-run --test product_e2e -p app --features product-e2e
+
+      # The test's asserts ARE the gate: recall@15 must not regress beyond the calibrated
+      # baseline drop (≤3%), no eval failures, and the ProductionRagEvaluator must run all
+      # golden examples. `--ignored` selects the #[ignore] real-LLM test; `--test-threads=1`
+      # is required for the module-scoped RAG fixture infra. A non-zero exit fails the job
+      # (blocking gate). Hallucination is reported but not gated (heuristic; see GOTCHAS.md).
+      - name: Run ProductionRagEvaluator (blocking)
+        run: |
+          E2E_MODE=nightly cargo test --test product_e2e -p app --features product-e2e \
+            rag_quality_prod -- --ignored --test-threads=1 --nocapture
+        timeout-minutes: 20
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-e2e-gate-failure-${{ github.run_id }}
+          path: avrag-rs/crates/app/tests/e2e_output/**/**
+          retention-days: 14
