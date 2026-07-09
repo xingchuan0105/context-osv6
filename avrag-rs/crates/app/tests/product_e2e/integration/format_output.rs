@@ -20,7 +20,7 @@ async fn chat_presentation_html_returns_structured_slides() {
     let http_resp = ctx
         .chat_with_format_hint_without_mock_chunk_pin(
             "What is antifragility?",
-            &upload.notebook_id,
+            &upload.workspace_id,
             &[upload.document_id],
             Some("ppt-generation"),
         )
@@ -60,7 +60,7 @@ async fn chat_html_renderer_returns_valid_html() {
     let http_resp = ctx
         .chat_with_format_hint_without_mock_chunk_pin(
             "What is antifragility?",
-            &upload.notebook_id,
+            &upload.workspace_id,
             &[upload.document_id],
             Some("html-renderer"),
         )

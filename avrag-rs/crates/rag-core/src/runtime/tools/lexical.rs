@@ -19,7 +19,7 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
     let query = args.terms.join(" ");
     let request = ChatRequest {
         query: query.clone(),
-        notebook_id: None,
+        workspace_id: None,
         session_id: None,
         agent_type: "chat".to_string(),
         source_type: None,

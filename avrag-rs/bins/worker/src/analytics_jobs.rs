@@ -132,7 +132,7 @@ async fn rollup_public_share_views(pool: &PgPool, target_date: NaiveDate) -> Res
             n.owner_id as user_id,
             count(*)::bigint as shared_kb_open_count
         from share_access_logs sal
-        join notebooks n on n.id = sal.notebook_id
+        join workspaces n on n.id = sal.workspace_id
         where date(sal.created_at) = $1
           and sal.action = 'view'
           and n.owner_id is not null
@@ -272,7 +272,7 @@ async fn record_storage_snapshots(pool: &PgPool, target_date: NaiveDate) -> Resu
             event_date,
             user_id,
             session_id,
-            notebook_id,
+            workspace_id,
             event_name,
             feature,
             provider,
@@ -309,7 +309,7 @@ async fn record_storage_snapshots(pool: &PgPool, target_date: NaiveDate) -> Resu
                 'document_count', count(*)::bigint
             )
         from documents d
-        join notebooks n on n.id = d.notebook_id
+        join workspaces n on n.id = d.workspace_id
         where n.owner_id is not null
         group by n.owner_id
         having not exists (

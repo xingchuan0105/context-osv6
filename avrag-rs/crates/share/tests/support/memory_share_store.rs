@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 #[derive(Clone)]
 struct TokenRecord {
-    notebook_id: Uuid,
+    workspace_id: Uuid,
     access_level: ShareAccessLevel,
     expires_at: Option<DateTime<Utc>>,
     revoked_at: Option<DateTime<Utc>>,
@@ -36,9 +36,9 @@ impl MemoryShareStore {
         Self::default()
     }
 
-    pub async fn seed_notebook_owner(&self, notebook_id: Uuid, owner_id: Uuid) {
+    pub async fn seed_notebook_owner(&self, workspace_id: Uuid, owner_id: Uuid) {
         self.notebooks.write().await.insert(
-            notebook_id,
+            workspace_id,
             NotebookAccessSnapshot {
                 owner_id: Some(owner_id),
                 notebook_access_level: "private".to_string(),
@@ -46,11 +46,11 @@ impl MemoryShareStore {
         );
     }
 
-    pub async fn seed_member_access(&self, notebook_id: Uuid, user_id: Uuid, role: &str) {
+    pub async fn seed_member_access(&self, workspace_id: Uuid, user_id: Uuid, role: &str) {
         self.member_access
             .write()
             .await
-            .insert((notebook_id, user_id), role.to_string());
+            .insert((workspace_id, user_id), role.to_string());
     }
 
     pub async fn seed_shared_notebook(&self, token: &str, snapshot: SharedNotebookSnapshot) {
@@ -81,29 +81,29 @@ impl ShareStorePort for MemoryShareStore {
     async fn query_notebook_access(
         &self,
         _auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<Option<NotebookAccessSnapshot>, AppError> {
-        Ok(self.notebooks.read().await.get(&notebook_id).cloned())
+        Ok(self.notebooks.read().await.get(&workspace_id).cloned())
     }
 
     async fn query_member_access(
         &self,
         _auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         user_id: Uuid,
     ) -> Result<Option<String>, AppError> {
         Ok(self
             .member_access
             .read()
             .await
-            .get(&(notebook_id, user_id))
+            .get(&(workspace_id, user_id))
             .cloned())
     }
 
     async fn get_share_settings(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Uuid,
+        _workspace_id: Uuid,
     ) -> Result<(String, bool, Vec<app_core::ShareTokenSnapshot>), AppError> {
         Ok(("private".to_string(), false, Vec::new()))
     }
@@ -111,7 +111,7 @@ impl ShareStorePort for MemoryShareStore {
     async fn list_members(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Uuid,
+        _workspace_id: Uuid,
     ) -> Result<Vec<ShareNotebookMember>, AppError> {
         Ok(Vec::new())
     }
@@ -119,7 +119,7 @@ impl ShareStorePort for MemoryShareStore {
     async fn update_notebook_access_level(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Uuid,
+        _workspace_id: Uuid,
         _access_level: &str,
     ) -> Result<(), AppError> {
         Ok(())
@@ -128,7 +128,7 @@ impl ShareStorePort for MemoryShareStore {
     async fn update_share_settings(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Uuid,
+        _workspace_id: Uuid,
         _access_level: Option<&str>,
         _allow_download: Option<bool>,
     ) -> Result<(), AppError> {
@@ -138,7 +138,7 @@ impl ShareStorePort for MemoryShareStore {
     async fn create_share_token(
         &self,
         _auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         access_level: ShareAccessLevel,
         expires_at: Option<DateTime<Utc>>,
     ) -> Result<String, AppError> {
@@ -146,7 +146,7 @@ impl ShareStorePort for MemoryShareStore {
         self.tokens.write().await.insert(
             token.clone(),
             TokenRecord {
-                notebook_id,
+                workspace_id,
                 access_level,
                 expires_at,
                 revoked_at: None,
@@ -171,7 +171,7 @@ impl ShareStorePort for MemoryShareStore {
                 return Ok(None);
             }
         }
-        Ok(Some((record.notebook_id, record.access_level)))
+        Ok(Some((record.workspace_id, record.access_level)))
     }
 
     async fn revoke_token(
@@ -182,7 +182,7 @@ impl ShareStorePort for MemoryShareStore {
         let mut tokens = self.tokens.write().await;
         if let Some(record) = tokens.get_mut(token) {
             record.revoked_at = Some(Utc::now());
-            return Ok(Some(record.notebook_id));
+            return Ok(Some(record.workspace_id));
         }
         Ok(None)
     }
@@ -190,7 +190,7 @@ impl ShareStorePort for MemoryShareStore {
     async fn get_share_analytics(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Uuid,
+        _workspace_id: Uuid,
     ) -> Result<Vec<ShareAnalyticsEntry>, AppError> {
         Ok(Vec::new())
     }
@@ -198,7 +198,7 @@ impl ShareStorePort for MemoryShareStore {
     async fn get_share_access_logs(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Uuid,
+        _workspace_id: Uuid,
         _limit: usize,
     ) -> Result<Vec<ShareAccessLogEntry>, AppError> {
         Ok(Vec::new())
@@ -221,13 +221,13 @@ impl ShareStorePort for MemoryShareStore {
     async fn invite_member(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         email: &str,
         access_level: ShareAccessLevel,
     ) -> Result<ShareNotebookMember, AppError> {
         let member = ShareNotebookMember {
             id: Uuid::new_v4().to_string(),
-            notebook_id: notebook_id.to_string(),
+            workspace_id: workspace_id.to_string(),
             user_id: None,
             email: Some(email.to_string()),
             access_level,
@@ -243,7 +243,7 @@ impl ShareStorePort for MemoryShareStore {
     async fn accept_invite(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Uuid,
+        _workspace_id: Uuid,
         _member_id: Uuid,
         _actor_id: Uuid,
     ) -> Result<(), AppError> {
@@ -253,7 +253,7 @@ impl ShareStorePort for MemoryShareStore {
     async fn decline_invite(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Uuid,
+        _workspace_id: Uuid,
         _member_id: Uuid,
         _actor_id: Uuid,
     ) -> Result<(), AppError> {
@@ -263,7 +263,7 @@ impl ShareStorePort for MemoryShareStore {
     async fn add_member(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Uuid,
+        _workspace_id: Uuid,
         _user_id: Uuid,
         _access_level: ShareAccessLevel,
     ) -> Result<(), AppError> {
@@ -273,7 +273,7 @@ impl ShareStorePort for MemoryShareStore {
     async fn remove_member(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Uuid,
+        _workspace_id: Uuid,
         _member_id: Uuid,
     ) -> Result<(), AppError> {
         Ok(())

@@ -1,7 +1,7 @@
     async fn invite_member(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         email: &str,
         access_level: ShareAccessLevel,
     ) -> Result<ShareNotebookMember, AppError> {
@@ -23,10 +23,10 @@
         .map_err(|error| AppError::internal(error.to_string()))?;
         let user_id = invited_user.and_then(|row| row.try_get::<Uuid, _>("id").ok());
         let existing = sqlx::query(
-            "select id from notebook_members where org_id = $1 and notebook_id = $2 and lower(email) = lower($3) limit 1",
+            "select id from workspace_members where org_id = $1 and workspace_id = $2 and lower(email) = lower($3) limit 1",
         )
         .bind(auth.org_id().into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(&normalized_email)
         .fetch_optional(tx.as_mut())
         .await
@@ -34,7 +34,7 @@
         let row = if let Some(existing) = existing {
             sqlx::query(
                 r#"
-                update notebook_members
+                update workspace_members
                 set user_id = $4,
                     access_level = $5,
                     invited_by = $6,
@@ -42,13 +42,13 @@
                     invited_at = now(),
                     updated_at = now(),
                     accepted_at = null
-                where id = $1 and org_id = $2 and notebook_id = $3
-                returning id, notebook_id, user_id, email, access_level, invite_status, invited_by, invited_at, accepted_at
+                where id = $1 and org_id = $2 and workspace_id = $3
+                returning id, workspace_id, user_id, email, access_level, invite_status, invited_by, invited_at, accepted_at
                 "#,
             )
             .bind(existing.try_get::<Uuid, _>("id").map_err(|error| AppError::internal(error.to_string()))?)
             .bind(auth.org_id().into_uuid())
-            .bind(notebook_id)
+            .bind(workspace_id)
             .bind(user_id)
             .bind(access_level.as_db())
             .bind(auth.actor_id().map(|id| id.into_uuid()))
@@ -58,14 +58,14 @@
         } else {
             sqlx::query(
                 r#"
-                insert into notebook_members (id, org_id, notebook_id, user_id, email, access_level, invited_by, invite_status, invited_at, updated_at)
+                insert into workspace_members (id, org_id, workspace_id, user_id, email, access_level, invited_by, invite_status, invited_at, updated_at)
                 values ($1, $2, $3, $4, $5, $6, $7, 'pending', now(), now())
-                returning id, notebook_id, user_id, email, access_level, invite_status, invited_by, invited_at, accepted_at
+                returning id, workspace_id, user_id, email, access_level, invite_status, invited_by, invited_at, accepted_at
                 "#,
             )
             .bind(Uuid::new_v4())
             .bind(auth.org_id().into_uuid())
-            .bind(notebook_id)
+            .bind(workspace_id)
             .bind(user_id)
             .bind(&normalized_email)
             .bind(access_level.as_db())

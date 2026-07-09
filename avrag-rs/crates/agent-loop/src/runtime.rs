@@ -105,7 +105,7 @@ pub struct AgentRequest {
     /// on its own via the memory cluster).
     pub query: String,
     /// Notebook / workspace context.
-    pub notebook_id: Option<String>,
+    pub workspace_id: Option<String>,
     /// Session ID for continuity.
     pub session_id: Option<String>,
     /// Document scope for RAG (server-controlled, never expanded by model).
@@ -155,7 +155,7 @@ impl std::fmt::Debug for AgentRequest {
         f.debug_struct("AgentRequest")
             .field("kind", &self.kind)
             .field("query", &self.query)
-            .field("notebook_id", &self.notebook_id)
+            .field("workspace_id", &self.workspace_id)
             .field("session_id", &self.session_id)
             .field("doc_scope", &self.doc_scope)
             .field("messages", &self.messages)
@@ -308,7 +308,7 @@ mod tests {
         let req = AgentRequest {
             kind: AgentKind::Chat,
             query: "hello".to_string(),
-            notebook_id: Some("nb-1".to_string()),
+            workspace_id: Some("nb-1".to_string()),
             session_id: Some("sess-1".to_string()),
             doc_scope: vec!["doc-1".to_string()],
             messages: vec![],

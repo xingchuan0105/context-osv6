@@ -13,14 +13,14 @@ impl DocumentContext {
     pub async fn list_ready_documents_for_chat(
         &self,
         storage: &StorageContext,
-        notebook_id: &str,
+        workspace_id: &str,
         doc_scope: &[String],
     ) -> Vec<StoredDocument> {
         let state = storage.inner().read().await;
         state
             .documents
             .values()
-            .filter(|stored| stored.document.notebook_id == notebook_id)
+            .filter(|stored| stored.document.workspace_id == workspace_id)
             .filter(|stored| matches!(stored.document.status, DocumentStatus::Completed))
             .filter(|stored| doc_scope.is_empty() || doc_scope.contains(&stored.document.id))
             .cloned()
@@ -39,7 +39,7 @@ impl DocumentContext {
 
         let task = build_ingest_task(
             seed.org_id.clone(),
-            seed.notebook_id.clone(),
+            seed.workspace_id.clone(),
             seed.document_id.clone(),
             Some(current_user_id(auth)),
             IngestDocumentPayload {
@@ -83,7 +83,7 @@ impl DocumentContext {
 
         let task = build_reindex_task(
             seed.org_id,
-            seed.notebook_id,
+            seed.workspace_id,
             seed.document_id,
             Some(current_user_id(auth)),
             ReindexDocumentPayload {

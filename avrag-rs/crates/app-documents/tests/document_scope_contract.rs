@@ -104,7 +104,7 @@ async fn validate_document_scope_rejects_foreign_notebook_in_memory() {
                 document: common::Document {
                     id: document_id.clone(),
                     org_id: org_id.clone(),
-                    notebook_id: notebook_a.clone(),
+                    workspace_id: notebook_a.clone(),
                     owner_id: user_id.clone(),
                     file_name: "scope.txt".to_string(),
                     mime_type: "text/plain".to_string(),

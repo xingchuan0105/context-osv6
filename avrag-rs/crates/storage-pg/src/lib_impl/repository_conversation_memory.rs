@@ -29,7 +29,7 @@ impl ConversationMemoryRepository {
         exclude_message_ids: &[i64],
     ) -> Result<Vec<ConversationHistoryHit>, PgStorageError> {
         let limit = limit.clamp(1, 50);
-        let notebook_id = self.resolve_session_notebook_id(auth, session_id).await?;
+        let workspace_id = self.resolve_session_workspace_id(auth, session_id).await?;
         let user_id = auth
             .actor_id()
             .map(|actor| actor.into_uuid())
@@ -38,7 +38,7 @@ impl ConversationMemoryRepository {
         let recent = self.load_recent_messages(
             auth,
             session_id,
-            notebook_id,
+            workspace_id,
             user_id,
             scope,
             RECENT_CANDIDATE_LIMIT,
@@ -53,7 +53,7 @@ impl ConversationMemoryRepository {
             self.search_messages_fts(
                 auth,
                 session_id,
-                notebook_id,
+                workspace_id,
                 user_id,
                 scope,
                 &segmented_query,
@@ -75,7 +75,7 @@ impl ConversationMemoryRepository {
         Ok(merged)
     }
 
-    async fn resolve_session_notebook_id(
+    async fn resolve_session_workspace_id(
         &self,
         auth: &AuthContext,
         session_id: Uuid,
@@ -83,7 +83,7 @@ impl ConversationMemoryRepository {
         let mut tx = self.pool.begin(auth).await?;
         let row = sqlx::query(
             r#"
-            select notebook_id
+            select workspace_id
             from chat_sessions
             where id = $1 and org_id = $2
             "#,
@@ -93,17 +93,17 @@ impl ConversationMemoryRepository {
         .fetch_optional(tx.inner())
         .await?;
         tx.commit().await?;
-        let notebook_id = row
-            .and_then(|r| r.try_get::<Uuid, _>("notebook_id").ok())
+        let workspace_id = row
+            .and_then(|r| r.try_get::<Uuid, _>("workspace_id").ok())
             .ok_or_else(|| PgStorageError::NotFound("session not found".to_string()))?;
-        Ok(notebook_id)
+        Ok(workspace_id)
     }
 
     async fn load_recent_messages(
         &self,
         auth: &AuthContext,
         session_id: Uuid,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         user_id: Uuid,
         scope: ConversationHistoryScope,
         limit: i64,
@@ -136,7 +136,7 @@ impl ConversationMemoryRepository {
                 from chat_messages m
                 join chat_sessions s on s.id = m.session_id
                 where m.org_id = $1
-                  and s.notebook_id = $2
+                  and s.workspace_id = $2
                   and s.user_id = $3
                   and m.role in ('user', 'assistant')
                   and not (m.id = any($4))
@@ -145,7 +145,7 @@ impl ConversationMemoryRepository {
                 "#,
             )
             .bind(auth.org_id().into_uuid())
-            .bind(notebook_id)
+            .bind(workspace_id)
             .bind(user_id)
             .bind(exclude_message_ids)
             .bind(limit)
@@ -160,7 +160,7 @@ impl ConversationMemoryRepository {
         &self,
         auth: &AuthContext,
         session_id: Uuid,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         user_id: Uuid,
         scope: ConversationHistoryScope,
         segmented_query: &str,
@@ -198,7 +198,7 @@ impl ConversationMemoryRepository {
                 from chat_messages m
                 join chat_sessions s on s.id = m.session_id
                 where m.org_id = $1
-                  and s.notebook_id = $2
+                  and s.workspace_id = $2
                   and s.user_id = $3
                   and m.role in ('user', 'assistant')
                   and not (m.id = any($5))
@@ -208,7 +208,7 @@ impl ConversationMemoryRepository {
                 "#,
             )
             .bind(auth.org_id().into_uuid())
-            .bind(notebook_id)
+            .bind(workspace_id)
             .bind(user_id)
             .bind(segmented_query)
             .bind(exclude_message_ids)

@@ -169,7 +169,7 @@ impl BillingContext {
                 event_name: analytics::CostEventName::LlmUsageMetered,
                 feature: feature.as_str(),
                 session_id: None,
-                notebook_id: None,
+                workspace_id: None,
                 usage,
                 source,
                 metadata: serde_json::json!({

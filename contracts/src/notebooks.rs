@@ -26,17 +26,13 @@ pub struct Notebook {
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookListResponse {
-    /// Product wire name is `workspaces` (legacy clients may send/read `notebooks`).
-    #[serde(rename = "workspaces", alias = "notebooks")]
-    pub notebooks: Vec<Notebook>,
+    pub workspaces: Vec<Notebook>,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookResponse {
-    /// Product wire name is `workspace` (legacy clients may send/read `notebook`).
-    #[serde(rename = "workspace", alias = "notebook")]
-    pub notebook: Notebook,
+    pub workspace: Notebook,
 }
 
 #[typeshare]
@@ -60,8 +56,7 @@ pub struct UpdateNotebookRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ChatSession {
     pub id: String,
-    #[serde(rename = "workspace_id", alias = "notebook_id")]
-    pub notebook_id: String,
+    pub workspace_id: String,
     #[serde(default)]
     pub title: Option<String>,
     pub agent_type: String,
@@ -80,8 +75,7 @@ pub struct ChatSessionListResponse {
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateChatSessionRequest {
-    #[serde(rename = "workspace_id", alias = "notebook_id")]
-    pub notebook_id: String,
+    pub workspace_id: String,
     #[serde(default)]
     pub title: Option<String>,
     #[serde(default = "default_rag_agent")]
@@ -102,8 +96,7 @@ pub struct UpdateChatSessionRequest {
 pub struct ApiKeyRow {
     pub id: String,
     pub org_id: String,
-    #[serde(rename = "workspace_id", alias = "notebook_id")]
-    pub notebook_id: String,
+    pub workspace_id: String,
     pub key_prefix: String,
     pub name: String,
     pub permissions: Vec<String>,
@@ -147,8 +140,7 @@ pub struct CreateApiKeyResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookNote {
     pub id: String,
-    #[serde(rename = "workspace_id", alias = "notebook_id")]
-    pub notebook_id: String,
+    pub workspace_id: String,
     pub title: String,
     pub content: String,
     pub preview: String,

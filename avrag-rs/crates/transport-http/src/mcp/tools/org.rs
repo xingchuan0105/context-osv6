@@ -33,7 +33,7 @@ pub(crate) async fn create_workspace(
         None,
         json!({ "notebook": notebook }),
         vec![
-            "Create a workspace API key via POST /api/v1/notebooks/{id}/api-keys (index+query permissions)",
+            "Create a workspace API key via POST /api/v1/workspaces/{id}/api-keys (index+query permissions)",
             "workspace.create_upload or workspace.add_url_source",
             "workspace.rag_query after documents are completed",
         ],
@@ -45,11 +45,11 @@ pub(crate) async fn list_workspaces(
     _arguments: &Value,
 ) -> Result<Value, AppError> {
     authorize_org_tool(state.auth(), org_list_permission())?;
-    let notebooks = state.docs().list_notebooks().await;
+    let workspaces = state.docs().list_notebooks().await;
     Ok(catalog::success_result(
         "org.list_workspaces",
         None,
-        json!({ "notebooks": notebooks }),
+        json!({ "notebooks": workspaces }),
         vec!["org.create_workspace to add another workspace"],
     ))
 }

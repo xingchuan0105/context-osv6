@@ -56,7 +56,7 @@ async fn real_llm_rag_document_qa_returns_citation() {
     let result = chat_with_retry(
         &ctx,
         "What is antifragility?",
-        &upload.notebook_id,
+        &upload.workspace_id,
         &[upload.document_id.clone()],
     )
     .await;
@@ -114,7 +114,7 @@ async fn real_llm_rag_complex_query_uses_multiple_tools() {
     let result = chat_with_citations_retry_attempts(
         &ctx,
         "First summarize this book's author and chapter structure, then explain a core idea from an early section.",
-        &upload.notebook_id,
+        &upload.workspace_id,
         &[upload.document_id.clone()],
         REAL_LLM_MULTITOOL_MAX_ATTEMPTS + 2,
     )

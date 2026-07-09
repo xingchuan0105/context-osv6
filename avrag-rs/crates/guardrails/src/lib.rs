@@ -38,7 +38,7 @@ impl GuardPipeline {
         org_id: Uuid,
         user_id: Uuid,
         doc_scope: &[String],
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         trace_id: Option<String>,
     ) -> GuardResult {
         let input_ctx = input::InputGuardContext {
@@ -46,7 +46,7 @@ impl GuardPipeline {
             org_id,
             user_id,
             doc_scope,
-            notebook_id,
+            workspace_id,
             trace_id: trace_id.clone(),
         };
 

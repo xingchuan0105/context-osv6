@@ -20,7 +20,7 @@ pub struct IngestionTask {
     pub task_id: String,
     pub kind: IngestionTaskKind,
     pub org_id: String,
-    pub notebook_id: String,
+    pub workspace_id: String,
     pub document_id: String,
     pub requested_by: Option<String>,
     pub idempotency_key: String,

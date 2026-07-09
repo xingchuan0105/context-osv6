@@ -18,12 +18,12 @@ use contracts::notebooks::{
 use contracts::preferences::UserPreferences;
 
 /// Count pinned sources for a notebook from the user's preferences.
-fn pinned_source_count(preferences: &UserPreferences, notebook_id: &str) -> i64 {
+fn pinned_source_count(preferences: &UserPreferences, workspace_id: &str) -> i64 {
     preferences
         .dashboard
         .workspace_preferences
         .iter()
-        .find(|pref| pref.notebook_id == notebook_id)
+        .find(|pref| pref.workspace_id == workspace_id)
         .map(|pref| pref.pinned_source_ids.len() as i64)
         .unwrap_or(0)
 }
@@ -40,7 +40,7 @@ pub(super) fn collect_overview(notebook: &Notebook) -> NotebookAnalysisOverview 
 pub(super) fn collect_sources(
     sources: &[Document],
     preferences: &UserPreferences,
-    notebook_id: &str,
+    workspace_id: &str,
 ) -> NotebookAnalysisSources {
     let (mut ready, mut failed) = (0i64, 0i64);
     for source in sources {
@@ -51,7 +51,7 @@ pub(super) fn collect_sources(
         }
     }
     let processing = (sources.len() as i64) - ready - failed;
-    let pinned = pinned_source_count(preferences, notebook_id);
+    let pinned = pinned_source_count(preferences, workspace_id);
     NotebookAnalysisSources {
         total: sources.len() as i64,
         ready,

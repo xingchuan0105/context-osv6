@@ -25,7 +25,7 @@ async fn embedding_503_returns_degraded_answer_with_lexical_fallback() {
     let http_resp = ctx
         .chat(
             "What is antifragility?",
-            &upload.notebook_id,
+            &upload.workspace_id,
             &[upload.document_id.clone()],
         )
         .await

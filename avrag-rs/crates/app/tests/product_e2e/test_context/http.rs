@@ -19,7 +19,7 @@ impl TestContext {
     pub async fn create_notebook(&self, name: &str) -> anyhow::Result<NotebookInner> {
         let resp = self
             .http_client
-            .post(format!("{}/api/v1/notebooks", self.base_url))
+            .post(format!("{}/api/v1/workspaces", self.base_url))
             .json(&serde_json::json!({ "name": name, "description": "" }))
             .send()
             .await?;
@@ -41,17 +41,17 @@ impl TestContext {
     pub async fn upload_document_to_notebook(
         &self,
         fixture: &str,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> anyhow::Result<UploadResponse> {
         let content = setup::load_fixture(fixture)?;
-        self.upload_bytes_to_notebook(fixture, content.into_bytes(), notebook_id)
+        self.upload_bytes_to_notebook(fixture, content.into_bytes(), workspace_id)
             .await
     }
 
     pub async fn upload_file_from_path_to_notebook(
         &self,
         file_path: &str,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> anyhow::Result<UploadResponse> {
         let path = std::path::Path::new(file_path);
         let bytes =
@@ -60,7 +60,7 @@ impl TestContext {
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("document.bin");
-        self.upload_bytes_to_notebook(filename, bytes, notebook_id)
+        self.upload_bytes_to_notebook(filename, bytes, workspace_id)
             .await
     }
 
@@ -74,15 +74,15 @@ impl TestContext {
         &self,
         filename: &str,
         bytes: Vec<u8>,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> anyhow::Result<UploadResponse> {
         let mime_type = setup::mime_type_for_filename(filename);
 
         let resp = self
             .http_client
             .post(format!(
-                "{}/api/v1/notebooks/{}/documents",
-                self.base_url, notebook_id
+                "{}/api/v1/workspaces/{}/documents",
+                self.base_url, workspace_id
             ))
             .json(&serde_json::json!({
                 "filename": filename,
@@ -113,12 +113,12 @@ impl TestContext {
             let body = upload_resp.text().await.unwrap_or_default();
             anyhow::bail!("upload PUT failed: HTTP {status}, body: {body}");
         }
-        self.verify_uploaded_object_readable(&document_id, notebook_id, filename)
+        self.verify_uploaded_object_readable(&document_id, workspace_id, filename)
             .await?;
 
         Ok(UploadResponse {
             document_id,
-            notebook_id: notebook_id.to_string(),
+            workspace_id: workspace_id.to_string(),
             upload_url: String::new(),
             status,
         })
@@ -213,10 +213,10 @@ impl TestContext {
     async fn verify_uploaded_object_readable(
         &self,
         document_id: &str,
-        notebook_id: &str,
+        workspace_id: &str,
         filename: &str,
     ) -> anyhow::Result<()> {
-        let object_path = format!("{}/{}/{}/{}", self.org_id, notebook_id, document_id, filename);
+        let object_path = format!("{}/{}/{}/{}", self.org_id, workspace_id, document_id, filename);
         let object_full_path = std::path::Path::new(&self.object_root).join(&object_path);
         if !object_full_path.is_file() {
             anyhow::bail!(
@@ -232,49 +232,49 @@ impl TestContext {
     pub async fn chat(
         &self,
         query: &str,
-        notebook_id: &str,
+        workspace_id: &str,
         doc_scope: &[String],
     ) -> anyhow::Result<HttpResponse> {
-        self.post_rag_chat(query, notebook_id, doc_scope, None, true)
+        self.post_rag_chat(query, workspace_id, doc_scope, None, true)
             .await
     }
 
     pub async fn chat_without_mock_chunk_pin(
         &self,
         query: &str,
-        notebook_id: &str,
+        workspace_id: &str,
         doc_scope: &[String],
     ) -> anyhow::Result<HttpResponse> {
-        self.post_rag_chat(query, notebook_id, doc_scope, None, false)
+        self.post_rag_chat(query, workspace_id, doc_scope, None, false)
             .await
     }
 
     pub async fn chat_with_format_hint(
         &self,
         query: &str,
-        notebook_id: &str,
+        workspace_id: &str,
         doc_scope: &[String],
         format_hint: Option<&str>,
     ) -> anyhow::Result<HttpResponse> {
-        self.post_rag_chat(query, notebook_id, doc_scope, format_hint, true)
+        self.post_rag_chat(query, workspace_id, doc_scope, format_hint, true)
             .await
     }
 
     pub async fn chat_with_format_hint_without_mock_chunk_pin(
         &self,
         query: &str,
-        notebook_id: &str,
+        workspace_id: &str,
         doc_scope: &[String],
         format_hint: Option<&str>,
     ) -> anyhow::Result<HttpResponse> {
-        self.post_rag_chat(query, notebook_id, doc_scope, format_hint, false)
+        self.post_rag_chat(query, workspace_id, doc_scope, format_hint, false)
             .await
     }
 
     async fn post_rag_chat(
         &self,
         query: &str,
-        notebook_id: &str,
+        workspace_id: &str,
         doc_scope: &[String],
         format_hint: Option<&str>,
         pin_mock_chunk_ids: bool,
@@ -283,7 +283,7 @@ impl TestContext {
         let mut body = serde_json::json!({
             "query": query,
             "agent_type": "rag",
-            "notebook_id": notebook_id,
+            "workspace_id": workspace_id,
             "doc_scope": doc_scope,
             "stream": false,
         });
@@ -319,7 +319,7 @@ impl TestContext {
     pub async fn chat_with_session(
         &self,
         query: &str,
-        notebook_id: &str,
+        workspace_id: &str,
         doc_scope: &[String],
         session_id: &str,
     ) -> anyhow::Result<HttpResponse> {
@@ -327,7 +327,7 @@ impl TestContext {
         let body = serde_json::json!({
             "query": query,
             "agent_type": "rag",
-            "notebook_id": notebook_id,
+            "workspace_id": workspace_id,
             "doc_scope": doc_scope,
             "session_id": session_id,
             "stream": false,
@@ -361,7 +361,7 @@ impl TestContext {
     pub async fn chat_general(
         &self,
         query: &str,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
@@ -369,7 +369,7 @@ impl TestContext {
             .json(&serde_json::json!({
                 "query": query,
                 "agent_type": "chat",
-                "notebook_id": notebook_id,
+                "workspace_id": workspace_id,
                 "doc_scope": Vec::<String>::new(),
                 "stream": false,
             }))
@@ -380,11 +380,11 @@ impl TestContext {
         Ok(HttpResponse { status, body_json })
     }
 
-    pub async fn create_share_token(&self, notebook_id: &str) -> anyhow::Result<String> {
+    pub async fn create_share_token(&self, workspace_id: &str) -> anyhow::Result<String> {
         let resp = self
             .http_client
             .post(format!(
-                "{}/api/v1/notebooks/{notebook_id}/share",
+                "{}/api/v1/workspaces/{workspace_id}/share",
                 self.base_url
             ))
             .json(&serde_json::json!({ "role": "viewer" }))
@@ -404,7 +404,7 @@ impl TestContext {
     pub async fn chat_with_share(
         &self,
         query: &str,
-        notebook_id: &str,
+        workspace_id: &str,
         share_token: &str,
     ) -> anyhow::Result<HttpResponse> {
         let resp = self
@@ -413,7 +413,7 @@ impl TestContext {
             .json(&serde_json::json!({
                 "query": query,
                 "agent_type": "chat",
-                "notebook_id": notebook_id,
+                "workspace_id": workspace_id,
                 "source_type": "share",
                 "source_token": share_token,
                 "doc_scope": Vec::<String>::new(),
@@ -433,14 +433,14 @@ impl TestContext {
             .unwrap_or(0)
     }
 
-    pub async fn search(&self, query: &str, notebook_id: &str) -> anyhow::Result<HttpResponse> {
+    pub async fn search(&self, query: &str, workspace_id: &str) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
             .post(format!("{}/api/v1/chat", self.base_url))
             .json(&serde_json::json!({
                 "query": query,
                 "agent_type": "search",
-                "notebook_id": notebook_id,
+                "workspace_id": workspace_id,
                 "doc_scope": Vec::<String>::new(),
                 "stream": false,
             }))
@@ -460,7 +460,7 @@ impl TestContext {
         let mut body = serde_json::json!({
             "query": params.query,
             "agent_type": params.agent_type,
-            "notebook_id": params.notebook_id,
+            "workspace_id": params.workspace_id,
             "doc_scope": params.doc_scope,
             "stream": true,
         });
@@ -549,7 +549,7 @@ impl TestContext {
     pub async fn chat_stream(
         &self,
         query: &str,
-        notebook_id: &str,
+        workspace_id: &str,
         doc_scope: &[String],
         max_events: usize,
         max_wait: Duration,
@@ -558,7 +558,7 @@ impl TestContext {
             ChatStreamParams {
                 query,
                 agent_type: "rag",
-                notebook_id,
+                workspace_id,
                 doc_scope,
                 session_id: None,
                 format_hint: None,
@@ -610,7 +610,7 @@ impl TestContext {
         let resp = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
             .build()?
-            .post(format!("{}/api/v1/notebooks", self.base_url))
+            .post(format!("{}/api/v1/workspaces", self.base_url))
             .header("Authorization", format!("Bearer {token}"))
             .json(&serde_json::json!({ "name": name, "description": "" }))
             .send()
@@ -628,7 +628,7 @@ impl TestContext {
         &self,
         token: &str,
         query: &str,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> anyhow::Result<HttpResponse> {
         let resp = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
@@ -638,7 +638,7 @@ impl TestContext {
             .json(&serde_json::json!({
                 "query": query,
                 "agent_type": "chat",
-                "notebook_id": notebook_id,
+                "workspace_id": workspace_id,
                 "doc_scope": Vec::<String>::new(),
                 "stream": false,
             }))
@@ -651,14 +651,14 @@ impl TestContext {
 
     pub async fn invite_notebook_member(
         &self,
-        notebook_id: &str,
+        workspace_id: &str,
         email: &str,
         role: &str,
     ) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
             .post(format!(
-                "{}/api/v1/notebooks/{notebook_id}/members/invite",
+                "{}/api/v1/workspaces/{workspace_id}/members/invite",
                 self.base_url
             ))
             .json(&serde_json::json!({ "email": email, "role": role }))
@@ -669,14 +669,14 @@ impl TestContext {
         Ok(HttpResponse { status, body_json })
     }
 
-    pub async fn list_notebook_members(
+    pub async fn list_workspace_members(
         &self,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> anyhow::Result<serde_json::Value> {
         let resp = self
             .http_client
             .get(format!(
-                "{}/api/v1/notebooks/{notebook_id}/members",
+                "{}/api/v1/workspaces/{workspace_id}/members",
                 self.base_url
             ))
             .send()
@@ -736,13 +736,13 @@ impl TestContext {
     pub async fn chat_stream_abort_capture_session(
         &self,
         query: &str,
-        notebook_id: &str,
+        workspace_id: &str,
         doc_scope: &[String],
     ) -> anyhow::Result<(Vec<SseEvent>, Option<String>)> {
         let body = serde_json::json!({
             "query": query,
             "agent_type": "rag",
-            "notebook_id": notebook_id,
+            "workspace_id": workspace_id,
             "doc_scope": doc_scope,
             "stream": true,
         });
@@ -797,13 +797,13 @@ impl TestContext {
     pub async fn chat_stream_abort_after_start(
         &self,
         query: &str,
-        notebook_id: &str,
+        workspace_id: &str,
         doc_scope: &[String],
     ) -> anyhow::Result<Vec<SseEvent>> {
         let body = serde_json::json!({
             "query": query,
             "agent_type": "rag",
-            "notebook_id": notebook_id,
+            "workspace_id": workspace_id,
             "doc_scope": doc_scope,
             "stream": true,
         });
@@ -837,10 +837,10 @@ impl TestContext {
         Ok(events)
     }
 
-    pub async fn get_notebook(&self, notebook_id: &str) -> anyhow::Result<HttpResponse> {
+    pub async fn get_notebook(&self, workspace_id: &str) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
-            .get(format!("{}/api/v1/notebooks/{notebook_id}", self.base_url))
+            .get(format!("{}/api/v1/workspaces/{workspace_id}", self.base_url))
             .send()
             .await?;
         let status = resp.status().as_u16();
@@ -851,7 +851,7 @@ impl TestContext {
     pub async fn list_notebooks(&self) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
-            .get(format!("{}/api/v1/notebooks", self.base_url))
+            .get(format!("{}/api/v1/workspaces", self.base_url))
             .send()
             .await?;
         let status = resp.status().as_u16();
@@ -861,13 +861,13 @@ impl TestContext {
 
     pub async fn update_notebook(
         &self,
-        notebook_id: &str,
+        workspace_id: &str,
         name: &str,
         description: &str,
     ) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
-            .patch(format!("{}/api/v1/notebooks/{notebook_id}", self.base_url))
+            .patch(format!("{}/api/v1/workspaces/{workspace_id}", self.base_url))
             .json(&serde_json::json!({ "name": name, "description": description }))
             .send()
             .await?;
@@ -876,10 +876,10 @@ impl TestContext {
         Ok(HttpResponse { status, body_json })
     }
 
-    pub async fn delete_notebook(&self, notebook_id: &str) -> anyhow::Result<HttpResponse> {
+    pub async fn delete_notebook(&self, workspace_id: &str) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
-            .delete(format!("{}/api/v1/notebooks/{notebook_id}", self.base_url))
+            .delete(format!("{}/api/v1/workspaces/{workspace_id}", self.base_url))
             .send()
             .await?;
         let status = resp.status().as_u16();
@@ -889,13 +889,13 @@ impl TestContext {
 
     pub async fn accept_notebook_invite(
         &self,
-        notebook_id: &str,
+        workspace_id: &str,
         member_id: &str,
     ) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
             .post(format!(
-                "{}/api/v1/notebooks/{notebook_id}/members/{member_id}/accept",
+                "{}/api/v1/workspaces/{workspace_id}/members/{member_id}/accept",
                 self.base_url
             ))
             .json(&serde_json::json!({}))

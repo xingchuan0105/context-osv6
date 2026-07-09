@@ -95,7 +95,7 @@ pub struct NotificationCreateParams {
 pub struct ValidatedApiKey {
     pub id: Uuid,
     pub org_id: OrgId,
-    pub notebook_id: Option<Uuid>,
+    pub workspace_id: Option<Uuid>,
     pub permissions: Vec<String>,
     pub created_by: Option<Uuid>,
     pub rate_limit_rpm: u32,

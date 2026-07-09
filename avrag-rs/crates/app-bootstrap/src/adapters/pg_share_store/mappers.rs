@@ -4,8 +4,8 @@ fn map_member(row: sqlx::postgres::PgRow) -> Result<ShareNotebookMember, AppErro
             .try_get::<Uuid, _>("id")
             .map(|id| id.to_string())
             .map_err(|error| AppError::internal(error.to_string()))?,
-        notebook_id: row
-            .try_get::<Uuid, _>("notebook_id")
+        workspace_id: row
+            .try_get::<Uuid, _>("workspace_id")
             .map(|id| id.to_string())
             .map_err(|error| AppError::internal(error.to_string()))?,
         user_id: row

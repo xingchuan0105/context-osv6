@@ -39,7 +39,7 @@ pub trait SessionPort: Send + Sync {
     async fn list_sessions(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
     ) -> Result<Vec<ChatSession>, AppError>;
 
     async fn get_session(
@@ -51,7 +51,7 @@ pub trait SessionPort: Send + Sync {
     async fn create_session(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         title: Option<&str>,
         agent_type: &str,
     ) -> Result<ChatSession, AppError>;
@@ -119,7 +119,7 @@ pub trait ChatCatalogPort: Send + Sync {
     async fn get_notebook(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<Option<Notebook>, AppError>;
 }
 

@@ -18,7 +18,7 @@ use crate::auth_guard::{
 
 #[utoipa::path(
     get,
-    path = "/api/v1/notebooks",
+    path = "/api/v1/workspaces",
     responses(
         (status = 200, description = "List all notebooks", body = NotebookListResponse)
     ),
@@ -30,17 +30,17 @@ pub(crate) async fn list_notebooks(
     if let Err(error) = authorize_org_tool(state.auth(), org_list_permission()) {
         return app_error_response(error);
     }
-    let notebooks = state.docs().list_notebooks().await;
+    let workspaces = state.docs().list_notebooks().await;
     (
         StatusCode::OK,
-        Json(contracts::notebooks::NotebookListResponse { notebooks }),
+        Json(contracts::notebooks::NotebookListResponse { workspaces }),
     )
         .into_response()
 }
 
 #[utoipa::path(
     get,
-    path = "/api/v1/notebooks/{id}",
+    path = "/api/v1/workspaces/{id}",
     responses(
         (status = 200, description = "Get a notebook by ID", body = NotebookResponse),
         (status = 404, description = "Notebook not found")
@@ -67,13 +67,13 @@ pub(crate) async fn get_notebook(
                     None,
                     Uuid::parse_str(&nb.id).ok(),
                     serde_json::json!({
-                        "notebook_id": nb.id.clone(),
+                        "workspace_id": nb.id.clone(),
                     }),
                 )
                 .await;
             (
                 StatusCode::OK,
-                Json(contracts::notebooks::NotebookResponse { notebook: nb }),
+                Json(contracts::notebooks::NotebookResponse { workspace: nb }),
             )
                 .into_response()
         }
@@ -87,7 +87,7 @@ pub(crate) async fn get_notebook(
 
 #[utoipa::path(
     post,
-    path = "/api/v1/notebooks",
+    path = "/api/v1/workspaces",
     request_body = CreateNotebookRequest,
     responses(
         (status = 201, description = "Notebook created", body = NotebookResponse)
@@ -104,7 +104,7 @@ pub(crate) async fn create_notebook(
     match state.docs().create_notebook(req).await {
         Ok(nb) => (
             StatusCode::CREATED,
-            Json(contracts::notebooks::NotebookResponse { notebook: nb }),
+            Json(contracts::notebooks::NotebookResponse { workspace: nb }),
         )
             .into_response(),
         Err(e) => app_error_response(e),
@@ -113,7 +113,7 @@ pub(crate) async fn create_notebook(
 
 #[utoipa::path(
     put,
-    path = "/api/v1/notebooks/{id}",
+    path = "/api/v1/workspaces/{id}",
     request_body = UpdateNotebookRequest,
     responses(
         (status = 200, description = "Notebook updated", body = NotebookResponse),
@@ -138,7 +138,7 @@ pub(crate) async fn update_notebook(
     match state.docs().update_notebook(&id, req).await {
         Ok(nb) => (
             StatusCode::OK,
-            Json(contracts::notebooks::NotebookResponse { notebook: nb }),
+            Json(contracts::notebooks::NotebookResponse { workspace: nb }),
         )
             .into_response(),
         Err(e) => app_error_response(e),
@@ -147,7 +147,7 @@ pub(crate) async fn update_notebook(
 
 #[utoipa::path(
     delete,
-    path = "/api/v1/notebooks/{id}",
+    path = "/api/v1/workspaces/{id}",
     responses(
         (status = 200, description = "Notebook deleted"),
         (status = 404, description = "Notebook not found")

@@ -12,7 +12,7 @@ pub(crate) fn mcp_workspace_query_tools() -> Vec<Value> {
     query_tools()
 }
 
-fn notebook_id_property() -> Value {
+fn workspace_id_property() -> Value {
     json!({
         "type": "string",
         "description": "Workspace (notebook) UUID"
@@ -51,9 +51,9 @@ fn ingest_tools() -> Vec<Value> {
             "description": "Start a file upload; PUT bytes to returned upload_url, then complete_upload.",
             "inputSchema": {
                 "type": "object",
-                "required": ["notebook_id", "filename", "mime_type", "file_size"],
+                "required": ["workspace_id", "filename", "mime_type", "file_size"],
                 "properties": {
-                    "notebook_id": notebook_id_property(),
+                    "workspace_id": workspace_id_property(),
                     "filename": { "type": "string" },
                     "mime_type": { "type": "string" },
                     "file_size": { "type": "integer", "minimum": 1 }
@@ -65,9 +65,9 @@ fn ingest_tools() -> Vec<Value> {
             "description": "Finalize a file upload after PUT to upload_url.",
             "inputSchema": {
                 "type": "object",
-                "required": ["notebook_id", "document_id"],
+                "required": ["workspace_id", "document_id"],
                 "properties": {
-                    "notebook_id": notebook_id_property(),
+                    "workspace_id": workspace_id_property(),
                     "document_id": { "type": "string" }
                 }
             }
@@ -77,9 +77,9 @@ fn ingest_tools() -> Vec<Value> {
             "description": "Poll document ingest/index status.",
             "inputSchema": {
                 "type": "object",
-                "required": ["notebook_id", "document_id"],
+                "required": ["workspace_id", "document_id"],
                 "properties": {
-                    "notebook_id": notebook_id_property(),
+                    "workspace_id": workspace_id_property(),
                     "document_id": { "type": "string" }
                 }
             }
@@ -89,9 +89,9 @@ fn ingest_tools() -> Vec<Value> {
             "description": "Add a URL source to a workspace for crawling and indexing.",
             "inputSchema": {
                 "type": "object",
-                "required": ["notebook_id", "url"],
+                "required": ["workspace_id", "url"],
                 "properties": {
-                    "notebook_id": notebook_id_property(),
+                    "workspace_id": workspace_id_property(),
                     "url": { "type": "string" }
                 }
             }
@@ -101,9 +101,9 @@ fn ingest_tools() -> Vec<Value> {
             "description": "List indexed sources in a workspace.",
             "inputSchema": {
                 "type": "object",
-                "required": ["notebook_id"],
+                "required": ["workspace_id"],
                 "properties": {
-                    "notebook_id": notebook_id_property()
+                    "workspace_id": workspace_id_property()
                 }
             }
         }),
@@ -117,9 +117,9 @@ fn query_tools() -> Vec<Value> {
             "description": "Run a notebook-scoped RAG query over indexed sources (codegen/SDK).",
             "inputSchema": {
                 "type": "object",
-                "required": ["notebook_id", "query"],
+                "required": ["workspace_id", "query"],
                 "properties": {
-                    "notebook_id": notebook_id_property(),
+                    "workspace_id": workspace_id_property(),
                     "query": { "type": "string" },
                     "doc_scope": {
                         "type": "array",
@@ -133,9 +133,9 @@ fn query_tools() -> Vec<Value> {
             "description": "Run a notebook-scoped web search agent (native web_search tools).",
             "inputSchema": {
                 "type": "object",
-                "required": ["notebook_id", "query"],
+                "required": ["workspace_id", "query"],
                 "properties": {
-                    "notebook_id": notebook_id_property(),
+                    "workspace_id": workspace_id_property(),
                     "query": { "type": "string" }
                 }
             }
@@ -145,9 +145,9 @@ fn query_tools() -> Vec<Value> {
             "description": "Legacy alias for workspace.rag_query.",
             "inputSchema": {
                 "type": "object",
-                "required": ["notebook_id", "query"],
+                "required": ["workspace_id", "query"],
                 "properties": {
-                    "notebook_id": notebook_id_property(),
+                    "workspace_id": workspace_id_property(),
                     "query": { "type": "string" },
                     "agent_type": { "type": "string" },
                     "doc_scope": {
@@ -176,7 +176,7 @@ pub(crate) fn operation_guide_mode_for_tool(tool_name: &str) -> Option<&'static 
 
 pub(crate) fn success_result(
     tool: &str,
-    notebook_id: Option<&str>,
+    workspace_id: Option<&str>,
     data: Value,
     next_steps: Vec<&str>,
 ) -> Value {
@@ -186,7 +186,7 @@ pub(crate) fn success_result(
     json!({
         "ok": true,
         "tool": tool,
-        "notebook_id": notebook_id,
+        "workspace_id": workspace_id,
         "data": data,
         "agent_operation_guide": guide,
         "next_steps": next_steps,

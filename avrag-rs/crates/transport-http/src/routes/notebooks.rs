@@ -3,15 +3,10 @@ use axum::{Router, routing::get};
 
 use crate::handlers;
 
-/// Notebook / workspace product routes.
-///
-/// Dual-mount: `/notebooks/*` (legacy) and `/workspaces/*` (product name).
-/// Same handlers; JSON field is already `workspace_id` (with notebook_id alias).
+/// Workspace product routes (notebook path removed — product not launched).
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
-        .merge(workspace_scoped_router("/notebooks"))
         .merge(workspace_scoped_router("/workspaces"))
-        // Document/source/org surfaces are not under the workspace id path.
         .route("/documents", get(handlers::list_documents_handler))
         .route(
             "/documents/{document_id}",
@@ -55,7 +50,6 @@ pub(crate) fn router() -> Router<AppState> {
 }
 
 fn workspace_scoped_router(prefix: &str) -> Router<AppState> {
-    // `{id}` is the workspace/notebook id path segment.
     Router::new()
         .route(
             prefix,

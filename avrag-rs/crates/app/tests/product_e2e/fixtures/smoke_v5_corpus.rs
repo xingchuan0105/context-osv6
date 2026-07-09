@@ -46,7 +46,7 @@ fn smoke_v5_ingest_timeout_secs(base: u64) -> u64 {
 pub struct SmokeV5CorpusState {
     pub org_id: String,
     pub user_id: String,
-    pub notebook_id: String,
+    pub workspace_id: String,
     pub documents: Vec<SmokeV5Document>,
 }
 
@@ -262,7 +262,7 @@ async fn ingest_smoke_v5_corpus(ctx: &mut TestContext) -> SmokeV5CorpusState {
     SmokeV5CorpusState {
         org_id: DEFAULT_TEST_ORG_ID.to_string(),
         user_id: DEFAULT_TEST_USER_ID.to_string(),
-        notebook_id: notebook.id,
+        workspace_id: notebook.id,
         documents,
     }
 }
@@ -297,8 +297,8 @@ async fn ensure_smoke_v5_corpus(ctx: &mut TestContext) -> SmokeV5CorpusState {
     if let Some(state) = load_smoke_v5_state() {
         if validate_smoke_v5_corpus(ctx, &state).await {
             eprintln!(
-                "[smoke_v5] reusing cached corpus (notebook_id={}, {} docs)",
-                state.notebook_id,
+                "[smoke_v5] reusing cached corpus (workspace_id={}, {} docs)",
+                state.workspace_id,
                 state.documents.len()
             );
             return state;

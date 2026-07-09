@@ -23,7 +23,7 @@ async fn rag_auto_fallback_when_codegen_skipped() {
     let http_resp: HttpResponse = ctx
         .chat(
             "What is antifragility?",
-            &upload.notebook_id,
+            &upload.workspace_id,
             &[upload.document_id.clone()],
         )
         .await

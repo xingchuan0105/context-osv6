@@ -10,7 +10,7 @@ impl ShareService {
     async fn record_share_event(
         &self,
         ctx: &AuthContext,
-        notebook_id: &str,
+        workspace_id: &str,
         event_name: analytics::ProductEventName,
         metadata: serde_json::Value,
     ) {
@@ -22,7 +22,7 @@ impl ShareService {
             event_time: chrono::Utc::now(),
             user_id,
             session_id: None,
-            notebook_id: Uuid::parse_str(notebook_id).ok(),
+            workspace_id: Uuid::parse_str(workspace_id).ok(),
             surface: analytics::Surface::Settings,
             event_name,
             result: analytics::ResultTag::Success,
@@ -39,13 +39,13 @@ impl ShareService {
     pub async fn get_share_settings(
         &self,
         ctx: &AuthContext,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> Result<ShareSettings> {
-        let access = self.check_access(ctx, notebook_id).await?;
+        let access = self.check_access(ctx, workspace_id).await?;
         if access == AccessLevel::None {
             bail!("insufficient permission to view share settings");
         }
-        let notebook_uuid = Uuid::parse_str(notebook_id)?;
+        let notebook_uuid = Uuid::parse_str(workspace_id)?;
         let (access_level, allow_download, share_tokens) =
             self.store.get_share_settings(ctx, notebook_uuid).await?;
         Ok(ShareSettings {
@@ -62,7 +62,7 @@ impl ShareService {
                 })
                 .collect(),
             members: self
-                .list_members(ctx, notebook_id)
+                .list_members(ctx, workspace_id)
                 .await?
                 .into_iter()
                 .collect(),
@@ -72,10 +72,10 @@ impl ShareService {
     pub async fn update_access_level(
         &self,
         ctx: &AuthContext,
-        notebook_id: &str,
+        workspace_id: &str,
         access_level: &str,
     ) -> Result<String> {
-        let access = self.check_access(ctx, notebook_id).await?;
+        let access = self.check_access(ctx, workspace_id).await?;
         if !access.allows_share_management() {
             bail!("insufficient permission to update access level");
         }
@@ -84,7 +84,7 @@ impl ShareService {
             _ => bail!("invalid access level"),
         };
         self.store
-            .update_notebook_access_level(ctx, Uuid::parse_str(notebook_id)?, normalized)
+            .update_notebook_access_level(ctx, Uuid::parse_str(workspace_id)?, normalized)
             .await?;
         Ok(normalized.to_string())
     }
@@ -92,11 +92,11 @@ impl ShareService {
     pub async fn update_share_settings(
         &self,
         ctx: &AuthContext,
-        notebook_id: &str,
+        workspace_id: &str,
         access_level: Option<&str>,
         allow_download: Option<bool>,
     ) -> Result<ShareSettings> {
-        let access = self.check_access(ctx, notebook_id).await?;
+        let access = self.check_access(ctx, workspace_id).await?;
         if !access.allows_share_management() {
             bail!("insufficient permission to update share settings");
         }
@@ -111,23 +111,23 @@ impl ShareService {
         self.store
             .update_share_settings(
                 ctx,
-                Uuid::parse_str(notebook_id)?,
+                Uuid::parse_str(workspace_id)?,
                 normalized_access_level.as_deref(),
                 allow_download,
             )
             .await?;
-        self.get_share_settings(ctx, notebook_id).await
+        self.get_share_settings(ctx, workspace_id).await
     }
 
     pub async fn create_share_token(
         &self,
         ctx: &AuthContext,
-        notebook_id: &str,
+        workspace_id: &str,
         access_level: AccessLevel,
         expires_in_secs: Option<i64>,
     ) -> Result<String> {
         if !self
-            .check_access(ctx, notebook_id)
+            .check_access(ctx, workspace_id)
             .await?
             .allows_share_management()
         {
@@ -138,14 +138,14 @@ impl ShareService {
             .store
             .create_share_token(
                 ctx,
-                Uuid::parse_str(notebook_id)?,
+                Uuid::parse_str(workspace_id)?,
                 access_level.into(),
                 expires_at,
             )
             .await?;
         self.record_share_event(
             ctx,
-            notebook_id,
+            workspace_id,
             analytics::ProductEventName::ShareLinkCreated,
             serde_json::json!({
                 "access_level": access_level.as_db(),
@@ -161,15 +161,15 @@ impl ShareService {
             .store
             .validate_token(token)
             .await?
-            .map(|(notebook_id, level)| (notebook_id.to_string(), level.into())))
+            .map(|(workspace_id, level)| (workspace_id.to_string(), level.into())))
     }
 
     pub async fn revoke_token(&self, ctx: &AuthContext, token: &str) -> Result<()> {
-        let Some((notebook_id, _)) = self.validate_token(token).await? else {
+        let Some((workspace_id, _)) = self.validate_token(token).await? else {
             return Ok(());
         };
         if !self
-            .check_access(ctx, &notebook_id)
+            .check_access(ctx, &workspace_id)
             .await?
             .allows_share_management()
         {
@@ -178,7 +178,7 @@ impl ShareService {
         let _ = self.store.revoke_token(ctx, token).await?;
         self.record_share_event(
             ctx,
-            &notebook_id,
+            &workspace_id,
             analytics::ProductEventName::ShareLinkDisabled,
             serde_json::json!({ "token": token }),
         )
@@ -189,10 +189,10 @@ impl ShareService {
     pub async fn get_share_analytics(
         &self,
         ctx: &AuthContext,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> Result<Vec<ShareAnalytics>> {
         if !self
-            .check_access(ctx, notebook_id)
+            .check_access(ctx, workspace_id)
             .await?
             .allows_share_management()
         {
@@ -200,7 +200,7 @@ impl ShareService {
         }
         Ok(self
             .store
-            .get_share_analytics(ctx, Uuid::parse_str(notebook_id)?)
+            .get_share_analytics(ctx, Uuid::parse_str(workspace_id)?)
             .await?
             .into_iter()
             .map(|entry| ShareAnalytics {

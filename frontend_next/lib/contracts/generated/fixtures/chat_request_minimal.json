@@ -3,10 +3,10 @@
   "debug": false,
   "doc_scope": [],
   "messages": [],
-  "notebook_id": null,
   "query": "hello",
   "session_id": null,
   "source_token": null,
   "source_type": null,
-  "stream": false
+  "stream": false,
+  "workspace_id": null
 }

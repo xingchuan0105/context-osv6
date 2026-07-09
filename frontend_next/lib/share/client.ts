@@ -137,7 +137,7 @@ export function isShareEnabled(settings: ShareSettings | null) {
 
 export async function getShareSettings(token: string, workspaceId: string) {
   const raw = await request<RawShareSettings>(
-    `/api/v1/notebooks/${workspaceId}/share/settings`,
+    `/api/v1/workspaces/${workspaceId}/share/settings`,
     { method: "GET" },
     token,
   );
@@ -151,7 +151,7 @@ export async function updateShareSettings(
   settings: Pick<ShareSettings, "access_level" | "allow_download">,
 ) {
   const raw = await request<RawShareSettings>(
-    `/api/v1/notebooks/${workspaceId}/share/settings`,
+    `/api/v1/workspaces/${workspaceId}/share/settings`,
     {
       method: "PUT",
       body: JSON.stringify(settings),
@@ -171,7 +171,7 @@ export async function createShareLink(
   },
 ) {
   return request<{ share_token: string }>(
-    `/api/v1/notebooks/${workspaceId}/share`,
+    `/api/v1/workspaces/${workspaceId}/share`,
     {
       method: "POST",
       body: JSON.stringify(requestBody),
@@ -182,7 +182,7 @@ export async function createShareLink(
 
 export async function revokeShareLink(token: string, workspaceId: string, shareToken: string) {
   await request<Record<string, never>>(
-    `/api/v1/notebooks/${workspaceId}/share/${shareToken}`,
+    `/api/v1/workspaces/${workspaceId}/share/${shareToken}`,
     { method: "DELETE" },
     token,
   );
@@ -190,7 +190,7 @@ export async function revokeShareLink(token: string, workspaceId: string, shareT
 
 export async function getShareAnalytics(token: string, workspaceId: string) {
   const envelope = await request<ApiEnvelope<RawShareAnalytics[]>>(
-    `/api/v1/notebooks/${workspaceId}/share/analytics`,
+    `/api/v1/workspaces/${workspaceId}/share/analytics`,
     { method: "GET" },
     token,
   );
@@ -214,7 +214,7 @@ export async function getShareAnalytics(token: string, workspaceId: string) {
 
 export async function getShareAccessLogs(token: string, workspaceId: string) {
   const envelope = await request<ApiEnvelope<RawShareAccessLog[]>>(
-    `/api/v1/notebooks/${workspaceId}/share/access-logs`,
+    `/api/v1/workspaces/${workspaceId}/share/access-logs`,
     { method: "GET" },
     token,
   );
@@ -230,7 +230,7 @@ export async function getShareAccessLogs(token: string, workspaceId: string) {
 }
 
 export async function listMembers(token: string, workspaceId: string) {
-  return request<MembersResponse>(`/api/v1/notebooks/${workspaceId}/members`, { method: "GET" }, token);
+  return request<MembersResponse>(`/api/v1/workspaces/${workspaceId}/members`, { method: "GET" }, token);
 }
 
 export async function inviteMember(
@@ -240,7 +240,7 @@ export async function inviteMember(
   role: "viewer" | "editor",
 ) {
   await request<Record<string, never>>(
-    `/api/v1/notebooks/${workspaceId}/members/invite`,
+    `/api/v1/workspaces/${workspaceId}/members/invite`,
     {
       method: "POST",
       body: JSON.stringify({ email, role }),
@@ -251,7 +251,7 @@ export async function inviteMember(
 
 export async function removeMember(token: string, workspaceId: string, memberId: string) {
   await request<Record<string, never>>(
-    `/api/v1/notebooks/${workspaceId}/members/${memberId}`,
+    `/api/v1/workspaces/${workspaceId}/members/${memberId}`,
     { method: "DELETE" },
     token,
   );
@@ -259,7 +259,7 @@ export async function removeMember(token: string, workspaceId: string, memberId:
 
 export async function acceptInvite(token: string, workspaceId: string, memberId: string) {
   await request<Record<string, never>>(
-    `/api/v1/notebooks/${workspaceId}/members/${memberId}/accept`,
+    `/api/v1/workspaces/${workspaceId}/members/${memberId}/accept`,
     {
       method: "POST",
       body: JSON.stringify({}),
@@ -270,7 +270,7 @@ export async function acceptInvite(token: string, workspaceId: string, memberId:
 
 export async function declineInvite(token: string, workspaceId: string, memberId: string) {
   await request<Record<string, never>>(
-    `/api/v1/notebooks/${workspaceId}/members/${memberId}/decline`,
+    `/api/v1/workspaces/${workspaceId}/members/${memberId}/decline`,
     {
       method: "POST",
       body: JSON.stringify({}),

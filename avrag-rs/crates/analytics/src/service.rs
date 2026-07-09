@@ -22,7 +22,7 @@ impl AnalyticsService {
         sqlx::query(
             r#"
             insert into product_events (
-                event_id, event_time, event_date, user_id, session_id, notebook_id,
+                event_id, event_time, event_date, user_id, session_id, workspace_id,
                 surface, event_name, result, request_id, trace_id, client_platform, metadata
             ) values ($1, $2, date($2), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             "#,
@@ -31,7 +31,7 @@ impl AnalyticsService {
         .bind(event.event_time)
         .bind(event.user_id)
         .bind(event.session_id)
-        .bind(event.notebook_id)
+        .bind(event.workspace_id)
         .bind(enum_text(&event.surface)?)
         .bind(enum_text(&event.event_name)?)
         .bind(enum_text(&event.result)?)
@@ -48,7 +48,7 @@ impl AnalyticsService {
         sqlx::query(
             r#"
             insert into cost_events (
-                event_id, event_time, event_date, user_id, session_id, notebook_id,
+                event_id, event_time, event_date, user_id, session_id, workspace_id,
                 event_name, feature, provider, model, prompt_tokens, completion_tokens,
                 embedding_tokens, usage_units, storage_bytes_delta, external_call_count,
                 source, metadata
@@ -59,7 +59,7 @@ impl AnalyticsService {
         .bind(event.event_time)
         .bind(event.user_id)
         .bind(event.session_id)
-        .bind(event.notebook_id)
+        .bind(event.workspace_id)
         .bind(enum_text(&event.event_name)?)
         .bind(&event.feature)
         .bind(&event.provider)

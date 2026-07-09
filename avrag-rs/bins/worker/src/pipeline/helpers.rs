@@ -84,7 +84,7 @@ fn validate_temporary_mirror_path(local_path: &str) -> Result<()> {
 pub(crate) async fn mirror_document_asset(
     object_store: &ObjectStoreHandle,
     context: &AuthContext,
-    notebook_id: &str,
+    workspace_id: &str,
     document_id: &str,
     asset_id: Uuid,
     source_path: &str,
@@ -94,7 +94,7 @@ pub(crate) async fn mirror_document_asset(
     super::pg_side_effects::mirror_document_asset(
         object_store,
         context,
-        notebook_id,
+        workspace_id,
         document_id,
         asset_id,
         source_path,

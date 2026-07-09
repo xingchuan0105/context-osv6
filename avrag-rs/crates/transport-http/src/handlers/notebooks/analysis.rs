@@ -13,13 +13,13 @@ use crate::auth_guard::{ensure_user_notebook_access, require_user_session};
 
 fn pinned_source_count(
     preferences: &contracts::preferences::UserPreferences,
-    notebook_id: &str,
+    workspace_id: &str,
 ) -> i64 {
     preferences
         .dashboard
         .workspace_preferences
         .iter()
-        .find(|pref| pref.notebook_id == notebook_id)
+        .find(|pref| pref.workspace_id == workspace_id)
         .map(|pref| pref.pinned_source_ids.len() as i64)
         .unwrap_or(0)
 }
@@ -43,7 +43,7 @@ impl NotebookAnalysisCollector {
         &self,
         sources: &[common::Document],
         preferences: &contracts::preferences::UserPreferences,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> contracts::notebooks::NotebookAnalysisSources {
         let (mut ready, mut failed) = (0i64, 0i64);
         for source in sources {
@@ -54,7 +54,7 @@ impl NotebookAnalysisCollector {
             }
         }
         let processing = (sources.len() as i64) - ready - failed;
-        let pinned = pinned_source_count(preferences, notebook_id);
+        let pinned = pinned_source_count(preferences, workspace_id);
         contracts::notebooks::NotebookAnalysisSources {
             total: sources.len() as i64,
             ready,
@@ -99,15 +99,15 @@ impl NotebookAnalysisCollector {
     async fn collect_access(
         &self,
         state: &AppState,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> contracts::notebooks::NotebookAnalysisAccess {
-        let notebook_id = notebook_id.to_string();
+        let workspace_id = workspace_id.to_string();
         let (member_count, share_enabled, active_api_key_count) = tokio::join!(
-            async { state.share().share_member_count(&notebook_id).await },
-            async { state.share().share_enabled_for_notebook(&notebook_id).await },
+            async { state.share().share_member_count(&workspace_id).await },
+            async { state.share().share_enabled_for_notebook(&workspace_id).await },
             async {
                 state.admin_api()
-                    .list_api_keys(&notebook_id)
+                    .list_api_keys(&workspace_id)
                     .await
                     .map(|items| items.into_iter().filter(|k| k.is_active).count() as i64)
                     .unwrap_or(0)
@@ -163,7 +163,7 @@ impl NotebookAnalysisCollector {
 
 pub(crate) async fn get_notebook_analysis_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
 ) -> Response {
     if let Err(error) = require_user_session(
         state.auth(),
@@ -171,10 +171,10 @@ pub(crate) async fn get_notebook_analysis_handler(
     ) {
         return app_error_response(error);
     }
-    if let Err(error) = ensure_user_notebook_access(&state, &notebook_id).await {
+    if let Err(error) = ensure_user_notebook_access(&state, &workspace_id).await {
         return app_error_response(error);
     }
-    let Some(notebook) = state.docs().get_notebook(&notebook_id).await else {
+    let Some(notebook) = state.docs().get_notebook(&workspace_id).await else {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     };
 
@@ -182,10 +182,10 @@ pub(crate) async fn get_notebook_analysis_handler(
     let chat = state.chat();
     let prefs = state.prefs();
     let (sources, sessions, preferences, notes) = tokio::join!(
-        docs.list_documents(Some(&notebook_id), None),
-        chat.list_sessions(Some(&notebook_id)),
+        docs.list_documents(Some(&workspace_id), None),
+        chat.list_sessions(Some(&workspace_id)),
         prefs.current(),
-        load_notebook_notes(&state, &notebook_id),
+        load_notebook_notes(&state, &workspace_id),
     );
     let preferences = match preferences {
         Ok(preferences) => preferences,
@@ -198,10 +198,10 @@ pub(crate) async fn get_notebook_analysis_handler(
 
     let collector = NotebookAnalysisCollector;
     let overview = collector.collect_overview(&notebook);
-    let sources_summary = collector.collect_sources(&sources, &preferences, &notebook_id);
+    let sources_summary = collector.collect_sources(&sources, &preferences, &workspace_id);
     let threads = collector.collect_threads(&sessions);
     let notes_summary = collector.collect_notes(&notes);
-    let access = collector.collect_access(&state, &notebook_id).await;
+    let access = collector.collect_access(&state, &workspace_id).await;
     let alerts = collector.build_alerts(&sources_summary, &sessions, &notes, &notes_summary);
 
     (

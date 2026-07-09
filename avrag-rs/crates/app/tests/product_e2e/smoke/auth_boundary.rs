@@ -103,7 +103,7 @@ async fn chat_with_valid_org_but_no_user_id_is_accepted() {
     // means the request is treated as system-actor. This is intentional
     // for service-to-service calls and should NOT be rejected.
     //
-    // We need to send a structurally-valid request body (notebook_id +
+    // We need to send a structurally-valid request body (workspace_id +
     // valid agent_type) so the only thing under test is the auth
     // boundary. The chat handler may still 4xx for other reasons
     // (no doc_scope, etc.) — we just want to confirm it does NOT 500.
@@ -117,7 +117,7 @@ async fn chat_with_valid_org_but_no_user_id_is_accepted() {
             "query": "hi",
             "agent_type": "rag",
             "stream": false,
-            "notebook_id": "00000000-0000-0000-0000-000000000001",
+            "workspace_id": "00000000-0000-0000-0000-000000000001",
         }))
         .send()
         .await
@@ -151,7 +151,7 @@ async fn create_notebook_under_one_org_then_read_under_another_org_returns_404_o
     let resp = ctx_b
         .http_client
         .get(format!(
-            "{}/api/v1/notebooks/{}",
+            "{}/api/v1/workspaces/{}",
             ctx_b.base_url, notebook.id
         ))
         .send()

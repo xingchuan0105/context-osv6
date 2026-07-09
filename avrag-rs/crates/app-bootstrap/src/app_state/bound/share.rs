@@ -22,10 +22,10 @@ impl<'a> BoundShare<'a> {
     /// Lightweight share-token mint (legacy helper used by product tests / admin UI).
     pub async fn create_share_token(
         &self,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> Result<common::ShareTokenResponse, common::AppError> {
         self.docs
-            .get_notebook(self.auth, self.storage, notebook_id)
+            .get_notebook(self.auth, self.storage, workspace_id)
             .await
             .ok_or_else(|| {
                 common::AppError::not_found("notebook_not_found", "notebook not found")
@@ -37,14 +37,14 @@ impl<'a> BoundShare<'a> {
 
     pub async fn create_share_link(
         &self,
-        notebook_id: String,
+        workspace_id: String,
         access_level: avrag_share::AccessLevel,
         expires_in_secs: Option<i64>,
     ) -> Result<common::ShareTokenResponse, common::AppError> {
         let store = self.require_store()?;
         avrag_share::handle_create_share_link(
             self.auth.clone(),
-            notebook_id,
+            workspace_id,
             access_level,
             expires_in_secs,
             store,
@@ -59,22 +59,22 @@ impl<'a> BoundShare<'a> {
 
     pub async fn get_share_settings(
         &self,
-        notebook_id: String,
+        workspace_id: String,
     ) -> Result<avrag_share::ShareSettings, common::AppError> {
         let store = self.require_store()?;
-        avrag_share::handle_get_share_settings(self.auth.clone(), notebook_id, store).await
+        avrag_share::handle_get_share_settings(self.auth.clone(), workspace_id, store).await
     }
 
     pub async fn update_share_settings(
         &self,
-        notebook_id: String,
+        workspace_id: String,
         access_level: Option<String>,
         allow_download: Option<bool>,
     ) -> Result<avrag_share::ShareSettings, common::AppError> {
         let store = self.require_store()?;
         avrag_share::handle_update_share_settings(
             self.auth.clone(),
-            notebook_id,
+            workspace_id,
             access_level,
             allow_download,
             store,
@@ -84,13 +84,13 @@ impl<'a> BoundShare<'a> {
 
     pub async fn update_share_access_level(
         &self,
-        notebook_id: String,
+        workspace_id: String,
         access_level: String,
     ) -> Result<String, common::AppError> {
         let store = self.require_store()?;
         avrag_share::handle_update_access_level(
             self.auth.clone(),
-            notebook_id,
+            workspace_id,
             access_level,
             store,
         )
@@ -99,18 +99,18 @@ impl<'a> BoundShare<'a> {
 
     pub async fn get_share_analytics(
         &self,
-        notebook_id: String,
+        workspace_id: String,
     ) -> Result<Vec<avrag_share::ShareAnalytics>, common::AppError> {
         let store = self.require_store()?;
-        avrag_share::handle_get_share_analytics(self.auth.clone(), notebook_id, store).await
+        avrag_share::handle_get_share_analytics(self.auth.clone(), workspace_id, store).await
     }
 
     pub async fn get_share_access_logs(
         &self,
-        notebook_id: String,
+        workspace_id: String,
     ) -> Result<Vec<avrag_share::ShareAccessLog>, common::AppError> {
         let store = self.require_store()?;
-        avrag_share::handle_get_share_access_logs(self.auth.clone(), notebook_id, None, store)
+        avrag_share::handle_get_share_access_logs(self.auth.clone(), workspace_id, None, store)
             .await
     }
 
@@ -124,49 +124,49 @@ impl<'a> BoundShare<'a> {
 
     pub async fn list_share_members(
         &self,
-        notebook_id: String,
+        workspace_id: String,
     ) -> Result<Vec<avrag_share::NotebookMember>, common::AppError> {
         let store = self.require_store()?;
-        avrag_share::handle_list_members(self.auth.clone(), notebook_id, store).await
+        avrag_share::handle_list_members(self.auth.clone(), workspace_id, store).await
     }
 
     pub async fn invite_share_member(
         &self,
-        notebook_id: String,
+        workspace_id: String,
         email: String,
         role: avrag_share::AccessLevel,
     ) -> Result<(), common::AppError> {
         let store = self.require_store()?;
-        avrag_share::handle_invite_member(self.auth.clone(), notebook_id, email, role, store)
+        avrag_share::handle_invite_member(self.auth.clone(), workspace_id, email, role, store)
             .await
             .map(|_| ())
     }
 
     pub async fn accept_share_invite(
         &self,
-        notebook_id: String,
+        workspace_id: String,
         member_id: String,
     ) -> Result<(), common::AppError> {
         let store = self.require_store()?;
-        avrag_share::handle_accept_invite(self.auth.clone(), notebook_id, member_id, store).await
+        avrag_share::handle_accept_invite(self.auth.clone(), workspace_id, member_id, store).await
     }
 
     pub async fn decline_share_invite(
         &self,
-        notebook_id: String,
+        workspace_id: String,
         member_id: String,
     ) -> Result<(), common::AppError> {
         let store = self.require_store()?;
-        avrag_share::handle_decline_invite(self.auth.clone(), notebook_id, member_id, store).await
+        avrag_share::handle_decline_invite(self.auth.clone(), workspace_id, member_id, store).await
     }
 
     pub async fn remove_share_member(
         &self,
-        notebook_id: String,
+        workspace_id: String,
         member_id: String,
     ) -> Result<(), common::AppError> {
         let store = self.require_store()?;
-        avrag_share::handle_remove_member(self.auth.clone(), notebook_id, member_id, store).await
+        avrag_share::handle_remove_member(self.auth.clone(), workspace_id, member_id, store).await
     }
 
     pub async fn get_shared_notebook(
@@ -177,21 +177,21 @@ impl<'a> BoundShare<'a> {
         avrag_share::handle_get_shared_notebook(token, store).await
     }
 
-    pub async fn share_member_count(&self, notebook_id: &str) -> i64 {
+    pub async fn share_member_count(&self, workspace_id: &str) -> i64 {
         let Some(store) = self.storage.share_store() else {
             return 0;
         };
-        avrag_share::handle_list_members(self.auth.clone(), notebook_id.to_string(), store)
+        avrag_share::handle_list_members(self.auth.clone(), workspace_id.to_string(), store)
             .await
             .map(|members| members.len() as i64)
             .unwrap_or(0)
     }
 
-    pub async fn share_enabled_for_notebook(&self, notebook_id: &str) -> bool {
+    pub async fn share_enabled_for_notebook(&self, workspace_id: &str) -> bool {
         let Some(store) = self.storage.share_store() else {
             return false;
         };
-        avrag_share::handle_get_share_settings(self.auth.clone(), notebook_id.to_string(), store)
+        avrag_share::handle_get_share_settings(self.auth.clone(), workspace_id.to_string(), store)
             .await
             .map(|settings| {
                 settings
@@ -205,10 +205,10 @@ impl<'a> BoundShare<'a> {
 
     pub async fn resolve_share_chat_notebook_scope(&self, token: &str) -> Option<Uuid> {
         let store = self.storage.share_store()?;
-        let notebook_id = avrag_share::handle_validate_token(token, store)
+        let workspace_id = avrag_share::handle_validate_token(token, store)
             .await
             .ok()??;
-        Uuid::parse_str(&notebook_id).ok()
+        Uuid::parse_str(&workspace_id).ok()
     }
 }
 

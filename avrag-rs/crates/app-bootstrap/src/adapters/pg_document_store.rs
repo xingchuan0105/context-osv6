@@ -38,11 +38,11 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
     async fn get_notebook(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<Option<Notebook>, AppError> {
         self.repo
             .bootstrap()
-            .get_notebook(auth, notebook_id)
+            .get_notebook(auth, workspace_id)
             .await
             .map_err(map_pg_error)
     }
@@ -63,14 +63,14 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
     async fn update_notebook(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         name: Option<&str>,
         description: Option<&str>,
     ) -> Result<Option<Notebook>, AppError> {
         let current = self
             .repo
             .bootstrap()
-            .get_notebook(auth, notebook_id)
+            .get_notebook(auth, workspace_id)
             .await
             .map_err(map_pg_error)?;
         let Some(notebook) = current else {
@@ -80,7 +80,7 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
         let description = description.unwrap_or(notebook.description.as_str());
         self.repo
             .bootstrap()
-            .update_notebook(auth, notebook_id, name, description)
+            .update_notebook(auth, workspace_id, name, description)
             .await
             .map_err(map_pg_error)
     }
@@ -88,11 +88,11 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
     async fn delete_notebook(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<bool, AppError> {
         self.repo
             .bootstrap()
-            .delete_notebook(auth, notebook_id)
+            .delete_notebook(auth, workspace_id)
             .await
             .map_err(map_pg_error)
     }
@@ -113,11 +113,11 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
     async fn list_sources(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
     ) -> Result<Vec<SourceRow>, AppError> {
         self.repo
             .chunks()
-            .list_sources(auth, notebook_id)
+            .list_sources(auth, workspace_id)
             .await
             .map_err(map_pg_error)
     }
@@ -125,11 +125,11 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
     async fn list_documents(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         document_id: Option<Uuid>,
     ) -> Result<Vec<Document>, AppError> {
         self.repo
-            .list_documents(auth, notebook_id, document_id)
+            .list_documents(auth, workspace_id, document_id)
             .await
             .map_err(map_pg_error)
     }
@@ -137,14 +137,14 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
     async fn create_document(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         filename: &str,
         file_size: u64,
         mime_type: &str,
     ) -> Result<Document, AppError> {
         self.repo
             .bootstrap()
-            .create_document(auth, notebook_id, filename, file_size, mime_type)
+            .create_document(auth, workspace_id, filename, file_size, mime_type)
             .await
             .map_err(map_pg_error)
     }
@@ -210,12 +210,12 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
         auth: &AuthContext,
         document_id: Uuid,
         filename: Option<&str>,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         status: Option<DocumentStatus>,
     ) -> Result<bool, AppError> {
         self.repo
             .documents()
-            .update_document(auth, document_id, filename, notebook_id, status)
+            .update_document(auth, document_id, filename, workspace_id, status)
             .await
             .map_err(map_pg_error)
     }

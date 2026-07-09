@@ -139,7 +139,7 @@ mod tests {
     fn request_with_mode(agent_type: &str, doc_scope: Vec<String>) -> ChatRequest {
         ChatRequest {
             query: "test".to_string(),
-            notebook_id: Some("notebook-1".to_string()),
+            workspace_id: Some("notebook-1".to_string()),
             session_id: None,
             agent_type: agent_type.to_string(),
             source_type: None,
@@ -157,7 +157,7 @@ mod tests {
         let now = now_rfc3339();
         ChatSession {
             id: "session-1".to_string(),
-            notebook_id: "notebook-1".to_string(),
+            workspace_id: "notebook-1".to_string(),
             title: None,
             agent_type: agent_type.to_string(),
             pinned: false,
@@ -185,9 +185,9 @@ mod tests {
 
     #[tokio::test]
     async fn dispatch_rag_with_notebook_docscope_runs_rag_pipeline() {
-        let notebook_id = new_id();
+        let workspace_id = new_id();
         let notebook = Notebook {
-            id: notebook_id.clone(),
+            id: workspace_id.clone(),
             org_id: test_auth().org_id().to_string(),
             owner_id: Uuid::nil().to_string(),
             name: "Test Notebook".to_string(),
@@ -200,9 +200,9 @@ mod tests {
             shared: false,
         };
         let state = test_chat_context(Some(notebook.clone()));
-        let request = request_with_mode("rag", vec![notebook_id.clone()]);
+        let request = request_with_mode("rag", vec![workspace_id.clone()]);
         let mut session = session_for("rag");
-        session.notebook_id = notebook_id;
+        session.workspace_id = workspace_id;
 
         let execution = dispatch_mode(&state, &request, &session, None)
             .await

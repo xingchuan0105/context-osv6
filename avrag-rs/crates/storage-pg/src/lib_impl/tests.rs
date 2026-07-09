@@ -15,7 +15,7 @@ mod tests {
     async fn insert_test_document_block(
         repo: &PgAppRepository,
         org_id: Uuid,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         document_id: Uuid,
         block_id: &str,
     ) {
@@ -28,13 +28,13 @@ mod tests {
         sqlx::query(
             r#"
             insert into document_blocks (
-                org_id, notebook_id, document_id, block_id, page, block_type, modality,
+                org_id, workspace_id, document_id, block_id, page, block_type, modality,
                 text, parser_backend
             ) values ($1, $2, $3, $4, 1, 'paragraph', 'text', 'block text', 'test')
             "#,
         )
         .bind(org_id)
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(document_id)
         .bind(block_id)
         .execute(tx.as_mut())
@@ -86,18 +86,18 @@ mod tests {
             .bootstrap().create_notebook(&ctx, "ir tenant scope notebook", "ir tenant scope")
             .await
             .unwrap();
-        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+        let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
         let document = repo
-            .bootstrap().create_document(&ctx, notebook_id, "ir-tenant-scope.txt", 42, "text/plain")
+            .bootstrap().create_document(&ctx, workspace_id, "ir-tenant-scope.txt", 42, "text/plain")
             .await
             .unwrap();
         let document_id = Uuid::parse_str(&document.id).unwrap();
-        let other_notebook_id = Uuid::new_v4();
+        let other_workspace_id = Uuid::new_v4();
 
         insert_test_document_block(
             &repo,
             owner_org_uuid,
-            notebook_id,
+            workspace_id,
             document_id,
             "owner-clear-block",
         )
@@ -105,7 +105,7 @@ mod tests {
         insert_test_document_block(
             &repo,
             other_org_uuid,
-            other_notebook_id,
+            other_workspace_id,
             document_id,
             "other-clear-block",
         )
@@ -128,7 +128,7 @@ mod tests {
         insert_test_document_block(
             &repo,
             owner_org_uuid,
-            notebook_id,
+            workspace_id,
             document_id,
             "owner-replace-block",
         )
@@ -149,7 +149,7 @@ mod tests {
             metadata_json: serde_json::json!({}),
         };
 
-        repo.documents().replace_document_blocks(&ctx, notebook_id, document_id, &[replacement])
+        repo.documents().replace_document_blocks(&ctx, workspace_id, document_id, &[replacement])
             .await
             .unwrap();
 
@@ -292,9 +292,9 @@ mod tests {
             .bootstrap().create_notebook(&ctx, "soft delete test notebook", "soft delete test")
             .await
             .unwrap();
-        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+        let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
         let document = repo
-            .bootstrap().create_document(&ctx, notebook_id, "delete-me.txt", 42, "text/plain")
+            .bootstrap().create_document(&ctx, workspace_id, "delete-me.txt", 42, "text/plain")
             .await
             .unwrap();
         let document_id = Uuid::parse_str(&document.id).unwrap();
@@ -345,7 +345,7 @@ mod tests {
             "dead_letter"
         );
         assert!(
-            repo.list_documents(&ctx, Some(notebook_id), Some(document_id))
+            repo.list_documents(&ctx, Some(workspace_id), Some(document_id))
                 .await
                 .unwrap()
                 .is_empty()
@@ -378,14 +378,14 @@ mod tests {
             )
             .await
             .unwrap();
-        let other_notebook_id = Uuid::parse_str(&other_notebook.id).unwrap();
+        let other_workspace_id = Uuid::parse_str(&other_notebook.id).unwrap();
         let notebook = repo
             .bootstrap().create_notebook(&ctx, "cleanup task test notebook", "cleanup task test")
             .await
             .unwrap();
-        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+        let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
         let document = repo
-            .bootstrap().create_document(&ctx, notebook_id, "cleanup-me.txt", 42, "text/plain")
+            .bootstrap().create_document(&ctx, workspace_id, "cleanup-me.txt", 42, "text/plain")
             .await
             .unwrap();
         let document_id = Uuid::parse_str(&document.id).unwrap();
@@ -402,7 +402,7 @@ mod tests {
             .unwrap()
             .expect("cleanup task should be claimed");
         assert_eq!(claimed.org_id, org_id.into_uuid());
-        assert_eq!(claimed.notebook_id, notebook_id);
+        assert_eq!(claimed.workspace_id, workspace_id);
         assert_eq!(claimed.document_id, document_id);
         let lock_token = claimed.lock_token.expect("claim must return lock token");
         assert!(
@@ -463,13 +463,13 @@ mod tests {
         sqlx::query(
             r#"
             insert into document_parse_runs (
-                run_id, org_id, notebook_id, document_id, status, backend_summary, artifact_path
+                run_id, org_id, workspace_id, document_id, status, backend_summary, artifact_path
             ) values ($1, $2, $3, $4, 'running', $5, $6)
             "#,
         )
         .bind(parse_run_id)
         .bind(org_id.into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(document_id)
         .bind(serde_json::json!({"test": true}))
         .bind("artifact/key")
@@ -491,14 +491,14 @@ mod tests {
         sqlx::query(
             r#"
             insert into document_assets (
-                asset_id, org_id, notebook_id, document_id, page, asset_kind,
+                asset_id, org_id, workspace_id, document_id, page, asset_kind,
                 storage_path, mime_type, parser_backend, parse_run_id
             ) values ($1, $2, $3, $4, 1, 'image', 'safe/asset.png', 'image/png', 'test', $5)
             "#,
         )
         .bind(Uuid::new_v4())
         .bind(org_id.into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(document_id)
         .bind(parse_run_id)
         .execute(repo.raw())
@@ -507,13 +507,13 @@ mod tests {
         sqlx::query(
             r#"
             insert into document_blocks (
-                org_id, notebook_id, document_id, block_id, page, block_type, modality,
+                org_id, workspace_id, document_id, block_id, page, block_type, modality,
                 text, parser_backend, parse_run_id
             ) values ($1, $2, $3, 'block-1', 1, 'paragraph', 'text', 'block text', 'test', $4)
             "#,
         )
         .bind(org_id.into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(document_id)
         .bind(parse_run_id)
         .execute(repo.raw())
@@ -522,14 +522,14 @@ mod tests {
         sqlx::query(
             r#"
             insert into document_multimodal_chunks (
-                chunk_id, org_id, notebook_id, document_id, page, context_text,
+                chunk_id, org_id, workspace_id, document_id, page, context_text,
                 normalized_text, parser_backend, parse_run_id
             ) values ($1, $2, $3, $4, 1, 'context', 'normalized', 'test', $5)
             "#,
         )
         .bind(Uuid::new_v4())
         .bind(org_id.into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(document_id)
         .bind(parse_run_id)
         .execute(repo.raw())
@@ -540,13 +540,13 @@ mod tests {
         sqlx::query(
             r#"
             insert into document_parse_runs (
-                run_id, org_id, notebook_id, document_id, status, backend_summary
+                run_id, org_id, workspace_id, document_id, status, backend_summary
             ) values ($1, $2, $3, $4, 'completed', '{}'::jsonb)
             "#,
         )
         .bind(wrong_parse_run_id)
         .bind(other_org_id.into_uuid())
-        .bind(other_notebook_id)
+        .bind(other_workspace_id)
         .bind(document_id)
         .execute(repo.raw())
         .await
@@ -566,14 +566,14 @@ mod tests {
         sqlx::query(
             r#"
             insert into document_assets (
-                asset_id, org_id, notebook_id, document_id, page, asset_kind,
+                asset_id, org_id, workspace_id, document_id, page, asset_kind,
                 storage_path, mime_type, parser_backend, parse_run_id
             ) values ($1, $2, $3, $4, 1, 'image', 'wrong/asset.png', 'image/png', 'test', $5)
             "#,
         )
         .bind(Uuid::new_v4())
         .bind(other_org_id.into_uuid())
-        .bind(other_notebook_id)
+        .bind(other_workspace_id)
         .bind(document_id)
         .bind(wrong_parse_run_id)
         .execute(repo.raw())
@@ -582,13 +582,13 @@ mod tests {
         sqlx::query(
             r#"
             insert into document_blocks (
-                org_id, notebook_id, document_id, block_id, page, block_type, modality,
+                org_id, workspace_id, document_id, block_id, page, block_type, modality,
                 text, parser_backend, parse_run_id
             ) values ($1, $2, $3, 'wrong-block-1', 1, 'paragraph', 'text', 'wrong block', 'test', $4)
             "#,
         )
         .bind(other_org_id.into_uuid())
-        .bind(other_notebook_id)
+        .bind(other_workspace_id)
         .bind(document_id)
         .bind(wrong_parse_run_id)
         .execute(repo.raw())
@@ -597,14 +597,14 @@ mod tests {
         sqlx::query(
             r#"
             insert into document_multimodal_chunks (
-                chunk_id, org_id, notebook_id, document_id, page, context_text,
+                chunk_id, org_id, workspace_id, document_id, page, context_text,
                 normalized_text, parser_backend, parse_run_id
             ) values ($1, $2, $3, $4, 1, 'wrong context', 'wrong normalized', 'test', $5)
             "#,
         )
         .bind(Uuid::new_v4())
         .bind(other_org_id.into_uuid())
-        .bind(other_notebook_id)
+        .bind(other_workspace_id)
         .bind(document_id)
         .bind(wrong_parse_run_id)
         .execute(repo.raw())
@@ -697,23 +697,23 @@ mod tests {
             )
             .await
             .unwrap();
-        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+        let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
         let document = repo
-            .bootstrap().create_document(&ctx, notebook_id, "active.txt", 42, "text/plain")
+            .bootstrap().create_document(&ctx, workspace_id, "active.txt", 42, "text/plain")
             .await
             .unwrap();
         let document_id = Uuid::parse_str(&document.id).unwrap();
         sqlx::query(
             r#"
             insert into document_assets (
-                asset_id, org_id, notebook_id, document_id, page, asset_kind,
+                asset_id, org_id, workspace_id, document_id, page, asset_kind,
                 storage_path, mime_type, parser_backend
             ) values ($1, $2, $3, $4, 1, 'image', 'must/not/delete.png', 'image/png', 'test')
             "#,
         )
         .bind(Uuid::new_v4())
         .bind(org_id.into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(document_id)
         .execute(repo.raw())
         .await
@@ -991,12 +991,12 @@ mod tests {
             .bootstrap().create_notebook(&ctx, "tool-results-test", "tool results test")
             .await
             .unwrap();
-        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+        let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
 
         let session = repo
             .sessions().create_session(
                 &ctx,
-                notebook_id,
+                workspace_id,
                 Some("test-session-title"),
                 "rag",
             )
@@ -1079,9 +1079,9 @@ mod tests {
             .bootstrap().create_notebook(&ctx, "turn-metadata-test", "turn metadata test")
             .await
             .unwrap();
-        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+        let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
         let session = repo
-            .sessions().create_session(&ctx, notebook_id, Some("meta-session"), "rag")
+            .sessions().create_session(&ctx, workspace_id, Some("meta-session"), "rag")
             .await
             .unwrap();
         let session_id = Uuid::parse_str(&session.id).unwrap();
@@ -1153,15 +1153,15 @@ mod tests {
             .bootstrap().create_notebook(&ctx, "memory-search", "memory search test")
             .await
             .unwrap();
-        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+        let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
 
         let session_a = repo
-            .sessions().create_session(&ctx, notebook_id, Some("session-a"), "rag")
+            .sessions().create_session(&ctx, workspace_id, Some("session-a"), "rag")
             .await
             .unwrap();
         let session_a_id = Uuid::parse_str(&session_a.id).unwrap();
         let session_b = repo
-            .sessions().create_session(&ctx, notebook_id, Some("session-b"), "rag")
+            .sessions().create_session(&ctx, workspace_id, Some("session-b"), "rag")
             .await
             .unwrap();
         let session_b_id = Uuid::parse_str(&session_b.id).unwrap();
@@ -1251,10 +1251,10 @@ mod tests {
             .bootstrap().create_notebook(&ctx, "session-search", "session search test")
             .await
             .unwrap();
-        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+        let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
 
         let session = repo
-            .sessions().create_session(&ctx, notebook_id, Some("generic title"), "rag")
+            .sessions().create_session(&ctx, workspace_id, Some("generic title"), "rag")
             .await
             .unwrap();
         let session_id = Uuid::parse_str(&session.id).unwrap();
@@ -1303,15 +1303,15 @@ mod tests {
             .bootstrap().create_notebook(&ctx, "assistant-history", "assistant history test")
             .await
             .unwrap();
-        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+        let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
 
         let session_a = repo
-            .sessions().create_session(&ctx, notebook_id, Some("session-a"), "rag")
+            .sessions().create_session(&ctx, workspace_id, Some("session-a"), "rag")
             .await
             .unwrap();
         let session_a_id = Uuid::parse_str(&session_a.id).unwrap();
         let session_b = repo
-            .sessions().create_session(&ctx, notebook_id, Some("session-b"), "rag")
+            .sessions().create_session(&ctx, workspace_id, Some("session-b"), "rag")
             .await
             .unwrap();
         let session_b_id = Uuid::parse_str(&session_b.id).unwrap();
@@ -1389,9 +1389,9 @@ mod tests {
             .bootstrap().create_notebook(&ctx_a, "org-a notebook", "isolation test")
             .await
             .unwrap();
-        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+        let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
 
-        let fetched = repo.bootstrap().get_notebook(&ctx_b, notebook_id).await.unwrap();
+        let fetched = repo.bootstrap().get_notebook(&ctx_b, workspace_id).await.unwrap();
         assert!(
             fetched.is_none(),
             "org B must not read org A's notebook via get_notebook"

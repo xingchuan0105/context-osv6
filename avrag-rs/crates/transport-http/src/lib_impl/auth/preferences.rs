@@ -102,7 +102,7 @@ pub(crate) async fn auth_update_preferences_handler(
         );
     }
 
-    for (notebook_id, notes) in changed_workspace_drafts(&previous_preferences, &req) {
+    for (workspace_id, notes) in changed_workspace_drafts(&previous_preferences, &req) {
         let metadata = serde_json::json!({
             "notes_length": notes.chars().count(),
             "synced": true,
@@ -113,7 +113,7 @@ pub(crate) async fn auth_update_preferences_handler(
                 analytics::Surface::Workspace,
                 analytics::ResultTag::Success,
                 None,
-                uuid::Uuid::parse_str(&notebook_id).ok(),
+                uuid::Uuid::parse_str(&workspace_id).ok(),
                 metadata.clone(),
             )
             .await;
@@ -123,7 +123,7 @@ pub(crate) async fn auth_update_preferences_handler(
                 analytics::Surface::Workspace,
                 analytics::ResultTag::Success,
                 None,
-                uuid::Uuid::parse_str(&notebook_id).ok(),
+                uuid::Uuid::parse_str(&workspace_id).ok(),
                 metadata,
             )
             .await;
@@ -250,24 +250,24 @@ fn changed_workspace_drafts(
         .dashboard
         .workspace_drafts
         .iter()
-        .map(|draft| (draft.notebook_id.clone(), draft.notes.clone()))
+        .map(|draft| (draft.workspace_id.clone(), draft.notes.clone()))
         .collect::<std::collections::BTreeMap<_, _>>();
     let next_map = next
         .dashboard
         .workspace_drafts
         .iter()
-        .map(|draft| (draft.notebook_id.clone(), draft.notes.clone()))
+        .map(|draft| (draft.workspace_id.clone(), draft.notes.clone()))
         .collect::<std::collections::BTreeMap<_, _>>();
 
-    let mut notebook_ids = previous_map.keys().cloned().collect::<std::collections::BTreeSet<_>>();
-    notebook_ids.extend(next_map.keys().cloned());
+    let mut workspace_ids = previous_map.keys().cloned().collect::<std::collections::BTreeSet<_>>();
+    workspace_ids.extend(next_map.keys().cloned());
 
-    notebook_ids
+    workspace_ids
         .into_iter()
-        .filter_map(|notebook_id| {
-            let before = previous_map.get(&notebook_id).cloned().unwrap_or_default();
-            let after = next_map.get(&notebook_id).cloned().unwrap_or_default();
-            (before != after).then_some((notebook_id, after))
+        .filter_map(|workspace_id| {
+            let before = previous_map.get(&workspace_id).cloned().unwrap_or_default();
+            let after = next_map.get(&workspace_id).cloned().unwrap_or_default();
+            (before != after).then_some((workspace_id, after))
         })
         .collect()
 }

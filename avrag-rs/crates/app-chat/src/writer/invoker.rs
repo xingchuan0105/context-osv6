@@ -30,7 +30,7 @@ impl SubagentInvoker {
         AgentRequest {
             kind,
             query: query.to_string(),
-            notebook_id: parent.notebook_id.clone(),
+            workspace_id: parent.workspace_id.clone(),
             session_id: parent.session_id.clone(),
             doc_scope: parent.doc_scope.clone(),
             messages: Vec::new(),

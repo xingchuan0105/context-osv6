@@ -132,7 +132,7 @@ async fn real_llm_rag_bundled_pdf_corpus_query() {
     let result = chat_with_citations_retry_attempts(
         &ctx,
         "According to the uploaded PDF, what is LiteParse and how is it used? Cite the document.",
-        &upload.notebook_id,
+        &upload.workspace_id,
         &[upload.document_id.clone()],
         REAL_LLM_MULTITOOL_MAX_ATTEMPTS,
     )
@@ -260,7 +260,7 @@ async fn real_llm_rag_staging_local_book_pdf() {
     let result = chat_with_retry(
         &ctx,
         "Summarize the author and a core idea from an early section, with citations.",
-        &upload.notebook_id,
+        &upload.workspace_id,
         &[upload.document_id.clone()],
     )
     .await;

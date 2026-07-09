@@ -11,7 +11,7 @@ use super::catalog;
 use super::gateway;
 
 pub(crate) async fn compat_mcp_sse_handler(
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
     let request_id = state
@@ -24,10 +24,10 @@ pub(crate) async fn compat_mcp_sse_handler(
         "method": "ready",
         "params": {
             "request_id": request_id,
-            "notebook_id": notebook_id,
+            "workspace_id": workspace_id,
             "deprecated": true,
             "tools": catalog::mcp_workspace_query_tools(),
-            "rpc_endpoint": format!("/mcp/notebooks/{notebook_id}"),
+            "rpc_endpoint": format!("/mcp/workspaces/{workspace_id}"),
             "preferred_rpc_endpoint": "/api/v1/mcp",
         }
     });
@@ -40,17 +40,17 @@ pub(crate) async fn compat_mcp_sse_handler(
 }
 
 pub(crate) async fn compat_mcp_jsonrpc_handler(
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
     Extension(RequestState(state)): Extension<RequestState>,
     body: Bytes,
 ) -> Response {
-    gateway::handle_mcp_jsonrpc(&state, Some(notebook_id), body).await
+    gateway::handle_mcp_jsonrpc(&state, Some(workspace_id), body).await
 }
 
 pub(crate) async fn compat_mcp_tool_call_handler(
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
     Extension(RequestState(state)): Extension<RequestState>,
     body: Bytes,
 ) -> Response {
-    gateway::legacy_mcp_tool_call_handler(&state, notebook_id, body).await
+    gateway::legacy_mcp_tool_call_handler(&state, workspace_id, body).await
 }

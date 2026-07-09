@@ -21,7 +21,7 @@ use uuid::Uuid;
 fn make_request(query: &str, agent_type: &str) -> ChatRequest {
     ChatRequest {
         query: query.to_string(),
-        notebook_id: None,
+        workspace_id: None,
         session_id: None,
         agent_type: agent_type.to_string(),
         source_type: None,

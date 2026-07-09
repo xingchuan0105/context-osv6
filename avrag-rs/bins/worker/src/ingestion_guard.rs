@@ -393,7 +393,7 @@ pub(crate) async fn process_document_cleanup_task(
     info!(
         task_id = %task.task_id,
         org_id = %targets.org_id,
-        notebook_id = %targets.notebook_id,
+        workspace_id = %targets.workspace_id,
         document_id = %targets.document_id,
         status = ?targets.status,
         "document cleanup succeeded"

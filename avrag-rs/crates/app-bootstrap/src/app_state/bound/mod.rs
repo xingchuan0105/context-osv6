@@ -25,7 +25,7 @@ use super::AppState;
 pub struct WorkspaceApiKeyAuth {
     pub key_id: Uuid,
     pub org_id: OrgId,
-    pub notebook_id: Option<Uuid>,
+    pub workspace_id: Option<Uuid>,
     pub permissions: Vec<String>,
     pub rate_limit_rpm: u32,
 }

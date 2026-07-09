@@ -4,16 +4,14 @@ use typeshare::typeshare;
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkspaceDraftPreference {
-    #[serde(rename = "workspace_id", alias = "notebook_id")]
-    pub notebook_id: String,
+    pub workspace_id: String,
     pub notes: String,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct NotebookWorkspacePreference {
-    #[serde(rename = "workspace_id", alias = "notebook_id")]
-    pub notebook_id: String,
+    pub workspace_id: String,
     #[serde(default)]
     pub pinned_source_ids: Vec<String>,
 }
@@ -22,8 +20,7 @@ pub struct NotebookWorkspacePreference {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NotebookNotePreference {
     pub note_id: String,
-    #[serde(rename = "workspace_id", alias = "notebook_id")]
-    pub notebook_id: String,
+    pub workspace_id: String,
     pub title: String,
     pub content: String,
     pub created_at: String,
@@ -38,7 +35,7 @@ pub struct NotebookNotePreference {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct DashboardPreferences {
     #[serde(default)]
-    pub favorite_notebook_ids: Vec<String>,
+    pub favorite_workspace_ids: Vec<String>,
     #[serde(default)]
     pub workspace_drafts: Vec<WorkspaceDraftPreference>,
     #[serde(default)]

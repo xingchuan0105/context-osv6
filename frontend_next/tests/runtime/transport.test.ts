@@ -64,7 +64,7 @@ describe("transport runtime branches", () => {
 
     const { restRequest } = await import("../../lib/runtime/transport");
 
-    await restRequest("/api/v1/notebooks");
+    await restRequest("/api/v1/workspaces");
 
     expect(requestViaIPCMock).toHaveBeenCalledTimes(1);
     expect(authRequestMock).not.toHaveBeenCalled();
@@ -76,7 +76,7 @@ describe("transport runtime branches", () => {
 
     const { restRequest } = await import("../../lib/runtime/transport");
 
-    await restRequest("/api/v1/notebooks");
+    await restRequest("/api/v1/workspaces");
 
     expect(authRequestMock).toHaveBeenCalledTimes(1);
     expect(requestViaIPCMock).not.toHaveBeenCalled();

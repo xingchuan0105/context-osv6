@@ -255,8 +255,8 @@ async fn share_chat_notebook_scope_from_request(
     }
     let token = chat_request.source_token.as_deref()?;
     let notebook_scope = state.share().resolve_share_chat_notebook_scope(token).await?;
-    if let Some(notebook_id) = chat_request.notebook_id.as_deref()
-        && uuid::Uuid::parse_str(notebook_id).ok()? != notebook_scope
+    if let Some(workspace_id) = chat_request.workspace_id.as_deref()
+        && uuid::Uuid::parse_str(workspace_id).ok()? != notebook_scope
     {
         return None;
     }
@@ -329,8 +329,8 @@ async fn auth_from_bearer(state: &AppState, headers: &HeaderMap) -> Option<AuthC
     let mut ctx = AuthContext::new(validated.org_id, SubjectKind::ApiKey)
         .with_actor_id(ActorId::new(validated.key_id))
         .with_rate_limit_rpm(validated.rate_limit_rpm);
-    if let Some(notebook_id) = validated.notebook_id {
-        ctx = ctx.with_notebook_scope(notebook_id);
+    if let Some(workspace_id) = validated.workspace_id {
+        ctx = ctx.with_notebook_scope(workspace_id);
     }
     for perm in validated.permissions {
         ctx = ctx.grant(perm);
@@ -390,7 +390,7 @@ fn normalize_route(path: &str) -> &'static str {
         "/api/auth/usage-limit" => "/api/auth/usage-limit",
         "/api/auth/legal-acceptance" => "/api/auth/legal-acceptance",
         "/api/auth/legal-status" => "/api/auth/legal-status",
-        "/api/v1/notebooks" => "/api/v1/notebooks",
+        "/api/v1/workspaces" => "/api/v1/workspaces",
         "/api/v1/chat" => "/api/v1/chat",
         "/api/v1/mcp" => "/api/v1/mcp",
         "/api/v1/chat/sessions" => "/api/v1/chat/sessions",
@@ -403,15 +403,15 @@ fn normalize_route(path: &str) -> &'static str {
             "/api/v1/chat/sessions/:id/messages"
         }
         _ if path.starts_with("/api/v1/chat/sessions/") => "/api/v1/chat/sessions/:id",
-        _ if path.starts_with("/api/v1/notebooks/") => "/api/v1/notebooks/:id",
+        _ if path.starts_with("/api/v1/workspaces/") => "/api/v1/workspaces/:id",
         _ if path.starts_with("/api/shared/kb/") => "/api/shared/kb/:token",
         _ if path.starts_with("/dev-upload/") => "/dev-upload/:document_id",
         _ if path.starts_with("/uploads/") => "/uploads/:document_id",
-        _ if path.starts_with("/v1/notebooks/") => "/v1/notebooks/:id/chat/completions",
-        _ if path.starts_with("/mcp/notebooks/") && path.ends_with("/tools/call") => {
-            "/mcp/notebooks/:id/tools/call"
+        _ if path.starts_with("/v1/workspaces/") => "/v1/workspaces/:id/chat/completions",
+        _ if path.starts_with("/mcp/workspaces/") && path.ends_with("/tools/call") => {
+            "/mcp/workspaces/:id/tools/call"
         }
-        _ if path.starts_with("/mcp/notebooks/") => "/mcp/notebooks/:id",
+        _ if path.starts_with("/mcp/workspaces/") => "/mcp/workspaces/:id",
         _ => "other",
     }
 }

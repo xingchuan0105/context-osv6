@@ -20,7 +20,7 @@ async fn duplicate_upload_returns_same_document_id() {
 
     // 2. Second upload of the same file to the same notebook
     let upload2 = ctx
-        .upload_document_to_notebook("antifragile.txt", &upload1.notebook_id)
+        .upload_document_to_notebook("antifragile.txt", &upload1.workspace_id)
         .await
         .unwrap();
 

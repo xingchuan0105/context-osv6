@@ -18,7 +18,7 @@ pub trait DocumentStorePort: Send + Sync {
     async fn get_notebook(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<Option<Notebook>, AppError>;
 
     async fn create_notebook(
@@ -31,7 +31,7 @@ pub trait DocumentStorePort: Send + Sync {
     async fn update_notebook(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         name: Option<&str>,
         description: Option<&str>,
     ) -> Result<Option<Notebook>, AppError>;
@@ -39,7 +39,7 @@ pub trait DocumentStorePort: Send + Sync {
     async fn delete_notebook(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<bool, AppError>;
 
     async fn get_document_scope_states(
@@ -51,20 +51,20 @@ pub trait DocumentStorePort: Send + Sync {
     async fn list_sources(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
     ) -> Result<Vec<SourceRow>, AppError>;
 
     async fn list_documents(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         document_id: Option<Uuid>,
     ) -> Result<Vec<Document>, AppError>;
 
     async fn create_document(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         filename: &str,
         file_size: u64,
         mime_type: &str,
@@ -104,7 +104,7 @@ pub trait DocumentStorePort: Send + Sync {
         auth: &AuthContext,
         document_id: Uuid,
         filename: Option<&str>,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         status: Option<DocumentStatus>,
     ) -> Result<bool, AppError>;
 

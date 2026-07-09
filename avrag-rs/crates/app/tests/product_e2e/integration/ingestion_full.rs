@@ -28,7 +28,7 @@ async fn empty_document_ingests_with_zero_chunks_and_degrades() {
     let http_resp: HttpResponse = ctx
         .chat(
             "What is in this document?",
-            &upload.notebook_id,
+            &upload.workspace_id,
             &[upload.document_id.clone()],
         )
         .await

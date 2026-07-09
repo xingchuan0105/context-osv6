@@ -32,7 +32,7 @@ pub(crate) async fn stage_materialize_chunks_assets_profile(
     processor: &PgTaskProcessor,
     task: &IngestionTask,
     context: &AuthContext,
-    notebook_id: Uuid,
+    workspace_id: Uuid,
     document_id: Uuid,
     parse_run_id: Uuid,
     filename: &str,
@@ -70,7 +70,7 @@ pub(crate) async fn stage_materialize_chunks_assets_profile(
         processor,
         task,
         context,
-        notebook_id,
+        workspace_id,
         document_id,
         document_ir,
         filename,
@@ -82,7 +82,7 @@ pub(crate) async fn stage_materialize_chunks_assets_profile(
         processor,
         task,
         context,
-        notebook_id,
+        workspace_id,
         document_id,
         parse_run_id,
         document_ir,
@@ -94,7 +94,7 @@ pub(crate) async fn stage_materialize_chunks_assets_profile(
         processor,
         task,
         context,
-        notebook_id,
+        workspace_id,
         document_id,
         parse_run_id,
         &chunk_plan,
@@ -153,7 +153,7 @@ async fn persist_profile_and_toc(
     processor: &PgTaskProcessor,
     task: &IngestionTask,
     context: &AuthContext,
-    notebook_id: Uuid,
+    workspace_id: Uuid,
     document_id: Uuid,
     document_ir: &DocumentIr,
     filename: &str,
@@ -173,7 +173,7 @@ async fn persist_profile_and_toc(
         .await?;
         if let Err(error) = processor.storage.repo
             .bootstrap()
-            .replace_document_toc(context, notebook_id, document_id, &profile_result.toc_entries)
+            .replace_document_toc(context, workspace_id, document_id, &profile_result.toc_entries)
             .await
         {
             info!(document_id = %document_id, error = %error, "failed to write document toc");
@@ -215,7 +215,7 @@ async fn persist_document_assets(
     processor: &PgTaskProcessor,
     task: &IngestionTask,
     context: &AuthContext,
-    notebook_id: Uuid,
+    workspace_id: Uuid,
     document_id: Uuid,
     parse_run_id: Uuid,
     document_ir: &DocumentIr,
@@ -251,7 +251,7 @@ async fn persist_document_assets(
         asset_uuid_by_ref.insert(asset.asset_id.clone(), stored_asset_id);
         let stored_asset_object_key = build_asset_object_key(
             context,
-            &task.notebook_id,
+            &task.workspace_id,
             &task.document_id,
             stored_asset_id,
             &asset.storage_path,
@@ -260,7 +260,7 @@ async fn persist_document_assets(
         let stored_image_path = mirror_document_asset(
             &processor.storage.object_store,
             context,
-            &task.notebook_id,
+            &task.workspace_id,
             &task.document_id,
             stored_asset_id,
             &asset.storage_path,
@@ -293,7 +293,7 @@ async fn persist_document_assets(
                 context,
                 avrag_storage_pg::StoreDocumentAssetParams {
                     asset_id: stored_asset_id,
-                    notebook_id,
+                    workspace_id,
                     document_id,
                     parse_run_id: Some(parse_run_id),
                     page: asset.page.map(|page| page as i32),
@@ -322,7 +322,7 @@ async fn persist_multimodal_chunks(
     processor: &PgTaskProcessor,
     task: &IngestionTask,
     context: &AuthContext,
-    notebook_id: Uuid,
+    workspace_id: Uuid,
     document_id: Uuid,
     parse_run_id: Uuid,
     chunk_plan: &ingestion::chunker::IrChunkPlan,
@@ -371,7 +371,7 @@ async fn persist_multimodal_chunks(
                 context,
                 avrag_storage_pg::StoreMultimodalChunkParams {
                     chunk_id,
-                    notebook_id,
+                    workspace_id,
                     document_id,
                     parse_run_id: Some(parse_run_id),
                     asset_id: Some(asset_id),

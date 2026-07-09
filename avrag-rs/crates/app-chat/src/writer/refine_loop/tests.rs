@@ -130,7 +130,7 @@ fn test_parent_request() -> AgentRequest {
     AgentRequest {
         kind: AgentKind::Write,
         query: "test topic".to_string(),
-        notebook_id: None,
+        workspace_id: None,
         session_id: Some("test-session".to_string()),
         doc_scope: vec![],
         messages: vec![],

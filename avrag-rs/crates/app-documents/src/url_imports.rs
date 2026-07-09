@@ -18,7 +18,7 @@ impl DocumentContext {
         storage: &StorageContext,
         _billing: &BillingContext,
         analytics: &AnalyticsServiceCtx,
-        notebook_id: &str,
+        workspace_id: &str,
         req: AddUrlSourceRequest,
     ) -> Result<CreateDocumentUploadResponse, AppError> {
         let url = req.url.trim();
@@ -32,15 +32,15 @@ impl DocumentContext {
                 "document store port is required (wire MemoryDocumentStore or Pg adapter at bootstrap)",
             )
         })?;
-        let notebook_id =
-            parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
+        let workspace_id =
+            parse_uuid_or_app_error(workspace_id, "notebook_not_found", "notebook not found")?;
         let quota = storage.billing_quota().ok_or_else(|| {
             AppError::internal("billing quota port is required for url imports")
         })?;
         quota
             .ensure_storage_bytes_quota(auth, fetched.raw_bytes.len() as i64)
             .await?;
-        if !quota.notebook_exists(auth, notebook_id).await? {
+        if !quota.notebook_exists(auth, workspace_id).await? {
             return Err(AppError::not_found(
                 "notebook_not_found",
                 "notebook not found",
@@ -49,7 +49,7 @@ impl DocumentContext {
         let document = store
             .create_document(
                 auth,
-                notebook_id,
+                workspace_id,
                 &fetched.filename,
                 fetched.raw_bytes.len() as u64,
                 &fetched.mime_type,
@@ -79,7 +79,7 @@ impl DocumentContext {
             analytics::Surface::Workspace,
             analytics::ResultTag::Success,
             None,
-            Some(notebook_id),
+            Some(workspace_id),
             serde_json::json!({
                 "document_id": document.id.clone(),
                 "url": url,
@@ -94,7 +94,7 @@ impl DocumentContext {
             analytics,
             analytics::CostEventName::UploadBytesMetered,
             "upload",
-            Some(notebook_id),
+            Some(workspace_id),
             fetched.raw_bytes.len() as i64,
             "url_import",
             serde_json::json!({
@@ -115,12 +115,12 @@ impl DocumentContext {
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
-        notebook_id: Option<&str>,
+        workspace_id: Option<&str>,
     ) -> Vec<SourceRow> {
         let Some(store) = storage.document_store() else {
             return Vec::new();
         };
-        let notebook_uuid = notebook_id.and_then(|value| Uuid::parse_str(value).ok());
+        let notebook_uuid = workspace_id.and_then(|value| Uuid::parse_str(value).ok());
         store
             .list_sources(auth, notebook_uuid)
             .await

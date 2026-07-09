@@ -10,7 +10,7 @@ async fn missing_brave_key_is_explicit_error() {
     let executor = SearchExecutor::new(SearchConfig::default());
     let request = contracts::chat::ChatRequest {
         query: "test".to_string(),
-        notebook_id: None,
+        workspace_id: None,
         session_id: None,
         agent_type: "search".to_string(),
         source_type: None,
@@ -42,7 +42,7 @@ async fn unsupported_provider_is_explicit_error() {
     });
     let request = contracts::chat::ChatRequest {
         query: "test".to_string(),
-        notebook_id: None,
+        workspace_id: None,
         session_id: None,
         agent_type: "search".to_string(),
         source_type: None,
@@ -102,7 +102,7 @@ async fn brave_llm_context_live_smoke_returns_grounding_sources() {
     });
     let request = contracts::chat::ChatRequest {
         query: "What is the Brave Search LLM Context API?".to_string(),
-        notebook_id: None,
+        workspace_id: None,
         session_id: None,
         agent_type: "search".to_string(),
         source_type: None,

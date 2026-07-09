@@ -57,7 +57,7 @@ pub trait ContentStore: Send + Sync {
     async fn list_documents(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         document_id: Option<Uuid>,
     ) -> Result<Vec<Document>, ContentStoreError>;
 

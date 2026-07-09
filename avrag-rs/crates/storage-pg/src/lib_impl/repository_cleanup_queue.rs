@@ -56,7 +56,7 @@ impl IngestionQueueRepository {
                 updated_at = now()
             from next_task
             where dct.task_id = next_task.task_id
-            returning dct.task_id, dct.org_id, dct.notebook_id, dct.document_id, dct.requested_by,
+            returning dct.task_id, dct.org_id, dct.workspace_id, dct.document_id, dct.requested_by,
                       dct.idempotency_key, dct.payload, dct.lock_token,
                       dct.attempt_count, dct.max_attempts
             "#,

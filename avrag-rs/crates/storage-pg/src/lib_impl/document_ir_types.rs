@@ -3,7 +3,7 @@ use super::*;
 pub struct DocumentParseRunRow {
     pub run_id: Uuid,
     pub org_id: Uuid,
-    pub notebook_id: Uuid,
+    pub workspace_id: Uuid,
     pub document_id: Uuid,
     pub status: String,
     pub backend_summary: serde_json::Value,

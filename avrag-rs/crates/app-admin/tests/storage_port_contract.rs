@@ -90,7 +90,7 @@ impl AdminStorePort for RecordingAdminStore {
     async fn list_api_keys(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Option<Uuid>,
+        _workspace_id: Option<Uuid>,
     ) -> Result<Vec<ApiKeyRow>, AppError> {
         Ok(Vec::new())
     }
@@ -98,7 +98,7 @@ impl AdminStorePort for RecordingAdminStore {
     async fn create_api_key(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Option<Uuid>,
+        _workspace_id: Option<Uuid>,
         _name: &str,
         _permissions: &[String],
         _rate_limit_rpm: i32,
@@ -110,7 +110,7 @@ impl AdminStorePort for RecordingAdminStore {
     async fn revoke_api_key(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Option<Uuid>,
+        _workspace_id: Option<Uuid>,
         _key_id: Uuid,
     ) -> Result<bool, AppError> {
         Ok(false)
@@ -390,7 +390,7 @@ async fn memory_mode_preferences_round_trip_via_memory_admin_store() {
     let mut prefs = UserPreferences::default();
     prefs
         .dashboard
-        .favorite_notebook_ids
+        .favorite_workspace_ids
         .push("nb-contract-test".to_string());
 
     admin
@@ -402,7 +402,7 @@ async fn memory_mode_preferences_round_trip_via_memory_admin_store() {
         .await
         .unwrap();
     assert_eq!(
-        loaded.dashboard.favorite_notebook_ids,
+        loaded.dashboard.favorite_workspace_ids,
         vec!["nb-contract-test".to_string()]
     );
 }
@@ -420,7 +420,7 @@ async fn admin_store_port_is_used_when_wired() {
         .load_user_preferences(&auth, &storage, user_id)
         .await
         .unwrap();
-    assert!(prefs.dashboard.favorite_notebook_ids.is_empty());
+    assert!(prefs.dashboard.favorite_workspace_ids.is_empty());
     assert_eq!(
         reads.load(std::sync::atomic::Ordering::SeqCst),
         1,
@@ -433,13 +433,13 @@ async fn memory_mode_api_keys_use_in_memory_map() {
     let admin = AdminContext::new();
     let storage = memory_storage();
     let auth = test_auth();
-    let notebook_id = Uuid::new_v4().to_string();
+    let workspace_id = Uuid::new_v4().to_string();
 
     let created = admin
         .create_api_key(
             &auth,
             &storage,
-            &notebook_id,
+            &workspace_id,
             CreateApiKeyRequest {
                 name: "test-key".to_string(),
                 permissions: vec!["query".to_string()],
@@ -451,7 +451,7 @@ async fn memory_mode_api_keys_use_in_memory_map() {
         .unwrap();
 
     let listed = admin
-        .list_api_keys(&auth, &storage, &notebook_id)
+        .list_api_keys(&auth, &storage, &workspace_id)
         .await
         .unwrap();
     assert_eq!(listed.len(), 1);

@@ -38,11 +38,11 @@ impl ChatContext {
         (nb, sess, src)
     }
 
-    pub async fn list_sessions(&self, notebook_id: Option<&str>) -> Vec<ChatSession> {
+    pub async fn list_sessions(&self, workspace_id: Option<&str>) -> Vec<ChatSession> {
         let Ok(pg) = self.require_chat_persistence() else {
             return Vec::new();
         };
-        let notebook_uuid = notebook_id.and_then(|value| Uuid::parse_str(value).ok());
+        let notebook_uuid = workspace_id.and_then(|value| Uuid::parse_str(value).ok());
         pg.list_sessions(&self.auth, notebook_uuid)
             .await
             .unwrap_or_default()
@@ -53,12 +53,12 @@ impl ChatContext {
         req: CreateChatSessionRequest,
     ) -> Result<ChatSession, AppError> {
         let pg = self.require_chat_persistence()?;
-        let notebook_id = parse_uuid_or_app_error(
-            &req.notebook_id,
+        let workspace_id = parse_uuid_or_app_error(
+            &req.workspace_id,
             "notebook_not_found",
             "notebook not found",
         )?;
-        let notebook = pg.get_notebook(&self.auth, notebook_id).await?;
+        let notebook = pg.get_notebook(&self.auth, workspace_id).await?;
         if notebook.is_none() {
             return Err(AppError::not_found(
                 "notebook_not_found",
@@ -68,7 +68,7 @@ impl ChatContext {
         let session = pg
             .create_session(
                 &self.auth,
-                notebook_id,
+                workspace_id,
                 req.title.as_deref(),
                 &req.agent_type,
             )
@@ -78,7 +78,7 @@ impl ChatContext {
             analytics::Surface::Workspace,
             analytics::ResultTag::Success,
             Uuid::parse_str(&session.id).ok(),
-            Some(notebook_id),
+            Some(workspace_id),
             serde_json::json!({
                 "agent_type": req.agent_type,
             }),
@@ -117,7 +117,7 @@ impl ChatContext {
                 analytics::Surface::Workspace,
                 analytics::ResultTag::Success,
                 Some(session_id),
-                Uuid::parse_str(&session.notebook_id).ok(),
+                Uuid::parse_str(&session.workspace_id).ok(),
                 serde_json::json!({
                     "title": session.title.clone(),
                 }),
@@ -130,7 +130,7 @@ impl ChatContext {
                 analytics::Surface::Workspace,
                 analytics::ResultTag::Success,
                 Some(session_id),
-                Uuid::parse_str(&session.notebook_id).ok(),
+                Uuid::parse_str(&session.workspace_id).ok(),
                 serde_json::json!({}),
             )
             .await;

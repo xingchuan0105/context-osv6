@@ -51,11 +51,11 @@ impl SessionPort for PgChatPersistenceAdapter {
     async fn list_sessions(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
     ) -> Result<Vec<ChatSession>, AppError> {
         self.repo
             .sessions()
-            .list_sessions(auth, notebook_id)
+            .list_sessions(auth, workspace_id)
             .await
             .map_err(map_pg_error)
     }
@@ -75,13 +75,13 @@ impl SessionPort for PgChatPersistenceAdapter {
     async fn create_session(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         title: Option<&str>,
         agent_type: &str,
     ) -> Result<ChatSession, AppError> {
         self.repo
             .sessions()
-            .create_session(auth, notebook_id, title, agent_type)
+            .create_session(auth, workspace_id, title, agent_type)
             .await
             .map_err(map_pg_error)
     }
@@ -225,11 +225,11 @@ impl ChatCatalogPort for PgChatPersistenceAdapter {
     async fn get_notebook(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<Option<Notebook>, AppError> {
         self.repo
             .bootstrap()
-            .get_notebook(auth, notebook_id)
+            .get_notebook(auth, workspace_id)
             .await
             .map_err(map_pg_error)
     }

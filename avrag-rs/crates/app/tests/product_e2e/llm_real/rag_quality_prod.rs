@@ -291,7 +291,7 @@ async fn production_rag_evaluator_runs_real_retrieval_against_golden_set() {
         "golden set has no rag subset examples"
     );
 
-    let notebook_id = &upload.notebook_id;
+    let workspace_id = &upload.workspace_id;
     let doc_scope = [upload.document_id.clone()];
 
     let mut recall_results = Vec::new();
@@ -301,7 +301,7 @@ async fn production_rag_evaluator_runs_real_retrieval_against_golden_set() {
     let mut failures: Vec<(String, String)> = Vec::new();
 
     for example in &examples {
-        let resp = match ctx.chat(&example.query, notebook_id, &doc_scope).await {
+        let resp = match ctx.chat(&example.query, workspace_id, &doc_scope).await {
             Ok(r) => r,
             Err(e) => {
                 failures.push((example.query.clone(), format!("chat: {e}")));
@@ -482,7 +482,7 @@ async fn realistic_corpus_full_eval() {
         .create_notebook("rag-quality-realistic-corpus")
         .await
         .expect("create notebook");
-    let notebook_id = notebook.id.clone();
+    let workspace_id = notebook.id.clone();
 
     let corpus_files = [
         ("thesis_y_refrigeration.txt", 600),         // 52K chars, thesis
@@ -498,7 +498,7 @@ async fn realistic_corpus_full_eval() {
     for (filename, timeout_secs) in &corpus_files {
         eprintln!("[realistic_corpus] uploading {filename} ...");
         let upload = ctx
-            .upload_document_to_notebook(filename, &notebook_id)
+            .upload_document_to_notebook(filename, &workspace_id)
             .await
             .unwrap_or_else(|e| panic!("upload {filename}: {e}"));
         let status = ctx
@@ -563,7 +563,7 @@ async fn realistic_corpus_full_eval() {
         // response — some queries may return a degrade response without an `answer`
         // field, which we catch and record as a failure with the raw JSON for debugging.
         let resp = match ctx
-            .chat_without_mock_chunk_pin(&example.query, &notebook_id, &doc_scope)
+            .chat_without_mock_chunk_pin(&example.query, &workspace_id, &doc_scope)
             .await
         {
             Ok(r) => r,
@@ -742,7 +742,7 @@ async fn rag_system_prompt_smoke_v5() {
 
     let (fixture, ctx) = shared_smoke_v5_context().await;
     let corpus = &fixture.corpus;
-    let notebook_id = corpus.notebook_id.clone();
+    let workspace_id = corpus.workspace_id.clone();
     let doc_ids: Vec<String> = corpus
         .documents
         .iter()
@@ -830,7 +830,7 @@ async fn rag_system_prompt_smoke_v5() {
         );
 
         let probe =
-            match chat_rag_observable_probe(&ctx, &example.query, &notebook_id, &doc_scope).await {
+            match chat_rag_observable_probe(&ctx, &example.query, &workspace_id, &doc_scope).await {
                 Ok(p) => p,
                 Err(failure) => {
                     let liveness = probe_api_liveness(&ctx).await;
@@ -1093,7 +1093,7 @@ async fn rag_tools_golden_set() {
 
     let (fixture, ctx) = shared_smoke_v5_context().await;
     let corpus = &fixture.corpus;
-    let notebook_id = corpus.notebook_id.clone();
+    let workspace_id = corpus.workspace_id.clone();
     let doc_ids: Vec<String> = corpus
         .documents
         .iter()
@@ -1136,7 +1136,7 @@ async fn rag_tools_golden_set() {
         }
 
         let probe =
-            match chat_rag_observable_probe(&ctx, &example.query, &notebook_id, &doc_scope).await {
+            match chat_rag_observable_probe(&ctx, &example.query, &workspace_id, &doc_scope).await {
                 Ok(p) => p,
                 Err(failure) => {
                     let liveness = probe_api_liveness(&ctx).await;
@@ -1257,7 +1257,7 @@ async fn triplet_benchmark_huawei_ipd() {
         .find(|d| d.filename == "huawei_ipd_370_activities.txt")
         .expect("huawei doc in corpus");
     let doc_id = huawei.document_id.clone();
-    let notebook_id = corpus.notebook_id.clone();
+    let workspace_id = corpus.workspace_id.clone();
     let doc_scope = vec![doc_id.clone()];
 
     let ingest_secs = ctx
@@ -1310,7 +1310,7 @@ async fn triplet_benchmark_huawei_ipd() {
         .expect("PAC-05 probe in golden set");
 
     let probe =
-        match chat_rag_observable_probe(&ctx, &example.query, &notebook_id, &doc_scope).await {
+        match chat_rag_observable_probe(&ctx, &example.query, &workspace_id, &doc_scope).await {
             Ok(p) => p,
             Err(failure) => {
                 let liveness = probe_api_liveness(&ctx).await;

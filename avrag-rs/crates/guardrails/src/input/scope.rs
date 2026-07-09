@@ -1,8 +1,8 @@
 //! Scope enforcement guard.
 //!
-//! Validates that the user is only querying notebooks they have access to.
+//! Validates that the user is only querying workspaces they have access to.
 //! The actual access check requires database lookup; this guard handles
-//! the case where a notebook_id is explicitly provided that doesn't match
+//! the case where a workspace_id is explicitly provided that doesn't match
 //! the user's scope.
 
 use crate::input::{InputGuard, InputGuardContext};
@@ -18,30 +18,30 @@ impl ScopeGuard {
 
     /// Scope check — validates notebook access based on doc_scope.
     ///
-    /// If `notebook_id` is provided but not in `doc_scope`, this is a scope violation.
+    /// If `workspace_id` is provided but not in `doc_scope`, this is a scope violation.
     /// The actual permission lookup (database check) happens elsewhere in the request
     /// pipeline; this guard enforces the client-provided scope contract.
     pub fn check(&self, ctx: &InputGuardContext<'_>) -> Option<GuardResult> {
-        // If no notebook_id was specified, no scope violation is possible from this guard
-        let notebook_id = ctx.notebook_id?;
+        // If no workspace_id was specified, no scope violation is possible from this guard
+        let workspace_id = ctx.workspace_id?;
 
         // If doc_scope is empty, user hasn't been granted any notebooks
         if ctx.doc_scope.is_empty() {
             return Some(GuardResult::block(
                 "input:scope_violation",
                 RiskLevel::High,
-                "User has no notebooks in scope",
+                "User has no workspaces in scope",
                 ctx.trace_id.clone(),
                 None,
             ));
         }
 
         // Convert doc_scope notebook IDs to strings for comparison
-        let requested_notebook = notebook_id.to_string();
+        let requested_notebook = workspace_id.to_string();
         let in_scope = ctx.doc_scope.iter().any(|id| {
             let normalized = id.trim_matches('-');
             normalized == requested_notebook
-                || normalized == notebook_id.to_string().replace('-', "")
+                || normalized == workspace_id.to_string().replace('-', "")
         });
 
         if !in_scope {
@@ -50,7 +50,7 @@ impl ScopeGuard {
                 RiskLevel::Medium,
                 format!(
                     "Requested notebook {} is not in user's authorized scope",
-                    notebook_id
+                    workspace_id
                 ),
                 ctx.trace_id.clone(),
                 None,
@@ -84,7 +84,7 @@ mod tests {
 
     fn make_ctx(
         query: &str,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         doc_scope: Vec<String>,
     ) -> InputGuardContext<'_> {
         InputGuardContext {
@@ -92,13 +92,13 @@ mod tests {
             org_id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
             doc_scope: Box::leak(doc_scope.into_boxed_slice()),
-            notebook_id,
+            workspace_id,
             trace_id: Some("test-trace".into()),
         }
     }
 
     #[test]
-    fn test_no_notebook_id_passed() {
+    fn test_no_workspace_id_passed() {
         let guard = ScopeGuard::new();
         let ctx = make_ctx(
             "query",
@@ -112,8 +112,8 @@ mod tests {
     #[test]
     fn test_in_scope_passed() {
         let guard = ScopeGuard::new();
-        let notebook_id = Uuid::new_v4();
-        let ctx = make_ctx("query", Some(notebook_id), vec![notebook_id.to_string()]);
+        let workspace_id = Uuid::new_v4();
+        let ctx = make_ctx("query", Some(workspace_id), vec![workspace_id.to_string()]);
         let result = guard.check(&ctx);
         assert!(result.is_none());
     }
@@ -121,8 +121,8 @@ mod tests {
     #[test]
     fn test_out_of_scope_blocked() {
         let guard = ScopeGuard::new();
-        let notebook_id = Uuid::new_v4();
-        let ctx = make_ctx("query", Some(notebook_id), vec!["other-notebook".into()]);
+        let workspace_id = Uuid::new_v4();
+        let ctx = make_ctx("query", Some(workspace_id), vec!["other-notebook".into()]);
         let result = guard.check(&ctx);
         assert!(result.is_some());
         let r = result.unwrap();
@@ -133,8 +133,8 @@ mod tests {
     #[test]
     fn test_empty_scope_blocked() {
         let guard = ScopeGuard::new();
-        let notebook_id = Uuid::new_v4();
-        let ctx = make_ctx("query", Some(notebook_id), vec![]);
+        let workspace_id = Uuid::new_v4();
+        let ctx = make_ctx("query", Some(workspace_id), vec![]);
         let result = guard.check(&ctx);
         assert!(result.is_some());
         let r = result.unwrap();

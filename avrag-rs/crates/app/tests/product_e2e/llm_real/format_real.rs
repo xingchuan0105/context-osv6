@@ -33,7 +33,7 @@ async fn real_llm_format_html_renderer_returns_html() {
     let result = chat_with_format_retry(
         &ctx,
         "Render the document content as an HTML page",
-        &upload.notebook_id,
+        &upload.workspace_id,
         &[upload.document_id.clone()],
         "html-renderer",
     )

@@ -24,7 +24,7 @@ async fn stream_rag_events(debug: bool) -> anyhow::Result<Vec<crate::product_e2e
         ChatStreamParams {
             query: QUERY,
             agent_type: "rag",
-            notebook_id: &upload.notebook_id,
+            workspace_id: &upload.workspace_id,
             doc_scope: &[upload.document_id.clone()],
             session_id: None,
             format_hint: None,
@@ -143,7 +143,7 @@ async fn chat_stream_client_disconnect_aborts_without_hang() {
     let upload = &fixture.upload;
     let ctx = shared_ready_rag_context().await;
     let aborted = ctx
-        .chat_stream_abort_after_start(QUERY, &upload.notebook_id, &[upload.document_id.clone()])
+        .chat_stream_abort_after_start(QUERY, &upload.workspace_id, &[upload.document_id.clone()])
         .await
         .expect("abort stream");
     assert!(
@@ -165,7 +165,7 @@ async fn chat_stream_disconnect_reconnect_continues_session() {
     let (events, session_id) = ctx
         .chat_stream_abort_capture_session(
             QUERY,
-            &upload.notebook_id,
+            &upload.workspace_id,
             &[upload.document_id.clone()],
         )
         .await
@@ -182,7 +182,7 @@ async fn chat_stream_disconnect_reconnect_continues_session() {
     let http_resp = ctx
         .chat_with_session(
             follow_up,
-            &upload.notebook_id,
+            &upload.workspace_id,
             &[upload.document_id.clone()],
             &session_id,
         )

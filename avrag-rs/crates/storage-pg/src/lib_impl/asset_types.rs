@@ -3,7 +3,7 @@ use super::*;
 pub struct DocumentAssetRow {
     pub asset_id: Uuid,
     pub org_id: Uuid,
-    pub notebook_id: Uuid,
+    pub workspace_id: Uuid,
     pub document_id: Uuid,
     pub parse_run_id: Option<Uuid>,
     pub page: Option<i32>,
@@ -21,7 +21,7 @@ pub struct DocumentAssetRow {
 pub struct MultimodalChunkRow {
     pub chunk_id: Uuid,
     pub org_id: Uuid,
-    pub notebook_id: Uuid,
+    pub workspace_id: Uuid,
     pub document_id: Uuid,
     pub parse_run_id: Option<Uuid>,
     pub asset_id: Option<Uuid>,
@@ -37,7 +37,7 @@ pub struct MultimodalChunkRow {
 #[derive(Debug, Clone)]
 pub struct StoreDocumentAssetParams {
     pub asset_id: Uuid,
-    pub notebook_id: Uuid,
+    pub workspace_id: Uuid,
     pub document_id: Uuid,
     pub parse_run_id: Option<Uuid>,
     pub page: Option<i32>,
@@ -53,7 +53,7 @@ pub struct StoreDocumentAssetParams {
 #[derive(Debug, Clone)]
 pub struct StoreMultimodalChunkParams {
     pub chunk_id: Uuid,
-    pub notebook_id: Uuid,
+    pub workspace_id: Uuid,
     pub document_id: Uuid,
     pub parse_run_id: Option<Uuid>,
     pub asset_id: Option<Uuid>,

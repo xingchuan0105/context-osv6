@@ -56,14 +56,14 @@ pub fn agent_icon(agent_type: &str) -> &'static str {
 
 pub fn build_object_path(
     context: &AuthContext,
-    notebook_id: Uuid,
+    workspace_id: Uuid,
     document_id: Uuid,
     filename: &str,
 ) -> String {
     format!(
         "{}/{}/{}/{}",
         context.org_id(),
-        notebook_id,
+        workspace_id,
         document_id,
         sanitize_filename(filename)
     )

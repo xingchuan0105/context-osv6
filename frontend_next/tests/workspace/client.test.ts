@@ -124,14 +124,14 @@ describe("workspace client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "https://api.example.test/api/v1/notebooks/ws-1",
+      "https://api.example.test/api/v1/workspaces/ws-1",
       expect.objectContaining({
         method: "GET",
       }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "https://api.example.test/api/v1/notebooks/ws-1",
+      "https://api.example.test/api/v1/workspaces/ws-1",
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({
@@ -400,7 +400,7 @@ describe("workspace client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "https://api.example.test/api/v1/notebooks/ws-1/sources/url",
+      "https://api.example.test/api/v1/workspaces/ws-1/sources/url",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ url: "https://example.test" }),
@@ -482,7 +482,7 @@ describe("workspace client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "https://api.example.test/api/v1/notebooks/ws-1/notes",
+      "https://api.example.test/api/v1/workspaces/ws-1/notes",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -525,7 +525,7 @@ describe("workspace client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "https://api.example.test/api/v1/notebooks/ws-1/notes",
+      "https://api.example.test/api/v1/workspaces/ws-1/notes",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ title: "Created", content: "Fresh" }),
@@ -571,7 +571,7 @@ describe("workspace client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "https://api.example.test/api/v1/notebooks/ws-1/notes/note-2",
+      "https://api.example.test/api/v1/workspaces/ws-1/notes/note-2",
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({ title: "Updated", content: "Fresh" }),
@@ -591,7 +591,7 @@ describe("workspace client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "https://api.example.test/api/v1/notebooks/ws-1/notes/note-2",
+      "https://api.example.test/api/v1/workspaces/ws-1/notes/note-2",
       expect.objectContaining({ method: "DELETE" }),
     );
   });
@@ -634,7 +634,7 @@ describe("workspace client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "https://api.example.test/api/v1/notebooks/ws-1/notes/note-2/promote-to-source",
+      "https://api.example.test/api/v1/workspaces/ws-1/notes/note-2/promote-to-source",
       expect.objectContaining({ method: "POST" }),
     );
   });
@@ -776,7 +776,7 @@ describe("workspace client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "https://api.example.test/api/v1/notebooks/ws-1/documents",
+      "https://api.example.test/api/v1/workspaces/ws-1/documents",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({

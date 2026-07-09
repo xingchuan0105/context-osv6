@@ -95,7 +95,7 @@ impl DocumentStorePort for RecordingDocumentStore {
     async fn get_notebook(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Uuid,
+        _workspace_id: Uuid,
     ) -> Result<Option<Notebook>, AppError> {
         Ok(None)
     }
@@ -112,7 +112,7 @@ impl DocumentStorePort for RecordingDocumentStore {
     async fn update_notebook(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Uuid,
+        _workspace_id: Uuid,
         _name: Option<&str>,
         _description: Option<&str>,
     ) -> Result<Option<Notebook>, AppError> {
@@ -122,7 +122,7 @@ impl DocumentStorePort for RecordingDocumentStore {
     async fn delete_notebook(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Uuid,
+        _workspace_id: Uuid,
     ) -> Result<bool, AppError> {
         Ok(false)
     }
@@ -138,7 +138,7 @@ impl DocumentStorePort for RecordingDocumentStore {
     async fn list_sources(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Option<Uuid>,
+        _workspace_id: Option<Uuid>,
     ) -> Result<Vec<SourceRow>, AppError> {
         Ok(Vec::new())
     }
@@ -146,7 +146,7 @@ impl DocumentStorePort for RecordingDocumentStore {
     async fn list_documents(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Option<Uuid>,
+        _workspace_id: Option<Uuid>,
         _document_id: Option<Uuid>,
     ) -> Result<Vec<Document>, AppError> {
         Ok(Vec::new())
@@ -155,7 +155,7 @@ impl DocumentStorePort for RecordingDocumentStore {
     async fn create_document(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Uuid,
+        _workspace_id: Uuid,
         _filename: &str,
         _file_size: u64,
         _mime_type: &str,
@@ -205,7 +205,7 @@ impl DocumentStorePort for RecordingDocumentStore {
         _auth: &AuthContext,
         _document_id: Uuid,
         _filename: Option<&str>,
-        _notebook_id: Option<Uuid>,
+        _workspace_id: Option<Uuid>,
         _status: Option<DocumentStatus>,
     ) -> Result<bool, AppError> {
         Ok(false)
@@ -355,7 +355,7 @@ async fn document_store_port_is_used_when_wired() {
     let ctx = DocumentContext::new();
     let auth = test_auth();
 
-    let notebooks = ctx.list_notebooks(&auth, &storage).await;
+    let workspaces = ctx.list_notebooks(&auth, &storage).await;
     assert_eq!(notebooks.len(), 1);
     assert_eq!(notebooks[0].name, "Port Notebook");
     assert_eq!(

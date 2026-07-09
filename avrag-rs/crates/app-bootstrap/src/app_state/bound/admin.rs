@@ -29,7 +29,7 @@ impl<'a> BoundAdmin<'a> {
             return Ok(validated.map(|key| WorkspaceApiKeyAuth {
                 key_id: key.id,
                 org_id: key.org_id,
-                notebook_id: key.notebook_id,
+                workspace_id: key.workspace_id,
                 permissions: key.permissions,
                 rate_limit_rpm: key.rate_limit_rpm,
             }));
@@ -42,7 +42,7 @@ impl<'a> BoundAdmin<'a> {
             .map(|record| WorkspaceApiKeyAuth {
                 key_id: record.id,
                 org_id: record.org_id,
-                notebook_id: record.notebook_id,
+                workspace_id: record.workspace_id,
                 permissions: record.permissions,
                 rate_limit_rpm: record.rate_limit_rpm,
             }))
@@ -50,20 +50,20 @@ impl<'a> BoundAdmin<'a> {
 
     pub async fn list_api_keys(
         &self,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> Result<Vec<common::ApiKeyRow>, common::AppError> {
         self.admin
-            .list_api_keys(self.auth, self.storage, notebook_id)
+            .list_api_keys(self.auth, self.storage, workspace_id)
             .await
     }
 
     pub async fn create_api_key(
         &self,
-        notebook_id: &str,
+        workspace_id: &str,
         req: common::CreateApiKeyRequest,
     ) -> Result<common::CreateApiKeyResponse, common::AppError> {
         self.admin
-            .create_api_key(self.auth, self.storage, notebook_id, req)
+            .create_api_key(self.auth, self.storage, workspace_id, req)
             .await
     }
 
@@ -93,11 +93,11 @@ impl<'a> BoundAdmin<'a> {
 
     pub async fn revoke_api_key(
         &self,
-        notebook_id: &str,
+        workspace_id: &str,
         key_id: &str,
     ) -> Result<common::StatusOnlyResponse, common::AppError> {
         self.admin
-            .revoke_api_key(self.auth, self.storage, notebook_id, key_id)
+            .revoke_api_key(self.auth, self.storage, workspace_id, key_id)
             .await
     }
 

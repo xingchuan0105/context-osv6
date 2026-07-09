@@ -204,7 +204,7 @@ impl AppState {
         surface: analytics::Surface,
         result: analytics::ResultTag,
         session_id: Option<Uuid>,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         metadata: serde_json::Value,
     ) {
         self.analytics
@@ -214,7 +214,7 @@ impl AppState {
                 surface,
                 result,
                 session_id,
-                notebook_id,
+                workspace_id,
                 metadata,
             )
             .await;
@@ -237,7 +237,7 @@ impl AppState {
         &self,
         event_name: analytics::CostEventName,
         feature: &str,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         storage_bytes_delta: i64,
         source: &str,
         metadata: serde_json::Value,
@@ -247,7 +247,7 @@ impl AppState {
             &self.analytics.service().cloned(),
             event_name,
             feature,
-            notebook_id,
+            workspace_id,
             storage_bytes_delta,
             source,
             metadata,
@@ -259,7 +259,7 @@ impl AppState {
         &self,
         provider: &str,
         model: &str,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         external_call_count: i64,
         metadata: serde_json::Value,
     ) {
@@ -268,7 +268,7 @@ impl AppState {
             &self.analytics.service().cloned(),
             provider,
             model,
-            notebook_id,
+            workspace_id,
             external_call_count,
             metadata,
         )

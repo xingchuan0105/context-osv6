@@ -60,7 +60,7 @@ impl ChunkRepository {
     pub async fn search_chunks_text(
         &self,
         context: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         query: &str,
         limit: usize,
     ) -> Result<Vec<IndexedChunk>, PgStorageError> {
@@ -76,7 +76,7 @@ impl ChunkRepository {
               ts_rank_cd(c.search_vector, plainto_tsquery('simple', $2)) as rank
             from chunks c
             join documents d on d.id = c.document_id
-            where d.notebook_id = $1
+            where d.workspace_id = $1
               and d.status not in ('deleting', 'deleted')
               and c.chunk_type = 'body'
               and c.search_vector @@ plainto_tsquery('simple', $2)
@@ -84,7 +84,7 @@ impl ChunkRepository {
             limit $3
             "#,
         )
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(query)
         .bind(i64::try_from(limit).unwrap_or(i64::MAX))
         .fetch_all(tx.inner())
@@ -421,20 +421,20 @@ impl ChunkRepository {
     pub async fn list_sources(
         &self,
         context: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
     ) -> Result<Vec<SourceRow>, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select d.id, d.notebook_id, n.title as notebook_name, d.file_name, d.status
+            select d.id, d.workspace_id, n.title as notebook_name, d.file_name, d.status
             from documents d
-            join notebooks n on n.id = d.notebook_id
-            where ($1::uuid is null or d.notebook_id = $1)
+            join workspaces n on n.id = d.workspace_id
+            where ($1::uuid is null or d.workspace_id = $1)
               and d.status not in ('deleting', 'deleted')
             order by d.updated_at desc, d.created_at desc
             "#,
         )
-        .bind(notebook_id)
+        .bind(workspace_id)
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;
@@ -446,8 +446,8 @@ impl ChunkRepository {
                     .try_get::<Uuid, _>("id")
                     .map(|value| value.to_string())
                     .unwrap_or_default(),
-                notebook_id: row
-                    .try_get::<Uuid, _>("notebook_id")
+                workspace_id: row
+                    .try_get::<Uuid, _>("workspace_id")
                     .map(|value| value.to_string())
                     .unwrap_or_default(),
                 notebook_name: row.try_get("notebook_name").unwrap_or_default(),

@@ -22,10 +22,10 @@ impl<'a> BoundDocuments<'a> {
 
     pub async fn get_notebook(
         &self,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> Option<contracts::notebooks::Notebook> {
         self.docs
-            .get_notebook(self.auth, self.storage, notebook_id)
+            .get_notebook(self.auth, self.storage, workspace_id)
             .await
     }
 
@@ -40,36 +40,36 @@ impl<'a> BoundDocuments<'a> {
 
     pub async fn update_notebook(
         &self,
-        notebook_id: &str,
+        workspace_id: &str,
         req: common::UpdateNotebookRequest,
     ) -> Result<contracts::notebooks::Notebook, common::AppError> {
         self.docs
-            .update_notebook(self.auth, self.storage, notebook_id, req)
+            .update_notebook(self.auth, self.storage, workspace_id, req)
             .await
     }
 
     pub async fn delete_notebook(
         &self,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> Result<common::StatusOnlyResponse, common::AppError> {
         self.docs
-            .delete_notebook(self.auth, self.storage, notebook_id)
+            .delete_notebook(self.auth, self.storage, workspace_id)
             .await
     }
 
     pub async fn list_documents(
         &self,
-        notebook_id: Option<&str>,
+        workspace_id: Option<&str>,
         document_id: Option<&str>,
     ) -> Vec<common::Document> {
         self.docs
-            .list_documents(self.auth, self.storage, notebook_id, document_id)
+            .list_documents(self.auth, self.storage, workspace_id, document_id)
             .await
     }
 
     pub async fn create_document_upload(
         &self,
-        notebook_id: &str,
+        workspace_id: &str,
         req: common::CreateDocumentRequest,
     ) -> Result<contracts::documents::CreateDocumentUploadResponse, common::AppError> {
         self.docs
@@ -78,7 +78,7 @@ impl<'a> BoundDocuments<'a> {
                 self.storage,
                 self.billing,
                 self.analytics,
-                notebook_id,
+                workspace_id,
                 req,
             )
             .await
@@ -187,7 +187,7 @@ impl<'a> BoundDocuments<'a> {
 
     pub async fn add_url_source(
         &self,
-        notebook_id: &str,
+        workspace_id: &str,
         req: common::AddUrlSourceRequest,
     ) -> Result<contracts::documents::CreateDocumentUploadResponse, common::AppError> {
         self.docs
@@ -196,15 +196,15 @@ impl<'a> BoundDocuments<'a> {
                 self.storage,
                 self.billing,
                 self.analytics,
-                notebook_id,
+                workspace_id,
                 req,
             )
             .await
     }
 
-    pub async fn list_sources(&self, notebook_id: Option<&str>) -> Vec<common::SourceRow> {
+    pub async fn list_sources(&self, workspace_id: Option<&str>) -> Vec<common::SourceRow> {
         self.docs
-            .list_sources(self.auth, self.storage, notebook_id)
+            .list_sources(self.auth, self.storage, workspace_id)
             .await
     }
 }

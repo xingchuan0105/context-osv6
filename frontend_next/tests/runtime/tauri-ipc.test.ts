@@ -34,14 +34,14 @@ describe("tauri-ipc runtime", () => {
 
     const { requestViaIPC } = await import("../../lib/runtime/tauri-ipc");
 
-    await requestViaIPC("/api/v1/notebooks", {
+    await requestViaIPC("/api/v1/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "demo" }),
     });
 
     expect(invokeMock).toHaveBeenCalledWith("api_call", {
       method: "POST",
-      path: "/api/v1/notebooks",
+      path: "/api/v1/workspaces",
       body: { name: "demo" },
       token: undefined,
     });

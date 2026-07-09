@@ -14,39 +14,39 @@ pub trait ShareStorePort: Send + Sync {
     async fn query_notebook_access(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<Option<NotebookAccessSnapshot>, AppError>;
 
     async fn query_member_access(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         user_id: Uuid,
     ) -> Result<Option<String>, AppError>;
 
     async fn get_share_settings(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<(String, bool, Vec<crate::share_domain::ShareTokenSnapshot>), AppError>;
 
     async fn list_members(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<Vec<ShareNotebookMember>, AppError>;
 
     async fn update_notebook_access_level(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         access_level: &str,
     ) -> Result<(), AppError>;
 
     async fn update_share_settings(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         access_level: Option<&str>,
         allow_download: Option<bool>,
     ) -> Result<(), AppError>;
@@ -54,7 +54,7 @@ pub trait ShareStorePort: Send + Sync {
     async fn create_share_token(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         access_level: ShareAccessLevel,
         expires_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<String, AppError>;
@@ -70,13 +70,13 @@ pub trait ShareStorePort: Send + Sync {
     async fn get_share_analytics(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<Vec<ShareAnalyticsEntry>, AppError>;
 
     async fn get_share_access_logs(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         limit: usize,
     ) -> Result<Vec<ShareAccessLogEntry>, AppError>;
 
@@ -93,7 +93,7 @@ pub trait ShareStorePort: Send + Sync {
     async fn invite_member(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         email: &str,
         access_level: ShareAccessLevel,
     ) -> Result<ShareNotebookMember, AppError>;
@@ -101,7 +101,7 @@ pub trait ShareStorePort: Send + Sync {
     async fn accept_invite(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         member_id: Uuid,
         actor_id: Uuid,
     ) -> Result<(), AppError>;
@@ -109,7 +109,7 @@ pub trait ShareStorePort: Send + Sync {
     async fn decline_invite(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         member_id: Uuid,
         actor_id: Uuid,
     ) -> Result<(), AppError>;
@@ -117,7 +117,7 @@ pub trait ShareStorePort: Send + Sync {
     async fn add_member(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         user_id: Uuid,
         access_level: ShareAccessLevel,
     ) -> Result<(), AppError>;
@@ -125,7 +125,7 @@ pub trait ShareStorePort: Send + Sync {
     async fn remove_member(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         member_id: Uuid,
     ) -> Result<(), AppError>;
 

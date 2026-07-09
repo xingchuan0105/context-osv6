@@ -9,7 +9,7 @@ use agent_tools::progressive::{
 const RAG_SUMMARY: &str = "RAG uses Python SDK codegen only. Emit <code language=\"python\"> blocks calling client.dense_search, client.chunk_fetch, etc. Do not call native retrieval tool schemas.";
 const SEARCH_SUMMARY: &str = "Search uses native tool calls (web_search, web_fetch). Do not use codegen/SDK blocks in search mode.";
 const INDEX_SUMMARY: &str = "Ingestion uses MCP workspace tools plus HTTP PUT for file bytes. Flow: create_upload → PUT upload_url → complete_upload → poll document_status until completed.";
-const WORKSPACE_CREATE_SUMMARY: &str = "Personal product: humans create workspaces in the UI, then share notebook_id plus a workspace API key (index+query). Do not rely on account/org-scoped keys for normal automation.";
+const WORKSPACE_CREATE_SUMMARY: &str = "Personal product: humans create workspaces in the UI, then share workspace_id plus a workspace API key (index+query). Do not rely on account/org-scoped keys for normal automation.";
 
 pub fn load_invoke_operation_guide(mode: &str) -> Option<AgentOperationGuide> {
     match mode {

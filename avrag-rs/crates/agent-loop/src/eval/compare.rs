@@ -203,7 +203,7 @@ mod tests {
             request: crate::runtime::AgentRequest {
                 kind: crate::AgentKind::Chat,
                 query: "q".to_string(),
-                notebook_id: None,
+                workspace_id: None,
                 session_id: None,
                 doc_scope: vec![],
                 messages: vec![],

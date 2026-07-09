@@ -29,13 +29,13 @@ impl DocumentContext {
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
-        notebook_id: Option<&str>,
+        workspace_id: Option<&str>,
         document_id: Option<&str>,
     ) -> Vec<Document> {
         let Some(store) = storage.document_store() else {
             return Vec::new();
         };
-        let notebook_uuid = notebook_id.and_then(|value| Uuid::parse_str(value).ok());
+        let notebook_uuid = workspace_id.and_then(|value| Uuid::parse_str(value).ok());
         let document_uuid = document_id.and_then(|value| Uuid::parse_str(value).ok());
         store
             .list_documents(auth, notebook_uuid, document_uuid)
@@ -49,7 +49,7 @@ impl DocumentContext {
         storage: &StorageContext,
         _billing: &BillingContext,
         analytics: &AnalyticsServiceCtx,
-        notebook_id: &str,
+        workspace_id: &str,
         req: CreateDocumentRequest,
     ) -> Result<CreateDocumentUploadResponse, AppError> {
         if req.filename.trim().is_empty() {
@@ -84,9 +84,9 @@ impl DocumentContext {
         quota
             .ensure_storage_bytes_quota(auth, req.file_size as i64)
             .await?;
-        let notebook_id =
-            parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
-        if store.get_notebook(auth, notebook_id).await?.is_none() {
+        let workspace_id =
+            parse_uuid_or_app_error(workspace_id, "notebook_not_found", "notebook not found")?;
+        if store.get_notebook(auth, workspace_id).await?.is_none() {
             return Err(AppError::not_found(
                 "notebook_not_found",
                 "notebook not found",
@@ -95,7 +95,7 @@ impl DocumentContext {
         let document = store
             .create_document(
                 auth,
-                notebook_id,
+                workspace_id,
                 req.filename.trim(),
                 req.file_size,
                 &req.mime_type,
@@ -115,7 +115,7 @@ impl DocumentContext {
             analytics::Surface::Workspace,
             analytics::ResultTag::Success,
             None,
-            Some(notebook_id),
+            Some(workspace_id),
             serde_json::json!({
                 "document_id": document.id.clone(),
                 "filename": req.filename.trim(),
@@ -130,7 +130,7 @@ impl DocumentContext {
             analytics,
             analytics::CostEventName::UploadBytesMetered,
             "upload",
-            Some(notebook_id),
+            Some(workspace_id),
             req.file_size as i64,
             "file_upload",
             serde_json::json!({
@@ -281,7 +281,7 @@ impl DocumentContext {
 
         let task = build_ingest_task(
             seed.org_id.clone(),
-            seed.notebook_id.clone(),
+            seed.workspace_id.clone(),
             seed.document_id.clone(),
             Some(current_user_id(auth)),
             IngestDocumentPayload {
@@ -302,7 +302,7 @@ impl DocumentContext {
             )
             .await?;
         let task_inserted = handle_upload_queue_outcome(queue_outcome)?;
-        let notebook_id = Uuid::parse_str(&seed.notebook_id).ok();
+        let workspace_id = Uuid::parse_str(&seed.workspace_id).ok();
         let metadata = serde_json::json!({
             "document_id": seed.document_id.clone(),
             "filename": seed.filename.clone(),
@@ -332,7 +332,7 @@ impl DocumentContext {
             analytics::Surface::Workspace,
             analytics::ResultTag::Success,
             None,
-            notebook_id,
+            workspace_id,
             metadata,
         )
         .await;
@@ -408,8 +408,8 @@ impl DocumentContext {
         })?;
         let document_id =
             parse_uuid_or_app_error(document_id, "document_not_found", "document not found")?;
-        let notebook_id = req
-            .notebook_id
+        let workspace_id = req
+            .workspace_id
             .as_deref()
             .map(|value| {
                 parse_uuid_or_app_error(value, "notebook_not_found", "notebook not found")
@@ -420,7 +420,7 @@ impl DocumentContext {
                 auth,
                 document_id,
                 req.filename.as_deref(),
-                notebook_id,
+                workspace_id,
                 req.status.clone(),
             )
             .await?;
@@ -481,7 +481,7 @@ impl DocumentContext {
                 "document not found",
             ));
         }
-        let notebook_id = Uuid::parse_str(&seed.notebook_id).ok();
+        let workspace_id = Uuid::parse_str(&seed.workspace_id).ok();
         let metadata = serde_json::json!({
             "document_id": seed.document_id.clone(),
             "filename": seed.filename.clone(),
@@ -495,7 +495,7 @@ impl DocumentContext {
             analytics::Surface::Workspace,
             analytics::ResultTag::Success,
             None,
-            notebook_id,
+            workspace_id,
             metadata,
         )
         .await;

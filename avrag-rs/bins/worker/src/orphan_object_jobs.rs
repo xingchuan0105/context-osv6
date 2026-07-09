@@ -75,7 +75,7 @@ impl OrphanObjectJobRunner {
             }
 
             // Safety: only delete objects that match the expected path pattern
-            // {org_id}/{notebook_id}/{document_id}/{filename}
+            // {org_id}/{workspace_id}/{document_id}/{filename}
             if path.split('/').count() < 4 {
                 skipped += 1;
                 continue;
@@ -150,9 +150,9 @@ mod tests {
             .bootstrap().create_notebook(&ctx, "orphan-scan-test", "orphan scan test")
             .await
             .unwrap();
-        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+        let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
         let document = repo
-            .bootstrap().create_document(&ctx, notebook_id, "in-flight.txt", 7, "text/plain")
+            .bootstrap().create_document(&ctx, workspace_id, "in-flight.txt", 7, "text/plain")
             .await
             .unwrap();
         let document_id = Uuid::parse_str(&document.id).unwrap();
@@ -171,7 +171,7 @@ mod tests {
         let orphan_path = format!(
             "{}/{}/{}/orphan.bin",
             org_id.into_uuid(),
-            notebook_id,
+            workspace_id,
             Uuid::new_v4()
         );
         store
@@ -211,7 +211,7 @@ mod tests {
             .execute(&mut *tx)
             .await
             .unwrap();
-        sqlx::query("delete from notebooks where org_id = $1")
+        sqlx::query("delete from workspaces where org_id = $1")
             .bind(org_id.into_uuid())
             .execute(&mut *tx)
             .await

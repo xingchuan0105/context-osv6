@@ -28,9 +28,9 @@ fn chat_request_deserializes_with_minimal_defaults_and_no_request_id_field() {
             "debug": false
         })
     );
-    // Wire product name is workspace_id; omitted when None (alias notebook_id still deserializes).
+    // Wire product name is workspace_id; omitted when None (alias workspace_id still deserializes).
     assert!(
-        serialized.get("workspace_id").is_none() && serialized.get("notebook_id").is_none(),
+        serialized.get("workspace_id").is_none() && serialized.get("workspace_id").is_none(),
         "empty workspace scope should omit both wire keys"
     );
     assert!(
@@ -258,7 +258,7 @@ fn export_golden_fixtures() {
         "chat_request_minimal.json",
         serde_json::json!({
             "query": "hello",
-            "notebook_id": null,
+            "workspace_id": null,
             "session_id": null,
             "agent_type": "chat",
             "source_type": null,
@@ -356,7 +356,7 @@ fn export_golden_fixtures() {
     write(
         "notebook_list_minimal.json",
         serde_json::to_value(NotebookListResponse {
-            notebooks: vec![Notebook {
+            workspaces: vec![Notebook {
                 id: "nb-1".to_string(),
                 org_id: "org-1".to_string(),
                 owner_id: "user-1".to_string(),

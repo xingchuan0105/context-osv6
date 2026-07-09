@@ -1,7 +1,7 @@
     async fn get_share_settings(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<(String, bool, Vec<ShareTokenSnapshot>), AppError> {
         let mut tx = self
             .repo
@@ -11,8 +11,8 @@
             .map_err(|error| AppError::internal(error.to_string()))?;
         set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
         let notebook_row =
-            sqlx::query("select access_level, allow_download from notebooks where id = $1")
-                .bind(notebook_id)
+            sqlx::query("select access_level, allow_download from workspaces where id = $1")
+                .bind(workspace_id)
                 .fetch_one(tx.as_mut())
                 .await
                 .map_err(|error| AppError::internal(error.to_string()))?;
@@ -26,12 +26,12 @@
             r#"
             select token, access_level, expires_at, revoked_at, access_count
             from share_tokens
-            where org_id = $1 and notebook_id = $2
+            where org_id = $1 and workspace_id = $2
             order by created_at desc
             "#,
         )
         .bind(auth.org_id().into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .fetch_all(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
@@ -67,7 +67,7 @@
     async fn update_notebook_access_level(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         access_level: &str,
     ) -> Result<(), AppError> {
         let mut tx = self
@@ -77,8 +77,8 @@
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
         set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
-        sqlx::query("update notebooks set access_level = $2, updated_at = now() where id = $1")
-            .bind(notebook_id)
+        sqlx::query("update workspaces set access_level = $2, updated_at = now() where id = $1")
+            .bind(workspace_id)
             .bind(access_level)
             .execute(tx.as_mut())
             .await
@@ -92,7 +92,7 @@
     async fn update_share_settings(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         access_level: Option<&str>,
         allow_download: Option<bool>,
     ) -> Result<(), AppError> {
@@ -112,7 +112,7 @@
             where id = $1
             "#,
         )
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(access_level)
         .bind(allow_download)
         .execute(tx.as_mut())
@@ -126,7 +126,7 @@
     async fn list_members(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<Vec<ShareNotebookMember>, AppError> {
         let mut tx = self
             .repo
@@ -137,14 +137,14 @@
         set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
         let rows = sqlx::query(
             r#"
-            select id, notebook_id, user_id, email, access_level, invite_status, invited_by, invited_at, accepted_at
-            from notebook_members
-            where org_id = $1 and notebook_id = $2
+            select id, workspace_id, user_id, email, access_level, invite_status, invited_by, invited_at, accepted_at
+            from workspace_members
+            where org_id = $1 and workspace_id = $2
             order by invited_at asc
             "#,
         )
         .bind(auth.org_id().into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .fetch_all(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;

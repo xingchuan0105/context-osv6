@@ -30,7 +30,7 @@ Agents do **not** need a separate “account-level” or “org-level” key for
 - **Workspace API keys** (scoped to one `notebook_id`): default permissions `index`, `query` when omitted at creation — call `workspace.*` MCP tools only.
 - Internal proxy auth (`x-org-id`, `x-user-id`, optional `x-permissions`) is for trusted frontends and tests only. End users and personal agents should use JWT or workspace API keys instead.
 
-Create workspace keys (product path): `POST /api/v1/notebooks/{notebook_id}/api-keys` (signed-in user session only; managed from the workspace API Access UI)
+Create workspace keys (product path): `POST /api/v1/workspaces/{workspace_id}/api-keys` (signed-in user session only; managed from the workspace API Access UI)
 
 ## Unified MCP (preferred)
 
@@ -89,15 +89,15 @@ REST routes below enforce the **same workspace scope and permission rules** as M
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/sources?notebook_id={notebook_id}` | List sources |
-| `POST` | `/api/v1/notebooks/{notebook_id}/documents` | Create file upload |
+| `GET` | `/api/v1/sources?notebook_id={workspace_id}` | List sources |
+| `POST` | `/api/v1/workspaces/{workspace_id}/documents` | Create file upload |
 | `POST` | `/api/v1/documents/{document_id}/complete-upload` | Finish upload |
 | `POST` | `/api/v1/chat` | REST/SSE chat |
 | `GET` | `/api/v1/agent/operation-guides/{mode}` | Prefetch guide (`rag`, `search`, `index`, `workspace.create`) |
 
 ## Deprecated MCP path
 
-- `POST /mcp/notebooks/{notebook_id}` — legacy; injects `notebook_id` from URL. Migrate to `/api/v1/mcp`.
+- `POST /mcp/workspaces/{workspace_id}` — legacy; injects `notebook_id` from URL. Migrate to `/api/v1/mcp`.
 
 ## Progressive disclosure (`agent_operation_guide`)
 

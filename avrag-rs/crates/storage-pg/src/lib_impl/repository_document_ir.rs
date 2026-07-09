@@ -48,7 +48,7 @@ impl DocumentRepository {
 
 pub struct CreateDocumentParseRunParams<'a> {
     pub run_id: Uuid,
-    pub notebook_id: Uuid,
+    pub workspace_id: Uuid,
     pub document_id: Uuid,
     pub backend_summary: &'a serde_json::Value,
     pub artifact_path: Option<&'a str>,
@@ -86,7 +86,7 @@ impl DocumentRepository {
             INSERT INTO document_parse_runs (
                 run_id,
                 org_id,
-                notebook_id,
+                workspace_id,
                 document_id,
                 status,
                 backend_summary,
@@ -98,7 +98,7 @@ impl DocumentRepository {
                 FROM documents d
                 WHERE d.id = $4
                   AND d.org_id = $2
-                  AND d.notebook_id = $3
+                  AND d.workspace_id = $3
                   AND d.status NOT IN ('deleting', 'deleted')
                 FOR UPDATE
             )
@@ -117,7 +117,7 @@ impl DocumentRepository {
         )
         .bind(params.run_id)
         .bind(context.org_id().into_uuid())
-        .bind(params.notebook_id)
+        .bind(params.workspace_id)
         .bind(params.document_id)
         .bind(params.backend_summary)
         .bind(params.artifact_path)
@@ -162,7 +162,7 @@ impl DocumentRepository {
                   FROM documents d
                   WHERE d.id = pr.document_id
                     AND d.org_id = pr.org_id
-                    AND d.notebook_id = pr.notebook_id
+                    AND d.workspace_id = pr.workspace_id
                     AND d.status NOT IN ('deleting', 'deleted')
                   FOR UPDATE
               )
@@ -201,7 +201,7 @@ impl DocumentRepository {
     pub async fn replace_document_blocks(
         &self,
         context: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         document_id: Uuid,
         blocks: &[StoredDocumentBlock],
     ) -> Result<(), PgStorageError> {
@@ -236,7 +236,7 @@ impl DocumentRepository {
                 r#"
                 INSERT INTO document_blocks (
                     org_id,
-                    notebook_id,
+                    workspace_id,
                     document_id,
                     parse_run_id,
                     block_id,
@@ -256,7 +256,7 @@ impl DocumentRepository {
                 "#,
             )
             .bind(context.org_id().into_uuid())
-            .bind(notebook_id)
+            .bind(workspace_id)
             .bind(document_id)
             .bind(block.parse_run_id)
             .bind(&block.block_id)

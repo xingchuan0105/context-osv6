@@ -24,7 +24,7 @@ pub struct InputGuardContext<'a> {
     pub org_id: Uuid,
     pub user_id: Uuid,
     pub doc_scope: &'a [String],
-    pub notebook_id: Option<Uuid>,
+    pub workspace_id: Option<Uuid>,
     pub trace_id: Option<String>,
 }
 
@@ -71,7 +71,7 @@ impl InputGuardPipeline {
             org_id: uuid::Uuid::nil(),
             user_id: uuid::Uuid::nil(),
             doc_scope: &[],
-            notebook_id: None,
+            workspace_id: None,
             trace_id,
         };
         for guard in &self.guards {

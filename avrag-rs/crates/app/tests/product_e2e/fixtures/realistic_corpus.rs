@@ -33,7 +33,7 @@ const REALISTIC_CORPUS: &[(&str, u64)] = &[
 pub struct RealisticCorpusState {
     pub org_id: String,
     pub user_id: String,
-    pub notebook_id: String,
+    pub workspace_id: String,
     pub documents: Vec<RealisticDocument>,
 }
 
@@ -285,14 +285,14 @@ async fn discover_realistic_corpus_pg(pg_url: &str) -> Option<RealisticCorpusSta
         }
     };
     let mut documents = Vec::new();
-    let mut notebook_id: Option<Uuid> = None;
+    let mut workspace_id: Option<Uuid> = None;
 
     for (filename, _) in REALISTIC_CORPUS {
         let row: Option<(Uuid, Uuid)> = sqlx::query_as(
             r#"
-            SELECT d.id, d.notebook_id
+            SELECT d.id, d.workspace_id
             FROM documents d
-            LEFT JOIN notebooks n ON n.id = d.notebook_id
+            LEFT JOIN workspaces n ON n.id = d.workspace_id
             WHERE d.org_id = $1
               AND d.file_name = $2
               AND d.status = 'completed'
@@ -317,14 +317,14 @@ async fn discover_realistic_corpus_pg(pg_url: &str) -> Option<RealisticCorpusSta
                 return None;
             }
         };
-        if let Some(expected_nb) = notebook_id {
+        if let Some(expected_nb) = workspace_id {
             if expected_nb != nb_id {
                 eprintln!(
-                    "[realistic] PG discovery: {filename} notebook_id={nb_id} differs from prior {expected_nb} (using first notebook for chat scope)"
+                    "[realistic] PG discovery: {filename} workspace_id={nb_id} differs from prior {expected_nb} (using first notebook for chat scope)"
                 );
             }
         } else {
-            notebook_id = Some(nb_id);
+            workspace_id = Some(nb_id);
         }
         documents.push(RealisticDocument {
             filename: (*filename).to_string(),
@@ -332,11 +332,11 @@ async fn discover_realistic_corpus_pg(pg_url: &str) -> Option<RealisticCorpusSta
         });
     }
 
-    let notebook_id = notebook_id?;
+    let workspace_id = workspace_id?;
     Some(RealisticCorpusState {
         org_id: DEFAULT_TEST_ORG_ID.to_string(),
         user_id: DEFAULT_TEST_USER_ID.to_string(),
-        notebook_id: notebook_id.to_string(),
+        workspace_id: workspace_id.to_string(),
         documents,
     })
 }
@@ -345,8 +345,8 @@ async fn resolve_realistic_corpus(pg_url: &str) -> RealisticCorpusState {
     if let Some(state) = load_realistic_state() {
         if validate_realistic_corpus_pg(pg_url, &state).await {
             eprintln!(
-                "[realistic] reusing cached corpus (notebook_id={}, {} docs)",
-                state.notebook_id,
+                "[realistic] reusing cached corpus (workspace_id={}, {} docs)",
+                state.workspace_id,
                 state.documents.len()
             );
             return state;
@@ -359,8 +359,8 @@ async fn resolve_realistic_corpus(pg_url: &str) -> RealisticCorpusState {
     if let Some(state) = discover_realistic_corpus_pg(pg_url).await {
         if validate_realistic_corpus_pg(pg_url, &state).await {
             eprintln!(
-                "[realistic] discovered corpus in PG (notebook_id={}, {} docs) — refreshed cache",
-                state.notebook_id,
+                "[realistic] discovered corpus in PG (workspace_id={}, {} docs) — refreshed cache",
+                state.workspace_id,
                 state.documents.len()
             );
             save_realistic_state(&state);

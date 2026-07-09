@@ -34,10 +34,10 @@ fn is_org_permission(permission: &str) -> bool {
 /// Normalize API key permissions at create time and on validate/read.
 pub fn normalize_api_key_permissions(
     permissions: &[String],
-    notebook_id: Option<uuid::Uuid>,
+    workspace_id: Option<uuid::Uuid>,
 ) -> Vec<String> {
     let mut normalized = if permissions.is_empty() {
-        if notebook_id.is_some() {
+        if workspace_id.is_some() {
             WORKSPACE_KEY_DEFAULT_PERMISSIONS
                 .iter()
                 .map(|value| (*value).to_string())
@@ -57,13 +57,13 @@ pub fn normalize_api_key_permissions(
     };
     normalized.sort();
     normalized.dedup();
-    if notebook_id.is_some() {
+    if workspace_id.is_some() {
         normalized.retain(|item| is_workspace_permission(item));
     } else {
         normalized.retain(|item| is_org_permission(item));
     }
     if normalized.is_empty() {
-        if notebook_id.is_some() {
+        if workspace_id.is_some() {
             normalized.extend(
                 WORKSPACE_KEY_DEFAULT_PERMISSIONS
                     .iter()

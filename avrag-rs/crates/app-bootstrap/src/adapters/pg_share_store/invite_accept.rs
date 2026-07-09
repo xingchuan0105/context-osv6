@@ -1,7 +1,7 @@
     async fn accept_invite(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         member_id: Uuid,
         actor_id: Uuid,
     ) -> Result<(), AppError> {
@@ -26,14 +26,14 @@
         let row = sqlx::query(
             r#"
             select email, invite_status
-            from notebook_members
-            where id = $1 and org_id = $2 and notebook_id = $3
+            from workspace_members
+            where id = $1 and org_id = $2 and workspace_id = $3
             for update
             "#,
         )
         .bind(member_id)
         .bind(auth.org_id().into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .fetch_optional(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?
@@ -56,17 +56,17 @@
         }
         sqlx::query(
             r#"
-            update notebook_members
+            update workspace_members
             set user_id = $4,
                 invite_status = 'accepted',
                 accepted_at = now(),
                 updated_at = now()
-            where id = $1 and org_id = $2 and notebook_id = $3
+            where id = $1 and org_id = $2 and workspace_id = $3
             "#,
         )
         .bind(member_id)
         .bind(auth.org_id().into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(actor_id)
         .execute(tx.as_mut())
         .await

@@ -36,11 +36,11 @@ impl DocumentContext {
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> Option<Notebook> {
         let store = require_document_store(storage).ok()?;
-        let notebook_id = Uuid::parse_str(notebook_id).ok()?;
-        let notebook = store.get_notebook(auth, notebook_id).await.ok().flatten()?;
+        let workspace_id = Uuid::parse_str(workspace_id).ok()?;
+        let notebook = store.get_notebook(auth, workspace_id).await.ok().flatten()?;
         Some(notebook)
     }
 
@@ -83,16 +83,16 @@ impl DocumentContext {
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
-        notebook_id: &str,
+        workspace_id: &str,
         req: UpdateNotebookRequest,
     ) -> Result<Notebook, AppError> {
         let store = require_document_store(storage)?;
-        let notebook_id =
-            parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
+        let workspace_id =
+            parse_uuid_or_app_error(workspace_id, "notebook_not_found", "notebook not found")?;
         store
             .update_notebook(
                 auth,
-                notebook_id,
+                workspace_id,
                 Some(req.name.trim()),
                 Some(req.description.trim()),
             )
@@ -104,12 +104,12 @@ impl DocumentContext {
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> Result<StatusOnlyResponse, AppError> {
         let store = require_document_store(storage)?;
-        let notebook_id =
-            parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
-        let deleted = store.delete_notebook(auth, notebook_id).await?;
+        let workspace_id =
+            parse_uuid_or_app_error(workspace_id, "notebook_not_found", "notebook not found")?;
+        let deleted = store.delete_notebook(auth, workspace_id).await?;
         if !deleted {
             return Err(AppError::not_found(
                 "notebook_not_found",

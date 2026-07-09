@@ -46,8 +46,8 @@ impl MemoryAdminStore {
         }
     }
 
-    fn bucket_key(notebook_id: Option<Uuid>) -> String {
-        notebook_id
+    fn bucket_key(workspace_id: Option<Uuid>) -> String {
+        workspace_id
             .map(|id| id.to_string())
             .unwrap_or_else(|| ORG_KEY_BUCKET.to_string())
     }
@@ -181,9 +181,9 @@ impl AdminStorePort for MemoryAdminStore {
     async fn list_api_keys(
         &self,
         _auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
     ) -> Result<Vec<ApiKeyRow>, AppError> {
-        let bucket = Self::bucket_key(notebook_id);
+        let bucket = Self::bucket_key(workspace_id);
         let keys = self.api_keys.read().await;
         Ok(keys.get(&bucket).cloned().unwrap_or_default())
     }
@@ -191,7 +191,7 @@ impl AdminStorePort for MemoryAdminStore {
     async fn create_api_key(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         name: &str,
         permissions: &[String],
         rate_limit_rpm: i32,
@@ -203,7 +203,7 @@ impl AdminStorePort for MemoryAdminStore {
         let row = ApiKeyRow {
             id: new_id(),
             org_id: org_id.clone(),
-            notebook_id: notebook_id
+            workspace_id: workspace_id
                 .map(|id| id.to_string())
                 .unwrap_or_default(),
             key_prefix: plaintext_key.chars().take(12).collect(),
@@ -220,7 +220,7 @@ impl AdminStorePort for MemoryAdminStore {
             created_at: now_rfc3339(),
             updated_at: now_rfc3339(),
         };
-        let bucket = Self::bucket_key(notebook_id);
+        let bucket = Self::bucket_key(workspace_id);
         {
             let mut keys = self.api_keys.write().await;
             keys.entry(bucket).or_default().push(row.clone());
@@ -231,7 +231,7 @@ impl AdminStorePort for MemoryAdminStore {
             MemoryApiKeyRecord {
                 id: Uuid::parse_str(&row.id).unwrap_or_else(|_| Uuid::new_v4()),
                 org_id: auth.org_id(),
-                notebook_id,
+                workspace_id,
                 permissions: permissions.to_vec(),
                 rate_limit_rpm: rate_limit_rpm_u32,
                 is_active: true,
@@ -248,10 +248,10 @@ impl AdminStorePort for MemoryAdminStore {
     async fn revoke_api_key(
         &self,
         _auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         key_id: Uuid,
     ) -> Result<bool, AppError> {
-        let bucket = Self::bucket_key(notebook_id);
+        let bucket = Self::bucket_key(workspace_id);
         let key_id_str = key_id.to_string();
         let mut keys_map = self.api_keys.write().await;
         let keys = keys_map.entry(bucket).or_default();

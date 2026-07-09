@@ -36,7 +36,7 @@ fn ensure_permission_for_subject(auth: &AuthContext, permission: &str) -> Result
 }
 
 pub(crate) fn authorize_org_tool(auth: &AuthContext, permission: &str) -> Result<(), AppError> {
-    if auth.notebook_id().is_some() {
+    if auth.workspace_id().is_some() {
         return Err(AppError::forbidden(
             "workspace_key_cannot_call_org_tools",
             "workspace-scoped API keys cannot call org-level endpoints",
@@ -48,16 +48,16 @@ pub(crate) fn authorize_org_tool(auth: &AuthContext, permission: &str) -> Result
 pub(crate) fn authorize_workspace_tool(
     auth: &AuthContext,
     permission: &str,
-    notebook_id: Uuid,
+    workspace_id: Uuid,
 ) -> Result<(), AppError> {
     if matches!(auth.subject_kind(), SubjectKind::ApiKey) {
-        if auth.notebook_id().is_none() {
+        if auth.workspace_id().is_none() {
             return Err(AppError::forbidden(
                 "org_key_cannot_call_workspace_tools",
                 "org-scoped API keys cannot call workspace-level endpoints",
             ));
         }
-        auth.ensure_notebook_scope(notebook_id)
+        auth.ensure_notebook_scope(workspace_id)
             .map_err(auth_error_to_app_error)?;
     }
     ensure_permission_for_subject(auth, permission)
@@ -68,7 +68,7 @@ pub(crate) fn authorize_api_key_query_scoped(auth: &AuthContext) -> Result<(), A
         return Ok(());
     }
     ensure_permission_for_subject(auth, PERM_QUERY)?;
-    if auth.notebook_id().is_none() {
+    if auth.workspace_id().is_none() {
         return Err(AppError::forbidden(
             "org_key_cannot_call_workspace_tools",
             "org-scoped API keys cannot call workspace-level endpoints",
@@ -79,16 +79,16 @@ pub(crate) fn authorize_api_key_query_scoped(auth: &AuthContext) -> Result<(), A
 
 pub(crate) fn authorize_workspace_index_or_query(
     auth: &AuthContext,
-    notebook_id: Uuid,
+    workspace_id: Uuid,
 ) -> Result<(), AppError> {
     if matches!(auth.subject_kind(), SubjectKind::ApiKey) {
-        if auth.notebook_id().is_none() {
+        if auth.workspace_id().is_none() {
             return Err(AppError::forbidden(
                 "org_key_cannot_call_workspace_tools",
                 "org-scoped API keys cannot call workspace-level endpoints",
             ));
         }
-        auth.ensure_notebook_scope(notebook_id)
+        auth.ensure_notebook_scope(workspace_id)
             .map_err(auth_error_to_app_error)?;
         let has_index = auth.ensure_permission(PERM_INDEX).is_ok();
         let has_query = auth.ensure_permission(PERM_QUERY).is_ok();
@@ -105,12 +105,12 @@ pub(crate) fn authorize_workspace_index_or_query(
 
 pub(crate) fn authorize_workspace_index_or_query_str(
     auth: &AuthContext,
-    notebook_id: &str,
+    workspace_id: &str,
 ) -> Result<(), AppError> {
     if !matches!(auth.subject_kind(), SubjectKind::ApiKey) {
         return Ok(());
     }
-    let notebook_uuid = parse_notebook_id(notebook_id)?;
+    let notebook_uuid = parse_workspace_id(workspace_id)?;
     authorize_workspace_index_or_query(auth, notebook_uuid)
 }
 
@@ -143,12 +143,12 @@ pub(crate) fn require_user_admin(auth: &AuthContext) -> Result<(), AppError> {
 
 pub(crate) fn authorize_session_notebook(
     auth: &AuthContext,
-    session_notebook_id: &str,
+    session_workspace_id: &str,
 ) -> Result<(), AppError> {
     if !matches!(auth.subject_kind(), SubjectKind::ApiKey) {
         return Ok(());
     }
-    authorize_workspace_notebook_str(auth, query_permission(), session_notebook_id)
+    authorize_workspace_notebook_str(auth, query_permission(), session_workspace_id)
 }
 
 pub(crate) async fn authorize_session_access(
@@ -159,14 +159,14 @@ pub(crate) async fn authorize_session_access(
         .get_session(session_id)
         .await
         .ok_or_else(|| AppError::not_found("session_not_found", "session not found"))?;
-    authorize_session_notebook(state.auth(), &session.notebook_id)?;
+    authorize_session_notebook(state.auth(), &session.workspace_id)?;
     Ok(session)
 }
 
 pub(crate) async fn ensure_document_in_notebook(
     state: &AppState,
     document_id: &str,
-    notebook_id: &str,
+    workspace_id: &str,
 ) -> Result<(), AppError> {
     let document = state.docs()
         .list_documents(None, Some(document_id))
@@ -174,7 +174,7 @@ pub(crate) async fn ensure_document_in_notebook(
         .into_iter()
         .next()
         .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
-    if document.notebook_id != notebook_id {
+    if document.workspace_id != workspace_id {
         return Err(AppError::forbidden(
             "document_notebook_mismatch",
             "document does not belong to the requested workspace",
@@ -186,31 +186,31 @@ pub(crate) async fn ensure_document_in_notebook(
 pub(crate) fn authorize_workspace_notebook_str(
     auth: &AuthContext,
     permission: &str,
-    notebook_id: &str,
+    workspace_id: &str,
 ) -> Result<(), AppError> {
     if !matches!(auth.subject_kind(), SubjectKind::ApiKey) {
         return Ok(());
     }
-    let notebook_uuid = parse_notebook_id(notebook_id)?;
+    let notebook_uuid = parse_workspace_id(workspace_id)?;
     authorize_workspace_tool(auth, permission, notebook_uuid)
 }
 
 pub(crate) fn authorize_workspace_query_optional_notebook(
     auth: &AuthContext,
-    notebook_id: Option<&str>,
+    workspace_id: Option<&str>,
 ) -> Result<(), AppError> {
     if !matches!(auth.subject_kind(), SubjectKind::ApiKey) {
         return Ok(());
     }
-    let notebook_id = notebook_id
+    let workspace_id = workspace_id
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| {
             AppError::validation(
-                "notebook_id_required",
-                "notebook_id is required for workspace API keys",
+                "workspace_id_required",
+                "workspace_id is required for workspace API keys",
             )
         })?;
-    authorize_workspace_notebook_str(auth, PERM_QUERY, notebook_id)
+    authorize_workspace_notebook_str(auth, PERM_QUERY, workspace_id)
 }
 
 pub(crate) async fn authorize_document_access(
@@ -227,7 +227,7 @@ pub(crate) async fn authorize_document_access(
         .into_iter()
         .next()
         .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
-    authorize_workspace_notebook_str(state.auth(), permission, &document.notebook_id)
+    authorize_workspace_notebook_str(state.auth(), permission, &document.workspace_id)
 }
 
 pub(crate) async fn authorize_document_access_index_or_query(
@@ -243,28 +243,28 @@ pub(crate) async fn authorize_document_access_index_or_query(
         .into_iter()
         .next()
         .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
-    authorize_workspace_index_or_query_str(state.auth(), &document.notebook_id)
+    authorize_workspace_index_or_query_str(state.auth(), &document.workspace_id)
 }
 
-pub(crate) fn parse_notebook_id(value: &str) -> Result<Uuid, AppError> {
+pub(crate) fn parse_workspace_id(value: &str) -> Result<Uuid, AppError> {
     Uuid::parse_str(value.trim()).map_err(|_| {
-        AppError::validation("invalid_notebook_id", "notebook_id must be a valid UUID")
+        AppError::validation("invalid_workspace_id", "workspace_id must be a valid UUID")
     })
 }
 
-pub(crate) fn require_notebook_id_arg(arguments: &serde_json::Value) -> Result<Uuid, AppError> {
-    let notebook_id = arguments
-        .get("notebook_id")
+pub(crate) fn require_workspace_id_arg(arguments: &serde_json::Value) -> Result<Uuid, AppError> {
+    let workspace_id = arguments
+        .get("workspace_id")
         .and_then(|value| value.as_str())
         .unwrap_or_default()
         .trim();
-    if notebook_id.is_empty() {
+    if workspace_id.is_empty() {
         return Err(AppError::validation(
-            "notebook_id_required",
-            "workspace tools require arguments.notebook_id",
+            "workspace_id_required",
+            "workspace tools require arguments.workspace_id",
         ));
     }
-    parse_notebook_id(notebook_id)
+    parse_workspace_id(workspace_id)
 }
 
 pub(crate) fn org_create_permission() -> &'static str {
@@ -285,7 +285,7 @@ pub(crate) fn query_permission() -> &'static str {
 
 pub(crate) async fn ensure_user_notebook_access(
     state: &AppState,
-    notebook_id: &str,
+    workspace_id: &str,
 ) -> Result<(), AppError> {
     if !matches!(state.auth().subject_kind(), SubjectKind::User) {
         return Ok(());
@@ -301,7 +301,7 @@ pub(crate) async fn ensure_user_notebook_access(
     };
     let service = avrag_share::ShareService::new(store);
     let access = service
-        .check_access(state.auth(), notebook_id)
+        .check_access(state.auth(), workspace_id)
         .await
         .map_err(|error| {
             AppError::internal(format!("failed to verify workspace access: {error}"))

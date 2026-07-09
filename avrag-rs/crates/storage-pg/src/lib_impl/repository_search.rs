@@ -1,6 +1,6 @@
 use super::*;
 impl ChunkRepository {
-    /// Global search: notebooks by title/description using ILIKE.
+    /// Global search: workspaces by title/description using ILIKE.
     pub async fn search_notebooks(
         &self,
         context: &AuthContext,
@@ -34,7 +34,7 @@ impl ChunkRepository {
         let rows = if segmented_query.is_empty() {
             sqlx::query(
                 r#"
-                select id, notebook_id, title, agent_type, pinned, created_at, updated_at
+                select id, workspace_id, title, agent_type, pinned, created_at, updated_at
                 from chat_sessions
                 where title ilike $1
                 order by updated_at desc, created_at desc
@@ -47,7 +47,7 @@ impl ChunkRepository {
         } else {
             sqlx::query(
                 r#"
-                select distinct s.id, s.notebook_id, s.title, s.agent_type, s.pinned, s.created_at, s.updated_at
+                select distinct s.id, s.workspace_id, s.title, s.agent_type, s.pinned, s.created_at, s.updated_at
                 from chat_sessions s
                 where s.title ilike $1
                    or exists (
@@ -79,9 +79,9 @@ impl ChunkRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select d.id, d.notebook_id, n.title as notebook_name, d.file_name, d.status
+            select d.id, d.workspace_id, n.title as notebook_name, d.file_name, d.status
             from documents d
-            join notebooks n on n.id = d.notebook_id
+            join workspaces n on n.id = d.workspace_id
             where d.file_name ilike $1
               and d.status not in ('deleting', 'deleted')
             order by d.updated_at desc, d.created_at desc
@@ -100,8 +100,8 @@ impl ChunkRepository {
                     .try_get::<Uuid, _>("id")
                     .map(|value| value.to_string())
                     .unwrap_or_default(),
-                notebook_id: row
-                    .try_get::<Uuid, _>("notebook_id")
+                workspace_id: row
+                    .try_get::<Uuid, _>("workspace_id")
                     .map(|value| value.to_string())
                     .unwrap_or_default(),
                 notebook_name: row.try_get("notebook_name").unwrap_or_default(),

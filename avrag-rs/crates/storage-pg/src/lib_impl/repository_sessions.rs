@@ -4,18 +4,18 @@ impl SessionRepository {
     pub async fn list_sessions(
         &self,
         context: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
     ) -> Result<Vec<ChatSession>, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select id, notebook_id, title, agent_type, pinned, created_at, updated_at
+            select id, workspace_id, title, agent_type, pinned, created_at, updated_at
             from chat_sessions
-            where ($1::uuid is null or notebook_id = $1)
+            where ($1::uuid is null or workspace_id = $1)
             order by pinned desc, updated_at desc, created_at desc
             "#,
         )
-        .bind(notebook_id)
+        .bind(workspace_id)
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;
@@ -30,7 +30,7 @@ impl SessionRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, notebook_id, title, agent_type, pinned, created_at, updated_at
+            select id, workspace_id, title, agent_type, pinned, created_at, updated_at
             from chat_sessions
             where id = $1
             "#,
@@ -57,7 +57,7 @@ impl SessionRepository {
                 pinned = COALESCE($3, pinned),
                 updated_at = now()
             where id = $1
-            returning id, notebook_id, title, agent_type, pinned, created_at, updated_at
+            returning id, workspace_id, title, agent_type, pinned, created_at, updated_at
             "#,
         )
         .bind(session_id)
@@ -72,7 +72,7 @@ impl SessionRepository {
     pub async fn create_session(
         &self,
         context: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         title: Option<&str>,
         agent_type: &str,
     ) -> Result<ChatSession, PgStorageError> {
@@ -80,13 +80,13 @@ impl SessionRepository {
         ensure_org_and_actor(tx.inner(), context).await?;
         let row = sqlx::query(
             r#"
-            insert into chat_sessions (org_id, notebook_id, user_id, title, agent_type)
+            insert into chat_sessions (org_id, workspace_id, user_id, title, agent_type)
             values ($1, $2, $3, $4, $5)
-            returning id, notebook_id, title, agent_type, pinned, created_at, updated_at
+            returning id, workspace_id, title, agent_type, pinned, created_at, updated_at
             "#,
         )
         .bind(context.org_id().into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(context.actor_id().map(ActorId::into_uuid))
         .bind(title)
         .bind(agent_type)

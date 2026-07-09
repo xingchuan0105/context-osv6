@@ -43,7 +43,7 @@ impl ShareAccessLevel {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShareNotebookMember {
     pub id: String,
-    pub notebook_id: String,
+    pub workspace_id: String,
     pub user_id: Option<String>,
     pub email: Option<String>,
     pub access_level: ShareAccessLevel,
@@ -102,7 +102,7 @@ pub struct SharedSourceSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShareAccessLogEntry {
     pub id: String,
-    pub notebook_id: String,
+    pub workspace_id: String,
     pub share_token: String,
     pub action: String,
     pub accessed_at: i64,
@@ -120,7 +120,7 @@ pub struct ShareAnalyticsEntry {
 #[derive(Debug, Clone)]
 pub struct PublicShareChatContextSnapshot {
     pub org_id: Uuid,
-    pub notebook_id: Uuid,
+    pub workspace_id: Uuid,
     pub owner_user_id: Uuid,
     pub access_level: ShareAccessLevel,
 }

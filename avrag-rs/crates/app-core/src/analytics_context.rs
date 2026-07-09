@@ -49,7 +49,7 @@ impl AnalyticsServiceCtx {
         surface: analytics::Surface,
         result: analytics::ResultTag,
         session_id: Option<Uuid>,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         metadata: serde_json::Value,
     ) {
         self.into_context(
@@ -61,7 +61,7 @@ impl AnalyticsServiceCtx {
             surface,
             result,
             session_id,
-            notebook_id,
+            workspace_id,
             metadata,
         )
         .await;
@@ -76,7 +76,7 @@ impl AnalyticsServiceCtx {
         surface: analytics::Surface,
         result: analytics::ResultTag,
         session_id: Option<Uuid>,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         metadata: serde_json::Value,
     ) {
         self.into_context(Some(user_id), request_id)
@@ -85,7 +85,7 @@ impl AnalyticsServiceCtx {
                 surface,
                 result,
                 session_id,
-                notebook_id,
+                workspace_id,
                 metadata,
             )
             .await;
@@ -126,7 +126,7 @@ impl AnalyticsContext {
         surface: analytics::Surface,
         result: analytics::ResultTag,
         session_id: Option<Uuid>,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         metadata: serde_json::Value,
     ) {
         let Some(ref analytics) = self.analytics else {
@@ -141,7 +141,7 @@ impl AnalyticsContext {
             event_time: chrono::Utc::now(),
             user_id,
             session_id,
-            notebook_id,
+            workspace_id,
             surface,
             event_name,
             result,
@@ -169,7 +169,7 @@ impl AnalyticsContext {
             event_time: chrono::Utc::now(),
             user_id,
             session_id: record.session_id,
-            notebook_id: record.notebook_id,
+            workspace_id: record.workspace_id,
             event_name: record.event_name,
             feature: record.feature.to_string(),
             provider: crate::util::non_empty_or_unknown(&record.usage.provider),
@@ -198,7 +198,7 @@ impl AnalyticsContext {
         &self,
         event_name: analytics::CostEventName,
         feature: &str,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         storage_bytes_delta: i64,
         source: &str,
         metadata: serde_json::Value,
@@ -215,7 +215,7 @@ impl AnalyticsContext {
             event_time: chrono::Utc::now(),
             user_id,
             session_id: None,
-            notebook_id,
+            workspace_id,
             event_name,
             feature: feature.to_string(),
             provider: "internal".to_string(),
@@ -239,7 +239,7 @@ impl AnalyticsContext {
         &self,
         provider: &str,
         model: &str,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         external_call_count: i64,
         metadata: serde_json::Value,
     ) {
@@ -255,7 +255,7 @@ impl AnalyticsContext {
             event_time: chrono::Utc::now(),
             user_id,
             session_id: None,
-            notebook_id,
+            workspace_id,
             event_name: analytics::CostEventName::ExternalSearchUsageMetered,
             feature: "search".to_string(),
             provider: crate::util::non_empty_or_unknown(provider),
@@ -281,7 +281,7 @@ pub struct CostEventRecord<'a> {
     pub event_name: analytics::CostEventName,
     pub feature: &'a str,
     pub session_id: Option<Uuid>,
-    pub notebook_id: Option<Uuid>,
+    pub workspace_id: Option<Uuid>,
     pub usage: &'a avrag_llm::LlmUsage,
     pub source: &'a str,
     pub metadata: serde_json::Value,

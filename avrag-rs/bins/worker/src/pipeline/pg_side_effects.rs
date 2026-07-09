@@ -74,7 +74,7 @@ pub(crate) fn collect_document_text(chunk_plan: &ingestion::chunker::IrChunkPlan
 
 pub(crate) fn build_asset_object_key(
     context: &AuthContext,
-    notebook_id: &str,
+    workspace_id: &str,
     document_id: &str,
     asset_id: Uuid,
     source_path: &str,
@@ -83,7 +83,7 @@ pub(crate) fn build_asset_object_key(
     format!(
         "{}/{}/{}/assets/{}.{}",
         context.org_id(),
-        notebook_id,
+        workspace_id,
         document_id,
         asset_id,
         extension
@@ -97,7 +97,7 @@ fn infer_asset_extension(path: &str) -> Option<&'static str> {
 pub(crate) async fn mirror_document_asset(
     object_store: &ObjectStoreHandle,
     context: &AuthContext,
-    notebook_id: &str,
+    workspace_id: &str,
     document_id: &str,
     asset_id: Uuid,
     source_path: &str,
@@ -108,7 +108,7 @@ pub(crate) async fn mirror_document_asset(
     }
 
     let object_key =
-        build_asset_object_key(context, notebook_id, document_id, asset_id, source_path);
+        build_asset_object_key(context, workspace_id, document_id, asset_id, source_path);
     if common::is_remote_url(source_path) {
         return mirror_remote_asset(object_store, source_path, &object_key, ttl_secs)
             .await

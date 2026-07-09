@@ -130,7 +130,7 @@ mod tests {
             org_id: uuid::Uuid::new_v4(),
             user_id: uuid::Uuid::new_v4(),
             doc_scope: &[],
-            notebook_id: None,
+            workspace_id: None,
             trace_id: Some("test-trace".into()),
         }
     }

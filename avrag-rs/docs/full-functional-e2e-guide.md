@@ -260,7 +260,7 @@ E2E_MODE=smoke cargo test -p app --test product_e2e --features product-e2e \
 
 ### 2.9 OpenAI 兼容 API / 限流 / 配额（PR-3）
 
-OpenAI 兼容路由 `POST /v1/notebooks/{notebook_id}/chat/completions` 复用标准 chat 鉴权（API Key Bearer + `query` 权限 + notebook scope）；限流按 API key 的 `rate_limit_rpm` 每 key 计数，配额按用户滚动 5h/7d 用量计。
+OpenAI 兼容路由 `POST /v1/workspaces/{workspace_id}/chat/completions` 复用标准 chat 鉴权（API Key Bearer + `query` 权限 + notebook scope）；限流按 API key 的 `rate_limit_rpm` 每 key 计数，配额按用户滚动 5h/7d 用量计。
 
 | 能力 | 验收标准 | 现有测试 | 层 | 依赖 | 并行组 |
 |------|----------|----------|-----|------|--------|

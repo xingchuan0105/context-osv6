@@ -53,15 +53,15 @@ pub(crate) fn router() -> Router<AppState> {
 pub(crate) fn compat_router() -> Router<AppState> {
     Router::new()
         .route(
-            "/v1/notebooks/{notebook_id}/chat/completions",
+            "/v1/workspaces/{workspace_id}/chat/completions",
             post(crate::lib_impl::openai_chat_completions_handler),
         )
         .route(
-            "/mcp/notebooks/{notebook_id}",
+            "/mcp/workspaces/{workspace_id}",
             get(crate::mcp::compat_mcp_sse_handler).post(crate::mcp::compat_mcp_jsonrpc_handler),
         )
         .route(
-            "/mcp/notebooks/{notebook_id}/tools/call",
+            "/mcp/workspaces/{workspace_id}/tools/call",
             post(crate::mcp::compat_mcp_tool_call_handler),
         )
 }

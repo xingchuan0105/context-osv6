@@ -60,7 +60,7 @@
 - 内容以 Markdown 作为外部存储格式。
 - `editorProps.handleKeyDown` 已处理 `Shift+Enter` 插入 `<br>` 和标题末尾 `Enter` 行为。
 - 粘贴逻辑已有 HTML 清洗和链接处理。
-- 笔记保存链路在 `frontend_next/lib/workspace/client.ts` 中使用 `/api/v1/notebooks/{workspace_id}/notes`。
+- 笔记保存链路在 `frontend_next/lib/workspace/client.ts` 中使用 `/api/v1/workspaces/{workspace_id}/notes`。
 
 这意味着 Tab 补全应作为 TipTap extension 或 ProseMirror plugin 接入，而不是在 React 外层用 textarea 方式处理。
 
@@ -167,7 +167,7 @@ flowchart TD
 
 建议新增：
 
-`POST /api/v1/notebooks/{notebook_id}/notes/{note_id}/tab-completions`
+`POST /api/v1/workspaces/{workspace_id}/notes/{note_id}/tab-completions`
 
 请求：
 
@@ -212,7 +212,7 @@ flowchart TD
 
 建议新增：
 
-`POST /api/v1/notebooks/{notebook_id}/notes/{note_id}/completion-context`
+`POST /api/v1/workspaces/{workspace_id}/notes/{note_id}/completion-context`
 
 用途：
 
@@ -224,7 +224,7 @@ flowchart TD
 
 建议新增：
 
-`POST /api/v1/notebooks/{notebook_id}/notes/{note_id}/tab-completions/{suggestion_id}/feedback`
+`POST /api/v1/workspaces/{workspace_id}/notes/{note_id}/tab-completions/{suggestion_id}/feedback`
 
 事件：
 

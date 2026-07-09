@@ -20,7 +20,7 @@ pub(crate) async fn stage_build_and_replace_retrieval_index(
     processor: &PgTaskProcessor,
     task: &IngestionTask,
     context: &AuthContext,
-    notebook_id: Uuid,
+    workspace_id: Uuid,
     document_id: Uuid,
     parse_run_id: Uuid,
     document_ir: &DocumentIr,
@@ -100,7 +100,7 @@ pub(crate) async fn stage_build_and_replace_retrieval_index(
         .await?;
         let batch = build_document_index_batch(
             context,
-            Some(notebook_id),
+            Some(workspace_id),
             document_id,
             parse_run_id,
             text_index_records,

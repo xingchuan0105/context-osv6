@@ -36,11 +36,11 @@ impl BillingQuotaPort for PgBillingQuotaAdapter {
     async fn notebook_exists(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<bool, AppError> {
         Ok(self
             .document_store
-            .get_notebook(auth, notebook_id)
+            .get_notebook(auth, workspace_id)
             .await?
             .is_some())
     }

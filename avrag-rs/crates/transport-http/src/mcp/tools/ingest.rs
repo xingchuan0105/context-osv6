@@ -5,14 +5,14 @@ use serde_json::{Value, json};
 
 use crate::auth_guard::{
     authorize_workspace_index_or_query, authorize_workspace_tool, ensure_document_in_notebook,
-    index_permission, query_permission, require_notebook_id_arg,
+    index_permission, query_permission, require_workspace_id_arg,
 };
 use crate::mcp::catalog;
 
 pub(crate) async fn create_upload(state: &AppState, arguments: &Value) -> Result<Value, AppError> {
-    let notebook_id = require_notebook_id_arg(arguments)?;
-    authorize_workspace_tool(state.auth(), index_permission(), notebook_id)?;
-    let notebook_id_str = notebook_id.to_string();
+    let workspace_id = require_workspace_id_arg(arguments)?;
+    authorize_workspace_tool(state.auth(), index_permission(), workspace_id)?;
+    let workspace_id_str = workspace_id.to_string();
 
     let filename = arguments
         .get("filename")
@@ -39,7 +39,7 @@ pub(crate) async fn create_upload(state: &AppState, arguments: &Value) -> Result
 
     let upload = state.docs()
         .create_document_upload(
-            &notebook_id_str,
+            &workspace_id_str,
             CreateDocumentRequest {
                 filename,
                 mime_type,
@@ -50,7 +50,7 @@ pub(crate) async fn create_upload(state: &AppState, arguments: &Value) -> Result
 
     Ok(catalog::success_result(
         "workspace.create_upload",
-        Some(&notebook_id_str),
+        Some(&workspace_id_str),
         json!(upload),
         vec![
             "HTTP PUT file bytes to data.upload_url",
@@ -64,9 +64,9 @@ pub(crate) async fn complete_upload(
     state: &AppState,
     arguments: &Value,
 ) -> Result<Value, AppError> {
-    let notebook_id = require_notebook_id_arg(arguments)?;
-    authorize_workspace_tool(state.auth(), index_permission(), notebook_id)?;
-    let notebook_id_str = notebook_id.to_string();
+    let workspace_id = require_workspace_id_arg(arguments)?;
+    authorize_workspace_tool(state.auth(), index_permission(), workspace_id)?;
+    let workspace_id_str = workspace_id.to_string();
     let document_id = arguments
         .get("document_id")
         .and_then(|value| value.as_str())
@@ -79,12 +79,12 @@ pub(crate) async fn complete_upload(
             "document_id is required",
         ));
     }
-    ensure_document_in_notebook(state, &document_id, &notebook_id_str).await?;
+    ensure_document_in_notebook(state, &document_id, &workspace_id_str).await?;
 
     let result = state.docs().complete_document_upload(&document_id).await?;
     Ok(catalog::success_result(
         "workspace.complete_upload",
-        Some(&notebook_id_str),
+        Some(&workspace_id_str),
         json!(result),
         vec!["workspace.document_status until status is completed"],
     ))
@@ -94,9 +94,9 @@ pub(crate) async fn document_status(
     state: &AppState,
     arguments: &Value,
 ) -> Result<Value, AppError> {
-    let notebook_id = require_notebook_id_arg(arguments)?;
-    authorize_workspace_index_or_query(state.auth(), notebook_id)?;
-    let notebook_id_str = notebook_id.to_string();
+    let workspace_id = require_workspace_id_arg(arguments)?;
+    authorize_workspace_index_or_query(state.auth(), workspace_id)?;
+    let workspace_id_str = workspace_id.to_string();
     let document_id = arguments
         .get("document_id")
         .and_then(|value| value.as_str())
@@ -116,7 +116,7 @@ pub(crate) async fn document_status(
         .into_iter()
         .next()
         .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
-    if document.notebook_id != notebook_id_str {
+    if document.workspace_id != workspace_id_str {
         return Err(AppError::forbidden(
             "document_notebook_mismatch",
             "document does not belong to the requested workspace",
@@ -125,7 +125,7 @@ pub(crate) async fn document_status(
 
     Ok(catalog::success_result(
         "workspace.document_status",
-        Some(&notebook_id_str),
+        Some(&workspace_id_str),
         json!({
             "document_id": document.id,
             "status": document.status.as_str(),
@@ -139,9 +139,9 @@ pub(crate) async fn document_status(
 }
 
 pub(crate) async fn add_url_source(state: &AppState, arguments: &Value) -> Result<Value, AppError> {
-    let notebook_id = require_notebook_id_arg(arguments)?;
-    authorize_workspace_tool(state.auth(), index_permission(), notebook_id)?;
-    let notebook_id_str = notebook_id.to_string();
+    let workspace_id = require_workspace_id_arg(arguments)?;
+    authorize_workspace_tool(state.auth(), index_permission(), workspace_id)?;
+    let workspace_id_str = workspace_id.to_string();
     let url = arguments
         .get("url")
         .and_then(|value| value.as_str())
@@ -153,11 +153,11 @@ pub(crate) async fn add_url_source(state: &AppState, arguments: &Value) -> Resul
     }
 
     let source = state.docs()
-        .add_url_source(&notebook_id_str, AddUrlSourceRequest { url })
+        .add_url_source(&workspace_id_str, AddUrlSourceRequest { url })
         .await?;
     Ok(catalog::success_result(
         "workspace.add_url_source",
-        Some(&notebook_id_str),
+        Some(&workspace_id_str),
         json!(source),
         vec![
             "workspace.document_status until completed",
@@ -167,13 +167,13 @@ pub(crate) async fn add_url_source(state: &AppState, arguments: &Value) -> Resul
 }
 
 pub(crate) async fn list_sources(state: &AppState, arguments: &Value) -> Result<Value, AppError> {
-    let notebook_id = require_notebook_id_arg(arguments)?;
-    authorize_workspace_tool(state.auth(), query_permission(), notebook_id)?;
-    let notebook_id_str = notebook_id.to_string();
-    let sources = state.docs().list_sources(Some(&notebook_id_str)).await;
+    let workspace_id = require_workspace_id_arg(arguments)?;
+    authorize_workspace_tool(state.auth(), query_permission(), workspace_id)?;
+    let workspace_id_str = workspace_id.to_string();
+    let sources = state.docs().list_sources(Some(&workspace_id_str)).await;
     Ok(catalog::success_result(
         "workspace.list_sources",
-        Some(&notebook_id_str),
+        Some(&workspace_id_str),
         json!({ "sources": sources }),
         vec!["workspace.rag_query"],
     ))

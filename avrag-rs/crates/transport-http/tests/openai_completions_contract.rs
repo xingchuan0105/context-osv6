@@ -1,6 +1,6 @@
 //! PR-3 (plan §6.1): OpenAI-compatible chat completions contract.
 //!
-//! The OpenAI route is `POST /v1/notebooks/{notebook_id}/chat/completions`
+//! The OpenAI route is `POST /v1/workspaces/{workspace_id}/chat/completions`
 //! (handler `openai_chat_completions_handler` -> `chat_post_handler`). It is
 //! authenticated by the same middleware as the rest of the API, so a workspace
 //! API key (Bearer) with the `query` permission and a matching notebook scope
@@ -84,7 +84,7 @@ fn test_app_state() -> AppState {
 }
 
 /// Build a router with a workspace notebook + a workspace API key, returning
-/// `(app, notebook_id, bearer)`.
+/// `(app, workspace_id, bearer)`.
 async fn create_workspace_with_key(permissions: Vec<String>) -> (axum::Router, String, String) {
     let state = test_app_state();
     let notebook = state.docs()
@@ -109,16 +109,16 @@ async fn create_workspace_with_key(permissions: Vec<String>) -> (axum::Router, S
     (build_router(state), notebook.id, key.plaintext_key)
 }
 
-/// Build a `POST /v1/notebooks/{notebook_id}/chat/completions` request with an
+/// Build a `POST /v1/workspaces/{workspace_id}/chat/completions` request with an
 /// optional Bearer and a JSON body.
 fn openai_chat_request(
-    notebook_id: &str,
+    workspace_id: &str,
     bearer: Option<&str>,
     body: serde_json::Value,
 ) -> Request<Body> {
     let mut builder = Request::builder()
         .method("POST")
-        .uri(format!("/v1/notebooks/{notebook_id}/chat/completions"))
+        .uri(format!("/v1/workspaces/{workspace_id}/chat/completions"))
         .header(header::CONTENT_TYPE, "application/json");
     if let Some(bearer) = bearer {
         builder = builder.header("Authorization", format!("Bearer {bearer}"));
@@ -128,10 +128,10 @@ fn openai_chat_request(
 
 #[tokio::test]
 async fn openai_completions_without_authorization_returns_401() {
-    let (app, notebook_id, _) = create_workspace_with_key(vec!["query".to_string()]).await;
+    let (app, workspace_id, _) = create_workspace_with_key(vec!["query".to_string()]).await;
     let response = app
         .oneshot(openai_chat_request(
-            &notebook_id,
+            &workspace_id,
             None,
             serde_json::json!({ "query": "hi", "stream": false }),
         ))
@@ -142,10 +142,10 @@ async fn openai_completions_without_authorization_returns_401() {
 
 #[tokio::test]
 async fn openai_completions_with_workspace_key_returns_200_body() {
-    let (app, notebook_id, bearer) = create_workspace_with_key(vec!["query".to_string()]).await;
+    let (app, workspace_id, bearer) = create_workspace_with_key(vec!["query".to_string()]).await;
     let response = app
         .oneshot(openai_chat_request(
-            &notebook_id,
+            &workspace_id,
             Some(&bearer),
             serde_json::json!({ "query": "hi", "stream": false }),
         ))
@@ -170,10 +170,10 @@ async fn openai_completions_with_workspace_key_returns_200_body() {
 
 #[tokio::test]
 async fn openai_completions_with_stream_returns_sse() {
-    let (app, notebook_id, bearer) = create_workspace_with_key(vec!["query".to_string()]).await;
+    let (app, workspace_id, bearer) = create_workspace_with_key(vec!["query".to_string()]).await;
     let response = app
         .oneshot(openai_chat_request(
-            &notebook_id,
+            &workspace_id,
             Some(&bearer),
             serde_json::json!({ "query": "hi", "stream": true }),
         ))
@@ -199,7 +199,7 @@ async fn openai_completions_with_stream_returns_sse() {
 
 #[tokio::test]
 async fn openai_completions_notebook_scope_mismatch_returns_403() {
-    let (app, _notebook_id, bearer) = create_workspace_with_key(vec!["query".to_string()]).await;
+    let (app, _workspace_id, bearer) = create_workspace_with_key(vec!["query".to_string()]).await;
     let other_notebook = Uuid::new_v4().to_string();
     let response = app
         .oneshot(openai_chat_request(

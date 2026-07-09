@@ -160,11 +160,11 @@ pub struct StreamReasoningCapture {
 // Upload response (document upload)
 // ---------------------------------------------------------------------------
 
-/// Response from `POST /api/v1/notebooks/{id}/documents`.
+/// Response from `POST /api/v1/workspaces/{id}/documents`.
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct UploadResponse {
     pub document_id: String,
-    pub notebook_id: String,
+    pub workspace_id: String,
     pub upload_url: String,
     #[serde(default)]
     pub status: u16,

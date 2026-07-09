@@ -50,14 +50,14 @@ fn postgres_unavailable_response() -> Response {
 }
 
 /// Common guard: signed-in user + notebook access + postgres share backend.
-async fn require_share_session(state: &AppState, notebook_id: &str) -> Result<(), Response> {
+async fn require_share_session(state: &AppState, workspace_id: &str) -> Result<(), Response> {
     if let Err(error) = require_user_session(
         state.auth(),
         "this endpoint requires a signed-in user session",
     ) {
         return Err(app_error_response(error));
     }
-    if let Err(error) = ensure_user_notebook_access(state, notebook_id).await {
+    if let Err(error) = ensure_user_notebook_access(state, workspace_id).await {
         return Err(app_error_response(error));
     }
     if !state.postgres_configured() {
@@ -95,10 +95,10 @@ macro_rules! share_empty_ok {
 
 pub(crate) async fn create_share_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
     Json(req): Json<CreateShareRequest>,
 ) -> Response {
-    if let Err(response) = require_share_session(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &workspace_id).await {
         return response;
     }
     let expires_in_secs = req.expires_at.as_deref().and_then(parse_expires_in_secs);
@@ -106,16 +106,16 @@ pub(crate) async fn create_share_handler(
     share_ok!(
         state
             .share()
-            .create_share_link(notebook_id, access_level, expires_in_secs)
+            .create_share_link(workspace_id, access_level, expires_in_secs)
             .await
     )
 }
 
 pub(crate) async fn revoke_share_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path((notebook_id, token)): Path<(String, String)>,
+    Path((workspace_id, token)): Path<(String, String)>,
 ) -> Response {
-    if let Err(response) = require_share_session(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &workspace_id).await {
         return response;
     }
     share_empty_ok!(state.share().revoke_share_link(token).await)
@@ -123,41 +123,41 @@ pub(crate) async fn revoke_share_handler(
 
 pub(crate) async fn get_share_settings_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
 ) -> Response {
-    if let Err(response) = require_share_session(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &workspace_id).await {
         return response;
     }
-    share_ok!(state.share().get_share_settings(notebook_id).await)
+    share_ok!(state.share().get_share_settings(workspace_id).await)
 }
 
 pub(crate) async fn update_share_settings_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
     Json(req): Json<UpdateShareSettingsBody>,
 ) -> Response {
-    if let Err(response) = require_share_session(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &workspace_id).await {
         return response;
     }
     share_ok!(
         state
             .share()
-            .update_share_settings(notebook_id, req.access_level, req.allow_download)
+            .update_share_settings(workspace_id, req.access_level, req.allow_download)
             .await
     )
 }
 
 pub(crate) async fn update_access_level_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
     Json(req): Json<AccessLevelBody>,
 ) -> Response {
-    if let Err(response) = require_share_session(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &workspace_id).await {
         return response;
     }
     match state
         .share()
-        .update_share_access_level(notebook_id, req.access_level)
+        .update_share_access_level(workspace_id, req.access_level)
         .await
     {
         Ok(access_level) => (
@@ -171,22 +171,22 @@ pub(crate) async fn update_access_level_handler(
 
 pub(crate) async fn get_share_analytics_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
 ) -> Response {
-    if let Err(response) = require_share_session(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &workspace_id).await {
         return response;
     }
-    share_ok!(state.share().get_share_analytics(notebook_id).await)
+    share_ok!(state.share().get_share_analytics(workspace_id).await)
 }
 
 pub(crate) async fn get_share_access_logs_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
 ) -> Response {
-    if let Err(response) = require_share_session(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &workspace_id).await {
         return response;
     }
-    share_ok!(state.share().get_share_access_logs(notebook_id).await)
+    share_ok!(state.share().get_share_access_logs(workspace_id).await)
 }
 
 pub(crate) async fn validate_share_token_handler(
@@ -197,10 +197,10 @@ pub(crate) async fn validate_share_token_handler(
         return postgres_unavailable_response();
     }
     match state.share().validate_share_token(&token).await {
-        Ok(Some(notebook_id)) => (
+        Ok(Some(workspace_id)) => (
             StatusCode::OK,
             Json(common::ShareTokenResponse {
-                share_token: notebook_id,
+                share_token: workspace_id,
             }),
         )
             .into_response(),
@@ -214,12 +214,12 @@ pub(crate) async fn validate_share_token_handler(
 
 pub(crate) async fn list_members_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
 ) -> Response {
-    if let Err(response) = require_share_session(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &workspace_id).await {
         return response;
     }
-    match state.share().list_share_members(notebook_id).await {
+    match state.share().list_share_members(workspace_id).await {
         Ok(items) => {
             let members = items
                 .into_iter()
@@ -244,24 +244,24 @@ pub(crate) async fn list_members_handler(
 
 pub(crate) async fn invite_member_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
     Json(req): Json<InviteMemberBody>,
 ) -> Response {
-    if let Err(response) = require_share_session(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &workspace_id).await {
         return response;
     }
     let role = avrag_share::AccessLevel::from_role(&req.role);
     share_empty_ok!(
         state
             .share()
-            .invite_share_member(notebook_id, req.email, role)
+            .invite_share_member(workspace_id, req.email, role)
             .await
     )
 }
 
 pub(crate) async fn accept_member_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path((notebook_id, member_id)): Path<(String, String)>,
+    Path((workspace_id, member_id)): Path<(String, String)>,
 ) -> Response {
     if let Err(error) = require_user_session(
         state.auth(),
@@ -275,14 +275,14 @@ pub(crate) async fn accept_member_handler(
     share_empty_ok!(
         state
             .share()
-            .accept_share_invite(notebook_id, member_id)
+            .accept_share_invite(workspace_id, member_id)
             .await
     )
 }
 
 pub(crate) async fn decline_member_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path((notebook_id, member_id)): Path<(String, String)>,
+    Path((workspace_id, member_id)): Path<(String, String)>,
 ) -> Response {
     if let Err(error) = require_user_session(
         state.auth(),
@@ -296,22 +296,22 @@ pub(crate) async fn decline_member_handler(
     share_empty_ok!(
         state
             .share()
-            .decline_share_invite(notebook_id, member_id)
+            .decline_share_invite(workspace_id, member_id)
             .await
     )
 }
 
 pub(crate) async fn remove_member_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path((notebook_id, member_id)): Path<(String, String)>,
+    Path((workspace_id, member_id)): Path<(String, String)>,
 ) -> Response {
-    if let Err(response) = require_share_session(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &workspace_id).await {
         return response;
     }
     share_empty_ok!(
         state
             .share()
-            .remove_share_member(notebook_id, member_id)
+            .remove_share_member(workspace_id, member_id)
             .await
     )
 }

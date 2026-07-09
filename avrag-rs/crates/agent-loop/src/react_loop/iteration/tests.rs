@@ -20,7 +20,7 @@ fn base_request(kind: AgentKind) -> crate::runtime::AgentRequest {
     crate::runtime::AgentRequest {
         kind,
         query: "test".to_string(),
-        notebook_id: None,
+        workspace_id: None,
         session_id: None,
         doc_scope: vec![],
         messages: vec![],

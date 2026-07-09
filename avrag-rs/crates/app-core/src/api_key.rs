@@ -11,7 +11,7 @@ use uuid::Uuid;
 pub struct MemoryApiKeyRecord {
     pub id: Uuid,
     pub org_id: OrgId,
-    pub notebook_id: Option<Uuid>,
+    pub workspace_id: Option<Uuid>,
     pub permissions: Vec<String>,
     pub rate_limit_rpm: u32,
     pub is_active: bool,

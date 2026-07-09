@@ -62,7 +62,7 @@ impl Drop for E2eEnabledGuard {
 async fn openai_chat_completion(
     ctx: &TestContext,
     bearer: &str,
-    notebook_id: &str,
+    workspace_id: &str,
     edge_ip: &str,
 ) -> reqwest::Response {
     let client = reqwest::Client::builder()
@@ -71,8 +71,8 @@ async fn openai_chat_completion(
         .expect("rate limit reqwest client");
     client
         .post(format!(
-            "{}/v1/notebooks/{}/chat/completions",
-            ctx.base_url, notebook_id
+            "{}/v1/workspaces/{}/chat/completions",
+            ctx.base_url, workspace_id
         ))
         .header("Authorization", format!("Bearer {bearer}"))
         .header("x-forwarded-for", edge_ip)

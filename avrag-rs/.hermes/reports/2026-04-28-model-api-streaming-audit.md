@@ -41,7 +41,7 @@ DeepSeek docs checked:
 | Text rerank fallback | `RERANK_*`, `reranker.rs` | SiliconFlow-style `/rerank`, `Qwen/Qwen3-Reranker-8B` | fallback reranker | Old/legacy fallback remains. Risk only if configured; docs already warn not to point this at DashScope native without client changes. |
 | Search LLM | `SEARCH_LLM_*`, `crates/search` | DashScope compatible-mode `qwen3.5-plus` | search planner/tool mode | Still old provider/model. Separate from Main Agent. |
 | Search provider | `SEARCH_PROVIDER`, `SearchExecutor` | Perplexity + optional Exa config | web search mode | Still external search provider. Not part of Main Agent switch. |
-| HTTP OpenAI-compatible route | `/v1/notebooks/{notebook_id}/chat/completions` | internal API compatibility route | transport compatibility | Name is OpenAI-compatible API surface, not necessarily old external OpenAI provider. |
+| HTTP OpenAI-compatible route | `/v1/workspaces/{workspace_id}/chat/completions` | internal API compatibility route | transport compatibility | Name is OpenAI-compatible API surface, not necessarily old external OpenAI provider. |
 | Docs/comments | `docs/model-provider-matrix-2026-03.md`, `CLAUDE.md`, older planning docs | still mention DMXAPI as Main Agent | documentation | Stale after this switch. Reported, not fully rewritten here. |
 
 ## Audit conclusion

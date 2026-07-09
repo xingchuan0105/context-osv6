@@ -78,7 +78,7 @@ impl ChatContext {
         surface: analytics::Surface,
         result: analytics::ResultTag,
         session_id: Option<Uuid>,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         metadata: serde_json::Value,
     ) {
         self.analytics
@@ -88,7 +88,7 @@ impl ChatContext {
                 surface,
                 result,
                 session_id,
-                notebook_id,
+                workspace_id,
                 metadata,
             )
             .await;

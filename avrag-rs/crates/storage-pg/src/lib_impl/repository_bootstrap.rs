@@ -57,7 +57,7 @@ impl BootstrapRepository {
     pub async fn get_notebook(
         &self,
         context: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<Option<Notebook>, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
@@ -67,7 +67,7 @@ impl BootstrapRepository {
             where id = $1 and org_id = $2
             "#,
         )
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(context.org_id().into_uuid())
         .fetch_optional(tx.inner())
         .await?;
@@ -85,7 +85,7 @@ impl BootstrapRepository {
         ensure_org_and_actor(tx.inner(), context).await?;
         let row = sqlx::query(
             r#"
-            insert into notebooks (org_id, owner_id, title, description)
+            insert into workspaces (org_id, owner_id, title, description)
             values ($1, $2, $3, $4)
             returning id, org_id, owner_id, title, description, created_at, updated_at
             "#,
@@ -103,7 +103,7 @@ impl BootstrapRepository {
     pub async fn update_notebook(
         &self,
         context: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         name: &str,
         description: &str,
     ) -> Result<Option<Notebook>, PgStorageError> {
@@ -116,7 +116,7 @@ impl BootstrapRepository {
             returning id, org_id, owner_id, title, description, created_at, updated_at
             "#,
         )
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(name)
         .bind(description)
         .fetch_optional(tx.inner())
@@ -128,11 +128,11 @@ impl BootstrapRepository {
     pub async fn delete_notebook(
         &self,
         context: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<bool, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
-        let result = sqlx::query("delete from notebooks where id = $1")
-            .bind(notebook_id)
+        let result = sqlx::query("delete from workspaces where id = $1")
+            .bind(workspace_id)
             .execute(tx.inner())
             .await?;
         tx.commit().await?;
@@ -142,7 +142,7 @@ impl BootstrapRepository {
     pub async fn create_document(
         &self,
         context: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         filename: &str,
         file_size: u64,
         mime_type: &str,
@@ -152,18 +152,18 @@ impl BootstrapRepository {
         let document_id = Uuid::new_v4();
         let row = sqlx::query(
             r#"
-            insert into documents (id, org_id, notebook_id, file_name, mime_type, file_size, status, chunk_count, object_path, user_id)
+            insert into documents (id, org_id, workspace_id, file_name, mime_type, file_size, status, chunk_count, object_path, user_id)
             values ($1, $2, $3, $4, $5, $6, 'pending', 0, $7, $8)
-            returning id, org_id, notebook_id, file_name, mime_type, file_size, status, chunk_count, created_at, updated_at
+            returning id, org_id, workspace_id, file_name, mime_type, file_size, status, chunk_count, created_at, updated_at
             "#,
         )
         .bind(document_id)
         .bind(context.org_id().into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(filename)
         .bind(mime_type)
         .bind(i64::try_from(file_size).unwrap_or(i64::MAX))
-        .bind(build_object_path(context, notebook_id, document_id, filename))
+        .bind(build_object_path(context, workspace_id, document_id, filename))
         .bind(context.actor_id().map(ActorId::into_uuid))
         .fetch_one(tx.inner())
         .await?;
@@ -179,7 +179,7 @@ impl BootstrapRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, org_id, notebook_id, file_name, mime_type, file_size, object_path, status
+            select id, org_id, workspace_id, file_name, mime_type, file_size, object_path, status
             from documents
             where id = $1
             "#,
@@ -298,7 +298,7 @@ impl BootstrapRepository {
     pub async fn replace_document_toc(
         &self,
         context: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         document_id: Uuid,
         entries: &[TocEntry],
     ) -> Result<(), PgStorageError> {
@@ -313,14 +313,14 @@ impl BootstrapRepository {
         for entry in entries {
             sqlx::query(
                 r#"
-                insert into document_toc (id, org_id, document_id, notebook_id, parent_id, title, heading_level, page, chunk_id, rank)
+                insert into document_toc (id, org_id, document_id, workspace_id, parent_id, title, heading_level, page, chunk_id, rank)
                 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 "#,
             )
             .bind(entry.id)
             .bind(context.org_id().into_uuid())
             .bind(document_id)
-            .bind(notebook_id)
+            .bind(workspace_id)
             .bind(entry.parent_id)
             .bind(&entry.title)
             .bind(entry.heading_level)

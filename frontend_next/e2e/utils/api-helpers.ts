@@ -369,7 +369,7 @@ export async function ensureE2eOrgMember(
 }
 
 export async function listNotebookMembers(request: APIRequestContext, notebookId: string) {
-  const resp = await request.get(`/api/v1/notebooks/${notebookId}/members`, {
+  const resp = await request.get(`/api/v1/workspaces/${notebookId}/members`, {
     headers: authHeaders(),
   });
   if (!resp.ok()) {
@@ -416,7 +416,7 @@ export async function createNotebookViaAPI(
   name: string,
   description = "",
 ) {
-  const resp = await request.post("/api/v1/notebooks", {
+  const resp = await request.post("/api/v1/workspaces", {
     headers: authHeaders(),
     data: { name, description },
   });
@@ -431,7 +431,7 @@ export async function deleteNotebookViaAPI(
   notebookId: string,
 ) {
   if (!notebookId) return;
-  await request.delete(`/api/v1/notebooks/${notebookId}`, {
+  await request.delete(`/api/v1/workspaces/${notebookId}`, {
     headers: authHeaders(),
   });
 }

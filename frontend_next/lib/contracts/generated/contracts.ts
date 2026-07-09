@@ -408,7 +408,6 @@ export interface ChatTurnInput {
 
 export interface ChatRequest {
 	query: string;
-	/** Product wire name is `workspace_id`; `notebook_id` remains the Rust field (storage alias). */
 	workspace_id?: string;
 	session_id?: string;
 	agent_type: string;
@@ -524,7 +523,7 @@ export interface NotebookNotePreference {
 }
 
 export interface DashboardPreferences {
-	favorite_notebook_ids?: string[];
+	favorite_workspace_ids?: string[];
 	workspace_drafts?: WorkspaceDraftPreference[];
 	workspace_preferences?: NotebookWorkspacePreference[];
 	notebook_notes?: NotebookNotePreference[];
@@ -699,7 +698,6 @@ export interface NotebookAnalysisResponse {
 }
 
 export interface NotebookListResponse {
-	/** Product wire name is `workspaces` (legacy clients may send/read `notebooks`). */
 	workspaces: Notebook[];
 }
 
@@ -724,7 +722,6 @@ export interface NotebookNoteResponse {
 }
 
 export interface NotebookResponse {
-	/** Product wire name is `workspace` (legacy clients may send/read `notebook`). */
 	workspace: Notebook;
 }
 

@@ -61,7 +61,7 @@ impl From<AccessLevel> for app_core::ShareAccessLevel {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotebookMember {
     pub id: String,
-    pub notebook_id: String,
+    pub workspace_id: String,
     pub user_id: Option<String>,
     pub email: Option<String>,
     pub access_level: AccessLevel,
@@ -75,7 +75,7 @@ impl From<app_core::ShareNotebookMember> for NotebookMember {
     fn from(value: app_core::ShareNotebookMember) -> Self {
         Self {
             id: value.id,
-            notebook_id: value.notebook_id,
+            workspace_id: value.workspace_id,
             user_id: value.user_id,
             email: value.email,
             access_level: value.access_level.into(),
@@ -141,7 +141,7 @@ pub struct SharedSource {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShareAccessLog {
     pub id: String,
-    pub notebook_id: String,
+    pub workspace_id: String,
     pub share_token: String,
     pub action: String,
     pub accessed_at: i64,
@@ -159,7 +159,7 @@ pub struct ShareAnalytics {
 #[derive(Debug, Clone)]
 pub struct PublicShareChatContext {
     pub org_id: uuid::Uuid,
-    pub notebook_id: uuid::Uuid,
+    pub workspace_id: uuid::Uuid,
     pub owner_user_id: uuid::Uuid,
     pub access_level: AccessLevel,
 }

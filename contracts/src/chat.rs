@@ -7,14 +7,8 @@ use typeshare::typeshare;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChatRequest {
     pub query: String,
-    /// Product wire name is `workspace_id`; `notebook_id` remains the Rust field (storage alias).
-    #[serde(
-        default,
-        rename = "workspace_id",
-        alias = "notebook_id",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub notebook_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
     #[serde(default)]
     pub session_id: Option<String>,
     #[serde(default = "default_chat_agent")]

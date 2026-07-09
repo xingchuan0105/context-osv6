@@ -13,8 +13,8 @@
 - [15:46:15] Milvus collections/list -> 200 {"code":0,"data":["avrag_rag_text_chunks","avrag_rag_multimodal_chunks","avrag_rag_kg_entities","avrag_rag_kg_relations","avrag_rag_graph_passages"]}
 - [15:46:16] POST /api/auth/register -> 201
 - [15:46:16] GET /api/auth/me -> 200
-- [15:46:16] POST /api/v1/notebooks -> 201 {"notebook":{"id":"7cdd0997-2f06-4046-a716-c1747a590976","org_id":"edd22a8f-4e86-447e-8479-dbc6e7471725","owner_id":"ea047241-0519-49ac-a190-0ec9f1ac2fd3","name":"e2e-minsky86-1777362376","title":"e2e-minsky86-1777362376","description":"Live E2E minsky86.pdf","created_at":"2026-04-28T07:46:16.548784
-- [15:46:16] POST /api/v1/notebooks/7cdd0997-2f06-4046-a716-c1747a590976/documents -> 201 {"document_id":"873f52ca-eb2b-4d9f-aef2-7dadd590feb6","upload_url":"http://127.0.0.1:8080/uploads/873f52ca-eb2b-4d9f-aef2-7dadd590feb6?expires=1777363276&signature=6a57905b6b18b6083444bbbd892207c05e33f677266f0c0cab7f5e68f9e95ffc","status":"pending"}
+- [15:46:16] POST /api/v1/workspaces -> 201 {"notebook":{"id":"7cdd0997-2f06-4046-a716-c1747a590976","org_id":"edd22a8f-4e86-447e-8479-dbc6e7471725","owner_id":"ea047241-0519-49ac-a190-0ec9f1ac2fd3","name":"e2e-minsky86-1777362376","title":"e2e-minsky86-1777362376","description":"Live E2E minsky86.pdf","created_at":"2026-04-28T07:46:16.548784
+- [15:46:16] POST /api/v1/workspaces/7cdd0997-2f06-4046-a716-c1747a590976/documents -> 201 {"document_id":"873f52ca-eb2b-4d9f-aef2-7dadd590feb6","upload_url":"http://127.0.0.1:8080/uploads/873f52ca-eb2b-4d9f-aef2-7dadd590feb6?expires=1777363276&signature=6a57905b6b18b6083444bbbd892207c05e33f677266f0c0cab7f5e68f9e95ffc","status":"pending"}
 - [15:46:16] PUT /dev-upload/873f52ca-eb2b-4d9f-aef2-7dadd590feb6 -> 200 {"status":"queued"}
 - [15:46:16] status poll 00 elapsed=0s -> HTTP 200, status=queued, body={"status": "queued"}
 - [15:46:21] status poll 01 elapsed=4s -> HTTP 200, status=processing, body={"status": "processing"}

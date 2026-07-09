@@ -24,7 +24,7 @@ fn mcp_error_code(payload: &Value) -> Option<&str> {
 }
 
 /// Create a workspace-scoped API key and return its plaintext bearer token.
-async fn workspace_key(ctx: &TestContext, notebook_id: &str, permissions: &[&str]) -> String {
+async fn workspace_key(ctx: &TestContext, workspace_id: &str, permissions: &[&str]) -> String {
     let state = ctx
         .app_state
         .as_ref()
@@ -32,7 +32,7 @@ async fn workspace_key(ctx: &TestContext, notebook_id: &str, permissions: &[&str
         .clone();
     let key = state.admin_api()
         .create_api_key(
-            notebook_id,
+            workspace_id,
             CreateApiKeyRequest {
                 name: "boundary".to_string(),
                 permissions: permissions.iter().map(|p| p.to_string()).collect(),
@@ -91,7 +91,7 @@ async fn org_key_cannot_call_workspace_mcp_tool() {
         &ctx,
         &bearer,
         "workspace.rag_query",
-        json!({ "notebook_id": uuid::Uuid::new_v4().to_string(), "query": "x" }),
+        json!({ "workspace_id": uuid::Uuid::new_v4().to_string(), "query": "x" }),
     )
     .await;
     assert_eq!(status, 200, "body: {payload}");
@@ -112,7 +112,7 @@ async fn workspace_key_cannot_query_other_workspace() {
         &ctx,
         &bearer,
         "workspace.rag_query",
-        json!({ "notebook_id": uuid::Uuid::new_v4().to_string(), "query": "hello" }),
+        json!({ "workspace_id": uuid::Uuid::new_v4().to_string(), "query": "hello" }),
     )
     .await;
     assert_eq!(status, 200, "body: {payload}");
@@ -132,7 +132,7 @@ async fn api_key_cannot_list_notebook_notes() {
         .expect("notes reqwest client");
     let resp = client
         .get(format!(
-            "{}/api/v1/notebooks/{}/notes",
+            "{}/api/v1/workspaces/{}/notes",
             ctx.base_url, notebook.id
         ))
         .header("Authorization", format!("Bearer {bearer}"))

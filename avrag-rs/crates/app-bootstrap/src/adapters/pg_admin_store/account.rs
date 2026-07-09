@@ -24,10 +24,10 @@
     async fn list_api_keys(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
     ) -> Result<Vec<ApiKeyRow>, AppError> {
         self.repo
-            .auth().list_api_keys(auth, notebook_id)
+            .auth().list_api_keys(auth, workspace_id)
             .await
             .map_err(map_pg_error)
     }
@@ -35,7 +35,7 @@
     async fn create_api_key(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         name: &str,
         permissions: &[String],
         rate_limit_rpm: i32,
@@ -45,7 +45,7 @@
             .repo
             .auth().create_api_key(
                 auth,
-                notebook_id,
+                workspace_id,
                 name,
                 permissions,
                 rate_limit_rpm.max(0) as u32,
@@ -62,11 +62,11 @@
     async fn revoke_api_key(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         key_id: Uuid,
     ) -> Result<bool, AppError> {
         self.repo
-            .auth().revoke_api_key(auth, notebook_id, key_id)
+            .auth().revoke_api_key(auth, workspace_id, key_id)
             .await
             .map_err(map_pg_error)
     }

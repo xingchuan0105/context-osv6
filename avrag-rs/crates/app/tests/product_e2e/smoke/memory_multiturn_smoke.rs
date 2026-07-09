@@ -16,18 +16,18 @@ async fn ingest_antifragile(ctx: &mut TestContext) -> (String, String) {
         .await
         .unwrap();
     assert_eq!(status, DocumentStatus::Completed);
-    (upload.notebook_id, upload.document_id)
+    (upload.workspace_id, upload.document_id)
 }
 
 #[tokio::test]
 async fn on_demand_conversation_history_load_returns_pg_messages() {
     super::require_smoke_suite();
     let mut ctx = TestContext::new_smoke_with_rag().await;
-    let (notebook_id, doc_id) = ingest_antifragile(&mut ctx).await;
+    let (workspace_id, doc_id) = ingest_antifragile(&mut ctx).await;
     let doc_scope = vec![doc_id];
 
     let turn1_http = ctx
-        .chat("What is antifragility?", &notebook_id, &doc_scope)
+        .chat("What is antifragility?", &workspace_id, &doc_scope)
         .await
         .unwrap();
     assert_http_ok(&turn1_http);
@@ -37,7 +37,7 @@ async fn on_demand_conversation_history_load_returns_pg_messages() {
     let turn2_http = ctx
         .chat_with_session(
             "Tell me more about that concept.",
-            &notebook_id,
+            &workspace_id,
             &doc_scope,
             &session_id,
         )
@@ -48,7 +48,7 @@ async fn on_demand_conversation_history_load_returns_pg_messages() {
     let turn3_http = ctx
         .chat_with_session(
             "Can you give one more example of antifragility?",
-            &notebook_id,
+            &workspace_id,
             &doc_scope,
             &session_id,
         )
@@ -61,7 +61,7 @@ async fn on_demand_conversation_history_load_returns_pg_messages() {
     let turn4_http = ctx
         .chat_with_session(
             "Please recall our earlier discussion about antifragility.",
-            &notebook_id,
+            &workspace_id,
             &doc_scope,
             &session_id,
         )
@@ -106,11 +106,11 @@ async fn on_demand_conversation_history_load_returns_pg_messages() {
 async fn notebook_scope_conversation_history_load_spans_sessions() {
     super::require_smoke_suite();
     let mut ctx = TestContext::new_smoke_with_rag().await;
-    let (notebook_id, doc_id) = ingest_antifragile(&mut ctx).await;
+    let (workspace_id, doc_id) = ingest_antifragile(&mut ctx).await;
     let doc_scope = vec![doc_id];
 
     let session_a_http = ctx
-        .chat("What is antifragility?", &notebook_id, &doc_scope)
+        .chat("What is antifragility?", &workspace_id, &doc_scope)
         .await
         .unwrap();
     assert_http_ok(&session_a_http);
@@ -129,7 +129,7 @@ async fn notebook_scope_conversation_history_load_spans_sessions() {
     let session_b_http = ctx
         .chat(
             "Start a fresh session in the same notebook.",
-            &notebook_id,
+            &workspace_id,
             &doc_scope,
         )
         .await
@@ -147,7 +147,7 @@ async fn notebook_scope_conversation_history_load_spans_sessions() {
     let recall_http = ctx
         .chat_with_session(
             "Search notebook history for antifragility.",
-            &notebook_id,
+            &workspace_id,
             &doc_scope,
             &session_b,
         )
@@ -197,11 +197,11 @@ async fn notebook_scope_conversation_history_load_spans_sessions() {
 async fn on_demand_user_profile_load_returns_profile_shape() {
     super::require_smoke_suite();
     let mut ctx = TestContext::new_smoke_with_rag().await;
-    let (notebook_id, doc_id) = ingest_antifragile(&mut ctx).await;
+    let (workspace_id, doc_id) = ingest_antifragile(&mut ctx).await;
     let doc_scope = vec![doc_id];
 
     let turn1_http = ctx
-        .chat("What is antifragility?", &notebook_id, &doc_scope)
+        .chat("What is antifragility?", &workspace_id, &doc_scope)
         .await
         .unwrap();
     assert_http_ok(&turn1_http);
@@ -213,7 +213,7 @@ async fn on_demand_user_profile_load_returns_profile_shape() {
     let turn2_http = ctx
         .chat_with_session(
             "What do you know about my preferences?",
-            &notebook_id,
+            &workspace_id,
             &doc_scope,
             &session_id,
         )
@@ -246,7 +246,7 @@ async fn on_demand_user_profile_load_returns_profile_shape() {
 async fn first_turn_memory_tool_works_with_resolved_session_id() {
     super::require_smoke_suite();
     let mut ctx = TestContext::new_smoke_with_rag().await;
-    let (notebook_id, doc_id) = ingest_antifragile(&mut ctx).await;
+    let (workspace_id, doc_id) = ingest_antifragile(&mut ctx).await;
     let doc_scope = vec![doc_id];
 
     ctx.set_mock_rag_skill_request_memory(true);
@@ -255,7 +255,7 @@ async fn first_turn_memory_tool_works_with_resolved_session_id() {
     let http_resp = ctx
         .chat_without_mock_chunk_pin(
             "Please load my conversation history.",
-            &notebook_id,
+            &workspace_id,
             &doc_scope,
         )
         .await

@@ -49,7 +49,7 @@ pub(crate) async fn unified_mcp_sse_handler(
 
 pub(crate) async fn handle_mcp_jsonrpc(
     state: &AppState,
-    default_notebook_id: Option<String>,
+    default_workspace_id: Option<String>,
     body: Bytes,
 ) -> Response {
     let request_json: Value = match serde_json::from_slice(body.as_ref()) {
@@ -85,7 +85,7 @@ pub(crate) async fn handle_mcp_jsonrpc(
                 .pointer("/params/arguments")
                 .cloned()
                 .unwrap_or_else(|| json!({}));
-            inject_default_notebook_id(default_notebook_id.as_deref(), &mut arguments);
+            inject_default_workspace_id(default_workspace_id.as_deref(), &mut arguments);
             match dispatch::execute_mcp_tool(state, tool_name, &arguments).await {
                 Ok(result) => jsonrpc::tool_call_success(id, result),
                 Err(error) => handlers::mcp_tool_call_error_response(
@@ -102,7 +102,7 @@ pub(crate) async fn handle_mcp_jsonrpc(
 
 pub(crate) async fn legacy_mcp_tool_call_handler(
     state: &AppState,
-    notebook_id: String,
+    workspace_id: String,
     body: Bytes,
 ) -> Response {
     let request_json: Value = match serde_json::from_slice(body.as_ref()) {
@@ -124,7 +124,7 @@ pub(crate) async fn legacy_mcp_tool_call_handler(
     {
         obj.insert("query".to_string(), query.clone());
     }
-    inject_default_notebook_id(Some(notebook_id.as_str()), &mut arguments);
+    inject_default_workspace_id(Some(workspace_id.as_str()), &mut arguments);
 
     match dispatch::execute_mcp_tool(state, tool_name, &arguments).await {
         Ok(mut result) => {
@@ -153,18 +153,18 @@ pub(crate) async fn legacy_mcp_tool_call_handler(
     }
 }
 
-fn inject_default_notebook_id(notebook_id: Option<&str>, arguments: &mut Value) {
-    let Some(notebook_id) = notebook_id else {
+fn inject_default_workspace_id(workspace_id: Option<&str>, arguments: &mut Value) {
+    let Some(workspace_id) = workspace_id else {
         return;
     };
     let Some(obj) = arguments.as_object_mut() else {
         return;
     };
     if obj
-        .get("notebook_id")
+        .get("workspace_id")
         .and_then(|value| value.as_str())
         .is_none_or(|value| value.trim().is_empty())
     {
-        obj.insert("notebook_id".to_string(), json!(notebook_id));
+        obj.insert("workspace_id".to_string(), json!(workspace_id));
     }
 }

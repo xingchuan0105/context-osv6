@@ -29,7 +29,7 @@ async fn identical_rag_query_hits_embedding_cache() {
     let scope = [upload.document_id.clone()];
 
     let before = ctx.embedding_call_count();
-    let first = ctx.chat(query, &upload.notebook_id, &scope).await.unwrap();
+    let first = ctx.chat(query, &upload.workspace_id, &scope).await.unwrap();
     assert_http_ok(&first);
     let after_first = ctx.embedding_call_count();
     assert!(
@@ -37,7 +37,7 @@ async fn identical_rag_query_hits_embedding_cache() {
         "first query should call mock embedding at least once"
     );
 
-    let second = ctx.chat(query, &upload.notebook_id, &scope).await.unwrap();
+    let second = ctx.chat(query, &upload.workspace_id, &scope).await.unwrap();
     assert_http_ok(&second);
     let after_second = ctx.embedding_call_count();
     let delta_first = after_first.saturating_sub(before);

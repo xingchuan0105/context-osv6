@@ -8,20 +8,20 @@
 - `GET /ready`
 - `GET /docs`
 - `GET /openapi.json`
-- `GET /api/v1/notebooks`
-- `POST /api/v1/notebooks`
-- `GET /api/v1/notebooks/{id}`
-- `PUT /api/v1/notebooks/{id}`
-- `DELETE /api/v1/notebooks/{id}`
-- `POST /api/v1/notebooks/{id}/documents`
-- `POST /api/v1/notebooks/{id}/sources/url`
+- `GET /api/v1/workspaces`
+- `POST /api/v1/workspaces`
+- `GET /api/v1/workspaces/{id}`
+- `PUT /api/v1/workspaces/{id}`
+- `DELETE /api/v1/workspaces/{id}`
+- `POST /api/v1/workspaces/{id}/documents`
+- `POST /api/v1/workspaces/{id}/sources/url`
 - `GET /api/v1/documents`
 - `GET /api/v1/documents/{id}/status`
 - `GET /api/v1/documents/{id}/content`
 - `GET /api/v1/documents/{id}/parsed-preview`
 - `PUT /api/v1/documents/{id}`
 - `DELETE /api/v1/documents/{id}`
-- `DELETE /api/v1/notebooks/{id}/documents/{doc_id}`
+- `DELETE /api/v1/workspaces/{id}/documents/{doc_id}`
 - `POST /api/v1/documents/{id}/reindex`
 - `POST /api/v1/chat`
 - `GET /api/v1/chat/sessions`
@@ -61,7 +61,7 @@
 
 ## Upload / Reindex Runtime Behavior
 
-- `POST /api/v1/notebooks/{id}/documents`
+- `POST /api/v1/workspaces/{id}/documents`
   - 只登记文档并返回 `upload_url`
   - PostgreSQL 模式下不直接生成 chunks
 - `PUT /dev-upload/{document_id}`

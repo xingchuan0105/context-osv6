@@ -363,7 +363,7 @@ fn experiment_request(topic: &str) -> AgentRequest {
     AgentRequest {
         kind: AgentKind::WriteRefine,
         query: topic.to_string(),
-        notebook_id: None,
+        workspace_id: None,
         session_id: Some(format!("refine-experiment-{topic}")),
         doc_scope: vec![],
         messages: vec![],

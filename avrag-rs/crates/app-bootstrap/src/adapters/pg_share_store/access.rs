@@ -1,7 +1,7 @@
     async fn query_notebook_access(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<Option<NotebookAccessSnapshot>, AppError> {
         let mut tx = self
             .repo
@@ -17,7 +17,7 @@
             where id = $1 and org_id = $2
             "#,
         )
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(auth.org_id().into_uuid())
         .fetch_optional(tx.as_mut())
         .await
@@ -36,7 +36,7 @@
     async fn query_member_access(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         user_id: Uuid,
     ) -> Result<Option<String>, AppError> {
         let mut tx = self
@@ -49,12 +49,12 @@
         let row = sqlx::query(
             r#"
             select access_level
-            from notebook_members
-            where org_id = $1 and notebook_id = $2 and user_id = $3 and invite_status = 'accepted'
+            from workspace_members
+            where org_id = $1 and workspace_id = $2 and user_id = $3 and invite_status = 'accepted'
             "#,
         )
         .bind(auth.org_id().into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(user_id)
         .fetch_optional(tx.as_mut())
         .await

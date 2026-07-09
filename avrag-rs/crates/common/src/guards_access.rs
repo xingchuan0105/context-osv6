@@ -60,7 +60,7 @@ pub struct AnswerContextChunk {
 pub struct ApiKeyRow {
     pub id: String,
     pub org_id: String,
-    pub notebook_id: String,
+    pub workspace_id: String,
     pub key_prefix: String,
     pub name: String,
     pub permissions: Vec<String>,

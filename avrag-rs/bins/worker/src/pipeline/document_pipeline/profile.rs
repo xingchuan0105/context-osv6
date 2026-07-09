@@ -112,7 +112,7 @@ pub(crate) async fn generate_document_summary(
             event_time: chrono::Utc::now(),
             user_id,
             session_id: None,
-            notebook_id: None,
+            workspace_id: None,
             event_name: analytics::CostEventName::SummaryUsageMetered,
             feature: "summary".to_string(),
             provider: if llm_usage.provider.trim().is_empty() {

@@ -165,7 +165,7 @@ async fn org_api_key_can_create_workspace_via_mcp() {
 
 #[tokio::test]
 async fn workspace_key_cannot_call_org_mcp_tool() {
-    let (_state, _notebook_id, bearer, app) =
+    let (_state, _workspace_id, bearer, app) =
         create_workspace_with_key(vec!["index".to_string(), "query".to_string()]).await;
 
     let (status, payload) = mcp_tools_call(
@@ -189,7 +189,7 @@ async fn workspace_key_cannot_call_org_mcp_tool() {
 
 #[tokio::test]
 async fn workspace_scope_mismatch_mcp_rag_query() {
-    let (_state, _notebook_id, bearer, app) =
+    let (_state, _workspace_id, bearer, app) =
         create_workspace_with_key(vec!["query".to_string()]).await;
     let other_notebook = Uuid::new_v4().to_string();
 
@@ -198,7 +198,7 @@ async fn workspace_scope_mismatch_mcp_rag_query() {
         &bearer,
         "workspace.rag_query",
         serde_json::json!({
-            "notebook_id": other_notebook,
+            "workspace_id": other_notebook,
             "query": "hello"
         }),
     )
@@ -214,7 +214,7 @@ async fn workspace_scope_mismatch_mcp_rag_query() {
 
 #[tokio::test]
 async fn workspace_query_only_key_cannot_mcp_create_upload() {
-    let (_state, notebook_id, bearer, app) =
+    let (_state, workspace_id, bearer, app) =
         create_workspace_with_key(vec!["query".to_string()]).await;
 
     let (status, payload) = mcp_tools_call(
@@ -222,7 +222,7 @@ async fn workspace_query_only_key_cannot_mcp_create_upload() {
         &bearer,
         "workspace.create_upload",
         serde_json::json!({
-            "notebook_id": notebook_id,
+            "workspace_id": workspace_id,
             "filename": "notes.txt",
             "mime_type": "text/plain",
             "file_size": 12
@@ -282,7 +282,7 @@ async fn mcp_complete_upload_rejects_document_from_other_workspace() {
         &key.plaintext_key,
         "workspace.complete_upload",
         serde_json::json!({
-            "notebook_id": notebook_a.id,
+            "workspace_id": notebook_a.id,
             "document_id": upload_b.document_id
         }),
     )
@@ -350,7 +350,7 @@ async fn workspace_key_cannot_rag_other_workspace_doc_scope() {
         &key.plaintext_key,
         "workspace.rag_query",
         serde_json::json!({
-            "notebook_id": notebook_a.id,
+            "workspace_id": notebook_a.id,
             "query": "secret",
             "doc_scope": [upload_b.document_id]
         }),
@@ -363,14 +363,14 @@ async fn workspace_key_cannot_rag_other_workspace_doc_scope() {
 
 #[tokio::test]
 async fn rest_create_notebook_forbidden_for_workspace_key() {
-    let (_state, _notebook_id, bearer, app) =
+    let (_state, _workspace_id, bearer, app) =
         create_workspace_with_key(vec!["index".to_string(), "query".to_string()]).await;
 
     let response = app
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/notebooks")
+                .uri("/api/v1/workspaces")
                 .header(header::CONTENT_TYPE, "application/json")
                 .header("Authorization", format!("Bearer {bearer}"))
                 .body(Body::from(
@@ -396,7 +396,7 @@ async fn rest_create_notebook_forbidden_for_workspace_key() {
 
 #[tokio::test]
 async fn rest_upload_scope_mismatch_returns_forbidden() {
-    let (_state, _notebook_id, bearer, app) =
+    let (_state, _workspace_id, bearer, app) =
         create_workspace_with_key(vec!["index".to_string(), "query".to_string()]).await;
     let other_notebook = Uuid::new_v4();
 
@@ -404,7 +404,7 @@ async fn rest_upload_scope_mismatch_returns_forbidden() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/notebooks/{other_notebook}/documents"))
+                .uri(format!("/api/v1/workspaces/{other_notebook}/documents"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .header("Authorization", format!("Bearer {bearer}"))
                 .body(Body::from(
@@ -431,7 +431,7 @@ async fn rest_upload_scope_mismatch_returns_forbidden() {
 
 #[tokio::test]
 async fn mcp_ingestion_flow_create_upload_complete_status() {
-    let (state, notebook_id, bearer, app) =
+    let (state, workspace_id, bearer, app) =
         create_workspace_with_key(vec!["index".to_string(), "query".to_string()]).await;
 
     let (status, payload) = mcp_tools_call(
@@ -439,7 +439,7 @@ async fn mcp_ingestion_flow_create_upload_complete_status() {
         &bearer,
         "workspace.create_upload",
         serde_json::json!({
-            "notebook_id": notebook_id,
+            "workspace_id": workspace_id,
             "filename": "flow.txt",
             "mime_type": "text/plain",
             "file_size": 24
@@ -469,7 +469,7 @@ async fn mcp_ingestion_flow_create_upload_complete_status() {
         &bearer,
         "workspace.complete_upload",
         serde_json::json!({
-            "notebook_id": notebook_id,
+            "workspace_id": workspace_id,
             "document_id": document_id
         }),
     )
@@ -492,7 +492,7 @@ async fn mcp_ingestion_flow_create_upload_complete_status() {
         &bearer,
         "workspace.document_status",
         serde_json::json!({
-            "notebook_id": notebook_id,
+            "workspace_id": workspace_id,
             "document_id": document_id
         }),
     )

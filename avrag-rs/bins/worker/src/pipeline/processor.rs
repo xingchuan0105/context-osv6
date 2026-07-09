@@ -306,7 +306,7 @@ impl TaskProcessor for PgTaskProcessor {
                     .map(|f| f.to_string_lossy().to_string())
                     .unwrap_or_else(|| object_path.clone())
             };
-            let notebook_id = Uuid::parse_str(&task.notebook_id).unwrap_or_else(|_| Uuid::nil());
+            let workspace_id = Uuid::parse_str(&task.workspace_id).unwrap_or_else(|_| Uuid::nil());
 
             // Security scan: malware (ClamAV) + ZIP-bomb detection.
             if !is_url_task {
@@ -382,7 +382,7 @@ impl TaskProcessor for PgTaskProcessor {
                     &context,
                     avrag_storage_pg::CreateDocumentParseRunParams {
                         run_id: parse_run_id,
-                        notebook_id,
+                        workspace_id,
                         document_id,
                         backend_summary: &initial_backend_summary,
                         artifact_path: Some(&object_path),
@@ -398,7 +398,7 @@ impl TaskProcessor for PgTaskProcessor {
                 RunDocumentPipelineParams {
                     task,
                     context: &context,
-                    notebook_id,
+                    workspace_id,
                     document_id,
                     parse_run_id,
                     bytes: &bytes,
@@ -510,7 +510,7 @@ impl TaskProcessor for PgTaskProcessor {
                         event_time: chrono::Utc::now(),
                         user_id,
                         session_id: None,
-                        notebook_id: Uuid::parse_str(&task.notebook_id).ok(),
+                        workspace_id: Uuid::parse_str(&task.workspace_id).ok(),
                         event_name: analytics::CostEventName::EmbeddingUsageMetered,
                         feature: "embedding".to_string(),
                         provider: "worker".to_string(),

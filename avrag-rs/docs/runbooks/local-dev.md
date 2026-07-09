@@ -42,8 +42,8 @@ pnpm dev
 ## 手工验证建议
 
 1. `GET /health`
-2. `POST /api/v1/notebooks`
-3. `POST /api/v1/notebooks/{id}/documents`
+2. `POST /api/v1/workspaces`
+3. `POST /api/v1/workspaces/{id}/documents`
 4. `PUT /dev-upload/{doc_id}`
 5. `GET /api/v1/documents/{id}/status`
 6. `POST /api/v1/chat` 或 `POST /api/v1/chat?stream=true`

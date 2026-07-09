@@ -67,7 +67,7 @@ describe("dashboard client", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.example.test/api/v1/notebooks",
+      "https://api.example.test/api/v1/workspaces",
       expect.objectContaining({
         method: "GET",
         cache: "no-store",
@@ -181,7 +181,7 @@ describe("dashboard client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "https://api.example.test/api/v1/notebooks",
+      "https://api.example.test/api/v1/workspaces",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -193,7 +193,7 @@ describe("dashboard client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "https://api.example.test/api/v1/notebooks/ws-2",
+      "https://api.example.test/api/v1/workspaces/ws-2",
       expect.objectContaining({
         method: "PUT",
         body: JSON.stringify({
@@ -205,7 +205,7 @@ describe("dashboard client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "https://api.example.test/api/v1/notebooks/ws-2",
+      "https://api.example.test/api/v1/workspaces/ws-2",
       expect.objectContaining({
         method: "DELETE",
       }),

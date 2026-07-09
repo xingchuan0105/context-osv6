@@ -80,7 +80,7 @@ test.describe("Notebook & Document Lifecycle", () => {
     const id = await createNotebookViaAPI(request, token, name);
 
     // List
-    const list = await request.get("/api/v1/notebooks", {
+    const list = await request.get("/api/v1/workspaces", {
       headers: authHeaders(token),
     });
     expect(list.ok()).toBeTruthy();
@@ -90,21 +90,21 @@ test.describe("Notebook & Document Lifecycle", () => {
     expect(found!.name).toBe(name);
 
     // Get
-    const get = await request.get(`/api/v1/notebooks/${id}`, {
+    const get = await request.get(`/api/v1/workspaces/${id}`, {
       headers: authHeaders(token),
     });
     expect(get.ok()).toBeTruthy();
 
     // Update
     const newName = `${name}-updated`;
-    const update = await request.put(`/api/v1/notebooks/${id}`, {
+    const update = await request.put(`/api/v1/workspaces/${id}`, {
       headers: authHeaders(token),
       data: { name: newName, description: "updated by e2e" },
     });
     expect(update.ok(), `update failed: ${await update.text()}`).toBeTruthy();
 
     // Verify update
-    const getUpdated = await request.get(`/api/v1/notebooks/${id}`, {
+    const getUpdated = await request.get(`/api/v1/workspaces/${id}`, {
       headers: authHeaders(token),
     });
     const updated = (await getUpdated.json()) as { notebook?: { name: string } };
@@ -114,7 +114,7 @@ test.describe("Notebook & Document Lifecycle", () => {
     await deleteNotebookViaAPI(request, token, id);
 
     // Verify deleted
-    const getDeleted = await request.get(`/api/v1/notebooks/${id}`, {
+    const getDeleted = await request.get(`/api/v1/workspaces/${id}`, {
       headers: authHeaders(token),
     });
     expect(getDeleted.ok()).toBeFalsy();
@@ -130,7 +130,7 @@ test.describe("Notebook & Document Lifecycle", () => {
     try {
       // Step 1: Create document record
       const createResp = await request.post(
-        `/api/v1/notebooks/${notebookId}/documents`,
+        `/api/v1/workspaces/${notebookId}/documents`,
         {
           headers: authHeaders(token),
           data: { filename: "sample.txt", file_size: 50, mime_type: "text/plain" },
@@ -186,7 +186,7 @@ test.describe("Notebook & Document Lifecycle", () => {
     try {
       // Create + upload document (don't wait for ingestion)
       const createResp = await request.post(
-        `/api/v1/notebooks/${notebookId}/documents`,
+        `/api/v1/workspaces/${notebookId}/documents`,
         {
           headers: authHeaders(token),
           data: { filename: "reindex.txt", file_size: 40, mime_type: "text/plain" },
@@ -307,7 +307,7 @@ test.describe("Chat Modes", () => {
 
     // Create + upload document without waiting for ingestion
     const createResp = await request.post(
-      `/api/v1/notebooks/${notebookId}/documents`,
+      `/api/v1/workspaces/${notebookId}/documents`,
       {
         headers: authHeaders(token),
         data: { filename: "rag-test.txt", file_size: content.length, mime_type: "text/plain" },
@@ -508,7 +508,7 @@ test.describe("Share & Collaboration", () => {
   test("T10: share link creation and validation", async ({ request }) => {
     // Create share token
     const shareResp = await request.post(
-      `/api/v1/notebooks/${notebookId}/share`,
+      `/api/v1/workspaces/${notebookId}/share`,
       {
         headers: authHeaders(token),
         data: { role: "viewer" },
@@ -535,14 +535,14 @@ test.describe("Share & Collaboration", () => {
   test("T11a: share settings and access level", async ({ request }) => {
     // Get current share settings
     const settingsResp = await request.get(
-      `/api/v1/notebooks/${notebookId}/share/settings`,
+      `/api/v1/workspaces/${notebookId}/share/settings`,
       { headers: authHeaders(token) },
     );
     expect(settingsResp.ok(), `settings failed: ${settingsResp.status()}`).toBeTruthy();
 
     // Update access level
     const updateResp = await request.post(
-      `/api/v1/notebooks/${notebookId}/access-level`,
+      `/api/v1/workspaces/${notebookId}/access-level`,
       {
         headers: authHeaders(token),
         data: { access_level: "link" },
@@ -552,7 +552,7 @@ test.describe("Share & Collaboration", () => {
   });
 
   test("T11b: share download policy persists to public payload", async ({ request }) => {
-    const shareResp = await request.post(`/api/v1/notebooks/${notebookId}/share`, {
+    const shareResp = await request.post(`/api/v1/workspaces/${notebookId}/share`, {
       headers: authHeaders(token),
       data: { role: "viewer" },
     });
@@ -562,7 +562,7 @@ test.describe("Share & Collaboration", () => {
     expect(shareToken).toBeTruthy();
 
     const updateResp = await request.put(
-      `/api/v1/notebooks/${notebookId}/share/settings`,
+      `/api/v1/workspaces/${notebookId}/share/settings`,
       {
         headers: authHeaders(token),
         data: { access_level: "link", allow_download: true },
@@ -571,7 +571,7 @@ test.describe("Share & Collaboration", () => {
     expect(updateResp.ok(), `share settings update failed: ${await updateResp.text()}`).toBeTruthy();
 
     const settingsResp = await request.get(
-      `/api/v1/notebooks/${notebookId}/share/settings`,
+      `/api/v1/workspaces/${notebookId}/share/settings`,
       { headers: authHeaders(token) },
     );
     const settingsBody = (await settingsResp.json()) as { allow_download?: boolean };
@@ -588,7 +588,7 @@ test.describe("Share & Collaboration", () => {
   test("T12: share analytics and access logs", async ({ request }) => {
     // Create a share token first
     const shareResp = await request.post(
-      `/api/v1/notebooks/${notebookId}/share`,
+      `/api/v1/workspaces/${notebookId}/share`,
       {
         headers: authHeaders(token),
         data: { role: "viewer" },
@@ -604,14 +604,14 @@ test.describe("Share & Collaboration", () => {
 
     // Check analytics
     const analyticsResp = await request.get(
-      `/api/v1/notebooks/${notebookId}/share/analytics`,
+      `/api/v1/workspaces/${notebookId}/share/analytics`,
       { headers: authHeaders(token) },
     );
     expect(analyticsResp.ok(), `analytics failed: ${analyticsResp.status()}`).toBeTruthy();
 
     // Check access logs
     const logsResp = await request.get(
-      `/api/v1/notebooks/${notebookId}/share/access-logs`,
+      `/api/v1/workspaces/${notebookId}/share/access-logs`,
       { headers: authHeaders(token) },
     );
     expect(logsResp.ok(), `access-logs failed: ${logsResp.status()}`).toBeTruthy();
@@ -679,7 +679,7 @@ test.describe("Browser Frontend Journeys", () => {
       await gotoAndWaitForHydration(page, `/dashboard/${notebookId}`);
       const addUrlResponse = page.waitForResponse((resp) =>
         resp.request().method() === "POST" &&
-        resp.url().includes(`/api/v1/notebooks/${notebookId}/sources/url`)
+        resp.url().includes(`/api/v1/workspaces/${notebookId}/sources/url`)
       );
       await page.getByPlaceholder(/添加网页链接源|Add URL source/).fill(`${baseURL}/login`);
       await page.getByRole("button", { name: /添加链接|Add URL/ }).click();
@@ -706,7 +706,7 @@ test.describe("Browser Frontend Journeys", () => {
     );
 
     await seedBrowserAuth(page, request, auth.token);
-    await page.route(`**/api/v1/notebooks/${notebookId}/share/analytics`, async (route) => {
+    await page.route(`**/api/v1/workspaces/${notebookId}/share/analytics`, async (route) => {
       await route.fulfill({
         status: 500,
         contentType: "application/json",
@@ -717,7 +717,7 @@ test.describe("Browser Frontend Journeys", () => {
     try {
       await gotoAndWaitForHydration(page, `/dashboard/${notebookId}/share`);
       const analyticsRequest = page.waitForRequest(
-        `**/api/v1/notebooks/${notebookId}/share/analytics`,
+        `**/api/v1/workspaces/${notebookId}/share/analytics`,
       );
       await page.getByRole("button", { name: /分析|Analytics/ }).click();
       await analyticsRequest;

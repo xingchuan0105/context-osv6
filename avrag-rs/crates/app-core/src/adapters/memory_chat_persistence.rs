@@ -49,7 +49,7 @@ impl MemoryChatPersistence {
     fn session_visible(state: &MemoryState, auth: &AuthContext, session: &ChatSession) -> bool {
         state
             .notebooks
-            .get(&session.notebook_id)
+            .get(&session.workspace_id)
             .map(|nb| nb.org_id == Self::org_id(auth))
             .unwrap_or(false)
     }
@@ -112,9 +112,9 @@ impl SessionPort for MemoryChatPersistence {
     async fn list_sessions(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
     ) -> Result<Vec<ChatSession>, AppError> {
-        let notebook_key = notebook_id.map(|id| id.to_string());
+        let notebook_key = workspace_id.map(|id| id.to_string());
         let state = self.state.read().await;
         Ok(state
             .sessions
@@ -123,7 +123,7 @@ impl SessionPort for MemoryChatPersistence {
             .filter(|session| {
                 notebook_key
                     .as_ref()
-                    .map(|id| session.notebook_id == *id)
+                    .map(|id| session.workspace_id == *id)
                     .unwrap_or(true)
             })
             .cloned()
@@ -147,11 +147,11 @@ impl SessionPort for MemoryChatPersistence {
     async fn create_session(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         title: Option<&str>,
         agent_type: &str,
     ) -> Result<ChatSession, AppError> {
-        let notebook_key = notebook_id.to_string();
+        let notebook_key = workspace_id.to_string();
         let mut state = self.state.write().await;
         let notebook = state
             .notebooks
@@ -162,7 +162,7 @@ impl SessionPort for MemoryChatPersistence {
         let now = now_rfc3339();
         let session = ChatSession {
             id: new_id(),
-            notebook_id: notebook.id,
+            workspace_id: notebook.id,
             title: title
                 .map(str::trim)
                 .filter(|t| !t.is_empty())
@@ -348,13 +348,13 @@ impl MessagePort for MemoryChatPersistence {
                 "session not found",
             ));
         }
-        let notebook_id = session.notebook_id.clone();
+        let workspace_id = session.workspace_id.clone();
         let session_keys: Vec<String> = match scope {
             ConversationHistoryScope::Session => vec![session_key],
             ConversationHistoryScope::Notebook => state
                 .sessions
                 .values()
-                .filter(|s| s.notebook_id == notebook_id)
+                .filter(|s| s.workspace_id == workspace_id)
                 .filter(|s| Self::session_visible(&state, auth, s))
                 .map(|s| s.id.clone())
                 .collect(),
@@ -428,13 +428,13 @@ impl ChatCatalogPort for MemoryChatPersistence {
                     && !Self::is_deleting_or_deleted(&stored.document.status)
             })
             .filter_map(|stored| {
-                let notebook = state.notebooks.get(&stored.document.notebook_id)?;
+                let notebook = state.notebooks.get(&stored.document.workspace_id)?;
                 if notebook.org_id != org {
                     return None;
                 }
                 Some(SourceRow {
                     id: stored.document.id.clone(),
-                    notebook_id: notebook.id.clone(),
+                    workspace_id: notebook.id.clone(),
                     notebook_name: notebook.name.clone(),
                     title: stored.document.file_name.clone(),
                     file_name: stored.document.file_name.clone(),
@@ -447,9 +447,9 @@ impl ChatCatalogPort for MemoryChatPersistence {
     async fn get_notebook(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<Option<Notebook>, AppError> {
-        let key = notebook_id.to_string();
+        let key = workspace_id.to_string();
         let org = Self::org_id(auth);
         let state = self.state.read().await;
         Ok(state
@@ -576,14 +576,14 @@ mod tests {
         let state = Arc::new(RwLock::new(MemoryState::default()));
         let org = Uuid::from_u128(1);
         let user = Uuid::from_u128(2);
-        let notebook_id = Uuid::from_u128(10);
+        let workspace_id = Uuid::from_u128(10);
         let now = now_rfc3339();
         {
             let mut s = state.write().await;
             s.notebooks.insert(
-                notebook_id.to_string(),
+                workspace_id.to_string(),
                 Notebook {
-                    id: notebook_id.to_string(),
+                    id: workspace_id.to_string(),
                     org_id: org.to_string(),
                     owner_id: user.to_string(),
                     name: "nb".into(),
@@ -600,11 +600,11 @@ mod tests {
         let store = MemoryChatPersistence::new(state);
         let a = auth(org, user);
         let session = store
-            .create_session(&a, notebook_id, Some("hello"), "chat")
+            .create_session(&a, workspace_id, Some("hello"), "chat")
             .await
             .expect("create");
         let session_uuid = Uuid::parse_str(&session.id).unwrap();
-        let listed = store.list_sessions(&a, Some(notebook_id)).await.unwrap();
+        let listed = store.list_sessions(&a, Some(workspace_id)).await.unwrap();
         assert_eq!(listed.len(), 1);
         let assistant_id = store
             .append_chat_turn(
@@ -636,14 +636,14 @@ mod tests {
         let org = Uuid::from_u128(1);
         let other = Uuid::from_u128(99);
         let user = Uuid::from_u128(2);
-        let notebook_id = Uuid::from_u128(10);
+        let workspace_id = Uuid::from_u128(10);
         let now = now_rfc3339();
         {
             let mut s = state.write().await;
             s.notebooks.insert(
-                notebook_id.to_string(),
+                workspace_id.to_string(),
                 Notebook {
-                    id: notebook_id.to_string(),
+                    id: workspace_id.to_string(),
                     org_id: org.to_string(),
                     owner_id: user.to_string(),
                     name: "nb".into(),
@@ -660,7 +660,7 @@ mod tests {
         let store = MemoryChatPersistence::new(state);
         let a = auth(org, user);
         let session = store
-            .create_session(&a, notebook_id, None, "chat")
+            .create_session(&a, workspace_id, None, "chat")
             .await
             .unwrap();
         let sid = Uuid::parse_str(&session.id).unwrap();

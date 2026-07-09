@@ -9,11 +9,11 @@ impl ShareService {
     pub async fn get_share_access_logs(
         &self,
         ctx: &contracts::auth_runtime::AuthContext,
-        notebook_id: &str,
+        workspace_id: &str,
         limit: usize,
     ) -> Result<Vec<ShareAccessLog>> {
         if !self
-            .check_access(ctx, notebook_id)
+            .check_access(ctx, workspace_id)
             .await?
             .allows_share_management()
         {
@@ -21,12 +21,12 @@ impl ShareService {
         }
         Ok(self
             .store
-            .get_share_access_logs(ctx, uuid::Uuid::parse_str(notebook_id)?, limit)
+            .get_share_access_logs(ctx, uuid::Uuid::parse_str(workspace_id)?, limit)
             .await?
             .into_iter()
             .map(|entry| ShareAccessLog {
                 id: entry.id,
-                notebook_id: entry.notebook_id,
+                workspace_id: entry.workspace_id,
                 share_token: entry.share_token,
                 action: entry.action,
                 accessed_at: entry.accessed_at,
@@ -73,7 +73,7 @@ impl ShareService {
             .await?
             .map(|snapshot| PublicShareChatContext {
                 org_id: snapshot.org_id,
-                notebook_id: snapshot.notebook_id,
+                workspace_id: snapshot.workspace_id,
                 owner_user_id: snapshot.owner_user_id,
                 access_level: snapshot.access_level.into(),
             }))

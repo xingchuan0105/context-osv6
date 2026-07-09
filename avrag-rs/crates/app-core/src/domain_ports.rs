@@ -22,7 +22,7 @@ pub trait DocumentScopeValidator: Send + Sync {
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
-        notebook_id: &str,
+        workspace_id: &str,
         document_ids: &[String],
     ) -> Result<(), AppError>;
 }

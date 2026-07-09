@@ -43,7 +43,7 @@ impl IngestionQueueRepository {
         let result = sqlx::query(
             r#"
             insert into ingestion_tasks (
-                task_id, org_id, notebook_id, document_id, kind, requested_by, idempotency_key,
+                task_id, org_id, workspace_id, document_id, kind, requested_by, idempotency_key,
                 queue_group, payload, status, attempt_count, max_attempts, available_at, enqueued_at, updated_at
             )
             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $10, $11, now(), $12, now())
@@ -56,7 +56,7 @@ impl IngestionQueueRepository {
         )
         .bind(org_id.into_uuid())
         .bind(
-            Uuid::parse_str(&task.notebook_id)
+            Uuid::parse_str(&task.workspace_id)
                 .map_err(|_| PgStorageError::NotFound("invalid notebook id".to_string()))?,
         )
         .bind(
@@ -133,7 +133,7 @@ impl IngestionQueueRepository {
         let result = sqlx::query(
             r#"
             insert into ingestion_tasks (
-                task_id, org_id, notebook_id, document_id, kind, requested_by, idempotency_key,
+                task_id, org_id, workspace_id, document_id, kind, requested_by, idempotency_key,
                 queue_group, payload, status, attempt_count, max_attempts, available_at, enqueued_at, updated_at
             )
             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'queued', $10, $11, now(), $12, now())
@@ -146,7 +146,7 @@ impl IngestionQueueRepository {
         )
         .bind(org_id)
         .bind(
-            Uuid::parse_str(&task.notebook_id)
+            Uuid::parse_str(&task.workspace_id)
                 .map_err(|_| PgStorageError::NotFound("invalid notebook id".to_string()))?,
         )
         .bind(
@@ -242,7 +242,7 @@ impl IngestionQueueRepository {
                 updated_at = now()
             from next_task
             where it.task_id = next_task.task_id
-            returning it.task_id, it.org_id, it.notebook_id, it.document_id, it.kind, it.requested_by,
+            returning it.task_id, it.org_id, it.workspace_id, it.document_id, it.kind, it.requested_by,
                       it.idempotency_key, it.enqueued_at, it.payload, it.lock_token,
                       it.attempt_count, it.max_attempts
             "#,

@@ -374,7 +374,7 @@ pnpm exec playwright test --project=functional e2e/specs/smoke/api-access.spec.t
 
 - [ ] MCP：create_upload → PUT → complete → query/RAG + citations（integration）
 - [ ] API Key 权限边界（integration + transport contract）
-- [ ] OpenAI `/v1/notebooks/{id}/chat/completions` 契约测
+- [ ] OpenAI `/v1/workspaces/{id}/chat/completions` 契约测
 
 ### 浏览器
 

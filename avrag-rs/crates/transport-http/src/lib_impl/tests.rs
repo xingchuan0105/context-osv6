@@ -97,7 +97,7 @@ async fn protected_routes_require_auth() {
     let state = test_app_state();
     let app = build_router(state);
     let req = Request::builder()
-        .uri("/api/v1/notebooks")
+        .uri("/api/v1/workspaces")
         .method("GET")
         .body(Body::empty())
         .unwrap();
@@ -112,7 +112,7 @@ async fn notebook_routes_with_auth_headers() {
     let org_id = "11111111-1111-1111-1111-111111111111";
     let user_id = "22222222-2222-2222-2222-222222222222";
     let req = Request::builder()
-        .uri("/api/v1/notebooks")
+        .uri("/api/v1/workspaces")
         .method("GET")
         .header(middleware::HEADER_ORG_ID, org_id)
         .header(middleware::HEADER_USER_ID, user_id)
@@ -147,7 +147,7 @@ async fn workspace_api_key_can_access_its_notebook_sources() {
     let app = build_router(state);
 
     let req = Request::builder()
-        .uri(format!("/api/v1/sources?notebook_id={}", notebook.id))
+        .uri(format!("/api/v1/sources?workspace_id={}", notebook.id))
         .method("GET")
         .header("Authorization", format!("Bearer {}", key.plaintext_key))
         .body(Body::empty())
@@ -175,7 +175,7 @@ async fn mcp_jsonrpc_initialize_and_tools_list() {
     let user_id = "00000000-0000-0000-0000-000000000002";
 
     let init_req = Request::builder()
-        .uri(format!("/mcp/notebooks/{}", notebook.id))
+        .uri(format!("/mcp/workspaces/{}", notebook.id))
         .method("POST")
         .header("Content-Type", "application/json")
         .header(middleware::HEADER_ORG_ID, org_id)
@@ -191,7 +191,7 @@ async fn mcp_jsonrpc_initialize_and_tools_list() {
     assert_eq!(init_payload["result"]["serverInfo"]["name"], "context-os");
 
     let list_req = Request::builder()
-        .uri(format!("/mcp/notebooks/{}", notebook.id))
+        .uri(format!("/mcp/workspaces/{}", notebook.id))
         .method("POST")
         .header("Content-Type", "application/json")
         .header(middleware::HEADER_ORG_ID, org_id)
@@ -247,7 +247,7 @@ async fn unified_mcp_lists_org_and_workspace_tools() {
 }
 
 #[tokio::test]
-async fn org_mcp_create_workspace_returns_notebook_id() {
+async fn org_mcp_create_workspace_returns_workspace_id() {
     let state = test_app_state();
     let app = build_router(state);
     let org_id = "00000000-0000-0000-0000-000000000001";
@@ -362,7 +362,7 @@ async fn chat_session_routes_work_with_auth_headers() {
         .header(middleware::HEADER_ORG_ID, org_id)
         .header(middleware::HEADER_USER_ID, user_id)
         .body(Body::from(format!(
-            r#"{{"notebook_id":"{}","title":"My Session","agent_type":"chat"}}"#,
+            r#"{{"workspace_id":"{}","title":"My Session","agent_type":"chat"}}"#,
             notebook.id
         )))
         .unwrap();
@@ -373,7 +373,7 @@ async fn chat_session_routes_work_with_auth_headers() {
     let session_id = session["id"].as_str().unwrap().to_string();
 
     let list_req = Request::builder()
-        .uri(format!("/api/v1/chat/sessions?notebook_id={}", notebook.id))
+        .uri(format!("/api/v1/chat/sessions?workspace_id={}", notebook.id))
         .method("GET")
         .header(middleware::HEADER_ORG_ID, org_id)
         .header(middleware::HEADER_USER_ID, user_id)
@@ -429,7 +429,7 @@ async fn document_and_share_routes_work_when_database_available() {
         .to_string();
 
     let notebook_req = Request::builder()
-        .uri("/api/v1/notebooks")
+        .uri("/api/v1/workspaces")
         .method("POST")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {token}"))
@@ -441,13 +441,13 @@ async fn document_and_share_routes_work_when_database_available() {
         .await
         .unwrap();
     let notebook_payload: serde_json::Value = serde_json::from_slice(&notebook_body).unwrap();
-    let notebook_id = notebook_payload["notebook"]["id"]
+    let workspace_id = notebook_payload["notebook"]["id"]
         .as_str()
         .unwrap()
         .to_string();
 
     let create_doc_req = Request::builder()
-        .uri(format!("/api/v1/notebooks/{notebook_id}/documents"))
+        .uri(format!("/api/v1/workspaces/{workspace_id}/documents"))
         .method("POST")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {token}"))
@@ -477,7 +477,7 @@ async fn document_and_share_routes_work_when_database_available() {
     assert_eq!(status_resp.status(), StatusCode::OK);
 
     let share_req = Request::builder()
-        .uri(format!("/api/v1/notebooks/{notebook_id}/share"))
+        .uri(format!("/api/v1/workspaces/{workspace_id}/share"))
         .method("POST")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {token}"))
@@ -498,7 +498,7 @@ async fn document_and_share_routes_work_when_database_available() {
     assert_eq!(validate_resp.status(), StatusCode::OK);
 
     let settings_req = Request::builder()
-        .uri(format!("/api/v1/notebooks/{notebook_id}/share/settings"))
+        .uri(format!("/api/v1/workspaces/{workspace_id}/share/settings"))
         .method("GET")
         .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
@@ -507,7 +507,7 @@ async fn document_and_share_routes_work_when_database_available() {
     assert_eq!(settings_resp.status(), StatusCode::OK);
 
     let analytics_req = Request::builder()
-        .uri(format!("/api/v1/notebooks/{notebook_id}/share/analytics"))
+        .uri(format!("/api/v1/workspaces/{workspace_id}/share/analytics"))
         .method("GET")
         .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
@@ -516,7 +516,7 @@ async fn document_and_share_routes_work_when_database_available() {
     assert_eq!(analytics_resp.status(), StatusCode::OK);
 
     let logs_req = Request::builder()
-        .uri(format!("/api/v1/notebooks/{notebook_id}/share/access-logs"))
+        .uri(format!("/api/v1/workspaces/{workspace_id}/share/access-logs"))
         .method("GET")
         .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
@@ -607,7 +607,7 @@ async fn create_document_upload_rejects_unsupported_file_type() {
 
     let app = build_router(state);
     let req = Request::builder()
-        .uri(format!("/api/v1/notebooks/{}/documents", notebook.id))
+        .uri(format!("/api/v1/workspaces/{}/documents", notebook.id))
         .method("POST")
         .header("Content-Type", "application/json")
         .header(middleware::HEADER_ORG_ID, org_id)
@@ -774,7 +774,7 @@ async fn preferences_roundtrip_when_database_available() {
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {token}"))
         .body(Body::from(
-            r#"{"dashboard":{"favorite_notebook_ids":[],"workspace_drafts":[{"notebook_id":"00000000-0000-0000-0000-000000000010","notes":"hello notes"}]},"notifications":{"email_enabled":true,"product_enabled":true,"security_enabled":true,"weekly_digest_enabled":false,"quiet_hours_start":null,"quiet_hours_end":null}}"#,
+            r#"{"dashboard":{"favorite_workspace_ids":[],"workspace_drafts":[{"workspace_id":"00000000-0000-0000-0000-000000000010","notes":"hello notes"}]},"notifications":{"email_enabled":true,"product_enabled":true,"security_enabled":true,"weekly_digest_enabled":false,"quiet_hours_start":null,"quiet_hours_end":null}}"#,
         ))
         .unwrap();
     let update_resp = app.clone().oneshot(update_req).await.unwrap();
@@ -1466,7 +1466,7 @@ async fn anonymous_share_chat_requires_login_without_persisting_owner_session() 
     let org_id = Uuid::parse_str(&claims.org_id).unwrap();
 
     let notebook_req = Request::builder()
-        .uri("/api/v1/notebooks")
+        .uri("/api/v1/workspaces")
         .method("POST")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {token}"))
@@ -1480,7 +1480,7 @@ async fn anonymous_share_chat_requires_login_without_persisting_owner_session() 
         .await
         .unwrap();
     let notebook: serde_json::Value = serde_json::from_slice(&notebook_body).unwrap();
-    let notebook_id = notebook["notebook"]["id"].as_str().unwrap().to_string();
+    let workspace_id = notebook["notebook"]["id"].as_str().unwrap().to_string();
 
     let share_token = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
         .create_share_token(
@@ -1489,7 +1489,7 @@ async fn anonymous_share_chat_requires_login_without_persisting_owner_session() 
                 contracts::auth_runtime::SubjectKind::User,
             )
             .with_actor_id(contracts::auth_runtime::ActorId::new(user_id)),
-            &notebook_id,
+            &workspace_id,
             avrag_share::AccessLevel::Read,
             None,
         )
@@ -1501,7 +1501,7 @@ async fn anonymous_share_chat_requires_login_without_persisting_owner_session() 
         .method("POST")
         .header("Content-Type", "application/json")
         .body(Body::from(format!(
-            r#"{{"query":"hello public share","notebook_id":"{notebook_id}","agent_type":"chat","source_type":"share","source_token":"{share_token}","doc_scope":[],"messages":[],"stream":false}}"#
+            r#"{{"query":"hello public share","workspace_id":"{workspace_id}","agent_type":"chat","source_type":"share","source_token":"{share_token}","doc_scope":[],"messages":[],"stream":false}}"#
         )))
         .unwrap();
     let chat_resp = app.clone().oneshot(chat_req).await.unwrap();
@@ -1515,7 +1515,7 @@ async fn anonymous_share_chat_requires_login_without_persisting_owner_session() 
             .is_some_and(|message| message.contains("asking questions requires sign-in"))
     );
 
-    let sessions = state.chat().list_sessions(Some(&notebook_id)).await;
+    let sessions = state.chat().list_sessions(Some(&workspace_id)).await;
     assert!(sessions.is_empty());
 }
 

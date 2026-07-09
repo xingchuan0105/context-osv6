@@ -284,7 +284,7 @@ mod tests {
                 &upload.document_id,
                 UpdateDocumentRequest {
                     filename: None,
-                    notebook_id: None,
+                    workspace_id: None,
                     status: Some(DocumentStatus::Deleting),
                 },
             )
@@ -426,7 +426,7 @@ mod tests {
             .execute_chat_stream(
                 contracts::chat::ChatRequest {
                     query: "hello".to_string(),
-                    notebook_id: Some(notebook.id),
+                    workspace_id: Some(notebook.id),
                     session_id: None,
                     agent_type: "chat".to_string(),
                     source_type: None,
@@ -495,7 +495,7 @@ mod tests {
             .execute_chat_stream(
                 contracts::chat::ChatRequest {
                     query: "hello".to_string(),
-                    notebook_id: Some(notebook.id),
+                    workspace_id: Some(notebook.id),
                     session_id: None,
                     agent_type: "chat".to_string(),
                     source_type: None,
@@ -557,7 +557,7 @@ mod tests {
             .execute_chat_stream(
                 contracts::chat::ChatRequest {
                     query: "hello".to_string(),
-                    notebook_id: Some(notebook.id),
+                    workspace_id: Some(notebook.id),
                     session_id: None,
                     agent_type: "search".to_string(),
                     source_type: None,
@@ -704,11 +704,11 @@ mod tests {
 
     async fn document_status(
         state: &AppState,
-        notebook_id: &str,
+        workspace_id: &str,
         document_id: &str,
     ) -> DocumentStatus {
         state.docs()
-            .list_documents(Some(notebook_id), Some(document_id))
+            .list_documents(Some(workspace_id), Some(document_id))
             .await
             .into_iter()
             .next()

@@ -212,7 +212,7 @@ impl ChatContext {
             },
             result,
             Uuid::parse_str(&session.id).ok(),
-            Uuid::parse_str(&session.notebook_id).ok(),
+            Uuid::parse_str(&session.workspace_id).ok(),
             metadata,
         )
         .await;
@@ -274,7 +274,7 @@ impl ChatContext {
                     event_name: analytics::CostEventName::LlmUsageMetered,
                     feature,
                     session_id: Uuid::parse_str(&execution.response.session_id).ok(),
-                    notebook_id: None,
+                    workspace_id: None,
                     usage: llm_usage,
                     source: "pipeline",
                     metadata: cost_metadata,

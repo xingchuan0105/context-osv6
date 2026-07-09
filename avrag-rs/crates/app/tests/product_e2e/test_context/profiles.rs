@@ -24,7 +24,7 @@ use super::builder::PersistentSmokeInfra;
 pub struct ChatStreamParams<'a> {
     pub query: &'a str,
     pub agent_type: &'a str,
-    pub notebook_id: &'a str,
+    pub workspace_id: &'a str,
     pub doc_scope: &'a [String],
     pub session_id: Option<&'a str>,
     pub format_hint: Option<&'a str>,

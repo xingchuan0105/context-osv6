@@ -8,7 +8,7 @@ pub(super) fn build_plan_payloads(
         serde_json::json!({
             "plan_id": PLAN_FREE,
             "name": "Free",
-            "description": "Starter plan for smaller personal notebooks and trial usage.",
+            "description": "Starter plan for smaller personal workspaces and trial usage.",
             "price_label": config.price_label_for_plan(PLAN_FREE),
             "price_label_cny": config.price_label_cny_for_plan(PLAN_FREE),
             "price_label_usd": config.price_label_usd_for_plan(PLAN_FREE),

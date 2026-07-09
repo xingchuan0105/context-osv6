@@ -3,7 +3,7 @@ pub fn map_document_asset(row: PgRow) -> Result<DocumentAssetRow, PgStorageError
     Ok(DocumentAssetRow {
         asset_id: row.get("asset_id"),
         org_id: row.get("org_id"),
-        notebook_id: row.get("notebook_id"),
+        workspace_id: row.get("workspace_id"),
         document_id: row.get("document_id"),
         parse_run_id: row.get("parse_run_id"),
         page: row.get("page"),
@@ -22,7 +22,7 @@ pub fn map_multimodal_chunk(row: PgRow) -> Result<MultimodalChunkRow, PgStorageE
     Ok(MultimodalChunkRow {
         chunk_id: row.get("chunk_id"),
         org_id: row.get("org_id"),
-        notebook_id: row.get("notebook_id"),
+        workspace_id: row.get("workspace_id"),
         document_id: row.get("document_id"),
         parse_run_id: row.get("parse_run_id"),
         asset_id: row.get("asset_id"),

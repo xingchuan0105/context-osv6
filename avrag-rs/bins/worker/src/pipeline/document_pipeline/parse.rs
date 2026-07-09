@@ -124,7 +124,7 @@ pub(crate) async fn stage_project_document_ir(
     processor: &PgTaskProcessor,
     task: &IngestionTask,
     context: &AuthContext,
-    notebook_id: Uuid,
+    workspace_id: Uuid,
     document_id: Uuid,
     parse_run_id: Uuid,
     document_ir: &DocumentIr,
@@ -146,7 +146,7 @@ pub(crate) async fn stage_project_document_ir(
         .documents()
         .replace_document_blocks(
             context,
-            notebook_id,
+            workspace_id,
             document_id,
             &build_document_block_rows(document_ir, parse_run_id),
         )

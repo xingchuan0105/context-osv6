@@ -193,7 +193,7 @@ async fn workspace_api_key_cannot_read_other_workspace_session() {
         .unwrap();
     let session_b = state.chat()
         .create_session(CreateChatSessionRequest {
-            notebook_id: notebook_b.id.clone(),
+            workspace_id: notebook_b.id.clone(),
             title: Some("private".to_string()),
             agent_type: "rag".to_string(),
         })
@@ -265,7 +265,7 @@ async fn org_api_key_cannot_call_workspace_mcp_tool() {
                         "params": {
                             "name": "workspace.rag_query",
                             "arguments": {
-                                "notebook_id": notebook.id,
+                                "workspace_id": notebook.id,
                                 "query": "blocked"
                             }
                         }
@@ -315,7 +315,7 @@ async fn workspace_api_key_cannot_create_workspace_api_key() {
     let (status, payload) = rest_json(
         &app,
         "POST",
-        &format!("/api/v1/notebooks/{}/api-keys", notebook.id),
+        &format!("/api/v1/workspaces/{}/api-keys", notebook.id),
         Some(&key.plaintext_key),
         Some(serde_json::json!({ "name": "blocked-workspace-key" })),
     )
@@ -354,7 +354,7 @@ async fn workspace_api_key_cannot_list_notebook_notes() {
     let (status, payload) = rest_json(
         &app,
         "GET",
-        &format!("/api/v1/notebooks/{}/notes", notebook.id),
+        &format!("/api/v1/workspaces/{}/notes", notebook.id),
         Some(&key.plaintext_key),
         None,
     )
@@ -386,7 +386,7 @@ async fn workspace_api_key_cannot_update_other_workspace_session() {
         .unwrap();
     let session_b = state.chat()
         .create_session(CreateChatSessionRequest {
-            notebook_id: notebook_b.id.clone(),
+            workspace_id: notebook_b.id.clone(),
             title: Some("private".to_string()),
             agent_type: "rag".to_string(),
         })
@@ -597,7 +597,7 @@ async fn user_without_notebook_access_cannot_list_workspace_api_keys() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/notebooks")
+                .uri("/api/v1/workspaces")
                 .header(header::CONTENT_TYPE, "application/json")
                 .header("Authorization", format!("Bearer {owner_token}"))
                 .body(Body::from(
@@ -615,7 +615,7 @@ async fn user_without_notebook_access_cannot_list_workspace_api_keys() {
     let create_body = to_bytes(create_response.into_body(), usize::MAX)
         .await
         .unwrap();
-    let notebook_id =
+    let workspace_id =
         serde_json::from_slice::<serde_json::Value>(&create_body).unwrap()["notebook"]["id"]
             .as_str()
             .unwrap()
@@ -624,7 +624,7 @@ async fn user_without_notebook_access_cannot_list_workspace_api_keys() {
     let (status, payload) = rest_json(
         &app,
         "GET",
-        &format!("/api/v1/notebooks/{notebook_id}/api-keys"),
+        &format!("/api/v1/workspaces/{workspace_id}/api-keys"),
         Some(&outsider_token),
         None,
     )
@@ -653,7 +653,7 @@ async fn user_without_notebook_access_cannot_revoke_workspace_api_key() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/notebooks")
+                .uri("/api/v1/workspaces")
                 .header(header::CONTENT_TYPE, "application/json")
                 .header("Authorization", format!("Bearer {owner_token}"))
                 .body(Body::from(
@@ -671,7 +671,7 @@ async fn user_without_notebook_access_cannot_revoke_workspace_api_key() {
     let create_body = to_bytes(create_response.into_body(), usize::MAX)
         .await
         .unwrap();
-    let notebook_id =
+    let workspace_id =
         serde_json::from_slice::<serde_json::Value>(&create_body).unwrap()["notebook"]["id"]
             .as_str()
             .unwrap()
@@ -682,7 +682,7 @@ async fn user_without_notebook_access_cannot_revoke_workspace_api_key() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/notebooks/{notebook_id}/api-keys"))
+                .uri(format!("/api/v1/workspaces/{workspace_id}/api-keys"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .header("Authorization", format!("Bearer {owner_token}"))
                 .body(Body::from(
@@ -704,7 +704,7 @@ async fn user_without_notebook_access_cannot_revoke_workspace_api_key() {
     let (status, payload) = rest_json(
         &app,
         "DELETE",
-        &format!("/api/v1/notebooks/{notebook_id}/api-keys/{key_id}"),
+        &format!("/api/v1/workspaces/{workspace_id}/api-keys/{key_id}"),
         Some(&outsider_token),
         None,
     )

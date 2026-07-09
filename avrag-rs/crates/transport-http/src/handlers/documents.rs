@@ -36,15 +36,15 @@ pub(crate) async fn list_documents_handler(
 
 pub(crate) async fn create_document_upload_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
     Json(req): Json<CreateDocumentRequest>,
 ) -> Response {
     if let Err(error) =
-        authorize_workspace_notebook_str(state.auth(), index_permission(), &notebook_id)
+        authorize_workspace_notebook_str(state.auth(), index_permission(), &workspace_id)
     {
         return app_error_response(error);
     }
-    match state.docs().create_document_upload(&notebook_id, req).await {
+    match state.docs().create_document_upload(&workspace_id, req).await {
         Ok(resp) => (StatusCode::CREATED, Json(resp)).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -52,15 +52,15 @@ pub(crate) async fn create_document_upload_handler(
 
 pub(crate) async fn add_url_source_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
     Json(req): Json<AddUrlSourceRequest>,
 ) -> Response {
     if let Err(error) =
-        authorize_workspace_notebook_str(state.auth(), index_permission(), &notebook_id)
+        authorize_workspace_notebook_str(state.auth(), index_permission(), &workspace_id)
     {
         return app_error_response(error);
     }
-    match state.docs().add_url_source(&notebook_id, req).await {
+    match state.docs().add_url_source(&workspace_id, req).await {
         Ok(resp) => (StatusCode::CREATED, Json(resp)).into_response(),
         Err(error) => app_error_response(error),
     }

@@ -152,7 +152,7 @@ impl DocumentRepository {
         context: &AuthContext,
         document_id: Uuid,
         filename: Option<&str>,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         status: Option<DocumentStatus>,
     ) -> Result<bool, PgStorageError> {
         if matches!(
@@ -167,7 +167,7 @@ impl DocumentRepository {
             r#"
             update documents
             set file_name = coalesce($2, file_name),
-                notebook_id = coalesce($3, notebook_id),
+                workspace_id = coalesce($3, workspace_id),
                 status = coalesce($4, status),
                 updated_at = now()
             where id = $1
@@ -176,7 +176,7 @@ impl DocumentRepository {
         )
         .bind(document_id)
         .bind(filename)
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(status_text)
         .execute(tx.inner())
         .await?;
@@ -193,7 +193,7 @@ impl DocumentRepository {
         ensure_org_and_actor(tx.inner(), context).await?;
         let row = sqlx::query(
             r#"
-            select id, org_id, notebook_id, file_name, mime_type, file_size, status, object_path
+            select id, org_id, workspace_id, file_name, mime_type, file_size, status, object_path
             from documents
             where id = $1
             for update
@@ -209,7 +209,7 @@ impl DocumentRepository {
         };
 
         let org_id: Uuid = row.try_get("org_id")?;
-        let notebook_id: Uuid = row.try_get("notebook_id")?;
+        let workspace_id: Uuid = row.try_get("workspace_id")?;
         let status_text: String = row.try_get("status")?;
         let status = parse_document_status(&status_text);
 
@@ -221,7 +221,7 @@ impl DocumentRepository {
         let task_inserted = insert_document_cleanup_task(
             tx.inner(),
             org_id,
-            notebook_id,
+            workspace_id,
             document_id,
             context.actor_id().map(ActorId::into_uuid),
             &row,

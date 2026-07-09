@@ -87,14 +87,14 @@ async fn resolve_public_share_chat_context_maps_snapshot_to_domain() {
     let store = Arc::new(MemoryShareStore::new());
     let token = "chat-context-token";
     let org_id = Uuid::new_v4();
-    let notebook_id = Uuid::new_v4();
+    let workspace_id = Uuid::new_v4();
     let owner_user_id = Uuid::new_v4();
     store
         .seed_public_chat_context(
             token,
             PublicShareChatContextSnapshot {
                 org_id,
-                notebook_id,
+                workspace_id,
                 owner_user_id,
                 access_level: ShareAccessLevel::Read,
             },
@@ -109,7 +109,7 @@ async fn resolve_public_share_chat_context_maps_snapshot_to_domain() {
         .expect("token should resolve to chat context");
 
     assert_eq!(context.org_id, org_id);
-    assert_eq!(context.notebook_id, notebook_id);
+    assert_eq!(context.workspace_id, workspace_id);
     assert_eq!(context.owner_user_id, owner_user_id);
     assert_eq!(context.access_level, AccessLevel::Read);
 }
@@ -129,22 +129,22 @@ async fn resolve_public_share_chat_context_returns_none_for_unknown_token() {
 #[tokio::test]
 async fn owner_can_invite_member() {
     let store = Arc::new(MemoryShareStore::new());
-    let notebook_id = Uuid::new_v4();
+    let workspace_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
-    store.seed_notebook_owner(notebook_id, owner_id).await;
+    store.seed_notebook_owner(workspace_id, owner_id).await;
 
     let service = ShareService::new(store.clone());
     let member = service
         .invite_member(
             &user_auth(owner_id),
-            &notebook_id.to_string(),
+            &workspace_id.to_string(),
             "collaborator@example.com",
             AccessLevel::Write,
         )
         .await
         .expect("owner should invite member");
 
-    assert_eq!(member.notebook_id, notebook_id.to_string());
+    assert_eq!(member.workspace_id, workspace_id.to_string());
     assert_eq!(member.email.as_deref(), Some("collaborator@example.com"));
     assert_eq!(member.access_level, AccessLevel::Write);
     assert_eq!(member.invite_status, "pending");
@@ -161,19 +161,19 @@ async fn owner_can_invite_member() {
 #[tokio::test]
 async fn non_owner_invite_is_rejected_before_store() {
     let store = Arc::new(MemoryShareStore::new());
-    let notebook_id = Uuid::new_v4();
+    let workspace_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let viewer_id = Uuid::new_v4();
-    store.seed_notebook_owner(notebook_id, owner_id).await;
+    store.seed_notebook_owner(workspace_id, owner_id).await;
     store
-        .seed_member_access(notebook_id, viewer_id, "viewer")
+        .seed_member_access(workspace_id, viewer_id, "viewer")
         .await;
 
     let service = ShareService::new(store.clone());
     let error = service
         .invite_member(
             &user_auth(viewer_id),
-            &notebook_id.to_string(),
+            &workspace_id.to_string(),
             "blocked@example.com",
             AccessLevel::Read,
         )

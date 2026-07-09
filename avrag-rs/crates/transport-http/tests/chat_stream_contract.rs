@@ -113,14 +113,14 @@ fn test_agent_service() -> UnifiedAgentService {
 
 #[tokio::test]
 async fn post_chat_with_stream_flag_only_returns_sse() {
-    let (app, notebook_id, org_id) = test_app().await;
+    let (app, workspace_id, org_id) = test_app().await;
     let request_id = "req-stream-flag";
     let response = app
         .oneshot(chat_post_request(
             org_id,
             serde_json::json!({
                 "query": "Reply with a short answer.",
-                "notebook_id": notebook_id,
+                "workspace_id": workspace_id,
                 "agent_type": "chat",
                 "stream": true
             }),
@@ -147,14 +147,14 @@ async fn post_chat_with_stream_flag_only_returns_sse() {
 
 #[tokio::test]
 async fn post_chat_with_accept_sse_only_returns_sse() {
-    let (app, notebook_id, org_id) = test_app().await;
+    let (app, workspace_id, org_id) = test_app().await;
     let request_id = "req-accept-sse";
     let response = app
         .oneshot(chat_post_request(
             org_id,
             serde_json::json!({
                 "query": "Reply with a short answer.",
-                "notebook_id": notebook_id,
+                "workspace_id": workspace_id,
                 "agent_type": "chat",
                 "stream": false
             }),
@@ -175,14 +175,14 @@ async fn post_chat_with_accept_sse_only_returns_sse() {
 
 #[tokio::test]
 async fn post_rag_chat_stream_without_runtime_fails_closed_after_retrieval_activity() {
-    let (app, notebook_id, document_id, org_id) = test_app_with_ready_document().await;
+    let (app, workspace_id, document_id, org_id) = test_app_with_ready_document().await;
     let request_id = "req-rag-progress";
     let response = app
         .oneshot(chat_post_request(
             org_id,
             serde_json::json!({
                 "query": "Summarize available context.",
-                "notebook_id": notebook_id,
+                "workspace_id": workspace_id,
                 "agent_type": "rag",
                 "doc_scope": [document_id],
                 "stream": true
@@ -226,14 +226,14 @@ async fn post_rag_chat_stream_without_runtime_fails_closed_after_retrieval_activ
 
 #[tokio::test]
 async fn post_rag_chat_with_empty_doc_scope_clarifies_without_retrieval() {
-    let (app, notebook_id, org_id) = test_app().await;
+    let (app, workspace_id, org_id) = test_app().await;
     let request_id = "req-rag-empty-scope";
     let response = app
         .oneshot(chat_post_request(
             org_id,
             serde_json::json!({
                 "query": "Summarize available context.",
-                "notebook_id": notebook_id,
+                "workspace_id": workspace_id,
                 "agent_type": "rag",
                 "stream": true
             }),
@@ -262,14 +262,14 @@ async fn post_rag_chat_with_empty_doc_scope_clarifies_without_retrieval() {
 
 #[tokio::test]
 async fn post_chat_stream_event_order_start_first_done_terminal() {
-    let (app, notebook_id, org_id) = test_app().await;
+    let (app, workspace_id, org_id) = test_app().await;
     let request_id = "req-event-order";
     let response = app
         .oneshot(chat_post_request(
             org_id,
             serde_json::json!({
                 "query": "Reply with a short answer.",
-                "notebook_id": notebook_id,
+                "workspace_id": workspace_id,
                 "agent_type": "chat",
                 "stream": true
             }),
@@ -310,14 +310,14 @@ async fn post_chat_stream_event_order_start_first_done_terminal() {
 
 #[tokio::test]
 async fn post_chat_stream_done_payload_includes_core_fields() {
-    let (app, notebook_id, org_id) = test_app().await;
+    let (app, workspace_id, org_id) = test_app().await;
     let request_id = "req-done-payload";
     let response = app
         .oneshot(chat_post_request(
             org_id,
             serde_json::json!({
                 "query": "Reply with a short answer.",
-                "notebook_id": notebook_id,
+                "workspace_id": workspace_id,
                 "agent_type": "chat",
                 "stream": true
             }),
@@ -352,13 +352,13 @@ async fn post_chat_stream_done_payload_includes_core_fields() {
 
 #[tokio::test]
 async fn post_chat_without_streaming_returns_json() {
-    let (app, notebook_id, org_id) = test_app().await;
+    let (app, workspace_id, org_id) = test_app().await;
     let response = app
         .oneshot(chat_post_request(
             org_id,
             serde_json::json!({
                 "query": "Reply with a short answer.",
-                "notebook_id": notebook_id,
+                "workspace_id": workspace_id,
                 "agent_type": "chat",
                 "stream": false
             }),

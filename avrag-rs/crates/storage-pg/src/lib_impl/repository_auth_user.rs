@@ -3,23 +3,23 @@ impl AuthRepository {
     pub async fn list_api_keys(
         &self,
         context: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
     ) -> Result<Vec<ApiKeyRow>, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select id, org_id, notebook_id, key_prefix, name, permissions, rate_limit_rpm,
+            select id, org_id, workspace_id, key_prefix, name, permissions, rate_limit_rpm,
                    expires_at, last_used_at, is_active, created_by, created_at, updated_at
             from api_keys
             where is_active = true
               and (
-                ($1::uuid is not null and notebook_id = $1)
-                or ($1::uuid is null and notebook_id is null)
+                ($1::uuid is not null and workspace_id = $1)
+                or ($1::uuid is null and workspace_id is null)
               )
             order by created_at desc
             "#,
         )
-        .bind(notebook_id)
+        .bind(workspace_id)
         .fetch_all(tx.inner())
         .await?;
         tx.commit().await?;
@@ -29,7 +29,7 @@ impl AuthRepository {
     pub async fn create_api_key(
         &self,
         context: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         name: &str,
         permissions: &[String],
         rate_limit_rpm: u32,
@@ -37,9 +37,9 @@ impl AuthRepository {
     ) -> Result<(ApiKeyRow, String), PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         ensure_org_and_actor(tx.inner(), context).await?;
-        if let Some(notebook_id) = notebook_id {
-            let exists = sqlx::query("select 1 from notebooks where id = $1")
-                .bind(notebook_id)
+        if let Some(workspace_id) = workspace_id {
+            let exists = sqlx::query("select 1 from workspaces where id = $1")
+                .bind(workspace_id)
                 .fetch_optional(tx.inner())
                 .await?;
             if exists.is_none() {
@@ -54,19 +54,19 @@ impl AuthRepository {
         let row = sqlx::query(
             r#"
             insert into api_keys (
-                org_id, notebook_id, key_hash, key_prefix, name, permissions, rate_limit_rpm, expires_at, created_by
+                org_id, workspace_id, key_hash, key_prefix, name, permissions, rate_limit_rpm, expires_at, created_by
             )
             values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            returning id, org_id, notebook_id, key_prefix, name, permissions, rate_limit_rpm,
+            returning id, org_id, workspace_id, key_prefix, name, permissions, rate_limit_rpm,
                       expires_at, last_used_at, is_active, created_by, created_at, updated_at
             "#,
         )
         .bind(context.org_id().into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(key_hash)
         .bind(key_prefix)
         .bind(name)
-        .bind(contracts::normalize_api_key_permissions(permissions, notebook_id))
+        .bind(contracts::normalize_api_key_permissions(permissions, workspace_id))
         .bind(i32::try_from(rate_limit_rpm).unwrap_or(i32::MAX))
         .bind(expires_at)
         .bind(context.actor_id().map(ActorId::into_uuid))
@@ -79,7 +79,7 @@ impl AuthRepository {
     pub async fn revoke_api_key(
         &self,
         context: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         key_id: Uuid,
     ) -> Result<bool, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
@@ -88,11 +88,11 @@ impl AuthRepository {
             update api_keys
             set is_active = false, updated_at = now()
             where id = $1
-              and ($2::uuid is null or notebook_id = $2)
+              and ($2::uuid is null or workspace_id = $2)
             "#,
         )
         .bind(key_id)
-        .bind(notebook_id)
+        .bind(workspace_id)
         .execute(tx.inner())
         .await?;
         tx.commit().await?;
@@ -200,7 +200,7 @@ impl AuthRepository {
         set_current_role(tx.as_mut(), "super_admin").await?;
         let row = sqlx::query(
             r#"
-            select id, org_id, notebook_id, permissions, created_by, expires_at, is_active, rate_limit_rpm
+            select id, org_id, workspace_id, permissions, created_by, expires_at, is_active, rate_limit_rpm
             from api_keys
             where key_hash = $1
             limit 1
@@ -224,12 +224,12 @@ impl AuthRepository {
 
         let id: Uuid = row.try_get("id")?;
         let org_id: Uuid = row.try_get("org_id")?;
-        let notebook_id: Option<Uuid> = row.try_get("notebook_id").ok().flatten();
+        let workspace_id: Option<Uuid> = row.try_get("workspace_id").ok().flatten();
         let permissions = contracts::normalize_api_key_permissions(
             &row
                 .try_get::<Vec<String>, _>("permissions")
                 .unwrap_or_else(|_| vec![contracts::PERM_QUERY.to_string()]),
-            notebook_id,
+            workspace_id,
         );
         let created_by: Option<Uuid> = row.try_get("created_by").ok().flatten();
         let rate_limit_rpm = u32::try_from(row.try_get::<i32, _>("rate_limit_rpm")?).unwrap_or(60);
@@ -250,7 +250,7 @@ impl AuthRepository {
         Ok(Some(ValidatedApiKey {
             id,
             org_id: OrgId::from(org_id),
-            notebook_id,
+            workspace_id,
             permissions,
             created_by,
             rate_limit_rpm,

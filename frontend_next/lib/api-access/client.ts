@@ -37,12 +37,12 @@ export function getApiAccessBaseUrl() {
 }
 
 export async function listApiKeys(token: string, workspaceId: string) {
-  return request<ApiKeyListResponse>(`/api/v1/notebooks/${workspaceId}/api-keys`, { method: "GET" }, token);
+  return request<ApiKeyListResponse>(`/api/v1/workspaces/${workspaceId}/api-keys`, { method: "GET" }, token);
 }
 
 export async function createApiKey(token: string, workspaceId: string, requestBody: CreateApiKeyRequest) {
   return request<CreateApiKeyResponse>(
-    `/api/v1/notebooks/${workspaceId}/api-keys`,
+    `/api/v1/workspaces/${workspaceId}/api-keys`,
     {
       method: "POST",
       body: JSON.stringify(requestBody),
@@ -53,7 +53,7 @@ export async function createApiKey(token: string, workspaceId: string, requestBo
 
 export async function revokeApiKey(token: string, workspaceId: string, keyId: string) {
   return request<Record<string, never>>(
-    `/api/v1/notebooks/${workspaceId}/api-keys/${keyId}`,
+    `/api/v1/workspaces/${workspaceId}/api-keys/${keyId}`,
     { method: "DELETE" },
     token,
   );

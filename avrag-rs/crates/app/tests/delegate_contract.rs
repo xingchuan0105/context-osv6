@@ -48,7 +48,7 @@ async fn citation_lookup_unknown_message_returns_message_not_found() {
     let session = state
         .chat()
         .create_session(CreateChatSessionRequest {
-            notebook_id: notebook.id,
+            workspace_id: notebook.id,
             title: Some("citation contract".into()),
             agent_type: "chat".into(),
         })
@@ -93,7 +93,7 @@ async fn execute_chat_empty_query_returns_validation_error() {
     let err = state.chat()
         .execute_chat(contracts::chat::ChatRequest {
             query: "   ".to_string(),
-            notebook_id: None,
+            workspace_id: None,
             session_id: None,
             agent_type: "chat".to_string(),
             source_type: None,
@@ -122,7 +122,7 @@ async fn execute_chat_memory_without_llm_returns_internal_error() {
         .chat()
         .execute_chat(contracts::chat::ChatRequest {
             query: "hello from delegate contract".to_string(),
-            notebook_id: Some(notebook.id.clone()),
+            workspace_id: Some(notebook.id.clone()),
             session_id: None,
             agent_type: "chat".to_string(),
             source_type: None,

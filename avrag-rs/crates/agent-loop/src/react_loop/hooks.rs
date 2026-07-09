@@ -144,7 +144,7 @@ mod tests {
         let request = REQUEST.get_or_init(|| AgentRequest {
             kind: crate::AgentKind::Rag,
             query: "test".to_string(),
-            notebook_id: None,
+            workspace_id: None,
             session_id: None,
             doc_scope: vec![],
             messages: vec![],

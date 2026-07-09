@@ -11,7 +11,7 @@ impl ChatContext {
     pub fn memory_session_visible(&self, state: &MemoryState, session: &ChatSession) -> bool {
         state
             .notebooks
-            .get(&session.notebook_id)
+            .get(&session.workspace_id)
             .map(|notebook| notebook.org_id == self.current_org_id())
             .unwrap_or(false)
     }

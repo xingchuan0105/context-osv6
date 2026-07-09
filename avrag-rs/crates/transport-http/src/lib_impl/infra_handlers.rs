@@ -110,9 +110,9 @@ pub(crate) async fn openapi_handler() -> Response {
                 "/api/auth/usage-limit": {},
                 "/api/v1/chat": {},
                 "/api/v1/mcp": {},
-                "/v1/notebooks/{notebook_id}/chat/completions": {},
-                "/mcp/notebooks/{notebook_id}": {},
-                "/mcp/notebooks/{notebook_id}/tools/call": {},
+                "/v1/workspaces/{workspace_id}/chat/completions": {},
+                "/mcp/workspaces/{workspace_id}": {},
+                "/mcp/workspaces/{workspace_id}/tools/call": {},
                 "/webhooks/stripe": {}
             }
         })),
@@ -266,14 +266,14 @@ pub(crate) async fn billing_webhook_handler(
 }
 
 pub(crate) async fn openai_chat_completions_handler(
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
     Extension(RequestState(state)): Extension<RequestState>,
     headers: HeaderMap,
     Json(mut req): Json<contracts::chat::ChatRequest>,
 ) -> Response {
-    req.notebook_id = Some(notebook_id.clone());
+    req.workspace_id = Some(workspace_id.clone());
     if let Err(error) =
-        crate::mcp::expand_external_notebook_rag_scope(&state, &notebook_id, &mut req).await
+        crate::mcp::expand_external_notebook_rag_scope(&state, &workspace_id, &mut req).await
     {
         return handlers::app_error_response(error);
     }
@@ -428,7 +428,7 @@ pub(crate) async fn object_storage_webhook_handler(
 
 fn extract_document_id_from_object_path(path: &str) -> Option<String> {
     let parts: Vec<&str> = path.split('/').collect();
-    // Expected format: {org_id}/{notebook_id}/{document_id}/{filename}
+    // Expected format: {org_id}/{workspace_id}/{document_id}/{filename}
     if parts.len() >= 3 {
         Some(parts[2].to_string())
     } else {

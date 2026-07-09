@@ -70,13 +70,13 @@ pub trait AdminStorePort: Send + Sync {
     async fn list_api_keys(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
     ) -> Result<Vec<ApiKeyRow>, AppError>;
 
     async fn create_api_key(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         name: &str,
         permissions: &[String],
         rate_limit_rpm: i32,
@@ -86,7 +86,7 @@ pub trait AdminStorePort: Send + Sync {
     async fn revoke_api_key(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         key_id: Uuid,
     ) -> Result<bool, AppError>;
 

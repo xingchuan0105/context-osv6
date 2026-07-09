@@ -13,7 +13,7 @@ use crate::middleware::RequestState;
 
 pub(crate) async fn list_api_keys_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
 ) -> Response {
     if let Err(error) = forbid_api_key(
         state.auth(),
@@ -21,10 +21,10 @@ pub(crate) async fn list_api_keys_handler(
     ) {
         return app_error_response(error);
     }
-    if let Err(error) = ensure_user_notebook_access(&state, &notebook_id).await {
+    if let Err(error) = ensure_user_notebook_access(&state, &workspace_id).await {
         return app_error_response(error);
     }
-    match state.admin_api().list_api_keys(&notebook_id).await {
+    match state.admin_api().list_api_keys(&workspace_id).await {
         Ok(api_keys) => (
             StatusCode::OK,
             Json(common::ApiKeyListResponse { api_keys }),
@@ -36,7 +36,7 @@ pub(crate) async fn list_api_keys_handler(
 
 pub(crate) async fn create_api_key_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path(notebook_id): Path<String>,
+    Path(workspace_id): Path<String>,
     Json(req): Json<common::CreateApiKeyRequest>,
 ) -> Response {
     if let Err(error) = forbid_api_key(
@@ -45,10 +45,10 @@ pub(crate) async fn create_api_key_handler(
     ) {
         return app_error_response(error);
     }
-    if let Err(error) = ensure_user_notebook_access(&state, &notebook_id).await {
+    if let Err(error) = ensure_user_notebook_access(&state, &workspace_id).await {
         return app_error_response(error);
     }
-    match state.admin_api().create_api_key(&notebook_id, req).await {
+    match state.admin_api().create_api_key(&workspace_id, req).await {
         Ok(resp) => (StatusCode::CREATED, Json(resp)).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -116,7 +116,7 @@ pub(crate) async fn revoke_org_api_key_handler(
 
 pub(crate) async fn revoke_api_key_handler(
     Extension(RequestState(state)): Extension<RequestState>,
-    Path((notebook_id, key_id)): Path<(String, String)>,
+    Path((workspace_id, key_id)): Path<(String, String)>,
 ) -> Response {
     if let Err(error) = forbid_api_key(
         state.auth(),
@@ -124,10 +124,10 @@ pub(crate) async fn revoke_api_key_handler(
     ) {
         return app_error_response(error);
     }
-    if let Err(error) = ensure_user_notebook_access(&state, &notebook_id).await {
+    if let Err(error) = ensure_user_notebook_access(&state, &workspace_id).await {
         return app_error_response(error);
     }
-    match state.admin_api().revoke_api_key(&notebook_id, &key_id).await {
+    match state.admin_api().revoke_api_key(&workspace_id, &key_id).await {
         Ok(_) => (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response(),
         Err(error) => app_error_response(error),
     }

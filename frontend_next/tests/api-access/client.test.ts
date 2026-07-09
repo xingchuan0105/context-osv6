@@ -134,14 +134,14 @@ describe("api access client", () => {
     expect(getApiAccessBaseUrl()).toBe("https://api.example.test");
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "https://api.example.test/api/v1/notebooks/ws-1/api-keys",
+      "https://api.example.test/api/v1/workspaces/ws-1/api-keys",
       expect.objectContaining({
         method: "GET",
       }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "https://api.example.test/api/v1/notebooks/ws-1/api-keys",
+      "https://api.example.test/api/v1/workspaces/ws-1/api-keys",
       expect.objectContaining({
         method: "POST",
       }),
@@ -158,7 +158,7 @@ describe("api access client", () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      "https://api.example.test/api/v1/notebooks/ws-1/api-keys/key-2",
+      "https://api.example.test/api/v1/workspaces/ws-1/api-keys/key-2",
       expect.objectContaining({
         method: "DELETE",
       }),

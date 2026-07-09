@@ -15,13 +15,13 @@ use crate::{
 };
 
 impl ChatContext {
-    #[tracing::instrument(skip(self, req), fields(agent_type = %req.agent_type, notebook_id = ?req.notebook_id))]
+    #[tracing::instrument(skip(self, req), fields(agent_type = %req.agent_type, workspace_id = ?req.workspace_id))]
     pub async fn execute_chat_pipeline(&self, req: ChatRequest) -> Result<ChatResponse, AppError> {
-        let effective_notebook_id = chat_notebook_id_for_request(self, &req);
+        let effective_workspace_id = chat_workspace_id_for_request(self, &req);
         if self.storage.chat_persistence().is_some()
             && req.agent_type == "rag"
             && req.doc_scope.is_empty()
-            && effective_notebook_id.is_none()
+            && effective_workspace_id.is_none()
         {
             return Err(AppError::validation(
                 "docscope_required",
@@ -34,12 +34,12 @@ impl ChatContext {
         execute_chat_pipeline(self.clone(), req).await
     }
 
-    #[tracing::instrument(skip(self, req), fields(agent_type = %req.agent_type, notebook_id = ?req.notebook_id, trace_id = tracing::field::Empty))]
+    #[tracing::instrument(skip(self, req), fields(agent_type = %req.agent_type, workspace_id = ?req.workspace_id, trace_id = tracing::field::Empty))]
     pub(crate) async fn execute_chat_preflight(
         &self,
         req: &ChatRequest,
     ) -> Result<ChatPreflight, AppError> {
-        let effective_notebook_id = chat_notebook_id_for_request(self, req);
+        let effective_workspace_id = chat_workspace_id_for_request(self, req);
         if req.source_type.as_deref() == Some("share") && self.auth.actor_id().is_none() {
             return Err(AppError::unauthorized(
                 "Viewing shared content does not require sign-in, but asking questions does.",
@@ -139,12 +139,12 @@ impl ChatContext {
 
         let trace_id = Uuid::new_v4().to_string();
         tracing::Span::current().record("trace_id", &trace_id);
-        let notebook_uuid = effective_notebook_id;
+        let notebook_uuid = effective_workspace_id;
         if req.source_type.as_deref() == Some("share")
-            && req.notebook_id.as_ref().is_some()
-            && req.notebook_id.as_ref().and_then(|id| {
+            && req.workspace_id.as_ref().is_some()
+            && req.workspace_id.as_ref().and_then(|id| {
                 parse_uuid_or_app_error(id, "invalid_notebook", "invalid notebook id").ok()
-            }) != self.auth.notebook_id()
+            }) != self.auth.workspace_id()
         {
             return Err(AppError::validation(
                 "invalid_share_scope",
@@ -162,7 +162,7 @@ impl ChatContext {
             .unwrap_or_else(|| req.doc_scope.clone());
 
         info!(
-            notebook_id = ?req.notebook_id,
+            workspace_id = ?req.workspace_id,
             notebook_uuid = ?notebook_uuid,
             request_doc_scope = ?req.doc_scope,
             guard_scope = ?guard_scope,
@@ -265,10 +265,10 @@ impl ChatContext {
         req: &ChatRequest,
     ) -> Result<ChatSession, AppError> {
         if req.source_type.as_deref() == Some("share") {
-            let notebook_id = chat_notebook_id_for_request(self, req)
+            let workspace_id = chat_workspace_id_for_request(self, req)
                 .map(|value| value.to_string())
                 .ok_or_else(|| {
-                    AppError::validation("notebook_required", "notebook_id is required")
+                    AppError::validation("notebook_required", "workspace_id is required")
                 })?;
             let session_id = req
                 .session_id
@@ -277,7 +277,7 @@ impl ChatContext {
             let now = now_rfc3339();
             return Ok(ChatSession {
                 id: session_id,
-                notebook_id,
+                workspace_id,
                 title: None,
                 agent_type: req.agent_type.clone(),
                 pinned: false,
@@ -293,14 +293,14 @@ impl ChatContext {
                 .ok_or_else(|| AppError::not_found("session_not_found", "session not found"));
         }
 
-        let notebook_id = chat_notebook_id_for_request(self, req)
+        let workspace_id = chat_workspace_id_for_request(self, req)
             .map(|value| value.to_string())
-            .ok_or_else(|| AppError::validation("notebook_required", "notebook_id is required"))?;
+            .ok_or_else(|| AppError::validation("notebook_required", "workspace_id is required"))?;
         if req.source_type.as_deref() == Some("share") {
             let now = now_rfc3339();
             return Ok(ChatSession {
                 id: Uuid::new_v4().to_string(),
-                notebook_id,
+                workspace_id,
                 title: None,
                 agent_type: req.agent_type.clone(),
                 pinned: false,
@@ -309,7 +309,7 @@ impl ChatContext {
             });
         }
         self.create_session(CreateChatSessionRequest {
-            notebook_id,
+            workspace_id,
             title: None,
             agent_type: req.agent_type.clone(),
         })
@@ -317,13 +317,13 @@ impl ChatContext {
     }
 }
 
-fn chat_notebook_id_for_request(state: &ChatContext, req: &ChatRequest) -> Option<Uuid> {
-    req.notebook_id
+fn chat_workspace_id_for_request(state: &ChatContext, req: &ChatRequest) -> Option<Uuid> {
+    req.workspace_id
         .as_ref()
         .and_then(|id| parse_uuid_or_app_error(id, "invalid_notebook", "invalid notebook id").ok())
         .or_else(|| {
             (req.source_type.as_deref() == Some("share"))
-                .then(|| state.auth.notebook_id())
+                .then(|| state.auth.workspace_id())
                 .flatten()
         })
 }

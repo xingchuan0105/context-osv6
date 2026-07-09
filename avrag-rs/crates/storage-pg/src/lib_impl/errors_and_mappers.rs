@@ -27,7 +27,7 @@ pub enum PgStorageError {
 pub struct DocumentTaskSeed {
     pub document_id: String,
     pub org_id: String,
-    pub notebook_id: String,
+    pub workspace_id: String,
     pub filename: String,
     pub mime_type: String,
     pub file_size: u64,
@@ -74,7 +74,7 @@ pub enum DocumentCleanupTaskFailureOutcome {
 pub struct DocumentCleanupTask {
     pub task_id: Uuid,
     pub org_id: Uuid,
-    pub notebook_id: Uuid,
+    pub workspace_id: Uuid,
     pub document_id: Uuid,
     pub requested_by: Option<Uuid>,
     pub idempotency_key: String,
@@ -87,7 +87,7 @@ pub struct DocumentCleanupTask {
 #[derive(Debug, Clone)]
 pub struct DocumentCleanupTargets {
     pub org_id: Uuid,
-    pub notebook_id: Uuid,
+    pub workspace_id: Uuid,
     pub document_id: Uuid,
     pub status: DocumentStatus,
     pub object_path: Option<String>,
@@ -143,7 +143,7 @@ pub fn map_notebook(row: PgRow) -> Result<Notebook, PgStorageError> {
 pub fn map_document(row: PgRow) -> Result<Document, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
     let org_id: Uuid = row.try_get("org_id")?;
-    let notebook_id: Uuid = row.try_get("notebook_id")?;
+    let workspace_id: Uuid = row.try_get("workspace_id")?;
     let file_name: String = row.try_get("file_name")?;
     let mime_type: Option<String> = row.try_get("mime_type")?;
     let file_size: i64 = row.try_get("file_size")?;
@@ -154,7 +154,7 @@ pub fn map_document(row: PgRow) -> Result<Document, PgStorageError> {
     Ok(Document {
         id: id.to_string(),
         org_id: org_id.to_string(),
-        notebook_id: notebook_id.to_string(),
+        workspace_id: workspace_id.to_string(),
         owner_id: String::new(),
         file_name,
         mime_type: mime_type.unwrap_or_default(),
@@ -168,7 +168,7 @@ pub fn map_document(row: PgRow) -> Result<Document, PgStorageError> {
 
 pub fn map_session(row: PgRow) -> Result<ChatSession, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
-    let notebook_id: Uuid = row.try_get("notebook_id")?;
+    let workspace_id: Uuid = row.try_get("workspace_id")?;
     let title: Option<String> = row.try_get("title")?;
     let agent_type: String = row.try_get("agent_type")?;
     let pinned: bool = row.try_get("pinned").unwrap_or(false);
@@ -176,7 +176,7 @@ pub fn map_session(row: PgRow) -> Result<ChatSession, PgStorageError> {
     let updated_at: DateTime<Utc> = row.try_get("updated_at")?;
     Ok(ChatSession {
         id: id.to_string(),
-        notebook_id: notebook_id.to_string(),
+        workspace_id: workspace_id.to_string(),
         title,
         agent_type,
         pinned,
@@ -242,7 +242,7 @@ pub fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
 pub fn map_api_key(row: PgRow) -> Result<ApiKeyRow, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
     let org_id: Uuid = row.try_get("org_id")?;
-    let notebook_id: Option<Uuid> = row.try_get("notebook_id").ok().flatten();
+    let workspace_id: Option<Uuid> = row.try_get("workspace_id").ok().flatten();
     let created_by: Option<Uuid> = row.try_get("created_by").ok().flatten();
     let created_at: DateTime<Utc> = row.try_get("created_at")?;
     let updated_at: DateTime<Utc> = row.try_get("updated_at")?;
@@ -254,7 +254,7 @@ pub fn map_api_key(row: PgRow) -> Result<ApiKeyRow, PgStorageError> {
     Ok(ApiKeyRow {
         id: id.to_string(),
         org_id: org_id.to_string(),
-        notebook_id: notebook_id
+        workspace_id: workspace_id
             .map(|value| value.to_string())
             .unwrap_or_default(),
         key_prefix: row.try_get("key_prefix")?,
@@ -341,7 +341,7 @@ pub fn map_indexed_chunk(row: PgRow) -> Result<IndexedChunk, PgStorageError> {
 pub fn map_document_task_seed(row: PgRow) -> Result<DocumentTaskSeed, PgStorageError> {
     let document_id: Uuid = row.try_get("id")?;
     let org_id: Uuid = row.try_get("org_id")?;
-    let notebook_id: Uuid = row.try_get("notebook_id")?;
+    let workspace_id: Uuid = row.try_get("workspace_id")?;
     let filename: String = row.try_get("file_name")?;
     let mime_type: Option<String> = row.try_get("mime_type")?;
     let file_size: i64 = row.try_get("file_size")?;
@@ -350,7 +350,7 @@ pub fn map_document_task_seed(row: PgRow) -> Result<DocumentTaskSeed, PgStorageE
     Ok(DocumentTaskSeed {
         document_id: document_id.to_string(),
         org_id: org_id.to_string(),
-        notebook_id: notebook_id.to_string(),
+        workspace_id: workspace_id.to_string(),
         filename,
         mime_type: mime_type.unwrap_or_else(|| "application/octet-stream".to_string()),
         file_size: u64::try_from(file_size).unwrap_or_default(),
@@ -372,7 +372,7 @@ pub fn map_document_upload_validation(row: PgRow) -> Result<DocumentUploadValida
 pub fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
     let task_id: Uuid = row.try_get("task_id")?;
     let org_id: Uuid = row.try_get("org_id")?;
-    let notebook_id: Uuid = row.try_get("notebook_id")?;
+    let workspace_id: Uuid = row.try_get("workspace_id")?;
     let document_id: Uuid = row.try_get("document_id")?;
     let kind: String = row.try_get("kind")?;
     let requested_by: Option<Uuid> = row.try_get("requested_by")?;
@@ -383,7 +383,7 @@ pub fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
         task_id: task_id.to_string(),
         kind: parse_ingestion_kind(&kind),
         org_id: org_id.to_string(),
-        notebook_id: notebook_id.to_string(),
+        workspace_id: workspace_id.to_string(),
         document_id: document_id.to_string(),
         requested_by: requested_by.map(|value| value.to_string()),
         idempotency_key: row.try_get("idempotency_key")?,
@@ -399,7 +399,7 @@ pub fn map_document_cleanup_task(row: PgRow) -> Result<DocumentCleanupTask, PgSt
     Ok(DocumentCleanupTask {
         task_id: row.try_get("task_id")?,
         org_id: row.try_get("org_id")?,
-        notebook_id: row.try_get("notebook_id")?,
+        workspace_id: row.try_get("workspace_id")?,
         document_id: row.try_get("document_id")?,
         requested_by: row.try_get("requested_by")?,
         idempotency_key: row.try_get("idempotency_key")?,

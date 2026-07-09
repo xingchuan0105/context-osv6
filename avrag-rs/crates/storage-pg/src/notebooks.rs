@@ -30,15 +30,15 @@ impl crate::PgAppRepository {
                 n.id, n.org_id, n.owner_id, n.title, n.description, n.created_at, n.updated_at,
                 coalesce(doc_stats.document_count, 0) as document_count,
                 coalesce(doc_stats.status_summary, '{}'::jsonb) as status_summary,
-                exists(select 1 from share_tokens st where st.notebook_id = n.id and st.revoked_at is null) as shared
-            from notebooks n
+                exists(select 1 from share_tokens st where st.workspace_id = n.id and st.revoked_at is null) as shared
+            from workspaces n
             left join lateral (
                 select count(*) as document_count,
                     jsonb_object_agg(status, cnt) as status_summary
                 from (
                     select status, count(*) as cnt
                     from documents d
-                    where d.notebook_id = n.id
+                    where d.workspace_id = n.id
                       and d.status not in ('deleting', 'deleted')
                     group by status
                 ) sub

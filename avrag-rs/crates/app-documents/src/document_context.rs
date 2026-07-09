@@ -72,8 +72,8 @@ impl DocumentContext {
             ));
         }
 
-        if let Some(notebook_id) = auth.notebook_id() {
-            self.validate_document_scope(auth, storage, &notebook_id.to_string(), doc_scope)
+        if let Some(workspace_id) = auth.workspace_id() {
+            self.validate_document_scope(auth, storage, &workspace_id.to_string(), doc_scope)
                 .await?;
         }
         Ok(())
@@ -94,13 +94,13 @@ impl DocumentScopeValidator for DocumentContext {
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
-        notebook_id: &str,
+        workspace_id: &str,
         document_ids: &[String],
     ) -> Result<(), AppError> {
         if document_ids.is_empty() {
             return Ok(());
         }
-        let notebook_uuid = Uuid::parse_str(notebook_id)
+        let notebook_uuid = Uuid::parse_str(workspace_id)
             .map_err(|_| AppError::not_found("notebook_not_found", "notebook not found"))?;
 
         let store = require_document_store(storage)?;
@@ -117,12 +117,12 @@ impl DocumentScopeValidator for DocumentContext {
                     format!("document {document_id} does not exist or is not accessible"),
                 ));
             };
-            let seed_notebook_uuid = Uuid::parse_str(&seed.notebook_id)
+            let seed_notebook_uuid = Uuid::parse_str(&seed.workspace_id)
                 .map_err(|_| AppError::internal("document notebook id is invalid"))?;
             if seed_notebook_uuid != notebook_uuid {
                 return Err(AppError::validation(
                     "invalid_document_scope",
-                    format!("document {document_id} is not in notebook {notebook_id}"),
+                    format!("document {document_id} is not in notebook {workspace_id}"),
                 ));
             }
         }

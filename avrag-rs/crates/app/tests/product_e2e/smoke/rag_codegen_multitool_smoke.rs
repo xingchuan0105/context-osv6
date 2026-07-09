@@ -25,7 +25,7 @@ async fn rag_multiround_profile_codegen_doc_profile_then_chunk_fetch() {
     let http_resp: HttpResponse = ctx
         .chat_without_mock_chunk_pin(
             "What does the opening section of this book discuss?",
-            &upload.notebook_id,
+            &upload.workspace_id,
             &[upload.document_id.clone()],
         )
         .await

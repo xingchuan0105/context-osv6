@@ -11,14 +11,14 @@ use crate::{
 
 pub async fn handle_create_share_link(
     ctx: AuthContext,
-    notebook_id: String,
+    workspace_id: String,
     access_level: AccessLevel,
     expires_in_secs: Option<i64>,
     store: Arc<dyn ShareStorePort>,
 ) -> Result<ShareTokenResponse, AppError> {
     let service = ShareService::new(store);
     let token = service
-        .create_share_token(&ctx, &notebook_id, access_level, expires_in_secs)
+        .create_share_token(&ctx, &workspace_id, access_level, expires_in_secs)
         .await
         .map_err(map_anyhow_error)?;
     Ok(ShareTokenResponse { share_token: token })
@@ -33,7 +33,7 @@ pub async fn handle_validate_token(
         .validate_token(token)
         .await
         .map_err(map_anyhow_error)?
-        .map(|(notebook_id, _)| notebook_id))
+        .map(|(workspace_id, _)| workspace_id))
 }
 
 pub async fn handle_get_shared_notebook(
@@ -60,39 +60,39 @@ pub async fn handle_resolve_public_share_chat_context(
 
 pub async fn handle_get_share_settings(
     ctx: AuthContext,
-    notebook_id: String,
+    workspace_id: String,
     store: Arc<dyn ShareStorePort>,
 ) -> Result<ShareSettings, AppError> {
     let service = ShareService::new(store);
     service
-        .get_share_settings(&ctx, &notebook_id)
+        .get_share_settings(&ctx, &workspace_id)
         .await
         .map_err(map_anyhow_error)
 }
 
 pub async fn handle_update_share_settings(
     ctx: AuthContext,
-    notebook_id: String,
+    workspace_id: String,
     access_level: Option<String>,
     allow_download: Option<bool>,
     store: Arc<dyn ShareStorePort>,
 ) -> Result<ShareSettings, AppError> {
     let service = ShareService::new(store);
     service
-        .update_share_settings(&ctx, &notebook_id, access_level.as_deref(), allow_download)
+        .update_share_settings(&ctx, &workspace_id, access_level.as_deref(), allow_download)
         .await
         .map_err(map_anyhow_error)
 }
 
 pub async fn handle_update_access_level(
     ctx: AuthContext,
-    notebook_id: String,
+    workspace_id: String,
     access_level: String,
     store: Arc<dyn ShareStorePort>,
 ) -> Result<String, AppError> {
     let service = ShareService::new(store);
     service
-        .update_access_level(&ctx, &notebook_id, &access_level)
+        .update_access_level(&ctx, &workspace_id, &access_level)
         .await
         .map_err(map_anyhow_error)
 }
@@ -111,90 +111,90 @@ pub async fn handle_revoke_share_link(
 
 pub async fn handle_invite_member(
     ctx: AuthContext,
-    notebook_id: String,
+    workspace_id: String,
     email: String,
     role: AccessLevel,
     store: Arc<dyn ShareStorePort>,
 ) -> Result<NotebookMember, AppError> {
     let service = ShareService::new(store);
     service
-        .invite_member(&ctx, &notebook_id, &email, role)
+        .invite_member(&ctx, &workspace_id, &email, role)
         .await
         .map_err(map_anyhow_error)
 }
 
 pub async fn handle_list_members(
     ctx: AuthContext,
-    notebook_id: String,
+    workspace_id: String,
     store: Arc<dyn ShareStorePort>,
 ) -> Result<Vec<NotebookMember>, AppError> {
     let service = ShareService::new(store);
     service
-        .list_members(&ctx, &notebook_id)
+        .list_members(&ctx, &workspace_id)
         .await
         .map_err(map_anyhow_error)
 }
 
 pub async fn handle_accept_invite(
     ctx: AuthContext,
-    notebook_id: String,
+    workspace_id: String,
     member_id: String,
     store: Arc<dyn ShareStorePort>,
 ) -> Result<(), AppError> {
     let service = ShareService::new(store);
     service
-        .accept_invite(&ctx, &notebook_id, &member_id)
+        .accept_invite(&ctx, &workspace_id, &member_id)
         .await
         .map_err(map_anyhow_error)
 }
 
 pub async fn handle_decline_invite(
     ctx: AuthContext,
-    notebook_id: String,
+    workspace_id: String,
     member_id: String,
     store: Arc<dyn ShareStorePort>,
 ) -> Result<(), AppError> {
     let service = ShareService::new(store);
     service
-        .decline_invite(&ctx, &notebook_id, &member_id)
+        .decline_invite(&ctx, &workspace_id, &member_id)
         .await
         .map_err(map_anyhow_error)
 }
 
 pub async fn handle_remove_member(
     ctx: AuthContext,
-    notebook_id: String,
+    workspace_id: String,
     member_id: String,
     store: Arc<dyn ShareStorePort>,
 ) -> Result<(), AppError> {
     let service = ShareService::new(store);
     service
-        .remove_member(&ctx, &notebook_id, &member_id)
+        .remove_member(&ctx, &workspace_id, &member_id)
         .await
         .map_err(map_anyhow_error)
 }
 
 pub async fn handle_get_share_analytics(
     ctx: AuthContext,
-    notebook_id: String,
+    workspace_id: String,
     store: Arc<dyn ShareStorePort>,
 ) -> Result<Vec<ShareAnalytics>, AppError> {
     let service = ShareService::new(store);
     service
-        .get_share_analytics(&ctx, &notebook_id)
+        .get_share_analytics(&ctx, &workspace_id)
         .await
         .map_err(map_anyhow_error)
 }
 
 pub async fn handle_get_share_access_logs(
     ctx: AuthContext,
-    notebook_id: String,
+    workspace_id: String,
     limit: Option<usize>,
     store: Arc<dyn ShareStorePort>,
 ) -> Result<Vec<ShareAccessLog>, AppError> {
     let service = ShareService::new(store);
     service
-        .get_share_access_logs(&ctx, &notebook_id, limit.unwrap_or(100))
+        .get_share_access_logs(&ctx, &workspace_id, limit.unwrap_or(100))
         .await
         .map_err(map_anyhow_error)
 }

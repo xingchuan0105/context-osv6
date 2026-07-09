@@ -122,7 +122,7 @@ async fn run_pipeline(
             "mode": execution.mode,
             "agent_type": request.agent_type,
             "trace_id": preflight.trace_id,
-            "notebook_id": session.notebook_id,
+            "workspace_id": session.workspace_id,
         }),
         created_at: common::now_rfc3339(),
     };

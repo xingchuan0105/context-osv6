@@ -21,7 +21,7 @@ async fn corrupted_file_upload_returns_failed_status() {
     let resp = ctx
         .http_client
         .post(format!(
-            "{}/api/v1/notebooks/{}/documents",
+            "{}/api/v1/workspaces/{}/documents",
             ctx.base_url, notebook.id
         ))
         .json(&serde_json::json!({

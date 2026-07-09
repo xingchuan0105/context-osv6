@@ -191,7 +191,7 @@ mod tests {
             &crate::runtime::AgentRequest {
                 kind: crate::AgentKind::Rag,
                 query: "test".to_string(),
-                notebook_id: None,
+                workspace_id: None,
                 session_id: None,
                 doc_scope: vec![],
                 messages: vec![],
@@ -235,7 +235,7 @@ mod tests {
         let request = crate::runtime::AgentRequest {
             kind: crate::AgentKind::Rag,
             query: "test".to_string(),
-            notebook_id: None,
+            workspace_id: None,
             session_id: None,
             doc_scope: vec![],
             messages: vec![],
@@ -283,7 +283,7 @@ mod tests {
             &crate::runtime::AgentRequest {
                 kind: crate::AgentKind::Search,
                 query: "latest rust release".to_string(),
-                notebook_id: None,
+                workspace_id: None,
                 session_id: None,
                 doc_scope: vec![],
                 messages: vec![],
@@ -323,7 +323,7 @@ mod tests {
             &crate::runtime::AgentRequest {
                 kind: crate::AgentKind::Rag,
                 query: "test".to_string(),
-                notebook_id: None,
+                workspace_id: None,
                 session_id: None,
                 doc_scope: vec![],
                 messages: vec![],

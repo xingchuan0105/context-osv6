@@ -1,7 +1,7 @@
     async fn add_member(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         user_id: Uuid,
         access_level: ShareAccessLevel,
     ) -> Result<(), AppError> {
@@ -14,9 +14,9 @@
         set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
         sqlx::query(
             r#"
-            insert into notebook_members (id, org_id, notebook_id, user_id, access_level, invited_by, invite_status, invited_at, accepted_at, updated_at)
+            insert into workspace_members (id, org_id, workspace_id, user_id, access_level, invited_by, invite_status, invited_at, accepted_at, updated_at)
             values ($1, $2, $3, $4, $5, $6, 'accepted', now(), now(), now())
-            on conflict (notebook_id, user_id) do update
+            on conflict (workspace_id, user_id) do update
             set access_level = excluded.access_level,
                 invited_by = excluded.invited_by,
                 invite_status = 'accepted',
@@ -27,7 +27,7 @@
         )
         .bind(Uuid::new_v4())
         .bind(auth.org_id().into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(user_id)
         .bind(access_level.as_db())
         .bind(auth.actor_id().map(|id| id.into_uuid()))
@@ -43,7 +43,7 @@
     async fn remove_member(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         member_id: Uuid,
     ) -> Result<(), AppError> {
         let mut tx = self
@@ -55,12 +55,12 @@
         set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
         sqlx::query(
             r#"
-            delete from notebook_members
-            where org_id = $1 and notebook_id = $2 and id = $3
+            delete from workspace_members
+            where org_id = $1 and workspace_id = $2 and id = $3
             "#,
         )
         .bind(auth.org_id().into_uuid())
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(member_id)
         .execute(tx.as_mut())
         .await

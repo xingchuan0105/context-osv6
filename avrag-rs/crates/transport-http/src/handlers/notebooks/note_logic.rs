@@ -61,7 +61,7 @@ pub(super) fn notebook_note_from_pref(
 ) -> contracts::notebooks::NotebookNote {
     contracts::notebooks::NotebookNote {
         id: note.note_id.clone(),
-        notebook_id: note.notebook_id.clone(),
+        workspace_id: note.workspace_id.clone(),
         title: note.title.clone(),
         content: note.content.clone(),
         preview: note_preview(&note.content),
@@ -78,13 +78,13 @@ pub(super) fn notebook_note_from_pref(
 /// persist the updated preferences).
 pub(super) fn migrate_workspace_draft_to_note(
     preferences: &mut contracts::preferences::UserPreferences,
-    notebook_id: &str,
+    workspace_id: &str,
 ) -> bool {
     let has_notes = preferences
         .dashboard
         .notebook_notes
         .iter()
-        .any(|note| note.notebook_id == notebook_id);
+        .any(|note| note.workspace_id == workspace_id);
     if has_notes {
         return false;
     }
@@ -93,7 +93,7 @@ pub(super) fn migrate_workspace_draft_to_note(
         .dashboard
         .workspace_drafts
         .iter()
-        .position(|draft| draft.notebook_id == notebook_id && !draft.notes.trim().is_empty())
+        .position(|draft| draft.workspace_id == workspace_id && !draft.notes.trim().is_empty())
     else {
         return false;
     };
@@ -105,7 +105,7 @@ pub(super) fn migrate_workspace_draft_to_note(
         .notebook_notes
         .push(contracts::preferences::NotebookNotePreference {
             note_id: Uuid::new_v4().to_string(),
-            notebook_id: notebook_id.to_string(),
+            workspace_id: workspace_id.to_string(),
             title: "Imported Notes".to_string(),
             content: legacy.notes,
             created_at: now.clone(),

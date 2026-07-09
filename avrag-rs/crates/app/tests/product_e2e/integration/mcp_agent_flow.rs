@@ -88,7 +88,7 @@ async fn mcp_agent_flow_create_upload_complete_query_returns_citations() {
         &bearer,
         "workspace.create_upload",
         json!({
-            "notebook_id": notebook.id,
+            "workspace_id": notebook.id,
             "filename": fixture,
             "mime_type": "text/plain",
             "file_size": bytes.len(),
@@ -122,7 +122,7 @@ async fn mcp_agent_flow_create_upload_complete_query_returns_citations() {
         &ctx,
         &bearer,
         "workspace.complete_upload",
-        json!({ "notebook_id": notebook.id, "document_id": document_id }),
+        json!({ "workspace_id": notebook.id, "document_id": document_id }),
     )
     .await;
     assert_eq!(
@@ -138,7 +138,7 @@ async fn mcp_agent_flow_create_upload_complete_query_returns_citations() {
             &ctx,
             &bearer,
             "workspace.document_status",
-            json!({ "notebook_id": notebook.id, "document_id": document_id }),
+            json!({ "workspace_id": notebook.id, "document_id": document_id }),
         )
         .await;
         assert_eq!(status, 200, "document_status: HTTP {status}, body: {body}");
@@ -173,7 +173,7 @@ async fn mcp_agent_flow_create_upload_complete_query_returns_citations() {
         &ctx,
         &bearer,
         "workspace.rag_query",
-        json!({ "notebook_id": notebook.id, "query": query }),
+        json!({ "workspace_id": notebook.id, "query": query }),
     )
     .await;
     assert_eq!(status, 200, "rag_query: HTTP {status}, body: {payload}");

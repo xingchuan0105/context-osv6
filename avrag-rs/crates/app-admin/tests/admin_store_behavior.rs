@@ -99,7 +99,7 @@ impl AdminStorePort for OrgBlockingStore {
     async fn list_api_keys(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Option<Uuid>,
+        _workspace_id: Option<Uuid>,
     ) -> Result<Vec<common::ApiKeyRow>, AppError> {
         Err(AppError::internal("not implemented"))
     }
@@ -107,7 +107,7 @@ impl AdminStorePort for OrgBlockingStore {
     async fn create_api_key(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Option<Uuid>,
+        _workspace_id: Option<Uuid>,
         _name: &str,
         _permissions: &[String],
         _rate_limit_rpm: i32,
@@ -119,7 +119,7 @@ impl AdminStorePort for OrgBlockingStore {
     async fn revoke_api_key(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Option<Uuid>,
+        _workspace_id: Option<Uuid>,
         _key_id: Uuid,
     ) -> Result<bool, AppError> {
         Err(AppError::internal("not implemented"))

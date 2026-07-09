@@ -70,7 +70,7 @@ pub struct AuthContext {
     org_id: OrgId,
     actor_id: Option<ActorId>,
     subject_kind: SubjectKind,
-    notebook_id: Option<Uuid>,
+    workspace_id: Option<Uuid>,
     permissions: BTreeSet<String>,
     request_id: Option<String>,
     rate_limit_rpm: Option<u32>,
@@ -82,7 +82,7 @@ impl AuthContext {
             org_id,
             actor_id: None,
             subject_kind,
-            notebook_id: None,
+            workspace_id: None,
             permissions: BTreeSet::new(),
             request_id: None,
             rate_limit_rpm: None,
@@ -94,8 +94,8 @@ impl AuthContext {
         self
     }
 
-    pub fn with_notebook_scope(mut self, notebook_id: Uuid) -> Self {
-        self.notebook_id = Some(notebook_id);
+    pub fn with_notebook_scope(mut self, workspace_id: Uuid) -> Self {
+        self.workspace_id = Some(workspace_id);
         self
     }
 
@@ -126,8 +126,8 @@ impl AuthContext {
         &self.subject_kind
     }
 
-    pub fn notebook_id(&self) -> Option<Uuid> {
-        self.notebook_id
+    pub fn workspace_id(&self) -> Option<Uuid> {
+        self.workspace_id
     }
 
     pub fn request_id(&self) -> Option<&str> {
@@ -152,12 +152,12 @@ impl AuthContext {
         })
     }
 
-    pub fn ensure_notebook_scope(&self, notebook_id: Uuid) -> Result<(), AuthError> {
-        match self.notebook_id {
-            Some(expected) if expected == notebook_id => Ok(()),
+    pub fn ensure_notebook_scope(&self, workspace_id: Uuid) -> Result<(), AuthError> {
+        match self.workspace_id {
+            Some(expected) if expected == workspace_id => Ok(()),
             Some(expected) => Err(AuthError::NotebookScopeMismatch {
                 expected,
-                actual: notebook_id,
+                actual: workspace_id,
             }),
             None => Err(AuthError::MissingNotebookScope),
         }

@@ -14,12 +14,12 @@
             r#"
             select
               st.org_id,
-              st.notebook_id,
+              st.workspace_id,
               st.access_level,
               st.expires_at,
               n.allow_download
             from share_tokens st
-            join notebooks n on n.id = st.notebook_id
+            join workspaces n on n.id = st.workspace_id
             where st.token = $1
               and st.revoked_at is null
               and (st.expires_at is null or st.expires_at > now())
@@ -39,8 +39,8 @@
             .try_get::<Uuid, _>("org_id")
             .map_err(|error| AppError::internal(error.to_string()))?;
         set_current_org(tx.as_mut(), &org_id.to_string()).await?;
-        let notebook_id = row
-            .try_get::<Uuid, _>("notebook_id")
+        let workspace_id = row
+            .try_get::<Uuid, _>("workspace_id")
             .map_err(|error| AppError::internal(error.to_string()))?;
         let access_level = row
             .try_get::<String, _>("access_level")
@@ -57,18 +57,18 @@
             .map_err(|error| AppError::internal(error.to_string()))?;
         sqlx::query(
             r#"
-            insert into share_access_logs (org_id, notebook_id, share_token, action, created_at)
+            insert into share_access_logs (org_id, workspace_id, share_token, action, created_at)
             values ($1, $2, $3, 'view', now())
             "#,
         )
         .bind(org_id)
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(token)
         .execute(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
-        let notebook_row = sqlx::query("select title, description from notebooks where id = $1")
-            .bind(notebook_id)
+        let notebook_row = sqlx::query("select title, description from workspaces where id = $1")
+            .bind(workspace_id)
             .fetch_one(tx.as_mut())
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
@@ -80,12 +80,12 @@
             r#"
             select id, file_name, status
             from documents
-            where notebook_id = $1
+            where workspace_id = $1
               and status not in ('deleting', 'deleted')
             order by updated_at desc, created_at desc
             "#,
         )
-        .bind(notebook_id)
+        .bind(workspace_id)
         .fetch_all(tx.as_mut())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
@@ -94,7 +94,7 @@
             .map_err(|error| AppError::internal(error.to_string()))?;
         Ok(Some(SharedNotebookSnapshot {
             knowledge_base: SharedKnowledgeBaseSnapshot {
-                id: notebook_id.to_string(),
+                id: workspace_id.to_string(),
                 title,
                 description,
             },
@@ -136,11 +136,11 @@
             r#"
             select
               st.org_id,
-              st.notebook_id,
+              st.workspace_id,
               st.access_level,
               coalesce(n.owner_id, st.created_by) as owner_user_id
             from share_tokens st
-            join notebooks n on n.id = st.notebook_id
+            join workspaces n on n.id = st.workspace_id
             where st.token = $1
               and st.revoked_at is null
               and (st.expires_at is null or st.expires_at > now())
@@ -159,8 +159,8 @@
         let org_id = row
             .try_get::<Uuid, _>("org_id")
             .map_err(|error| AppError::internal(error.to_string()))?;
-        let notebook_id = row
-            .try_get::<Uuid, _>("notebook_id")
+        let workspace_id = row
+            .try_get::<Uuid, _>("workspace_id")
             .map_err(|error| AppError::internal(error.to_string()))?;
         let access_level = row
             .try_get::<String, _>("access_level")
@@ -176,12 +176,12 @@
         };
         sqlx::query(
             r#"
-            insert into share_access_logs (org_id, notebook_id, share_token, action, created_at)
+            insert into share_access_logs (org_id, workspace_id, share_token, action, created_at)
             values ($1, $2, $3, 'chat', now())
             "#,
         )
         .bind(org_id)
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(token)
         .execute(tx.as_mut())
         .await
@@ -191,7 +191,7 @@
             .map_err(|error| AppError::internal(error.to_string()))?;
         Ok(Some(PublicShareChatContextSnapshot {
             org_id,
-            notebook_id,
+            workspace_id,
             owner_user_id,
             access_level: ShareAccessLevel::from_role(&access_level),
         }))

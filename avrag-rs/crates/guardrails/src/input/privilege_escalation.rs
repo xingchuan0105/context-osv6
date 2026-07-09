@@ -99,7 +99,7 @@ mod tests {
             org_id: uuid::Uuid::new_v4(),
             user_id: uuid::Uuid::new_v4(),
             doc_scope: &[],
-            notebook_id: None,
+            workspace_id: None,
             trace_id: Some("test-trace".into()),
         }
     }
@@ -118,7 +118,7 @@ mod tests {
     #[test]
     fn test_normal_query_passed() {
         let guard = PrivilegeEscalationGuard::new();
-        let ctx = make_ctx("What notebooks do I have?");
+        let ctx = make_ctx("What workspaces do I have?");
         let result = guard.check(&ctx);
         assert!(result.is_none());
     }

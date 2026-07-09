@@ -15,6 +15,6 @@ pub trait BillingQuotaPort: Send + Sync {
     async fn notebook_exists(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<bool, AppError>;
 }

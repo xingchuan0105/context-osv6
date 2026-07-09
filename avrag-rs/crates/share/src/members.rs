@@ -8,10 +8,10 @@ impl ShareService {
     pub async fn list_members(
         &self,
         ctx: &AuthContext,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> Result<Vec<NotebookMember>> {
         if !self
-            .check_access(ctx, notebook_id)
+            .check_access(ctx, workspace_id)
             .await?
             .allows_share_management()
         {
@@ -19,7 +19,7 @@ impl ShareService {
         }
         Ok(self
             .store
-            .list_members(ctx, Uuid::parse_str(notebook_id)?)
+            .list_members(ctx, Uuid::parse_str(workspace_id)?)
             .await?
             .into_iter()
             .map(NotebookMember::from)
@@ -29,12 +29,12 @@ impl ShareService {
     pub async fn invite_member(
         &self,
         ctx: &AuthContext,
-        notebook_id: &str,
+        workspace_id: &str,
         email: &str,
         access_level: AccessLevel,
     ) -> Result<NotebookMember> {
         if !self
-            .check_access(ctx, notebook_id)
+            .check_access(ctx, workspace_id)
             .await?
             .allows_share_management()
         {
@@ -44,7 +44,7 @@ impl ShareService {
             .store
             .invite_member(
                 ctx,
-                Uuid::parse_str(notebook_id)?,
+                Uuid::parse_str(workspace_id)?,
                 email,
                 access_level.into(),
             )
@@ -55,7 +55,7 @@ impl ShareService {
     pub async fn accept_invite(
         &self,
         ctx: &AuthContext,
-        notebook_id: &str,
+        workspace_id: &str,
         member_id: &str,
     ) -> Result<()> {
         let actor_id = ctx
@@ -64,7 +64,7 @@ impl ShareService {
         self.store
             .accept_invite(
                 ctx,
-                Uuid::parse_str(notebook_id)?,
+                Uuid::parse_str(workspace_id)?,
                 Uuid::parse_str(member_id)?,
                 actor_id.into_uuid(),
             )
@@ -75,7 +75,7 @@ impl ShareService {
     pub async fn decline_invite(
         &self,
         ctx: &AuthContext,
-        notebook_id: &str,
+        workspace_id: &str,
         member_id: &str,
     ) -> Result<()> {
         let actor_id = ctx
@@ -84,7 +84,7 @@ impl ShareService {
         self.store
             .decline_invite(
                 ctx,
-                Uuid::parse_str(notebook_id)?,
+                Uuid::parse_str(workspace_id)?,
                 Uuid::parse_str(member_id)?,
                 actor_id.into_uuid(),
             )
@@ -95,12 +95,12 @@ impl ShareService {
     pub async fn add_member(
         &self,
         ctx: &AuthContext,
-        notebook_id: &str,
+        workspace_id: &str,
         user_id: &str,
         access_level: AccessLevel,
     ) -> Result<()> {
         if !self
-            .check_access(ctx, notebook_id)
+            .check_access(ctx, workspace_id)
             .await?
             .allows_share_management()
         {
@@ -109,7 +109,7 @@ impl ShareService {
         self.store
             .add_member(
                 ctx,
-                Uuid::parse_str(notebook_id)?,
+                Uuid::parse_str(workspace_id)?,
                 Uuid::parse_str(user_id)?,
                 access_level.into(),
             )
@@ -120,11 +120,11 @@ impl ShareService {
     pub async fn remove_member(
         &self,
         ctx: &AuthContext,
-        notebook_id: &str,
+        workspace_id: &str,
         member_id: &str,
     ) -> Result<()> {
         if !self
-            .check_access(ctx, notebook_id)
+            .check_access(ctx, workspace_id)
             .await?
             .allows_share_management()
         {
@@ -133,7 +133,7 @@ impl ShareService {
         self.store
             .remove_member(
                 ctx,
-                Uuid::parse_str(notebook_id)?,
+                Uuid::parse_str(workspace_id)?,
                 Uuid::parse_str(member_id)?,
             )
             .await

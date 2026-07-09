@@ -179,7 +179,7 @@ mod tests {
                     query: format!("q{}", i),
                     resolved_query: format!("q{}", i),
                     query_resolution: None,
-                    notebook_id: None,
+                    workspace_id: None,
                     session_id: None,
                     doc_scope: vec![],
                     messages: vec![],

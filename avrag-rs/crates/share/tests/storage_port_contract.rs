@@ -51,14 +51,14 @@ fn owner_auth(owner_id: Uuid) -> AuthContext {
 #[tokio::test]
 async fn create_share_token_round_trips_through_validate_token() {
     let store = Arc::new(MemoryShareStore::new());
-    let notebook_id = Uuid::new_v4();
+    let workspace_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
-    store.seed_notebook_owner(notebook_id, owner_id).await;
+    store.seed_notebook_owner(workspace_id, owner_id).await;
 
     let service = ShareService::new(store);
     let auth = owner_auth(owner_id);
     let token = service
-        .create_share_token(&auth, &notebook_id.to_string(), AccessLevel::Read, None)
+        .create_share_token(&auth, &workspace_id.to_string(), AccessLevel::Read, None)
         .await
         .expect("owner should create share token");
 
@@ -68,7 +68,7 @@ async fn create_share_token_round_trips_through_validate_token() {
         .expect("validate should succeed")
         .expect("token should resolve");
 
-    assert_eq!(validated.0, notebook_id.to_string());
+    assert_eq!(validated.0, workspace_id.to_string());
     assert_eq!(validated.1, AccessLevel::Read);
 }
 

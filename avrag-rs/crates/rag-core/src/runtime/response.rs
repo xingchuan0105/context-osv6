@@ -64,8 +64,8 @@ impl RagRuntime {
             .into_iter()
             .collect::<Vec<_>>();
         let doc_scope_ids = super::planner::request_doc_ids(request);
-        let notebook_id = request
-            .notebook_id
+        let workspace_id = request
+            .workspace_id
             .as_deref()
             .and_then(|id| Uuid::parse_str(id).ok());
 
@@ -74,9 +74,9 @@ impl RagRuntime {
         } else if summary_mode == "all" {
             if let Some(scope_ids) = doc_scope_ids.as_deref() {
                 scope_ids.to_vec()
-            } else if let Some(notebook_id) = notebook_id {
+            } else if let Some(workspace_id) = workspace_id {
                 content_store
-                    .list_documents(auth, Some(notebook_id), None)
+                    .list_documents(auth, Some(workspace_id), None)
                     .await
                     .inspect_err(|e| tracing::warn!(error = %e, "content_store.list_documents failed, degrading"))
                     .unwrap_or_default()

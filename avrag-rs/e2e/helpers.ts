@@ -48,7 +48,7 @@ export async function createNotebookViaAPI(
   name: string,
   description = "e2e test notebook",
 ): Promise<string> {
-  const response = await request.post("/api/v1/notebooks", {
+  const response = await request.post("/api/v1/workspaces", {
     headers: { Authorization: `Bearer ${token}` },
     data: { name, description },
   });
@@ -65,7 +65,7 @@ export async function deleteNotebookViaAPI(
   notebookId: string,
 ): Promise<void> {
   if (!notebookId) return;
-  await request.delete(`/api/v1/notebooks/${notebookId}`, {
+  await request.delete(`/api/v1/workspaces/${notebookId}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
@@ -81,7 +81,7 @@ export async function uploadDocumentAndWait(
 ): Promise<string> {
   // Step 1: Create document record
   const createResp = await request.post(
-    `/api/v1/notebooks/${notebookId}/documents`,
+    `/api/v1/workspaces/${notebookId}/documents`,
     {
       headers: { Authorization: `Bearer ${token}` },
       data: { filename: fileName, file_size: content.length, mime_type: mimeType },

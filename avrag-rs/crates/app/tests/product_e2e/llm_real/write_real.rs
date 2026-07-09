@@ -25,7 +25,7 @@ async fn real_llm_write_mode_produces_article_with_fingerprint() {
     let params = ChatStreamParams {
         query: "用三百字左右介绍量子纠缠的基本概念，面向普通读者。",
         agent_type: "write",
-        notebook_id: &notebook.id,
+        workspace_id: &notebook.id,
         doc_scope: &[],
         session_id: None,
         format_hint: None,

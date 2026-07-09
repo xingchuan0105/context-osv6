@@ -59,8 +59,8 @@ pub(crate) async fn chat_post_handler(
 ) -> Response {
     let should_stream = req.stream || accepts_sse(&headers);
     let source_type = req.source_type.clone();
-    let notebook_id = req
-        .notebook_id
+    let workspace_id = req
+        .workspace_id
         .as_deref()
         .and_then(|value| Uuid::parse_str(value).ok());
     let agent_type = req.agent_type.clone();
@@ -84,7 +84,7 @@ pub(crate) async fn chat_post_handler(
     tracing::Span::current().record("request_id", &request_id);
 
     if let Err(error) =
-        authorize_workspace_query_optional_notebook(state.auth(), req.notebook_id.as_deref())
+        authorize_workspace_query_optional_notebook(state.auth(), req.workspace_id.as_deref())
     {
         return app_error_response_for_agent(error, operation_guide_agent_type(&agent_type));
     }
@@ -102,7 +102,7 @@ pub(crate) async fn chat_post_handler(
             surface,
             analytics::ResultTag::Success,
             None,
-            notebook_id,
+            workspace_id,
             serde_json::json!({
                 "agent_type": agent_type,
                 "query_length": query_len,
@@ -117,7 +117,7 @@ pub(crate) async fn chat_post_handler(
             req,
             request_id,
             surface,
-            notebook_id,
+            workspace_id,
             agent_type,
             query_len,
         );
@@ -133,7 +133,7 @@ pub(crate) async fn chat_post_handler(
                     surface,
                     analytics::ResultTag::Failure,
                     None,
-                    notebook_id,
+                    workspace_id,
                     serde_json::json!({
                         "agent_type": agent_type,
                         "error_code": e.code(),
@@ -174,7 +174,7 @@ fn chat_live_stream_response(
     req: ChatRequest,
     request_id: String,
     surface: analytics::Surface,
-    notebook_id: Option<Uuid>,
+    workspace_id: Option<Uuid>,
     agent_type: String,
     query_len: usize,
 ) -> Response {
@@ -200,7 +200,7 @@ fn chat_live_stream_response(
                     surface,
                     analytics::ResultTag::Failure,
                     None,
-                    notebook_id,
+                    workspace_id,
                     serde_json::json!({
                         "agent_type": agent_type_for_task,
                         "error_code": error.code(),
@@ -320,7 +320,7 @@ pub(crate) async fn search_handler(
     (
         StatusCode::OK,
         Json(serde_json::json!({
-            "notebooks": notebooks,
+            "workspaces": notebooks,
             "sessions": sessions,
             "sources": sources,
         })),
@@ -330,17 +330,12 @@ pub(crate) async fn search_handler(
 
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ChatSessionsQuery {
-    /// Preferred product query key.
     pub workspace_id: Option<String>,
-    /// Legacy alias for `workspace_id`.
-    pub notebook_id: Option<String>,
 }
 
 impl ChatSessionsQuery {
     pub(crate) fn workspace_id(&self) -> Option<&str> {
-        self.workspace_id
-            .as_deref()
-            .or(self.notebook_id.as_deref())
+        self.workspace_id.as_deref()
     }
 }
 
@@ -365,7 +360,7 @@ pub(crate) async fn create_chat_session_handler(
     Json(req): Json<CreateChatSessionRequest>,
 ) -> Response {
     if let Err(error) =
-        authorize_workspace_notebook_str(state.auth(), query_permission(), &req.notebook_id)
+        authorize_workspace_notebook_str(state.auth(), query_permission(), &req.workspace_id)
     {
         return app_error_response(error);
     }

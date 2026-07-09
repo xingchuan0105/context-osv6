@@ -57,11 +57,11 @@ impl ChatContext {
         Ok(Self::build_rag_session_context(messages))
     }
 
-    pub async fn get_notebook(&self, notebook_id: &str) -> Option<contracts::notebooks::Notebook> {
+    pub async fn get_notebook(&self, workspace_id: &str) -> Option<contracts::notebooks::Notebook> {
         let pg = self.storage.chat_persistence()?;
-        let notebook_id = Uuid::parse_str(notebook_id).ok()?;
+        let workspace_id = Uuid::parse_str(workspace_id).ok()?;
         let notebook = pg
-            .get_notebook(&self.auth, notebook_id)
+            .get_notebook(&self.auth, workspace_id)
             .await
             .ok()
             .flatten()?;
@@ -128,7 +128,7 @@ impl ChatContext {
         kind: agents::AgentKind,
         session_id_override: Option<String>,
     ) -> agent_loop::runtime::AgentRequest {
-        let notebook_id = req.notebook_id.clone();
+        let workspace_id = req.workspace_id.clone();
         let session_id = session_id_override.or_else(|| req.session_id.clone());
         let doc_scope = req.doc_scope.clone();
         let stream = req.stream;
@@ -153,7 +153,7 @@ impl ChatContext {
         agent_loop::runtime::AgentRequest {
             kind,
             query: req.query.clone(),
-            notebook_id,
+            workspace_id,
             session_id,
             doc_scope,
             messages,

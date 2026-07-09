@@ -4,16 +4,16 @@ use contracts::chat::ChatRequest;
 use contracts::documents::DocumentStatus;
 use serde_json::{Value, json};
 
-use crate::auth_guard::{authorize_workspace_tool, query_permission, require_notebook_id_arg};
+use crate::auth_guard::{authorize_workspace_tool, query_permission, require_workspace_id_arg};
 
 pub(crate) async fn execute_query_tool(
     state: &AppState,
     tool_name: &str,
     arguments: &Value,
 ) -> Result<Value, AppError> {
-    let notebook_id = require_notebook_id_arg(arguments)?;
-    authorize_workspace_tool(state.auth(), query_permission(), notebook_id)?;
-    let notebook_id_str = notebook_id.to_string();
+    let workspace_id = require_workspace_id_arg(arguments)?;
+    authorize_workspace_tool(state.auth(), query_permission(), workspace_id)?;
+    let workspace_id_str = workspace_id.to_string();
 
     let query = arguments
         .get("query")
@@ -57,7 +57,7 @@ pub(crate) async fn execute_query_tool(
 
     let mut req = ChatRequest {
         query,
-        notebook_id: Some(notebook_id_str.clone()),
+        workspace_id: Some(workspace_id_str.clone()),
         session_id: None,
         agent_type,
         source_type: None,
@@ -69,11 +69,11 @@ pub(crate) async fn execute_query_tool(
         language: None,
         format_hint: None,
     };
-    expand_external_notebook_rag_scope(state, &notebook_id_str, &mut req).await?;
+    expand_external_notebook_rag_scope(state, &workspace_id_str, &mut req).await?;
     let response = state.chat().execute_chat(req).await?;
     Ok(super::super::catalog::success_result(
         tool_name,
-        Some(&notebook_id_str),
+        Some(&workspace_id_str),
         serde_json::to_value(response).unwrap_or_else(|_| json!({})),
         vec![],
     ))
@@ -81,7 +81,7 @@ pub(crate) async fn execute_query_tool(
 
 pub(crate) async fn expand_external_notebook_rag_scope(
     state: &AppState,
-    notebook_id: &str,
+    workspace_id: &str,
     req: &mut ChatRequest,
 ) -> Result<(), AppError> {
     if req.agent_type != "rag" || !req.doc_scope.is_empty() {
@@ -89,11 +89,11 @@ pub(crate) async fn expand_external_notebook_rag_scope(
     }
 
     state.docs()
-        .get_notebook(notebook_id)
+        .get_notebook(workspace_id)
         .await
         .ok_or_else(|| AppError::not_found("notebook_not_found", "notebook not found"))?;
     let doc_scope = state.docs()
-        .list_documents(Some(notebook_id), None)
+        .list_documents(Some(workspace_id), None)
         .await
         .into_iter()
         .filter(|document| matches!(document.status, DocumentStatus::Completed))

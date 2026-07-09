@@ -65,7 +65,7 @@ export async function listWorkspaces(token: string): Promise<DashboardWorkspaceL
   const resp = await request<RawNotebookListResponse>("/api/v1/workspaces", { method: "GET" }, token);
 
   return {
-    workspaces: (resp.workspaces ?? resp.notebooks ?? []).map(mapNotebook),
+    workspaces: (resp.workspaces ?? []).map(mapNotebook),
   };
 }
 
@@ -83,7 +83,7 @@ export async function createWorkspace(
   );
 
   return {
-    workspace: mapNotebook((resp.workspace ?? resp.notebook)!),
+    workspace: mapNotebook((resp.workspace)!),
   };
 }
 
@@ -102,7 +102,7 @@ export async function updateWorkspace(
   );
 
   return {
-    workspace: mapNotebook((resp.workspace ?? resp.notebook)!),
+    workspace: mapNotebook((resp.workspace)!),
   };
 }
 

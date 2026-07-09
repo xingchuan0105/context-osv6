@@ -39,7 +39,7 @@ async fn cross_user_direct_get_notebook_without_token_returns_4xx() {
     let resp = ctx_b
         .http_client
         .get(format!(
-            "{}/api/v1/notebooks/{}",
+            "{}/api/v1/workspaces/{}",
             ctx_b.base_url, notebook.id
         ))
         .send()
@@ -90,7 +90,7 @@ async fn owner_can_invite_member_via_http() {
     assert_eq!(invite_resp.status, 200, "invite should succeed");
 
     let members_body = ctx_a
-        .list_notebook_members(&notebook.id)
+        .list_workspace_members(&notebook.id)
         .await
         .expect("list members");
     let members = members_body["members"].as_array().expect("members array");
@@ -120,7 +120,7 @@ async fn invited_member_can_accept_and_access_notebook() {
     assert_eq!(invite_resp.status, 200);
 
     let members_body = ctx_owner
-        .list_notebook_members(&notebook.id)
+        .list_workspace_members(&notebook.id)
         .await
         .expect("list members");
     let member_id = members_body["members"]
@@ -152,7 +152,7 @@ async fn invited_member_can_accept_and_access_notebook() {
     );
 
     let members_after = ctx_owner
-        .list_notebook_members(&notebook.id)
+        .list_workspace_members(&notebook.id)
         .await
         .expect("list members after accept");
     assert!(

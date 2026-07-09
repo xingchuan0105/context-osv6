@@ -385,13 +385,13 @@ pub fn count_sse_trace_stage(events: &[SseEvent], stage: &str) -> usize {
 pub async fn chat_rag_observable_probe(
     ctx: &TestContext,
     query: &str,
-    notebook_id: &str,
+    workspace_id: &str,
     doc_scope: &[String],
 ) -> Result<RagObservableProbeResult, RagObservableProbeFailure> {
     let params = ChatStreamParams {
         query,
         agent_type: "rag",
-        notebook_id,
+        workspace_id,
         doc_scope,
         session_id: None,
         format_hint: None,
@@ -450,7 +450,7 @@ pub async fn chat_rag_observable_probe(
 
     eprintln!("[rag_observable] falling back to non-streaming chat");
     let http_resp = match ctx
-        .chat_without_mock_chunk_pin(query, notebook_id, doc_scope)
+        .chat_without_mock_chunk_pin(query, workspace_id, doc_scope)
         .await
     {
         Ok(r) => r,
@@ -538,7 +538,7 @@ async fn chat_stream_once(
             ChatStreamParams {
                 query: params.query,
                 agent_type: params.agent_type,
-                notebook_id: params.notebook_id,
+                workspace_id: params.workspace_id,
                 doc_scope: params.doc_scope,
                 session_id: params.session_id,
                 format_hint: params.format_hint,
@@ -659,7 +659,7 @@ async fn chat_stream_with_retry_inner(
 pub async fn chat_with_retry(
     ctx: &TestContext,
     query: &str,
-    notebook_id: &str,
+    workspace_id: &str,
     doc_scope: &[String],
 ) -> LlmRealChatResult {
     chat_stream_with_retry_inner(
@@ -667,7 +667,7 @@ pub async fn chat_with_retry(
         ChatStreamParams {
             query,
             agent_type: "rag",
-            notebook_id,
+            workspace_id,
             doc_scope,
             session_id: None,
             format_hint: None,
@@ -692,17 +692,17 @@ fn answer_rejects_synthesis_fallback(answer: &str) -> bool {
 pub async fn chat_with_citations_retry(
     ctx: &TestContext,
     query: &str,
-    notebook_id: &str,
+    workspace_id: &str,
     doc_scope: &[String],
 ) -> LlmRealChatResult {
-    chat_with_citations_retry_attempts(ctx, query, notebook_id, doc_scope, REAL_LLM_MAX_ATTEMPTS)
+    chat_with_citations_retry_attempts(ctx, query, workspace_id, doc_scope, REAL_LLM_MAX_ATTEMPTS)
         .await
 }
 
 pub async fn chat_with_citations_retry_attempts(
     ctx: &TestContext,
     query: &str,
-    notebook_id: &str,
+    workspace_id: &str,
     doc_scope: &[String],
     max_attempts: usize,
 ) -> LlmRealChatResult {
@@ -711,7 +711,7 @@ pub async fn chat_with_citations_retry_attempts(
         ChatStreamParams {
             query,
             agent_type: "rag",
-            notebook_id,
+            workspace_id,
             doc_scope,
             session_id: None,
             format_hint: None,
@@ -733,7 +733,7 @@ pub async fn chat_with_citations_retry_attempts(
 pub async fn chat_with_multitool_retry(
     ctx: &TestContext,
     query: &str,
-    notebook_id: &str,
+    workspace_id: &str,
     doc_scope: &[String],
     min_distinct_tools: usize,
     retrieval_tools: &[&str],
@@ -744,7 +744,7 @@ pub async fn chat_with_multitool_retry(
         ChatStreamParams {
             query,
             agent_type: "rag",
-            notebook_id,
+            workspace_id,
             doc_scope,
             session_id: None,
             format_hint: None,
@@ -778,7 +778,7 @@ pub async fn chat_with_multitool_retry(
 pub async fn chat_with_format_retry(
     ctx: &TestContext,
     query: &str,
-    notebook_id: &str,
+    workspace_id: &str,
     doc_scope: &[String],
     format_hint: &str,
 ) -> LlmRealChatResult {
@@ -787,7 +787,7 @@ pub async fn chat_with_format_retry(
         ChatStreamParams {
             query,
             agent_type: "rag",
-            notebook_id,
+            workspace_id,
             doc_scope,
             session_id: None,
             format_hint: Some(format_hint),
@@ -805,7 +805,7 @@ pub async fn chat_with_format_retry(
 pub async fn chat_with_session_retry(
     ctx: &TestContext,
     query: &str,
-    notebook_id: &str,
+    workspace_id: &str,
     doc_scope: &[String],
     session_id: &str,
 ) -> LlmRealChatResult {
@@ -814,7 +814,7 @@ pub async fn chat_with_session_retry(
         ChatStreamParams {
             query,
             agent_type: "rag",
-            notebook_id,
+            workspace_id,
             doc_scope,
             session_id: Some(session_id),
             format_hint: None,
@@ -832,14 +832,14 @@ pub async fn chat_with_session_retry(
 pub async fn chat_general_with_retry(
     ctx: &TestContext,
     query: &str,
-    notebook_id: &str,
+    workspace_id: &str,
 ) -> LlmRealChatResult {
     chat_stream_with_retry_inner(
         ctx,
         ChatStreamParams {
             query,
             agent_type: "chat",
-            notebook_id,
+            workspace_id,
             doc_scope: &[],
             session_id: None,
             format_hint: None,
@@ -857,7 +857,7 @@ pub async fn chat_general_with_retry(
 pub async fn search_with_retry(
     ctx: &TestContext,
     query: &str,
-    notebook_id: &str,
+    workspace_id: &str,
 ) -> LlmRealChatResult {
     let empty_scope: &[String] = &[];
     chat_stream_with_retry_inner(
@@ -865,7 +865,7 @@ pub async fn search_with_retry(
         ChatStreamParams {
             query,
             agent_type: "search",
-            notebook_id,
+            workspace_id,
             doc_scope: empty_scope,
             session_id: None,
             format_hint: None,

@@ -61,15 +61,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 mkdir -p "${CACHE_ROOT}/target/avrag-rs" \
-         "${CACHE_ROOT}/target/frontend_rust" \
          "${CACHE_ROOT}/sccache"
 
 workspace_cache_target() {
   local workspace_root="$1"
   case "$(basename "${workspace_root}")" in
     avrag-rs) echo "${CACHE_ROOT}/target/avrag-rs" ;;
-    frontend_rust) echo "${CACHE_ROOT}/target/frontend_rust" ;;
-    *)
+        *)
       die "unsupported workspace for cache activation: ${workspace_root}"
       ;;
   esac
@@ -156,7 +154,7 @@ configure_checkout() {
   local migrate_targets="$2"
   local workspace_root target_dir
 
-  for workspace_root in "${checkout_root}/avrag-rs" "${checkout_root}/frontend_rust"; do
+  for workspace_root in "${checkout_root}/avrag-rs"; do
     [[ -d "${workspace_root}" ]] || continue
     target_dir="$(workspace_cache_target "${workspace_root}")"
     write_local_machine "${workspace_root}" "${target_dir}"

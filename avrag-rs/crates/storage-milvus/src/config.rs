@@ -5,7 +5,7 @@ use crate::types::MilvusStorageError;
 pub struct TenantContext {
     pub org_id: String,
     pub user_id: String,
-    pub notebook_id: Option<String>,
+    pub workspace_id: Option<String>,
     pub doc_scope: Vec<String>,
 }
 

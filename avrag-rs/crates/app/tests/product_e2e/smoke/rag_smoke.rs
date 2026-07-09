@@ -47,7 +47,7 @@ async fn rag_document_qa_returns_citation() {
     let http_resp: HttpResponse = ctx
         .chat_without_mock_chunk_pin(
             "What is antifragility?",
-            &upload.notebook_id,
+            &upload.workspace_id,
             &[upload.document_id.clone()],
         )
         .await

@@ -133,7 +133,7 @@ impl ContentStore for LocalContentStore {
     async fn list_documents(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Option<Uuid>,
+        _workspace_id: Option<Uuid>,
         _document_id: Option<Uuid>,
     ) -> Result<Vec<Document>, ContentStoreError> {
         self.ensure_dirs()

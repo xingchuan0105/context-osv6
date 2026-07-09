@@ -42,11 +42,11 @@ impl AdminContext {
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
-        notebook_id: &str,
+        workspace_id: &str,
     ) -> Result<Vec<ApiKeyRow>, AppError> {
         let store = require_admin_store(storage)?;
         let notebook_uuid =
-            parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
+            parse_uuid_or_app_error(workspace_id, "notebook_not_found", "notebook not found")?;
         store.list_api_keys(auth, Some(notebook_uuid)).await
     }
 
@@ -54,7 +54,7 @@ impl AdminContext {
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
-        notebook_id: &str,
+        workspace_id: &str,
         req: CreateApiKeyRequest,
     ) -> Result<CreateApiKeyResponse, AppError> {
         if req.name.trim().is_empty() {
@@ -62,7 +62,7 @@ impl AdminContext {
         }
         let store = require_admin_store(storage)?;
         let notebook_uuid =
-            parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
+            parse_uuid_or_app_error(workspace_id, "notebook_not_found", "notebook not found")?;
         let permissions =
             contracts::normalize_api_key_permissions(&req.permissions, Some(notebook_uuid));
         let rate_limit_rpm = req.rate_limit_rpm.unwrap_or(60);
@@ -159,12 +159,12 @@ impl AdminContext {
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
-        notebook_id: &str,
+        workspace_id: &str,
         key_id: &str,
     ) -> Result<StatusOnlyResponse, AppError> {
         let store = require_admin_store(storage)?;
         let notebook_uuid =
-            parse_uuid_or_app_error(notebook_id, "notebook_not_found", "notebook not found")?;
+            parse_uuid_or_app_error(workspace_id, "notebook_not_found", "notebook not found")?;
         let key_uuid = parse_uuid_or_app_error(key_id, "api_key_not_found", "api key not found")?;
         let revoked = store
             .revoke_api_key(auth, Some(notebook_uuid), key_uuid)

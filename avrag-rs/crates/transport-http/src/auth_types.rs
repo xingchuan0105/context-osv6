@@ -81,7 +81,7 @@ pub(crate) struct UpdateProfileRequest {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct WorkspaceDraftPreference {
     #[serde(default)]
-    pub notebook_id: String,
+    pub workspace_id: String,
     #[serde(default)]
     pub notes: String,
 }
@@ -89,7 +89,7 @@ pub(crate) struct WorkspaceDraftPreference {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct NotebookWorkspacePreference {
     #[serde(default)]
-    pub notebook_id: String,
+    pub workspace_id: String,
     #[serde(default)]
     pub pinned_source_ids: Vec<String>,
 }
@@ -99,7 +99,7 @@ pub(crate) struct NotebookNotePreference {
     #[serde(default)]
     pub note_id: String,
     #[serde(default)]
-    pub notebook_id: String,
+    pub workspace_id: String,
     #[serde(default)]
     pub title: String,
     #[serde(default)]
@@ -117,7 +117,7 @@ pub(crate) struct NotebookNotePreference {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct DashboardPreferences {
     #[serde(default)]
-    pub favorite_notebook_ids: Vec<String>,
+    pub favorite_workspace_ids: Vec<String>,
     #[serde(default)]
     pub workspace_drafts: Vec<WorkspaceDraftPreference>,
     #[serde(default)]

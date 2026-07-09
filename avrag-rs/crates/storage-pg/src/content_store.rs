@@ -96,11 +96,11 @@ impl ContentStore for PgContentStore {
     async fn list_documents(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         document_id: Option<Uuid>,
     ) -> Result<Vec<Document>, ContentStoreError> {
         self.repo
-            .list_documents(auth, notebook_id, document_id)
+            .list_documents(auth, workspace_id, document_id)
             .await
             .map_err(map_pg_error)
     }

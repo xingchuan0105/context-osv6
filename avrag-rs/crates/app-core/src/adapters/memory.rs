@@ -87,12 +87,12 @@ impl DocumentStorePort for MemoryDocumentStore {
     async fn get_notebook(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<Option<Notebook>, AppError> {
         let state = self.state.read().await;
         Ok(state
             .notebooks
-            .get(&notebook_id.to_string())
+            .get(&workspace_id.to_string())
             .filter(|n| org_matches(auth, &n.org_id))
             .cloned())
     }
@@ -127,12 +127,12 @@ impl DocumentStorePort for MemoryDocumentStore {
     async fn update_notebook(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         name: Option<&str>,
         description: Option<&str>,
     ) -> Result<Option<Notebook>, AppError> {
         let mut state = self.state.write().await;
-        let key = notebook_id.to_string();
+        let key = workspace_id.to_string();
         let notebook = state.notebooks.get_mut(&key);
         let Some(notebook) = notebook else {
             return Ok(None);
@@ -154,9 +154,9 @@ impl DocumentStorePort for MemoryDocumentStore {
     async fn delete_notebook(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
     ) -> Result<bool, AppError> {
-        let key = notebook_id.to_string();
+        let key = workspace_id.to_string();
         let mut state = self.state.write().await;
         let can_delete = state
             .notebooks
@@ -169,11 +169,11 @@ impl DocumentStorePort for MemoryDocumentStore {
         state.notebooks.remove(&key);
         state
             .documents
-            .retain(|_, stored| stored.document.notebook_id != key);
+            .retain(|_, stored| stored.document.workspace_id != key);
         let removed_sessions: Vec<String> = state
             .sessions
             .iter()
-            .filter_map(|(id, session)| (session.notebook_id == key).then_some(id.clone()))
+            .filter_map(|(id, session)| (session.workspace_id == key).then_some(id.clone()))
             .collect();
         for session_id in &removed_sessions {
             state.sessions.remove(session_id);
@@ -205,7 +205,7 @@ impl DocumentStorePort for MemoryDocumentStore {
     async fn list_sources(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Option<Uuid>,
+        _workspace_id: Option<Uuid>,
     ) -> Result<Vec<SourceRow>, AppError> {
         Ok(Vec::new())
     }
@@ -213,11 +213,11 @@ impl DocumentStorePort for MemoryDocumentStore {
     async fn list_documents(
         &self,
         auth: &AuthContext,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         document_id: Option<Uuid>,
     ) -> Result<Vec<Document>, AppError> {
         let state = self.state.read().await;
-        let notebook_filter = notebook_id.map(|id| id.to_string());
+        let notebook_filter = workspace_id.map(|id| id.to_string());
         let document_filter = document_id.map(|id| id.to_string());
         Ok(state
             .documents
@@ -226,7 +226,7 @@ impl DocumentStorePort for MemoryDocumentStore {
             .filter(|stored| {
                 notebook_filter
                     .as_ref()
-                    .map(|id| stored.document.notebook_id == *id)
+                    .map(|id| stored.document.workspace_id == *id)
                     .unwrap_or(true)
             })
             .filter(|stored| {
@@ -243,7 +243,7 @@ impl DocumentStorePort for MemoryDocumentStore {
     async fn create_document(
         &self,
         auth: &AuthContext,
-        notebook_id: Uuid,
+        workspace_id: Uuid,
         filename: &str,
         file_size: u64,
         mime_type: &str,
@@ -252,7 +252,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         let document = Document {
             id: new_id(),
             org_id: current_org_id(auth),
-            notebook_id: notebook_id.to_string(),
+            workspace_id: workspace_id.to_string(),
             owner_id: current_user_id(auth),
             file_name: filename.to_string(),
             mime_type: mime_type.to_string(),
@@ -289,11 +289,11 @@ impl DocumentStorePort for MemoryDocumentStore {
         Ok(Some(DocumentTaskSeed {
             document_id: doc.id.clone(),
             org_id: doc.org_id.clone(),
-            notebook_id: doc.notebook_id.clone(),
+            workspace_id: doc.workspace_id.clone(),
             filename: doc.file_name.clone(),
             mime_type: doc.mime_type.clone(),
             file_size: doc.file_size,
-            object_path: format!("{}/{}/{}", doc.org_id, doc.notebook_id, doc.id),
+            object_path: format!("{}/{}/{}", doc.org_id, doc.workspace_id, doc.id),
             status: doc.status.clone(),
         }))
     }
@@ -373,7 +373,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         auth: &AuthContext,
         document_id: Uuid,
         filename: Option<&str>,
-        notebook_id: Option<Uuid>,
+        workspace_id: Option<Uuid>,
         status: Option<DocumentStatus>,
     ) -> Result<bool, AppError> {
         let mut state = self.state.write().await;
@@ -389,8 +389,8 @@ impl DocumentStorePort for MemoryDocumentStore {
         if let Some(filename) = filename {
             stored.document.file_name = filename.to_string();
         }
-        if let Some(notebook_id) = notebook_id {
-            stored.document.notebook_id = notebook_id.to_string();
+        if let Some(workspace_id) = workspace_id {
+            stored.document.workspace_id = workspace_id.to_string();
         }
         if let Some(status) = status {
             stored.document.status = status;
@@ -517,7 +517,7 @@ impl BillingQuotaPort for MemoryBillingQuotaPort {
     async fn notebook_exists(
         &self,
         _auth: &AuthContext,
-        _notebook_id: Uuid,
+        _workspace_id: Uuid,
     ) -> Result<bool, AppError> {
         Ok(true)
     }

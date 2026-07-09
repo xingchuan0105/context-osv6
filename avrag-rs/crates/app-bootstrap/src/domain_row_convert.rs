@@ -8,7 +8,7 @@ pub fn document_task_seed(value: avrag_storage_pg::DocumentTaskSeed) -> Document
     DocumentTaskSeed {
         document_id: value.document_id,
         org_id: value.org_id,
-        notebook_id: value.notebook_id,
+        workspace_id: value.workspace_id,
         filename: value.filename,
         mime_type: value.mime_type,
         file_size: value.file_size,
@@ -130,7 +130,7 @@ pub fn document_asset_row(value: avrag_storage_pg::DocumentAssetRow) -> Document
     DocumentAssetRow {
         asset_id: value.asset_id,
         org_id: value.org_id,
-        notebook_id: value.notebook_id,
+        workspace_id: value.workspace_id,
         document_id: value.document_id,
         parse_run_id: value.parse_run_id,
         page: value.page,
@@ -149,7 +149,7 @@ pub fn multimodal_chunk_row(value: avrag_storage_pg::MultimodalChunkRow) -> Mult
     MultimodalChunkRow {
         chunk_id: value.chunk_id,
         org_id: value.org_id,
-        notebook_id: value.notebook_id,
+        workspace_id: value.workspace_id,
         document_id: value.document_id,
         parse_run_id: value.parse_run_id,
         asset_id: value.asset_id,

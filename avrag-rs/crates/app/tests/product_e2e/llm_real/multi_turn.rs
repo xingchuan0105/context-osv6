@@ -35,7 +35,7 @@ async fn real_llm_multi_turn_rag_follow_up_remembers_context() {
     let turn1 = chat_with_retry(
         &ctx,
         "What is antifragility?",
-        &upload.notebook_id,
+        &upload.workspace_id,
         &doc_scope,
     )
     .await;
@@ -53,7 +53,7 @@ async fn real_llm_multi_turn_rag_follow_up_remembers_context() {
     let turn2 = chat_with_session_retry(
         &ctx,
         "Who wrote the book about it?",
-        &upload.notebook_id,
+        &upload.workspace_id,
         &doc_scope,
         &session_id,
     )

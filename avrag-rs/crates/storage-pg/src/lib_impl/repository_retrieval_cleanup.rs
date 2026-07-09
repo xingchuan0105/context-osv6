@@ -31,7 +31,7 @@ impl ChunkRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select id, org_id, notebook_id, status, object_path
+            select id, org_id, workspace_id, status, object_path
             from documents
             where id = $1
               and org_id = $2
@@ -47,21 +47,21 @@ impl ChunkRepository {
             return Ok(None);
         };
         let org_id: Uuid = row.try_get("org_id")?;
-        let notebook_id: Uuid = row.try_get("notebook_id")?;
+        let workspace_id: Uuid = row.try_get("workspace_id")?;
 
         let asset_rows = sqlx::query(
             r#"
             select storage_path
             from document_assets
             where org_id = $1
-              and notebook_id = $2
+              and workspace_id = $2
               and document_id = $3
               and storage_path is not null
             order by created_at asc, asset_id asc
             "#,
         )
         .bind(org_id)
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(document_id)
         .fetch_all(tx.inner())
         .await?;
@@ -77,7 +77,7 @@ impl ChunkRepository {
         let status_text: String = row.try_get("status")?;
         Ok(Some(DocumentCleanupTargets {
             org_id,
-            notebook_id,
+            workspace_id,
             document_id: row.try_get("id")?,
             status: parse_document_status(&status_text),
             object_path: object_path.or(fallback_object_path),
@@ -100,7 +100,7 @@ impl ChunkRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            select org_id, notebook_id
+            select org_id, workspace_id
             from documents
             where id = $1
               and org_id = $2
@@ -117,29 +117,29 @@ impl ChunkRepository {
             return Ok(false);
         };
         let org_id: Uuid = row.try_get("org_id")?;
-        let notebook_id: Uuid = row.try_get("notebook_id")?;
+        let workspace_id: Uuid = row.try_get("workspace_id")?;
 
         sqlx::query(
-            "delete from document_multimodal_chunks where org_id = $1 and notebook_id = $2 and document_id = $3",
+            "delete from document_multimodal_chunks where org_id = $1 and workspace_id = $2 and document_id = $3",
         )
         .bind(org_id)
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(document_id)
         .execute(tx.inner())
         .await?;
         sqlx::query(
-            "delete from document_assets where org_id = $1 and notebook_id = $2 and document_id = $3",
+            "delete from document_assets where org_id = $1 and workspace_id = $2 and document_id = $3",
         )
         .bind(org_id)
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(document_id)
         .execute(tx.inner())
         .await?;
         sqlx::query(
-            "delete from document_blocks where org_id = $1 and notebook_id = $2 and document_id = $3",
+            "delete from document_blocks where org_id = $1 and workspace_id = $2 and document_id = $3",
         )
         .bind(org_id)
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(document_id)
         .execute(tx.inner())
         .await?;
@@ -149,10 +149,10 @@ impl ChunkRepository {
             .execute(tx.inner())
             .await?;
         sqlx::query(
-            "delete from document_parse_runs where org_id = $1 and notebook_id = $2 and document_id = $3",
+            "delete from document_parse_runs where org_id = $1 and workspace_id = $2 and document_id = $3",
         )
         .bind(org_id)
-        .bind(notebook_id)
+        .bind(workspace_id)
         .bind(document_id)
         .execute(tx.inner())
         .await?;
@@ -220,7 +220,7 @@ impl ChunkRepository {
 pub async fn insert_document_cleanup_task(
     tx: &mut PgConnection,
     org_id: Uuid,
-    notebook_id: Uuid,
+    workspace_id: Uuid,
     document_id: Uuid,
     requested_by: Option<Uuid>,
     row: &PgRow,
@@ -233,7 +233,7 @@ pub async fn insert_document_cleanup_task(
     let idempotency_key = format!("document-cleanup:{org_id}:{document_id}");
     let payload = json!({
         "org_id": org_id.to_string(),
-        "notebook_id": notebook_id.to_string(),
+        "workspace_id": workspace_id.to_string(),
         "document_id": document_id.to_string(),
         "file_name": file_name,
         "mime_type": mime_type.unwrap_or_default(),
@@ -245,14 +245,14 @@ pub async fn insert_document_cleanup_task(
     let result = sqlx::query(
         r#"
         insert into document_cleanup_tasks (
-            org_id, notebook_id, document_id, requested_by, idempotency_key, payload
+            org_id, workspace_id, document_id, requested_by, idempotency_key, payload
         )
         values ($1, $2, $3, $4, $5, $6)
         on conflict (idempotency_key) do nothing
         "#,
     )
     .bind(org_id)
-    .bind(notebook_id)
+    .bind(workspace_id)
     .bind(document_id)
     .bind(requested_by)
     .bind(idempotency_key)

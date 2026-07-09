@@ -17,7 +17,7 @@ pub(crate) async fn record_product_event_if_available(
     surface: analytics::Surface,
     result: analytics::ResultTag,
     session_id: Option<Uuid>,
-    notebook_id: Option<Uuid>,
+    workspace_id: Option<Uuid>,
     metadata: serde_json::Value,
 ) {
     analytics
@@ -27,7 +27,7 @@ pub(crate) async fn record_product_event_if_available(
             surface,
             result,
             session_id,
-            notebook_id,
+            workspace_id,
             metadata,
         )
         .await;
@@ -38,7 +38,7 @@ pub(crate) async fn record_storage_cost_event_if_available(
     analytics: &AnalyticsServiceCtx,
     event_name: analytics::CostEventName,
     feature: &str,
-    notebook_id: Option<Uuid>,
+    workspace_id: Option<Uuid>,
     storage_bytes_delta: i64,
     source: &str,
     metadata: serde_json::Value,
@@ -48,7 +48,7 @@ pub(crate) async fn record_storage_cost_event_if_available(
         &analytics.service().cloned(),
         event_name,
         feature,
-        notebook_id,
+        workspace_id,
         storage_bytes_delta,
         source,
         metadata,
