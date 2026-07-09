@@ -1,5 +1,7 @@
 mode: rag
 system_prompt_base: prompts/orchestrators/rag-system.md
+# Intentionally empty: retrieve tools are disclosed on-demand via skill clusters
+# (codegen/memory). Product capabilities still list auto_fallback.tool_id.
 tool_pool: []
 inject_retrieval_query: true
 skill_catalog:

@@ -57,8 +57,11 @@ impl CapabilityRegistry {
         self.skills.get(id)
     }
 
-    /// List all executable tools from the unified catalog.
-    pub fn list_tools(&self) -> Vec<&ToolMetadata> {
+    /// All executable tool meta from [`ToolCatalog`] (execution table).
+    ///
+    /// **Not** the product disclosure list — HTTP capabilities use mode
+    /// `tool_pool` (+ auto_fallback) via [`super::api::build_capabilities_response`].
+    pub fn list_catalog_tools(&self) -> Vec<&ToolMetadata> {
         let _ = self;
         ToolCatalog::standard_cached()
             .list()
@@ -408,9 +411,9 @@ mod tests {
     }
 
     #[test]
-    fn list_tools_returns_unified_catalog() {
+    fn list_catalog_tools_returns_unified_catalog() {
         let registry = CapabilityRegistry::standard();
-        let tools = registry.list_tools();
+        let tools = registry.list_catalog_tools();
         assert_eq!(tools.len(), registry.tool_count());
         assert!(tools.iter().any(|t| t.id == "web_search"));
         assert!(tools.iter().any(|t| t.id == "dense_retrieval"));

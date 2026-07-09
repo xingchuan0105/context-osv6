@@ -85,6 +85,16 @@ const PRODUCT_MODE_FILES: &[(&str, &str)] = &[
 struct ModeYamlToolPool {
     #[serde(default)]
     tool_pool: Vec<String>,
+    /// RAG (and others) may keep `tool_pool` empty for on-demand skill disclosure
+    /// while still auto-invoking a retrieval tool — include it in product capability list.
+    #[serde(default)]
+    auto_fallback: Option<ModeYamlAutoFallback>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModeYamlAutoFallback {
+    #[serde(default)]
+    tool_id: Option<String>,
 }
 
 fn resolve_mode_yaml_path(file_stem: &str) -> Option<std::path::PathBuf> {
@@ -114,30 +124,45 @@ fn resolve_mode_yaml_path(file_stem: &str) -> Option<std::path::PathBuf> {
     None
 }
 
+fn parse_mode_yaml(file_stem: &str) -> Option<ModeYamlToolPool> {
+    let path = resolve_mode_yaml_path(file_stem)?;
+    let content = std::fs::read_to_string(&path).ok()?;
+    serde_yaml::from_str(&content).ok()
+}
+
+/// YAML `tool_pool` only (ModeConfig retrieve disclosure; may be empty for RAG).
 fn load_mode_tool_pool(file_stem: &str) -> Vec<String> {
-    let Some(path) = resolve_mode_yaml_path(file_stem) else {
-        return vec![];
-    };
-    let Ok(content) = std::fs::read_to_string(&path) else {
-        return vec![];
-    };
-    serde_yaml::from_str::<ModeYamlToolPool>(&content)
+    parse_mode_yaml(file_stem)
         .map(|m| m.tool_pool)
         .unwrap_or_default()
 }
 
-/// Union of `tool_pool` ids across product modes (chat/rag/search/write).
+/// Product capability disclosure for a mode: `tool_pool` ∪ `auto_fallback.tool_id`.
+fn load_mode_disclosed_tools(file_stem: &str) -> Vec<String> {
+    let Some(m) = parse_mode_yaml(file_stem) else {
+        return vec![];
+    };
+    let mut ids = m.tool_pool;
+    if let Some(fb) = m.auto_fallback.and_then(|a| a.tool_id) {
+        if !fb.is_empty() && !ids.iter().any(|x| x == &fb) {
+            ids.push(fb);
+        }
+    }
+    ids
+}
+
+/// Union of disclosed tool ids across product modes (chat/rag/search/write).
 pub fn product_mode_tool_pool_union() -> BTreeSet<String> {
     let mut ids = BTreeSet::new();
     for (_, file_stem) in PRODUCT_MODE_FILES {
-        for id in load_mode_tool_pool(file_stem) {
+        for id in load_mode_disclosed_tools(file_stem) {
             ids.insert(id);
         }
     }
     ids
 }
 
-fn product_mode_tool_pools() -> BTreeMap<String, Vec<String>> {
+fn product_mode_yaml_tool_pools() -> BTreeMap<String, Vec<String>> {
     PRODUCT_MODE_FILES
         .iter()
         .map(|(mode_id, file_stem)| ((*mode_id).to_string(), load_mode_tool_pool(file_stem)))
@@ -154,7 +179,7 @@ fn product_mode_tool_pools() -> BTreeMap<String, Vec<String>> {
 /// `tool_pool` (not the full executable catalog).
 pub fn build_capabilities_response() -> CapabilitiesResponse {
     let registry = super::CapabilityRegistry::standard_cached();
-    let pools = product_mode_tool_pools();
+    let pools = product_mode_yaml_tool_pools();
     let allowed = product_mode_tool_pool_union();
 
     let mut tools: Vec<ToolCapability> = allowed
@@ -277,9 +302,17 @@ mod tests {
         if allowed.contains("web_search") {
             assert!(resp.tools.iter().any(|t| t.id == "web_search"));
         }
+        // RAG keeps tool_pool empty for loop semantics; auto_fallback.tool_id is disclosed.
+        assert!(
+            allowed.contains("dense_retrieval"),
+            "rag auto_fallback dense_retrieval must appear in disclosure union"
+        );
+        assert!(resp.tools.iter().any(|t| t.id == "dense_retrieval"));
         assert_eq!(
             resp.modes["search"].tool_pool,
             load_mode_tool_pool("search")
         );
+        // mode.tool_pool in response is the YAML tool_pool only (not auto_fallback merge)
+        // — product tools[] is the union; mode field stays faithful to ModeConfig.
     }
 }
