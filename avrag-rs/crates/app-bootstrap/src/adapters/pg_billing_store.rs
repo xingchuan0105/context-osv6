@@ -200,7 +200,7 @@ impl BillingStorePort for PgBillingStoreAdapter {
         user_id: UserId,
         out_trade_no: &str,
         plan_id: &str,
-        amount_cents: i32,
+        amount_cents: i64,
     ) -> Result<(), AppError> {
         let mut tx = self
             .repo

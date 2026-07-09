@@ -45,9 +45,9 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
             INSERT INTO llm_usage_events (
                 org_id, user_id, feature, stage, provider, model,
                 prompt_tokens, completion_tokens, total_tokens,
-                usage_units, usage_source,
+                usage_units, usage_source, usage_kind,
                 session_id, document_id, request_id, trace_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             "#,
         )
         .bind(ctx.org_id)
@@ -61,6 +61,7 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         .bind(record.total_tokens as i64)
         .bind(usage_units)
         .bind(record.usage_source.as_str())
+        .bind(record.usage_kind)
         .bind(ctx.session_id)
         .bind(ctx.document_id)
         .bind(&ctx.request_id)

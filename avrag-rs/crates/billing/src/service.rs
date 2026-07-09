@@ -216,7 +216,7 @@ impl BillingService {
                         user_id,
                         &out_trade_no,
                         requested_plan,
-                        amount_cents as i32,
+                        amount_cents,
                     )
                     .await
                 {
