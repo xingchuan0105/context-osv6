@@ -310,6 +310,80 @@ async fn stage_materialize_chunks_assets_profile(
         "IR chunk plan generated"
     );
 
+    let chunks = persist_body_chunks(
+        processor,
+        task,
+        context,
+        document_id,
+        parse_run_id,
+        &content,
+        &body_chunks,
+    )
+    .await?;
+    let processed_chunk_count = chunks.len().max(1);
+
+    persist_profile_and_toc(
+        processor,
+        task,
+        context,
+        notebook_id,
+        document_id,
+        document_ir,
+        filename,
+        &chunks,
+    )
+    .await?;
+
+    let (asset_uuid_by_ref, stored_asset_path_by_ref) = persist_document_assets(
+        processor,
+        task,
+        context,
+        notebook_id,
+        document_id,
+        parse_run_id,
+        document_ir,
+        parse_run_state,
+    )
+    .await?;
+
+    let mut stored_multimodal_chunks = persist_multimodal_chunks(
+        processor,
+        task,
+        context,
+        notebook_id,
+        document_id,
+        parse_run_id,
+        &chunk_plan,
+        &asset_uuid_by_ref,
+        &stored_asset_path_by_ref,
+        parse_run_state,
+    )
+    .await?;
+
+    maybe_enrich_visual_multimodal_summaries(
+        processor,
+        &mut stored_multimodal_chunks,
+        &mut parse_run_state.outputs,
+    )
+    .await;
+
+    Ok(MaterializeOutput {
+        content,
+        processed_chunk_count,
+        chunks,
+        stored_multimodal_chunks,
+    })
+}
+
+async fn persist_body_chunks(
+    processor: &PgTaskProcessor,
+    task: &IngestionTask,
+    context: &AuthContext,
+    document_id: Uuid,
+    parse_run_id: Uuid,
+    content: &str,
+    body_chunks: &[avrag_storage_pg::StoreDocumentChunkParams],
+) -> Result<Vec<avrag_storage_pg::IndexedChunk>, IngestionError> {
     ensure_ingestion_side_effects_allowed(
         &processor.repo,
         context,
@@ -318,25 +392,34 @@ async fn stage_materialize_chunks_assets_profile(
         "body chunk writes",
     )
     .await?;
-    let chunks = processor
+    processor
         .repo
         .bootstrap()
         .store_document_body_chunks(
             context,
             document_id,
             Some(parse_run_id),
-            &content,
-            &body_chunks,
+            content,
+            body_chunks,
         )
         .await
-        .map_err(from_storage_error)?;
-    let processed_chunk_count = chunks.len().max(1);
+        .map_err(from_storage_error)
+}
 
+async fn persist_profile_and_toc(
+    processor: &PgTaskProcessor,
+    task: &IngestionTask,
+    context: &AuthContext,
+    notebook_id: Uuid,
+    document_id: Uuid,
+    document_ir: &DocumentIr,
+    filename: &str,
+    chunks: &[avrag_storage_pg::IndexedChunk],
+) -> Result<(), IngestionError> {
     let profile_result =
-        generate_document_profile_with_llm(processor, document_id, document_ir, &chunks, filename)
+        generate_document_profile_with_llm(processor, document_id, document_ir, chunks, filename)
             .await;
-    let toc_entries = profile_result.toc_entries;
-    if !toc_entries.is_empty() {
+    if !profile_result.toc_entries.is_empty() {
         ensure_ingestion_side_effects_allowed(
             &processor.repo,
             context,
@@ -348,12 +431,16 @@ async fn stage_materialize_chunks_assets_profile(
         if let Err(error) = processor
             .repo
             .bootstrap()
-            .replace_document_toc(context, notebook_id, document_id, &toc_entries)
+            .replace_document_toc(context, notebook_id, document_id, &profile_result.toc_entries)
             .await
         {
             info!(document_id = %document_id, error = %error, "failed to write document toc");
         } else {
-            info!(document_id = %document_id, toc_count = toc_entries.len(), "document toc written");
+            info!(
+                document_id = %document_id,
+                toc_count = profile_result.toc_entries.len(),
+                "document toc written"
+            );
         }
     }
     if let Some(profile_metadata) = profile_result.profile_metadata {
@@ -380,7 +467,25 @@ async fn stage_materialize_chunks_assets_profile(
             info!(document_id = %document_id, error = %error, "failed to write document profile metadata");
         }
     }
+    Ok(())
+}
 
+async fn persist_document_assets(
+    processor: &PgTaskProcessor,
+    task: &IngestionTask,
+    context: &AuthContext,
+    notebook_id: Uuid,
+    document_id: Uuid,
+    parse_run_id: Uuid,
+    document_ir: &DocumentIr,
+    parse_run_state: &mut ParseRunState,
+) -> Result<
+    (
+        std::collections::HashMap<String, Uuid>,
+        std::collections::HashMap<String, Option<String>>,
+    ),
+    IngestionError,
+> {
     let mut asset_uuid_by_ref = std::collections::HashMap::new();
     let mut stored_asset_path_by_ref = std::collections::HashMap::new();
 
@@ -421,7 +526,7 @@ async fn stage_materialize_chunks_assets_profile(
             processor.asset_url_ttl_secs,
         )
         .await
-        .map_err(|error| IngestionError::storage(error))?;
+        .map_err(|error| IngestionError::storage_object(error))?;
         if stored_image_path.is_some() {
             parse_run_state.outputs.mirrored_asset_count += 1;
         }
@@ -468,11 +573,25 @@ async fn stage_materialize_chunks_assets_profile(
                 .object_store
                 .delete(&stored_asset_object_key)
                 .await;
-            return Err(IngestionError::storage(error));
+            return Err(IngestionError::storage_database(error));
         }
         stored_asset_path_by_ref.insert(asset.asset_id.clone(), stored_image_path.clone());
     }
+    Ok((asset_uuid_by_ref, stored_asset_path_by_ref))
+}
 
+async fn persist_multimodal_chunks(
+    processor: &PgTaskProcessor,
+    task: &IngestionTask,
+    context: &AuthContext,
+    notebook_id: Uuid,
+    document_id: Uuid,
+    parse_run_id: Uuid,
+    chunk_plan: &ingestion::chunker::IrChunkPlan,
+    asset_uuid_by_ref: &std::collections::HashMap<String, Uuid>,
+    stored_asset_path_by_ref: &std::collections::HashMap<String, Option<String>>,
+    parse_run_state: &mut ParseRunState,
+) -> Result<Vec<StoredMultimodalChunk>, IngestionError> {
     ensure_ingestion_side_effects_allowed(
         &processor.repo,
         context,
@@ -593,21 +712,7 @@ async fn stage_materialize_chunks_assets_profile(
             )),
         });
     }
-
-    maybe_enrich_visual_multimodal_summaries(
-        processor,
-        &mut stored_multimodal_chunks,
-        &mut parse_run_state.outputs,
-    )
-    .await;
-
-
-    Ok(MaterializeOutput {
-        content,
-        processed_chunk_count,
-        chunks,
-        stored_multimodal_chunks,
-    })
+    Ok(stored_multimodal_chunks)
 }
 
 async fn stage_build_and_replace_retrieval_index(
