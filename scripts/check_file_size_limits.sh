@@ -26,7 +26,7 @@ files=(
   avrag-rs/crates/agent-tools/src/catalog.rs
   avrag-rs/crates/app-bootstrap/src/app_state/e2e_upload_helpers.rs
   avrag-rs/crates/app-bootstrap/src/app_state/state_methods.rs
-  avrag-rs/crates/app-bootstrap/src/app_state/bound/mod.rs
+  avrag-rs/crates/app-bootstrap/src/product_apps/mod.rs
   frontend_next/lib/workspace/client.ts
   frontend_next/components/admin/i18n/copy.ts
   frontend_next/components/admin/ops/feature-flags-surface.tsx

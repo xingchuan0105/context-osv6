@@ -70,7 +70,7 @@ pub(crate) async fn execute_query_tool(
         format_hint: None,
     };
     expand_external_workspace_rag_scope(state, &workspace_id_str, &mut req).await?;
-    let response = state.chat().execute_chat(req).await?;
+    let response = state.agent().chat().execute_chat(req).await?;
     Ok(super::super::catalog::success_result(
         tool_name,
         Some(&workspace_id_str),

@@ -45,7 +45,7 @@ pub(crate) async fn runtime_execute_handler(
     if let Err(error) = authorize_api_key_query_scoped(state.auth()) {
         return app_error_response(error);
     }
-    match state.chat().execute_runtime_tools(req).await {
+    match state.agent().chat().execute_runtime_tools(req).await {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -123,7 +123,7 @@ pub(crate) async fn chat_post_handler(
         );
     }
 
-    match state.chat().execute_chat(req).await {
+    match state.agent().chat().execute_chat(req).await {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(e) => {
             let event_name = chat_failure_event_name(&agent_type);

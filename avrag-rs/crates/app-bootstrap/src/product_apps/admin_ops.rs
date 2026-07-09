@@ -1,6 +1,6 @@
-//! Bound face — super-admin / ops console (AdminStorePort).
+//! Product App — AdminOps (ADR-0007) / ops console (AdminStorePort).
 //!
-//! Product handlers should use `state.admin_ops()`, not `state.admin_store()`.
+//! Product handlers should use `state.admin_ops() product App`, not `state.admin_store()`.
 
 use app_core::{
     AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview, AdminDegradationStatus,
@@ -12,12 +12,12 @@ use contracts::auth_runtime::{AuthContext, OrgId};
 use std::sync::Arc;
 use uuid::Uuid;
 
-pub struct BoundAdminOps<'a> {
+pub struct AdminOpsApp<'a> {
     pub(crate) auth: &'a AuthContext,
     pub(crate) store: Option<Arc<dyn AdminStorePort>>,
 }
 
-impl<'a> BoundAdminOps<'a> {
+impl<'a> AdminOpsApp<'a> {
     fn require_store(&self) -> Result<Arc<dyn AdminStorePort>, AppError> {
         self.store.clone().ok_or_else(|| {
             AppError::validation(

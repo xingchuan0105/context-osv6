@@ -1,4 +1,4 @@
-//! Bound face — billing.
+//! Product App — Billing (ADR-0007).
 
 use app_core::{BillingStorePort, StorageContext};
 use avrag_storage_pg::PgAppRepository;
@@ -8,13 +8,13 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 
-pub struct BoundBilling<'a> {
+pub struct BillingApp<'a> {
     pub(crate) auth: &'a AuthContext,
     pub(crate) storage: &'a StorageContext,
     pub(crate) postgres: Option<Arc<PgAppRepository>>,
 }
 
-impl<'a> BoundBilling<'a> {
+impl<'a> BillingApp<'a> {
     fn billing_store(&self) -> Option<Arc<dyn BillingStorePort>> {
         self.storage.billing_store()
     }

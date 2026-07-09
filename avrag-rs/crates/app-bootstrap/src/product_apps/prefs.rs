@@ -1,4 +1,4 @@
-//! Bound face — prefs.
+//! Product App — Prefs (ADR-0007).
 
 use app_core::StorageContext;
 use contracts::auth_runtime::AuthContext;
@@ -7,13 +7,13 @@ use contracts::UserPreferences;
 use uuid::Uuid;
 
 
-pub struct BoundPrefs<'a> {
+pub struct PrefsApp<'a> {
     pub(crate) admin: &'a app_admin::AdminContext,
     pub(crate) auth: &'a AuthContext,
     pub(crate) storage: &'a StorageContext,
 }
 
-impl<'a> BoundPrefs<'a> {
+impl<'a> PrefsApp<'a> {
     pub async fn load(&self, user_id: Uuid) -> Result<UserPreferences, common::AppError> {
         self.admin
             .load_user_preferences(self.auth, self.storage, user_id)

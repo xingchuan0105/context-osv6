@@ -1,5 +1,11 @@
 mod adapters;
 mod app_state;
+mod product_apps;
+
+pub use product_apps::{
+    AdminApp, AdminOpsApp, AgentApp, BillingApp, PrefsApp, ShareApp, WorkspaceApp, WriteApp,
+    WorkspaceApiKeyAuth,
+};
 mod config_helpers;
 mod domain_row_convert;
 mod pg_error;

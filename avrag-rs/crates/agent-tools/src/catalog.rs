@@ -57,6 +57,12 @@ impl ToolCatalog {
         let mut tools = HashMap::new();
         let skill_reg = builtin_registry_cached();
         for skill in skill_reg.iter() {
+            // Write refine control-loop tools are owned by WriteApp / WriteRefineLoopRunner
+            // (ADR-0007 T2). They stay in SkillRegistry for Write mode disclosure only,
+            // never as UnifiedAgent ReAct ToolCatalog entries.
+            if skill.id().starts_with("write_refine") {
+                continue;
+            }
             let meta = meta_from_skill(skill);
             tools.insert(
                 skill.id().to_string(),
@@ -215,5 +221,28 @@ mod tests {
         let calc = cat.tool_meta("calculator").expect("calculator");
         assert_eq!(calc.id, "calculator");
         assert!(calc.input_schema.get("properties").is_some() || calc.input_schema.is_object());
+    }
+
+    #[test]
+    fn write_refine_not_in_react_tool_catalog() {
+        let cat = ToolCatalog::standard_cached();
+        for id in [
+            "write_refine_revise",
+            "write_refine_research",
+            "write_refine_finish",
+            "write_refine_lexical",
+        ] {
+            assert!(
+                cat.get(id).is_none(),
+                "{id} must not be in ToolCatalog (WriteApp control ring only)"
+            );
+        }
+        // Still available for Write mode meta via skill registry, not catalog dispatch.
+        assert!(
+            cat.skill_registry()
+                .get("write_refine_revise")
+                .is_some(),
+            "skill registry keeps write_refine for WriteApp disclosure"
+        );
     }
 }

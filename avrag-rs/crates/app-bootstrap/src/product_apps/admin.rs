@@ -1,4 +1,4 @@
-//! Bound face — admin.
+//! Product App — Admin API keys (ADR-0007).
 
 use app_core::StorageContext;
 use avrag_storage_pg::PgAppRepository;
@@ -8,14 +8,14 @@ use std::sync::Arc;
 
 use super::WorkspaceApiKeyAuth;
 
-pub struct BoundAdmin<'a> {
+pub struct AdminApp<'a> {
     pub(crate) admin: &'a app_admin::AdminContext,
     pub(crate) auth: &'a AuthContext,
     pub(crate) storage: &'a StorageContext,
     pub(crate) postgres: Option<Arc<PgAppRepository>>,
 }
 
-impl<'a> BoundAdmin<'a> {
+impl<'a> AdminApp<'a> {
     pub async fn validate_workspace_api_key(
         &self,
         plaintext_key: &str,

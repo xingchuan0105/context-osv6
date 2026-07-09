@@ -2,7 +2,6 @@ mod state_types;
 pub use state_types::*;
 mod state_methods;
 pub use state_methods::CostEventRecord;
-mod bound;
 mod asset_helpers;
 mod memory_helpers;
 mod e2e_upload_helpers;

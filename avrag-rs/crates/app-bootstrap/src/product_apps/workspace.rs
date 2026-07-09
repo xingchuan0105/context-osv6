@@ -1,11 +1,11 @@
-//! Bound face — documents.
+//! Product App — Workspace (ADR-0007).
 
 use app_core::{AnalyticsServiceCtx, StorageContext};
 use contracts::auth_runtime::AuthContext;
 use futures::Stream;
 
 
-pub struct BoundDocuments<'a> {
+pub struct WorkspaceApp<'a> {
     pub(crate) docs: &'a app_documents::DocumentContext,
     pub(crate) auth: &'a AuthContext,
     pub(crate) storage: &'a StorageContext,
@@ -13,7 +13,7 @@ pub struct BoundDocuments<'a> {
     pub(crate) analytics: &'a AnalyticsServiceCtx,
 }
 
-impl<'a> BoundDocuments<'a> {
+impl<'a> WorkspaceApp<'a> {
     pub async fn list_workspaces(&self) -> Vec<contracts::workspaces::Workspace> {
         self.docs
             .list_workspaces(self.auth, self.storage)

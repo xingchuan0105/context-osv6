@@ -1,4 +1,4 @@
-//! Bound face — share.
+//! Product App — Share (ADR-0007).
 
 use app_core::{ShareStorePort, StorageContext};
 use contracts::auth_runtime::AuthContext;
@@ -6,13 +6,13 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 
-pub struct BoundShare<'a> {
+pub struct ShareApp<'a> {
     pub(crate) auth: &'a AuthContext,
     pub(crate) storage: &'a StorageContext,
     pub(crate) docs: &'a app_documents::DocumentContext,
 }
 
-impl<'a> BoundShare<'a> {
+impl<'a> ShareApp<'a> {
     fn require_store(&self) -> Result<Arc<dyn ShareStorePort>, common::AppError> {
         self.storage
             .share_store()

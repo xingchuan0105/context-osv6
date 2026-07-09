@@ -48,9 +48,9 @@ impl AppState {
         &self.auth
     }
 
-    // --- Product path (W2): use Bound faces on AppState ---
+    // --- Product path (W2): use product Apps on AppState ---
     // Prefer: chat() / docs() / admin_api() / admin_ops() / share() / prefs() / billing_api()
-    // (see `bound/mod.rs`). The raw domain/context accessors below are for
+    // (see `product_apps/`). The raw domain/context accessors below are for
     // bootstrap, middleware, and tests — not for new product handlers.
 
     /// Chat domain context (sessions / RAG orchestration). Prefer for product paths.
@@ -68,7 +68,7 @@ impl AppState {
         &self.admin
     }
 
-    /// Storage / ports container (infra). Prefer Bound faces for product work.
+    /// Storage / ports container (infra). Prefer product Apps for product work.
     pub fn storage(&self) -> &app_core::StorageContext {
         &self.storage
     }
@@ -126,7 +126,7 @@ impl AppState {
         self.storage.billing_store()
     }
 
-    /// Infra: raw share store. Prefer `share()` (includes `check_access`).
+    /// Infra: raw share store. Prefer `share()` product App (includes `check_access`).
     pub fn share_store(&self) -> Option<Arc<dyn ShareStorePort>> {
         self.storage.share_store()
     }

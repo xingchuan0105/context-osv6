@@ -46,10 +46,16 @@ impl CapabilityRegistry {
         STANDARD_REGISTRY.get_or_init(Self::standard)
     }
 
-    /// Look up a tool by id (unified catalog only).
+    /// Look up a tool by id.
+    ///
+    /// Prefer ReAct [`ToolCatalog`]. Write-control tools (`write_refine_*`) are **not**
+    /// in that catalog (ADR-0007); their disclosure meta comes from SkillRegistry only.
     pub fn tool(&self, id: &str) -> Option<&ToolMetadata> {
-        let _ = self; // modes/skills only; tools are process-global catalog
-        ToolCatalog::standard_cached().tool_meta(id)
+        let _ = self;
+        if let Some(m) = ToolCatalog::standard_cached().tool_meta(id) {
+            return Some(m);
+        }
+        write_control_tool_meta(id)
     }
 
     /// Look up a skill by id.
@@ -136,6 +142,42 @@ impl CapabilityRegistry {
 // ---------------------------------------------------------------------------
 // Helpers: convert v4 types into v5 metadata
 // ---------------------------------------------------------------------------
+
+/// WriteApp control-ring tool meta (not in ToolCatalog / UnifiedAgent ReAct).
+fn write_control_tool_meta(id: &str) -> Option<&'static ToolMetadata> {
+    use std::sync::OnceLock;
+    static MAP: OnceLock<HashMap<String, ToolMetadata>> = OnceLock::new();
+    let map = MAP.get_or_init(|| {
+        let mut m = HashMap::new();
+        let reg = crate::skills::builtin_registry_cached();
+        for skill in reg.iter() {
+            if !skill.id().starts_with("write_refine") {
+                continue;
+            }
+            let spec = skill.spec();
+            m.insert(
+                skill.id().to_string(),
+                ToolMetadata {
+                    id: spec.name.clone(),
+                    version: spec.version.clone(),
+                    owner: "write-control".to_string(),
+                    description: spec.description.clone(),
+                    input_schema: spec.input_schema.clone(),
+                    output_schema: spec.output_schema.clone(),
+                    risk_level: super::RiskLevel::Medium,
+                    permissions: Vec::new(),
+                    external_deps: vec![],
+                    deprecation: None,
+                    retry_policy: super::RetryPolicy::default(),
+                    activation_phase: ActivationPhase::PlanAndEvaluate,
+                    applicable_strategies: vec!["write".into()],
+                },
+            );
+        }
+        m
+    });
+    map.get(id)
+}
 
 /// ADR-0007 §8.8 retired skills — excluded from default registry catalog.
 ///
@@ -318,9 +360,14 @@ mod tests {
     fn standard_registry_loads_prompt_skills_and_catalog_tools() {
         let registry = CapabilityRegistry::standard();
         // Tools come solely from ToolCatalog (skills + RAG), not a second map.
+        // write_refine_* excluded from ReAct ToolCatalog (WriteApp control ring).
         assert!(
-            registry.tool_count() >= 8 + crate::catalog::RAG_TOOL_IDS.len(),
-            "catalog tools (builtins + RAG)"
+            registry.tool_count() >= 6 + crate::catalog::RAG_TOOL_IDS.len(),
+            "catalog tools (non-write builtins + RAG)"
+        );
+        assert!(
+            registry.tool("write_refine_revise").is_some(),
+            "write control meta still resolvable for WriteApp disclosure"
         );
         assert!(registry.tool("web_search").is_some());
         assert!(registry.tool("web_fetch").is_some());

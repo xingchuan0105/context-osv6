@@ -1,6 +1,6 @@
 //! Workspace share / collab HTTP handlers.
 //!
-//! Business logic lives in `avrag_share::ShareService` (via `state.share()`).
+//! Business logic lives in `avrag_share::ShareService` (via ShareApp (`state.share()`)).
 //! This module only enforces auth/session guards and maps results to HTTP.
 
 use app_bootstrap::AppState;
