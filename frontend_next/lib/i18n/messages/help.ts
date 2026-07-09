@@ -9,6 +9,10 @@ export const helpMessages = {
     zh: "返回 Dashboard",
     en: "Back to dashboard",
   },
+  helpBackHelp: {
+    zh: "返回帮助中心",
+    en: "Back to help",
+  },
   helpItemAccount1: {
     zh: "支持注册、登录、重置密码与退出登录。",
     en: "Registration, sign-in, password reset, and sign-out are all supported.",
@@ -136,6 +140,26 @@ export const helpMessages = {
   helpSectionWorkspaceTitle: {
     zh: "2. 工作区与会话",
     en: "2. Workspaces & sessions",
+  },
+  helpSectionWriteTitle: {
+    zh: "Write 模式",
+    en: "Write mode",
+  },
+  helpItemWrite1: {
+    zh: "输入主题后自动调研、生成大纲并分段撰写长文。",
+    en: "Enter a topic to auto-research, outline, and draft a long-form article in sections.",
+  },
+  helpItemWrite2: {
+    zh: "支持统计指纹精修，降低 AI 生成痕迹。",
+    en: "Includes statistical-fingerprint refinement to reduce detectable AI patterns.",
+  },
+  helpItemWrite3: {
+    zh: "单路调研失败时会自动降级为单路模式。",
+    en: "Falls back to single-path research when one research path fails.",
+  },
+  helpItemWriteDocs: {
+    zh: "查看 Write 模式文档",
+    en: "Read Write mode documentation",
   },
   helpSubtitle: {
     zh: "按 Wiki 方式整理 Context-OS 的核心工作流、API 能力边界，以及出现问题时的优先排查路径。",
