@@ -117,14 +117,6 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         country: config.search.country.clone(),
         freshness: config.search.freshness.clone(),
     })));
-    let agent_service = Some(build_unified_agent_service(
-        llm_ctx.agent_client().cloned(),
-        search_executor.clone(),
-        None,
-        None,
-        None,
-        &config.prompts.dir,
-    ));
     let object_store: Arc<dyn app_core::ObjectStorePort> =
         Arc::new(ObjectStorePortAdapter::new(Arc::new(
             ObjectStoreHandle::local(PathBuf::from(config.object_root.clone())),
@@ -135,6 +127,9 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
     let document_store: Option<Arc<dyn app_core::DocumentStorePort>> = Some(Arc::new(
         app_core::MemoryDocumentStore::new(memory_state.clone()),
     ));
+    let chat_persistence: Option<Arc<dyn ChatPersistencePort>> = Some(Arc::new(
+        app_core::MemoryChatPersistence::new(memory_state.clone()),
+    ));
     let admin_store: Option<Arc<dyn app_core::AdminStorePort>> = Some(Arc::new(
         app_core::MemoryAdminStore::new(
             memory_state.clone(),
@@ -144,6 +139,14 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
     ));
     let billing_quota: Option<Arc<dyn app_core::BillingQuotaPort>> =
         Some(Arc::new(app_core::MemoryBillingQuotaPort));
+    let agent_service = Some(build_unified_agent_service(
+        llm_ctx.agent_client().cloned(),
+        search_executor.clone(),
+        None,
+        chat_persistence.clone(),
+        None,
+        &config.prompts.dir,
+    ));
     let storage = StorageContext::from_parts(StorageContextParts {
         infra: StorageInfra {
             postgres_health: None,
@@ -158,7 +161,7 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
             billing_quota,
             billing_store: None,
             share_store: None,
-            chat_persistence: None,
+            chat_persistence,
         },
         memory: MemoryStateHandles {
             inner: memory_state,
