@@ -4,9 +4,12 @@
 //! - [`runtime`] — `AgentRequest`, `AgentRunResult`, `Agent` trait
 //! - [`events`] — `AgentEvent` / sinks
 //! - [`helpers`] — citation/codegen helpers used by the loop
+//! - [`untrusted_input`] — scrub untrusted tool / observation text
 //!
 //! Tool execution stays in [`agent_tools`]. Orchestration (chat pipeline,
-//! UnifiedAgent shell) remains in `app-chat` and re-exports this crate.
+//! UnifiedAgent shell) remains in `app-chat`.
+//!
+//! Extension guide: crate-level `EXTENDING.md` (next to this crate’s `Cargo.toml`).
 
 #![recursion_limit = "256"]
 

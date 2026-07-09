@@ -1,6 +1,12 @@
 // Large async agent layouts (UnifiedAgent / ReActLoop) exceed default query depth on rustc 1.96.
 #![recursion_limit = "256"]
 
+//! Chat product orchestrator: sessions, pipeline, UnifiedAgent shell, writer glue.
+//!
+//! - Loop platform: [`agent_loop`] (see `agent-loop/EXTENDING.md`)
+//! - Tools: [`agent_tools`] (`ToolCatalog` / `dispatch_tool` only)
+//! - Do not re-grow tool match arms or loop forks in this crate.
+
 pub mod agent_runtime;
 pub mod agents;
 pub mod chat;
@@ -8,6 +14,7 @@ pub mod chat_private;
 pub mod chat_streaming;
 pub mod citations;
 pub mod context;
+/// Eval harness lives in `agent_loop`; re-export only when the `eval` feature is on.
 #[cfg(feature = "eval")]
 pub use agent_loop::eval;
 pub mod i18n;

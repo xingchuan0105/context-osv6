@@ -39,6 +39,10 @@
 | **TN-2.3** workspace JSON envelope + typeshare | Done |
 | **TN-2.4** progressive `disclosure_catalog` | Done |
 | **W2** AppState Bound 纪律（admin_ops / share.check_access） | Done |
+| **W3** transport-http 测试巨石拆分 | Done（`lib_impl/tests/*`） |
+| **W4** Profile 强类型 + Chat/Search 范围文档 | Done |
+| **W5** Admin ops `shared.ts` 真共享 | Done |
+| **W6** Loop 扩展文档 + app-chat thin 边界 | Done（`agent-loop/EXTENDING.md`） |
 
 ---
 
@@ -80,7 +84,9 @@ pnpm -C frontend_next exec tsc --noEmit
 |----|------|
 | C4 | **明确不做**（产品分层） |
 | `frontend_rust` | 范围外（契约字段改动时需自行对齐） |
-| TN-2 B5–B10 | profile Value、测试巨石、crate 再瘦、admin ops 真共享… |
+| TN-2 B5–B10 | **W3–W6 已收口**（测试拆分 / profile 强类型 / ops shared / loop 扩展文档） |
+| storage-pg 测试巨石再拆 | 可选；HTTP 侧已拆 |
+| 类型名 Notebook→Workspace 残余 | 可选 rename |
 | CI 挂 file-size gate | solo 默认定向本地 |
 
 ---
@@ -92,3 +98,4 @@ pnpm -C frontend_next exec tsc --noEmit
 | 2026-07-09 | Wave 0–6 主体 + 再收口 |
 | 2026-07-09 | 产品补裁 §5a；P0–P7 可选全量落地；handoff **Done** |
 | 2026-07-09 | **TN-2**：删 atomic_tools；list_catalog_tools；workspace envelope；disclosure_catalog |
+| 2026-07-09 | **W3–W6**：HTTP 测试拆分；Profile 强类型；admin ops shared；loop EXTENDING + app-chat thin |

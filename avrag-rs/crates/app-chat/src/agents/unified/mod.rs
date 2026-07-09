@@ -1,10 +1,10 @@
 //! UnifiedAgent — single agent implementation that routes between
 //! Chat / RAG / Search modes via `AgentRequest.kind`.
 //!
-//! v6 (ADR-0006): Chat / RAG / Search route through the unified `ReActLoop`
-//! (`crate::agents::loop`). Differences between modes are expressed through
-//! YAML `ModeConfig` files (`modes/chat.yaml`, `modes/rag.yaml`, `modes/search.yaml`)
-//! rather than independent Strategy state machines.
+//! v6 (ADR-0006): Chat / RAG / Search route through `agent_loop::ReActLoop`.
+//! Differences between modes are expressed through YAML `ModeConfig` files
+//! (`modes/chat.yaml`, `modes/rag.yaml`, `modes/search.yaml`) rather than
+//! independent Strategy state machines. Tool execute stays in `agent_tools`.
 //!
 //! # Write mode (intentional split)
 //!
@@ -30,9 +30,6 @@ use avrag_search::SearchProvider;
 use common::AppError;
 use std::sync::Arc;
 use uuid::Uuid;
-
-pub use agent_loop::helpers;
-pub use agent_tools::weather;
 
 /// Unified agent that dispatches to Chat / RAG / Search based on `request.kind`.
 pub struct UnifiedAgent {
