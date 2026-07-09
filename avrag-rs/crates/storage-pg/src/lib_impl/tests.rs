@@ -43,6 +43,30 @@ mod tests {
         tx.commit().await.unwrap();
     }
 
+
+    async fn count_document_assets_for_org(
+        repo: &PgAppRepository,
+        org_id: Uuid,
+        document_id: Uuid,
+    ) -> i64 {
+        let mut tx = repo.raw().begin().await.unwrap();
+        sqlx::query("select set_config('app.current_org', $1, true)")
+            .bind(org_id.to_string())
+            .execute(tx.as_mut())
+            .await
+            .unwrap();
+        let row = sqlx::query(
+            "select count(*)::bigint as c from document_assets where org_id = $1 and document_id = $2",
+        )
+        .bind(org_id)
+        .bind(document_id)
+        .fetch_one(tx.as_mut())
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        row.try_get("c").unwrap()
+    }
+
     async fn count_document_blocks_for_org(
         repo: &PgAppRepository,
         org_id: Uuid,
@@ -396,11 +420,19 @@ mod tests {
             }
         );
 
-        let claimed = repo
-            .ingestion_queue().claim_next_document_cleanup_task("cleanup-test-worker", Some(60))
-            .await
-            .unwrap()
-            .expect("cleanup task should be claimed");
+        let mut claimed = None;
+        for _ in 0..20 {
+            let next = repo
+                .ingestion_queue().claim_next_document_cleanup_task("cleanup-test-worker", Some(60))
+                .await
+                .unwrap();
+            let Some(task) = next else { break };
+            if task.document_id == document_id {
+                claimed = Some(task);
+                break;
+            }
+        }
+        let claimed = claimed.expect("cleanup task for our document should be claimed");
         assert_eq!(claimed.org_id, org_id.into_uuid());
         assert_eq!(claimed.workspace_id, workspace_id);
         assert_eq!(claimed.document_id, document_id);
@@ -438,28 +470,61 @@ mod tests {
             DocumentCleanupTaskFailureOutcome::Requeued
         );
 
-        let deletion_error = sqlx::query("select deletion_error from documents where id = $1")
-            .bind(document_id)
-            .fetch_one(repo.raw())
-            .await
-            .unwrap()
-            .try_get::<Option<String>, _>("deletion_error")
-            .unwrap();
+        let deletion_error = {
+            let mut tx = repo.raw().begin().await.unwrap();
+            sqlx::query("select set_config('app.current_org', $1, true)")
+                .bind(org_id.into_uuid().to_string())
+                .execute(tx.as_mut())
+                .await
+                .unwrap();
+            let row = sqlx::query("select deletion_error from documents where id = $1")
+                .bind(document_id)
+                .fetch_one(tx.as_mut())
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+            row.try_get::<Option<String>, _>("deletion_error").unwrap()
+        };
         assert_eq!(deletion_error.as_deref(), Some("cleanup transient failure"));
 
-        sqlx::query("update document_cleanup_tasks set available_at = now() where task_id = $1")
-            .bind(claimed.task_id)
-            .execute(repo.raw())
-            .await
-            .unwrap();
-        let claimed = repo
-            .ingestion_queue().claim_next_document_cleanup_task("cleanup-test-worker", Some(60))
-            .await
-            .unwrap()
-            .expect("cleanup task should be claimed again");
+        {
+            let mut tx = repo.raw().begin().await.unwrap();
+            sqlx::query("select set_config('app.document_cleanup_worker', 'true', true)")
+                .execute(tx.as_mut())
+                .await
+                .unwrap();
+            sqlx::query("update document_cleanup_tasks set available_at = now() where task_id = $1")
+                .bind(claimed.task_id)
+                .execute(tx.as_mut())
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+        }
+        let mut claimed_again = None;
+        for _ in 0..20 {
+            let next = repo
+                .ingestion_queue()
+                .claim_next_document_cleanup_task("cleanup-test-worker", Some(60))
+                .await
+                .unwrap();
+            let Some(task) = next else {
+                break;
+            };
+            if task.task_id == claimed.task_id {
+                claimed_again = Some(task);
+                break;
+            }
+        }
+        let claimed = claimed_again.expect("cleanup task should be claimed again");
         let lock_token = claimed.lock_token.expect("claim must return lock token");
 
         let parse_run_id = Uuid::new_v4();
+        let mut seed_tx = repo.raw().begin().await.unwrap();
+        sqlx::query("select set_config('app.current_org', $1, true)")
+            .bind(org_id.into_uuid().to_string())
+            .execute(seed_tx.as_mut())
+            .await
+            .unwrap();
         sqlx::query(
             r#"
             insert into document_parse_runs (
@@ -473,7 +538,7 @@ mod tests {
         .bind(document_id)
         .bind(serde_json::json!({"test": true}))
         .bind("artifact/key")
-        .execute(repo.raw())
+        .execute(seed_tx.as_mut())
         .await
         .unwrap();
         sqlx::query(
@@ -485,7 +550,7 @@ mod tests {
         .bind(org_id.into_uuid())
         .bind(document_id)
         .bind(parse_run_id)
-        .execute(repo.raw())
+        .execute(seed_tx.as_mut())
         .await
         .unwrap();
         sqlx::query(
@@ -501,7 +566,7 @@ mod tests {
         .bind(workspace_id)
         .bind(document_id)
         .bind(parse_run_id)
-        .execute(repo.raw())
+        .execute(seed_tx.as_mut())
         .await
         .unwrap();
         sqlx::query(
@@ -516,7 +581,7 @@ mod tests {
         .bind(workspace_id)
         .bind(document_id)
         .bind(parse_run_id)
-        .execute(repo.raw())
+        .execute(seed_tx.as_mut())
         .await
         .unwrap();
         sqlx::query(
@@ -532,11 +597,18 @@ mod tests {
         .bind(workspace_id)
         .bind(document_id)
         .bind(parse_run_id)
-        .execute(repo.raw())
+        .execute(seed_tx.as_mut())
         .await
         .unwrap();
+        seed_tx.commit().await.unwrap();
 
         let wrong_parse_run_id = Uuid::new_v4();
+        let mut other_tx = repo.raw().begin().await.unwrap();
+        sqlx::query("select set_config('app.current_org', $1, true)")
+            .bind(other_org_id.into_uuid().to_string())
+            .execute(other_tx.as_mut())
+            .await
+            .unwrap();
         sqlx::query(
             r#"
             insert into document_parse_runs (
@@ -548,7 +620,7 @@ mod tests {
         .bind(other_org_id.into_uuid())
         .bind(other_workspace_id)
         .bind(document_id)
-        .execute(repo.raw())
+        .execute(other_tx.as_mut())
         .await
         .unwrap();
         sqlx::query(
@@ -560,7 +632,7 @@ mod tests {
         .bind(other_org_id.into_uuid())
         .bind(document_id)
         .bind(wrong_parse_run_id)
-        .execute(repo.raw())
+        .execute(other_tx.as_mut())
         .await
         .unwrap();
         sqlx::query(
@@ -576,7 +648,7 @@ mod tests {
         .bind(other_workspace_id)
         .bind(document_id)
         .bind(wrong_parse_run_id)
-        .execute(repo.raw())
+        .execute(other_tx.as_mut())
         .await
         .unwrap();
         sqlx::query(
@@ -591,7 +663,7 @@ mod tests {
         .bind(other_workspace_id)
         .bind(document_id)
         .bind(wrong_parse_run_id)
-        .execute(repo.raw())
+        .execute(other_tx.as_mut())
         .await
         .unwrap();
         sqlx::query(
@@ -607,9 +679,10 @@ mod tests {
         .bind(other_workspace_id)
         .bind(document_id)
         .bind(wrong_parse_run_id)
-        .execute(repo.raw())
+        .execute(other_tx.as_mut())
         .await
         .unwrap();
+        other_tx.commit().await.unwrap();
 
         let targets = repo
             .chunks().get_document_cleanup_targets(&ctx, document_id, &claimed.payload)
@@ -641,24 +714,38 @@ mod tests {
             let sql = format!(
                 "select count(*)::bigint as c from {table} where org_id = $1 and document_id = $2"
             );
+            let mut tx = repo.raw().begin().await.unwrap();
+            sqlx::query("select set_config('app.current_org', $1, true)")
+                .bind(org_id.into_uuid().to_string())
+                .execute(tx.as_mut())
+                .await
+                .unwrap();
             let count = sqlx::query(&sql)
                 .bind(org_id.into_uuid())
                 .bind(document_id)
-                .fetch_one(repo.raw())
+                .fetch_one(tx.as_mut())
                 .await
                 .unwrap()
                 .try_get::<i64, _>("c")
                 .unwrap();
+            tx.commit().await.unwrap();
             assert_eq!(count, 0, "{table} should be cleaned for owning tenant");
 
+            let mut tx = repo.raw().begin().await.unwrap();
+            sqlx::query("select set_config('app.current_org', $1, true)")
+                .bind(other_org_id.into_uuid().to_string())
+                .execute(tx.as_mut())
+                .await
+                .unwrap();
             let wrong_count = sqlx::query(&sql)
                 .bind(other_org_id.into_uuid())
                 .bind(document_id)
-                .fetch_one(repo.raw())
+                .fetch_one(tx.as_mut())
                 .await
                 .unwrap()
                 .try_get::<i64, _>("c")
                 .unwrap();
+            tx.commit().await.unwrap();
             assert_eq!(wrong_count, 1, "{table} wrong-tenant row should remain");
         }
         assert_eq!(
@@ -703,6 +790,12 @@ mod tests {
             .await
             .unwrap();
         let document_id = Uuid::parse_str(&document.id).unwrap();
+        let mut tx = repo.raw().begin().await.unwrap();
+        sqlx::query("select set_config('app.current_org', $1, true)")
+            .bind(org_id.into_uuid().to_string())
+            .execute(tx.as_mut())
+            .await
+            .unwrap();
         sqlx::query(
             r#"
             insert into document_assets (
@@ -715,9 +808,10 @@ mod tests {
         .bind(org_id.into_uuid())
         .bind(workspace_id)
         .bind(document_id)
-        .execute(repo.raw())
+        .execute(tx.as_mut())
         .await
         .unwrap();
+        tx.commit().await.unwrap();
 
         let payload = serde_json::json!({"object_path": "must/not/delete.txt"});
         assert!(
@@ -732,16 +826,7 @@ mod tests {
                 .await
                 .unwrap()
         );
-        let remaining = sqlx::query(
-            "select count(*)::bigint as c from document_assets where org_id = $1 and document_id = $2",
-        )
-        .bind(org_id.into_uuid())
-        .bind(document_id)
-        .fetch_one(repo.raw())
-        .await
-        .unwrap()
-        .try_get::<i64, _>("c")
-        .unwrap();
+        let remaining = count_document_assets_for_org(&repo, org_id.into_uuid(), document_id).await;
         assert_eq!(remaining, 1);
     }
 
@@ -1200,13 +1285,23 @@ mod tests {
         .await
         .unwrap();
 
-        let tokens_row: Option<(Option<String>,)> = sqlx::query_as(
-            "SELECT search_tokens FROM chat_messages WHERE session_id = $1 AND role = 'user' ORDER BY id DESC LIMIT 1",
-        )
-        .bind(session_a_id)
-        .fetch_optional(repo.raw())
-        .await
-        .unwrap();
+        let tokens_row: Option<(Option<String>,)> = {
+            let mut tx = repo.raw().begin().await.unwrap();
+            sqlx::query("select set_config('app.current_org', $1, true)")
+                .bind(org_id.into_uuid().to_string())
+                .execute(tx.as_mut())
+                .await
+                .unwrap();
+            let row = sqlx::query_as(
+                "SELECT search_tokens FROM chat_messages WHERE session_id = $1 AND role = 'user' ORDER BY id DESC LIMIT 1",
+            )
+            .bind(session_a_id)
+            .fetch_optional(tx.as_mut())
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+            row
+        };
         assert!(
             tokens_row
                 .and_then(|(t,)| t)

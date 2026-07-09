@@ -13,7 +13,7 @@
         let row = sqlx::query(
             r#"
             select owner_id, access_level
-            from notebooks
+            from workspaces
             where id = $1 and org_id = $2
             "#,
         )

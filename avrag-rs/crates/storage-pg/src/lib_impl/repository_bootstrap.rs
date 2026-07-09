@@ -63,7 +63,7 @@ impl BootstrapRepository {
         let row = sqlx::query(
             r#"
             select id, org_id, owner_id, title, description, created_at, updated_at
-            from notebooks
+            from workspaces
             where id = $1 and org_id = $2
             "#,
         )
@@ -110,7 +110,7 @@ impl BootstrapRepository {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
-            update notebooks
+            update workspaces
             set title = $2, description = $3, updated_at = now()
             where id = $1
             returning id, org_id, owner_id, title, description, created_at, updated_at

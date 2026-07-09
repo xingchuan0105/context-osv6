@@ -10,7 +10,7 @@ impl ChunkRepository {
         let rows = sqlx::query(
             r#"
             select id, org_id, owner_id, title, description, created_at, updated_at
-            from notebooks
+            from workspaces
             where (title ilike $1 or description ilike $1)
             order by updated_at desc, created_at desc
             limit 50

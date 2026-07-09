@@ -6,7 +6,7 @@ fn notebook_search_query_scopes_by_org_and_orders_by_updated_at() {
     let org_id = Uuid::from_u128(42);
     let sql = build_notebook_search_query(org_id, None);
 
-    assert!(sql.contains("\"notebooks\""));
+    assert!(sql.contains("\"workspaces\""));
     assert!(sql.contains("\"org_id\""));
     assert!(sql.contains(&org_id.to_string()));
     assert!(sql.contains("ORDER BY"));

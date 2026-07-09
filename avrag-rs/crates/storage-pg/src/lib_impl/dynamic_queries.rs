@@ -2,7 +2,8 @@ use super::*;
 use sea_query::{Iden, PostgresQueryBuilder, Query};
 
 #[derive(Iden)]
-pub enum Notebooks {
+#[iden = "workspaces"]
+pub enum Workspaces {
     Table,
     Id,
     OrgId,
@@ -16,15 +17,15 @@ pub fn build_notebook_search_query(
 ) -> String {
     let mut query = Query::select();
     query
-        .columns([Notebooks::Id, Notebooks::Title, Notebooks::UpdatedAt])
-        .from(Notebooks::Table)
-        .and_where(sea_query::Expr::col(Notebooks::OrgId).eq(org_id));
+        .columns([Workspaces::Id, Workspaces::Title, Workspaces::UpdatedAt])
+        .from(Workspaces::Table)
+        .and_where(sea_query::Expr::col(Workspaces::OrgId).eq(org_id));
 
     if let Some(title) = title_filter {
-        query.and_where(sea_query::Expr::col(Notebooks::Title).like(format!("%{}%", title)));
+        query.and_where(sea_query::Expr::col(Workspaces::Title).like(format!("%{}%", title)));
     }
 
-    query.order_by(Notebooks::UpdatedAt, sea_query::Order::Desc);
+    query.order_by(Workspaces::UpdatedAt, sea_query::Order::Desc);
 
     query.to_string(PostgresQueryBuilder)
 }

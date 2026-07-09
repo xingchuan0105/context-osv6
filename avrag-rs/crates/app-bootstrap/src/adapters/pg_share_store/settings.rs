@@ -105,7 +105,7 @@
         set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
         sqlx::query(
             r#"
-            update notebooks
+            update workspaces
             set access_level = coalesce($2, access_level),
                 allow_download = coalesce($3, allow_download),
                 updated_at = now()
