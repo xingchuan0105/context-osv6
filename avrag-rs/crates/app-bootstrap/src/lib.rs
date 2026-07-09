@@ -332,8 +332,15 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         Arc::new(PgHealthAdapter::new(repo.clone())) as Arc<dyn app_core::PostgresHealthPort>
     });
     let uses_memory_adapters = pg.is_none();
-    let document_store: Option<Arc<dyn DocumentStorePort>> = pg.as_ref().map(|repository| {
-        Arc::new(PgDocumentStoreAdapter::new(repository.clone())) as Arc<dyn DocumentStorePort>
+    // Always install a document store: PG adapter when available, otherwise memory.
+    // Domain code must not dual-path on Option — memory is an adapter, not a control-flow mode.
+    let memory_state = Arc::new(RwLock::new(MemoryState::default()));
+    let document_store: Option<Arc<dyn DocumentStorePort>> = Some(match pg.as_ref() {
+        Some(repository) => {
+            Arc::new(PgDocumentStoreAdapter::new(repository.clone())) as Arc<dyn DocumentStorePort>
+        }
+        None => Arc::new(app_core::MemoryDocumentStore::new(memory_state.clone()))
+            as Arc<dyn DocumentStorePort>,
     });
     let admin_store: Option<Arc<dyn AdminStorePort>> = pg.as_ref().map(|repository| {
         Arc::new(PgAdminStoreAdapter::new(repository.clone())) as Arc<dyn AdminStorePort>
@@ -341,10 +348,14 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     let auth_store: Option<Arc<dyn AuthStorePort>> = pg.as_ref().map(|repository| {
         Arc::new(PgAuthStoreAdapter::new(repository.clone())) as Arc<dyn AuthStorePort>
     });
-    let billing_quota: Option<Arc<dyn BillingQuotaPort>> = document_store.as_ref().map(|store| {
-        Arc::new(PgBillingQuotaAdapter::new(billing.clone(), store.clone()))
-            as Arc<dyn BillingQuotaPort>
-    });
+    let billing_quota: Option<Arc<dyn BillingQuotaPort>> = match (pg.as_ref(), document_store.as_ref()) {
+        (Some(_), Some(store)) => Some(Arc::new(PgBillingQuotaAdapter::new(
+            billing.clone(),
+            store.clone(),
+        )) as Arc<dyn BillingQuotaPort>),
+        (None, _) => Some(Arc::new(app_core::MemoryBillingQuotaPort) as Arc<dyn BillingQuotaPort>),
+        _ => None,
+    };
     let agent_service = Some(build_unified_agent_service(
         llm_ctx.agent_client().cloned(),
         search_executor.clone(),
@@ -369,7 +380,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
             chat_persistence,
         },
         memory: MemoryStateHandles {
-            inner: Arc::new(RwLock::new(MemoryState::default())),
+            inner: memory_state,
             api_keys: Arc::new(RwLock::new(BTreeMap::new())),
             api_key_hashes: Arc::new(RwLock::new(BTreeMap::new())),
         },

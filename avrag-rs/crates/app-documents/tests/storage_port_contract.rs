@@ -2,8 +2,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use app_core::{
-    AnalyticsServiceCtx, DocumentStorePort, MemoryState, MemoryStateHandles, ObjectStoreConfig,
-    ObjectStorePort, StorageContext, StorageContextParts, StorageInfra, StorageStores,
+    AnalyticsServiceCtx, DocumentStorePort, MemoryDocumentStore, MemoryState, MemoryStateHandles,
+    ObjectStoreConfig, ObjectStorePort, StorageContext, StorageContextParts, StorageInfra,
+    StorageStores,
 };
 use app_documents::DocumentContext;
 use async_trait::async_trait;
@@ -258,6 +259,7 @@ fn test_auth() -> AuthContext {
 }
 
 fn memory_storage() -> StorageContext {
+    let memory_state = Arc::new(RwLock::new(MemoryState::default()));
     StorageContext::from_parts(StorageContextParts {
         infra: StorageInfra {
             postgres_health: None,
@@ -266,7 +268,7 @@ fn memory_storage() -> StorageContext {
             max_upload_file_size_bytes: 10 * 1024 * 1024,
         },
         stores: StorageStores {
-            document_store: None,
+            document_store: Some(Arc::new(MemoryDocumentStore::new(memory_state.clone()))),
             auth_store: None,
             admin_store: None,
             billing_quota: None,
@@ -275,7 +277,7 @@ fn memory_storage() -> StorageContext {
             chat_persistence: None,
         },
         memory: MemoryStateHandles {
-            inner: Arc::new(RwLock::new(MemoryState::default())),
+            inner: memory_state,
             api_keys: Arc::new(RwLock::new(BTreeMap::new())),
             api_key_hashes: Arc::new(RwLock::new(BTreeMap::new())),
         },
@@ -322,7 +324,7 @@ fn storage_with_document_store(store: Arc<dyn DocumentStorePort>) -> StorageCont
 }
 
 #[tokio::test]
-async fn memory_mode_create_notebook_round_trips_without_ports() {
+async fn memory_mode_create_notebook_round_trips_via_memory_document_store() {
     let ctx = DocumentContext::new();
     let storage = memory_storage();
     let auth = test_auth();

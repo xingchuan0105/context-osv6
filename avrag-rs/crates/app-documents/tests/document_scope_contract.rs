@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use app_core::{
-    DocumentScopeValidator, MemoryState, MemoryStateHandles, ObjectStoreConfig, ObjectStorePort,
-    StorageContext, StorageContextParts, StorageInfra, StorageStores,
+    DocumentScopeValidator, MemoryDocumentStore, MemoryState, MemoryStateHandles, ObjectStoreConfig,
+    ObjectStorePort, StorageContext, StorageContextParts, StorageInfra, StorageStores,
 };
 use app_documents::DocumentContext;
 use async_trait::async_trait;
@@ -47,6 +47,7 @@ impl ObjectStorePort for TestObjectStore {
 }
 
 fn memory_storage(org_id: &str, user_id: &str) -> (StorageContext, String, String) {
+    let memory_state = Arc::new(RwLock::new(MemoryState::default()));
     let storage = StorageContext::from_parts(StorageContextParts {
         infra: StorageInfra {
             postgres_health: None,
@@ -55,7 +56,7 @@ fn memory_storage(org_id: &str, user_id: &str) -> (StorageContext, String, Strin
             max_upload_file_size_bytes: 10 * 1024 * 1024,
         },
         stores: StorageStores {
-            document_store: None,
+            document_store: Some(Arc::new(MemoryDocumentStore::new(memory_state.clone()))),
             auth_store: None,
             admin_store: None,
             billing_quota: None,
@@ -64,7 +65,7 @@ fn memory_storage(org_id: &str, user_id: &str) -> (StorageContext, String, Strin
             chat_persistence: None,
         },
         memory: MemoryStateHandles {
-            inner: Arc::new(RwLock::new(MemoryState::default())),
+            inner: memory_state,
             api_keys: Arc::new(RwLock::new(BTreeMap::new())),
             api_key_hashes: Arc::new(RwLock::new(BTreeMap::new())),
         },
