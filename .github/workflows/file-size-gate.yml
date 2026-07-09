@@ -1,0 +1,30 @@
+# Lightweight structural gate (TN Wave 0 allowlist).
+# Fails on missing allowlist paths or files over hard line limits.
+name: File Size Gate
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/check_file_size_limits.sh'
+      - 'avrag-rs/**'
+      - 'frontend_next/**'
+      - 'contracts/**'
+      - '.github/workflows/file-size-gate.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'scripts/check_file_size_limits.sh'
+      - 'avrag-rs/**'
+      - 'frontend_next/**'
+      - 'contracts/**'
+      - '.github/workflows/file-size-gate.yml'
+  workflow_dispatch:
+
+jobs:
+  file-size-gate:
+    name: check_file_size_limits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run file size gate
+        run: bash scripts/check_file_size_limits.sh

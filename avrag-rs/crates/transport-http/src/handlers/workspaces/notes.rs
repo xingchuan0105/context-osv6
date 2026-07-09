@@ -6,7 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use common::{AppError, CreateDocumentRequest};
-use contracts::notebooks::{CreateNotebookNoteRequest, UpdateNotebookNoteRequest};
+use contracts::workspaces::{CreateWorkspaceNoteRequest, UpdateWorkspaceNoteRequest};
 use uuid::Uuid;
 
 use super::super::{app_error_response, error_response};
@@ -58,9 +58,9 @@ fn slugify_note_filename(title: &str) -> String {
 }
 
 fn notebook_note_from_pref(
-    note: &contracts::preferences::NotebookNotePreference,
-) -> contracts::notebooks::NotebookNote {
-    contracts::notebooks::NotebookNote {
+    note: &contracts::preferences::WorkspaceNotePreference,
+) -> contracts::workspaces::WorkspaceNote {
+    contracts::workspaces::WorkspaceNote {
         id: note.note_id.clone(),
         workspace_id: note.workspace_id.clone(),
         title: note.title.clone(),
@@ -79,7 +79,7 @@ fn migrate_workspace_draft_to_note(
 ) -> bool {
     let has_notes = preferences
         .dashboard
-        .notebook_notes
+        .workspace_notes
         .iter()
         .any(|note| note.workspace_id == workspace_id);
     if has_notes {
@@ -99,8 +99,8 @@ fn migrate_workspace_draft_to_note(
     let now = chrono::Utc::now().to_rfc3339();
     preferences
         .dashboard
-        .notebook_notes
-        .push(contracts::preferences::NotebookNotePreference {
+        .workspace_notes
+        .push(contracts::preferences::WorkspaceNotePreference {
             note_id: Uuid::new_v4().to_string(),
             workspace_id: workspace_id.to_string(),
             title: "Imported Notes".to_string(),
@@ -113,10 +113,10 @@ fn migrate_workspace_draft_to_note(
     true
 }
 
-pub(super) async fn load_notebook_notes(
+pub(super) async fn load_workspace_notes(
     state: &AppState,
     workspace_id: &str,
-) -> Result<Vec<contracts::notebooks::NotebookNote>, AppError> {
+) -> Result<Vec<contracts::workspaces::WorkspaceNote>, AppError> {
     let mut preferences = state.prefs().current().await?;
     let migrated = migrate_workspace_draft_to_note(&mut preferences, workspace_id);
     if migrated {
@@ -125,7 +125,7 @@ pub(super) async fn load_notebook_notes(
 
     let mut notes = preferences
         .dashboard
-        .notebook_notes
+        .workspace_notes
         .iter()
         .filter(|note| note.workspace_id == workspace_id)
         .map(notebook_note_from_pref)
@@ -139,7 +139,7 @@ pub(super) async fn load_notebook_notes(
     Ok(notes)
 }
 
-async fn require_notebook_notes_access(
+async fn require_workspace_notes_access(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<(), Response> {
@@ -149,7 +149,7 @@ async fn require_notebook_notes_access(
     Ok(())
 }
 
-pub(crate) async fn list_notebook_notes_handler(
+pub(crate) async fn list_workspace_notes_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(workspace_id): Path<String>,
 ) -> Response {
@@ -159,24 +159,24 @@ pub(crate) async fn list_notebook_notes_handler(
     ) {
         return app_error_response(error);
     }
-    if let Err(response) = require_notebook_notes_access(&state, &workspace_id).await {
+    if let Err(response) = require_workspace_notes_access(&state, &workspace_id).await {
         return response;
     }
-    if state.docs().get_notebook(&workspace_id).await.is_none() {
-        return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
+    if state.docs().get_workspace(&workspace_id).await.is_none() {
+        return error_response(StatusCode::NOT_FOUND, "not_found", "Workspace not found");
     }
 
-    match load_notebook_notes(&state, &workspace_id).await {
+    match load_workspace_notes(&state, &workspace_id).await {
         Ok(notes) => (
             StatusCode::OK,
-            Json(contracts::notebooks::NotebookNoteListResponse { notes }),
+            Json(contracts::workspaces::WorkspaceNoteListResponse { notes }),
         )
             .into_response(),
         Err(error) => app_error_response(error),
     }
 }
 
-pub(crate) async fn get_notebook_note_handler(
+pub(crate) async fn get_workspace_note_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path((workspace_id, note_id)): Path<(String, String)>,
 ) -> Response {
@@ -186,18 +186,18 @@ pub(crate) async fn get_notebook_note_handler(
     ) {
         return app_error_response(error);
     }
-    if let Err(response) = require_notebook_notes_access(&state, &workspace_id).await {
+    if let Err(response) = require_workspace_notes_access(&state, &workspace_id).await {
         return response;
     }
-    if state.docs().get_notebook(&workspace_id).await.is_none() {
-        return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
+    if state.docs().get_workspace(&workspace_id).await.is_none() {
+        return error_response(StatusCode::NOT_FOUND, "not_found", "Workspace not found");
     }
 
-    match load_notebook_notes(&state, &workspace_id).await {
+    match load_workspace_notes(&state, &workspace_id).await {
         Ok(notes) => match notes.into_iter().find(|note| note.id == note_id) {
             Some(note) => (
                 StatusCode::OK,
-                Json(contracts::notebooks::NotebookNoteResponse { note }),
+                Json(contracts::workspaces::WorkspaceNoteResponse { note }),
             )
                 .into_response(),
             None => error_response(StatusCode::NOT_FOUND, "not_found", "Note not found"),
@@ -206,10 +206,10 @@ pub(crate) async fn get_notebook_note_handler(
     }
 }
 
-pub(crate) async fn create_notebook_note_handler(
+pub(crate) async fn create_workspace_note_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(workspace_id): Path<String>,
-    Json(req): Json<CreateNotebookNoteRequest>,
+    Json(req): Json<CreateWorkspaceNoteRequest>,
 ) -> Response {
     if let Err(error) = require_user_session(
         state.auth(),
@@ -217,11 +217,11 @@ pub(crate) async fn create_notebook_note_handler(
     ) {
         return app_error_response(error);
     }
-    if let Err(response) = require_notebook_notes_access(&state, &workspace_id).await {
+    if let Err(response) = require_workspace_notes_access(&state, &workspace_id).await {
         return response;
     }
-    if state.docs().get_notebook(&workspace_id).await.is_none() {
-        return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
+    if state.docs().get_workspace(&workspace_id).await.is_none() {
+        return error_response(StatusCode::NOT_FOUND, "not_found", "Workspace not found");
     }
 
     let mut preferences = match state.prefs().current().await {
@@ -229,7 +229,7 @@ pub(crate) async fn create_notebook_note_handler(
         Err(error) => return app_error_response(error),
     };
     let now = chrono::Utc::now().to_rfc3339();
-    let note = contracts::preferences::NotebookNotePreference {
+    let note = contracts::preferences::WorkspaceNotePreference {
         note_id: Uuid::new_v4().to_string(),
         workspace_id: workspace_id.clone(),
         title: normalize_note_title(req.title),
@@ -239,12 +239,12 @@ pub(crate) async fn create_notebook_note_handler(
         promoted_document_id: None,
         promoted_at: None,
     };
-    preferences.dashboard.notebook_notes.push(note.clone());
+    preferences.dashboard.workspace_notes.push(note.clone());
 
     match state.prefs().save_current(&preferences).await {
         Ok(_) => (
             StatusCode::CREATED,
-            Json(contracts::notebooks::NotebookNoteResponse {
+            Json(contracts::workspaces::WorkspaceNoteResponse {
                 note: notebook_note_from_pref(&note),
             }),
         )
@@ -253,10 +253,10 @@ pub(crate) async fn create_notebook_note_handler(
     }
 }
 
-pub(crate) async fn update_notebook_note_handler(
+pub(crate) async fn update_workspace_note_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path((workspace_id, note_id)): Path<(String, String)>,
-    Json(req): Json<UpdateNotebookNoteRequest>,
+    Json(req): Json<UpdateWorkspaceNoteRequest>,
 ) -> Response {
     if let Err(error) = require_user_session(
         state.auth(),
@@ -264,11 +264,11 @@ pub(crate) async fn update_notebook_note_handler(
     ) {
         return app_error_response(error);
     }
-    if let Err(response) = require_notebook_notes_access(&state, &workspace_id).await {
+    if let Err(response) = require_workspace_notes_access(&state, &workspace_id).await {
         return response;
     }
-    if state.docs().get_notebook(&workspace_id).await.is_none() {
-        return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
+    if state.docs().get_workspace(&workspace_id).await.is_none() {
+        return error_response(StatusCode::NOT_FOUND, "not_found", "Workspace not found");
     }
 
     let mut preferences = match state.prefs().current().await {
@@ -278,7 +278,7 @@ pub(crate) async fn update_notebook_note_handler(
     let migrated = migrate_workspace_draft_to_note(&mut preferences, &workspace_id);
     let Some(note) = preferences
         .dashboard
-        .notebook_notes
+        .workspace_notes
         .iter_mut()
         .find(|note| note.workspace_id == workspace_id && note.note_id == note_id)
     else {
@@ -300,14 +300,14 @@ pub(crate) async fn update_notebook_note_handler(
     match state.prefs().save_current(&preferences).await {
         Ok(_) => (
             StatusCode::OK,
-            Json(contracts::notebooks::NotebookNoteResponse { note: response }),
+            Json(contracts::workspaces::WorkspaceNoteResponse { note: response }),
         )
             .into_response(),
         Err(error) => app_error_response(error),
     }
 }
 
-pub(crate) async fn delete_notebook_note_handler(
+pub(crate) async fn delete_workspace_note_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path((workspace_id, note_id)): Path<(String, String)>,
 ) -> Response {
@@ -317,23 +317,23 @@ pub(crate) async fn delete_notebook_note_handler(
     ) {
         return app_error_response(error);
     }
-    if let Err(response) = require_notebook_notes_access(&state, &workspace_id).await {
+    if let Err(response) = require_workspace_notes_access(&state, &workspace_id).await {
         return response;
     }
-    if state.docs().get_notebook(&workspace_id).await.is_none() {
-        return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
+    if state.docs().get_workspace(&workspace_id).await.is_none() {
+        return error_response(StatusCode::NOT_FOUND, "not_found", "Workspace not found");
     }
 
     let mut preferences = match state.prefs().current().await {
         Ok(preferences) => preferences,
         Err(error) => return app_error_response(error),
     };
-    let before = preferences.dashboard.notebook_notes.len();
+    let before = preferences.dashboard.workspace_notes.len();
     preferences
         .dashboard
-        .notebook_notes
+        .workspace_notes
         .retain(|note| !(note.workspace_id == workspace_id && note.note_id == note_id));
-    if before == preferences.dashboard.notebook_notes.len() {
+    if before == preferences.dashboard.workspace_notes.len() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Note not found");
     }
 
@@ -353,11 +353,11 @@ pub(crate) async fn promote_notebook_note_handler(
     ) {
         return app_error_response(error);
     }
-    if let Err(response) = require_notebook_notes_access(&state, &workspace_id).await {
+    if let Err(response) = require_workspace_notes_access(&state, &workspace_id).await {
         return response;
     }
-    if state.docs().get_notebook(&workspace_id).await.is_none() {
-        return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
+    if state.docs().get_workspace(&workspace_id).await.is_none() {
+        return error_response(StatusCode::NOT_FOUND, "not_found", "Workspace not found");
     }
 
     let mut preferences = match state.prefs().current().await {
@@ -367,7 +367,7 @@ pub(crate) async fn promote_notebook_note_handler(
     let migrated = migrate_workspace_draft_to_note(&mut preferences, &workspace_id);
     let Some(note) = preferences
         .dashboard
-        .notebook_notes
+        .workspace_notes
         .iter_mut()
         .find(|note| note.workspace_id == workspace_id && note.note_id == note_id)
     else {
@@ -421,7 +421,7 @@ pub(crate) async fn promote_notebook_note_handler(
     match state.prefs().save_current(&preferences).await {
         Ok(_) => (
             StatusCode::OK,
-            Json(contracts::notebooks::PromoteNotebookNoteResponse {
+            Json(contracts::workspaces::PromoteWorkspaceNoteResponse {
                 note: response_note,
                 source_id: upload.document_id,
             }),

@@ -8,7 +8,7 @@ Tracks the decomposition of `crates/app` into domain crates (`app-core`, `app-ch
 |-------|----------------|
 | `app-core` | Shared contexts (`StorageContext`, `AnalyticsContext`), config, domain ports |
 | `app-chat` | Chat pipeline, agents, sessions, citations, RAG execute |
-| `app-documents` | Notebooks, documents, ingest, URL imports, `build_docscope_metadata` |
+| `app-documents` | Workspaces, documents, ingest, URL imports, `build_docscope_metadata` |
 | `app-admin` | API keys, notifications, admin operations |
 | `app-billing` | Usage limits, quota checks |
 | `app-bootstrap` | `new_memory` / `bootstrap`, factory wiring (`config_helpers`) |

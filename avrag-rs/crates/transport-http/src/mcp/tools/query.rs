@@ -29,7 +29,7 @@ pub(crate) async fn execute_query_tool(
     }
 
     let agent_type = match tool_name {
-        "workspace.rag_query" | "notebook.chat" => arguments
+        "workspace.rag_query" | "workspace.chat" => arguments
             .get("agent_type")
             .and_then(|value| value.as_str())
             .filter(|value| !value.trim().is_empty())
@@ -69,7 +69,7 @@ pub(crate) async fn execute_query_tool(
         language: None,
         format_hint: None,
     };
-    expand_external_notebook_rag_scope(state, &workspace_id_str, &mut req).await?;
+    expand_external_workspace_rag_scope(state, &workspace_id_str, &mut req).await?;
     let response = state.chat().execute_chat(req).await?;
     Ok(super::super::catalog::success_result(
         tool_name,
@@ -79,7 +79,7 @@ pub(crate) async fn execute_query_tool(
     ))
 }
 
-pub(crate) async fn expand_external_notebook_rag_scope(
+pub(crate) async fn expand_external_workspace_rag_scope(
     state: &AppState,
     workspace_id: &str,
     req: &mut ChatRequest,
@@ -89,9 +89,9 @@ pub(crate) async fn expand_external_notebook_rag_scope(
     }
 
     state.docs()
-        .get_notebook(workspace_id)
+        .get_workspace(workspace_id)
         .await
-        .ok_or_else(|| AppError::not_found("notebook_not_found", "notebook not found"))?;
+        .ok_or_else(|| AppError::not_found("workspace_not_found", "workspace not found"))?;
     let doc_scope = state.docs()
         .list_documents(Some(workspace_id), None)
         .await

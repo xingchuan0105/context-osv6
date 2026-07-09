@@ -5,7 +5,7 @@ import { DashboardPage } from "../../pom/dashboard-page";
 import { SharePage } from "../../pom/share-page";
 import {
   ensureE2eOrgMember,
-  listNotebookMembers,
+  listWorkspaceMembers,
   loginAndPrepareUserSession,
   resetAndPrepareTestUser,
   seedBrowserPageAuth,
@@ -38,7 +38,7 @@ test.describe("Invite Collaboration", () => {
     await share.goto(workspaceId);
     await share.inviteMember(COLLAB_USER.email);
 
-    const members = await listNotebookMembers(request, workspaceId);
+    const members = await listWorkspaceMembers(request, workspaceId);
     const pendingMember = members.members.find(
       (member) =>
         member.email.trim().toLowerCase() === COLLAB_USER.email.toLowerCase() &&

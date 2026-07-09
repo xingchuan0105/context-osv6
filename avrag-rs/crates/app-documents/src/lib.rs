@@ -3,7 +3,7 @@ mod document_context;
 mod documents;
 mod helpers;
 mod ingest;
-mod notebooks;
+mod workspaces;
 mod url_fetch;
 mod url_imports;
 

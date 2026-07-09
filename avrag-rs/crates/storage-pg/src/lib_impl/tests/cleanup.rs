@@ -16,7 +16,7 @@ async fn delete_document_soft_deletes_and_enqueues_cleanup_once_when_database_av
         .with_actor_id(ActorId::new(user_id));
 
     let notebook = repo
-        .bootstrap().create_notebook(&ctx, "soft delete test notebook", "soft delete test")
+        .bootstrap().create_workspace(&ctx, "soft delete test notebook", "soft delete test")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
@@ -98,7 +98,7 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
     let other_ctx = AuthContext::new(other_org_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(other_user_id));
     let other_notebook = repo
-        .bootstrap().create_notebook(
+        .bootstrap().create_workspace(
             &other_ctx,
             "cleanup other tenant notebook",
             "cleanup other tenant",
@@ -107,7 +107,7 @@ async fn document_cleanup_task_claim_fail_complete_and_db_cleanup_when_database_
         .unwrap();
     let other_workspace_id = Uuid::parse_str(&other_notebook.id).unwrap();
     let notebook = repo
-        .bootstrap().create_notebook(&ctx, "cleanup task test notebook", "cleanup task test")
+        .bootstrap().create_workspace(&ctx, "cleanup task test notebook", "cleanup task test")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
@@ -480,7 +480,7 @@ async fn cleanup_targets_reject_active_document_when_database_available() {
     let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(user_id));
     let notebook = repo
-        .bootstrap().create_notebook(
+        .bootstrap().create_workspace(
             &ctx,
             "active cleanup guard notebook",
             "active cleanup guard",

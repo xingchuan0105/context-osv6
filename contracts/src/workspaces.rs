@@ -4,7 +4,7 @@ use typeshare::typeshare;
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct Notebook {
+pub struct Workspace {
     pub id: String,
     pub org_id: String,
     pub owner_id: String,
@@ -25,19 +25,19 @@ pub struct Notebook {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct NotebookListResponse {
-    pub workspaces: Vec<Notebook>,
+pub struct WorkspaceListResponse {
+    pub workspaces: Vec<Workspace>,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct NotebookResponse {
-    pub workspace: Notebook,
+pub struct WorkspaceResponse {
+    pub workspace: Workspace,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct CreateNotebookRequest {
+pub struct CreateWorkspaceRequest {
     pub name: String,
     #[serde(default)]
     pub description: String,
@@ -45,7 +45,7 @@ pub struct CreateNotebookRequest {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct UpdateNotebookRequest {
+pub struct UpdateWorkspaceRequest {
     #[serde(default)]
     pub name: String,
     #[serde(default)]
@@ -138,7 +138,7 @@ pub struct CreateApiKeyResponse {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct NotebookNote {
+pub struct WorkspaceNote {
     pub id: String,
     pub workspace_id: String,
     pub title: String,
@@ -154,19 +154,19 @@ pub struct NotebookNote {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct NotebookNoteListResponse {
-    pub notes: Vec<NotebookNote>,
+pub struct WorkspaceNoteListResponse {
+    pub notes: Vec<WorkspaceNote>,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct NotebookNoteResponse {
-    pub note: NotebookNote,
+pub struct WorkspaceNoteResponse {
+    pub note: WorkspaceNote,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
-pub struct CreateNotebookNoteRequest {
+pub struct CreateWorkspaceNoteRequest {
     #[serde(default)]
     pub title: Option<String>,
     #[serde(default)]
@@ -175,7 +175,7 @@ pub struct CreateNotebookNoteRequest {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
-pub struct UpdateNotebookNoteRequest {
+pub struct UpdateWorkspaceNoteRequest {
     #[serde(default)]
     pub title: Option<String>,
     #[serde(default)]
@@ -184,14 +184,14 @@ pub struct UpdateNotebookNoteRequest {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct PromoteNotebookNoteResponse {
-    pub note: NotebookNote,
+pub struct PromoteWorkspaceNoteResponse {
+    pub note: WorkspaceNote,
     pub source_id: String,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct NotebookAnalysisOverview {
+pub struct WorkspaceAnalysisOverview {
     pub title: String,
     pub description: String,
     pub updated_at: String,
@@ -201,7 +201,7 @@ pub struct NotebookAnalysisOverview {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct NotebookAnalysisSources {
+pub struct WorkspaceAnalysisSources {
     #[typeshare(serialized_as = "number")]
     pub total: i64,
     #[typeshare(serialized_as = "number")]
@@ -218,7 +218,7 @@ pub struct NotebookAnalysisSources {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct NotebookAnalysisThreads {
+pub struct WorkspaceAnalysisThreads {
     #[typeshare(serialized_as = "number")]
     pub total: i64,
     #[typeshare(serialized_as = "number")]
@@ -231,7 +231,7 @@ pub struct NotebookAnalysisThreads {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct NotebookAnalysisNotes {
+pub struct WorkspaceAnalysisNotes {
     #[typeshare(serialized_as = "number")]
     pub total: i64,
     #[serde(default)]
@@ -242,7 +242,7 @@ pub struct NotebookAnalysisNotes {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct NotebookAnalysisAccess {
+pub struct WorkspaceAnalysisAccess {
     pub share_enabled: bool,
     #[typeshare(serialized_as = "number")]
     pub member_count: i64,
@@ -252,7 +252,7 @@ pub struct NotebookAnalysisAccess {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct NotebookAnalysisAlert {
+pub struct WorkspaceAnalysisAlert {
     pub level: String,
     pub code: String,
     pub message: String,
@@ -260,13 +260,13 @@ pub struct NotebookAnalysisAlert {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct NotebookAnalysisResponse {
-    pub overview: NotebookAnalysisOverview,
-    pub sources: NotebookAnalysisSources,
-    pub threads: NotebookAnalysisThreads,
-    pub notes: NotebookAnalysisNotes,
-    pub access: NotebookAnalysisAccess,
-    pub alerts: Vec<NotebookAnalysisAlert>,
+pub struct WorkspaceAnalysisResponse {
+    pub overview: WorkspaceAnalysisOverview,
+    pub sources: WorkspaceAnalysisSources,
+    pub threads: WorkspaceAnalysisThreads,
+    pub notes: WorkspaceAnalysisNotes,
+    pub access: WorkspaceAnalysisAccess,
+    pub alerts: Vec<WorkspaceAnalysisAlert>,
 }
 
 fn default_rag_agent() -> String {

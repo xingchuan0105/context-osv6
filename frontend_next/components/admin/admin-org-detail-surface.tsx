@@ -57,7 +57,7 @@ export function AdminOrganizationDetailSurface() {
   const memberCount = users.filter((user) => ["member", "viewer", "editor"].includes(user.role)).length;
   const recentMembers = sortUsers(users, "created_desc").slice(0, 5);
   const requestsPerUser30d = organization ? Math.floor((usage30d?.total_requests ?? 0) / Math.max(organization.user_count, 1)) : 0;
-  const notebooksPerUser = organization ? Math.floor(organization.notebook_count / Math.max(organization.user_count, 1)) : 0;
+  const notebooksPerUser = organization ? Math.floor(organization.workspace_count / Math.max(organization.user_count, 1)) : 0;
 
   async function handleToggleBlocked() {
     if (!organization) {
@@ -110,7 +110,7 @@ export function AdminOrganizationDetailSurface() {
               <AdminMetricCard label={adminText(locale, "admin.table.users")} value={organization.user_count.toString()} />
               <AdminMetricCard
                 label={adminText(locale, "common.notebooks")}
-                value={organization.notebook_count.toString()}
+                value={organization.workspace_count.toString()}
                 detail={`${adminText(locale, "common.created")} ${formatUnixDate(organization.created_at, locale)}`}
               />
             </div>

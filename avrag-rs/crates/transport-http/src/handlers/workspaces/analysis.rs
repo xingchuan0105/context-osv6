@@ -7,7 +7,7 @@ use axum::{
 };
 
 use super::super::{app_error_response, error_response};
-use super::notes::load_notebook_notes;
+use super::notes::load_workspace_notes;
 use crate::middleware::RequestState;
 use crate::auth_guard::{ensure_user_notebook_access, require_user_session};
 
@@ -24,14 +24,14 @@ fn pinned_source_count(
         .unwrap_or(0)
 }
 
-struct NotebookAnalysisCollector;
+struct WorkspaceAnalysisCollector;
 
-impl NotebookAnalysisCollector {
+impl WorkspaceAnalysisCollector {
     fn collect_overview(
         &self,
-        notebook: &contracts::notebooks::Notebook,
-    ) -> contracts::notebooks::NotebookAnalysisOverview {
-        contracts::notebooks::NotebookAnalysisOverview {
+        notebook: &contracts::workspaces::Workspace,
+    ) -> contracts::workspaces::WorkspaceAnalysisOverview {
+        contracts::workspaces::WorkspaceAnalysisOverview {
             title: notebook.title.clone(),
             description: notebook.description.clone(),
             updated_at: notebook.updated_at.clone(),
@@ -44,7 +44,7 @@ impl NotebookAnalysisCollector {
         sources: &[common::Document],
         preferences: &contracts::preferences::UserPreferences,
         workspace_id: &str,
-    ) -> contracts::notebooks::NotebookAnalysisSources {
+    ) -> contracts::workspaces::WorkspaceAnalysisSources {
         let (mut ready, mut failed) = (0i64, 0i64);
         for source in sources {
             match source.status {
@@ -55,7 +55,7 @@ impl NotebookAnalysisCollector {
         }
         let processing = (sources.len() as i64) - ready - failed;
         let pinned = pinned_source_count(preferences, workspace_id);
-        contracts::notebooks::NotebookAnalysisSources {
+        contracts::workspaces::WorkspaceAnalysisSources {
             total: sources.len() as i64,
             ready,
             processing: processing.max(0),
@@ -67,12 +67,12 @@ impl NotebookAnalysisCollector {
 
     fn collect_threads(
         &self,
-        sessions: &[contracts::notebooks::ChatSession],
-    ) -> contracts::notebooks::NotebookAnalysisThreads {
+        sessions: &[contracts::workspaces::ChatSession],
+    ) -> contracts::workspaces::WorkspaceAnalysisThreads {
         let latest = sessions
             .iter()
             .max_by(|a, b| a.updated_at.cmp(&b.updated_at));
-        contracts::notebooks::NotebookAnalysisThreads {
+        contracts::workspaces::WorkspaceAnalysisThreads {
             total: sessions.len() as i64,
             pinned: sessions.iter().filter(|s| s.pinned).count() as i64,
             latest_activity_at: latest.map(|s| s.updated_at.clone()),
@@ -82,14 +82,14 @@ impl NotebookAnalysisCollector {
 
     fn collect_notes(
         &self,
-        notes: &[contracts::notebooks::NotebookNote],
-    ) -> contracts::notebooks::NotebookAnalysisNotes {
+        notes: &[contracts::workspaces::WorkspaceNote],
+    ) -> contracts::workspaces::WorkspaceAnalysisNotes {
         let promoted = notes
             .iter()
             .filter(|n| n.promoted_document_id.is_some())
             .count() as i64;
         let latest = notes.iter().map(|n| n.updated_at.clone()).max();
-        contracts::notebooks::NotebookAnalysisNotes {
+        contracts::workspaces::WorkspaceAnalysisNotes {
             total: notes.len() as i64,
             latest_edited_at: latest,
             promoted_to_source: promoted,
@@ -100,7 +100,7 @@ impl NotebookAnalysisCollector {
         &self,
         state: &AppState,
         workspace_id: &str,
-    ) -> contracts::notebooks::NotebookAnalysisAccess {
+    ) -> contracts::workspaces::WorkspaceAnalysisAccess {
         let workspace_id = workspace_id.to_string();
         let (member_count, share_enabled, active_api_key_count) = tokio::join!(
             async { state.share().share_member_count(&workspace_id).await },
@@ -113,7 +113,7 @@ impl NotebookAnalysisCollector {
                     .unwrap_or(0)
             },
         );
-        contracts::notebooks::NotebookAnalysisAccess {
+        contracts::workspaces::WorkspaceAnalysisAccess {
             share_enabled,
             member_count,
             active_api_key_count,
@@ -122,35 +122,35 @@ impl NotebookAnalysisCollector {
 
     fn build_alerts(
         &self,
-        sources: &contracts::notebooks::NotebookAnalysisSources,
-        sessions: &[contracts::notebooks::ChatSession],
-        notes: &[contracts::notebooks::NotebookNote],
-        notes_summary: &contracts::notebooks::NotebookAnalysisNotes,
-    ) -> Vec<contracts::notebooks::NotebookAnalysisAlert> {
+        sources: &contracts::workspaces::WorkspaceAnalysisSources,
+        sessions: &[contracts::workspaces::ChatSession],
+        notes: &[contracts::workspaces::WorkspaceNote],
+        notes_summary: &contracts::workspaces::WorkspaceAnalysisNotes,
+    ) -> Vec<contracts::workspaces::WorkspaceAnalysisAlert> {
         let mut alerts = Vec::new();
         if sources.ready == 0 {
-            alerts.push(contracts::notebooks::NotebookAnalysisAlert {
+            alerts.push(contracts::workspaces::WorkspaceAnalysisAlert {
                 level: "warning".to_string(),
                 code: "no_ready_sources".to_string(),
                 message: "No ready sources are available for RAG chat.".to_string(),
             });
         }
         if sources.failed > 0 {
-            alerts.push(contracts::notebooks::NotebookAnalysisAlert {
+            alerts.push(contracts::workspaces::WorkspaceAnalysisAlert {
                 level: "warning".to_string(),
                 code: "failed_sources".to_string(),
                 message: format!("{} sources need attention or reindexing.", sources.failed),
             });
         }
         if sessions.is_empty() {
-            alerts.push(contracts::notebooks::NotebookAnalysisAlert {
+            alerts.push(contracts::workspaces::WorkspaceAnalysisAlert {
                 level: "info".to_string(),
                 code: "no_threads".to_string(),
                 message: "This notebook does not have any threads yet.".to_string(),
             });
         }
         if !notes.is_empty() && notes_summary.promoted_to_source == 0 {
-            alerts.push(contracts::notebooks::NotebookAnalysisAlert {
+            alerts.push(contracts::workspaces::WorkspaceAnalysisAlert {
                 level: "info".to_string(),
                 code: "notes_not_promoted".to_string(),
                 message: "Notes exist, but none have been promoted into shared sources yet."
@@ -161,7 +161,7 @@ impl NotebookAnalysisCollector {
     }
 }
 
-pub(crate) async fn get_notebook_analysis_handler(
+pub(crate) async fn get_workspace_analysis_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(workspace_id): Path<String>,
 ) -> Response {
@@ -174,8 +174,8 @@ pub(crate) async fn get_notebook_analysis_handler(
     if let Err(error) = ensure_user_notebook_access(&state, &workspace_id).await {
         return app_error_response(error);
     }
-    let Some(notebook) = state.docs().get_notebook(&workspace_id).await else {
-        return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
+    let Some(notebook) = state.docs().get_workspace(&workspace_id).await else {
+        return error_response(StatusCode::NOT_FOUND, "not_found", "Workspace not found");
     };
 
     let docs = state.docs();
@@ -185,7 +185,7 @@ pub(crate) async fn get_notebook_analysis_handler(
         docs.list_documents(Some(&workspace_id), None),
         chat.list_sessions(Some(&workspace_id)),
         prefs.current(),
-        load_notebook_notes(&state, &workspace_id),
+        load_workspace_notes(&state, &workspace_id),
     );
     let preferences = match preferences {
         Ok(preferences) => preferences,
@@ -196,7 +196,7 @@ pub(crate) async fn get_notebook_analysis_handler(
         Err(error) => return app_error_response(error),
     };
 
-    let collector = NotebookAnalysisCollector;
+    let collector = WorkspaceAnalysisCollector;
     let overview = collector.collect_overview(&notebook);
     let sources_summary = collector.collect_sources(&sources, &preferences, &workspace_id);
     let threads = collector.collect_threads(&sessions);
@@ -206,7 +206,7 @@ pub(crate) async fn get_notebook_analysis_handler(
 
     (
         StatusCode::OK,
-        Json(contracts::notebooks::NotebookAnalysisResponse {
+        Json(contracts::workspaces::WorkspaceAnalysisResponse {
             overview,
             sources: sources_summary,
             threads,

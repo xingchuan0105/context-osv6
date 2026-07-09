@@ -144,7 +144,7 @@ pub(crate) async fn request_context_middleware(
         })
         .map(|auth| {
             if let Some(notebook_scope) = share_chat_notebook_scope {
-                auth.with_notebook_scope(notebook_scope)
+                auth.with_workspace_scope(notebook_scope)
             } else {
                 auth
             }
@@ -330,7 +330,7 @@ async fn auth_from_bearer(state: &AppState, headers: &HeaderMap) -> Option<AuthC
         .with_actor_id(ActorId::new(validated.key_id))
         .with_rate_limit_rpm(validated.rate_limit_rpm);
     if let Some(workspace_id) = validated.workspace_id {
-        ctx = ctx.with_notebook_scope(workspace_id);
+        ctx = ctx.with_workspace_scope(workspace_id);
     }
     for perm in validated.permissions {
         ctx = ctx.grant(perm);

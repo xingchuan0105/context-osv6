@@ -1,7 +1,7 @@
 //! Pure domain logic for assembling a notebook's analysis summary.
 //!
 //! Previously this logic lived inline inside the HTTP handler
-//! (`get_notebook_analysis_handler`), mixing pure data aggregation with HTTP
+//! (`get_workspace_analysis_handler`), mixing pure data aggregation with HTTP
 //! plumbing. It is extracted here so the handler stays a thin transport layer
 //! and the aggregation is independently testable.
 //!
@@ -11,9 +11,9 @@
 
 use common::Document;
 use contracts::documents::DocumentStatus;
-use contracts::notebooks::{
-    ChatSession, Notebook, NotebookAnalysisAlert, NotebookAnalysisNotes, NotebookAnalysisOverview,
-    NotebookAnalysisSources, NotebookAnalysisThreads,
+use contracts::workspaces::{
+    ChatSession, Workspace, WorkspaceAnalysisAlert, WorkspaceAnalysisNotes, WorkspaceAnalysisOverview,
+    WorkspaceAnalysisSources, WorkspaceAnalysisThreads,
 };
 use contracts::preferences::UserPreferences;
 
@@ -28,8 +28,8 @@ fn pinned_source_count(preferences: &UserPreferences, workspace_id: &str) -> i64
         .unwrap_or(0)
 }
 
-pub(super) fn collect_overview(notebook: &Notebook) -> NotebookAnalysisOverview {
-    NotebookAnalysisOverview {
+pub(super) fn collect_overview(notebook: &Workspace) -> WorkspaceAnalysisOverview {
+    WorkspaceAnalysisOverview {
         title: notebook.title.clone(),
         description: notebook.description.clone(),
         updated_at: notebook.updated_at.clone(),
@@ -41,7 +41,7 @@ pub(super) fn collect_sources(
     sources: &[Document],
     preferences: &UserPreferences,
     workspace_id: &str,
-) -> NotebookAnalysisSources {
+) -> WorkspaceAnalysisSources {
     let (mut ready, mut failed) = (0i64, 0i64);
     for source in sources {
         match source.status {
@@ -52,7 +52,7 @@ pub(super) fn collect_sources(
     }
     let processing = (sources.len() as i64) - ready - failed;
     let pinned = pinned_source_count(preferences, workspace_id);
-    NotebookAnalysisSources {
+    WorkspaceAnalysisSources {
         total: sources.len() as i64,
         ready,
         processing: processing.max(0),
@@ -62,11 +62,11 @@ pub(super) fn collect_sources(
     }
 }
 
-pub(super) fn collect_threads(sessions: &[ChatSession]) -> NotebookAnalysisThreads {
+pub(super) fn collect_threads(sessions: &[ChatSession]) -> WorkspaceAnalysisThreads {
     let latest = sessions
         .iter()
         .max_by(|a, b| a.updated_at.cmp(&b.updated_at));
-    NotebookAnalysisThreads {
+    WorkspaceAnalysisThreads {
         total: sessions.len() as i64,
         pinned: sessions.iter().filter(|s| s.pinned).count() as i64,
         latest_activity_at: latest.map(|s| s.updated_at.clone()),
@@ -74,13 +74,13 @@ pub(super) fn collect_threads(sessions: &[ChatSession]) -> NotebookAnalysisThrea
     }
 }
 
-pub(super) fn collect_notes(notes: &[contracts::notebooks::NotebookNote]) -> NotebookAnalysisNotes {
+pub(super) fn collect_notes(notes: &[contracts::workspaces::WorkspaceNote]) -> WorkspaceAnalysisNotes {
     let promoted = notes
         .iter()
         .filter(|n| n.promoted_document_id.is_some())
         .count() as i64;
     let latest = notes.iter().map(|n| n.updated_at.clone()).max();
-    NotebookAnalysisNotes {
+    WorkspaceAnalysisNotes {
         total: notes.len() as i64,
         latest_edited_at: latest,
         promoted_to_source: promoted,
@@ -89,35 +89,35 @@ pub(super) fn collect_notes(notes: &[contracts::notebooks::NotebookNote]) -> Not
 
 /// Build user-facing alerts from the aggregated sub-summaries. Pure: no I/O.
 pub(super) fn build_alerts(
-    sources: &NotebookAnalysisSources,
+    sources: &WorkspaceAnalysisSources,
     sessions: &[ChatSession],
-    notes: &[contracts::notebooks::NotebookNote],
-    notes_summary: &NotebookAnalysisNotes,
-) -> Vec<NotebookAnalysisAlert> {
+    notes: &[contracts::workspaces::WorkspaceNote],
+    notes_summary: &WorkspaceAnalysisNotes,
+) -> Vec<WorkspaceAnalysisAlert> {
     let mut alerts = Vec::new();
     if sources.ready == 0 {
-        alerts.push(NotebookAnalysisAlert {
+        alerts.push(WorkspaceAnalysisAlert {
             level: "warning".to_string(),
             code: "no_ready_sources".to_string(),
             message: "No ready sources are available for RAG chat.".to_string(),
         });
     }
     if sources.failed > 0 {
-        alerts.push(NotebookAnalysisAlert {
+        alerts.push(WorkspaceAnalysisAlert {
             level: "warning".to_string(),
             code: "failed_sources".to_string(),
             message: format!("{} sources need attention or reindexing.", sources.failed),
         });
     }
     if sessions.is_empty() {
-        alerts.push(NotebookAnalysisAlert {
+        alerts.push(WorkspaceAnalysisAlert {
             level: "info".to_string(),
             code: "no_threads".to_string(),
             message: "This notebook does not have any threads yet.".to_string(),
         });
     }
     if !notes.is_empty() && notes_summary.promoted_to_source == 0 {
-        alerts.push(NotebookAnalysisAlert {
+        alerts.push(WorkspaceAnalysisAlert {
             level: "info".to_string(),
             code: "notes_not_promoted".to_string(),
             message: "Notes exist, but none have been promoted into shared sources yet."

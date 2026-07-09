@@ -49,7 +49,7 @@ pub struct SharedSource {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SharedNotebookPayload {
+pub struct SharedWorkspacePayload {
     pub knowledge_base: SharedKnowledgeBase,
     pub share: SharedShareInfo,
     pub sources: Vec<SharedSource>,

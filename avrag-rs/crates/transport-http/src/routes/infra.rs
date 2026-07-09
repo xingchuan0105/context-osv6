@@ -26,6 +26,6 @@ pub(crate) fn router() -> Router<AppState> {
         )
         .route(
             "/api/shared/kb/{token}",
-            get(crate::lib_impl::shared_notebook_handler),
+            get(crate::lib_impl::shared_workspace_handler),
         )
     }

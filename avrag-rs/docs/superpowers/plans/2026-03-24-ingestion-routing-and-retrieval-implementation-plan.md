@@ -265,7 +265,7 @@
 字段建议：
 - `asset_id`
 - `org_id`
-- `notebook_id`
+- `workspace_id`
 - `document_id`
 - `page`
 - `asset_kind`
@@ -282,7 +282,7 @@
 字段建议：
 - `chunk_id`
 - `org_id`
-- `notebook_id`
+- `workspace_id`
 - `document_id`
 - `asset_id`
 - `page`

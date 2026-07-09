@@ -133,7 +133,7 @@ describe("WorkspaceChatPane transcript", () => {
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
     mocks.streamWorkspaceChatMock.mockImplementation(async (_token, request, onEvent) => {
       expect(request).toMatchObject({
-        notebook_id: "ws-inline-rag",
+        workspace_id: "ws-inline-rag",
         session_id: null,
         agent_type: "rag",
         doc_scope: ["doc-1"],

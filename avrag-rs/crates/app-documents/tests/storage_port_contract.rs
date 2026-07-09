@@ -9,9 +9,9 @@ use app_core::{
 use app_documents::DocumentContext;
 use async_trait::async_trait;
 use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
-use common::{AppError, CreateNotebookRequest, Document, SourceRow, now_rfc3339};
+use common::{AppError, CreateWorkspaceRequest, Document, SourceRow, now_rfc3339};
 use contracts::documents::DocumentStatus;
-use contracts::notebooks::Notebook;
+use contracts::workspaces::Workspace;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -69,20 +69,20 @@ fn document_modules_do_not_call_storage_pg_escape_hatch() {
 
 #[derive(Clone, Default)]
 struct RecordingDocumentStore {
-    list_notebooks_calls: Arc<std::sync::atomic::AtomicUsize>,
+    list_workspaces_calls: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 #[async_trait]
 impl DocumentStorePort for RecordingDocumentStore {
-    async fn list_notebooks(&self, _auth: &AuthContext) -> Result<Vec<Notebook>, AppError> {
-        self.list_notebooks_calls
+    async fn list_workspaces(&self, _auth: &AuthContext) -> Result<Vec<Workspace>, AppError> {
+        self.list_workspaces_calls
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        Ok(vec![Notebook {
+        Ok(vec![Workspace {
             id: Uuid::new_v4().to_string(),
             org_id: "org-test".to_string(),
             owner_id: "user-test".to_string(),
-            name: "Port Notebook".to_string(),
-            title: "Port Notebook".to_string(),
+            name: "Port Workspace".to_string(),
+            title: "Port Workspace".to_string(),
             description: String::new(),
             document_count: 0,
             status_summary: HashMap::new(),
@@ -92,34 +92,34 @@ impl DocumentStorePort for RecordingDocumentStore {
         }])
     }
 
-    async fn get_notebook(
+    async fn get_workspace(
         &self,
         _auth: &AuthContext,
         _workspace_id: Uuid,
-    ) -> Result<Option<Notebook>, AppError> {
+    ) -> Result<Option<Workspace>, AppError> {
         Ok(None)
     }
 
-    async fn create_notebook(
+    async fn create_workspace(
         &self,
         _auth: &AuthContext,
         _name: &str,
         _description: &str,
-    ) -> Result<Notebook, AppError> {
+    ) -> Result<Workspace, AppError> {
         Err(AppError::internal("not implemented"))
     }
 
-    async fn update_notebook(
+    async fn update_workspace(
         &self,
         _auth: &AuthContext,
         _workspace_id: Uuid,
         _name: Option<&str>,
         _description: Option<&str>,
-    ) -> Result<Option<Notebook>, AppError> {
+    ) -> Result<Option<Workspace>, AppError> {
         Ok(None)
     }
 
-    async fn delete_notebook(
+    async fn delete_workspace(
         &self,
         _auth: &AuthContext,
         _workspace_id: Uuid,
@@ -324,44 +324,44 @@ fn storage_with_document_store(store: Arc<dyn DocumentStorePort>) -> StorageCont
 }
 
 #[tokio::test]
-async fn memory_mode_create_notebook_round_trips_via_memory_document_store() {
+async fn memory_mode_create_workspace_round_trips_via_memory_document_store() {
     let ctx = DocumentContext::new();
     let storage = memory_storage();
     let auth = test_auth();
     let analytics = AnalyticsServiceCtx::new(None);
 
     let notebook = ctx
-        .create_notebook(
+        .create_workspace(
             &auth,
             &storage,
             &analytics,
-            CreateNotebookRequest {
-                name: "Memory Notebook".to_string(),
+            CreateWorkspaceRequest {
+                name: "Memory Workspace".to_string(),
                 description: String::new(),
             },
         )
         .await
         .unwrap();
 
-    let listed = ctx.list_notebooks(&auth, &storage).await;
+    let listed = ctx.list_workspaces(&auth, &storage).await;
     assert!(listed.iter().any(|item| item.id == notebook.id));
 }
 
 #[tokio::test]
 async fn document_store_port_is_used_when_wired() {
     let recorder = Arc::new(RecordingDocumentStore::default());
-    let calls = recorder.list_notebooks_calls.clone();
+    let calls = recorder.list_workspaces_calls.clone();
     let storage = storage_with_document_store(recorder);
     let ctx = DocumentContext::new();
     let auth = test_auth();
 
-    let workspaces = ctx.list_notebooks(&auth, &storage).await;
+    let workspaces = ctx.list_workspaces(&auth, &storage).await;
     assert_eq!(notebooks.len(), 1);
-    assert_eq!(notebooks[0].name, "Port Notebook");
+    assert_eq!(notebooks[0].name, "Port Workspace");
     assert_eq!(
         calls.load(std::sync::atomic::Ordering::SeqCst),
         1,
-        "list_notebooks should delegate to DocumentStorePort"
+        "list_workspaces should delegate to DocumentStorePort"
     );
 }
 #[test]

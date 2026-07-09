@@ -12,7 +12,7 @@ pub struct ConversationHistoryHit {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConversationHistoryScope {
     Session,
-    Notebook,
+    Workspace,
 }
 
 const RECENT_CANDIDATE_LIMIT: i64 = 50;

@@ -220,7 +220,7 @@ E2E_MODE=smoke cargo test -p app --test product_e2e --features product-e2e \
 | Checkout consent gate | `smoke::billing_boundary` | L1 | — |
 | Usage 仪表 | `billing/usage-*.spec.ts` | L5 | — |
 | Admin 导航 | `smoke/admin-navigation.spec.ts` | L5 | — |
-| Notebook CRUD | `journey/notebook-crud.spec.ts` | L5 | Product E2E 仅 create |
+| Workspace CRUD | `journey/notebook-crud.spec.ts` | L5 | Product E2E 仅 create |
 | Tauri IPC | desktop 13 单元测 | L6 | 非 product E2E |
 
 ---

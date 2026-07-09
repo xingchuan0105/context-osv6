@@ -24,7 +24,7 @@ async fn real_llm_search_open_query_returns_web_citation() {
     let ctx = TestContext::new_with_real_llm().await;
 
     let notebook = ctx
-        .create_notebook("test-notebook")
+        .create_workspace("test-notebook")
         .await
         .expect("create notebook");
 

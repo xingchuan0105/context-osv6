@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use contracts::auth_runtime::AuthContext;
 use common::{AppError, Document, DocumentContentResponse, ParsedPreviewResponse, SourceRow};
 use contracts::documents::DocumentStatus;
-use contracts::notebooks::Notebook;
+use contracts::workspaces::Workspace;
 use ingestion_types::{AuditRecord, IngestionTask};
 use uuid::Uuid;
 
@@ -13,30 +13,30 @@ use crate::domain_rows::{
 
 #[async_trait]
 pub trait DocumentStorePort: Send + Sync {
-    async fn list_notebooks(&self, auth: &AuthContext) -> Result<Vec<Notebook>, AppError>;
+    async fn list_workspaces(&self, auth: &AuthContext) -> Result<Vec<Workspace>, AppError>;
 
-    async fn get_notebook(
+    async fn get_workspace(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
-    ) -> Result<Option<Notebook>, AppError>;
+    ) -> Result<Option<Workspace>, AppError>;
 
-    async fn create_notebook(
+    async fn create_workspace(
         &self,
         auth: &AuthContext,
         name: &str,
         description: &str,
-    ) -> Result<Notebook, AppError>;
+    ) -> Result<Workspace, AppError>;
 
-    async fn update_notebook(
+    async fn update_workspace(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
         name: Option<&str>,
         description: Option<&str>,
-    ) -> Result<Option<Notebook>, AppError>;
+    ) -> Result<Option<Workspace>, AppError>;
 
-    async fn delete_notebook(
+    async fn delete_workspace(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,

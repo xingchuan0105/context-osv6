@@ -133,12 +133,12 @@ async fn chat_with_valid_org_but_no_user_id_is_accepted() {
 }
 
 #[tokio::test]
-async fn create_notebook_under_one_org_then_read_under_another_org_returns_404_or_403() {
+async fn create_workspace_under_one_org_then_read_under_another_org_returns_404_or_403() {
     super::require_smoke_suite();
     // Data-scope boundary at the notebook layer: once User A creates
     // a notebook, User B (different org) cannot fetch it by ID.
     let ctx_a = TestContext::new_smoke_with_org(ORG_ID, USER_ID).await;
-    let notebook = ctx_a.create_notebook("org-a-private").await.unwrap();
+    let notebook = ctx_a.create_workspace("org-a-private").await.unwrap();
 
     let ctx_b = TestContext::new_smoke_with_org(
         "44444444-4444-4444-4444-444444444444",
@@ -207,7 +207,7 @@ async fn chat_with_valid_jwt_bearer_returns_200() {
         .await
         .expect("register user for JWT test");
     let notebook = ctx
-        .create_notebook_with_token(&token, "jwt-chat")
+        .create_workspace_with_token(&token, "jwt-chat")
         .await
         .expect("create notebook for JWT user");
 

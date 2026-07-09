@@ -37,7 +37,7 @@ pub struct OrgRow {
     #[typeshare(serialized_as = "number")]
     pub user_count: i64,
     #[typeshare(serialized_as = "number")]
-    pub notebook_count: i64,
+    pub workspace_count: i64,
     #[typeshare(serialized_as = "number")]
     pub query_count: i64,
     pub blocked: bool,

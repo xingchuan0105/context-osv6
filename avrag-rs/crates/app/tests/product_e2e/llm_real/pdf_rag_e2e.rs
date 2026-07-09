@@ -40,7 +40,7 @@ async fn real_llm_rag_after_liteparse_pdf_ingest_returns_citation() {
     );
 
     let mut ctx = TestContext::new_with_real_llm().await;
-    let notebook = ctx.create_notebook("pdf-rag-real").await.expect("notebook");
+    let notebook = ctx.create_workspace("pdf-rag-real").await.expect("notebook");
     let path = phase0_mini_fixture_path().to_string_lossy().to_string();
     let upload = ctx
         .upload_file_from_path_to_notebook(&path, &notebook.id)

@@ -192,7 +192,7 @@ export function auditResourceTypeLabel(locale: UiLocale, resourceType: string) {
     case "document":
       return locale === "zh-CN" ? "文档" : "Document";
     case "notebook":
-      return locale === "zh-CN" ? "知识库" : "Notebook";
+      return locale === "zh-CN" ? "知识库" : "Workspace";
     case "task":
       return locale === "zh-CN" ? "任务" : "Task";
     case "share":

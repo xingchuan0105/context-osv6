@@ -1,21 +1,21 @@
 //! Contract tests for AppState domain faces after TN Wave 3.
 //!
 //! - Chat: `state.chat()`
-//! - Notebooks/docs: `state.docs()`
+//! - Workspaces/docs: `state.docs()`
 //! - Admin API keys: `state.admin_api()`
 //! - Share token helper still on AppState
 
 use app::{AppConfig, AppState};
-use common::CreateNotebookRequest;
-use contracts::notebooks::CreateChatSessionRequest;
+use common::CreateWorkspaceRequest;
+use contracts::workspaces::CreateChatSessionRequest;
 
 async fn memory_state() -> AppState {
     AppState::new(AppConfig::default())
 }
 
-async fn create_notebook(state: &AppState) -> contracts::notebooks::Notebook {
+async fn create_workspace(state: &AppState) -> contracts::workspaces::Workspace {
     state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "delegate-contract".into(),
             description: String::new(),
         })
@@ -44,7 +44,7 @@ async fn citation_lookup_missing_session_returns_session_not_found() {
 #[tokio::test]
 async fn citation_lookup_unknown_message_returns_message_not_found() {
     let state = memory_state().await;
-    let notebook = create_notebook(&state).await;
+    let notebook = create_workspace(&state).await;
     let session = state
         .chat()
         .create_session(CreateChatSessionRequest {
@@ -77,9 +77,9 @@ async fn citation_asset_missing_returns_not_found_in_memory_mode() {
 }
 
 #[tokio::test]
-async fn list_sessions_empty_for_new_notebook() {
+async fn list_sessions_empty_for_new_workspace() {
     let state = memory_state().await;
-    let notebook = create_notebook(&state).await;
+    let notebook = create_workspace(&state).await;
 
     let sessions = state.chat().list_sessions(Some(&notebook.id)).await;
 
@@ -116,7 +116,7 @@ async fn execute_chat_empty_query_returns_validation_error() {
 async fn execute_chat_memory_without_llm_returns_internal_error() {
     // Default memory AppState has no LLM client; contract is a clean error, not panic.
     let state = memory_state().await;
-    let notebook = create_notebook(&state).await;
+    let notebook = create_workspace(&state).await;
 
     let err = state
         .chat()
@@ -152,7 +152,7 @@ async fn execute_chat_memory_without_llm_returns_internal_error() {
 #[tokio::test]
 async fn admin_list_api_keys_empty_for_valid_notebook() {
     let state = memory_state().await;
-    let notebook = create_notebook(&state).await;
+    let notebook = create_workspace(&state).await;
 
     let keys = state.admin_api().list_api_keys(&notebook.id).await.unwrap();
 
@@ -162,7 +162,7 @@ async fn admin_list_api_keys_empty_for_valid_notebook() {
 #[tokio::test]
 async fn admin_create_share_token_succeeds_for_existing_notebook() {
     let state = memory_state().await;
-    let notebook = create_notebook(&state).await;
+    let notebook = create_workspace(&state).await;
 
     let response = state.share().create_share_token(&notebook.id).await.unwrap();
 
@@ -183,7 +183,7 @@ async fn admin_create_share_token_missing_notebook_returns_not_found() {
         .await
         .unwrap_err();
 
-    assert_eq!(err.code(), "notebook_not_found");
+    assert_eq!(err.code(), "workspace_not_found");
     assert_eq!(err.http_status(), 404);
 }
 
@@ -205,7 +205,7 @@ async fn admin_ops_without_actor_is_unauthorized() {
 #[tokio::test]
 async fn share_check_access_memory_mode_allows() {
     let state = memory_state().await;
-    let notebook = create_notebook(&state).await;
+    let notebook = create_workspace(&state).await;
     let access = state.share().check_access(&notebook.id).await.unwrap();
     assert_ne!(access, avrag_share::AccessLevel::None);
 }

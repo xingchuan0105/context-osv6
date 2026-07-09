@@ -63,7 +63,7 @@
 | 技术债 v7 声称 | 测试 Round 7 / 实测 | S9 结论 |
 |----------------|----------------------|---------|
 | desktop `src-tauri` **0** 个 `#[test]`；CI 仅 `cargo check` | `registry` 2 + `api` 2 + `backend` 2 + `chat` 7 = **13** 测；`smoke-e2e.yml:130` 为 `cargo test --manifest-path desktop/src-tauri/Cargo.toml` | ✅ **核销** — 技术债 Warning 过时 |
-| share contract 只 4 测、invite/public-read 缺失 | `share_behavior.rs` **6** + `storage_port_contract.rs` **4** + `access_level_contract.rs` **3** + `module_surface.rs` **1** = **14** 测；`owner_can_invite_member` / `non_owner_invite_is_rejected_before_store` / `load_shared_notebook` / `resolve_public_share_chat_context` 均已覆盖 | ✅ **核销** — 技术债只数了 `storage_port_contract.rs` |
+| share contract 只 4 测、invite/public-read 缺失 | `share_behavior.rs` **6** + `storage_port_contract.rs` **4** + `access_level_contract.rs` **3** + `module_surface.rs` **1** = **14** 测；`owner_can_invite_member` / `non_owner_invite_is_rejected_before_store` / `load_shared_workspace` / `resolve_public_share_chat_context` 均已覆盖 | ✅ **核销** — 技术债只数了 `storage_port_contract.rs` |
 | legal 版本号双源、无 CI 守护 | `scripts/verify-legal-p0.sh` **P0-CON-5** 三源字面值比对 + `license-check.yml` `legal-p0-verify` job | ✅ **核销** — Brooks 架构/技术债「无守护」结论不准确 |
 | `agents/loop/mod.rs` dead `merge_request_doc_scope` re-export | S1 已删；`RUSTFLAGS="-D warnings" cargo check --workspace` 全绿 | ✅ **核销** |
 | 工作树 38 文件未分层 | S0 三分支 commit（legal / app-chat / hygiene）已入库 | ✅ **核销** |

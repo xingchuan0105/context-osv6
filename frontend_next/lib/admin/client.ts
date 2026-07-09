@@ -5,7 +5,7 @@ export type AdminOrgRow = {
   name: string;
   plan: string;
   user_count: number;
-  notebook_count: number;
+  workspace_count: number;
   query_count: number;
   blocked: boolean;
   created_at: number;
@@ -174,7 +174,7 @@ function mapOrgRow(raw: RawOrgRow): AdminOrgRow {
     name: raw.name,
     plan: "N/A",
     user_count: raw.user_count,
-    notebook_count: raw.document_count,
+    workspace_count: raw.document_count,
     query_count: raw.query_count,
     blocked: raw.blocked,
     created_at: raw.created_at,

@@ -33,7 +33,7 @@ impl DocumentContext {
             )
         })?;
         let workspace_id =
-            parse_uuid_or_app_error(workspace_id, "notebook_not_found", "notebook not found")?;
+            parse_uuid_or_app_error(workspace_id, "workspace_not_found", "workspace not found")?;
         let quota = storage.billing_quota().ok_or_else(|| {
             AppError::internal("billing quota port is required for url imports")
         })?;
@@ -42,8 +42,8 @@ impl DocumentContext {
             .await?;
         if !quota.notebook_exists(auth, workspace_id).await? {
             return Err(AppError::not_found(
-                "notebook_not_found",
-                "notebook not found",
+                "workspace_not_found",
+                "workspace not found",
             ));
         }
         let document = store

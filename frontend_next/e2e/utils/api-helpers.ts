@@ -368,7 +368,7 @@ export async function ensureE2eOrgMember(
   }
 }
 
-export async function listNotebookMembers(request: APIRequestContext, notebookId: string) {
+export async function listWorkspaceMembers(request: APIRequestContext, notebookId: string) {
   const resp = await request.get(`/api/v1/workspaces/${notebookId}/members`, {
     headers: authHeaders(),
   });
@@ -411,7 +411,7 @@ export function runScopedName(label: string, runId: string): string {
  * 如果后端使用JWT Bearer Token而非session cookie，需在setup-env.ts中将token
  * 写入文件（如 `playwright/.auth/token.txt`），本函数读取后附加到header。
  */
-export async function createNotebookViaAPI(
+export async function createWorkspaceViaAPI(
   request: APIRequestContext,
   name: string,
   description = "",
@@ -423,10 +423,10 @@ export async function createNotebookViaAPI(
   if (!resp.ok()) {
     throw new Error(`create notebook failed: ${resp.status()} ${await resp.text()}`);
   }
-  return resp.json() as Promise<{ notebook: { id: string } }>;
+  return resp.json() as Promise<{ workspace: { id: string } }>;
 }
 
-export async function deleteNotebookViaAPI(
+export async function deleteWorkspaceViaAPI(
   request: APIRequestContext,
   notebookId: string,
 ) {

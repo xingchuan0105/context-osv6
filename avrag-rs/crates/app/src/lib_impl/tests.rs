@@ -6,10 +6,10 @@ mod tests {
         build_docscope_metadata, build_url_source_filename, infer_url_import_mime_type,
         normalize_imported_text,
     };
-    use common::{CreateDocumentRequest, CreateNotebookRequest, UpdateDocumentRequest};
+    use common::{CreateDocumentRequest, CreateWorkspaceRequest, UpdateDocumentRequest};
     use contracts::chat::ChatMessage;
     use contracts::documents::{CreateDocumentUploadResponse, DocumentStatus};
-    use contracts::notebooks::Notebook;
+    use contracts::workspaces::Workspace;
 
     use uuid::Uuid;
 
@@ -216,7 +216,7 @@ mod tests {
     async fn memory_delete_document_soft_deletes_and_hides_document() {
         let state = AppState::new(AppConfig::default());
         let notebook = state.docs()
-            .create_notebook(CreateNotebookRequest {
+            .create_workspace(CreateWorkspaceRequest {
                 name: "soft delete".to_string(),
                 description: String::new(),
             })
@@ -261,7 +261,7 @@ mod tests {
     async fn memory_update_document_rejects_deletion_workflow_statuses() {
         let state = AppState::new(AppConfig::default());
         let notebook = state.docs()
-            .create_notebook(CreateNotebookRequest {
+            .create_workspace(CreateWorkspaceRequest {
                 name: "status guard".to_string(),
                 description: String::new(),
             })
@@ -414,7 +414,7 @@ mod tests {
             ScriptedAgent,
         )));
         let notebook = state.docs()
-            .create_notebook(CreateNotebookRequest {
+            .create_workspace(CreateWorkspaceRequest {
                 name: "chat".to_string(),
                 description: String::new(),
             })
@@ -483,7 +483,7 @@ mod tests {
             BufferedOnlyAgent,
         )));
         let notebook = state.docs()
-            .create_notebook(CreateNotebookRequest {
+            .create_workspace(CreateWorkspaceRequest {
                 name: "chat".to_string(),
                 description: String::new(),
             })
@@ -545,7 +545,7 @@ mod tests {
             BufferedOnlyAgent,
         )));
         let notebook = state.docs()
-            .create_notebook(CreateNotebookRequest {
+            .create_workspace(CreateWorkspaceRequest {
                 name: "search".to_string(),
                 description: String::new(),
             })
@@ -680,9 +680,9 @@ mod tests {
         state: &AppState,
         filename: &str,
         file_size: u64,
-    ) -> (Notebook, CreateDocumentUploadResponse) {
+    ) -> (Workspace, CreateDocumentUploadResponse) {
         let notebook = state.docs()
-            .create_notebook(CreateNotebookRequest {
+            .create_workspace(CreateWorkspaceRequest {
                 name: format!("upload validation {filename}"),
                 description: String::new(),
             })

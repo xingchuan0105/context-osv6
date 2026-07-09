@@ -71,7 +71,7 @@ describe("WorkspaceChatPane streaming status hints", () => {
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
     mocks.streamWorkspaceChatMock.mockImplementation(async (_token, request, onEvent) => {
       expect(request).toMatchObject({
-        notebook_id: "ws-chat",
+        workspace_id: "ws-chat",
         session_id: null,
         agent_type: "chat",
         doc_scope: [],

@@ -101,7 +101,7 @@ impl InputGuardPipeline {
             org_id: uuid::Uuid::nil(),
             user_id: uuid::Uuid::nil(),
             doc_scope: &[],
-            notebook_id: None,
+            workspace_id: None,
             trace_id,
         };
         for guard in &self.guards {
@@ -217,7 +217,7 @@ pub async fn build_agent_request(...) -> crate::agents::runtime::AgentRequest {
     crate::agents::runtime::AgentRequest {
         kind,
         query: req.query.clone(),
-        notebook_id,
+        workspace_id,
         session_id,
         doc_scope,
         messages: req.messages.clone(),

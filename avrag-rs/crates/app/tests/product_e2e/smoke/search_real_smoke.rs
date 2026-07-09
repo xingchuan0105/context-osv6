@@ -19,7 +19,7 @@ async fn open_query_with_real_brave_returns_web_citation() {
     unsafe { std::env::set_var("SEARCH_USE_REAL", "1") };
 
     let ctx = TestContext::new_smoke().await;
-    let notebook = ctx.create_notebook("real-search-smoke").await.unwrap();
+    let notebook = ctx.create_workspace("real-search-smoke").await.unwrap();
     let http_resp: HttpResponse = ctx
         .search("What is the weather in Tokyo today?", &notebook.id)
         .await

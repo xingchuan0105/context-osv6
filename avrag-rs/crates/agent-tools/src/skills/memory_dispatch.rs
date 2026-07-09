@@ -67,14 +67,14 @@ fn parse_history_scope(value: Option<&Value>) -> ConversationHistoryScope {
         .map(str::to_lowercase)
     {
         Some(scope) if scope == "session" => ConversationHistoryScope::Session,
-        _ => ConversationHistoryScope::Notebook,
+        _ => ConversationHistoryScope::Workspace,
     }
 }
 
 fn scope_label(scope: ConversationHistoryScope) -> &'static str {
     match scope {
         ConversationHistoryScope::Session => "session",
-        ConversationHistoryScope::Notebook => "notebook",
+        ConversationHistoryScope::Workspace => "notebook",
     }
 }
 

@@ -15,7 +15,7 @@ use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::PgAppRepository;
 use common::{AppError, Document, DocumentContentResponse, ParsedPreviewResponse, SourceRow};
 use contracts::documents::DocumentStatus;
-use contracts::notebooks::Notebook;
+use contracts::workspaces::Workspace;
 use ingestion_types::{AuditRecord, IngestionTask};
 use uuid::Uuid;
 
@@ -31,46 +31,46 @@ impl PgDocumentStoreAdapter {
 
 #[async_trait]
 impl DocumentStorePort for PgDocumentStoreAdapter {
-    async fn list_notebooks(&self, auth: &AuthContext) -> Result<Vec<Notebook>, AppError> {
-        self.repo.list_notebooks(auth).await.map_err(map_pg_error)
+    async fn list_workspaces(&self, auth: &AuthContext) -> Result<Vec<Workspace>, AppError> {
+        self.repo.list_workspaces(auth).await.map_err(map_pg_error)
     }
 
-    async fn get_notebook(
+    async fn get_workspace(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
-    ) -> Result<Option<Notebook>, AppError> {
+    ) -> Result<Option<Workspace>, AppError> {
         self.repo
             .bootstrap()
-            .get_notebook(auth, workspace_id)
+            .get_workspace(auth, workspace_id)
             .await
             .map_err(map_pg_error)
     }
 
-    async fn create_notebook(
+    async fn create_workspace(
         &self,
         auth: &AuthContext,
         name: &str,
         description: &str,
-    ) -> Result<Notebook, AppError> {
+    ) -> Result<Workspace, AppError> {
         self.repo
             .bootstrap()
-            .create_notebook(auth, name, description)
+            .create_workspace(auth, name, description)
             .await
             .map_err(map_pg_error)
     }
 
-    async fn update_notebook(
+    async fn update_workspace(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
         name: Option<&str>,
         description: Option<&str>,
-    ) -> Result<Option<Notebook>, AppError> {
+    ) -> Result<Option<Workspace>, AppError> {
         let current = self
             .repo
             .bootstrap()
-            .get_notebook(auth, workspace_id)
+            .get_workspace(auth, workspace_id)
             .await
             .map_err(map_pg_error)?;
         let Some(notebook) = current else {
@@ -80,19 +80,19 @@ impl DocumentStorePort for PgDocumentStoreAdapter {
         let description = description.unwrap_or(notebook.description.as_str());
         self.repo
             .bootstrap()
-            .update_notebook(auth, workspace_id, name, description)
+            .update_workspace(auth, workspace_id, name, description)
             .await
             .map_err(map_pg_error)
     }
 
-    async fn delete_notebook(
+    async fn delete_workspace(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
     ) -> Result<bool, AppError> {
         self.repo
             .bootstrap()
-            .delete_notebook(auth, workspace_id)
+            .delete_workspace(auth, workspace_id)
             .await
             .map_err(map_pg_error)
     }

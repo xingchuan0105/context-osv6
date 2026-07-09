@@ -43,7 +43,7 @@
 ## Brooks-Lint 当前报告（M15，2026-06-13 post-v7）
 
 - [合并修复计划 v7](/home/chuan/context-osv6/avrag-rs/docs/brooks-merged-fix-plan-2026-06-13-v7.md) — S0–S9 + M15 已完成。
-- [架构审计（2026-06-13）](/home/chuan/context-osv6/avrag-rs/docs/brooks-architecture-audit-2026-06-13.md) — **99/100**；test-kit/dev-dep/NotebookStore 卫生项已核销。
+- [架构审计（2026-06-13）](/home/chuan/context-osv6/avrag-rs/docs/brooks-architecture-audit-2026-06-13.md) — **99/100**；test-kit/dev-dep/WorkspaceStore 卫生项已核销。
 - [PR 审查（2026-06-13 v7）](/home/chuan/context-osv6/avrag-rs/docs/brooks-pr-review-2026-06-13-v7.md) — **98/100**；v6 blocker 已闭环。
 - [测试质量审查（2026-06-13）](/home/chuan/context-osv6/avrag-rs/docs/brooks-test-quality-review-2026-06-13.md) — **99/100**。
 - [技术债评估（2026-06-13）](/home/chuan/context-osv6/avrag-rs/docs/brooks-tech-debt-assessment-2026-06-13.md) — **99/100**；S9 核销 desktop/share 跨报告矛盾。

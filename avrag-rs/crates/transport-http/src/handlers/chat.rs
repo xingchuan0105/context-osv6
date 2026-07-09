@@ -12,7 +12,7 @@ use common::AppError;
 use contracts::chat::ChatEvent;
 use contracts::chat::ChatRequest;
 use contracts::documents::CitationLookupRequest;
-use contracts::notebooks::{CreateChatSessionRequest, UpdateChatSessionRequest};
+use contracts::workspaces::{CreateChatSessionRequest, UpdateChatSessionRequest};
 use contracts::RuntimeExecuteRequest;
 use std::{convert::Infallible, time::Duration};
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
@@ -351,7 +351,7 @@ pub(crate) async fn list_chat_sessions_handler(
     let sessions = state.chat().list_sessions(params.workspace_id()).await;
     (
         StatusCode::OK,
-        Json(contracts::notebooks::ChatSessionListResponse { sessions }),
+        Json(contracts::workspaces::ChatSessionListResponse { sessions }),
     )
         .into_response()
 }

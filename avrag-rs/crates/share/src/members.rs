@@ -2,14 +2,14 @@ use anyhow::{bail, Result};
 use contracts::auth_runtime::AuthContext;
 use uuid::Uuid;
 
-use crate::{AccessLevel, NotebookMember, ShareService};
+use crate::{AccessLevel, WorkspaceMember, ShareService};
 
 impl ShareService {
     pub async fn list_members(
         &self,
         ctx: &AuthContext,
         workspace_id: &str,
-    ) -> Result<Vec<NotebookMember>> {
+    ) -> Result<Vec<WorkspaceMember>> {
         if !self
             .check_access(ctx, workspace_id)
             .await?
@@ -22,7 +22,7 @@ impl ShareService {
             .list_members(ctx, Uuid::parse_str(workspace_id)?)
             .await?
             .into_iter()
-            .map(NotebookMember::from)
+            .map(WorkspaceMember::from)
             .collect())
     }
 
@@ -32,7 +32,7 @@ impl ShareService {
         workspace_id: &str,
         email: &str,
         access_level: AccessLevel,
-    ) -> Result<NotebookMember> {
+    ) -> Result<WorkspaceMember> {
         if !self
             .check_access(ctx, workspace_id)
             .await?

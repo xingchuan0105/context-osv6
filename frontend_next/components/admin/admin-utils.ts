@@ -34,7 +34,7 @@ export function sortOrganizations(rows: AdminOrgRow[], sort: string) {
       case "users_desc":
         return right.user_count - left.user_count || left.name.localeCompare(right.name);
       case "notebooks_desc":
-        return right.notebook_count - left.notebook_count || left.name.localeCompare(right.name);
+        return right.workspace_count - left.workspace_count || left.name.localeCompare(right.name);
       case "created_desc":
         return right.created_at - left.created_at || left.name.localeCompare(right.name);
       default:

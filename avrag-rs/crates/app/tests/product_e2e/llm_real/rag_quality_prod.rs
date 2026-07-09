@@ -479,7 +479,7 @@ async fn realistic_corpus_full_eval() {
 
     // --- Upload all 7 corpus files to a single notebook ---
     let notebook = ctx
-        .create_notebook("rag-quality-realistic-corpus")
+        .create_workspace("rag-quality-realistic-corpus")
         .await
         .expect("create notebook");
     let workspace_id = notebook.id.clone();

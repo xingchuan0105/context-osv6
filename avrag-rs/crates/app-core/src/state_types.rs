@@ -1,12 +1,12 @@
 use common::{Document, NotificationRow, ParsedPreviewItem};
 use contracts::UserPreferences;
 use contracts::chat::ChatMessage;
-use contracts::notebooks::{ChatSession, Notebook};
+use contracts::workspaces::{ChatSession, Workspace};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Default)]
 pub struct MemoryState {
-    pub notebooks: BTreeMap<String, Notebook>,
+    pub notebooks: BTreeMap<String, Workspace>,
     pub documents: BTreeMap<String, StoredDocument>,
     pub sessions: BTreeMap<String, ChatSession>,
     pub messages: BTreeMap<String, Vec<ChatMessage>>,

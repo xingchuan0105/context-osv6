@@ -36,7 +36,7 @@ impl ChatContext {
 
     pub async fn build_session_context(
         &self,
-        session: &contracts::notebooks::ChatSession,
+        session: &contracts::workspaces::ChatSession,
     ) -> Result<Option<RagSessionContext>, AppError> {
         let session_uuid = Uuid::parse_str(&session.id).map_err(|_| {
             AppError::validation("invalid_session_id", "invalid session UUID format")
@@ -57,11 +57,11 @@ impl ChatContext {
         Ok(Self::build_rag_session_context(messages))
     }
 
-    pub async fn get_notebook(&self, workspace_id: &str) -> Option<contracts::notebooks::Notebook> {
+    pub async fn get_workspace(&self, workspace_id: &str) -> Option<contracts::workspaces::Workspace> {
         let pg = self.storage.chat_persistence()?;
         let workspace_id = Uuid::parse_str(workspace_id).ok()?;
         let notebook = pg
-            .get_notebook(&self.auth, workspace_id)
+            .get_workspace(&self.auth, workspace_id)
             .await
             .ok()
             .flatten()?;

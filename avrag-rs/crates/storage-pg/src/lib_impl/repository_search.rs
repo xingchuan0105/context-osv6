@@ -1,11 +1,11 @@
 use super::*;
 impl ChunkRepository {
     /// Global search: workspaces by title/description using ILIKE.
-    pub async fn search_notebooks(
+    pub async fn search_workspaces(
         &self,
         context: &AuthContext,
         pattern: &str,
-    ) -> Result<Vec<Notebook>, PgStorageError> {
+    ) -> Result<Vec<Workspace>, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
@@ -79,7 +79,7 @@ impl ChunkRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select d.id, d.workspace_id, n.title as notebook_name, d.file_name, d.status
+            select d.id, d.workspace_id, n.title as workspace_name, d.file_name, d.status
             from documents d
             join workspaces n on n.id = d.workspace_id
             where d.file_name ilike $1
@@ -104,7 +104,7 @@ impl ChunkRepository {
                     .try_get::<Uuid, _>("workspace_id")
                     .map(|value| value.to_string())
                     .unwrap_or_default(),
-                notebook_name: row.try_get("notebook_name").unwrap_or_default(),
+                workspace_name: row.try_get("workspace_name").unwrap_or_default(),
                 title: row.try_get("file_name").unwrap_or_default(),
                 file_name: row.try_get("file_name").unwrap_or_default(),
                 status: row

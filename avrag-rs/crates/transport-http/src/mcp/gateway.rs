@@ -80,7 +80,7 @@ pub(crate) async fn handle_mcp_jsonrpc(
             let tool_name = request_json
                 .pointer("/params/name")
                 .and_then(|value| value.as_str())
-                .unwrap_or("notebook.chat");
+                .unwrap_or("workspace.chat");
             let mut arguments = request_json
                 .pointer("/params/arguments")
                 .cloned()
@@ -113,7 +113,7 @@ pub(crate) async fn legacy_mcp_tool_call_handler(
     let tool_name = request_json
         .pointer("/params/name")
         .and_then(|value| value.as_str())
-        .unwrap_or("notebook.chat");
+        .unwrap_or("workspace.chat");
     let mut arguments = request_json
         .pointer("/params/arguments")
         .cloned()

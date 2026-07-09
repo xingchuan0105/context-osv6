@@ -45,10 +45,10 @@ impl<'a> BoundShare<'a> {
         workspace_id: &str,
     ) -> Result<common::ShareTokenResponse, common::AppError> {
         self.docs
-            .get_notebook(self.auth, self.storage, workspace_id)
+            .get_workspace(self.auth, self.storage, workspace_id)
             .await
             .ok_or_else(|| {
-                common::AppError::not_found("notebook_not_found", "notebook not found")
+                common::AppError::not_found("workspace_not_found", "workspace not found")
             })?;
         Ok(common::ShareTokenResponse {
             share_token: format!("share_{}", common::new_id()),
@@ -145,7 +145,7 @@ impl<'a> BoundShare<'a> {
     pub async fn list_share_members(
         &self,
         workspace_id: String,
-    ) -> Result<Vec<avrag_share::NotebookMember>, common::AppError> {
+    ) -> Result<Vec<avrag_share::WorkspaceMember>, common::AppError> {
         let store = self.require_store()?;
         avrag_share::handle_list_members(self.auth.clone(), workspace_id, store).await
     }
@@ -189,12 +189,12 @@ impl<'a> BoundShare<'a> {
         avrag_share::handle_remove_member(self.auth.clone(), workspace_id, member_id, store).await
     }
 
-    pub async fn get_shared_notebook(
+    pub async fn get_shared_workspace(
         &self,
         token: &str,
-    ) -> Result<Option<avrag_share::SharedNotebookPayload>, common::AppError> {
+    ) -> Result<Option<avrag_share::SharedWorkspacePayload>, common::AppError> {
         let store = self.require_store()?;
-        avrag_share::handle_get_shared_notebook(token, store).await
+        avrag_share::handle_get_shared_workspace(token, store).await
     }
 
     pub async fn share_member_count(&self, workspace_id: &str) -> i64 {

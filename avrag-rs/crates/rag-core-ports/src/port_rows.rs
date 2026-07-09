@@ -67,7 +67,7 @@ pub struct UserProfileRow {
 pub enum ConversationHistoryScope {
     Session,
     #[default]
-    Notebook,
+    Workspace,
 }
 
 #[derive(Debug, Clone)]

@@ -107,7 +107,7 @@ describe("share client", () => {
             data: [
               {
                 id: "log-1",
-                notebook_id: "ws-1",
+                workspace_id: "ws-1",
                 share_token: "visitor-a",
                 action: "view",
                 accessed_at: 1713369600,

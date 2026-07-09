@@ -84,7 +84,7 @@ impl ShareService {
             _ => bail!("invalid access level"),
         };
         self.store
-            .update_notebook_access_level(ctx, Uuid::parse_str(workspace_id)?, normalized)
+            .update_workspace_access_level(ctx, Uuid::parse_str(workspace_id)?, normalized)
             .await?;
         Ok(normalized.to_string())
     }

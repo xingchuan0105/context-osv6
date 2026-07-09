@@ -5,8 +5,8 @@ use common::{AppError, ShareTokenResponse};
 use std::sync::Arc;
 
 use crate::{
-    AccessLevel, NotebookMember, PublicShareChatContext, ShareAccessLog, ShareAnalytics,
-    ShareService, ShareSettings, SharedNotebookPayload,
+    AccessLevel, WorkspaceMember, PublicShareChatContext, ShareAccessLog, ShareAnalytics,
+    ShareService, ShareSettings, SharedWorkspacePayload,
 };
 
 pub async fn handle_create_share_link(
@@ -36,13 +36,13 @@ pub async fn handle_validate_token(
         .map(|(workspace_id, _)| workspace_id))
 }
 
-pub async fn handle_get_shared_notebook(
+pub async fn handle_get_shared_workspace(
     token: &str,
     store: Arc<dyn ShareStorePort>,
-) -> Result<Option<SharedNotebookPayload>, AppError> {
+) -> Result<Option<SharedWorkspacePayload>, AppError> {
     let service = ShareService::new(store);
     service
-        .load_shared_notebook(token)
+        .load_shared_workspace(token)
         .await
         .map_err(map_anyhow_error)
 }
@@ -115,7 +115,7 @@ pub async fn handle_invite_member(
     email: String,
     role: AccessLevel,
     store: Arc<dyn ShareStorePort>,
-) -> Result<NotebookMember, AppError> {
+) -> Result<WorkspaceMember, AppError> {
     let service = ShareService::new(store);
     service
         .invite_member(&ctx, &workspace_id, &email, role)
@@ -127,7 +127,7 @@ pub async fn handle_list_members(
     ctx: AuthContext,
     workspace_id: String,
     store: Arc<dyn ShareStorePort>,
-) -> Result<Vec<NotebookMember>, AppError> {
+) -> Result<Vec<WorkspaceMember>, AppError> {
     let service = ShareService::new(store);
     service
         .list_members(&ctx, &workspace_id)

@@ -32,7 +32,7 @@ describe("WorkspaceChatPane streaming search flow", () => {
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
     mocks.streamWorkspaceChatMock.mockImplementation(async (_token, request, onEvent) => {
       expect(request).toMatchObject({
-        notebook_id: "ws-1",
+        workspace_id: "ws-1",
         session_id: null,
         agent_type: "search",
         doc_scope: ["doc-1", "doc-2"],

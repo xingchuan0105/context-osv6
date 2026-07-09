@@ -1,7 +1,7 @@
-    async fn load_shared_notebook(
+    async fn load_shared_workspace(
         &self,
         token: &str,
-    ) -> Result<Option<SharedNotebookSnapshot>, AppError> {
+    ) -> Result<Option<SharedWorkspaceSnapshot>, AppError> {
         let mut tx = self
             .repo
             .raw()
@@ -92,7 +92,7 @@
         tx.commit()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-        Ok(Some(SharedNotebookSnapshot {
+        Ok(Some(SharedWorkspaceSnapshot {
             knowledge_base: SharedKnowledgeBaseSnapshot {
                 id: workspace_id.to_string(),
                 title,

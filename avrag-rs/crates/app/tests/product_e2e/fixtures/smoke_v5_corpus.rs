@@ -223,7 +223,7 @@ async fn ingest_smoke_v5_corpus(ctx: &mut TestContext) -> SmokeV5CorpusState {
     );
 
     let notebook = ctx
-        .create_notebook(SMOKE_V5_NOTEBOOK_NAME)
+        .create_workspace(SMOKE_V5_NOTEBOOK_NAME)
         .await
         .expect("create notebook");
     let mut documents = Vec::new();

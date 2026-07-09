@@ -20,7 +20,7 @@ async fn real_llm_write_mode_produces_article_with_fingerprint() {
     require_real_llm_config();
 
     let ctx = TestContext::new_with_real_llm().await;
-    let notebook = ctx.create_notebook("write-real").await.expect("notebook");
+    let notebook = ctx.create_workspace("write-real").await.expect("notebook");
 
     let params = ChatStreamParams {
         query: "用三百字左右介绍量子纠缠的基本概念，面向普通读者。",

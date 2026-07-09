@@ -14,46 +14,46 @@ pub struct BoundDocuments<'a> {
 }
 
 impl<'a> BoundDocuments<'a> {
-    pub async fn list_notebooks(&self) -> Vec<contracts::notebooks::Notebook> {
+    pub async fn list_workspaces(&self) -> Vec<contracts::workspaces::Workspace> {
         self.docs
-            .list_notebooks(self.auth, self.storage)
+            .list_workspaces(self.auth, self.storage)
             .await
     }
 
-    pub async fn get_notebook(
+    pub async fn get_workspace(
         &self,
         workspace_id: &str,
-    ) -> Option<contracts::notebooks::Notebook> {
+    ) -> Option<contracts::workspaces::Workspace> {
         self.docs
-            .get_notebook(self.auth, self.storage, workspace_id)
+            .get_workspace(self.auth, self.storage, workspace_id)
             .await
     }
 
-    pub async fn create_notebook(
+    pub async fn create_workspace(
         &self,
-        req: common::CreateNotebookRequest,
-    ) -> Result<contracts::notebooks::Notebook, common::AppError> {
+        req: common::CreateWorkspaceRequest,
+    ) -> Result<contracts::workspaces::Workspace, common::AppError> {
         self.docs
-            .create_notebook(self.auth, self.storage, self.analytics, req)
+            .create_workspace(self.auth, self.storage, self.analytics, req)
             .await
     }
 
-    pub async fn update_notebook(
+    pub async fn update_workspace(
         &self,
         workspace_id: &str,
-        req: common::UpdateNotebookRequest,
-    ) -> Result<contracts::notebooks::Notebook, common::AppError> {
+        req: common::UpdateWorkspaceRequest,
+    ) -> Result<contracts::workspaces::Workspace, common::AppError> {
         self.docs
-            .update_notebook(self.auth, self.storage, workspace_id, req)
+            .update_workspace(self.auth, self.storage, workspace_id, req)
             .await
     }
 
-    pub async fn delete_notebook(
+    pub async fn delete_workspace(
         &self,
         workspace_id: &str,
     ) -> Result<common::StatusOnlyResponse, common::AppError> {
         self.docs
-            .delete_notebook(self.auth, self.storage, workspace_id)
+            .delete_workspace(self.auth, self.storage, workspace_id)
             .await
     }
 

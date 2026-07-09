@@ -1,7 +1,7 @@
 use super::support::*;
 
 #[tokio::test]
-async fn search_conversation_history_notebook_scope_spans_sessions_when_database_available() {
+async fn search_conversation_history_workspace_scope_spans_sessions_when_database_available() {
     let Some(database_url) = env::var("DATABASE_URL").ok() else {
         return;
     };
@@ -16,7 +16,7 @@ async fn search_conversation_history_notebook_scope_spans_sessions_when_database
         .with_actor_id(ActorId::new(user_id));
 
     let notebook = repo
-        .bootstrap().create_notebook(&ctx, "memory-search", "memory search test")
+        .bootstrap().create_workspace(&ctx, "memory-search", "memory search test")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
@@ -95,7 +95,7 @@ async fn search_conversation_history_notebook_scope_spans_sessions_when_database
             &ctx,
             session_b_id,
             "antifragility",
-            ConversationHistoryScope::Notebook,
+            ConversationHistoryScope::Workspace,
             10,
             &[],
         )
@@ -124,7 +124,7 @@ async fn search_sessions_matches_assistant_message_body_when_database_available(
         .with_actor_id(ActorId::new(user_id));
 
     let notebook = repo
-        .bootstrap().create_notebook(&ctx, "session-search", "session search test")
+        .bootstrap().create_workspace(&ctx, "session-search", "session search test")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
@@ -176,7 +176,7 @@ async fn search_conversation_history_matches_assistant_message_when_database_ava
         .with_actor_id(ActorId::new(user_id));
 
     let notebook = repo
-        .bootstrap().create_notebook(&ctx, "assistant-history", "assistant history test")
+        .bootstrap().create_workspace(&ctx, "assistant-history", "assistant history test")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
@@ -231,7 +231,7 @@ async fn search_conversation_history_matches_assistant_message_when_database_ava
             &ctx,
             session_b_id,
             "antifragility",
-            ConversationHistoryScope::Notebook,
+            ConversationHistoryScope::Workspace,
             10,
             &[],
         )

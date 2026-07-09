@@ -12,11 +12,11 @@ pub(crate) fn auth_error_to_app_error(error: AuthError) -> AppError {
             "missing_permission",
             format!("missing permission: {permission}"),
         ),
-        AuthError::NotebookScopeMismatch { expected, actual } => AppError::forbidden(
+        AuthError::WorkspaceScopeMismatch { expected, actual } => AppError::forbidden(
             "notebook_scope_mismatch",
             format!("API key is scoped to notebook {expected}, got {actual}"),
         ),
-        AuthError::MissingNotebookScope => {
+        AuthError::MissingWorkspaceScope => {
             AppError::forbidden("missing_notebook_scope", "workspace API key scope required")
         }
         AuthError::CrossTenantAccess => AppError::forbidden(
@@ -57,7 +57,7 @@ pub(crate) fn authorize_workspace_tool(
                 "org-scoped API keys cannot call workspace-level endpoints",
             ));
         }
-        auth.ensure_notebook_scope(workspace_id)
+        auth.ensure_workspace_scope(workspace_id)
             .map_err(auth_error_to_app_error)?;
     }
     ensure_permission_for_subject(auth, permission)
@@ -88,7 +88,7 @@ pub(crate) fn authorize_workspace_index_or_query(
                 "org-scoped API keys cannot call workspace-level endpoints",
             ));
         }
-        auth.ensure_notebook_scope(workspace_id)
+        auth.ensure_workspace_scope(workspace_id)
             .map_err(auth_error_to_app_error)?;
         let has_index = auth.ensure_permission(PERM_INDEX).is_ok();
         let has_query = auth.ensure_permission(PERM_QUERY).is_ok();
@@ -154,7 +154,7 @@ pub(crate) fn authorize_session_notebook(
 pub(crate) async fn authorize_session_access(
     state: &AppState,
     session_id: &str,
-) -> Result<contracts::notebooks::ChatSession, AppError> {
+) -> Result<contracts::workspaces::ChatSession, AppError> {
     let session = state.chat()
         .get_session(session_id)
         .await
@@ -163,7 +163,7 @@ pub(crate) async fn authorize_session_access(
     Ok(session)
 }
 
-pub(crate) async fn ensure_document_in_notebook(
+pub(crate) async fn ensure_document_in_workspace(
     state: &AppState,
     document_id: &str,
     workspace_id: &str,
@@ -176,7 +176,7 @@ pub(crate) async fn ensure_document_in_notebook(
         .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
     if document.workspace_id != workspace_id {
         return Err(AppError::forbidden(
-            "document_notebook_mismatch",
+            "document_workspace_mismatch",
             "document does not belong to the requested workspace",
         ));
     }
@@ -317,7 +317,7 @@ mod tests {
     #[test]
     fn workspace_key_rejected_for_org_tools() {
         let auth = AuthContext::new(OrgId::from(Uuid::new_v4()), SubjectKind::ApiKey)
-            .with_notebook_scope(Uuid::new_v4())
+            .with_workspace_scope(Uuid::new_v4())
             .grant(PERM_WORKSPACE_CREATE);
         let err = authorize_org_tool(&auth, PERM_WORKSPACE_CREATE).unwrap_err();
         assert_eq!(err.code(), "workspace_key_cannot_call_org_tools");
@@ -336,7 +336,7 @@ mod tests {
         let scoped = Uuid::new_v4();
         let other = Uuid::new_v4();
         let auth = AuthContext::new(OrgId::from(Uuid::new_v4()), SubjectKind::ApiKey)
-            .with_notebook_scope(scoped)
+            .with_workspace_scope(scoped)
             .grant(PERM_QUERY);
         let err = authorize_workspace_tool(&auth, PERM_QUERY, other).unwrap_err();
         assert_eq!(err.code(), "notebook_scope_mismatch");

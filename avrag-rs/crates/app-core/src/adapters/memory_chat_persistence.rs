@@ -12,7 +12,7 @@ use common::{AppError, SourceRow, new_id, now_rfc3339};
 use contracts::auth_runtime::AuthContext;
 use contracts::chat::ChatMessage;
 use contracts::documents::DocumentStatus;
-use contracts::notebooks::{ChatSession, Notebook};
+use contracts::workspaces::{ChatSession, Workspace};
 use ingestion_types::AuditRecord;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -158,7 +158,7 @@ impl SessionPort for MemoryChatPersistence {
             .get(&notebook_key)
             .filter(|nb| nb.org_id == Self::org_id(auth))
             .cloned()
-            .ok_or_else(|| AppError::not_found("notebook_not_found", "notebook not found"))?;
+            .ok_or_else(|| AppError::not_found("workspace_not_found", "workspace not found"))?;
         let now = now_rfc3339();
         let session = ChatSession {
             id: new_id(),
@@ -351,7 +351,7 @@ impl MessagePort for MemoryChatPersistence {
         let workspace_id = session.workspace_id.clone();
         let session_keys: Vec<String> = match scope {
             ConversationHistoryScope::Session => vec![session_key],
-            ConversationHistoryScope::Notebook => state
+            ConversationHistoryScope::Workspace => state
                 .sessions
                 .values()
                 .filter(|s| s.workspace_id == workspace_id)
@@ -392,11 +392,11 @@ impl MessagePort for MemoryChatPersistence {
 
 #[async_trait]
 impl ChatCatalogPort for MemoryChatPersistence {
-    async fn search_notebooks(
+    async fn search_workspaces(
         &self,
         auth: &AuthContext,
         pattern: &str,
-    ) -> Result<Vec<Notebook>, AppError> {
+    ) -> Result<Vec<Workspace>, AppError> {
         let q = Self::strip_like_pattern(pattern);
         let org = Self::org_id(auth);
         let state = self.state.read().await;
@@ -435,7 +435,7 @@ impl ChatCatalogPort for MemoryChatPersistence {
                 Some(SourceRow {
                     id: stored.document.id.clone(),
                     workspace_id: notebook.id.clone(),
-                    notebook_name: notebook.name.clone(),
+                    workspace_name: notebook.name.clone(),
                     title: stored.document.file_name.clone(),
                     file_name: stored.document.file_name.clone(),
                     status: Self::status_label(&stored.document.status).to_string(),
@@ -444,11 +444,11 @@ impl ChatCatalogPort for MemoryChatPersistence {
             .collect())
     }
 
-    async fn get_notebook(
+    async fn get_workspace(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
-    ) -> Result<Option<Notebook>, AppError> {
+    ) -> Result<Option<Workspace>, AppError> {
         let key = workspace_id.to_string();
         let org = Self::org_id(auth);
         let state = self.state.read().await;
@@ -582,7 +582,7 @@ mod tests {
             let mut s = state.write().await;
             s.notebooks.insert(
                 workspace_id.to_string(),
-                Notebook {
+                Workspace {
                     id: workspace_id.to_string(),
                     org_id: org.to_string(),
                     owner_id: user.to_string(),
@@ -642,7 +642,7 @@ mod tests {
             let mut s = state.write().await;
             s.notebooks.insert(
                 workspace_id.to_string(),
-                Notebook {
+                Workspace {
                     id: workspace_id.to_string(),
                     org_id: org.to_string(),
                     owner_id: user.to_string(),

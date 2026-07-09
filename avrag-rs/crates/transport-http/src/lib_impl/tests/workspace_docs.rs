@@ -1,11 +1,11 @@
 use super::support::*;
 
 #[tokio::test]
-async fn workspace_api_key_can_access_its_notebook_sources() {
+async fn workspace_api_key_can_access_its_workspace_sources() {
     let state = test_app_state();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
-            name: "API Key Notebook".to_string(),
+        .create_workspace(CreateWorkspaceRequest {
+            name: "API Key Workspace".to_string(),
             description: String::new(),
         })
         .await
@@ -69,7 +69,7 @@ async fn document_and_share_routes_work_when_database_available() {
         .method("POST")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {token}"))
-        .body(Body::from(r#"{"name":"Routes Notebook","description":""}"#))
+        .body(Body::from(r#"{"name":"Routes Workspace","description":""}"#))
         .unwrap();
     let notebook_resp = app.clone().oneshot(notebook_req).await.unwrap();
     assert_eq!(notebook_resp.status(), StatusCode::CREATED);
@@ -77,7 +77,7 @@ async fn document_and_share_routes_work_when_database_available() {
         .await
         .unwrap();
     let notebook_payload: serde_json::Value = serde_json::from_slice(&notebook_body).unwrap();
-    let workspace_id = notebook_payload["notebook"]["id"]
+    let workspace_id = notebook_payload["workspace"]["id"]
         .as_str()
         .unwrap()
         .to_string();
@@ -166,7 +166,7 @@ async fn document_and_share_routes_work_when_database_available() {
 async fn signed_upload_handler_accepts_valid_signed_url() {
     let state = test_app_state();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "Upload Test".to_string(),
             description: String::new(),
         })
@@ -211,7 +211,7 @@ async fn signed_upload_handler_accepts_valid_signed_url() {
 async fn create_document_upload_rejects_unsupported_file_type() {
     let state = test_app_state();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "Unsupported Upload Test".to_string(),
             description: String::new(),
         })
@@ -252,7 +252,7 @@ async fn dev_upload_handler_completes_upload_flow() {
 
     let state = test_app_state();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "Dev Upload Test".to_string(),
             description: String::new(),
         })
@@ -301,7 +301,7 @@ async fn dev_upload_handler_completes_upload_flow() {
 
 
 #[tokio::test]
-async fn shared_notebook_handler_is_not_implemented_no_longer_returns_501() {
+async fn shared_workspace_handler_is_not_implemented_no_longer_returns_501() {
     let state = test_app_state();
     let app = build_router(state);
     let req = Request::builder()

@@ -11,7 +11,7 @@ async fn search_429_returns_degraded_answer() {
     // 1. Force mock search to return 429
     ctx.set_search_429(true);
 
-    let notebook = ctx.create_notebook("test-notebook").await.unwrap();
+    let notebook = ctx.create_workspace("test-notebook").await.unwrap();
     let http_resp: HttpResponse = ctx
         .search("What is the weather in Tokyo today?", &notebook.id)
         .await

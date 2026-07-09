@@ -141,7 +141,7 @@ fn query_tools() -> Vec<Value> {
             }
         }),
         json!({
-            "name": "notebook.chat",
+            "name": "workspace.chat",
             "description": "Legacy alias for workspace.rag_query.",
             "inputSchema": {
                 "type": "object",
@@ -162,7 +162,7 @@ fn query_tools() -> Vec<Value> {
 
 pub(crate) fn operation_guide_mode_for_tool(tool_name: &str) -> Option<&'static str> {
     match tool_name {
-        "workspace.rag_query" | "notebook.chat" => Some("rag"),
+        "workspace.rag_query" | "workspace.chat" => Some("rag"),
         "workspace.search_query" => Some("search"),
         "workspace.create_upload"
         | "workspace.complete_upload"

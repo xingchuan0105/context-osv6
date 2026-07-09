@@ -147,7 +147,7 @@ mod tests {
         let ctx = AuthContext::new(org_id, SubjectKind::User).with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
-            .bootstrap().create_notebook(&ctx, "orphan-scan-test", "orphan scan test")
+            .bootstrap().create_workspace(&ctx, "orphan-scan-test", "orphan scan test")
             .await
             .unwrap();
         let workspace_id = Uuid::parse_str(&notebook.id).unwrap();

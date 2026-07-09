@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use common::AppError;
 use contracts::chat::{ChatRequest, ChatResponse};
-use contracts::notebooks::ChatSession;
+use contracts::workspaces::ChatSession;
 
 #[async_trait]
 pub trait RagExecutor: Send + Sync {

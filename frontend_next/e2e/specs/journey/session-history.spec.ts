@@ -1,6 +1,6 @@
 import { test, expect } from "../../fixtures/run-context";
 import { ChatPanelPage } from "../../pom/chat-panel-page";
-import { createNotebookViaAPI, resetAndPrepareTestUser } from "../../utils/api-helpers";
+import { createWorkspaceViaAPI, resetAndPrepareTestUser } from "../../utils/api-helpers";
 
 test.describe("Session history", () => {
   test.beforeAll(async ({ request }) => {
@@ -8,7 +8,7 @@ test.describe("Session history", () => {
   });
 
   test("messages survive page refresh", async ({ page, runId }) => {
-    const notebook = await createNotebookViaAPI(page.request, `e2e-history-test ${runId}`);
+    const notebook = await createWorkspaceViaAPI(page.request, `e2e-history-test ${runId}`);
 
     const chat = new ChatPanelPage(page);
     await page.goto(`/dashboard/${notebook.notebook.id}`);

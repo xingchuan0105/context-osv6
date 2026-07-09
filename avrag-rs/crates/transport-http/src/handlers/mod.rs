@@ -9,11 +9,11 @@ use common::AppError;
 
 mod chat;
 mod documents;
-mod notebooks;
+mod workspaces;
 
 pub(crate) use chat::*;
 pub(crate) use documents::*;
-pub(crate) use notebooks::*;
+pub(crate) use workspaces::*;
 
 // ---------------------------------------------------------------------------
 // Error helpers

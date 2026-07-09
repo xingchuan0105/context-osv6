@@ -170,14 +170,14 @@ pub struct UploadResponse {
     pub status: u16,
 }
 
-/// Notebook creation response wrapper.
+/// Workspace creation response wrapper.
 #[derive(Debug, Clone, serde::Deserialize)]
-pub struct NotebookResponse {
-    pub notebook: NotebookInner,
+pub struct WorkspaceResponse {
+    pub notebook: WorkspaceInner,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
-pub struct NotebookInner {
+pub struct WorkspaceInner {
     pub id: String,
     pub title: String,
 }

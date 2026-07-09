@@ -57,9 +57,9 @@ pub(super) fn slugify_note_filename(title: &str) -> String {
 
 /// Convert a stored preference into the API-facing note type.
 pub(super) fn notebook_note_from_pref(
-    note: &contracts::preferences::NotebookNotePreference,
-) -> contracts::notebooks::NotebookNote {
-    contracts::notebooks::NotebookNote {
+    note: &contracts::preferences::WorkspaceNotePreference,
+) -> contracts::workspaces::WorkspaceNote {
+    contracts::workspaces::WorkspaceNote {
         id: note.note_id.clone(),
         workspace_id: note.workspace_id.clone(),
         title: note.title.clone(),
@@ -73,7 +73,7 @@ pub(super) fn notebook_note_from_pref(
 }
 
 /// One-time migration: if a notebook has notes in the legacy
-/// `workspace_drafts` format but none in the new `notebook_notes` format,
+/// `workspace_drafts` format but none in the new `workspace_notes` format,
 /// import the draft. Returns `true` if a migration happened (caller should
 /// persist the updated preferences).
 pub(super) fn migrate_workspace_draft_to_note(
@@ -82,7 +82,7 @@ pub(super) fn migrate_workspace_draft_to_note(
 ) -> bool {
     let has_notes = preferences
         .dashboard
-        .notebook_notes
+        .workspace_notes
         .iter()
         .any(|note| note.workspace_id == workspace_id);
     if has_notes {
@@ -102,8 +102,8 @@ pub(super) fn migrate_workspace_draft_to_note(
     let now = chrono::Utc::now().to_rfc3339();
     preferences
         .dashboard
-        .notebook_notes
-        .push(contracts::preferences::NotebookNotePreference {
+        .workspace_notes
+        .push(contracts::preferences::WorkspaceNotePreference {
             note_id: Uuid::new_v4().to_string(),
             workspace_id: workspace_id.to_string(),
             title: "Imported Notes".to_string(),

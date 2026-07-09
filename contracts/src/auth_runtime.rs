@@ -94,7 +94,7 @@ impl AuthContext {
         self
     }
 
-    pub fn with_notebook_scope(mut self, workspace_id: Uuid) -> Self {
+    pub fn with_workspace_scope(mut self, workspace_id: Uuid) -> Self {
         self.workspace_id = Some(workspace_id);
         self
     }
@@ -152,14 +152,14 @@ impl AuthContext {
         })
     }
 
-    pub fn ensure_notebook_scope(&self, workspace_id: Uuid) -> Result<(), AuthError> {
+    pub fn ensure_workspace_scope(&self, workspace_id: Uuid) -> Result<(), AuthError> {
         match self.workspace_id {
             Some(expected) if expected == workspace_id => Ok(()),
-            Some(expected) => Err(AuthError::NotebookScopeMismatch {
+            Some(expected) => Err(AuthError::WorkspaceScopeMismatch {
                 expected,
                 actual: workspace_id,
             }),
-            None => Err(AuthError::MissingNotebookScope),
+            None => Err(AuthError::MissingWorkspaceScope),
         }
     }
 }
@@ -168,14 +168,14 @@ impl AuthContext {
 pub enum AuthError {
     #[error("missing org scope")]
     MissingOrgScope,
-    #[error("missing notebook scope")]
-    MissingNotebookScope,
+    #[error("missing workspace scope")]
+    MissingWorkspaceScope,
     #[error("missing permission: {permission}")]
     MissingPermission { permission: String },
     #[error("resource belongs to a different organization")]
     CrossTenantAccess,
-    #[error("notebook scope mismatch: expected {expected}, got {actual}")]
-    NotebookScopeMismatch { expected: Uuid, actual: Uuid },
+    #[error("workspace scope mismatch: expected {expected}, got {actual}")]
+    WorkspaceScopeMismatch { expected: Uuid, actual: Uuid },
 }
 
 pub fn ensure_same_org(context: &AuthContext, resource_org_id: OrgId) -> Result<(), AuthError> {

@@ -40,7 +40,7 @@ impl BillingQuotaPort for PgBillingQuotaAdapter {
     ) -> Result<bool, AppError> {
         Ok(self
             .document_store
-            .get_notebook(auth, workspace_id)
+            .get_workspace(auth, workspace_id)
             .await?
             .is_some())
     }

@@ -12,7 +12,7 @@ describe("resolveMiddlewareAction", () => {
       type: "redirect",
       destination: "/admin/organizations/abc",
     });
-    expect(resolveMiddlewareAction("/notebooks/ws-1/share", true)).toEqual({
+    expect(resolveMiddlewareAction("/workspaces/ws-1/share", true)).toEqual({
       type: "redirect",
       destination: "/dashboard/ws-1/share",
     });

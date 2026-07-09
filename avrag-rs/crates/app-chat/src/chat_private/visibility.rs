@@ -1,5 +1,5 @@
 use app_core::MemoryState;
-use contracts::notebooks::ChatSession;
+use contracts::workspaces::ChatSession;
 
 use crate::context::ChatContext;
 

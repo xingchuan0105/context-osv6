@@ -43,7 +43,7 @@ describe("WorkspaceApiAccessSurface", () => {
         {
           id: "key-1",
           org_id: "org-1",
-          notebook_id: workspaceId,
+          workspace_id: workspaceId,
           key_prefix: "sk_live_123",
           name: "Existing Key",
           permissions: ["index"],
@@ -61,7 +61,7 @@ describe("WorkspaceApiAccessSurface", () => {
       api_key: {
         id: "key-2",
         org_id: "org-1",
-        notebook_id: workspaceId,
+        workspace_id: workspaceId,
         key_prefix: "sk_live_456",
         name: "Agent Key",
         permissions: ["index", "query"],

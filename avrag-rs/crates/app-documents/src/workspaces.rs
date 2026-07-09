@@ -2,10 +2,10 @@ use app_core::{
     AnalyticsServiceCtx, DocumentStorePort, StorageContext, parse_uuid_or_app_error,
 };
 use common::{
-    AppError, CreateNotebookRequest, StatusOnlyResponse, UpdateNotebookRequest,
+    AppError, CreateWorkspaceRequest, StatusOnlyResponse, UpdateWorkspaceRequest,
 };
 use contracts::auth_runtime::AuthContext;
-use contracts::notebooks::Notebook;
+use contracts::workspaces::Workspace;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -21,36 +21,36 @@ fn require_document_store(
 }
 
 impl DocumentContext {
-    pub async fn list_notebooks(
+    pub async fn list_workspaces(
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
-    ) -> Vec<Notebook> {
+    ) -> Vec<Workspace> {
         let Ok(store) = require_document_store(storage) else {
             return Vec::new();
         };
-        store.list_notebooks(auth).await.unwrap_or_default()
+        store.list_workspaces(auth).await.unwrap_or_default()
     }
 
-    pub async fn get_notebook(
+    pub async fn get_workspace(
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
         workspace_id: &str,
-    ) -> Option<Notebook> {
+    ) -> Option<Workspace> {
         let store = require_document_store(storage).ok()?;
         let workspace_id = Uuid::parse_str(workspace_id).ok()?;
-        let notebook = store.get_notebook(auth, workspace_id).await.ok().flatten()?;
+        let notebook = store.get_workspace(auth, workspace_id).await.ok().flatten()?;
         Some(notebook)
     }
 
-    pub async fn create_notebook(
+    pub async fn create_workspace(
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
         analytics: &AnalyticsServiceCtx,
-        req: CreateNotebookRequest,
-    ) -> Result<Notebook, AppError> {
+        req: CreateWorkspaceRequest,
+    ) -> Result<Workspace, AppError> {
         if req.name.trim().is_empty() {
             return Err(AppError::validation(
                 "name_required",
@@ -60,12 +60,12 @@ impl DocumentContext {
 
         let store = require_document_store(storage)?;
         let notebook = store
-            .create_notebook(auth, req.name.trim(), req.description.trim())
+            .create_workspace(auth, req.name.trim(), req.description.trim())
             .await?;
         record_product_event_if_available(
             auth,
             analytics,
-            analytics::ProductEventName::NotebookCreated,
+            analytics::ProductEventName::WorkspaceCreated,
             analytics::Surface::Workspace,
             analytics::ResultTag::Success,
             None,
@@ -79,28 +79,28 @@ impl DocumentContext {
         Ok(notebook)
     }
 
-    pub async fn update_notebook(
+    pub async fn update_workspace(
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
         workspace_id: &str,
-        req: UpdateNotebookRequest,
-    ) -> Result<Notebook, AppError> {
+        req: UpdateWorkspaceRequest,
+    ) -> Result<Workspace, AppError> {
         let store = require_document_store(storage)?;
         let workspace_id =
-            parse_uuid_or_app_error(workspace_id, "notebook_not_found", "notebook not found")?;
+            parse_uuid_or_app_error(workspace_id, "workspace_not_found", "workspace not found")?;
         store
-            .update_notebook(
+            .update_workspace(
                 auth,
                 workspace_id,
                 Some(req.name.trim()),
                 Some(req.description.trim()),
             )
             .await?
-            .ok_or_else(|| AppError::not_found("notebook_not_found", "notebook not found"))
+            .ok_or_else(|| AppError::not_found("workspace_not_found", "workspace not found"))
     }
 
-    pub async fn delete_notebook(
+    pub async fn delete_workspace(
         &self,
         auth: &AuthContext,
         storage: &StorageContext,
@@ -108,12 +108,12 @@ impl DocumentContext {
     ) -> Result<StatusOnlyResponse, AppError> {
         let store = require_document_store(storage)?;
         let workspace_id =
-            parse_uuid_or_app_error(workspace_id, "notebook_not_found", "notebook not found")?;
-        let deleted = store.delete_notebook(auth, workspace_id).await?;
+            parse_uuid_or_app_error(workspace_id, "workspace_not_found", "workspace not found")?;
+        let deleted = store.delete_workspace(auth, workspace_id).await?;
         if !deleted {
             return Err(AppError::not_found(
-                "notebook_not_found",
-                "notebook not found",
+                "workspace_not_found",
+                "workspace not found",
             ));
         }
         Ok(StatusOnlyResponse {

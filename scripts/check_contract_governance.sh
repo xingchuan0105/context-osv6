@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
-if rg -n 'pub struct (ChatRequest|ChatResponse|ChatEvent|NotebookResponse|DocumentStatusResponse|AuthEnvelope|UsageLimitResponse)' frontend_rust/crates/web-sdk/src avrag-rs/crates/transport-http/src avrag-rs/crates/app/src; then
+if rg -n 'pub struct (ChatRequest|ChatResponse|ChatEvent|WorkspaceResponse|DocumentStatusResponse|AuthEnvelope|UsageLimitResponse)' frontend_rust/crates/web-sdk/src avrag-rs/crates/transport-http/src avrag-rs/crates/app/src; then
   echo "manual transport DTO definition found outside contracts crate"
   exit 1
 fi

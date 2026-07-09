@@ -70,7 +70,7 @@ async fn org_key(ctx: &TestContext, permissions: &[&str]) -> String {
 async fn workspace_key_cannot_call_org_mcp_tool() {
     super::require_integration_suite();
     let ctx = TestContext::new_smoke().await;
-    let notebook = ctx.create_notebook("boundary-ws").await.unwrap();
+    let notebook = ctx.create_workspace("boundary-ws").await.unwrap();
     let bearer = workspace_key(&ctx, &notebook.id, &["query"]).await;
 
     let (status, payload) = mcp_tools_call(&ctx, &bearer, "org.list_workspaces", json!({})).await;
@@ -105,7 +105,7 @@ async fn org_key_cannot_call_workspace_mcp_tool() {
 async fn workspace_key_cannot_query_other_workspace() {
     super::require_integration_suite();
     let ctx = TestContext::new_smoke().await;
-    let notebook = ctx.create_notebook("boundary-scope").await.unwrap();
+    let notebook = ctx.create_workspace("boundary-scope").await.unwrap();
     let bearer = workspace_key(&ctx, &notebook.id, &["query"]).await;
 
     let (status, payload) = mcp_tools_call(
@@ -120,10 +120,10 @@ async fn workspace_key_cannot_query_other_workspace() {
 }
 
 #[tokio::test]
-async fn api_key_cannot_list_notebook_notes() {
+async fn api_key_cannot_list_workspace_notes() {
     super::require_integration_suite();
     let ctx = TestContext::new_smoke().await;
-    let notebook = ctx.create_notebook("boundary-notes").await.unwrap();
+    let notebook = ctx.create_workspace("boundary-notes").await.unwrap();
     let bearer = workspace_key(&ctx, &notebook.id, &["query"]).await;
 
     let client = reqwest::Client::builder()

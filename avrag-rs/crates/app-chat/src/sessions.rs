@@ -1,8 +1,8 @@
 use app_core::parse_uuid_or_app_error;
 use common::{AppError, SourceRow, StatusOnlyResponse};
 use contracts::chat::{ChatMessage, ChatRequest, ChatResponse};
-use contracts::notebooks::{
-    ChatSession, CreateChatSessionRequest, Notebook, UpdateChatSessionRequest,
+use contracts::workspaces::{
+    ChatSession, CreateChatSessionRequest, Workspace, UpdateChatSessionRequest,
 };
 use uuid::Uuid;
 
@@ -18,13 +18,13 @@ impl ChatContext {
         })
     }
 
-    pub async fn search(&self, pattern: &str) -> (Vec<Notebook>, Vec<ChatSession>, Vec<SourceRow>) {
+    pub async fn search(&self, pattern: &str) -> (Vec<Workspace>, Vec<ChatSession>, Vec<SourceRow>) {
         let Ok(pg) = self.require_chat_persistence() else {
             return (Vec::new(), Vec::new(), Vec::new());
         };
         let like_pattern = format!("%{}%", pattern);
         let nb = pg
-            .search_notebooks(&self.auth, &like_pattern)
+            .search_workspaces(&self.auth, &like_pattern)
             .await
             .unwrap_or_default();
         let sess = pg
@@ -55,14 +55,14 @@ impl ChatContext {
         let pg = self.require_chat_persistence()?;
         let workspace_id = parse_uuid_or_app_error(
             &req.workspace_id,
-            "notebook_not_found",
-            "notebook not found",
+            "workspace_not_found",
+            "workspace not found",
         )?;
-        let notebook = pg.get_notebook(&self.auth, workspace_id).await?;
+        let notebook = pg.get_workspace(&self.auth, workspace_id).await?;
         if notebook.is_none() {
             return Err(AppError::not_found(
-                "notebook_not_found",
-                "notebook not found",
+                "workspace_not_found",
+                "workspace not found",
             ));
         }
         let session = pg

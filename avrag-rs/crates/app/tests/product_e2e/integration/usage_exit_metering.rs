@@ -42,7 +42,7 @@ async fn chat_records_llm_usage_event_with_usage_kind_chat() {
     .expect("count usage before chat");
 
     let notebook = ctx
-        .create_notebook_with_token(&token, "usage-exit-meter")
+        .create_workspace_with_token(&token, "usage-exit-meter")
         .await
         .expect("create notebook");
 

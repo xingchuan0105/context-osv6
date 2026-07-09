@@ -64,7 +64,7 @@
         ))
     }
 
-    async fn update_notebook_access_level(
+    async fn update_workspace_access_level(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
@@ -127,7 +127,7 @@
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
-    ) -> Result<Vec<ShareNotebookMember>, AppError> {
+    ) -> Result<Vec<ShareWorkspaceMember>, AppError> {
         let mut tx = self
             .repo
             .raw()

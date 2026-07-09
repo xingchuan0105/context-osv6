@@ -71,7 +71,7 @@ cargo run -p avrag-worker
 - `task_id`
 - `kind`
 - `org_id`
-- `notebook_id`
+- `workspace_id`
 - `document_id`
 - `requested_by`
 - `idempotency_key`

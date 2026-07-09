@@ -90,9 +90,9 @@ async fn workspace_key_rate_limit_rpm_2_blocks_third_request_with_429() {
 
     let ctx = TestContext::new_smoke().await;
     // Setup runs while E2E_ENABLED is still "true" (set by the bootstrap), so
-    // the proxy-header auth used by `create_notebook` works.
+    // the proxy-header auth used by `create_workspace` works.
     let notebook = ctx
-        .create_notebook("rate-limit")
+        .create_workspace("rate-limit")
         .await
         .expect("create notebook");
 

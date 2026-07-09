@@ -1,4 +1,4 @@
-//! Notebook / org API-key HTTP handlers (auth only; domain logic on AppState/admin).
+//! Workspace / org API-key HTTP handlers (auth only; domain logic on AppState/admin).
 
 use axum::{
     Json,

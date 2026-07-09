@@ -11,7 +11,7 @@ use crate::product_e2e::{
 async fn real_llm_general_chat_returns_substantive_answer() {
     super::require_nightly_suite();
     let ctx = TestContext::new_with_real_llm().await;
-    let notebook = ctx.create_notebook("chat-real").await.expect("notebook");
+    let notebook = ctx.create_workspace("chat-real").await.expect("notebook");
 
     let result = chat_general_with_retry(
         &ctx,

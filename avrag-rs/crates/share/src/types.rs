@@ -59,7 +59,7 @@ impl From<AccessLevel> for app_core::ShareAccessLevel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NotebookMember {
+pub struct WorkspaceMember {
     pub id: String,
     pub workspace_id: String,
     pub user_id: Option<String>,
@@ -71,8 +71,8 @@ pub struct NotebookMember {
     pub accepted_at: Option<i64>,
 }
 
-impl From<app_core::ShareNotebookMember> for NotebookMember {
-    fn from(value: app_core::ShareNotebookMember) -> Self {
+impl From<app_core::ShareWorkspaceMember> for WorkspaceMember {
+    fn from(value: app_core::ShareWorkspaceMember) -> Self {
         Self {
             id: value.id,
             workspace_id: value.workspace_id,
@@ -92,7 +92,7 @@ pub struct ShareSettings {
     pub access_level: String,
     pub allow_download: bool,
     pub share_tokens: Vec<ShareTokenInfo>,
-    pub members: Vec<NotebookMember>,
+    pub members: Vec<WorkspaceMember>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,7 +105,7 @@ pub struct ShareTokenInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SharedNotebookPayload {
+pub struct SharedWorkspacePayload {
     pub knowledge_base: SharedKnowledgeBase,
     pub share: SharedShareInfo,
     pub sources: Vec<SharedSource>,

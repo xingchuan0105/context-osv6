@@ -42,7 +42,7 @@ afterEach(() => {
 describe("WorkspaceChatPane modes", () => {
   it("uses chat by default without sources and rag by default when sources are available", async () => {
     const user = userEvent.setup();
-    const requests: Array<{ agent_type?: string; notebook_id?: string; doc_scope?: string[] }> = [];
+    const requests: Array<{ agent_type?: string; workspace_id?: string; doc_scope?: string[] }> = [];
 
     mocks.listWorkspaceSessionMessagesMock.mockResolvedValue({ messages: [] });
     mocks.streamWorkspaceChatMock.mockImplementation(async (_token, request, onEvent) => {
@@ -99,7 +99,7 @@ describe("WorkspaceChatPane modes", () => {
     await waitFor(() => {
       expect(requests[1]).toMatchObject({
         agent_type: "rag",
-        notebook_id: "ws-rag",
+        workspace_id: "ws-rag",
         doc_scope: ["doc-1"],
       });
     });

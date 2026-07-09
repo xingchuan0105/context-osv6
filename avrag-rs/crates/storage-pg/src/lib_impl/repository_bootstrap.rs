@@ -54,11 +54,11 @@ impl BootstrapRepository {
         self.pool.raw()
     }
 
-    pub async fn get_notebook(
+    pub async fn get_workspace(
         &self,
         context: &AuthContext,
         workspace_id: Uuid,
-    ) -> Result<Option<Notebook>, PgStorageError> {
+    ) -> Result<Option<Workspace>, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
@@ -75,12 +75,12 @@ impl BootstrapRepository {
         row.map(map_notebook).transpose()
     }
 
-    pub async fn create_notebook(
+    pub async fn create_workspace(
         &self,
         context: &AuthContext,
         name: &str,
         description: &str,
-    ) -> Result<Notebook, PgStorageError> {
+    ) -> Result<Workspace, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         ensure_org_and_actor(tx.inner(), context).await?;
         let row = sqlx::query(
@@ -100,13 +100,13 @@ impl BootstrapRepository {
         map_notebook(row)
     }
 
-    pub async fn update_notebook(
+    pub async fn update_workspace(
         &self,
         context: &AuthContext,
         workspace_id: Uuid,
         name: &str,
         description: &str,
-    ) -> Result<Option<Notebook>, PgStorageError> {
+    ) -> Result<Option<Workspace>, PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         let row = sqlx::query(
             r#"
@@ -125,7 +125,7 @@ impl BootstrapRepository {
         row.map(map_notebook).transpose()
     }
 
-    pub async fn delete_notebook(
+    pub async fn delete_workspace(
         &self,
         context: &AuthContext,
         workspace_id: Uuid,

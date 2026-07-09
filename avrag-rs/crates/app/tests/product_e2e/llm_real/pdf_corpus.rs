@@ -167,7 +167,7 @@ async fn real_llm_rag_bundled_pdf_corpus_query() {
     );
 }
 
-/// Notebook with bundled PDF + txt — multi-doc scope RAG (not MinerU-era dual-book PDF).
+/// Workspace with bundled PDF + txt — multi-doc scope RAG (not MinerU-era dual-book PDF).
 #[tokio::test]
 #[ignore = "requires real LLM + embedding; run with --ignored --test-threads=1"]
 async fn real_llm_rag_multidoc_pdf_and_txt() {
@@ -178,7 +178,7 @@ async fn real_llm_rag_multidoc_pdf_and_txt() {
 
     let mut ctx = TestContext::new_with_real_llm().await;
     let notebook = ctx
-        .create_notebook("pdf-txt-corpus")
+        .create_workspace("pdf-txt-corpus")
         .await
         .expect("notebook");
 

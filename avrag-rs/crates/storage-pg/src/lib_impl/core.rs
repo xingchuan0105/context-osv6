@@ -7,7 +7,7 @@ pub use common::{
 };
 pub use contracts::chat::{ChatMessage, Citation};
 pub use contracts::documents::{DocumentStatus};
-pub use contracts::notebooks::{ChatSession, Notebook};
+pub use contracts::workspaces::{ChatSession, Workspace};
 pub use ingestion_types::{
     AuditRecord, IngestionTask, IngestionTaskKind, IngestionTaskPayload, TaskCompletionOutcome,
     TaskFailureOutcome,

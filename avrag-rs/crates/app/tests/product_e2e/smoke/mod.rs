@@ -17,7 +17,7 @@ pub mod billing_boundary;
 pub mod chat_smoke;
 pub mod ingestion_smoke;
 pub mod memory_multiturn_smoke;
-pub mod notebook_crud;
+pub mod workspace_crud;
 pub mod paddle_image_smoke;
 pub mod paddle_pdf_smoke;
 pub mod rag_codegen_multitool_smoke;

@@ -1,5 +1,5 @@
 import { request } from "../http/request";
-import { type RawNotebook } from "../workspace/client";
+import { type RawWorkspace } from "../workspace/client";
 
 export type DashboardWorkspace = {
   workspace_id: string;
@@ -33,19 +33,18 @@ export type UpdateWorkspaceRequest = {
   description: string;
 };
 
-type RawNotebookListResponse = {
-  workspaces?: RawNotebook[];
-  notebooks?: RawNotebook[];
-};
+type RawWorkspaceListResponse = {
+  workspaces?: RawWorkspace[];
+  };
 
-type RawNotebookResponse = {
-  workspace?: RawNotebook;
-  notebook?: RawNotebook;
+type RawWorkspaceResponse = {
+  workspace?: RawWorkspace;
+  notebook?: RawWorkspace;
 };
 
 type EmptyResponse = Record<string, never>;
 
-function mapNotebook(notebook: RawNotebook): DashboardWorkspace {
+function mapWorkspace(notebook: RawWorkspace): DashboardWorkspace {
   return {
     workspace_id: notebook.id,
     org_id: notebook.org_id,
@@ -62,10 +61,10 @@ function mapNotebook(notebook: RawNotebook): DashboardWorkspace {
 }
 
 export async function listWorkspaces(token: string): Promise<DashboardWorkspaceListResponse> {
-  const resp = await request<RawNotebookListResponse>("/api/v1/workspaces", { method: "GET" }, token);
+  const resp = await request<RawWorkspaceListResponse>("/api/v1/workspaces", { method: "GET" }, token);
 
   return {
-    workspaces: (resp.workspaces ?? []).map(mapNotebook),
+    workspaces: (resp.workspaces ?? []).map(mapWorkspace),
   };
 }
 
@@ -73,7 +72,7 @@ export async function createWorkspace(
   token: string,
   requestBody: CreateWorkspaceRequest,
 ): Promise<DashboardWorkspaceResponse> {
-  const resp = await request<RawNotebookResponse>(
+  const resp = await request<RawWorkspaceResponse>(
     "/api/v1/workspaces",
     {
       method: "POST",
@@ -83,7 +82,7 @@ export async function createWorkspace(
   );
 
   return {
-    workspace: mapNotebook((resp.workspace)!),
+    workspace: mapWorkspace((resp.workspace)!),
   };
 }
 
@@ -92,7 +91,7 @@ export async function updateWorkspace(
   workspace_id: string,
   requestBody: UpdateWorkspaceRequest,
 ): Promise<DashboardWorkspaceResponse> {
-  const resp = await request<RawNotebookResponse>(
+  const resp = await request<RawWorkspaceResponse>(
     `/api/v1/workspaces/${workspace_id}`,
     {
       method: "PUT",
@@ -102,7 +101,7 @@ export async function updateWorkspace(
   );
 
   return {
-    workspace: mapNotebook((resp.workspace)!),
+    workspace: mapWorkspace((resp.workspace)!),
   };
 }
 

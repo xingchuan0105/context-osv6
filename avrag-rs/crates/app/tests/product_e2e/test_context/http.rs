@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use super::super::{
-    DocumentStatus, HttpResponse, NotebookInner, NotebookResponse, SseEvent, SseParser,
+    DocumentStatus, HttpResponse, WorkspaceInner, WorkspaceResponse, SseEvent, SseParser,
     UploadResponse,
     mock_servers::{
         set_mock_rag_codegen_chunk_id, set_mock_rag_codegen_chunk_ids, set_mock_rag_codegen_query,
@@ -16,7 +16,7 @@ use super::TestContext;
 use super::profiles::ChatStreamParams;
 
 impl TestContext {
-    pub async fn create_notebook(&self, name: &str) -> anyhow::Result<NotebookInner> {
+    pub async fn create_workspace(&self, name: &str) -> anyhow::Result<WorkspaceInner> {
         let resp = self
             .http_client
             .post(format!("{}/api/v1/workspaces", self.base_url))
@@ -28,12 +28,12 @@ impl TestContext {
         if status != 201 {
             anyhow::bail!("create notebook failed: HTTP {status}, body: {body}");
         }
-        let wrapper: NotebookResponse = serde_json::from_value(body)?;
+        let wrapper: WorkspaceResponse = serde_json::from_value(body)?;
         Ok(wrapper.notebook)
     }
 
     pub async fn upload_document(&self, fixture: &str) -> anyhow::Result<UploadResponse> {
-        let notebook = self.create_notebook("test-notebook").await?;
+        let notebook = self.create_workspace("test-notebook").await?;
         self.upload_document_to_notebook(fixture, &notebook.id)
             .await
     }
@@ -65,7 +65,7 @@ impl TestContext {
     }
 
     pub async fn upload_file_from_path(&self, file_path: &str) -> anyhow::Result<UploadResponse> {
-        let notebook = self.create_notebook("test-notebook").await?;
+        let notebook = self.create_workspace("test-notebook").await?;
         self.upload_file_from_path_to_notebook(file_path, &notebook.id)
             .await
     }
@@ -602,11 +602,11 @@ impl TestContext {
             .ok_or_else(|| anyhow::anyhow!("missing token in register response: {payload}"))
     }
 
-    pub async fn create_notebook_with_token(
+    pub async fn create_workspace_with_token(
         &self,
         token: &str,
         name: &str,
-    ) -> anyhow::Result<NotebookInner> {
+    ) -> anyhow::Result<WorkspaceInner> {
         let resp = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
             .build()?
@@ -620,7 +620,7 @@ impl TestContext {
         if status != 201 {
             anyhow::bail!("create notebook with token failed: HTTP {status}, body: {body}");
         }
-        let wrapper: NotebookResponse = serde_json::from_value(body)?;
+        let wrapper: WorkspaceResponse = serde_json::from_value(body)?;
         Ok(wrapper.notebook)
     }
 
@@ -837,7 +837,7 @@ impl TestContext {
         Ok(events)
     }
 
-    pub async fn get_notebook(&self, workspace_id: &str) -> anyhow::Result<HttpResponse> {
+    pub async fn get_workspace(&self, workspace_id: &str) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
             .get(format!("{}/api/v1/workspaces/{workspace_id}", self.base_url))
@@ -848,7 +848,7 @@ impl TestContext {
         Ok(HttpResponse { status, body_json })
     }
 
-    pub async fn list_notebooks(&self) -> anyhow::Result<HttpResponse> {
+    pub async fn list_workspaces(&self) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
             .get(format!("{}/api/v1/workspaces", self.base_url))
@@ -859,7 +859,7 @@ impl TestContext {
         Ok(HttpResponse { status, body_json })
     }
 
-    pub async fn update_notebook(
+    pub async fn update_workspace(
         &self,
         workspace_id: &str,
         name: &str,
@@ -876,7 +876,7 @@ impl TestContext {
         Ok(HttpResponse { status, body_json })
     }
 
-    pub async fn delete_notebook(&self, workspace_id: &str) -> anyhow::Result<HttpResponse> {
+    pub async fn delete_workspace(&self, workspace_id: &str) -> anyhow::Result<HttpResponse> {
         let resp = self
             .http_client
             .delete(format!("{}/api/v1/workspaces/{workspace_id}", self.base_url))

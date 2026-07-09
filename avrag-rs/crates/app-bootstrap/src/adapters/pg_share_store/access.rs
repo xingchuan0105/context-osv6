@@ -1,8 +1,8 @@
-    async fn query_notebook_access(
+    async fn query_workspace_access(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
-    ) -> Result<Option<NotebookAccessSnapshot>, AppError> {
+    ) -> Result<Option<WorkspaceAccessSnapshot>, AppError> {
         let mut tx = self
             .repo
             .raw()
@@ -25,7 +25,7 @@
         tx.commit()
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
-        Ok(row.map(|row| NotebookAccessSnapshot {
+        Ok(row.map(|row| WorkspaceAccessSnapshot {
             owner_id: row.try_get::<Option<Uuid>, _>("owner_id").ok().flatten(),
             notebook_access_level: row
                 .try_get::<String, _>("access_level")

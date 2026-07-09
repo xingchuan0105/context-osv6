@@ -8,7 +8,7 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
-use common::{CreateDocumentRequest, CreateNotebookRequest};
+use common::{CreateDocumentRequest, CreateWorkspaceRequest};
 use contracts::chat::ChatEvent;
 use contracts::chat::ChatResponse;
 use contracts::documents::DocumentStatus;
@@ -433,7 +433,7 @@ async fn test_app() -> (axum::Router, String, Uuid) {
     let org_id = Uuid::new_v4();
     let notebook = state
         .with_auth(AuthContext::new(OrgId::from(org_id), SubjectKind::User))
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "stream-contract".to_string(),
             description: "chat stream contract test".to_string(),
         })
@@ -450,7 +450,7 @@ async fn test_app_with_ready_document() -> (axum::Router, String, String, Uuid) 
     let org_id = Uuid::new_v4();
     let scoped = state.with_auth(AuthContext::new(OrgId::from(org_id), SubjectKind::User));
     let notebook = scoped
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "stream-contract-rag".to_string(),
             description: "chat stream RAG contract test".to_string(),
         })

@@ -3,9 +3,9 @@ use std::sync::Arc;
 use app_core::{
     ShareStorePort,
     share_domain::{
-        NotebookAccessSnapshot, PublicShareChatContextSnapshot, ShareAccessLevel,
-        ShareAccessLogEntry, ShareAnalyticsEntry, ShareNotebookMember, ShareTokenSnapshot,
-        SharedKnowledgeBaseSnapshot, SharedNotebookSnapshot, SharedShareInfoSnapshot,
+        WorkspaceAccessSnapshot, PublicShareChatContextSnapshot, ShareAccessLevel,
+        ShareAccessLogEntry, ShareAnalyticsEntry, ShareWorkspaceMember, ShareTokenSnapshot,
+        SharedKnowledgeBaseSnapshot, SharedWorkspaceSnapshot, SharedShareInfoSnapshot,
         SharedSourceSnapshot,
     },
 };

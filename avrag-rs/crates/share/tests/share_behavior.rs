@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use app_core::{
     PublicShareChatContextSnapshot, ShareAccessLevel, SharedKnowledgeBaseSnapshot,
-    SharedNotebookSnapshot, SharedShareInfoSnapshot, SharedSourceSnapshot,
+    SharedWorkspaceSnapshot, SharedShareInfoSnapshot, SharedSourceSnapshot,
 };
 use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
 use avrag_share::{AccessLevel, ShareService};
@@ -18,13 +18,13 @@ fn user_auth(user_id: Uuid) -> AuthContext {
 }
 
 #[tokio::test]
-async fn load_shared_notebook_maps_snapshot_fields_to_payload() {
+async fn load_shared_workspace_maps_snapshot_fields_to_payload() {
     let store = Arc::new(MemoryShareStore::new());
     let token = "public-read-token";
     store
-        .seed_shared_notebook(
+        .seed_shared_workspace(
             token,
-            SharedNotebookSnapshot {
+            SharedWorkspaceSnapshot {
                 knowledge_base: SharedKnowledgeBaseSnapshot {
                     id: "nb-1".to_string(),
                     title: "Quarterly Review".to_string(),
@@ -47,7 +47,7 @@ async fn load_shared_notebook_maps_snapshot_fields_to_payload() {
 
     let service = ShareService::new(store);
     let payload = service
-        .load_shared_notebook(token)
+        .load_shared_workspace(token)
         .await
         .expect("load should succeed")
         .expect("token should resolve to payload");
@@ -71,11 +71,11 @@ async fn load_shared_notebook_maps_snapshot_fields_to_payload() {
 }
 
 #[tokio::test]
-async fn load_shared_notebook_returns_none_for_unknown_token() {
+async fn load_shared_workspace_returns_none_for_unknown_token() {
     let service = ShareService::new(Arc::new(MemoryShareStore::new()));
 
     let payload = service
-        .load_shared_notebook("missing-token")
+        .load_shared_workspace("missing-token")
         .await
         .expect("load should succeed");
 
@@ -131,7 +131,7 @@ async fn owner_can_invite_member() {
     let store = Arc::new(MemoryShareStore::new());
     let workspace_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
-    store.seed_notebook_owner(workspace_id, owner_id).await;
+    store.seed_workspace_owner(workspace_id, owner_id).await;
 
     let service = ShareService::new(store.clone());
     let member = service
@@ -164,7 +164,7 @@ async fn non_owner_invite_is_rejected_before_store() {
     let workspace_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
     let viewer_id = Uuid::new_v4();
-    store.seed_notebook_owner(workspace_id, owner_id).await;
+    store.seed_workspace_owner(workspace_id, owner_id).await;
     store
         .seed_member_access(workspace_id, viewer_id, "viewer")
         .await;

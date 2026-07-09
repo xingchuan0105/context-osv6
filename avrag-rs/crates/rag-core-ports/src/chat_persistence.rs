@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use common::{AppError, SourceRow};
 use contracts::chat::ChatMessage;
-use contracts::notebooks::{ChatSession, Notebook};
+use contracts::workspaces::{ChatSession, Workspace};
 use contracts::{AuthContext, ToolResult};
 use ingestion_types::AuditRecord;
 use uuid::Uuid;
@@ -101,14 +101,14 @@ pub trait MessagePort: Send + Sync {
     ) -> Result<Vec<ConversationHistoryHit>, AppError>;
 }
 
-/// Notebook / source catalog lookups used by chat UX.
+/// Workspace / source catalog lookups used by chat UX.
 #[async_trait]
 pub trait ChatCatalogPort: Send + Sync {
-    async fn search_notebooks(
+    async fn search_workspaces(
         &self,
         auth: &AuthContext,
         pattern: &str,
-    ) -> Result<Vec<Notebook>, AppError>;
+    ) -> Result<Vec<Workspace>, AppError>;
 
     async fn search_sources(
         &self,
@@ -116,11 +116,11 @@ pub trait ChatCatalogPort: Send + Sync {
         pattern: &str,
     ) -> Result<Vec<SourceRow>, AppError>;
 
-    async fn get_notebook(
+    async fn get_workspace(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
-    ) -> Result<Option<Notebook>, AppError>;
+    ) -> Result<Option<Workspace>, AppError>;
 }
 
 /// Long-term user profile load/store.

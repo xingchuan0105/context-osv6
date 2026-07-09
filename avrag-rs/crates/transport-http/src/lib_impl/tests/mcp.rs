@@ -4,8 +4,8 @@ use super::support::*;
 async fn mcp_jsonrpc_initialize_and_tools_list() {
     let state = test_app_state();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
-            name: "MCP Notebook".to_string(),
+        .create_workspace(CreateWorkspaceRequest {
+            name: "MCP Workspace".to_string(),
             description: String::new(),
         })
         .await
@@ -123,7 +123,7 @@ async fn org_mcp_create_workspace_returns_workspace_id() {
     let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(
         payload
-            .pointer("/result/structuredContent/data/notebook/id")
+            .pointer("/result/structuredContent/data/workspace/id")
             .and_then(|value| value.as_str())
             .is_some()
     );

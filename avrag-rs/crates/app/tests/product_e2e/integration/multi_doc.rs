@@ -10,7 +10,7 @@ async fn multi_doc_rag_returns_citations_from_both_docs() {
     super::require_integration_suite();
 
     let mut ctx = TestContext::new_smoke_with_rag().await;
-    let notebook = ctx.create_notebook("multi-doc-test").await.unwrap();
+    let notebook = ctx.create_workspace("multi-doc-test").await.unwrap();
 
     // 1. Upload two documents to the same notebook
     let upload1 = ctx

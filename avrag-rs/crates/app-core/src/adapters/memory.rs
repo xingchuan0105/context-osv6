@@ -1,4 +1,4 @@
-use crate::ports::notebooks::notebook_store::NotebookStore;
+use crate::ports::workspaces::workspace_store::WorkspaceStore;
 use crate::{
     BillingQuotaPort, DocumentStorePort, MemoryState, current_org_id, current_user_id,
     domain_rows::{
@@ -9,28 +9,28 @@ use crate::{
 use async_trait::async_trait;
 use contracts::auth_runtime::AuthContext;
 use common::{
-    AppError, CreateNotebookRequest, Document, DocumentContentResponse, ParsedPreviewResponse,
+    AppError, CreateWorkspaceRequest, Document, DocumentContentResponse, ParsedPreviewResponse,
     SourceRow, default_org_id, default_user_id, new_id, now_rfc3339,
 };
 use contracts::documents::DocumentStatus;
-use contracts::notebooks::Notebook;
+use contracts::workspaces::Workspace;
 use ingestion_types::{AuditRecord, IngestionTask};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 #[derive(Default, Clone)]
-pub struct MemoryNotebookStore;
+pub struct MemoryWorkspaceStore;
 
 #[async_trait]
-impl NotebookStore for MemoryNotebookStore {
-    async fn list_notebooks(&self) -> Result<Vec<Notebook>, AppError> {
+impl WorkspaceStore for MemoryWorkspaceStore {
+    async fn list_workspaces(&self) -> Result<Vec<Workspace>, AppError> {
         Ok(Vec::new())
     }
 
-    async fn create_notebook(&self, req: CreateNotebookRequest) -> Result<Notebook, AppError> {
+    async fn create_workspace(&self, req: CreateWorkspaceRequest) -> Result<Workspace, AppError> {
         let now = now_rfc3339();
-        Ok(Notebook {
+        Ok(Workspace {
             id: new_id(),
             org_id: default_org_id(),
             owner_id: default_user_id(),
@@ -74,7 +74,7 @@ fn upload_status_mutable(status: &DocumentStatus) -> bool {
 
 #[async_trait]
 impl DocumentStorePort for MemoryDocumentStore {
-    async fn list_notebooks(&self, auth: &AuthContext) -> Result<Vec<Notebook>, AppError> {
+    async fn list_workspaces(&self, auth: &AuthContext) -> Result<Vec<Workspace>, AppError> {
         let state = self.state.read().await;
         Ok(state
             .notebooks
@@ -84,11 +84,11 @@ impl DocumentStorePort for MemoryDocumentStore {
             .collect())
     }
 
-    async fn get_notebook(
+    async fn get_workspace(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
-    ) -> Result<Option<Notebook>, AppError> {
+    ) -> Result<Option<Workspace>, AppError> {
         let state = self.state.read().await;
         Ok(state
             .notebooks
@@ -97,14 +97,14 @@ impl DocumentStorePort for MemoryDocumentStore {
             .cloned())
     }
 
-    async fn create_notebook(
+    async fn create_workspace(
         &self,
         auth: &AuthContext,
         name: &str,
         description: &str,
-    ) -> Result<Notebook, AppError> {
+    ) -> Result<Workspace, AppError> {
         let now = now_rfc3339();
-        let notebook = Notebook {
+        let notebook = Workspace {
             id: new_id(),
             org_id: current_org_id(auth),
             owner_id: current_user_id(auth),
@@ -124,13 +124,13 @@ impl DocumentStorePort for MemoryDocumentStore {
         Ok(notebook)
     }
 
-    async fn update_notebook(
+    async fn update_workspace(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
         name: Option<&str>,
         description: Option<&str>,
-    ) -> Result<Option<Notebook>, AppError> {
+    ) -> Result<Option<Workspace>, AppError> {
         let mut state = self.state.write().await;
         let key = workspace_id.to_string();
         let notebook = state.notebooks.get_mut(&key);
@@ -151,7 +151,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         Ok(Some(notebook.clone()))
     }
 
-    async fn delete_notebook(
+    async fn delete_workspace(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,

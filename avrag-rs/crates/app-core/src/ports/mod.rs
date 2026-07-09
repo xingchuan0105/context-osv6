@@ -1,3 +1,3 @@
 pub mod chat;
-pub mod notebooks;
+pub mod workspaces;
 pub mod rate_limit;

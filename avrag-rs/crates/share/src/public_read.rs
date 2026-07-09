@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 
 use crate::{
     PublicShareChatContext, ShareAccessLog, ShareService, SharedKnowledgeBase,
-    SharedNotebookPayload, SharedShareInfo, SharedSource,
+    SharedWorkspacePayload, SharedShareInfo, SharedSource,
 };
 
 impl ShareService {
@@ -34,12 +34,12 @@ impl ShareService {
             .collect())
     }
 
-    pub async fn load_shared_notebook(&self, token: &str) -> Result<Option<SharedNotebookPayload>> {
+    pub async fn load_shared_workspace(&self, token: &str) -> Result<Option<SharedWorkspacePayload>> {
         Ok(self
             .store
-            .load_shared_notebook(token)
+            .load_shared_workspace(token)
             .await?
-            .map(|snapshot| SharedNotebookPayload {
+            .map(|snapshot| SharedWorkspacePayload {
                 knowledge_base: SharedKnowledgeBase {
                     id: snapshot.knowledge_base.id,
                     title: snapshot.knowledge_base.title,

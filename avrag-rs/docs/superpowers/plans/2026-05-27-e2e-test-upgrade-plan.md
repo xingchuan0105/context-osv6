@@ -859,7 +859,7 @@ fn build_request(strategy: StrategyKind, query: &str) -> AgentRequest {
     AgentRequest {
         kind,
         query: query.to_string(),
-        notebook_id: None,
+        workspace_id: None,
         session_id: None,
         doc_scope: vec![],
         messages: vec![ChatTurnInput {

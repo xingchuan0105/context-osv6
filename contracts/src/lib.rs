@@ -6,7 +6,7 @@ pub mod billing;
 pub mod chat;
 pub mod documents;
 pub mod errors;
-pub mod notebooks;
+pub mod workspaces;
 pub mod preferences;
 pub mod rag_execute;
 pub mod share;
@@ -46,18 +46,18 @@ pub use documents::{
     SourcesResponse,
 };
 pub use errors::ErrorEnvelope;
-pub use notebooks::{
+pub use workspaces::{
     ApiKeyListResponse, ApiKeyRow, ChatSession, ChatSessionListResponse, CreateApiKeyRequest,
-    CreateApiKeyResponse, CreateChatSessionRequest, CreateNotebookNoteRequest,
-    CreateNotebookRequest, Notebook, NotebookAnalysisAccess, NotebookAnalysisAlert,
-    NotebookAnalysisNotes, NotebookAnalysisOverview, NotebookAnalysisResponse,
-    NotebookAnalysisSources, NotebookAnalysisThreads, NotebookListResponse, NotebookNote,
-    NotebookNoteListResponse, NotebookNoteResponse, NotebookResponse, PromoteNotebookNoteResponse,
-    UpdateChatSessionRequest, UpdateNotebookNoteRequest, UpdateNotebookRequest,
+    CreateApiKeyResponse, CreateChatSessionRequest, CreateWorkspaceNoteRequest,
+    CreateWorkspaceRequest, Workspace, WorkspaceAnalysisAccess, WorkspaceAnalysisAlert,
+    WorkspaceAnalysisNotes, WorkspaceAnalysisOverview, WorkspaceAnalysisResponse,
+    WorkspaceAnalysisSources, WorkspaceAnalysisThreads, WorkspaceListResponse, WorkspaceNote,
+    WorkspaceNoteListResponse, WorkspaceNoteResponse, WorkspaceResponse, PromoteWorkspaceNoteResponse,
+    UpdateChatSessionRequest, UpdateWorkspaceNoteRequest, UpdateWorkspaceRequest,
 };
 pub use preferences::{
     AgentPreference, AgentPreferenceMemory, BlockedAgentPreference, DailyPreferenceLog,
-    DashboardPreferences, NotebookNotePreference, NotebookWorkspacePreference,
+    DashboardPreferences, WorkspaceNotePreference, WorkspacePreference,
     NotificationPreferences, UserPreferences, WorkspaceDraftPreference,
 };
 pub use rag_execute::{
@@ -67,7 +67,7 @@ pub use rag_execute::{
 };
 pub use share::{
     AccessLogEntry, AccessLogsResponse, MemberRow, MembersResponse, ShareAnalyticsResponse,
-    ShareSettings, ShareTokenResponse, SharedKnowledgeBase, SharedNotebookPayload, SharedShareInfo,
+    ShareSettings, ShareTokenResponse, SharedKnowledgeBase, SharedWorkspacePayload, SharedShareInfo,
     SharedSource,
 };
 pub use tool_call::{

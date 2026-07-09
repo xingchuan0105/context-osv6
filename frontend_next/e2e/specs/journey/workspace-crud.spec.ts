@@ -1,22 +1,22 @@
 import { test, expect } from "../../fixtures/run-context";
-import { NotebookPage } from "../../pom/notebook-page";
+import { WorkspacePage } from "../../pom/workspace-page";
 import { DashboardPage } from "../../pom/dashboard-page";
 import { resetAndPrepareTestUser } from "../../utils/api-helpers";
 
-test.describe("Notebook CRUD", () => {
+test.describe("Workspace CRUD", () => {
   test.beforeAll(async ({ request }) => {
     await resetAndPrepareTestUser(request);
   });
 
-  test("create rename and delete notebook via UI", async ({ page, runId }) => {
-    const notebook = new NotebookPage(page);
+  test("create rename and delete workspace via UI", async ({ page, runId }) => {
+    const notebook = new WorkspacePage(page);
     const dashboard = new DashboardPage(page);
 
     const originalName = `crud-test ${runId}`;
     const renamedName = `crud-test-renamed ${runId}`;
 
     // Create via UI
-    await notebook.createNotebook(originalName);
+    await notebook.createWorkspace(originalName);
 
     // Verify creation on dashboard
     await page.goto("/dashboard");
@@ -24,7 +24,7 @@ test.describe("Notebook CRUD", () => {
 
     // Rename via UI（须先回到 workspace 页面）
     await dashboard.openWorkspace(originalName);
-    await notebook.renameNotebook(renamedName);
+    await notebook.renameWorkspace(renamedName);
 
     // Verify rename on dashboard
     await page.goto("/dashboard");
@@ -32,7 +32,7 @@ test.describe("Notebook CRUD", () => {
     await expect(page.getByText(originalName)).not.toBeVisible();
 
     // Delete via UI（dashboard action menu）
-    await notebook.deleteNotebook();
+    await notebook.deleteWorkspace();
 
     // Verify deletion
     await page.goto("/dashboard");

@@ -53,7 +53,7 @@ async fn create_share_token_round_trips_through_validate_token() {
     let store = Arc::new(MemoryShareStore::new());
     let workspace_id = Uuid::new_v4();
     let owner_id = Uuid::new_v4();
-    store.seed_notebook_owner(workspace_id, owner_id).await;
+    store.seed_workspace_owner(workspace_id, owner_id).await;
 
     let service = ShareService::new(store);
     let auth = owner_auth(owner_id);

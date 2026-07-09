@@ -491,12 +491,12 @@ export interface CreateDocumentUploadResponse {
 	status: string;
 }
 
-export interface CreateNotebookNoteRequest {
+export interface CreateWorkspaceNoteRequest {
 	title?: string;
 	content?: string;
 }
 
-export interface CreateNotebookRequest {
+export interface CreateWorkspaceRequest {
 	name: string;
 	description?: string;
 }
@@ -506,12 +506,12 @@ export interface WorkspaceDraftPreference {
 	notes: string;
 }
 
-export interface NotebookWorkspacePreference {
+export interface WorkspacePreference {
 	workspace_id: string;
 	pinned_source_ids?: string[];
 }
 
-export interface NotebookNotePreference {
+export interface WorkspaceNotePreference {
 	note_id: string;
 	workspace_id: string;
 	title: string;
@@ -525,8 +525,8 @@ export interface NotebookNotePreference {
 export interface DashboardPreferences {
 	favorite_workspace_ids?: string[];
 	workspace_drafts?: WorkspaceDraftPreference[];
-	workspace_preferences?: NotebookWorkspacePreference[];
-	notebook_notes?: NotebookNotePreference[];
+	workspace_preferences?: WorkspacePreference[];
+	workspace_notes?: WorkspaceNotePreference[];
 }
 
 export interface DegradationStatusResponse {
@@ -633,98 +633,6 @@ export interface MessageFeedbackRequest {
 	rating: MessageFeedbackRating;
 }
 
-export interface Notebook {
-	id: string;
-	org_id: string;
-	owner_id: string;
-	name: string;
-	title: string;
-	description: string;
-	created_at: string;
-	updated_at: string;
-	document_count?: number;
-	status_summary?: Record<string, number>;
-	shared?: boolean;
-}
-
-export interface NotebookAnalysisAccess {
-	share_enabled: boolean;
-	member_count: number;
-	active_api_key_count: number;
-}
-
-export interface NotebookAnalysisAlert {
-	level: string;
-	code: string;
-	message: string;
-}
-
-export interface NotebookAnalysisNotes {
-	total: number;
-	latest_edited_at?: string;
-	promoted_to_source: number;
-}
-
-export interface NotebookAnalysisOverview {
-	title: string;
-	description: string;
-	updated_at: string;
-	document_count: number;
-}
-
-export interface NotebookAnalysisSources {
-	total: number;
-	ready: number;
-	processing: number;
-	failed: number;
-	selected: number;
-	pinned: number;
-}
-
-export interface NotebookAnalysisThreads {
-	total: number;
-	pinned: number;
-	latest_activity_at?: string;
-	latest_mode?: string;
-}
-
-export interface NotebookAnalysisResponse {
-	overview: NotebookAnalysisOverview;
-	sources: NotebookAnalysisSources;
-	threads: NotebookAnalysisThreads;
-	notes: NotebookAnalysisNotes;
-	access: NotebookAnalysisAccess;
-	alerts: NotebookAnalysisAlert[];
-}
-
-export interface NotebookListResponse {
-	workspaces: Notebook[];
-}
-
-export interface NotebookNote {
-	id: string;
-	workspace_id: string;
-	title: string;
-	content: string;
-	preview: string;
-	created_at: string;
-	updated_at: string;
-	promoted_document_id?: string;
-	promoted_at?: string;
-}
-
-export interface NotebookNoteListResponse {
-	notes: NotebookNote[];
-}
-
-export interface NotebookNoteResponse {
-	note: NotebookNote;
-}
-
-export interface NotebookResponse {
-	workspace: Notebook;
-}
-
 export interface NotificationPreferences {
 	email_enabled: boolean;
 	product_enabled: boolean;
@@ -756,7 +664,7 @@ export interface OrgRow {
 	name: string;
 	plan: string;
 	user_count: number;
-	notebook_count: number;
+	workspace_count: number;
 	query_count: number;
 	blocked: boolean;
 	created_at: string;
@@ -795,8 +703,20 @@ export interface PlansResponse {
 	plans: PlanRow[];
 }
 
-export interface PromoteNotebookNoteResponse {
-	note: NotebookNote;
+export interface WorkspaceNote {
+	id: string;
+	workspace_id: string;
+	title: string;
+	content: string;
+	preview: string;
+	created_at: string;
+	updated_at: string;
+	promoted_document_id?: string;
+	promoted_at?: string;
+}
+
+export interface PromoteWorkspaceNoteResponse {
+	note: WorkspaceNote;
 	source_id: string;
 }
 
@@ -858,7 +778,7 @@ export interface SharedSource {
 	status: string;
 }
 
-export interface SharedNotebookPayload {
+export interface SharedWorkspacePayload {
 	knowledge_base: SharedKnowledgeBase;
 	share: SharedShareInfo;
 	sources: SharedSource[];
@@ -888,12 +808,12 @@ export interface UpdateChatSessionRequest {
 	pinned?: boolean;
 }
 
-export interface UpdateNotebookNoteRequest {
+export interface UpdateWorkspaceNoteRequest {
 	title?: string;
 	content?: string;
 }
 
-export interface UpdateNotebookRequest {
+export interface UpdateWorkspaceRequest {
 	name?: string;
 	description?: string;
 }
@@ -970,6 +890,86 @@ export interface WorkerStatusResponse {
 	queued_tasks: number;
 	processing_tasks: number;
 	failed_documents: number;
+}
+
+export interface Workspace {
+	id: string;
+	org_id: string;
+	owner_id: string;
+	name: string;
+	title: string;
+	description: string;
+	created_at: string;
+	updated_at: string;
+	document_count?: number;
+	status_summary?: Record<string, number>;
+	shared?: boolean;
+}
+
+export interface WorkspaceAnalysisAccess {
+	share_enabled: boolean;
+	member_count: number;
+	active_api_key_count: number;
+}
+
+export interface WorkspaceAnalysisAlert {
+	level: string;
+	code: string;
+	message: string;
+}
+
+export interface WorkspaceAnalysisNotes {
+	total: number;
+	latest_edited_at?: string;
+	promoted_to_source: number;
+}
+
+export interface WorkspaceAnalysisOverview {
+	title: string;
+	description: string;
+	updated_at: string;
+	document_count: number;
+}
+
+export interface WorkspaceAnalysisSources {
+	total: number;
+	ready: number;
+	processing: number;
+	failed: number;
+	selected: number;
+	pinned: number;
+}
+
+export interface WorkspaceAnalysisThreads {
+	total: number;
+	pinned: number;
+	latest_activity_at?: string;
+	latest_mode?: string;
+}
+
+export interface WorkspaceAnalysisResponse {
+	overview: WorkspaceAnalysisOverview;
+	sources: WorkspaceAnalysisSources;
+	threads: WorkspaceAnalysisThreads;
+	notes: WorkspaceAnalysisNotes;
+	access: WorkspaceAnalysisAccess;
+	alerts: WorkspaceAnalysisAlert[];
+}
+
+export interface WorkspaceListResponse {
+	workspaces: Workspace[];
+}
+
+export interface WorkspaceNoteListResponse {
+	notes: WorkspaceNote[];
+}
+
+export interface WorkspaceNoteResponse {
+	note: WorkspaceNote;
+}
+
+export interface WorkspaceResponse {
+	workspace: Workspace;
 }
 
 export enum DocumentStatus {

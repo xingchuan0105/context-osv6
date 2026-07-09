@@ -12,7 +12,7 @@ Context-OS is a personal product: one user owns their workspaces. Agents should 
 ### Get a workspace id
 
 1. Ask the human to create a workspace in the product UI (or use one they already opened).
-2. Copy the workspace id (`notebook_id`) from the URL or API Access page.
+2. Copy the workspace id (`workspace_id`) from the URL or API Access page.
 3. Ask them to create a **workspace-scoped API key** on that workspace's API Access page with `index` and `query`.
 4. Use that key for ingestion and RAG via `workspace.*` MCP tools.
 

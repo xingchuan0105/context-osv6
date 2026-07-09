@@ -51,7 +51,7 @@ describe("contract golden fixtures", () => {
 
     expect(request).toEqual({
       query: "hello",
-      notebook_id: null,
+      workspace_id: null,
       session_id: null,
       agent_type: "chat",
       source_type: null,

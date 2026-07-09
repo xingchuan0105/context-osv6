@@ -101,7 +101,7 @@ impl DocumentScopeValidator for DocumentContext {
             return Ok(());
         }
         let notebook_uuid = Uuid::parse_str(workspace_id)
-            .map_err(|_| AppError::not_found("notebook_not_found", "notebook not found"))?;
+            .map_err(|_| AppError::not_found("workspace_not_found", "workspace not found"))?;
 
         let store = require_document_store(storage)?;
         for document_id in document_ids {

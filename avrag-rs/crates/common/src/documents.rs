@@ -95,8 +95,8 @@ pub struct SourceRow {
     pub id: String,
     #[serde(rename = "workspace_id", alias = "workspace_id")]
     pub workspace_id: String,
-    #[serde(rename = "workspace_name", alias = "notebook_name")]
-    pub notebook_name: String,
+    #[serde(rename = "workspace_name", alias = "workspace_name")]
+    pub workspace_name: String,
     pub title: String,
     pub file_name: String,
     pub status: String,

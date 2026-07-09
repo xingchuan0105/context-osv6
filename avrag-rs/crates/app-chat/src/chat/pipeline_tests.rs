@@ -15,7 +15,7 @@ mod tests {
     use avrag_guardrails::GuardPipeline;
     use common::{AppError, new_id, now_rfc3339};
     use contracts::chat::ChatRequest;
-    use contracts::notebooks::{ChatSession, Notebook};
+    use contracts::workspaces::{ChatSession, Workspace};
     use tokio::sync::RwLock;
     use uuid::Uuid;
 
@@ -82,7 +82,7 @@ mod tests {
             .with_request_id("pipeline-test")
     }
 
-    fn test_chat_context(notebook: Option<Notebook>) -> ChatContext {
+    fn test_chat_context(notebook: Option<Workspace>) -> ChatContext {
         let mut memory = MemoryState::default();
         if let Some(notebook) = notebook {
             memory
@@ -186,12 +186,12 @@ mod tests {
     #[tokio::test]
     async fn dispatch_rag_with_notebook_docscope_runs_rag_pipeline() {
         let workspace_id = new_id();
-        let notebook = Notebook {
+        let notebook = Workspace {
             id: workspace_id.clone(),
             org_id: test_auth().org_id().to_string(),
             owner_id: Uuid::nil().to_string(),
-            name: "Test Notebook".to_string(),
-            title: "Test Notebook".to_string(),
+            name: "Test Workspace".to_string(),
+            title: "Test Workspace".to_string(),
             description: String::new(),
             created_at: now_rfc3339(),
             updated_at: now_rfc3339(),

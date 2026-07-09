@@ -11,7 +11,7 @@ pub enum Workspaces {
     UpdatedAt,
 }
 
-pub fn build_notebook_search_query(
+pub fn build_workspace_search_query(
     org_id: Uuid,
     title_filter: Option<&str>,
 ) -> String {

@@ -42,7 +42,7 @@ export async function loginTestUser(
   return token;
 }
 
-export async function createNotebookViaAPI(
+export async function createWorkspaceViaAPI(
   request: APIRequestContext,
   token: string,
   name: string,
@@ -59,7 +59,7 @@ export async function createNotebookViaAPI(
   return id;
 }
 
-export async function deleteNotebookViaAPI(
+export async function deleteWorkspaceViaAPI(
   request: APIRequestContext,
   token: string,
   notebookId: string,

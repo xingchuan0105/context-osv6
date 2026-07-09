@@ -4,7 +4,7 @@
         workspace_id: Uuid,
         email: &str,
         access_level: ShareAccessLevel,
-    ) -> Result<ShareNotebookMember, AppError> {
+    ) -> Result<ShareWorkspaceMember, AppError> {
         let normalized_email = email.trim().to_lowercase();
         let mut tx = self
             .repo

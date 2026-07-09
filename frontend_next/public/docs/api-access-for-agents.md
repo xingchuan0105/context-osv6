@@ -12,7 +12,7 @@ Context-OS is a **personal knowledge product**: one signed-in user owns their wo
 - This public endpoint document describes the current HTTP access shape; deeper target architecture is documented in [Current Product Architecture](/home/chuan/context-osv6/avrag-rs/docs/superpowers/specs/2026-04-26-current-product-rag-architecture.md).
 
 ## Scope
-- `workspace` maps to `notebook_id`.
+- `workspace` maps to `workspace_id`.
 - External agents should prefer the **unified MCP** entry point at `POST /api/v1/mcp`.
 - REST/SSE remains available for UI, streaming, and binary uploads.
 
@@ -20,14 +20,14 @@ Context-OS is a **personal knowledge product**: one signed-in user owns their wo
 
 1. The human creates a workspace in the product UI.
 2. On that workspace's **API Access** page, they create a **workspace API key** (permissions `index` and/or `query`).
-3. The agent uses that key plus the workspace's `notebook_id` for upload, indexing, and RAG.
+3. The agent uses that key plus the workspace's `workspace_id` for upload, indexing, and RAG.
 
 Agents do **not** need a separate “account-level” or “org-level” key for normal personal use.
 
 ## Authentication
 - **Agents (external automation):** `Authorization: Bearer <workspace_api_key>` on `POST /api/v1/mcp` and scoped REST routes. Permission checks apply to the key (`index`, `query`, etc.).
 - **Human UI (interactive sessions):** user JWT (or trusted frontend proxy headers). Signed-in users are not subject to API-key permission strings.
-- **Workspace API keys** (scoped to one `notebook_id`): default permissions `index`, `query` when omitted at creation — call `workspace.*` MCP tools only.
+- **Workspace API keys** (scoped to one `workspace_id`): default permissions `index`, `query` when omitted at creation — call `workspace.*` MCP tools only.
 - Internal proxy auth (`x-org-id`, `x-user-id`, optional `x-permissions`) is for trusted frontends and tests only. End users and personal agents should use JWT or workspace API keys instead.
 
 Create workspace keys (product path): `POST /api/v1/workspaces/{workspace_id}/api-keys` (signed-in user session only; managed from the workspace API Access UI)
@@ -39,7 +39,7 @@ Create workspace keys (product path): `POST /api/v1/workspaces/{workspace_id}/ap
 | `POST` | `/api/v1/mcp` | JSON-RPC: `initialize`, `tools/list`, `tools/call` |
 | `GET` | `/api/v1/mcp` | SSE `ready` event with tool catalog summary |
 
-### Workspace tools (require `arguments.notebook_id`)
+### Workspace tools (require `arguments.workspace_id`)
 
 These are the tools personal agents should use after the human shares a workspace id and key.
 
@@ -52,7 +52,7 @@ These are the tools personal agents should use after the human shares a workspac
 | `workspace.list_sources` | `query` | List sources |
 | `workspace.rag_query` | `query` | RAG (codegen/SDK) |
 | `workspace.search_query` | `query` | Web search (native tools) |
-| `notebook.chat` | `query` | Legacy alias for RAG |
+| `workspace.chat` | `query` | Legacy alias for RAG |
 
 Example `tools/call`:
 
@@ -64,7 +64,7 @@ Example `tools/call`:
   "params": {
     "name": "workspace.rag_query",
     "arguments": {
-      "notebook_id": "11111111-1111-1111-1111-111111111111",
+      "workspace_id": "11111111-1111-1111-1111-111111111111",
       "query": "Summarize the indexed docs"
     }
   }
@@ -89,7 +89,7 @@ REST routes below enforce the **same workspace scope and permission rules** as M
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/sources?notebook_id={workspace_id}` | List sources |
+| `GET` | `/api/v1/sources?workspace_id={workspace_id}` | List sources |
 | `POST` | `/api/v1/workspaces/{workspace_id}/documents` | Create file upload |
 | `POST` | `/api/v1/documents/{document_id}/complete-upload` | Finish upload |
 | `POST` | `/api/v1/chat` | REST/SSE chat |
@@ -97,7 +97,7 @@ REST routes below enforce the **same workspace scope and permission rules** as M
 
 ## Deprecated MCP path
 
-- `POST /mcp/workspaces/{workspace_id}` — legacy; injects `notebook_id` from URL. Migrate to `/api/v1/mcp`.
+- `POST /mcp/workspaces/{workspace_id}` — legacy; injects `workspace_id` from URL. Migrate to `/api/v1/mcp`.
 
 ## Progressive disclosure (`agent_operation_guide`)
 
@@ -111,7 +111,7 @@ REST endpoints keep flat JSON errors with normal HTTP status codes (403/400/etc.
 
 - `org_key_cannot_call_workspace_tools`: account-scoped automation credential called a workspace tool (personal agents should use a workspace key instead)
 - `workspace_key_cannot_call_org_tools`: workspace key called an internal account-provisioning tool (create the workspace in the UI first)
-- `notebook_scope_mismatch`: workspace key used for wrong `notebook_id`
+- `notebook_scope_mismatch`: workspace key used for wrong `workspace_id`
 - `missing_permission`: API key lacks required permission
 - `docscope_required`: RAG with no completed documents
 - `rag_runtime_not_configured`: RAG backend not configured in test/dev environments

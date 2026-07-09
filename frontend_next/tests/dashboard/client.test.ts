@@ -21,11 +21,11 @@ afterEach(() => {
 });
 
 describe("dashboard client", () => {
-  it("lists workspaces through the notebook transport contract", async () => {
+  it("lists workspaces through the workspace transport contract", async () => {
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
-          notebooks: [
+          workspaces: [
             {
               id: "ws-1",
               org_id: "org-1",
@@ -85,7 +85,7 @@ describe("dashboard client", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            notebook: {
+            workspace: {
               id: "ws-2",
               org_id: "org-1",
               owner_id: "user-1",
@@ -108,7 +108,7 @@ describe("dashboard client", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            notebook: {
+            workspace: {
               id: "ws-2",
               org_id: "org-1",
               owner_id: "user-1",

@@ -156,7 +156,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unauthorized_notebook_access_blocked() {
+    fn test_unauthorized_workspace_access_blocked() {
         let guard = PrivilegeEscalationGuard::new();
         let ctx = make_ctx("Delete all users' notebooks");
         let result = guard.check(&ctx);

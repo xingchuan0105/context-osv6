@@ -14,7 +14,7 @@ const ORG_B: &str = "66666666-6666-6666-6666-666666666666";
 async fn share_token_allows_cross_user_readonly_chat() {
     super::require_smoke_suite();
     let ctx_a = TestContext::new_smoke_with_org(ORG_A, USER_A).await;
-    let notebook = ctx_a.create_notebook("shared-notebook").await.unwrap();
+    let notebook = ctx_a.create_workspace("shared-notebook").await.unwrap();
     let share_token = ctx_a.create_share_token(&notebook.id).await.unwrap();
 
     let ctx_b = TestContext::new_smoke_with_org(ORG_B, USER_B).await;
@@ -30,10 +30,10 @@ async fn share_token_allows_cross_user_readonly_chat() {
 }
 
 #[tokio::test]
-async fn cross_user_direct_get_notebook_without_token_returns_4xx() {
+async fn cross_user_direct_get_workspace_without_token_returns_4xx() {
     super::require_smoke_suite();
     let ctx_a = TestContext::new_smoke_with_org(ORG_A, USER_A).await;
-    let notebook = ctx_a.create_notebook("private-notebook").await.unwrap();
+    let notebook = ctx_a.create_workspace("private-notebook").await.unwrap();
 
     let ctx_b = TestContext::new_smoke_with_org(ORG_B, USER_B).await;
     let resp = ctx_b
@@ -57,7 +57,7 @@ async fn cross_user_direct_get_notebook_without_token_returns_4xx() {
 async fn share_chat_with_invalid_token_returns_401_or_403() {
     super::require_smoke_suite();
     let ctx_a = TestContext::new_smoke_with_org(ORG_A, USER_A).await;
-    let notebook = ctx_a.create_notebook("bad-token-notebook").await.unwrap();
+    let notebook = ctx_a.create_workspace("bad-token-notebook").await.unwrap();
 
     let ctx_b = TestContext::new_smoke_with_org(ORG_B, USER_B).await;
     let http_resp = ctx_b
@@ -81,7 +81,7 @@ async fn share_chat_with_invalid_token_returns_401_or_403() {
 async fn owner_can_invite_member_via_http() {
     super::require_smoke_suite();
     let ctx_a = TestContext::new_smoke_with_org(ORG_A, USER_A).await;
-    let notebook = ctx_a.create_notebook("invite-notebook").await.unwrap();
+    let notebook = ctx_a.create_workspace("invite-notebook").await.unwrap();
 
     let invite_resp = ctx_a
         .invite_notebook_member(&notebook.id, &local_dev_email(USER_COLLAB), "write")
@@ -108,7 +108,7 @@ async fn invited_member_can_accept_and_access_notebook() {
     super::require_smoke_suite();
     let ctx_owner = TestContext::new_smoke_with_org(ORG_A, USER_OWNER).await;
     let notebook = ctx_owner
-        .create_notebook("invite-accept-notebook")
+        .create_workspace("invite-accept-notebook")
         .await
         .unwrap();
 
@@ -135,7 +135,7 @@ async fn invited_member_can_accept_and_access_notebook() {
     let ctx_collab = TestContext::new_smoke_with_org(ORG_A, USER_COLLAB).await;
     // Write path seeds `{USER_COLLAB}@local.dev` via ensure_org_and_actor (list is read-only).
     let _ = ctx_collab
-        .create_notebook("collab-seed-notebook")
+        .create_workspace("collab-seed-notebook")
         .await
         .expect("seed collaborator user");
 
@@ -145,7 +145,7 @@ async fn invited_member_can_accept_and_access_notebook() {
         .expect("accept invite");
     assert_eq!(accept_resp.status, 200, "accept invite: {accept_resp:?}");
 
-    let access_resp = ctx_collab.get_notebook(&notebook.id).await.unwrap();
+    let access_resp = ctx_collab.get_workspace(&notebook.id).await.unwrap();
     assert_eq!(
         access_resp.status, 200,
         "accepted member should read notebook, got {access_resp:?}"

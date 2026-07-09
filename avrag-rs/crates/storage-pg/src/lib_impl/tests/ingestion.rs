@@ -16,7 +16,7 @@ async fn renew_ingestion_task_lock_matches_processing_task_lease_when_database_a
         .with_actor_id(ActorId::new(user_id));
 
     let notebook = repo
-        .bootstrap().create_notebook(&ctx, "lease renewal test notebook", "lease renewal test")
+        .bootstrap().create_workspace(&ctx, "lease renewal test notebook", "lease renewal test")
         .await
         .unwrap();
     let document = repo
@@ -100,7 +100,7 @@ async fn ingestion_side_effect_guard_requires_current_lease_and_non_deleting_doc
     let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(user_id));
     let notebook = repo
-        .bootstrap().create_notebook(&ctx, "ingestion guard notebook", "ingestion guard")
+        .bootstrap().create_workspace(&ctx, "ingestion guard notebook", "ingestion guard")
         .await
         .unwrap();
     let document = repo

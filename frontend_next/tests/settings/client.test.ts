@@ -54,10 +54,10 @@ describe("settings client", () => {
         new Response(
           JSON.stringify({
             dashboard: {
-              favorite_notebook_ids: [],
+              favorite_workspace_ids: [],
               workspace_drafts: [],
               workspace_preferences: [],
-              notebook_notes: [],
+              workspace_notes: [],
             },
             notifications: {
               email_enabled: true,
@@ -78,10 +78,10 @@ describe("settings client", () => {
         new Response(
           JSON.stringify({
             dashboard: {
-              favorite_notebook_ids: [],
+              favorite_workspace_ids: [],
               workspace_drafts: [],
               workspace_preferences: [],
-              notebook_notes: [],
+              workspace_notes: [],
             },
             notifications: {
               email_enabled: true,
@@ -189,10 +189,10 @@ describe("settings client", () => {
 
     await expect(getUserPreferences("token-123")).resolves.toEqual({
       dashboard: {
-        favorite_notebook_ids: [],
+        favorite_workspace_ids: [],
         workspace_drafts: [],
         workspace_preferences: [],
-        notebook_notes: [],
+        workspace_notes: [],
       },
       notifications: {
         email_enabled: true,
@@ -207,10 +207,10 @@ describe("settings client", () => {
     await expect(
       updateUserPreferences("token-123", {
         dashboard: {
-          favorite_notebook_ids: [],
+          favorite_workspace_ids: [],
           workspace_drafts: [],
           workspace_preferences: [],
-          notebook_notes: [],
+          workspace_notes: [],
         },
         notifications: {
           email_enabled: true,
@@ -223,10 +223,10 @@ describe("settings client", () => {
       }),
     ).resolves.toEqual({
       dashboard: {
-        favorite_notebook_ids: [],
+        favorite_workspace_ids: [],
         workspace_drafts: [],
         workspace_preferences: [],
-        notebook_notes: [],
+        workspace_notes: [],
       },
       notifications: {
         email_enabled: true,

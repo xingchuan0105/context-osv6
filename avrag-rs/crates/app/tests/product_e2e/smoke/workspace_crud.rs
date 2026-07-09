@@ -1,25 +1,25 @@
-//! Notebook create / read / update / delete over HTTP (Product E2E).
+//! Workspace create / read / update / delete over HTTP (Product E2E).
 
 use crate::product_e2e::TestContext;
 
 #[tokio::test]
-async fn notebook_crud_lifecycle_via_http() {
+async fn workspace_crud_lifecycle_via_http() {
     super::require_smoke_suite();
     let ctx = TestContext::new_smoke().await;
 
-    let created = ctx.create_notebook("crud-original").await.unwrap();
+    let created = ctx.create_workspace("crud-original").await.unwrap();
     let workspace_id = created.id.clone();
 
-    let get_resp = ctx.get_notebook(&workspace_id).await.unwrap();
+    let get_resp = ctx.get_workspace(&workspace_id).await.unwrap();
     assert_eq!(get_resp.status, 200, "get notebook: {get_resp:?}");
     assert_eq!(
-        get_resp.body_json["notebook"]["name"].as_str(),
+        get_resp.body_json["workspace"]["name"].as_str(),
         Some("crud-original")
     );
 
-    let list_resp = ctx.list_notebooks().await.unwrap();
+    let list_resp = ctx.list_workspaces().await.unwrap();
     assert_eq!(list_resp.status, 200, "list notebooks: {list_resp:?}");
-    let workspaces = list_resp.body_json["notebooks"]
+    let workspaces = list_resp.body_json["workspaces"]
         .as_array()
         .expect("notebooks array");
     assert!(
@@ -30,19 +30,19 @@ async fn notebook_crud_lifecycle_via_http() {
     );
 
     let update_resp = ctx
-        .update_notebook(&workspace_id, "crud-renamed", "updated description")
+        .update_workspace(&workspace_id, "crud-renamed", "updated description")
         .await
         .unwrap();
     assert_eq!(update_resp.status, 200, "update notebook: {update_resp:?}");
     assert_eq!(
-        update_resp.body_json["notebook"]["name"].as_str(),
+        update_resp.body_json["workspace"]["name"].as_str(),
         Some("crud-renamed")
     );
 
-    let delete_resp = ctx.delete_notebook(&workspace_id).await.unwrap();
+    let delete_resp = ctx.delete_workspace(&workspace_id).await.unwrap();
     assert_eq!(delete_resp.status, 200, "delete notebook: {delete_resp:?}");
 
-    let gone_resp = ctx.get_notebook(&workspace_id).await.unwrap();
+    let gone_resp = ctx.get_workspace(&workspace_id).await.unwrap();
     assert!(
         gone_resp.status == 404 || gone_resp.status == 403,
         "deleted notebook should be inaccessible, got HTTP {}",

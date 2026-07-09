@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use app_core::{
-    NotebookAccessSnapshot, PublicShareChatContextSnapshot, ShareAccessLevel, ShareAccessLogEntry,
-    ShareAnalyticsEntry, ShareNotebookMember, ShareStorePort, SharedNotebookSnapshot,
+    WorkspaceAccessSnapshot, PublicShareChatContextSnapshot, ShareAccessLevel, ShareAccessLogEntry,
+    ShareAnalyticsEntry, ShareWorkspaceMember, ShareStorePort, SharedWorkspaceSnapshot,
 };
 use async_trait::async_trait;
 use contracts::auth_runtime::AuthContext;
@@ -22,12 +22,12 @@ struct TokenRecord {
 
 #[derive(Clone, Default)]
 pub struct MemoryShareStore {
-    notebooks: Arc<RwLock<HashMap<Uuid, NotebookAccessSnapshot>>>,
+    notebooks: Arc<RwLock<HashMap<Uuid, WorkspaceAccessSnapshot>>>,
     member_access: Arc<RwLock<HashMap<(Uuid, Uuid), String>>>,
     tokens: Arc<RwLock<HashMap<String, TokenRecord>>>,
-    shared_notebooks: Arc<RwLock<HashMap<String, SharedNotebookSnapshot>>>,
+    shared_workspaces: Arc<RwLock<HashMap<String, SharedWorkspaceSnapshot>>>,
     public_chat_contexts: Arc<RwLock<HashMap<String, PublicShareChatContextSnapshot>>>,
-    invites: Arc<RwLock<Vec<ShareNotebookMember>>>,
+    invites: Arc<RwLock<Vec<ShareWorkspaceMember>>>,
 }
 
 #[allow(dead_code)]
@@ -36,10 +36,10 @@ impl MemoryShareStore {
         Self::default()
     }
 
-    pub async fn seed_notebook_owner(&self, workspace_id: Uuid, owner_id: Uuid) {
+    pub async fn seed_workspace_owner(&self, workspace_id: Uuid, owner_id: Uuid) {
         self.notebooks.write().await.insert(
             workspace_id,
-            NotebookAccessSnapshot {
+            WorkspaceAccessSnapshot {
                 owner_id: Some(owner_id),
                 notebook_access_level: "private".to_string(),
             },
@@ -53,8 +53,8 @@ impl MemoryShareStore {
             .insert((workspace_id, user_id), role.to_string());
     }
 
-    pub async fn seed_shared_notebook(&self, token: &str, snapshot: SharedNotebookSnapshot) {
-        self.shared_notebooks
+    pub async fn seed_shared_workspace(&self, token: &str, snapshot: SharedWorkspaceSnapshot) {
+        self.shared_workspaces
             .write()
             .await
             .insert(token.to_string(), snapshot);
@@ -71,18 +71,18 @@ impl MemoryShareStore {
             .insert(token.to_string(), snapshot);
     }
 
-    pub async fn invited_members(&self) -> Vec<ShareNotebookMember> {
+    pub async fn invited_members(&self) -> Vec<ShareWorkspaceMember> {
         self.invites.read().await.clone()
     }
 }
 
 #[async_trait]
 impl ShareStorePort for MemoryShareStore {
-    async fn query_notebook_access(
+    async fn query_workspace_access(
         &self,
         _auth: &AuthContext,
         workspace_id: Uuid,
-    ) -> Result<Option<NotebookAccessSnapshot>, AppError> {
+    ) -> Result<Option<WorkspaceAccessSnapshot>, AppError> {
         Ok(self.notebooks.read().await.get(&workspace_id).cloned())
     }
 
@@ -112,11 +112,11 @@ impl ShareStorePort for MemoryShareStore {
         &self,
         _auth: &AuthContext,
         _workspace_id: Uuid,
-    ) -> Result<Vec<ShareNotebookMember>, AppError> {
+    ) -> Result<Vec<ShareWorkspaceMember>, AppError> {
         Ok(Vec::new())
     }
 
-    async fn update_notebook_access_level(
+    async fn update_workspace_access_level(
         &self,
         _auth: &AuthContext,
         _workspace_id: Uuid,
@@ -204,11 +204,11 @@ impl ShareStorePort for MemoryShareStore {
         Ok(Vec::new())
     }
 
-    async fn load_shared_notebook(
+    async fn load_shared_workspace(
         &self,
         token: &str,
-    ) -> Result<Option<SharedNotebookSnapshot>, AppError> {
-        Ok(self.shared_notebooks.read().await.get(token).cloned())
+    ) -> Result<Option<SharedWorkspaceSnapshot>, AppError> {
+        Ok(self.shared_workspaces.read().await.get(token).cloned())
     }
 
     async fn resolve_public_share_chat_context(
@@ -224,8 +224,8 @@ impl ShareStorePort for MemoryShareStore {
         workspace_id: Uuid,
         email: &str,
         access_level: ShareAccessLevel,
-    ) -> Result<ShareNotebookMember, AppError> {
-        let member = ShareNotebookMember {
+    ) -> Result<ShareWorkspaceMember, AppError> {
+        let member = ShareWorkspaceMember {
             id: Uuid::new_v4().to_string(),
             workspace_id: workspace_id.to_string(),
             user_id: None,

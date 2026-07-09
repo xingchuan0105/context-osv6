@@ -85,11 +85,11 @@ impl DocumentContext {
             .ensure_storage_bytes_quota(auth, req.file_size as i64)
             .await?;
         let workspace_id =
-            parse_uuid_or_app_error(workspace_id, "notebook_not_found", "notebook not found")?;
-        if store.get_notebook(auth, workspace_id).await?.is_none() {
+            parse_uuid_or_app_error(workspace_id, "workspace_not_found", "workspace not found")?;
+        if store.get_workspace(auth, workspace_id).await?.is_none() {
             return Err(AppError::not_found(
-                "notebook_not_found",
-                "notebook not found",
+                "workspace_not_found",
+                "workspace not found",
             ));
         }
         let document = store
@@ -412,7 +412,7 @@ impl DocumentContext {
             .workspace_id
             .as_deref()
             .map(|value| {
-                parse_uuid_or_app_error(value, "notebook_not_found", "notebook not found")
+                parse_uuid_or_app_error(value, "workspace_not_found", "workspace not found")
             })
             .transpose()?;
         let updated = store

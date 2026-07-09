@@ -95,7 +95,7 @@ type RawShareAnalytics = {
 
 type RawShareAccessLog = {
   id: string;
-  notebook_id: string;
+  workspace_id: string;
   share_token: string;
   action: string;
   accessed_at: number;
@@ -308,7 +308,7 @@ export async function streamSharedChat(
       },
       body: JSON.stringify({
         query,
-        notebook_id: notebookId,
+        workspace_id: notebookId,
         session_id: null,
         agent_type: "rag",
         source_type: "share",

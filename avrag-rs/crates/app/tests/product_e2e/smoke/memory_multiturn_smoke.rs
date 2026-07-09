@@ -97,7 +97,7 @@ async fn on_demand_conversation_history_load_returns_pg_messages() {
     assert_eq!(
         data.get("scope")
             .and_then(|v: &serde_json::Value| v.as_str()),
-        Some("notebook"),
+        Some("workspace"),
         "expected default notebook scope, got: {data}"
     );
 }
@@ -166,7 +166,7 @@ async fn notebook_scope_conversation_history_load_spans_sessions() {
     assert_eq!(
         data.get("scope")
             .and_then(|v: &serde_json::Value| v.as_str()),
-        Some("notebook")
+        Some("workspace")
     );
     let messages = data
         .get("messages")

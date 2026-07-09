@@ -6,7 +6,7 @@ use crate::product_e2e::{ChatResponse, TestContext, assertions::*};
 async fn general_agent_returns_non_empty_answer() {
     super::require_smoke_suite();
     let ctx = TestContext::new_smoke().await;
-    let notebook = ctx.create_notebook("chat-smoke").await.unwrap();
+    let notebook = ctx.create_workspace("chat-smoke").await.unwrap();
 
     let http_resp = ctx
         .chat_general("Hello, who are you?", &notebook.id)

@@ -66,7 +66,7 @@ export function AdminOrganizationsSurface() {
   const blockedCount = organizations.filter((organization) => organization.blocked).length;
   const activeCount = organizations.length - blockedCount;
   const totalUserCount = organizations.reduce((total, organization) => total + organization.user_count, 0);
-  const totalNotebookCount = organizations.reduce((total, organization) => total + organization.notebook_count, 0);
+  const totalWorkspaceCount = organizations.reduce((total, organization) => total + organization.workspace_count, 0);
   const error = organizationsQuery.error ?? toggleBlockedMutation.error ?? null;
   const loading = Boolean(token) && organizationsQuery.isPending;
 
@@ -98,9 +98,9 @@ export function AdminOrganizationsSurface() {
             <AdminMetricCard label={adminText(locale, "organizations.activeOrganizations")} tone="success" value={activeCount.toString()} />
             <AdminMetricCard label={adminText(locale, "organizations.blockedOrganizations")} tone="danger" value={blockedCount.toString()} />
             <AdminMetricCard
-              label={adminText(locale, "organizations.totalNotebooks")}
+              label={adminText(locale, "organizations.totalWorkspaces")}
               tone="warning"
-              value={totalNotebookCount.toString()}
+              value={totalWorkspaceCount.toString()}
               detail={`${adminText(locale, "organizations.usersCovered")} ${totalUserCount}`}
             />
           </div>
@@ -192,7 +192,7 @@ export function AdminOrganizationsSurface() {
                         </td>
                         <td style={{ padding: "1rem" }}>{planLabel(locale, organization.plan)}</td>
                         <td style={{ padding: "1rem" }}>{organization.user_count}</td>
-                        <td style={{ padding: "1rem" }}>{organization.notebook_count}</td>
+                        <td style={{ padding: "1rem" }}>{organization.workspace_count}</td>
                         <td style={{ padding: "1rem" }}>{organization.query_count}</td>
                         <td style={{ padding: "1rem" }}>
                           <span

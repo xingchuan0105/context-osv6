@@ -97,7 +97,7 @@ pub(super) fn mock_memory_tool_call(tool: &str) -> Option<serde_json::Value> {
         "conversation_history_load" => (
             "call_mem_history_0",
             serde_json::to_string(
-                &json!({"query": "antifragility", "scope": "notebook", "limit": 20}),
+                &json!({"query": "antifragility", "scope": "workspace", "limit": 20}),
             )
             .unwrap_or_else(|_| "{}".to_string()),
         ),

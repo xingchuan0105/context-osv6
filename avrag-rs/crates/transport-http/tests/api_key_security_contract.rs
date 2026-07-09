@@ -4,9 +4,9 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
-use common::{CreateApiKeyRequest, CreateNotebookRequest, default_org_id, default_user_id};
+use common::{CreateApiKeyRequest, CreateWorkspaceRequest, default_org_id, default_user_id};
 use contracts::agent_permissions::{PERM_ADMIN, USER_ROLE_ORG_ADMIN};
-use contracts::notebooks::CreateChatSessionRequest;
+use contracts::workspaces::CreateChatSessionRequest;
 use std::env;
 use tower::ServiceExt;
 use transport_http::build_router;
@@ -87,7 +87,7 @@ async fn rest_json(
 async fn workspace_api_key_cannot_create_org_api_key() {
     let state = test_app_state();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "key-mgmt".to_string(),
             description: String::new(),
         })
@@ -178,14 +178,14 @@ async fn admin_user_can_create_org_api_key() {
 async fn workspace_api_key_cannot_read_other_workspace_session() {
     let state = test_app_state();
     let notebook_a = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "session-a".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
     let notebook_b = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "session-b".to_string(),
             description: String::new(),
         })
@@ -242,7 +242,7 @@ async fn org_api_key_cannot_call_workspace_mcp_tool() {
         .await
         .unwrap();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "target".to_string(),
             description: String::new(),
         })
@@ -292,7 +292,7 @@ async fn org_api_key_cannot_call_workspace_mcp_tool() {
 async fn workspace_api_key_cannot_create_workspace_api_key() {
     let state = test_app_state();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "nested-keys".to_string(),
             description: String::new(),
         })
@@ -328,10 +328,10 @@ async fn workspace_api_key_cannot_create_workspace_api_key() {
     );
 }
 #[tokio::test]
-async fn workspace_api_key_cannot_list_notebook_notes() {
+async fn workspace_api_key_cannot_list_workspace_notes() {
     let state = test_app_state();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "notes-ui".to_string(),
             description: String::new(),
         })
@@ -371,14 +371,14 @@ async fn workspace_api_key_cannot_list_notebook_notes() {
 async fn workspace_api_key_cannot_update_other_workspace_session() {
     let state = test_app_state();
     let notebook_a = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "session-update-a".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
     let notebook_b = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "session-update-b".to_string(),
             description: String::new(),
         })
@@ -506,7 +506,7 @@ async fn org_admin_jwt_can_create_org_api_key() {
 async fn workspace_api_key_cannot_read_user_preferences() {
     let state = test_app_state();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "prefs-ui".to_string(),
             description: String::new(),
         })
@@ -545,7 +545,7 @@ async fn workspace_api_key_cannot_read_user_preferences() {
 async fn workspace_api_key_cannot_update_profile() {
     let state = test_app_state();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "profile-ui".to_string(),
             description: String::new(),
         })
@@ -616,7 +616,7 @@ async fn user_without_notebook_access_cannot_list_workspace_api_keys() {
         .await
         .unwrap();
     let workspace_id =
-        serde_json::from_slice::<serde_json::Value>(&create_body).unwrap()["notebook"]["id"]
+        serde_json::from_slice::<serde_json::Value>(&create_body).unwrap()["workspace"]["id"]
             .as_str()
             .unwrap()
             .to_string();
@@ -672,7 +672,7 @@ async fn user_without_notebook_access_cannot_revoke_workspace_api_key() {
         .await
         .unwrap();
     let workspace_id =
-        serde_json::from_slice::<serde_json::Value>(&create_body).unwrap()["notebook"]["id"]
+        serde_json::from_slice::<serde_json::Value>(&create_body).unwrap()["workspace"]["id"]
             .as_str()
             .unwrap()
             .to_string();
@@ -744,7 +744,7 @@ async fn org_api_key_create_strips_admin_permission() {
 async fn workspace_api_key_create_strips_admin_permission() {
     let state = test_app_state();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "strip-admin".to_string(),
             description: String::new(),
         })

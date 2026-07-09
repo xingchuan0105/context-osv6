@@ -3,7 +3,7 @@ use app_documents::{AuditAction, AuditRecord};
 use chrono::Utc;
 use common::{AppError, now_rfc3339};
 use contracts::chat::{ChatRequest, ChatResponse, ModeDebug, TraceInfo};
-use contracts::notebooks::{ChatSession, CreateChatSessionRequest};
+use contracts::workspaces::{ChatSession, CreateChatSessionRequest};
 use tracing::info;
 use uuid::Uuid;
 

@@ -47,7 +47,7 @@ export function WorkspaceTopBar({
   const safeWorkspaceDescription = workspaceDescription ?? "";
   const currentUserLabel = auth.user?.full_name.trim() || auth.user?.email.trim() || formatUiMessage(locale, "workspaceAnonymousUser");
   const currentUserEmail = auth.user?.email.trim() || formatUiMessage(locale, "workspaceAnonymousUser");
-  const newNotebookLabel = locale === "zh-CN" ? "新建笔记本" : "New Notebook";
+  const newWorkspaceLabel = locale === "zh-CN" ? "新建笔记本" : "New Workspace";
   const displayTitle = safeWorkspaceTitle;
 
   useEffect(() => {
@@ -223,7 +223,7 @@ export function WorkspaceTopBar({
             <svg aria-hidden="true" className={styles.actionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path d="M12 5v14M5 12h14" strokeLinecap="round" strokeWidth="1.9" />
             </svg>
-            <span className={styles.topBarActionLabel}>{newNotebookLabel}</span>
+            <span className={styles.topBarActionLabel}>{newWorkspaceLabel}</span>
           </button>
           <Link className={styles.topBarActionButton} href={`/dashboard/${workspaceId}/share`}>
             <svg aria-hidden="true" className={styles.actionIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">

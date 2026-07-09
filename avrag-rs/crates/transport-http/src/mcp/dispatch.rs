@@ -17,7 +17,7 @@ pub(crate) async fn execute_mcp_tool(
         "workspace.document_status" => tools::document_status(state, arguments).await,
         "workspace.add_url_source" => tools::add_url_source(state, arguments).await,
         "workspace.list_sources" => tools::list_sources(state, arguments).await,
-        "workspace.rag_query" | "workspace.search_query" | "notebook.chat" => {
+        "workspace.rag_query" | "workspace.search_query" | "workspace.chat" => {
             tools::execute_query_tool(state, tool_name, arguments).await
         }
         other => Err(AppError::validation(

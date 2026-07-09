@@ -20,7 +20,7 @@ use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::{ChatTurn, PgAppRepository};
 use common::{AppError, SourceRow};
 use contracts::chat::ChatMessage;
-use contracts::notebooks::{ChatSession, Notebook};
+use contracts::workspaces::{ChatSession, Workspace};
 use ingestion_types::AuditRecord;
 use uuid::Uuid;
 
@@ -175,8 +175,8 @@ impl MessagePort for PgChatPersistenceAdapter {
             ConversationHistoryScope::Session => {
                 avrag_storage_pg::ConversationHistoryScope::Session
             }
-            ConversationHistoryScope::Notebook => {
-                avrag_storage_pg::ConversationHistoryScope::Notebook
+            ConversationHistoryScope::Workspace => {
+                avrag_storage_pg::ConversationHistoryScope::Workspace
             }
         };
         self.repo
@@ -198,14 +198,14 @@ impl MessagePort for PgChatPersistenceAdapter {
 
 #[async_trait]
 impl ChatCatalogPort for PgChatPersistenceAdapter {
-    async fn search_notebooks(
+    async fn search_workspaces(
         &self,
         auth: &AuthContext,
         pattern: &str,
-    ) -> Result<Vec<Notebook>, AppError> {
+    ) -> Result<Vec<Workspace>, AppError> {
         self.repo
             .chunks()
-            .search_notebooks(auth, pattern)
+            .search_workspaces(auth, pattern)
             .await
             .map_err(map_pg_error)
     }
@@ -222,14 +222,14 @@ impl ChatCatalogPort for PgChatPersistenceAdapter {
             .map_err(map_pg_error)
     }
 
-    async fn get_notebook(
+    async fn get_workspace(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
-    ) -> Result<Option<Notebook>, AppError> {
+    ) -> Result<Option<Workspace>, AppError> {
         self.repo
             .bootstrap()
-            .get_notebook(auth, workspace_id)
+            .get_workspace(auth, workspace_id)
             .await
             .map_err(map_pg_error)
     }

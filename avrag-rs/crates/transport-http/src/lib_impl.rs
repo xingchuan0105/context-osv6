@@ -31,5 +31,5 @@ pub(crate) use auth::reset::{
 pub(crate) use infra_handlers::{
     billing_webhook_handler, docs_handler, health_handler,
     metrics_handler, object_storage_webhook_handler, openai_chat_completions_handler,
-    openapi_handler, ready_handler, shared_notebook_handler, signed_upload_handler,
+    openapi_handler, ready_handler, shared_workspace_handler, signed_upload_handler,
 };

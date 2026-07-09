@@ -16,23 +16,23 @@ use utoipa_swagger_ui::SwaggerUi;
 #[derive(OpenApi)]
 #[openapi(
     paths(
-        crate::handlers::list_notebooks,
-        crate::handlers::get_notebook,
-        crate::handlers::create_notebook,
-        crate::handlers::update_notebook,
-        crate::handlers::delete_notebook,
+        crate::handlers::list_workspaces,
+        crate::handlers::get_workspace,
+        crate::handlers::create_workspace,
+        crate::handlers::update_workspace,
+        crate::handlers::delete_workspace,
     ),
     components(
         schemas(
-            contracts::notebooks::Notebook,
-            contracts::notebooks::NotebookResponse,
-            contracts::notebooks::NotebookListResponse,
-            common::CreateNotebookRequest,
-            common::UpdateNotebookRequest,
+            contracts::workspaces::Workspace,
+            contracts::workspaces::WorkspaceResponse,
+            contracts::workspaces::WorkspaceListResponse,
+            common::CreateWorkspaceRequest,
+            common::UpdateWorkspaceRequest,
         )
     ),
     tags(
-        (name = "notebooks", description = "Notebook management APIs")
+        (name = "workspaces", description = "Workspace management APIs")
     )
 )]
 struct ApiDoc;
@@ -187,7 +187,7 @@ fn build_cors_layer() -> CorsLayer {
 // ---------------------------------------------------------------------------
 
 pub fn build_router(state: AppState) -> Router {
-    let protected_api_v1 = crate::routes::notebooks::router()
+    let protected_api_v1 = crate::routes::workspaces::router()
         .merge(crate::routes::chat::router())
         .merge(crate::routes::rag::router())
         .merge(crate::routes::billing::router())

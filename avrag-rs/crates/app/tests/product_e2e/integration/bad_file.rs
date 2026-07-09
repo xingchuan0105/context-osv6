@@ -14,7 +14,7 @@ async fn corrupted_file_upload_returns_failed_status() {
     //    is actually a PNG image.  ParseRouter accepts extension↔MIME, but
     //    lopdf::Document::load_mem will fail when it tries to parse the PNG
     //    bytes as a PDF, causing ingestion to transition to Failed.
-    let notebook = ctx.create_notebook("test-notebook").await.unwrap();
+    let notebook = ctx.create_workspace("test-notebook").await.unwrap();
     // Minimal valid PNG (1×1 pixel, transparent)
     let content = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\xfc\xcf\xc0\x50\x0f\x00\x04A\x01\xa1\x3a\xf0\xfc\xcc\x00\x00\x00\x00IEND\xaeB`\x82";
 

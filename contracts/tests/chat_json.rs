@@ -351,12 +351,12 @@ fn export_golden_fixtures() {
         serde_json::to_value(response).expect("serialize response"),
     );
 
-    use contracts::{HealthResponse, Notebook, NotebookListResponse, PlanRow, PlansResponse};
+    use contracts::{HealthResponse, Workspace, WorkspaceListResponse, PlanRow, PlansResponse};
 
     write(
-        "notebook_list_minimal.json",
-        serde_json::to_value(NotebookListResponse {
-            workspaces: vec![Notebook {
+        "workspace_list_minimal.json",
+        serde_json::to_value(WorkspaceListResponse {
+            workspaces: vec![Workspace {
                 id: "nb-1".to_string(),
                 org_id: "org-1".to_string(),
                 owner_id: "user-1".to_string(),

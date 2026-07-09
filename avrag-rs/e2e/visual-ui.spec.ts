@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
-  createNotebookViaAPI,
-  deleteNotebookViaAPI,
+  createWorkspaceViaAPI,
+  deleteWorkspaceViaAPI,
   gotoAndWaitForHydration,
   registerTestUser,
   seedBrowserAuth,
@@ -47,7 +47,7 @@ test.describe("Visual UI Regression", () => {
   test("V00: preview dashboard shell", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 810 });
     await gotoAndWaitForHydration(page, "/preview/dashboard");
-    await expect(page.getByText("NotebookLM")).toBeVisible();
+    await expect(page.getByText("WorkspaceLM")).toBeVisible();
     await expectVisualSnapshot(page, "preview-dashboard-shell.png");
   });
 
@@ -80,7 +80,7 @@ test.describe("Visual UI Regression", () => {
 
   test("V04: workspace shell", async ({ page, request }) => {
     const auth = await registerTestUser(request);
-    const notebookId = await createNotebookViaAPI(
+    const notebookId = await createWorkspaceViaAPI(
       request,
       auth.token,
       VISUAL_NOTEBOOK_NAME,
@@ -92,7 +92,7 @@ test.describe("Visual UI Regression", () => {
       await expect(page.locator("form textarea").first()).toBeVisible();
       await expectVisualSnapshot(page, "workspace-shell.png");
     } finally {
-      await deleteNotebookViaAPI(request, auth.token, notebookId);
+      await deleteWorkspaceViaAPI(request, auth.token, notebookId);
     }
   });
 });

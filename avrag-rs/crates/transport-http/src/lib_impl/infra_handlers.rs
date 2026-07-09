@@ -273,14 +273,14 @@ pub(crate) async fn openai_chat_completions_handler(
 ) -> Response {
     req.workspace_id = Some(workspace_id.clone());
     if let Err(error) =
-        crate::mcp::expand_external_notebook_rag_scope(&state, &workspace_id, &mut req).await
+        crate::mcp::expand_external_workspace_rag_scope(&state, &workspace_id, &mut req).await
     {
         return handlers::app_error_response(error);
     }
     handlers::chat_post_handler(Extension(RequestState(state)), headers, Json(req)).await
 }
 
-pub(crate) async fn shared_notebook_handler(
+pub(crate) async fn shared_workspace_handler(
     Path(token): Path<String>,
     State(state): State<AppState>,
 ) -> Response {
@@ -296,7 +296,7 @@ pub(crate) async fn shared_notebook_handler(
             .into_response();
     }
 
-    match state.share().get_shared_notebook(&token).await {
+    match state.share().get_shared_workspace(&token).await {
         Ok(Some(payload)) => (
             StatusCode::OK,
             Json(json!({

@@ -82,7 +82,7 @@ const INLINE_COPY = {
   },
   "common.notebooks": {
     zh: "知识库",
-    en: "Notebooks",
+    en: "Workspaces",
   },
   "common.owners": {
     zh: "所有者",
@@ -414,7 +414,7 @@ const INLINE_COPY = {
   },
   "organizations.sort.notebooksDesc": {
     zh: "知识库数优先",
-    en: "Notebooks desc",
+    en: "Workspaces desc",
   },
   "organizations.sort.queriesDesc": {
     zh: "请求数优先",
@@ -432,7 +432,7 @@ const INLINE_COPY = {
     zh: "查看组织、团队规模、知识库数量和访问状态。",
     en: "Review organizations, team size, notebooks, and access status.",
   },
-  "organizations.totalNotebooks": {
+  "organizations.totalWorkspaces": {
     zh: "知识库总数",
     en: "Total notebooks",
   },
@@ -462,7 +462,7 @@ const INLINE_COPY = {
   },
   "organizationDetail.notebooksPerUser": {
     zh: "人均知识库",
-    en: "Notebooks per user",
+    en: "Workspaces per user",
   },
   "organizationDetail.subtitle": {
     zh: "查看组织配置、成员构成和近期 7/30 天用量。",

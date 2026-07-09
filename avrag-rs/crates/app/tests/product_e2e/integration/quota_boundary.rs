@@ -54,7 +54,7 @@ async fn exhausted_quota_blocks_chat_with_quota_exceeded() {
     .expect("seed exhausted usage");
 
     let notebook = ctx
-        .create_notebook_with_token(&token, "quota-test")
+        .create_workspace_with_token(&token, "quota-test")
         .await
         .expect("create notebook");
 

@@ -187,10 +187,10 @@ describe("SettingsSurface", () => {
     });
     mocks.getUserPreferencesMock.mockResolvedValue({
       dashboard: {
-        favorite_notebook_ids: [],
+        favorite_workspace_ids: [],
         workspace_drafts: [],
         workspace_preferences: [],
-        notebook_notes: [],
+        workspace_notes: [],
       },
       notifications: {
         email_enabled: true,
@@ -243,10 +243,10 @@ describe("SettingsSurface", () => {
     });
     mocks.updateUserPreferencesMock.mockResolvedValue({
       dashboard: {
-        favorite_notebook_ids: [],
+        favorite_workspace_ids: [],
         workspace_drafts: [],
         workspace_preferences: [],
-        notebook_notes: [],
+        workspace_notes: [],
       },
       notifications: {
         email_enabled: true,

@@ -146,9 +146,9 @@ pnpm generate:contracts && git -C .. diff --exit-code -- frontend_next/lib/contr
 - **验证：** `pnpm typecheck && pnpm test`。
 
 ### W2b — 统一 notebook→workspace 映射器
-- 在 `frontend_next/lib/workspace/client.ts` 提取共享 `mapNotebook(raw): Workspace`。
-- `lib/dashboard/client.ts:35-73` 的 `RawNotebook`/`mapNotebook` 改为引用共享版本。
-- 删除 `workspace/client.ts` 中的 `remapNotebook` 泛型 + inline `{id, ...notebook}` 展开。
+- 在 `frontend_next/lib/workspace/client.ts` 提取共享 `mapWorkspace(raw): Workspace`。
+- `lib/dashboard/client.ts:35-73` 的 `RawWorkspace`/`mapWorkspace` 改为引用共享版本。
+- 删除 `workspace/client.ts` 中的 `remapWorkspace` 泛型 + inline `{id, ...notebook}` 展开。
 - **验证：** `pnpm typecheck && pnpm test`。
 
 ### W2c — SSE 解析器 zod schema（依赖 W1a）

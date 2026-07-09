@@ -4,18 +4,18 @@ use common::AppError;
 use uuid::Uuid;
 
 use crate::share_domain::{
-    NotebookAccessSnapshot, PublicShareChatContextSnapshot, ShareAccessLevel, ShareAccessLogEntry,
-    ShareAnalyticsEntry, ShareNotebookMember, SharedNotebookSnapshot,
+    WorkspaceAccessSnapshot, PublicShareChatContextSnapshot, ShareAccessLevel, ShareAccessLogEntry,
+    ShareAnalyticsEntry, ShareWorkspaceMember, SharedWorkspaceSnapshot,
 };
 
 /// Share persistence boundary — SQL implementations live in bootstrap adapters.
 #[async_trait]
 pub trait ShareStorePort: Send + Sync {
-    async fn query_notebook_access(
+    async fn query_workspace_access(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
-    ) -> Result<Option<NotebookAccessSnapshot>, AppError>;
+    ) -> Result<Option<WorkspaceAccessSnapshot>, AppError>;
 
     async fn query_member_access(
         &self,
@@ -34,9 +34,9 @@ pub trait ShareStorePort: Send + Sync {
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
-    ) -> Result<Vec<ShareNotebookMember>, AppError>;
+    ) -> Result<Vec<ShareWorkspaceMember>, AppError>;
 
-    async fn update_notebook_access_level(
+    async fn update_workspace_access_level(
         &self,
         auth: &AuthContext,
         workspace_id: Uuid,
@@ -80,10 +80,10 @@ pub trait ShareStorePort: Send + Sync {
         limit: usize,
     ) -> Result<Vec<ShareAccessLogEntry>, AppError>;
 
-    async fn load_shared_notebook(
+    async fn load_shared_workspace(
         &self,
         token: &str,
-    ) -> Result<Option<SharedNotebookSnapshot>, AppError>;
+    ) -> Result<Option<SharedWorkspaceSnapshot>, AppError>;
 
     async fn resolve_public_share_chat_context(
         &self,
@@ -96,7 +96,7 @@ pub trait ShareStorePort: Send + Sync {
         workspace_id: Uuid,
         email: &str,
         access_level: ShareAccessLevel,
-    ) -> Result<ShareNotebookMember, AppError>;
+    ) -> Result<ShareWorkspaceMember, AppError>;
 
     async fn accept_invite(
         &self,

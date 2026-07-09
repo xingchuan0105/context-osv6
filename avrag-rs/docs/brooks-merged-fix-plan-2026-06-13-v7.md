@@ -67,7 +67,7 @@
 | L2 | P1 | Legal review | `integration-e2e.yml` 未配 PG，transport-http legal 测试在 integration CI 空跑 | S4 |
 | L3 | P1 | Legal review | legal HTTP 测试薄：缺 `needs_re_acceptance:true` / `re_acceptance` context / stale privacy / DB 行断言 / 同事务负向 | S4 |
 | L4 | P1 | Legal review | Playwright legal E2E 未跟上 P1：缺 `legal-status` / 重签门控 UI / 支付勾选 UI；版本号硬编码 `"2026-06-13"` 未引 `versions.ts` | S4 |
-| B7 | P2 | 架构 Suggestion | `NotebookStore` 在 ports 双路径暴露 | S8 |
+| B7 | P2 | 架构 Suggestion | `WorkspaceStore` 在 ports 双路径暴露 | S8 |
 | B8 | P2 | 技术债 Domain Distortion | `LegalReacceptanceGate.tsx` 混用 i18n 与硬编码中文 + 内联 style | S7 |
 | B9 | P2 | 架构 Suggestion | `docs/README.md` / architecture-baseline §2 文档漂移（仍指 v5 / `app-core` Redis 旧路径） | S8 |
 | B10 | P2 | 测试 Suggestion | billing usage seed 块在 3 个测试文件复制 | S8 |
@@ -89,7 +89,7 @@
 | B5 | ✅ | mock 拆为 `office` / `paddle` / `embedding` / `search` / `rag_codegen` / `llm_server` + `MockRagState` |
 | B6 | ✅ | `tests/legal/*` 29/29 绿 |
 | L2–L4 | ✅ | integration PG + HTTP + Playwright legal |
-| B7 | ✅ | 仅 `ports::notebooks::notebook_store::NotebookStore` 单一路径 |
+| B7 | ✅ | 仅 `ports::workspaces::workspace_store::WorkspaceStore` 单一路径 |
 | B8 | ✅ | `LegalReacceptanceGate` 全 i18n；`PaymentConsentRequiredError` 默认英文 + `code` |
 | B9 | ✅ | `docs/README.md` 指向 v7 / M15 报告 |
 | B10 | ✅ | `billing/tests/support/mod.rs` 共享 seed helpers |
@@ -142,7 +142,7 @@
 |------|--------|--------|
 | +6 | B3 删除 `app-chat → app-bootstrap` dev-dep（消除全图唯一 Cargo 环） | S3 |
 | +4 | B2 `avrag-test-kit` 死成员去留 | S3 |
-| +2 | B7 `NotebookStore` 单一公共出口 | S8 |
+| +2 | B7 `WorkspaceStore` 单一公共出口 | S8 |
 | +1 | B9 README/baseline 文档对齐 | S8 |
 | **=100** | | |
 
@@ -165,7 +165,7 @@ flowchart TD
   end
   subgraph W3["Wave 3: P2 收尾"]
     S7["S7 Legal 防御/契约/i18n 收尾"]
-    S8["S8 文档/卫生：NotebookStore + README + seed"]
+    S8["S8 文档/卫生：WorkspaceStore + README + seed"]
     S9["S9 核实 desktop/share 跨报告矛盾"]
   end
   M15["M15 四维重跑记分"]
@@ -233,7 +233,7 @@ flowchart TD
 
 ### S8 — 文档/卫生（P2）= B7 + B9 + B10
 
-- **B7**：`NotebookStore` 选 `ports::notebooks::notebook_store::NotebookStore` 为唯一出口，删另一路径。
+- **B7**：`WorkspaceStore` 选 `ports::workspaces::workspace_store::WorkspaceStore` 为唯一出口，删另一路径。
 - **B9**：`docs/README.md` 指向本计划/最新四维报告；architecture-baseline §2 Redis 路径改 `app-bootstrap`。
 - **B10**：billing `seed_user_with_plan` + `seed_llm_usage_events` 提到 `tests/support/mod.rs`。
 

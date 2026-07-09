@@ -57,7 +57,7 @@ async fn mcp_agent_flow_create_upload_complete_query_returns_citations() {
     let ctx = TestContext::new_smoke_with_rag().await;
 
     // 1. Create a workspace as the test user (plan §5.1 step 1: helper/JWT).
-    let notebook = ctx.create_notebook("mcp-agent-flow").await.unwrap();
+    let notebook = ctx.create_workspace("mcp-agent-flow").await.unwrap();
 
     // 2. Create a workspace API key with index + query permissions.
     let state = ctx

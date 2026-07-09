@@ -20,7 +20,7 @@
 | M1 W1b | Contract completeness test is robust — tests all 15 ChatResponse keys with exact set equality + `satisfies` compile-time constraint. Cannot be silently bypassed. |
 | M1 W1c | Integer type mappings removed from `typeshare.toml`. Verified: zero diff in generated `contracts.ts` (dead config confirmed). |
 | M2 W2a | `requestEnvelope<T>()` extraction clean. All local `unwrapApiData` + `ApiEnvelope` definitions eliminated. `share/client.ts` non-throwing `data ?? []` pattern correctly preserved. |
-| M2 W2b | `RawNotebook` type genuinely shared. Two `mapNotebook` functions map to different target types (correct). |
+| M2 W2b | `RawWorkspace` type genuinely shared. Two `mapWorkspace` functions map to different target types (correct). |
 | M2 W2d-tiptap | Shared `workspace-html-sanitize.ts` properly used by both `citation-renderer.tsx` and tiptap editor. |
 | M2 W2d-history | 10 pure string utilities cleanly extracted to `session-title-text.ts`. No side effects, properly typed. |
 | General | No file crossed the 1000-line threshold due to M0-M2 changes. |
@@ -103,7 +103,7 @@ But Write **is** implemented — `pipeline_steps.rs:57` routes `AgentKind::Write
 
 ### NEW-4. [MEDIUM] `notebooks/share.rs` — 600 lines of inlined handlers
 
-`avrag-rs/crates/transport-http/src/handlers/notebooks/share.rs`: 10 handlers (create/revoke/get/update/validate/access-level/analytics/logs/token/api-keys) with access-control + business logic inlined per handler. Same S3 pattern as `reset.rs` and `billing/api.rs`. Candidate for a `ShareService`.
+`avrag-rs/crates/transport-http/src/handlers/workspaces/share.rs`: 10 handlers (create/revoke/get/update/validate/access-level/analytics/logs/token/api-keys) with access-control + business logic inlined per handler. Same S3 pattern as `reset.rs` and `billing/api.rs`. Candidate for a `ShareService`.
 
 ### NEW-5. [CRITICAL] 102 typecheck errors from WIP admin components
 

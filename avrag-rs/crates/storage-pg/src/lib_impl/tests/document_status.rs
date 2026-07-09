@@ -16,7 +16,7 @@ async fn generic_status_update_rejects_deleting_and_deleted_when_database_availa
         .with_actor_id(ActorId::new(user_id));
 
     let notebook = repo
-        .bootstrap().create_notebook(&ctx, "status guard test notebook", "status guard test")
+        .bootstrap().create_workspace(&ctx, "status guard test notebook", "status guard test")
         .await
         .unwrap();
     let document = repo
@@ -77,7 +77,7 @@ async fn update_document_summary_overwrites_existing_summary_when_database_avail
         .with_actor_id(ActorId::new(user_id));
 
     let notebook = repo
-        .bootstrap().create_notebook(&ctx, "summary test notebook", "summary test")
+        .bootstrap().create_workspace(&ctx, "summary test notebook", "summary test")
         .await
         .unwrap();
     let document = repo

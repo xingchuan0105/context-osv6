@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test";
 import {
   registerTestUser,
   loginTestUser,
-  createNotebookViaAPI,
-  deleteNotebookViaAPI,
+  createWorkspaceViaAPI,
+  deleteWorkspaceViaAPI,
   uploadDocumentAndWait,
   collectSSEEvents,
   authHeaders,
@@ -59,9 +59,9 @@ test.describe("Infrastructure & Auth", () => {
   });
 });
 
-// ─── Group 2: Notebook & Document Lifecycle ─────────────────────────
+// ─── Group 2: Workspace & Document Lifecycle ─────────────────────────
 
-test.describe("Notebook & Document Lifecycle", () => {
+test.describe("Workspace & Document Lifecycle", () => {
   let token = "";
   let email = "";
   let password = "";
@@ -77,7 +77,7 @@ test.describe("Notebook & Document Lifecycle", () => {
     const name = uniqueName("pw-nb");
 
     // Create
-    const id = await createNotebookViaAPI(request, token, name);
+    const id = await createWorkspaceViaAPI(request, token, name);
 
     // List
     const list = await request.get("/api/v1/workspaces", {
@@ -111,7 +111,7 @@ test.describe("Notebook & Document Lifecycle", () => {
     expect(updated?.notebook?.name).toBe(newName);
 
     // Delete
-    await deleteNotebookViaAPI(request, token, id);
+    await deleteWorkspaceViaAPI(request, token, id);
 
     // Verify deleted
     const getDeleted = await request.get(`/api/v1/workspaces/${id}`, {
@@ -121,7 +121,7 @@ test.describe("Notebook & Document Lifecycle", () => {
   });
 
   test("T05: document upload and ingestion pipeline", async ({ request }) => {
-    const notebookId = await createNotebookViaAPI(
+    const notebookId = await createWorkspaceViaAPI(
       request,
       token,
       uniqueName("pw-upload"),
@@ -172,12 +172,12 @@ test.describe("Notebook & Document Lifecycle", () => {
         console.warn("[WARN] T05: Ingestion failed — embedding/LLM keys may not be configured");
       }
     } finally {
-      await deleteNotebookViaAPI(request, token, notebookId);
+      await deleteWorkspaceViaAPI(request, token, notebookId);
     }
   });
 
   test("T06: document reindex", async ({ request }) => {
-    const notebookId = await createNotebookViaAPI(
+    const notebookId = await createWorkspaceViaAPI(
       request,
       token,
       uniqueName("pw-reindex"),
@@ -210,7 +210,7 @@ test.describe("Notebook & Document Lifecycle", () => {
       // Reindex endpoint accepts the request regardless of current status
       expect([200, 202]).toContain(reindexResp.status());
     } finally {
-      await deleteNotebookViaAPI(request, token, notebookId);
+      await deleteWorkspaceViaAPI(request, token, notebookId);
     }
   });
 });
@@ -224,7 +224,7 @@ test.describe("Chat Modes", () => {
   test.beforeAll(async ({ request }) => {
     const auth = await registerTestUser(request);
     token = auth.token;
-    notebookId = await createNotebookViaAPI(
+    notebookId = await createWorkspaceViaAPI(
       request,
       token,
       uniqueName("pw-chat"),
@@ -232,7 +232,7 @@ test.describe("Chat Modes", () => {
   });
 
   test.afterAll(async ({ request }) => {
-    await deleteNotebookViaAPI(request, token, notebookId);
+    await deleteWorkspaceViaAPI(request, token, notebookId);
   });
 
   test("T07: general chat (streaming SSE)", async ({ request }) => {
@@ -240,7 +240,7 @@ test.describe("Chat Modes", () => {
     const requestId = uniqueName("req");
     const events = await collectSSEEvents(request, token, {
       query: `Please reply with a short sentence containing the marker ${marker}`,
-      notebook_id: notebookId,
+      workspace_id: notebookId,
       agent_type: "general",
       stream: true,
     }, requestId);
@@ -329,7 +329,7 @@ test.describe("Chat Modes", () => {
     // regardless of whether the embedding pipeline completed
     const events = await collectSSEEvents(request, token, {
       query: "What is the capital of France?",
-      notebook_id: notebookId,
+      workspace_id: notebookId,
       agent_type: "rag",
       doc_scope: [documentId],
       stream: true,
@@ -366,7 +366,7 @@ test.describe("Chat Modes", () => {
       "Enable E2E_STRICT_CITATIONS=1 to enforce citation golden-set regression",
     );
 
-    const notebook = await createNotebookViaAPI(
+    const notebook = await createWorkspaceViaAPI(
       request,
       token,
       uniqueName("pw-rag-citation-golden"),
@@ -388,7 +388,7 @@ test.describe("Chat Modes", () => {
 
       const events = await collectSSEEvents(request, token, {
         query: "What is the capital of France?",
-        notebook_id: notebook,
+        workspace_id: notebook,
         agent_type: "rag",
         doc_scope: [docId],
         stream: true,
@@ -411,7 +411,7 @@ test.describe("Chat Modes", () => {
         "strict mode requires at least one citation item",
       ).toBeGreaterThan(0);
     } finally {
-      await deleteNotebookViaAPI(request, token, notebook);
+      await deleteWorkspaceViaAPI(request, token, notebook);
     }
   });
 
@@ -419,7 +419,7 @@ test.describe("Chat Modes", () => {
     // Send a chat message
     const events1 = await collectSSEEvents(request, token, {
       query: "First test message for session management",
-      notebook_id: notebookId,
+      workspace_id: notebookId,
       agent_type: "general",
       stream: true,
     });
@@ -453,7 +453,7 @@ test.describe("Chat Modes", () => {
   test("T09b: chat session rename and pin persistence", async ({ request }) => {
     const events = await collectSSEEvents(request, token, {
       query: "Rename and pin this session",
-      notebook_id: notebookId,
+      workspace_id: notebookId,
       agent_type: "general",
       stream: true,
     });
@@ -494,7 +494,7 @@ test.describe("Share & Collaboration", () => {
   test.beforeAll(async ({ request }) => {
     const auth = await registerTestUser(request);
     token = auth.token;
-    notebookId = await createNotebookViaAPI(
+    notebookId = await createWorkspaceViaAPI(
       request,
       token,
       uniqueName("pw-share"),
@@ -502,7 +502,7 @@ test.describe("Share & Collaboration", () => {
   });
 
   test.afterAll(async ({ request }) => {
-    await deleteNotebookViaAPI(request, token, notebookId);
+    await deleteWorkspaceViaAPI(request, token, notebookId);
   });
 
   test("T10: share link creation and validation", async ({ request }) => {
@@ -626,7 +626,7 @@ test.describe("Browser Frontend Journeys", () => {
     await expect(page.getByRole("link", { name: /忘记密码|Forgot Password/ })).toHaveCount(1);
 
     const auth = await registerTestUser(request);
-    const notebookId = await createNotebookViaAPI(
+    const notebookId = await createWorkspaceViaAPI(
       request,
       auth.token,
       uniqueName("pw-ui-capabilities"),
@@ -647,7 +647,7 @@ test.describe("Browser Frontend Journeys", () => {
       ).toBeVisible();
 
     } finally {
-      await deleteNotebookViaAPI(request, auth.token, notebookId);
+      await deleteWorkspaceViaAPI(request, auth.token, notebookId);
     }
   });
 
@@ -667,7 +667,7 @@ test.describe("Browser Frontend Journeys", () => {
 
   test("UI02: workspace can import a real URL source", async ({ page, request, baseURL }) => {
     const auth = await registerTestUser(request);
-    const notebookId = await createNotebookViaAPI(
+    const notebookId = await createWorkspaceViaAPI(
       request,
       auth.token,
       uniqueName("pw-ui-url"),
@@ -693,13 +693,13 @@ test.describe("Browser Frontend Journeys", () => {
         timeout: 15_000,
       });
     } finally {
-      await deleteNotebookViaAPI(request, auth.token, notebookId);
+      await deleteWorkspaceViaAPI(request, auth.token, notebookId);
     }
   });
 
   test("UI03: share analytics failures surface an error banner", async ({ page, request }) => {
     const auth = await registerTestUser(request);
-    const notebookId = await createNotebookViaAPI(
+    const notebookId = await createWorkspaceViaAPI(
       request,
       auth.token,
       uniqueName("pw-ui-share"),
@@ -725,13 +725,13 @@ test.describe("Browser Frontend Journeys", () => {
         page.locator("text=/加载分享分析失败|Failed to load share analytics/").first(),
       ).toBeVisible({ timeout: 10_000 });
     } finally {
-      await deleteNotebookViaAPI(request, auth.token, notebookId);
+      await deleteWorkspaceViaAPI(request, auth.token, notebookId);
     }
   });
 
   test("T19: workspace chat keeps scroll position while browsing history", async ({ page, request }) => {
     const auth = await registerTestUser(request);
-    const notebookId = await createNotebookViaAPI(
+    const notebookId = await createWorkspaceViaAPI(
       request,
       auth.token,
       uniqueName("pw-virtual-chat"),
@@ -777,7 +777,7 @@ test.describe("Browser Frontend Journeys", () => {
       const after = await shell.evaluate((node) => (node as HTMLElement).scrollTop);
       expect(Math.abs(after - before)).toBeLessThan(120);
     } finally {
-      await deleteNotebookViaAPI(request, auth.token, notebookId);
+      await deleteWorkspaceViaAPI(request, auth.token, notebookId);
     }
   });
 });

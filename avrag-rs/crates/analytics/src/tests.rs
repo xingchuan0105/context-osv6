@@ -57,7 +57,7 @@ fn cost_event_serializes_provider_and_usage_fields() {
 #[test]
 fn activation_rule_requires_notebook_upload_and_chat() {
     let flags = crate::rollups::ActivationInputs {
-        created_notebook: true,
+        created_workspace: true,
         uploaded_document: true,
         completed_chat: true,
     };

@@ -39,7 +39,7 @@ async fn cross_org_rag_does_not_leak_documents() {
     //    same topic. org-B has no documents, so RAG should NOT reach
     //    into org-A's data to find answers.
     let ctx_b = TestContext::new_smoke_with_rag_and_org(ORG_B, USER_B).await;
-    let notebook_b = ctx_b.create_notebook("org-b-notebook").await.unwrap();
+    let notebook_b = ctx_b.create_workspace("org-b-notebook").await.unwrap();
     let http_resp: HttpResponse = ctx_b
         .chat("What is antifragility?", &notebook_b.id, &[])
         .await
@@ -90,7 +90,7 @@ async fn cross_org_rag_cannot_query_org_a_doc_by_id() {
     //    document_id directly in doc_scope. A correct RAG layer must
     //    refuse to use a document owned by a different org.
     let ctx_b = TestContext::new_smoke_with_rag_and_org(ORG_B, USER_B).await;
-    let notebook_b = ctx_b.create_notebook("org-b-notebook").await.unwrap();
+    let notebook_b = ctx_b.create_workspace("org-b-notebook").await.unwrap();
     let http_resp: HttpResponse = ctx_b
         .chat(
             "What is antifragility?",

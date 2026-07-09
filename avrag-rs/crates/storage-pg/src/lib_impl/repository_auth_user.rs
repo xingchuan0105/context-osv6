@@ -44,7 +44,7 @@ impl AuthRepository {
                 .await?;
             if exists.is_none() {
                 tx.rollback().await?;
-                return Err(PgStorageError::NotFound("notebook not found".to_string()));
+                return Err(PgStorageError::NotFound("workspace not found".to_string()));
             }
         }
 

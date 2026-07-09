@@ -45,7 +45,7 @@ POST /api/v1/chat
 ```json
 {
   "query": "<写作主题，非闲聊 / writing topic, not a chat message>",
-  "notebook_id": "<workspace uuid>",
+  "workspace_id": "<workspace uuid>",
   "agent_type": "write",
   "doc_scope": [],
   "stream": true,
@@ -56,7 +56,7 @@ POST /api/v1/chat
 | 字段 / Field | 说明 / Description |
 |------|------|
 | `query` | 主题或写作任务描述 / Topic or writing task description |
-| `notebook_id` | 工作区 ID / Workspace ID |
+| `workspace_id` | 工作区 ID / Workspace ID |
 | `doc_scope` | 可选；限制知识库调研范围（传给 RAG worker）/ Optional; limit knowledge-base research scope |
 | `stream` | 建议 `true`（耗时长）/ Recommended `true` (long-running) |
 | `debug` | `true` 时 `done` 含 `write_result`（指纹、revise 轮次、token 等）/ When `true`, `done` includes `write_result` |

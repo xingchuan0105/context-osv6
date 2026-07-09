@@ -28,7 +28,7 @@ pub mod util;
 
 pub use adapters::{
     MemoryAdminStore, MemoryBillingQuotaPort, MemoryChatPersistence, MemoryDocumentStore,
-    MemoryNotebookStore,
+    MemoryWorkspaceStore,
 };
 pub use admin_domain::{
     AdminAuditLogEntry, AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview,
@@ -79,9 +79,9 @@ pub use legal_versions::{
     PUBLISHED_PRIVACY_VERSION, PUBLISHED_TERMS_VERSION, validate_published_legal_versions,
 };
 pub use share_domain::{
-    NotebookAccessSnapshot, PublicShareChatContextSnapshot, ShareAccessLevel, ShareAccessLogEntry,
-    ShareAnalyticsEntry, ShareNotebookMember, ShareSettingsSnapshot, ShareTokenSnapshot,
-    SharedKnowledgeBaseSnapshot, SharedNotebookSnapshot, SharedShareInfoSnapshot,
+    WorkspaceAccessSnapshot, PublicShareChatContextSnapshot, ShareAccessLevel, ShareAccessLogEntry,
+    ShareAnalyticsEntry, ShareWorkspaceMember, ShareSettingsSnapshot, ShareTokenSnapshot,
+    SharedKnowledgeBaseSnapshot, SharedWorkspaceSnapshot, SharedShareInfoSnapshot,
     SharedSourceSnapshot,
 };
 pub use share_store::ShareStorePort;

@@ -20,7 +20,7 @@ export type Workspace = {
   shared?: boolean;
 };
 
-export type RawNotebook = {
+export type RawWorkspace = {
   id: string;
   org_id: string;
   owner_id: string;
@@ -34,26 +34,25 @@ export type RawNotebook = {
   shared?: boolean;
 };
 
-/** Single notebook DTO → workspace mapping (storage still uses notebook id). */
-export function mapNotebook(raw: RawNotebook): Workspace {
+/** API workspace DTO (id) → client Workspace (workspace_id). */
+export function mapWorkspace(raw: RawWorkspace): Workspace {
   const { id, ...rest } = raw;
   return { ...rest, workspace_id: id };
 }
 
-function workspaceFromEnvelope(resp: { workspace: RawNotebook }): Workspace {
+function workspaceFromEnvelope(resp: { workspace: RawWorkspace }): Workspace {
   const raw = resp.workspace;
   if (!raw) {
-    throw new Error("workspace envelope missing workspace/notebook");
+    throw new Error("workspace envelope missing workspace");
   }
-  return mapNotebook(raw);
+  return mapWorkspace(raw);
 }
 
 function workspacesFromListEnvelope(resp: {
-  workspaces?: RawNotebook[];
-  notebooks?: RawNotebook[];
-}): Workspace[] {
+  workspaces?: RawWorkspace[];
+  }): Workspace[] {
   const list = resp.workspaces ?? [];
-  return list.map(mapNotebook);
+  return list.map(mapWorkspace);
 }
 
 export type WorkspaceResponse = {
@@ -173,7 +172,7 @@ export type WorkspaceMessageFeedbackRequest = {
 type EmptyResponse = Record<string, never>;
 
 export async function getWorkspace(token: string, workspace_id: string): Promise<WorkspaceResponse> {
-  const resp = await request<{ workspace: RawNotebook }>(
+  const resp = await request<{ workspace: RawWorkspace }>(
     `/api/v1/workspaces/${workspace_id}`,
     { method: "GET" },
     token,
@@ -187,7 +186,7 @@ export async function updateWorkspace(
   workspace_id: string,
   requestBody: { name: string; description: string },
 ): Promise<WorkspaceResponse> {
-  const resp = await request<{ workspace: RawNotebook }>(
+  const resp = await request<{ workspace: RawWorkspace }>(
     `/api/v1/workspaces/${workspace_id}`,
     {
       method: "PUT",

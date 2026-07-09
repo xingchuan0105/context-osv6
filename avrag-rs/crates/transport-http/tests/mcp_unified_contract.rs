@@ -4,7 +4,7 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
-use common::{CreateApiKeyRequest, CreateDocumentRequest, CreateNotebookRequest};
+use common::{CreateApiKeyRequest, CreateDocumentRequest, CreateWorkspaceRequest};
 use contracts::agent_permissions::PERM_ADMIN;
 use contracts::documents::DocumentStatus;
 use tower::ServiceExt;
@@ -43,7 +43,7 @@ async fn create_workspace_with_key(
 ) -> (AppState, String, String, axum::Router) {
     let state = test_app_state();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "unified-contract".to_string(),
             description: String::new(),
         })
@@ -106,7 +106,7 @@ async fn mcp_tools_call(
 async fn workspace_api_key_defaults_include_index_and_query() {
     let state = test_app_state();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "defaults".to_string(),
             description: String::new(),
         })
@@ -157,7 +157,7 @@ async fn org_api_key_can_create_workspace_via_mcp() {
     assert_eq!(status, StatusCode::OK);
     assert!(
         payload
-            .pointer("/result/structuredContent/data/notebook/id")
+            .pointer("/result/structuredContent/data/workspace/id")
             .and_then(|value| value.as_str())
             .is_some()
     );
@@ -239,14 +239,14 @@ async fn workspace_query_only_key_cannot_mcp_create_upload() {
 async fn mcp_complete_upload_rejects_document_from_other_workspace() {
     let state = test_app_state();
     let notebook_a = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "workspace-a".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
     let notebook_b = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "workspace-b".to_string(),
             description: String::new(),
         })
@@ -291,7 +291,7 @@ async fn mcp_complete_upload_rejects_document_from_other_workspace() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         mcp_app_error_code(&payload),
-        Some("document_notebook_mismatch")
+        Some("document_workspace_mismatch")
     );
 }
 
@@ -299,14 +299,14 @@ async fn mcp_complete_upload_rejects_document_from_other_workspace() {
 async fn workspace_key_cannot_rag_other_workspace_doc_scope() {
     let state = test_app_state();
     let notebook_a = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "scope-a".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
     let notebook_b = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "scope-b".to_string(),
             description: String::new(),
         })
@@ -362,7 +362,7 @@ async fn workspace_key_cannot_rag_other_workspace_doc_scope() {
 }
 
 #[tokio::test]
-async fn rest_create_notebook_forbidden_for_workspace_key() {
+async fn rest_create_workspace_forbidden_for_workspace_key() {
     let (_state, _workspace_id, bearer, app) =
         create_workspace_with_key(vec!["index".to_string(), "query".to_string()]).await;
 

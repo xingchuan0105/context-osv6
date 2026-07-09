@@ -14,7 +14,7 @@ function resolveCompatibilityRedirect(pathname: string): string | null {
     return "/dashboard";
   }
 
-  if (pathname.startsWith("/notebooks/")) {
+  if (pathname.startsWith("/workspaces/")) {
     const match = pathname.match(
       /^\/notebooks\/([^/]+)\/share(?:\/(analytics|access-logs))?$/,
     );

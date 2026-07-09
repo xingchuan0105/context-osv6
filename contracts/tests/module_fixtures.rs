@@ -1,7 +1,7 @@
-use contracts::{HealthResponse, NotebookListResponse, PlansResponse};
+use contracts::{HealthResponse, WorkspaceListResponse, PlansResponse};
 
 #[test]
-fn notebook_list_minimal_fixture_roundtrips() {
+fn workspace_list_minimal_fixture_roundtrips() {
     let json = serde_json::json!({
         "workspaces": [{
             "id": "nb-1",
@@ -18,7 +18,7 @@ fn notebook_list_minimal_fixture_roundtrips() {
         }]
     });
 
-    let parsed: NotebookListResponse =
+    let parsed: WorkspaceListResponse =
         serde_json::from_value(json.clone()).expect("workspaces list should deserialize");
     assert_eq!(parsed.workspaces.len(), 1);
     assert_eq!(parsed.workspaces[0].name, "demo");

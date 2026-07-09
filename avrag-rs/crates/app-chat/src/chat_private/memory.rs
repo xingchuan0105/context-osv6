@@ -1,7 +1,7 @@
 use app_core::ChatPersistencePort;
 use avrag_rag_core::context::SessionContext as RagSessionContext;
 use contracts::chat::ChatMessage;
-use contracts::notebooks::ChatSession;
+use contracts::workspaces::ChatSession;
 
 use super::profile_merge::{apply_profile_delta, parse_profile_delta_response};
 use super::profile_types::ProfileDelta;

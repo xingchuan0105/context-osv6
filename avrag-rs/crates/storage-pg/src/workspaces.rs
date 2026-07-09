@@ -1,28 +1,28 @@
 use std::sync::Arc;
 
 use contracts::auth_runtime::AuthContext;
-use contracts::notebooks::Notebook;
+use contracts::workspaces::Workspace;
 
 #[derive(Clone)]
-pub struct PgNotebookQueries {
+pub struct PgWorkspaceQueries {
     repo: Arc<crate::PgAppRepository>,
 }
 
-impl PgNotebookQueries {
+impl PgWorkspaceQueries {
     pub fn new(repo: Arc<crate::PgAppRepository>) -> Self {
         Self { repo }
     }
 
-    pub async fn list(&self, auth: &AuthContext) -> Result<Vec<Notebook>, crate::PgStorageError> {
-        self.repo.list_notebooks(auth).await
+    pub async fn list(&self, auth: &AuthContext) -> Result<Vec<Workspace>, crate::PgStorageError> {
+        self.repo.list_workspaces(auth).await
     }
 }
 
 impl crate::PgAppRepository {
-    pub async fn list_notebooks(
+    pub async fn list_workspaces(
         &self,
         context: &AuthContext,
-    ) -> Result<Vec<Notebook>, crate::PgStorageError> {
+    ) -> Result<Vec<Workspace>, crate::PgStorageError> {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"

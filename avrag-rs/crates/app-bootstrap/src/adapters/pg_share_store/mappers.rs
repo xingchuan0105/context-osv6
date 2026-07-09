@@ -1,5 +1,5 @@
-fn map_member(row: sqlx::postgres::PgRow) -> Result<ShareNotebookMember, AppError> {
-    Ok(ShareNotebookMember {
+fn map_member(row: sqlx::postgres::PgRow) -> Result<ShareWorkspaceMember, AppError> {
+    Ok(ShareWorkspaceMember {
         id: row
             .try_get::<Uuid, _>("id")
             .map(|id| id.to_string())

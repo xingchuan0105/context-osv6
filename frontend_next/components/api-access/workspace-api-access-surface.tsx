@@ -242,7 +242,7 @@ export function WorkspaceApiAccessSurface({ workspaceId }: WorkspaceApiAccessSur
               </p>
             </div>
             <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.92rem", margin: 0 }}>
-              在 API 路径中，这个 Workspace 对应 <code>notebook_id</code>。
+              在 API 路径中，这个 Workspace 对应 <code>workspace_id</code>。
             </p>
           </div>
         </header>
@@ -450,7 +450,7 @@ export function WorkspaceApiAccessSurface({ workspaceId }: WorkspaceApiAccessSur
                 <div style={{ display: "grid", gap: "0.25rem", minWidth: 0 }}>
                   <strong>先读说明页</strong>
                   <p style={{ color: "hsl(var(--muted-foreground))", margin: 0 }}>
-                    看清支持范围、认证方式，以及 Workspace 与 <code>notebook_id</code> 的映射。
+                    看清支持范围、认证方式，以及 Workspace 与 <code>workspace_id</code> 的映射。
                   </p>
                   <Link className="app-link" href="/help/api-access">
                     /help/api-access

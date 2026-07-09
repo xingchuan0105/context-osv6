@@ -24,10 +24,10 @@ describe("dashboard preferences", () => {
       new Response(
         JSON.stringify({
           dashboard: {
-            favorite_notebook_ids: ["ws-1", "ws-2"],
+            favorite_workspace_ids: ["ws-1", "ws-2"],
             workspace_drafts: [],
             workspace_preferences: [],
-            notebook_notes: [],
+            workspace_notes: [],
           },
           notifications: {},
         }),
@@ -59,10 +59,10 @@ describe("dashboard preferences", () => {
         new Response(
           JSON.stringify({
             dashboard: {
-              favorite_notebook_ids: ["ws-1"],
-              workspace_drafts: [{ notebook_id: "ws-3", notes: "draft" }],
-              workspace_preferences: [{ notebook_id: "ws-4", pinned_source_ids: ["src-1"] }],
-              notebook_notes: [],
+              favorite_workspace_ids: ["ws-1"],
+              workspace_drafts: [{ workspace_id: "ws-3", notes: "draft" }],
+              workspace_preferences: [{ workspace_id: "ws-4", pinned_source_ids: ["src-1"] }],
+              workspace_notes: [],
             },
             notifications: {},
           }),
@@ -76,10 +76,10 @@ describe("dashboard preferences", () => {
         new Response(
           JSON.stringify({
             dashboard: {
-              favorite_notebook_ids: ["ws-2", "ws-3"],
-              workspace_drafts: [{ notebook_id: "ws-3", notes: "draft" }],
-              workspace_preferences: [{ notebook_id: "ws-4", pinned_source_ids: ["src-1"] }],
-              notebook_notes: [],
+              favorite_workspace_ids: ["ws-2", "ws-3"],
+              workspace_drafts: [{ workspace_id: "ws-3", notes: "draft" }],
+              workspace_preferences: [{ workspace_id: "ws-4", pinned_source_ids: ["src-1"] }],
+              workspace_notes: [],
             },
             notifications: {},
           }),
@@ -110,10 +110,10 @@ describe("dashboard preferences", () => {
         method: "PUT",
         body: JSON.stringify({
           dashboard: {
-            favorite_notebook_ids: ["ws-2", "ws-3"],
-            workspace_drafts: [{ notebook_id: "ws-3", notes: "draft" }],
-            workspace_preferences: [{ notebook_id: "ws-4", pinned_source_ids: ["src-1"] }],
-            notebook_notes: [],
+            favorite_workspace_ids: ["ws-2", "ws-3"],
+            workspace_drafts: [{ workspace_id: "ws-3", notes: "draft" }],
+            workspace_preferences: [{ workspace_id: "ws-4", pinned_source_ids: ["src-1"] }],
+            workspace_notes: [],
           },
           notifications: {},
         }),

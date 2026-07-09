@@ -81,7 +81,7 @@ fn memory_storage(org_id: &str, user_id: &str) -> (StorageContext, String, Strin
 }
 
 #[tokio::test]
-async fn validate_document_scope_rejects_foreign_notebook_in_memory() {
+async fn validate_document_scope_rejects_foreign_workspace_in_memory() {
     let (storage, org_id, user_id) = memory_storage(
         "00000000-0000-0000-0000-000000000001",
         "00000000-0000-0000-0000-000000000002",

@@ -4,7 +4,7 @@ pub(super) use app_bootstrap::AppState;
 pub(super) use axum::body::{Body, to_bytes};
 pub(super) use axum::http::Request;
 pub(super) use axum::http::StatusCode;
-pub(super) use common::CreateNotebookRequest;
+pub(super) use common::CreateWorkspaceRequest;
 pub(super) use serde_json::json;
 pub(super) use std::env;
 pub(super) use tower::ServiceExt;

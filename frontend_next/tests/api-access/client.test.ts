@@ -30,7 +30,7 @@ describe("api access client", () => {
               {
                 id: "key-1",
                 org_id: "org-1",
-                notebook_id: "ws-1",
+                workspace_id: "ws-1",
                 key_prefix: "sk_live_123",
                 name: "Indexer",
                 permissions: ["index"],
@@ -56,7 +56,7 @@ describe("api access client", () => {
             api_key: {
               id: "key-2",
               org_id: "org-1",
-              notebook_id: "ws-1",
+              workspace_id: "ws-1",
               key_prefix: "sk_live_456",
               name: "Agent Key",
               permissions: ["index", "query"],
@@ -88,7 +88,7 @@ describe("api access client", () => {
         {
           id: "key-1",
           org_id: "org-1",
-          notebook_id: "ws-1",
+          workspace_id: "ws-1",
           key_prefix: "sk_live_123",
           name: "Indexer",
           permissions: ["index"],
@@ -114,7 +114,7 @@ describe("api access client", () => {
       api_key: {
         id: "key-2",
         org_id: "org-1",
-        notebook_id: "ws-1",
+        workspace_id: "ws-1",
         key_prefix: "sk_live_456",
         name: "Agent Key",
         permissions: ["index", "query"],

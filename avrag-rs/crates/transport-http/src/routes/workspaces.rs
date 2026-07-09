@@ -53,14 +53,14 @@ fn workspace_scoped_router(prefix: &str) -> Router<AppState> {
     Router::new()
         .route(
             prefix,
-            get(handlers::list_notebooks).post(handlers::create_notebook),
+            get(handlers::list_workspaces).post(handlers::create_workspace),
         )
         .route(
             &format!("{prefix}/{{id}}"),
-            get(handlers::get_notebook)
-                .patch(handlers::update_notebook)
-                .put(handlers::update_notebook)
-                .delete(handlers::delete_notebook),
+            get(handlers::get_workspace)
+                .patch(handlers::update_workspace)
+                .put(handlers::update_workspace)
+                .delete(handlers::delete_workspace),
         )
         .route(
             &format!("{prefix}/{{id}}/documents"),
@@ -72,17 +72,17 @@ fn workspace_scoped_router(prefix: &str) -> Router<AppState> {
         )
         .route(
             &format!("{prefix}/{{id}}/analysis"),
-            get(handlers::get_notebook_analysis_handler),
+            get(handlers::get_workspace_analysis_handler),
         )
         .route(
             &format!("{prefix}/{{id}}/notes"),
-            get(handlers::list_notebook_notes_handler).post(handlers::create_notebook_note_handler),
+            get(handlers::list_workspace_notes_handler).post(handlers::create_workspace_note_handler),
         )
         .route(
             &format!("{prefix}/{{id}}/notes/{{note_id}}"),
-            get(handlers::get_notebook_note_handler)
-                .put(handlers::update_notebook_note_handler)
-                .delete(handlers::delete_notebook_note_handler),
+            get(handlers::get_workspace_note_handler)
+                .put(handlers::update_workspace_note_handler)
+                .delete(handlers::delete_workspace_note_handler),
         )
         .route(
             &format!("{prefix}/{{id}}/notes/{{note_id}}/promote-to-source"),

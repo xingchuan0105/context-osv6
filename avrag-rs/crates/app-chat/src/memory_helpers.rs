@@ -143,7 +143,7 @@ pub fn build_parsed_preview(content: &str) -> Vec<ParsedPreviewItem> {
 pub fn build_answer(
     query: &str,
     agent_type: &str,
-    notebook_name: &str,
+    workspace_name: &str,
     context_document: Option<&StoredDocument>,
     ready_document_count: usize,
 ) -> String {
@@ -158,7 +158,7 @@ pub fn build_answer(
             if let Some(document) = context_document {
                 let preview: String = document.content.chars().take(220).collect();
                 return format!(
-                    "M1/M2 skeleton RAG response for notebook \"{notebook_name}\". I found {ready_document_count} ready document(s). Placeholder context came from \"{}\": {}",
+                    "M1/M2 skeleton RAG response for notebook \"{workspace_name}\". I found {ready_document_count} ready document(s). Placeholder context came from \"{}\": {}",
                     document.document.file_name, preview
                 );
             }

@@ -36,12 +36,12 @@ afterEach(() => {
 });
 
 describe("workspace client", () => {
-  it("reads and updates workspaces through the notebook transport while keeping workspace_id at the boundary", async () => {
+  it("reads and updates workspaces through the workspace transport while keeping workspace_id at the boundary", async () => {
     fetchMock
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            notebook: {
+            workspace: {
               id: "ws-1",
               org_id: "org-1",
               owner_id: "user-1",
@@ -64,7 +64,7 @@ describe("workspace client", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            notebook: {
+            workspace: {
               id: "ws-1",
               org_id: "org-1",
               owner_id: "user-1",
@@ -145,14 +145,14 @@ describe("workspace client", () => {
     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer token-123");
   });
 
-  it("listWorkspaceSessions maps notebook_id to workspace_id", async () => {
+  it("listWorkspaceSessions maps workspace_id to workspace_id", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           sessions: [
             {
               id: "sess-1",
-              notebook_id: "ws-1",
+              workspace_id: "ws-1",
               title: "Draft",
               agent_type: "rag",
               pinned: true,
@@ -181,7 +181,7 @@ describe("workspace client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "https://api.example.test/api/v1/chat/sessions?notebook_id=ws-1",
+      "https://api.example.test/api/v1/chat/sessions?workspace_id=ws-1",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -191,7 +191,7 @@ describe("workspace client", () => {
       new Response(
         JSON.stringify({
           id: "sess-2",
-          notebook_id: "ws-1",
+          workspace_id: "ws-1",
           title: null,
           agent_type: "rag",
           pinned: false,
@@ -219,17 +219,17 @@ describe("workspace client", () => {
       "https://api.example.test/api/v1/chat/sessions",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ notebook_id: "ws-1", title: null, agent_type: "rag" }),
+        body: JSON.stringify({ workspace_id: "ws-1", title: null, agent_type: "rag" }),
       }),
     );
   });
 
-  it("updateWorkspaceSession maps notebook_id to workspace_id", async () => {
+  it("updateWorkspaceSession maps workspace_id to workspace_id", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           id: "sess-2",
-          notebook_id: "ws-1",
+          workspace_id: "ws-1",
           title: "Renamed",
           agent_type: "rag",
           pinned: true,
@@ -261,12 +261,12 @@ describe("workspace client", () => {
     );
   });
 
-  it("getWorkspaceSession maps notebook_id to workspace_id", async () => {
+  it("getWorkspaceSession maps workspace_id to workspace_id", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           id: "sess-2",
-          notebook_id: "ws-1",
+          workspace_id: "ws-1",
           title: "Renamed",
           agent_type: "rag",
           pinned: true,
@@ -341,15 +341,15 @@ describe("workspace client", () => {
     );
   });
 
-  it("listWorkspaceSources maps notebook fields to workspace fields", async () => {
+  it("listWorkspaceSources maps workspace fields to workspace fields", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           sources: [
             {
               id: "src-1",
-              notebook_id: "ws-1",
-              notebook_name: "Workspace 1",
+              workspace_id: "ws-1",
+              workspace_name: "Workspace 1",
               title: "Doc",
               file_name: "alpha.pdf",
               status: "ready",
@@ -375,7 +375,7 @@ describe("workspace client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "https://api.example.test/api/v1/sources?notebook_id=ws-1",
+      "https://api.example.test/api/v1/sources?workspace_id=ws-1",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -442,14 +442,14 @@ describe("workspace client", () => {
     );
   });
 
-  it("listWorkspaceNotes maps notebook_id to workspace_id", async () => {
+  it("listWorkspaceNotes maps workspace_id to workspace_id", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           notes: [
             {
               id: "note-1",
-              notebook_id: "ws-1",
+              workspace_id: "ws-1",
               title: "Note",
               content: "Body",
               preview: "Body",
@@ -487,13 +487,13 @@ describe("workspace client", () => {
     );
   });
 
-  it("createWorkspaceNote sends note data to notebook notes endpoint", async () => {
+  it("createWorkspaceNote sends note data to workspace notes endpoint", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           note: {
             id: "note-2",
-            notebook_id: "ws-1",
+            workspace_id: "ws-1",
             title: "Created",
             content: "Fresh",
             preview: "Fresh",
@@ -533,13 +533,13 @@ describe("workspace client", () => {
     );
   });
 
-  it("updateWorkspaceNote maps notebook_id to workspace_id", async () => {
+  it("updateWorkspaceNote maps workspace_id to workspace_id", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           note: {
             id: "note-2",
-            notebook_id: "ws-1",
+            workspace_id: "ws-1",
             title: "Updated",
             content: "Fresh",
             preview: "Fresh",
@@ -596,13 +596,13 @@ describe("workspace client", () => {
     );
   });
 
-  it("promoteWorkspaceNote maps notebook fields and returns source_id", async () => {
+  it("promoteWorkspaceNote maps workspace fields and returns source_id", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           note: {
             id: "note-2",
-            notebook_id: "ws-1",
+            workspace_id: "ws-1",
             title: "Updated",
             content: "Fresh",
             preview: "Fresh",

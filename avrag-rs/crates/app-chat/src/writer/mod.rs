@@ -309,7 +309,7 @@ fn checkpoint_state(state: &WriterState, dir: &PathBuf) -> Result<(), AppError> 
 pub(crate) async fn run_write_mode(
     state: &ChatContext,
     request: &contracts::chat::ChatRequest,
-    session: &contracts::notebooks::ChatSession,
+    session: &contracts::workspaces::ChatSession,
     stream_config: Option<&crate::chat::StreamConfig>,
 ) -> Result<crate::chat::ChatExecution, AppError> {
     let mut agent_request = state

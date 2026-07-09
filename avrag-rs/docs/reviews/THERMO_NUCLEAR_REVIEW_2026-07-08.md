@@ -61,7 +61,7 @@ if let Some(store) = storage.document_store() {
 ```
 The in-memory backend is hand-inlined, duplicating auth/org-id guards, status guards, event recording. This is the single reason `documents.rs` is 868 lines.
 
-**Code-judo move:** Implement `MemoryDocumentStore: DocumentStorePort` (precedent exists: `app-core/src/adapters/memory.rs:8` `MemoryNotebookStore`). Then every service method collapses to a single `store.method(…)` call and the `else` branch disappears from ~30 methods. Likely halves `documents.rs`. This is unfinished architecture, not a style issue.
+**Code-judo move:** Implement `MemoryDocumentStore: DocumentStorePort` (precedent exists: `app-core/src/adapters/memory.rs:8` `MemoryWorkspaceStore`). Then every service method collapses to a single `store.method(…)` call and the `else` branch disappears from ~30 methods. Likely halves `documents.rs`. This is unfinished architecture, not a style issue.
 
 ---
 
@@ -166,7 +166,7 @@ Three flavors of the same anti-pattern:
 
 **Top blockers:**
 1. **[HIGH]** Three copies of `ApiEnvelope<T>` + two copies of `unwrapApiData` across `admin/client.ts`, `share/client.ts`, `settings/client.ts`. `share` even has a second divergent shape (`success`/`data`/`error`). One `requestEnvelope<T>()` in `lib/http/request.ts` collapses all.
-2. **[HIGH]** Two divergent notebook→workspace remappers (`dashboard/client.ts` `mapNotebook` vs `workspace/client.ts` `remapNotebook` + inline spreads). One shared `mapNotebook(raw): Workspace`.
+2. **[HIGH]** Two divergent notebook→workspace remappers (`dashboard/client.ts` `mapWorkspace` vs `workspace/client.ts` `remapWorkspace` + inline spreads). One shared `mapWorkspace(raw): Workspace`.
 3. **[HIGH]** `workspace-note-editor-tiptap.tsx` (852 lines): hand-rolled HTML sanitizer (~105 lines) reimplementing `dompurify` which is **already a dependency** and used canonically in `citation-renderer.tsx`. Plus link-panel geometry, toolbar state, editor wiring. Also imports CSS from `workspace-right-rail.module.css` (wrong module). Decompose → <400 lines.
 4. **[HIGH]** `workspace-history-pane.tsx` (743): fetches the same transcript **3× per session** (title-derivation, title-sync, search-indexing) via chained effects + `Set` guards. ~120 lines of inline pure string utils. Extract `use-session-transcripts.ts` (one fetch, derive both).
 5. **[HIGH]** SSE parser (`stream.ts:210-223`) erases generated contract types: rebuilds every field by hand (`String(raw.doc_id ?? "")`) then double-casts `citations as unknown as Array<Record<string, unknown>>`. `zod` is already a dependency but unused. Define zod schemas per `ChatEvent` variant; delete the coercion block.

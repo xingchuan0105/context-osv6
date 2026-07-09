@@ -17,7 +17,7 @@ async fn document_ir_projection_deletes_are_tenant_scoped_when_database_availabl
     let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
         .with_actor_id(ActorId::new(user_id));
     let notebook = repo
-        .bootstrap().create_notebook(&ctx, "ir tenant scope notebook", "ir tenant scope")
+        .bootstrap().create_workspace(&ctx, "ir tenant scope notebook", "ir tenant scope")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&notebook.id).unwrap();

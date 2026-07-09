@@ -72,7 +72,7 @@ pnpm -C frontend_next exec tsc --noEmit
 | Capabilities API | 披露 = mode `tool_pool` ∪ `auto_fallback.tool_id`；全表见 `list_catalog_tools` |
 | JSON 信封 | 写 `workspace(s)`；读兼容 `notebook(s)` |
 | Handler | Bound 面：`docs()` / `admin_api()` / `share()` / `prefs()` / `billing_api()` |
-| URL | `/workspaces/*` 产品默认；`/notebooks/*` 兼容同 handler |
+| URL | **仅** `/workspaces/*`（`/notebooks/*` 已删除） |
 | 不恢复 ExecutePlan | |
 | Solo | 默认本地 trunk；定向测试 |
 
@@ -85,9 +85,9 @@ pnpm -C frontend_next exec tsc --noEmit
 | C4 | **明确不做**（产品分层） |
 | `frontend_rust` | 范围外（契约字段改动时需自行对齐） |
 | TN-2 B5–B10 | **W3–W6 已收口**（测试拆分 / profile 强类型 / ops shared / loop 扩展文档） |
-| storage-pg 测试巨石再拆 | 可选；HTTP 侧已拆 |
-| 类型名 Notebook→Workspace 残余 | 可选 rename |
-| CI 挂 file-size gate | solo 默认定向本地 |
+| storage-pg 测试巨石再拆 | **Done**（`lib_impl/tests/*`） |
+| 类型名 Notebook→Workspace 残余 | **Done**（contracts / modules / API 命名） |
+| CI 挂 file-size gate | **Done**（`.github/workflows/file-size-gate.yml`） |
 
 ---
 
@@ -99,3 +99,4 @@ pnpm -C frontend_next exec tsc --noEmit
 | 2026-07-09 | 产品补裁 §5a；P0–P7 可选全量落地；handoff **Done** |
 | 2026-07-09 | **TN-2**：删 atomic_tools；list_catalog_tools；workspace envelope；disclosure_catalog |
 | 2026-07-09 | **W3–W6**：HTTP 测试拆分；Profile 强类型；admin ops shared；loop EXTENDING + app-chat thin |
+| 2026-07-09 | **R1–R3**：storage-pg 测试拆分；Notebook→Workspace 类型；CI file-size gate |

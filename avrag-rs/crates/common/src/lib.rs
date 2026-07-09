@@ -12,7 +12,7 @@ pub mod errors;
 pub mod guards_access;
 pub mod identity;
 pub mod key_vault;
-pub mod notebook_requests;
+pub mod workspace_requests;
 pub mod ssrf;
 pub mod text_segment;
 pub mod util;
@@ -35,7 +35,7 @@ pub use guards_access::{
     InputGuardType, NotificationRow, NotificationsResponse, OutputGuardType, ShareTokenResponse,
 };
 pub use identity::{OrgId, UserId, default_org_id, default_rag_agent, default_user_id};
-pub use notebook_requests::{CreateNotebookRequest, UpdateNotebookRequest};
+pub use workspace_requests::{CreateWorkspaceRequest, UpdateWorkspaceRequest};
 pub use ssrf::{SsrfError, validate_http_url, validate_http_url_with_dns};
 pub use text_segment::{merge_search_tokens, rrf_merge, segment_for_fts};
 pub use util::{

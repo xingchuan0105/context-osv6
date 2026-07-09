@@ -10,7 +10,7 @@ pub struct WorkspaceDraftPreference {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct NotebookWorkspacePreference {
+pub struct WorkspacePreference {
     pub workspace_id: String,
     #[serde(default)]
     pub pinned_source_ids: Vec<String>,
@@ -18,7 +18,7 @@ pub struct NotebookWorkspacePreference {
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct NotebookNotePreference {
+pub struct WorkspaceNotePreference {
     pub note_id: String,
     pub workspace_id: String,
     pub title: String,
@@ -39,9 +39,9 @@ pub struct DashboardPreferences {
     #[serde(default)]
     pub workspace_drafts: Vec<WorkspaceDraftPreference>,
     #[serde(default)]
-    pub workspace_preferences: Vec<NotebookWorkspacePreference>,
+    pub workspace_preferences: Vec<WorkspacePreference>,
     #[serde(default)]
-    pub notebook_notes: Vec<NotebookNotePreference>,
+    pub workspace_notes: Vec<WorkspaceNotePreference>,
 }
 
 #[typeshare]

@@ -4,7 +4,7 @@ use contracts::documents::DocumentStatus;
 use serde_json::{Value, json};
 
 use crate::auth_guard::{
-    authorize_workspace_index_or_query, authorize_workspace_tool, ensure_document_in_notebook,
+    authorize_workspace_index_or_query, authorize_workspace_tool, ensure_document_in_workspace,
     index_permission, query_permission, require_workspace_id_arg,
 };
 use crate::mcp::catalog;
@@ -79,7 +79,7 @@ pub(crate) async fn complete_upload(
             "document_id is required",
         ));
     }
-    ensure_document_in_notebook(state, &document_id, &workspace_id_str).await?;
+    ensure_document_in_workspace(state, &document_id, &workspace_id_str).await?;
 
     let result = state.docs().complete_document_upload(&document_id).await?;
     Ok(catalog::success_result(
@@ -118,7 +118,7 @@ pub(crate) async fn document_status(
         .ok_or_else(|| AppError::not_found("document_not_found", "document not found"))?;
     if document.workspace_id != workspace_id_str {
         return Err(AppError::forbidden(
-            "document_notebook_mismatch",
+            "document_workspace_mismatch",
             "document does not belong to the requested workspace",
         ));
     }

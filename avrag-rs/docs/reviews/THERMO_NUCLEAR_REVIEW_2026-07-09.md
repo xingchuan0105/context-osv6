@@ -176,7 +176,7 @@ M3 fixed storage-pg modularity. Bootstrap still **re-wraps** domain repos into p
 
 ### H7. [HIGH] Share HTTP path still fat despite `ShareService`
 
-**Where:** `transport-http/.../notebooks/share.rs` (~527 lines).  
+**Where:** `transport-http/.../workspaces/share.rs` (~527 lines).  
 `avrag_share::ShareService` exists and is used by share crate handlers, but transport-http still inlines create/revoke/settings/analytics/members with postgres-unavailable checks and local `ApiEnvelope` types.
 
 **Code judo:** Transport handlers become thin: auth guard → `ShareService` → envelope. Delete the second business-logic copy.

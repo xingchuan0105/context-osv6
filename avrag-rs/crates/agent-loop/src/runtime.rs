@@ -104,7 +104,7 @@ pub struct AgentRequest {
     /// (ADR-0010: server-side query normalization removed; LLM resolves anaphora
     /// on its own via the memory cluster).
     pub query: String,
-    /// Notebook / workspace context.
+    /// Workspace / workspace context.
     pub workspace_id: Option<String>,
     /// Session ID for continuity.
     pub session_id: Option<String>,

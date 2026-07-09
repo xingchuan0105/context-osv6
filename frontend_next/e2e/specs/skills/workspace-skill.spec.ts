@@ -5,7 +5,7 @@ import { ChatPanelPage } from "../../pom/chat-panel-page";
 import { resetAndPrepareTestUser } from "../../utils/api-helpers";
 import path from "path";
 
-test.describe("Notebook Skill", () => {
+test.describe("Workspace Skill", () => {
   test.beforeAll(async ({ request }) => {
     await resetAndPrepareTestUser(request);
   });

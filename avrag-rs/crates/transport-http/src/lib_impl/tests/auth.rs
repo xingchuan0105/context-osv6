@@ -1,7 +1,7 @@
 use super::support::*;
 
 #[tokio::test]
-async fn notebook_routes_with_auth_headers() {
+async fn workspace_routes_with_auth_headers() {
     let state = test_app_state();
     let app = build_router(state);
     let org_id = "11111111-1111-1111-1111-111111111111";
@@ -22,7 +22,7 @@ async fn notebook_routes_with_auth_headers() {
 async fn chat_session_routes_work_with_auth_headers() {
     let state = test_app_state();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "Session Test".to_string(),
             description: String::new(),
         })
@@ -701,7 +701,7 @@ async fn anonymous_share_chat_requires_login_without_persisting_owner_session() 
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {token}"))
         .body(Body::from(
-            r#"{"name":"Shared Chat Notebook","description":""}"#,
+            r#"{"name":"Shared Chat Workspace","description":""}"#,
         ))
         .unwrap();
     let notebook_resp = app.clone().oneshot(notebook_req).await.unwrap();
@@ -710,7 +710,7 @@ async fn anonymous_share_chat_requires_login_without_persisting_owner_session() 
         .await
         .unwrap();
     let notebook: serde_json::Value = serde_json::from_slice(&notebook_body).unwrap();
-    let workspace_id = notebook["notebook"]["id"].as_str().unwrap().to_string();
+    let workspace_id = notebook["workspace"]["id"].as_str().unwrap().to_string();
 
     let share_token = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
         .create_share_token(

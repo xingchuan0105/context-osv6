@@ -1,5 +1,5 @@
 use app_bootstrap::AppState;
-use common::{AppError, CreateNotebookRequest};
+use common::{AppError, CreateWorkspaceRequest};
 use serde_json::{Value, json};
 
 use crate::auth_guard::{authorize_org_tool, org_create_permission, org_list_permission};
@@ -26,12 +26,12 @@ pub(crate) async fn create_workspace(
         .trim()
         .to_string();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest { name, description })
+        .create_workspace(CreateWorkspaceRequest { name, description })
         .await?;
     Ok(catalog::success_result(
         "org.create_workspace",
         None,
-        json!({ "notebook": notebook }),
+        json!({ "workspace": notebook }),
         vec![
             "Create a workspace API key via POST /api/v1/workspaces/{id}/api-keys (index+query permissions)",
             "workspace.create_upload or workspace.add_url_source",
@@ -45,11 +45,11 @@ pub(crate) async fn list_workspaces(
     _arguments: &Value,
 ) -> Result<Value, AppError> {
     authorize_org_tool(state.auth(), org_list_permission())?;
-    let workspaces = state.docs().list_notebooks().await;
+    let workspaces = state.docs().list_workspaces().await;
     Ok(catalog::success_result(
         "org.list_workspaces",
         None,
-        json!({ "notebooks": workspaces }),
+        json!({ "workspaces": workspaces }),
         vec!["org.create_workspace to add another workspace"],
     ))
 }

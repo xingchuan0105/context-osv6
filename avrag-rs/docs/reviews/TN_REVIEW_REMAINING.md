@@ -27,7 +27,7 @@
 ### DEFERRED-1. W4c — ShareService 提取 [MEDIUM]
 
 **发现：** NEW-4 (MEDIUM)
-**位置：** `avrag-rs/crates/transport-http/src/handlers/notebooks/share.rs`（600 行）
+**位置：** `avrag-rs/crates/transport-http/src/handlers/workspaces/share.rs`（600 行）
 **问题：** 10 个 handler 内联了完整的访问控制 + 业务逻辑（create/revoke/get/update/validate/access-level/analytics/logs/token/api-keys）。与 S3 reset.rs / billing/api.rs 同一模式。
 **为何延迟：** W4a/W4b 优先完成（更高优先级）。Share handler 的业务逻辑不如 password-reset/billing 复杂（主要是 CRUD + 权限检查），提取 Service 的收益相对较低。
 **工作量：** 1 天

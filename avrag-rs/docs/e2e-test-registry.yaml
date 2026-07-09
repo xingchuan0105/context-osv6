@@ -438,7 +438,7 @@ tests:
       - M
       - I
     ci_default: true
-  - id: product_e2e::integration::mcp_auth_boundary::api_key_cannot_list_notebook_notes
+  - id: product_e2e::integration::mcp_auth_boundary::api_key_cannot_list_workspace_notes
     layer: L2
     module: mcp_auth_boundary
     suite: integration
@@ -1153,7 +1153,7 @@ tests:
     parallel_group: G-parallel-smoke
     ci_default: true
     note: "run module with --test-threads=1"
-  - id: product_e2e::smoke::auth_boundary::create_notebook_under_one_org_then_read_under_another_org_returns_404_or_403
+  - id: product_e2e::smoke::auth_boundary::create_workspace_under_one_org_then_read_under_another_org_returns_404_or_403
     layer: L1
     module: auth_boundary
     suite: smoke
@@ -1304,9 +1304,9 @@ tests:
       - I
     parallel_group: G-serial-rag
     ci_default: true
-  - id: product_e2e::smoke::notebook_crud::notebook_crud_lifecycle_via_http
+  - id: product_e2e::smoke::workspace_crud::workspace_crud_lifecycle_via_http
     layer: L1
-    module: notebook_crud
+    module: workspace_crud
     suite: smoke
     capabilities: []
     evidence:
@@ -1421,7 +1421,7 @@ tests:
       - I
     parallel_group: G-parallel-smoke
     ci_default: true
-  - id: product_e2e::smoke::share_boundary::cross_user_direct_get_notebook_without_token_returns_4xx
+  - id: product_e2e::smoke::share_boundary::cross_user_direct_get_workspace_without_token_returns_4xx
     layer: L1
     module: share_boundary
     suite: smoke

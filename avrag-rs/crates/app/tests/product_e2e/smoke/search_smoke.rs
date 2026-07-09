@@ -7,7 +7,7 @@ async fn open_query_returns_web_citation() {
     super::require_smoke_suite();
     let ctx = TestContext::new_smoke().await;
 
-    let notebook = ctx.create_notebook("test-notebook").await.unwrap();
+    let notebook = ctx.create_workspace("test-notebook").await.unwrap();
     let http_resp: HttpResponse = ctx
         .search("What is the weather in Tokyo today?", &notebook.id)
         .await

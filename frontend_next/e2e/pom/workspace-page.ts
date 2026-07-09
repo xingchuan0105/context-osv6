@@ -1,7 +1,68 @@
-import { type Page } from "@playwright/test";
+import { type Page, expect } from "@playwright/test";
 
 export class WorkspacePage {
+  private lastCreatedName: string | null = null;
+
   constructor(private page: Page) {}
+
+  /** 从 /dashboard 创建 workspace 并通过 inline 编辑设置名称 */
+  async createWorkspace(name: string) {
+    await this.page.goto("/dashboard");
+    await this.page.waitForLoadState("networkidle");
+
+    await this.page.locator('[data-testid="dashboard-create-workspace"]').click();
+    await this.page.waitForURL(/\/dashboard\/[^/]+$/);
+
+    await this.page.locator('[data-testid="workspace-top-bar"]').waitFor({ state: "visible" });
+    const titleTrigger = this.page.locator("#workspace-title");
+    await titleTrigger.waitFor({ state: "visible", timeout: 10_000 });
+
+    await titleTrigger.click();
+    await titleTrigger.fill(name);
+    await titleTrigger.press("Enter");
+
+    await expect(this.page.locator("#workspace-title")).toHaveText(name);
+    this.lastCreatedName = name;
+  }
+
+  /** 要求在 workspace 页面（已定位到目标 workspace） */
+  async renameWorkspace(newName: string) {
+    await this.page.locator('[data-testid="workspace-top-bar"]').waitFor({ state: "visible" });
+    const titleTrigger = this.page.locator("#workspace-title");
+    await titleTrigger.waitFor({ state: "visible", timeout: 10_000 });
+
+    await titleTrigger.click();
+    await titleTrigger.fill(newName);
+    await titleTrigger.press("Enter");
+
+    await expect(this.page.locator("#workspace-title")).toHaveText(newName);
+    this.lastCreatedName = newName;
+  }
+
+  /** 从 /dashboard 找到最近创建的 workspace 并删除 */
+  async deleteWorkspace() {
+    await this.page.goto("/dashboard");
+    await this.page.waitForLoadState("networkidle");
+
+    const targetName = this.lastCreatedName;
+    if (!targetName) {
+      throw new Error(
+        "deleteWorkspace called but no workspace was created in this test. Call createWorkspace first.",
+      );
+    }
+    const cardLocator = this.page.locator('[data-testid="dashboard-workspace-item"]', {
+      has: this.page.getByText(targetName, { exact: true }),
+    });
+
+    await cardLocator.locator(".dashboard-menu-trigger").click();
+
+    this.page.once("dialog", (dialog) => dialog.accept());
+
+    await this.page.getByRole("menuitem", { name: /删除|Delete/i }).click();
+
+    await expect(cardLocator).toBeHidden();
+    this.lastCreatedName = null;
+  }
 
   /** 桌面端 history rail 默认显示，只需等待其可见 */
   async waitForHistoryTabVisible() {
@@ -26,7 +87,7 @@ export class WorkspacePage {
     // 等待上传状态至少变为 pending/processing（避免空转 ingestion 等待）
     await this.page.waitForSelector(
       '[data-testid="ingestion-status"][data-status="pending"], [data-testid="ingestion-status"][data-status="processing"], [data-testid="ingestion-status"][data-status="completed"]',
-      { timeout: 30_000 }
+      { timeout: 30_000 },
     );
   }
 
@@ -36,7 +97,7 @@ export class WorkspacePage {
     // 等待任意 source item 的 data-status 变为 completed 或 ready
     await this.page.waitForSelector(
       '[data-testid="ingestion-status"][data-status="completed"], [data-testid="ingestion-status"][data-status="ready"]',
-      { timeout: effectiveTimeout }
+      { timeout: effectiveTimeout },
     );
   }
 

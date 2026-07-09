@@ -10,7 +10,7 @@ async fn search_timeout_returns_degraded_answer() {
     let ctx = TestContext::new_smoke().await;
     ctx.set_search_delay_ms(2_000);
 
-    let notebook = ctx.create_notebook("search-timeout").await.unwrap();
+    let notebook = ctx.create_workspace("search-timeout").await.unwrap();
     let http_resp: HttpResponse = ctx
         .search("What is the weather in Tokyo today?", &notebook.id)
         .await
@@ -36,7 +36,7 @@ async fn search_empty_results_returns_degraded_answer() {
     let ctx = TestContext::new_smoke().await;
     ctx.set_search_empty(true);
 
-    let notebook = ctx.create_notebook("search-empty").await.unwrap();
+    let notebook = ctx.create_workspace("search-empty").await.unwrap();
     let http_resp: HttpResponse = ctx
         .search("obscure query with no brave hits xyz123", &notebook.id)
         .await

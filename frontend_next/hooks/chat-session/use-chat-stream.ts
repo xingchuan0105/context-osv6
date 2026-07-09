@@ -156,7 +156,7 @@ export function useChatStream(
             tokenRef.current,
             {
               query: trimmedQuery,
-              notebook_id: workspaceIdRef.current,
+              workspace_id: workspaceIdRef.current,
               session_id: requestSessionId,
               agent_type: effectiveChatModeRef.current,
               doc_scope: selectedSourceIdsRef.current,

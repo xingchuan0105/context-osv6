@@ -226,7 +226,7 @@ E2E_MODE=integration cargo test -p app --test product_e2e \
 | 无 Authorization | 401 |
 | workspace API key + `stream: false` | 200 + OpenAI 形态 body |
 | `stream: true` | SSE（可复用 `chat_stream_contract.rs` 断言思路） |
-| notebook_id 与 key 不匹配 | 403 |
+| workspace_id 与 key 不匹配 | 403 |
 
 **验收**：`cargo test -p transport-http openai_completions`；已包含在 PR smoke 的 `cargo test -p transport-http` 步骤。
 

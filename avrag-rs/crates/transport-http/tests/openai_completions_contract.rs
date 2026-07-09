@@ -20,7 +20,7 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
-use common::{CreateApiKeyRequest, CreateNotebookRequest};
+use common::{CreateApiKeyRequest, CreateWorkspaceRequest};
 use tower::ServiceExt;
 use transport_http::build_router;
 use uuid::Uuid;
@@ -88,7 +88,7 @@ fn test_app_state() -> AppState {
 async fn create_workspace_with_key(permissions: Vec<String>) -> (axum::Router, String, String) {
     let state = test_app_state();
     let notebook = state.docs()
-        .create_notebook(CreateNotebookRequest {
+        .create_workspace(CreateWorkspaceRequest {
             name: "openai-contract".to_string(),
             description: String::new(),
         })

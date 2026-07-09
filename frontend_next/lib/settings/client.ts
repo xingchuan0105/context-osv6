@@ -11,10 +11,10 @@ export type NotificationPreferences = {
 };
 
 export type DashboardPreferences = {
-  favorite_notebook_ids: string[];
+  favorite_workspace_ids: string[];
   workspace_drafts: Array<Record<string, unknown>>;
   workspace_preferences: Array<Record<string, unknown>>;
-  notebook_notes: Array<Record<string, unknown>>;
+  workspace_notes: Array<Record<string, unknown>>;
 };
 
 export type UserPreferences = {

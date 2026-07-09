@@ -79,7 +79,7 @@ const CHAT_MODE_ORDER: WorkspaceChatMode[] = ["rag", "search", "chat"];
 - Persona 种子、回放、`no_persona` 开关
 - `write_refine` 独立按钮或模式
 - 指纹 band 可视化、精修轮次调试面板
-- MCP `notebook.chat` 扩展 write（仍用 REST/SSE）
+- MCP `workspace.chat` 扩展 write（仍用 REST/SSE）
 - `GET /api/v1/agent/operation-guides/write`（可 Phase 0 可选补丁，非阻塞）
 - 追求 gate 10/10 band（当前 8/10 已验收）
 
@@ -143,7 +143,7 @@ curl -N -H "Authorization: Bearer $JWT" \
   -H "Content-Type: application/json" \
   -d '{
     "query": "用五百字介绍 KV 缓存，面向工程师",
-    "notebook_id": "<uuid>",
+    "workspace_id": "<uuid>",
     "agent_type": "write",
     "stream": true
   }' \
@@ -170,7 +170,7 @@ curl -N -H "Authorization: Bearer $JWT" \
 POST /api/v1/chat
 {
   "query": "<写作主题，非闲聊>",
-  "notebook_id": "<workspace uuid>",
+  "workspace_id": "<workspace uuid>",
   "agent_type": "write",
   "doc_scope": [],
   "stream": true,
@@ -181,7 +181,7 @@ POST /api/v1/chat
 | 字段 | 说明 |
 |------|------|
 | `query` | 主题或写作任务描述 |
-| `notebook_id` | 工作区 ID |
+| `workspace_id` | 工作区 ID |
 | `doc_scope` | 可选；限制知识库调研范围（传给 RAG worker） |
 | `stream` | 建议 `true`（耗时长） |
 | `debug` | `true` 时 `done` 含 `write_result`（指纹、revise 轮次、token 等） |

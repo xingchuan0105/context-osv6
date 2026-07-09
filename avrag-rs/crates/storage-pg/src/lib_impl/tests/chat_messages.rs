@@ -17,7 +17,7 @@ async fn chat_message_tool_results_roundtrip_when_database_available() {
         .with_actor_id(ActorId::new(user_id));
 
     let notebook = repo
-        .bootstrap().create_notebook(&ctx, "tool-results-test", "tool results test")
+        .bootstrap().create_workspace(&ctx, "tool-results-test", "tool results test")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&notebook.id).unwrap();
@@ -105,7 +105,7 @@ async fn chat_message_turn_metadata_roundtrip_when_database_available() {
         .with_actor_id(ActorId::new(Uuid::new_v4()));
 
     let notebook = repo
-        .bootstrap().create_notebook(&ctx, "turn-metadata-test", "turn metadata test")
+        .bootstrap().create_workspace(&ctx, "turn-metadata-test", "turn metadata test")
         .await
         .unwrap();
     let workspace_id = Uuid::parse_str(&notebook.id).unwrap();

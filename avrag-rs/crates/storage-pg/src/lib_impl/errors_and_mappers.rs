@@ -110,7 +110,7 @@ pub struct DocumentScopeState {
 
 pub use common::IndexedChunk;
 
-pub fn map_notebook(row: PgRow) -> Result<Notebook, PgStorageError> {
+pub fn map_notebook(row: PgRow) -> Result<Workspace, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
     let org_id: Uuid = row.try_get("org_id")?;
     let owner_id: Option<Uuid> = row.try_get("owner_id")?;
@@ -125,7 +125,7 @@ pub fn map_notebook(row: PgRow) -> Result<Notebook, PgStorageError> {
     let status_summary: std::collections::HashMap<String, i64> =
         serde_json::from_value(status_summary_json).unwrap_or_default();
     let shared: bool = row.try_get("shared").unwrap_or(false);
-    Ok(Notebook {
+    Ok(Workspace {
         id: id.to_string(),
         org_id: org_id.to_string(),
         owner_id: owner_id.map(|value| value.to_string()).unwrap_or_default(),

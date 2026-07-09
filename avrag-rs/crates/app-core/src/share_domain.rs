@@ -41,7 +41,7 @@ impl ShareAccessLevel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShareNotebookMember {
+pub struct ShareWorkspaceMember {
     pub id: String,
     pub workspace_id: String,
     pub user_id: Option<String>,
@@ -58,7 +58,7 @@ pub struct ShareSettingsSnapshot {
     pub access_level: String,
     pub allow_download: bool,
     pub share_tokens: Vec<ShareTokenSnapshot>,
-    pub members: Vec<ShareNotebookMember>,
+    pub members: Vec<ShareWorkspaceMember>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,7 +71,7 @@ pub struct ShareTokenSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SharedNotebookSnapshot {
+pub struct SharedWorkspaceSnapshot {
     pub knowledge_base: SharedKnowledgeBaseSnapshot,
     pub share: SharedShareInfoSnapshot,
     pub sources: Vec<SharedSourceSnapshot>,
@@ -126,7 +126,7 @@ pub struct PublicShareChatContextSnapshot {
 }
 
 #[derive(Debug, Clone)]
-pub struct NotebookAccessSnapshot {
+pub struct WorkspaceAccessSnapshot {
     pub owner_id: Option<Uuid>,
     pub notebook_access_level: String,
 }
