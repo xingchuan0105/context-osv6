@@ -186,3 +186,26 @@ async fn admin_create_share_token_missing_notebook_returns_not_found() {
     assert_eq!(err.code(), "notebook_not_found");
     assert_eq!(err.http_status(), 404);
 }
+
+// ---------------------------------------------------------------------------
+// W2: Bound product faces (admin_ops / share access)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn admin_ops_without_actor_is_unauthorized() {
+    use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
+    let state = memory_state().await;
+    // Memory bootstrap attaches a default actor; strip it for this contract.
+    let state = state.with_auth(AuthContext::new(OrgId::from(uuid::Uuid::nil()), SubjectKind::User));
+    let err = state.admin_ops().list_feature_flags().await.unwrap_err();
+    assert_eq!(err.http_status(), 401);
+    assert_eq!(err.code(), "unauthorized");
+}
+
+#[tokio::test]
+async fn share_check_access_memory_mode_allows() {
+    let state = memory_state().await;
+    let notebook = create_notebook(&state).await;
+    let access = state.share().check_access(&notebook.id).await.unwrap();
+    assert_ne!(access, avrag_share::AccessLevel::None);
+}

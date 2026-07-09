@@ -38,6 +38,7 @@
 | **TN-2.2** `list_catalog_tools` + rag auto_fallback 披露 | Done |
 | **TN-2.3** workspace JSON envelope + typeshare | Done |
 | **TN-2.4** progressive `disclosure_catalog` | Done |
+| **W2** AppState Bound 纪律（admin_ops / share.check_access） | Done |
 
 ---
 

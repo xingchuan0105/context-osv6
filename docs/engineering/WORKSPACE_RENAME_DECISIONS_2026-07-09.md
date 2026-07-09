@@ -10,7 +10,8 @@
 | 4 | 无旧客户端；未上线，**不做长期 alias 兼容**（API/JSON/代码公开层一律 workspace） |
 | 5 | 记忆/偏好/画像：仅 Chat + WebSearch 体验增强（另波） |
 | 6 | Agent 继续以 Loop 为平台演进（另波） |
-| 7 | Admin 要真架构（另波）；测试分册（另波）；AppState Bound 纪律（随改随清） |
+| 7 | Admin 要真架构（另波）；测试分册（另波） |
+| 8 | **AppState 产品路径只认 Bound**（W2）：`docs/chat/admin_api/admin_ops/share/prefs/billing_api` |
 
 ## 迁移
 

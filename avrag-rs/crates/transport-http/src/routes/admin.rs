@@ -2,7 +2,7 @@ use app_bootstrap::AppState;
 use app_core::{
     AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview, AdminDegradationStatus,
     AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminOrgInfo, AdminRagHealthStatus,
-    AdminStorePort, AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
+    AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
 };
 use axum::{
     Extension, Json, Router,
@@ -13,7 +13,6 @@ use axum::{
 };
 use common::{ApiResponse, AppError};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::middleware::RequestState;
@@ -99,20 +98,6 @@ struct ReviewFeatureFlagChangeRequest {
     review_note: Option<String>,
 }
 
-macro_rules! admin_store_or_response {
-    ($state:expr) => {
-        match $state.admin_store() {
-            Some(store) => store,
-            None => {
-                return app_error_response::<serde_json::Value>(AppError::validation(
-                    "postgres_not_configured",
-                    "postgres backend is not configured",
-                ));
-            }
-        }
-    };
-}
-
 fn app_error_response<T: serde::Serialize>(error: AppError) -> Response {
     let (status, code, message) = match &error {
         AppError::Validation {
@@ -153,24 +138,10 @@ fn app_error_response<T: serde::Serialize>(error: AppError) -> Response {
     (status, Json(ApiResponse::<T>::err(code, &message))).into_response()
 }
 
-async fn call_admin_store<T, F, Fut>(state: &AppState, f: F) -> Response
-where
-    T: serde::Serialize,
-    F: FnOnce(Arc<dyn AdminStorePort>) -> Fut,
-    Fut: std::future::Future<Output = Result<T, AppError>>,
-{
-    if state.auth().actor_id().is_none() {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(ApiResponse::<T>::err(
-                "authenticated_user_required",
-                "admin action requires an authenticated user",
-            )),
-        )
-            .into_response();
-    }
-    let store = admin_store_or_response!(state);
-    match f(store).await {
+async fn ops_json<T: serde::Serialize>(
+    result: Result<T, AppError>,
+) -> Response {
+    match result {
         Ok(value) => Json(ApiResponse::ok(value)).into_response(),
         Err(error) => app_error_response::<T>(error),
     }
@@ -205,11 +176,7 @@ async fn list_orgs(
 ) -> Response {
     let page = query.page.unwrap_or(1).max(1);
     let per_page = app_core::admin_clamp_org_list_per_page(query.per_page.unwrap_or(100));
-    call_admin_store::<Vec<AdminOrgInfo>, _, _>(&state, |store| {
-        let auth = state.auth().clone();
-        async move { store.list_orgs(&auth, page, per_page).await }
-    })
-    .await
+    ops_json(state.admin_ops().list_orgs(page, per_page).await).await
 }
 
 async fn get_org(
@@ -220,11 +187,7 @@ async fn get_org(
         Ok(org_id) => org_id,
         Err(response) => return response,
     };
-    call_admin_store::<AdminOrgInfo, _, _>(&state, |store| {
-        let auth = state.auth().clone();
-        async move { store.get_org(&auth, org_id).await }
-    })
-    .await
+    ops_json(state.admin_ops().get_org(org_id).await).await
 }
 
 async fn list_users(
@@ -235,11 +198,7 @@ async fn list_users(
         Ok(org_id) => org_id,
         Err(response) => return response,
     };
-    call_admin_store::<Vec<AdminUserInfo>, _, _>(&state, |store| {
-        let auth = state.auth().clone();
-        async move { store.list_users(&auth, org_id).await }
-    })
-    .await
+    ops_json(state.admin_ops().list_users(org_id).await).await
 }
 
 async fn delete_user(
@@ -257,11 +216,7 @@ async fn delete_user(
         }
     };
     let org_id = state.auth().org_id();
-    call_admin_store::<(), _, _>(&state, |store| {
-        let auth = state.auth().clone();
-        async move { store.delete_user(&auth, org_id, user_id).await }
-    })
-    .await
+    ops_json(state.admin_ops().delete_user(org_id, user_id).await).await
 }
 
 async fn get_usage(
@@ -273,11 +228,7 @@ async fn get_usage(
         Err(response) => return response,
     };
     let period = query.period.unwrap_or_else(|| "30d".to_string());
-    call_admin_store::<AdminUsageStats, _, _>(&state, |store| {
-        let auth = state.auth().clone();
-        async move { store.get_usage(&auth, org_id, &period).await }
-    })
-    .await
+    ops_json(state.admin_ops().get_usage(org_id, &period).await).await
 }
 
 async fn block_org(
@@ -288,11 +239,7 @@ async fn block_org(
         Ok(org_id) => org_id,
         Err(response) => return response,
     };
-    call_admin_store::<(), _, _>(&state, |store| {
-        let auth = state.auth().clone();
-        async move { store.set_org_blocked(&auth, org_id, body.blocked).await }
-    })
-    .await
+    ops_json(state.admin_ops().set_org_blocked(org_id, body.blocked).await).await
 }
 
 #[derive(Serialize)]
@@ -315,58 +262,35 @@ async fn health() -> Response {
 }
 
 async fn billing_overview(Extension(RequestState(state)): Extension<RequestState>) -> Response {
-    call_admin_store::<AdminBillingOverview, _, _>(&state, |store| {
-        let auth = state.auth().clone();
-        async move { store.billing_overview(&auth).await }
-    })
-    .await
+    ops_json(state.admin_ops().billing_overview().await).await
 }
 
 async fn rag_health(Extension(RequestState(state)): Extension<RequestState>) -> Response {
-    call_admin_store::<AdminRagHealthStatus, _, _>(&state, |store| {
-        let auth = state.auth().clone();
-        async move { store.rag_health(&auth).await }
-    })
-    .await
+    ops_json(state.admin_ops().rag_health().await).await
 }
 
 async fn worker_status(Extension(RequestState(state)): Extension<RequestState>) -> Response {
-    call_admin_store::<AdminWorkerStatus, _, _>(&state, |store| {
-        let auth = state.auth().clone();
-        async move { store.worker_status(&auth).await }
-    })
-    .await
+    ops_json(state.admin_ops().worker_status().await).await
 }
 
 async fn degradation_status(Extension(RequestState(state)): Extension<RequestState>) -> Response {
-    call_admin_store::<AdminDegradationStatus, _, _>(&state, |store| {
-        let auth = state.auth().clone();
-        async move { store.degradation_status(&auth).await }
-    })
-    .await
+    ops_json(state.admin_ops().degradation_status().await).await
 }
 
 async fn feature_flags(Extension(RequestState(state)): Extension<RequestState>) -> Response {
-    call_admin_store::<Vec<AdminFeatureFlagEntry>, _, _>(&state, |store| {
-        let auth = state.auth().clone();
-        async move { store.list_feature_flags(&auth).await }
-    })
-    .await
+    ops_json(state.admin_ops().list_feature_flags().await).await
 }
 
 async fn feature_flag_change_requests(
     Extension(RequestState(state)): Extension<RequestState>,
     Query(query): Query<FeatureFlagChangeRequestQuery>,
 ) -> Response {
-    let status = query.status;
-    call_admin_store::<Vec<AdminFeatureFlagChangeRequest>, _, _>(&state, |store| {
-        let auth = state.auth().clone();
-        async move {
-            store
-                .list_feature_flag_change_requests(&auth, status.as_deref())
-                .await
-        }
-    })
+    ops_json(
+        state
+            .admin_ops()
+            .list_feature_flag_change_requests(query.status.as_deref())
+            .await,
+    )
     .await
 }
 
@@ -375,14 +299,12 @@ async fn create_feature_flag_change_request(
     Path(key): Path<String>,
     Json(body): Json<CreateFeatureFlagChangeRequest>,
 ) -> Response {
-    call_admin_store::<AdminFeatureFlagChangeRequest, _, _>(&state, |store| {
-        let auth = state.auth().clone();
-        async move {
-            store
-                .create_feature_flag_change_request(&auth, &key, body.enabled, &body.reason)
-                .await
-        }
-    })
+    ops_json(
+        state
+            .admin_ops()
+            .create_feature_flag_change_request(&key, body.enabled, &body.reason)
+            .await,
+    )
     .await
 }
 
@@ -391,19 +313,16 @@ async fn review_feature_flag_change_request(
     Path(request_id): Path<String>,
     Json(body): Json<ReviewFeatureFlagChangeRequest>,
 ) -> Response {
-    call_admin_store::<AdminFeatureFlagChangeRequest, _, _>(&state, |store| {
-        let auth = state.auth().clone();
-        async move {
-            store
-                .review_feature_flag_change_request(
-                    &auth,
-                    &request_id,
-                    body.approved,
-                    body.review_note.as_deref(),
-                )
-                .await
-        }
-    })
+    ops_json(
+        state
+            .admin_ops()
+            .review_feature_flag_change_request(
+                &request_id,
+                body.approved,
+                body.review_note.as_deref(),
+            )
+            .await,
+    )
     .await
 }
 
@@ -411,35 +330,19 @@ async fn audit_logs(
     Extension(RequestState(state)): Extension<RequestState>,
     Query(query): Query<AuditQuery>,
 ) -> Response {
-    if state.auth().actor_id().is_none() {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(ApiResponse::<AdminAuditLogPage>::err(
-                "authenticated_user_required",
-                "admin action requires an authenticated user",
-            )),
-        )
-            .into_response();
-    }
-    let store = admin_store_or_response!(state);
     let format = query.format.clone();
     let audit_query = audit_query(query);
-    let auth = state.auth().clone();
+    let ops = state.admin_ops();
     if format.as_deref() == Some("csv") {
-        match store.export_audit_logs_csv(&auth, &audit_query).await {
-            Ok(csv) => {
-                return (
-                    StatusCode::OK,
-                    [(header::CONTENT_TYPE, "text/csv; charset=utf-8")],
-                    csv,
-                )
-                    .into_response();
-            }
-            Err(error) => return app_error_response::<AdminAuditLogPage>(error),
-        }
+        return match ops.export_audit_logs_csv(&audit_query).await {
+            Ok(csv) => (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "text/csv; charset=utf-8")],
+                csv,
+            )
+                .into_response(),
+            Err(error) => app_error_response::<AdminAuditLogPage>(error),
+        };
     }
-    match store.list_audit_logs(&auth, &audit_query).await {
-        Ok(page) => Json(ApiResponse::ok(page)).into_response(),
-        Err(error) => app_error_response::<AdminAuditLogPage>(error),
-    }
+    ops_json(ops.list_audit_logs(&audit_query).await).await
 }

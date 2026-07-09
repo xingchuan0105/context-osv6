@@ -296,19 +296,13 @@ pub(crate) async fn ensure_user_notebook_access(
     if state.postgres_configured() && state.share_store().is_none() {
         return Err(AppError::internal("share access verification unavailable"));
     }
-    let Some(store) = state.share_store() else {
+    if !state.postgres_configured() {
         return Ok(());
-    };
-    let service = avrag_share::ShareService::new(store);
-    let access = service
-        .check_access(state.auth(), workspace_id)
-        .await
-        .map_err(|error| {
-            AppError::internal(format!("failed to verify workspace access: {error}"))
-        })?;
+    }
+    let access = state.share().check_access(workspace_id).await?;
     if access == avrag_share::AccessLevel::None {
         return Err(AppError::forbidden(
-            "notebook_access_required",
+            "workspace_access_required",
             "workspace membership required to manage API keys for this workspace",
         ));
     }

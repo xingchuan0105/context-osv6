@@ -48,23 +48,27 @@ impl AppState {
         &self.auth
     }
 
-    /// Domain face accessors (TN Wave 3) — prefer these over AppState business
-    /// passthrough methods. Pure identity wrappers on AppState are being removed.
-    ///
-    /// Note: `billing()` and `analytics()` already exist below with their
-    /// established return shapes (`BillingContext` / optional service Arc).
+    // --- Product path (W2): use Bound faces on AppState ---
+    // Prefer: chat() / docs() / admin_api() / admin_ops() / share() / prefs() / billing_api()
+    // (see `bound/mod.rs`). The raw domain/context accessors below are for
+    // bootstrap, middleware, and tests — not for new product handlers.
+
+    /// Chat domain context (sessions / RAG orchestration). Prefer for product paths.
     pub fn chat(&self) -> &app_chat::ChatContext {
         &self.chat
     }
 
+    /// Raw document context (needs caller-supplied auth/storage). Prefer `docs()`.
     pub fn documents(&self) -> &app_documents::DocumentContext {
         &self.documents
     }
 
+    /// Raw admin context. Prefer `admin_api()` (keys/notifications) or `admin_ops()` (console).
     pub fn admin(&self) -> &app_admin::AdminContext {
         &self.admin
     }
 
+    /// Storage / ports container (infra). Prefer Bound faces for product work.
     pub fn storage(&self) -> &app_core::StorageContext {
         &self.storage
     }
@@ -112,14 +116,17 @@ impl AppState {
         self.postgres.clone()
     }
 
+    /// Infra: raw admin store. Prefer `admin_ops()` in HTTP product handlers.
     pub fn admin_store(&self) -> Option<Arc<dyn AdminStorePort>> {
         self.storage.admin_store()
     }
 
+    /// Infra: raw billing store. Prefer `billing_api()`.
     pub fn billing_store(&self) -> Option<Arc<dyn BillingStorePort>> {
         self.storage.billing_store()
     }
 
+    /// Infra: raw share store. Prefer `share()` (includes `check_access`).
     pub fn share_store(&self) -> Option<Arc<dyn ShareStorePort>> {
         self.storage.share_store()
     }

@@ -19,6 +19,26 @@ impl<'a> BoundShare<'a> {
             .ok_or_else(|| common::AppError::internal("postgres backend is not configured"))
     }
 
+    /// Whether the authenticated user may access the workspace (membership / share).
+    /// Returns `AccessLevel::None` when denied; callers map to forbidden as needed.
+    pub async fn check_access(
+        &self,
+        workspace_id: &str,
+    ) -> Result<avrag_share::AccessLevel, common::AppError> {
+        let Some(store) = self.storage.share_store() else {
+            // Memory mode / no share backend: treat as open for product paths that only
+            // enforce membership when postgres share store is present.
+            return Ok(avrag_share::AccessLevel::Write);
+        };
+        let service = avrag_share::ShareService::new(store);
+        service
+            .check_access(self.auth, workspace_id)
+            .await
+            .map_err(|error| {
+                common::AppError::internal(format!("failed to verify workspace access: {error}"))
+            })
+    }
+
     /// Lightweight share-token mint (legacy helper used by product tests / admin UI).
     pub async fn create_share_token(
         &self,

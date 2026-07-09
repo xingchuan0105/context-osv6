@@ -1,16 +1,18 @@
-//! Bound domain handles (TN Wave 3).
+//! Bound domain handles (TN Wave 3 / W2).
 //!
-//! Multi-context operations need `auth` + `storage` (+ optional billing/analytics).
-//! Callers use `state.docs()` / `admin_api()` / `share()` / `prefs()` / `billing_api()`.
+//! Product HTTP handlers must use these faces — not raw store accessors on AppState:
+//! `docs()` / `chat()` / `admin_api()` / `admin_ops()` / `share()` / `prefs()` / `billing_api()`.
 
 mod documents;
 mod admin;
+mod admin_ops;
 mod share;
 mod billing;
 mod prefs;
 
 pub use documents::BoundDocuments;
 pub use admin::BoundAdmin;
+pub use admin_ops::BoundAdminOps;
 pub use share::BoundShare;
 pub use billing::BoundBilling;
 pub use prefs::BoundPrefs;
@@ -76,6 +78,15 @@ impl AppState {
             auth: &self.auth,
             storage: &self.storage,
             postgres: self.postgres.clone(),
+        }
+    }
+
+    /// Bound super-admin / ops console (`AdminStorePort` + auth).
+    /// Prefer this over `admin_store()` in HTTP handlers.
+    pub fn admin_ops(&self) -> BoundAdminOps<'_> {
+        BoundAdminOps {
+            auth: &self.auth,
+            store: self.storage.admin_store(),
         }
     }
 }
