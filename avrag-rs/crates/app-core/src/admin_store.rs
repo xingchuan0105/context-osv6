@@ -1,12 +1,10 @@
 use async_trait::async_trait;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use chrono::{DateTime, Utc};
-use common::{
-    ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow,
-};
+use common::{ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow};
 use uuid::Uuid;
 
-use avrag_auth::OrgId;
+use contracts::auth_runtime::OrgId;
 
 use crate::admin_domain::{
     AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview, AdminDegradationStatus,

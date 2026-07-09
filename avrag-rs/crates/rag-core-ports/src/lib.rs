@@ -3,10 +3,13 @@ use async_trait::async_trait;
 pub mod chat_persistence;
 pub mod port_rows;
 
-pub use chat_persistence::{AppendChatTurn, ChatPersistencePort};
+pub use chat_persistence::{
+    AppendChatTurn, ChatCatalogPort, ChatContentPort, ChatPersistencePort, ChatSideEffectPort,
+    MessagePort, ProfilePort, SessionPort,
+};
 pub use port_rows::{
-    DocumentAssetRow, MultimodalChunkRow, NotificationCreateParams, ConversationHistoryHit,
-    ConversationHistoryScope, UserProfileRow,
+    ConversationHistoryHit, ConversationHistoryScope, DocumentAssetRow, MultimodalChunkRow,
+    NotificationCreateParams, UserProfileRow,
 };
 
 #[async_trait]

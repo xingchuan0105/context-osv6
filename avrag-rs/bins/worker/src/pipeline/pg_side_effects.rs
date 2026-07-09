@@ -1,7 +1,8 @@
 use anyhow::Result;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::{ObjectStoreHandle, TocEntry};
-use ingestion::{BlockType, DocumentIr};
+use common::SummaryMetadata;
+use ingestion::DocumentIr;
 use std::path::Path;
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -171,28 +172,26 @@ pub(crate) async fn finalize_mirrored_asset_path(
     }
 }
 
-pub(crate) async fn maybe_enrich_toc_with_llm(
+pub(crate) struct DocumentProfileLlmResult {
+    pub toc_entries: Vec<TocEntry>,
+    pub profile_metadata: Option<SummaryMetadata>,
+}
+
+pub(crate) async fn generate_document_profile_with_llm(
     processor: &PgTaskProcessor,
+    document_id: Uuid,
     document_ir: &DocumentIr,
     chunks: &[avrag_storage_pg::IndexedChunk],
     filename: &str,
-    toc_entries: Vec<TocEntry>,
-) -> Vec<TocEntry> {
-    let heading_blocks = document_ir
-        .blocks
-        .iter()
-        .filter(|b| matches!(b.block_type, BlockType::Heading))
-        .count();
-    let force_llm = std::env::var("INGESTION_LLM_SECTION_INDEX")
-        .ok()
-        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
-    let sparse = toc_entries.is_empty() || heading_blocks == 0;
-    if !force_llm && !sparse {
-        return toc_entries;
-    }
+) -> DocumentProfileLlmResult {
     let Some(generator) = processor.section_index_generator.as_ref() else {
-        return toc_entries;
+        info!(document_id = %document_id, "section index generator not configured; skipping profile");
+        return DocumentProfileLlmResult {
+            toc_entries: Vec::new(),
+            profile_metadata: None,
+        };
     };
+
     let index_chunks: Vec<avrag_llm::SectionIndexChunk> = chunks
         .iter()
         .filter_map(|c| {
@@ -205,8 +204,12 @@ pub(crate) async fn maybe_enrich_toc_with_llm(
         })
         .collect();
     if index_chunks.is_empty() {
-        return toc_entries;
+        return DocumentProfileLlmResult {
+            toc_entries: Vec::new(),
+            profile_metadata: None,
+        };
     }
+
     match generator
         .generate(&document_ir.title, filename, &index_chunks)
         .await
@@ -214,21 +217,34 @@ pub(crate) async fn maybe_enrich_toc_with_llm(
         Ok(output) if !output.sections.is_empty() => {
             info!(
                 sections = output.sections.len(),
-                "LLM section index generated for document"
+                "LLM document profile index generated"
             );
-            toc_entries_from_llm_sections(&output)
+            let profile_metadata = Some(avrag_llm::build_profile_metadata(
+                &document_id.to_string(),
+                &document_ir.title,
+                filename,
+                &output.document_metadata,
+            ));
+            DocumentProfileLlmResult {
+                toc_entries: toc_entries_from_llm_sections(&output),
+                profile_metadata,
+            }
         }
-        Ok(_) => toc_entries,
+        Ok(_) => DocumentProfileLlmResult {
+            toc_entries: Vec::new(),
+            profile_metadata: None,
+        },
         Err(error) => {
-            info!(error = %error, "LLM section index failed; keeping heuristic toc");
-            toc_entries
+            info!(error = %error, "LLM document profile index failed");
+            DocumentProfileLlmResult {
+                toc_entries: Vec::new(),
+                profile_metadata: None,
+            }
         }
     }
 }
 
-fn toc_entries_from_llm_sections(
-    output: &avrag_llm::SectionIndexOutput,
-) -> Vec<TocEntry> {
+fn toc_entries_from_llm_sections(output: &avrag_llm::SectionIndexOutput) -> Vec<TocEntry> {
     let mut entries = Vec::new();
     let mut heading_stack: Vec<(i32, Uuid)> = Vec::new();
 
@@ -261,70 +277,6 @@ fn toc_entries_from_llm_sections(
         }
 
         heading_stack.push((heading_level, entry_id));
-    }
-
-    entries
-}
-
-pub(crate) fn build_toc_entries(
-    document_ir: &DocumentIr,
-    chunks: &[avrag_storage_pg::IndexedChunk],
-) -> Vec<TocEntry> {
-    let mut block_id_to_chunk_id = std::collections::HashMap::new();
-    for chunk in chunks {
-        if let Ok(chunk_uuid) = Uuid::parse_str(&chunk.chunk_id)
-            && let Some(block_id) = chunk.metadata.get("block_id").and_then(|v| v.as_str())
-        {
-            block_id_to_chunk_id.insert(block_id.to_string(), chunk_uuid);
-        }
-    }
-
-    let mut entries = Vec::new();
-    let mut heading_stack: Vec<(usize, Uuid)> = Vec::new();
-
-    for (rank, block) in document_ir
-        .blocks
-        .iter()
-        .filter(|b| matches!(b.block_type, BlockType::Heading))
-        .enumerate()
-    {
-        let heading_level = block
-            .metadata
-            .get("heading_level")
-            .and_then(|v| v.parse::<i32>().ok())
-            .unwrap_or(1);
-
-        let title = if block.text.trim().is_empty() {
-            document_ir.title.clone()
-        } else {
-            block.text.trim().to_string()
-        };
-
-        let page = block.page.map(|p| p as i32);
-        let chunk_id = block_id_to_chunk_id.get(&block.block_id).copied();
-        let entry_id = Uuid::new_v4();
-
-        let parent_id = {
-            while let Some(&(top_level, _)) = heading_stack.last() {
-                if top_level < heading_level as usize {
-                    break;
-                }
-                heading_stack.pop();
-            }
-            heading_stack.last().map(|&(_, id)| id)
-        };
-
-        entries.push(TocEntry {
-            id: entry_id,
-            parent_id,
-            title,
-            heading_level,
-            page,
-            chunk_id,
-            rank: rank as i32,
-        });
-
-        heading_stack.push((heading_level as usize, entry_id));
     }
 
     entries

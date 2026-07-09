@@ -1,5 +1,5 @@
 use app_bootstrap::AppState;
-use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
 use axum::{
     Json,
     body::{Body, to_bytes},
@@ -172,9 +172,7 @@ pub(crate) async fn request_context_middleware(
             .map(|actor| actor.into_uuid())
             .unwrap_or(Uuid::nil())
     );
-    let mut limit_rpm = auth
-        .rate_limit_rpm()
-        .unwrap_or(DEFAULT_RATE_LIMIT_RPM);
+    let mut limit_rpm = auth.rate_limit_rpm().unwrap_or(DEFAULT_RATE_LIMIT_RPM);
     if std::env::var("E2E_ENABLED").unwrap_or_default() == "true" {
         limit_rpm = 1000;
     }
@@ -301,9 +299,9 @@ async fn check_rate_limit_with_fallback(
 }
 
 async fn auth_from_bearer(state: &AppState, headers: &HeaderMap) -> Option<AuthContext> {
-    let token = crate::extract_bearer(headers)?;
+    let token = crate::lib_impl::extract_bearer(headers)?;
 
-    if let Some(claims) = crate::verify_jwt(token) {
+    if let Some(claims) = crate::lib_impl::verify_jwt(token) {
         let org_uuid = Uuid::parse_str(&claims.org_id).ok()?;
         let user_uuid = Uuid::parse_str(&claims.sub).ok()?;
 

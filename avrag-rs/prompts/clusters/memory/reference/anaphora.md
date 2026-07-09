@@ -1,18 +1,20 @@
 # 指代消解边界
 
-## Runtime 已做
+## Runtime 注入（仅此）
 
-1. Pre-Loop 将消解结果写入 `resolved_query`（PG 一等列 + metadata）；`content` 保留用户原话
-2. 下游检索/上下文默认读 `resolved_query`，缺省回退原话
-3. ReAct messages 中仍可见用户原始 `query`——展示与审计用
+1. 当前 query 原文
+2. 最近 **2** 条 prior user 原文（`[prior_user_query]` 前缀）
+3. 服务端**不再**做指代消解，不再生成 `resolved_query`（ADR-0010 废止 ADR-0008 的 Pre-Loop normalize）
 
-## Agent 职责
+## Agent 职责（你负责消解）
 
-1. 代词（it/this/that/它/这/那）→ 以 `[prior_user_query]` + `resolved_query` 为上下文，勿重复猜测
-2. 消解后仍歧义（多个同等候选实体）→ 向用户澄清，不臆造
-3. 跨轮保持主题与实体连续性；勿发明上文不存在的实体
+1. 看到代词（it/this/that/它/这/那）、指示词（这位/那位/这本书/那个概念）、省略（about it/谁写的）→ 检查 2 条 prior 是否够锚定实体
+2. 不够 → 调 `conversation_history_load`（`scope=notebook` 默认）拉更早历史
+3. 用最近一条相关 user turn 锚定实体
+4. 消解后仍歧义（多个同等候选实体）→ 向用户澄清，不臆造
+5. 跨轮保持主题与实体连续性；勿发明上文不存在的实体
 
 ## 常见误判
 
 - 用户切换话题后旧指代失效 → 以最近一轮明确实体为准
-- 消解读错时原话仍在 PG → 用户可纠正，不会污染历史
+- 2 条 prior 不足时跳过 history_load 直接猜 → 禁止；必须先拉历史

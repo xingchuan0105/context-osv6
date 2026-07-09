@@ -1,25 +1,22 @@
 use app_core::parse_uuid_or_app_error;
+use app_documents::{AuditAction, AuditRecord};
 use chrono::Utc;
 use common::{AppError, now_rfc3339};
 use contracts::chat::{ChatRequest, ChatResponse, ModeDebug, TraceInfo};
 use contracts::notebooks::{ChatSession, CreateChatSessionRequest};
-use app_documents::{AuditAction, AuditRecord};
 use tracing::info;
 use uuid::Uuid;
 
 use super::{ChatExecution, ChatPreflight, execute_chat_pipeline};
 use crate::context::ChatContext;
 use crate::{
-    derive_profile_domains, derive_profile_topics, detect_preferred_style,
-    estimate_token_count, merge_general_profile_custom_preferences,
+    derive_profile_domains, derive_profile_topics, detect_preferred_style, estimate_token_count,
+    merge_general_profile_custom_preferences,
 };
 
 impl ChatContext {
     #[tracing::instrument(skip(self, req), fields(agent_type = %req.agent_type, notebook_id = ?req.notebook_id))]
-    pub async fn execute_chat_pipeline(
-        &self,
-        req: ChatRequest,
-    ) -> Result<ChatResponse, AppError> {
+    pub async fn execute_chat_pipeline(&self, req: ChatRequest) -> Result<ChatResponse, AppError> {
         let effective_notebook_id = chat_notebook_id_for_request(self, &req);
         if self.storage.chat_persistence().is_some()
             && req.agent_type == "rag"

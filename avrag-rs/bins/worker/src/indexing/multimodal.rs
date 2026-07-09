@@ -5,10 +5,10 @@ use ingestion::{DocumentIr, IngestionError, parse_page_status_from_ir};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use super::media::{build_multimodal_embed_input, MediaResolveContext};
-use super::ocr_gating::document_paddle_ocr_succeeded;
 use super::env::env_flag_enabled;
-use super::types::{record_multimodal_degrade, StoredMultimodalChunk};
+use super::media::{MediaResolveContext, build_multimodal_embed_input};
+use super::ocr_gating::document_paddle_ocr_succeeded;
+use super::types::{StoredMultimodalChunk, record_multimodal_degrade};
 
 pub async fn build_multimodal_index_records(
     processor: &crate::PgTaskProcessor,
@@ -36,8 +36,7 @@ pub async fn build_multimodal_index_records(
     };
     let semaphore = Arc::new(tokio::sync::Semaphore::new(4));
     let client = client.clone();
-    type MmEmbeddingHandle =
-        tokio::task::JoinHandle<anyhow::Result<Option<(usize, Vec<f32>)>>>;
+    type MmEmbeddingHandle = tokio::task::JoinHandle<anyhow::Result<Option<(usize, Vec<f32>)>>>;
     let mut handles: Vec<(usize, Uuid, MmEmbeddingHandle)> = Vec::with_capacity(chunks.len());
 
     let paddle_ocr_succeeded = document_paddle_ocr_succeeded(document_ir);
@@ -67,17 +66,12 @@ pub async fn build_multimodal_index_records(
                     .await
                     .map_err(|e| anyhow::anyhow!("{e}"))?;
                 let input = build_multimodal_embed_input(&ctx, &chunk, caption).await;
-                let used_text_only = input.image.is_none()
-                    && input.images.is_empty()
-                    && input.text.is_some();
+                let used_text_only =
+                    input.image.is_none() && input.images.is_empty() && input.text.is_some();
                 if used_text_only {
                     anyhow::bail!(
                         "chunk {chunk_id} has no resolvable image{}",
-                        if had_fusion {
-                            " for fusion embed"
-                        } else {
-                            ""
-                        }
+                        if had_fusion { " for fusion embed" } else { "" }
                     );
                 }
                 let vector = c.embed_multimodal_fused(&input, None).await?;
@@ -98,6 +92,7 @@ pub async fn build_multimodal_index_records(
                     outputs,
                     format!("chunk {chunk_id}: multimodal embed failed: {error}"),
                 );
+                outputs.failed_mm_chunks.push(chunk_id);
                 warn!(
                     chunk_id = %chunk_id,
                     chunk_index = idx,
@@ -110,6 +105,7 @@ pub async fn build_multimodal_index_records(
                     outputs,
                     format!("chunk {chunk_id}: multimodal embed task join failed: {error}"),
                 );
+                outputs.failed_mm_chunks.push(chunk_id);
             }
         }
     }

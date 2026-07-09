@@ -94,6 +94,40 @@ pub enum Commands {
         command: LlmRealCommands,
     },
 
+    /// Produce a decoupled RAG diagnostic scorecard for llm_real probe artifacts.
+    RagDiag {
+        /// Path to run directory or run id under e2e_output.
+        #[arg(long)]
+        run: PathBuf,
+
+        /// Golden set JSON used to score queries.
+        #[arg(long, default_value = "tests/rag_quality/golden_set_smoke_v5.json")]
+        golden: PathBuf,
+
+        /// Output path for the Markdown report (default: stdout).
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Compare two RAG diagnostic scorecards and report drift/significance.
+    RagDrift {
+        /// Baseline run directory or run id under e2e_output.
+        #[arg(long)]
+        baseline: PathBuf,
+
+        /// Current run directory or run id under e2e_output.
+        #[arg(long)]
+        current: PathBuf,
+
+        /// Golden set JSON used to score both runs.
+        #[arg(long, default_value = "tests/rag_quality/golden_set_smoke_v5.json")]
+        golden: PathBuf,
+
+        /// Output path for the Markdown report (default: stdout).
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+
     /// Set or update a baseline run.
     Baseline {
         /// Path to the run directory to use as baseline.

@@ -1,20 +1,20 @@
+use contracts::auth_runtime::SubjectKind;
 use axum::{
     Json,
     extract::{Extension, Path},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use avrag_auth::SubjectKind;
 use common::{AppError, CreateNotebookRequest, UpdateNotebookRequest};
 use contracts::notebooks::{NotebookListResponse, NotebookResponse};
 use uuid::Uuid;
 
-use crate::RequestState;
+use super::super::{app_error_response, error_response};
+use crate::middleware::RequestState;
 use crate::auth_guard::{
     authorize_org_tool, authorize_workspace_notebook_str, org_create_permission,
     org_list_permission, query_permission,
 };
-use super::super::{app_error_response, error_response};
 
 #[utoipa::path(
     get,

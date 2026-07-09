@@ -5,15 +5,15 @@ use contracts::ToolResult;
 use super::assembler::DisclosedState;
 use super::config::{AutoFallbackConfig, LoopExitConfig, ModeConfig};
 use super::exit_policy::{
-    degraded_no_evidence_answer, has_retrieval_observation, post_fallback_gate, PostLoopAction,
+    PostLoopAction, degraded_no_evidence_answer, has_retrieval_observation, post_fallback_gate,
 };
 use super::reasoning_emit;
-use super::run_result::build_run_result;
+use super::run_result::{build_run_result, RunContext};
 use super::telemetry::ReActIterationRecord;
-use super::{fallback, truncate_preview, ReActLoop};
+use super::{ReActLoop, fallback, truncate_preview};
 use crate::agents::events::{AgentEvent, AgentEventSink};
-use crate::agents::react_loop::DegradeReason;
 use crate::agents::runtime::{AgentRequest, AgentRunResult, FinalDecision};
+use super::cancellation::DegradeReason;
 
 impl ReActLoop {
     pub(super) async fn trigger_auto_fallback_and_check_degraded(
@@ -21,7 +21,7 @@ impl ReActLoop {
         mode: &ModeConfig,
         loop_exit: &LoopExitConfig,
         request: &AgentRequest,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         retrieval_query: &str,
         messages: &mut Vec<ChatMessage>,
         collected_tool_results: &mut Vec<ToolResult>,
@@ -45,8 +45,7 @@ impl ReActLoop {
             sink,
         )
         .await?;
-        let has_evidence =
-            has_retrieval_observation(messages, collected_tool_results, mode);
+        let has_evidence = has_retrieval_observation(messages, collected_tool_results, mode);
         if post_fallback_gate(loop_exit, has_evidence) != PostLoopAction::DegradedNoEvidence {
             return Ok(None);
         }
@@ -117,27 +116,32 @@ impl ReActLoop {
                 usage: None,
             })
             .await;
+        let ctx = RunContext {
+            iteration,
+            max_iterations,
+            total_tool_calls,
+            telemetry_records,
+            total_usage,
+            reasoning_summary_acc,
+            start_time,
+        };
         let mut result = build_run_result(
             &self.llm,
             answer,
             request,
             collected_tool_results,
-            telemetry_records,
-            total_usage,
-            reasoning_summary_acc,
-            iteration,
-            max_iterations,
-            total_tool_calls,
-            start_time,
+            &ctx,
             Some(FinalDecision::Degraded {
-                reason: crate::agents::react_loop::DegradeReason::NoResultsAfterAllFallbacks,
+                reason: DegradeReason::NoResultsAfterAllFallbacks,
             }),
         );
-        result.degrade_trace.push(contracts::chat::DegradeTraceItem {
-            stage: "degraded_no_evidence".to_string(),
-            reason: DegradeReason::NoRetrievalEvidence,
-            impact: "Answer withheld; synthesis skipped".to_string(),
-        });
+        result
+            .degrade_trace
+            .push(contracts::chat::DegradeTraceItem {
+                stage: "degraded_no_evidence".to_string(),
+                reason: DegradeReason::NoRetrievalEvidence,
+                impact: "Answer withheld; synthesis skipped".to_string(),
+            });
         self.emit_run_citations(sink, &result.citations).await;
         Ok(result)
     }
@@ -146,7 +150,7 @@ impl ReActLoop {
         &self,
         mode: &ModeConfig,
         request: &AgentRequest,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         retrieval_query: &str,
         messages: &mut Vec<ChatMessage>,
         collected_tool_results: &mut Vec<ToolResult>,
@@ -197,7 +201,7 @@ impl ReActLoop {
     pub(super) async fn run_rag_retrieval_fallback(
         &self,
         request: &AgentRequest,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         retrieval_query: &str,
         fallback: &AutoFallbackConfig,
         messages: &mut Vec<ChatMessage>,
@@ -234,14 +238,9 @@ impl ReActLoop {
             _ => return Ok(()),
         }
         .map_err(|e| AppError::internal(format!("serialize fallback args: {e}")))?;
-        let result = fallback::inject_fallback_observation(
-            runtime,
-            auth,
-            args,
-            &fallback.tool_id,
-            messages,
-        )
-        .await;
+        let result =
+            fallback::inject_fallback_observation(runtime, auth, args, &fallback.tool_id, messages)
+                .await;
         collected_tool_results.push(result);
         Ok(())
     }
@@ -277,7 +276,11 @@ impl ReActLoop {
         Ok(())
     }
 
-    pub(super) async fn emit_unknown_fallback_skipped(&self, sink: &dyn AgentEventSink, tool_id: &str) {
+    pub(super) async fn emit_unknown_fallback_skipped(
+        &self,
+        sink: &dyn AgentEventSink,
+        tool_id: &str,
+    ) {
         let _ = sink
             .emit(AgentEvent::Activity {
                 stage: "fallback_skipped".to_string(),

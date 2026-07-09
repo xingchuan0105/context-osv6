@@ -89,10 +89,16 @@ pub struct CreatePasswordResetTicketInput {
 
 #[async_trait]
 pub trait AuthStorePort: Send + Sync {
-    async fn register_user(&self, input: &RegisterUserInput) -> Result<RegisterUserResult, AppError>;
+    async fn register_user(
+        &self,
+        input: &RegisterUserInput,
+    ) -> Result<RegisterUserResult, AppError>;
 
     /// Standalone consent for payment or re-acceptance flows (not registration).
-    async fn record_legal_acceptance(&self, input: &RecordLegalAcceptanceInput) -> Result<(), AppError>;
+    async fn record_legal_acceptance(
+        &self,
+        input: &RecordLegalAcceptanceInput,
+    ) -> Result<(), AppError>;
 
     /// Latest acceptance vs published versions — drives re-acceptance UI.
     async fn get_user_legal_status(&self, user_id: Uuid) -> Result<UserLegalStatus, AppError>;
@@ -100,7 +106,10 @@ pub trait AuthStorePort: Send + Sync {
     /// Whether the user recorded a `payment` context acceptance at current published versions.
     async fn has_payment_legal_acceptance(&self, user_id: Uuid) -> Result<bool, AppError>;
 
-    async fn find_user_for_login(&self, email: &str) -> Result<Option<AuthUserCredentials>, AppError>;
+    async fn find_user_for_login(
+        &self,
+        email: &str,
+    ) -> Result<Option<AuthUserCredentials>, AppError>;
 
     async fn invalidate_session(&self, user_id: Uuid) -> Result<bool, AppError>;
 

@@ -1,5 +1,5 @@
-use typeshare::typeshare;
 use serde::{Deserialize, Serialize};
+use typeshare::typeshare;
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,11 +59,11 @@ pub struct SharedNotebookPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShareAnalyticsResponse {
     #[typeshare(serialized_as = "number")]
-    pub total_views:        i64,
+    pub total_views: i64,
     #[typeshare(serialized_as = "number")]
-    pub total_unique_visitors:        i64,
+    pub total_unique_visitors: i64,
     #[typeshare(serialized_as = "Record<string, number>")]
-    pub views_by_day:       std::collections::BTreeMap<String, i64>,
+    pub views_by_day: std::collections::BTreeMap<String, i64>,
 }
 
 #[typeshare]

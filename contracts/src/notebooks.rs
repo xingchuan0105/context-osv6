@@ -1,6 +1,6 @@
-use typeshare::typeshare;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use typeshare::typeshare;
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
@@ -15,10 +15,10 @@ pub struct Notebook {
     pub updated_at: String,
     #[serde(default)]
     #[typeshare(serialized_as = "number")]
-    pub document_count:        i64,
+    pub document_count: i64,
     #[serde(default)]
     #[typeshare(serialized_as = "Record<string, number>")]
-    pub status_summary:        HashMap<String, i64>,
+    pub status_summary: HashMap<String, i64>,
     #[serde(default)]
     pub shared: bool,
 }
@@ -196,33 +196,33 @@ pub struct NotebookAnalysisOverview {
     pub description: String,
     pub updated_at: String,
     #[typeshare(serialized_as = "number")]
-    pub document_count:        i64,
+    pub document_count: i64,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookAnalysisSources {
     #[typeshare(serialized_as = "number")]
-    pub total:        i64,
+    pub total: i64,
     #[typeshare(serialized_as = "number")]
-    pub ready:        i64,
+    pub ready: i64,
     #[typeshare(serialized_as = "number")]
-    pub processing:        i64,
+    pub processing: i64,
     #[typeshare(serialized_as = "number")]
-    pub failed:        i64,
+    pub failed: i64,
     #[typeshare(serialized_as = "number")]
-    pub selected:        i64,
+    pub selected: i64,
     #[typeshare(serialized_as = "number")]
-    pub pinned:        i64,
+    pub pinned: i64,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookAnalysisThreads {
     #[typeshare(serialized_as = "number")]
-    pub total:        i64,
+    pub total: i64,
     #[typeshare(serialized_as = "number")]
-    pub pinned:        i64,
+    pub pinned: i64,
     #[serde(default)]
     pub latest_activity_at: Option<String>,
     #[serde(default)]
@@ -233,11 +233,11 @@ pub struct NotebookAnalysisThreads {
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookAnalysisNotes {
     #[typeshare(serialized_as = "number")]
-    pub total:        i64,
+    pub total: i64,
     #[serde(default)]
     pub latest_edited_at: Option<String>,
     #[typeshare(serialized_as = "number")]
-    pub promoted_to_source:        i64,
+    pub promoted_to_source: i64,
 }
 
 #[typeshare]
@@ -245,9 +245,9 @@ pub struct NotebookAnalysisNotes {
 pub struct NotebookAnalysisAccess {
     pub share_enabled: bool,
     #[typeshare(serialized_as = "number")]
-    pub member_count:        i64,
+    pub member_count: i64,
     #[typeshare(serialized_as = "number")]
-    pub active_api_key_count:        i64,
+    pub active_api_key_count: i64,
 }
 
 #[typeshare]

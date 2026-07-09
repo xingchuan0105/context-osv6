@@ -1,13 +1,13 @@
 use std::collections::{BTreeMap, HashSet};
 
 use ingestion::parser::{
-    optional_payload_hash, PaddleOcrClient, PaddleOcrConfig, PaddleOcrPageResult, PaddleResultCache,
+    PaddleOcrClient, PaddleOcrConfig, PaddleOcrPageResult, PaddleResultCache, optional_payload_hash,
 };
 use ingestion::{
-    AssetIr, BlockIr, BlockModality, BlockType, DocumentIr, DocumentType, IngestionError,
-    PageIr, ParseBackend, SourceLocator,
+    AssetIr, BlockIr, BlockModality, BlockType, DocumentIr, DocumentType, IngestionError, PageIr,
+    ParseBackend, SourceLocator,
 };
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 /// Outcome of per-page Paddle Jobs OCR (LiteParse path).
@@ -182,7 +182,7 @@ async fn ocr_single_page_with_retry(
     match client
         .ocr_single_page_pdf(pdf_slice, page_number)
         .await
-        .map_err(|e| IngestionError::StateSink(format!("PaddleOCR page job failed: {e}")))
+        .map_err(|e| IngestionError::parse(format!("PaddleOCR page job failed: {e}")))
     {
         Ok(result) => Ok(result),
         Err(first_err) => {
@@ -198,7 +198,7 @@ async fn ocr_single_page_with_retry(
                 .ocr_single_page_pdf(pdf_slice, page_number)
                 .await
                 .map_err(|e| {
-                    IngestionError::StateSink(format!(
+                    IngestionError::parse(format!(
                         "PaddleOCR page job failed after retry: {e} (first: {first_err})"
                     ))
                 })
@@ -214,9 +214,8 @@ pub async fn execute_paddle_ocr_per_page(
     paddle_pages: &[u32],
     table_ocr_pages: &HashSet<u32>,
 ) -> Result<PaddlePerPageOcrOutcome, IngestionError> {
-    let config = PaddleOcrConfig::from_env().map_err(|e| {
-        IngestionError::StateSink(format!("PaddleOCR config error: {e}"))
-    })?;
+    let config = PaddleOcrConfig::from_env()
+        .map_err(|e| IngestionError::parse(format!("PaddleOCR config error: {e}")))?;
     let client = PaddleOcrClient::new(config.clone());
     let mut cache = PaddleResultCache::from_env();
     let payload_hash = optional_payload_hash();
@@ -336,14 +335,13 @@ pub async fn execute_paddle_ocr_image(
     filename: &str,
     document_id: Uuid,
 ) -> Result<DocumentIr, IngestionError> {
-    let config = PaddleOcrConfig::from_env().map_err(|e| {
-        IngestionError::StateSink(format!("PaddleOCR config error: {e}"))
-    })?;
+    let config = PaddleOcrConfig::from_env()
+        .map_err(|e| IngestionError::parse(format!("PaddleOCR config error: {e}")))?;
     let client = PaddleOcrClient::new(config);
     let page_result = client
         .ocr_image_bytes(bytes, filename)
         .await
-        .map_err(|e| IngestionError::StateSink(format!("PaddleOCR image job failed: {e}")))?;
+        .map_err(|e| IngestionError::parse(format!("PaddleOCR image job failed: {e}")))?;
 
     let table_pages = HashSet::new();
     let mut ir = build_document_ir_from_paddle(
@@ -353,8 +351,10 @@ pub async fn execute_paddle_ocr_image(
         &table_pages,
     );
     ir.doc_type = DocumentType::Image;
-    ir.metadata
-        .insert("ingest_route_version".to_string(), "liteparse-v1".to_string());
+    ir.metadata.insert(
+        "ingest_route_version".to_string(),
+        "liteparse-v1".to_string(),
+    );
     ir.metadata
         .insert("pdf_route_mode".to_string(), "paddle_image".to_string());
     ir.metadata
@@ -386,15 +386,13 @@ mod budget_tests {
             figures: vec![],
         }];
         let table_pages = HashSet::from([2]);
-        let ir = build_document_ir_from_paddle(
-            Uuid::new_v4(),
-            "t.pdf",
-            &pages,
-            &table_pages,
-        );
+        let ir = build_document_ir_from_paddle(Uuid::new_v4(), "t.pdf", &pages, &table_pages);
         assert_eq!(ir.blocks.len(), 1);
         assert_eq!(ir.blocks[0].block_type, BlockType::Table);
-        assert_eq!(ir.metadata.get("ocr_backend").map(String::as_str), Some("paddle_jobs"));
+        assert_eq!(
+            ir.metadata.get("ocr_backend").map(String::as_str),
+            Some("paddle_jobs")
+        );
     }
 
     /// Documents metadata contract for standalone image ingest (`execute_paddle_ocr_image`).
@@ -405,15 +403,13 @@ mod budget_tests {
             text: "image ocr text".to_string(),
             figures: vec![],
         }];
-        let mut ir = build_document_ir_from_paddle(
-            Uuid::new_v4(),
-            "photo.png",
-            &pages,
-            &HashSet::new(),
-        );
+        let mut ir =
+            build_document_ir_from_paddle(Uuid::new_v4(), "photo.png", &pages, &HashSet::new());
         ir.doc_type = DocumentType::Image;
-        ir.metadata
-            .insert("ingest_route_version".to_string(), "liteparse-v1".to_string());
+        ir.metadata.insert(
+            "ingest_route_version".to_string(),
+            "liteparse-v1".to_string(),
+        );
         ir.metadata
             .insert("pdf_route_mode".to_string(), "paddle_image".to_string());
         ir.metadata
@@ -432,6 +428,9 @@ mod budget_tests {
             ir.metadata.get("paddle_jobs_count").map(String::as_str),
             Some("1")
         );
-        assert!(!ir.blocks.is_empty(), "image OCR should emit searchable text blocks");
+        assert!(
+            !ir.blocks.is_empty(),
+            "image OCR should emit searchable text blocks"
+        );
     }
 }

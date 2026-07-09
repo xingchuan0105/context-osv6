@@ -15,12 +15,20 @@ pub(crate) async fn build_text_index_records(
         .collect::<Vec<_>>();
     let vectors = embed_text_vectors(processor, &texts).await?;
 
+    if vectors.len() != chunks.len() {
+        return Err(IngestionError::embedding(format!(
+            "embedding count ({}) != chunk count ({}) — refusing to silently drop chunks",
+            vectors.len(),
+            chunks.len()
+        )));
+    }
+
     chunks
         .iter()
         .zip(vectors)
         .map(|(chunk, vector)| {
             let chunk_id = Uuid::parse_str(&chunk.chunk_id)
-                .map_err(|error| IngestionError::StateSink(format!("invalid chunk id: {error}")))?;
+                .map_err(|error| IngestionError::InvalidId(format!("invalid chunk id: {error}")))?;
             Ok(TextChunkIndexRecord {
                 chunk_id,
                 content: chunk.content.clone(),
@@ -44,7 +52,7 @@ pub(crate) async fn embed_text_vectors(
         return Ok(Vec::new());
     }
     if processor.embedding_client.is_none() {
-        return Err(IngestionError::StateSink(format!(
+        return Err(IngestionError::embedding(format!(
             "text embedding client not configured (expected dim {})",
             processor.embedding_dim
         )));
@@ -60,14 +68,14 @@ pub(crate) async fn embed_text_vectors_with_client(
         return Ok(Vec::new());
     }
     let Some(client) = client else {
-        return Err(IngestionError::StateSink(
-            "text embedding client not configured".to_string(),
+        return Err(IngestionError::embedding(
+            "text embedding client not configured",
         ));
     };
     client
         .embed(texts)
         .await
-        .map_err(|error| IngestionError::StateSink(format!("embedding failed: {error}")))
+        .map_err(|error| IngestionError::embedding(format!("embedding failed: {error}")))
 }
 
 fn metadata_string(metadata: &serde_json::Value, key: &str) -> Option<String> {

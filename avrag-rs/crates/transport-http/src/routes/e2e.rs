@@ -9,7 +9,7 @@ use serde_json::json;
 use std::env;
 use tracing::{info, warn};
 
-use crate::AppState;
+use app_bootstrap::AppState;
 
 #[derive(Deserialize)]
 pub(crate) struct ResetUserDataRequest {
@@ -47,6 +47,7 @@ pub(crate) fn router() -> axum::Router<AppState> {
         )
 }
 
+#[allow(clippy::result_large_err)]
 fn validate_e2e_request(headers: &axum::http::HeaderMap, email: &str) -> Result<String, Response> {
     let node_env = env::var("NODE_ENV").unwrap_or_default();
     let e2e_enabled = env::var("E2E_ENABLED").unwrap_or_default();

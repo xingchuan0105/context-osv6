@@ -97,7 +97,8 @@ async fn mcp_tools_call(
         .unwrap();
     let status = response.status();
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let payload = serde_json::from_slice::<serde_json::Value>(&body).unwrap_or(serde_json::Value::Null);
+    let payload =
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap_or(serde_json::Value::Null);
     (status, payload)
 }
 
@@ -204,7 +205,10 @@ async fn workspace_scope_mismatch_mcp_rag_query() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(mcp_app_error_code(&payload), Some("notebook_scope_mismatch"));
+    assert_eq!(
+        mcp_app_error_code(&payload),
+        Some("notebook_scope_mismatch")
+    );
     assert_eq!(mcp_guide_mode(&payload), Some("rag"));
 }
 

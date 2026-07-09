@@ -13,10 +13,7 @@ impl AppState {
             );
         };
         let Some(actor_id) = self.auth().actor_id() else {
-            return ApiResponse::err(
-                "authenticated_user_required",
-                "authenticated user required",
-            );
+            return ApiResponse::err("authenticated_user_required", "authenticated user required");
         };
         avrag_billing::handle_get_plans(store, UserId::from(actor_id.into_uuid())).await
     }
@@ -31,10 +28,7 @@ impl AppState {
             );
         };
         let Some(actor_id) = self.auth().actor_id() else {
-            return ApiResponse::err(
-                "authenticated_user_required",
-                "authenticated user required",
-            );
+            return ApiResponse::err("authenticated_user_required", "authenticated user required");
         };
         avrag_billing::handle_get_subscription(store, UserId::from(actor_id.into_uuid())).await
     }
@@ -47,10 +41,7 @@ impl AppState {
             );
         };
         let Some(actor_id) = self.auth().actor_id() else {
-            return ApiResponse::err(
-                "authenticated_user_required",
-                "authenticated user required",
-            );
+            return ApiResponse::err("authenticated_user_required", "authenticated user required");
         };
         avrag_billing::handle_get_usage(store, UserId::from(actor_id.into_uuid())).await
     }
@@ -65,10 +56,7 @@ impl AppState {
             );
         };
         let Some(actor_id) = self.auth().actor_id() else {
-            return ApiResponse::err(
-                "authenticated_user_required",
-                "authenticated user required",
-            );
+            return ApiResponse::err("authenticated_user_required", "authenticated user required");
         };
         avrag_billing::handle_get_usage_window(store, UserId::from(actor_id.into_uuid())).await
     }
@@ -84,12 +72,10 @@ impl AppState {
             );
         };
         let Some(actor_id) = self.auth().actor_id() else {
-            return ApiResponse::err(
-                "authenticated_user_required",
-                "authenticated user required",
-            );
+            return ApiResponse::err("authenticated_user_required", "authenticated user required");
         };
-        avrag_billing::handle_get_usage_history(store, UserId::from(actor_id.into_uuid()), days).await
+        avrag_billing::handle_get_usage_history(store, UserId::from(actor_id.into_uuid()), days)
+            .await
     }
 
     pub async fn billing_get_usage_forecast(
@@ -102,10 +88,7 @@ impl AppState {
             );
         };
         let Some(actor_id) = self.auth().actor_id() else {
-            return ApiResponse::err(
-                "authenticated_user_required",
-                "authenticated user required",
-            );
+            return ApiResponse::err("authenticated_user_required", "authenticated user required");
         };
         avrag_billing::handle_get_usage_forecast(store, UserId::from(actor_id.into_uuid())).await
     }
@@ -128,7 +111,10 @@ impl AppState {
         };
         let user_id = UserId::from(actor_id.into_uuid());
         if let Some(auth_store) = self.auth_store() {
-            match auth_store.has_payment_legal_acceptance(user_id.into_uuid()).await {
+            match auth_store
+                .has_payment_legal_acceptance(user_id.into_uuid())
+                .await
+            {
                 Ok(true) => {}
                 Ok(false) => {
                     return ApiResponse::err(
@@ -155,10 +141,7 @@ impl AppState {
             );
         };
         let Some(actor_id) = self.auth().actor_id() else {
-            return ApiResponse::err(
-                "authenticated_user_required",
-                "authenticated user required",
-            );
+            return ApiResponse::err("authenticated_user_required", "authenticated user required");
         };
         avrag_billing::handle_create_portal(store, UserId::from(actor_id.into_uuid())).await
     }
@@ -182,23 +165,25 @@ impl AppState {
         let repo = self
             .postgres_repo()
             .ok_or_else(|| "database not available".to_string())?;
-        let user_id: Option<Uuid> =
-            match sqlx::query_as::<_, (Option<Uuid>,)>("select id from users where email = $1 limit 1")
-                .bind(email)
-                .fetch_optional(repo.raw())
-                .await
-            {
-                Ok(Some((Some(id),))) => Some(id),
-                Ok(Some((None,))) | Ok(None) => None,
-                Err(error) => {
-                    tracing::warn!(error = %error, "E2E reset: database error during user lookup");
-                    return Err("user lookup failed".to_string());
-                }
-            };
+        let user_id: Option<Uuid> = match sqlx::query_as::<_, (Option<Uuid>,)>(
+            "select id from users where email = $1 limit 1",
+        )
+        .bind(email)
+        .fetch_optional(repo.raw())
+        .await
+        {
+            Ok(Some((Some(id),))) => Some(id),
+            Ok(Some((None,))) | Ok(None) => None,
+            Err(error) => {
+                tracing::warn!(error = %error, "E2E reset: database error during user lookup");
+                return Err("user lookup failed".to_string());
+            }
+        };
         let Some(user_id) = user_id else {
             return Ok(false);
         };
-        repo.delete_user_cascade(self.auth(), user_id)
+        repo.auth()
+            .delete_user_cascade(self.auth(), user_id)
             .await
             .map_err(|error| {
                 tracing::warn!(error = %error, "E2E reset: failed to delete user");
@@ -210,14 +195,10 @@ impl AppState {
         let repo = self
             .postgres_repo()
             .ok_or_else(|| "database not available".to_string())?;
-        let mut tx = repo
-            .raw()
-            .begin()
-            .await
-            .map_err(|error| {
-                tracing::warn!(error = %error, "E2E grant: failed to begin transaction");
-                "admin role grant failed".to_string()
-            })?;
+        let mut tx = repo.raw().begin().await.map_err(|error| {
+            tracing::warn!(error = %error, "E2E grant: failed to begin transaction");
+            "admin role grant failed".to_string()
+        })?;
         sqlx::query("select set_config('app.current_role', 'super_admin', true)")
             .execute(&mut *tx)
             .await
@@ -255,12 +236,10 @@ impl AppState {
             tracing::warn!(error = %error, "E2E grant: failed to update user role");
             "admin role grant failed".to_string()
         })?;
-        tx.commit()
-            .await
-            .map_err(|error| {
-                tracing::warn!(error = %error, "E2E grant: failed to commit transaction");
-                "admin role grant failed".to_string()
-            })
+        tx.commit().await.map_err(|error| {
+            tracing::warn!(error = %error, "E2E grant: failed to commit transaction");
+            "admin role grant failed".to_string()
+        })
     }
 
     /// Place `member_email` into `owner_email`'s organization for invite-accept E2E.
@@ -272,7 +251,7 @@ impl AppState {
         full_name: &str,
     ) -> Result<(), String> {
         use app_core::{PUBLISHED_PRIVACY_VERSION, PUBLISHED_TERMS_VERSION};
-        use bcrypt::{hash, DEFAULT_COST};
+        use bcrypt::{DEFAULT_COST, hash};
 
         let repo = self
             .postgres_repo()
@@ -289,17 +268,17 @@ impl AppState {
         })?;
         let (_owner_id, org_id) = owner_row.ok_or_else(|| "owner not found".to_string())?;
 
-        if let Some((existing_id,)) = sqlx::query_as::<_, (Uuid,)>(
-            "select id from users where email = $1 limit 1",
-        )
-        .bind(member_email)
-        .fetch_optional(repo.raw())
-        .await
-        .map_err(|error| {
-            tracing::warn!(error = %error, "E2E org member: member lookup failed");
-            "member lookup failed".to_string()
-        })? {
-            repo.delete_user_cascade(self.auth(), existing_id)
+        if let Some((existing_id,)) =
+            sqlx::query_as::<_, (Uuid,)>("select id from users where email = $1 limit 1")
+                .bind(member_email)
+                .fetch_optional(repo.raw())
+                .await
+                .map_err(|error| {
+                    tracing::warn!(error = %error, "E2E org member: member lookup failed");
+                    "member lookup failed".to_string()
+                })?
+        {
+            repo.auth().delete_user_cascade(self.auth(), existing_id)
                 .await
                 .map_err(|error| {
                     tracing::warn!(error = %error, "E2E org member: failed to delete existing member");
@@ -312,14 +291,10 @@ impl AppState {
             "password hash failed".to_string()
         })?;
         let user_id = Uuid::new_v4();
-        let mut tx = repo
-            .raw()
-            .begin()
-            .await
-            .map_err(|error| {
-                tracing::warn!(error = %error, "E2E org member: begin tx failed");
-                "member provisioning failed".to_string()
-            })?;
+        let mut tx = repo.raw().begin().await.map_err(|error| {
+            tracing::warn!(error = %error, "E2E org member: begin tx failed");
+            "member provisioning failed".to_string()
+        })?;
         sqlx::query("select set_config('app.current_role', 'super_admin', true)")
             .execute(&mut *tx)
             .await
@@ -361,8 +336,8 @@ impl AppState {
 
     /// Checks if the JWT's auth_version matches the user's current auth_version.
     ///
-    /// Returns `false` when PostgreSQL is not configured unless
-    /// `AVRAG_AUTH_VERSION_BYPASS=true` is set explicitly for local development.
+    /// Returns `true` when PostgreSQL is not configured (memory mode is
+    /// development-only with no security semantics).
     pub async fn jwt_auth_version_matches(
         &self,
         user_uuid: Uuid,
@@ -370,9 +345,7 @@ impl AppState {
         token_auth_version: i32,
     ) -> bool {
         let Some(repo) = self.postgres_repo() else {
-            return std::env::var("AVRAG_AUTH_VERSION_BYPASS")
-                .ok()
-                .is_some_and(|value| matches!(value.as_str(), "true" | "1"));
+            return true;
         };
         let Ok(mut tx) = repo.raw().begin().await else {
             return false;
@@ -462,8 +435,7 @@ impl AppState {
         let object_path = row
             .try_get::<String, _>("object_path")
             .map_err(|error| common::AppError::internal(error.to_string()))?;
-        let mut auth =
-            avrag_auth::AuthContext::new(org_id.into(), avrag_auth::SubjectKind::System);
+        let mut auth = contracts::auth_runtime::AuthContext::new(org_id.into(), contracts::auth_runtime::SubjectKind::System);
         if let Some(actor) = self.auth().actor_id() {
             auth = auth.with_actor_id(actor);
         }

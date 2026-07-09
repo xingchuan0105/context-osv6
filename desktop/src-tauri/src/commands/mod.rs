@@ -1,3 +1,9 @@
 pub mod api;
 pub mod backend;
+pub mod cache;
 pub mod chat;
+pub mod chat_stream;
+pub mod license;
+pub mod llm_config;
+pub mod local;
+pub mod system;

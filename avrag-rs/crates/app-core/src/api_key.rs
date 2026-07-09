@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use avrag_auth::OrgId;
+use contracts::auth_runtime::OrgId;
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 use tokio::sync::RwLock;

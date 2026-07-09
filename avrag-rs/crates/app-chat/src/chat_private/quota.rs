@@ -39,7 +39,8 @@ impl ChatContext {
         let Some(pg) = self.storage.chat_persistence() else {
             return Ok(());
         };
-        pg.record_usage_event(&self.auth, metric_type, quantity, source).await?;
+        pg.record_usage_event(&self.auth, metric_type, quantity, source)
+            .await?;
         Ok(())
     }
 }

@@ -5,9 +5,9 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::context::ChatContext;
-use common::{AppError};
-use contracts::chat::{ChatRequest, ChatResponse};
 use app_documents::{AuditAction, AuditRecord};
+use common::AppError;
+use contracts::chat::{ChatRequest, ChatResponse};
 
 #[derive(Clone)]
 pub(crate) struct StreamConfig {
@@ -39,9 +39,6 @@ pub(crate) struct ChatExecution {
     /// Whether Citations events were already emitted during mode-step execution.
     #[serde(default)]
     pub citations_emitted: bool,
-    /// Query normalization metadata from agent run (ADR-0008).
-    #[serde(default)]
-    pub query_resolution: Option<serde_json::Value>,
 }
 
 pub(crate) async fn execute_chat_pipeline(
@@ -89,11 +86,15 @@ async fn run_pipeline(
             request_id: config.request_id.clone(),
             session_id: session.id.clone(),
         });
-        if let Some(guide) = crate::external_agent_guide::load_invoke_operation_guide(&request.agent_type) {
-            let _ = config.sender.send(contracts::chat::ChatEvent::OperationGuide {
-                request_id: config.request_id.clone(),
-                guide,
-            });
+        if let Some(guide) =
+            crate::external_agent_guide::load_invoke_operation_guide(&request.agent_type)
+        {
+            let _ = config
+                .sender
+                .send(contracts::chat::ChatEvent::OperationGuide {
+                    request_id: config.request_id.clone(),
+                    guide,
+                });
         }
     }
 
@@ -141,6 +142,10 @@ async fn run_pipeline(
             .await?;
     }
 
+    // Emit terminal SSE (especially `done`) before persistence/usage so clients
+    // are not blocked on slow post-processing (fixes missing done on long answers).
+    crate::chat::pipeline_steps::emit_terminal_stream_events(stream_config.as_ref(), &execution);
+
     if request.source_type.as_deref() != Some("share")
         && let Some(chat_persistence) = state.chat_persistence()
     {
@@ -162,7 +167,7 @@ async fn run_pipeline(
             .await?;
     }
 
-    crate::chat::pipeline_steps::emit_terminal_stream_events(stream_config.as_ref(), &execution);
-
-    Ok(crate::external_agent_guide::attach_operation_guide(execution.response))
+    Ok(crate::external_agent_guide::attach_operation_guide(
+        execution.response,
+    ))
 }

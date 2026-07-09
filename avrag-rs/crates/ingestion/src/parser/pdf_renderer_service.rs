@@ -60,10 +60,7 @@ impl PdfRendererServiceClient {
     }
 
     pub async fn healthz(&self) -> Result<bool> {
-        let url = format!(
-            "{}/v1/healthz",
-            self.config.base_url.trim_end_matches('/')
-        );
+        let url = format!("{}/v1/healthz", self.config.base_url.trim_end_matches('/'));
         let response = self.client.get(url).send().await?;
         Ok(response.status().is_success())
     }
@@ -120,8 +117,7 @@ pub fn pages_per_visual_chunk() -> u32 {
 }
 
 pub fn visual_render_strategy() -> String {
-    std::env::var("PDF_VISUAL_RENDER_STRATEGY")
-        .unwrap_or_else(|_| "pixmap_72dpi".to_string())
+    std::env::var("PDF_VISUAL_RENDER_STRATEGY").unwrap_or_else(|_| "pixmap_72dpi".to_string())
 }
 
 pub fn chunk_page_ranges(pages: &[u32], chunk_size: u32) -> Vec<(u32, u32)> {
@@ -163,7 +159,10 @@ mod tests {
     fn chunk_page_ranges_groups_contiguous_pages_up_to_chunk_size() {
         assert_eq!(chunk_page_ranges(&[1, 2, 3, 4], 4), vec![(1, 4)]);
         assert_eq!(chunk_page_ranges(&[1, 2, 4, 5], 4), vec![(1, 2), (4, 5)]);
-        assert_eq!(chunk_page_ranges(&[1, 3, 5], 4), vec![(1, 1), (3, 3), (5, 5)]);
+        assert_eq!(
+            chunk_page_ranges(&[1, 3, 5], 4),
+            vec![(1, 1), (3, 3), (5, 5)]
+        );
     }
 
     #[test]

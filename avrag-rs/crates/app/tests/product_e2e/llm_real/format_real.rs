@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use crate::product_e2e::{
-    DocumentStatus, TestContext, DegradeReason,
+    DegradeReason, DocumentStatus, TestContext,
     assertions::assert_answer_substantive,
     llm_real::{chat_with_format_retry, merge_llm_real_extra},
 };
@@ -15,7 +15,6 @@ use crate::product_e2e::{
 #[tokio::test]
 #[ignore = "requires real LLM API key; run with --ignored --test-threads=1"]
 async fn real_llm_format_html_renderer_returns_html() {
-
     super::require_nightly_suite();
     let mut ctx = TestContext::new_with_real_llm().await;
 

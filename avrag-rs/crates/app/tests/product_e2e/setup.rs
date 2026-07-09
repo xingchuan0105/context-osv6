@@ -70,20 +70,13 @@ fn parse_docker_inspect_timestamp(raw: &str) -> Option<chrono::DateTime<chrono::
     }
     chrono::DateTime::parse_from_rfc3339(trimmed)
         .ok()
-        .or_else(|| {
-            chrono::DateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M:%S.%f %z %Z").ok()
-        })
+        .or_else(|| chrono::DateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M:%S.%f %z %Z").ok())
         .or_else(|| chrono::DateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M:%S %z %Z").ok())
 }
 
 async fn docker_container_age_secs(container_name: &str) -> Option<u64> {
     let output = tokio::process::Command::new("docker")
-        .args([
-            "inspect",
-            "--format",
-            "{{.CreatedAt}}",
-            container_name,
-        ])
+        .args(["inspect", "--format", "{{.CreatedAt}}", container_name])
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .output()
@@ -164,6 +157,7 @@ async fn is_safe_to_remove_orphan(container_name: &str) -> bool {
 pub struct SharedPostgres {
     pub url: String,
     pub container_name: String,
+    pub is_external: bool,
     refs: AtomicUsize,
 }
 
@@ -175,6 +169,76 @@ fn shared_pg_slot() -> &'static tokio::sync::Mutex<Option<Arc<SharedPostgres>>> 
 
 fn short_docker_id() -> String {
     Uuid::new_v4().to_string()
+}
+
+fn smoke_force_ingest() -> bool {
+    std::env::var("RAG_QUALITY_SMOKE_FORCE_INGEST")
+        .ok()
+        .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+}
+
+fn database_name_from_url(url: &str) -> Option<String> {
+    let trimmed = url.trim().trim_end_matches('/');
+    let (_, tail) = trimmed.rsplit_once('/')?;
+    let database = tail.split_once('?').map(|(db, _)| db).unwrap_or(tail);
+    if database.is_empty() {
+        None
+    } else {
+        Some(database.to_string())
+    }
+}
+
+/// Default smoke database URL derived from `DATABASE_URL` host/credentials.
+pub fn default_smoke_postgres_url() -> String {
+    const FALLBACK: &str = "postgres://avrag:avrag@127.0.0.1:5432/avrag_rs_e2e_smoke";
+    let Ok(database_url) = std::env::var("DATABASE_URL") else {
+        return FALLBACK.to_string();
+    };
+    let trimmed = database_url.trim().trim_end_matches('/');
+    let Some((prefix, _)) = trimmed.rsplit_once('/') else {
+        return FALLBACK.to_string();
+    };
+    if prefix.is_empty() {
+        return FALLBACK.to_string();
+    }
+    format!("{prefix}/avrag_rs_e2e_smoke")
+}
+
+/// Returns the first reachable Postgres URL for persistent smoke corpus reuse.
+pub async fn resolve_persistent_smoke_postgres_url() -> String {
+    let force_ingest = smoke_force_ingest();
+    let mut candidates: Vec<String> = Vec::new();
+    if let Ok(url) = std::env::var("RAG_QUALITY_SMOKE_DATABASE_URL") {
+        candidates.push(url);
+    }
+    candidates.push(default_smoke_postgres_url());
+    if let Ok(url) = std::env::var("DATABASE_URL") {
+        if force_ingest && database_name_from_url(&url).as_deref() == Some("avrag_rs") {
+            eprintln!(
+                "[product_e2e] WARNING: RAG_QUALITY_SMOKE_FORCE_INGEST=1 with DATABASE_URL pointing to avrag_rs (shared dev DB).\n\
+                 Recommended: set RAG_QUALITY_SMOKE_DATABASE_URL=postgres://avrag:avrag@127.0.0.1:5432/avrag_rs_e2e_smoke"
+            );
+        }
+        candidates.push(url);
+    }
+    candidates.push("postgres://test:test@127.0.0.1:5432/test".to_string());
+
+    let mut deduped = Vec::new();
+    for url in candidates {
+        if !deduped.contains(&url) {
+            deduped.push(url);
+        }
+    }
+
+    for url in deduped {
+        if postgres_is_ready(&url).await {
+            return url;
+        }
+    }
+
+    panic!(
+        "no reachable Postgres for smoke-v5 corpus reuse (tried RAG_QUALITY_SMOKE_DATABASE_URL, derived avrag_rs_e2e_smoke, DATABASE_URL, test:test@127.0.0.1:5432/test)"
+    );
 }
 
 async fn postgres_is_ready(url: &str) -> bool {
@@ -208,6 +272,7 @@ pub async fn acquire_shared_postgres() -> anyhow::Result<(String, Arc<SharedPost
     let pg = Arc::new(SharedPostgres {
         url: url.clone(),
         container_name,
+        is_external: false,
         refs: AtomicUsize::new(1),
     });
     let mut slot = shared_pg_slot().lock().await;
@@ -215,14 +280,57 @@ pub async fn acquire_shared_postgres() -> anyhow::Result<(String, Arc<SharedPost
     Ok((url, pg))
 }
 
-/// Release a shared Postgres reference; stops the container when the last ref drops.
+/// Acquire a reference to an external Postgres instance (developer / CI stack).
+///
+/// Does not start or stop containers on release — data survives across test runs.
+pub async fn acquire_external_postgres(url: &str) -> anyhow::Result<(String, Arc<SharedPostgres>)> {
+    if !postgres_is_ready(url).await {
+        anyhow::bail!("external postgres not ready at {url}");
+    }
+
+    let existing = {
+        let slot = shared_pg_slot().lock().await;
+        slot.clone()
+    };
+
+    if let Some(pg) = existing {
+        if pg.is_external && pg.url == url && postgres_is_ready(&pg.url).await {
+            pg.refs.fetch_add(1, Ordering::SeqCst);
+            return Ok((pg.url.clone(), pg));
+        }
+        if !pg.is_external {
+            let stale_name = pg.container_name.clone();
+            let _ = stop_postgres(&stale_name).await;
+        }
+        let mut slot = shared_pg_slot().lock().await;
+        if slot.as_ref().is_some_and(|shared| Arc::ptr_eq(shared, &pg)) {
+            *slot = None;
+        }
+    }
+
+    let pg = Arc::new(SharedPostgres {
+        url: url.to_string(),
+        container_name: String::new(),
+        is_external: true,
+        refs: AtomicUsize::new(1),
+    });
+    let mut slot = shared_pg_slot().lock().await;
+    *slot = Some(pg.clone());
+    Ok((url.to_string(), pg))
+}
+
+/// Release a shared Postgres reference; stops test-owned containers when the last ref drops.
 pub fn release_shared_postgres(pg: &Arc<SharedPostgres>) {
     let prev = pg.refs.fetch_sub(1, Ordering::SeqCst);
     if prev == 1 {
-        let container_name = pg.container_name.clone();
         let pg = Arc::clone(pg);
         block_on_with_timeout(async move {
-            stop_postgres_and_clear_slot(&container_name, pg).await;
+            if pg.is_external {
+                clear_shared_pg_slot(&pg).await;
+            } else {
+                let container_name = pg.container_name.clone();
+                stop_postgres_and_clear_slot(&container_name, pg).await;
+            }
         });
     }
 }
@@ -319,7 +427,10 @@ async fn clear_shared_pg_slot(pg: &Arc<SharedPostgres>) {
 
 async fn clear_shared_milvus_slot(milvus: &Arc<SharedMilvus>) {
     let mut slot = shared_milvus_slot().lock().await;
-    if slot.as_ref().is_some_and(|shared| Arc::ptr_eq(shared, milvus)) {
+    if slot
+        .as_ref()
+        .is_some_and(|shared| Arc::ptr_eq(shared, milvus))
+    {
         *slot = None;
     }
 }
@@ -343,10 +454,7 @@ fn block_on_with_timeout(fut: impl std::future::Future<Output = ()> + Send + 'st
                 .build()
                 .expect("tokio runtime for sync teardown")
                 .block_on(async {
-                    if tokio::time::timeout(TEARDOWN_TIMEOUT, fut)
-                        .await
-                        .is_err()
-                    {
+                    if tokio::time::timeout(TEARDOWN_TIMEOUT, fut).await.is_err() {
                         eprintln!(
                             "[product_e2e] teardown timed out after {}s",
                             TEARDOWN_TIMEOUT.as_secs()
@@ -544,7 +652,10 @@ pub async fn acquire_shared_milvus() -> anyhow::Result<(String, Arc<SharedMilvus
             let _ = stop_milvus(stale_name).await;
         }
         let mut slot = shared_milvus_slot().lock().await;
-        if slot.as_ref().is_some_and(|shared| Arc::ptr_eq(shared, &milvus)) {
+        if slot
+            .as_ref()
+            .is_some_and(|shared| Arc::ptr_eq(shared, &milvus))
+        {
             *slot = None;
         }
     }
@@ -642,9 +753,7 @@ async fn start_milvus_compose_stack() -> anyhow::Result<()> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        anyhow::bail!(
-            "docker compose milvus up failed (stderr={stderr}, stdout={stdout})"
-        );
+        anyhow::bail!("docker compose milvus up failed (stderr={stderr}, stdout={stdout})");
     }
     Ok(())
 }
@@ -777,9 +886,7 @@ async fn wait_for_milvus(url: &str, container_name: &str) -> anyhow::Result<()> 
         }
         if tokio::time::Instant::now() >= deadline {
             let logs = docker_container_recent_logs(container_name).await;
-            anyhow::bail!(
-                "milvus did not become ready in 90s at {url}; recent logs:\n{logs}"
-            );
+            anyhow::bail!("milvus did not become ready in 90s at {url}; recent logs:\n{logs}");
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }

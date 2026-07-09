@@ -2,10 +2,3 @@
 # Map Rust JSON value types to TS unknown for wire payloads.
 [typescript.type_mappings]
 "Value" = "unknown"
-"i64" = "number"
-"u64" = "number"
-"usize" = "number"
-"i32" = "number"
-"u32" = "number"
-"f64" = "number"
-"f32" = "number"

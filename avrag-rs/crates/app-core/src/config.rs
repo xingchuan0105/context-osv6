@@ -21,6 +21,8 @@ pub struct AppConfig {
     pub agent_llm: ModelProviderConfig,
     pub memory_llm: ModelProviderConfig,
     pub ingestion_llm: ModelProviderConfig,
+    /// LLM for KG triplet extraction during document ingest (defaults to DeepSeek).
+    pub triplet_llm: ModelProviderConfig,
     pub search: SearchConfig,
     pub redis: RedisConfig,
     pub object_storage: ObjectStorageConfig,
@@ -243,6 +245,19 @@ impl Default for AppConfig {
                 rpm_limit: None,
                 tpm_limit: None,
             },
+            triplet_llm: ModelProviderConfig {
+                base_url: "https://api.deepseek.com".to_string(),
+                api_key: String::new(),
+                model: "deepseek-v4-flash".to_string(),
+                timeout_ms: 180000,
+                temperature: Some(0.2),
+                api_style: Some("openai".to_string()),
+                dimensions: None,
+                enable_thinking: Some(false),
+                enable_cache: None,
+                rpm_limit: None,
+                tpm_limit: None,
+            },
             search: SearchConfig {
                 mode: "llm_tools".to_string(),
                 enable_thinking: true,
@@ -350,6 +365,7 @@ impl AppConfig {
         config.agent_llm = model_config_from_env("AGENT_LLM", &config.agent_llm, None);
         config.memory_llm = model_config_from_env("MEMORY_LLM", &config.memory_llm, None);
         config.ingestion_llm = model_config_from_env("INGESTION_LLM", &config.ingestion_llm, None);
+        config.triplet_llm = model_config_from_env("TRIPLET_LLM", &config.triplet_llm, None);
 
         config.search.mode = env_string("SEARCH_MODE", &config.search.mode);
         config.search.enable_thinking =

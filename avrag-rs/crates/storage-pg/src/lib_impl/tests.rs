@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::super::*;
     use std::env;
 
     #[test]
@@ -71,8 +71,10 @@ mod tests {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+        __bootstrap.migrate().await.unwrap();
+        let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+        repo.bootstrap().migrate().await.unwrap();
 
         let org_id = OrgId::from(Uuid::new_v4());
         let owner_org_uuid = org_id.into_uuid();
@@ -81,12 +83,12 @@ mod tests {
         let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
             .with_actor_id(ActorId::new(user_id));
         let notebook = repo
-            .create_notebook(&ctx, "ir tenant scope notebook", "ir tenant scope")
+            .bootstrap().create_notebook(&ctx, "ir tenant scope notebook", "ir tenant scope")
             .await
             .unwrap();
         let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
         let document = repo
-            .create_document(&ctx, notebook_id, "ir-tenant-scope.txt", 42, "text/plain")
+            .bootstrap().create_document(&ctx, notebook_id, "ir-tenant-scope.txt", 42, "text/plain")
             .await
             .unwrap();
         let document_id = Uuid::parse_str(&document.id).unwrap();
@@ -109,7 +111,7 @@ mod tests {
         )
         .await;
 
-        repo.clear_document_ir_projection(&ctx, document_id)
+        repo.documents().clear_document_ir_projection(&ctx, document_id)
             .await
             .unwrap();
 
@@ -147,7 +149,7 @@ mod tests {
             metadata_json: serde_json::json!({}),
         };
 
-        repo.replace_document_blocks(&ctx, notebook_id, document_id, &[replacement])
+        repo.documents().replace_document_blocks(&ctx, notebook_id, document_id, &[replacement])
             .await
             .unwrap();
 
@@ -192,8 +194,10 @@ mod tests {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+        __bootstrap.migrate().await.unwrap();
+        let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+        repo.bootstrap().migrate().await.unwrap();
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
@@ -201,11 +205,11 @@ mod tests {
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
-            .create_notebook(&ctx, "lease renewal test notebook", "lease renewal test")
+            .bootstrap().create_notebook(&ctx, "lease renewal test notebook", "lease renewal test")
             .await
             .unwrap();
         let document = repo
-            .create_document(
+            .bootstrap().create_document(
                 &ctx,
                 Uuid::parse_str(&notebook.id).unwrap(),
                 "lease-renewal-test.txt",
@@ -228,7 +232,7 @@ mod tests {
                 file_size: 42,
             },
         );
-        assert!(repo.enqueue_ingestion_task(&task).await.unwrap());
+        assert!(repo.ingestion_queue().enqueue_ingestion_task(&task).await.unwrap());
         let task_id = Uuid::parse_str(&task.task_id).unwrap();
         let lock_token = Uuid::new_v4();
         sqlx::query(
@@ -251,18 +255,18 @@ mod tests {
 
         let lock_token = lock_token.to_string();
         assert!(
-            repo.renew_ingestion_task_lock(&task.task_id, &lock_token)
+            repo.ingestion_queue().renew_ingestion_task_lock(&task.task_id, &lock_token)
                 .await
                 .unwrap()
         );
         assert!(
             !repo
-                .renew_ingestion_task_lock(&task.task_id, &Uuid::new_v4().to_string())
+                .ingestion_queue().renew_ingestion_task_lock(&task.task_id, &Uuid::new_v4().to_string())
                 .await
                 .unwrap()
         );
         assert_eq!(
-            repo.complete_ingestion_task(&task.task_id, Some(&lock_token))
+            repo.ingestion_queue().complete_ingestion_task(&task.task_id, Some(&lock_token))
                 .await
                 .unwrap(),
             TaskCompletionOutcome::Completed
@@ -274,8 +278,10 @@ mod tests {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+        __bootstrap.migrate().await.unwrap();
+        let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+        repo.bootstrap().migrate().await.unwrap();
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
@@ -283,12 +289,12 @@ mod tests {
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
-            .create_notebook(&ctx, "soft delete test notebook", "soft delete test")
+            .bootstrap().create_notebook(&ctx, "soft delete test notebook", "soft delete test")
             .await
             .unwrap();
         let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
         let document = repo
-            .create_document(&ctx, notebook_id, "delete-me.txt", 42, "text/plain")
+            .bootstrap().create_document(&ctx, notebook_id, "delete-me.txt", 42, "text/plain")
             .await
             .unwrap();
         let document_id = Uuid::parse_str(&document.id).unwrap();
@@ -305,26 +311,26 @@ mod tests {
                 file_size: 42,
             },
         );
-        assert!(repo.enqueue_ingestion_task(&task).await.unwrap());
+        assert!(repo.ingestion_queue().enqueue_ingestion_task(&task).await.unwrap());
 
         assert_eq!(
-            repo.delete_document(&ctx, document_id).await.unwrap(),
+            repo.documents().delete_document(&ctx, document_id).await.unwrap(),
             DocumentDeletionOutcome::Queued {
                 task_inserted: true
             }
         );
         assert_eq!(
-            repo.delete_document(&ctx, document_id).await.unwrap(),
+            repo.documents().delete_document(&ctx, document_id).await.unwrap(),
             DocumentDeletionOutcome::AlreadyDeleting {
                 task_inserted: false
             }
         );
         assert_eq!(
-            repo.get_document_status(&ctx, document_id).await.unwrap(),
+            repo.documents().get_document_status(&ctx, document_id).await.unwrap(),
             Some(DocumentStatus::Deleting)
         );
         assert_eq!(
-            repo.count_document_cleanup_tasks_for_document(&ctx, document_id)
+            repo.chunks().count_document_cleanup_tasks_for_document(&ctx, document_id)
                 .await
                 .unwrap(),
             1
@@ -351,8 +357,10 @@ mod tests {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+        __bootstrap.migrate().await.unwrap();
+        let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+        repo.bootstrap().migrate().await.unwrap();
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
@@ -363,7 +371,7 @@ mod tests {
         let other_ctx = AuthContext::new(other_org_id, avrag_auth::SubjectKind::User)
             .with_actor_id(ActorId::new(other_user_id));
         let other_notebook = repo
-            .create_notebook(
+            .bootstrap().create_notebook(
                 &other_ctx,
                 "cleanup other tenant notebook",
                 "cleanup other tenant",
@@ -372,24 +380,24 @@ mod tests {
             .unwrap();
         let other_notebook_id = Uuid::parse_str(&other_notebook.id).unwrap();
         let notebook = repo
-            .create_notebook(&ctx, "cleanup task test notebook", "cleanup task test")
+            .bootstrap().create_notebook(&ctx, "cleanup task test notebook", "cleanup task test")
             .await
             .unwrap();
         let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
         let document = repo
-            .create_document(&ctx, notebook_id, "cleanup-me.txt", 42, "text/plain")
+            .bootstrap().create_document(&ctx, notebook_id, "cleanup-me.txt", 42, "text/plain")
             .await
             .unwrap();
         let document_id = Uuid::parse_str(&document.id).unwrap();
         assert_eq!(
-            repo.delete_document(&ctx, document_id).await.unwrap(),
+            repo.documents().delete_document(&ctx, document_id).await.unwrap(),
             DocumentDeletionOutcome::Queued {
                 task_inserted: true
             }
         );
 
         let claimed = repo
-            .claim_next_document_cleanup_task("cleanup-test-worker", Some(60))
+            .ingestion_queue().claim_next_document_cleanup_task("cleanup-test-worker", Some(60))
             .await
             .unwrap()
             .expect("cleanup task should be claimed");
@@ -398,29 +406,29 @@ mod tests {
         assert_eq!(claimed.document_id, document_id);
         let lock_token = claimed.lock_token.expect("claim must return lock token");
         assert!(
-            repo.renew_document_cleanup_task_lock(claimed.task_id, lock_token)
+            repo.ingestion_queue().renew_document_cleanup_task_lock(claimed.task_id, lock_token)
                 .await
                 .unwrap()
         );
         assert!(
-            repo.document_cleanup_task_lease_is_current(claimed.task_id, lock_token)
-                .await
-                .unwrap()
-        );
-        assert!(
-            !repo
-                .document_cleanup_task_lease_is_current(claimed.task_id, Uuid::new_v4())
+            repo.chunks().document_cleanup_task_lease_is_current(claimed.task_id, lock_token)
                 .await
                 .unwrap()
         );
         assert!(
             !repo
-                .renew_document_cleanup_task_lock(claimed.task_id, Uuid::new_v4())
+                .chunks().document_cleanup_task_lease_is_current(claimed.task_id, Uuid::new_v4())
+                .await
+                .unwrap()
+        );
+        assert!(
+            !repo
+                .ingestion_queue().renew_document_cleanup_task_lock(claimed.task_id, Uuid::new_v4())
                 .await
                 .unwrap()
         );
         assert_eq!(
-            repo.fail_document_cleanup_task(
+            repo.ingestion_queue().fail_document_cleanup_task(
                 claimed.task_id,
                 lock_token,
                 "cleanup transient failure"
@@ -445,7 +453,7 @@ mod tests {
             .await
             .unwrap();
         let claimed = repo
-            .claim_next_document_cleanup_task("cleanup-test-worker", Some(60))
+            .ingestion_queue().claim_next_document_cleanup_task("cleanup-test-worker", Some(60))
             .await
             .unwrap()
             .expect("cleanup task should be claimed again");
@@ -604,7 +612,7 @@ mod tests {
         .unwrap();
 
         let targets = repo
-            .get_document_cleanup_targets(&ctx, document_id, &claimed.payload)
+            .chunks().get_document_cleanup_targets(&ctx, document_id, &claimed.payload)
             .await
             .unwrap()
             .unwrap();
@@ -614,13 +622,13 @@ mod tests {
                 .contains(&"safe/asset.png".to_string())
         );
         assert!(
-            repo.cleanup_document_derived_rows(&ctx, document_id)
+            repo.chunks().cleanup_document_derived_rows(&ctx, document_id)
                 .await
                 .unwrap()
         );
-        assert!(repo.mark_document_deleted(&ctx, document_id).await.unwrap());
+        assert!(repo.chunks().mark_document_deleted(&ctx, document_id).await.unwrap());
         assert_eq!(
-            repo.get_document_status(&ctx, document_id).await.unwrap(),
+            repo.documents().get_document_status(&ctx, document_id).await.unwrap(),
             Some(DocumentStatus::Deleted)
         );
         for table in [
@@ -654,13 +662,13 @@ mod tests {
             assert_eq!(wrong_count, 1, "{table} wrong-tenant row should remain");
         }
         assert_eq!(
-            repo.complete_document_cleanup_task(claimed.task_id, lock_token)
+            repo.ingestion_queue().complete_document_cleanup_task(claimed.task_id, lock_token)
                 .await
                 .unwrap(),
             DocumentCleanupTaskCompletionOutcome::Completed
         );
         assert_eq!(
-            repo.complete_document_cleanup_task(claimed.task_id, lock_token)
+            repo.ingestion_queue().complete_document_cleanup_task(claimed.task_id, lock_token)
                 .await
                 .unwrap(),
             DocumentCleanupTaskCompletionOutcome::LeaseLost
@@ -672,15 +680,17 @@ mod tests {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+        __bootstrap.migrate().await.unwrap();
+        let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+        repo.bootstrap().migrate().await.unwrap();
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
         let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
             .with_actor_id(ActorId::new(user_id));
         let notebook = repo
-            .create_notebook(
+            .bootstrap().create_notebook(
                 &ctx,
                 "active cleanup guard notebook",
                 "active cleanup guard",
@@ -689,7 +699,7 @@ mod tests {
             .unwrap();
         let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
         let document = repo
-            .create_document(&ctx, notebook_id, "active.txt", 42, "text/plain")
+            .bootstrap().create_document(&ctx, notebook_id, "active.txt", 42, "text/plain")
             .await
             .unwrap();
         let document_id = Uuid::parse_str(&document.id).unwrap();
@@ -711,14 +721,14 @@ mod tests {
 
         let payload = serde_json::json!({"object_path": "must/not/delete.txt"});
         assert!(
-            repo.get_document_cleanup_targets(&ctx, document_id, &payload)
+            repo.chunks().get_document_cleanup_targets(&ctx, document_id, &payload)
                 .await
                 .unwrap()
                 .is_none()
         );
         assert!(
             !repo
-                .cleanup_document_derived_rows(&ctx, document_id)
+                .chunks().cleanup_document_derived_rows(&ctx, document_id)
                 .await
                 .unwrap()
         );
@@ -741,19 +751,21 @@ mod tests {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+        __bootstrap.migrate().await.unwrap();
+        let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+        repo.bootstrap().migrate().await.unwrap();
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
         let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
             .with_actor_id(ActorId::new(user_id));
         let notebook = repo
-            .create_notebook(&ctx, "ingestion guard notebook", "ingestion guard")
+            .bootstrap().create_notebook(&ctx, "ingestion guard notebook", "ingestion guard")
             .await
             .unwrap();
         let document = repo
-            .create_document(
+            .bootstrap().create_document(
                 &ctx,
                 Uuid::parse_str(&notebook.id).unwrap(),
                 "ingestion-guard.txt",
@@ -776,7 +788,7 @@ mod tests {
                 file_size: 42,
             },
         );
-        assert!(repo.enqueue_ingestion_task(&task).await.unwrap());
+        assert!(repo.ingestion_queue().enqueue_ingestion_task(&task).await.unwrap());
         let task_id = Uuid::parse_str(&task.task_id).unwrap();
         let lock_token = Uuid::new_v4();
         sqlx::query(
@@ -795,7 +807,7 @@ mod tests {
 
         let lock_token_string = lock_token.to_string();
         assert!(
-            repo.document_allows_ingestion_side_effects(
+            repo.documents().document_allows_ingestion_side_effects(
                 &ctx,
                 document_id,
                 &task.task_id,
@@ -806,7 +818,7 @@ mod tests {
         );
         assert!(
             !repo
-                .document_allows_ingestion_side_effects(
+                .documents().document_allows_ingestion_side_effects(
                     &ctx,
                     document_id,
                     &task.task_id,
@@ -816,14 +828,14 @@ mod tests {
                 .unwrap()
         );
         assert_eq!(
-            repo.delete_document(&ctx, document_id).await.unwrap(),
+            repo.documents().delete_document(&ctx, document_id).await.unwrap(),
             DocumentDeletionOutcome::Queued {
                 task_inserted: true
             }
         );
         assert!(
             !repo
-                .document_allows_ingestion_side_effects(
+                .documents().document_allows_ingestion_side_effects(
                     &ctx,
                     document_id,
                     &task.task_id,
@@ -839,8 +851,10 @@ mod tests {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+        __bootstrap.migrate().await.unwrap();
+        let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+        repo.bootstrap().migrate().await.unwrap();
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
@@ -848,11 +862,11 @@ mod tests {
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
-            .create_notebook(&ctx, "status guard test notebook", "status guard test")
+            .bootstrap().create_notebook(&ctx, "status guard test notebook", "status guard test")
             .await
             .unwrap();
         let document = repo
-            .create_document(
+            .bootstrap().create_document(
                 &ctx,
                 Uuid::parse_str(&notebook.id).unwrap(),
                 "status-guard.txt",
@@ -865,7 +879,7 @@ mod tests {
 
         assert!(
             !repo
-                .update_document(
+                .documents().update_document(
                     &ctx,
                     document_id,
                     None,
@@ -877,16 +891,16 @@ mod tests {
         );
         assert!(
             !repo
-                .set_document_status(&ctx, document_id, DocumentStatus::Deleted)
+                .documents().set_document_status(&ctx, document_id, DocumentStatus::Deleted)
                 .await
                 .unwrap()
         );
         assert_eq!(
-            repo.get_document_status(&ctx, document_id).await.unwrap(),
+            repo.documents().get_document_status(&ctx, document_id).await.unwrap(),
             Some(DocumentStatus::Pending)
         );
         assert_eq!(
-            repo.count_document_cleanup_tasks_for_document(&ctx, document_id)
+            repo.chunks().count_document_cleanup_tasks_for_document(&ctx, document_id)
                 .await
                 .unwrap(),
             0
@@ -898,8 +912,10 @@ mod tests {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+        __bootstrap.migrate().await.unwrap();
+        let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+        repo.bootstrap().migrate().await.unwrap();
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
@@ -907,11 +923,11 @@ mod tests {
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
-            .create_notebook(&ctx, "summary test notebook", "summary test")
+            .bootstrap().create_notebook(&ctx, "summary test notebook", "summary test")
             .await
             .unwrap();
         let document = repo
-            .create_document(
+            .bootstrap().create_document(
                 &ctx,
                 Uuid::parse_str(&notebook.id).unwrap(),
                 "summary-test.txt",
@@ -922,7 +938,7 @@ mod tests {
             .unwrap();
         let document_id = Uuid::parse_str(&document.id).unwrap();
 
-        repo.store_document_body(&ctx, document_id, "First line. Second line. Third line.")
+        repo.bootstrap().store_document_body(&ctx, document_id, "First line. Second line. Third line.")
             .await
             .unwrap();
         let summary_output = common::SummaryOutput {
@@ -939,12 +955,12 @@ mod tests {
                 publication_date: None,
             },
         };
-        repo.update_document_summary(&ctx, document_id, &summary_output, None, None)
+        repo.documents().update_document_summary(&ctx, document_id, &summary_output, None, None)
             .await
             .unwrap();
 
         let preview = repo
-            .get_parsed_preview(&ctx, document_id, 0, 10)
+            .chunks().get_parsed_preview(&ctx, document_id, 0, 10)
             .await
             .unwrap()
             .unwrap();
@@ -960,8 +976,10 @@ mod tests {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+        __bootstrap.migrate().await.unwrap();
+        let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+        repo.bootstrap().migrate().await.unwrap();
 
         let org_id = OrgId::from(Uuid::new_v4());
         let _org_uuid = org_id.into_uuid();
@@ -970,13 +988,13 @@ mod tests {
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
-            .create_notebook(&ctx, "tool-results-test", "tool results test")
+            .bootstrap().create_notebook(&ctx, "tool-results-test", "tool results test")
             .await
             .unwrap();
         let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
 
         let session = repo
-            .create_session(
+            .sessions().create_session(
                 &ctx,
                 notebook_id,
                 Some("test-session-title"),
@@ -1004,10 +1022,10 @@ mod tests {
         ];
 
         let message_id = repo
-            .append_chat_turn(
+            .sessions().append_chat_turn(
                 &ctx,
                 session_id,
-                ChatTurn {
+                &ChatTurn {
                     user_content: "Calculate something",
                     assistant_content: "Here are the results.",
                     assistant_answer_blocks: &[],
@@ -1048,20 +1066,22 @@ mod tests {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+        __bootstrap.migrate().await.unwrap();
+        let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+        repo.bootstrap().migrate().await.unwrap();
 
         let org_id = OrgId::from(Uuid::new_v4());
         let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
             .with_actor_id(ActorId::new(Uuid::new_v4()));
 
         let notebook = repo
-            .create_notebook(&ctx, "turn-metadata-test", "turn metadata test")
+            .bootstrap().create_notebook(&ctx, "turn-metadata-test", "turn metadata test")
             .await
             .unwrap();
         let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
         let session = repo
-            .create_session(&ctx, notebook_id, Some("meta-session"), "rag")
+            .sessions().create_session(&ctx, notebook_id, Some("meta-session"), "rag")
             .await
             .unwrap();
         let session_id = Uuid::parse_str(&session.id).unwrap();
@@ -1076,10 +1096,10 @@ mod tests {
         });
 
         let message_id = repo
-            .append_chat_turn(
+            .sessions().append_chat_turn(
                 &ctx,
                 session_id,
-                ChatTurn {
+                &ChatTurn {
                     user_content: "Who wrote it?",
                     assistant_content: "Taleb.",
                     assistant_answer_blocks: &[],
@@ -1119,8 +1139,10 @@ mod tests {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+        __bootstrap.migrate().await.unwrap();
+        let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+        repo.bootstrap().migrate().await.unwrap();
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
@@ -1128,26 +1150,26 @@ mod tests {
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
-            .create_notebook(&ctx, "memory-search", "memory search test")
+            .bootstrap().create_notebook(&ctx, "memory-search", "memory search test")
             .await
             .unwrap();
         let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
 
         let session_a = repo
-            .create_session(&ctx, notebook_id, Some("session-a"), "rag")
+            .sessions().create_session(&ctx, notebook_id, Some("session-a"), "rag")
             .await
             .unwrap();
         let session_a_id = Uuid::parse_str(&session_a.id).unwrap();
         let session_b = repo
-            .create_session(&ctx, notebook_id, Some("session-b"), "rag")
+            .sessions().create_session(&ctx, notebook_id, Some("session-b"), "rag")
             .await
             .unwrap();
         let session_b_id = Uuid::parse_str(&session_b.id).unwrap();
 
-        repo.append_chat_turn(
+        repo.sessions().append_chat_turn(
             &ctx,
             session_a_id,
-            ChatTurn {
+            &ChatTurn {
                 user_content: "What is antifragility?",
                 assistant_content: "Antifragility gains from disorder.",
                 assistant_answer_blocks: &[],
@@ -1161,10 +1183,10 @@ mod tests {
         .await
         .unwrap();
 
-        repo.append_chat_turn(
+        repo.sessions().append_chat_turn(
             &ctx,
             session_b_id,
-            ChatTurn {
+            &ChatTurn {
                 user_content: "Open a second session.",
                 assistant_content: "Sure.",
                 assistant_answer_blocks: &[],
@@ -1193,7 +1215,7 @@ mod tests {
         );
 
         let hits = repo
-            .search_conversation_history(
+            .conversation_memory().search_conversation_history(
                 &ctx,
                 session_b_id,
                 "antifragility",
@@ -1215,8 +1237,10 @@ mod tests {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+        __bootstrap.migrate().await.unwrap();
+        let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+        repo.bootstrap().migrate().await.unwrap();
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
@@ -1224,21 +1248,21 @@ mod tests {
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
-            .create_notebook(&ctx, "session-search", "session search test")
+            .bootstrap().create_notebook(&ctx, "session-search", "session search test")
             .await
             .unwrap();
         let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
 
         let session = repo
-            .create_session(&ctx, notebook_id, Some("generic title"), "rag")
+            .sessions().create_session(&ctx, notebook_id, Some("generic title"), "rag")
             .await
             .unwrap();
         let session_id = Uuid::parse_str(&session.id).unwrap();
 
-        repo.append_chat_turn(
+        repo.sessions().append_chat_turn(
             &ctx,
             session_id,
-            ChatTurn {
+            &ChatTurn {
                 user_content: "Tell me something.",
                 assistant_content: "The secret roadmap keyword is zephyrneedle2026.",
                 assistant_answer_blocks: &[],
@@ -1253,7 +1277,7 @@ mod tests {
         .unwrap();
 
         let pattern = "%zephyrneedle2026%";
-        let matches = repo.search_sessions(&ctx, pattern).await.unwrap();
+        let matches = repo.chunks().search_sessions(&ctx, pattern).await.unwrap();
         assert!(
             matches.iter().any(|item| item.id == session.id),
             "search_sessions should match assistant message FTS, not only session title"
@@ -1265,8 +1289,10 @@ mod tests {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+        __bootstrap.migrate().await.unwrap();
+        let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+        repo.bootstrap().migrate().await.unwrap();
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
@@ -1274,26 +1300,26 @@ mod tests {
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
-            .create_notebook(&ctx, "assistant-history", "assistant history test")
+            .bootstrap().create_notebook(&ctx, "assistant-history", "assistant history test")
             .await
             .unwrap();
         let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
 
         let session_a = repo
-            .create_session(&ctx, notebook_id, Some("session-a"), "rag")
+            .sessions().create_session(&ctx, notebook_id, Some("session-a"), "rag")
             .await
             .unwrap();
         let session_a_id = Uuid::parse_str(&session_a.id).unwrap();
         let session_b = repo
-            .create_session(&ctx, notebook_id, Some("session-b"), "rag")
+            .sessions().create_session(&ctx, notebook_id, Some("session-b"), "rag")
             .await
             .unwrap();
         let session_b_id = Uuid::parse_str(&session_b.id).unwrap();
 
-        repo.append_chat_turn(
+        repo.sessions().append_chat_turn(
             &ctx,
             session_a_id,
-            ChatTurn {
+            &ChatTurn {
                 user_content: "Explain a concept.",
                 assistant_content: "Antifragility gains from volatility and stressors.",
                 assistant_answer_blocks: &[],
@@ -1307,10 +1333,10 @@ mod tests {
         .await
         .unwrap();
 
-        repo.append_chat_turn(
+        repo.sessions().append_chat_turn(
             &ctx,
             session_b_id,
-            ChatTurn {
+            &ChatTurn {
                 user_content: "Another topic.",
                 assistant_content: "Sure.",
                 assistant_answer_blocks: &[],
@@ -1325,7 +1351,7 @@ mod tests {
         .unwrap();
 
         let hits = repo
-            .search_conversation_history(
+            .conversation_memory().search_conversation_history(
                 &ctx,
                 session_b_id,
                 "antifragility",
@@ -1347,8 +1373,10 @@ mod tests {
         let Some(database_url) = env::var("DATABASE_URL").ok() else {
             return;
         };
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let __bootstrap = BootstrapRepository::connect(&database_url).await.unwrap();
+        __bootstrap.migrate().await.unwrap();
+        let repo = PgAppRepository { pool: __bootstrap.pool.clone() };
+        repo.bootstrap().migrate().await.unwrap();
 
         let org_a = OrgId::from(Uuid::new_v4());
         let org_b = OrgId::from(Uuid::new_v4());
@@ -1358,12 +1386,12 @@ mod tests {
             .with_actor_id(ActorId::new(Uuid::new_v4()));
 
         let notebook = repo
-            .create_notebook(&ctx_a, "org-a notebook", "isolation test")
+            .bootstrap().create_notebook(&ctx_a, "org-a notebook", "isolation test")
             .await
             .unwrap();
         let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
 
-        let fetched = repo.get_notebook(&ctx_b, notebook_id).await.unwrap();
+        let fetched = repo.bootstrap().get_notebook(&ctx_b, notebook_id).await.unwrap();
         assert!(
             fetched.is_none(),
             "org B must not read org A's notebook via get_notebook"

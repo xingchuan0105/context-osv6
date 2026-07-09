@@ -19,11 +19,7 @@ pub fn user_role_grants_org_admin(role: &str) -> bool {
 fn is_allowed_permission(permission: &str) -> bool {
     matches!(
         permission,
-        PERM_QUERY
-            | PERM_INDEX
-            | PERM_ADMIN
-            | PERM_WORKSPACE_CREATE
-            | PERM_WORKSPACE_LIST
+        PERM_QUERY | PERM_INDEX | PERM_ADMIN | PERM_WORKSPACE_CREATE | PERM_WORKSPACE_LIST
     )
 }
 
@@ -149,9 +145,6 @@ mod tests {
             ],
             Some(Uuid::new_v4()),
         );
-        assert_eq!(
-            perms,
-            vec![PERM_INDEX.to_string(), PERM_QUERY.to_string()]
-        );
+        assert_eq!(perms, vec![PERM_INDEX.to_string(), PERM_QUERY.to_string()]);
     }
 }

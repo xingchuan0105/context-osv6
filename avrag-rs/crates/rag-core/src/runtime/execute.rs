@@ -4,12 +4,15 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_retrieval_data_plane::{
     GraphRelationHint, GraphSearchOutput, GraphSearchRequest, WeightedChunkList,
 };
-use contracts::{BackendTrace, ChannelCoverage, ChannelTraceItem, Coverage, ExecutePlanRequest, ExecutePlanResponse, PlaceholderTriplet, RelationPath, RetrievalBundle, RetrievedChunk};
 use contracts::chat::{DegradeReason, DegradeTraceItem};
+use contracts::{
+    BackendTrace, ChannelCoverage, ChannelTraceItem, Coverage, ExecutePlanRequest,
+    ExecutePlanResponse, PlaceholderTriplet, RelationPath, RetrievalBundle, RetrievedChunk,
+};
 use sha2::{Digest, Sha256};
 
 const RETRIEVAL_CACHE_TTL_SECS: u64 = 30 * 60; // 30 minutes
@@ -482,7 +485,9 @@ impl RagRuntime {
             Ok(Err(error)) => {
                 let degrade_trace = vec![DegradeTraceItem {
                     stage: "multimodal_dense".to_string(),
-                    reason: DegradeReason::Other(format!("Multimodal dense channel failed: {error}")),
+                    reason: DegradeReason::Other(format!(
+                        "Multimodal dense channel failed: {error}"
+                    )),
                     impact: "Skipping multimodal dense retrieval channel".to_string(),
                 }];
                 MultimodalChannelOutput {
@@ -587,7 +592,7 @@ impl RagRuntime {
             };
         }
 
-        let doc_ids = request_doc_ids(&request.to_chat_request_compat());
+        let doc_ids = request_doc_ids(&crate::execute_plan_to_chat_request(request));
         match self
             .data_plane
             .search_graph(GraphSearchRequest {
@@ -646,9 +651,7 @@ impl RagRuntime {
             }
         }
 
-        request
-            .validate()
-            .map_err(|error| anyhow!(error.to_string()))?;
+        crate::validate_execute_plan(request).map_err(|error| anyhow!(error.to_string()))?;
         let total_candidate_budget = request
             .budget
             .as_ref()
@@ -660,8 +663,8 @@ impl RagRuntime {
             .and_then(|budget| budget.final_chunk_budget)
             .unwrap_or(FINAL_MIN_CHUNKS);
 
-        let compat_request = request.to_chat_request_compat();
-        let compat_plan = request.to_rag_plan_compat();
+        let compat_request = crate::execute_plan_to_chat_request(request);
+        let compat_plan = crate::execute_plan_to_rag_plan(request);
         let item_trace =
             build_item_trace_with_total(&compat_request, &compat_plan, total_candidate_budget);
         let channel_budgets = channel_candidate_budgets(request, total_candidate_budget);
@@ -755,11 +758,13 @@ impl RagRuntime {
             let names = content_store
                 .get_document_names(auth, &unique_doc_ids)
                 .await
-                .inspect_err(|e| tracing::warn!(
-                    error = %e,
-                    doc_ids = ?unique_doc_ids,
-                    "content_store.get_document_names failed, degrading"
-                ))
+                .inspect_err(|e| {
+                    tracing::warn!(
+                        error = %e,
+                        doc_ids = ?unique_doc_ids,
+                        "content_store.get_document_names failed, degrading"
+                    )
+                })
                 .unwrap_or_default();
             if names.len() < unique_doc_ids.len() {
                 tracing::info!(

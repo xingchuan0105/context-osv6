@@ -1,7 +1,7 @@
 use std::{collections::HashMap, collections::HashSet};
 
 use anyhow::Result;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_llm::{MultiModalEmbeddingInput, MultiModalRerankDocument};
 use avrag_retrieval_data_plane::{
     Bm25SearchRequest, MultimodalSearchRequest, TextDenseSearchRequest, WeightedChunkList,
@@ -195,7 +195,10 @@ impl RagRuntime {
                     if let Some(reason) = output.trace.fallback_reason.as_ref() {
                         degrade_trace.push(DegradeTraceItem {
                             stage: "bm25".to_string(),
-                            reason: DegradeReason::Other(format!("Sparse retrieval fallback: {}", reason)),
+                            reason: DegradeReason::Other(format!(
+                                "Sparse retrieval fallback: {}",
+                                reason
+                            )),
                             impact: "Used a fallback sparse retrieval path for one lexical item"
                                 .to_string(),
                         });
@@ -279,7 +282,10 @@ impl RagRuntime {
                 Err(error) => {
                     degrade_trace.push(DegradeTraceItem {
                         stage: "multimodal_dense".to_string(),
-                        reason: DegradeReason::Other(format!("Multimodal embedding failed: {}", error)),
+                        reason: DegradeReason::Other(format!(
+                            "Multimodal embedding failed: {}",
+                            error
+                        )),
                         impact: "Skipping multimodal dense retrieval for one query item"
                             .to_string(),
                     });
@@ -300,7 +306,10 @@ impl RagRuntime {
                 Ok(results) => chunks.extend(results),
                 Err(error) => degrade_trace.push(DegradeTraceItem {
                     stage: "multimodal_dense".to_string(),
-                    reason: DegradeReason::Other(format!("Multimodal dense retrieval failed: {}", error)),
+                    reason: DegradeReason::Other(format!(
+                        "Multimodal dense retrieval failed: {}",
+                        error
+                    )),
                     impact: "Skipping multimodal dense retrieval for one query item".to_string(),
                 }),
             }
@@ -425,17 +434,20 @@ impl RagRuntime {
                     for result in results {
                         score_by_index.insert(result.index, result.score);
                     }
+                    // Write rerank scores back into chunk.score so downstream
+                    // cut_top_k / dual_threshold_cut order by rerank relevance
+                    // instead of the stale dense score.
+                    for chunk in &mut ranked {
+                        if let Some(&index) = original_index_by_chunk.get(&chunk.chunk_id) {
+                            if let Some(&score) = score_by_index.get(&index) {
+                                chunk.score = score;
+                            }
+                        }
+                    }
                     ranked.sort_by(|left, right| {
-                        let left_score = original_index_by_chunk
-                            .get(&left.chunk_id)
-                            .and_then(|index| score_by_index.get(index).copied())
-                            .unwrap_or(left.score);
-                        let right_score = original_index_by_chunk
-                            .get(&right.chunk_id)
-                            .and_then(|index| score_by_index.get(index).copied())
-                            .unwrap_or(right.score);
-                        right_score
-                            .partial_cmp(&left_score)
+                        right
+                            .score
+                            .partial_cmp(&left.score)
                             .unwrap_or(std::cmp::Ordering::Equal)
                     });
                     return cut_top_k(ranked, rerank_budget);
@@ -443,7 +455,10 @@ impl RagRuntime {
                 Err(error) => {
                     degrade_trace.push(DegradeTraceItem {
                         stage: "mm_reranker".to_string(),
-                        reason: DegradeReason::Other(format!("Multimodal reranker call failed: {}", error)),
+                        reason: DegradeReason::Other(format!(
+                            "Multimodal reranker call failed: {}",
+                            error
+                        )),
                         impact: "Falling back to text rerank or pre-rerank ordering".to_string(),
                     });
                 }

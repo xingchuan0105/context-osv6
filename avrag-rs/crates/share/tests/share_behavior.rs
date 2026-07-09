@@ -6,7 +6,7 @@ use app_core::{
     PublicShareChatContextSnapshot, ShareAccessLevel, SharedKnowledgeBaseSnapshot,
     SharedNotebookSnapshot, SharedShareInfoSnapshot, SharedSourceSnapshot,
 };
-use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
 use avrag_share::{AccessLevel, ShareService};
 use support::MemoryShareStore;
 use uuid::Uuid;
@@ -54,7 +54,10 @@ async fn load_shared_notebook_maps_snapshot_fields_to_payload() {
 
     assert_eq!(payload.knowledge_base.id, "nb-1");
     assert_eq!(payload.knowledge_base.title, "Quarterly Review");
-    assert_eq!(payload.knowledge_base.description.as_deref(), Some("Q1 notes"));
+    assert_eq!(
+        payload.knowledge_base.description.as_deref(),
+        Some("Q1 notes")
+    );
     assert_eq!(payload.share.permission, "partial");
     assert_eq!(
         payload.share.expires_at.as_deref(),
@@ -145,7 +148,10 @@ async fn owner_can_invite_member() {
     assert_eq!(member.email.as_deref(), Some("collaborator@example.com"));
     assert_eq!(member.access_level, AccessLevel::Write);
     assert_eq!(member.invite_status, "pending");
-    assert_eq!(member.invited_by.as_deref(), Some(owner_id.to_string().as_str()));
+    assert_eq!(
+        member.invited_by.as_deref(),
+        Some(owner_id.to_string().as_str())
+    );
 
     let stored = store.invited_members().await;
     assert_eq!(stored.len(), 1);
@@ -175,7 +181,9 @@ async fn non_owner_invite_is_rejected_before_store() {
         .expect_err("viewer should not invite members");
 
     assert!(
-        error.to_string().contains("insufficient permission to invite members"),
+        error
+            .to_string()
+            .contains("insufficient permission to invite members"),
         "unexpected error: {error}"
     );
     assert!(

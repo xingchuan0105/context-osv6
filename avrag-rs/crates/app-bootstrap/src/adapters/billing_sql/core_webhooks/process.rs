@@ -160,6 +160,26 @@ pub(super) async fn process_webhook_event(
 
                     tx.commit().await?;
 
+                    if app_core::billing_domain::is_desktop_license_plan(&plan_id) {
+                        if let Ok(license) =
+                            avrag_licensing::fulfill_desktop_license(&user_id, &plan_id).await
+                        {
+                            let _ = emit_billing_notification(
+                                repo.clone(),
+                                &user_id,
+                                "desktop.license.issued",
+                                "Desktop license issued",
+                                "Your AVRag Desktop license key is ready.",
+                                serde_json::json!({
+                                    "plan_id": plan_id,
+                                    "license_key": license.key,
+                                    "deep_link": format!("avrag-desktop://activate?key={}", license.key),
+                                }),
+                            )
+                            .await;
+                        }
+                    }
+
                     let _ = emit_billing_notification(
                         repo.clone(),
                         &user_id,
@@ -309,6 +329,26 @@ pub(super) async fn process_webhook_event(
                 .await?;
 
                 tx.commit().await?;
+
+                if app_core::billing_domain::is_desktop_license_plan(&plan_id) {
+                    if let Ok(license) =
+                        avrag_licensing::fulfill_desktop_license(&user_id.to_string(), &plan_id).await
+                    {
+                        let _ = emit_billing_notification(
+                            repo.clone(),
+                            &user_id.to_string(),
+                            "desktop.license.issued",
+                            "Desktop license issued",
+                            "Your AVRag Desktop license key is ready.",
+                            serde_json::json!({
+                                "plan_id": plan_id,
+                                "license_key": license.key,
+                                "deep_link": format!("avrag-desktop://activate?key={}", license.key),
+                            }),
+                        )
+                        .await;
+                    }
+                }
 
                 let _ = emit_billing_notification(
                     repo.clone(),

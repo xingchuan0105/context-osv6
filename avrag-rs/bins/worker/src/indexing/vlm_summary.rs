@@ -2,8 +2,8 @@ use avrag_llm::ChatMessage;
 use tracing::warn;
 
 use super::env::{env_flag_enabled, vlm_summary_enabled};
-use super::media::{resolve_visual_chunk_image_refs, MediaResolveContext};
-use super::types::{record_multimodal_degrade, StoredMultimodalChunk};
+use super::media::{MediaResolveContext, resolve_visual_chunk_image_refs};
+use super::types::{StoredMultimodalChunk, record_multimodal_degrade};
 
 pub async fn maybe_enrich_visual_multimodal_summaries(
     processor: &crate::PgTaskProcessor,

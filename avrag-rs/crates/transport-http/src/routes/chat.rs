@@ -54,7 +54,7 @@ pub(crate) fn compat_router() -> Router<AppState> {
     Router::new()
         .route(
             "/v1/notebooks/{notebook_id}/chat/completions",
-            post(crate::openai_chat_completions_handler),
+            post(crate::lib_impl::openai_chat_completions_handler),
         )
         .route(
             "/mcp/notebooks/{notebook_id}",

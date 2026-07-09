@@ -99,12 +99,21 @@ impl OrphanObjectJobRunner {
     }
 
     async fn fetch_document_object_paths(&self) -> Result<Vec<String>> {
+        // `documents` has forced row-level security keyed on `app.current_org`. The worker
+        // pool has no org context, so a plain select sees zero rows and every object would
+        // be misclassified as orphan and deleted — including in-flight uploads. Run the
+        // scan as `super_admin` (allowed by `admin_access_documents`) inside a transaction
+        // so the setting is scoped to this query only.
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+            .execute(&mut *tx)
+            .await?;
         let rows = sqlx::query_as::<_, (String,)>(
             "select object_path from documents where object_path is not null and object_path != ''",
         )
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *tx)
         .await?;
-
+        tx.commit().await?;
         Ok(rows.into_iter().map(|row| row.0).collect())
     }
 }
@@ -114,4 +123,99 @@ fn env_bool(key: &str, default: bool) -> bool {
         .ok()
         .map(|value| value.trim().eq_ignore_ascii_case("true"))
         .unwrap_or(default)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
+    use avrag_storage_pg::{BootstrapRepository, PgAppRepository};
+    use uuid::Uuid;
+
+    // Regression: `documents` has forced RLS keyed on `app.current_org`. The scan runs on
+    // a raw pool with no org context, so it must escalate to `super_admin` to see in-flight
+    // document object_paths — otherwise freshly uploaded objects get deleted mid-ingest.
+    #[tokio::test]
+    async fn orphan_scan_preserves_in_flight_document_object() {
+        let Some(database_url) = std::env::var("DATABASE_URL").ok() else {
+            return;
+        };
+        let repo = { let __b = BootstrapRepository::connect(&database_url).await.unwrap(); __b.migrate().await.unwrap(); PgAppRepository::from_pool(__b.raw().clone()) };
+
+        let org_id = OrgId::from(Uuid::new_v4());
+        let user_id = Uuid::new_v4();
+        let ctx = AuthContext::new(org_id, SubjectKind::User).with_actor_id(ActorId::new(user_id));
+
+        let notebook = repo
+            .bootstrap().create_notebook(&ctx, "orphan-scan-test", "orphan scan test")
+            .await
+            .unwrap();
+        let notebook_id = Uuid::parse_str(&notebook.id).unwrap();
+        let document = repo
+            .bootstrap().create_document(&ctx, notebook_id, "in-flight.txt", 7, "text/plain")
+            .await
+            .unwrap();
+        let document_id = Uuid::parse_str(&document.id).unwrap();
+        let seed = repo
+            .bootstrap().get_document_task_seed(&ctx, document_id)
+            .await
+            .unwrap()
+            .expect("document seed");
+        let object_path = seed.object_path.clone();
+        assert!(!object_path.is_empty());
+
+        let tmp = tempfile::tempdir().unwrap();
+        let store = ObjectStoreHandle::local(tmp.path().to_path_buf());
+        store.put(&object_path, b"in-flight-bytes").await.unwrap();
+        // A second object with no matching document row is a true orphan.
+        let orphan_path = format!(
+            "{}/{}/{}/orphan.bin",
+            org_id.into_uuid(),
+            notebook_id,
+            Uuid::new_v4()
+        );
+        store
+            .put(&orphan_path, b"orphan-bytes")
+            .await
+            .unwrap();
+
+        let mut runner = OrphanObjectJobRunner {
+            pool: repo.raw().clone(),
+            object_store: Arc::new(store),
+            interval: Duration::ZERO,
+            last_run_at: None,
+        };
+        runner.maybe_run().await.unwrap();
+
+        // In-flight document object must survive the scan.
+        runner
+            .object_store
+            .get(&object_path)
+            .await
+            .expect("in-flight document object was deleted by orphan scan");
+        // True orphan must be removed.
+        let listing = runner.object_store.list().await.unwrap();
+        assert!(
+            !listing.contains(&orphan_path),
+            "orphan object was not deleted: {listing:?}"
+        );
+
+        // Cleanup: drop the test document/notebook outside RLS via super_admin.
+        let mut tx = repo.raw().begin().await.unwrap();
+        sqlx::query("select set_config('app.current_role', 'super_admin', true)")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        sqlx::query("delete from documents where org_id = $1")
+            .bind(org_id.into_uuid())
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        sqlx::query("delete from notebooks where org_id = $1")
+            .bind(org_id.into_uuid())
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+    }
 }

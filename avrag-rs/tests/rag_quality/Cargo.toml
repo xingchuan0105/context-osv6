@@ -9,11 +9,17 @@ rust-version.workspace = true
 name = "quality_runner"
 path = "src/bin/quality_runner.rs"
 
+[[bin]]
+name = "judge_calibration"
+path = "src/bin/judge_calibration.rs"
+
 [dependencies]
 # Core RAG dependencies (for integration testing against real runtime)
 avrag-rag-core = { path = "../../crates/rag-core" }
 common = { path = "../../crates/common" }
 avrag-llm = { path = "../../crates/llm" }
+# Shared wire types — needed to extract retrieval/citation chunks from ChatResponse
+contracts = { path = "../../../contracts" }
 
 # Evaluation / metrics
 serde.workspace = true
@@ -22,6 +28,7 @@ regex.workspace = true
 once_cell.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+async-trait.workspace = true
 
 # Async
 tokio.workspace = true

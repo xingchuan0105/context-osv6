@@ -63,10 +63,7 @@ pub trait BillingStorePort: Send + Sync {
         customer_id: &str,
     ) -> Result<(), AppError>;
 
-    async fn load_usage_window(
-        &self,
-        user_id: UserId,
-    ) -> Result<UsageWindowResponse, AppError>;
+    async fn load_usage_window(&self, user_id: UserId) -> Result<UsageWindowResponse, AppError>;
 
     async fn load_usage_history(
         &self,
@@ -74,10 +71,8 @@ pub trait BillingStorePort: Send + Sync {
         days: i32,
     ) -> Result<UsageHistoryResponse, AppError>;
 
-    async fn load_usage_forecast(
-        &self,
-        user_id: UserId,
-    ) -> Result<UsageForecastResponse, AppError>;
+    async fn load_usage_forecast(&self, user_id: UserId)
+    -> Result<UsageForecastResponse, AppError>;
 
     async fn insert_pending_alipay_order(
         &self,
@@ -152,11 +147,7 @@ pub trait UsageLimitStorePort: Send + Sync {
         since: DateTime<Utc>,
     ) -> Result<HashMap<String, i64>, AppError>;
 
-    async fn load_model_rates(
-        &self,
-        provider: &str,
-        model: &str,
-    ) -> Result<(f64, f64), AppError>;
+    async fn load_model_rates(&self, provider: &str, model: &str) -> Result<(f64, f64), AppError>;
 
     async fn has_user_override(&self, user_id: Uuid) -> Result<bool, AppError>;
 

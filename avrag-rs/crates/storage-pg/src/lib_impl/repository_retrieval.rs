@@ -1,4 +1,5 @@
-impl PgAppRepository {
+use super::*;
+impl ChunkRepository {
     pub async fn get_document_scope_states(
         &self,
         context: &AuthContext,
@@ -317,9 +318,12 @@ impl PgAppRepository {
         let mut tx = self.pool.begin(context).await?;
         let rows = sqlx::query(
             r#"
-            select metadata
+            select distinct on (document_id) document_id, metadata
             from chunks
-            where document_id = any($1) and chunk_type = 'summary'
+            where document_id = any($1)
+              and chunk_type in ('profile', 'summary')
+            order by document_id,
+                     case chunk_type when 'profile' then 0 else 1 end
             "#,
         )
         .bind(doc_ids)

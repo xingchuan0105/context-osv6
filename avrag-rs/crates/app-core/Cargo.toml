@@ -11,7 +11,6 @@ async-trait.workspace = true
 analytics = { path = "../analytics" }
 contracts = { path = "../../../contracts" }
 serde.workspace = true
-avrag-auth = { path = "../auth" }
 avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
 avrag-rag-core-ports = { path = "../rag-core-ports" }
 avrag-llm = { path = "../llm" }
@@ -33,6 +32,5 @@ uuid.workspace = true
 
 [dev-dependencies]
 async-trait.workspace = true
-avrag-auth = { path = "../auth" }
 common = { path = "../common" }
 tokio.workspace = true

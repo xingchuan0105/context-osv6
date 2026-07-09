@@ -1,26 +1,24 @@
 use avrag_llm::{ChatMessage, LlmResponse};
 use common::AppError;
-use contracts::{ToolResult};
+use contracts::ToolResult;
 
 use super::config::ModeConfig;
-use super::optimizer::{
-    build_budget_warning, build_duplicate_hint, extract_chunk_ids, ContextAdjustment,
-    LoopOptimizer,
-};
 use super::telemetry::ReActIterationRecord;
 use super::{
-    build_assistant_message_with_tool_calls, build_tool_message, dispatch_rag_tool, ReActLoop,
+    ReActLoop, build_assistant_message_with_tool_calls, build_tool_message, dispatch_rag_tool,
 };
 use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::runtime::AgentRequest;
 
-use super::iteration::{disclosed_skill_ids, iteration_llm_usage, IterationControl, IterationOutcome, IterationState};
+use super::iteration::{
+    IterationControl, IterationOutcome, IterationState, disclosed_skill_ids, iteration_llm_usage,
+};
 
 impl ReActLoop {
     pub(super) async fn dispatch_tool_call(
         &self,
         call: &contracts::ToolCall,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         doc_scope: &[String],
         session_id: Option<&str>,
     ) -> ToolResult {
@@ -29,13 +27,12 @@ impl ReActLoop {
             | "doc_summary" | "doc_metadata" | "doc_profile" => {
                 self.dispatch_rag_tool_call(call, auth, doc_scope).await
             }
-            "web_fetch" | "web_search" => {
-                self.dispatch_search(call, auth, session_id).await
-            }
-            "conversation_history_load" | "user_profile_load"
-            | "calculator" | "code_interpreter" | "weather_query" => {
-                self.dispatch_native(call, auth, session_id).await
-            }
+            "web_fetch" | "web_search" => self.dispatch_search(call, auth, session_id).await,
+            "conversation_history_load"
+            | "user_profile_load"
+            | "calculator"
+            | "code_interpreter"
+            | "weather_query" => self.dispatch_native(call, auth, session_id).await,
             _ => self.dispatch_native(call, auth, session_id).await,
         }
     }
@@ -43,7 +40,7 @@ impl ReActLoop {
     async fn dispatch_rag_tool_call(
         &self,
         call: &contracts::ToolCall,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         doc_scope: &[String],
     ) -> ToolResult {
         if let Some(runtime) = &self.rag_runtime {
@@ -62,7 +59,7 @@ impl ReActLoop {
     async fn dispatch_search(
         &self,
         call: &contracts::ToolCall,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         session_id: Option<&str>,
     ) -> ToolResult {
         self.dispatch_skill_tool(call, auth, session_id).await
@@ -71,7 +68,7 @@ impl ReActLoop {
     async fn dispatch_native(
         &self,
         call: &contracts::ToolCall,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         session_id: Option<&str>,
     ) -> ToolResult {
         self.dispatch_skill_tool(call, auth, session_id).await
@@ -80,7 +77,7 @@ impl ReActLoop {
     async fn dispatch_skill_tool(
         &self,
         call: &contracts::ToolCall,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         session_id: Option<&str>,
     ) -> contracts::ToolResult {
         let session_uuid = session_id.and_then(|id| uuid::Uuid::parse_str(id).ok());
@@ -98,13 +95,11 @@ impl ReActLoop {
     pub(super) async fn dispatch_native_tool_calls(
         &self,
         iteration: u8,
-        max_iterations: u8,
         _mode: &ModeConfig,
         request: &AgentRequest,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         _loop_exit: &super::config::LoopExitConfig,
         state: &mut IterationState,
-        optimizer: &LoopOptimizer,
         sink: &dyn AgentEventSink,
         llm_response: &LlmResponse,
         iter_start: std::time::Instant,
@@ -142,9 +137,6 @@ impl ReActLoop {
 
         self.update_state_after_tool_calls(
             state,
-            optimizer,
-            iteration,
-            max_iterations,
             &calls,
             &call_ids,
             llm_response,
@@ -170,9 +162,6 @@ impl ReActLoop {
     fn update_state_after_tool_calls(
         &self,
         state: &mut IterationState,
-        optimizer: &LoopOptimizer,
-        iteration: u8,
-        max_iterations: u8,
         calls: &[contracts::ToolCall],
         call_ids: &[String],
         llm_response: &LlmResponse,
@@ -186,34 +175,6 @@ impl ReActLoop {
         ));
         for tm in tool_messages {
             state.messages.push(tm);
-        }
-
-        let current_chunk_ids = extract_chunk_ids(&state.tool_results);
-        state.progress.record_iteration(iteration, &current_chunk_ids);
-        let remaining = max_iterations.saturating_sub(iteration + 1);
-        match optimizer.advise(
-            &state.progress,
-            &current_chunk_ids,
-            remaining,
-            max_iterations,
-        ) {
-            ContextAdjustment::DuplicateChunksHint {
-                chunk_ids,
-                first_seen_at,
-            } => {
-                state
-                    .messages
-                    .push(ChatMessage::system(build_duplicate_hint(
-                        &chunk_ids,
-                        &first_seen_at,
-                    )));
-            }
-            ContextAdjustment::BudgetWarning { remaining, max } => {
-                state
-                    .messages
-                    .push(ChatMessage::system(build_budget_warning(remaining, max)));
-            }
-            ContextAdjustment::None => {}
         }
 
         state.total_tool_calls += calls.len() as u32;

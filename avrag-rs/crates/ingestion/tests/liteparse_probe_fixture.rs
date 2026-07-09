@@ -1,11 +1,10 @@
 use std::path::PathBuf;
 
-use ingestion::parser::{ParsePlan, ParseRoute, ParseRouter, PdfPageBackend};
 use ingestion::LiteParseService;
+use ingestion::parser::{ParsePlan, ParseRoute, ParseRouter, PdfPageBackend};
 
 fn phase0_mini_pdf() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../docs/spike/fixtures/phase0-mini.pdf")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/spike/fixtures/phase0-mini.pdf")
 }
 
 #[test]
@@ -53,14 +52,16 @@ async fn liteparse_probe_and_extract_mini_pdf() {
     let blocks = snapshot.extract_blocks_for_pages(&[]);
     assert!(!blocks.is_empty(), "extract should yield text blocks");
     assert!(
-        blocks.iter().all(|b| b.bbox[2] >= b.bbox[0] && b.bbox[3] >= b.bbox[1]),
+        blocks
+            .iter()
+            .all(|b| b.bbox[2] >= b.bbox[0] && b.bbox[3] >= b.bbox[1]),
         "bbox should be normalized x0,y0,x1,y1"
     );
 }
 
 #[test]
 fn router_snapshot_handoff_preserves_probe_and_block_counts() {
-    use ingestion::parser::{ParsePlan, ParseRouter, probe_pdf_hybrid, ParseProbeConfig};
+    use ingestion::parser::{ParsePlan, ParseProbeConfig, ParseRouter, probe_pdf_hybrid};
 
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../docs/spike/fixtures/phase0-mini.pdf");

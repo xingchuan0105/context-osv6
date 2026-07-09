@@ -99,17 +99,12 @@ impl MultiModalEmbeddingInput {
     }
 
     pub fn estimate_tokens(&self) -> usize {
-        let text_tokens = self
-            .text
-            .as_deref()
-            .map(crate::count_tokens)
-            .unwrap_or(0);
+        let text_tokens = self.text.as_deref().map(crate::count_tokens).unwrap_or(0);
         let per_image = default_image_token_estimate();
         let image_tokens = self.image_count() * per_image;
         let video_tokens = usize::from(self.video.is_some()) * per_image;
         text_tokens + image_tokens + video_tokens
     }
-
 }
 
 fn build_dashscope_multimodal_contents(input: &MultiModalEmbeddingInput) -> Vec<serde_json::Value> {
@@ -267,6 +262,13 @@ impl EmbeddingClient {
             }
         }
 
+        anyhow::ensure!(
+            vectors.len() == texts.len(),
+            "embedding produced {} vectors for {} inputs (cache reassembly or provider mismatch)",
+            vectors.len(),
+            texts.len()
+        );
+
         Ok(vectors)
     }
 
@@ -411,7 +413,8 @@ impl EmbeddingClient {
             Some(crate::ApiStyle::DashScopeMultimodalEmbedding)
         ) || matches!(
             self.config.model.as_str(),
-            "qwen3-vl-embedding" | "tongyi-embedding-vision-plus-2026-03-06"
+            "qwen3-vl-embedding"
+                | "tongyi-embedding-vision-plus-2026-03-06"
                 | "tongyi-embedding-vision-flash-2026-03-06"
         )
     }
@@ -462,6 +465,13 @@ impl EmbeddingClient {
             .json()
             .await
             .context("Failed to parse embedding response")?;
+
+        anyhow::ensure!(
+            resp.data.len() == texts.len(),
+            "embedding provider returned {} vectors for {} texts",
+            resp.data.len(),
+            texts.len()
+        );
 
         Ok(resp.data.into_iter().map(|d| d.embedding).collect())
     }
@@ -636,6 +646,63 @@ mod tests {
             http_calls.load(Ordering::SeqCst),
             1,
             "second identical embed should hit Redis, not call HTTP again"
+        );
+    }
+
+    /// Provider returning fewer embeddings than texts must fail loud, not silently
+    /// truncate. No cache/Redis required: the HTTP mock responds with 2 embeddings
+    /// for a 3-text request, so the count assertion in `embed_openai_compatible_text`
+    /// (and the subsequent guard in `embed`) must surface an `Err`.
+    #[tokio::test]
+    async fn embed_fails_when_provider_returns_too_few_vectors() {
+        use axum::{Json, Router, routing::post};
+        use serde_json::json;
+
+        // Always respond with exactly 2 embedding entries, regardless of request size.
+        let app = Router::new().route(
+            "/embeddings",
+            post(|_req: Json<serde_json::Value>| async move {
+                let dim = 8usize;
+                let vector: Vec<f32> = (0..dim).map(|i| 0.1 + i as f32 * 0.01).collect();
+                let data: Vec<serde_json::Value> =
+                    (0..2).map(|_| json!({ "embedding": vector })).collect();
+                Json(json!({ "data": data }))
+            }),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock embedding listener");
+        let port = listener.local_addr().unwrap().port();
+        let base_url = format!("http://127.0.0.1:{port}");
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        // No `.with_cache(...)` → request always hits the HTTP mock.
+        let client = EmbeddingClient::new(ModelProviderConfig {
+            base_url,
+            api_key: "sk-test".to_string(),
+            model: "mock-embedding".to_string(),
+            timeout_ms: 5_000,
+            api_style: None,
+            dimensions: Some(8),
+            enable_thinking: None,
+            enable_cache: None,
+            rpm_limit: None,
+            tpm_limit: None,
+        });
+
+        // Request 3 texts; mock returns only 2 → must error, never truncate.
+        let result = client.embed(&["one", "two", "three"]).await;
+        assert!(
+            result.is_err(),
+            "embed() must return Err when provider returns fewer vectors than texts"
+        );
+        let message = result.unwrap_err().to_string();
+        assert!(
+            message.contains("vectors") && message.contains("texts"),
+            "error should explain the count mismatch, got: {message}"
         );
     }
 }

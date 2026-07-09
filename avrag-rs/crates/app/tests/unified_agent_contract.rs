@@ -32,8 +32,6 @@ fn base_request(kind: AgentKind) -> AgentRequest {
     AgentRequest {
         kind,
         query: "hello".to_string(),
-        resolved_query: "hello".to_string(),
-        query_resolution: None,
         notebook_id: None,
         session_id: None,
         doc_scope: vec![],
@@ -59,7 +57,7 @@ fn base_request(kind: AgentKind) -> AgentRequest {
 
 #[tokio::test]
 async fn chat_without_llm_returns_error() {
-    let agent = UnifiedAgent::new(None);
+    let agent = UnifiedAgent::new(None, None, None);
     let sink = CollectingSink::new();
     let req = base_request(AgentKind::Chat);
 
@@ -78,7 +76,7 @@ async fn chat_without_llm_returns_error() {
 
 #[tokio::test]
 async fn rag_without_doc_scope_returns_validation_error() {
-    let agent = UnifiedAgent::new(Some(dummy_llm()));
+    let agent = UnifiedAgent::new(Some(dummy_llm()), None, None);
     let sink = CollectingSink::new();
     let req = base_request(AgentKind::Rag);
 
@@ -97,7 +95,7 @@ async fn rag_without_doc_scope_returns_validation_error() {
 
 #[tokio::test]
 async fn rag_without_runtime_returns_error() {
-    let agent = UnifiedAgent::new(Some(dummy_llm()));
+    let agent = UnifiedAgent::new(Some(dummy_llm()), None, None);
     let sink = CollectingSink::new();
     let mut req = base_request(AgentKind::Rag);
     req.doc_scope = vec!["doc-1".to_string()];
@@ -117,7 +115,7 @@ async fn rag_without_runtime_returns_error() {
 
 #[tokio::test]
 async fn search_without_executor_returns_error() {
-    let agent = UnifiedAgent::new(Some(dummy_llm()));
+    let agent = UnifiedAgent::new(Some(dummy_llm()), None, None);
     let sink = CollectingSink::new();
     let req = base_request(AgentKind::Search);
 
@@ -134,13 +132,30 @@ async fn search_without_executor_returns_error() {
     );
 }
 
+#[tokio::test]
+async fn write_through_unified_agent_returns_not_implemented() {
+    let agent = UnifiedAgent::new(Some(dummy_llm()), None, None);
+    let sink = CollectingSink::new();
+    let req = base_request(AgentKind::Write);
+
+    let result = agent.run(req, &sink).await;
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(
+        err.code().contains("write_mode_not_implemented"),
+        "expected write_mode_not_implemented, got code={} message={}",
+        err.code(),
+        err.message()
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Routing decision events
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn chat_emits_routing_decision_event() {
-    let agent = UnifiedAgent::new(Some(dummy_llm()));
+    let agent = UnifiedAgent::new(Some(dummy_llm()), None, None);
     let sink = CollectingSink::new();
     let req = base_request(AgentKind::Chat);
 
@@ -149,7 +164,9 @@ async fn chat_emits_routing_decision_event() {
 
     let events = sink.events();
     assert!(
-        events.iter().any(|e| matches!(e, AgentEvent::RoutingDecision { mode_id, .. } if mode_id == "chat")),
+        events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::RoutingDecision { mode_id, .. } if mode_id == "chat")),
         "expected RoutingDecision event for chat mode, got events: {:?}",
         events
     );
@@ -157,7 +174,7 @@ async fn chat_emits_routing_decision_event() {
 
 #[tokio::test]
 async fn chat_emits_audit_record_for_routing() {
-    let agent = UnifiedAgent::new(Some(dummy_llm()));
+    let agent = UnifiedAgent::new(Some(dummy_llm()), None, None);
     let sink = CollectingSink::new();
     let req = base_request(AgentKind::Chat);
 
@@ -172,7 +189,7 @@ async fn chat_emits_audit_record_for_routing() {
 
 #[tokio::test]
 async fn chat_emits_activity_event() {
-    let agent = UnifiedAgent::new(Some(dummy_llm()));
+    let agent = UnifiedAgent::new(Some(dummy_llm()), None, None);
     let sink = CollectingSink::new();
     let req = base_request(AgentKind::Chat);
 
@@ -193,7 +210,7 @@ async fn chat_emits_activity_event() {
 
 #[tokio::test]
 async fn cancellation_aborts_run_promptly() {
-    let agent = UnifiedAgent::new(Some(dummy_llm()));
+    let agent = UnifiedAgent::new(Some(dummy_llm()), None, None);
     let sink = CollectingSink::new();
     let cancel = tokio_util::sync::CancellationToken::new();
     let mut req = base_request(AgentKind::Chat);
@@ -225,7 +242,7 @@ async fn cancellation_aborts_run_promptly() {
 #[test]
 fn unified_agent_builder_chain_compiles() {
     let llm = dummy_llm();
-    let _agent = UnifiedAgent::new(Some(llm.clone()))
+    let _agent = UnifiedAgent::new(Some(llm.clone()), None, None)
         .with_rag_runtime(None)
         .with_search_executor(None);
     // Builder chain compiles; field access is not tested because fields are private.

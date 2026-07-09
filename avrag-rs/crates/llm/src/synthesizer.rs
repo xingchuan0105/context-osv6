@@ -144,14 +144,16 @@ pub fn parse_synthesis_output(raw_output: &str) -> SynthesisOutput {
                 .answer_blocks
                 .iter()
                 .map(|block| match block {
-                    RawAnswerBlock::Text { text, citations } => contracts::chat::AnswerBlock::Text {
-                        text: text.trim().to_string(),
-                        citations: citations
-                            .iter()
-                            .map(|chunk_id| chunk_id.trim().to_string())
-                            .filter(|chunk_id| !chunk_id.is_empty())
-                            .collect(),
-                    },
+                    RawAnswerBlock::Text { text, citations } => {
+                        contracts::chat::AnswerBlock::Text {
+                            text: text.trim().to_string(),
+                            citations: citations
+                                .iter()
+                                .map(|chunk_id| chunk_id.trim().to_string())
+                                .filter(|chunk_id| !chunk_id.is_empty())
+                                .collect(),
+                        }
+                    }
                     RawAnswerBlock::Image { chunk_id } => contracts::chat::AnswerBlock::Image {
                         chunk_id: chunk_id.trim().to_string(),
                     },

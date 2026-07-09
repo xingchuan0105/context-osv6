@@ -4,8 +4,8 @@ use contracts::documents::DocumentStatus;
 use uuid::Uuid;
 
 pub use avrag_rag_core_ports::{
-    DocumentAssetRow, MultimodalChunkRow, NotificationCreateParams, ConversationHistoryHit,
-    ConversationHistoryScope, UserProfileRow,
+    ConversationHistoryHit, ConversationHistoryScope, DocumentAssetRow, MultimodalChunkRow,
+    NotificationCreateParams, UserProfileRow,
 };
 pub use common::IndexedChunk;
 

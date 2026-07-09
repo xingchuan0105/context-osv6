@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use ingestion::parser::{blocks_to_document_ir, LiteParseTextBlock};
+use ingestion::parser::{LiteParseTextBlock, blocks_to_document_ir};
 use ingestion::{DocumentType, ParseBackend};
 use uuid::Uuid;
 
@@ -29,7 +29,10 @@ fn liteparse_document_ir_contract() {
 
     assert_eq!(ir.doc_type, DocumentType::Pdf);
     assert_eq!(ir.primary_backend, ParseBackend::LiteParsePdf);
-    assert_eq!(ir.metadata.get("ingest_route_version").map(String::as_str), Some("liteparse-v1"));
+    assert_eq!(
+        ir.metadata.get("ingest_route_version").map(String::as_str),
+        Some("liteparse-v1")
+    );
     assert_eq!(ir.blocks.len(), 2);
     assert!(ir.blocks.iter().all(|b| b.source_locator.bbox.is_some()));
 }

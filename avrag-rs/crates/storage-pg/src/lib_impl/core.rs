@@ -1,34 +1,35 @@
-use avrag_auth::{ActorId, AuthContext, AuthError, OrgId};
-use chrono::{DateTime, Utc};
-use common::{
+use super::*;
+pub use contracts::auth_runtime::{ActorId, AuthContext, AuthError, OrgId};
+pub use chrono::{DateTime, Utc};
+pub use common::{
     merge_search_tokens, rrf_merge, segment_for_fts, ApiKeyRow, Document, DocumentContentResponse,
     NotificationRow, ParsedPreviewItem, ParsedPreviewResponse, SourceRow,
 };
-use contracts::chat::{ChatMessage, Citation};
-use contracts::documents::{DocumentStatus};
-use contracts::notebooks::{ChatSession, Notebook};
-use ingestion_types::{
+pub use contracts::chat::{ChatMessage, Citation};
+pub use contracts::documents::{DocumentStatus};
+pub use contracts::notebooks::{ChatSession, Notebook};
+pub use ingestion_types::{
     AuditRecord, IngestionTask, IngestionTaskKind, IngestionTaskPayload, TaskCompletionOutcome,
     TaskFailureOutcome,
 };
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use sha2::{Digest, Sha256};
-use sqlx::{
+pub use serde::{Deserialize, Serialize};
+pub use serde_json::json;
+pub use sha2::{Digest, Sha256};
+pub use sqlx::{
     PgPool, Postgres, Row, Transaction,
     postgres::{PgConnection, PgPoolOptions, PgRow},
 };
-use std::collections::HashMap;
-use thiserror::Error;
-use uuid::Uuid;
+pub use std::collections::HashMap;
+pub use thiserror::Error;
+pub use uuid::Uuid;
 
-pub use object_store::{
+pub use crate::object_store::{
     LocalObjectStore, ObjectStoreHandle, ObjectStoreHeadError, ObjectStoreMetadata, S3ObjectStore,
 };
 
 #[derive(Debug, Clone)]
 pub struct TenantPgPool {
-    pool: PgPool,
+    pub pool: PgPool,
 }
 
 impl TenantPgPool {
@@ -115,5 +116,37 @@ pub struct UserProfileRow {
 
 #[derive(Debug, Clone)]
 pub struct PgAppRepository {
-    pool: TenantPgPool,
+    pub pool: TenantPgPool,
+}
+
+macro_rules! define_repository {
+    ($name:ident) => {
+        #[derive(Debug, Clone)]
+        pub struct $name {
+            pub(crate) pool: TenantPgPool,
+        }
+    };
+}
+define_repository!(AuthRepository);
+define_repository!(AssetRepository);
+define_repository!(BootstrapRepository);
+define_repository!(IngestionQueueRepository);
+define_repository!(ConversationMemoryRepository);
+define_repository!(DocumentRepository);
+define_repository!(ChunkRepository);
+define_repository!(SessionRepository);
+define_repository!(AuditRepository);
+
+impl PgAppRepository {
+    pub fn raw(&self) -> &PgPool { self.pool.raw() }
+    pub fn from_pool(pool: PgPool) -> Self { Self { pool: TenantPgPool::new(pool) } }
+    pub fn auth(&self) -> AuthRepository { AuthRepository { pool: self.pool.clone() } }
+    pub fn assets(&self) -> AssetRepository { AssetRepository { pool: self.pool.clone() } }
+    pub fn bootstrap(&self) -> BootstrapRepository { BootstrapRepository { pool: self.pool.clone() } }
+    pub fn ingestion_queue(&self) -> IngestionQueueRepository { IngestionQueueRepository { pool: self.pool.clone() } }
+    pub fn conversation_memory(&self) -> ConversationMemoryRepository { ConversationMemoryRepository { pool: self.pool.clone() } }
+    pub fn documents(&self) -> DocumentRepository { DocumentRepository { pool: self.pool.clone() } }
+    pub fn chunks(&self) -> ChunkRepository { ChunkRepository { pool: self.pool.clone() } }
+    pub fn sessions(&self) -> SessionRepository { SessionRepository { pool: self.pool.clone() } }
+    pub fn audit(&self) -> AuditRepository { AuditRepository { pool: self.pool.clone() } }
 }

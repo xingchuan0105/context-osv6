@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use chrono::{Duration, Utc};
 use tracing::warn;
 use uuid::Uuid;
@@ -46,10 +46,8 @@ impl ShareService {
             bail!("insufficient permission to view share settings");
         }
         let notebook_uuid = Uuid::parse_str(notebook_id)?;
-        let (access_level, allow_download, share_tokens) = self
-            .store
-            .get_share_settings(ctx, notebook_uuid)
-            .await?;
+        let (access_level, allow_download, share_tokens) =
+            self.store.get_share_settings(ctx, notebook_uuid).await?;
         Ok(ShareSettings {
             access_level,
             allow_download,

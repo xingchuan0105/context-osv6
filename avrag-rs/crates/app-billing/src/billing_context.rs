@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
-use app_core::{util::non_empty_or_unknown, AnalyticsContext, CostEventRecord as AnalyticsCostRecord};
-use avrag_auth::AuthContext;
+use app_core::{
+    AnalyticsContext, CostEventRecord as AnalyticsCostRecord, util::non_empty_or_unknown,
+};
+use contracts::auth_runtime::AuthContext;
 use avrag_billing::usage_limit::BillableFeature;
 use avrag_llm::LlmUsage;
 use common::AppError;
@@ -89,12 +91,7 @@ impl BillingContext {
             .map(|v| v.into_uuid())
             .unwrap_or_else(Uuid::nil);
         let decision = qm
-            .check_quota(
-                auth.org_id().into_uuid(),
-                user_uuid,
-                metric_type,
-                requested,
-            )
+            .check_quota(auth.org_id().into_uuid(), user_uuid, metric_type, requested)
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;
 

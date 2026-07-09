@@ -225,7 +225,9 @@ async fn summarize_figure_with_vlm(
 
 #[cfg(test)]
 mod tests {
-    use ingestion::parser::{PageRouteKind, PdfImageFormat, PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteReason};
+    use ingestion::parser::{
+        PageRouteKind, PdfImageFormat, PdfPageBackend, PdfPagePlan, PdfParsePlan, RouteReason,
+    };
     use ingestion::{DocumentIr, DocumentType, ParseBackend};
 
     use super::*;

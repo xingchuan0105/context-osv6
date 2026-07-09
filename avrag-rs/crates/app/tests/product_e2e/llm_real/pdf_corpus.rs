@@ -11,18 +11,24 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::product_e2e::{
-    DocumentStatus, TestContext, setup,
+    DocumentStatus, TestContext,
     assertions::{
         assert_answer_substantive, assert_citation_doc_id, assert_has_citations,
         assert_liteparse_hybrid_backend_summary, assert_no_mineru_in_backend_summary,
     },
     llm_real::{
-        chat_with_citations_retry, chat_with_citations_retry_attempts, chat_with_retry,
-        merge_llm_real_extra, REAL_LLM_MULTITOOL_MAX_ATTEMPTS,
+        REAL_LLM_MULTITOOL_MAX_ATTEMPTS, chat_with_citations_retry,
+        chat_with_citations_retry_attempts, chat_with_retry, merge_llm_real_extra,
     },
+    setup,
 };
 
-const RETRIEVAL_TOOLS: &[&str] = &["dense_retrieval", "index_lookup", "doc_profile", "doc_summary"];
+const RETRIEVAL_TOOLS: &[&str] = &[
+    "dense_retrieval",
+    "index_lookup",
+    "doc_profile",
+    "doc_summary",
+];
 const BUNDLED_INGEST_TIMEOUT: Duration = Duration::from_secs(300);
 const STAGING_INGEST_TIMEOUT: Duration = Duration::from_secs(1200);
 
@@ -55,10 +61,7 @@ async fn ingest_pdf_with_routing_asserts(
     min_chunk_units: usize,
 ) -> crate::product_e2e::UploadResponse {
     eprintln!("[llm_real/pdf_corpus] uploading {path}");
-    let upload = ctx
-        .upload_file_from_path(path)
-        .await
-        .expect("upload pdf");
+    let upload = ctx.upload_file_from_path(path).await.expect("upload pdf");
     assert_eq!(upload.status, 201);
 
     let status = ctx
@@ -144,7 +147,10 @@ async fn real_llm_rag_bundled_pdf_corpus_query() {
             .iter()
             .any(|r| RETRIEVAL_TOOLS.contains(&r.tool.as_str())),
         "expected retrieval-class tool, got: {:?}",
-        resp.tool_results.iter().map(|r| &r.tool).collect::<Vec<_>>()
+        resp.tool_results
+            .iter()
+            .map(|r| &r.tool)
+            .collect::<Vec<_>>()
     );
 
     ctx.save_llm_artifact(
@@ -171,7 +177,10 @@ async fn real_llm_rag_multidoc_pdf_and_txt() {
     assert!(pdf_path.is_file(), "missing phase0-mini.pdf");
 
     let mut ctx = TestContext::new_with_real_llm().await;
-    let notebook = ctx.create_notebook("pdf-txt-corpus").await.expect("notebook");
+    let notebook = ctx
+        .create_notebook("pdf-txt-corpus")
+        .await
+        .expect("notebook");
 
     let pdf_upload = ctx
         .upload_file_from_path_to_notebook(&pdf_path.to_string_lossy(), &notebook.id)
@@ -246,8 +255,7 @@ async fn real_llm_rag_staging_local_book_pdf() {
     };
 
     let mut ctx = TestContext::new_with_real_llm_pdf().await;
-    let upload =
-        ingest_pdf_with_routing_asserts(&mut ctx, &path, STAGING_INGEST_TIMEOUT, 2).await;
+    let upload = ingest_pdf_with_routing_asserts(&mut ctx, &path, STAGING_INGEST_TIMEOUT, 2).await;
 
     let result = chat_with_retry(
         &ctx,

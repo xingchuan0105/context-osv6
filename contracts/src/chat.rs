@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use ts_rs::TS;
 use typeshare::typeshare;
-use std::collections::BTreeMap;
 
 #[typeshare]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,7 +46,7 @@ pub struct ChatTurnInput {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     #[typeshare(serialized_as = "number")]
-    pub id:  i64,
+    pub id: i64,
     pub session_id: String,
     pub role: String,
     pub content: String,
@@ -79,13 +79,13 @@ pub struct ChatMessageListResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Citation {
     #[typeshare(serialized_as = "number")]
-    pub citation_id:  i64,
+    pub citation_id: i64,
     pub doc_id: String,
     #[serde(default)]
     pub chunk_id: Option<String>,
     #[serde(default)]
     #[typeshare(serialized_as = "number")]
-    pub page:  Option<usize>,
+    pub page: Option<usize>,
     pub doc_name: String,
     #[serde(default)]
     pub preview: Option<String>,
@@ -111,7 +111,10 @@ pub struct Citation {
 }
 
 #[derive(TS, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[ts(export, export_to = "../../frontend_next/lib/contracts/generated/answer_block.ts")]
+#[ts(
+    export,
+    export_to = "../../frontend_next/lib/contracts/generated/answer_block.ts"
+)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum AnswerBlock {
     Text {
@@ -135,7 +138,7 @@ pub struct SourceRef {
     pub doc_id: Option<String>,
     #[serde(default)]
     #[typeshare(serialized_as = "number")]
-    pub page:  Option<usize>,
+    pub page: Option<usize>,
 }
 
 #[typeshare]
@@ -238,7 +241,9 @@ impl DegradeReason {
             }
             Self::AllToolsFailed => "all tool calls failed".to_string(),
             Self::ProviderUnavailable => "provider unavailable".to_string(),
-            Self::NoRetrievalEvidence => "no retrieval evidence after loop and fallback".to_string(),
+            Self::NoRetrievalEvidence => {
+                "no retrieval evidence after loop and fallback".to_string()
+            }
             Self::EmbeddingUnavailable => "embedding service unavailable".to_string(),
             Self::Other(msg) => msg.clone(),
             other => other.as_str().replace('_', " "),
@@ -457,15 +462,15 @@ pub struct GeneralPlan {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RagTraceSummary {
     #[typeshare(serialized_as = "number")]
-    pub item_count:  usize,
+    pub item_count: usize,
     #[typeshare(serialized_as = "number")]
-    pub total_candidate_budget:  usize,
+    pub total_candidate_budget: usize,
     #[typeshare(serialized_as = "number")]
-    pub max_rerank_docs:  usize,
+    pub max_rerank_docs: usize,
     #[typeshare(serialized_as = "number")]
-    pub max_final_chunks:  usize,
+    pub max_final_chunks: usize,
     #[typeshare(serialized_as = "number")]
-    pub top_k_returned:  usize,
+    pub top_k_returned: usize,
     pub summary_mode: String,
     pub items: Vec<RagTraceItem>,
 }
@@ -482,15 +487,15 @@ pub struct RagTraceItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
     #[typeshare(serialized_as = "number")]
-    pub recall_budget:  usize,
+    pub recall_budget: usize,
     #[typeshare(serialized_as = "number")]
-    pub bm25_k:  usize,
+    pub bm25_k: usize,
     #[typeshare(serialized_as = "number")]
-    pub dense_k:  usize,
+    pub dense_k: usize,
     #[typeshare(serialized_as = "number")]
-    pub rerank_budget:  usize,
+    pub rerank_budget: usize,
     #[typeshare(serialized_as = "number")]
-    pub source_count:  usize,
+    pub source_count: usize,
     #[serde(default)]
     pub source_ids: Vec<String>,
 }
@@ -519,7 +524,7 @@ pub struct RagModeDebug {
 pub struct SummaryInjectionTrace {
     pub mode: String,
     #[typeshare(serialized_as = "number")]
-    pub injected_count:  usize,
+    pub injected_count: usize,
 }
 
 #[typeshare]
@@ -539,13 +544,13 @@ pub enum ToolStatus {
 pub struct ToolTrace {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[typeshare(serialized_as = "number")]
-    pub elapsed_ms:  Option<u64>,
+    pub elapsed_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[typeshare(serialized_as = "number")]
-    pub raw_hit_count:  Option<usize>,
+    pub raw_hit_count: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[typeshare(serialized_as = "number")]
-    pub hydrated_hit_count:  Option<usize>,
+    pub hydrated_hit_count: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub degrade_reason: Option<String>,
 }
@@ -566,14 +571,14 @@ pub struct ToolResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatTokenUsage {
     #[typeshare(serialized_as = "number")]
-    pub prompt_tokens:  u64,
+    pub prompt_tokens: u64,
     #[typeshare(serialized_as = "number")]
-    pub completion_tokens:  u64,
+    pub completion_tokens: u64,
     #[typeshare(serialized_as = "number")]
-    pub total_tokens:  u64,
+    pub total_tokens: u64,
     #[serde(default)]
     #[typeshare(serialized_as = "number")]
-    pub cached_tokens:  u64,
+    pub cached_tokens: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -598,7 +603,7 @@ pub struct ChatResponse {
     pub mode_debug: Option<ModeDebug>,
     #[serde(default)]
     #[typeshare(serialized_as = "number")]
-    pub message_id:  Option<i64>,
+    pub message_id: Option<i64>,
     #[serde(default)]
     pub guard_report: Option<GuardReport>,
     #[serde(default)]
@@ -612,7 +617,10 @@ pub struct ChatResponse {
 
 #[typeshare]
 #[derive(TS, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[ts(export, export_to = "../../frontend_next/lib/contracts/generated/agent_operation_guide.ts")]
+#[ts(
+    export,
+    export_to = "../../frontend_next/lib/contracts/generated/agent_operation_guide.ts"
+)]
 pub struct AgentOperationGuide {
     pub mode: String,
     pub summary: String,
@@ -645,7 +653,10 @@ pub struct ChatActivitySourcePreview {
 ///
 /// SSE framing stays a transport concern handled by the HTTP layer.
 #[derive(TS, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[ts(export, export_to = "../../frontend_next/lib/contracts/generated/chat_event.ts")]
+#[ts(
+    export,
+    export_to = "../../frontend_next/lib/contracts/generated/chat_event.ts"
+)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum ChatEvent {
     Start {
@@ -745,6 +756,6 @@ pub enum MessageFeedbackRating {
 pub struct MessageFeedbackRequest {
     pub session_id: String,
     #[typeshare(serialized_as = "number")]
-    pub message_id:  i64,
+    pub message_id: i64,
     pub rating: MessageFeedbackRating,
 }

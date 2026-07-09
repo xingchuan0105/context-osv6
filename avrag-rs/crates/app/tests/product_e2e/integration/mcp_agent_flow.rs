@@ -13,9 +13,10 @@ use common::CreateApiKeyRequest;
 use serde_json::{Value, json};
 
 use crate::product_e2e::{
-    ChatResponse, TestContext, assertions::*, mock_servers::{
-        set_mock_rag_codegen_chunk_id, set_mock_rag_codegen_query,
-    }, setup,
+    ChatResponse, TestContext,
+    assertions::*,
+    mock_servers::{set_mock_rag_codegen_chunk_id, set_mock_rag_codegen_query},
+    setup,
 };
 
 /// POST `/api/v1/mcp` `tools/call` with a Bearer API key.

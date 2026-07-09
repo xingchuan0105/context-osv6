@@ -1,19 +1,19 @@
+use app_bootstrap::AppState;
 use app_chat::agents::{
     events::{AgentEvent, AgentEventSink},
     runtime::{Agent, AgentRequest, AgentRunResult, AgentRunUsage},
     service::UnifiedAgentService,
 };
-use app_bootstrap::AppState;
 use app_core::AppConfig;
-use avrag_auth::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
 use common::{CreateDocumentRequest, CreateNotebookRequest};
-use contracts::chat::{ChatResponse};
-use contracts::documents::{DocumentStatus};
 use contracts::chat::ChatEvent;
+use contracts::chat::ChatResponse;
+use contracts::documents::DocumentStatus;
 use http_body_util::BodyExt;
 use std::time::Duration;
 use tower::ServiceExt;
@@ -32,34 +32,38 @@ impl Agent for ScriptedAgent {
         // Simulate RAG-specific behaviour so that RAG contract tests can verify
         // end-to-end streaming without a real runtime.
         if request.kind == app_chat::agents::AgentKind::Rag {
-            let _ = sink.emit(AgentEvent::Activity {
-                stage: "planning".to_string(),
-                message: "planning".to_string(),
-            })
-            .await;
+            let _ = sink
+                .emit(AgentEvent::Activity {
+                    stage: "planning".to_string(),
+                    message: "planning".to_string(),
+                })
+                .await;
 
             if request.doc_scope.is_empty() {
                 let answer = "请选择一个或多个文档以继续。".to_string();
-                let _ = sink.emit(AgentEvent::MessageDelta {
-                    text: answer.clone(),
-                })
-                .await;
-                let _ = sink.emit(AgentEvent::Done {
-                    final_message: Some(answer.clone()),
-                    usage: None,
-                })
-                .await;
+                let _ = sink
+                    .emit(AgentEvent::MessageDelta {
+                        text: answer.clone(),
+                    })
+                    .await;
+                let _ = sink
+                    .emit(AgentEvent::Done {
+                        final_message: Some(answer.clone()),
+                        usage: None,
+                    })
+                    .await;
                 return Ok(AgentRunResult {
                     answer,
                     ..Default::default()
                 });
             }
 
-            let _ = sink.emit(AgentEvent::Activity {
-                stage: "retrieving".to_string(),
-                message: "retrieving".to_string(),
-            })
-            .await;
+            let _ = sink
+                .emit(AgentEvent::Activity {
+                    stage: "retrieving".to_string(),
+                    message: "retrieving".to_string(),
+                })
+                .await;
 
             return Err(common::AppError::validation(
                 "rag_runtime_not_configured",
@@ -67,24 +71,28 @@ impl Agent for ScriptedAgent {
             ));
         }
 
-        let _ = sink.emit(AgentEvent::Activity {
-            stage: "test".to_string(),
-            message: "test agent".to_string(),
-        })
-        .await;
-        let _ = sink.emit(AgentEvent::MessageDelta {
-            text: "scripted ".to_string(),
-        })
-        .await;
-        let _ = sink.emit(AgentEvent::MessageDelta {
-            text: "answer".to_string(),
-        })
-        .await;
-        let _ = sink.emit(AgentEvent::Done {
-            final_message: Some("scripted answer".to_string()),
-            usage: None,
-        })
-        .await;
+        let _ = sink
+            .emit(AgentEvent::Activity {
+                stage: "test".to_string(),
+                message: "test agent".to_string(),
+            })
+            .await;
+        let _ = sink
+            .emit(AgentEvent::MessageDelta {
+                text: "scripted ".to_string(),
+            })
+            .await;
+        let _ = sink
+            .emit(AgentEvent::MessageDelta {
+                text: "answer".to_string(),
+            })
+            .await;
+        let _ = sink
+            .emit(AgentEvent::Done {
+                final_message: Some("scripted answer".to_string()),
+                usage: None,
+            })
+            .await;
         Ok(AgentRunResult {
             answer: "scripted answer".to_string(),
             usage: Some(AgentRunUsage {

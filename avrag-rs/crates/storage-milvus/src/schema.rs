@@ -1,5 +1,5 @@
 use crate::config::MilvusConfig;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -62,7 +62,7 @@ pub fn schema_text(config: &MilvusConfig) -> (Value, Vec<Value>) {
             varchar_field("parse_run_id", 64, false, false, false),
             int64_field("doc_version", false),
             int64_field("page", true),
-            varchar_field("text", 65_535, false, false, true),
+            bm25_text_field("text", 65_535),
             float_vector_field("text_dense", config.text_vector_dim),
             sparse_vector_field("text_sparse"),
             varchar_field("chunk_type", 64, false, false, false),
@@ -215,6 +215,33 @@ pub fn varchar_field(
     nullable: bool,
     enable_analyzer: bool,
 ) -> Value {
+    varchar_field_with_analyzer(name, max_length, is_primary, nullable, enable_analyzer, None)
+}
+
+pub fn chinese_analyzer_params() -> Value {
+    json!({ "type": "chinese" })
+}
+
+/// VARCHAR field for BM25 full-text search on Chinese documents.
+pub fn bm25_text_field(name: &str, max_length: usize) -> Value {
+    varchar_field_with_analyzer(
+        name,
+        max_length,
+        false,
+        false,
+        true,
+        Some(chinese_analyzer_params()),
+    )
+}
+
+pub fn varchar_field_with_analyzer(
+    name: &str,
+    max_length: usize,
+    is_primary: bool,
+    nullable: bool,
+    enable_analyzer: bool,
+    analyzer_params: Option<Value>,
+) -> Value {
     let mut field = json!({
         "fieldName": name,
         "dataType": "VarChar",
@@ -230,6 +257,9 @@ pub fn varchar_field(
     }
     if enable_analyzer {
         field["elementTypeParams"]["enable_analyzer"] = json!(true);
+        if let Some(params) = analyzer_params {
+            field["elementTypeParams"]["analyzer_params"] = params;
+        }
     }
     field
 }
@@ -482,4 +512,51 @@ pub fn collection_names_from_response(response: &Value) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::MilvusConfig;
+
+    fn test_config() -> MilvusConfig {
+        MilvusConfig {
+            url: "http://localhost:19530".to_string(),
+            token: None,
+            database: Some("test".to_string()),
+            collection_prefix: "test".to_string(),
+            text_vector_dim: 4,
+            multimodal_vector_dim: 4,
+            metric_type: "L2".to_string(),
+        }
+    }
+
+    fn field_by_name<'a>(schema: &'a Value, name: &str) -> &'a Value {
+        schema_fields(schema)
+            .and_then(|fields| fields.iter().find(|field| field_name(field) == Some(name)))
+            .unwrap_or_else(|| panic!("field `{name}` not found"))
+    }
+
+    #[test]
+    fn schema_text_bm25_field_uses_chinese_analyzer() {
+        let (schema, _) = schema_text(&test_config());
+        let text_field = field_by_name(&schema, "text");
+        let params = &text_field["elementTypeParams"];
+        assert_eq!(params["enable_analyzer"], json!(true));
+        assert_eq!(params["analyzer_params"], json!({ "type": "chinese" }));
+    }
+
+    #[test]
+    fn varchar_field_with_analyzer_does_not_set_params_when_disabled() {
+        let field = varchar_field("caption", 128, false, true, false);
+        assert!(field["elementTypeParams"]["enable_analyzer"].is_null());
+        assert!(field["elementTypeParams"]["analyzer_params"].is_null());
+    }
+
+    #[test]
+    fn schema_text_non_bm25_fields_keep_standard_analyzer_default() {
+        let (schema, _) = schema_text(&test_config());
+        let chunk_type = field_by_name(&schema, "chunk_type");
+        assert!(chunk_type["elementTypeParams"]["enable_analyzer"].is_null());
+    }
 }

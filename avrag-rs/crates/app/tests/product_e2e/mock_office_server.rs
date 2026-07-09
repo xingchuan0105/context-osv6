@@ -259,10 +259,7 @@ async fn mock_office_healthz() -> axum::response::Response {
 }
 
 /// Start a mock Office Parser HTTP server (`/v1/parse/{docx,pptx,xlsx}`, `/v1/healthz`).
-pub async fn start_mock_office_parser_server() -> (
-    String,
-    tokio::sync::oneshot::Sender<()>,
-) {
+pub async fn start_mock_office_parser_server() -> (String, tokio::sync::oneshot::Sender<()>) {
     let (listener, base_url) = bind_persistent_listener().await;
     let app = Router::new()
         .route("/v1/healthz", get(mock_office_healthz))

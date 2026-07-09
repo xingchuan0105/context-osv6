@@ -60,5 +60,8 @@ async fn office_docx_staging_ingest_e2e() {
         .query_document_chunk_count(&upload.document_id)
         .await
         .expect("chunk count");
-    assert!(chunk_count > 0, "expected indexed chunks after real docx ingest");
+    assert!(
+        chunk_count > 0,
+        "expected indexed chunks after real docx ingest"
+    );
 }

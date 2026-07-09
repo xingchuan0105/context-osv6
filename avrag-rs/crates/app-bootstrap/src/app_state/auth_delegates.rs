@@ -1,4 +1,4 @@
-use avrag_auth::OrgId;
+use contracts::auth_runtime::OrgId;
 use common::AppError;
 use uuid::Uuid;
 
@@ -20,6 +20,7 @@ impl AppState {
     ) -> Result<Option<WorkspaceApiKeyAuth>, AppError> {
         if let Some(repo) = self.postgres_repo() {
             let validated = repo
+                .auth()
                 .validate_api_key(plaintext_key)
                 .await
                 .map_err(crate::pg_error::map_pg_error)?;

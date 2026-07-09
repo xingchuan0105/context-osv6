@@ -118,4 +118,3 @@ pub(crate) fn parse_rag_strategy_evaluation(raw: &str) -> Option<RagStrategyEval
     let json = extract_json_object(raw).unwrap_or_else(|| raw.trim().to_string());
     serde_json::from_str::<RagStrategyEvaluation>(&json).ok()
 }
-

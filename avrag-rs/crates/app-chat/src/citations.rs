@@ -1,7 +1,7 @@
 use app_core::parse_uuid_or_app_error;
 use app_documents::{infer_mime_type_from_path, is_remote_asset_reference};
-use common::{AppError};
-use contracts::documents::{CitationLookupResponse};
+use common::AppError;
+use contracts::documents::CitationLookupResponse;
 
 use crate::context::ChatContext;
 
@@ -20,8 +20,7 @@ impl ChatContext {
                 parse_uuid_or_app_error(session_id, "session_not_found", "session not found")?;
             let message = pg
                 .get_message(&self.auth, session_uuid, message_id)
-                .await
-                ?
+                .await?
                 .ok_or_else(|| AppError::not_found("message_not_found", "message not found"))?;
             let citation = message
                 .citations
@@ -35,13 +34,10 @@ impl ChatContext {
 
                 if let Some(multimodal) = pg
                     .get_multimodal_chunk_by_id(&self.auth, chunk_uuid)
-                    .await
-                    ?
+                    .await?
                 {
                     let asset = if let Some(asset_id) = multimodal.asset_id {
-                        pg.get_document_asset_by_id(&self.auth, asset_id)
-                            .await
-                            ?
+                        pg.get_document_asset_by_id(&self.auth, asset_id).await?
                     } else {
                         None
                     };
@@ -56,7 +52,7 @@ impl ChatContext {
                     });
                     let image_url = if let Some(asset) = asset.as_ref() {
                         self.documents
-                            .resolve_citation_asset_url(&self.storage, asset)
+                            .resolve_citation_asset_url(self.storage.objects(), asset)
                             .await
                     } else {
                         None
@@ -84,11 +80,7 @@ impl ChatContext {
                     });
                 }
 
-                if let Some(chunk) = pg
-                    .get_chunk_by_id(&self.auth, chunk_uuid)
-                    .await
-                    ?
-                {
+                if let Some(chunk) = pg.get_chunk_by_id(&self.auth, chunk_uuid).await? {
                     return Ok(CitationLookupResponse {
                         doc_name: Some(citation.doc_name),
                         content: Some(chunk.content),
@@ -187,8 +179,7 @@ impl ChatContext {
         let asset_uuid = parse_uuid_or_app_error(asset_id, "asset_not_found", "asset not found")?;
         let asset = pg
             .get_document_asset_by_id(&self.auth, asset_uuid)
-            .await
-            ?
+            .await?
             .ok_or_else(|| AppError::not_found("asset_not_found", "asset not found"))?;
         let storage_path = asset
             .storage_path
@@ -203,7 +194,8 @@ impl ChatContext {
 
         let bytes = self
             .storage
-            .object_store()
+            .objects()
+            .object_store
             .get(&storage_path)
             .await
             .map_err(|error| AppError::internal(error.to_string()))?;

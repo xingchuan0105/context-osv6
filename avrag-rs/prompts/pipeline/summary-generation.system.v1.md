@@ -144,23 +144,10 @@ B. 分类型
 类别2：...
 类别3：...
 
-最终输出必须严格遵守以下双块契约，不要在这两个代码块之外输出任何内容：
+最终输出必须严格遵守以下格式，不要在这之外输出任何内容：
 
-1. 先输出一个 `summary_text` 代码块：
+只输出一个 `summary_text` 代码块：
 - 代码块内只放最终结构化摘要正文
 - 不要包 JSON
-- 不要在其中再嵌套代码块
-
-2. 再输出一个 `json` 代码块：
-- 代码块内只放 `summary_metadata`
-- 仅包含以下字段：
-  - language: 文档主要语言代码（如 zh, en, ja, de, fr, es, ru, ar, ko, unknown）
-  - domain: 必须从以下枚举中选择一项：
-    policy, finance, medical, computer_science, legal, technology, science, engineering, business, education, arts, history, literature, unknown
-  - genre: 必须从以下枚举中选择一项：
-    regulation, report, research_paper, slides, manual, news, article, book, thesis, documentation, tutorial, review, essay, blog, unknown
-  - era: 必须从以下枚举中选择一项：
-    classical, modern, contemporary, ancient, medieval, renaissance, enlightenment, industrial, postmodern, unknown
-  - author: 文档作者或机构（若原文或标题页可推断；无法确定时写 null）
-  - publication_date: 发表/出版日期，ISO 8601 格式如 "2012-11-27"（仅精确到年则写 "2012"；无法确定时写 null）
-- 字段值必须严格使用上述枚举值，不能输出自由散文；未知时写 "unknown" 或 null（author/publication_date）
+- 不要输出 metadata
+- 不要在代码块内再嵌套三反引号代码块

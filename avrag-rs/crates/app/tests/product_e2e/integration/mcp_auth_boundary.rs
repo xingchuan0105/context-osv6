@@ -13,8 +13,8 @@ use common::CreateApiKeyRequest;
 use contracts::agent_permissions::PERM_ADMIN;
 use serde_json::{Value, json};
 
-use crate::product_e2e::TestContext;
 use super::mcp_agent_flow::mcp_tools_call;
+use crate::product_e2e::TestContext;
 
 /// Read the AppError code from a JSON-RPC error envelope (`error.data.error`).
 fn mcp_error_code(payload: &Value) -> Option<&str> {
@@ -73,8 +73,7 @@ async fn workspace_key_cannot_call_org_mcp_tool() {
     let notebook = ctx.create_notebook("boundary-ws").await.unwrap();
     let bearer = workspace_key(&ctx, &notebook.id, &["query"]).await;
 
-    let (status, payload) =
-        mcp_tools_call(&ctx, &bearer, "org.list_workspaces", json!({})).await;
+    let (status, payload) = mcp_tools_call(&ctx, &bearer, "org.list_workspaces", json!({})).await;
     assert_eq!(status, 200, "body: {payload}");
     assert_eq!(
         mcp_error_code(&payload),
@@ -117,10 +116,7 @@ async fn workspace_key_cannot_query_other_workspace() {
     )
     .await;
     assert_eq!(status, 200, "body: {payload}");
-    assert_eq!(
-        mcp_error_code(&payload),
-        Some("notebook_scope_mismatch")
-    );
+    assert_eq!(mcp_error_code(&payload), Some("notebook_scope_mismatch"));
 }
 
 #[tokio::test]
@@ -135,7 +131,10 @@ async fn api_key_cannot_list_notebook_notes() {
         .build()
         .expect("notes reqwest client");
     let resp = client
-        .get(format!("{}/api/v1/notebooks/{}/notes", ctx.base_url, notebook.id))
+        .get(format!(
+            "{}/api/v1/notebooks/{}/notes",
+            ctx.base_url, notebook.id
+        ))
         .header("Authorization", format!("Bearer {bearer}"))
         .send()
         .await

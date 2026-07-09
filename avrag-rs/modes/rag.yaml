@@ -3,7 +3,7 @@ system_prompt_base: prompts/orchestrators/rag-system.md
 tool_pool: []
 inject_retrieval_query: true
 skill_catalog:
-  retrieve: [codegen, memory]
+  retrieve: [codegen, memory, metadata]
   synthesis: [writing, format]
   mandatory:
     retrieve: [codegen]
@@ -19,10 +19,6 @@ auto_fallback:
   tool_id: dense_retrieval
   top_k: 10
 temperature: 0.3
-query_normalization:
-  enabled: true
-  max_prior_turns: 6
-  llm_fallback: true
 loop_exit:
   require_evidence: true
   allow_content_early_stop: false

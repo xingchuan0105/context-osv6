@@ -30,11 +30,7 @@ async fn concurrent_rag_queries_are_safe_on_codegen_bridge() {
 
     let doc_scope = vec![upload.document_id.clone()];
     let (http1, http2) = tokio::join!(
-        ctx.chat_without_mock_chunk_pin(
-            "What is antifragility?",
-            &upload.notebook_id,
-            &doc_scope,
-        ),
+        ctx.chat_without_mock_chunk_pin("What is antifragility?", &upload.notebook_id, &doc_scope,),
         ctx.chat_without_mock_chunk_pin(
             "What is the Lindy Effect described in this document?",
             &upload.notebook_id,

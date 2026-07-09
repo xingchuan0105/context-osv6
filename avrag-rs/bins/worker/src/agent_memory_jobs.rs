@@ -382,7 +382,10 @@ mod tests {
                 no_change: Vec::new(),
             },
         ];
-        truncate_agent_daily_log(&mut preferences, NaiveDate::from_ymd_opt(2026, 6, 14).unwrap());
+        truncate_agent_daily_log(
+            &mut preferences,
+            NaiveDate::from_ymd_opt(2026, 6, 14).unwrap(),
+        );
         assert_eq!(preferences.agent_memory.daily_log.len(), 1);
         assert_eq!(preferences.agent_memory.daily_log[0].date, "2026-06-01");
     }

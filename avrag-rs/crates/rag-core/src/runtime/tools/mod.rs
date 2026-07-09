@@ -1,12 +1,13 @@
 pub mod dense;
 pub mod doc_metadata;
 pub mod doc_profile;
+pub mod doc_scan;
 pub mod doc_summary;
 pub mod graph;
 pub mod index_lookup;
 pub mod lexical;
 
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_retrieval_data_plane::ScoredChunk;
 use contracts::{ToolCall, ToolResult, ToolStatus};
 
@@ -22,6 +23,7 @@ pub async fn dispatch(runtime: &RagRuntime, auth: &AuthContext, call: &ToolCall)
         "doc_summary" => doc_summary::run(runtime, auth, &call.args).await,
         "doc_metadata" => doc_metadata::run(runtime, auth, &call.args).await,
         "doc_profile" => doc_profile::run(runtime, auth, &call.args).await,
+        "doc_scan" => doc_scan::run(runtime, auth, &call.args).await,
         other => ToolResult {
             tool: other.to_string(),
             version: call.version.clone(),
@@ -64,9 +66,8 @@ pub(crate) fn scored_chunk_to_json(chunk: &ScoredChunk) -> serde_json::Value {
     });
     if is_page_raster {
         value["modality"] = serde_json::json!("page_raster");
-        value["retrieval_hint"] = serde_json::json!(
-            "该片段来自页图向量，无 OCR 正文；引用请标注页码范围"
-        );
+        value["retrieval_hint"] =
+            serde_json::json!("该片段来自页图向量，无 OCR 正文；引用请标注页码范围");
         if let Some(locator) = &chunk.source_locator {
             for key in ["page_range_start", "page_range_end", "page_numbers"] {
                 if let Some(entry) = locator.get(key).and_then(|v| v.as_str()) {

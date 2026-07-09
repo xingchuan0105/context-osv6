@@ -32,11 +32,10 @@ mod tests {
 
     #[test]
     fn accepts_published_versions() {
-        assert!(validate_published_legal_versions(
-            PUBLISHED_TERMS_VERSION,
-            PUBLISHED_PRIVACY_VERSION
-        )
-        .is_ok());
+        assert!(
+            validate_published_legal_versions(PUBLISHED_TERMS_VERSION, PUBLISHED_PRIVACY_VERSION)
+                .is_ok()
+        );
     }
 
     #[test]

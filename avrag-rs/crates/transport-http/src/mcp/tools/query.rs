@@ -2,7 +2,7 @@ use app_bootstrap::AppState;
 use common::AppError;
 use contracts::chat::ChatRequest;
 use contracts::documents::DocumentStatus;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::auth_guard::{authorize_workspace_tool, query_permission, require_notebook_id_arg};
 

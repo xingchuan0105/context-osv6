@@ -1,6 +1,4 @@
-use super::config_types::{
-    EvidenceGateConfig, LoopExitConfig, ModeConfig,
-};
+use super::config_types::{LoopExitConfig, ModeConfig};
 
 pub fn load_mode_config(mode_id: &str) -> Result<ModeConfig, common::AppError> {
     let mut resolved_path = std::path::PathBuf::from(format!("modes/{}.yaml", mode_id));
@@ -60,10 +58,6 @@ impl ModeConfig {
             cfg.require_evidence = true;
             cfg.allow_content_early_stop = false;
             cfg.skip_synthesis_on_direct_answer = false;
-        }
-        // Enable evidence gate by default for RAG and search modes
-        if (self.id == "rag" || self.id == "search") && cfg.evidence_gate.is_none() {
-            cfg.evidence_gate = Some(EvidenceGateConfig::default());
         }
         cfg
     }

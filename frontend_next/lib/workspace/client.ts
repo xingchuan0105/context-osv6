@@ -20,6 +20,25 @@ export type Workspace = {
   shared?: boolean;
 };
 
+export type RawNotebook = {
+  id: string;
+  org_id: string;
+  owner_id: string;
+  name: string;
+  title: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+  document_count?: number;
+  status_summary?: Record<string, number>;
+  shared?: boolean;
+};
+
+export function mapNotebook(raw: RawNotebook): Workspace {
+  const { id, ...rest } = raw;
+  return { ...rest, workspace_id: id };
+}
+
 export type WorkspaceResponse = {
   workspace: Workspace;
 };
@@ -137,16 +156,13 @@ export type WorkspaceMessageFeedbackRequest = {
 type EmptyResponse = Record<string, never>;
 
 export async function getWorkspace(token: string, workspace_id: string): Promise<WorkspaceResponse> {
-  const resp = await request<{ notebook: Omit<Workspace, "workspace_id"> & { id: string } }>(
+  const resp = await request<{ notebook: RawNotebook }>(
     `/api/v1/notebooks/${workspace_id}`,
     { method: "GET" },
     token,
   );
 
-  const { id, ...notebook } = resp.notebook;
-  return {
-    workspace: { ...notebook, workspace_id: id },
-  };
+  return { workspace: mapNotebook(resp.notebook) };
 }
 
 export async function updateWorkspace(
@@ -154,7 +170,7 @@ export async function updateWorkspace(
   workspace_id: string,
   requestBody: { name: string; description: string },
 ): Promise<WorkspaceResponse> {
-  const resp = await request<{ notebook: Omit<Workspace, "workspace_id"> & { id: string } }>(
+  const resp = await request<{ notebook: RawNotebook }>(
     `/api/v1/notebooks/${workspace_id}`,
     {
       method: "PUT",
@@ -163,10 +179,7 @@ export async function updateWorkspace(
     token,
   );
 
-  const { id, ...notebook } = resp.notebook;
-  return {
-    workspace: { ...notebook, workspace_id: id },
-  };
+  return { workspace: mapNotebook(resp.notebook) };
 }
 
 export async function listWorkspaceSessions(

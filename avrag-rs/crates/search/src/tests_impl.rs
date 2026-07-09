@@ -22,9 +22,9 @@ async fn missing_brave_key_is_explicit_error() {
         language: None,
         format_hint: None,
     };
-    let auth = avrag_auth::AuthContext::new(
-        avrag_auth::OrgId::from(uuid::Uuid::nil()),
-        avrag_auth::SubjectKind::User,
+    let auth = contracts::auth_runtime::AuthContext::new(
+        contracts::auth_runtime::OrgId::from(uuid::Uuid::nil()),
+        contracts::auth_runtime::SubjectKind::User,
     );
     let error = executor.execute(&request, &auth).await.unwrap_err();
     assert!(
@@ -54,9 +54,9 @@ async fn unsupported_provider_is_explicit_error() {
         language: None,
         format_hint: None,
     };
-    let auth = avrag_auth::AuthContext::new(
-        avrag_auth::OrgId::from(uuid::Uuid::nil()),
-        avrag_auth::SubjectKind::User,
+    let auth = contracts::auth_runtime::AuthContext::new(
+        contracts::auth_runtime::OrgId::from(uuid::Uuid::nil()),
+        contracts::auth_runtime::SubjectKind::User,
     );
     let error = executor.execute(&request, &auth).await.unwrap_err();
     assert!(
@@ -114,9 +114,9 @@ async fn brave_llm_context_live_smoke_returns_grounding_sources() {
         language: None,
         format_hint: None,
     };
-    let auth = avrag_auth::AuthContext::new(
-        avrag_auth::OrgId::from(uuid::Uuid::nil()),
-        avrag_auth::SubjectKind::User,
+    let auth = contracts::auth_runtime::AuthContext::new(
+        contracts::auth_runtime::OrgId::from(uuid::Uuid::nil()),
+        contracts::auth_runtime::SubjectKind::User,
     );
 
     let response = executor.execute(&request, &auth).await.unwrap();

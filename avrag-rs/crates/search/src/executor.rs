@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use contracts::chat::ChatRequest;
 use reqwest::Client;
 
@@ -36,9 +36,7 @@ impl SearchExecutor {
                 builder = builder.proxy(proxy);
             }
         }
-        let client = builder
-            .build()
-            .unwrap_or_else(|_| Client::new());
+        let client = builder.build().unwrap_or_else(|_| Client::new());
         Self { config, client }
     }
 

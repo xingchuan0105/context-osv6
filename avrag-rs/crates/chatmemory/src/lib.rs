@@ -1,5 +1,5 @@
-use app_core::{ChatPersistencePort, UserProfileRow};
-use avrag_auth::AuthContext;
+use app_core::{MessagePort, ProfilePort, UserProfileRow};
+use contracts::auth_runtime::AuthContext;
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -29,13 +29,20 @@ pub struct Layer3Profile {
     pub inference_version: String,
 }
 
+/// Holds only the ISP facets chat-memory actually uses (messages + profile).
 pub struct ChatMemory {
-    persistence: Arc<dyn ChatPersistencePort>,
+    messages: Arc<dyn MessagePort>,
+    profile: Arc<dyn ProfilePort>,
 }
 
 impl ChatMemory {
-    pub fn new(persistence: Arc<dyn ChatPersistencePort>) -> Self {
-        Self { persistence }
+    /// Construct from a concrete store that implements both focused ports.
+    ///
+    /// Pass the same `Arc` twice when the adapter implements both traits
+    /// (e.g. `PgChatPersistenceAdapter`); Rust coerces each clone to the
+    /// narrower trait object.
+    pub fn new(messages: Arc<dyn MessagePort>, profile: Arc<dyn ProfilePort>) -> Self {
+        Self { messages, profile }
     }
 
     pub async fn load(
@@ -43,11 +50,11 @@ impl ChatMemory {
         auth: &AuthContext,
         session_id: Uuid,
     ) -> anyhow::Result<ChatMemoryData> {
-        let messages = self.persistence.list_messages(auth, session_id).await?;
+        let messages = self.messages.list_messages(auth, session_id).await?;
 
         let actor_id = auth.actor_id().map(|value| value.into_uuid());
         let profile = if let Some(user_id) = actor_id {
-            self.persistence
+            self.profile
                 .get_user_profile(auth, user_id)
                 .await?
                 .map(map_profile)
@@ -91,7 +98,7 @@ impl ChatMemory {
             inferred_at: Utc::now(),
             inference_version: update.inference_version,
         };
-        self.persistence.upsert_user_profile(auth, &profile).await?;
+        self.profile.upsert_user_profile(auth, &profile).await?;
         Ok(())
     }
 }

@@ -1,30 +1,31 @@
 use crate::core::build_plan_payloads;
-use crate::webhook_parse::subscription_snapshot_from_event;
 use crate::stripe_client::StripeClient;
 use crate::types::{BillingConfig, HmacSha256, PLAN_PRO, STATUS_ACTIVE};
+use crate::webhook_parse::subscription_snapshot_from_event;
 use hmac::Mac;
 use std::sync::Mutex;
 
 static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
 #[test]
-fn billing_config_prefers_v5_env_names() {
+fn billing_config_marks_checkout_available_for_creem_and_alipay() {
     let _guard = ENV_MUTEX.lock().unwrap();
-    set_env("STRIPE_PRICE_PRO", "price_pro_v5");
-    set_env("STRIPE_PRICE_ENTERPRISE", "price_plus_v5");
-    set_env("BILLING_PRICE_LABEL_PRO", "$29/month");
-    set_env("BILLING_PRICE_LABEL_ENTERPRISE", "Talk to sales");
-    set_env("STRIPE_SECRET_KEY", "sk_test");
-    remove_env("STRIPE_PRICE_PRO_MONTHLY");
-    remove_env("STRIPE_PRICE_ID");
+    remove_env("STRIPE_SECRET_KEY");
+    set_env("CREEM_API_KEY", "creem_test");
+    set_env("CREEM_PRODUCT_PRO", "prod_pro");
+    set_env("CREEM_PRODUCT_PLUS", "prod_plus");
+    set_env("ALIPAY_APP_ID", "alipay_test");
+    set_env("ALIPAY_PRICE_PRO", "39.00");
+    set_env("ALIPAY_PRICE_PLUS", "19.00");
+    set_env("CREEM_PRICE_PRO", "5.99");
+    set_env("CREEM_PRICE_PLUS", "3.19");
 
     let config = BillingConfig::from_env();
 
-    assert_eq!(config.stripe_price_pro, "price_pro_v5");
-    assert_eq!(config.stripe_price_plus, "price_plus_v5");
-    assert_eq!(config.billing_price_label_pro, "$29/month");
-    assert_eq!(config.billing_price_label_plus, "Talk to sales");
     assert!(config.checkout_available(PLAN_PRO));
+    assert_eq!(config.price_label_cny_for_plan("plus"), "¥19.00 / 月");
+    assert_eq!(config.price_label_usd_for_plan("plus"), "$3.19 / 月");
+    assert_eq!(BillingConfig::decimal_price_to_cents("19.00"), 1900);
 }
 
 #[test]
@@ -33,7 +34,11 @@ fn billing_config_falls_back_to_legacy_price_envs() {
     remove_env("STRIPE_PRICE_PRO");
     remove_env("STRIPE_PRICE_ENTERPRISE");
     remove_env("BILLING_PRICE_LABEL_PRO");
-    remove_env("BILLING_PRICE_LABEL_ENTERPRISE");
+    remove_env("BILLING_PRICE_LABEL_PLUS");
+    remove_env("ALIPAY_PRICE_PRO");
+    remove_env("ALIPAY_PRICE_PLUS");
+    remove_env("CREEM_PRICE_PRO");
+    remove_env("CREEM_PRICE_PLUS");
     set_env("STRIPE_SECRET_KEY", "sk_test");
     set_env("STRIPE_PRICE_PRO_MONTHLY", "price_pro_legacy");
 
@@ -42,7 +47,7 @@ fn billing_config_falls_back_to_legacy_price_envs() {
     assert_eq!(config.stripe_price_pro, "price_pro_legacy");
     assert_eq!(
         config.price_label_for_plan(PLAN_PRO),
-        "¥129 / 月 · $19 / 月"
+        "¥39.00 / 月 · $5.99 / 月"
     );
 }
 
@@ -223,9 +228,10 @@ fn alipay_real_key_loads_and_signs() {
 #[test]
 fn plans_endpoint_emits_dual_currency_price_labels_for_plus_and_pro() {
     let _guard = ENV_MUTEX.lock().unwrap();
-    // Drop env overrides so we observe the hard-coded Task-3 fallbacks.
-    remove_env("BILLING_PRICE_LABEL_PRO");
-    remove_env("BILLING_PRICE_LABEL_PLUS");
+    set_env("ALIPAY_PRICE_PLUS", "19.00");
+    set_env("ALIPAY_PRICE_PRO", "39.00");
+    set_env("CREEM_PRICE_PLUS", "3.19");
+    set_env("CREEM_PRICE_PRO", "5.99");
     let config = BillingConfig::from_env();
 
     let plans = build_plan_payloads(&config, "free", &Default::default());
@@ -243,13 +249,13 @@ fn plans_endpoint_emits_dual_currency_price_labels_for_plus_and_pro() {
         .expect("plus plan present");
     assert_eq!(
         plus.get("price_label_cny").and_then(|v| v.as_str()),
-        Some("¥49 / 月"),
-        "plus plan should carry the CNY price label (¥49 / 月)"
+        Some("¥19.00 / 月"),
+        "plus plan should carry the CNY price label from ALIPAY_PRICE_PLUS"
     );
     assert_eq!(
         plus.get("price_label_usd").and_then(|v| v.as_str()),
-        Some("$9 / 月"),
-        "plus plan should carry the USD price label ($9 / 月)"
+        Some("$3.19 / 月"),
+        "plus plan should carry the USD price label from CREEM_PRICE_PLUS"
     );
 
     let pro = plans
@@ -258,11 +264,11 @@ fn plans_endpoint_emits_dual_currency_price_labels_for_plus_and_pro() {
         .expect("pro plan present");
     assert_eq!(
         pro.get("price_label_cny").and_then(|v| v.as_str()),
-        Some("¥129 / 月"),
+        Some("¥39.00 / 月"),
     );
     assert_eq!(
         pro.get("price_label_usd").and_then(|v| v.as_str()),
-        Some("$19 / 月"),
+        Some("$5.99 / 月"),
     );
 }
 

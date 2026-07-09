@@ -115,9 +115,7 @@ pub fn apply_profile_delta(existing: serde_json::Value, delta: ProfileDelta) -> 
     apply_hint_updates_from_typed(&mut profile, &delta.session_continuity_hints, &today);
 
     if !delta.observed_conflicts.is_empty() {
-        if let Some(existing_conflicts) =
-            ensure_array_slot(&mut profile, "observed_conflicts")
-        {
+        if let Some(existing_conflicts) = ensure_array_slot(&mut profile, "observed_conflicts") {
             for conflict in &delta.observed_conflicts {
                 let c = conflict_to_value(conflict);
                 let is_dup = existing_conflicts.iter().any(|e| {
@@ -409,8 +407,8 @@ fn apply_hint_updates_from_typed(
     let cutoff = (chrono::NaiveDate::parse_from_str(today, "%Y-%m-%d")
         .unwrap_or_else(|_| chrono::Utc::now().date_naive())
         - chrono::Duration::days(7))
-        .format("%Y-%m-%d")
-        .to_string();
+    .format("%Y-%m-%d")
+    .to_string();
     slot_arr.retain(|h| {
         h.get("created_at")
             .and_then(|v| v.as_str())
@@ -474,7 +472,8 @@ pub(crate) fn apply_singleton_update(
     update: Option<&serde_json::Value>,
     today: &str,
 ) {
-    let typed: Option<SingletonUpdate> = update.and_then(|v| serde_json::from_value(v.clone()).ok());
+    let typed: Option<SingletonUpdate> =
+        update.and_then(|v| serde_json::from_value(v.clone()).ok());
     apply_singleton_update_from_typed(profile, key, typed.as_ref(), today);
 }
 

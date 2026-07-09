@@ -117,18 +117,20 @@ impl UsageLimitService {
         let plan_id = self.store.get_user_plan(user_id).await?;
         let plan_row = self.store.load_plan_policy(&plan_id).await?;
         let (default_5h, default_7d, plan_enabled) = plan_row
-            .map(|row| (row.rolling_5h_limit_units, row.rolling_7d_limit_units, row.enabled))
+            .map(|row| {
+                (
+                    row.rolling_5h_limit_units,
+                    row.rolling_7d_limit_units,
+                    row.enabled,
+                )
+            })
             .unwrap_or((100, 1000, true));
 
         if let Some(row) = override_row {
             return Ok(UsageLimitPolicy {
                 enabled: row.enabled,
-                rolling_5h_limit_units: row
-                    .rolling_5h_limit_units
-                    .unwrap_or(default_5h),
-                rolling_7d_limit_units: row
-                    .rolling_7d_limit_units
-                    .unwrap_or(default_7d),
+                rolling_5h_limit_units: row.rolling_5h_limit_units.unwrap_or(default_5h),
+                rolling_7d_limit_units: row.rolling_7d_limit_units.unwrap_or(default_7d),
             });
         }
 

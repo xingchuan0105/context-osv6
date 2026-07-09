@@ -19,12 +19,7 @@ fn read_shard_list(adapter_dir: &str) -> Vec<String> {
         .collect()
 }
 
-fn assemble_port_impl(
-    adapter_dir: &str,
-    trait_name: &str,
-    adapter_name: &str,
-    out_file: &str,
-) {
+fn assemble_port_impl(adapter_dir: &str, trait_name: &str, adapter_name: &str, out_file: &str) {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR");
     let shards = read_shard_list(adapter_dir);
@@ -45,9 +40,7 @@ fn assemble_port_impl(
         }
     }
 
-    let generated = format!(
-        "#[async_trait]\nimpl {trait_name} for {adapter_name} {{\n{body}}}\n"
-    );
+    let generated = format!("#[async_trait]\nimpl {trait_name} for {adapter_name} {{\n{body}}}\n");
     let out_path = Path::new(&out_dir).join(out_file);
     fs::write(&out_path, generated).unwrap_or_else(|error| {
         panic!("failed to write {}: {error}", out_path.display());

@@ -1,5 +1,5 @@
-use avrag_auth::AuthContext;
-use common::{TocEntry};
+use contracts::auth_runtime::AuthContext;
+use common::TocEntry;
 use contracts::{DocProfileArgs, ToolResult, ToolStatus, ToolTrace};
 use uuid::Uuid;
 
@@ -68,7 +68,8 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                     .push(entry);
             }
 
-            let include = |field: &str| args.fields.is_empty() || args.fields.iter().any(|f| f == field);
+            let include =
+                |field: &str| args.fields.is_empty() || args.fields.iter().any(|f| f == field);
 
             let filtered: Vec<_> = metadata_list
                 .into_iter()

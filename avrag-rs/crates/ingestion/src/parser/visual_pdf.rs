@@ -47,10 +47,9 @@ impl VisualPdfParser {
         document
             .metadata
             .insert("ingest_route".to_string(), "visual".to_string());
-        document.metadata.insert(
-            "visual_pages_per_chunk".to_string(),
-            chunk_size.to_string(),
-        );
+        document
+            .metadata
+            .insert("visual_pages_per_chunk".to_string(), chunk_size.to_string());
 
         let mut sorted_pages = page_numbers.to_vec();
         sorted_pages.sort_unstable();

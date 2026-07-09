@@ -5,7 +5,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-trap 'docker ps -aq --filter name=avrag-test- | xargs -r docker rm -f' EXIT
+# Ephemeral avrag-test-* PG containers are intentionally left running for
+# reuse across e2e runs (see AGENTS.md). Set E2E_PRUNE_TEST_PG=1 to force teardown.
+if [[ "${E2E_PRUNE_TEST_PG:-0}" == "1" ]]; then
+  trap 'docker ps -aq --filter name=avrag-test- | xargs -r docker rm -f' EXIT
+fi
 
 if [[ -f .env ]]; then
   set -a

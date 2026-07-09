@@ -1,8 +1,8 @@
-use super::{PageRouteKind, PdfPageBackend, RouteDecision, RouteReason};
-use super::super::probe::{
-    PdfPageProbeResult, BIGRAM_REPEAT_THRESHOLD, PAGE_TEXT_THRESHOLD, UNIQUE_TOKEN_THRESHOLD,
-};
 use super::super::ParseProbeConfig;
+use super::super::probe::{
+    BIGRAM_REPEAT_THRESHOLD, PAGE_TEXT_THRESHOLD, PdfPageProbeResult, UNIQUE_TOKEN_THRESHOLD,
+};
+use super::{PageRouteKind, PdfPageBackend, RouteDecision, RouteReason};
 
 /// §5.2 priority: D → C → B → A (combinable).
 pub(in crate::parser::router) fn classify_page_routes(
@@ -28,10 +28,9 @@ pub(in crate::parser::router) fn classify_page_routes(
     }
 
     let garbled = page.table_garbled_ratio.unwrap_or(0.0);
-    let table_garble_heavy =
-        page.table_hint_count > 0 && garbled > config.table_garble_threshold;
-    let table_ocr = table_garble_heavy
-        || (!is_scan && page.table_hint_count > config.table_heavy_threshold);
+    let table_garble_heavy = page.table_hint_count > 0 && garbled > config.table_garble_threshold;
+    let table_ocr =
+        table_garble_heavy || (!is_scan && page.table_hint_count > config.table_heavy_threshold);
     if table_ocr {
         routes.push(PageRouteKind::TableOcr);
     }
@@ -58,8 +57,14 @@ pub(in crate::parser::router) fn classify_page_routes(
 }
 
 pub(in crate::parser::router) fn routes_to_backend(routes: &[PageRouteKind]) -> PdfPageBackend {
-    if routes.iter().any(|r| matches!(r, PageRouteKind::ScanOcr | PageRouteKind::TableOcr)) {
-        if routes.iter().any(|r| matches!(r, PageRouteKind::Text | PageRouteKind::Figure)) {
+    if routes
+        .iter()
+        .any(|r| matches!(r, PageRouteKind::ScanOcr | PageRouteKind::TableOcr))
+    {
+        if routes
+            .iter()
+            .any(|r| matches!(r, PageRouteKind::Text | PageRouteKind::Figure))
+        {
             // Combined page: text via LiteParse, OCR via paddle in worker
             PdfPageBackend::LITEPARSE_TEXT
         } else {

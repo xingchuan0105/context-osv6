@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use common::AppError;
 
 use crate::StorageContext;

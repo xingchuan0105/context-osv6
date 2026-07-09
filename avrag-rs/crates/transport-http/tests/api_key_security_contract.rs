@@ -32,11 +32,7 @@ fn register_body(email: &str, full_name: &str) -> String {
     )
 }
 
-async fn register_and_get_token(
-    app: &axum::Router,
-    email: &str,
-    full_name: &str,
-) -> String {
+async fn register_and_get_token(app: &axum::Router, email: &str, full_name: &str) -> String {
     let response = app
         .clone()
         .oneshot(
@@ -74,11 +70,16 @@ async fn rest_json(
     if body.is_some() {
         builder = builder.header(header::CONTENT_TYPE, "application/json");
     }
-    let request = builder.body(Body::from(body.unwrap_or(serde_json::json!({})).to_string())).unwrap();
+    let request = builder
+        .body(Body::from(
+            body.unwrap_or(serde_json::json!({})).to_string(),
+        ))
+        .unwrap();
     let response = app.clone().oneshot(request).await.unwrap();
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let payload = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap_or(serde_json::Value::Null);
+    let payload =
+        serde_json::from_slice::<serde_json::Value>(&bytes).unwrap_or(serde_json::Value::Null);
     (status, payload)
 }
 
@@ -459,9 +460,7 @@ async fn admin_user_can_list_and_revoke_org_api_keys() {
             .pointer("/api_keys")
             .and_then(|value| value.as_array())
             .is_some_and(|items| items.iter().any(|item| {
-                item.get("id")
-                    .and_then(|value| value.as_str())
-                    == Some(created.api_key.id.as_str())
+                item.get("id").and_then(|value| value.as_str()) == Some(created.api_key.id.as_str())
             }))
     );
 
@@ -616,11 +615,11 @@ async fn user_without_notebook_access_cannot_list_workspace_api_keys() {
     let create_body = to_bytes(create_response.into_body(), usize::MAX)
         .await
         .unwrap();
-    let notebook_id = serde_json::from_slice::<serde_json::Value>(&create_body)
-        .unwrap()["notebook"]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let notebook_id =
+        serde_json::from_slice::<serde_json::Value>(&create_body).unwrap()["notebook"]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
     let (status, payload) = rest_json(
         &app,
@@ -672,11 +671,11 @@ async fn user_without_notebook_access_cannot_revoke_workspace_api_key() {
     let create_body = to_bytes(create_response.into_body(), usize::MAX)
         .await
         .unwrap();
-    let notebook_id = serde_json::from_slice::<serde_json::Value>(&create_body)
-        .unwrap()["notebook"]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let notebook_id =
+        serde_json::from_slice::<serde_json::Value>(&create_body).unwrap()["notebook"]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
     let key_response = app
         .clone()
@@ -694,9 +693,10 @@ async fn user_without_notebook_access_cannot_revoke_workspace_api_key() {
         .await
         .unwrap();
     assert_eq!(key_response.status(), StatusCode::CREATED);
-    let key_body = to_bytes(key_response.into_body(), usize::MAX).await.unwrap();
-    let key_id = serde_json::from_slice::<serde_json::Value>(&key_body)
-        .unwrap()["api_key"]["id"]
+    let key_body = to_bytes(key_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let key_id = serde_json::from_slice::<serde_json::Value>(&key_body).unwrap()["api_key"]["id"]
         .as_str()
         .unwrap()
         .to_string();
@@ -755,10 +755,7 @@ async fn workspace_api_key_create_strips_admin_permission() {
             &notebook.id,
             CreateApiKeyRequest {
                 name: "agent".to_string(),
-                permissions: vec![
-                    PERM_ADMIN.to_string(),
-                    contracts::PERM_QUERY.to_string(),
-                ],
+                permissions: vec![PERM_ADMIN.to_string(), contracts::PERM_QUERY.to_string()],
                 rate_limit_rpm: Some(60),
                 expires_at: None,
             },

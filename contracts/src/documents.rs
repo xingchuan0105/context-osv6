@@ -1,5 +1,5 @@
-use typeshare::typeshare;
 use serde::{Deserialize, Serialize};
+use typeshare::typeshare;
 
 #[typeshare]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,10 +57,10 @@ pub struct Document {
     pub file_name: String,
     pub mime_type: String,
     #[typeshare(serialized_as = "number")]
-    pub file_size:        u64,
+    pub file_size: u64,
     pub status: String,
     #[typeshare(serialized_as = "number")]
-    pub chunk_count:        usize,
+    pub chunk_count: usize,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -83,7 +83,7 @@ pub struct DocumentContentResponse {
 pub struct CreateDocumentRequest {
     pub filename: String,
     #[typeshare(serialized_as = "number")]
-    pub file_size:        u64,
+    pub file_size: u64,
     pub mime_type: String,
 }
 
@@ -93,9 +93,9 @@ pub struct ParsedPreviewItem {
     pub kind: String,
     pub text: String,
     #[typeshare(serialized_as = "number")]
-    pub page:        usize,
+    pub page: usize,
     #[typeshare(serialized_as = "number")]
-    pub cursor:        usize,
+    pub cursor: usize,
 }
 
 #[typeshare]
@@ -104,7 +104,7 @@ pub struct ParsedPreviewResponse {
     pub items: Vec<ParsedPreviewItem>,
     pub has_more: bool,
     #[typeshare(serialized_as = "number")]
-    pub next_cursor:        usize,
+    pub next_cursor: usize,
     #[serde(default)]
     pub summary: Option<String>,
 }
@@ -131,9 +131,9 @@ pub struct SourcesResponse {
 pub struct CitationLookupRequest {
     pub session_id: String,
     #[typeshare(serialized_as = "number")]
-    pub message_id:        i64,
+    pub message_id: i64,
     #[typeshare(serialized_as = "number")]
-    pub citation_id:        i64,
+    pub citation_id: i64,
 }
 
 #[typeshare]
@@ -149,7 +149,7 @@ pub struct CitationLookupResponse {
     pub chunk_id: Option<String>,
     #[serde(default)]
     #[typeshare(serialized_as = "number")]
-    pub page:        Option<usize>,
+    pub page: Option<usize>,
     #[serde(default)]
     pub chunk_type: Option<String>,
     #[serde(default)]
@@ -173,7 +173,7 @@ pub struct AnswerContextChunk {
     pub chunk_type: String,
     #[serde(default)]
     #[typeshare(serialized_as = "number")]
-    pub page:        Option<i64>,
+    pub page: Option<i64>,
     pub text: String,
     #[serde(default)]
     pub asset_id: Option<String>,

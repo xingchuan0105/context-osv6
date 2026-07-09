@@ -1,7 +1,11 @@
 use app_core::{MemoryState, RetrievedContext, StoredDocument};
-use common::{ParsedPreviewItem};
-use contracts::chat::{ChatMessage, ChatRequest, Citation, DegradeReason, DegradeTraceItem, ModeDebug, PlannerOutput, RagModeDebug, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary, SourceRef, SummaryInjectionTrace};
-use contracts::documents::{DocumentStatus};
+use common::ParsedPreviewItem;
+use contracts::chat::{
+    ChatMessage, ChatRequest, Citation, DegradeReason, DegradeTraceItem, ModeDebug, PlannerOutput,
+    RagModeDebug, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary, SourceRef,
+    SummaryInjectionTrace,
+};
+use contracts::documents::DocumentStatus;
 
 pub fn next_message_id(state: &mut MemoryState) -> i64 {
     state.next_message_id += 1;

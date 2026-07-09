@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use ingestion::parser::{
-    append_liteparse_blocks_to_ir, blocks_to_document_ir, page_has_searchable_text,
-    LiteParseTextBlock,
+    LiteParseTextBlock, append_liteparse_blocks_to_ir, blocks_to_document_ir,
+    page_has_searchable_text,
 };
 use ingestion::{DocumentType, ParseBackend};
 use uuid::Uuid;

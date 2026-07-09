@@ -1,4 +1,5 @@
-impl PgAppRepository {
+use super::*;
+impl AssetRepository {
     pub async fn store_document_asset(
         &self,
         context: &AuthContext,

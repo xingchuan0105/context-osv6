@@ -1,3 +1,4 @@
+use super::*;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentAssetRow {
     pub asset_id: Uuid,

@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::RequestState;
+use crate::middleware::RequestState;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -150,11 +150,7 @@ fn app_error_response<T: serde::Serialize>(error: AppError) -> Response {
             message.clone(),
         ),
     };
-    (
-        status,
-        Json(ApiResponse::<T>::err(code, &message)),
-    )
-        .into_response()
+    (status, Json(ApiResponse::<T>::err(code, &message))).into_response()
 }
 
 async fn call_admin_store<T, F, Fut>(state: &AppState, f: F) -> Response

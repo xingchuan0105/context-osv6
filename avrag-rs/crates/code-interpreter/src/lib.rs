@@ -17,11 +17,14 @@
 
 mod bridge;
 
-pub use bridge::{bridge_shim_client_method_names, HostBridge};
+pub use bridge::{HostBridge, bridge_shim_client_method_names};
 
 use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::Duration;
+
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 
 /// Result of a single code execution.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -123,21 +126,34 @@ impl CodeInterpreter {
         let temp_dir = tempfile::TempDir::new()
             .map_err(|e| InterpreterError::Io(std::io::Error::other(format!("temp dir: {e}"))))?;
 
-        let mut child = Command::new(&self.python_path)
+        let mut command = Command::new(&self.python_path);
+        command
             .arg("-c")
             .arg(&sandbox_code)
             .current_dir(temp_dir.path())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    InterpreterError::PythonNotFound(self.python_path.clone())
-                } else {
-                    InterpreterError::Io(e)
-                }
-            })?;
+            .stderr(Stdio::piped());
+        // Put the child in its own process group so that, on timeout, we can
+        // kill the python process *and* any subprocesses it may have spawned
+        // (child becomes the pgid leader, so pid == pgid).
+        #[cfg(unix)]
+        command.process_group(0);
+        let mut child = command.spawn().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                InterpreterError::PythonNotFound(self.python_path.clone())
+            } else {
+                InterpreterError::Io(e)
+            }
+        })?;
+        // Capture the child's pid before it is moved into the wait thread; with
+        // process_group(0) set, this pid doubles as the process-group id for killpg.
+        #[cfg(unix)]
+        let child_pid = child.id();
+        // Keep `child_pid` referenced on non-unix so the binding stays live; the
+        // group-kill is a no-op there (sandbox requires Unix anyway).
+        #[cfg(not(unix))]
+        let child_pid: Option<u32> = child.id();
 
         // Resource limits are applied inside the Python sandbox via the
         // `resource` module.  The Python wrapper calls resource.setrlimit()
@@ -177,6 +193,13 @@ impl CodeInterpreter {
                 }
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                // Child was moved into the wait thread; kill its whole process
+                // group to clean up python + any subprocesses it spawned, then
+                // reap the zombie via the wait thread (which still owns `child`).
+                #[cfg(unix)]
+                unsafe {
+                    let _ = libc::killpg(child_pid as i32, libc::SIGKILL);
+                }
                 Err(InterpreterError::Timeout(self.timeout_secs))
             }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(InterpreterError::Io(
@@ -195,6 +218,7 @@ impl CodeInterpreter {
             &self.python_path,
             self.timeout_secs,
             self.memory_limit_mb,
+            self.cpu_limit_secs,
             code,
             bridge,
         )
@@ -219,7 +243,7 @@ fn read_pipe<R: Read>(stream: &mut Option<R>) -> Result<String, InterpreterError
 /// 2. Overrides `__import__` to block dangerous modules
 /// 3. Captures stdout/stderr
 /// 4. Returns a JSON-serialized `ExecutionResult`
-fn build_sandbox_wrapper(user_code: &str, memory_mb: u64, _cpu_secs: u64) -> String {
+fn build_sandbox_wrapper(user_code: &str, memory_mb: u64, cpu_secs: u64) -> String {
     let blocked_modules = [
         "os",
         "subprocess",
@@ -271,6 +295,12 @@ try:
 except Exception:
     pass
 
+try:
+    import resource
+    resource.setrlimit(resource.RLIMIT_CPU, ({cpu_secs}, {cpu_secs}))
+except Exception:
+    pass
+
 _real_stdout = sys.stdout
 _real_stderr = sys.stderr
 _cap_stdout = io.StringIO()
@@ -297,6 +327,7 @@ _real_stdout.write(json.dumps(output))
 "#,
         blocked_list = blocked_list,
         memory_mb = memory_mb,
+        cpu_secs = cpu_secs,
         escaped_code = escaped_code,
     )
 }
@@ -340,7 +371,9 @@ print(json.dumps(chunks))
             .unwrap();
         assert!(result.success, "stderr: {}", result.stderr);
         assert!(
-            result.stdout.contains("00000000-0000-4000-8000-000000000001"),
+            result
+                .stdout
+                .contains("00000000-0000-4000-8000-000000000001"),
             "stdout: {}",
             result.stdout
         );
@@ -427,5 +460,39 @@ print(json.dumps({'mean': mean, 'std': round(std, 2)}))";
         assert!(result.success);
         assert!(result.stdout.contains("3.0"), "stdout: {}", result.stdout);
         assert!(result.stdout.contains("1.41"), "stdout: {}", result.stdout);
+    }
+
+    /// The non-bridge path must kill the child on timeout and return
+    /// `InterpreterError::Timeout`. `while True: pass` spins forever, so the
+    /// only way this completes is via the timeout arm. Requires `python3`.
+    #[cfg(unix)]
+    #[test]
+    fn execute_timeout_kills_busy_python() {
+        if std::process::Command::new("python3")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            eprintln!("skipping: python3 not found on PATH");
+            return;
+        }
+
+        let started = std::time::Instant::now();
+        let interpreter = CodeInterpreter::new().with_timeout(2);
+        let result = interpreter.execute("while True:\n    pass");
+        let elapsed = started.elapsed();
+
+        assert!(
+            matches!(result, Err(InterpreterError::Timeout(2))),
+            "expected Timeout(2), got {:?}",
+            result
+        );
+        // If the kill/reap regressed, recv_timeout itself still fires at 2s, but
+        // a leaked process can keep the test runner's machine hot; bound the
+        // wall clock as a sanity check.
+        assert!(
+            elapsed.as_secs() < 10,
+            "timeout path took too long ({elapsed:?})"
+        );
     }
 }

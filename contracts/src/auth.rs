@@ -1,6 +1,6 @@
-use typeshare::typeshare;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use typeshare::typeshare;
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]

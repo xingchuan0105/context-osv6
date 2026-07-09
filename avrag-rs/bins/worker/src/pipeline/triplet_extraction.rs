@@ -1,16 +1,18 @@
+use crate::indexing::{
+    MediaResolveContext, StoredMultimodalChunk, env_flag_enabled, resolve_visual_chunk_image_refs,
+};
+use crate::indexing::triplet_batch_token_budget;
 use anyhow::Result;
 use avrag_llm::ChatMessage;
 use avrag_retrieval_data_plane::TextChunkIndexRecord;
-use crate::indexing::{
-    env_flag_enabled, resolve_visual_chunk_image_refs, MediaResolveContext, StoredMultimodalChunk,
-};
 use std::sync::Arc;
 use tracing::info;
 use uuid::Uuid;
 
 use super::document_pipeline::ParseRunState;
-use super::processor::PgTaskProcessor;
 use super::helpers::{estimate_token_count, record_graph_degrade};
+use super::processor::PgTaskProcessor;
+use super::triplet_semantic_lint::triplet_semantic_violation;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ExtractedTriplet {
@@ -126,7 +128,7 @@ pub(crate) async fn extract_visual_triplets_for_index(
             ),
             ChatMessage::user(prompt),
         ];
-        match llm.complete(&messages, Some(0.1)).await {
+        match complete_triplet_extraction(&llm, &messages).await {
             Ok(response) => {
                 output.total_tokens = output
                     .total_tokens
@@ -183,7 +185,7 @@ pub(crate) async fn extract_triplets_for_index(
                 .await
                 .map_err(|e| anyhow::anyhow!("{e}"))?;
             let messages = build_triplet_extraction_messages(&batch);
-            let response = llm.complete(&messages, Some(0.1)).await?;
+            let response = complete_triplet_extraction(&llm, &messages).await?;
             let raw_triplets = parse_triplet_response(&response.content, &batch.chunk_ids)?;
             Ok::<_, anyhow::Error>((raw_triplets, response.usage.total_tokens))
         }));
@@ -233,7 +235,7 @@ pub(crate) async fn extract_triplets_for_index(
 fn build_triplet_extraction_batches(
     text_chunks: &[TextChunkIndexRecord],
 ) -> Vec<TripletExtractionBatch> {
-    const TOKEN_BUDGET: i64 = 3_000;
+    let token_budget = triplet_batch_token_budget();
 
     let mut batches = Vec::new();
     let mut current_ids = Vec::new();
@@ -242,7 +244,7 @@ fn build_triplet_extraction_batches(
 
     for chunk in text_chunks {
         let chunk_tokens = estimate_token_count(&chunk.content).max(1);
-        if !current_chunks.is_empty() && current_tokens + chunk_tokens > TOKEN_BUDGET {
+        if !current_chunks.is_empty() && current_tokens + chunk_tokens > token_budget {
             batches.push(TripletExtractionBatch {
                 chunk_ids: std::mem::take(&mut current_ids),
                 payload: serde_json::json!({ "chunks": std::mem::take(&mut current_chunks) }),
@@ -283,77 +285,155 @@ fn build_triplet_extraction_messages(batch: &TripletExtractionBatch) -> Vec<Chat
     ]
 }
 
+/// DeepSeek v4-flash non-reasoning (`thinking: disabled`) may wrap JSON in markdown
+/// fences. Strip them in `parse_triplet_response`; do not enable JSON Output mode here
+/// (adds latency and can exceed ingest timeouts on large documents).
+async fn complete_triplet_extraction(
+    llm: &avrag_llm::LlmClient,
+    messages: &[ChatMessage],
+) -> Result<avrag_llm::LlmResponse> {
+    // Large batches can emit long JSON arrays; cap high enough to avoid truncation.
+    llm.complete_with_max_tokens(messages, Some(0.1), 8_192).await
+}
+
+fn normalize_triplet_json_payload(content: &str) -> String {
+    let trimmed = content.trim();
+    if !trimmed.starts_with("```") {
+        return trimmed.to_string();
+    }
+    let mut body = String::new();
+    for line in trimmed.lines().skip(1) {
+        if line.trim() == "```" {
+            break;
+        }
+        if !body.is_empty() {
+            body.push('\n');
+        }
+        body.push_str(line);
+    }
+    body.trim().to_string()
+}
+
 pub(crate) fn parse_triplet_response(
     content: &str,
     valid_chunk_ids: &[Uuid],
 ) -> Result<Vec<ExtractedTriplet>> {
-    let value: serde_json::Value = serde_json::from_str(content)
-        .map_err(|e| anyhow::anyhow!("Failed to parse triplet JSON: {}", e))?;
+    let normalized = normalize_triplet_json_payload(content);
+    match serde_json::from_str::<serde_json::Value>(&normalized) {
+        Ok(value) => Ok(collect_triplets_from_value(&value, valid_chunk_ids)),
+        Err(primary_error) => {
+            let salvaged = salvage_triplet_objects(&normalized, valid_chunk_ids);
+            if salvaged.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Failed to parse triplet JSON: {primary_error}"
+                ));
+            }
+            Ok(salvaged)
+        }
+    }
+}
 
-    let triplets = value
-        .get("triplets")
-        .and_then(serde_json::Value::as_array)
-        .ok_or_else(|| anyhow::anyhow!("triplet response missing triplets array"))?;
+fn collect_triplets_from_value(
+    value: &serde_json::Value,
+    valid_chunk_ids: &[Uuid],
+) -> Vec<ExtractedTriplet> {
+    let Some(triplets) = value.get("triplets").and_then(serde_json::Value::as_array) else {
+        return Vec::new();
+    };
 
     let mut parsed = Vec::new();
     for item in triplets {
-        // 严格对象格式：{"chunk_id": "...", "subject": "...", "predicate": "...", "object": "..."}
-        let Some(chunk_id_str) = item.get("chunk_id").and_then(|v| v.as_str()) else {
-            continue; // chunk_id 缺失，丢弃
-        };
-        let Ok(chunk_id) = Uuid::parse_str(chunk_id_str) else {
-            continue; // chunk_id 无法解析，丢弃
-        };
-        if !valid_chunk_ids.contains(&chunk_id) {
-            continue; // chunk_id 不在当前 batch 内，丢弃
+        if let Some(triplet) = parse_triplet_item(item, valid_chunk_ids) {
+            parsed.push(triplet);
         }
-
-        let Some(subject) = item
-            .get("subject")
-            .and_then(|v| v.as_str())
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-        else {
-            continue;
-        };
-        let Some(predicate) = item
-            .get("predicate")
-            .and_then(|v| v.as_str())
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-        else {
-            continue;
-        };
-        let Some(object) = item
-            .get("object")
-            .and_then(|v| v.as_str())
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-        else {
-            continue;
-        };
-
-        let confidence = item
-            .get("confidence")
-            .and_then(|v| v.as_f64())
-            .map(|v| v as f32)
-            .unwrap_or(1.0);
-        let source = item
-            .get("source")
-            .and_then(|v| v.as_str())
-            .unwrap_or("text_chunk")
-            .to_string();
-
-        parsed.push(ExtractedTriplet {
-            subject,
-            predicate,
-            object,
-            supporting_chunk_ids: vec![chunk_id],
-            source,
-            confidence,
-        });
     }
-    Ok(parsed)
+    parsed
+}
+
+fn parse_triplet_item(
+    item: &serde_json::Value,
+    valid_chunk_ids: &[Uuid],
+) -> Option<ExtractedTriplet> {
+    let chunk_id_str = item.get("chunk_id")?.as_str()?;
+    let chunk_id = Uuid::parse_str(chunk_id_str).ok()?;
+    if !valid_chunk_ids.contains(&chunk_id) {
+        return None;
+    }
+
+    let subject = item
+        .get("subject")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())?;
+    let predicate = item
+        .get("predicate")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())?;
+    let object = item
+        .get("object")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())?;
+
+    if triplet_semantic_violation(&subject, &predicate, &object).is_some() {
+        return None;
+    }
+
+    let confidence = item
+        .get("confidence")
+        .and_then(|v| v.as_f64())
+        .map(|v| v as f32)
+        .unwrap_or(1.0);
+    let source = item
+        .get("source")
+        .and_then(|v| v.as_str())
+        .unwrap_or("text_chunk")
+        .to_string();
+
+    Some(ExtractedTriplet {
+        subject,
+        predicate,
+        object,
+        supporting_chunk_ids: vec![chunk_id],
+        source,
+        confidence,
+    })
+}
+
+/// Recover complete triplet objects when the model response is truncated mid-JSON.
+fn salvage_triplet_objects(normalized: &str, valid_chunk_ids: &[Uuid]) -> Vec<ExtractedTriplet> {
+    let mut salvaged = Vec::new();
+    let mut search_from = 0;
+    while let Some(rel) = normalized[search_from..].find("{\"chunk_id\"") {
+        let start = search_from + rel;
+        let mut parsed_any = false;
+        let mut end = (start + 20).min(normalized.len());
+        while end <= normalized.len() {
+            if normalized.is_char_boundary(end) {
+                if let Ok(item) = serde_json::from_str::<serde_json::Value>(&normalized[start..end])
+                    && item.get("chunk_id").is_some()
+                    && item.get("subject").is_some()
+                    && item.get("predicate").is_some()
+                    && item.get("object").is_some()
+                    && let Some(triplet) = parse_triplet_item(&item, valid_chunk_ids)
+                {
+                    salvaged.push(triplet);
+                    search_from = end;
+                    parsed_any = true;
+                    break;
+                }
+            }
+            if end == normalized.len() {
+                break;
+            }
+            end += 1;
+        }
+        if !parsed_any {
+            search_from = start + 1;
+        }
+    }
+    salvaged
 }
 
 pub(crate) fn triplet_extraction_enabled() -> bool {

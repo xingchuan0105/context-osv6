@@ -7,7 +7,9 @@ version.workspace = true
 
 [features]
 default = []
+dev-tools = []
 eval = []
+write-mode = []
 
 [dependencies]
 analytics = { path = "../analytics" }
@@ -17,7 +19,6 @@ app-admin = { path = "../app-admin" }
 app-billing = { path = "../app-billing" }
 app-core = { path = "../app-core" }
 app-documents = { path = "../app-documents" }
-avrag-auth = { path = "../auth" }
 avrag-billing = { path = "../billing" }
 avrag-chatmemory = { path = "../chatmemory" }
 avrag-code-interpreter = { path = "../code-interpreter" }
@@ -29,6 +30,7 @@ avrag-search = { path = "../search" }
 chrono.workspace = true
 common = { path = "../common" }
 contracts = { path = "../../../contracts" }
+heavytail = { path = "../heavytail" }
 evalexpr.workspace = true
 futures = "0.3"
 regex.workspace = true
@@ -47,3 +49,4 @@ uuid.workspace = true
 [dev-dependencies]
 app-core = { path = "../app-core" }
 avrag-storage-pg = { path = "../storage-pg" }
+

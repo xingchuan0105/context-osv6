@@ -46,14 +46,18 @@ impl DisclosurePlanner {
 
         if first_round {
             slices.push(DisclosureSlice::ClusterIndex(DiscloseAt::Retrieve));
-            for cluster_id in &mode.skill_catalog.mandatory.retrieve {
-                push_cluster_body(&mut slices, cluster_id, None, already_disclosed);
-            }
+        }
+
+        // Mandatory retrieve clusters (e.g. codegen SDK) must stay in the system
+        // prompt every round — not only iteration 0 — so the model can recover
+        // from sandbox errors with method signatures in context.
+        for cluster_id in &mode.skill_catalog.mandatory.retrieve {
+            push_cluster_body(&mut slices, cluster_id, None, already_disclosed, true);
         }
 
         if let Some(requested) = skill_request {
             for cluster_id in requested {
-                push_cluster_body(&mut slices, cluster_id, None, already_disclosed);
+                push_cluster_body(&mut slices, cluster_id, None, already_disclosed, false);
             }
         }
 
@@ -83,22 +87,46 @@ impl DisclosurePlanner {
         slices.push(DisclosureSlice::ClusterIndex(DiscloseAt::Synthesis));
 
         if let Some(writing_ref) = choices.writing_ref.as_deref() {
-            push_cluster_body(&mut slices, "writing", Some(writing_ref), already_disclosed);
+            push_cluster_body(
+                &mut slices,
+                "writing",
+                Some(writing_ref),
+                already_disclosed,
+                false,
+            );
         } else if let Some(hint) = request
             .metadata
             .get("writing_hint")
             .and_then(|v| v.as_str())
         {
             if let Some(ref_slug) = map_writing_hint(hint) {
-                push_cluster_body(&mut slices, "writing", Some(&ref_slug), already_disclosed);
+                push_cluster_body(
+                    &mut slices,
+                    "writing",
+                    Some(&ref_slug),
+                    already_disclosed,
+                    false,
+                );
             }
         }
 
         if let Some(format_ref) = choices.format_ref.as_deref() {
-            push_cluster_body(&mut slices, "format", Some(format_ref), already_disclosed);
+            push_cluster_body(
+                &mut slices,
+                "format",
+                Some(format_ref),
+                already_disclosed,
+                false,
+            );
         } else if let Some(hint) = request.format_hint.as_deref() {
             if let Some(ref_slug) = map_format_hint(hint) {
-                push_cluster_body(&mut slices, "format", Some(&ref_slug), already_disclosed);
+                push_cluster_body(
+                    &mut slices,
+                    "format",
+                    Some(&ref_slug),
+                    already_disclosed,
+                    false,
+                );
             }
         }
 
@@ -115,13 +143,14 @@ fn push_cluster_body(
     cluster_id: &str,
     reference: Option<&str>,
     already_disclosed: &HashSet<String>,
+    repeat_each_round: bool,
 ) {
     let key = if let Some(r) = reference {
         format!("{cluster_id}:{r}")
     } else {
         cluster_id.to_string()
     };
-    if already_disclosed.contains(&key) {
+    if !repeat_each_round && already_disclosed.contains(&key) {
         return;
     }
     slices.push(DisclosureSlice::ClusterBody {
@@ -173,10 +202,17 @@ impl<'a> DisclosureRenderer<'a> {
                     } else {
                         cluster_id.clone()
                     };
-                    if disclosed.disclosed_skill_ids.contains(&key) {
+                    let repeat_each_round = mode
+                        .skill_catalog
+                        .mandatory
+                        .retrieve
+                        .iter()
+                        .any(|id| id == cluster_id);
+                    if disclosed.disclosed_skill_ids.contains(&key) && !repeat_each_round {
                         continue;
                     }
                     if let Some(body) = render_cluster_body(cluster_id, disclosed, ref_slug) {
+                        let body = inject_cluster_runtime_context(cluster_id, body, request);
                         parts.push(body);
                         if disclosed.disclosed_skill_ids.insert(key.clone()) {
                             newly_disclosed.push(cluster_id.clone());
@@ -195,11 +231,7 @@ impl<'a> DisclosureRenderer<'a> {
                     }
                 }
                 DisclosureSlice::RetrievalQuery => {
-                    parts.push(format!(
-                        "Retrieval query: {}\nUser display query: {}",
-                        request.effective_query(),
-                        request.query
-                    ));
+                    parts.push(format!("Retrieval query: {}", request.query));
                 }
             }
         }
@@ -314,6 +346,23 @@ fn render_cluster_body(
     Some(parts.join("\n\n"))
 }
 
+/// Append cluster-specific runtime context (e.g. `docscope_metadata` for the
+/// `metadata` cluster) to a rendered cluster body. Currently only the
+/// `metadata` cluster carries runtime-injected context.
+fn inject_cluster_runtime_context(
+    cluster_id: &str,
+    body: String,
+    request: &AgentRequest,
+) -> String {
+    if cluster_id == "metadata" {
+        if let Some(meta) = &request.docscope_metadata {
+            let json = serde_json::to_string_pretty(meta).unwrap_or_default();
+            return format!("{body}\n\n<docscope_metadata>\n{json}\n</docscope_metadata>");
+        }
+    }
+    body
+}
+
 fn render_skill_body_with_deps(skill_id: &str, disclosed: &DisclosedState) -> Option<String> {
     let prompt_registry = PromptRegistry::standard_cached();
     let skill = prompt_registry.skill(skill_id)?;
@@ -372,7 +421,6 @@ fn map_format_hint(hint: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agents::runtime::AgentRequest;
 
     fn rag_mode() -> ModeConfig {
         super::super::config::load_mode_config("rag").unwrap()
@@ -382,7 +430,10 @@ mod tests {
     fn retrieve_first_round_includes_index_mandatory_and_query() {
         let mode = rag_mode();
         let plan = DisclosurePlanner::plan_retrieve(&mode, true, None, &HashSet::new());
-        assert!(plan.slices.contains(&DisclosureSlice::ClusterIndex(DiscloseAt::Retrieve)));
+        assert!(
+            plan.slices
+                .contains(&DisclosureSlice::ClusterIndex(DiscloseAt::Retrieve))
+        );
         assert!(plan
             .slices
             .iter()
@@ -391,17 +442,19 @@ mod tests {
     }
 
     #[test]
-    fn retrieve_later_round_skips_index_and_mandatory() {
+    fn retrieve_later_round_includes_mandatory_codegen() {
         let mode = rag_mode();
         let plan = DisclosurePlanner::plan_retrieve(&mode, false, None, &HashSet::new());
-        assert!(!plan
-            .slices
-            .iter()
-            .any(|s| matches!(s, DisclosureSlice::ClusterIndex(_))));
-        assert!(!plan
-            .slices
-            .iter()
-            .any(|s| matches!(s, DisclosureSlice::ClusterBody { cluster_id, .. } if cluster_id == "codegen")));
+        assert!(
+            !plan
+                .slices
+                .iter()
+                .any(|s| matches!(s, DisclosureSlice::ClusterIndex(_)))
+        );
+        assert!(plan.slices.iter().any(
+            |s| matches!(s, DisclosureSlice::ClusterBody { cluster_id, .. } if cluster_id == "codegen")
+        ));
+        assert!(!plan.slices.contains(&DisclosureSlice::RetrievalQuery));
     }
 
     #[test]
@@ -418,7 +471,7 @@ mod tests {
         assert!(plan.slices.iter().any(|s| {
             matches!(s, DisclosureSlice::ClusterBody { cluster_id, .. } if cluster_id == "memory")
         }));
-        assert!(!plan.slices.iter().any(|s| {
+        assert!(plan.slices.iter().any(|s| {
             matches!(s, DisclosureSlice::ClusterBody { cluster_id, .. } if cluster_id == "codegen")
         }));
     }

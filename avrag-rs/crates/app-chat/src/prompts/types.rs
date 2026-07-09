@@ -196,4 +196,3 @@ pub struct RagContext {
     pub skill: RagBehaviorSkill,
     pub output_contract: String,
 }
-

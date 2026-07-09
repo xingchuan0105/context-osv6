@@ -1,8 +1,9 @@
-use app_core::AnalyticsServiceCtx;
 use app_billing;
-use avrag_auth::AuthContext;
+use app_core::AnalyticsServiceCtx;
+use contracts::auth_runtime::AuthContext;
 use uuid::Uuid;
 
+/// Thin alias over the canonical analytics seam (`AnalyticsServiceCtx`).
 pub(crate) async fn record_product_event_if_available(
     auth: &AuthContext,
     analytics: &AnalyticsServiceCtx,
@@ -13,19 +14,17 @@ pub(crate) async fn record_product_event_if_available(
     notebook_id: Option<Uuid>,
     metadata: serde_json::Value,
 ) {
-    let ctx = analytics.into_context(
-        auth.actor_id().map(|actor| actor.into_uuid()),
-        auth.request_id().map(str::to_string),
-    );
-    ctx.record_product_event(
-        event_name,
-        surface,
-        result,
-        session_id,
-        notebook_id,
-        metadata,
-    )
-    .await;
+    analytics
+        .record_product_event_for_auth(
+            auth,
+            event_name,
+            surface,
+            result,
+            session_id,
+            notebook_id,
+            metadata,
+        )
+        .await;
 }
 
 pub(crate) async fn record_storage_cost_event_if_available(

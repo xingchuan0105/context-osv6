@@ -29,9 +29,7 @@ impl LocalCache {
     pub async fn cleanup_expired(&self) {
         let mut data = self.data.write().await;
         let now = std::time::Instant::now();
-        data.retain(|_, entry| {
-            entry.expires_at.map_or(true, |expires| expires > now)
-        });
+        data.retain(|_, entry| entry.expires_at.map_or(true, |expires| expires > now));
     }
 }
 

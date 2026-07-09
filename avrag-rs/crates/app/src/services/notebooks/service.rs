@@ -1,6 +1,6 @@
 use crate::ports::notebooks::notebook_store::NotebookStore;
 use common::{AppError, CreateNotebookRequest};
-use contracts::notebooks::{Notebook};
+use contracts::notebooks::Notebook;
 use std::sync::Arc;
 
 #[derive(Clone)]

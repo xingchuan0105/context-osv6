@@ -110,19 +110,6 @@ impl CapabilityRegistry {
         tools
     }
 
-    /// Answer 阶段：返回 format 技能目录（按 ID 排序，确保 prompt 确定性）
-    pub fn answer_format_skills(&self, mode_id: &str) -> Vec<&SkillMetadata> {
-        let mode_id = mode_id.to_string();
-        let mut skills: Vec<_> = self
-            .skills
-            .values()
-            .filter(|s| s.activation_phase == ActivationPhase::Answer)
-            .filter(|s| s.applicable_strategies.iter().any(|s| s == &mode_id))
-            .collect();
-        skills.sort_by_key(|s| &s.id);
-        skills
-    }
-
     /// Answer 阶段：返回写作风格技能目录（按 ID 排序，确保 prompt 确定性）
     pub fn answer_writing_styles(&self, mode_id: &str) -> Vec<&SkillMetadata> {
         let mode_id = mode_id.to_string();
@@ -136,18 +123,6 @@ impl CapabilityRegistry {
         skills
     }
 
-    /// Answer 阶段：返回行为模式技能目录（目前只有 brainstorming，按 ID 排序）
-    pub fn answer_behavior_modes(&self, mode_id: &str) -> Vec<&SkillMetadata> {
-        let mode_id = mode_id.to_string();
-        let mut skills: Vec<_> = self
-            .skills
-            .values()
-            .filter(|s| s.category == "behavior")
-            .filter(|s| s.applicable_strategies.iter().any(|s| s == &mode_id))
-            .collect();
-        skills.sort_by_key(|s| &s.id);
-        skills
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -155,30 +130,35 @@ impl CapabilityRegistry {
 // ---------------------------------------------------------------------------
 
 /// ADR-0007 §8.8 retired skills — excluded from default registry catalog.
+///
+/// Sorted alphabetically to enable `binary_search`; edit this list to retire
+/// or revive a skill. A skill may also self-declare via the `deprecation`
+/// frontmatter key (handled separately in `skill_to_metadata`).
+const RETIRED_SKILL_IDS: &[&str] = &[
+    "academic-writing",
+    "brainstorming",
+    "chat-plan",
+    "concise-writing",
+    "framework-extraction",
+    "html-renderer",
+    "ppt-generation",
+    "professional-writing",
+    "rag-codegen-guide",
+    "rag-citation-format",
+    "rag-doc-summary-guide",
+    "rag-eval",
+    "rag-memory-mgmt",
+    "rag-plan",
+    "rag-retrieval-strategy",
+    "search-eval",
+    "search-plan",
+    "storytelling",
+    "teaching",
+    "url-citation-format",
+];
+
 fn is_retired_skill(id: &str) -> bool {
-    matches!(
-        id,
-        "rag-plan"
-            | "search-plan"
-            | "chat-plan"
-            | "rag-eval"
-            | "search-eval"
-            | "rag-memory-mgmt"
-            | "rag-citation-format"
-            | "url-citation-format"
-            | "rag-codegen-guide"
-            | "rag-retrieval-strategy"
-            | "rag-doc-summary-guide"
-            | "concise-writing"
-            | "professional-writing"
-            | "academic-writing"
-            | "storytelling"
-            | "brainstorming"
-            | "html-renderer"
-            | "ppt-generation"
-            | "teaching"
-            | "framework-extraction"
-    )
+    RETIRED_SKILL_IDS.binary_search(&id).is_ok()
 }
 
 fn register_llm_facing_tools() -> HashMap<String, ToolMetadata> {
@@ -189,11 +169,7 @@ fn register_llm_facing_tools() -> HashMap<String, ToolMetadata> {
     };
 
     let mut tools = HashMap::new();
-    let all_modes = vec![
-        "rag".to_string(),
-        "search".to_string(),
-        "chat".to_string(),
-    ];
+    let all_modes = vec!["rag".to_string(), "search".to_string(), "chat".to_string()];
     let search = vec!["search".to_string()];
     let perms = vec![Permission::ExternalNetwork];
 
@@ -536,10 +512,11 @@ mod tests {
     #[test]
     fn registry_can_lookup_all_modes() {
         let registry = CapabilityRegistry::standard();
-        assert_eq!(registry.mode_count(), 3, "expected 3 modes");
+        assert_eq!(registry.mode_count(), 4, "expected 4 modes");
         assert!(registry.mode("chat").is_some());
         assert!(registry.mode("rag").is_some());
         assert!(registry.mode("search").is_some());
+        assert!(registry.mode("write").is_some());
         assert!(registry.mode("nonexistent").is_none());
     }
 
@@ -570,7 +547,7 @@ mod tests {
     fn list_modes_returns_all() {
         let registry = CapabilityRegistry::standard();
         let modes = registry.list_modes();
-        assert_eq!(modes.len(), 3);
+        assert_eq!(modes.len(), 4);
     }
 
     #[test]
@@ -578,10 +555,7 @@ mod tests {
         let registry = CapabilityRegistry::standard();
         let plan_tools = registry.plan_tools("rag");
         let ids: Vec<&str> = plan_tools.iter().map(|t| t.id.as_str()).collect();
-        assert_eq!(
-            ids,
-            vec!["conversation_history_load", "user_profile_load"]
-        );
+        assert_eq!(ids, vec!["conversation_history_load", "user_profile_load"]);
     }
 
     #[test]
@@ -597,36 +571,5 @@ mod tests {
         }
 
         assert_eq!(plan_tools.len(), 2);
-    }
-
-    #[test]
-    fn answer_format_skills_filters_by_phase() {
-        let registry = CapabilityRegistry::standard();
-        let answer_skills = registry.answer_format_skills("rag");
-
-        // 所有返回的技能都应该是 Answer phase
-        for skill in &answer_skills {
-            assert_eq!(
-                skill.activation_phase,
-                super::super::ActivationPhase::Answer
-            );
-        }
-
-        // CDS v1.1: format cluster replaces individual format leaf skills
-        assert!(answer_skills.iter().any(|s| s.id == "format"));
-    }
-
-    #[test]
-    fn answer_format_skills_universal_across_modes() {
-        let registry = CapabilityRegistry::standard();
-
-        // CDS v1.1: format cluster is output-agnostic — available to all modes
-        for mode in ["chat", "rag", "search"] {
-            let skills = registry.answer_format_skills(mode);
-            assert!(
-                skills.iter().any(|s| s.id == "format"),
-                "format cluster should be available to mode '{mode}'"
-            );
-        }
     }
 }

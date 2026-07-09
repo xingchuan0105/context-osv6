@@ -1,0 +1,91 @@
+{
+  "description": "Column-semantics regression fixtures for triplet mapping edges (G1–G4). No document-specific code-prefix rules.",
+  "cases": [
+    {
+      "id": "catalog-id-to-short-name",
+      "triplet": {
+        "subject": "SKU-4421",
+        "predicate": "maps to",
+        "object": "Widget A"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "catalog-id-to-short-name-zh",
+      "triplet": {
+        "subject": "ACT-100",
+        "predicate": "标识为",
+        "object": "概念启动"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "category-belongs",
+      "triplet": {
+        "subject": "概念启动",
+        "predicate": "属于",
+        "object": "概念阶段"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "verb-edge-not-mapping",
+      "triplet": {
+        "subject": "MKTPDT",
+        "predicate": "制定",
+        "object": "项目计划"
+      },
+      "expect": "allow"
+    },
+    {
+      "id": "duty-sentence-as-mapping-object",
+      "triplet": {
+        "subject": "ME-10",
+        "predicate": "标识为",
+        "object": "探索可选概念和提供技术可选方案"
+      },
+      "expect": "reject",
+      "violation": "mapping_object_not_short_label"
+    },
+    {
+      "id": "execution-row-id-with-duty-text",
+      "triplet": {
+        "subject": "ROLE-03",
+        "predicate": "标识为",
+        "object": "与负责人充分沟通并理解任务书"
+      },
+      "expect": "reject",
+      "violation": "mapping_object_not_short_label"
+    },
+    {
+      "id": "org-name-as-mapping-subject",
+      "triplet": {
+        "subject": "MKTPDT",
+        "predicate": "标识为",
+        "object": "制定计划阶段项目计划"
+      },
+      "expect": "reject",
+      "violation": "org_role_not_catalog_mapping"
+    },
+    {
+      "id": "mapping-object-with-comma",
+      "triplet": {
+        "subject": "CAT-50",
+        "predicate": "标识为",
+        "object": "增扩PDT，进行全员任命"
+      },
+      "expect": "reject",
+      "violation": "mapping_object_not_short_label"
+    },
+    {
+      "id": "predicate-is-activity-title",
+      "triplet": {
+        "subject": "SE",
+        "predicate": "准备可获得性决策评审材料",
+        "object": "材料"
+      },
+      "expect": "reject",
+      "violation": "predicate_too_long"
+    }
+  ]
+}

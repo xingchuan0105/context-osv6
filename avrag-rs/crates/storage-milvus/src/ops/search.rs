@@ -6,8 +6,10 @@ use avrag_retrieval_data_plane::{
     Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, MultimodalSearchRequest, ScoredChunk,
     TextDenseSearchRequest,
 };
+use contracts::auth_runtime::AuthContext;
 use serde_json::{Value, json};
 use tracing::warn;
+use uuid::Uuid;
 
 impl MilvusDataPlane {
     pub(crate) async fn search_entities(
@@ -70,9 +72,74 @@ impl MilvusDataPlane {
             .await?;
         let mut chunks = Vec::new();
         for row in rows {
-            match scored_text_chunk(row, "milvus_text_dense") {
+            match scored_text_chunk(row, "milvus_text_dense", &self.config.metric_type) {
                 Ok(chunk) => chunks.push(chunk),
-                Err(e) => warn!(error = %e, channel = "milvus_text_dense", "skipped malformed search row"),
+                Err(e) => {
+                    warn!(error = %e, channel = "milvus_text_dense", "skipped malformed search row")
+                }
+            }
+        }
+        Ok(chunks)
+    }
+
+    /// Count indexed text (body) chunks for a doc scope via a scalar query.
+    ///
+    /// Used by the retrieval runtime to size the dynamic rough-recall budget.
+    /// Milvus `/v2/vectordb/entities/query` caps `limit` at 16384; docscope body
+    /// chunk counts in practice fit, so we count returned rows. Empty doc_ids
+    /// short-circuits to 0.
+    pub async fn count_text_chunks(
+        &self,
+        auth: &AuthContext,
+        doc_ids: &[Uuid],
+    ) -> anyhow::Result<usize> {
+        if doc_ids.is_empty() {
+            return Ok(0);
+        }
+        let filter = doc_filter(auth, Some(doc_ids));
+        const COUNT_QUERY_LIMIT: usize = 16384;
+        let rows = self
+            .query_entities(
+                &self.config.collection_names().text_chunks,
+                filter,
+                COUNT_QUERY_LIMIT,
+                &["chunk_id"],
+            )
+            .await?;
+        Ok(rows.len())
+    }
+
+    /// List all text (body) chunks for a doc scope with full content.
+    ///
+    /// Backs the `doc_chunks` agent tool. Uses the same scalar query as
+    /// `count_text_chunks` but pulls `TEXT_OUTPUT_FIELDS` (incl. `text`) so the
+    /// codegen sandbox can run arbitrary traversal/aggregate operators over the
+    /// full chunk set. Empty doc_ids short-circuits to an empty list. The
+    /// Milvus `/v2/vectordb/entities/query` `limit` cap is 16384; callers that
+    /// exceed it should narrow the doc scope rather than paginate here.
+    pub async fn list_text_chunks(
+        &self,
+        auth: &AuthContext,
+        doc_ids: &[Uuid],
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
+        if doc_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let filter = doc_filter(auth, Some(doc_ids));
+        const LIST_QUERY_LIMIT: usize = 16384;
+        let rows = self
+            .query_entities(
+                &self.config.collection_names().text_chunks,
+                filter,
+                LIST_QUERY_LIMIT,
+                &TEXT_OUTPUT_FIELDS,
+            )
+            .await?;
+        let mut chunks = Vec::with_capacity(rows.len());
+        for row in rows {
+            match scored_text_chunk(row, "milvus_doc_scan", &self.config.metric_type) {
+                Ok(chunk) => chunks.push(chunk),
+                Err(e) => warn!(error = %e, channel = "milvus_doc_scan", "skipped malformed scan row"),
             }
         }
         Ok(chunks)
@@ -107,9 +174,14 @@ impl MilvusDataPlane {
         let raw_hit_count = rows.len();
         let mut chunks = Vec::new();
         for row in rows {
-            match scored_text_chunk(row, "milvus_bm25") {
+            // BM25's `distance` is a relevance score (higher = better), not a
+            // geometric distance, so it must bypass the L2 inversion. Pass the
+            // "BM25" sentinel to keep the raw score.
+            match scored_text_chunk(row, "milvus_bm25", "BM25") {
                 Ok(chunk) => chunks.push(chunk),
-                Err(e) => warn!(error = %e, channel = "milvus_bm25", "skipped malformed search row"),
+                Err(e) => {
+                    warn!(error = %e, channel = "milvus_bm25", "skipped malformed search row")
+                }
             }
         }
         let hydrated_hit_count = chunks.len();
@@ -144,16 +216,22 @@ impl MilvusDataPlane {
             .await?;
         let mut chunks = Vec::new();
         for row in rows {
-            match scored_multimodal_chunk(row, "milvus_multimodal_dense") {
+            match scored_multimodal_chunk(row, "milvus_multimodal_dense", &self.config.metric_type) {
                 Ok(chunk) => chunks.push(chunk),
-                Err(e) => warn!(error = %e, channel = "milvus_multimodal_dense", "skipped malformed search row"),
+                Err(e) => {
+                    warn!(error = %e, channel = "milvus_multimodal_dense", "skipped malformed search row")
+                }
             }
         }
         Ok(chunks)
     }
 }
 
-pub(crate) fn scored_text_chunk(row: Value, channel: &str) -> anyhow::Result<ScoredChunk> {
+pub(crate) fn scored_text_chunk(
+    row: Value,
+    channel: &str,
+    metric_type: &str,
+) -> anyhow::Result<ScoredChunk> {
     let chunk_id = uuid_field(&row, "chunk_id")
         .map_err(|e| anyhow::anyhow!("scored_text_chunk chunk_id error on row {}: {}", row, e))?;
     let doc_id = uuid_field(&row, "doc_id")
@@ -162,7 +240,7 @@ pub(crate) fn scored_text_chunk(row: Value, channel: &str) -> anyhow::Result<Sco
         chunk_id,
         doc_id,
         content: string_field(&row, "text").unwrap_or_default(),
-        score: score_field(&row),
+        score: score_field(&row, metric_type),
         source: channel.to_string(),
         page: row.get("page").and_then(Value::as_i64),
         chunk_type: string_field(&row, "chunk_type").unwrap_or_else(|| "text".to_string()),
@@ -178,8 +256,12 @@ pub(crate) fn scored_text_chunk(row: Value, channel: &str) -> anyhow::Result<Sco
     })
 }
 
-pub(crate) fn scored_multimodal_chunk(row: Value, channel: &str) -> anyhow::Result<ScoredChunk> {
-    let base_score = score_field(&row);
+pub(crate) fn scored_multimodal_chunk(
+    row: Value,
+    channel: &str,
+    metric_type: &str,
+) -> anyhow::Result<ScoredChunk> {
+    let base_score = score_field(&row, metric_type);
     let weight = row
         .get("retrieval_weight")
         .and_then(Value::as_f64)
@@ -233,6 +315,7 @@ mod search_tests {
         let chunk = scored_multimodal_chunk(
             sample_multimodal_row(Some(0.4)),
             "milvus_multimodal_dense",
+            "COSINE",
         )
         .expect("row should parse");
         assert!((chunk.score - 0.36).abs() < 1e-6);
@@ -240,15 +323,17 @@ mod search_tests {
 
     #[test]
     fn scored_multimodal_ignores_full_weight() {
-        let chunk = scored_multimodal_chunk(sample_multimodal_row(Some(1.0)), "test")
-            .expect("row should parse");
+        let chunk =
+            scored_multimodal_chunk(sample_multimodal_row(Some(1.0)), "test", "COSINE")
+                .expect("row should parse");
         assert!((chunk.score - 0.9).abs() < 1e-6);
     }
 
     #[test]
     fn scored_multimodal_without_weight_uses_base_score() {
-        let chunk = scored_multimodal_chunk(sample_multimodal_row(None), "test")
-            .expect("row should parse");
+        let chunk =
+            scored_multimodal_chunk(sample_multimodal_row(None), "test", "COSINE")
+                .expect("row should parse");
         assert!((chunk.score - 0.9).abs() < 1e-6);
     }
 }

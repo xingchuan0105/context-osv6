@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::documents::AnswerContextChunk;
 use crate::chat::{
     ChatRequest, Citation, DegradeTraceItem, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary,
 };
+use crate::documents::AnswerContextChunk;
 
 fn default_execute_plan_version() -> String {
     "rag-execute-v1".to_string()
@@ -95,7 +95,8 @@ pub enum PlaceholderTripletType {
 }
 
 impl PlaceholderTriplet {
-    /// 分类 triplet 为 fuzzy/traceable/resolved
+    /// Pure wire classification (no I/O). Runtime code should prefer
+    /// `avrag_rag_core::classify_placeholder_triplet` for a single import path.
     pub fn classify(&self) -> PlaceholderTripletType {
         let placeholder_count = self.subject.starts_with("?") as usize
             + self.predicate.starts_with("?") as usize
@@ -211,6 +212,10 @@ pub enum ExecutePlanValidationError {
 impl ExecutePlanRequest {
     pub const MAX_ITEMS: usize = 4;
 
+    /// Wire-level validation of an execute-plan payload.
+    ///
+    /// Runtime callers should use `avrag_rag_core::validate_execute_plan` so policy
+    /// stays outside the contracts crate surface area over time.
     pub fn validate(&self) -> Result<(), ExecutePlanValidationError> {
         if self.doc_scope.is_empty() {
             return Err(ExecutePlanValidationError::EmptyDocScope);
@@ -279,6 +284,8 @@ impl ExecutePlanRequest {
         Ok(())
     }
 
+    /// Retrieval-prep mutation. Prefer `avrag_rag_core::ensure_original_query_text_dense_item`.
+    #[deprecated(note = "use avrag_rag_core::ensure_original_query_text_dense_item")]
     pub fn ensure_original_query_text_dense_item(&mut self, original_query: &str) {
         let original_query = original_query.trim();
         if original_query.is_empty() {
@@ -376,10 +383,6 @@ impl ExecutePlanRequest {
     }
 
     /// Extract document IDs from the doc_scope field.
-    ///
-    /// This replaces the previous `to_chat_request_compat()` + `request_doc_ids()`
-    /// hack where ExecutePlanRequest had to be converted to ChatRequest just to
-    /// extract doc_ids. Now ExecutePlanRequest directly provides doc_ids.
     pub fn doc_ids(&self) -> Option<Vec<uuid::Uuid>> {
         (!self.doc_scope.is_empty()).then(|| {
             self.doc_scope
@@ -389,6 +392,9 @@ impl ExecutePlanRequest {
         })
     }
 
+    /// Compat projection for transitional rag-core callers.
+    /// Prefer `avrag_rag_core::execute_plan_to_chat_request`.
+    #[deprecated(note = "use avrag_rag_core::execute_plan_to_chat_request")]
     pub fn to_chat_request_compat(&self) -> ChatRequest {
         let query = self
             .items

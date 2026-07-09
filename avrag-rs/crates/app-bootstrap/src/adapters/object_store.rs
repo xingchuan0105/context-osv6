@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use app_core::{
-    object_store_port::ObjectStoreUploadStream, ObjectStoreHeadError, ObjectStoreMetadata,
-    ObjectStorePort,
+    ObjectStoreHeadError, ObjectStoreMetadata, ObjectStorePort,
+    object_store_port::ObjectStoreUploadStream,
 };
 use async_trait::async_trait;
 use avrag_storage_pg::ObjectStoreHandle;
@@ -49,24 +49,26 @@ impl ObjectStorePort for ObjectStorePortAdapter {
     }
 
     async fn head(&self, path: &str) -> Result<ObjectStoreMetadata, ObjectStoreHeadError> {
-        self.inner.head(path).await.map(
-            |metadata| ObjectStoreMetadata {
+        self.inner
+            .head(path)
+            .await
+            .map(|metadata| ObjectStoreMetadata {
                 size_bytes: metadata.size_bytes,
                 sha256_hex: metadata.sha256_hex,
                 content_type: metadata.content_type,
                 etag: metadata.etag,
-            },
-        ).map_err(|error| match error {
-            avrag_storage_pg::ObjectStoreHeadError::NotFound { path } => {
-                ObjectStoreHeadError::NotFound { path }
-            }
-            avrag_storage_pg::ObjectStoreHeadError::NotFile { path } => {
-                ObjectStoreHeadError::NotFile { path }
-            }
-            avrag_storage_pg::ObjectStoreHeadError::Backend(error) => {
-                ObjectStoreHeadError::Backend(error.to_string())
-            }
-        })
+            })
+            .map_err(|error| match error {
+                avrag_storage_pg::ObjectStoreHeadError::NotFound { path } => {
+                    ObjectStoreHeadError::NotFound { path }
+                }
+                avrag_storage_pg::ObjectStoreHeadError::NotFile { path } => {
+                    ObjectStoreHeadError::NotFile { path }
+                }
+                avrag_storage_pg::ObjectStoreHeadError::Backend(error) => {
+                    ObjectStoreHeadError::Backend(error.to_string())
+                }
+            })
     }
 
     async fn presigned_get_url(&self, path: &str, ttl_secs: u64) -> Result<String, AppError> {

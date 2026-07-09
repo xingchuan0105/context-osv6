@@ -8,7 +8,7 @@ mod unsupported;
 mod weather;
 mod web_search;
 
-pub(super) use support::{tool_call, FakeSearchProvider};
+pub(super) use support::{FakeSearchProvider, tool_call};
 
 mod support {
     use contracts::ToolCall;

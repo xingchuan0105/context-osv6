@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use avrag_auth::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
 use avrag_retrieval_data_plane::{
     Bm25SearchRequest, DocumentIndexBatch, EntityIndexRecord, GraphPassageIndexRecord,
     GraphRelationHint, GraphSearchRequest, MultimodalChunkIndexRecord, MultimodalSearchRequest,
-    RelationIndexRecord, RetrievalDataPlane, TextChunkIndexRecord, TextDenseSearchRequest,
+    RelationIndexRecord, RetrievalDataPlane, RetrievalReadPort, TextChunkIndexRecord, TextDenseSearchRequest,
 };
 use avrag_storage_milvus::{MilvusConfig, MilvusDataPlane};
 use tokio::time::sleep;

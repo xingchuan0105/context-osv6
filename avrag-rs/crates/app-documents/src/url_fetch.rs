@@ -161,11 +161,7 @@ pub fn looks_like_html(bytes: &[u8]) -> bool {
         || prefix.contains("<!doctype html")
 }
 
-pub fn build_url_source_filename(
-    url: &Url,
-    mime_type: &str,
-    title_hint: Option<&str>,
-) -> String {
+pub fn build_url_source_filename(url: &Url, mime_type: &str, title_hint: Option<&str>) -> String {
     let extension = match mime_type {
         "text/html" => "html",
         "application/json" => "json",

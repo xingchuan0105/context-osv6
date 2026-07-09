@@ -44,14 +44,6 @@ echo "==> ts-rs: AnswerBlock, ChatEvent"
   cargo run --quiet --bin export-types
 )
 
-# ts-rs maps i64 -> bigint and may emit cross-crate imports; normalize for JSON wire types.
-CHAT_EVENT_TS="${OUT_DIR}/chat_event.ts"
-if [[ -f "${CHAT_EVENT_TS}" ]]; then
-  sed -i '/^import type { ChatActivitySourcePreview/d' "${CHAT_EVENT_TS}"
-  sed -i 's/Array<ChatActivitySourcePreview>/Array<{ id: string; label: string; href?: string | null }>/g' "${CHAT_EVENT_TS}"
-  sed -i 's/message_id: bigint/message_id: number/g' "${CHAT_EVENT_TS}"
-fi
-
 echo "==> golden JSON fixtures"
 (
   cd "${CONTRACTS_DIR}"

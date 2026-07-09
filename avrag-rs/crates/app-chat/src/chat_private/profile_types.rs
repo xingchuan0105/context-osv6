@@ -22,8 +22,14 @@ impl ProfileDelta {
             && self.session_continuity_hints.is_empty()
             && self.observed_conflicts.is_empty()
             && self.global_summary.as_ref().is_none_or(|s| s.is_empty())
-            && self.preferred_answer_style_update.as_ref().is_none_or(|u| u.is_noop())
-            && self.preferred_language_update.as_ref().is_none_or(|u| u.is_noop())
+            && self
+                .preferred_answer_style_update
+                .as_ref()
+                .is_none_or(|u| u.is_noop())
+            && self
+                .preferred_language_update
+                .as_ref()
+                .is_none_or(|u| u.is_noop())
     }
 }
 

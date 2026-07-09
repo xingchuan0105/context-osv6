@@ -1,5 +1,5 @@
-use contracts::{ToolResult, ToolStatus};
 use contracts::chat::{Citation, DegradeReason, DegradeTraceItem};
+use contracts::{ToolResult, ToolStatus};
 
 use super::retrieval::chunk_text_field;
 
@@ -210,7 +210,11 @@ pub fn degrade_trace_from_tool_results(tool_results: &[ToolResult]) -> Vec<Degra
 }
 
 fn parse_tool_degrade_reason(raw: &str) -> DegradeReason {
-    for part in raw.split(';').map(str::trim).filter(|part| !part.is_empty()) {
+    for part in raw
+        .split(';')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+    {
         let parsed = DegradeReason::from_str(part);
         if part == parsed.as_str() {
             return parsed;

@@ -1,12 +1,11 @@
 use async_trait::async_trait;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use common::AppError;
 use uuid::Uuid;
 
 use crate::share_domain::{
-    NotebookAccessSnapshot, PublicShareChatContextSnapshot, ShareAccessLevel,
-    ShareAccessLogEntry, ShareAnalyticsEntry, ShareNotebookMember,
-    SharedNotebookSnapshot,
+    NotebookAccessSnapshot, PublicShareChatContextSnapshot, ShareAccessLevel, ShareAccessLogEntry,
+    ShareAnalyticsEntry, ShareNotebookMember, SharedNotebookSnapshot,
 };
 
 /// Share persistence boundary — SQL implementations live in bootstrap adapters.
@@ -65,11 +64,8 @@ pub trait ShareStorePort: Send + Sync {
         token: &str,
     ) -> Result<Option<(Uuid, ShareAccessLevel)>, AppError>;
 
-    async fn revoke_token(
-        &self,
-        auth: &AuthContext,
-        token: &str,
-    ) -> Result<Option<Uuid>, AppError>;
+    async fn revoke_token(&self, auth: &AuthContext, token: &str)
+    -> Result<Option<Uuid>, AppError>;
 
     async fn get_share_analytics(
         &self,

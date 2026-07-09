@@ -28,4 +28,3 @@ pub fn extract_referenced_chunk_ids(answer_text: &str) -> HashSet<String> {
     }
     ids
 }
-

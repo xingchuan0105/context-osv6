@@ -4,14 +4,12 @@ use contracts::ToolResult;
 
 use super::assembler::{ContextAssembler, DisclosedState};
 use super::config::{LoopExitConfig, ModeConfig};
-use super::exit_policy::{
-    decide_synthesis_gate, degraded_no_evidence_answer, has_retrieval_observation, SynthesisGate,
-};
+use super::exit_policy::{SynthesisGate, decide_synthesis_gate, has_retrieval_observation};
 use super::reasoning_emit;
-use super::run_result::build_run_result;
+use super::run_result::{build_run_result, RunContext};
 use super::synthesis::SynthesisPhase;
 use super::telemetry::ReActIterationRecord;
-use super::{truncate_preview, ReActLoop};
+use super::{ReActLoop, truncate_preview};
 use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::runtime::{AgentRequest, AgentRunResult, FinalDecision};
 
@@ -21,7 +19,7 @@ impl ReActLoop {
         mode: &ModeConfig,
         loop_exit: &LoopExitConfig,
         request: &AgentRequest,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         retrieval_query: &str,
         direct_answer: Option<&str>,
         messages: &mut Vec<ChatMessage>,
@@ -36,8 +34,7 @@ impl ReActLoop {
         reasoning_summary_acc: &str,
         start_time: std::time::Instant,
     ) -> Result<Option<AgentRunResult>, AppError> {
-        let mut has_evidence =
-            has_retrieval_observation(messages, collected_tool_results, mode);
+        let mut has_evidence = has_retrieval_observation(messages, collected_tool_results, mode);
 
         match decide_synthesis_gate(
             loop_exit,
@@ -91,31 +88,7 @@ impl ReActLoop {
                 {
                     return Ok(Some(result));
                 }
-                has_evidence =
-                    has_retrieval_observation(messages, collected_tool_results, mode);
-            }
-            SynthesisGate::DegradedNoEvidence => {
-                return Ok(Some(
-                    self.finish_direct_answer_run(
-                        degraded_no_evidence_answer(&mode.id),
-                        request,
-                        disclosed_state,
-                        collected_tool_results,
-                        sink,
-                        iteration,
-                        max_iterations,
-                        total_tool_calls,
-                        telemetry_records,
-                        total_usage,
-                        reasoning_summary_acc,
-                        start_time,
-                        "degraded_no_evidence",
-                        FinalDecision::Degraded {
-                            reason: crate::agents::react_loop::DegradeReason::NoResultsAfterAllFallbacks,
-                        },
-                    )
-                    .await?,
-                ));
+                has_evidence = has_retrieval_observation(messages, collected_tool_results, mode);
             }
             SynthesisGate::EnterSynthesis => {}
         }
@@ -237,8 +210,11 @@ impl ReActLoop {
             )
             .await?;
 
-        let disclosed_skills: Vec<String> =
-            disclosed_state.disclosed_skill_ids.iter().cloned().collect();
+        let disclosed_skills: Vec<String> = disclosed_state
+            .disclosed_skill_ids
+            .iter()
+            .cloned()
+            .collect();
         let observation_preview = truncate_preview(&final_answer, 200);
         reasoning_emit::emit_evaluation_telemetry(
             sink,
@@ -266,7 +242,11 @@ impl ReActLoop {
         )
         .await
     }
-    pub(super) async fn emit_run_citations(&self, sink: &dyn AgentEventSink, citations: &[contracts::chat::Citation]) {
+    pub(super) async fn emit_run_citations(
+        &self,
+        sink: &dyn AgentEventSink,
+        citations: &[contracts::chat::Citation],
+    ) {
         if !citations.is_empty() {
             let _ = sink
                 .emit(AgentEvent::Citations {
@@ -291,18 +271,21 @@ impl ReActLoop {
         start_time: std::time::Instant,
         final_decision: Option<FinalDecision>,
     ) -> Result<AgentRunResult, AppError> {
+        let ctx = RunContext {
+            iteration,
+            max_iterations,
+            total_tool_calls,
+            telemetry_records,
+            total_usage,
+            reasoning_summary_acc,
+            start_time,
+        };
         let result = build_run_result(
             &self.llm,
             final_answer,
             request,
             collected_tool_results,
-            telemetry_records,
-            total_usage,
-            reasoning_summary_acc,
-            iteration,
-            max_iterations,
-            total_tool_calls,
-            start_time,
+            &ctx,
             final_decision,
         );
         self.emit_run_citations(sink, &result.citations).await;

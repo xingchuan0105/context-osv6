@@ -1,6 +1,8 @@
 use anyhow::Result;
 use avrag_llm::LlmUsage;
-use contracts::chat::{ChatRequest, DegradeReason, DegradeTraceItem, RagPlan, RagPlanItem, RagTraceItem};
+use contracts::chat::{
+    ChatRequest, DegradeReason, DegradeTraceItem, RagPlan, RagPlanItem, RagTraceItem,
+};
 use uuid::Uuid;
 
 use crate::context::SessionContext;

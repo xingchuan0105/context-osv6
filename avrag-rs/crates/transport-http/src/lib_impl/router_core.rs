@@ -1,22 +1,14 @@
 
 
 use app_bootstrap::AppState;
-use app_core::{CreatePasswordResetTicketInput, RegisterUserInput};
-use bcrypt::{DEFAULT_COST, hash, verify};
 use axum::{
     Json, Router,
-    body::Bytes,
-    extract::{Extension, Path, Query, State},
     http::{HeaderMap, HeaderValue, StatusCode},
-    response::{IntoResponse, Response},
     routing::put,
 };
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use serde::Deserialize;
-use serde_json::json;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
-use tracing::warn;
 use uuid::Uuid;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -45,16 +37,6 @@ use utoipa_swagger_ui::SwaggerUi;
 )]
 struct ApiDoc;
 
-use auth_types::{
-    AuthEnvelope, AuthPayload, AuthUserDto, ChangePasswordRequest,
-    ConfirmResetPasswordRequest, LegalStatusEnvelope, LegalStatusPayload, LoginRequest,
-    RecordLegalAcceptanceRequest, RegisterRequest,
-    ResetPasswordRequest, ResetRequest, SendResetCodeRequest, UpdateProfileRequest,
-    UserPreferencesPayload, VerifyResetCodeRequest, VerifyResetTokenRequest,
-};
-
-pub(crate) use middleware::RequestState;
-
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -66,13 +48,13 @@ const JWT_DEFAULT_SECRET: &str = "change-me-in-production";
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct JwtClaims {
-    sub: String,
-    org_id: String,
-    permissions: Vec<String>,
+pub(crate) struct JwtClaims {
+    pub(crate) sub: String,
+    pub(crate) org_id: String,
+    pub(crate) permissions: Vec<String>,
     jti: String,
     #[serde(default = "default_auth_version")]
-    auth_version: i32,
+    pub(crate) auth_version: i32,
     exp: usize,
     iat: usize,
 }
@@ -93,38 +75,29 @@ fn jwt_secret() -> String {
     }
 }
 
-async fn record_api_product_event_if_available(
+/// API-surface product events — delegates to canonical analytics entry point.
+pub(crate) async fn record_api_product_event_if_available(
     state: &AppState,
     user_id: Uuid,
     event_name: analytics::ProductEventName,
     result: analytics::ResultTag,
     metadata: serde_json::Value,
 ) {
-    let Some(analytics) = state.analytics() else {
-        return;
-    };
-    let event = analytics::ProductEvent {
-        event_id: Uuid::new_v4(),
-        event_time: chrono::Utc::now(),
-        user_id,
-        session_id: None,
-        notebook_id: None,
-        surface: analytics::Surface::Api,
-        event_name,
-        result,
-        request_id: state.auth().request_id().map(str::to_string),
-        trace_id: None,
-        client_platform: "web".to_string(),
-        metadata,
-    };
-    if let Err(error) = analytics.record_product_event(&event).await {
-        telemetry::prometheus::record_dependency_failure("analytics");
-        tracing::warn!(error = %error, event_name = ?event_name, "failed to record API product event");
-    }
+    state
+        .analytics_ctx_for_user(user_id)
+        .record_product_event(
+            event_name,
+            analytics::Surface::Api,
+            result,
+            None,
+            None,
+            metadata,
+        )
+        .await;
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn issue_jwt(user_id: &Uuid, org_id: &Uuid) -> String {
+pub fn issue_jwt(user_id: &Uuid, org_id: &Uuid) -> String {
     issue_jwt_for_auth_version(user_id, org_id, default_auth_version(), "user")
 }
 
@@ -214,39 +187,40 @@ fn build_cors_layer() -> CorsLayer {
 // ---------------------------------------------------------------------------
 
 pub fn build_router(state: AppState) -> Router {
-    let protected_api_v1 = routes::notebooks::router()
-        .merge(routes::chat::router())
-        .merge(routes::rag::router())
-        .merge(routes::billing::router())
-        .merge(routes::admin::router())
+    let protected_api_v1 = crate::routes::notebooks::router()
+        .merge(crate::routes::chat::router())
+        .merge(crate::routes::rag::router())
+        .merge(crate::routes::billing::router())
+        .merge(crate::routes::license::router())
+        .merge(crate::routes::admin::router())
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
-            middleware::request_context_middleware,
+            crate::middleware::request_context_middleware,
         ));
-    let protected_auth = routes::auth::protected_router().route_layer(
-        axum::middleware::from_fn_with_state(state.clone(), middleware::request_context_middleware),
+    let protected_auth = crate::routes::auth::protected_router().route_layer(
+        axum::middleware::from_fn_with_state(state.clone(), crate::middleware::request_context_middleware),
     );
-    let protected_chat_compat = routes::chat::compat_router().route_layer(
-        axum::middleware::from_fn_with_state(state.clone(), middleware::request_context_middleware),
+    let protected_chat_compat = crate::routes::chat::compat_router().route_layer(
+        axum::middleware::from_fn_with_state(state.clone(), crate::middleware::request_context_middleware),
     );
 
     let protected_dev_upload = Router::new()
-        .route("/dev-upload/{document_id}", put(crate::dev_upload_handler))
+        .route("/dev-upload/{document_id}", put(super::infra_handlers::dev_upload_handler))
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
-            middleware::request_context_middleware,
+            crate::middleware::request_context_middleware,
         ));
 
     Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
-        .merge(routes::infra::router())
+        .merge(crate::routes::infra::router())
         .merge(protected_dev_upload)
-        .nest("/api/auth", routes::auth::public_router().merge(protected_auth))
+        .nest("/api/auth", crate::routes::auth::public_router().merge(protected_auth))
         .nest("/api/v1", protected_api_v1)
-        .nest("/api/e2e", routes::e2e::router())
+        .nest("/api/e2e", crate::routes::e2e::router())
         .merge(protected_chat_compat)
         .with_state(state)
-        .layer(axum::middleware::from_fn(middleware::observability_middleware))
+        .layer(axum::middleware::from_fn(crate::middleware::observability_middleware))
         .layer(TraceLayer::new_for_http())
         .layer(build_cors_layer())
         .layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024))

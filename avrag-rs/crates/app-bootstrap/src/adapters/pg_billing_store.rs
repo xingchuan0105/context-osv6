@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
+use crate::adapters::pg_session::set_current_role;
 use app_core::BillingStorePort;
 use app_core::{
     BillingConfig, BillingProvider, Subscription, UsageForecastResponse, UsageHistoryResponse,
     UsageWindowResponse, WebhookClaim,
 };
+use async_trait::async_trait;
 use avrag_storage_pg::PgAppRepository;
 use common::{AppError, UserId};
-use crate::adapters::pg_session::set_current_role;
 use sqlx::Row;
 use std::collections::HashMap;
 
@@ -18,11 +18,11 @@ mod billing_sql {
 
     use anyhow::{Result, anyhow, bail};
     use app_core::{
-        BillingConfig, BillingProvider, DailyUsage, ExistingSubscriptionFields, LimitHits,
-        StripeSubscriptionSnapshot, Subscription, SubscriptionStatus, UsageForecastResponse,
-        UsageHistoryResponse, UsageWindowBucket, UsageWindowResponse, WebhookClaim,
-        ADMIN_ROLE_SUPER, PLAN_FREE, PLAN_PLUS, PLAN_PRO, STATUS_ACTIVE, STATUS_CANCELED,
-        STATUS_PAST_DUE, STATUS_UNPAID,
+        ADMIN_ROLE_SUPER, BillingConfig, BillingProvider, DailyUsage, ExistingSubscriptionFields,
+        LimitHits, PLAN_FREE, PLAN_PLUS, PLAN_PRO, STATUS_ACTIVE, STATUS_CANCELED, STATUS_PAST_DUE,
+        STATUS_UNPAID, StripeSubscriptionSnapshot, Subscription, SubscriptionStatus,
+        UsageForecastResponse, UsageHistoryResponse, UsageWindowBucket, UsageWindowResponse,
+        WebhookClaim,
     };
     use avrag_storage_pg::PgAppRepository;
     use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
@@ -32,7 +32,10 @@ mod billing_sql {
 
     use crate::adapters::pg_session::{set_current_role_sqlx, set_current_user_sqlx};
 
-    pub(super) async fn set_current_user(conn: &mut sqlx::PgConnection, user_id: &str) -> Result<()> {
+    pub(super) async fn set_current_user(
+        conn: &mut sqlx::PgConnection,
+        user_id: &str,
+    ) -> Result<()> {
         set_current_user_sqlx(conn, user_id).await?;
         Ok(())
     }
@@ -242,9 +245,15 @@ impl BillingStorePort for PgBillingStoreAdapter {
         status: &str,
         error: Option<String>,
     ) -> Result<(), AppError> {
-        billing_sql::update_webhook_lease_status(self.repo.clone(), provider, event_id, status, error)
-            .await
-            .map_err(map_err)
+        billing_sql::update_webhook_lease_status(
+            self.repo.clone(),
+            provider,
+            event_id,
+            status,
+            error,
+        )
+        .await
+        .map_err(map_err)
     }
 
     async fn process_webhook_event(

@@ -1,9 +1,9 @@
 use anyhow::Result;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_retrieval_data_plane::RetrievalDataPlane;
 use avrag_storage_pg::{
     DocumentCleanupTask, DocumentCleanupTaskCompletionOutcome, DocumentCleanupTaskFailureOutcome,
-    ObjectStoreHandle, PgAppRepository,
+    ObjectStoreHandle, PgAppRepository, PgStorageError,
 };
 use ingestion::{IngestionError, IngestionTask};
 use sha2::{Digest, Sha256};
@@ -17,6 +17,10 @@ use uuid::Uuid;
 
 use crate::runtime_support::{document_cleanup_task_context, safe_relative_object_key};
 
+pub(crate) fn from_storage_error(error: PgStorageError) -> IngestionError {
+    IngestionError::storage(error)
+}
+
 pub(crate) async fn ensure_ingestion_side_effects_allowed(
     repo: &PgAppRepository,
     context: &AuthContext,
@@ -25,6 +29,7 @@ pub(crate) async fn ensure_ingestion_side_effects_allowed(
     phase: &str,
 ) -> Result<(), IngestionError> {
     let allowed = repo
+        .documents()
         .document_allows_ingestion_side_effects(
             context,
             document_id,
@@ -32,11 +37,11 @@ pub(crate) async fn ensure_ingestion_side_effects_allowed(
             task.lock_token.as_deref(),
         )
         .await
-        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+        .map_err(from_storage_error)?;
     if allowed {
         Ok(())
     } else {
-        Err(IngestionError::StateSink(format!(
+        Err(IngestionError::storage(format!(
             "ingestion side effects aborted before {phase}: document is deleting/deleted or task lease was lost"
         )))
     }
@@ -49,9 +54,10 @@ pub(crate) async fn verify_uploaded_object_bytes(
     bytes: &[u8],
 ) -> Result<(), IngestionError> {
     let validation = repo
+        .documents()
         .get_document_upload_validation(context, document_id)
         .await
-        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+        .map_err(from_storage_error)?;
     let Some(validation) = validation else {
         return Ok(());
     };
@@ -59,7 +65,7 @@ pub(crate) async fn verify_uploaded_object_bytes(
     if let Some(expected_size) = validation.upload_size_bytes {
         let actual_size = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
         if expected_size != actual_size {
-            return Err(IngestionError::StateSink(format!(
+            return Err(IngestionError::security(format!(
                 "uploaded object size changed after validation: expected {expected_size} bytes, got {actual_size} bytes"
             )));
         }
@@ -70,8 +76,8 @@ pub(crate) async fn verify_uploaded_object_bytes(
         hasher.update(bytes);
         let actual_sha256 = hex::encode(hasher.finalize());
         if expected_sha256 != actual_sha256 {
-            return Err(IngestionError::StateSink(
-                "uploaded object checksum changed after validation".to_string(),
+            return Err(IngestionError::security(
+                "uploaded object checksum changed after validation",
             ));
         }
     }
@@ -100,7 +106,7 @@ pub(crate) fn spawn_ingestion_task_lock_heartbeat(
 
         loop {
             heartbeat.tick().await;
-            match repo.renew_ingestion_task_lock(&task_id, &lock_token).await {
+            match repo.ingestion_queue().renew_ingestion_task_lock(&task_id, &lock_token).await {
                 Ok(true) => {}
                 Ok(false) => warn!(
                     task_id = %task_id,
@@ -116,7 +122,9 @@ pub(crate) fn spawn_ingestion_task_lock_heartbeat(
     })
 }
 
-pub(crate) async fn stop_ingestion_task_lock_heartbeat(heartbeat: Option<tokio::task::JoinHandle<()>>) {
+pub(crate) async fn stop_ingestion_task_lock_heartbeat(
+    heartbeat: Option<tokio::task::JoinHandle<()>>,
+) {
     let Some(heartbeat) = heartbeat else {
         return;
     };
@@ -141,6 +149,7 @@ pub(crate) fn spawn_document_cleanup_task_lock_heartbeat(
         loop {
             heartbeat.tick().await;
             match repo
+                .ingestion_queue()
                 .renew_document_cleanup_task_lock(task_id, lock_token)
                 .await
             {
@@ -163,7 +172,9 @@ pub(crate) fn spawn_document_cleanup_task_lock_heartbeat(
     })
 }
 
-pub(crate) async fn stop_document_cleanup_task_lock_heartbeat(heartbeat: tokio::task::JoinHandle<()>) {
+pub(crate) async fn stop_document_cleanup_task_lock_heartbeat(
+    heartbeat: tokio::task::JoinHandle<()>,
+) {
     heartbeat.abort();
     if let Err(error) = heartbeat.await
         && !error.is_cancelled()
@@ -179,6 +190,7 @@ pub(crate) async fn run_document_cleanup_once(
     worker_id: &str,
 ) -> Result<bool> {
     let Some(task) = repo
+        .ingestion_queue()
         .claim_next_document_cleanup_task(worker_id, None)
         .await?
     else {
@@ -211,6 +223,7 @@ pub(crate) async fn run_document_cleanup_once(
 
     match result {
         Ok(()) => match repo
+            .ingestion_queue()
             .complete_document_cleanup_task(task.task_id, lock_token)
             .await?
         {
@@ -222,6 +235,7 @@ pub(crate) async fn run_document_cleanup_once(
             }
         },
         Err(error) => match repo
+            .ingestion_queue()
             .fail_document_cleanup_task(task.task_id, lock_token, &error.to_string())
             .await?
         {
@@ -254,6 +268,7 @@ async fn ensure_document_cleanup_task_can_continue(
         .lock_token
         .ok_or_else(|| anyhow::anyhow!("cleanup task missing lock token before {phase}"))?;
     if repo
+        .chunks()
         .document_cleanup_task_lease_is_current(task.task_id, lock_token)
         .await?
     {
@@ -276,6 +291,7 @@ pub(crate) async fn process_document_cleanup_task(
     let context = document_cleanup_task_context(task);
     ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "target lookup").await?;
     let Some(targets) = repo
+        .chunks()
         .get_document_cleanup_targets(&context, task.document_id, &task.payload)
         .await?
     else {
@@ -284,7 +300,8 @@ pub(crate) async fn process_document_cleanup_task(
     };
     if !matches!(
         targets.status,
-        contracts::documents::DocumentStatus::Deleting | contracts::documents::DocumentStatus::Deleted
+        contracts::documents::DocumentStatus::Deleting
+            | contracts::documents::DocumentStatus::Deleted
     ) {
         return Err(anyhow::anyhow!(
             "document {} was not in deleting/deleted status during cleanup",
@@ -352,6 +369,7 @@ pub(crate) async fn process_document_cleanup_task(
     ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "derived row cleanup")
         .await?;
     if !repo
+        .chunks()
         .cleanup_document_derived_rows(&context, task.document_id)
         .await?
     {
@@ -363,6 +381,7 @@ pub(crate) async fn process_document_cleanup_task(
     ensure_document_cleanup_task_can_continue(repo, task, &lease_lost, "mark document deleted")
         .await?;
     if !repo
+        .chunks()
         .mark_document_deleted(&context, task.document_id)
         .await?
     {

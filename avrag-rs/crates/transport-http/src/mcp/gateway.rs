@@ -5,11 +5,11 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use uuid::Uuid;
 
+use crate::middleware::RequestState;
 use crate::handlers;
-use crate::RequestState;
 
 use super::catalog;
 use super::dispatch;

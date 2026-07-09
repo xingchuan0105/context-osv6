@@ -6,6 +6,8 @@ pub(super) fn build_chat_completion_request_body(
     messages: &[ChatMessage],
     temperature: Option<f32>,
     stream: bool,
+    json_mode: bool,
+    max_tokens: Option<u32>,
 ) -> serde_json::Value {
     let mut request_body = serde_json::json!({
         "model": config.model,
@@ -38,8 +40,12 @@ pub(super) fn build_chat_completion_request_body(
     if let Some(temp) = temperature {
         request_body["temperature"] = serde_json::json!(temp);
     }
+    if let Some(max_tokens) = max_tokens {
+        request_body["max_tokens"] = serde_json::json!(max_tokens);
+    }
     if let Some(enable_thinking) = config.enable_thinking {
-        if config.base_url.to_ascii_lowercase().contains("deepseek") {
+        let base = config.base_url.to_ascii_lowercase();
+        if base.contains("deepseek") {
             let mut thinking = serde_json::json!({
                 "type": if enable_thinking { "enabled" } else { "disabled" },
             });
@@ -47,6 +53,8 @@ pub(super) fn build_chat_completion_request_body(
                 thinking["reasoning_effort"] = serde_json::json!("max");
             }
             request_body["thinking"] = thinking;
+        } else if base.contains("generativelanguage") || base.contains("googleapis.com") {
+            // Gemini OpenAI-compat rejects unknown `enable_thinking` (400 INVALID_ARGUMENT).
         } else {
             request_body["enable_thinking"] = serde_json::json!(enable_thinking);
         }
@@ -59,6 +67,19 @@ pub(super) fn build_chat_completion_request_body(
     }
     if config.enable_cache == Some(true) {
         request_body["prompt_cache"] = serde_json::json!(true);
+    }
+
+    // JSON Output (`response_format: json_object`) constrains the model to emit
+    // a valid JSON string, eliminating the code-block-on-synthesis failure mode
+    // at the API layer. Gated to OpenAI-compatible providers that honor this
+    // field (DeepSeek, SiliconFlow). The prompt must already contain "json" +
+    // a format example. See https://api-docs.deepseek.com/zh-cn/guides/json_mode
+    // and https://api-docs.siliconflow.cn/docs/api/chat-completions-post.
+    if json_mode {
+        let base = config.base_url.to_ascii_lowercase();
+        if base.contains("deepseek") || base.contains("siliconflow") {
+            request_body["response_format"] = serde_json::json!({ "type": "json_object" });
+        }
     }
 
     request_body
@@ -92,6 +113,8 @@ mod tests {
             &[ChatMessage::user("hello")],
             Some(0.3),
             false,
+            false,
+            None,
         );
 
         assert_eq!(body["thinking"]["type"], "disabled");
@@ -106,10 +129,31 @@ mod tests {
             &[ChatMessage::user("hello")],
             Some(0.3),
             false,
+            false,
+            None,
         );
 
         assert_eq!(body["thinking"]["type"], "enabled");
         assert_eq!(body["thinking"]["reasoning_effort"], "max");
+    }
+
+    #[test]
+    fn gemini_request_omits_enable_thinking_field() {
+        let config = test_config(
+            "https://generativelanguage.googleapis.com/v1beta/openai",
+            Some(false),
+        );
+        let body = build_chat_completion_request_body(
+            &config,
+            &[ChatMessage::user("hello")],
+            Some(0.3),
+            false,
+            false,
+            None,
+        );
+
+        assert!(body.get("enable_thinking").is_none());
+        assert!(body.get("thinking").is_none());
     }
 
     #[test]
@@ -123,6 +167,8 @@ mod tests {
             &[ChatMessage::user("hello")],
             Some(0.3),
             false,
+            false,
+            None,
         );
 
         assert_eq!(body["enable_thinking"], false);
@@ -134,7 +180,7 @@ mod tests {
         let mut config = test_config("https://api.deepseek.com", None);
         config.enable_cache = Some(true);
         let body =
-            build_chat_completion_request_body(&config, &[ChatMessage::user("hello")], None, false);
+            build_chat_completion_request_body(&config, &[ChatMessage::user("hello")], None, false, false, None);
         assert_eq!(body["prompt_cache"], true);
     }
 
@@ -142,7 +188,7 @@ mod tests {
     fn request_omits_prompt_cache_when_enable_cache_is_none() {
         let config = test_config("https://api.deepseek.com", None);
         let body =
-            build_chat_completion_request_body(&config, &[ChatMessage::user("hello")], None, false);
+            build_chat_completion_request_body(&config, &[ChatMessage::user("hello")], None, false, false, None);
         assert!(body.get("prompt_cache").is_none());
     }
 
@@ -172,7 +218,7 @@ mod tests {
             reasoning_content: None,
         };
 
-        let body = build_chat_completion_request_body(&config, &[msg1, msg2, msg3], None, false);
+        let body = build_chat_completion_request_body(&config, &[msg1, msg2, msg3], None, false, false, None);
 
         let messages = body["messages"].as_array().unwrap();
         assert_eq!(messages.len(), 3);
@@ -216,6 +262,8 @@ mod tests {
             &[ChatMessage::user("hello"), assistant],
             None,
             false,
+            false,
+            None,
         );
 
         let messages = body["messages"].as_array().unwrap();
@@ -223,5 +271,62 @@ mod tests {
             messages[1]["reasoning_content"],
             "Let me search the knowledge base."
         );
+    }
+
+    #[test]
+    fn deepseek_json_mode_sets_response_format() {
+        let config = test_config("https://api.deepseek.com", None);
+        let body = build_chat_completion_request_body(
+            &config,
+            &[ChatMessage::user("return json")],
+            None,
+            false,
+            true,
+            None,
+        );
+        assert_eq!(body["response_format"]["type"], "json_object");
+    }
+
+    #[test]
+    fn siliconflow_json_mode_sets_response_format() {
+        let config = test_config("https://api.siliconflow.cn/v1", None);
+        let body = build_chat_completion_request_body(
+            &config,
+            &[ChatMessage::user("return json")],
+            None,
+            false,
+            true,
+            None,
+        );
+        assert_eq!(body["response_format"]["type"], "json_object");
+    }
+
+    #[test]
+    fn json_mode_omitted_for_non_deepseek_providers() {
+        let config =
+            test_config("https://dashscope.aliyuncs.com/compatible-mode/v1", None);
+        let body = build_chat_completion_request_body(
+            &config,
+            &[ChatMessage::user("return json")],
+            None,
+            false,
+            true,
+            None,
+        );
+        assert!(body.get("response_format").is_none());
+    }
+
+    #[test]
+    fn json_mode_omitted_when_not_requested() {
+        let config = test_config("https://api.deepseek.com", None);
+        let body = build_chat_completion_request_body(
+            &config,
+            &[ChatMessage::user("hello")],
+            None,
+            false,
+            false,
+            None,
+        );
+        assert!(body.get("response_format").is_none());
     }
 }

@@ -2,14 +2,12 @@ use avrag_llm::ChatMessage;
 use contracts::ToolResult;
 
 use super::super::assembler::DisclosedState;
-use super::super::optimizer::IterationProgress;
 use super::super::telemetry::ReActIterationRecord;
 
 pub struct IterationState {
     pub messages: Vec<ChatMessage>,
     pub disclosed: DisclosedState,
     pub tool_results: Vec<ToolResult>,
-    pub progress: IterationProgress,
     pub total_tool_calls: u32,
     pub consecutive_sandbox_errors: u8,
     pub reasoning_acc: String,

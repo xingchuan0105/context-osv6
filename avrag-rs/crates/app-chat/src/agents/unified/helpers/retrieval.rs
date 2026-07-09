@@ -1,6 +1,6 @@
 use contracts::AnswerContextChunk;
-use contracts::{ToolResult, ToolStatus};
 use contracts::chat::SourceRef;
+use contracts::{ToolResult, ToolStatus};
 
 pub fn has_evidence(tool_results: &[ToolResult]) -> bool {
     tool_results.iter().any(|result| {

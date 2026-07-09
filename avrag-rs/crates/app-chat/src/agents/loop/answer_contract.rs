@@ -393,16 +393,193 @@ pub fn render_synthesis_prose(answer: &ParsedSynthesisAnswer) -> String {
     }
 }
 
+const PARTIAL_EVIDENCE_INSUFFICIENT_ZH: &str = "资料不足以完整回答";
+
+const DRAFT_REFUSAL_CUES: &[&str] = &[
+    "未找到",
+    "未提及",
+    "未提到",
+    "没有提及",
+    "没有找到",
+    "没有提到",
+    "未在文档中找到",
+    "文档中未",
+    "资料中未",
+    "不在文档",
+    "不在资料",
+    "未提供",
+    "无法确认",
+    "无法确定",
+    "无法回答",
+    "暂无相关",
+    "无相关内容",
+];
+
 pub fn contract_violation_fallback(mode_id: &str) -> String {
     match mode_id {
-        "rag" => "I found relevant material but could not format a validated cited answer. \
-                  Please try asking again."
-            .to_string(),
-        "search" => "I found search results but could not format a validated answer. \
-                      Please try again."
-            .to_string(),
-        _ => "I could not produce a validated answer.".to_string(),
+        "rag" => "找到了相关资料，但未能生成符合引用格式要求的完整答案，请尝试重新提问。".to_string(),
+        "search" => "找到了搜索结果，但未能生成符合格式要求的完整答案，请尝试重新提问。".to_string(),
+        _ => "未能生成符合格式要求的完整答案。".to_string(),
     }
+}
+
+fn draft_contains_refusal(answer_text: &str) -> bool {
+    DRAFT_REFUSAL_CUES
+        .iter()
+        .any(|cue| answer_text.contains(cue))
+}
+
+fn try_parse_candidate(
+    raw: &str,
+    tool_results: &[ToolResult],
+    messages: &[ChatMessage],
+    mode: &ModeConfig,
+) -> Option<ParsedSynthesisAnswer> {
+    parse_synthesis_answer(raw, mode)
+        .ok()
+        .or_else(|| lift_prose_to_contract(raw, tool_results, messages, mode))
+}
+
+fn strip_unknown_cite_markers(text: &str, known: &std::collections::HashSet<String>) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find("[[") {
+        out.push_str(&rest[..start]);
+        let after_start = &rest[start + 2..];
+        let Some(end) = after_start.find("]]") else {
+            out.push_str(&rest[start..]);
+            break;
+        };
+        let token = after_start[..end].trim();
+        let marker = format!("[[{token}]]");
+        if let Some(chunk_id) = token.strip_prefix("cite:").map(str::trim) {
+            if known.contains(chunk_id) {
+                out.push_str(&marker);
+            }
+        } else if let Some(chunk_id) = token.strip_prefix("image:").map(str::trim) {
+            if known.contains(chunk_id) {
+                out.push_str(&marker);
+            }
+        } else {
+            out.push_str(&marker);
+        }
+        rest = &after_start[end + 2..];
+    }
+    out.push_str(rest);
+    collapse_whitespace(&out)
+}
+
+fn strip_unknown_search_markers(text: &str, valid_indices: &[u32]) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find("[[") {
+        out.push_str(&rest[..start]);
+        let after_start = &rest[start + 2..];
+        let Some(end) = after_start.find("]]") else {
+            out.push_str(&rest[start..]);
+            break;
+        };
+        let inner = after_start[..end].trim();
+        let marker = format!("[[{inner}]]");
+        let keep = if inner.contains(',') {
+            inner.split(',').all(|part| {
+                part.trim()
+                    .parse::<u32>()
+                    .ok()
+                    .is_some_and(|index| valid_indices.contains(&index))
+            })
+        } else {
+            inner
+                .parse::<u32>()
+                .ok()
+                .is_some_and(|index| valid_indices.contains(&index))
+        };
+        if keep {
+            out.push_str(&marker);
+        }
+        rest = &after_start[end + 2..];
+    }
+    out.push_str(rest);
+    collapse_whitespace(&out)
+}
+
+fn collapse_whitespace(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn sanitize_partial_answer(
+    answer: &ParsedSynthesisAnswer,
+    tool_results: &[ToolResult],
+    messages: &[ChatMessage],
+) -> Option<String> {
+    match answer {
+        ParsedSynthesisAnswer::Rag(ans) => {
+            let known = known_chunk_ids_with_messages(tool_results, messages);
+            let cleaned = strip_unknown_cite_markers(&ans.answer_text, &known);
+            if cleaned.chars().count() >= 4 {
+                Some(cleaned)
+            } else {
+                None
+            }
+        }
+        ParsedSynthesisAnswer::Search(ans) => {
+            let valid_indices: Vec<u32> = ans.citations.iter().map(|c| c.index).collect();
+            let cleaned = strip_unknown_search_markers(&ans.answer_text, &valid_indices);
+            if cleaned.chars().count() >= 4 {
+                Some(cleaned)
+            } else {
+                None
+            }
+        }
+    }
+}
+
+/// When synthesis JSON fails validation but the model attempted an answer (no refusal
+/// phrasing in draft `answer_text`), salvage usable prose by dropping invalid citations.
+pub fn extract_partial_synthesis_fallback(
+    candidates: &[&str],
+    tool_results: &[ToolResult],
+    messages: &[ChatMessage],
+    mode: &ModeConfig,
+) -> Option<String> {
+    if mode.synthesis_output.contract == AnswerContractKind::ProseOnly {
+        return None;
+    }
+
+    for raw in candidates {
+        if let Some(parsed) = try_parse_candidate(raw, tool_results, messages, mode) {
+            let answer_text = match &parsed {
+                ParsedSynthesisAnswer::Rag(a) => &a.answer_text,
+                ParsedSynthesisAnswer::Search(a) => &a.answer_text,
+            };
+            if draft_contains_refusal(answer_text) {
+                return None;
+            }
+        }
+    }
+
+    for raw in candidates.iter().rev() {
+        let Some(parsed) = try_parse_candidate(raw, tool_results, messages, mode) else {
+            continue;
+        };
+        if let Some(cleaned) = sanitize_partial_answer(&parsed, tool_results, messages) {
+            return Some(cleaned);
+        }
+    }
+
+    if candidates.iter().any(|raw| {
+        try_parse_candidate(raw, tool_results, messages, mode).is_some_and(|parsed| {
+            let answer_text = match &parsed {
+                ParsedSynthesisAnswer::Rag(a) => &a.answer_text,
+                ParsedSynthesisAnswer::Search(a) => &a.answer_text,
+            };
+            !draft_contains_refusal(answer_text)
+        })
+    }) {
+        return Some(PARTIAL_EVIDENCE_INSUFFICIENT_ZH.to_string());
+    }
+
+    None
 }
 
 pub fn resolve_synthesis_answer(
@@ -511,5 +688,72 @@ mod tests {
         )
         .unwrap();
         assert!(validate_synthesis_answer(&lifted, &tool_results, &[], &mode).is_empty());
+    }
+
+    #[test]
+    fn contract_violation_fallback_rag_is_chinese() {
+        let fallback = contract_violation_fallback("rag");
+        assert!(!fallback.contains("I found"));
+        assert!(fallback.contains('，') || fallback.contains('。') || fallback.chars().any(|c| c > '\u{4e00}'));
+    }
+
+    #[test]
+    fn extract_partial_fallback_strips_invalid_citations() {
+        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let tool_results = vec![contracts::ToolResult {
+            tool: "dense_retrieval".to_string(),
+            version: "1".to_string(),
+            status: contracts::ToolStatus::Ok,
+            data: Some(serde_json::json!({"chunks": [{"chunk_id": "good"}]})),
+            trace: None,
+        }];
+        let raw = r#"{"schema_version":"internal_answer_v1","answer_text":"公司于2019年在大连建厂[[cite:good]][[cite:bad]]，营收550万元。","citations":[{"chunk_id":"good"},{"chunk_id":"bad"}],"coverage":"full","refusal_reason":null}"#;
+        let partial = extract_partial_synthesis_fallback(&[raw], &tool_results, &[], &mode)
+            .expect("expected partial answer");
+        assert!(partial.contains("2019年在大连建厂"));
+        assert!(partial.contains("[[cite:good]]"));
+        assert!(!partial.contains("[[cite:bad]]"));
+    }
+
+    #[test]
+    fn extract_partial_fallback_returns_insufficient_zh_when_text_empty_after_strip() {
+        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let tool_results = vec![contracts::ToolResult {
+            tool: "dense_retrieval".to_string(),
+            version: "1".to_string(),
+            status: contracts::ToolStatus::Ok,
+            data: Some(serde_json::json!({"chunks": [{"chunk_id": "good"}]})),
+            trace: None,
+        }];
+        let raw = r#"{"schema_version":"internal_answer_v1","answer_text":"[[cite:bad]]","citations":[{"chunk_id":"bad"}],"coverage":"full","refusal_reason":null}"#;
+        let partial = extract_partial_synthesis_fallback(&[raw], &tool_results, &[], &mode)
+            .expect("expected insufficient fallback");
+        assert_eq!(partial, PARTIAL_EVIDENCE_INSUFFICIENT_ZH);
+    }
+
+    #[test]
+    fn extract_partial_fallback_skips_when_draft_contains_refusal() {
+        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let raw = r#"{"schema_version":"internal_answer_v1","answer_text":"文档中未找到保修期限相关信息。","citations":[],"coverage":"none","refusal_reason":"not found"}"#;
+        assert!(extract_partial_synthesis_fallback(&[raw], &[], &[], &mode).is_none());
+    }
+
+    #[test]
+    fn extract_partial_fallback_prefers_latest_candidate() {
+        let mode = super::super::config::load_mode_config("rag").unwrap();
+        let tool_results = vec![contracts::ToolResult {
+            tool: "dense_retrieval".to_string(),
+            version: "1".to_string(),
+            status: contracts::ToolStatus::Ok,
+            data: Some(serde_json::json!({"chunks": [{"chunk_id": "a"}]})),
+            trace: None,
+        }];
+        let first = r#"{"schema_version":"internal_answer_v1","answer_text":"旧答案[[cite:missing]]","citations":[{"chunk_id":"missing"}]}"#;
+        let second = r#"{"schema_version":"internal_answer_v1","answer_text":"新答案基于证据[[cite:a]]","citations":[{"chunk_id":"a"}]}"#;
+        let partial =
+            extract_partial_synthesis_fallback(&[first, second], &tool_results, &[], &mode)
+                .expect("expected partial answer");
+        assert!(partial.contains("新答案"));
+        assert!(!partial.contains("旧答案"));
     }
 }

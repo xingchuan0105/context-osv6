@@ -23,3 +23,6 @@ volumes/
 
 # Python virtual environments
 .venv/
+
+# HeavyTail validation corpora (may be copyrighted; local-only)
+/crates/heavytail/tests/corpus/*/*.txt

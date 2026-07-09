@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use uuid::Uuid;
 
 use crate::{AccessLevel, NotebookMember, ShareService};
@@ -142,5 +142,27 @@ impl ShareService {
 }
 
 fn map_store_error(error: common::AppError) -> anyhow::Error {
-    anyhow::anyhow!(error.to_string())
+    // Preserve the AppError so map_anyhow_error can downcast it back and keep the
+    // original variant/code/http_status (e.g. validation -> 400 instead of 500).
+    // Stringifying here would lose the type and re-classify every store error as
+    // internal_error/500.
+    anyhow::Error::new(error)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::map_store_error;
+    use common::AppError;
+
+    #[test]
+    fn map_store_error_preserves_app_error_for_downcast() {
+        let original = AppError::validation("invite_not_allowed", "invite not allowed");
+        let anyhow_err = map_store_error(original);
+        let recovered = anyhow_err
+            .downcast_ref::<AppError>()
+            .expect("anyhow error should wrap the original AppError");
+        assert_eq!(recovered.code(), "invite_not_allowed");
+        assert_eq!(recovered.http_status(), 400);
+        assert_eq!(recovered.message(), "invite not allowed");
+    }
 }

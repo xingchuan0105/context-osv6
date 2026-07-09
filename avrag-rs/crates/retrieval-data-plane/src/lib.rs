@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use avrag_auth::{AuthContext, OrgId};
+use contracts::auth_runtime::{AuthContext, OrgId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -248,31 +248,13 @@ pub struct IndexWriteReport {
     pub graph_passage_count: usize,
 }
 
+/// Read/query contract for the retrieval data plane.
+///
+/// Consumers that only run queries (e.g. `RagRuntime` during a chat turn) depend
+/// on this narrow trait instead of the full [`RetrievalDataPlane`], so they are
+/// not coupled to write/schema methods they never call.
 #[async_trait]
-pub trait RetrievalDataPlane: Send + Sync {
-    async fn ensure_schema(&self) -> anyhow::Result<()> {
-        Err(retrieval_data_plane_method_not_implemented("ensure_schema"))
-    }
-
-    async fn replace_document_index(
-        &self,
-        _batch: DocumentIndexBatch,
-    ) -> anyhow::Result<IndexWriteReport> {
-        Err(retrieval_data_plane_method_not_implemented(
-            "replace_document_index",
-        ))
-    }
-
-    async fn delete_document_index(
-        &self,
-        _auth: &AuthContext,
-        _document_id: Uuid,
-    ) -> anyhow::Result<()> {
-        Err(retrieval_data_plane_method_not_implemented(
-            "delete_document_index",
-        ))
-    }
-
+pub trait RetrievalReadPort: Send + Sync {
     async fn search_text_dense(
         &self,
         request: TextDenseSearchRequest,
@@ -289,25 +271,70 @@ pub trait RetrievalDataPlane: Send + Sync {
         &self,
         _request: GraphSearchRequest,
     ) -> anyhow::Result<GraphSearchOutput> {
-        Err(retrieval_data_plane_method_not_implemented("search_graph"))
+        Err(anyhow::anyhow!(
+            "search_graph is not implemented on this retrieval adapter"
+        ))
+    }
+
+    /// Count indexed text (body) chunks for the given doc scope.
+    ///
+    /// Used by the retrieval runtime to size the dynamic rough-recall budget
+    /// (docscope chunk total × fraction). Returns 0 by default so stubs and
+    /// adapters without a count capability fall back to the configured floor.
+    async fn count_text_chunks(
+        &self,
+        _auth: &AuthContext,
+        _doc_ids: &[Uuid],
+    ) -> anyhow::Result<usize> {
+        Ok(0)
+    }
+
+    /// List ALL text (body) chunks for the given doc scope with full content.
+    ///
+    /// Backs the `doc_chunks` agent tool: lets the codegen sandbox run arbitrary
+    /// traversal/aggregate operators (re, collections, set, ...) over a doc's
+    /// entire chunk set — for "how many / count / distribution" queries that
+    /// dense/lexical top-K cannot answer. Returns empty by default so stubs and
+    /// adapters without a scan capability degrade gracefully.
+    async fn list_text_chunks(
+        &self,
+        _auth: &AuthContext,
+        _doc_ids: &[Uuid],
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
+        Ok(Vec::new())
     }
 }
 
-fn retrieval_data_plane_method_not_implemented(method: &str) -> anyhow::Error {
-    anyhow::anyhow!(
-        "RetrievalDataPlane method {method} is not implemented; configure a concrete retrieval data plane adapter instead of relying on trait defaults"
-    )
+/// Full data plane: extends [`RetrievalReadPort`] with **required** index
+/// write/schema methods used by the ingestion worker and bootstrap.
+///
+/// Read-only consumers should depend on [`RetrievalReadPort`] only — do not
+/// implement this trait with stub writes.
+#[async_trait]
+pub trait RetrievalDataPlane: RetrievalReadPort {
+    async fn ensure_schema(&self) -> anyhow::Result<()>;
+
+    async fn replace_document_index(
+        &self,
+        batch: DocumentIndexBatch,
+    ) -> anyhow::Result<IndexWriteReport>;
+
+    async fn delete_document_index(
+        &self,
+        auth: &AuthContext,
+        document_id: Uuid,
+    ) -> anyhow::Result<()>;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use avrag_auth::SubjectKind;
+    use contracts::auth_runtime::SubjectKind;
 
     struct PartialRetrievalDataPlane;
 
     #[async_trait]
-    impl RetrievalDataPlane for PartialRetrievalDataPlane {
+    impl RetrievalReadPort for PartialRetrievalDataPlane {
         async fn search_text_dense(
             &self,
             _request: TextDenseSearchRequest,
@@ -338,29 +365,36 @@ mod tests {
         }
     }
 
-    fn auth_context() -> AuthContext {
-        AuthContext::new(OrgId::from(Uuid::from_u128(1)), SubjectKind::System)
-    }
+    #[async_trait]
+    impl RetrievalDataPlane for PartialRetrievalDataPlane {
+        async fn ensure_schema(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
 
-    fn empty_index_batch() -> DocumentIndexBatch {
-        DocumentIndexBatch {
-            org_id: OrgId::from(Uuid::from_u128(1)),
-            workspace_id: None,
-            document_id: Uuid::from_u128(2),
-            parse_run_id: Uuid::from_u128(3),
-            doc_version: 1,
-            text_chunks: Vec::new(),
-            multimodal_chunks: Vec::new(),
-            entities: Vec::new(),
-            relations: Vec::new(),
-            graph_passages: Vec::new(),
+        async fn replace_document_index(
+            &self,
+            _batch: DocumentIndexBatch,
+        ) -> anyhow::Result<IndexWriteReport> {
+            Ok(IndexWriteReport {
+                text_chunk_count: 0,
+                multimodal_chunk_count: 0,
+                entity_count: 0,
+                relation_count: 0,
+                graph_passage_count: 0,
+            })
+        }
+
+        async fn delete_document_index(
+            &self,
+            _auth: &AuthContext,
+            _document_id: Uuid,
+        ) -> anyhow::Result<()> {
+            Ok(())
         }
     }
 
-    fn assert_not_implemented(error: anyhow::Error, method: &str) {
-        let message = error.to_string();
-        assert!(message.contains(method), "{message}");
-        assert!(message.contains("not implemented"), "{message}");
+    fn auth_context() -> AuthContext {
+        AuthContext::new(OrgId::from(Uuid::from_u128(1)), SubjectKind::System)
     }
 
     #[test]
@@ -374,46 +408,33 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn default_write_and_graph_methods_fail_explicitly() {
+    async fn write_methods_are_required_on_full_data_plane() {
         let data_plane = PartialRetrievalDataPlane;
         let auth = auth_context();
-
-        assert_not_implemented(
-            data_plane.ensure_schema().await.unwrap_err(),
-            "ensure_schema",
-        );
-        assert_not_implemented(
-            data_plane
-                .replace_document_index(empty_index_batch())
-                .await
-                .unwrap_err(),
-            "replace_document_index",
-        );
-        assert_not_implemented(
-            data_plane
-                .delete_document_index(&auth, Uuid::from_u128(2))
-                .await
-                .unwrap_err(),
-            "delete_document_index",
-        );
-        assert_not_implemented(
-            data_plane
-                .search_graph(GraphSearchRequest {
-                    auth,
-                    doc_ids: None,
-                    entity_names: Vec::new(),
-                    relation_hints: Vec::new(),
-                    relation_limit: 10,
-                    supporting_chunk_limit: 10,
-                    query_entities: Vec::new(),
-                    query_entity_vectors: Vec::new(),
-                    hop_limit: 1,
-                    fan_out_limit: 10,
-                    tenant_org_id: "test-org".to_string(),
-                })
-                .await
-                .unwrap_err(),
-            "search_graph",
+        data_plane.ensure_schema().await.unwrap();
+        data_plane
+            .delete_document_index(&auth, Uuid::from_u128(2))
+            .await
+            .unwrap();
+        let err = data_plane
+            .search_graph(GraphSearchRequest {
+                auth,
+                doc_ids: None,
+                entity_names: Vec::new(),
+                relation_hints: Vec::new(),
+                relation_limit: 10,
+                supporting_chunk_limit: 10,
+                query_entities: Vec::new(),
+                query_entity_vectors: Vec::new(),
+                hop_limit: 1,
+                fan_out_limit: 10,
+                tenant_org_id: "test-org".to_string(),
+            })
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("search_graph"),
+            "{err}"
         );
     }
 }

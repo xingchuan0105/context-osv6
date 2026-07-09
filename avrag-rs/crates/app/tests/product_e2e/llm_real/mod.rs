@@ -254,6 +254,281 @@ fn stream_had_error(events: &[SseEvent]) -> bool {
     events.iter().any(|e| e.event == "error")
 }
 
+/// How observability was captured for a RAG quality probe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObservabilityMode {
+    /// Streaming SSE with `debug: true` — full trace + prompt snapshots.
+    FullStream,
+    /// Non-streaming fallback when the stream lacked a parseable `done` payload.
+    FallbackNonStream,
+}
+
+/// RAG probe result with full observability capture for smoke / quality eval.
+#[derive(Debug, Clone)]
+pub struct RagObservableProbeResult {
+    pub resp: ChatResponse,
+    pub capture: StreamReasoningCapture,
+    pub sse_events: Vec<SseEvent>,
+    pub observability_mode: ObservabilityMode,
+    pub stream_error_with_done: bool,
+}
+
+/// Best-effort snapshot of the local API server's liveness, taken at failure time.
+///
+/// `GET /health` is an unauthenticated route on the test router (it delegates to the
+/// production `transport_http::build_router`). A failed probe leaves this snapshot so an
+/// offline reader can tell whether the API process was still accepting connections when
+/// reqwest reported `error sending request for url`.
+#[derive(Debug, Clone)]
+pub struct LivenessSnapshot {
+    /// RFC3339 timestamp of the probe.
+    pub checked_at: String,
+    /// HTTP status code, or `None` if the request itself errored.
+    pub status_code: Option<u16>,
+    /// First 200 chars of the response body (or the request error text).
+    pub body_prefix: String,
+    /// Elapsed wall time in milliseconds.
+    pub elapsed_ms: u64,
+}
+
+/// Probe failure carrying full diagnostics so the root cause can be read offline.
+///
+/// Replaces the previous `format!("chat: {e}")` that flattened the reqwest error chain and
+/// discarded the SSE events captured before the stream died. See
+/// `prompts/_backups/doc_chunks_e2e_handoff.md` §3.5 for the failure that motivated this.
+#[derive(Debug, Clone)]
+pub struct RagObservableProbeFailure {
+    /// Full anyhow error chain (`{e:#}`), not the flattened one-liner.
+    pub error_chain: String,
+    /// Coarse classification: "connect" | "timeout" | "reset" | "other".
+    pub error_category: String,
+    /// SSE events collected before the stream failed (empty if attempt 1 itself errored).
+    pub sse_events: Vec<SseEvent>,
+    /// Reasoning capture from the (failed) stream.
+    pub capture: StreamReasoningCapture,
+    /// Which step failed last: "fallback_non_stream" (the only return-Err path).
+    pub failing_stage: String,
+}
+
+/// Classify a reqwest error message into a coarse category for triage. Keyword-based;
+/// order matters (most specific first).
+fn classify_reqwest_error(message: &str) -> &'static str {
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("timed out") || lower.contains("deadline") {
+        "timeout"
+    } else if lower.contains("connection reset")
+        || lower.contains("reset by peer")
+        || lower.contains("broken pipe")
+        || lower.contains("connection aborted")
+    {
+        "reset"
+    } else if lower.contains("connect") || lower.contains("connection refused") {
+        "connect"
+    } else {
+        "other"
+    }
+}
+
+fn empty_reasoning_capture() -> StreamReasoningCapture {
+    StreamReasoningCapture {
+        summary: String::new(),
+        delta_count: 0,
+        trace_reasoning: Vec::new(),
+        prompt_snapshots: Vec::new(),
+    }
+}
+
+/// Collect distinct tool names from SSE `tool_result.*` traces and final `tool_results`.
+pub fn summarize_tool_activity(events: &[SseEvent], resp: &ChatResponse) -> Vec<String> {
+    let mut tools = std::collections::BTreeSet::new();
+    for event in events {
+        if event.event != "trace" {
+            continue;
+        }
+        let Some(stage) = event.data.get("stage").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        if let Some(tool) = stage.strip_prefix("tool_result.") {
+            tools.insert(tool.to_string());
+        }
+    }
+    for result in &resp.tool_results {
+        tools.insert(result.tool.clone());
+    }
+    tools.into_iter().collect()
+}
+
+/// Count SSE trace events whose `stage` equals or starts with `stage`.
+pub fn count_sse_trace_stage(events: &[SseEvent], stage: &str) -> usize {
+    events
+        .iter()
+        .filter(|event| {
+            event.event == "trace"
+                && event
+                    .data
+                    .get("stage")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s == stage || s.starts_with(&format!("{stage}.")))
+                    .unwrap_or(false)
+        })
+        .count()
+}
+
+/// Streaming RAG chat with full observability for quality probes.
+///
+/// Uses `debug: true`, `pin_mock_chunk_ids: false` (real retrieval). Retries the
+/// stream up to [`REAL_LLM_MAX_ATTEMPTS`] when the terminal `done` payload is missing;
+/// falls back to non-streaming chat if streaming still fails. When the stream carries
+/// an SSE `error` event (e.g. the LLM provider aborted a Chinese query mid-stream),
+/// the product side has already signalled failure, so we skip the retry and fall back
+/// immediately instead of burning another attempt.
+pub async fn chat_rag_observable_probe(
+    ctx: &TestContext,
+    query: &str,
+    notebook_id: &str,
+    doc_scope: &[String],
+) -> Result<RagObservableProbeResult, RagObservableProbeFailure> {
+    let params = ChatStreamParams {
+        query,
+        agent_type: "rag",
+        notebook_id,
+        doc_scope,
+        session_id: None,
+        format_hint: None,
+        debug: true,
+        pin_mock_chunk_ids: false,
+    };
+
+    let mut last_events = Vec::new();
+    let mut last_capture = empty_reasoning_capture();
+    let mut stream_error_with_done = false;
+
+    for attempt in 1..=REAL_LLM_MAX_ATTEMPTS {
+        match chat_stream_once(ctx, &params).await {
+            Ok((events, Some(resp), capture)) => {
+                if stream_had_error(&events) && attempt == REAL_LLM_MAX_ATTEMPTS {
+                    stream_error_with_done = true;
+                }
+                return Ok(RagObservableProbeResult {
+                    resp,
+                    capture,
+                    sse_events: events,
+                    observability_mode: ObservabilityMode::FullStream,
+                    stream_error_with_done,
+                });
+            }
+            Ok((events, None, capture)) => {
+                if stream_had_error(&events) {
+                    eprintln!(
+                        "[rag_observable] attempt {attempt}/{} stream error event without done; skipping retry, falling back; events={}",
+                        REAL_LLM_MAX_ATTEMPTS,
+                        events.len()
+                    );
+                    last_events = events;
+                    last_capture = capture;
+                    break;
+                }
+                eprintln!(
+                    "[rag_observable] attempt {attempt}/{} missing done payload; events={}",
+                    REAL_LLM_MAX_ATTEMPTS,
+                    events.len()
+                );
+                last_events = events;
+                last_capture = capture;
+            }
+            Err(err) => {
+                eprintln!(
+                    "[rag_observable] attempt {attempt}/{} stream error: {err}",
+                    REAL_LLM_MAX_ATTEMPTS
+                );
+            }
+        }
+        if attempt < REAL_LLM_MAX_ATTEMPTS {
+            tokio::time::sleep(RETRY_DELAY).await;
+        }
+    }
+
+    eprintln!("[rag_observable] falling back to non-streaming chat");
+    let http_resp = match ctx
+        .chat_without_mock_chunk_pin(query, notebook_id, doc_scope)
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            let chain = format!("{e:#}");
+            let category = classify_reqwest_error(&chain);
+            eprintln!("[rag_observable] fallback non-stream failed ({category}): {chain}");
+            return Err(RagObservableProbeFailure {
+                error_chain: chain,
+                error_category: category.to_string(),
+                sse_events: last_events,
+                capture: last_capture,
+                failing_stage: "fallback_non_stream".to_string(),
+            });
+        }
+    };
+    let chat = match http_resp.into_business::<ChatResponse>() {
+        Ok(c) => c,
+        Err(e) => {
+            let chain = format!("response parse failed: {e}");
+            let category = classify_reqwest_error(&chain);
+            eprintln!("[rag_observable] fallback parse failed ({category}): {chain}");
+            return Err(RagObservableProbeFailure {
+                error_chain: chain,
+                error_category: category.to_string(),
+                sse_events: last_events,
+                capture: last_capture,
+                failing_stage: "fallback_non_stream_parse".to_string(),
+            });
+        }
+    };
+    Ok(RagObservableProbeResult {
+        resp: chat,
+        capture: last_capture,
+        sse_events: last_events,
+        observability_mode: ObservabilityMode::FallbackNonStream,
+        stream_error_with_done: false,
+    })
+}
+
+/// Best-effort liveness probe of the local API server at failure time.
+///
+/// Hits the unauthenticated `GET /health` route with a short 5s timeout and records the
+/// status code, a body prefix, and elapsed time. Never returns `Err`: any request failure
+/// is captured into the snapshot so an offline reader can distinguish "API down" from
+/// "API slow / returning errors".
+pub async fn probe_api_liveness(ctx: &TestContext) -> LivenessSnapshot {
+    let url = format!("{}/health", ctx.base_url);
+    let started = std::time::Instant::now();
+    let checked_at = chrono::Utc::now().to_rfc3339();
+
+    let req = ctx
+        .http_client
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(5));
+    match req.send().await {
+        Ok(resp) => {
+            let status = resp.status().as_u16();
+            let body = resp.text().await.unwrap_or_default();
+            LivenessSnapshot {
+                checked_at,
+                status_code: Some(status),
+                body_prefix: body.chars().take(200).collect(),
+                elapsed_ms: started.elapsed().as_millis() as u64,
+            }
+        }
+        Err(e) => {
+            let msg = format!("{e}");
+            LivenessSnapshot {
+                checked_at,
+                status_code: None,
+                body_prefix: msg.chars().take(200).collect(),
+                elapsed_ms: started.elapsed().as_millis() as u64,
+            }
+        }
+    }
+}
+
 async fn chat_stream_once(
     ctx: &TestContext,
     params: &ChatStreamParams<'_>,
@@ -268,6 +543,7 @@ async fn chat_stream_once(
                 session_id: params.session_id,
                 format_hint: params.format_hint,
                 debug: params.debug,
+                pin_mock_chunk_ids: params.pin_mock_chunk_ids,
             },
             REAL_LLM_STREAM_MAX_EVENTS,
             REAL_LLM_STREAM_DEADLINE,
@@ -396,6 +672,7 @@ pub async fn chat_with_retry(
             session_id: None,
             format_hint: None,
             debug: true,
+            pin_mock_chunk_ids: true,
         },
         |resp| !resp.answer.is_empty(),
         "rag chat",
@@ -418,14 +695,8 @@ pub async fn chat_with_citations_retry(
     notebook_id: &str,
     doc_scope: &[String],
 ) -> LlmRealChatResult {
-    chat_with_citations_retry_attempts(
-        ctx,
-        query,
-        notebook_id,
-        doc_scope,
-        REAL_LLM_MAX_ATTEMPTS,
-    )
-    .await
+    chat_with_citations_retry_attempts(ctx, query, notebook_id, doc_scope, REAL_LLM_MAX_ATTEMPTS)
+        .await
 }
 
 pub async fn chat_with_citations_retry_attempts(
@@ -445,6 +716,7 @@ pub async fn chat_with_citations_retry_attempts(
             session_id: None,
             format_hint: None,
             debug: true,
+            pin_mock_chunk_ids: true,
         },
         |resp| {
             !resp.answer.is_empty()
@@ -477,6 +749,7 @@ pub async fn chat_with_multitool_retry(
             session_id: None,
             format_hint: None,
             debug: true,
+            pin_mock_chunk_ids: true,
         },
         |resp| {
             if resp.answer.len() < min_answer_len {
@@ -487,9 +760,7 @@ pub async fn chat_with_multitool_retry(
                 names.insert(result.tool.as_str());
             }
             let ready = names.len() >= min_distinct_tools
-                && names
-                    .iter()
-                    .any(|tool| retrieval_tools.contains(tool));
+                && names.iter().any(|tool| retrieval_tools.contains(tool));
             if !ready {
                 eprintln!(
                     "[llm_real] rag multitool chat tools={names:?} (need >={min_distinct_tools})"
@@ -521,6 +792,7 @@ pub async fn chat_with_format_retry(
             session_id: None,
             format_hint: Some(format_hint),
             debug: true,
+            pin_mock_chunk_ids: true,
         },
         |resp| !resp.answer.is_empty(),
         "format chat",
@@ -547,6 +819,7 @@ pub async fn chat_with_session_retry(
             session_id: Some(session_id),
             format_hint: None,
             debug: true,
+            pin_mock_chunk_ids: true,
         },
         |resp| !resp.answer.is_empty(),
         "session chat",
@@ -571,6 +844,7 @@ pub async fn chat_general_with_retry(
             session_id: None,
             format_hint: None,
             debug: true,
+            pin_mock_chunk_ids: true,
         },
         |resp| !resp.answer.is_empty(),
         "general chat",
@@ -596,6 +870,7 @@ pub async fn search_with_retry(
             session_id: None,
             format_hint: None,
             debug: true,
+            pin_mock_chunk_ids: true,
         },
         |resp| !resp.answer.is_empty() && resp.degrade_trace.is_empty(),
         "search",
@@ -623,10 +898,12 @@ pub(crate) fn require_real_llm_config() {
 }
 
 pub mod chat_real;
+pub mod write_real;
 pub mod format_real;
 pub mod multi_turn;
 pub mod pdf_corpus;
 pub mod pdf_rag_e2e;
+pub mod rag_quality_prod;
 pub mod rag_real;
 pub mod search_real;
 
@@ -737,6 +1014,62 @@ mod stream_reasoning_tests {
     }
 
     #[test]
+    fn summarize_tool_activity_merges_sse_and_response_tools() {
+        use contracts::chat::{ToolResult, ToolStatus};
+        let events = vec![
+            SseEvent {
+                event: "trace".to_string(),
+                data: serde_json::json!({
+                    "stage": "tool_result.code_gen",
+                    "status": "ok",
+                    "detail": { "tool": "code_gen" }
+                }),
+            },
+            SseEvent {
+                event: "trace".to_string(),
+                data: serde_json::json!({
+                    "stage": "tool_result.dense_retrieval",
+                    "status": "ok",
+                    "detail": { "tool": "dense_retrieval" }
+                }),
+            },
+        ];
+        let resp = ChatResponse {
+            answer: String::new(),
+            answer_blocks: Vec::new(),
+            session_id: "s1".into(),
+            agent_type: "rag".into(),
+            sources: Vec::new(),
+            citations: Vec::new(),
+            trace: contracts::chat::TraceInfo { mode: "rag".into() },
+            degrade_trace: Vec::new(),
+            planner_output: None,
+            mode_debug: None,
+            message_id: None,
+            guard_report: None,
+            tool_results: vec![ToolResult {
+                tool: "index_lookup".into(),
+                version: "1".into(),
+                status: ToolStatus::Ok,
+                data: None,
+                trace: None,
+            }],
+            usage: None,
+            agent_operation_guide: None,
+        };
+        let tools = summarize_tool_activity(&events, &resp);
+        assert_eq!(
+            tools,
+            vec![
+                "code_gen".to_string(),
+                "dense_retrieval".to_string(),
+                "index_lookup".to_string(),
+            ]
+        );
+        assert_eq!(count_sse_trace_stage(&events, "turn_start"), 0);
+    }
+
+    #[test]
     fn parse_chat_response_uses_last_done_payload() {
         let partial = serde_json::json!({
             "event": "done",
@@ -760,6 +1093,22 @@ mod stream_reasoning_tests {
         ];
         let resp = parse_chat_response_from_stream_events(&events).expect("parse done");
         assert_eq!(resp.answer, "final");
+    }
+
+    #[test]
+    fn classify_reqwest_error_categories() {
+        assert_eq!(classify_reqwest_error("operation timed out"), "timeout");
+        assert_eq!(
+            classify_reqwest_error("request timed out after 30s"),
+            "timeout"
+        );
+        assert_eq!(classify_reqwest_error("connection reset by peer"), "reset");
+        assert_eq!(classify_reqwest_error("broken pipe (os error 32)"), "reset");
+        assert_eq!(
+            classify_reqwest_error("error connecting to 127.0.0.1:3645: connection refused"),
+            "connect"
+        );
+        assert_eq!(classify_reqwest_error("dns error: host not found"), "other");
     }
 }
 

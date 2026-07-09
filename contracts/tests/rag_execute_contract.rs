@@ -1,5 +1,7 @@
-use contracts::{ExecutePlanRequest, ExecutePlanSummaryMode, ExecutePlanValidationError, RetrievalBundle};
 use contracts::chat::{RagPlan, RagPlanItem};
+use contracts::{
+    ExecutePlanRequest, ExecutePlanSummaryMode, ExecutePlanValidationError, RetrievalBundle,
+};
 
 #[test]
 fn execute_plan_request_drops_legacy_clarify_fields_when_mapped_from_rag_plan() {

@@ -1,12 +1,12 @@
-use app_core::{AdminStorePort, AppConfig, BillingStorePort, ShareStorePort};
-use common::AppError;
-use app_chat::agents::service::UnifiedAgentService;
 use super::AppState;
-use crate::adapters::RedisRateLimitBackend;
 use crate::AppBootstrapResult;
+use crate::adapters::RedisRateLimitBackend;
 use anyhow::Result as AnyResult;
-use avrag_auth::AuthContext;
+use app_chat::agents::service::UnifiedAgentService;
+use app_core::{AdminStorePort, AppConfig, BillingStorePort, ShareStorePort};
+use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::PgAppRepository;
+use common::AppError;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -25,6 +25,7 @@ impl From<AppBootstrapResult> for AppState {
             postgres: result.postgres,
             redis_url: result.redis_url,
             rate_limit_backend: result.rate_limit_backend,
+            password_reset_service: crate::services::PasswordResetService::from_env(),
         }
     }
 }
@@ -74,6 +75,10 @@ impl AppState {
         self.storage.auth_store()
     }
 
+    pub fn password_reset_service(&self) -> &crate::services::PasswordResetService {
+        &self.password_reset_service
+    }
+
     pub fn postgres_repo(&self) -> Option<Arc<PgAppRepository>> {
         self.postgres.clone()
     }
@@ -104,9 +109,9 @@ impl AppState {
         self.chat.orchestrator = self.orchestrator.clone();
     }
 
-    pub fn set_uses_memory_adapters(&mut self, value: bool) {
+    pub fn set_uses_memory_adapters(&self, value: bool) {
+        // Flag is Arc-shared across StorageContext clones (AppState + ChatContext).
         self.storage.set_uses_memory_adapters(value);
-        self.chat.storage = self.storage.clone();
     }
 
     pub fn llm_ctx(&self) -> &app_chat::LlmContext {
@@ -154,6 +159,16 @@ impl AppState {
         )
     }
 
+    /// Build an analytics context for an explicitly-resolved user id (e.g. an
+    /// auth flow where the actor was just resolved and is not yet on `self.auth`).
+    pub fn analytics_ctx_for_user(
+        &self,
+        user_id: Uuid,
+    ) -> app_core::analytics_context::AnalyticsContext {
+        self.analytics
+            .into_context(Some(user_id), self.auth.request_id().map(str::to_string))
+    }
+
     pub async fn record_product_event_if_available(
         &self,
         event_name: analytics::ProductEventName,
@@ -163,31 +178,17 @@ impl AppState {
         notebook_id: Option<Uuid>,
         metadata: serde_json::Value,
     ) {
-        let Some(ref analytics) = self.analytics.service() else {
-            return;
-        };
-        let Some(user_id) = self.auth.actor_id().map(|actor| actor.into_uuid()) else {
-            return;
-        };
-
-        let event = analytics::ProductEvent {
-            event_id: Uuid::new_v4(),
-            event_time: chrono::Utc::now(),
-            user_id,
-            session_id,
-            notebook_id,
-            surface,
-            event_name,
-            result,
-            request_id: self.auth.request_id().map(str::to_string),
-            trace_id: None,
-            client_platform: "web".to_string(),
-            metadata,
-        };
-        if let Err(error) = analytics.record_product_event(&event).await {
-            telemetry::prometheus::record_dependency_failure("analytics");
-            tracing::warn!(error = %error, event_name = ?event_name, "failed to record product event");
-        }
+        self.analytics
+            .record_product_event_for_auth(
+                &self.auth,
+                event_name,
+                surface,
+                result,
+                session_id,
+                notebook_id,
+                metadata,
+            )
+            .await;
     }
 }
 
@@ -263,6 +264,7 @@ impl AppState {
         expires_at_unix: Option<u64>,
     ) -> Result<String, AppError> {
         self.storage
+            .objects()
             .signed_upload_url(document_id, object_path, expires_at_unix)
     }
 
@@ -273,7 +275,11 @@ impl AppState {
         expires: u64,
         signature: &str,
     ) -> Result<(), AppError> {
-        self.storage
-            .verify_upload_signature(document_id, object_path, expires, signature)
+        self.storage.objects().verify_upload_signature(
+            document_id,
+            object_path,
+            expires,
+            signature,
+        )
     }
 }

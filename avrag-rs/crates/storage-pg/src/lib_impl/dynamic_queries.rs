@@ -1,3 +1,4 @@
+use super::*;
 use sea_query::{Iden, PostgresQueryBuilder, Query};
 
 #[derive(Iden)]

@@ -5,8 +5,8 @@ use super::super::config::{LoopExitConfig, ModeConfig};
 use super::super::exit_policy::{has_retrieval_observation, should_block_content_early_stop};
 use super::super::skill_request::is_skill_request_message;
 use super::super::telemetry::ReActIterationRecord;
-use super::super::{truncate_preview, ReActLoop};
-use super::state::{disclosed_skill_ids, IterationControl, IterationOutcome, IterationState};
+use super::super::{ReActLoop, truncate_preview};
+use super::state::{IterationControl, IterationOutcome, IterationState, disclosed_skill_ids};
 use crate::agents::events::AgentEventSink;
 use crate::agents::runtime::AgentRunUsage;
 

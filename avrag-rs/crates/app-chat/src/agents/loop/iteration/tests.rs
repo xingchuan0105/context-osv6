@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
 use super::{IterationControl, IterationOutcome, IterationState};
+use crate::agents::AgentKind;
 use crate::agents::capability::CapabilityRegistry;
 use crate::agents::events::CollectingSink;
-use crate::agents::r#loop::assembler::DisclosedState;
-use crate::agents::r#loop::optimizer::{IterationProgress, LoopOptimizer};
 use crate::agents::r#loop::ReActLoop;
-use crate::agents::AgentKind;
+use crate::agents::r#loop::assembler::DisclosedState;
 use avrag_llm::{ChatMessage, LlmClient, LlmResponse, LlmUsage, ModelProviderConfig};
 
 fn rag_mode() -> super::super::config::ModeConfig {
@@ -21,8 +20,6 @@ fn base_request(kind: AgentKind) -> crate::agents::runtime::AgentRequest {
     crate::agents::runtime::AgentRequest {
         kind,
         query: "test".to_string(),
-        resolved_query: "test".to_string(),
-        query_resolution: None,
         notebook_id: None,
         session_id: None,
         doc_scope: vec![],
@@ -75,14 +72,13 @@ fn empty_state() -> IterationState {
         messages: vec![ChatMessage::user("test")],
         disclosed: DisclosedState::default(),
         tool_results: vec![],
-        progress: IterationProgress::new(),
         total_tool_calls: 0,
         consecutive_sandbox_errors: 0,
         reasoning_acc: String::new(),
     }
 }
 
-fn test_auth() -> avrag_auth::AuthContext {
+fn test_auth() -> contracts::auth_runtime::AuthContext {
     serde_json::from_value(serde_json::json!({
         "org_id": "00000000-0000-0000-0000-000000000001",
         "subject_kind": "User",
@@ -97,7 +93,6 @@ async fn native_tool_call_returns_continue_with_record() {
     let mode = super::super::config::load_mode_config("search").unwrap();
     let mut state = empty_state();
     let sink = CollectingSink::new();
-    let optimizer = LoopOptimizer::new();
     let auth = test_auth();
     let mut response = fake_llm_response("");
     response.tool_calls = Some(vec![contracts::ToolCall {
@@ -109,13 +104,11 @@ async fn native_tool_call_returns_continue_with_record() {
     let outcome = loop_
         .apply_llm_output(
             0,
-            3,
             &mode,
             &base_request(AgentKind::Search),
             &auth,
             &mode.loop_exit_for_mode(),
             &mut state,
-            &optimizer,
             &sink,
             &response,
             std::time::Instant::now(),
@@ -143,7 +136,7 @@ async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chu
     }
 
     #[async_trait::async_trait]
-    impl avrag_retrieval_data_plane::RetrievalDataPlane for StubDataPlane {
+    impl avrag_retrieval_data_plane::RetrievalReadPort for StubDataPlane {
         async fn search_text_dense(
             &self,
             _request: avrag_retrieval_data_plane::TextDenseSearchRequest,
@@ -212,7 +205,7 @@ async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chu
     }));
     let chunk_id = Uuid::from_u128(1);
     let doc_id = Uuid::parse_str("00000000-0000-0000-0000-000000000010").unwrap();
-    let data_plane: Arc<dyn avrag_retrieval_data_plane::RetrievalDataPlane> =
+    let data_plane: Arc<dyn avrag_retrieval_data_plane::RetrievalReadPort> =
         Arc::new(StubDataPlane { chunk_id, doc_id });
     let config = avrag_rag_core::RagConfig::new_for_data_plane(embedding, None);
     let runtime = Arc::new(RagRuntime::with_data_plane(config, data_plane));
@@ -221,7 +214,6 @@ async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chu
     let mode = rag_mode();
     let mut state = empty_state();
     let sink = CollectingSink::new();
-    let optimizer = LoopOptimizer::new();
     let auth = test_auth();
     let mut request = base_request(AgentKind::Rag);
     request.doc_scope = vec![doc_id.to_string()];
@@ -233,13 +225,11 @@ async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chu
     let _outcome = loop_
         .apply_llm_output(
             0,
-            4,
             &mode,
             &request,
             &auth,
             &mode.loop_exit_for_mode(),
             &mut state,
-            &optimizer,
             &sink,
             &response,
             std::time::Instant::now(),
@@ -250,7 +240,7 @@ async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chu
     let observation = state
         .messages
         .iter()
-        .find(|m| m.content.contains("<code_execution_result>"))
+        .find(|m| m.content.contains("<code_execution_result"))
         .map(|m| m.content.as_str())
         .expect("code_execution_result message");
     assert!(
@@ -274,20 +264,17 @@ async fn code_block_success_returns_continue() {
     let mode = rag_mode();
     let mut state = empty_state();
     let sink = CollectingSink::new();
-    let optimizer = LoopOptimizer::new();
     let auth = test_auth();
     let response = fake_llm_response(r#"<code language="python">print("ok")</code>"#);
 
     let outcome = loop_
         .apply_llm_output(
             0,
-            4,
             &mode,
             &base_request(AgentKind::Rag),
             &auth,
             &mode.loop_exit_for_mode(),
             &mut state,
-            &optimizer,
             &sink,
             &response,
             std::time::Instant::now(),
@@ -297,10 +284,12 @@ async fn code_block_success_returns_continue() {
 
     assert!(matches!(outcome.control, IterationControl::Continue));
     assert_eq!(outcome.record.as_ref().unwrap().exit_reason, "code_gen");
-    assert!(state
-        .messages
-        .iter()
-        .any(|m| m.content.contains("code_execution_result")));
+    assert!(
+        state
+            .messages
+            .iter()
+            .any(|m| m.content.contains("code_execution_result"))
+    );
 }
 
 #[tokio::test]
@@ -310,7 +299,6 @@ async fn consecutive_code_errors_break_to_synthesis() {
     let mut state = empty_state();
     state.consecutive_sandbox_errors = 1;
     let sink = CollectingSink::new();
-    let optimizer = LoopOptimizer::new();
     let auth = test_auth();
     let response =
         fake_llm_response(r#"<code language="python">raise RuntimeError("fail")</code>"#);
@@ -318,13 +306,11 @@ async fn consecutive_code_errors_break_to_synthesis() {
     let outcome = loop_
         .apply_llm_output(
             1,
-            4,
             &mode,
             &base_request(AgentKind::Rag),
             &auth,
             &mode.loop_exit_for_mode(),
             &mut state,
-            &optimizer,
             &sink,
             &response,
             std::time::Instant::now(),
@@ -346,20 +332,17 @@ async fn content_with_evidence_in_chat_returns_direct_answer() {
     let mode = chat_mode();
     let mut state = empty_state();
     let sink = CollectingSink::new();
-    let optimizer = LoopOptimizer::new();
     let auth = test_auth();
     let response = fake_llm_response("Here is your answer.");
 
     let outcome = loop_
         .apply_llm_output(
             0,
-            2,
             &mode,
             &base_request(AgentKind::Chat),
             &auth,
             &mode.loop_exit_for_mode(),
             &mut state,
-            &optimizer,
             &sink,
             &response,
             std::time::Instant::now(),
@@ -371,7 +354,10 @@ async fn content_with_evidence_in_chat_returns_direct_answer() {
         outcome.control,
         IterationControl::DirectAnswer { content } if content == "Here is your answer."
     ));
-    assert_eq!(outcome.record.as_ref().unwrap().exit_reason, "direct_content");
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "direct_content"
+    );
 }
 
 #[tokio::test]
@@ -380,20 +366,17 @@ async fn content_without_evidence_in_rag_is_blocked() {
     let mode = rag_mode();
     let mut state = empty_state();
     let sink = CollectingSink::new();
-    let optimizer = LoopOptimizer::new();
     let auth = test_auth();
     let response = fake_llm_response("Answer without retrieval.");
 
     let outcome = loop_
         .apply_llm_output(
             0,
-            4,
             &mode,
             &base_request(AgentKind::Rag),
             &auth,
             &mode.loop_exit_for_mode(),
             &mut state,
-            &optimizer,
             &sink,
             &response,
             std::time::Instant::now(),
@@ -406,9 +389,12 @@ async fn content_without_evidence_in_rag_is_blocked() {
         outcome.record.as_ref().unwrap().exit_reason,
         "content_blocked_no_evidence"
     );
-    assert!(state.messages.iter().any(|m| {
-        m.role == "user" && m.content.contains("retrieve evidence")
-    }));
+    assert!(
+        state
+            .messages
+            .iter()
+            .any(|m| { m.role == "user" && m.content.contains("retrieve evidence") })
+    );
 }
 
 #[tokio::test]
@@ -417,20 +403,17 @@ async fn skill_request_json_in_chat_is_not_direct_answer() {
     let mode = chat_mode();
     let mut state = empty_state();
     let sink = CollectingSink::new();
-    let optimizer = LoopOptimizer::new();
     let auth = test_auth();
     let response = fake_llm_response(r#"{"skill_request":["memory"]}"#);
 
     let outcome = loop_
         .apply_llm_output(
             0,
-            2,
             &mode,
             &base_request(AgentKind::Chat),
             &auth,
             &mode.loop_exit_for_mode(),
             &mut state,
-            &optimizer,
             &sink,
             &response,
             std::time::Instant::now(),
@@ -439,7 +422,10 @@ async fn skill_request_json_in_chat_is_not_direct_answer() {
         .unwrap();
 
     assert!(matches!(outcome.control, IterationControl::Continue));
-    assert_eq!(outcome.record.as_ref().unwrap().exit_reason, "skill_request");
+    assert_eq!(
+        outcome.record.as_ref().unwrap().exit_reason,
+        "skill_request"
+    );
     assert_eq!(
         state.disclosed.last_skill_request,
         Some(vec!["memory".to_string()])

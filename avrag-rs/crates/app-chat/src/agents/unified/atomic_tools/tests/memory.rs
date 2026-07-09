@@ -9,26 +9,19 @@ async fn chat_persistence_from_env() -> Option<std::sync::Arc<dyn app_core::Chat
     None
 }
 
-fn memory_test_auth() -> avrag_auth::AuthContext {
-    avrag_auth::AuthContext::new(
-        avrag_auth::OrgId::new(uuid::Uuid::new_v4()),
-        avrag_auth::SubjectKind::User,
+fn memory_test_auth() -> contracts::auth_runtime::AuthContext {
+    contracts::auth_runtime::AuthContext::new(
+        contracts::auth_runtime::OrgId::new(uuid::Uuid::new_v4()),
+        contracts::auth_runtime::SubjectKind::User,
     )
-    .with_actor_id(avrag_auth::ActorId::new(uuid::Uuid::new_v4()))
+    .with_actor_id(contracts::auth_runtime::ActorId::new(uuid::Uuid::new_v4()))
 }
 
 #[tokio::test]
 async fn test_conversation_history_load_without_memory_context_errors() {
     let auth = memory_test_auth();
     let call = tool_call("conversation_history_load", serde_json::json!({}));
-    let result = dispatch_atomic_tool_with_enforcement(
-        &call,
-        None,
-        Some(&auth),
-        None,
-        None,
-    )
-    .await;
+    let result = dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
     assert_eq!(result.status, ToolStatus::Error);
     let data = result.data.unwrap();
     let err = data["error"].as_str().unwrap();
@@ -42,14 +35,7 @@ async fn test_conversation_history_load_without_memory_context_errors() {
 async fn test_user_profile_load_without_memory_context_errors() {
     let auth = memory_test_auth();
     let call = tool_call("user_profile_load", serde_json::json!({}));
-    let result = dispatch_atomic_tool_with_enforcement(
-        &call,
-        None,
-        Some(&auth),
-        None,
-        None,
-    )
-    .await;
+    let result = dispatch_atomic_tool_with_enforcement(&call, None, Some(&auth), None, None).await;
     assert_eq!(result.status, ToolStatus::Error);
     let data = result.data.unwrap();
     let err = data["error"].as_str().unwrap();
@@ -64,9 +50,9 @@ async fn test_user_profile_load_with_pg_but_no_actor_reaches_memory_dispatch() {
     let Some(chat_persistence) = chat_persistence_from_env().await else {
         return;
     };
-    let auth = avrag_auth::AuthContext::new(
-        avrag_auth::OrgId::new(uuid::Uuid::new_v4()),
-        avrag_auth::SubjectKind::User,
+    let auth = contracts::auth_runtime::AuthContext::new(
+        contracts::auth_runtime::OrgId::new(uuid::Uuid::new_v4()),
+        contracts::auth_runtime::SubjectKind::User,
     );
     let call = tool_call("user_profile_load", serde_json::json!({}));
     let result = dispatch_atomic_tool_with_enforcement(
@@ -91,10 +77,7 @@ async fn test_conversation_history_load_with_pg_context_succeeds() {
     };
     let auth = memory_test_auth();
     let session_id = uuid::Uuid::new_v4();
-    let call = tool_call(
-        "conversation_history_load",
-        serde_json::json!({"limit": 5}),
-    );
+    let call = tool_call("conversation_history_load", serde_json::json!({"limit": 5}));
     let result = dispatch_atomic_tool_with_enforcement(
         &call,
         None,
@@ -137,8 +120,9 @@ async fn test_user_profile_load_with_pg_context_succeeds() {
     );
     let data = result.data.unwrap();
     assert!(data.get("structured_profile").is_some());
-    assert!(data
-        .get("expertise_domains")
-        .and_then(|v| v.as_array())
-        .is_some());
+    assert!(
+        data.get("expertise_domains")
+            .and_then(|v| v.as_array())
+            .is_some()
+    );
 }

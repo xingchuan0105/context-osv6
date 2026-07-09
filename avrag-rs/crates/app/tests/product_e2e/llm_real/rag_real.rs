@@ -9,22 +9,29 @@
 use std::time::Duration;
 
 use crate::product_e2e::{
-    DocumentStatus, TestContext, DegradeReason,
+    DegradeReason, DocumentStatus, TestContext,
     assertions::{
         assert_answer_has_doc_citation, assert_answer_substantive, assert_citation_doc_id,
         assert_citation_referenced_in_answer, assert_has_citations,
     },
-    llm_real::{chat_with_citations_retry_attempts, chat_with_retry, merge_llm_real_extra, REAL_LLM_MULTITOOL_MAX_ATTEMPTS},
+    llm_real::{
+        REAL_LLM_MULTITOOL_MAX_ATTEMPTS, chat_with_citations_retry_attempts, chat_with_retry,
+        merge_llm_real_extra,
+    },
 };
 
-const RETRIEVAL_TOOLS: &[&str] = &["dense_retrieval", "index_lookup", "doc_profile", "doc_summary"];
+const RETRIEVAL_TOOLS: &[&str] = &[
+    "dense_retrieval",
+    "index_lookup",
+    "doc_profile",
+    "doc_summary",
+];
 
 /// P0: Basic RAG document Q&A returns a substantive answer with at least
 /// one document citation when using a real LLM and real embedding provider.
 #[tokio::test]
 #[ignore = "requires real LLM API key; run with --ignored --test-threads=1"]
 async fn real_llm_rag_document_qa_returns_citation() {
-
     super::require_nightly_suite();
     let mut ctx = TestContext::new_with_real_llm().await;
 
@@ -89,7 +96,6 @@ async fn real_llm_rag_document_qa_returns_citation() {
 #[tokio::test]
 #[ignore = "requires real LLM API key; run with --ignored --test-threads=1"]
 async fn real_llm_rag_complex_query_uses_multiple_tools() {
-
     super::require_nightly_suite();
     let mut ctx = TestContext::new_with_real_llm().await;
 
@@ -119,9 +125,14 @@ async fn real_llm_rag_complex_query_uses_multiple_tools() {
     assert_citation_doc_id(resp, &upload.document_id);
     assert_answer_substantive(resp, 80);
     assert!(
-        resp.tool_results.iter().any(|r| RETRIEVAL_TOOLS.contains(&r.tool.as_str())),
+        resp.tool_results
+            .iter()
+            .any(|r| RETRIEVAL_TOOLS.contains(&r.tool.as_str())),
         "expected at least one retrieval-class tool, got: {:?}",
-        resp.tool_results.iter().map(|r| &r.tool).collect::<Vec<_>>()
+        resp.tool_results
+            .iter()
+            .map(|r| &r.tool)
+            .collect::<Vec<_>>()
     );
     let blocking_degrades: Vec<_> = resp
         .degrade_trace

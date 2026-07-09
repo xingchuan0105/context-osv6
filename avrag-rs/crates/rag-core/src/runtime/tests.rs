@@ -8,13 +8,13 @@ use super::*;
 use crate::context::SessionContext;
 use crate::retrieval::ScoredChunk;
 use async_trait::async_trait;
-use avrag_auth::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
 use avrag_retrieval_data_plane::{
     Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, GraphSearchOutput, GraphSearchRequest,
     MultimodalSearchRequest, RelationPathCandidate, TextDenseSearchRequest,
 };
-use contracts::{BackendTrace, Coverage, ExecutePlanResponse, RetrievalBundle, RetrievedChunk};
 use contracts::chat::{ChatMessage, ChatRequest, Citation, RagPlan, RagPlanItem};
+use contracts::{BackendTrace, Coverage, ExecutePlanResponse, RetrievalBundle, RetrievedChunk};
 use std::sync::Arc;
 use tokio::sync::Barrier;
 use uuid::Uuid;
@@ -113,7 +113,7 @@ fn make_scored_chunk(seed: u128, source: &str) -> ScoredChunk {
 struct StubRetrievalDataPlane;
 
 #[async_trait]
-impl RetrievalDataPlane for StubRetrievalDataPlane {
+impl RetrievalReadPort for StubRetrievalDataPlane {
     async fn search_text_dense(
         &self,
         _request: TextDenseSearchRequest,
@@ -145,7 +145,7 @@ impl RetrievalDataPlane for StubRetrievalDataPlane {
 struct GraphStubRetrievalDataPlane;
 
 #[async_trait]
-impl RetrievalDataPlane for GraphStubRetrievalDataPlane {
+impl RetrievalReadPort for GraphStubRetrievalDataPlane {
     async fn search_text_dense(
         &self,
         _request: TextDenseSearchRequest,
@@ -209,7 +209,7 @@ impl RetrievalDataPlane for GraphStubRetrievalDataPlane {
 struct PlaceholderTripletGraphDataPlane;
 
 #[async_trait]
-impl RetrievalDataPlane for PlaceholderTripletGraphDataPlane {
+impl RetrievalReadPort for PlaceholderTripletGraphDataPlane {
     async fn search_text_dense(
         &self,
         _request: TextDenseSearchRequest,
@@ -263,7 +263,7 @@ struct BarrierGraphBm25DataPlane {
 }
 
 #[async_trait]
-impl RetrievalDataPlane for BarrierGraphBm25DataPlane {
+impl RetrievalReadPort for BarrierGraphBm25DataPlane {
     async fn search_text_dense(
         &self,
         _request: TextDenseSearchRequest,

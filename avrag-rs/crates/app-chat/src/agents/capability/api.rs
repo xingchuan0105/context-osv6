@@ -133,6 +133,7 @@ mod tests {
         assert!(resp.modes.contains_key("chat"));
         assert!(resp.modes.contains_key("rag"));
         assert!(resp.modes.contains_key("search"));
+        assert!(resp.modes.contains_key("write"));
     }
 
     #[test]
@@ -149,6 +150,6 @@ mod tests {
         let json = serde_json::to_string(&resp).unwrap();
         let parsed: CapabilitiesResponse = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.api_version, "v6");
-        assert_eq!(parsed.modes.len(), 3);
+        assert_eq!(parsed.modes.len(), 4);
     }
 }

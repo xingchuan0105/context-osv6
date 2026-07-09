@@ -1,4 +1,5 @@
 import { request } from "../http/request";
+import { type RawNotebook } from "../workspace/client";
 
 export type DashboardWorkspace = {
   workspace_id: string;
@@ -30,20 +31,6 @@ export type CreateWorkspaceRequest = {
 export type UpdateWorkspaceRequest = {
   name: string;
   description: string;
-};
-
-type RawNotebook = {
-  id: string;
-  org_id: string;
-  owner_id: string;
-  name: string;
-  title: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
-  document_count?: number;
-  status_summary?: Record<string, number>;
-  shared?: boolean;
 };
 
 type RawNotebookListResponse = {

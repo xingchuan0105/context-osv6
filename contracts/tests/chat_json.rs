@@ -347,9 +347,7 @@ fn export_golden_fixtures() {
         serde_json::to_value(response).expect("serialize response"),
     );
 
-    use contracts::{
-        HealthResponse, NotebookListResponse, Notebook, PlansResponse, PlanRow,
-    };
+    use contracts::{HealthResponse, Notebook, NotebookListResponse, PlanRow, PlansResponse};
 
     write(
         "notebook_list_minimal.json",

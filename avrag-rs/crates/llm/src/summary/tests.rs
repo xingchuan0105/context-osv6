@@ -44,7 +44,7 @@ fn test_finalize_user_prompt_labels_partials() {
 }
 
 #[test]
-fn test_parse_summary_and_metadata_supports_block_contract() {
+fn test_parse_summary_text_supports_block_contract() {
     let raw_output = r#"
 ```summary_text
 【压缩目标】
@@ -52,104 +52,48 @@ fn test_parse_summary_and_metadata_supports_block_contract() {
 ```
 
 ```json
-{
-  "language": "zh",
-  "domain": "technology",
-  "genre": "technical_report",
-  "era": "contemporary"
-}
+{"language":"zh"}
 ```
 "#;
 
-    let (summary_text, metadata) =
-        parse_summary_and_metadata("doc-1", "Atlas Plan", "atlas.md", raw_output);
-
+    let summary_text = parse_summary_text(raw_output);
     assert_eq!(summary_text, "【压缩目标】\n- 提炼 Rust 计划");
-    assert_eq!(metadata.doc_id, "doc-1");
-    assert_eq!(metadata.filename, "atlas.md");
-    assert_eq!(metadata.docname, "Atlas Plan");
-    assert_eq!(metadata.language, "zh");
-    assert_eq!(metadata.domain, "technology".into());
-    assert_eq!(metadata.genre, "technical_report".into());
-    assert_eq!(metadata.era, "contemporary".into());
 }
 
 #[test]
-fn test_parse_summary_and_metadata_supports_json_envelope() {
+fn test_parse_summary_text_supports_json_envelope() {
     let raw_output = r#"
 ```json
 {
   "summary_text": "总命题：\n- Atlas 计划",
   "summary_metadata": {
-    "language": "en",
-    "domain": "operations",
-    "genre": "manual",
-    "era": "modern"
+    "language": "en"
   }
 }
 ```
 "#;
 
-    let (summary_text, metadata) =
-        parse_summary_and_metadata("doc-2", "Atlas Guide", "atlas.txt", raw_output);
-
+    let summary_text = parse_summary_text(raw_output);
     assert_eq!(summary_text, "总命题：\n- Atlas 计划");
-    assert_eq!(metadata.doc_id, "doc-2");
-    assert_eq!(metadata.filename, "atlas.txt");
-    assert_eq!(metadata.docname, "Atlas Guide");
-    assert_eq!(metadata.language, "en");
-    assert_eq!(metadata.domain, "operations".into());
-    assert_eq!(metadata.genre, "manual".into());
-    assert_eq!(metadata.era, "modern".into());
 }
 
 #[test]
-fn test_parse_summary_and_metadata_supports_legacy_text_and_metadata() {
+fn test_parse_summary_text_supports_legacy_text_before_json_fence() {
     let raw_output = r#"
 【宏观命题树】
 1. 第一层
 
 ```json
-{
-  "language": "zh",
-  "domain": "technology",
-  "genre": "technical_report",
-  "era": "contemporary"
-}
+{"language":"zh"}
 ```
 "#;
 
-    let (summary_text, metadata) =
-        parse_summary_and_metadata("doc-3", "Legacy", "legacy.md", raw_output);
-
+    let summary_text = parse_summary_text(raw_output);
     assert_eq!(summary_text, "【宏观命题树】\n1. 第一层");
-    assert_eq!(metadata.language, "zh");
-    assert_eq!(metadata.domain, "technology".into());
-    assert_eq!(metadata.genre, "technical_report".into());
-    assert_eq!(metadata.era, "contemporary".into());
 }
 
 #[test]
-fn test_parse_summary_and_metadata_defaults_metadata_when_json_is_invalid() {
-    let raw_output = r#"
-```summary_text
-结构化摘要正文
-```
-
-```json
-not valid json
-```
-"#;
-
-    let (summary_text, metadata) =
-        parse_summary_and_metadata("doc-4", "Broken", "broken.md", raw_output);
-
-    assert_eq!(summary_text, "结构化摘要正文");
-    assert_eq!(metadata.doc_id, "doc-4");
-    assert_eq!(metadata.filename, "broken.md");
-    assert_eq!(metadata.docname, "Broken");
-    assert_eq!(metadata.language, "unknown");
-    assert_eq!(metadata.domain, "unknown".into());
-    assert_eq!(metadata.genre, "unknown".into());
-    assert_eq!(metadata.era, "unknown".into());
+fn test_parse_summary_text_returns_trimmed_plain_text() {
+    let summary_text = parse_summary_text("  plain summary body  ");
+    assert_eq!(summary_text, "plain summary body");
 }

@@ -1,22 +1,27 @@
 use anyhow::Result;
 use avrag_storage_pg::{NotificationCreateParams, PgAppRepository};
-use ingestion::{AuditRecord, AuditSink, IngestionError, IngestionTask, StateSink, TaskCompletionOutcome, TaskFailureOutcome, TaskSource, Transition};
+use ingestion::{
+    AuditRecord, AuditSink, IngestionError, IngestionTask, StateSink, TaskCompletionOutcome,
+    TaskFailureOutcome, TaskSource, Transition,
+};
 use tracing::info;
 use uuid::Uuid;
 
-use crate::ingestion_guard::ensure_ingestion_side_effects_allowed;
+use crate::ingestion_guard::{ensure_ingestion_side_effects_allowed, from_storage_error};
 use crate::runtime_support::task_context;
 
 pub(crate) struct PgTaskSource {
     pub(crate) repo: PgAppRepository,
     pub(crate) worker_id: String,
+    pub(crate) worker_queue_group: String,
 }
 
 #[async_trait::async_trait]
 impl TaskSource for PgTaskSource {
     async fn fetch_next(&mut self) -> Result<Option<IngestionTask>, IngestionError> {
         self.repo
-            .claim_next_ingestion_task(&self.worker_id)
+            .ingestion_queue()
+            .claim_next_ingestion_task(&self.worker_id, &self.worker_queue_group)
             .await
             .map_err(|error| IngestionError::TaskSource(error.to_string()))
     }
@@ -26,6 +31,7 @@ impl TaskSource for PgTaskSource {
         task: &IngestionTask,
     ) -> Result<TaskCompletionOutcome, IngestionError> {
         self.repo
+            .ingestion_queue()
             .complete_ingestion_task(&task.task_id, task.lock_token.as_deref())
             .await
             .map_err(|error| IngestionError::TaskSource(error.to_string()))
@@ -37,6 +43,7 @@ impl TaskSource for PgTaskSource {
         error: &str,
     ) -> Result<TaskFailureOutcome, IngestionError> {
         self.repo
+            .ingestion_queue()
             .fail_ingestion_task(&task.task_id, task.lock_token.as_deref(), error)
             .await
             .map_err(|err| IngestionError::TaskSource(err.to_string()))
@@ -51,6 +58,7 @@ pub(crate) struct PgAuditSink {
 impl AuditSink for PgAuditSink {
     async fn record(&mut self, record: AuditRecord) -> Result<(), IngestionError> {
         self.repo
+            .audit()
             .append_audit_record(&record)
             .await
             .map_err(|error| IngestionError::AuditSink(error.to_string()))
@@ -71,11 +79,12 @@ impl StateSink for PgStateSink {
         ingestion::DocumentStateMachine::validate(&transition)?;
         let context = task_context(task);
         let document_id = Uuid::parse_str(&task.document_id)
-            .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+            .map_err(IngestionError::from)?;
 
         if matches!(
             transition.to,
-            contracts::documents::DocumentStatus::Processing | contracts::documents::DocumentStatus::Completed
+            contracts::documents::DocumentStatus::Processing
+                | contracts::documents::DocumentStatus::Completed
         ) {
             ensure_ingestion_side_effects_allowed(
                 &self.repo,
@@ -89,9 +98,11 @@ impl StateSink for PgStateSink {
 
         let updated = if matches!(
             transition.to,
-            contracts::documents::DocumentStatus::Processing | contracts::documents::DocumentStatus::Completed
+            contracts::documents::DocumentStatus::Processing
+                | contracts::documents::DocumentStatus::Completed
         ) {
             self.repo
+                .documents()
                 .set_document_status_for_ingestion_task(
                     &context,
                     document_id,
@@ -100,21 +111,23 @@ impl StateSink for PgStateSink {
                     task.lock_token.as_deref(),
                 )
                 .await
-                .map_err(|error| IngestionError::StateSink(error.to_string()))?
+                .map_err(from_storage_error)?
         } else {
             self.repo
+                .documents()
                 .set_document_status(&context, document_id, transition.to.clone())
                 .await
-                .map_err(|error| IngestionError::StateSink(error.to_string()))?
+                .map_err(from_storage_error)?
         };
         if !updated {
-            return Err(IngestionError::StateSink(format!(
+            return Err(IngestionError::storage(format!(
                 "document status transition to {:?} rejected: ingestion task lease lost or document is deleting",
                 transition.to
             )));
         }
 
         self.repo
+            .audit()
             .append_audit_record(&AuditRecord {
                 audit_id: common::new_id(),
                 org_id: task.org_id.clone(),
@@ -130,11 +143,12 @@ impl StateSink for PgStateSink {
                 created_at: chrono::Utc::now().to_rfc3339(),
             })
             .await
-            .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+            .map_err(from_storage_error)?;
 
         if matches!(
             transition.to,
-            contracts::documents::DocumentStatus::Completed | contracts::documents::DocumentStatus::Failed
+            contracts::documents::DocumentStatus::Completed
+                | contracts::documents::DocumentStatus::Failed
         ) {
             if matches!(transition.to, contracts::documents::DocumentStatus::Failed)
                 && let Some(user_id) = task
@@ -169,18 +183,25 @@ impl StateSink for PgStateSink {
                 .as_deref()
                 .and_then(|value| Uuid::parse_str(value).ok())
             {
-                let title = if matches!(transition.to, contracts::documents::DocumentStatus::Completed) {
+                let title = if matches!(
+                    transition.to,
+                    contracts::documents::DocumentStatus::Completed
+                ) {
                     "Document ingestion completed"
                 } else {
                     "Document ingestion failed"
                 };
-                let body = if matches!(transition.to, contracts::documents::DocumentStatus::Completed) {
+                let body = if matches!(
+                    transition.to,
+                    contracts::documents::DocumentStatus::Completed
+                ) {
                     "A document finished ingestion and is ready for retrieval."
                 } else {
                     "A document failed ingestion and needs attention."
                 };
                 let _ = self
                     .repo
+                    .auth()
                     .create_notification(
                         &context,
                         NotificationCreateParams {

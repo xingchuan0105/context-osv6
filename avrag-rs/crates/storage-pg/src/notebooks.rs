@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use contracts::notebooks::Notebook;
 
 #[derive(Clone)]

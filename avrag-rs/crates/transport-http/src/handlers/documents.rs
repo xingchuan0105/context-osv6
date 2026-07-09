@@ -6,23 +6,22 @@ use axum::{
 };
 use common::{AddUrlSourceRequest, CreateDocumentRequest, UpdateDocumentRequest};
 
-use crate::RequestState;
+use super::chat::ChatSessionsQuery;
+use super::{app_error_response, error_response};
+use crate::middleware::RequestState;
 use crate::auth_guard::{
     authorize_document_access, authorize_document_access_index_or_query,
     authorize_workspace_notebook_str, authorize_workspace_query_optional_notebook,
     index_permission,
 };
-use super::chat::ChatSessionsQuery;
-use super::{app_error_response, error_response};
 
 pub(crate) async fn list_documents_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Query(params): Query<ChatSessionsQuery>,
 ) -> Response {
-    if let Err(error) = authorize_workspace_query_optional_notebook(
-        state.auth(),
-        params.notebook_id.as_deref(),
-    ) {
+    if let Err(error) =
+        authorize_workspace_query_optional_notebook(state.auth(), params.notebook_id.as_deref())
+    {
         return app_error_response(error);
     }
     let documents = state
@@ -71,10 +70,9 @@ pub(crate) async fn list_sources_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Query(params): Query<ChatSessionsQuery>,
 ) -> Response {
-    if let Err(error) = authorize_workspace_query_optional_notebook(
-        state.auth(),
-        params.notebook_id.as_deref(),
-    ) {
+    if let Err(error) =
+        authorize_workspace_query_optional_notebook(state.auth(), params.notebook_id.as_deref())
+    {
         return app_error_response(error);
     }
     let sources = state.list_sources(params.notebook_id.as_deref()).await;
@@ -86,9 +84,7 @@ pub(crate) async fn update_document_handler(
     Path(document_id): Path<String>,
     Json(req): Json<UpdateDocumentRequest>,
 ) -> Response {
-    if let Err(error) =
-        authorize_document_access(&state, &document_id, index_permission()).await
-    {
+    if let Err(error) = authorize_document_access(&state, &document_id, index_permission()).await {
         return app_error_response(error);
     }
     match state.update_document(&document_id, req).await {
@@ -115,9 +111,7 @@ pub(crate) async fn delete_document_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(document_id): Path<String>,
 ) -> Response {
-    if let Err(error) =
-        authorize_document_access(&state, &document_id, index_permission()).await
-    {
+    if let Err(error) = authorize_document_access(&state, &document_id, index_permission()).await {
         return app_error_response(error);
     }
     match state.delete_document(&document_id).await {
@@ -130,9 +124,7 @@ pub(crate) async fn get_document_status_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(document_id): Path<String>,
 ) -> Response {
-    if let Err(error) =
-        authorize_document_access_index_or_query(&state, &document_id).await
-    {
+    if let Err(error) = authorize_document_access_index_or_query(&state, &document_id).await {
         return app_error_response(error);
     }
     let document = state
@@ -160,9 +152,7 @@ pub(crate) async fn get_document_content_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(document_id): Path<String>,
 ) -> Response {
-    if let Err(error) =
-        authorize_document_access_index_or_query(&state, &document_id).await
-    {
+    if let Err(error) = authorize_document_access_index_or_query(&state, &document_id).await {
         return app_error_response(error);
     }
     match state.get_document_content(&document_id).await {
@@ -182,9 +172,7 @@ pub(crate) async fn get_parsed_preview_handler(
     Path(document_id): Path<String>,
     Query(params): Query<ParsedPreviewQuery>,
 ) -> Response {
-    if let Err(error) =
-        authorize_document_access_index_or_query(&state, &document_id).await
-    {
+    if let Err(error) = authorize_document_access_index_or_query(&state, &document_id).await {
         return app_error_response(error);
     }
     match state
@@ -204,9 +192,7 @@ pub(crate) async fn reindex_document_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(document_id): Path<String>,
 ) -> Response {
-    if let Err(error) =
-        authorize_document_access(&state, &document_id, index_permission()).await
-    {
+    if let Err(error) = authorize_document_access(&state, &document_id, index_permission()).await {
         return app_error_response(error);
     }
     match state.reindex_document(&document_id).await {
@@ -223,9 +209,7 @@ pub(crate) async fn complete_document_upload_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(document_id): Path<String>,
 ) -> Response {
-    if let Err(error) =
-        authorize_document_access(&state, &document_id, index_permission()).await
-    {
+    if let Err(error) = authorize_document_access(&state, &document_id, index_permission()).await {
         return app_error_response(error);
     }
     match state.complete_document_upload(&document_id).await {

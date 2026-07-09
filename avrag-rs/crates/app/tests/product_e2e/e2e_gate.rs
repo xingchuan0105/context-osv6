@@ -23,9 +23,7 @@ pub fn suite_enabled(suite: E2eSuite) -> bool {
         "integration" => matches!(suite, E2eSuite::Smoke | E2eSuite::Integration),
         "nightly" | "llm_real" => matches!(suite, E2eSuite::Nightly),
         other => {
-            eprintln!(
-                "[product_e2e] WARN: unknown E2E_MODE={other:?}, treating as integration"
-            );
+            eprintln!("[product_e2e] WARN: unknown E2E_MODE={other:?}, treating as integration");
             matches!(suite, E2eSuite::Smoke | E2eSuite::Integration)
         }
     }

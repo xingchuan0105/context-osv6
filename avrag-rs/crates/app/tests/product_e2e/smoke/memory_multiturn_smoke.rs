@@ -1,4 +1,8 @@
-//! S2/S3: Multi-turn anaphora + resolved_query DB write-back + on-demand memory tools.
+//! S2/S3: Multi-turn anaphora + on-demand memory tools.
+// ADR-0010: server-side query normalization removed; the previous
+// `multiturn_anaphora_writes_resolved_query_to_db` test was deleted because
+// the LLM now resolves anaphora on its own via the memory cluster and no
+// resolved_query is written back to the DB.
 
 use std::time::Duration;
 
@@ -16,61 +20,7 @@ async fn ingest_antifragile(ctx: &mut TestContext) -> (String, String) {
 }
 
 #[tokio::test]
-async fn multiturn_anaphora_writes_resolved_query_to_db() {
-
-    super::require_smoke_suite();
-    let mut ctx = TestContext::new_smoke_with_rag().await;
-    let (notebook_id, doc_id) = ingest_antifragile(&mut ctx).await;
-    let doc_scope = vec![doc_id];
-
-    let turn1_http: HttpResponse = ctx
-        .chat("What is antifragility?", &notebook_id, &doc_scope)
-        .await
-        .unwrap();
-    assert_http_ok(&turn1_http);
-    let turn1: ChatResponse = turn1_http.into_business().unwrap();
-    assert!(
-        turn1.degrade_trace.is_empty(),
-        "turn1 degrade: {:?}",
-        turn1.degrade_trace
-    );
-
-    let session_id = turn1.session_id.clone();
-    let follow_up = "Who wrote the book about it?";
-    let turn2_http = ctx
-        .chat_with_session(follow_up, &notebook_id, &doc_scope, &session_id)
-        .await
-        .unwrap();
-    assert_http_ok(&turn2_http);
-    let turn2: ChatResponse = turn2_http.into_business().unwrap();
-
-    assert_answer_substantive(&turn2, 20);
-    assert!(
-        turn2.degrade_trace.is_empty(),
-        "turn2 degrade: {:?}",
-        turn2.degrade_trace
-    );
-
-    let (raw_content, resolved) = ctx
-        .query_latest_user_resolved_query(&session_id)
-        .await
-        .unwrap();
-    assert_eq!(raw_content, follow_up);
-    let resolved = resolved.expect("resolved_query should be written for anaphoric follow-up");
-    assert_ne!(
-        resolved, follow_up,
-        "resolved_query should expand the pronoun, got: {resolved}"
-    );
-    assert!(
-        resolved.to_lowercase().contains("taleb")
-            || resolved.to_lowercase().contains("antifragil"),
-        "resolved query should anchor to prior entity, got: {resolved}"
-    );
-}
-
-#[tokio::test]
 async fn on_demand_conversation_history_load_returns_pg_messages() {
-
     super::require_smoke_suite();
     let mut ctx = TestContext::new_smoke_with_rag().await;
     let (notebook_id, doc_id) = ingest_antifragile(&mut ctx).await;
@@ -145,7 +95,8 @@ async fn on_demand_conversation_history_load_returns_pg_messages() {
         "expected non-empty messages array, got data: {data}"
     );
     assert_eq!(
-        data.get("scope").and_then(|v: &serde_json::Value| v.as_str()),
+        data.get("scope")
+            .and_then(|v: &serde_json::Value| v.as_str()),
         Some("notebook"),
         "expected default notebook scope, got: {data}"
     );
@@ -176,7 +127,11 @@ async fn notebook_scope_conversation_history_load_spans_sessions() {
     );
 
     let session_b_http = ctx
-        .chat("Start a fresh session in the same notebook.", &notebook_id, &doc_scope)
+        .chat(
+            "Start a fresh session in the same notebook.",
+            &notebook_id,
+            &doc_scope,
+        )
         .await
         .unwrap();
     assert_http_ok(&session_b_http);
@@ -209,7 +164,8 @@ async fn notebook_scope_conversation_history_load_spans_sessions() {
     assert_eq!(history.status, contracts::chat::ToolStatus::Ok);
     let data: &serde_json::Value = history.data.as_ref().expect("history tool data");
     assert_eq!(
-        data.get("scope").and_then(|v: &serde_json::Value| v.as_str()),
+        data.get("scope")
+            .and_then(|v: &serde_json::Value| v.as_str()),
         Some("notebook")
     );
     let messages = data
@@ -239,7 +195,6 @@ async fn notebook_scope_conversation_history_load_spans_sessions() {
 
 #[tokio::test]
 async fn on_demand_user_profile_load_returns_profile_shape() {
-
     super::require_smoke_suite();
     let mut ctx = TestContext::new_smoke_with_rag().await;
     let (notebook_id, doc_id) = ingest_antifragile(&mut ctx).await;
@@ -289,7 +244,6 @@ async fn on_demand_user_profile_load_returns_profile_shape() {
 /// First HTTP turn (session_id=None) can still run memory tools after pipeline session backfill.
 #[tokio::test]
 async fn first_turn_memory_tool_works_with_resolved_session_id() {
-
     super::require_smoke_suite();
     let mut ctx = TestContext::new_smoke_with_rag().await;
     let (notebook_id, doc_id) = ingest_antifragile(&mut ctx).await;
@@ -311,7 +265,9 @@ async fn first_turn_memory_tool_works_with_resolved_session_id() {
 
     assert_tool_result_ok(&resp, "conversation_history_load");
     assert!(
-        resp.degrade_trace.iter().all(|item| item.stage != "conversation_history_load"),
+        resp.degrade_trace
+            .iter()
+            .all(|item| item.stage != "conversation_history_load"),
         "memory tool should not degrade when session is backfilled: {:?}",
         resp.degrade_trace
     );

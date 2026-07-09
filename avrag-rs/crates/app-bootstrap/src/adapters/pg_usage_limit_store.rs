@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use app_core::{
-    UsageLimitOverrideRow, UsageLimitPlanPolicyRow, UsageLimitStorePort, UsageLimitUsageRecord,
-    MeteringContext,
+    MeteringContext, UsageLimitOverrideRow, UsageLimitPlanPolicyRow, UsageLimitStorePort,
+    UsageLimitUsageRecord,
 };
+use async_trait::async_trait;
 use avrag_storage_pg::PgAppRepository;
 use chrono::{DateTime, Utc};
 use common::AppError;
@@ -32,9 +32,8 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         ctx: &MeteringContext,
         record: UsageLimitUsageRecord<'_>,
     ) -> Result<i64, AppError> {
-        let (input_rate, output_rate) = self
-            .load_model_rates(record.provider, record.model)
-            .await?;
+        let (input_rate, output_rate) =
+            self.load_model_rates(record.provider, record.model).await?;
         let usage_units = app_core::compute_usage_units_with_rates(
             record.prompt_tokens,
             record.completion_tokens,
@@ -150,7 +149,9 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         .fetch_one(self.pool())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
-        Ok(row.try_get::<i64, _>("total").map_err(|e| AppError::internal(e.to_string()))?)
+        Ok(row
+            .try_get::<i64, _>("total")
+            .map_err(|e| AppError::internal(e.to_string()))?)
     }
 
     async fn oldest_usage_event_since(
@@ -172,8 +173,7 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         .fetch_optional(self.pool())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
-        Ok(row
-            .and_then(|row| row.try_get::<DateTime<Utc>, _>("created_at").ok()))
+        Ok(row.and_then(|row| row.try_get::<DateTime<Utc>, _>("created_at").ok()))
     }
 
     async fn load_usage_breakdown(
@@ -206,11 +206,7 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         Ok(breakdown)
     }
 
-    async fn load_model_rates(
-        &self,
-        provider: &str,
-        model: &str,
-    ) -> Result<(f64, f64), AppError> {
+    async fn load_model_rates(&self, provider: &str, model: &str) -> Result<(f64, f64), AppError> {
         let row = sqlx::query(
             r#"
             SELECT input_unit_rate, output_unit_rate
@@ -258,6 +254,8 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         .fetch_one(self.pool())
         .await
         .map_err(|error| AppError::internal(error.to_string()))?;
-        Ok(row.try_get::<bool, _>("has_estimated").map_err(|e| AppError::internal(e.to_string()))?)
+        Ok(row
+            .try_get::<bool, _>("has_estimated")
+            .map_err(|e| AppError::internal(e.to_string()))?)
     }
 }

@@ -4,48 +4,48 @@ pub mod answer_contract;
 pub mod assembler;
 pub mod fallback;
 pub mod policy;
-pub use policy::config as config;
-pub use policy::disclosure_plan as disclosure_plan;
-pub use policy::exit_policy as exit_policy;
 pub use policy::LoopPolicy;
+pub use policy::config;
+pub use policy::disclosure_plan;
+pub use policy::exit_policy;
+pub mod cancellation;
+pub use cancellation::DegradeReason;
+pub(crate) use cancellation::cancellation_error;
 pub mod hooks;
 pub mod iteration;
 mod iteration_codegen;
 mod iteration_tools;
 mod message_format;
-mod rag_bridge;
 pub mod message_queue;
-pub mod optimizer;
 pub mod parse;
-pub mod query_normalize;
+mod rag_bridge;
 pub mod reasoning_emit;
 mod run_fallback;
 mod run_prepare;
+mod run_result;
 mod run_retrieval;
 mod run_synthesis;
-mod run_result;
 pub mod skill_request;
 pub mod skills;
 pub mod synthesis;
 pub mod telemetry;
 
 pub(crate) use message_format::{
-    build_assistant_message_with_tool_calls, build_tool_message, truncate_preview,
+    build_assistant_message_with_tool_calls, build_tool_message, truncate_observation,
+    truncate_preview,
 };
 pub(crate) use rag_bridge::dispatch_rag_tool;
 
 use crate::agents::capability::CapabilityRegistry;
-use crate::agents::events::{AgentEvent, AgentEventSink};
-use crate::agents::runtime::{AgentRequest, AgentRunResult, FinalDecision};
-use iteration::IterationState;
-use assembler::DisclosedState;
+use crate::agents::events::AgentEventSink;
+use crate::agents::runtime::{AgentRequest, AgentRunResult};
 use app_core::ChatPersistencePort;
+use assembler::DisclosedState;
 use avrag_llm::LlmClient;
 use common::AppError;
 use config::ModeConfig;
 use hooks::StandardLoopHooks;
-use optimizer::IterationProgress;
-use query_normalize::normalize_query;
+use iteration::IterationState;
 
 pub struct ReActLoop {
     llm: Arc<LlmClient>,
@@ -106,39 +106,18 @@ impl ReActLoop {
         let start_time = std::time::Instant::now();
         let cancel = request.cancellation_token.clone().unwrap_or_default();
         if cancel.is_cancelled() {
-            return Err(crate::agents::react_loop::cancellation_error());
+            return Err(cancellation_error());
         }
         let loop_exit = mode.loop_exit_for_mode();
         let hooks = StandardLoopHooks::default();
 
-        let norm = normalize_query(&self.llm, mode, &request).await?;
-        if let Some(clarify) = norm.clarify_answer {
-            let _ = sink
-                .emit(AgentEvent::MessageDelta {
-                    text: clarify.clone(),
-                })
-                .await;
-            let _ = sink
-                .emit(AgentEvent::Done {
-                    final_message: Some(clarify.clone()),
-                    usage: None,
-                })
-                .await;
-            return Ok(AgentRunResult {
-                answer: clarify.clone(),
-                final_decision: Some(FinalDecision::Clarified { question: clarify }),
-                ..AgentRunResult::default()
-            });
-        }
-
         let (request, base_message_count, max_iterations, auth, loop_user_query) =
-            self.prepare_run_request(mode, request, norm, sink).await?;
+            self.prepare_run_request(mode, request, sink).await?;
 
         let mut state = IterationState {
             messages: self.build_initial_messages(mode, &request, &loop_user_query),
             disclosed: DisclosedState::default(),
             tool_results: Vec::new(),
-            progress: IterationProgress::new(),
             total_tool_calls: 0,
             consecutive_sandbox_errors: 0,
             reasoning_acc: String::new(),
@@ -165,10 +144,10 @@ impl ReActLoop {
         let reasoning_summary_acc = state.reasoning_acc;
 
         if cancel.is_cancelled() {
-            return Err(crate::agents::react_loop::cancellation_error());
+            return Err(cancellation_error());
         }
 
-        let retrieval_query = request.effective_query().to_string();
+        let retrieval_query = request.query.clone();
         if let Some(result) = self
             .resolve_synthesis_gate(
                 mode,

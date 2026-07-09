@@ -70,22 +70,6 @@ pub(crate) fn compute_metrics(run: &EvalRun) -> (Vec<MetricValue>, Vec<MetricVal
 
     // ---- System metrics ----
 
-    // ToolSuccessRate: from tool_calls status across all cases.
-    let total_tool_calls: usize = run.cases.iter().map(|c| c.result.tool_calls.len()).sum();
-    let ok_tool_calls: usize = run
-        .cases
-        .iter()
-        .flat_map(|c| c.result.tool_calls.iter())
-        .filter(|tc| tc.status == contracts::ToolStatus::Ok)
-        .count();
-    if total_tool_calls > 0 {
-        system.push(MetricValue {
-            metric: SystemMetric::ToolSuccessRate.name().to_string(),
-            value: ok_tool_calls as f64 / total_tool_calls as f64,
-            target: Some(0.95),
-        });
-    }
-
     // Latency percentiles from total_elapsed_ms.
     let mut latencies: Vec<u64> = run
         .cases
@@ -159,15 +143,6 @@ pub(crate) fn compute_metrics(run: &EvalRun) -> (Vec<MetricValue>, Vec<MetricVal
             metric: SystemMetric::ReplanRate.name().to_string(),
             value: replanned as f64 / total_cases as f64,
             target: Some(0.2),
-        });
-    }
-
-    // AvgToolCallsPerTask.
-    if total_cases > 0 {
-        system.push(MetricValue {
-            metric: SystemMetric::AvgToolCallsPerTask.name().to_string(),
-            value: total_tool_calls as f64 / total_cases as f64,
-            target: Some(5.0),
         });
     }
 

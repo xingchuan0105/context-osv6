@@ -6,7 +6,6 @@ use crate::product_e2e::{DocumentStatus, TestContext};
 
 #[tokio::test]
 async fn upload_document_completes_ingestion() {
-
     super::require_smoke_suite();
     let mut ctx = TestContext::new_smoke().await;
 

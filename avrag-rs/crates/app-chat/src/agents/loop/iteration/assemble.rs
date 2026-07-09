@@ -1,10 +1,10 @@
 use avrag_llm::{ChatMessage, LlmResponse, LlmUsage};
 use common::AppError;
 
+use super::super::ReActLoop;
 use super::super::assembler::ContextAssembler;
 use super::super::config::ModeConfig;
 use super::super::reasoning_emit::{self, record_reasoning};
-use super::super::ReActLoop;
 use super::state::IterationState;
 use crate::agents::events::AgentEventSink;
 use crate::agents::runtime::AgentRequest;
@@ -13,6 +13,7 @@ impl ReActLoop {
     pub(super) async fn assemble_retrieve_context(
         &self,
         iteration: u8,
+        max_iterations: u8,
         mode: &ModeConfig,
         request: &AgentRequest,
         state: &mut IterationState,
@@ -27,6 +28,7 @@ impl ReActLoop {
 
         let assembled = ContextAssembler::assemble_retrieve(
             iteration,
+            max_iterations,
             mode,
             request,
             &self.skill_registry,

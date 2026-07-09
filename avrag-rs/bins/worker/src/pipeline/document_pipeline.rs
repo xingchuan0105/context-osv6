@@ -1,4 +1,4 @@
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use ingestion::chunker::ChunkPolicy;
 use ingestion::parser::{ParsePlan, ParseRouter};
 use ingestion::{
@@ -8,22 +8,22 @@ use ingestion::{
 use tracing::info;
 use uuid::Uuid;
 
-use crate::ingestion_guard::ensure_ingestion_side_effects_allowed;
-use crate::pdf;
-use crate::indexing::{
-    build_multimodal_index_records, maybe_enrich_visual_multimodal_summaries,
-    record_multimodal_degrade, StoredMultimodalChunk,
-};
 use super::helpers::{
-    build_asset_object_key, build_document_block_rows, build_document_chunk_rows,
-    build_document_index_batch, build_graph_index_records, build_text_index_records,
-    build_toc_entries, collect_document_text, enrich_multimodal_source_locator,
-    execute_external_parse, execute_local_parse, execute_office_parse,
-    extract_triplets_for_index, extract_visual_triplets_for_index, maybe_enrich_toc_with_llm,
-    merge_extracted_triplets, mirror_document_asset, triplet_extraction_enabled,
-    visual_triplet_extraction_enabled, GraphIndexRecords, ParseRunOutputs,
+    GraphIndexRecords, ParseRunOutputs, build_asset_object_key, build_document_block_rows,
+    build_document_chunk_rows, build_document_index_batch, build_graph_index_records,
+    build_text_index_records, collect_document_text,
+    enrich_multimodal_source_locator, execute_external_parse, execute_local_parse,
+    execute_office_parse, extract_triplets_for_index, extract_visual_triplets_for_index,
+    generate_document_profile_with_llm, merge_extracted_triplets, mirror_document_asset,
+    triplet_extraction_enabled, visual_triplet_extraction_enabled,
 };
 use super::processor::PgTaskProcessor;
+use crate::indexing::{
+    StoredMultimodalChunk, build_multimodal_index_records,
+    maybe_enrich_visual_multimodal_summaries, record_multimodal_degrade,
+};
+use crate::ingestion_guard::{ensure_ingestion_side_effects_allowed, from_storage_error};
+use crate::pdf;
 #[derive(Debug, Default, Clone)]
 pub(crate) struct ParseRunState {
     pub(crate) document_ir: Option<DocumentIr>,
@@ -65,31 +65,27 @@ async fn execute_parse_plan(
             .await
         }
         ParsePlan::Pdf(plan) => {
-            let (pdf_bytes, pdf_filename) =
-                pdf::maybe_convert_office_to_pdf(bytes, filename)
-                    .await
-                    .map_err(|e| {
-                        IngestionError::StateSink(format!(
-                            "office to pdf conversion failed for {filename}: {e}"
-                        ))
-                    })?;
+            let (pdf_bytes, pdf_filename) = pdf::maybe_convert_office_to_pdf(bytes, filename)
+                .await
+                .map_err(|e| {
+                    IngestionError::parse(format!(
+                        "office to pdf conversion failed for {filename}: {e}"
+                    ))
+                })?;
 
             let (effective_plan, liteparse_snapshot) = if plan.pages.is_empty() {
                 let routed = ParseRouter::route(&pdf_bytes, &pdf_filename, "application/pdf")
-                    .map_err(|e| IngestionError::StateSink(e.to_string()))?;
+                    .map_err(|e| IngestionError::storage(e))?;
                 match routed.plan {
                     ParsePlan::Pdf(p) => (p, routed.liteparse_snapshot),
                     other => {
-                        return Err(IngestionError::StateSink(format!(
+                        return Err(IngestionError::parse(format!(
                             "expected pdf plan after office conversion, got {other:?}"
                         )));
                     }
                 }
             } else {
-                (
-                    plan.clone(),
-                    route_decision.liteparse_snapshot.clone(),
-                )
+                (plan.clone(), route_decision.liteparse_snapshot.clone())
             };
 
             let ctx = pdf::PdfParseContext::new(
@@ -118,7 +114,8 @@ pub(crate) struct RunDocumentPipelineParams<'a> {
     pub(crate) bytes: &'a [u8],
     pub(crate) filename: &'a str,
     pub(crate) object_path: &'a str,
-    pub(crate) route_decision: &'a ingestion::parser::ParseRouteDecision,}
+    pub(crate) route_decision: &'a ingestion::parser::ParseRouteDecision,
+}
 
 pub(crate) async fn run_document_pipeline(
     processor: &PgTaskProcessor,
@@ -136,6 +133,88 @@ pub(crate) async fn run_document_pipeline(
         object_path,
         route_decision,
     } = params;
+
+    // Stage 1 — parse + validate
+    let document_ir = stage_parse_and_validate_ir(
+        processor,
+        bytes,
+        filename,
+        object_path,
+        document_id,
+        parse_run_id,
+        route_decision,
+        parse_run_state,
+    )
+    .await?;
+
+    // Stage 2 — project IR blocks
+    stage_project_document_ir(
+        processor,
+        task,
+        context,
+        notebook_id,
+        document_id,
+        parse_run_id,
+        &document_ir,
+    )
+    .await?;
+
+    // Stage 3 — chunks, assets, multimodal, toc/profile
+    let materialize = stage_materialize_chunks_assets_profile(
+        processor,
+        task,
+        context,
+        notebook_id,
+        document_id,
+        parse_run_id,
+        filename,
+        &document_ir,
+        parse_run_state,
+    )
+    .await?;
+
+    // Stage 4 — summary (best-effort, non-fatal)
+    generate_document_summary(
+        processor,
+        context,
+        task,
+        document_id,
+        filename,
+        materialize.content.as_str(),
+        &document_ir.title,
+    )
+    .await;
+
+    // Stage 5 — retrieval index replace
+    stage_build_and_replace_retrieval_index(
+        processor,
+        task,
+        context,
+        notebook_id,
+        document_id,
+        parse_run_id,
+        &document_ir,
+        &materialize,
+        parse_run_state,
+    )
+    .await?;
+
+    Ok(IngestionPipelineMetrics {
+        content: materialize.content,
+        processed_chunk_count: materialize.processed_chunk_count,
+    })
+}
+
+async fn stage_parse_and_validate_ir(
+    processor: &PgTaskProcessor,
+    bytes: &[u8],
+    filename: &str,
+    object_path: &str,
+    document_id: Uuid,
+    parse_run_id: Uuid,
+    route_decision: &ingestion::parser::ParseRouteDecision,
+    parse_run_state: &mut ParseRunState,
+) -> Result<DocumentIr, IngestionError> {
     let validation_report = sanitize_and_validate_document_ir(
         execute_parse_plan(
             processor,
@@ -149,7 +228,7 @@ pub(crate) async fn run_document_pipeline(
         .await?,
         &DocumentIrValidationOptions::default(),
     )
-    .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+    .map_err(|error| IngestionError::storage(error))?;
 
     let document_ir = validation_report.document;
     parse_run_state.validation_warnings = validation_report.warnings;
@@ -157,6 +236,18 @@ pub(crate) async fn run_document_pipeline(
     parse_run_state.outputs.asset_count = document_ir.assets.len();
     parse_run_state.document_ir = Some(document_ir.clone());
 
+    Ok(document_ir)
+}
+
+async fn stage_project_document_ir(
+    processor: &PgTaskProcessor,
+    task: &IngestionTask,
+    context: &AuthContext,
+    notebook_id: Uuid,
+    document_id: Uuid,
+    parse_run_id: Uuid,
+    document_ir: &DocumentIr,
+) -> Result<(), IngestionError> {
     ensure_ingestion_side_effects_allowed(
         &processor.repo,
         context,
@@ -167,22 +258,45 @@ pub(crate) async fn run_document_pipeline(
     .await?;
     processor
         .repo
+        .documents()
         .clear_document_ir_projection(context, document_id)
         .await
-        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+        .map_err(from_storage_error)?;
     processor
         .repo
+        .documents()
         .replace_document_blocks(
             context,
             notebook_id,
             document_id,
-            &build_document_block_rows(&document_ir, parse_run_id),
+            &build_document_block_rows(document_ir, parse_run_id),
         )
         .await
-        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+        .map_err(from_storage_error)?;
 
+    Ok(())
+}
+
+struct MaterializeOutput {
+    content: String,
+    processed_chunk_count: usize,
+    chunks: Vec<avrag_storage_pg::IndexedChunk>,
+    stored_multimodal_chunks: Vec<StoredMultimodalChunk>,
+}
+
+async fn stage_materialize_chunks_assets_profile(
+    processor: &PgTaskProcessor,
+    task: &IngestionTask,
+    context: &AuthContext,
+    notebook_id: Uuid,
+    document_id: Uuid,
+    parse_run_id: Uuid,
+    filename: &str,
+    document_ir: &DocumentIr,
+    parse_run_state: &mut ParseRunState,
+) -> Result<MaterializeOutput, IngestionError> {
     let chunk_plan =
-        ingestion::chunker::build_ir_chunk_plan(&document_ir, filename, &ChunkPolicy::default());
+        ingestion::chunker::build_ir_chunk_plan(document_ir, filename, &ChunkPolicy::default());
     parse_run_state.outputs.text_chunk_count = chunk_plan.text_chunks.len();
     parse_run_state.outputs.multimodal_chunk_count = chunk_plan.multimodal_chunks.len();
 
@@ -206,6 +320,7 @@ pub(crate) async fn run_document_pipeline(
     .await?;
     let chunks = processor
         .repo
+        .bootstrap()
         .store_document_body_chunks(
             context,
             document_id,
@@ -214,12 +329,13 @@ pub(crate) async fn run_document_pipeline(
             &body_chunks,
         )
         .await
-        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+        .map_err(from_storage_error)?;
     let processed_chunk_count = chunks.len().max(1);
 
-    let mut toc_entries = build_toc_entries(&document_ir, &chunks);
-    toc_entries =
-        maybe_enrich_toc_with_llm(processor, &document_ir, &chunks, filename, toc_entries).await;
+    let profile_result =
+        generate_document_profile_with_llm(processor, document_id, document_ir, &chunks, filename)
+            .await;
+    let toc_entries = profile_result.toc_entries;
     if !toc_entries.is_empty() {
         ensure_ingestion_side_effects_allowed(
             &processor.repo,
@@ -231,12 +347,37 @@ pub(crate) async fn run_document_pipeline(
         .await?;
         if let Err(error) = processor
             .repo
+            .bootstrap()
             .replace_document_toc(context, notebook_id, document_id, &toc_entries)
             .await
         {
             info!(document_id = %document_id, error = %error, "failed to write document toc");
         } else {
             info!(document_id = %document_id, toc_count = toc_entries.len(), "document toc written");
+        }
+    }
+    if let Some(profile_metadata) = profile_result.profile_metadata {
+        ensure_ingestion_side_effects_allowed(
+            &processor.repo,
+            context,
+            task,
+            document_id,
+            "profile metadata write",
+        )
+        .await?;
+        if let Err(error) = processor
+            .repo
+            .documents()
+            .update_document_profile(
+                context,
+                document_id,
+                &profile_metadata,
+                Some(&task.task_id),
+                task.lock_token.as_deref(),
+            )
+            .await
+        {
+            info!(document_id = %document_id, error = %error, "failed to write document profile metadata");
         }
     }
 
@@ -280,7 +421,7 @@ pub(crate) async fn run_document_pipeline(
             processor.asset_url_ttl_secs,
         )
         .await
-        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+        .map_err(|error| IngestionError::storage(error))?;
         if stored_image_path.is_some() {
             parse_run_state.outputs.mirrored_asset_count += 1;
         }
@@ -303,6 +444,7 @@ pub(crate) async fn run_document_pipeline(
 
         let store_result = processor
             .repo
+            .assets()
             .store_document_asset(
                 context,
                 avrag_storage_pg::StoreDocumentAssetParams {
@@ -326,7 +468,7 @@ pub(crate) async fn run_document_pipeline(
                 .object_store
                 .delete(&stored_asset_object_key)
                 .await;
-            return Err(IngestionError::StateSink(error.to_string()));
+            return Err(IngestionError::storage(error));
         }
         stored_asset_path_by_ref.insert(asset.asset_id.clone(), stored_image_path.clone());
     }
@@ -353,7 +495,7 @@ pub(crate) async fn run_document_pipeline(
             .get(&multimodal_chunk.asset_ref)
             .copied()
             .ok_or_else(|| {
-                IngestionError::StateSink(format!(
+                IngestionError::storage(format!(
                     "missing stored asset for multimodal block {}",
                     multimodal_chunk.block_id
                 ))
@@ -368,6 +510,7 @@ pub(crate) async fn run_document_pipeline(
 
         processor
             .repo
+            .assets()
             .store_multimodal_chunk(
                 context,
                 avrag_storage_pg::StoreMultimodalChunkParams {
@@ -397,7 +540,7 @@ pub(crate) async fn run_document_pipeline(
                 },
             )
             .await
-            .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+            .map_err(from_storage_error)?;
 
         let fusion_asset_refs = multimodal_chunk
             .metadata
@@ -458,148 +601,29 @@ pub(crate) async fn run_document_pipeline(
     )
     .await;
 
-    if let Some(ref summary_gen) = processor.summary_generator {
-        let user_uuid = task
-            .requested_by
-            .as_deref()
-            .and_then(|value| Uuid::parse_str(value).ok());
-        let mut skip_llm_summary = false;
 
-        if let (Some(svc), Some(user_id)) = (&processor.usage_limit, user_uuid) {
-            match svc.check_quota(context.org_id().into_uuid(), user_id).await {
-                Ok(quota) => {
-                    if quota.blocked_5h || quota.blocked_7d {
-                        info!(
-                            document_id = %document_id,
-                            user_id = %user_id,
-                            blocked_5h = quota.blocked_5h,
-                            blocked_7d = quota.blocked_7d,
-                            "skipping LLM summary generation because user quota is exhausted"
-                        );
-                        skip_llm_summary = true;
-                    }
-                }
-                Err(error) => {
-                    info!(
-                        document_id = %document_id,
-                        error = %error,
-                        "quota check failed for summary generation; skipping LLM summary (fail-closed)"
-                    );
-                    skip_llm_summary = true;
-                }
-            }
-        }
+    Ok(MaterializeOutput {
+        content,
+        processed_chunk_count,
+        chunks,
+        stored_multimodal_chunks,
+    })
+}
 
-        if !skip_llm_summary {
-            let title = document_ir.title.clone();
-            let generated_summary = summary_gen
-                .synthesize(&document_id.to_string(), &title, filename, &content)
-                .await;
-            match generated_summary {
-                Ok((summary, llm_usage)) => {
-                    ensure_ingestion_side_effects_allowed(
-                        &processor.repo,
-                        context,
-                        task,
-                        document_id,
-                        "summary update",
-                    )
-                    .await?;
-                    if let Err(error) = processor
-                        .repo
-                        .update_document_summary(
-                            context,
-                            document_id,
-                            &summary,
-                            Some(&task.task_id),
-                            task.lock_token.as_deref(),
-                        )
-                        .await
-                    {
-                        info!(document_id = %document_id, error = %error, "failed to update document summary with LLM result");
-                    } else {
-                        info!(document_id = %document_id, "successfully updated document summary with LLM result");
-                    }
-                    if let (Some(svc), Some(user_id)) = (&processor.usage_limit, user_uuid) {
-                        let ctx = avrag_billing::usage_limit::MeteringContext {
-                            user_id,
-                            org_id: context.org_id().into_uuid(),
-                            feature: avrag_billing::usage_limit::BillableFeature::Summary,
-                            stage: "worker_summary".to_string(),
-                            session_id: None,
-                            document_id: Some(document_id),
-                            request_id: None,
-                            trace_id: None,
-                        };
-                        if let Err(error) = svc
-                            .record_usage(
-                                &ctx,
-                                avrag_billing::usage_limit::UsageRecord {
-                                    provider: &llm_usage.provider,
-                                    model: &llm_usage.model,
-                                    prompt_tokens: llm_usage.prompt_tokens,
-                                    completion_tokens: llm_usage.completion_tokens,
-                                    total_tokens: llm_usage.total_tokens,
-                                    usage_source: avrag_billing::usage_limit::UsageSource::Actual,
-                                },
-                            )
-                            .await
-                        {
-                            info!(document_id = %document_id, error = %error, "failed to record summary usage");
-                        }
-                    }
-                    if let (Some(analytics), Some(user_id)) = (&processor.analytics, user_uuid) {
-                        let event = analytics::CostEvent {
-                            event_id: Uuid::new_v4(),
-                            event_time: chrono::Utc::now(),
-                            user_id,
-                            session_id: None,
-                            notebook_id: None,
-                            event_name: analytics::CostEventName::SummaryUsageMetered,
-                            feature: "summary".to_string(),
-                            provider: if llm_usage.provider.trim().is_empty() {
-                                "unknown".to_string()
-                            } else {
-                                llm_usage.provider.clone()
-                            },
-                            model: if llm_usage.model.trim().is_empty() {
-                                "unknown".to_string()
-                            } else {
-                                llm_usage.model.clone()
-                            },
-                            prompt_tokens: i64::from(llm_usage.prompt_tokens),
-                            completion_tokens: i64::from(llm_usage.completion_tokens),
-                            embedding_tokens: 0,
-                            usage_units: avrag_billing::usage_limit::compute_usage_units(
-                                &llm_usage.provider,
-                                &llm_usage.model,
-                                llm_usage.prompt_tokens,
-                                llm_usage.completion_tokens,
-                            ),
-                            storage_bytes_delta: 0,
-                            external_call_count: 0,
-                            source: "worker".to_string(),
-                            metadata: serde_json::json!({
-                                "task_id": task.task_id.clone(),
-                                "document_id": document_id,
-                                "filename": filename,
-                            }),
-                        };
-                        if let Err(error) = analytics.record_cost_event(&event).await {
-                            info!(document_id = %document_id, error = %error, "failed to record summary analytics event");
-                        }
-                    }
-                }
-                Err(error) => {
-                    info!(document_id = %document_id, error = %error, "Summary generation failed, keeping naive fallback");
-                }
-            }
-        }
-    }
-
+async fn stage_build_and_replace_retrieval_index(
+    processor: &PgTaskProcessor,
+    task: &IngestionTask,
+    context: &AuthContext,
+    notebook_id: Uuid,
+    document_id: Uuid,
+    parse_run_id: Uuid,
+    document_ir: &DocumentIr,
+    materialize: &MaterializeOutput,
+    parse_run_state: &mut ParseRunState,
+) -> Result<(), IngestionError> {
     let needs_text_vector_index = processor.retrieval_data_plane.is_some();
     let text_index_records = if needs_text_vector_index {
-        build_text_index_records(processor, &chunks).await?
+        build_text_index_records(processor, &materialize.chunks).await?
     } else {
         Vec::new()
     };
@@ -611,8 +635,8 @@ pub(crate) async fn run_document_pipeline(
     let multimodal_index_records = if needs_multimodal_vector_index {
         build_multimodal_index_records(
             processor,
-            &document_ir,
-            &stored_multimodal_chunks,
+            document_ir,
+            &materialize.stored_multimodal_chunks,
             &mut parse_run_state.outputs,
         )
         .await?
@@ -623,7 +647,8 @@ pub(crate) async fn run_document_pipeline(
         parse_run_state.outputs.multimodal_vector_count = multimodal_index_records.len();
     }
 
-    let graph_records = if processor.retrieval_data_plane.is_some() && triplet_extraction_enabled() {
+    let graph_records = if processor.retrieval_data_plane.is_some() && triplet_extraction_enabled()
+    {
         let mut extraction = extract_triplets_for_index(
             processor,
             document_id,
@@ -635,18 +660,17 @@ pub(crate) async fn run_document_pipeline(
             let visual = extract_visual_triplets_for_index(
                 processor,
                 document_id,
-                &stored_multimodal_chunks,
+                &materialize.stored_multimodal_chunks,
                 parse_run_state,
             )
             .await;
-            extraction.total_tokens = extraction
-                .total_tokens
-                .saturating_add(visual.total_tokens);
+            extraction.total_tokens = extraction.total_tokens.saturating_add(visual.total_tokens);
             extraction.triplets = merge_extracted_triplets(extraction.triplets, visual.triplets);
         }
         if extraction.total_tokens > 0 {
             let _ = processor
                 .repo
+                .sessions()
                 .record_usage_event(
                     context,
                     "triplet_extraction_tokens",
@@ -682,7 +706,7 @@ pub(crate) async fn run_document_pipeline(
             .replace_document_index(batch)
             .await
             .map_err(|error| {
-                IngestionError::StateSink(format!("retrieval data plane indexing failed: {error}"))
+                IngestionError::index(format!("retrieval data plane indexing failed: {error}"))
             })?;
         parse_run_state.outputs.text_vector_count = report.text_chunk_count;
         parse_run_state.outputs.multimodal_vector_count = report.multimodal_chunk_count;
@@ -691,8 +715,149 @@ pub(crate) async fn run_document_pipeline(
         parse_run_state.outputs.graph_passage_count = report.graph_passage_count;
     }
 
-    Ok(IngestionPipelineMetrics {
-        content,
-        processed_chunk_count,
-    })
+    Ok(())
+}
+
+async fn generate_document_summary(
+    processor: &PgTaskProcessor,
+    context: &AuthContext,
+    task: &IngestionTask,
+    document_id: Uuid,
+    filename: &str,
+    content: &str,
+    title: &str,
+) {
+    let Some(ref summary_gen) = processor.summary_generator else {
+        return;
+    };
+    let user_uuid = task
+        .requested_by
+        .as_deref()
+        .and_then(|value| Uuid::parse_str(value).ok());
+    let mut skip_llm_summary = false;
+
+    if let (Some(svc), Some(user_id)) = (&processor.usage_limit, user_uuid) {
+        match svc.check_quota(context.org_id().into_uuid(), user_id).await {
+            Ok(quota) => {
+                if quota.blocked_5h || quota.blocked_7d {
+                    info!(document_id = %document_id, user_id = %user_id, "skipping LLM summary — quota exhausted");
+                    skip_llm_summary = true;
+                }
+            }
+            Err(error) => {
+                info!(document_id = %document_id, error = %error, "quota check failed; skipping LLM summary (fail-closed)");
+                skip_llm_summary = true;
+            }
+        }
+    }
+
+    if skip_llm_summary {
+        return;
+    }
+
+    let generated_summary = summary_gen
+        .synthesize(&document_id.to_string(), title, filename, content)
+        .await;
+
+    let Ok((summary, llm_usage)) = generated_summary else {
+        info!(document_id = %document_id, "Summary generation failed, keeping naive fallback");
+        return;
+    };
+
+    if ensure_ingestion_side_effects_allowed(
+        &processor.repo,
+        context,
+        task,
+        document_id,
+        "summary update",
+    )
+    .await
+    .is_ok()
+    {
+        if let Err(error) = processor
+            .repo
+            .documents()
+            .update_document_summary(
+                context,
+                document_id,
+                &summary,
+                Some(&task.task_id),
+                task.lock_token.as_deref(),
+            )
+            .await
+        {
+            info!(document_id = %document_id, error = %error, "failed to update document summary");
+        }
+    }
+
+    if let (Some(svc), Some(user_id)) = (&processor.usage_limit, user_uuid) {
+        let ctx = avrag_billing::usage_limit::MeteringContext {
+            user_id,
+            org_id: context.org_id().into_uuid(),
+            feature: avrag_billing::usage_limit::BillableFeature::Summary,
+            stage: "worker_summary".to_string(),
+            session_id: None,
+            document_id: Some(document_id),
+            request_id: None,
+            trace_id: None,
+        };
+        if let Err(error) = svc
+            .record_usage(
+                &ctx,
+                avrag_billing::usage_limit::UsageRecord {
+                    provider: &llm_usage.provider,
+                    model: &llm_usage.model,
+                    prompt_tokens: llm_usage.prompt_tokens,
+                    completion_tokens: llm_usage.completion_tokens,
+                    total_tokens: llm_usage.total_tokens,
+                    usage_source: avrag_billing::usage_limit::UsageSource::Actual,
+                },
+            )
+            .await
+        {
+            info!(document_id = %document_id, error = %error, "failed to record summary usage");
+        }
+    }
+
+    if let (Some(analytics), Some(user_id)) = (&processor.analytics, user_uuid) {
+        let event = analytics::CostEvent {
+            event_id: Uuid::new_v4(),
+            event_time: chrono::Utc::now(),
+            user_id,
+            session_id: None,
+            notebook_id: None,
+            event_name: analytics::CostEventName::SummaryUsageMetered,
+            feature: "summary".to_string(),
+            provider: if llm_usage.provider.trim().is_empty() {
+                "unknown".to_string()
+            } else {
+                llm_usage.provider.clone()
+            },
+            model: if llm_usage.model.trim().is_empty() {
+                "unknown".to_string()
+            } else {
+                llm_usage.model.clone()
+            },
+            prompt_tokens: i64::from(llm_usage.prompt_tokens),
+            completion_tokens: i64::from(llm_usage.completion_tokens),
+            embedding_tokens: 0,
+            usage_units: avrag_billing::usage_limit::compute_usage_units(
+                &llm_usage.provider,
+                &llm_usage.model,
+                llm_usage.prompt_tokens,
+                llm_usage.completion_tokens,
+            ),
+            storage_bytes_delta: 0,
+            external_call_count: 0,
+            source: "worker".to_string(),
+            metadata: serde_json::json!({
+                "task_id": task.task_id,
+                "document_id": document_id,
+                "filename": filename,
+            }),
+        };
+        if let Err(error) = analytics.record_cost_event(&event).await {
+            info!(document_id = %document_id, error = %error, "failed to record summary analytics event");
+        }
+    }
 }

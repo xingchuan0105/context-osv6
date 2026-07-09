@@ -79,14 +79,15 @@ impl PromptLeakGuard {
     pub fn check(&self, response: &str, trace_id: Option<String>) -> GuardResult {
         for (name, prompt_text) in PROMPT_SOURCES {
             if let Some(leaked_paragraph) = detect_leak(response, prompt_text) {
-                let preview_len = leaked_paragraph.len().min(40);
+                // Take up to 40 chars (not bytes) for the preview; slicing by byte
+                // index would panic on a multibyte UTF-8 boundary (e.g. CJK text).
+                let preview: String = leaked_paragraph.chars().take(40).collect();
                 return GuardResult::block(
                     "output:prompt_leak",
                     RiskLevel::High,
                     format!(
                         "System prompt '{}' may have leaked: paragraph starting with '{}'...",
-                        name,
-                        &leaked_paragraph[..preview_len]
+                        name, preview
                     ),
                     trace_id,
                     None,
@@ -139,10 +140,14 @@ mod tests {
         assert!(result.passed);
     }
 
+    /// NOTE: this fixture mirrors the current `prompts/orchestrators/rag-system.md`
+    /// wording (minimal v0). If that prompt is rewritten, update the leaked text
+    /// below to verbatim-copy a current paragraph, otherwise the detector will
+    /// correctly miss it and this test will rot (see git history of this hunk).
     #[test]
     fn paragraph_leak_is_blocked() {
         let guard = PromptLeakGuard::new();
-        let leaked = "你是 Context OS 的 **RAG 文档助手**。你基于用户上传到工作区的文档回答问题，通过检索获取证据后再合成回答。";
+        let leaked = "系统提示要求：你是 **RAG agent**：只根据工作区文档（经检索得到的 chunks）回答用户。事实性结论必须有检索证据支撑；证据中没有的内容不要当作文档事实写出。";
         let result = guard.check(leaked, None);
         assert!(!result.passed);
         assert_eq!(result.guard_type, "output:prompt_leak");

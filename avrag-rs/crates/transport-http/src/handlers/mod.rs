@@ -33,19 +33,20 @@ pub(crate) fn app_error_response_for_agent(e: AppError, agent_type: Option<&str>
     if let Some(agent_type) = agent_type
         && let Some(guide) = app_chat::load_invoke_operation_guide(agent_type)
     {
-        body["agent_operation_guide"] = serde_json::to_value(guide).unwrap_or(serde_json::Value::Null);
+        body["agent_operation_guide"] =
+            serde_json::to_value(guide).unwrap_or(serde_json::Value::Null);
     }
     let retry_after = e.retry_after_secs();
     if let Some(secs) = retry_after {
         body["retry_after_secs"] = serde_json::json!(secs);
     }
     let mut response = (status, Json(body)).into_response();
-    if status == StatusCode::TOO_MANY_REQUESTS {
-        if let Some(secs) = retry_after {
-            response
-                .headers_mut()
-                .insert(header::RETRY_AFTER, HeaderValue::from(secs as u64));
-        }
+    if status == StatusCode::TOO_MANY_REQUESTS
+        && let Some(secs) = retry_after
+    {
+        response
+            .headers_mut()
+            .insert(header::RETRY_AFTER, HeaderValue::from(secs));
     }
     response
 }

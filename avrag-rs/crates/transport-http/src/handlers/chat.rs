@@ -8,30 +8,32 @@ use axum::{
         sse::{Event, KeepAlive},
     },
 };
-use common::{AppError};
-use contracts::{ExecutePlanRequest, RuntimeExecuteRequest};
-use contracts::chat::{ChatRequest};
-use contracts::documents::{CitationLookupRequest};
-use contracts::notebooks::{CreateChatSessionRequest, UpdateChatSessionRequest};
+use common::AppError;
 use contracts::chat::ChatEvent;
+use contracts::chat::ChatRequest;
+use contracts::documents::CitationLookupRequest;
+use contracts::notebooks::{CreateChatSessionRequest, UpdateChatSessionRequest};
+use contracts::{ExecutePlanRequest, RuntimeExecuteRequest};
 use std::{convert::Infallible, time::Duration};
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::RequestState;
+use super::{
+    app_error_response, app_error_response_for_agent, error_response, operation_guide_agent_type,
+};
+use crate::middleware::RequestState;
 use crate::auth_guard::{
     authorize_api_key_query_scoped, authorize_session_access, authorize_workspace_notebook_str,
     authorize_workspace_query_optional_notebook, forbid_api_key, forbid_workspace_api_key,
     query_permission,
 };
-use super::{app_error_response, app_error_response_for_agent, error_response, operation_guide_agent_type};
 
 pub(crate) async fn rag_execute_plan_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     payload: Result<Json<ExecutePlanRequest>, axum::extract::rejection::JsonRejection>,
 ) -> Response {
-    let Json(req) =     match payload {
+    let Json(req) = match payload {
         Ok(payload) => payload,
         Err(error) => {
             return app_error_response(AppError::validation(
@@ -53,7 +55,7 @@ pub(crate) async fn runtime_execute_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     payload: Result<Json<RuntimeExecuteRequest>, axum::extract::rejection::JsonRejection>,
 ) -> Response {
-    let Json(req) =     match payload {
+    let Json(req) = match payload {
         Ok(payload) => payload,
         Err(error) => {
             return app_error_response(AppError::validation(
@@ -103,10 +105,9 @@ pub(crate) async fn chat_post_handler(
         .unwrap_or_else(|| Uuid::new_v4().to_string());
     tracing::Span::current().record("request_id", &request_id);
 
-    if let Err(error) = authorize_workspace_query_optional_notebook(
-        state.auth(),
-        req.notebook_id.as_deref(),
-    ) {
+    if let Err(error) =
+        authorize_workspace_query_optional_notebook(state.auth(), req.notebook_id.as_deref())
+    {
         return app_error_response_for_agent(error, operation_guide_agent_type(&agent_type));
     }
 
@@ -358,10 +359,9 @@ pub(crate) async fn list_chat_sessions_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Query(params): Query<ChatSessionsQuery>,
 ) -> Response {
-    if let Err(error) = authorize_workspace_query_optional_notebook(
-        state.auth(),
-        params.notebook_id.as_deref(),
-    ) {
+    if let Err(error) =
+        authorize_workspace_query_optional_notebook(state.auth(), params.notebook_id.as_deref())
+    {
         return app_error_response(error);
     }
     let sessions = state.list_sessions(params.notebook_id.as_deref()).await;
@@ -509,10 +509,7 @@ pub(crate) async fn message_feedback_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(req): Json<contracts::chat::MessageFeedbackRequest>,
 ) -> Response {
-    if let Err(error) = forbid_api_key(
-        state.auth(),
-        "message feedback requires a user session",
-    ) {
+    if let Err(error) = forbid_api_key(state.auth(), "message feedback requires a user session") {
         return app_error_response(error);
     }
     let rating = match req.rating {

@@ -1,6 +1,6 @@
 use anyhow::Result;
-use avrag_auth::AuthContext;
 use app_core::ShareStorePort;
+use contracts::auth_runtime::AuthContext;
 use common::{AppError, ShareTokenResponse};
 use std::sync::Arc;
 
@@ -200,12 +200,49 @@ pub async fn handle_get_share_access_logs(
 }
 
 fn map_anyhow_error(error: anyhow::Error) -> AppError {
-    let message = error.to_string();
-    if message.contains("insufficient permission") {
-        return AppError::unauthorized(message);
+    // If the error originated as an AppError (e.g. from the share store via
+    // map_store_error), downcast it back to preserve the original variant/code/
+    // http_status instead of re-classifying from a substring of the message.
+    match error.downcast::<AppError>() {
+        Ok(app_error) => app_error,
+        Err(other) => {
+            let message = other.to_string();
+            if message.contains("insufficient permission") {
+                AppError::unauthorized(message)
+            } else if message.contains("invalid") || message.contains("parse") {
+                AppError::validation("invalid_request", message)
+            } else {
+                AppError::internal(message)
+            }
+        }
     }
-    if message.contains("invalid") || message.contains("parse") {
-        return AppError::validation("invalid_request", message);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::map_anyhow_error;
+    use common::AppError;
+
+    #[test]
+    fn map_anyhow_error_recovers_preserved_app_error() {
+        let original = AppError::validation("invite_not_allowed", "invite not allowed");
+        let mapped = map_anyhow_error(anyhow::Error::new(original));
+        assert_eq!(mapped.code(), "invite_not_allowed");
+        assert_eq!(mapped.http_status(), 400);
+        assert_eq!(mapped.message(), "invite not allowed");
     }
-    AppError::internal(message)
+
+    #[test]
+    fn map_anyhow_error_falls_back_to_heuristic_for_plain_anyhow() {
+        let mapped = map_anyhow_error(anyhow::anyhow!("invalid input from somewhere"));
+        assert_eq!(mapped.code(), "invalid_request");
+        assert_eq!(mapped.http_status(), 400);
+    }
+
+    #[test]
+    fn map_anyhow_error_falls_back_to_internal_for_unknown_messages() {
+        let mapped = map_anyhow_error(anyhow::anyhow!("something unexpected happened"));
+        assert_eq!(mapped.code(), "internal_error");
+        assert_eq!(mapped.http_status(), 500);
+    }
 }

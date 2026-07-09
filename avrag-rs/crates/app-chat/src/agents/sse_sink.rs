@@ -111,8 +111,7 @@ impl SseSink {
             return;
         }
         if matches!(&event, AgentEvent::Citations { citations } if !citations.is_empty()) {
-            self.citations_emitted
-                .store(true, Ordering::SeqCst);
+            self.citations_emitted.store(true, Ordering::SeqCst);
         }
         let chat_event = self.map_event(event);
         let _ = self.sender.send(chat_event);
@@ -315,20 +314,6 @@ impl SseSink {
                 detail: Some(serde_json::json!({
                     "iteration": iteration,
                     "exit_reason": exit_reason,
-                })),
-            },
-            AgentEvent::QueryResolved {
-                raw,
-                resolved,
-                slots,
-            } => ChatEvent::Trace {
-                request_id: self.request_id.clone(),
-                stage: "query_resolved".to_string(),
-                status: "ok".to_string(),
-                detail: Some(serde_json::json!({
-                    "raw": raw,
-                    "resolved": resolved,
-                    "slots": slots,
                 })),
             },
             AgentEvent::SynthesisContract { schema_version } => ChatEvent::Activity {
@@ -588,10 +573,11 @@ mod tests {
         assert!(sink.has_citations_emitted());
         let _ = rx.try_recv().expect("citations event should be sent");
 
-        sink.send(AgentEvent::Citations {
-            citations: vec![],
-        });
-        assert!(sink.has_citations_emitted(), "empty citations must not clear flag");
+        sink.send(AgentEvent::Citations { citations: vec![] });
+        assert!(
+            sink.has_citations_emitted(),
+            "empty citations must not clear flag"
+        );
     }
 
     #[test]

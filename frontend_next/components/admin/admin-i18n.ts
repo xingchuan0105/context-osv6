@@ -1,6 +1,5 @@
 "use client";
 
-import { formatUiMessage, type UiMessageKey } from "../../lib/i18n/messages";
 import type { UiLocale } from "../../lib/ui-preferences";
 
 type AdminInlineCopy = {
@@ -589,24 +588,180 @@ const INLINE_COPY = {
     zh: "查看失败文档、排队任务和近期 Guard 事件。",
     en: "Review failed documents, queued tasks, and recent guard events.",
   },
+  "admin.searchLabel": {
+    zh: "搜索",
+    en: "Search",
+  },
+  "admin.searchPlaceholder": {
+    zh: "按名称、邮箱或资源 ID 筛选",
+    en: "Filter by name, email, or resource ID",
+  },
+  "admin.filter.statusLabel": {
+    zh: "状态",
+    en: "Status",
+  },
+  "admin.filter.roleLabel": {
+    zh: "角色",
+    en: "Role",
+  },
+  "admin.filter.windowLabel": {
+    zh: "时间窗口",
+    en: "Time window",
+  },
+  "admin.filter.pageSizeLabel": {
+    zh: "每页条数",
+    en: "Rows per page",
+  },
+  "admin.filter.sortLabel": {
+    zh: "排序",
+    en: "Sort",
+  },
+  "admin.blockAction": {
+    zh: "封禁",
+    en: "Block",
+  },
+  "admin.unblockAction": {
+    zh: "解除封禁",
+    en: "Unblock",
+  },
+  "admin.loadError": {
+    zh: "加载后台数据失败。",
+    en: "Failed to load admin data.",
+  },
+  "admin.nav.organizations": {
+    zh: "组织",
+    en: "Organizations",
+  },
+  "admin.nav.users": {
+    zh: "用户",
+    en: "Users",
+  },
+  "admin.nav.usage": {
+    zh: "用量",
+    en: "Usage",
+  },
+  "admin.nav.ragHealth": {
+    zh: "RAG 健康",
+    en: "RAG Health",
+  },
+  "admin.table.organization": {
+    zh: "组织",
+    en: "Organization",
+  },
+  "admin.table.plan": {
+    zh: "计划",
+    en: "Plan",
+  },
+  "admin.table.status": {
+    zh: "状态",
+    en: "Status",
+  },
+  "admin.table.users": {
+    zh: "用户数",
+    en: "Users",
+  },
+  "admin.table.requests": {
+    zh: "请求数",
+    en: "Requests",
+  },
+  "admin.table.createdAt": {
+    zh: "创建时间",
+    en: "Created at",
+  },
+  "admin.table.lastActive": {
+    zh: "最近活跃",
+    en: "Last active",
+  },
+  "admin.metrics.totalOrganizations": {
+    zh: "组织总数",
+    en: "Total organizations",
+  },
+  "admin.metrics.totalRequests": {
+    zh: "请求总数",
+    en: "Total requests",
+  },
+  "admin.metrics.totalDocuments": {
+    zh: "文档总数",
+    en: "Total documents",
+  },
+  "admin.health.sectionTitle": {
+    zh: "系统健康",
+    en: "System health",
+  },
+  "admin.health.sectionSubtitle": {
+    zh: "检查服务状态、退化信号和恢复建议。",
+    en: "Check service status, degradation signals, and recovery hints.",
+  },
+  "admin.billing.sectionTitle": {
+    zh: "账单概览",
+    en: "Billing overview",
+  },
+  "admin.billing.sectionSubtitle": {
+    zh: "查看计划分布、收款状态和账单风险。",
+    en: "Review plan mix, collection status, and billing risks.",
+  },
+  "admin.featureFlags.sectionTitle": {
+    zh: "功能开关",
+    en: "Feature flags",
+  },
+  "admin.featureFlags.sectionSubtitle": {
+    zh: "管理开关状态、变更请求和审核流。",
+    en: "Manage flag state, change requests, and review flow.",
+  },
+  "admin.auditLogs.sectionTitle": {
+    zh: "审计日志",
+    en: "Audit logs",
+  },
+  "admin.auditLogs.sectionSubtitle": {
+    zh: "按动作、资源和执行者追踪后台操作。",
+    en: "Trace admin activity by action, resource, and actor.",
+  },
+  "admin.workers.sectionTitle": {
+    zh: "执行器状态",
+    en: "Worker status",
+  },
+  "admin.workers.sectionSubtitle": {
+    zh: "查看执行队列、处理能力和异常节点。",
+    en: "Review queue health, capacity, and failing workers.",
+  },
+  "admin.degradation.sectionTitle": {
+    zh: "降级状态",
+    en: "Degradation status",
+  },
+  "admin.degradation.sectionSubtitle": {
+    zh: "查看当前降级策略、触发原因和影响范围。",
+    en: "Review active degradation policies, triggers, and blast radius.",
+  },
+  "admin.status.active": {
+    zh: "正常",
+    en: "Active",
+  },
+  "admin.status.blocked": {
+    zh: "已封禁",
+    en: "Blocked",
+  },
+  "admin.status.healthy": {
+    zh: "健康",
+    en: "Healthy",
+  },
 } satisfies Record<string, AdminInlineCopy>;
 
-export function adminMessage(
-  locale: UiLocale,
-  key: UiMessageKey,
-  values?: Record<string, string | number>,
-) {
-  return formatUiMessage(locale, key, values);
-}
+export type AdminCopyKey = keyof typeof INLINE_COPY;
 
-export function adminText(locale: UiLocale, key: keyof typeof INLINE_COPY) {
+/** Single admin copy seam — always resolves from INLINE_COPY (not UI_MESSAGES). */
+export function adminText(locale: UiLocale, key: AdminCopyKey) {
   const copy = INLINE_COPY[key];
   return locale === "zh-CN" ? copy.zh : copy.en;
 }
 
+/** @deprecated Prefer adminText; kept as alias so call sites type-check against INLINE_COPY. */
+export function adminMessage(locale: UiLocale, key: AdminCopyKey) {
+  return adminText(locale, key);
+}
+
 export function formatAdminError(locale: UiLocale, error: unknown) {
   const detail = error instanceof Error ? error.message : String(error);
-  return `${adminMessage(locale, "admin.loadError")} ${detail}`;
+  return `${adminText(locale, "admin.loadError")} ${detail}`;
 }
 
 export function planLabel(locale: UiLocale, plan: string) {
@@ -633,8 +788,8 @@ export function planLabel(locale: UiLocale, plan: string) {
 
 export function orgStatusLabel(locale: UiLocale, blocked: boolean) {
   return blocked
-    ? adminMessage(locale, "admin.status.blocked")
-    : adminMessage(locale, "admin.status.active");
+    ? adminText(locale, "admin.status.blocked")
+    : adminText(locale, "admin.status.active");
 }
 
 export function userRoleLabel(locale: UiLocale, role: string) {
@@ -659,7 +814,7 @@ export function healthStatusLabel(locale: UiLocale, status: string) {
     case "ok":
     case "healthy":
     case "ready":
-      return adminMessage(locale, "admin.status.healthy");
+      return adminText(locale, "admin.status.healthy");
     case "degraded":
       return locale === "zh-CN" ? "降级中" : "Degraded";
     case "error":

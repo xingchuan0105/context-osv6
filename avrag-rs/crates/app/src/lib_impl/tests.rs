@@ -1,19 +1,19 @@
 #[cfg(test)]
 mod tests {
-    use crate::lib_impl::*;
     use crate::AppConfig;
+    use crate::lib_impl::*;
     use app_documents::{
         build_docscope_metadata, build_url_source_filename, infer_url_import_mime_type,
         normalize_imported_text,
     };
     use common::{CreateDocumentRequest, CreateNotebookRequest, UpdateDocumentRequest};
-use contracts::chat::{ChatMessage};
-use contracts::documents::{CreateDocumentUploadResponse, DocumentStatus};
-use contracts::notebooks::{Notebook};
+    use contracts::chat::ChatMessage;
+    use contracts::documents::{CreateDocumentUploadResponse, DocumentStatus};
+    use contracts::notebooks::Notebook;
 
     use uuid::Uuid;
 
-    use avrag_storage_pg::PgAppRepository;
+    use avrag_storage_pg::{BootstrapRepository, PgAppRepository};
     use reqwest::Url;
     use std::sync::Arc;
     use tokio::fs;
@@ -175,15 +175,17 @@ use contracts::notebooks::{Notebook};
     #[test]
     fn general_profile_custom_preferences_preserves_agent_memory() {
         let mut agent_memory = contracts::preferences::AgentPreferenceMemory::default();
-        agent_memory.active.push(contracts::preferences::AgentPreference {
-            id: "pref-1".to_string(),
-            text: "Use concise answers".to_string(),
-            category: "interaction".to_string(),
-            scope: "global".to_string(),
-            confidence: "explicit".to_string(),
-            source: "test".to_string(),
-            updated_at: "2026-04-26T00:00:00Z".to_string(),
-        });
+        agent_memory
+            .active
+            .push(contracts::preferences::AgentPreference {
+                id: "pref-1".to_string(),
+                text: "Use concise answers".to_string(),
+                category: "interaction".to_string(),
+                scope: "global".to_string(),
+                confidence: "explicit".to_string(),
+                source: "test".to_string(),
+                updated_at: "2026-04-26T00:00:00Z".to_string(),
+            });
 
         let merged = merge_general_profile_custom_preferences(
             serde_json::json!({ "theme": "dark" }),
@@ -402,24 +404,28 @@ use contracts::notebooks::{Notebook};
             _request: crate::agents::runtime::AgentRequest,
             sink: &dyn crate::agents::events::AgentEventSink,
         ) -> Result<crate::agents::runtime::AgentRunResult, common::AppError> {
-            let _ = sink.emit(crate::agents::events::AgentEvent::Activity {
-                stage: "chat".to_string(),
-                message: "Scripted chat".to_string(),
-            })
-            .await;
-            let _ = sink.emit(crate::agents::events::AgentEvent::MessageDelta {
-                text: "agent ".to_string(),
-            })
-            .await;
-            let _ = sink.emit(crate::agents::events::AgentEvent::MessageDelta {
-                text: "answer".to_string(),
-            })
-            .await;
-            let _ = sink.emit(crate::agents::events::AgentEvent::Done {
-                final_message: Some("agent answer".to_string()),
-                usage: None,
-            })
-            .await;
+            let _ = sink
+                .emit(crate::agents::events::AgentEvent::Activity {
+                    stage: "chat".to_string(),
+                    message: "Scripted chat".to_string(),
+                })
+                .await;
+            let _ = sink
+                .emit(crate::agents::events::AgentEvent::MessageDelta {
+                    text: "agent ".to_string(),
+                })
+                .await;
+            let _ = sink
+                .emit(crate::agents::events::AgentEvent::MessageDelta {
+                    text: "answer".to_string(),
+                })
+                .await;
+            let _ = sink
+                .emit(crate::agents::events::AgentEvent::Done {
+                    final_message: Some("agent answer".to_string()),
+                    usage: None,
+                })
+                .await;
 
             Ok(crate::agents::runtime::AgentRunResult {
                 answer: "agent answer".to_string(),
@@ -446,11 +452,12 @@ use contracts::notebooks::{Notebook};
             _request: crate::agents::runtime::AgentRequest,
             sink: &dyn crate::agents::events::AgentEventSink,
         ) -> Result<crate::agents::runtime::AgentRunResult, common::AppError> {
-            let _ = sink.emit(crate::agents::events::AgentEvent::Activity {
-                stage: "chat".to_string(),
-                message: "Buffered chat".to_string(),
-            })
-            .await;
+            let _ = sink
+                .emit(crate::agents::events::AgentEvent::Activity {
+                    stage: "chat".to_string(),
+                    message: "Buffered chat".to_string(),
+                })
+                .await;
 
             Ok(crate::agents::runtime::AgentRunResult {
                 answer: "buffered answer".to_string(),
@@ -660,8 +667,7 @@ use contracts::notebooks::{Notebook};
             "avrag-app-upload-validation-test-{}",
             Uuid::new_v4()
         ));
-        let repo = PgAppRepository::connect(&database_url).await.unwrap();
-        repo.migrate().await.unwrap();
+        let repo = { let __b = BootstrapRepository::connect(&database_url).await.unwrap(); __b.migrate().await.unwrap(); PgAppRepository::from_pool(__b.raw().clone()) };
 
         let mut config = AppConfig::default();
         config.org_id = Uuid::new_v4().to_string();
@@ -671,22 +677,20 @@ use contracts::notebooks::{Notebook};
         let mut state = AppState::new(config);
         let old = state.test_storage().clone();
         let pg = Arc::new(repo);
-        let document_store = Some(
-            Arc::new(app_bootstrap::test_support::PgDocumentStoreAdapter::new(pg.clone()))
-                as Arc<dyn app_core::DocumentStorePort>,
-        );
+        let document_store = Some(Arc::new(
+            app_bootstrap::test_support::PgDocumentStoreAdapter::new(pg.clone()),
+        ) as Arc<dyn app_core::DocumentStorePort>);
         let admin_store = Some(
-            Arc::new(app_bootstrap::test_support::PgAdminStoreAdapter::new(pg.clone()))
-                as Arc<dyn app_core::AdminStorePort>,
+            Arc::new(app_bootstrap::test_support::PgAdminStoreAdapter::new(
+                pg.clone(),
+            )) as Arc<dyn app_core::AdminStorePort>,
         );
-        let chat_persistence = Some(
-            Arc::new(app_bootstrap::test_support::PgChatPersistenceAdapter::new(pg.clone()))
-                as Arc<dyn app_core::ChatPersistencePort>,
-        );
-        let postgres_health = Some(
-            Arc::new(app_bootstrap::test_support::PgHealthAdapter::new(pg.clone()))
-                as Arc<dyn app_core::PostgresHealthPort>,
-        );
+        let chat_persistence = Some(Arc::new(
+            app_bootstrap::test_support::PgChatPersistenceAdapter::new(pg.clone()),
+        ) as Arc<dyn app_core::ChatPersistencePort>);
+        let postgres_health = Some(Arc::new(app_bootstrap::test_support::PgHealthAdapter::new(
+            pg.clone(),
+        )) as Arc<dyn app_core::PostgresHealthPort>);
         let inner = old.inner().clone();
         let api_keys = old.api_keys().clone();
         let api_key_hashes = old.api_key_hashes().clone();
@@ -697,26 +701,36 @@ use contracts::notebooks::{Notebook};
         let upload_expire = old.upload_expire_sec();
         let download_expire = old.download_expire_sec();
         state.test_set_postgres(pg.clone());
-        state.test_replace_storage(crate::storage_context::StorageContext::new(
-            postgres_health,
-            true,
-            document_store,
-            None,
-            admin_store,
-            None,
-            None,
-            None,
-            chat_persistence,
-            inner,
-            api_keys,
-            api_key_hashes,
-            max_upload,
-            false,
-            object_store,
-            public_base_url,
-            object_root_path,
-            upload_expire,
-            download_expire,
+        state.test_replace_storage(crate::storage_context::StorageContext::from_parts(
+            crate::storage_context::StorageContextParts {
+                infra: crate::storage_context::StorageInfra {
+                    postgres_health,
+                    postgres_configured: true,
+                    uses_memory_adapters: StorageInfra::memory_adapters_flag(false),
+                    max_upload_file_size_bytes: max_upload,
+                },
+                stores: crate::storage_context::StorageStores {
+                    document_store,
+                    auth_store: None,
+                    admin_store,
+                    billing_quota: None,
+                    billing_store: None,
+                    share_store: None,
+                    chat_persistence,
+                },
+                memory: crate::storage_context::MemoryStateHandles {
+                    inner,
+                    api_keys,
+                    api_key_hashes,
+                },
+                objects: crate::storage_context::ObjectStoreConfig {
+                    object_store,
+                    public_base_url,
+                    object_root: object_root_path,
+                    upload_expire_sec: upload_expire,
+                    download_expire_sec: download_expire,
+                },
+            },
         ));
         Some((state, object_root))
     }
@@ -767,7 +781,7 @@ use contracts::notebooks::{Notebook};
             .postgres_repo()
             .as_ref()
             .unwrap()
-            .count_ingestion_tasks_for_document(state.auth(), document_uuid)
+            .ingestion_queue().count_ingestion_tasks_for_document(state.auth(), document_uuid)
             .await
             .unwrap()
     }
@@ -847,7 +861,7 @@ use contracts::notebooks::{Notebook};
             .postgres_repo()
             .as_ref()
             .unwrap()
-            .get_document_upload_validation(
+            .documents().get_document_upload_validation(
                 state.auth(),
                 Uuid::parse_str(&upload.document_id).unwrap(),
             )

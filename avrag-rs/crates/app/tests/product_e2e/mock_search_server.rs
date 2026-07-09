@@ -32,11 +32,8 @@ impl MockSearchControls {
 /// Start a mock Brave Search HTTP server on an ephemeral port.
 ///
 /// Returns (base_url, abort_sender, controls).
-pub(crate) async fn start_mock_search_server() -> (
-    String,
-    tokio::sync::oneshot::Sender<()>,
-    MockSearchControls,
-) {
+pub(crate) async fn start_mock_search_server()
+-> (String, tokio::sync::oneshot::Sender<()>, MockSearchControls) {
     let controls = MockSearchControls::new();
     let flag = controls.clone();
     let flag2 = controls.clone();

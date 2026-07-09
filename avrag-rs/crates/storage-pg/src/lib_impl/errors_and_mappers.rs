@@ -1,8 +1,9 @@
-fn generate_plaintext_api_key() -> String {
+use super::*;
+pub fn generate_plaintext_api_key() -> String {
     format!("sk_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
 }
 
-fn hash_api_key(value: &str) -> String {
+pub fn hash_api_key(value: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(value.as_bytes());
     hex::encode(hasher.finalize())
@@ -107,17 +108,9 @@ pub struct DocumentScopeState {
     pub status: DocumentStatus,
 }
 
-#[derive(Debug, Clone)]
-pub struct IndexedChunk {
-    pub chunk_id: String,
-    pub doc_id: String,
-    pub page: Option<i64>,
-    pub content: String,
-    pub score: Option<f32>,
-    pub metadata: serde_json::Value,
-}
+pub use common::IndexedChunk;
 
-fn map_notebook(row: PgRow) -> Result<Notebook, PgStorageError> {
+pub fn map_notebook(row: PgRow) -> Result<Notebook, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
     let org_id: Uuid = row.try_get("org_id")?;
     let owner_id: Option<Uuid> = row.try_get("owner_id")?;
@@ -147,7 +140,7 @@ fn map_notebook(row: PgRow) -> Result<Notebook, PgStorageError> {
     })
 }
 
-fn map_document(row: PgRow) -> Result<Document, PgStorageError> {
+pub fn map_document(row: PgRow) -> Result<Document, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
     let org_id: Uuid = row.try_get("org_id")?;
     let notebook_id: Uuid = row.try_get("notebook_id")?;
@@ -173,7 +166,7 @@ fn map_document(row: PgRow) -> Result<Document, PgStorageError> {
     })
 }
 
-fn map_session(row: PgRow) -> Result<ChatSession, PgStorageError> {
+pub fn map_session(row: PgRow) -> Result<ChatSession, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
     let notebook_id: Uuid = row.try_get("notebook_id")?;
     let title: Option<String> = row.try_get("title")?;
@@ -192,7 +185,7 @@ fn map_session(row: PgRow) -> Result<ChatSession, PgStorageError> {
     })
 }
 
-fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
+pub fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
     let citations_value: serde_json::Value = row.try_get("citations")?;
     let citations = serde_json::from_value::<Vec<Citation>>(citations_value)?;
     let created_at: DateTime<Utc> = row.try_get("created_at")?;
@@ -246,7 +239,7 @@ fn map_message(row: PgRow) -> Result<ChatMessage, PgStorageError> {
     })
 }
 
-fn map_api_key(row: PgRow) -> Result<ApiKeyRow, PgStorageError> {
+pub fn map_api_key(row: PgRow) -> Result<ApiKeyRow, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
     let org_id: Uuid = row.try_get("org_id")?;
     let notebook_id: Option<Uuid> = row.try_get("notebook_id").ok().flatten();
@@ -279,7 +272,7 @@ fn map_api_key(row: PgRow) -> Result<ApiKeyRow, PgStorageError> {
     })
 }
 
-fn map_notification(row: PgRow) -> Result<NotificationRow, PgStorageError> {
+pub fn map_notification(row: PgRow) -> Result<NotificationRow, PgStorageError> {
     let id: Uuid = row.try_get("id")?;
     let org_id: Uuid = row.try_get("org_id")?;
     let user_id: Uuid = row.try_get("user_id")?;
@@ -305,7 +298,7 @@ fn map_notification(row: PgRow) -> Result<NotificationRow, PgStorageError> {
     })
 }
 
-fn map_user_profile(row: PgRow) -> Result<UserProfileRow, PgStorageError> {
+pub fn map_user_profile(row: PgRow) -> Result<UserProfileRow, PgStorageError> {
     let user_id: Uuid = row.try_get("user_id")?;
     let org_id: Uuid = row.try_get("org_id")?;
     let expertise_domains = json_string_vec(row.try_get("expertise_domains")?);
@@ -324,7 +317,7 @@ fn map_user_profile(row: PgRow) -> Result<UserProfileRow, PgStorageError> {
     })
 }
 
-fn map_indexed_chunk(row: PgRow) -> Result<IndexedChunk, PgStorageError> {
+pub fn map_indexed_chunk(row: PgRow) -> Result<IndexedChunk, PgStorageError> {
     let chunk_id: Uuid = row.try_get("id")?;
     let doc_id: Uuid = row.try_get("document_id")?;
     let page = row
@@ -345,7 +338,7 @@ fn map_indexed_chunk(row: PgRow) -> Result<IndexedChunk, PgStorageError> {
     })
 }
 
-fn map_document_task_seed(row: PgRow) -> Result<DocumentTaskSeed, PgStorageError> {
+pub fn map_document_task_seed(row: PgRow) -> Result<DocumentTaskSeed, PgStorageError> {
     let document_id: Uuid = row.try_get("id")?;
     let org_id: Uuid = row.try_get("org_id")?;
     let notebook_id: Uuid = row.try_get("notebook_id")?;
@@ -366,7 +359,7 @@ fn map_document_task_seed(row: PgRow) -> Result<DocumentTaskSeed, PgStorageError
     })
 }
 
-fn map_document_upload_validation(row: PgRow) -> Result<DocumentUploadValidation, PgStorageError> {
+pub fn map_document_upload_validation(row: PgRow) -> Result<DocumentUploadValidation, PgStorageError> {
     let upload_size_bytes: Option<i64> = row.try_get("upload_size_bytes")?;
     Ok(DocumentUploadValidation {
         upload_size_bytes: upload_size_bytes.and_then(|value| u64::try_from(value).ok()),
@@ -376,7 +369,7 @@ fn map_document_upload_validation(row: PgRow) -> Result<DocumentUploadValidation
     })
 }
 
-fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
+pub fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
     let task_id: Uuid = row.try_get("task_id")?;
     let org_id: Uuid = row.try_get("org_id")?;
     let notebook_id: Uuid = row.try_get("notebook_id")?;
@@ -402,7 +395,7 @@ fn map_ingestion_task(row: PgRow) -> Result<IngestionTask, PgStorageError> {
     })
 }
 
-fn map_document_cleanup_task(row: PgRow) -> Result<DocumentCleanupTask, PgStorageError> {
+pub fn map_document_cleanup_task(row: PgRow) -> Result<DocumentCleanupTask, PgStorageError> {
     Ok(DocumentCleanupTask {
         task_id: row.try_get("task_id")?,
         org_id: row.try_get("org_id")?,
@@ -417,7 +410,7 @@ fn map_document_cleanup_task(row: PgRow) -> Result<DocumentCleanupTask, PgStorag
     })
 }
 
-fn build_preview_items(content: &str) -> Vec<ParsedPreviewItem> {
+pub fn build_preview_items(content: &str) -> Vec<ParsedPreviewItem> {
     let mut items = Vec::new();
     for (index, line) in content.lines().enumerate() {
         let trimmed = line.trim();
@@ -442,7 +435,7 @@ fn build_preview_items(content: &str) -> Vec<ParsedPreviewItem> {
     items
 }
 
-fn build_summary(content: &str) -> String {
+pub fn build_summary(content: &str) -> String {
     let compact = content.split_whitespace().collect::<Vec<_>>().join(" ");
     compact.chars().take(180).collect()
 }

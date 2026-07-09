@@ -5,9 +5,9 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::{ExecutionResult, InterpreterError};
 use async_trait::async_trait;
 use serde_json::Value;
-use crate::{ExecutionResult, InterpreterError};
 
 /// Host-side bridge invoked from the sandbox via pipe RPC.
 #[async_trait]
@@ -48,13 +48,23 @@ class _Client:
         return _rpc("graph_search", {"query": query, "depth": depth})["chunks"]
     async def chunk_fetch(self, chunk_id):
         return _rpc("chunk_fetch", {"chunk_id": chunk_id})["chunks"]
-    async def doc_summary(self, doc_ids, level="doc"):
-        return _rpc("doc_summary", {"doc_ids": doc_ids, "level": level})["chunks"]
-    async def doc_profile(self, doc_ids, fields=None):
-        payload = {"doc_ids": doc_ids}
+    async def doc_summary(self, level="doc", doc_ids=None):
+        payload = {"level": level}
+        if doc_ids is not None:
+            payload["doc_ids"] = doc_ids
+        return _rpc("doc_summary", payload)["chunks"]
+    async def doc_profile(self, doc_ids=None, fields=None):
+        payload = {}
+        if doc_ids is not None:
+            payload["doc_ids"] = doc_ids
         if fields:
             payload["fields"] = fields
         return _rpc("doc_profile", payload)["chunks"]
+    async def doc_chunks(self, doc_ids=None):
+        payload = {}
+        if doc_ids is not None:
+            payload["doc_ids"] = doc_ids
+        return _rpc("doc_chunks", payload)["chunks"]
 
 client = _Client()
 "#
@@ -69,10 +79,11 @@ pub fn bridge_shim_client_method_names() -> &'static [&'static str] {
         "chunk_fetch",
         "doc_summary",
         "doc_profile",
+        "doc_chunks",
     ]
 }
 
-pub(crate) fn build_bridge_sandbox_wrapper(user_code: &str, memory_mb: u64) -> String {
+pub(crate) fn build_bridge_sandbox_wrapper(user_code: &str, memory_mb: u64, cpu_secs: u64) -> String {
     let blocked_modules = [
         "os",
         "subprocess",
@@ -124,6 +135,12 @@ try:
 except Exception:
     pass
 
+try:
+    import resource
+    resource.setrlimit(resource.RLIMIT_CPU, ({cpu_secs}, {cpu_secs}))
+except Exception:
+    pass
+
 {bridge_shim}
 
 _real_stdout = sys.stdout
@@ -153,6 +170,7 @@ _real_stdout.write(json.dumps(output))
 "#,
         blocked_list = blocked_list,
         memory_mb = memory_mb,
+        cpu_secs = cpu_secs,
         bridge_shim = bridge_shim_source(),
         indented_user_code = indented_user_code,
     )
@@ -204,10 +222,11 @@ mod unix_impl {
         python_path: &str,
         timeout_secs: u64,
         memory_mb: u64,
+        cpu_secs: u64,
         code: &str,
         bridge: Arc<dyn HostBridge>,
     ) -> Result<ExecutionResult, InterpreterError> {
-        let sandbox_code = build_bridge_sandbox_wrapper(code, memory_mb);
+        let sandbox_code = build_bridge_sandbox_wrapper(code, memory_mb, cpu_secs);
 
         let (req_reader, req_writer) = std::io::pipe().map_err(InterpreterError::Io)?;
         let (resp_reader, resp_writer) = std::io::pipe().map_err(InterpreterError::Io)?;
@@ -221,9 +240,8 @@ mod unix_impl {
             libc::fcntl(resp_read_fd, libc::F_SETFD, 0);
         }
 
-        let temp_dir = tempfile::TempDir::new().map_err(|e| {
-            InterpreterError::Io(std::io::Error::other(format!("temp dir: {e}")))
-        })?;
+        let temp_dir = tempfile::TempDir::new()
+            .map_err(|e| InterpreterError::Io(std::io::Error::other(format!("temp dir: {e}"))))?;
 
         let req_file = unsafe { std::fs::File::from_raw_fd(req_reader.into_raw_fd()) };
         let resp_file = unsafe { std::fs::File::from_raw_fd(resp_writer.into_raw_fd()) };
@@ -248,6 +266,9 @@ mod unix_impl {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        // Put the child in its own process group so that, on timeout, we can
+        // kill python *and* any subprocesses it spawned (pid == pgid).
+        command.process_group(0);
         unsafe {
             command.pre_exec(move || {
                 if libc::dup2(req_write_fd, 3) == -1 {
@@ -271,6 +292,9 @@ mod unix_impl {
                 InterpreterError::Io(e)
             }
         })?;
+        // Capture the child's pid before it is moved into the wait task; with
+        // process_group(0) set, this pid doubles as the process-group id for killpg.
+        let child_pid = child.id() as i32;
 
         let timeout = Duration::from_secs(timeout_secs);
         let wait_result = tokio::time::timeout(timeout, wait_child(child)).await;
@@ -278,7 +302,16 @@ mod unix_impl {
         let (status, stdout, stderr) = match wait_result {
             Ok(Ok(tuple)) => tuple,
             Ok(Err(e)) => return Err(e),
-            Err(_) => return Err(InterpreterError::Timeout(timeout_secs)),
+            Err(_) => {
+                // Kill the child's process group to clean up the python process
+                // + any subprocesses it spawned. `child` was moved into
+                // wait_child; use the captured pid as pgid (process_group(0) =>
+                // pid == pgid).
+                unsafe {
+                    let _ = libc::killpg(child_pid, libc::SIGKILL);
+                }
+                return Err(InterpreterError::Timeout(timeout_secs));
+            }
         };
 
         let exit_code = status.as_ref().and_then(|s| s.code());
@@ -345,7 +378,11 @@ mod unix_impl {
                         InterpreterError::Io(std::io::Error::other("stderr reader panicked"))
                     })?
                     .unwrap_or_default();
-                Ok((Some(status), String::from_utf8(stdout)?, String::from_utf8(stderr)?))
+                Ok((
+                    Some(status),
+                    String::from_utf8(stdout)?,
+                    String::from_utf8(stderr)?,
+                ))
             })();
             let _ = tx.send(result);
         });
@@ -391,6 +428,7 @@ pub async fn execute_with_bridge(
     _python_path: &str,
     _timeout_secs: u64,
     _memory_mb: u64,
+    _cpu_secs: u64,
     _code: &str,
     _bridge: Arc<dyn HostBridge>,
 ) -> Result<ExecutionResult, InterpreterError> {
@@ -417,6 +455,7 @@ mod bridge_shim_tests {
                 "chunk_fetch",
                 "doc_summary",
                 "doc_profile",
+                "doc_chunks",
             ]
         );
         assert!(!bridge_shim_client_method_names().contains(&"rerank"));
@@ -451,7 +490,11 @@ mod spawn_tests {
             });
         }
         let output = command.output().expect("spawn python");
-        assert!(output.status.success(), "stderr={}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         let mut buf = [0u8; 16];
         let n = read_end.read(&mut buf).expect("read pipe");
@@ -459,13 +502,117 @@ mod spawn_tests {
     }
 }
 
+#[cfg(all(test, unix))]
+mod timeout_kill_tests {
+    use super::*;
+    use async_trait::async_trait;
+    use serde_json::json;
+    use std::time::Instant;
+
+    /// Minimal host bridge stub whose responses never matter for these tests
+    /// (the busy-loop never makes an RPC).
+    struct NoopBridge;
+
+    #[async_trait]
+    impl HostBridge for NoopBridge {
+        async fn call(&self, _method: &str, _args: Value) -> Value {
+            json!({ "chunks": [] })
+        }
+    }
+
+    /// `while True: pass` pins a CPU and never exits on its own. The bridge
+    /// path must time out and return `InterpreterError::Timeout`, *and* kill the
+    /// orphaned python process so it does not leak. This asserts the error
+    /// variant and a reasonable wall-clock bound (well under the runaway 30s
+    /// default). Requires `python3` on PATH.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bridge_timeout_kills_busy_python() {
+        // `python3` may be absent in some CI images; skip rather than fail there.
+        if std::process::Command::new("python3")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            eprintln!("skipping: python3 not found on PATH");
+            return;
+        }
+
+        let started = Instant::now();
+        // A 2s timeout: the loop spins forever, so the only way this returns is
+        // via the timeout path. We also assert it returns promptly (< 10s) so a
+        // regression that fails to time out surfaces as a slow failure.
+        let result = execute_with_bridge(
+            "python3",
+            2,
+            256,
+            30,
+            "while True:\n    pass",
+            Arc::new(NoopBridge),
+        )
+        .await;
+
+        let elapsed = started.elapsed();
+        assert!(
+            matches!(result, Err(InterpreterError::Timeout(2))),
+            "expected Timeout(2), got {:?}",
+            result
+        );
+        assert!(
+            elapsed.as_secs() < 10,
+            "timeout path took too long ({elapsed:?}); child likely not reaped"
+        );
+    }
+
+    /// Manual / non-deterministic check that no orphaned python process from the
+    /// `bridge_timeout_kills_busy_python` run survives. Killing a process group
+    /// is inherently racy to observe from outside, so this is `#[ignore]`:
+    /// enable locally with `cargo test -p avrag-code-interpreter -- --ignored`
+    /// and (if needed) visually confirm with `pgrep -af 'while True'`.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "orphan-process check is non-deterministic; run manually with python3 available"]
+    async fn bridge_timeout_leaves_no_orphan_python() {
+        let _ = execute_with_bridge(
+            "python3",
+            2,
+            256,
+            30,
+            "while True:\n    pass",
+            Arc::new(NoopBridge),
+        )
+        .await;
+
+        // Give the SIGKILL a moment to take effect and the reaper to clean up.
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+        let pgrep = std::process::Command::new("pgrep")
+            .arg("-af")
+            .arg("python3")
+            .output();
+        match pgrep {
+            Ok(out) => {
+                let listing = String::from_utf8_lossy(&out.stdout);
+                // Our busy loop runs as `python3 -c "<wrapper>...while True..."`.
+                assert!(
+                    !listing.contains("while True"),
+                    "orphan python process still running:\n{listing}"
+                );
+            }
+            Err(_) => {
+                // pgrep itself unavailable; nothing deterministic to assert.
+                eprintln!("skipping orphan assertion: pgrep not available");
+            }
+        }
+    }
+}
+
 pub(crate) async fn execute_with_bridge_arc<B: HostBridge + Send + Sync + 'static>(
     python_path: &str,
     timeout_secs: u64,
     memory_mb: u64,
+    cpu_secs: u64,
     code: &str,
     bridge: Arc<B>,
 ) -> Result<ExecutionResult, InterpreterError> {
     let bridge: Arc<dyn HostBridge> = bridge;
-    execute_with_bridge(python_path, timeout_secs, memory_mb, code, bridge).await
+    execute_with_bridge(python_path, timeout_secs, memory_mb, cpu_secs, code, bridge).await
 }

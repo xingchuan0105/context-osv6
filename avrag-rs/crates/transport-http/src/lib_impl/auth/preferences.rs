@@ -1,4 +1,16 @@
-async fn auth_get_preferences_handler(
+use axum::Json;
+use axum::extract::Extension;
+use axum::extract::Path;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::response::Response;
+use tracing::warn;
+
+use crate::auth_types::UserPreferencesPayload;
+use crate::handlers;
+use crate::middleware::RequestState;
+
+pub(crate) async fn auth_get_preferences_handler(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
     if state.auth().actor_id().is_none() {
@@ -34,7 +46,7 @@ async fn auth_get_preferences_handler(
     }
 }
 
-async fn auth_update_preferences_handler(
+pub(crate) async fn auth_update_preferences_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(req): Json<UserPreferencesPayload>,
 ) -> Response {
@@ -120,7 +132,7 @@ async fn auth_update_preferences_handler(
     (StatusCode::OK, Json(req)).into_response()
 }
 
-async fn auth_get_agent_preferences_handler(
+pub(crate) async fn auth_get_agent_preferences_handler(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Response {
     if state.auth().actor_id().is_none() {
@@ -150,7 +162,7 @@ async fn auth_get_agent_preferences_handler(
     }
 }
 
-async fn auth_update_agent_preferences_handler(
+pub(crate) async fn auth_update_agent_preferences_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(agent_memory): Json<contracts::preferences::AgentPreferenceMemory>,
 ) -> Response {
@@ -194,7 +206,7 @@ async fn auth_update_agent_preferences_handler(
     }
 }
 
-async fn auth_delete_agent_preference_handler(
+pub(crate) async fn auth_delete_agent_preference_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(preference_id): Path<String>,
 ) -> Response {

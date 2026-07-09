@@ -2,32 +2,32 @@ use ingestion::parser::{ParsePlan, PdfPageBackend};
 use ingestion::{DocumentIr, ParseBackend, SourceLocator};
 
 pub(crate) use super::graph_index::{
-    build_document_index_batch, build_graph_index_records, GraphIndexRecords,
+    GraphIndexRecords, build_document_index_batch, build_graph_index_records,
 };
 pub(crate) use super::index_dispatch::build_text_index_records;
 pub(crate) use super::parse_route::{
     execute_external_parse, execute_local_parse, execute_office_parse,
 };
 pub(crate) use super::pg_side_effects::{
-    build_asset_object_key, build_document_block_rows, build_document_chunk_rows, build_toc_entries,
-    collect_document_text, maybe_enrich_toc_with_llm,
+    build_asset_object_key, build_document_block_rows, build_document_chunk_rows,
+    collect_document_text, generate_document_profile_with_llm,
 };
-use anyhow::{anyhow, Result};
-use avrag_auth::AuthContext;
+use anyhow::{Result, anyhow};
+use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::ObjectStoreHandle;
 use std::path::{Component, Path};
 use uuid::Uuid;
 
-use crate::runtime_support::safe_relative_object_key;
 pub(crate) use super::triplet_extraction::{
     extract_triplets_for_index, extract_visual_triplets_for_index, merge_extracted_triplets,
     triplet_extraction_enabled, visual_triplet_extraction_enabled,
 };
+use crate::runtime_support::safe_relative_object_key;
 
 #[cfg(test)]
 pub(crate) use super::index_dispatch::embed_text_vectors_with_client;
 #[cfg(test)]
-pub(crate) use super::triplet_extraction::{parse_triplet_response, ExtractedTriplet};
+pub(crate) use super::triplet_extraction::{ExtractedTriplet, parse_triplet_response};
 
 pub(crate) fn estimate_token_count(text: &str) -> i64 {
     common::estimate_token_count(text)
@@ -45,9 +45,7 @@ pub(crate) fn validate_mirror_source_path(source_path: &str) -> Result<()> {
         return validate_temporary_mirror_path(local_path);
     }
     if !safe_relative_object_key(source_path) {
-        return Err(anyhow!(
-            "mirror local asset path rejected: {source_path}"
-        ));
+        return Err(anyhow!("mirror local asset path rejected: {source_path}"));
     }
     Ok(())
 }
@@ -109,8 +107,7 @@ pub(crate) fn enrich_multimodal_source_locator(
     source_locator: &SourceLocator,
     metadata: &std::collections::BTreeMap<String, String>,
 ) -> serde_json::Value {
-    let mut value =
-        serde_json::to_value(source_locator).unwrap_or_else(|_| serde_json::json!({}));
+    let mut value = serde_json::to_value(source_locator).unwrap_or_else(|_| serde_json::json!({}));
     let Some(obj) = value.as_object_mut() else {
         return value;
     };
@@ -143,6 +140,10 @@ pub(crate) struct ParseRunOutputs {
     pub(crate) graph_degrade_reasons: Vec<String>,
     pub(crate) multimodal_degrade_count: usize,
     pub(crate) multimodal_degrade_reasons: Vec<String>,
+    /// Chunk ids whose multimodal vector embed failed. The PG `multimodal_chunks`
+    /// rows still exist for these (relation present, vector absent), so they are
+    /// surfaced to make the divergence visible rather than silently clean.
+    pub(crate) failed_mm_chunks: Vec<Uuid>,
 }
 
 pub(crate) fn build_parse_backend_summary(
@@ -253,6 +254,7 @@ pub(crate) fn build_parse_backend_summary(
 pub(crate) fn build_parse_warning_payload(
     document_ir: Option<&DocumentIr>,
     validation_warnings: &[ingestion::DocumentIrValidationIssue],
+    outputs: &ParseRunOutputs,
 ) -> serde_json::Value {
     let parse_warnings = document_ir
         .map(|document| {
@@ -282,9 +284,37 @@ pub(crate) fn build_parse_warning_payload(
             })
         })
         .collect::<Vec<_>>();
+
+    // Surface multimodal partial failures so a document that completes with a
+    // divergent state (PG `multimodal_chunks` rows present but their vector
+    // embeddings absent) is visible rather than silently clean. We emit a
+    // dedicated warning whenever any multimodal chunk failed; the ratio is
+    // included so consumers can gauge severity. The doc is still Completed
+    // (correct degrade behavior) — this only adds visibility.
+    let multimodal_failures = if outputs.multimodal_chunk_count > 0
+        && !outputs.failed_mm_chunks.is_empty()
+    {
+        let failed = outputs.failed_mm_chunks.len();
+        let total = outputs.multimodal_chunk_count;
+        let ratio = (failed as f64) / (total as f64);
+        let severity = if ratio > 0.5 { "high" } else { "low" };
+        serde_json::json!({
+            "code": "multimodal_partial_failure",
+            "failed_chunk_count": failed,
+            "total_chunk_count": total,
+            "failure_ratio": (ratio * 100.0).round() as u64,
+            "severity": severity,
+            "failed_chunk_ids": outputs.failed_mm_chunks,
+            "reasons": outputs.multimodal_degrade_reasons,
+        })
+    } else {
+        serde_json::Value::Null
+    };
+
     serde_json::json!({
         "parse_warnings": parse_warnings,
         "validation_warnings": validation_warnings,
+        "multimodal_partial_failure": multimodal_failures,
     })
 }
 

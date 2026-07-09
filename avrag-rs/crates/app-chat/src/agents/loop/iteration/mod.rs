@@ -10,11 +10,10 @@ pub(crate) use state::disclosed_skill_ids;
 use avrag_llm::LlmUsage;
 use common::AppError;
 
-use super::config::{LoopExitConfig, ModeConfig};
-use super::optimizer::LoopOptimizer;
-use super::parse::{parse_llm_output, LlmOutput};
-use super::skill_request::validate_skill_request;
 use super::ReActLoop;
+use super::config::{LoopExitConfig, ModeConfig};
+use super::parse::{LlmOutput, parse_llm_output};
+use super::skill_request::validate_skill_request;
 use crate::agents::events::AgentEventSink;
 use crate::agents::runtime::AgentRequest;
 
@@ -25,15 +24,14 @@ impl ReActLoop {
         max_iterations: u8,
         mode: &ModeConfig,
         request: &AgentRequest,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         loop_exit: &LoopExitConfig,
         state: &mut IterationState,
         total_usage: &mut LlmUsage,
-        optimizer: &LoopOptimizer,
         sink: &dyn AgentEventSink,
     ) -> Result<IterationOutcome, AppError> {
         let assembled = self
-            .assemble_retrieve_context(iteration, mode, request, state, sink)
+            .assemble_retrieve_context(iteration, max_iterations, mode, request, state, sink)
             .await;
         let iter_start = std::time::Instant::now();
         let llm_response = self
@@ -42,13 +40,11 @@ impl ReActLoop {
 
         self.apply_llm_output(
             iteration,
-            max_iterations,
             mode,
             request,
             auth,
             loop_exit,
             state,
-            optimizer,
             sink,
             &llm_response,
             iter_start,
@@ -59,13 +55,11 @@ impl ReActLoop {
     pub(crate) async fn apply_llm_output(
         &self,
         iteration: u8,
-        max_iterations: u8,
         mode: &ModeConfig,
         request: &AgentRequest,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         loop_exit: &LoopExitConfig,
         state: &mut IterationState,
-        optimizer: &LoopOptimizer,
         sink: &dyn AgentEventSink,
         llm_response: &avrag_llm::LlmResponse,
         iter_start: std::time::Instant,
@@ -81,13 +75,11 @@ impl ReActLoop {
             LlmOutput::NativeToolCalls(calls) => {
                 self.dispatch_native_tool_calls(
                     iteration,
-                    max_iterations,
                     mode,
                     request,
                     auth,
                     loop_exit,
                     state,
-                    optimizer,
                     sink,
                     llm_response,
                     iter_start,

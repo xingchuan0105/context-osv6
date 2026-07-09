@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use common::{AppError};
+use common::AppError;
 use contracts::chat::{ChatRequest, ModeDebug};
-use contracts::notebooks::{ChatSession};
+use contracts::notebooks::ChatSession;
 
 use crate::agents::runtime::AgentRequest;
 use crate::chat_streaming::STREAM_PLACEHOLDER_MESSAGE_ID;
@@ -29,8 +29,7 @@ pub(crate) async fn dispatch_mode(
     let agent_kind = crate::agents::AgentKind::parse(&request.agent_type);
 
     if matches!(agent_kind, Some(crate::agents::AgentKind::Rag)) && request.doc_scope.is_empty() {
-        let message =
-            crate::i18n::clarify::need_doc_scope(request.language.as_deref()).to_string();
+        let message = crate::i18n::clarify::need_doc_scope(request.language.as_deref()).to_string();
         return state
             .execute_clarify_mode_core(request, session, &message)
             .await;
@@ -54,6 +53,11 @@ pub(crate) async fn dispatch_mode(
         Some(crate::agents::AgentKind::Rag) => {
             run_rag_mode(state, request, session, stream_config).await
         }
+        Some(crate::agents::AgentKind::Write) => {
+            // Write is intentionally outside UnifiedAgent (needs ChatContext for
+            // drafts / refine loop). See agents::unified module docs.
+            crate::writer::run_write_mode(state, request, session, stream_config).await
+        }
     }
 }
 
@@ -69,8 +73,12 @@ async fn run_general_mode(
         return Err(AppError::internal("agent service is not configured"));
     };
 
-    let mut agent_request =
-        agent_request_with_resolved_session(state.build_agent_request(request, kind, Some(session.id.clone())).await, session);
+    let mut agent_request = agent_request_with_resolved_session(
+        state
+            .build_agent_request(request, kind, Some(session.id.clone()))
+            .await,
+        session,
+    );
     if let Some(config) = stream_config {
         agent_request.stream = true;
         agent_request.cancellation_token = Some(config.token.clone());
@@ -164,7 +172,11 @@ async fn run_search_mode(
 
     let mut agent_request = agent_request_with_resolved_session(
         state
-            .build_agent_request(request, crate::agents::AgentKind::Search, Some(session.id.clone()))
+            .build_agent_request(
+                request,
+                crate::agents::AgentKind::Search,
+                Some(session.id.clone()),
+            )
             .await,
         session,
     );
@@ -271,7 +283,11 @@ async fn run_rag_mode(
 
     let mut agent_request = agent_request_with_resolved_session(
         state
-            .build_agent_request(request, crate::agents::AgentKind::Rag, Some(session.id.clone()))
+            .build_agent_request(
+                request,
+                crate::agents::AgentKind::Rag,
+                Some(session.id.clone()),
+            )
             .await,
         session,
     );
@@ -337,7 +353,7 @@ async fn run_rag_mode(
 /// Extract `DebugTrace` events from a `CollectingSink` and attach them to
 /// `execution.debug_metadata` as `{"agent_debug_trace": [...]}`.
 /// Used by the non-streaming branches of general and search modes.
-fn attach_debug_trace_from_sink(
+pub(crate) fn attach_debug_trace_from_sink(
     execution: &mut ChatExecution,
     sink: &crate::agents::events::CollectingSink,
 ) {

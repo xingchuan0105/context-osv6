@@ -21,7 +21,6 @@ analytics = { path = "../analytics" }
 bytes = "1"
 contracts = { path = "../../../contracts" }
 serde.workspace = true
-avrag-auth = { path = "../auth" }
 avrag-billing = { path = "../billing" }
 avrag-llm = { path = "../llm" }
 avrag-rag-core = { path = "../rag-core" }
@@ -50,6 +49,7 @@ app-core = { path = "../app-core" }
 axum = { version = "0.8", features = ["macros", "multipart"] }
 avrag-storage-pg = { path = "../storage-pg" }
 ingestion = { path = "../ingestion" }
+rag_quality = { path = "../../tests/rag_quality" }
 redis.workspace = true
 tempfile = "3"
 tokio = { workspace = true, features = ["process"] }

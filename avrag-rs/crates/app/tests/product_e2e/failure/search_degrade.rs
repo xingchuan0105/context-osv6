@@ -48,7 +48,10 @@ async fn search_empty_results_returns_degraded_answer() {
         .citations
         .iter()
         .any(|c| c.layer.as_deref() == Some("search"));
-    assert!(!has_web, "empty search results must not produce web citations");
+    assert!(
+        !has_web,
+        "empty search results must not produce web citations"
+    );
     assert!(
         resp.answer.contains("could not retrieve web evidence")
             || !resp.degrade_trace.is_empty()

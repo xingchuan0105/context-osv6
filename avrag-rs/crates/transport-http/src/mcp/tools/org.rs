@@ -1,6 +1,6 @@
 use app_bootstrap::AppState;
 use common::{AppError, CreateNotebookRequest};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::auth_guard::{authorize_org_tool, org_create_permission, org_list_permission};
 use crate::mcp::catalog;

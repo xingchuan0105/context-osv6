@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use avrag_auth::AuthContext;
-use avrag_storage_pg::PgAppRepository;
 use app_core::StorageContext;
+use contracts::auth_runtime::AuthContext;
+use avrag_storage_pg::PgAppRepository;
 
 use crate::adapters::RedisRateLimitBackend;
+use crate::services::PasswordResetService;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -20,6 +21,7 @@ pub struct AppState {
     pub(crate) postgres: Option<Arc<PgAppRepository>>,
     pub(crate) redis_url: String,
     pub(crate) rate_limit_backend: Option<Arc<RedisRateLimitBackend>>,
+    pub(crate) password_reset_service: PasswordResetService,
 }
 
 pub use app_core::{MemoryState, RetrievedContext, StoredDocument};

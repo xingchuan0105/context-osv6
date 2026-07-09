@@ -11,7 +11,10 @@ pub struct ModeConfig {
     /// [`CapabilityRegistry`](crate::agents::capability::CapabilityRegistry).
     #[serde(default)]
     pub tool_pool: Vec<String>,
-    #[serde(default, deserialize_with = "super::skill_catalog::deserialize_skill_catalog")]
+    #[serde(
+        default,
+        deserialize_with = "super::skill_catalog::deserialize_skill_catalog"
+    )]
     pub skill_catalog: SkillCatalogConfig,
     /// Inject retrieval/display query block during retrieve (and synthesis when true).
     #[serde(default)]
@@ -21,31 +24,9 @@ pub struct ModeConfig {
     #[serde(default)]
     pub temperature: Option<f32>,
     #[serde(default)]
-    pub query_normalization: QueryNormalizationConfig,
-    #[serde(default)]
     pub loop_exit: LoopExitConfig,
     #[serde(default)]
     pub synthesis_output: SynthesisOutputConfig,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct QueryNormalizationConfig {
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-    #[serde(default = "default_max_prior_turns")]
-    pub max_prior_turns: u8,
-    #[serde(default = "default_true")]
-    pub llm_fallback: bool,
-}
-
-impl Default for QueryNormalizationConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            max_prior_turns: 6,
-            llm_fallback: true,
-        }
-    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -56,8 +37,6 @@ pub struct LoopExitConfig {
     pub allow_content_early_stop: bool,
     #[serde(default)]
     pub skip_synthesis_on_direct_answer: bool,
-    #[serde(default)]
-    pub evidence_gate: Option<EvidenceGateConfig>,
 }
 
 impl Default for LoopExitConfig {
@@ -66,42 +45,8 @@ impl Default for LoopExitConfig {
             require_evidence: true,
             allow_content_early_stop: false,
             skip_synthesis_on_direct_answer: false,
-            evidence_gate: None,
         }
     }
-}
-
-/// Pure-code evidence quality gate configuration.
-/// No LLM calls — inspects retrieval metadata only.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct EvidenceGateConfig {
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-    #[serde(default = "default_min_top_score")]
-    pub min_top_score: f32,
-    #[serde(default = "default_max_context_tokens")]
-    pub max_context_tokens: usize,
-    #[serde(default = "default_true")]
-    pub topic_overlap_required: bool,
-}
-
-impl Default for EvidenceGateConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            min_top_score: 0.5,
-            max_context_tokens: 12000,
-            topic_overlap_required: true,
-        }
-    }
-}
-
-fn default_min_top_score() -> f32 {
-    0.5
-}
-
-fn default_max_context_tokens() -> usize {
-    12000
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -130,14 +75,6 @@ impl Default for SynthesisOutputConfig {
             contract: AnswerContractKind::InternalAnswerV1,
         }
     }
-}
-
-fn default_true() -> bool {
-    true
-}
-
-fn default_max_prior_turns() -> u8 {
-    6
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

@@ -1,5 +1,5 @@
 use app_core::{AdminAuditLogPage, AdminUsageStats};
-use avrag_auth::OrgId;
+use contracts::auth_runtime::OrgId;
 use uuid::Uuid;
 
 #[derive(serde::Serialize)]

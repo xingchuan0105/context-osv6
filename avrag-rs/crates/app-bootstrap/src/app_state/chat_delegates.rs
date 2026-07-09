@@ -1,7 +1,9 @@
 use common::{AppError, SourceRow, StatusOnlyResponse};
-use contracts::chat::{ChatMessage, ChatRequest, ChatResponse};
-use contracts::notebooks::{ChatSession, CreateChatSessionRequest, Notebook, UpdateChatSessionRequest};
 use contracts::chat::ChatEvent;
+use contracts::chat::{ChatMessage, ChatRequest, ChatResponse};
+use contracts::notebooks::{
+    ChatSession, CreateChatSessionRequest, Notebook, UpdateChatSessionRequest,
+};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
 

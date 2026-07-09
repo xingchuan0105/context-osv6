@@ -5,7 +5,7 @@ use axum::{
 };
 use serde_json::json;
 
-use crate::RequestState;
+use crate::middleware::RequestState;
 
 use super::catalog;
 use super::gateway;

@@ -31,7 +31,7 @@ pub async fn dispatch_atomic_tools_with_provider(
 pub async fn dispatch_atomic_tools_with_enforcement(
     calls: Vec<ToolCall>,
     search_provider: Option<&dyn avrag_search::SearchProvider>,
-    auth: Option<&avrag_auth::AuthContext>,
+    auth: Option<&contracts::auth_runtime::AuthContext>,
     session_id: Option<uuid::Uuid>,
     chat_persistence: Option<&dyn app_core::ChatPersistencePort>,
 ) -> Vec<ToolResult> {
@@ -55,7 +55,7 @@ pub async fn dispatch_atomic_tools_with_enforcement(
 pub async fn dispatch_atomic_tool_with_enforcement(
     call: &ToolCall,
     search_provider: Option<&dyn avrag_search::SearchProvider>,
-    auth: Option<&avrag_auth::AuthContext>,
+    auth: Option<&contracts::auth_runtime::AuthContext>,
     session_id: Option<uuid::Uuid>,
     chat_persistence: Option<&dyn app_core::ChatPersistencePort>,
 ) -> ToolResult {

@@ -1,17 +1,17 @@
-use typeshare::typeshare;
 use serde::{Deserialize, Serialize};
+use typeshare::typeshare;
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RagHealthStatus {
     #[typeshare(serialized_as = "number")]
-    pub failed_documents:        i64,
+    pub failed_documents: i64,
     #[typeshare(serialized_as = "number")]
-    pub queued_tasks:        i64,
+    pub queued_tasks: i64,
     #[typeshare(serialized_as = "number")]
-    pub processing_tasks:        i64,
+    pub processing_tasks: i64,
     #[typeshare(serialized_as = "number")]
-    pub recent_guard_events:        i64,
+    pub recent_guard_events: i64,
 }
 
 #[typeshare]
@@ -35,11 +35,11 @@ pub struct OrgRow {
     pub name: String,
     pub plan: String,
     #[typeshare(serialized_as = "number")]
-    pub user_count:        i64,
+    pub user_count: i64,
     #[typeshare(serialized_as = "number")]
-    pub notebook_count:        i64,
+    pub notebook_count: i64,
     #[typeshare(serialized_as = "number")]
-    pub query_count:        i64,
+    pub query_count: i64,
     pub blocked: bool,
     pub created_at: String,
 }
@@ -78,11 +78,11 @@ pub struct UserListResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdminUsageResponse {
     #[typeshare(serialized_as = "number")]
-    pub total_requests:        i64,
+    pub total_requests: i64,
     #[typeshare(serialized_as = "number")]
-    pub total_tokens:        i64,
+    pub total_tokens: i64,
     #[typeshare(serialized_as = "number")]
-    pub total_documents:        i64,
+    pub total_documents: i64,
 }
 
 #[typeshare]
@@ -97,7 +97,7 @@ pub struct FeatureFlagEntry {
     pub requires_config: bool,
     pub source: String,
     #[typeshare(serialized_as = "number")]
-    pub updated_at:        Option<i64>,
+    pub updated_at: Option<i64>,
     pub has_pending_request: bool,
 }
 
@@ -114,11 +114,11 @@ pub struct FeatureFlagChangeRequest {
     pub reviewed_by: Option<String>,
     pub review_note: Option<String>,
     #[typeshare(serialized_as = "number")]
-    pub created_at:        i64,
+    pub created_at: i64,
     #[typeshare(serialized_as = "number")]
-    pub reviewed_at:        Option<i64>,
+    pub reviewed_at: Option<i64>,
     #[typeshare(serialized_as = "number")]
-    pub executed_at:        Option<i64>,
+    pub executed_at: Option<i64>,
 }
 
 #[typeshare]
@@ -126,36 +126,36 @@ pub struct FeatureFlagChangeRequest {
 pub struct WorkerStatusResponse {
     pub runtime_mode: String,
     #[typeshare(serialized_as = "number")]
-    pub queued_tasks:        i64,
+    pub queued_tasks: i64,
     #[typeshare(serialized_as = "number")]
-    pub processing_tasks:        i64,
+    pub processing_tasks: i64,
     #[typeshare(serialized_as = "number")]
-    pub failed_documents:        i64,
+    pub failed_documents: i64,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DegradationStatusResponse {
     #[typeshare(serialized_as = "number")]
-    pub failed_documents:        i64,
+    pub failed_documents: i64,
     #[typeshare(serialized_as = "number")]
-    pub recent_guard_events:        i64,
+    pub recent_guard_events: i64,
     #[typeshare(serialized_as = "number")]
-    pub share_access_events:        i64,
+    pub share_access_events: i64,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditLogEntry {
     #[typeshare(serialized_as = "number")]
-    pub id:        i64,
+    pub id: i64,
     pub actor_id: Option<String>,
     pub action: String,
     pub resource_type: String,
     pub resource_id: String,
     pub org_id: Option<String>,
     #[typeshare(serialized_as = "number")]
-    pub created_at:        i64,
+    pub created_at: i64,
 }
 
 #[typeshare]
@@ -173,10 +173,10 @@ pub struct AuditLogQuery {
     pub window: Option<String>,
     #[serde(default)]
     #[typeshare(serialized_as = "number")]
-    pub page:        Option<usize>,
+    pub page: Option<usize>,
     #[serde(default)]
     #[typeshare(serialized_as = "number")]
-    pub per_page:        Option<usize>,
+    pub per_page: Option<usize>,
 }
 
 #[typeshare]
@@ -184,9 +184,9 @@ pub struct AuditLogQuery {
 pub struct AuditLogListResponse {
     pub items: Vec<AuditLogEntry>,
     #[typeshare(serialized_as = "number")]
-    pub total:        usize,
+    pub total: usize,
     #[typeshare(serialized_as = "number")]
-    pub page:        usize,
+    pub page: usize,
     #[typeshare(serialized_as = "number")]
-    pub per_page:        usize,
+    pub per_page: usize,
 }

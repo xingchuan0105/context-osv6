@@ -37,11 +37,7 @@ pub fn merge_search_tokens(content: &str, resolved_query: Option<&str>) -> Strin
 }
 
 /// Merge ranked hit lists with reciprocal rank fusion (RRF).
-pub fn rrf_merge<T, F>(
-    lists: &[&[T]],
-    key: F,
-    limit: usize,
-) -> Vec<T>
+pub fn rrf_merge<T, F>(lists: &[&[T]], key: F, limit: usize) -> Vec<T>
 where
     T: Clone,
     F: Fn(&T) -> i64,

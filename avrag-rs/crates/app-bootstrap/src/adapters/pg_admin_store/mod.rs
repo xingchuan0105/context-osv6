@@ -1,17 +1,17 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use app_core::{
-    admin_audit_logs_to_csv, admin_audit_window_start, admin_clamp_audit_per_page,
-    admin_clamp_org_list_per_page, admin_escape_ilike_pattern, admin_usage_period_start,
-    domain_rows::UserProfileRow, AdminAuditLogEntry, AdminAuditLogPage, AdminAuditLogQuery,
-    AdminBillingOverview, AdminDegradationStatus, AdminFeatureFlagChangeRequest,
-    AdminFeatureFlagEntry, AdminOrgInfo, AdminRagHealthStatus, AdminStorePort, AdminUsageStats,
-    AdminUserInfo, AdminWorkerStatus,
-};
 use crate::domain_row_convert::{user_profile_row, user_profile_row_to_pg};
 use crate::pg_error::map_pg_error;
-use avrag_auth::{AuthContext, OrgId};
+use app_core::{
+    AdminAuditLogEntry, AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview,
+    AdminDegradationStatus, AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminOrgInfo,
+    AdminRagHealthStatus, AdminStorePort, AdminUsageStats, AdminUserInfo, AdminWorkerStatus,
+    admin_audit_logs_to_csv, admin_audit_window_start, admin_clamp_audit_per_page,
+    admin_clamp_org_list_per_page, admin_escape_ilike_pattern, admin_usage_period_start,
+    domain_rows::UserProfileRow,
+};
+use async_trait::async_trait;
+use contracts::auth_runtime::{AuthContext, OrgId};
 use avrag_storage_pg::PgAppRepository;
 use chrono::{DateTime, Utc};
 use common::{ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow, UserId};
@@ -33,9 +33,9 @@ impl PgAdminStoreAdapter {
         &self,
         auth: &AuthContext,
     ) -> Result<sqlx::Transaction<'_, sqlx::Postgres>, AppError> {
-        let actor_id = auth.actor_id().ok_or_else(|| {
-            AppError::unauthorized("admin action requires an authenticated user")
-        })?;
+        let actor_id = auth
+            .actor_id()
+            .ok_or_else(|| AppError::unauthorized("admin action requires an authenticated user"))?;
         let mut tx = begin_tx(self.repo.raw()).await?;
         set_current_org(tx.as_mut(), &auth.org_id().to_string()).await?;
         let role =
@@ -56,7 +56,10 @@ impl PgAdminStoreAdapter {
             .await?;
             return Ok(tx);
         }
-        Err(AppError::forbidden("admin_access_denied", "admin access denied"))
+        Err(AppError::forbidden(
+            "admin_access_denied",
+            "admin access denied",
+        ))
     }
 
     async fn scalar_count(conn: &mut sqlx::PgConnection, sql: &str) -> i64 {
@@ -73,8 +76,8 @@ include!("port_impl.rs");
 
 #[cfg(test)]
 mod tests {
-    use app_core::admin_escape_ilike_pattern;
     use crate::adapters::port_shard_guard;
+    use app_core::admin_escape_ilike_pattern;
 
     const ADAPTER_DIR: &str = "src/adapters/pg_admin_store";
 

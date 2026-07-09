@@ -20,10 +20,21 @@ pub use reranker::{
 };
 pub use section_index::{
     SectionIndexChunk, SectionIndexGenerator, SectionIndexOutput, SectionIndexSection,
+    build_profile_metadata,
 };
 pub use summary::SummaryGenerator;
 pub use synthesizer::{SynthesisOutput, parse_synthesis_output};
 pub use token_counter::{count_chat_messages, count_system_and_query, count_tokens};
+
+// TODO(write-mode): TenantContext and UsageObserver are WIP stubs for the
+// write-mode feature. These will be fully implemented when the feature lands.
+#[derive(Debug, Clone)]
+pub struct TenantContext {
+    pub org_id: uuid::Uuid,
+    pub user_id: uuid::Uuid,
+}
+
+pub trait UsageObserver: Send + Sync {}
 
 /// Trait for LLM completion providers.
 /// Allows injecting mock/recording providers in tests.

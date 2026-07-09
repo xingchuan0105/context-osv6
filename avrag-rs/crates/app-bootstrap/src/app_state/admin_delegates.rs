@@ -1,4 +1,7 @@
-use common::{ApiKeyRow, AppError, CreateApiKeyRequest, CreateApiKeyResponse, NotificationRow, ShareTokenResponse, StatusOnlyResponse, new_id};
+use common::{
+    ApiKeyRow, AppError, CreateApiKeyRequest, CreateApiKeyResponse, NotificationRow,
+    ShareTokenResponse, StatusOnlyResponse, new_id,
+};
 
 use super::AppState;
 

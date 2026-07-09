@@ -1,11 +1,7 @@
-use std::collections::{HashMap, HashSet};
-
 use avrag_llm::ChatMessage;
-use avrag_rag_core::{FocusMode, ScoreBasedFocusMode};
-use contracts::documents::AnswerContextChunk;
 use contracts::{ToolResult, ToolStatus};
 
-use super::config::{EvidenceGateConfig, LoopExitConfig, ModeConfig};
+use super::config::{LoopExitConfig, ModeConfig};
 
 const RAG_EVIDENCE_TOOLS: &[&str] = &[
     "dense_retrieval",
@@ -18,279 +14,6 @@ const RAG_EVIDENCE_TOOLS: &[&str] = &[
 ];
 
 const SEARCH_EVIDENCE_TOOLS: &[&str] = &["web_search", "web_fetch"];
-
-// ---------------------------------------------------------------------------
-// Evidence Gate: pure-code quality check between retrieval and synthesis
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum EvidenceGateResult {
-    Pass,
-    FocusModeNeeded,
-    TopicMismatch,
-    InsufficientEvidence,
-}
-
-/// Pure-code evidence quality gate. No LLM calls.
-/// Examines tool_results metadata: retrieval count, score concentration,
-/// context budget, topic relevance.
-fn search_tool_results_non_empty(tool_results: &[ToolResult]) -> bool {
-    tool_results.iter().any(|result| {
-        if result.status != ToolStatus::Ok
-            || !SEARCH_EVIDENCE_TOOLS.contains(&result.tool.as_str())
-        {
-            return false;
-        }
-        result.data.as_ref().is_some_and(|data| {
-            data.get("results")
-                .and_then(|v| v.as_array())
-                .is_some_and(|items| !items.is_empty())
-        })
-    })
-}
-
-pub fn evaluate_evidence_gate(
-    tool_results: &[ToolResult],
-    query: &str,
-    config: &EvidenceGateConfig,
-) -> EvidenceGateResult {
-    // Web search returns {"results": [...]}, not RAG chunks — pass when non-empty.
-    if search_tool_results_non_empty(tool_results) {
-        return EvidenceGateResult::Pass;
-    }
-
-    // 1. Extract all chunks from tool results (flat array or {"chunks": [...]}).
-    let mut chunks: Vec<&serde_json::Value> = Vec::new();
-    for result in tool_results {
-        let Some(data) = result.data.as_ref() else {
-            continue;
-        };
-        if let Some(arr) = data.as_array() {
-            chunks.extend(arr.iter());
-        } else if let Some(arr) = data.get("chunks").and_then(|c| c.as_array()) {
-            chunks.extend(arr.iter());
-        }
-    }
-
-    // 2. Retrieval count check
-    if chunks.is_empty() {
-        return EvidenceGateResult::InsufficientEvidence;
-    }
-
-    // 3. Score concentration: extract top-1 score
-    let top_score = chunks
-        .iter()
-        .filter_map(|chunk| {
-            chunk
-                .get("score")
-                .and_then(|s| s.as_f64())
-                .map(|s| s as f32)
-        })
-        .fold(0.0f32, f32::max);
-
-    if top_score < config.min_top_score {
-        return EvidenceGateResult::FocusModeNeeded;
-    }
-
-    // 4. Context budget: estimate total tokens (4 chars ≈ 1 token)
-    let total_tokens: usize = chunks
-        .iter()
-        .filter_map(|chunk| {
-            chunk
-                .get("text")
-                .or_else(|| chunk.get("content"))
-                .and_then(|c| c.as_str())
-        })
-        .map(|content| content.len() / 4)
-        .sum();
-
-    if total_tokens > config.max_context_tokens {
-        return EvidenceGateResult::FocusModeNeeded;
-    }
-
-    // 5. Topic relevance: check if query keywords overlap with doc metadata
-    if config.topic_overlap_required && !topic_overlap(query, &chunks) {
-        return EvidenceGateResult::TopicMismatch;
-    }
-
-    EvidenceGateResult::Pass
-}
-
-fn chunk_text_field(value: &serde_json::Value) -> Option<&str> {
-    value
-        .get("text")
-        .or_else(|| value.get("content"))
-        .and_then(|v| v.as_str())
-}
-
-fn chunk_from_json(value: &serde_json::Value) -> Option<AnswerContextChunk> {
-    let text = chunk_text_field(value)?.to_string();
-    Some(AnswerContextChunk {
-        chunk_id: value
-            .get("chunk_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string(),
-        doc_id: value
-            .get("doc_id")
-            .or_else(|| value.get("document_id"))
-            .and_then(|v| v.as_str())
-            .map(str::to_string),
-        chunk_type: value
-            .get("chunk_type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("text")
-            .to_string(),
-        page: value.get("page").and_then(|v| v.as_i64()),
-        text,
-        asset_id: None,
-        caption: None,
-        image_url: None,
-        parser_backend: None,
-        source_locator: None,
-    })
-}
-
-fn chunk_score(value: &serde_json::Value) -> f32 {
-    value
-        .get("score")
-        .and_then(|s| s.as_f64())
-        .map(|s| s as f32)
-        .unwrap_or(0.0)
-}
-
-fn filter_chunks_in_array(
-    chunks: &mut Vec<serde_json::Value>,
-    kept_ids: &HashSet<String>,
-    trimmed_text: &HashMap<String, String>,
-) {
-    chunks.retain(|chunk| {
-        chunk
-            .get("chunk_id")
-            .and_then(|v| v.as_str())
-            .is_some_and(|id| kept_ids.contains(id))
-    });
-    for chunk in chunks.iter_mut() {
-        if let Some(id) = chunk.get("chunk_id").and_then(|v| v.as_str())
-            && let Some(text) = trimmed_text.get(id)
-        {
-            if let Some(obj) = chunk.as_object_mut() {
-                if obj.contains_key("text") {
-                    obj.insert("text".to_string(), serde_json::Value::String(text.clone()));
-                } else {
-                    obj.insert("content".to_string(), serde_json::Value::String(text.clone()));
-                }
-            }
-        }
-    }
-}
-
-fn apply_focus_filter_to_data(
-    data: &mut serde_json::Value,
-    kept_ids: &HashSet<String>,
-    trimmed_text: &HashMap<String, String>,
-) {
-    if let Some(arr) = data.as_array_mut() {
-        filter_chunks_in_array(arr, kept_ids, trimmed_text);
-        return;
-    }
-    if let Some(obj) = data.as_object_mut()
-        && let Some(chunks) = obj.get_mut("chunks").and_then(|v| v.as_array_mut())
-    {
-        filter_chunks_in_array(chunks, kept_ids, trimmed_text);
-    }
-}
-
-/// Compress retrieval chunks when the evidence gate requests focus mode.
-pub fn apply_score_based_focus_mode(
-    tool_results: &mut [ToolResult],
-    query: &str,
-    gate_config: &EvidenceGateConfig,
-) -> bool {
-    if evaluate_evidence_gate(tool_results, query, gate_config)
-        != EvidenceGateResult::FocusModeNeeded
-    {
-        return false;
-    }
-
-    let focus = ScoreBasedFocusMode::default();
-    let mut pairs: Vec<(AnswerContextChunk, f32)> = Vec::new();
-
-    for result in tool_results.iter() {
-        let Some(data) = result.data.as_ref() else {
-            continue;
-        };
-        let chunk_values: Vec<&serde_json::Value> = if let Some(arr) = data.as_array() {
-            arr.iter().collect()
-        } else if let Some(arr) = data.get("chunks").and_then(|c| c.as_array()) {
-            arr.iter().collect()
-        } else {
-            continue;
-        };
-
-        for chunk in chunk_values {
-            if let Some(ctx) = chunk_from_json(chunk) {
-                pairs.push((ctx, chunk_score(chunk)));
-            }
-        }
-    }
-
-    if pairs.is_empty() {
-        return false;
-    }
-
-    let compressed = match focus.compress(&pairs, query, focus.keep_top_n) {
-        Ok(items) => items,
-        Err(error) => {
-            tracing::warn!(error = %error, "evidence gate: focus mode compression failed");
-            return false;
-        }
-    };
-
-    let kept_ids: HashSet<String> = compressed
-        .iter()
-        .map(|item| item.chunk.chunk_id.clone())
-        .collect();
-    let trimmed_text: HashMap<String, String> = compressed
-        .iter()
-        .map(|item| (item.chunk.chunk_id.clone(), item.chunk.text.clone()))
-        .collect();
-
-    for result in tool_results.iter_mut() {
-        if let Some(data) = result.data.as_mut() {
-            apply_focus_filter_to_data(data, &kept_ids, &trimmed_text);
-        }
-    }
-
-    true
-}
-
-fn topic_overlap(query: &str, chunks: &[&serde_json::Value]) -> bool {
-    let query_words: HashSet<&str> = query
-        .split_whitespace()
-        .filter(|w| w.len() > 3)
-        .collect();
-
-    if query_words.is_empty() {
-        return true; // can't check, assume ok
-    }
-
-    chunks.iter().any(|chunk| {
-        let doc_name = chunk
-            .get("document_name")
-            .or_else(|| chunk.get("doc_name"))
-            .or_else(|| chunk.get("doc_id"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        let snippet = chunk
-            .get("text")
-            .or_else(|| chunk.get("content"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        let combined = format!("{doc_name} {snippet}");
-        query_words.iter().any(|w| combined.contains(w))
-    })
-}
 
 // ---------------------------------------------------------------------------
 // Synthesis gate
@@ -306,7 +29,6 @@ pub enum PostLoopAction {
 pub enum SynthesisGate {
     EnterSynthesis,
     RunFallbackThenCheck,
-    DegradedNoEvidence,
     SkipSynthesisUseDirect(String),
 }
 
@@ -314,34 +36,12 @@ pub fn decide_synthesis_gate(
     loop_exit: &LoopExitConfig,
     has_evidence: bool,
     direct_answer: Option<&str>,
-    tool_results: &mut [ToolResult],
-    query: &str,
+    _tool_results: &[ToolResult],
+    _query: &str,
 ) -> SynthesisGate {
     if let Some(answer) = direct_answer {
         if loop_exit.skip_synthesis_on_direct_answer {
             return SynthesisGate::SkipSynthesisUseDirect(answer.to_string());
-        }
-    }
-
-    // Evidence Gate: pure-code quality check before synthesis
-    if let Some(gate_config) = &loop_exit.evidence_gate {
-        if gate_config.enabled && has_evidence {
-            match evaluate_evidence_gate(tool_results, query, gate_config) {
-                EvidenceGateResult::Pass => {}
-                EvidenceGateResult::TopicMismatch
-                | EvidenceGateResult::InsufficientEvidence => {
-                    return SynthesisGate::DegradedNoEvidence;
-                }
-                EvidenceGateResult::FocusModeNeeded => {
-                    if apply_score_based_focus_mode(tool_results, query, gate_config) {
-                        tracing::info!("evidence gate: applied score-based focus mode compression");
-                    } else {
-                        tracing::warn!(
-                            "evidence gate: focus mode needed but compression did not apply"
-                        );
-                    }
-                }
-            }
         }
     }
 
@@ -368,12 +68,28 @@ pub(crate) fn stdout_is_placeholder(stdout: &str) -> bool {
     )
 }
 
+/// Opening tag prefix used by codegen sandbox observations. We split on the prefix
+/// (without the trailing `>`) because the opening tag may carry attributes, e.g.
+/// `<code_execution_result untrusted="true">`. The closing tag remains the bare
+/// `</code_execution_result>`.
+const CODE_EXECUTION_RESULT_OPEN: &str = "<code_execution_result";
+const CODE_EXECUTION_RESULT_CLOSE: &str = "</code_execution_result>";
+
+/// True when `message_content` contains a (possibly attribute-bearing) code execution
+/// result block, i.e. `<code_execution_result ...>...</code_execution_result>`.
+fn has_code_execution_result_block(message_content: &str) -> bool {
+    message_content.contains(CODE_EXECUTION_RESULT_OPEN)
+        && message_content.contains(CODE_EXECUTION_RESULT_CLOSE)
+}
+
 /// Returns true when a `<code_execution_result>` observation carries retrieval output.
 pub fn code_execution_has_evidence(message_content: &str) -> bool {
+    // Split on the opening tag *prefix* so attribute-bearing tags
+    // (e.g. `<code_execution_result untrusted="true">`) are still matched.
     let Some(inner) = message_content
-        .split("<code_execution_result>")
+        .split(CODE_EXECUTION_RESULT_OPEN)
         .nth(1)
-        .and_then(|s| s.split("</code_execution_result>").next())
+        .and_then(|s| s.split(CODE_EXECUTION_RESULT_CLOSE).next())
     else {
         return false;
     };
@@ -423,7 +139,7 @@ pub fn has_retrieval_observation(
     if mode.id == "rag" {
         if messages.iter().any(|m| {
             m.role == "user"
-                && m.content.contains("<code_execution_result>")
+                && has_code_execution_result_block(&m.content)
                 && code_execution_has_evidence(&m.content)
         }) {
             return true;
@@ -487,6 +203,18 @@ mod tests {
     }
 
     #[test]
+    fn detects_code_execution_observation_with_untrusted_attribute() {
+        // The opening tag may carry attributes (e.g. untrusted="true"). Parsing must still
+        // match on the tag prefix, and the closing tag must remain recognized.
+        let content = "<code_execution_result untrusted=\"true\">\n[block 0] stdout: chunks found\nstderr: \n</code_execution_result>";
+        assert!(has_code_execution_result_block(content));
+        assert!(code_execution_has_evidence(content));
+        let mode = rag_mode();
+        let messages = vec![ChatMessage::user(content)];
+        assert!(has_retrieval_observation(&messages, &[], &mode));
+    }
+
+    #[test]
     fn empty_stdout_stderr_is_not_evidence() {
         let content =
             "<code_execution_result>\n[block 0] stdout: \nstderr: \n</code_execution_result>";
@@ -541,7 +269,6 @@ mod tests {
             require_evidence: true,
             allow_content_early_stop: false,
             skip_synthesis_on_direct_answer: false,
-            evidence_gate: None,
         };
         assert!(should_block_content_early_stop(&loop_exit, false));
         assert!(!should_block_content_early_stop(&loop_exit, true));
@@ -557,148 +284,6 @@ mod tests {
         assert_eq!(
             decide_post_loop(&loop_exit, true),
             PostLoopAction::EnterSynthesis
-        );
-    }
-
-    // -----------------------------------------------------------------------
-    // Evidence Gate tests
-    // -----------------------------------------------------------------------
-
-    fn gate_config() -> EvidenceGateConfig {
-        EvidenceGateConfig::default()
-    }
-
-    #[test]
-    fn evidence_gate_empty_chunks_returns_insufficient() {
-        let results = vec![];
-        assert_eq!(
-            evaluate_evidence_gate(&results, "test query", &gate_config()),
-            EvidenceGateResult::InsufficientEvidence
-        );
-    }
-
-    #[test]
-    fn evidence_gate_web_search_results_pass() {
-        let results = vec![ToolResult {
-            tool: "web_search".to_string(),
-            version: "1.0".to_string(),
-            status: ToolStatus::Ok,
-            data: Some(serde_json::json!({
-                "query_type": "brave_llm_context",
-                "sub_queries": ["tokyo weather"],
-                "results": [{
-                    "title": "Tokyo Weather",
-                    "url": "https://example.com/weather",
-                    "snippet": "Sunny today in Tokyo."
-                }],
-                "synthesized_answer": ""
-            })),
-            trace: None,
-        }];
-        assert_eq!(
-            evaluate_evidence_gate(&results, "tokyo weather", &gate_config()),
-            EvidenceGateResult::Pass
-        );
-    }
-
-    #[test]
-    fn evidence_gate_low_score_returns_focus_needed() {
-        let results = vec![ToolResult {
-            tool: "dense_retrieval".to_string(),
-            version: "1.0".to_string(),
-            status: ToolStatus::Ok,
-            data: Some(serde_json::json!({"chunks": [
-                {"chunk_id": "c1", "score": 0.2, "content": "some text", "document_name": "test.pdf"}
-            ]})),
-            trace: None,
-        }];
-        assert_eq!(
-            evaluate_evidence_gate(&results, "test query", &gate_config()),
-            EvidenceGateResult::FocusModeNeeded
-        );
-    }
-
-    #[test]
-    fn evidence_gate_high_score_relevant_topic_passes() {
-        let results = vec![ToolResult {
-            tool: "dense_retrieval".to_string(),
-            version: "1.0".to_string(),
-            status: ToolStatus::Ok,
-            data: Some(serde_json::json!({"chunks": [
-                {"chunk_id": "c1", "score": 0.8, "content": "antifragility is the concept", "document_name": "antifragile.pdf"}
-            ]})),
-            trace: None,
-        }];
-        assert_eq!(
-            evaluate_evidence_gate(&results, "what is antifragility", &gate_config()),
-            EvidenceGateResult::Pass
-        );
-    }
-
-    #[test]
-    fn evidence_gate_accepts_flat_dense_retrieval_array_with_text_field() {
-        let results = vec![ToolResult {
-            tool: "dense_retrieval".to_string(),
-            version: "1.0".to_string(),
-            status: ToolStatus::Ok,
-            data: Some(serde_json::json!([
-                {"chunk_id": "c1", "score": 0.82, "text": "antifragility gains from disorder", "doc_id": "antifragile.pdf"}
-            ])),
-            trace: None,
-        }];
-        assert_eq!(
-            evaluate_evidence_gate(&results, "what is antifragility", &gate_config()),
-            EvidenceGateResult::Pass
-        );
-    }
-
-    #[test]
-    fn evidence_gate_no_topic_overlap_returns_mismatch() {
-        let results = vec![ToolResult {
-            tool: "dense_retrieval".to_string(),
-            version: "1.0".to_string(),
-            status: ToolStatus::Ok,
-            data: Some(serde_json::json!({"chunks": [
-                {"chunk_id": "c1", "score": 0.8, "content": "quantum physics basics", "document_name": "physics.pdf"}
-            ]})),
-            trace: None,
-        }];
-        assert_eq!(
-            evaluate_evidence_gate(&results, "baking bread recipes", &gate_config()),
-            EvidenceGateResult::TopicMismatch
-        );
-    }
-
-    #[test]
-    fn focus_mode_compresses_low_score_retrieval_chunks() {
-        let mut results = vec![ToolResult {
-            tool: "dense_retrieval".to_string(),
-            version: "1.0".to_string(),
-            status: ToolStatus::Ok,
-            data: Some(serde_json::json!({"chunks": [
-                {"chunk_id": "c1", "score": 0.2, "content": "alpha text", "document_name": "a.pdf"},
-                {"chunk_id": "c2", "score": 0.15, "content": "beta text", "document_name": "b.pdf"},
-                {"chunk_id": "c3", "score": 0.1, "content": "gamma text", "document_name": "c.pdf"},
-            ]})),
-            trace: None,
-        }];
-
-        assert!(apply_score_based_focus_mode(
-            &mut results,
-            "alpha query",
-            &gate_config(),
-        ));
-
-        let chunks = results[0]
-            .data
-            .as_ref()
-            .and_then(|data| data.get("chunks"))
-            .and_then(|value| value.as_array())
-            .expect("chunks should remain after focus mode");
-        assert!(!chunks.is_empty());
-        assert_eq!(
-            chunks[0].get("chunk_id").and_then(|v| v.as_str()),
-            Some("c1")
         );
     }
 }

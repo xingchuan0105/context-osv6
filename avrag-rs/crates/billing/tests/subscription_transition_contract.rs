@@ -42,5 +42,9 @@ fn subscription_invoice_paid_rejects_earlier_period_end() {
         })
         .unwrap_err();
 
-    assert!(error.to_string().contains("new_period_end cannot be earlier"));
+    assert!(
+        error
+            .to_string()
+            .contains("new_period_end cannot be earlier")
+    );
 }

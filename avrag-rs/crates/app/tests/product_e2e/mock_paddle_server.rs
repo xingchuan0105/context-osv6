@@ -12,8 +12,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// OCR text returned by the mock Paddle Jobs API for image ingest contract tests.
-pub const MOCK_PADDLE_IMAGE_OCR_TEXT: &str =
-    "Paddle image contract OCR text for product E2E.";
+pub const MOCK_PADDLE_IMAGE_OCR_TEXT: &str = "Paddle image contract OCR text for product E2E.";
 
 /// JSONL body mimicking Paddle AI Studio layout parsing output (searchable text).
 pub(crate) fn mock_paddle_ocr_result_jsonl() -> String {
@@ -31,7 +30,10 @@ async fn mock_paddle_submit_job(
     while let Ok(Some(field)) = multipart.next_field().await {
         let _ = field.bytes().await;
     }
-    let job_id = format!("mock-paddle-{}", jobs_submitted.fetch_add(1, Ordering::SeqCst) + 1);
+    let job_id = format!(
+        "mock-paddle-{}",
+        jobs_submitted.fetch_add(1, Ordering::SeqCst) + 1
+    );
     let json_url = format!("{base_url}/results/{job_id}");
     Json(json!({
         "data": {
@@ -65,11 +67,8 @@ async fn mock_paddle_result_json(Path(job_id): Path<String>) -> axum::response::
 /// Start a mock Paddle OCR Jobs HTTP server (submit → poll → jsonUrl fetch).
 ///
 /// Returns (base_url, abort_sender, jobs_submitted_counter).
-pub async fn start_mock_paddle_ocr_server() -> (
-    String,
-    tokio::sync::oneshot::Sender<()>,
-    Arc<AtomicUsize>,
-) {
+pub async fn start_mock_paddle_ocr_server()
+-> (String, tokio::sync::oneshot::Sender<()>, Arc<AtomicUsize>) {
     let jobs_submitted = Arc::new(AtomicUsize::new(0));
     let (listener, base_url) = bind_persistent_listener().await;
     let base_url = Arc::new(base_url);

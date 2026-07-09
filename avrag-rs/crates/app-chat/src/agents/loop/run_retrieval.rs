@@ -1,15 +1,14 @@
 use avrag_llm::LlmUsage;
 use common::AppError;
 
+use super::ReActLoop;
 use super::assembler::LoopPhase;
 use super::config::{LoopExitConfig, ModeConfig};
 use super::exit_policy::has_retrieval_observation;
 use super::hooks::{LoopContext, LoopHooks, StandardLoopHooks};
 use super::iteration::{IterationControl, IterationOutcome, IterationState};
-use super::optimizer::LoopOptimizer;
 use super::reasoning_emit;
 use super::telemetry::ReActIterationRecord;
-use super::ReActLoop;
 use crate::agents::events::{AgentEvent, AgentEventSink};
 use crate::agents::runtime::AgentRequest;
 
@@ -18,7 +17,7 @@ impl ReActLoop {
         &self,
         mode: &ModeConfig,
         request: &AgentRequest,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         loop_exit: &LoopExitConfig,
         hooks: &StandardLoopHooks,
         base_message_count: usize,
@@ -31,7 +30,6 @@ impl ReActLoop {
         let mut telemetry_records: Vec<ReActIterationRecord> = vec![];
         let mut total_usage = LlmUsage::zeroed();
         let mut direct_answer: Option<String> = None;
-        let optimizer = LoopOptimizer::new();
 
         loop {
             if cancel.is_cancelled() {
@@ -65,7 +63,6 @@ impl ReActLoop {
                     loop_exit,
                     state,
                     &mut total_usage,
-                    &optimizer,
                     sink,
                 )
                 .await?;

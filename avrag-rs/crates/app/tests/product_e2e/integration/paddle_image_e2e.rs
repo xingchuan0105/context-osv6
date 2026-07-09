@@ -3,7 +3,9 @@
 use std::time::Duration;
 
 use crate::product_e2e::setup;
-use crate::product_e2e::{DocumentStatus, TestContext, assertions::assert_no_mineru_in_backend_summary};
+use crate::product_e2e::{
+    DocumentStatus, TestContext, assertions::assert_no_mineru_in_backend_summary,
+};
 
 fn paddle_contract_png_path() -> std::path::PathBuf {
     setup::fixture_path("paddle-contract.png").expect("paddle-contract.png fixture")
@@ -67,12 +69,16 @@ async fn paddle_ocr_image_routing_metadata_contract() {
         .cloned()
         .unwrap_or_default();
     assert_eq!(
-        ingest_routing.get("pdf_route_mode").and_then(|v| v.as_str()),
+        ingest_routing
+            .get("pdf_route_mode")
+            .and_then(|v| v.as_str()),
         Some("paddle_image"),
         "expected pdf_route_mode=paddle_image: {summary_text}"
     );
     assert_eq!(
-        ingest_routing.get("paddle_jobs_count").and_then(|v| v.as_str()),
+        ingest_routing
+            .get("paddle_jobs_count")
+            .and_then(|v| v.as_str()),
         Some("1")
     );
     assert_eq!(

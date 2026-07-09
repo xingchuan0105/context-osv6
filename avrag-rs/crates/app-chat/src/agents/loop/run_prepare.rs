@@ -1,10 +1,9 @@
 use avrag_llm::ChatMessage;
 use common::AppError;
 
-use super::config::ModeConfig;
-use super::query_normalize;
 use super::ReActLoop;
-use crate::agents::events::{AgentEvent, AgentEventSink};
+use super::config::ModeConfig;
+use crate::agents::events::AgentEventSink;
 use crate::agents::runtime::AgentRequest;
 
 impl ReActLoop {
@@ -12,47 +11,9 @@ impl ReActLoop {
         &self,
         mode: &ModeConfig,
         request: AgentRequest,
-        norm: query_normalize::NormalizeResult,
-        sink: &dyn AgentEventSink,
-    ) -> Result<
-        (
-            AgentRequest,
-            usize,
-            u8,
-            avrag_auth::AuthContext,
-            String,
-        ),
-        AppError,
-    > {
-        let request = request.with_resolved_query(norm.resolved_query.clone(), norm.meta);
-        let slots: Vec<String> = request
-            .query_resolution
-            .as_ref()
-            .map(|meta| {
-                meta.slots
-                    .iter()
-                    .map(|s| {
-                        serde_json::to_string(s)
-                            .unwrap_or_default()
-                            .trim_matches('"')
-                            .to_string()
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let _ = sink
-            .emit(AgentEvent::QueryResolved {
-                raw: request.query.clone(),
-                resolved: request.effective_query().to_string(),
-                slots,
-            })
-            .await;
-
-        let loop_user_query = if mode.id == "rag" || mode.id == "search" {
-            request.effective_query().to_string()
-        } else {
-            request.query.clone()
-        };
+        _sink: &dyn AgentEventSink,
+    ) -> Result<(AgentRequest, usize, u8, contracts::auth_runtime::AuthContext, String), AppError> {
+        let loop_user_query = request.query.clone();
         let base_message_count = request
             .messages
             .iter()
@@ -68,10 +29,16 @@ impl ReActLoop {
             })
             .max(1);
 
-        let auth: avrag_auth::AuthContext = serde_json::from_value(request.auth_context.clone())
+        let auth: contracts::auth_runtime::AuthContext = serde_json::from_value(request.auth_context.clone())
             .map_err(|e| AppError::internal(format!("invalid auth context: {e}")))?;
 
-        Ok((request, base_message_count, max_iterations, auth, loop_user_query))
+        Ok((
+            request,
+            base_message_count,
+            max_iterations,
+            auth,
+            loop_user_query,
+        ))
     }
 
     pub(super) fn build_initial_messages(

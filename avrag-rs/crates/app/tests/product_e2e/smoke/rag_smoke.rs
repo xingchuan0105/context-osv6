@@ -11,7 +11,6 @@ use crate::product_e2e::{ChatResponse, DocumentStatus, HttpResponse, TestContext
 
 #[tokio::test]
 async fn rag_document_qa_returns_citation() {
-
     super::require_smoke_suite();
     let mut ctx = TestContext::new_smoke_with_rag().await;
 
