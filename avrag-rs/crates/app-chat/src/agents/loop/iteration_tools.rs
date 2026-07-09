@@ -18,7 +18,7 @@ impl ReActLoop {
     pub(super) async fn dispatch_tool_call(
         &self,
         call: &contracts::ToolCall,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         doc_scope: &[String],
         session_id: Option<&str>,
     ) -> ToolResult {
@@ -40,7 +40,7 @@ impl ReActLoop {
     async fn dispatch_rag_tool_call(
         &self,
         call: &contracts::ToolCall,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         doc_scope: &[String],
     ) -> ToolResult {
         if let Some(runtime) = &self.rag_runtime {
@@ -59,7 +59,7 @@ impl ReActLoop {
     async fn dispatch_search(
         &self,
         call: &contracts::ToolCall,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         session_id: Option<&str>,
     ) -> ToolResult {
         self.dispatch_skill_tool(call, auth, session_id).await
@@ -68,7 +68,7 @@ impl ReActLoop {
     async fn dispatch_native(
         &self,
         call: &contracts::ToolCall,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         session_id: Option<&str>,
     ) -> ToolResult {
         self.dispatch_skill_tool(call, auth, session_id).await
@@ -77,7 +77,7 @@ impl ReActLoop {
     async fn dispatch_skill_tool(
         &self,
         call: &contracts::ToolCall,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         session_id: Option<&str>,
     ) -> contracts::ToolResult {
         let session_uuid = session_id.and_then(|id| uuid::Uuid::parse_str(id).ok());
@@ -97,7 +97,7 @@ impl ReActLoop {
         iteration: u8,
         _mode: &ModeConfig,
         request: &AgentRequest,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         _loop_exit: &super::config::LoopExitConfig,
         state: &mut IterationState,
         sink: &dyn AgentEventSink,

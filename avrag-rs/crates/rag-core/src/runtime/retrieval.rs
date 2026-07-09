@@ -1,7 +1,7 @@
 use std::{collections::HashMap, collections::HashSet};
 
 use anyhow::Result;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_llm::{MultiModalEmbeddingInput, MultiModalRerankDocument};
 use avrag_retrieval_data_plane::{
     Bm25SearchRequest, MultimodalSearchRequest, TextDenseSearchRequest, WeightedChunkList,

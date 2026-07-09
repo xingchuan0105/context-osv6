@@ -11,7 +11,7 @@ use app_core::{
     domain_rows::DocumentUploadQueueOutcome,
 };
 use async_trait::async_trait;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::PgAppRepository;
 use common::{AppError, Document, DocumentContentResponse, ParsedPreviewResponse, SourceRow};
 use contracts::documents::DocumentStatus;

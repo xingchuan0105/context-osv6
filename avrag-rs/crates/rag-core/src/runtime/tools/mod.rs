@@ -7,7 +7,7 @@ pub mod graph;
 pub mod index_lookup;
 pub mod lexical;
 
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_retrieval_data_plane::ScoredChunk;
 use contracts::{ToolCall, ToolResult, ToolStatus};
 

@@ -1,8 +1,8 @@
 use async_trait::async_trait;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_retrieval_data_plane::{
     Bm25SearchOutput, Bm25SearchRequest, DocumentIndexBatch, GraphSearchOutput, GraphSearchRequest,
-    IndexWriteReport, MultimodalSearchRequest, RetrievalDataPlane, ScoredChunk,
+    IndexWriteReport, MultimodalSearchRequest, RetrievalDataPlane, RetrievalReadPort, ScoredChunk,
     TextDenseSearchRequest,
 };
 
@@ -17,6 +17,47 @@ pub mod utils;
 pub use config::{MilvusCollectionNames, MilvusConfig, TenantContext};
 pub use lib_impl::MilvusDataPlane;
 pub use types::{MilvusStorageError, Result};
+
+#[async_trait]
+impl RetrievalReadPort for MilvusDataPlane {
+    async fn search_text_dense(
+        &self,
+        request: TextDenseSearchRequest,
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
+        self.search_text_dense(request).await
+    }
+
+    async fn search_bm25(&self, request: Bm25SearchRequest) -> anyhow::Result<Bm25SearchOutput> {
+        self.search_bm25(request).await
+    }
+
+    async fn search_multimodal(
+        &self,
+        request: MultimodalSearchRequest,
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
+        self.search_multimodal(request).await
+    }
+
+    async fn search_graph(&self, request: GraphSearchRequest) -> anyhow::Result<GraphSearchOutput> {
+        self.search_graph(request).await
+    }
+
+    async fn count_text_chunks(
+        &self,
+        auth: &AuthContext,
+        doc_ids: &[uuid::Uuid],
+    ) -> anyhow::Result<usize> {
+        self.count_text_chunks(auth, doc_ids).await
+    }
+
+    async fn list_text_chunks(
+        &self,
+        auth: &AuthContext,
+        doc_ids: &[uuid::Uuid],
+    ) -> anyhow::Result<Vec<ScoredChunk>> {
+        self.list_text_chunks(auth, doc_ids).await
+    }
+}
 
 #[async_trait]
 impl RetrievalDataPlane for MilvusDataPlane {
@@ -72,44 +113,6 @@ impl RetrievalDataPlane for MilvusDataPlane {
     ) -> anyhow::Result<IndexWriteReport> {
         let executor = executor::RealExecutor { plane: self };
         self.replace_document_index_impl(batch, &executor).await
-    }
-
-    async fn search_text_dense(
-        &self,
-        request: TextDenseSearchRequest,
-    ) -> anyhow::Result<Vec<ScoredChunk>> {
-        self.search_text_dense(request).await
-    }
-
-    async fn search_bm25(&self, request: Bm25SearchRequest) -> anyhow::Result<Bm25SearchOutput> {
-        self.search_bm25(request).await
-    }
-
-    async fn search_multimodal(
-        &self,
-        request: MultimodalSearchRequest,
-    ) -> anyhow::Result<Vec<ScoredChunk>> {
-        self.search_multimodal(request).await
-    }
-
-    async fn search_graph(&self, request: GraphSearchRequest) -> anyhow::Result<GraphSearchOutput> {
-        self.search_graph(request).await
-    }
-
-    async fn count_text_chunks(
-        &self,
-        auth: &AuthContext,
-        doc_ids: &[uuid::Uuid],
-    ) -> anyhow::Result<usize> {
-        self.count_text_chunks(auth, doc_ids).await
-    }
-
-    async fn list_text_chunks(
-        &self,
-        auth: &AuthContext,
-        doc_ids: &[uuid::Uuid],
-    ) -> anyhow::Result<Vec<ScoredChunk>> {
-        self.list_text_chunks(auth, doc_ids).await
     }
 }
 

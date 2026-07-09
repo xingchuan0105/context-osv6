@@ -6,7 +6,7 @@ use contracts::{ToolCall, ToolResult, ToolStatus};
 /// Execute automatic retrieval as fallback with caller-supplied args.
 pub async fn auto_fallback(
     runtime: &avrag_rag_core::RagRuntime,
-    auth: &avrag_auth::AuthContext,
+    auth: &contracts::auth_runtime::AuthContext,
     args: serde_json::Value,
     tool_id: &str,
 ) -> ToolResult {
@@ -22,7 +22,7 @@ pub async fn auto_fallback(
 /// Build a fallback observation message, append to messages, and return the tool result.
 pub async fn inject_fallback_observation(
     runtime: &avrag_rag_core::RagRuntime,
-    auth: &avrag_auth::AuthContext,
+    auth: &contracts::auth_runtime::AuthContext,
     args: serde_json::Value,
     tool_id: &str,
     messages: &mut Vec<avrag_llm::ChatMessage>,

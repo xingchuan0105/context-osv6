@@ -1,4 +1,4 @@
-use avrag_auth::OrgId;
+use contracts::auth_runtime::OrgId;
 use chrono::{DateTime, Utc};
 use common::UserId;
 use serde::Serialize;

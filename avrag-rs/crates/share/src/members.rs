@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use uuid::Uuid;
 
 use crate::{AccessLevel, NotebookMember, ShareService};

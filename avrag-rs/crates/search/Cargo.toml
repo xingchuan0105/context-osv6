@@ -15,7 +15,6 @@ serde_json.workspace = true
 reqwest.workspace = true
 tracing.workspace = true
 common = { path = "../common" }
-avrag-auth = { path = "../auth" }
 avrag-llm = { path = "../llm" }
 uuid.workspace = true
 rayon.workspace = true

@@ -8,7 +8,6 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 analytics = { path = "../analytics" }
-avrag-auth = { path = "../auth" }
 avrag-billing = { path = "../billing" }
 avrag-licensing = { path = "../licensing" }
 avrag-share = { path = "../share" }

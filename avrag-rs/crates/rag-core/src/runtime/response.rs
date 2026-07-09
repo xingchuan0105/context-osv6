@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use anyhow::Result;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use contracts::ExecutePlanResponse;
 use contracts::chat::{
     ChatRequest, ChatResponse, Citation, DegradeTraceItem, ModeDebug, PlannerOutput, RagModeDebug,

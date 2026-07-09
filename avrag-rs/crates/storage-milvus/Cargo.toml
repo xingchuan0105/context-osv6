@@ -8,7 +8,7 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-avrag-auth = { path = "../auth" }
+contracts = { path = "../../../contracts" }
 avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
 reqwest.workspace = true
 serde.workspace = true

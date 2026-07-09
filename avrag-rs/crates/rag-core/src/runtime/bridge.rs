@@ -3,7 +3,7 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_code_interpreter::HostBridge;
 use contracts::{
     DenseRetrievalArgs, DenseRetrievalModality, DocChunksArgs, DocProfileArgs, DocSummaryArgs,
@@ -372,7 +372,7 @@ impl HostBridge for RuntimeBridge {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use avrag_auth::{OrgId, SubjectKind};
+    use contracts::auth_runtime::{OrgId, SubjectKind};
     use avrag_llm::ModelProviderConfig;
     use avrag_retrieval_data_plane::{
         Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, GraphSearchOutput,
@@ -387,7 +387,7 @@ mod tests {
     }
 
     #[async_trait]
-    impl avrag_retrieval_data_plane::RetrievalDataPlane for StubDataPlane {
+    impl avrag_retrieval_data_plane::RetrievalReadPort for StubDataPlane {
         async fn search_text_dense(
             &self,
             _request: TextDenseSearchRequest,
@@ -498,7 +498,7 @@ mod tests {
         let config = super::super::config::RagConfig::new_for_data_plane(embedding, None);
         let chunk_id = Uuid::from_u128(1);
         let doc_id = Uuid::parse_str("00000000-0000-0000-0000-000000000010").unwrap();
-        let data_plane: Arc<dyn avrag_retrieval_data_plane::RetrievalDataPlane> =
+        let data_plane: Arc<dyn avrag_retrieval_data_plane::RetrievalReadPort> =
             Arc::new(StubDataPlane { chunk_id, doc_id });
         Arc::new(RagRuntime::with_data_plane(config, data_plane))
     }

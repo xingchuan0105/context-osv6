@@ -17,7 +17,7 @@ impl ReActLoop {
         &self,
         mode: &ModeConfig,
         request: &AgentRequest,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         loop_exit: &LoopExitConfig,
         hooks: &StandardLoopHooks,
         base_message_count: usize,

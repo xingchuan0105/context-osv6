@@ -435,7 +435,7 @@ impl AppState {
         let object_path = row
             .try_get::<String, _>("object_path")
             .map_err(|error| common::AppError::internal(error.to_string()))?;
-        let mut auth = avrag_auth::AuthContext::new(org_id.into(), avrag_auth::SubjectKind::System);
+        let mut auth = contracts::auth_runtime::AuthContext::new(org_id.into(), contracts::auth_runtime::SubjectKind::System);
         if let Some(actor) = self.auth().actor_id() {
             auth = auth.with_actor_id(actor);
         }

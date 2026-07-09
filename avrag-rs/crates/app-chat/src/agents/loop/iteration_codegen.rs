@@ -19,7 +19,7 @@ impl ReActLoop {
         &self,
         iteration: u8,
         request: &AgentRequest,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         state: &mut IterationState,
         sink: &dyn AgentEventSink,
         llm_response: &LlmResponse,
@@ -171,7 +171,7 @@ impl ReActLoop {
         idx: usize,
         code: &str,
         request: &AgentRequest,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         interpreter_lock: &Arc<std::sync::Mutex<Option<avrag_code_interpreter::CodeInterpreter>>>,
     ) -> (contracts::ToolStatus, String, bool, Vec<ToolResult>) {
         let code = code.to_string();

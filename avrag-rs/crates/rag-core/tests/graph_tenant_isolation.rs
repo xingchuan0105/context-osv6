@@ -1,9 +1,9 @@
 use async_trait::async_trait;
-use avrag_auth::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
 use avrag_rag_core::RagRuntime;
 use avrag_retrieval_data_plane::{
     Bm25SearchOutput, Bm25SearchRequest, GraphSearchOutput, GraphSearchRequest,
-    MultimodalSearchRequest, RetrievalDataPlane, ScoredChunk, TextDenseSearchRequest,
+    MultimodalSearchRequest, RetrievalReadPort, ScoredChunk, TextDenseSearchRequest,
 };
 use contracts::{GraphHint, GraphRetrievalArgs, ToolResult, ToolStatus};
 use std::sync::Arc;
@@ -19,7 +19,7 @@ struct CrossTenantBlockingDataPlane {
 }
 
 #[async_trait]
-impl RetrievalDataPlane for CrossTenantBlockingDataPlane {
+impl RetrievalReadPort for CrossTenantBlockingDataPlane {
     async fn search_text_dense(
         &self,
         _request: TextDenseSearchRequest,

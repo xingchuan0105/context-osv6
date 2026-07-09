@@ -168,7 +168,7 @@ impl AuthRepository {
         body: &str,
         data: serde_json::Value,
     ) -> Result<usize, PgStorageError> {
-        let context = AuthContext::new(org_id, avrag_auth::SubjectKind::System);
+        let context = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::System);
         let mut tx = self.pool.begin(&context).await?;
         let users = sqlx::query("select id from users where org_id = $1")
             .bind(org_id.into_uuid())

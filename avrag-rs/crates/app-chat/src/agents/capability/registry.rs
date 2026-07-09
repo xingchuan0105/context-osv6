@@ -130,30 +130,35 @@ impl CapabilityRegistry {
 // ---------------------------------------------------------------------------
 
 /// ADR-0007 §8.8 retired skills — excluded from default registry catalog.
+///
+/// Sorted alphabetically to enable `binary_search`; edit this list to retire
+/// or revive a skill. A skill may also self-declare via the `deprecation`
+/// frontmatter key (handled separately in `skill_to_metadata`).
+const RETIRED_SKILL_IDS: &[&str] = &[
+    "academic-writing",
+    "brainstorming",
+    "chat-plan",
+    "concise-writing",
+    "framework-extraction",
+    "html-renderer",
+    "ppt-generation",
+    "professional-writing",
+    "rag-codegen-guide",
+    "rag-citation-format",
+    "rag-doc-summary-guide",
+    "rag-eval",
+    "rag-memory-mgmt",
+    "rag-plan",
+    "rag-retrieval-strategy",
+    "search-eval",
+    "search-plan",
+    "storytelling",
+    "teaching",
+    "url-citation-format",
+];
+
 fn is_retired_skill(id: &str) -> bool {
-    matches!(
-        id,
-        "rag-plan"
-            | "search-plan"
-            | "chat-plan"
-            | "rag-eval"
-            | "search-eval"
-            | "rag-memory-mgmt"
-            | "rag-citation-format"
-            | "url-citation-format"
-            | "rag-codegen-guide"
-            | "rag-retrieval-strategy"
-            | "rag-doc-summary-guide"
-            | "concise-writing"
-            | "professional-writing"
-            | "academic-writing"
-            | "storytelling"
-            | "brainstorming"
-            | "html-renderer"
-            | "ppt-generation"
-            | "teaching"
-            | "framework-extraction"
-    )
+    RETIRED_SKILL_IDS.binary_search(&id).is_ok()
 }
 
 fn register_llm_facing_tools() -> HashMap<String, ToolMetadata> {

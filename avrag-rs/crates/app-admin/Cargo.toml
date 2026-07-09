@@ -7,7 +7,6 @@ version.workspace = true
 
 [dependencies]
 app-core = { path = "../app-core" }
-avrag-auth = { path = "../auth" }
 common = { path = "../common" }
 contracts = { path = "../../../contracts" }
 chrono.workspace = true
@@ -17,7 +16,6 @@ uuid.workspace = true
 [dev-dependencies]
 app-core = { path = "../app-core" }
 async-trait.workspace = true
-avrag-auth = { path = "../auth" }
 avrag-storage-pg = { path = "../storage-pg" }
 common = { path = "../common" }
 contracts = { path = "../../../contracts" }

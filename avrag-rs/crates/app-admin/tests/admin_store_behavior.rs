@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use app_core::{AdminStorePort, admin_escape_ilike_pattern};
 use async_trait::async_trait;
-use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
 use common::AppError;
 use uuid::Uuid;
 

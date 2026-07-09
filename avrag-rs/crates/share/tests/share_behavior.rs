@@ -6,7 +6,7 @@ use app_core::{
     PublicShareChatContextSnapshot, ShareAccessLevel, SharedKnowledgeBaseSnapshot,
     SharedNotebookSnapshot, SharedShareInfoSnapshot, SharedSourceSnapshot,
 };
-use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
 use avrag_share::{AccessLevel, ShareService};
 use support::MemoryShareStore;
 use uuid::Uuid;

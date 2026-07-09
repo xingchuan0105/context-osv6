@@ -21,7 +21,6 @@ analytics = { path = "../analytics" }
 bytes = "1"
 contracts = { path = "../../../contracts" }
 serde.workspace = true
-avrag-auth = { path = "../auth" }
 avrag-billing = { path = "../billing" }
 avrag-llm = { path = "../llm" }
 avrag-rag-core = { path = "../rag-core" }

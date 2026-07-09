@@ -13,7 +13,7 @@ mod tests;
 use std::sync::Arc;
 
 pub use self::config::RagConfig;
-pub use avrag_retrieval_data_plane::{RetrievalDataPlane, WeightedChunkList};
+pub use avrag_retrieval_data_plane::{RetrievalDataPlane, RetrievalReadPort, WeightedChunkList};
 
 /// RAG runtime — retrieval, synthesis, and response-building helpers.
 ///
@@ -24,12 +24,12 @@ use avrag_llm::EmbeddingClient;
 #[derive(Clone)]
 pub struct RagRuntime {
     config: RagConfig,
-    data_plane: Arc<dyn RetrievalDataPlane>,
+    data_plane: Arc<dyn RetrievalReadPort>,
     embedding_client: Option<Arc<EmbeddingClient>>,
 }
 
 impl RagRuntime {
-    pub fn with_data_plane(config: RagConfig, data_plane: Arc<dyn RetrievalDataPlane>) -> Self {
+    pub fn with_data_plane(config: RagConfig, data_plane: Arc<dyn RetrievalReadPort>) -> Self {
         Self {
             config,
             data_plane,
@@ -75,7 +75,7 @@ impl RagRuntime {
     /// Execute a batch of tool calls in parallel and return their results.
     pub async fn execute_tools(
         &self,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         calls: Vec<contracts::ToolCall>,
     ) -> Vec<contracts::ToolResult> {
         tools::dispatch_all(self, auth, calls).await
@@ -84,7 +84,7 @@ impl RagRuntime {
     /// Count indexed text (body) chunks for a doc scope, for dynamic rough-recall sizing.
     pub async fn count_text_chunks(
         &self,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         doc_ids: &[uuid::Uuid],
     ) -> anyhow::Result<usize> {
         self.data_plane.count_text_chunks(auth, doc_ids).await
@@ -95,7 +95,7 @@ impl RagRuntime {
     /// the full set). See `doc_scan_design.md`.
     pub async fn list_text_chunks(
         &self,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         doc_ids: &[uuid::Uuid],
     ) -> anyhow::Result<Vec<avrag_retrieval_data_plane::ScoredChunk>> {
         self.data_plane.list_text_chunks(auth, doc_ids).await

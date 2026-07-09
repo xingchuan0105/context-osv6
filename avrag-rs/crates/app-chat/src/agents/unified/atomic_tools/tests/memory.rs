@@ -9,12 +9,12 @@ async fn chat_persistence_from_env() -> Option<std::sync::Arc<dyn app_core::Chat
     None
 }
 
-fn memory_test_auth() -> avrag_auth::AuthContext {
-    avrag_auth::AuthContext::new(
-        avrag_auth::OrgId::new(uuid::Uuid::new_v4()),
-        avrag_auth::SubjectKind::User,
+fn memory_test_auth() -> contracts::auth_runtime::AuthContext {
+    contracts::auth_runtime::AuthContext::new(
+        contracts::auth_runtime::OrgId::new(uuid::Uuid::new_v4()),
+        contracts::auth_runtime::SubjectKind::User,
     )
-    .with_actor_id(avrag_auth::ActorId::new(uuid::Uuid::new_v4()))
+    .with_actor_id(contracts::auth_runtime::ActorId::new(uuid::Uuid::new_v4()))
 }
 
 #[tokio::test]
@@ -50,9 +50,9 @@ async fn test_user_profile_load_with_pg_but_no_actor_reaches_memory_dispatch() {
     let Some(chat_persistence) = chat_persistence_from_env().await else {
         return;
     };
-    let auth = avrag_auth::AuthContext::new(
-        avrag_auth::OrgId::new(uuid::Uuid::new_v4()),
-        avrag_auth::SubjectKind::User,
+    let auth = contracts::auth_runtime::AuthContext::new(
+        contracts::auth_runtime::OrgId::new(uuid::Uuid::new_v4()),
+        contracts::auth_runtime::SubjectKind::User,
     );
     let call = tool_call("user_profile_load", serde_json::json!({}));
     let result = dispatch_atomic_tool_with_enforcement(

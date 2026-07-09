@@ -1,4 +1,4 @@
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use contracts::chat::{ChatRequest, RagPlan, RagPlanItem};
 use contracts::{LexicalRetrievalArgs, ToolResult, ToolStatus, ToolTrace};
 

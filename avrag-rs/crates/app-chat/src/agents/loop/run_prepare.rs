@@ -12,7 +12,7 @@ impl ReActLoop {
         mode: &ModeConfig,
         request: AgentRequest,
         _sink: &dyn AgentEventSink,
-    ) -> Result<(AgentRequest, usize, u8, avrag_auth::AuthContext, String), AppError> {
+    ) -> Result<(AgentRequest, usize, u8, contracts::auth_runtime::AuthContext, String), AppError> {
         let loop_user_query = request.query.clone();
         let base_message_count = request
             .messages
@@ -29,7 +29,7 @@ impl ReActLoop {
             })
             .max(1);
 
-        let auth: avrag_auth::AuthContext = serde_json::from_value(request.auth_context.clone())
+        let auth: contracts::auth_runtime::AuthContext = serde_json::from_value(request.auth_context.clone())
             .map_err(|e| AppError::internal(format!("invalid auth context: {e}")))?;
 
         Ok((

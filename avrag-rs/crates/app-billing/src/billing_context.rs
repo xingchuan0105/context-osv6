@@ -3,7 +3,7 @@ use std::sync::Arc;
 use app_core::{
     AnalyticsContext, CostEventRecord as AnalyticsCostRecord, util::non_empty_or_unknown,
 };
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_billing::usage_limit::BillableFeature;
 use avrag_llm::LlmUsage;
 use common::AppError;

@@ -1,4 +1,4 @@
-use avrag_auth::OrgId;
+use contracts::auth_runtime::OrgId;
 use common::AppError;
 use uuid::Uuid;
 

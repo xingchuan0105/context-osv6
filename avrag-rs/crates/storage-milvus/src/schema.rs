@@ -1,5 +1,5 @@
 use crate::config::MilvusConfig;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use serde_json::{Value, json};
 use uuid::Uuid;
 

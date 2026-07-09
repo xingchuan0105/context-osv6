@@ -10,7 +10,7 @@ use app_core::{
     },
 };
 use async_trait::async_trait;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::PgAppRepository;
 use chrono::{DateTime, Utc};
 use common::AppError;

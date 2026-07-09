@@ -6,7 +6,7 @@ use app_core::{
     ShareAnalyticsEntry, ShareNotebookMember, ShareStorePort, SharedNotebookSnapshot,
 };
 use async_trait::async_trait;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use chrono::{DateTime, Utc};
 use common::AppError;
 use tokio::sync::RwLock;

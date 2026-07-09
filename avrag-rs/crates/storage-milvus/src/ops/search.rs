@@ -6,7 +6,7 @@ use avrag_retrieval_data_plane::{
     Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, MultimodalSearchRequest, ScoredChunk,
     TextDenseSearchRequest,
 };
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use serde_json::{Value, json};
 use tracing::warn;
 use uuid::Uuid;

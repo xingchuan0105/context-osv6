@@ -22,6 +22,7 @@ members = [
     "crates/heavytail",
     "crates/ingestion",
   "crates/ingestion-types",
+  "crates/licensing",
   "crates/llm",
   "crates/rag-core",
   "crates/rag-core-ports",

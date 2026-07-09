@@ -1,5 +1,5 @@
 use super::*;
-pub use avrag_auth::{ActorId, AuthContext, AuthError, OrgId};
+pub use contracts::auth_runtime::{ActorId, AuthContext, AuthError, OrgId};
 pub use chrono::{DateTime, Utc};
 pub use common::{
     merge_search_tokens, rrf_merge, segment_for_fts, ApiKeyRow, Document, DocumentContentResponse,

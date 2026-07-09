@@ -78,7 +78,7 @@ fn empty_state() -> IterationState {
     }
 }
 
-fn test_auth() -> avrag_auth::AuthContext {
+fn test_auth() -> contracts::auth_runtime::AuthContext {
     serde_json::from_value(serde_json::json!({
         "org_id": "00000000-0000-0000-0000-000000000001",
         "subject_kind": "User",
@@ -136,7 +136,7 @@ async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chu
     }
 
     #[async_trait::async_trait]
-    impl avrag_retrieval_data_plane::RetrievalDataPlane for StubDataPlane {
+    impl avrag_retrieval_data_plane::RetrievalReadPort for StubDataPlane {
         async fn search_text_dense(
             &self,
             _request: avrag_retrieval_data_plane::TextDenseSearchRequest,
@@ -205,7 +205,7 @@ async fn codegen_without_print_leaves_model_observation_empty_but_bridge_has_chu
     }));
     let chunk_id = Uuid::from_u128(1);
     let doc_id = Uuid::parse_str("00000000-0000-0000-0000-000000000010").unwrap();
-    let data_plane: Arc<dyn avrag_retrieval_data_plane::RetrievalDataPlane> =
+    let data_plane: Arc<dyn avrag_retrieval_data_plane::RetrievalReadPort> =
         Arc::new(StubDataPlane { chunk_id, doc_id });
     let config = avrag_rag_core::RagConfig::new_for_data_plane(embedding, None);
     let runtime = Arc::new(RagRuntime::with_data_plane(config, data_plane));

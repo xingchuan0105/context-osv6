@@ -5,7 +5,7 @@ use app_chat::agents::{
     service::UnifiedAgentService,
 };
 use app_core::AppConfig;
-use avrag_auth::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},

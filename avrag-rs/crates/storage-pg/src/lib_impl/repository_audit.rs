@@ -3,7 +3,7 @@ impl AuditRepository {
     pub async fn append_audit_record(&self, record: &AuditRecord) -> Result<(), PgStorageError> {
         let org_id = Uuid::parse_str(&record.org_id)
             .map_err(|_| PgStorageError::NotFound("invalid audit org id".to_string()))?;
-        let context = AuthContext::new(OrgId::from(org_id), avrag_auth::SubjectKind::System);
+        let context = AuthContext::new(OrgId::from(org_id), contracts::auth_runtime::SubjectKind::System);
         let mut tx = self.pool.begin(&context).await?;
         ensure_org_and_actor(tx.inner(), &context).await?;
         sqlx::query(

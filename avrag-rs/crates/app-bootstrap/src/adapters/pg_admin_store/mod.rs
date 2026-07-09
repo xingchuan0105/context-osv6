@@ -11,7 +11,7 @@ use app_core::{
     domain_rows::UserProfileRow,
 };
 use async_trait::async_trait;
-use avrag_auth::{AuthContext, OrgId};
+use contracts::auth_runtime::{AuthContext, OrgId};
 use avrag_storage_pg::PgAppRepository;
 use chrono::{DateTime, Utc};
 use common::{ApiKeyRow, AppError, CreateApiKeyResponse, NotificationRow, UserId};

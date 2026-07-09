@@ -22,7 +22,6 @@ app-billing = { path = "../app-billing" }
 app-chat = { path = "../app-chat" }
 app-core = { path = "../app-core" }
 app-documents = { path = "../app-documents" }
-avrag-auth = { path = "../auth" }
 avrag-billing = { path = "../billing" }
 avrag-licensing = { path = "../licensing" }
 avrag-cache-redis = { path = "../cache-redis" }

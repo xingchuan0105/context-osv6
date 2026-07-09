@@ -9,7 +9,7 @@ version.workspace = true
 default = []
 dev-tools = []
 eval = []
-write-mode = []  # WIP: gates the unfinished write-mode refine-experiment bin
+write-mode = []
 
 [dependencies]
 analytics = { path = "../analytics" }
@@ -19,7 +19,6 @@ app-admin = { path = "../app-admin" }
 app-billing = { path = "../app-billing" }
 app-core = { path = "../app-core" }
 app-documents = { path = "../app-documents" }
-avrag-auth = { path = "../auth" }
 avrag-billing = { path = "../billing" }
 avrag-chatmemory = { path = "../chatmemory" }
 avrag-code-interpreter = { path = "../code-interpreter" }
@@ -51,6 +50,3 @@ uuid.workspace = true
 app-core = { path = "../app-core" }
 avrag-storage-pg = { path = "../storage-pg" }
 
-[[bin]]
-name = "refine-experiment"
-required-features = ["write-mode"]

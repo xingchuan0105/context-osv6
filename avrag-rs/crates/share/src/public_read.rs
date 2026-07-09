@@ -8,7 +8,7 @@ use crate::{
 impl ShareService {
     pub async fn get_share_access_logs(
         &self,
-        ctx: &avrag_auth::AuthContext,
+        ctx: &contracts::auth_runtime::AuthContext,
         notebook_id: &str,
         limit: usize,
     ) -> Result<Vec<ShareAccessLog>> {

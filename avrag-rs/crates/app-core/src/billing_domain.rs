@@ -5,6 +5,15 @@ use uuid::Uuid;
 pub const PLAN_FREE: &str = "free";
 pub const PLAN_PRO: &str = "pro";
 pub const PLAN_PLUS: &str = "plus";
+pub const PLAN_DESKTOP_STANDARD: &str = "desktop-standard";
+pub const PLAN_DESKTOP_PRO: &str = "desktop-pro";
+
+pub fn is_desktop_license_plan(plan_id: &str) -> bool {
+    matches!(
+        plan_id.trim(),
+        PLAN_DESKTOP_STANDARD | PLAN_DESKTOP_PRO | "standard" | "desktop_pro"
+    ) || plan_id.trim().starts_with("desktop-")
+}
 pub const STATUS_ACTIVE: &str = "active";
 pub const STATUS_CANCELED: &str = "canceled";
 pub const STATUS_PAST_DUE: &str = "past_due";
@@ -28,6 +37,8 @@ pub struct BillingConfig {
     pub creem_price_plus: String,
     pub creem_product_pro: String,
     pub creem_product_plus: String,
+    pub creem_product_desktop_standard: String,
+    pub creem_product_desktop_pro: String,
 
     // Alipay Config
     pub alipay_app_id: String,
@@ -37,6 +48,8 @@ pub struct BillingConfig {
     pub alipay_notify_url: Option<String>,
     pub alipay_price_pro: String,
     pub alipay_price_plus: String,
+    pub alipay_price_desktop_standard: String,
+    pub alipay_price_desktop_pro: String,
 }
 
 impl BillingConfig {
@@ -64,6 +77,10 @@ impl BillingConfig {
             creem_webhook_secret: std::env::var("CREEM_WEBHOOK_SECRET").unwrap_or_default(),
             creem_product_pro: std::env::var("CREEM_PRODUCT_PRO").unwrap_or_default(),
             creem_product_plus: std::env::var("CREEM_PRODUCT_PLUS").unwrap_or_default(),
+            creem_product_desktop_standard: std::env::var("CREEM_PRODUCT_DESKTOP_STANDARD")
+                .unwrap_or_default(),
+            creem_product_desktop_pro: std::env::var("CREEM_PRODUCT_DESKTOP_PRO")
+                .unwrap_or_default(),
             creem_price_pro: std::env::var("CREEM_PRICE_PRO")
                 .unwrap_or_else(|_| "5.99".to_string()),
             creem_price_plus: std::env::var("CREEM_PRICE_PLUS")
@@ -83,6 +100,10 @@ impl BillingConfig {
                 .unwrap_or_else(|_| "39.00".to_string()),
             alipay_price_plus: std::env::var("ALIPAY_PRICE_PLUS")
                 .unwrap_or_else(|_| "19.00".to_string()),
+            alipay_price_desktop_standard: std::env::var("ALIPAY_PRICE_DESKTOP_STANDARD")
+                .unwrap_or_else(|_| "299.00".to_string()),
+            alipay_price_desktop_pro: std::env::var("ALIPAY_PRICE_DESKTOP_PRO")
+                .unwrap_or_else(|_| "699.00".to_string()),
         }
     }
 
@@ -130,6 +151,12 @@ impl BillingConfig {
             PLAN_PLUS if !self.creem_product_plus.trim().is_empty() => {
                 Some(self.creem_product_plus.as_str())
             }
+            PLAN_DESKTOP_STANDARD if !self.creem_product_desktop_standard.trim().is_empty() => {
+                Some(self.creem_product_desktop_standard.as_str())
+            }
+            PLAN_DESKTOP_PRO if !self.creem_product_desktop_pro.trim().is_empty() => {
+                Some(self.creem_product_desktop_pro.as_str())
+            }
             _ => None,
         }
     }
@@ -141,6 +168,12 @@ impl BillingConfig {
             }
             PLAN_PLUS if !self.alipay_price_plus.trim().is_empty() => {
                 Some(self.alipay_price_plus.as_str())
+            }
+            PLAN_DESKTOP_STANDARD if !self.alipay_price_desktop_standard.trim().is_empty() => {
+                Some(self.alipay_price_desktop_standard.as_str())
+            }
+            PLAN_DESKTOP_PRO if !self.alipay_price_desktop_pro.trim().is_empty() => {
+                Some(self.alipay_price_desktop_pro.as_str())
             }
             _ => None,
         }

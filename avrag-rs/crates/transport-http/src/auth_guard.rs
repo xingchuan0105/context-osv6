@@ -1,5 +1,5 @@
 use app_bootstrap::AppState;
-use avrag_auth::{AuthContext, AuthError, SubjectKind};
+use contracts::auth_runtime::{AuthContext, AuthError, SubjectKind};
 use common::AppError;
 use contracts::agent_permissions::{
     PERM_ADMIN, PERM_INDEX, PERM_QUERY, PERM_WORKSPACE_CREATE, PERM_WORKSPACE_LIST,
@@ -318,7 +318,7 @@ pub(crate) async fn ensure_user_notebook_access(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use avrag_auth::OrgId;
+    use contracts::auth_runtime::OrgId;
 
     #[test]
     fn workspace_key_rejected_for_org_tools() {

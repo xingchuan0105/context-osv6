@@ -1,6 +1,6 @@
 use anyhow::Result;
 use app_core::ShareStorePort;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use common::{AppError, ShareTokenResponse};
 use std::sync::Arc;
 

@@ -81,7 +81,7 @@ impl PolicyEnforcer {
     pub fn evaluate(
         &self,
         tool: &ToolMetadata,
-        auth: Option<&avrag_auth::AuthContext>,
+        auth: Option<&contracts::auth_runtime::AuthContext>,
     ) -> EnforcementAction {
         // 1. Explicit Deny rules take precedence.
         for rule in &self.rules {
@@ -133,14 +133,14 @@ impl PolicyEnforcer {
     }
 
     /// Convenience: evaluate and return true only if the result is Allow.
-    pub fn is_allowed(&self, tool: &ToolMetadata, auth: Option<&avrag_auth::AuthContext>) -> bool {
+    pub fn is_allowed(&self, tool: &ToolMetadata, auth: Option<&contracts::auth_runtime::AuthContext>) -> bool {
         matches!(self.evaluate(tool, auth), EnforcementAction::Allow)
     }
 }
 
 impl EnforcementCondition {
     /// Check whether this condition matches the given tool and auth context.
-    pub fn evaluate(&self, tool: &ToolMetadata, auth: Option<&avrag_auth::AuthContext>) -> bool {
+    pub fn evaluate(&self, tool: &ToolMetadata, auth: Option<&contracts::auth_runtime::AuthContext>) -> bool {
         match self {
             EnforcementCondition::RiskLevelExceeds(threshold) => {
                 risk_level_value(tool.risk_level) >= risk_level_value(*threshold)
@@ -355,10 +355,10 @@ mod tests {
         }
     }
 
-    fn auth_with(permission: &str) -> avrag_auth::AuthContext {
-        avrag_auth::AuthContext::new(
-            avrag_auth::OrgId::new(uuid::Uuid::nil()),
-            avrag_auth::SubjectKind::User,
+    fn auth_with(permission: &str) -> contracts::auth_runtime::AuthContext {
+        contracts::auth_runtime::AuthContext::new(
+            contracts::auth_runtime::OrgId::new(uuid::Uuid::nil()),
+            contracts::auth_runtime::SubjectKind::User,
         )
         .grant(permission)
     }

@@ -1,6 +1,6 @@
 use app_bootstrap::AppState;
 use app_core::AppConfig;
-use avrag_auth::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},

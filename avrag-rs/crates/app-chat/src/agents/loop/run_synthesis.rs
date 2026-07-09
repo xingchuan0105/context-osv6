@@ -19,7 +19,7 @@ impl ReActLoop {
         mode: &ModeConfig,
         loop_exit: &LoopExitConfig,
         request: &AgentRequest,
-        auth: &avrag_auth::AuthContext,
+        auth: &contracts::auth_runtime::AuthContext,
         retrieval_query: &str,
         direct_answer: Option<&str>,
         messages: &mut Vec<ChatMessage>,

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use app_billing::BillingContext;
 use app_core::{BillingQuotaPort, DocumentStorePort};
 use async_trait::async_trait;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use common::AppError;
 use uuid::Uuid;
 

@@ -108,15 +108,7 @@ pub struct DocumentScopeState {
     pub status: DocumentStatus,
 }
 
-#[derive(Debug, Clone)]
-pub struct IndexedChunk {
-    pub chunk_id: String,
-    pub doc_id: String,
-    pub page: Option<i64>,
-    pub content: String,
-    pub score: Option<f32>,
-    pub metadata: serde_json::Value,
-}
+pub use common::IndexedChunk;
 
 pub fn map_notebook(row: PgRow) -> Result<Notebook, PgStorageError> {
     let id: Uuid = row.try_get("id")?;

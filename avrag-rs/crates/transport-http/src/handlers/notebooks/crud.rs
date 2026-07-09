@@ -1,4 +1,4 @@
-use avrag_auth::SubjectKind;
+use contracts::auth_runtime::SubjectKind;
 use axum::{
     Json,
     extract::{Extension, Path},

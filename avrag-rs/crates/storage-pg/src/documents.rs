@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use common::Document;
 use uuid::Uuid;
 

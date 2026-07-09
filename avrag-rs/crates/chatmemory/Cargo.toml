@@ -15,4 +15,3 @@ serde_json.workspace = true
 chrono.workspace = true
 uuid.workspace = true
 common = { path = "../common" }
-avrag-auth = { path = "../auth" }

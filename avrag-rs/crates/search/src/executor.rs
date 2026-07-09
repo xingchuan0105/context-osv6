@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use contracts::chat::ChatRequest;
 use reqwest::Client;
 

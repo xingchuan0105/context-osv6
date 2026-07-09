@@ -1,5 +1,5 @@
 use app_bootstrap::AppState;
-use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
 use axum::{
     Json,
     body::{Body, to_bytes},

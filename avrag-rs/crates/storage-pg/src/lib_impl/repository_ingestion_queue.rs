@@ -33,9 +33,9 @@ impl IngestionQueueRepository {
             .and_then(|value| Uuid::parse_str(value).ok())
             .map(ActorId::new);
         let context = if let Some(actor_id) = actor_id {
-            AuthContext::new(org_id, avrag_auth::SubjectKind::User).with_actor_id(actor_id)
+            AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User).with_actor_id(actor_id)
         } else {
-            AuthContext::new(org_id, avrag_auth::SubjectKind::System)
+            AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::System)
         };
 
         let mut tx = self.pool.begin(&context).await?;

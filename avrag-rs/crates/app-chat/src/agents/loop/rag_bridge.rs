@@ -77,7 +77,7 @@ pub(crate) fn force_doc_scope(call: &mut contracts::ToolCall, scope: &[String]) 
 
 pub(crate) async fn dispatch_rag_tool(
     runtime: &avrag_rag_core::RagRuntime,
-    auth: &avrag_auth::AuthContext,
+    auth: &contracts::auth_runtime::AuthContext,
     call: &contracts::ToolCall,
     doc_scope: &[String],
 ) -> ToolResult {

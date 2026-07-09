@@ -1,4 +1,4 @@
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use contracts::{DocChunksArgs, ToolResult, ToolStatus, ToolTrace};
 use uuid::Uuid;
 

@@ -18,7 +18,7 @@ pub struct ExecutionContext<'a> {
     /// Optional search provider — required by `web_search` and related skills.
     pub search_provider: Option<&'a dyn avrag_search::SearchProvider>,
     /// Auth + PG session context for memory retrieval tools.
-    pub auth: Option<&'a avrag_auth::AuthContext>,
+    pub auth: Option<&'a contracts::auth_runtime::AuthContext>,
     pub session_id: Option<uuid::Uuid>,
     pub chat_persistence: Option<&'a dyn ChatPersistencePort>,
 }
@@ -35,7 +35,7 @@ impl<'a> ExecutionContext<'a> {
 
     pub fn with_memory(
         search_provider: Option<&'a dyn avrag_search::SearchProvider>,
-        auth: Option<&'a avrag_auth::AuthContext>,
+        auth: Option<&'a contracts::auth_runtime::AuthContext>,
         session_id: Option<uuid::Uuid>,
         chat_persistence: Option<&'a dyn ChatPersistencePort>,
     ) -> Self {

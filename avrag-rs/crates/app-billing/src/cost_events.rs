@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use analytics::AnalyticsService;
 use app_core::util::non_empty_or_unknown;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_llm::LlmUsage;
 use uuid::Uuid;
 

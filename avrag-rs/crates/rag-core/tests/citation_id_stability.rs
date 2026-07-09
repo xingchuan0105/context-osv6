@@ -10,7 +10,7 @@ use std::sync::Arc;
 use avrag_rag_core::RagRuntime;
 use avrag_retrieval_data_plane::{
     Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, GraphSearchOutput, GraphSearchRequest,
-    MultimodalSearchRequest, RetrievalDataPlane, ScoredChunk, TextDenseSearchRequest,
+    MultimodalSearchRequest, RetrievalReadPort, ScoredChunk, TextDenseSearchRequest,
 };
 use contracts::chat::{ChatRequest, Citation, RagPlan, RagPlanItem};
 use contracts::{
@@ -22,7 +22,7 @@ use contracts::{
 struct NoopDataPlane;
 
 #[async_trait::async_trait]
-impl RetrievalDataPlane for NoopDataPlane {
+impl RetrievalReadPort for NoopDataPlane {
     async fn search_text_dense(
         &self,
         _request: TextDenseSearchRequest,

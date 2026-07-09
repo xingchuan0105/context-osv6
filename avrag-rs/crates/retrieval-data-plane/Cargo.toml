@@ -8,7 +8,7 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-avrag-auth = { path = "../auth" }
+contracts = { path = "../../../contracts" }
 serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true

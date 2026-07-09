@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use app_core::StorageContext;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::PgAppRepository;
 
 use crate::adapters::RedisRateLimitBackend;

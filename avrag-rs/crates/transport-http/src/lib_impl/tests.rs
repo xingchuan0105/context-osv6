@@ -1484,11 +1484,11 @@ async fn anonymous_share_chat_requires_login_without_persisting_owner_session() 
 
     let share_token = avrag_share::ShareService::new(state.share_store().expect("pg expected"))
         .create_share_token(
-            &avrag_auth::AuthContext::new(
-                avrag_auth::OrgId::from(org_id),
-                avrag_auth::SubjectKind::User,
+            &contracts::auth_runtime::AuthContext::new(
+                contracts::auth_runtime::OrgId::from(org_id),
+                contracts::auth_runtime::SubjectKind::User,
             )
-            .with_actor_id(avrag_auth::ActorId::new(user_id)),
+            .with_actor_id(contracts::auth_runtime::ActorId::new(user_id)),
             &notebook_id,
             avrag_share::AccessLevel::Read,
             None,

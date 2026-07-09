@@ -8,7 +8,7 @@ version.workspace = true
 [dependencies]
 analytics = { path = "../analytics" }
 app-core = { path = "../app-core" }
-avrag-auth = { path = "../auth" }
+contracts = { path = "../../../contracts" }
 avrag-billing = { path = "../billing" }
 avrag-llm = { path = "../llm" }
 common = { path = "../common" }
