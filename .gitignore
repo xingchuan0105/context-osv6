@@ -60,8 +60,8 @@ frontend_next/playwright/
 # =====================
 # frontend/ is the old Next.js frontend — not part of this delivery
 /frontend/
-# docs/, memory/, output/, ~/ are workspace artifacts not part of the delivery
-/docs/
+# docs/ is the canonical documentation root (ADR, ops, reviews) — do NOT ignore.
+# Local-only workspace dumps:
 /memory/
 /output/
 ~/
@@ -86,6 +86,13 @@ e2e_output/
 # Graphify generated artifacts (graph.json alone is 21MB+)
 /graphify-out/
 avrag-rs/graphify-out/
+**/graphify-out/
+
+# HeavyTail experiment outputs (local runs only)
+avrag-rs/heavytail-out/
+
+# Prompt local backups (never commit)
+avrag-rs/prompts/_backups/
 
 # =====================
 # Brooks v4 plan hygiene (M0)
