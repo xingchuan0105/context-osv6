@@ -38,7 +38,7 @@ pub(crate) async fn execute_local_parse(
         };
 
     let parsed = parser.parse(bytes, filename).await.map_err(|error| {
-        IngestionError::StateSink(format!("local parse failed for {filename}: {error}"))
+        IngestionError::parse(format!("local parse failed for {filename}: {error}"))
     })?;
     Ok(pdf::document_ir_from_parsed_document(
         document_id,
@@ -73,7 +73,7 @@ pub(crate) async fn execute_office_parse(
     doc_type: &OfficeDocType,
 ) -> Result<DocumentIr, IngestionError> {
     let client = processor.office_parser_client.as_ref().ok_or_else(|| {
-        IngestionError::StateSink(format!(
+        IngestionError::parse(format!(
             "office parse selected for {filename}, but OFFICE_PARSER_BASE_URL is not configured"
         ))
     })?;
@@ -111,7 +111,7 @@ pub(crate) async fn execute_office_parse(
         }
     }
     .map_err(|error| {
-        IngestionError::StateSink(format!("office parse failed for {filename}: {error}"))
+        IngestionError::parse(format!("office parse failed for {filename}: {error}"))
     })?;
 
     let mut document_ir = response.document_ir;

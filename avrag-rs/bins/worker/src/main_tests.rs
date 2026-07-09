@@ -1,5 +1,5 @@
 use app_core::{AppConfig, load_prompt_template};
-use avrag_auth::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
 use avrag_retrieval_data_plane::{
     EntityIndexRecord, GraphPassageIndexRecord, RelationIndexRecord, TextChunkIndexRecord,
 };

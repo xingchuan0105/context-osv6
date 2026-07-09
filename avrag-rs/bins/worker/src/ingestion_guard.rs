@@ -1,5 +1,5 @@
 use anyhow::Result;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_retrieval_data_plane::RetrievalDataPlane;
 use avrag_storage_pg::{
     DocumentCleanupTask, DocumentCleanupTaskCompletionOutcome, DocumentCleanupTaskFailureOutcome,
@@ -18,7 +18,7 @@ use uuid::Uuid;
 use crate::runtime_support::{document_cleanup_task_context, safe_relative_object_key};
 
 pub(crate) fn from_storage_error(error: PgStorageError) -> IngestionError {
-    IngestionError::StateSink(error.to_string())
+    IngestionError::storage(error)
 }
 
 pub(crate) async fn ensure_ingestion_side_effects_allowed(
@@ -41,7 +41,7 @@ pub(crate) async fn ensure_ingestion_side_effects_allowed(
     if allowed {
         Ok(())
     } else {
-        Err(IngestionError::StateSink(format!(
+        Err(IngestionError::storage(format!(
             "ingestion side effects aborted before {phase}: document is deleting/deleted or task lease was lost"
         )))
     }
@@ -65,7 +65,7 @@ pub(crate) async fn verify_uploaded_object_bytes(
     if let Some(expected_size) = validation.upload_size_bytes {
         let actual_size = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
         if expected_size != actual_size {
-            return Err(IngestionError::StateSink(format!(
+            return Err(IngestionError::security(format!(
                 "uploaded object size changed after validation: expected {expected_size} bytes, got {actual_size} bytes"
             )));
         }
@@ -76,8 +76,8 @@ pub(crate) async fn verify_uploaded_object_bytes(
         hasher.update(bytes);
         let actual_sha256 = hex::encode(hasher.finalize());
         if expected_sha256 != actual_sha256 {
-            return Err(IngestionError::StateSink(
-                "uploaded object checksum changed after validation".to_string(),
+            return Err(IngestionError::security(
+                "uploaded object checksum changed after validation",
             ));
         }
     }

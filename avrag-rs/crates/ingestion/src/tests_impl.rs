@@ -92,7 +92,7 @@ struct FailingProcessor;
 #[async_trait]
 impl TaskProcessor for FailingProcessor {
     async fn process(&mut self, _task: &IngestionTask) -> Result<(), IngestionError> {
-        Err(IngestionError::StateSink("boom".to_string()))
+        Err(IngestionError::internal("boom"))
     }
 }
 

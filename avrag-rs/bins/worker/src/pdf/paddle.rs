@@ -182,7 +182,7 @@ async fn ocr_single_page_with_retry(
     match client
         .ocr_single_page_pdf(pdf_slice, page_number)
         .await
-        .map_err(|e| IngestionError::StateSink(format!("PaddleOCR page job failed: {e}")))
+        .map_err(|e| IngestionError::parse(format!("PaddleOCR page job failed: {e}")))
     {
         Ok(result) => Ok(result),
         Err(first_err) => {
@@ -198,7 +198,7 @@ async fn ocr_single_page_with_retry(
                 .ocr_single_page_pdf(pdf_slice, page_number)
                 .await
                 .map_err(|e| {
-                    IngestionError::StateSink(format!(
+                    IngestionError::parse(format!(
                         "PaddleOCR page job failed after retry: {e} (first: {first_err})"
                     ))
                 })
@@ -215,7 +215,7 @@ pub async fn execute_paddle_ocr_per_page(
     table_ocr_pages: &HashSet<u32>,
 ) -> Result<PaddlePerPageOcrOutcome, IngestionError> {
     let config = PaddleOcrConfig::from_env()
-        .map_err(|e| IngestionError::StateSink(format!("PaddleOCR config error: {e}")))?;
+        .map_err(|e| IngestionError::parse(format!("PaddleOCR config error: {e}")))?;
     let client = PaddleOcrClient::new(config.clone());
     let mut cache = PaddleResultCache::from_env();
     let payload_hash = optional_payload_hash();
@@ -336,12 +336,12 @@ pub async fn execute_paddle_ocr_image(
     document_id: Uuid,
 ) -> Result<DocumentIr, IngestionError> {
     let config = PaddleOcrConfig::from_env()
-        .map_err(|e| IngestionError::StateSink(format!("PaddleOCR config error: {e}")))?;
+        .map_err(|e| IngestionError::parse(format!("PaddleOCR config error: {e}")))?;
     let client = PaddleOcrClient::new(config);
     let page_result = client
         .ocr_image_bytes(bytes, filename)
         .await
-        .map_err(|e| IngestionError::StateSink(format!("PaddleOCR image job failed: {e}")))?;
+        .map_err(|e| IngestionError::parse(format!("PaddleOCR image job failed: {e}")))?;
 
     let table_pages = HashSet::new();
     let mut ir = build_document_ir_from_paddle(

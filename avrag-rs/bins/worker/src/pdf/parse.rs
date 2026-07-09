@@ -109,7 +109,7 @@ pub async fn probe_pdf_content(
     routes: &PdfPageRoutes,
 ) -> Result<PdfProbeOutcome, IngestionError> {
     let snapshot = service.parse_pdf_document(bytes).await.map_err(|e| {
-        IngestionError::StateSink(format!("LiteParse parse failed for {filename}: {e}"))
+        IngestionError::parse(format!("LiteParse parse failed for {filename}: {e}"))
     })?;
     Ok(probe_pdf_content_from_snapshot(
         &snapshot,
@@ -267,7 +267,7 @@ pub async fn apply_text_fallbacks(
         None
     } else {
         let renderer = ctx.pdf_renderer_client.as_ref().ok_or_else(|| {
-            IngestionError::StateSink(format!(
+            IngestionError::parse(format!(
                 "PDF E-class fallback for {filename}, but PDF_RENDERER_BASE_URL is not configured"
             ))
         })?;
@@ -277,7 +277,7 @@ pub async fn apply_text_fallbacks(
                 .parse_pages(bytes, filename, document_id, &paddle_needs_fallback)
                 .await
                 .map_err(|error| {
-                    IngestionError::StateSink(format!(
+                    IngestionError::parse(format!(
                         "visual pdf fallback failed for {filename}: {error}"
                     ))
                 })?,
@@ -393,7 +393,7 @@ pub async fn execute_pdf_parse(
         Some(snapshot) => snapshot,
         None => {
             owned_snapshot = service.parse_pdf_document(bytes).await.map_err(|e| {
-                IngestionError::StateSink(format!("LiteParse parse failed for {filename}: {e}"))
+                IngestionError::parse(format!("LiteParse parse failed for {filename}: {e}"))
             })?;
             &owned_snapshot
         }

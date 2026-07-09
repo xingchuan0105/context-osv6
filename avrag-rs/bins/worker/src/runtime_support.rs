@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use app_core::AppConfig;
-use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
 use avrag_retrieval_data_plane::RetrievalDataPlane;
 use avrag_storage_milvus::{MilvusConfig as StorageMilvusConfig, MilvusDataPlane};
 use avrag_storage_pg::{DocumentCleanupTask, ObjectStoreHandle, ObjectStoreHeadError, S3ObjectStore};

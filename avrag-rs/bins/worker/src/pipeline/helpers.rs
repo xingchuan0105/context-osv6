@@ -13,7 +13,7 @@ pub(crate) use super::pg_side_effects::{
     collect_document_text, generate_document_profile_with_llm,
 };
 use anyhow::{Result, anyhow};
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::ObjectStoreHandle;
 use std::path::{Component, Path};
 use uuid::Uuid;

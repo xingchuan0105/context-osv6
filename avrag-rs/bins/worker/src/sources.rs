@@ -120,7 +120,7 @@ impl StateSink for PgStateSink {
                 .map_err(from_storage_error)?
         };
         if !updated {
-            return Err(IngestionError::StateSink(format!(
+            return Err(IngestionError::storage(format!(
                 "document status transition to {:?} rejected: ingestion task lease lost or document is deleting",
                 transition.to
             )));

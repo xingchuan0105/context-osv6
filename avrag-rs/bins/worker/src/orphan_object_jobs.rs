@@ -128,7 +128,7 @@ fn env_bool(key: &str, default: bool) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
+    use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
     use avrag_storage_pg::{BootstrapRepository, PgAppRepository};
     use uuid::Uuid;
 

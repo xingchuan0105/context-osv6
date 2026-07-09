@@ -1,5 +1,5 @@
 use anyhow::Result;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::{ObjectStoreHandle, TocEntry};
 use common::SummaryMetadata;
 use ingestion::DocumentIr;

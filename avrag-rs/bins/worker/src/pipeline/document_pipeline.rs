@@ -1,4 +1,4 @@
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use ingestion::chunker::ChunkPolicy;
 use ingestion::parser::{ParsePlan, ParseRouter};
 use ingestion::{
@@ -68,18 +68,18 @@ async fn execute_parse_plan(
             let (pdf_bytes, pdf_filename) = pdf::maybe_convert_office_to_pdf(bytes, filename)
                 .await
                 .map_err(|e| {
-                    IngestionError::StateSink(format!(
+                    IngestionError::parse(format!(
                         "office to pdf conversion failed for {filename}: {e}"
                     ))
                 })?;
 
             let (effective_plan, liteparse_snapshot) = if plan.pages.is_empty() {
                 let routed = ParseRouter::route(&pdf_bytes, &pdf_filename, "application/pdf")
-                    .map_err(|e| IngestionError::StateSink(e.to_string()))?;
+                    .map_err(|e| IngestionError::storage(e))?;
                 match routed.plan {
                     ParsePlan::Pdf(p) => (p, routed.liteparse_snapshot),
                     other => {
-                        return Err(IngestionError::StateSink(format!(
+                        return Err(IngestionError::parse(format!(
                             "expected pdf plan after office conversion, got {other:?}"
                         )));
                     }
@@ -146,7 +146,7 @@ pub(crate) async fn run_document_pipeline(
         .await?,
         &DocumentIrValidationOptions::default(),
     )
-    .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+    .map_err(|error| IngestionError::storage(error))?;
 
     let document_ir = validation_report.document;
     parse_run_state.validation_warnings = validation_report.warnings;
@@ -306,7 +306,7 @@ pub(crate) async fn run_document_pipeline(
             processor.asset_url_ttl_secs,
         )
         .await
-        .map_err(|error| IngestionError::StateSink(error.to_string()))?;
+        .map_err(|error| IngestionError::storage(error))?;
         if stored_image_path.is_some() {
             parse_run_state.outputs.mirrored_asset_count += 1;
         }
@@ -353,7 +353,7 @@ pub(crate) async fn run_document_pipeline(
                 .object_store
                 .delete(&stored_asset_object_key)
                 .await;
-            return Err(IngestionError::StateSink(error.to_string()));
+            return Err(IngestionError::storage(error));
         }
         stored_asset_path_by_ref.insert(asset.asset_id.clone(), stored_image_path.clone());
     }
@@ -380,7 +380,7 @@ pub(crate) async fn run_document_pipeline(
             .get(&multimodal_chunk.asset_ref)
             .copied()
             .ok_or_else(|| {
-                IngestionError::StateSink(format!(
+                IngestionError::storage(format!(
                     "missing stored asset for multimodal block {}",
                     multimodal_chunk.block_id
                 ))
@@ -582,7 +582,7 @@ pub(crate) async fn run_document_pipeline(
             .replace_document_index(batch)
             .await
             .map_err(|error| {
-                IngestionError::StateSink(format!("retrieval data plane indexing failed: {error}"))
+                IngestionError::index(format!("retrieval data plane indexing failed: {error}"))
             })?;
         parse_run_state.outputs.text_vector_count = report.text_chunk_count;
         parse_run_state.outputs.multimodal_vector_count = report.multimodal_chunk_count;
