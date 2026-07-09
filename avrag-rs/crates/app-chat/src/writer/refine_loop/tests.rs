@@ -1,15 +1,11 @@
-//! Tests for the WriteRefine ReAct loop.
-//!
-//! Tests for types, helpers, handlers, and round-counter output.
+//! Handler-level WriteRefine tests (agent-coupled).
+//! Pure budget / helper / context tests live in `write-core`.
 
 use super::types::{
     BestSnapshot, FinishReason, RefineContext, RefineLoopBudget,
     WRITE_REFINE_HARD_REACT_CAP, WRITE_REFINE_GATE_MAX_REVISE,
 };
 use super::WriteRefineLoopRunner;
-use super::helpers::{
-    build_write_refine_round_counter_zh, strip_task_section,
-};
 
 use heavytail::diagnosis::diagnose_pre_refine;
 use heavytail::feedforward::fingerprint_workspace;
@@ -42,136 +38,6 @@ fn make_workspace() -> DraftWorkspace {
         rhythm: RhythmMode::Mixed,
     }];
     ws
-}
-
-#[test]
-fn refine_loop_budget_defaults_match_plan() {
-    let b = RefineLoopBudget::default();
-    assert_eq!(b.max_rounds, 5);
-    assert_eq!(b.max_react_iterations, WRITE_REFINE_HARD_REACT_CAP);
-    assert_eq!(b.max_on_demand_research, 5);
-    assert_eq!(b.per_research_worker_tokens, 4_000);
-    assert_eq!(b.max_refine_tokens, 40_000);
-}
-
-#[test]
-fn refine_loop_budget_from_writer_budget() {
-    let writer = WriterBudget::default();
-    let b = RefineLoopBudget::from_writer_budget(&writer, WRITE_REFINE_HARD_REACT_CAP);
-    assert_eq!(b.max_rounds, writer.max_rounds);
-    assert_eq!(b.max_react_iterations, WRITE_REFINE_HARD_REACT_CAP);
-}
-
-#[test]
-fn unlimited_budget_still_caps_react_iterations() {
-    let b = RefineLoopBudget::unlimited();
-    assert_eq!(b.max_react_iterations, WRITE_REFINE_HARD_REACT_CAP);
-    assert_eq!(b.max_rounds, WRITE_REFINE_GATE_MAX_REVISE);
-    assert!(b.react_iterations_capped());
-    assert!(b.revise_rounds_capped());
-}
-
-#[test]
-fn write_refine_round_counter_shows_remaining_and_last_round_hint() {
-    let budget = RefineLoopBudget::unlimited();
-    let mid = build_write_refine_round_counter_zh(
-        2,
-        6,
-        1,
-        WRITE_REFINE_GATE_MAX_REVISE,
-        0,
-        usize::MAX,
-        &budget,
-    );
-    assert!(mid.contains("第 3 / 6 轮"));
-    assert!(mid.contains("剩余 3 轮"));
-    assert!(mid.contains("<write_refine_round"));
-
-    let last = build_write_refine_round_counter_zh(
-        5,
-        6,
-        3,
-        WRITE_REFINE_GATE_MAX_REVISE,
-        1,
-        usize::MAX,
-        &budget,
-    );
-    assert!(last.contains("最后一轮"));
-    assert!(last.contains("remaining=\"0\""));
-}
-
-#[test]
-fn refine_context_checkpoint_writes_artifacts() {
-    // P2.7: refine checkpoint persists counters + workspace + material pack.
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let mut ctx = make_ctx();
-    ctx.revise_rounds_used = 2;
-    ctx.research_calls_used = 1;
-    ctx.tokens_used = 1234;
-
-    let mut dir = std::env::temp_dir();
-    dir.push(format!(
-        "heavytail-refine-ckpt-test-{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-
-    ctx.checkpoint(&dir).expect("checkpoint writes");
-
-    let context = std::fs::read_to_string(dir.join("refine").join("context.json")).unwrap();
-    let json: serde_json::Value = serde_json::from_str(&context).unwrap();
-    assert_eq!(json["revise_rounds_used"], 2);
-    assert_eq!(json["research_calls_used"], 1);
-    assert_eq!(json["tokens_used"], 1234);
-    assert!(json["workspace"].is_object());
-    assert!(dir.join("refine").join("material_pack.json").is_file());
-}
-
-#[test]
-fn refine_context_new_initializes_counters() {
-    let ws = make_workspace();
-    let style = StyleParams::default();
-    let diag = diagnose_pre_refine(&ws, &style, &[]);
-    let pack = MaterialPack::default();
-    let ctx = RefineContext::new(ws, diag, pack, None);
-    assert_eq!(ctx.research_calls_used, 0);
-    assert_eq!(ctx.revise_rounds_used, 0);
-    assert_eq!(ctx.react_iteration, 0);
-    assert_eq!(ctx.tokens_used, 0);
-    assert!(ctx.finish_reason.is_none());
-}
-
-#[test]
-fn refine_context_recompute_updates_bands_satisfied() {
-    let ws = make_workspace();
-    let style = StyleParams::default();
-    let diag = diagnose_pre_refine(&ws, &style, &[]);
-    let pack = MaterialPack::default();
-    let mut ctx = RefineContext::new(ws, diag, pack, None);
-    // ctx.bands_satisfied starts false (from RefineContext::new).
-    assert!(!ctx.bands_satisfied);
-    // After recompute, bands_satisfied reflects the validation of the
-    // current workspace (a uniform-length draft should not pass all bands).
-    ctx.recompute(&style, &[]);
-    assert_eq!(ctx.bands_satisfied, ctx.diagnosis.validation.passed);
-}
-
-#[test]
-fn strip_task_section_removes_task_heading() {
-    let brief = "## 指标说明\n\nstuff\n\n## 你的任务\n\nDo things.";
-    let stripped = strip_task_section(brief);
-    assert!(stripped.contains("指标说明"));
-    assert!(!stripped.contains("你的任务"));
-}
-
-#[test]
-fn strip_task_section_preserves_when_no_task() {
-    let brief = "## 指标说明\n\nstuff";
-    let stripped = strip_task_section(brief);
-    assert_eq!(stripped, brief);
 }
 
 // ── Phase 4: handler-level unit tests ──────────────────────────────────

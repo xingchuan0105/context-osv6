@@ -208,3 +208,100 @@ impl RefineContext {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::MaterialPack;
+    use heavytail::diagnosis::diagnose_pre_refine;
+    use heavytail::workspace::{DraftWorkspace, ParagraphRecord, RhythmMode, SentenceRecord};
+    use heavytail::workspace::SentenceId;
+
+    fn make_workspace() -> DraftWorkspace {
+        let mut ws = DraftWorkspace::default();
+        ws.sentences = vec![
+            SentenceRecord {
+                id: SentenceId("s01".into()),
+                text: "这是一句长度恰好二十字左右的示例句子。".into(),
+                para: 0,
+                tombstone: false,
+            },
+            SentenceRecord {
+                id: SentenceId("s02".into()),
+                text: "这是另一句差不多长度的中文示例句子。".into(),
+                para: 0,
+                tombstone: false,
+            },
+        ];
+        ws.paragraphs = vec![ParagraphRecord {
+            idx: 0,
+            rhythm: RhythmMode::Mixed,
+        }];
+        ws
+    }
+
+    #[test]
+    fn finish_reason_variants_are_distinct() {
+        assert_ne!(FinishReason::AgentFinish, FinishReason::IterationCap);
+        assert_ne!(FinishReason::TokenCap, FinishReason::ReviseRoundCap);
+    }
+
+    #[test]
+    fn refine_context_new_initializes_counters() {
+        let ws = make_workspace();
+        let style = StyleParams::default();
+        let diag = diagnose_pre_refine(&ws, &style, &[]);
+        let ctx = RefineContext::new(ws, diag, MaterialPack::default(), None);
+        assert_eq!(ctx.research_calls_used, 0);
+        assert_eq!(ctx.revise_rounds_used, 0);
+        assert_eq!(ctx.react_iteration, 0);
+        assert_eq!(ctx.tokens_used, 0);
+        assert!(ctx.finish_reason.is_none());
+    }
+
+    #[test]
+    fn refine_context_recompute_updates_bands_satisfied() {
+        let ws = make_workspace();
+        let style = StyleParams::default();
+        let diag = diagnose_pre_refine(&ws, &style, &[]);
+        let mut ctx = RefineContext::new(ws, diag, MaterialPack::default(), None);
+        assert!(!ctx.bands_satisfied);
+        ctx.recompute(&style, &[]);
+        assert_eq!(ctx.bands_satisfied, ctx.diagnosis.validation.passed);
+    }
+
+    #[test]
+    fn refine_context_checkpoint_writes_artifacts() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let mut ctx = {
+            let ws = make_workspace();
+            let style = StyleParams::default();
+            let diag = diagnose_pre_refine(&ws, &style, &[]);
+            RefineContext::new(ws, diag, MaterialPack::default(), None)
+        };
+        ctx.revise_rounds_used = 2;
+        ctx.research_calls_used = 1;
+        ctx.tokens_used = 1234;
+
+        let mut dir = std::env::temp_dir();
+        dir.push(format!(
+            "heavytail-refine-ckpt-test-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+
+        ctx.checkpoint(&dir).expect("checkpoint writes");
+
+        let context = std::fs::read_to_string(dir.join("refine").join("context.json")).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&context).unwrap();
+        assert_eq!(json["revise_rounds_used"], 2);
+        assert_eq!(json["research_calls_used"], 1);
+        assert_eq!(json["tokens_used"], 1234);
+        assert!(json["workspace"].is_object());
+        assert!(dir.join("refine").join("material_pack.json").is_file());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

@@ -7,11 +7,10 @@
 
 **已落地：**
 
-- `write-core`：`MaterialPack`、refine types、empty-topic / unified-billing / `write:*` 内部 feature 标签契约测试  
-- `app-chat::writer`：编排 + invoker + refine_loop（行为测试仍在此 crate）  
+- `write-core`：`MaterialPack`、refine types、**pure refine helpers**、empty-topic / unified-billing / `write:*` 契约测试  
+- `app-chat::writer`：`run_write_mode`、`SubagentInvoker`、`WriteRefineLoopRunner` + handlers（agent 胶水）；helpers 为 re-export  
 
-**下一步：** 在不改行为的前提下，把 `run_write_mode` / invoker / refine_loop 迁入 `write-core`（或保持编排在 app-chat 仅再抽依赖边界——以测试全绿为准）。
-## 现状锚点（勿先搬）
+**边界（刻意不整包硬搬）：** runner/invoker 依赖 `ChatContext` / `UnifiedAgentService` / `AgentEventSink`；迁入 `write-core` 会反转依赖。下一批再抽 port 或保持胶水在 app-chat。## 现状锚点（勿先搬）
 
 | 区域 | 路径 | 已有测试 |
 |------|------|----------|
