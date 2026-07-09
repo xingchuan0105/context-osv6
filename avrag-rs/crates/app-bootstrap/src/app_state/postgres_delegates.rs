@@ -109,7 +109,22 @@ impl AppState {
         let store: std::sync::Arc<dyn app_core::UsageLimitStorePort> =
             std::sync::Arc::new(crate::adapters::PgUsageLimitStoreAdapter::new(repo));
         let org_id = self.auth().org_id().into_uuid();
-        avrag_billing::handle_create_usage_export(store, org_id, actor_id.into_uuid(), body).await
+        let user_id = actor_id.into_uuid();
+        let response =
+            avrag_billing::handle_create_usage_export(store, org_id, user_id, body).await;
+        if response.ok {
+            if let Some(data) = response.data.as_ref() {
+                tracing::info!(
+                    target: "usage_export",
+                    export_id = %data.export_id,
+                    status = %data.status,
+                    user_id = %user_id,
+                    org_id = %org_id,
+                    "usage export job created"
+                );
+            }
+        }
+        response
     }
 
     pub async fn billing_get_usage_export(
