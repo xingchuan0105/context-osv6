@@ -23,26 +23,18 @@ pub struct AppendChatTurn<'a> {
     pub user_resolved_query: Option<&'a str>,
 }
 
-/// Chat/session persistence boundary — implementations live in storage adapters (PG).
-#[async_trait]
-pub trait ChatPersistencePort: Send + Sync {
-    async fn search_notebooks(
-        &self,
-        auth: &AuthContext,
-        pattern: &str,
-    ) -> Result<Vec<Notebook>, AppError>;
+// ---------------------------------------------------------------------------
+// Focused ports (ISP) — callers should depend on the narrowest trait they need.
+// ---------------------------------------------------------------------------
 
+/// Session CRUD + search.
+#[async_trait]
+pub trait SessionPort: Send + Sync {
     async fn search_sessions(
         &self,
         auth: &AuthContext,
         pattern: &str,
     ) -> Result<Vec<ChatSession>, AppError>;
-
-    async fn search_sources(
-        &self,
-        auth: &AuthContext,
-        pattern: &str,
-    ) -> Result<Vec<SourceRow>, AppError>;
 
     async fn list_sessions(
         &self,
@@ -73,7 +65,11 @@ pub trait ChatPersistencePort: Send + Sync {
     ) -> Result<Option<ChatSession>, AppError>;
 
     async fn delete_session(&self, auth: &AuthContext, session_id: Uuid) -> Result<bool, AppError>;
+}
 
+/// Message list/get + append turn + conversation history search.
+#[async_trait]
+pub trait MessagePort: Send + Sync {
     async fn list_messages(
         &self,
         auth: &AuthContext,
@@ -94,18 +90,6 @@ pub trait ChatPersistencePort: Send + Sync {
         turn: AppendChatTurn<'_>,
     ) -> Result<i64, AppError>;
 
-    async fn get_notebook(
-        &self,
-        auth: &AuthContext,
-        notebook_id: Uuid,
-    ) -> Result<Option<Notebook>, AppError>;
-
-    async fn get_user_profile(
-        &self,
-        auth: &AuthContext,
-        user_id: Uuid,
-    ) -> Result<Option<UserProfileRow>, AppError>;
-
     async fn search_conversation_history(
         &self,
         auth: &AuthContext,
@@ -115,7 +99,77 @@ pub trait ChatPersistencePort: Send + Sync {
         limit: i64,
         exclude_message_ids: &[i64],
     ) -> Result<Vec<ConversationHistoryHit>, AppError>;
+}
 
+/// Notebook / source catalog lookups used by chat UX.
+#[async_trait]
+pub trait ChatCatalogPort: Send + Sync {
+    async fn search_notebooks(
+        &self,
+        auth: &AuthContext,
+        pattern: &str,
+    ) -> Result<Vec<Notebook>, AppError>;
+
+    async fn search_sources(
+        &self,
+        auth: &AuthContext,
+        pattern: &str,
+    ) -> Result<Vec<SourceRow>, AppError>;
+
+    async fn get_notebook(
+        &self,
+        auth: &AuthContext,
+        notebook_id: Uuid,
+    ) -> Result<Option<Notebook>, AppError>;
+}
+
+/// Long-term user profile load/store.
+#[async_trait]
+pub trait ProfilePort: Send + Sync {
+    async fn get_user_profile(
+        &self,
+        auth: &AuthContext,
+        user_id: Uuid,
+    ) -> Result<Option<UserProfileRow>, AppError>;
+
+    async fn upsert_user_profile(
+        &self,
+        auth: &AuthContext,
+        profile: &UserProfileRow,
+    ) -> Result<(), AppError>;
+}
+
+/// Document assets / multimodal chunks / text chunks / summary metadata.
+#[async_trait]
+pub trait ChatContentPort: Send + Sync {
+    async fn get_document_asset_by_id(
+        &self,
+        auth: &AuthContext,
+        asset_id: Uuid,
+    ) -> Result<Option<DocumentAssetRow>, AppError>;
+
+    async fn get_multimodal_chunk_by_id(
+        &self,
+        auth: &AuthContext,
+        chunk_id: Uuid,
+    ) -> Result<Option<MultimodalChunkRow>, AppError>;
+
+    async fn get_chunk_by_id(
+        &self,
+        auth: &AuthContext,
+        chunk_id: Uuid,
+    ) -> Result<Option<common::IndexedChunk>, AppError>;
+
+    async fn get_summary_metadata(
+        &self,
+        auth: &AuthContext,
+        doc_ids: &[Uuid],
+    ) -> Result<Vec<common::SummaryMetadata>, AppError>;
+}
+
+/// Notifications, usage metering, audit append.
+#[async_trait]
+pub trait ChatSideEffectPort: Send + Sync {
     async fn create_notification(
         &self,
         auth: &AuthContext,
@@ -130,35 +184,29 @@ pub trait ChatPersistencePort: Send + Sync {
         source: &str,
     ) -> Result<(), AppError>;
 
-    async fn get_document_asset_by_id(
-        &self,
-        auth: &AuthContext,
-        asset_id: Uuid,
-    ) -> Result<Option<DocumentAssetRow>, AppError>;
-
-    async fn get_multimodal_chunk_by_id(
-        &self,
-        auth: &AuthContext,
-        chunk_id: Uuid,
-    ) -> Result<Option<MultimodalChunkRow>, AppError>;
-
     async fn append_audit_record(&self, record: &AuditRecord) -> Result<(), AppError>;
+}
 
-    async fn get_chunk_by_id(
-        &self,
-        auth: &AuthContext,
-        chunk_id: Uuid,
-    ) -> Result<Option<common::IndexedChunk>, AppError>;
+/// Full chat persistence surface — supertrait for bootstrap wiring.
+///
+/// Prefer depending on a focused port (`SessionPort`, `MessagePort`, …) at call
+/// sites. Keep `Arc<dyn ChatPersistencePort>` only where many facets are needed.
+pub trait ChatPersistencePort:
+    SessionPort
+    + MessagePort
+    + ChatCatalogPort
+    + ProfilePort
+    + ChatContentPort
+    + ChatSideEffectPort
+{
+}
 
-    async fn get_summary_metadata(
-        &self,
-        auth: &AuthContext,
-        doc_ids: &[Uuid],
-    ) -> Result<Vec<common::SummaryMetadata>, AppError>;
-
-    async fn upsert_user_profile(
-        &self,
-        auth: &AuthContext,
-        profile: &UserProfileRow,
-    ) -> Result<(), AppError>;
+impl<T> ChatPersistencePort for T where
+    T: SessionPort
+        + MessagePort
+        + ChatCatalogPort
+        + ProfilePort
+        + ChatContentPort
+        + ChatSideEffectPort
+{
 }

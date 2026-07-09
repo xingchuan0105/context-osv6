@@ -6,14 +6,17 @@ use crate::domain_row_convert::{
 };
 use crate::pg_error::map_pg_error;
 use app_core::{
-    chat_persistence::{AppendChatTurn, ChatPersistencePort},
+    chat_persistence::{
+        AppendChatTurn, ChatCatalogPort, ChatContentPort, ChatSideEffectPort, MessagePort,
+        ProfilePort, SessionPort,
+    },
     domain_rows::{
         ConversationHistoryHit, ConversationHistoryScope, DocumentAssetRow, IndexedChunk,
         MultimodalChunkRow, NotificationCreateParams, UserProfileRow,
     },
 };
 use async_trait::async_trait;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_storage_pg::{ChatTurn, PgAppRepository};
 use common::{AppError, SourceRow};
 use contracts::chat::ChatMessage;
@@ -32,19 +35,7 @@ impl PgChatPersistenceAdapter {
 }
 
 #[async_trait]
-impl ChatPersistencePort for PgChatPersistenceAdapter {
-    async fn search_notebooks(
-        &self,
-        auth: &AuthContext,
-        pattern: &str,
-    ) -> Result<Vec<Notebook>, AppError> {
-        self.repo
-            .chunks()
-            .search_notebooks(auth, pattern)
-            .await
-            .map_err(map_pg_error)
-    }
-
+impl SessionPort for PgChatPersistenceAdapter {
     async fn search_sessions(
         &self,
         auth: &AuthContext,
@@ -53,18 +44,6 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
         self.repo
             .chunks()
             .search_sessions(auth, pattern)
-            .await
-            .map_err(map_pg_error)
-    }
-
-    async fn search_sources(
-        &self,
-        auth: &AuthContext,
-        pattern: &str,
-    ) -> Result<Vec<SourceRow>, AppError> {
-        self.repo
-            .chunks()
-            .search_sources(auth, pattern)
             .await
             .map_err(map_pg_error)
     }
@@ -129,6 +108,10 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
             .map_err(map_pg_error)
     }
 
+}
+
+#[async_trait]
+impl MessagePort for PgChatPersistenceAdapter {
     async fn list_messages(
         &self,
         auth: &AuthContext,
@@ -179,31 +162,6 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
             .map_err(map_pg_error)
     }
 
-    async fn get_notebook(
-        &self,
-        auth: &AuthContext,
-        notebook_id: Uuid,
-    ) -> Result<Option<Notebook>, AppError> {
-        self.repo
-            .bootstrap()
-            .get_notebook(auth, notebook_id)
-            .await
-            .map_err(map_pg_error)
-    }
-
-    async fn get_user_profile(
-        &self,
-        auth: &AuthContext,
-        user_id: Uuid,
-    ) -> Result<Option<UserProfileRow>, AppError> {
-        self.repo
-            .auth()
-            .get_user_profile(auth, user_id)
-            .await
-            .map_err(map_pg_error)
-            .map(|profile| profile.map(user_profile_row))
-    }
-
     async fn search_conversation_history(
         &self,
         auth: &AuthContext,
@@ -236,33 +194,79 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
             .map(|rows| rows.into_iter().map(conversation_history_hit).collect())
     }
 
-    async fn create_notification(
+}
+
+#[async_trait]
+impl ChatCatalogPort for PgChatPersistenceAdapter {
+    async fn search_notebooks(
         &self,
         auth: &AuthContext,
-        params: NotificationCreateParams,
+        pattern: &str,
+    ) -> Result<Vec<Notebook>, AppError> {
+        self.repo
+            .chunks()
+            .search_notebooks(auth, pattern)
+            .await
+            .map_err(map_pg_error)
+    }
+
+    async fn search_sources(
+        &self,
+        auth: &AuthContext,
+        pattern: &str,
+    ) -> Result<Vec<SourceRow>, AppError> {
+        self.repo
+            .chunks()
+            .search_sources(auth, pattern)
+            .await
+            .map_err(map_pg_error)
+    }
+
+    async fn get_notebook(
+        &self,
+        auth: &AuthContext,
+        notebook_id: Uuid,
+    ) -> Result<Option<Notebook>, AppError> {
+        self.repo
+            .bootstrap()
+            .get_notebook(auth, notebook_id)
+            .await
+            .map_err(map_pg_error)
+    }
+
+}
+
+#[async_trait]
+impl ProfilePort for PgChatPersistenceAdapter {
+    async fn get_user_profile(
+        &self,
+        auth: &AuthContext,
+        user_id: Uuid,
+    ) -> Result<Option<UserProfileRow>, AppError> {
+        self.repo
+            .auth()
+            .get_user_profile(auth, user_id)
+            .await
+            .map_err(map_pg_error)
+            .map(|profile| profile.map(user_profile_row))
+    }
+
+    async fn upsert_user_profile(
+        &self,
+        auth: &AuthContext,
+        profile: &UserProfileRow,
     ) -> Result<(), AppError> {
         self.repo
             .auth()
-            .create_notification(auth, notification_create_params(params))
-            .await
-            .map(|_| ())
-            .map_err(map_pg_error)
-    }
-
-    async fn record_usage_event(
-        &self,
-        auth: &AuthContext,
-        metric_type: &str,
-        quantity: i64,
-        source: &str,
-    ) -> Result<(), AppError> {
-        self.repo
-            .sessions()
-            .record_usage_event(auth, metric_type, quantity, source)
+            .upsert_user_profile(auth, &user_profile_row_to_pg(profile))
             .await
             .map_err(map_pg_error)
     }
 
+}
+
+#[async_trait]
+impl ChatContentPort for PgChatPersistenceAdapter {
     async fn get_document_asset_by_id(
         &self,
         auth: &AuthContext,
@@ -287,14 +291,6 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
             .await
             .map_err(map_pg_error)
             .map(|chunk| chunk.map(multimodal_chunk_row))
-    }
-
-    async fn append_audit_record(&self, record: &AuditRecord) -> Result<(), AppError> {
-        self.repo
-            .audit()
-            .append_audit_record(record)
-            .await
-            .map_err(map_pg_error)
     }
 
     async fn get_chunk_by_id(
@@ -322,15 +318,44 @@ impl ChatPersistencePort for PgChatPersistenceAdapter {
             .map_err(map_pg_error)
     }
 
-    async fn upsert_user_profile(
+}
+
+#[async_trait]
+impl ChatSideEffectPort for PgChatPersistenceAdapter {
+    async fn create_notification(
         &self,
         auth: &AuthContext,
-        profile: &UserProfileRow,
+        params: NotificationCreateParams,
     ) -> Result<(), AppError> {
         self.repo
             .auth()
-            .upsert_user_profile(auth, &user_profile_row_to_pg(profile))
+            .create_notification(auth, notification_create_params(params))
+            .await
+            .map(|_| ())
+            .map_err(map_pg_error)
+    }
+
+    async fn record_usage_event(
+        &self,
+        auth: &AuthContext,
+        metric_type: &str,
+        quantity: i64,
+        source: &str,
+    ) -> Result<(), AppError> {
+        self.repo
+            .sessions()
+            .record_usage_event(auth, metric_type, quantity, source)
             .await
             .map_err(map_pg_error)
     }
+
+    async fn append_audit_record(&self, record: &AuditRecord) -> Result<(), AppError> {
+        self.repo
+            .audit()
+            .append_audit_record(record)
+            .await
+            .map_err(map_pg_error)
+    }
+
 }
+
