@@ -38,6 +38,12 @@ impl PgUsageObserver {
         self
     }
 
+    /// Test/diagnostics: whether recorded rows count toward user rolling quotas.
+    #[cfg(test)]
+    pub(crate) fn is_billable(&self) -> bool {
+        self.billable
+    }
+
     /// Map free-text feature tags set by `LlmClient::with_feature` to billable buckets.
     ///
     /// Prefer **exact / prefix** matches over substring `contains`, so tags like
@@ -216,6 +222,11 @@ impl TaskTenantUsageObserver {
     pub fn tenant_handle(&self) -> Arc<RwLock<TenantContext>> {
         self.tenant.clone()
     }
+
+    #[cfg(test)]
+    pub(crate) fn records_billable(&self) -> bool {
+        self.inner.is_billable()
+    }
 }
 
 #[async_trait]
@@ -234,6 +245,16 @@ impl UsageObserver for TaskTenantUsageObserver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use app_core::{
+        MeteringContext, UsageLimitOverrideRow, UsageLimitPlanPolicyRow, UsageLimitStorePort,
+        UsageLimitUsageRecord,
+    };
+    use async_trait::async_trait;
+    use chrono::{DateTime, Utc};
+    use common::AppError;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use uuid::Uuid;
 
     #[test]
     fn map_feature_is_deterministic_for_known_tags() {
@@ -265,6 +286,102 @@ mod tests {
         assert_eq!(
             PgUsageObserver::map_feature("agent_loop"),
             BillableFeature::Chat
+        );
+    }
+
+    struct StubUsageLimitStore;
+
+    #[async_trait]
+    impl UsageLimitStorePort for StubUsageLimitStore {
+        async fn insert_llm_usage_event(
+            &self,
+            _ctx: &MeteringContext,
+            _record: UsageLimitUsageRecord<'_>,
+        ) -> Result<i64, AppError> {
+            Ok(0)
+        }
+
+        async fn load_user_override(
+            &self,
+            _user_id: Uuid,
+        ) -> Result<Option<UsageLimitOverrideRow>, AppError> {
+            Ok(None)
+        }
+
+        async fn get_user_plan(&self, _user_id: Uuid) -> Result<String, AppError> {
+            Ok("free".into())
+        }
+
+        async fn load_plan_policy(
+            &self,
+            _plan_id: &str,
+        ) -> Result<Option<UsageLimitPlanPolicyRow>, AppError> {
+            Ok(None)
+        }
+
+        async fn sum_usage_units_since(
+            &self,
+            _user_id: Uuid,
+            _since: DateTime<Utc>,
+        ) -> Result<i64, AppError> {
+            Ok(0)
+        }
+
+        async fn oldest_usage_event_since(
+            &self,
+            _user_id: Uuid,
+            _since: DateTime<Utc>,
+        ) -> Result<Option<DateTime<Utc>>, AppError> {
+            Ok(None)
+        }
+
+        async fn load_usage_breakdown(
+            &self,
+            _user_id: Uuid,
+            _since: DateTime<Utc>,
+        ) -> Result<HashMap<String, i64>, AppError> {
+            Ok(HashMap::new())
+        }
+
+        async fn load_model_rates(
+            &self,
+            _provider: &str,
+            _model: &str,
+        ) -> Result<(f64, f64), AppError> {
+            Ok((1.0, 2.0))
+        }
+
+        async fn has_user_override(&self, _user_id: Uuid) -> Result<bool, AppError> {
+            Ok(false)
+        }
+
+        async fn has_estimated_usage(&self, _user_id: Uuid) -> Result<bool, AppError> {
+            Ok(false)
+        }
+    }
+
+    #[test]
+    fn default_observer_is_billable() {
+        let observer = PgUsageObserver::new(Arc::new(StubUsageLimitStore));
+        assert!(observer.is_billable());
+    }
+
+    #[test]
+    fn with_billable_false_marks_non_customer_rows() {
+        let observer = PgUsageObserver::new(Arc::new(StubUsageLimitStore)).with_billable(false);
+        assert!(!observer.is_billable());
+    }
+
+    #[test]
+    fn task_tenant_observer_is_non_billable_for_worker_path() {
+        let tenant = TenantContext {
+            org_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+        };
+        let observer = TaskTenantUsageObserver::new(Arc::new(StubUsageLimitStore), tenant);
+        assert!(
+            !observer.records_billable(),
+            "ADR 0006 §7: worker metering must not count toward user rolling quotas"
         );
     }
 }

@@ -29,7 +29,7 @@ See also [`product-e2e-plan.md`](product-e2e-plan.md).
 
 **Escalation into merge gate** (optional, PR-scoped): changes touching LLM protocol, billing/quota core, or auth may require the related integration / real-LLM subset before merge.
 
-**Nightly ownership**: failures on scheduled workflows require claim by the on-call/product rotation (do not leave red nightlies unowned).
+**Nightly ownership**: failures on scheduled workflows require claim within **1 business day** by the on-call/product rotation (do not leave red nightlies unowned). Until a named rota exists, default owner is the **last merger to the failing surface** (billing/quota → billing owners; LLM protocol → agent/rag owners; frontend → web owners).
 
 ## Layer overview
 

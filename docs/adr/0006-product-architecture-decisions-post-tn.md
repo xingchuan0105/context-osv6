@@ -218,14 +218,14 @@ Thermo-Nuclear 结构债主路径（C1–C3 / H1–H3 / 长尾）落地后，剩
 
 ### 实现 backlog（由本 ADR + 已接受评审派生）
 
-1. 软限 + 滥用 hard-cap 规格与代码  
-2. Worker 非 billable 计量过滤 + 测试  
-3. Write 入口用量提示文案  
-4. Desktop 版本线文档完善 + SLA 响应数字（基于 `docs/desktop/SUPPORT-AND-SLA.md`）  
-5. CI merge gate / nightly 分流 + nightly 认领机制  
-6. Write+heavytail crate 拆分（**测试先行**）  
-7. Execute-plan 运行时删除清单与日期  
-8. 用量导出 API + 1 年保留 / 删号级联规格  
+1. ~~软限 + 滥用 hard-cap 规格与代码~~ ✅ `feat/adr-0006-metering-and-write-copy`  
+2. ~~Worker 非 billable 计量过滤 + 测试~~ ✅ migration `0052` + observer tests  
+3. ~~Write 入口用量提示文案~~ ✅ frontend Write mode + usage hint  
+4. ~~Desktop 版本线文档完善 + SLA 响应数字~~ ✅ `docs/desktop/SUPPORT-AND-SLA.md` + `VERSIONING.md`  
+5. ~~CI merge gate / nightly 分流~~ ✅ `avrag-rs/docs/e2e-gates.md`（认领轮值可运营侧再填人）  
+6. Write+heavytail crate 拆分（**测试先行**）— 未开始  
+7. ~~Execute-plan 运行时删除清单与日期~~ ✅ `docs/adr/0006-execute-plan-removal-inventory.md`（目标 2026-09-30）  
+8. ~~用量导出 / 1 年保留规格草案~~ ✅ `docs/specs/usage-export-and-retention.md`（API 实现另开）
 
 ---
 
@@ -251,6 +251,7 @@ Thermo-Nuclear 结构债主路径（C1–C3 / H1–H3 / 长尾）落地后，剩
 | 2026-07-09 | 初稿：12 项决策 |
 | 2026-07-09 | 终裁 #3 / #9 / #11；写入评审初稿 |
 | 2026-07-09 | **产品同意评审结论**；张力项升格为 Accepted addenda |
+| 2026-07-09 | 实现进度：#1–#5/#7/#8 文档与代码落地；#6 Write crate 拆分仍待 |
 
 ---
 
