@@ -17,6 +17,9 @@ pub mod compiler;
 pub mod refine;
 pub mod validator;
 pub mod experiment;
+pub mod diagnosis;
+pub mod persona;
+pub mod lexical_apply;
 
 /// Carried from v1 spec unchanged (spec §12).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

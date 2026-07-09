@@ -1,0 +1,29 @@
+mode: write_refine
+system_prompt_base: prompts/orchestrators/write-refine-system.md
+tool_pool:
+  - write_refine_revise
+  - write_refine_lexical
+  - write_refine_research
+  - write_refine_finish
+skill_catalog:
+  retrieve:
+    - heavytail-metrics
+    - heavytail-priming
+    - heavytail-refine
+  synthesis: []
+  mandatory:
+    retrieve:
+      - heavytail-metrics
+budget:
+  max_iterations: 6
+  by_user_tier:
+    free: 5
+    pro: 6
+    enterprise: 6
+temperature: 0.4
+synthesis_output:
+  contract: prose_only
+loop_exit:
+  require_evidence: false
+  allow_content_early_stop: true
+  skip_synthesis_on_direct_answer: true

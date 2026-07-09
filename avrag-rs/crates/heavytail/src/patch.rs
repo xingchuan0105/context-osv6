@@ -17,6 +17,15 @@ pub struct AllowSet {
 }
 
 impl AllowSet {
+    /// Allow every currently live sentence id (WriteRefine revise patches).
+    pub fn all_live(workspace: &DraftWorkspace) -> Self {
+        let mut allow = Self::default();
+        for s in workspace.live() {
+            allow.replace.insert(s.id.clone());
+        }
+        allow
+    }
+
     fn allows(&self, id: &SentenceId) -> bool {
         if self.replace.contains(id) {
             return true;

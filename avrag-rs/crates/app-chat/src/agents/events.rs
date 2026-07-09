@@ -56,6 +56,12 @@ pub enum AgentEvent {
         #[serde(default, skip_serializing_if = "String::is_empty")]
         reasoning: String,
     },
+    /// Model requested a tool invocation (white-box observability).
+    ToolCall {
+        tool: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        args: Option<serde_json::Value>,
+    },
     /// Tool execution result (white-box observability).
     ToolResult {
         tool: String,

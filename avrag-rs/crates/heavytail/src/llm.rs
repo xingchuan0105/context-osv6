@@ -17,6 +17,13 @@ impl WriterLlm {
         })
     }
 
+    /// Wrap an existing client (tests / orchestrator).
+    pub fn from_client(client: LlmClient) -> Self {
+        Self {
+            client: client.with_feature("heavytail_writer"),
+        }
+    }
+
     /// Tag LLM calls for metering (`ChatUsageRecord.feature` in `crates/llm/src/usage_observer.rs`).
     pub fn with_phase(&self, phase: &str) -> Self {
         Self {
@@ -32,6 +39,22 @@ impl WriterLlm {
             .await
             .context("writer prose completion failed")?;
         Ok((response.content, response.usage.total_tokens))
+    }
+
+    /// Tool-calling completion for WriteRefine ReAct rounds.
+    pub async fn complete_with_tools(
+        &self,
+        messages: &[ChatMessage],
+        tools: &[contracts::ToolSpec],
+        temperature: f32,
+    ) -> Result<(avrag_llm::LlmResponse, u32)> {
+        let response = self
+            .client
+            .complete_with_tools(messages, tools, Some(temperature))
+            .await
+            .context("writer tool completion failed")?;
+        let tokens = response.usage.total_tokens;
+        Ok((response, tokens))
     }
 
     /// `complete_json_mode` with one reparse-retry: on parse failure the error is appended

@@ -216,6 +216,15 @@ impl SseSink {
                     "reasoning": reasoning,
                 })),
             },
+            AgentEvent::ToolCall { tool, args } => ChatEvent::Trace {
+                request_id: self.request_id.clone(),
+                stage: format!("tool_call.{}", tool),
+                status: "ok".to_string(),
+                detail: Some(serde_json::json!({
+                    "tool": tool,
+                    "args": args,
+                })),
+            },
             AgentEvent::ToolResult {
                 tool,
                 status,
