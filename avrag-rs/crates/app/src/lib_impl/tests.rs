@@ -643,7 +643,9 @@ mod tests {
                 infra: crate::storage_context::StorageInfra {
                     postgres_health,
                     postgres_configured: true,
-                    uses_memory_adapters: StorageInfra::memory_adapters_flag(false),
+                    uses_memory_adapters: crate::storage_context::StorageInfra::memory_adapters_flag(
+                        false,
+                    ),
                     max_upload_file_size_bytes: max_upload,
                 },
                 stores: crate::storage_context::StorageStores {
