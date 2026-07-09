@@ -8,7 +8,8 @@ set -e
 
 PLATFORM=${1:-all}
 
-echo "=== AVRag Desktop Build Script ==="
+# Build with optional embedded Keygen public key for offline license verification:
+#   KEYGEN_PUBLIC_KEY=<ed25519-public-key> ./scripts/build-desktop.sh linux
 echo "Platform: $PLATFORM"
 echo ""
 

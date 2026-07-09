@@ -26,6 +26,14 @@ tracing = "0.1"
 common = { path = "../../avrag-rs/crates/common" }
 contracts = { path = "../../contracts" }
 storage-local = { path = "../../avrag-rs/crates/storage-local" }
+avrag-llm = { path = "../../avrag-rs/crates/llm" }
+keygen-rs = "0.6"
+machineid-rs = "1.2"
+ed25519-dalek = "2"
+tauri-plugin-deep-link = "2"
+base64 = "0.22"
+url = "2"
+reqwest = { version = "0.13.4", features = ["json"] }
 
 [features]
 default = ["custom-protocol"]

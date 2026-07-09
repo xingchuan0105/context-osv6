@@ -1,0 +1,73 @@
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Context OS Pro subscription product">
+  <defs>
+    <linearGradient id="proGlow" x1="1920" y1="0" x2="0" y2="1080" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C4A1FF" stop-opacity="0.22"/>
+      <stop offset="0.55" stop-color="#F5B942" stop-opacity="0.1"/>
+      <stop offset="1" stop-color="#C4A1FF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="proAccent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#F5B942"/>
+      <stop offset="1" stop-color="#C4A1FF"/>
+    </linearGradient>
+    <filter id="proShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#000000" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <rect width="1920" height="1080" fill="#0F1117"/>
+  <rect width="1920" height="1080" fill="url(#proGlow)"/>
+  <circle cx="1700" cy="860" r="280" fill="#C4A1FF" fill-opacity="0.08"/>
+  <circle cx="240" cy="200" r="220" fill="#F5B942" fill-opacity="0.07"/>
+
+  <g filter="url(#proShadow)">
+    <rect x="80" y="80" width="1760" height="920" rx="40" fill="#141821" stroke="white" stroke-opacity="0.12" stroke-width="2"/>
+  </g>
+
+  <!-- Left column: brand + price -->
+  <g transform="translate(160 160)">
+    <g transform="scale(1.35)">
+      <rect width="76" height="76" rx="18" fill="#0F1117"/>
+      <rect x="0.75" y="0.75" width="74.5" height="74.5" rx="17.25" stroke="white" stroke-opacity="0.14" stroke-width="1.5"/>
+      <path d="M34 16C26.82 16 21 21.82 21 29V47C21 54.18 26.82 60 34 60" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4"/>
+      <path d="M42 16C49.18 16 55 21.82 55 29V47C55 54.18 49.18 60 42 60" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4"/>
+      <path d="M38 17.5V58.5" stroke="white" stroke-linecap="round" stroke-width="2.2"/>
+      <path d="M29.5 31.5H38" stroke="white" stroke-linecap="round" stroke-width="2"/>
+      <path d="M38 25.5H45" stroke="white" stroke-linecap="round" stroke-width="2"/>
+      <path d="M38 44.5H47" stroke="white" stroke-linecap="round" stroke-width="2"/>
+      <path d="M38 52H45" stroke="white" stroke-linecap="round" stroke-width="2"/>
+      <path d="M29.5 34.1C30.936 34.1 32.1 32.936 32.1 31.5C32.1 30.064 30.936 28.9 29.5 28.9C28.064 28.9 26.9 30.064 26.9 31.5C26.9 32.936 28.064 34.1 29.5 34.1Z" fill="white"/>
+      <path d="M45 28.1C46.436 28.1 47.6 26.936 47.6 25.5C47.6 24.064 46.436 22.9 45 22.9C43.564 22.9 42.4 24.064 42.4 25.5C42.4 26.936 43.564 28.1 45 28.1Z" fill="white"/>
+      <path d="M47 47.1C48.436 47.1 49.6 45.936 49.6 44.5C49.6 43.064 48.436 41.9 47 41.9C45.564 41.9 44.4 43.064 44.4 44.5C44.4 45.936 45.564 47.1 47 47.1Z" fill="white"/>
+      <path d="M45 54.3C46.27 54.3 47.3 53.27 47.3 52C47.3 50.73 46.27 49.7 45 49.7C43.73 49.7 42.7 50.73 42.7 52C42.7 53.27 43.73 54.3 45 54.3Z" fill="white"/>
+    </g>
+
+    <text x="0" y="160" fill="white" fill-opacity="0.72" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="26" font-weight="500" letter-spacing="0.14em">CONTEXT OS</text>
+
+    <rect x="0" y="188" width="136" height="42" rx="21" fill="url(#proAccent)" fill-opacity="0.18" stroke="url(#proAccent)" stroke-width="1.5"/>
+    <text x="68" y="216" text-anchor="middle" fill="#F3D899" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="22" font-weight="700" letter-spacing="0.08em">PRO</text>
+
+    <text x="0" y="360" fill="white" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="120" font-weight="700">$5.99</text>
+    <text x="0" y="418" fill="white" fill-opacity="0.62" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="28" font-weight="500">per month - billed monthly</text>
+
+    <text x="0" y="510" fill="white" fill-opacity="0.88" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="32" font-weight="600">For heavier workloads and power users</text>
+  </g>
+
+  <!-- Right column: features -->
+  <rect x="980" y="180" width="2" height="720" fill="white" fill-opacity="0.1"/>
+
+  <g font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" fill="white">
+    <text x="1040" y="280" font-size="34" font-weight="700" fill-opacity="0.92">What's included</text>
+
+    <circle cx="1060" cy="370" r="8" fill="#F5B942"/>
+    <text x="1088" y="378" font-size="30" fill-opacity="0.84">2.5M tokens per 5-hour window</text>
+
+    <circle cx="1060" cy="460" r="8" fill="#F5B942"/>
+    <text x="1088" y="468" font-size="30" fill-opacity="0.84">15M tokens per 7-day window</text>
+
+    <circle cx="1060" cy="550" r="8" fill="#F5B942"/>
+    <text x="1088" y="558" font-size="30" fill-opacity="0.84">Expanded quota for intensive research</text>
+
+    <rect x="1040" y="640" width="640" height="1" fill="white" fill-opacity="0.12"/>
+    <text x="1040" y="710" font-size="24" fill-opacity="0.48" font-weight="500">Knowledge workspace subscription - Cancel anytime</text>
+  </g>
+</svg>
