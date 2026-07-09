@@ -109,9 +109,9 @@ impl AppState {
         self.chat.orchestrator = self.orchestrator.clone();
     }
 
-    pub fn set_uses_memory_adapters(&mut self, value: bool) {
+    pub fn set_uses_memory_adapters(&self, value: bool) {
+        // Flag is Arc-shared across StorageContext clones (AppState + ChatContext).
         self.storage.set_uses_memory_adapters(value);
-        self.chat.storage = self.storage.clone();
     }
 
     pub fn llm_ctx(&self) -> &app_chat::LlmContext {

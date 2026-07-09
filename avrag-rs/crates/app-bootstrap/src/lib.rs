@@ -139,7 +139,7 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         infra: StorageInfra {
             postgres_health: None,
             postgres_configured: false,
-            uses_memory_adapters: true,
+            uses_memory_adapters: StorageInfra::memory_adapters_flag(true),
             max_upload_file_size_bytes: config.max_upload_file_size_bytes,
         },
         stores: StorageStores {
@@ -367,7 +367,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         infra: StorageInfra {
             postgres_health,
             postgres_configured: pg.is_some(),
-            uses_memory_adapters,
+            uses_memory_adapters: StorageInfra::memory_adapters_flag(uses_memory_adapters),
             max_upload_file_size_bytes: config.max_upload_file_size_bytes,
         },
         stores: StorageStores {

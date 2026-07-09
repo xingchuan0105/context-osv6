@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use common::{ApiKeyRow, AppError};
@@ -37,13 +38,22 @@ pub struct StorageStores {
 pub struct StorageInfra {
     pub postgres_health: Option<Arc<dyn PostgresHealthPort>>,
     pub postgres_configured: bool,
-    pub uses_memory_adapters: bool,
+    /// Shared across StorageContext clones (AppState + ChatContext) so flag updates stay coherent.
+    pub uses_memory_adapters: Arc<AtomicBool>,
     pub max_upload_file_size_bytes: u64,
 }
 
 impl StorageInfra {
-    pub fn set_uses_memory_adapters(&mut self, value: bool) {
-        self.uses_memory_adapters = value;
+    pub fn memory_adapters_flag(value: bool) -> Arc<AtomicBool> {
+        Arc::new(AtomicBool::new(value))
+    }
+
+    pub fn uses_memory_adapters(&self) -> bool {
+        self.uses_memory_adapters.load(Ordering::Relaxed)
+    }
+
+    pub fn set_uses_memory_adapters(&self, value: bool) {
+        self.uses_memory_adapters.store(value, Ordering::Relaxed);
     }
 }
 
@@ -219,7 +229,7 @@ impl StorageContext {
         if !self.infra.postgres_configured {
             return "memory";
         }
-        if self.stores.document_store.is_some() && !self.infra.uses_memory_adapters {
+        if self.stores.document_store.is_some() && !self.infra.uses_memory_adapters() {
             "postgres"
         } else {
             "postgres_degraded"
@@ -231,10 +241,10 @@ impl StorageContext {
     }
 
     pub fn uses_memory_adapters(&self) -> bool {
-        self.infra.uses_memory_adapters
+        self.infra.uses_memory_adapters()
     }
 
-    pub fn set_uses_memory_adapters(&mut self, value: bool) {
+    pub fn set_uses_memory_adapters(&self, value: bool) {
         self.infra.set_uses_memory_adapters(value);
     }
 

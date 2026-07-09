@@ -95,7 +95,7 @@ mod tests {
                 infra: StorageInfra {
                     postgres_health: None,
                     postgres_configured: false,
-                    uses_memory_adapters: true,
+                    uses_memory_adapters: StorageInfra::memory_adapters_flag(true),
                     max_upload_file_size_bytes: 10 * 1024 * 1024,
                 },
                 stores: StorageStores {
