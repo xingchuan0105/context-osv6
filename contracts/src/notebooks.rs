@@ -26,12 +26,16 @@ pub struct Notebook {
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookListResponse {
+    /// Product wire name is `workspaces` (legacy clients may send/read `notebooks`).
+    #[serde(rename = "workspaces", alias = "notebooks")]
     pub notebooks: Vec<Notebook>,
 }
 
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookResponse {
+    /// Product wire name is `workspace` (legacy clients may send/read `notebook`).
+    #[serde(rename = "workspace", alias = "notebook")]
     pub notebook: Notebook,
 }
 

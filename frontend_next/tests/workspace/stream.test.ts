@@ -247,7 +247,7 @@ describe("workspace chat stream transport", () => {
   it("posts the chat request to /api/v1/chat and streams the response", async () => {
     const requestBody: ChatRequest = {
       query: "Explain the plan",
-      notebook_id: "ws-1",
+      workspace_id: "ws-1",
       session_id: "sess-1",
       agent_type: "rag",
       source_type: "docs",
@@ -293,7 +293,7 @@ describe("workspace chat stream transport", () => {
     expect(headers.get("Content-Type")).toBe("application/json");
     expect(JSON.parse(String(init.body))).toEqual({
       query: "Explain the plan",
-      notebook_id: "ws-1",
+      workspace_id: "ws-1",
       session_id: "sess-1",
       agent_type: "rag",
       source_type: "docs",

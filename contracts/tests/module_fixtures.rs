@@ -2,7 +2,7 @@ use contracts::{HealthResponse, NotebookListResponse, PlansResponse};
 
 #[test]
 fn notebook_list_minimal_fixture_roundtrips() {
-    let json = serde_json::json!({
+    let legacy = serde_json::json!({
         "notebooks": [{
             "id": "nb-1",
             "org_id": "org-1",
@@ -19,12 +19,35 @@ fn notebook_list_minimal_fixture_roundtrips() {
     });
 
     let parsed: NotebookListResponse =
-        serde_json::from_value(json.clone()).expect("notebook list should deserialize");
+        serde_json::from_value(legacy).expect("legacy notebooks key should deserialize");
     assert_eq!(parsed.notebooks.len(), 1);
     assert_eq!(parsed.notebooks[0].name, "demo");
 
     let serialized = serde_json::to_value(parsed).expect("notebook list should serialize");
-    assert_eq!(serialized, json);
+    assert!(
+        serialized.get("workspaces").is_some(),
+        "product wire key is workspaces"
+    );
+    assert!(serialized.get("notebooks").is_none());
+
+    let product = serde_json::json!({
+        "workspaces": [{
+            "id": "nb-1",
+            "org_id": "org-1",
+            "owner_id": "user-1",
+            "name": "demo",
+            "title": "Demo",
+            "description": "",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "document_count": 0,
+            "status_summary": {},
+            "shared": false
+        }]
+    });
+    let parsed2: NotebookListResponse =
+        serde_json::from_value(product).expect("workspaces key should deserialize");
+    assert_eq!(parsed2.notebooks[0].id, "nb-1");
 }
 
 #[test]

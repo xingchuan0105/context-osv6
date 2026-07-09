@@ -34,11 +34,13 @@ export type UpdateWorkspaceRequest = {
 };
 
 type RawNotebookListResponse = {
-  notebooks: RawNotebook[];
+  workspaces?: RawNotebook[];
+  notebooks?: RawNotebook[];
 };
 
 type RawNotebookResponse = {
-  notebook: RawNotebook;
+  workspace?: RawNotebook;
+  notebook?: RawNotebook;
 };
 
 type EmptyResponse = Record<string, never>;
@@ -60,10 +62,10 @@ function mapNotebook(notebook: RawNotebook): DashboardWorkspace {
 }
 
 export async function listWorkspaces(token: string): Promise<DashboardWorkspaceListResponse> {
-  const resp = await request<RawNotebookListResponse>("/api/v1/notebooks", { method: "GET" }, token);
+  const resp = await request<RawNotebookListResponse>("/api/v1/workspaces", { method: "GET" }, token);
 
   return {
-    workspaces: resp.notebooks.map(mapNotebook),
+    workspaces: (resp.workspaces ?? resp.notebooks ?? []).map(mapNotebook),
   };
 }
 
@@ -72,7 +74,7 @@ export async function createWorkspace(
   requestBody: CreateWorkspaceRequest,
 ): Promise<DashboardWorkspaceResponse> {
   const resp = await request<RawNotebookResponse>(
-    "/api/v1/notebooks",
+    "/api/v1/workspaces",
     {
       method: "POST",
       body: JSON.stringify(requestBody),
@@ -81,7 +83,7 @@ export async function createWorkspace(
   );
 
   return {
-    workspace: mapNotebook(resp.notebook),
+    workspace: mapNotebook((resp.workspace ?? resp.notebook)!),
   };
 }
 
@@ -91,7 +93,7 @@ export async function updateWorkspace(
   requestBody: UpdateWorkspaceRequest,
 ): Promise<DashboardWorkspaceResponse> {
   const resp = await request<RawNotebookResponse>(
-    `/api/v1/notebooks/${workspace_id}`,
+    `/api/v1/workspaces/${workspace_id}`,
     {
       method: "PUT",
       body: JSON.stringify(requestBody),
@@ -100,10 +102,10 @@ export async function updateWorkspace(
   );
 
   return {
-    workspace: mapNotebook(resp.notebook),
+    workspace: mapNotebook((resp.workspace ?? resp.notebook)!),
   };
 }
 
 export async function deleteWorkspace(token: string, workspace_id: string): Promise<void> {
-  await request<EmptyResponse>(`/api/v1/notebooks/${workspace_id}`, { method: "DELETE" }, token);
+  await request<EmptyResponse>(`/api/v1/workspaces/${workspace_id}`, { method: "DELETE" }, token);
 }

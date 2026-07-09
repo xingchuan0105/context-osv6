@@ -40,6 +40,22 @@ export function mapNotebook(raw: RawNotebook): Workspace {
   return { ...rest, workspace_id: id };
 }
 
+function workspaceFromEnvelope(resp: { workspace?: RawNotebook; notebook?: RawNotebook }): Workspace {
+  const raw = resp.workspace ?? resp.notebook;
+  if (!raw) {
+    throw new Error("workspace envelope missing workspace/notebook");
+  }
+  return mapNotebook(raw);
+}
+
+function workspacesFromListEnvelope(resp: {
+  workspaces?: RawNotebook[];
+  notebooks?: RawNotebook[];
+}): Workspace[] {
+  const list = resp.workspaces ?? resp.notebooks ?? [];
+  return list.map(mapNotebook);
+}
+
 export type WorkspaceResponse = {
   workspace: Workspace;
 };
@@ -157,13 +173,13 @@ export type WorkspaceMessageFeedbackRequest = {
 type EmptyResponse = Record<string, never>;
 
 export async function getWorkspace(token: string, workspace_id: string): Promise<WorkspaceResponse> {
-  const resp = await request<{ notebook: RawNotebook }>(
+  const resp = await request<{ workspace?: RawNotebook; notebook?: RawNotebook }>(
     `/api/v1/workspaces/${workspace_id}`,
     { method: "GET" },
     token,
   );
 
-  return { workspace: mapNotebook(resp.notebook) };
+  return { workspace: workspaceFromEnvelope(resp) };
 }
 
 export async function updateWorkspace(
@@ -171,7 +187,7 @@ export async function updateWorkspace(
   workspace_id: string,
   requestBody: { name: string; description: string },
 ): Promise<WorkspaceResponse> {
-  const resp = await request<{ notebook: RawNotebook }>(
+  const resp = await request<{ workspace?: RawNotebook; notebook?: RawNotebook }>(
     `/api/v1/workspaces/${workspace_id}`,
     {
       method: "PUT",
@@ -180,7 +196,7 @@ export async function updateWorkspace(
     token,
   );
 
-  return { workspace: mapNotebook(resp.notebook) };
+  return { workspace: workspaceFromEnvelope(resp) };
 }
 
 export async function listWorkspaceSessions(

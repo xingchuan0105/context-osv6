@@ -90,7 +90,7 @@ export interface AnswerContextChunk {
 export interface ApiKeyRow {
 	id: string;
 	org_id: string;
-	notebook_id: string;
+	workspace_id: string;
 	key_prefix: string;
 	name: string;
 	permissions: string[];
@@ -408,7 +408,8 @@ export interface ChatTurnInput {
 
 export interface ChatRequest {
 	query: string;
-	notebook_id?: string;
+	/** Product wire name is `workspace_id`; `notebook_id` remains the Rust field (storage alias). */
+	workspace_id?: string;
 	session_id?: string;
 	agent_type: string;
 	source_type?: string;
@@ -424,7 +425,7 @@ export interface ChatRequest {
 
 export interface ChatSession {
 	id: string;
-	notebook_id: string;
+	workspace_id: string;
 	title?: string;
 	agent_type: string;
 	pinned?: boolean;
@@ -474,7 +475,7 @@ export interface CreateApiKeyResponse {
 }
 
 export interface CreateChatSessionRequest {
-	notebook_id: string;
+	workspace_id: string;
 	title?: string;
 	agent_type: string;
 }
@@ -502,18 +503,18 @@ export interface CreateNotebookRequest {
 }
 
 export interface WorkspaceDraftPreference {
-	notebook_id: string;
+	workspace_id: string;
 	notes: string;
 }
 
 export interface NotebookWorkspacePreference {
-	notebook_id: string;
+	workspace_id: string;
 	pinned_source_ids?: string[];
 }
 
 export interface NotebookNotePreference {
 	note_id: string;
-	notebook_id: string;
+	workspace_id: string;
 	title: string;
 	content: string;
 	created_at: string;
@@ -538,7 +539,7 @@ export interface DegradationStatusResponse {
 export interface Document {
 	id: string;
 	org_id: string;
-	notebook_id: string;
+	workspace_id: string;
 	owner_id: string;
 	file_name: string;
 	mime_type: string;
@@ -698,12 +699,13 @@ export interface NotebookAnalysisResponse {
 }
 
 export interface NotebookListResponse {
-	notebooks: Notebook[];
+	/** Product wire name is `workspaces` (legacy clients may send/read `notebooks`). */
+	workspaces: Notebook[];
 }
 
 export interface NotebookNote {
 	id: string;
-	notebook_id: string;
+	workspace_id: string;
 	title: string;
 	content: string;
 	preview: string;
@@ -722,7 +724,8 @@ export interface NotebookNoteResponse {
 }
 
 export interface NotebookResponse {
-	notebook: Notebook;
+	/** Product wire name is `workspace` (legacy clients may send/read `notebook`). */
+	workspace: Notebook;
 }
 
 export interface NotificationPreferences {
@@ -866,8 +869,8 @@ export interface SharedNotebookPayload {
 
 export interface SourceRow {
 	id: string;
-	notebook_id: string;
-	notebook_name: string;
+	workspace_id: string;
+	workspace_name: string;
 	title: string;
 	file_name: string;
 	status: string;

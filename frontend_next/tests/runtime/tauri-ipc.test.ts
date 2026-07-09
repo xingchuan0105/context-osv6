@@ -132,7 +132,7 @@ describe("tauri-ipc runtime", () => {
       "token-1",
       {
         query: "hello",
-        notebook_id: "ws-1",
+        workspace_id: "ws-1",
         session_id: undefined,
         agent_type: "chat",
         doc_scope: [],
@@ -182,7 +182,7 @@ describe("tauri-ipc runtime", () => {
       "token-1",
       {
         query: "hello",
-        notebook_id: "ws-1",
+        workspace_id: "ws-1",
         session_id: undefined,
         agent_type: "chat",
         doc_scope: [],
