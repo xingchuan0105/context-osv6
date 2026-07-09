@@ -1,17 +1,16 @@
 "use client";
 
-// Shared helpers for admin ops surfaces.
-import { useState } from "react";
+// Shared helpers + re-exports for admin ops surfaces (W5: single source).
 
-import type {
+export type {
   AdminAuditLogEntry,
   AdminAuditLogQuery,
   AdminFeatureFlagChangeRequest,
   AdminFeatureFlagEntry,
 } from "../../../lib/admin/client";
-import { useAuth } from "../../../lib/auth/context";
-import { useUiPreferences } from "../../../lib/ui-preferences";
-import {
+export { useAuth } from "../../../lib/auth/context";
+export { useUiPreferences } from "../../../lib/ui-preferences";
+export {
   adminText,
   auditActionLabel,
   auditResourceTypeLabel,
@@ -21,7 +20,7 @@ import {
   formatAdminError,
   workerRuntimeLabel,
 } from "../admin-i18n";
-import {
+export {
   useAdminAuditLogsQuery,
   useAdminBillingOverviewQuery,
   useAdminDegradationStatusQuery,
@@ -33,7 +32,7 @@ import {
   useRequestAdminFeatureFlagChangeMutation,
   useReviewAdminFeatureFlagChangeMutation,
 } from "../admin-queries";
-import {
+export {
   AdminMetricCard,
   AdminPageHeading,
   EmptyState,
@@ -41,7 +40,7 @@ import {
   LoadingState,
 } from "../admin-core-surfaces";
 
-function formatTimestamp(value: number, locale: "zh-CN" | "en") {
+export function formatTimestamp(value: number, locale: "zh-CN" | "en") {
   return new Intl.DateTimeFormat(locale, {
     year: "numeric",
     month: "short",
@@ -51,7 +50,7 @@ function formatTimestamp(value: number, locale: "zh-CN" | "en") {
   }).format(new Date(value * 1000));
 }
 
-function downloadTextFile(filename: string, contents: string) {
+export function downloadTextFile(filename: string, contents: string) {
   const blob = new Blob([contents], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -60,4 +59,3 @@ function downloadTextFile(filename: string, contents: string) {
   link.click();
   URL.revokeObjectURL(url);
 }
-
