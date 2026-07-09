@@ -30,6 +30,8 @@ pub struct UsageLimitUsageRecord<'a> {
     pub completion_tokens: u32,
     pub total_tokens: u32,
     pub usage_source: UsageSource,
+    /// Exit-metering kind: `chat`, `embedding_text`, `embedding_multimodal`, …
+    pub usage_kind: &'a str,
 }
 
 /// Billing persistence boundary — SQL implementations live in bootstrap adapters.
@@ -79,7 +81,7 @@ pub trait BillingStorePort: Send + Sync {
         user_id: UserId,
         out_trade_no: &str,
         plan_id: &str,
-        amount_cents: i32,
+        amount_cents: i64,
     ) -> Result<(), AppError>;
 
     async fn claim_webhook_with_lease(

@@ -73,7 +73,11 @@ pub(super) async fn process_webhook_event(
                     let user_id = data.get("user_id").or_else(|| data.pointer("/metadata/user_id")).and_then(|v| v.as_str()).ok_or_else(|| anyhow!("missing user_id"))?.to_string();
                     let plan_id = data.get("plan_id").or_else(|| data.pointer("/metadata/plan_id")).and_then(|v| v.as_str()).unwrap_or("pro").to_string();
                     let price_id = data.get("price_id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-                    let amount_cents = data.get("amount").or_else(|| data.get("amount_cents")).and_then(|v| v.as_i64()).unwrap_or(2000) as i32;
+                    let amount_cents = data
+                        .get("amount")
+                        .or_else(|| data.get("amount_cents"))
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(2000);
                     let currency = data.get("currency").and_then(|v| v.as_str()).unwrap_or("usd").to_string();
                     
                     let current_period_start = data.get("current_period_start").and_then(|v| v.as_i64()).and_then(|ts| Utc.timestamp_opt(ts, 0).single());

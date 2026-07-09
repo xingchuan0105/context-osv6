@@ -42,6 +42,7 @@ impl UsageLimitService {
                     completion_tokens: record.completion_tokens,
                     total_tokens: record.total_tokens,
                     usage_source: record.usage_source,
+                    usage_kind: "chat",
                 },
             )
             .await

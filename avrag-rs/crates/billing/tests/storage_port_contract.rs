@@ -138,7 +138,7 @@ impl BillingStorePort for MemoryBillingStore {
         _user_id: UserId,
         _out_trade_no: &str,
         _plan_id: &str,
-        _amount_cents: i32,
+        _amount_cents: i64,
     ) -> Result<(), AppError> {
         Ok(())
     }
