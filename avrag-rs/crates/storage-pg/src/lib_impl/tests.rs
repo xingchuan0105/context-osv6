@@ -80,7 +80,7 @@ mod tests {
         let owner_org_uuid = org_id.into_uuid();
         let other_org_uuid = Uuid::new_v4();
         let user_id = Uuid::new_v4();
-        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+        let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(user_id));
         let notebook = repo
             .bootstrap().create_notebook(&ctx, "ir tenant scope notebook", "ir tenant scope")
@@ -201,7 +201,7 @@ mod tests {
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
-        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+        let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
@@ -285,7 +285,7 @@ mod tests {
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
-        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+        let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
@@ -364,11 +364,11 @@ mod tests {
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
-        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+        let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(user_id));
         let other_org_id = OrgId::from(Uuid::new_v4());
         let other_user_id = Uuid::new_v4();
-        let other_ctx = AuthContext::new(other_org_id, avrag_auth::SubjectKind::User)
+        let other_ctx = AuthContext::new(other_org_id, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(other_user_id));
         let other_notebook = repo
             .bootstrap().create_notebook(
@@ -687,7 +687,7 @@ mod tests {
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
-        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+        let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(user_id));
         let notebook = repo
             .bootstrap().create_notebook(
@@ -758,7 +758,7 @@ mod tests {
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
-        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+        let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(user_id));
         let notebook = repo
             .bootstrap().create_notebook(&ctx, "ingestion guard notebook", "ingestion guard")
@@ -858,7 +858,7 @@ mod tests {
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
-        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+        let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
@@ -919,7 +919,7 @@ mod tests {
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
-        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+        let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
@@ -984,7 +984,7 @@ mod tests {
         let org_id = OrgId::from(Uuid::new_v4());
         let _org_uuid = org_id.into_uuid();
         let user_id = Uuid::new_v4();
-        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+        let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
@@ -1072,7 +1072,7 @@ mod tests {
         repo.bootstrap().migrate().await.unwrap();
 
         let org_id = OrgId::from(Uuid::new_v4());
-        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+        let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(Uuid::new_v4()));
 
         let notebook = repo
@@ -1146,7 +1146,7 @@ mod tests {
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
-        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+        let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
@@ -1244,7 +1244,7 @@ mod tests {
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
-        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+        let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
@@ -1296,7 +1296,7 @@ mod tests {
 
         let org_id = OrgId::from(Uuid::new_v4());
         let user_id = Uuid::new_v4();
-        let ctx = AuthContext::new(org_id, avrag_auth::SubjectKind::User)
+        let ctx = AuthContext::new(org_id, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(user_id));
 
         let notebook = repo
@@ -1380,9 +1380,9 @@ mod tests {
 
         let org_a = OrgId::from(Uuid::new_v4());
         let org_b = OrgId::from(Uuid::new_v4());
-        let ctx_a = AuthContext::new(org_a, avrag_auth::SubjectKind::User)
+        let ctx_a = AuthContext::new(org_a, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(Uuid::new_v4()));
-        let ctx_b = AuthContext::new(org_b, avrag_auth::SubjectKind::User)
+        let ctx_b = AuthContext::new(org_b, contracts::auth_runtime::SubjectKind::User)
             .with_actor_id(ActorId::new(Uuid::new_v4()));
 
         let notebook = repo

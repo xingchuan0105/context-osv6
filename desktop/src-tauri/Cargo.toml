@@ -26,7 +26,6 @@ tracing = "0.1"
 common = { path = "../../avrag-rs/crates/common" }
 contracts = { path = "../../contracts" }
 storage-local = { path = "../../avrag-rs/crates/storage-local" }
-avrag-auth = { path = "../../avrag-rs/crates/auth" }
 
 [features]
 default = ["custom-protocol"]

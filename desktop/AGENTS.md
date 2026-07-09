@@ -27,7 +27,7 @@
 3. **客户端守卫**：`lib/runtime/client-guard.tsx` 替代 middleware.ts
 4. **客户端 i18n**：`lib/runtime/client-i18n.tsx` 替代服务端 getRequestConfig
 5. **Cargo workspace（M5 结论）**：`desktop/src-tauri` **不能**作为成员并入 `avrag-rs/Cargo.toml`（cargo 要求成员目录必须在 workspace 根之下）。采用**独立 workspace + 独立 `Cargo.lock`**，path 依赖 `../../avrag-rs/crates/*` 与 `../../contracts`。锁漂移由根 CI `desktop-check` job 兜底（M9）。`cargo update` 后若 `time 0.3.48` 导致 `cookie`/`tauri-utils` 编译冲突，需 pin 回 `time 0.3.47`。
-6. **轻量依赖链（M5）**：desktop 仅依赖 `common`、`contracts`、`storage-local`、`avrag-auth`；`CachePort` 经 `avrag-rag-core-ports` 暴露，**不**直接依赖 `avrag-rag-core`（避免拉入 llm/redis/code-interpreter）。
+6. **轻量依赖链（M5）**：desktop 仅依赖 `common`、`contracts`、`storage-local`；auth 类型用 `contracts::auth_runtime`。`CachePort` 经 `avrag-rag-core-ports` 暴露，**不**直接依赖 `avrag-rag-core`（避免拉入 llm/redis/code-interpreter）。
 
 ## 开发流程
 
