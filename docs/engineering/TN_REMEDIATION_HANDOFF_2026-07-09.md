@@ -25,7 +25,7 @@
 | Wave 0–6 + P0–P7 + TN-2 | Done |
 | W1–W6 结构债 | Done |
 | R1–R3 扫尾 | Done |
-| **TN-3** | 见 plan；拍板 S4 全做 |
+| **TN-3** | **Done** — P0–P4 结构 + P5 金字塔（入口/盘点/去重/L1 测时） |
 
 ---
 
@@ -88,3 +88,4 @@ pnpm -C frontend_next exec tsc --noEmit
 |------|------|
 | 2026-07-09 | Wave 0–6 / TN-2 / W1–W6 / R1–R3 |
 | 2026-07-09 | **TN-3 拍板**：日常 A、真 AI A、真界面 A、性能 A、结构 S4、测试先量再砍 |
+| 2026-07-09 | **TN-3 完成**：P2 UserProfile；P5 入口脚本 + inventory + dedup + L1 bench + 巨石部分拆分 |
