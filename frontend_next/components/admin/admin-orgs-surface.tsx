@@ -142,7 +142,7 @@ export function AdminOrganizationsSurface() {
                 <select className="app-input" id="admin-org-sort" onChange={(event) => setSortMode(event.target.value)} value={sortMode}>
                   <option value="queries_desc">{adminText(locale, "organizations.sort.queriesDesc")}</option>
                   <option value="users_desc">{adminText(locale, "organizations.sort.usersDesc")}</option>
-                  <option value="notebooks_desc">{adminText(locale, "organizations.sort.notebooksDesc")}</option>
+                  <option value="workspaces_desc">{adminText(locale, "organizations.sort.workspacesDesc")}</option>
                   <option value="created_desc">{adminText(locale, "users.newestFirst")}</option>
                   <option value="name_asc">{adminText(locale, "organizations.sort.nameAsc")}</option>
                 </select>
@@ -165,7 +165,7 @@ export function AdminOrganizationsSurface() {
                       adminText(locale, "common.name"),
                       adminText(locale, "admin.table.plan"),
                       adminText(locale, "admin.table.users"),
-                      adminText(locale, "common.notebooks"),
+                      adminText(locale, "common.workspaces"),
                       adminText(locale, "admin.table.requests"),
                       adminText(locale, "admin.table.status"),
                       adminText(locale, "common.actions"),

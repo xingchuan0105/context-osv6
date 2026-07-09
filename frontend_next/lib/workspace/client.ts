@@ -1,4 +1,5 @@
 import { fetchResponse, request } from "../http/request";
+import type { Workspace as ApiWorkspace } from "../contracts/generated";
 import type {
   WorkspaceNote,
   WorkspaceSession,
@@ -6,41 +7,19 @@ import type {
 } from "./model";
 import type { AnswerBlock, Citation, ToolResult } from "./stream";
 
-export type Workspace = {
-  workspace_id: string;
-  org_id: string;
-  owner_id: string;
-  name: string;
-  title: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
-  document_count?: number;
-  status_summary?: Record<string, number>;
-  shared?: boolean;
-};
+/**
+ * UI workspace: same fields as wire `ApiWorkspace`, with `workspace_id` for routes.
+ * Wire shape comes only from typeshare (`ApiWorkspace.id`).
+ */
+export type Workspace = Omit<ApiWorkspace, "id"> & { workspace_id: string };
 
-export type RawWorkspace = {
-  id: string;
-  org_id: string;
-  owner_id: string;
-  name: string;
-  title: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
-  document_count?: number;
-  status_summary?: Record<string, number>;
-  shared?: boolean;
-};
-
-/** API workspace DTO (id) → client Workspace (workspace_id). */
-export function mapWorkspace(raw: RawWorkspace): Workspace {
+/** API workspace DTO (id) → client Workspace (workspace_id). Single adapter. */
+export function mapWorkspace(raw: ApiWorkspace): Workspace {
   const { id, ...rest } = raw;
   return { ...rest, workspace_id: id };
 }
 
-function workspaceFromEnvelope(resp: { workspace: RawWorkspace }): Workspace {
+function workspaceFromEnvelope(resp: { workspace?: ApiWorkspace }): Workspace {
   const raw = resp.workspace;
   if (!raw) {
     throw new Error("workspace envelope missing workspace");
@@ -48,11 +27,8 @@ function workspaceFromEnvelope(resp: { workspace: RawWorkspace }): Workspace {
   return mapWorkspace(raw);
 }
 
-function workspacesFromListEnvelope(resp: {
-  workspaces?: RawWorkspace[];
-  }): Workspace[] {
-  const list = resp.workspaces ?? [];
-  return list.map(mapWorkspace);
+function workspacesFromListEnvelope(resp: { workspaces?: ApiWorkspace[] }): Workspace[] {
+  return (resp.workspaces ?? []).map(mapWorkspace);
 }
 
 export type WorkspaceResponse = {
@@ -172,7 +148,7 @@ export type WorkspaceMessageFeedbackRequest = {
 type EmptyResponse = Record<string, never>;
 
 export async function getWorkspace(token: string, workspace_id: string): Promise<WorkspaceResponse> {
-  const resp = await request<{ workspace: RawWorkspace }>(
+  const resp = await request<{ workspace: ApiWorkspace }>(
     `/api/v1/workspaces/${workspace_id}`,
     { method: "GET" },
     token,
@@ -186,7 +162,7 @@ export async function updateWorkspace(
   workspace_id: string,
   requestBody: { name: string; description: string },
 ): Promise<WorkspaceResponse> {
-  const resp = await request<{ workspace: RawWorkspace }>(
+  const resp = await request<{ workspace: ApiWorkspace }>(
     `/api/v1/workspaces/${workspace_id}`,
     {
       method: "PUT",

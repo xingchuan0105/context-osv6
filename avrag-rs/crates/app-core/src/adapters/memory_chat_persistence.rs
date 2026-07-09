@@ -48,7 +48,7 @@ impl MemoryChatPersistence {
 
     fn session_visible(state: &MemoryState, auth: &AuthContext, session: &ChatSession) -> bool {
         state
-            .notebooks
+            .workspaces
             .get(&session.workspace_id)
             .map(|nb| nb.org_id == Self::org_id(auth))
             .unwrap_or(false)
@@ -154,7 +154,7 @@ impl SessionPort for MemoryChatPersistence {
         let notebook_key = workspace_id.to_string();
         let mut state = self.state.write().await;
         let notebook = state
-            .notebooks
+            .workspaces
             .get(&notebook_key)
             .filter(|nb| nb.org_id == Self::org_id(auth))
             .cloned()
@@ -401,7 +401,7 @@ impl ChatCatalogPort for MemoryChatPersistence {
         let org = Self::org_id(auth);
         let state = self.state.read().await;
         Ok(state
-            .notebooks
+            .workspaces
             .values()
             .filter(|nb| nb.org_id == org)
             .filter(|nb| {
@@ -428,7 +428,7 @@ impl ChatCatalogPort for MemoryChatPersistence {
                     && !Self::is_deleting_or_deleted(&stored.document.status)
             })
             .filter_map(|stored| {
-                let notebook = state.notebooks.get(&stored.document.workspace_id)?;
+                let notebook = state.workspaces.get(&stored.document.workspace_id)?;
                 if notebook.org_id != org {
                     return None;
                 }
@@ -453,7 +453,7 @@ impl ChatCatalogPort for MemoryChatPersistence {
         let org = Self::org_id(auth);
         let state = self.state.read().await;
         Ok(state
-            .notebooks
+            .workspaces
             .get(&key)
             .filter(|nb| nb.org_id == org)
             .cloned())
@@ -580,7 +580,7 @@ mod tests {
         let now = now_rfc3339();
         {
             let mut s = state.write().await;
-            s.notebooks.insert(
+            s.workspaces.insert(
                 workspace_id.to_string(),
                 Workspace {
                     id: workspace_id.to_string(),
@@ -640,7 +640,7 @@ mod tests {
         let now = now_rfc3339();
         {
             let mut s = state.write().await;
-            s.notebooks.insert(
+            s.workspaces.insert(
                 workspace_id.to_string(),
                 Workspace {
                     id: workspace_id.to_string(),

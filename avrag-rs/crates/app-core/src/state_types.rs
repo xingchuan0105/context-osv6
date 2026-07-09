@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Default)]
 pub struct MemoryState {
-    pub notebooks: BTreeMap<String, Workspace>,
+    pub workspaces: BTreeMap<String, Workspace>,
     pub documents: BTreeMap<String, StoredDocument>,
     pub sessions: BTreeMap<String, ChatSession>,
     pub messages: BTreeMap<String, Vec<ChatMessage>>,

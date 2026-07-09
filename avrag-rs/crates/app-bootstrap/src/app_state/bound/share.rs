@@ -207,7 +207,7 @@ impl<'a> BoundShare<'a> {
             .unwrap_or(0)
     }
 
-    pub async fn share_enabled_for_notebook(&self, workspace_id: &str) -> bool {
+    pub async fn share_enabled_for_workspace(&self, workspace_id: &str) -> bool {
         let Some(store) = self.storage.share_store() else {
             return false;
         };
@@ -223,7 +223,7 @@ impl<'a> BoundShare<'a> {
             .unwrap_or(false)
     }
 
-    pub async fn resolve_share_chat_notebook_scope(&self, token: &str) -> Option<Uuid> {
+    pub async fn resolve_share_chat_workspace_scope(&self, token: &str) -> Option<Uuid> {
         let store = self.storage.share_store()?;
         let workspace_id = avrag_share::handle_validate_token(token, store)
             .await

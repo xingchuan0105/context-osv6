@@ -132,7 +132,7 @@ pub(crate) async fn request_context_middleware(
             .into_response();
     }
 
-    let share_chat_notebook_scope = share_chat_notebook_scope_from_request(&state, &mut req).await;
+    let share_chat_workspace_scope = share_chat_workspace_scope_from_request(&state, &mut req).await;
     let auth = auth_from_bearer(&state, &headers)
         .await
         .or_else(|| {
@@ -143,8 +143,8 @@ pub(crate) async fn request_context_middleware(
             }
         })
         .map(|auth| {
-            if let Some(notebook_scope) = share_chat_notebook_scope {
-                auth.with_workspace_scope(notebook_scope)
+            if let Some(workspace_scope) = share_chat_workspace_scope {
+                auth.with_workspace_scope(workspace_scope)
             } else {
                 auth
             }
@@ -230,7 +230,7 @@ pub(crate) async fn request_context_middleware(
     response
 }
 
-async fn share_chat_notebook_scope_from_request(
+async fn share_chat_workspace_scope_from_request(
     state: &AppState,
     req: &mut Request,
 ) -> Option<Uuid> {
@@ -254,14 +254,14 @@ async fn share_chat_notebook_scope_from_request(
         return None;
     }
     let token = chat_request.source_token.as_deref()?;
-    let notebook_scope = state.share().resolve_share_chat_notebook_scope(token).await?;
+    let workspace_scope = state.share().resolve_share_chat_workspace_scope(token).await?;
     if let Some(workspace_id) = chat_request.workspace_id.as_deref()
-        && uuid::Uuid::parse_str(workspace_id).ok()? != notebook_scope
+        && uuid::Uuid::parse_str(workspace_id).ok()? != workspace_scope
     {
         return None;
     }
 
-    Some(notebook_scope)
+    Some(workspace_scope)
 }
 
 fn is_chat_endpoint_path(path: &str) -> bool {

@@ -21,7 +21,7 @@ export function mapWorkspace(workspace: DashboardWorkspace): DashboardWorkspaceI
     createdAt: workspace.created_at,
     updatedAt: workspace.updated_at,
     ownerId: workspace.owner_id,
-    statusSummary: workspace.status_summary,
+    statusSummary: workspace.status_summary ?? {},
   };
 }
 

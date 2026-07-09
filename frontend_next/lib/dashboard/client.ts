@@ -1,19 +1,9 @@
 import { request } from "../http/request";
-import { type RawWorkspace } from "../workspace/client";
+import type { Workspace as ApiWorkspace } from "../contracts/generated";
+import { mapWorkspace, type Workspace } from "../workspace/client";
 
-export type DashboardWorkspace = {
-  workspace_id: string;
-  org_id: string;
-  owner_id: string;
-  name: string;
-  title: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
-  document_count: number;
-  status_summary: Record<string, number>;
-  shared: boolean;
-};
+/** Dashboard uses the same UI Workspace shape as workspace client. */
+export type DashboardWorkspace = Workspace;
 
 export type DashboardWorkspaceListResponse = {
   workspaces: DashboardWorkspace[];
@@ -33,38 +23,23 @@ export type UpdateWorkspaceRequest = {
   description: string;
 };
 
-type RawWorkspaceListResponse = {
-  workspaces?: RawWorkspace[];
-  };
-
-type RawWorkspaceResponse = {
-  workspace?: RawWorkspace;
-  notebook?: RawWorkspace;
-};
-
 type EmptyResponse = Record<string, never>;
 
-function mapWorkspace(notebook: RawWorkspace): DashboardWorkspace {
+function toDashboardWorkspace(raw: ApiWorkspace): DashboardWorkspace {
+  const mapped = mapWorkspace(raw);
   return {
-    workspace_id: notebook.id,
-    org_id: notebook.org_id,
-    owner_id: notebook.owner_id,
-    name: notebook.name,
-    title: notebook.title,
-    description: notebook.description,
-    created_at: notebook.created_at,
-    updated_at: notebook.updated_at,
-    document_count: notebook.document_count ?? 0,
-    status_summary: notebook.status_summary ?? {},
-    shared: notebook.shared ?? false,
+    ...mapped,
+    document_count: mapped.document_count ?? 0,
+    status_summary: mapped.status_summary ?? {},
+    shared: mapped.shared ?? false,
   };
 }
 
 export async function listWorkspaces(token: string): Promise<DashboardWorkspaceListResponse> {
-  const resp = await request<RawWorkspaceListResponse>("/api/v1/workspaces", { method: "GET" }, token);
+  const resp = await request<{ workspaces?: ApiWorkspace[] }>("/api/v1/workspaces", { method: "GET" }, token);
 
   return {
-    workspaces: (resp.workspaces ?? []).map(mapWorkspace),
+    workspaces: (resp.workspaces ?? []).map(toDashboardWorkspace),
   };
 }
 
@@ -72,7 +47,7 @@ export async function createWorkspace(
   token: string,
   requestBody: CreateWorkspaceRequest,
 ): Promise<DashboardWorkspaceResponse> {
-  const resp = await request<RawWorkspaceResponse>(
+  const resp = await request<{ workspace?: ApiWorkspace }>(
     "/api/v1/workspaces",
     {
       method: "POST",
@@ -81,8 +56,12 @@ export async function createWorkspace(
     token,
   );
 
+  if (!resp.workspace) {
+    throw new Error("workspace envelope missing workspace");
+  }
+
   return {
-    workspace: mapWorkspace((resp.workspace)!),
+    workspace: toDashboardWorkspace(resp.workspace),
   };
 }
 
@@ -91,7 +70,7 @@ export async function updateWorkspace(
   workspace_id: string,
   requestBody: UpdateWorkspaceRequest,
 ): Promise<DashboardWorkspaceResponse> {
-  const resp = await request<RawWorkspaceResponse>(
+  const resp = await request<{ workspace?: ApiWorkspace }>(
     `/api/v1/workspaces/${workspace_id}`,
     {
       method: "PUT",
@@ -100,8 +79,12 @@ export async function updateWorkspace(
     token,
   );
 
+  if (!resp.workspace) {
+    throw new Error("workspace envelope missing workspace");
+  }
+
   return {
-    workspace: mapWorkspace((resp.workspace)!),
+    workspace: toDashboardWorkspace(resp.workspace),
   };
 }
 

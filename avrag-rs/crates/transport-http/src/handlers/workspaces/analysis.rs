@@ -104,7 +104,7 @@ impl WorkspaceAnalysisCollector {
         let workspace_id = workspace_id.to_string();
         let (member_count, share_enabled, active_api_key_count) = tokio::join!(
             async { state.share().share_member_count(&workspace_id).await },
-            async { state.share().share_enabled_for_notebook(&workspace_id).await },
+            async { state.share().share_enabled_for_workspace(&workspace_id).await },
             async {
                 state.admin_api()
                     .list_api_keys(&workspace_id)

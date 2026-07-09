@@ -80,7 +80,7 @@ const INLINE_COPY = {
     zh: "从未活跃",
     en: "Never active",
   },
-  "common.notebooks": {
+  "common.workspaces": {
     zh: "知识库",
     en: "Workspaces",
   },
@@ -412,7 +412,7 @@ const INLINE_COPY = {
     zh: "名称 A-Z",
     en: "Name A-Z",
   },
-  "organizations.sort.notebooksDesc": {
+  "organizations.sort.workspacesDesc": {
     zh: "知识库数优先",
     en: "Workspaces desc",
   },
@@ -460,7 +460,7 @@ const INLINE_COPY = {
     zh: "运营效率",
     en: "Operational efficiency",
   },
-  "organizationDetail.notebooksPerUser": {
+  "organizationDetail.workspacesPerUser": {
     zh: "人均知识库",
     en: "Workspaces per user",
   },

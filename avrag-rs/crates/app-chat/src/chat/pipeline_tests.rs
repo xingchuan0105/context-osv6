@@ -86,7 +86,7 @@ mod tests {
         let mut memory = MemoryState::default();
         if let Some(notebook) = notebook {
             memory
-                .notebooks
+                .workspaces
                 .insert(notebook.id.clone(), notebook.clone());
         }
         ChatContext {

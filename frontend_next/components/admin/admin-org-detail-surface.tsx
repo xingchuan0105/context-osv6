@@ -109,7 +109,7 @@ export function AdminOrganizationDetailSurface() {
               <AdminMetricCard label={adminText(locale, "admin.table.plan")} value={planLabel(locale, organization.plan)} />
               <AdminMetricCard label={adminText(locale, "admin.table.users")} value={organization.user_count.toString()} />
               <AdminMetricCard
-                label={adminText(locale, "common.notebooks")}
+                label={adminText(locale, "common.workspaces")}
                 value={organization.workspace_count.toString()}
                 detail={`${adminText(locale, "common.created")} ${formatUnixDate(organization.created_at, locale)}`}
               />
@@ -162,7 +162,7 @@ export function AdminOrganizationDetailSurface() {
                   <h3 style={{ margin: 0 }}>{adminText(locale, "organizationDetail.operationalEfficiency")}</h3>
                   <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
                     <AdminMetricCard label={adminText(locale, "common.requestsPerUser30d")} value={requestsPerUser30d.toString()} />
-                    <AdminMetricCard label={adminText(locale, "organizationDetail.notebooksPerUser")} value={notebooksPerUser.toString()} tone="success" />
+                    <AdminMetricCard label={adminText(locale, "organizationDetail.workspacesPerUser")} value={notebooksPerUser.toString()} tone="success" />
                   </div>
                   <div className="app-inline-surface" style={{ display: "grid", gap: "0.5rem" }}>
                     <div className="app-inline-row" style={{ marginBottom: 0 }}>

@@ -14,11 +14,11 @@ function resolveCompatibilityRedirect(pathname: string): string | null {
     return "/dashboard";
   }
 
+  // Legacy/public share URLs under /workspaces/:id/share → app dashboard share UI.
   if (pathname.startsWith("/workspaces/")) {
     const match = pathname.match(
-      /^\/notebooks\/([^/]+)\/share(?:\/(analytics|access-logs))?$/,
+      /^\/workspaces\/([^/]+)\/share(?:\/(analytics|access-logs))?$/,
     );
-
     if (match) {
       const [, workspaceId, suffix] = match;
       return suffix

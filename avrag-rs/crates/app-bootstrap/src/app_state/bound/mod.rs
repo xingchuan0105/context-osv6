@@ -33,7 +33,7 @@ pub struct WorkspaceApiKeyAuth {
 }
 
 impl AppState {
-    /// Bound document/notebook/source API (`auth` + `storage` + billing/analytics wired).
+    /// Bound document/workspace/source API (`auth` + `storage` + billing/analytics wired).
     pub fn docs(&self) -> BoundDocuments<'_> {
         BoundDocuments {
             docs: &self.documents,

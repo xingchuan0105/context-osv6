@@ -22,7 +22,7 @@ struct TokenRecord {
 
 #[derive(Clone, Default)]
 pub struct MemoryShareStore {
-    notebooks: Arc<RwLock<HashMap<Uuid, WorkspaceAccessSnapshot>>>,
+    workspaces: Arc<RwLock<HashMap<Uuid, WorkspaceAccessSnapshot>>>,
     member_access: Arc<RwLock<HashMap<(Uuid, Uuid), String>>>,
     tokens: Arc<RwLock<HashMap<String, TokenRecord>>>,
     shared_workspaces: Arc<RwLock<HashMap<String, SharedWorkspaceSnapshot>>>,
@@ -37,7 +37,7 @@ impl MemoryShareStore {
     }
 
     pub async fn seed_workspace_owner(&self, workspace_id: Uuid, owner_id: Uuid) {
-        self.notebooks.write().await.insert(
+        self.workspaces.write().await.insert(
             workspace_id,
             WorkspaceAccessSnapshot {
                 owner_id: Some(owner_id),
@@ -83,7 +83,7 @@ impl ShareStorePort for MemoryShareStore {
         _auth: &AuthContext,
         workspace_id: Uuid,
     ) -> Result<Option<WorkspaceAccessSnapshot>, AppError> {
-        Ok(self.notebooks.read().await.get(&workspace_id).cloned())
+        Ok(self.workspaces.read().await.get(&workspace_id).cloned())
     }
 
     async fn query_member_access(

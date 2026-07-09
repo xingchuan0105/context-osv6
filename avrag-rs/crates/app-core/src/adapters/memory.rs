@@ -77,7 +77,7 @@ impl DocumentStorePort for MemoryDocumentStore {
     async fn list_workspaces(&self, auth: &AuthContext) -> Result<Vec<Workspace>, AppError> {
         let state = self.state.read().await;
         Ok(state
-            .notebooks
+            .workspaces
             .values()
             .filter(|n| org_matches(auth, &n.org_id))
             .cloned()
@@ -91,7 +91,7 @@ impl DocumentStorePort for MemoryDocumentStore {
     ) -> Result<Option<Workspace>, AppError> {
         let state = self.state.read().await;
         Ok(state
-            .notebooks
+            .workspaces
             .get(&workspace_id.to_string())
             .filter(|n| org_matches(auth, &n.org_id))
             .cloned())
@@ -119,7 +119,7 @@ impl DocumentStorePort for MemoryDocumentStore {
         };
         let mut state = self.state.write().await;
         state
-            .notebooks
+            .workspaces
             .insert(notebook.id.clone(), notebook.clone());
         Ok(notebook)
     }
@@ -133,7 +133,7 @@ impl DocumentStorePort for MemoryDocumentStore {
     ) -> Result<Option<Workspace>, AppError> {
         let mut state = self.state.write().await;
         let key = workspace_id.to_string();
-        let notebook = state.notebooks.get_mut(&key);
+        let notebook = state.workspaces.get_mut(&key);
         let Some(notebook) = notebook else {
             return Ok(None);
         };
@@ -159,14 +159,14 @@ impl DocumentStorePort for MemoryDocumentStore {
         let key = workspace_id.to_string();
         let mut state = self.state.write().await;
         let can_delete = state
-            .notebooks
+            .workspaces
             .get(&key)
             .map(|n| org_matches(auth, &n.org_id))
             .unwrap_or(false);
         if !can_delete {
             return Ok(false);
         }
-        state.notebooks.remove(&key);
+        state.workspaces.remove(&key);
         state
             .documents
             .retain(|_, stored| stored.document.workspace_id != key);

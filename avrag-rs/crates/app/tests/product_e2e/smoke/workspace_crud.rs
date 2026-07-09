@@ -18,7 +18,7 @@ async fn workspace_crud_lifecycle_via_http() {
     );
 
     let list_resp = ctx.list_workspaces().await.unwrap();
-    assert_eq!(list_resp.status, 200, "list notebooks: {list_resp:?}");
+    assert_eq!(list_resp.status, 200, "list workspaces: {list_resp:?}");
     let workspaces = list_resp.body_json["workspaces"]
         .as_array()
         .expect("notebooks array");
