@@ -1,3 +1,8 @@
+//! Notebook share / collab HTTP handlers.
+//!
+//! Business logic lives in `avrag_share::ShareService` (via AppState delegates).
+//! This module only enforces auth/session guards and maps results to HTTP.
+
 use app_bootstrap::AppState;
 use axum::{
     Json,
@@ -7,10 +12,8 @@ use axum::{
 };
 
 use super::super::{app_error_response, error_response};
+use crate::auth_guard::{ensure_user_notebook_access, require_user_session};
 use crate::middleware::RequestState;
-use crate::auth_guard::{
-    ensure_user_notebook_access, forbid_api_key, require_user_admin, require_user_session,
-};
 
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct CreateShareRequest {
@@ -32,16 +35,10 @@ pub(crate) struct AccessLevelBody {
     pub access_level: String,
 }
 
-#[derive(Debug, serde::Serialize)]
-struct ApiEnvelope<T> {
-    ok: bool,
-    data: Option<T>,
-    error: Option<ApiErrorEnvelope>,
-}
-
-#[derive(Debug, serde::Serialize)]
-struct ApiErrorEnvelope {
-    message: String,
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct InviteMemberBody {
+    pub email: String,
+    pub role: String,
 }
 
 fn postgres_unavailable_response() -> Response {
@@ -52,11 +49,48 @@ fn postgres_unavailable_response() -> Response {
     )
 }
 
-async fn require_notebook_user_access(state: &AppState, notebook_id: &str) -> Result<(), Response> {
+/// Common guard: signed-in user + notebook access + postgres share backend.
+async fn require_share_session(state: &AppState, notebook_id: &str) -> Result<(), Response> {
+    if let Err(error) = require_user_session(
+        state.auth(),
+        "this endpoint requires a signed-in user session",
+    ) {
+        return Err(app_error_response(error));
+    }
     if let Err(error) = ensure_user_notebook_access(state, notebook_id).await {
         return Err(app_error_response(error));
     }
+    if !state.postgres_configured() {
+        return Err(postgres_unavailable_response());
+    }
     Ok(())
+}
+
+fn parse_expires_in_secs(raw: &str) -> Option<i64> {
+    let expires_at = chrono::DateTime::parse_from_rfc3339(raw).ok()?;
+    let delta = expires_at
+        .with_timezone(&chrono::Utc)
+        .signed_duration_since(chrono::Utc::now())
+        .num_seconds();
+    (delta > 0).then_some(delta)
+}
+
+macro_rules! share_ok {
+    ($result:expr) => {
+        match $result {
+            Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+            Err(error) => app_error_response(error),
+        }
+    };
+}
+
+macro_rules! share_empty_ok {
+    ($result:expr) => {
+        match $result {
+            Ok(()) => (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response(),
+            Err(error) => app_error_response(error),
+        }
+    };
 }
 
 pub(crate) async fn create_share_handler(
@@ -64,71 +98,36 @@ pub(crate) async fn create_share_handler(
     Path(notebook_id): Path<String>,
     Json(req): Json<CreateShareRequest>,
 ) -> Response {
-    if let Err(error) = require_user_session(
-        state.auth(),
-        "this endpoint requires a signed-in user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
-    }
-    if !state.postgres_configured() {
-        return postgres_unavailable_response();
     }
     let expires_in_secs = req.expires_at.as_deref().and_then(parse_expires_in_secs);
     let access_level = avrag_share::AccessLevel::from_role(&req.role);
-    match state
-        .create_share_link(notebook_id, access_level, expires_in_secs)
-        .await
-    {
-        Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
-        Err(error) => app_error_response(error),
-    }
+    share_ok!(
+        state
+            .create_share_link(notebook_id, access_level, expires_in_secs)
+            .await
+    )
 }
 
 pub(crate) async fn revoke_share_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path((notebook_id, token)): Path<(String, String)>,
 ) -> Response {
-    if let Err(error) = require_user_session(
-        state.auth(),
-        "this endpoint requires a signed-in user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
     }
-    if !state.postgres_configured() {
-        return postgres_unavailable_response();
-    }
-    match state.revoke_share_link(token).await {
-        Ok(()) => (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response(),
-        Err(error) => app_error_response(error),
-    }
+    share_empty_ok!(state.revoke_share_link(token).await)
 }
 
 pub(crate) async fn get_share_settings_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(notebook_id): Path<String>,
 ) -> Response {
-    if let Err(error) = require_user_session(
-        state.auth(),
-        "this endpoint requires a signed-in user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
     }
-    if !state.postgres_configured() {
-        return postgres_unavailable_response();
-    }
-    match state.get_share_settings(notebook_id).await {
-        Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
-        Err(error) => app_error_response(error),
-    }
+    share_ok!(state.get_share_settings(notebook_id).await)
 }
 
 pub(crate) async fn update_share_settings_handler(
@@ -136,25 +135,14 @@ pub(crate) async fn update_share_settings_handler(
     Path(notebook_id): Path<String>,
     Json(req): Json<UpdateShareSettingsBody>,
 ) -> Response {
-    if let Err(error) = require_user_session(
-        state.auth(),
-        "this endpoint requires a signed-in user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
     }
-    if !state.postgres_configured() {
-        return postgres_unavailable_response();
-    }
-    match state
-        .update_share_settings(notebook_id, req.access_level, req.allow_download)
-        .await
-    {
-        Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
-        Err(error) => app_error_response(error),
-    }
+    share_ok!(
+        state
+            .update_share_settings(notebook_id, req.access_level, req.allow_download)
+            .await
+    )
 }
 
 pub(crate) async fn update_access_level_handler(
@@ -162,17 +150,8 @@ pub(crate) async fn update_access_level_handler(
     Path(notebook_id): Path<String>,
     Json(req): Json<AccessLevelBody>,
 ) -> Response {
-    if let Err(error) = require_user_session(
-        state.auth(),
-        "this endpoint requires a signed-in user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
-    }
-    if !state.postgres_configured() {
-        return postgres_unavailable_response();
     }
     match state
         .update_share_access_level(notebook_id, req.access_level)
@@ -191,80 +170,20 @@ pub(crate) async fn get_share_analytics_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(notebook_id): Path<String>,
 ) -> Response {
-    if let Err(error) = require_user_session(
-        state.auth(),
-        "this endpoint requires a signed-in user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
     }
-    if !state.postgres_configured() {
-        return postgres_unavailable_response();
-    }
-    match state.get_share_analytics(notebook_id).await {
-        Ok(data) => (
-            StatusCode::OK,
-            Json(ApiEnvelope {
-                ok: true,
-                data: Some(data),
-                error: None,
-            }),
-        )
-            .into_response(),
-        Err(error) => (
-            StatusCode::BAD_REQUEST,
-            Json(ApiEnvelope::<Vec<avrag_share::ShareAnalytics>> {
-                ok: false,
-                data: None,
-                error: Some(ApiErrorEnvelope {
-                    message: error.message().to_string(),
-                }),
-            }),
-        )
-            .into_response(),
-    }
+    share_ok!(state.get_share_analytics(notebook_id).await)
 }
 
 pub(crate) async fn get_share_access_logs_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(notebook_id): Path<String>,
 ) -> Response {
-    if let Err(error) = require_user_session(
-        state.auth(),
-        "this endpoint requires a signed-in user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
     }
-    if !state.postgres_configured() {
-        return postgres_unavailable_response();
-    }
-    match state.get_share_access_logs(notebook_id).await {
-        Ok(data) => (
-            StatusCode::OK,
-            Json(ApiEnvelope {
-                ok: true,
-                data: Some(data),
-                error: None,
-            }),
-        )
-            .into_response(),
-        Err(error) => (
-            StatusCode::BAD_REQUEST,
-            Json(ApiEnvelope::<Vec<avrag_share::ShareAccessLog>> {
-                ok: false,
-                data: None,
-                error: Some(ApiErrorEnvelope {
-                    message: error.message().to_string(),
-                }),
-            }),
-        )
-            .into_response(),
-    }
+    share_ok!(state.get_share_access_logs(notebook_id).await)
 }
 
 pub(crate) async fn validate_share_token_handler(
@@ -277,173 +196,25 @@ pub(crate) async fn validate_share_token_handler(
     match state.validate_share_token(&token).await {
         Ok(Some(notebook_id)) => (
             StatusCode::OK,
-            Json(ApiEnvelope {
-                ok: true,
-                data: Some(common::ShareTokenResponse {
-                    share_token: notebook_id,
-                }),
-                error: None,
+            Json(common::ShareTokenResponse {
+                share_token: notebook_id,
             }),
         )
             .into_response(),
-        Ok(None) => (
-            StatusCode::OK,
-            Json(ApiEnvelope::<common::ShareTokenResponse> {
-                ok: false,
-                data: None,
-                error: Some(ApiErrorEnvelope {
-                    message: "invalid share token".to_string(),
-                }),
-            }),
-        )
-            .into_response(),
+        Ok(None) => app_error_response(common::AppError::validation(
+            "invalid_share_token",
+            "invalid share token",
+        )),
         Err(error) => app_error_response(error),
     }
-}
-
-pub(crate) async fn list_api_keys_handler(
-    Extension(RequestState(state)): Extension<RequestState>,
-    Path(notebook_id): Path<String>,
-) -> Response {
-    if let Err(error) = forbid_api_key(
-        state.auth(),
-        "API keys cannot manage other API keys; use a user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(error) = ensure_user_notebook_access(&state, &notebook_id).await {
-        return app_error_response(error);
-    }
-    match state.list_api_keys(&notebook_id).await {
-        Ok(api_keys) => (
-            StatusCode::OK,
-            Json(common::ApiKeyListResponse { api_keys }),
-        )
-            .into_response(),
-        Err(error) => app_error_response(error),
-    }
-}
-
-pub(crate) async fn create_api_key_handler(
-    Extension(RequestState(state)): Extension<RequestState>,
-    Path(notebook_id): Path<String>,
-    Json(req): Json<common::CreateApiKeyRequest>,
-) -> Response {
-    if let Err(error) = forbid_api_key(
-        state.auth(),
-        "API keys cannot manage other API keys; use a user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(error) = ensure_user_notebook_access(&state, &notebook_id).await {
-        return app_error_response(error);
-    }
-    match state.create_api_key(&notebook_id, req).await {
-        Ok(resp) => (StatusCode::CREATED, Json(resp)).into_response(),
-        Err(error) => app_error_response(error),
-    }
-}
-
-pub(crate) async fn create_org_api_key_handler(
-    Extension(RequestState(state)): Extension<RequestState>,
-    Json(req): Json<common::CreateApiKeyRequest>,
-) -> Response {
-    if let Err(error) = forbid_api_key(
-        state.auth(),
-        "API keys cannot manage org API keys; use a user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(error) = require_user_admin(state.auth()) {
-        return app_error_response(error);
-    }
-    match state.create_org_api_key(req).await {
-        Ok(resp) => (StatusCode::CREATED, Json(resp)).into_response(),
-        Err(error) => app_error_response(error),
-    }
-}
-
-pub(crate) async fn list_org_api_keys_handler(
-    Extension(RequestState(state)): Extension<RequestState>,
-) -> Response {
-    if let Err(error) = forbid_api_key(
-        state.auth(),
-        "API keys cannot manage org API keys; use a user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(error) = require_user_admin(state.auth()) {
-        return app_error_response(error);
-    }
-    match state.list_org_api_keys().await {
-        Ok(api_keys) => (
-            StatusCode::OK,
-            Json(common::ApiKeyListResponse { api_keys }),
-        )
-            .into_response(),
-        Err(error) => app_error_response(error),
-    }
-}
-
-pub(crate) async fn revoke_org_api_key_handler(
-    Extension(RequestState(state)): Extension<RequestState>,
-    Path(key_id): Path<String>,
-) -> Response {
-    if let Err(error) = forbid_api_key(
-        state.auth(),
-        "API keys cannot manage org API keys; use a user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(error) = require_user_admin(state.auth()) {
-        return app_error_response(error);
-    }
-    match state.revoke_org_api_key(&key_id).await {
-        Ok(_) => (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response(),
-        Err(error) => app_error_response(error),
-    }
-}
-
-pub(crate) async fn revoke_api_key_handler(
-    Extension(RequestState(state)): Extension<RequestState>,
-    Path((notebook_id, key_id)): Path<(String, String)>,
-) -> Response {
-    if let Err(error) = forbid_api_key(
-        state.auth(),
-        "API keys cannot manage other API keys; use a user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(error) = ensure_user_notebook_access(&state, &notebook_id).await {
-        return app_error_response(error);
-    }
-    match state.revoke_api_key(&notebook_id, &key_id).await {
-        Ok(_) => (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response(),
-        Err(error) => app_error_response(error),
-    }
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub(crate) struct InviteMemberBody {
-    pub email: String,
-    pub role: String,
 }
 
 pub(crate) async fn list_members_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(notebook_id): Path<String>,
 ) -> Response {
-    if let Err(error) = require_user_session(
-        state.auth(),
-        "this endpoint requires a signed-in user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
-    }
-    if !state.postgres_configured() {
-        return postgres_unavailable_response();
     }
     match state.list_share_members(notebook_id).await {
         Ok(items) => {
@@ -473,26 +244,11 @@ pub(crate) async fn invite_member_handler(
     Path(notebook_id): Path<String>,
     Json(req): Json<InviteMemberBody>,
 ) -> Response {
-    if let Err(error) = require_user_session(
-        state.auth(),
-        "this endpoint requires a signed-in user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
     }
-    if !state.postgres_configured() {
-        return postgres_unavailable_response();
-    }
     let role = avrag_share::AccessLevel::from_role(&req.role);
-    match state
-        .invite_share_member(notebook_id, req.email, role)
-        .await
-    {
-        Ok(_) => (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response(),
-        Err(error) => app_error_response(error),
-    }
+    share_empty_ok!(state.invite_share_member(notebook_id, req.email, role).await)
 }
 
 pub(crate) async fn accept_member_handler(
@@ -508,10 +264,7 @@ pub(crate) async fn accept_member_handler(
     if !state.postgres_configured() {
         return postgres_unavailable_response();
     }
-    match state.accept_share_invite(notebook_id, member_id).await {
-        Ok(()) => (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response(),
-        Err(error) => app_error_response(error),
-    }
+    share_empty_ok!(state.accept_share_invite(notebook_id, member_id).await)
 }
 
 pub(crate) async fn decline_member_handler(
@@ -527,74 +280,15 @@ pub(crate) async fn decline_member_handler(
     if !state.postgres_configured() {
         return postgres_unavailable_response();
     }
-    match state.decline_share_invite(notebook_id, member_id).await {
-        Ok(()) => (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response(),
-        Err(error) => app_error_response(error),
-    }
+    share_empty_ok!(state.decline_share_invite(notebook_id, member_id).await)
 }
 
 pub(crate) async fn remove_member_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     Path((notebook_id, member_id)): Path<(String, String)>,
 ) -> Response {
-    if let Err(error) = require_user_session(
-        state.auth(),
-        "this endpoint requires a signed-in user session",
-    ) {
-        return app_error_response(error);
-    }
-    if let Err(response) = require_notebook_user_access(&state, &notebook_id).await {
+    if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
     }
-    if !state.postgres_configured() {
-        return postgres_unavailable_response();
-    }
-    match state.remove_share_member(notebook_id, member_id).await {
-        Ok(()) => (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response(),
-        Err(error) => app_error_response(error),
-    }
-}
-
-pub(crate) async fn list_notifications_handler(
-    Extension(RequestState(state)): Extension<RequestState>,
-) -> Response {
-    if let Err(error) = require_user_session(
-        state.auth(),
-        "this endpoint requires a signed-in user session",
-    ) {
-        return app_error_response(error);
-    }
-    match state.list_notifications(100, 0).await {
-        Ok(notifications) => (
-            StatusCode::OK,
-            Json(common::NotificationsResponse { notifications }),
-        )
-            .into_response(),
-        Err(error) => app_error_response(error),
-    }
-}
-
-pub(crate) async fn mark_notification_read_handler(
-    Extension(RequestState(state)): Extension<RequestState>,
-    Path(notification_id): Path<String>,
-) -> Response {
-    if let Err(error) = require_user_session(
-        state.auth(),
-        "this endpoint requires a signed-in user session",
-    ) {
-        return app_error_response(error);
-    }
-    match state.mark_notification_read(&notification_id).await {
-        Ok(_) => (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response(),
-        Err(error) => app_error_response(error),
-    }
-}
-
-fn parse_expires_in_secs(raw: &str) -> Option<i64> {
-    let expires_at = chrono::DateTime::parse_from_rfc3339(raw).ok()?;
-    let delta = expires_at
-        .with_timezone(&chrono::Utc)
-        .signed_duration_since(chrono::Utc::now())
-        .num_seconds();
-    (delta > 0).then_some(delta)
+    share_empty_ok!(state.remove_share_member(notebook_id, member_id).await)
 }
