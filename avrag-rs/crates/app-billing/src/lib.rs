@@ -7,7 +7,7 @@ pub use cost_events::{
     CostEventRecord, record_cost_event_if_available,
     record_external_search_cost_event_if_available, record_storage_cost_event_if_available,
 };
-pub use usage_observer_impl::PgUsageObserver;
+pub use usage_observer_impl::{PgUsageObserver, TaskTenantUsageObserver};
 
 /// Facade alias for quota and metering operations.
 pub type BillingService = BillingContext;

@@ -7,6 +7,7 @@ use app_core::{
 };
 use async_trait::async_trait;
 use avrag_llm::{ChatUsageRecord, EmbeddingUsageRecord, TenantContext, UsageObserver};
+use tokio::sync::RwLock;
 
 /// Writes exit-metered usage into `llm_usage_events` via [`UsageLimitStorePort`].
 #[derive(Clone)]
@@ -25,32 +26,59 @@ impl PgUsageObserver {
         Self { store }
     }
 
-    fn map_feature(feature: &str) -> BillableFeature {
+    /// Map free-text feature tags set by `LlmClient::with_feature` to billable buckets.
+    ///
+    /// Prefer **exact / prefix** matches over substring `contains`, so tags like
+    /// `planner` / `agent_loop` / `write:refine` stay deterministic.
+    pub fn map_feature(feature: &str) -> BillableFeature {
         let f = feature.trim().to_ascii_lowercase();
-        if f.contains("summary") {
-            BillableFeature::Summary
-        } else if f.contains("planner") || f.contains("plan") {
-            BillableFeature::Planner
-        } else if f.contains("search") {
-            BillableFeature::Search
-        } else if f.contains("graph") || f.contains("triplet") {
-            BillableFeature::GraphExtraction
-        } else if f.contains("rag") || f.contains("answer") {
-            BillableFeature::Answer
-        } else if f.starts_with("write:") || f.contains("writer") || f.contains("section_index") {
-            // Write-mode phases and section-index stay on chat quota buckets.
-            BillableFeature::Chat
-        } else if f.contains("embedding") {
-            BillableFeature::Answer
-        } else {
-            BillableFeature::Chat
+        if f.is_empty() {
+            return BillableFeature::Chat;
         }
+        // Exact tags first.
+        match f.as_str() {
+            "summary" | "document_summary" => return BillableFeature::Summary,
+            "planner" | "plan" | "retrieval_planner" => return BillableFeature::Planner,
+            "search" | "web_search" => return BillableFeature::Search,
+            "triplet" | "graph" | "graph_extraction" => {
+                return BillableFeature::GraphExtraction;
+            }
+            "rag" | "answer" | "internal_answer" => return BillableFeature::Answer,
+            "chat" | "agent_loop" | "section_index" | "ingestion" | "heavytail_writer" => {
+                return BillableFeature::Chat;
+            }
+            "document_embedding" | "document_embedding_mm" | "embedding" => {
+                // Embeddings roll under answer/RAG product meter today.
+                return BillableFeature::Answer;
+            }
+            _ => {}
+        }
+        // Prefix tags (write phases, namespaced features).
+        if f.starts_with("write:") || f.starts_with("write_") {
+            return BillableFeature::Chat;
+        }
+        if f.starts_with("summary") {
+            return BillableFeature::Summary;
+        }
+        if f.starts_with("planner") || f.starts_with("plan:") {
+            return BillableFeature::Planner;
+        }
+        if f.starts_with("search") {
+            return BillableFeature::Search;
+        }
+        if f.starts_with("triplet") || f.starts_with("graph") {
+            return BillableFeature::GraphExtraction;
+        }
+        if f.starts_with("rag") || f.starts_with("answer") {
+            return BillableFeature::Answer;
+        }
+        if f.starts_with("embedding") || f.contains("embedding") {
+            return BillableFeature::Answer;
+        }
+        BillableFeature::Chat
     }
-}
 
-#[async_trait]
-impl UsageObserver for PgUsageObserver {
-    async fn record_chat(&self, tenant: &TenantContext, record: &ChatUsageRecord) {
+    pub async fn record_chat_for(&self, tenant: &TenantContext, record: &ChatUsageRecord) {
         let ctx = MeteringContext {
             user_id: tenant.user_id,
             org_id: tenant.org_id,
@@ -84,7 +112,11 @@ impl UsageObserver for PgUsageObserver {
         }
     }
 
-    async fn record_embedding(&self, tenant: &TenantContext, record: &EmbeddingUsageRecord) {
+    pub async fn record_embedding_for(
+        &self,
+        tenant: &TenantContext,
+        record: &EmbeddingUsageRecord,
+    ) {
         let usage_kind = if record.actual_tokens.is_some() {
             "embedding_multimodal"
         } else {
@@ -125,5 +157,99 @@ impl UsageObserver for PgUsageObserver {
                 "PgUsageObserver::record_embedding failed; continuing"
             );
         }
+    }
+}
+
+#[async_trait]
+impl UsageObserver for PgUsageObserver {
+    async fn record_chat(&self, tenant: &TenantContext, record: &ChatUsageRecord) {
+        self.record_chat_for(tenant, record).await;
+    }
+
+    async fn record_embedding(&self, tenant: &TenantContext, record: &EmbeddingUsageRecord) {
+        self.record_embedding_for(tenant, record).await;
+    }
+}
+
+/// Worker-facing observer that attributes usage to the **current task tenant**,
+/// ignoring the tenant baked into long-lived `LlmClient`/`EmbeddingClient`s.
+#[derive(Clone)]
+pub struct TaskTenantUsageObserver {
+    inner: PgUsageObserver,
+    tenant: Arc<RwLock<TenantContext>>,
+}
+
+impl std::fmt::Debug for TaskTenantUsageObserver {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TaskTenantUsageObserver")
+            .finish_non_exhaustive()
+    }
+}
+
+impl TaskTenantUsageObserver {
+    pub fn new(store: Arc<dyn UsageLimitStorePort>, initial: TenantContext) -> Self {
+        Self {
+            inner: PgUsageObserver::new(store),
+            tenant: Arc::new(RwLock::new(initial)),
+        }
+    }
+
+    pub async fn rebind(&self, tenant: TenantContext) {
+        *self.tenant.write().await = tenant;
+    }
+
+    pub fn tenant_handle(&self) -> Arc<RwLock<TenantContext>> {
+        self.tenant.clone()
+    }
+}
+
+#[async_trait]
+impl UsageObserver for TaskTenantUsageObserver {
+    async fn record_chat(&self, _tenant: &TenantContext, record: &ChatUsageRecord) {
+        let tenant = self.tenant.read().await.clone();
+        self.inner.record_chat_for(&tenant, record).await;
+    }
+
+    async fn record_embedding(&self, _tenant: &TenantContext, record: &EmbeddingUsageRecord) {
+        let tenant = self.tenant.read().await.clone();
+        self.inner.record_embedding_for(&tenant, record).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn map_feature_is_deterministic_for_known_tags() {
+        assert_eq!(
+            PgUsageObserver::map_feature("summary"),
+            BillableFeature::Summary
+        );
+        assert_eq!(
+            PgUsageObserver::map_feature("planner"),
+            BillableFeature::Planner
+        );
+        // "plan" as substring of "airplane" must NOT map to planner.
+        assert_eq!(
+            PgUsageObserver::map_feature("airplane_agent"),
+            BillableFeature::Chat
+        );
+        assert_eq!(
+            PgUsageObserver::map_feature("write:refine"),
+            BillableFeature::Chat
+        );
+        assert_eq!(
+            PgUsageObserver::map_feature("triplet"),
+            BillableFeature::GraphExtraction
+        );
+        assert_eq!(
+            PgUsageObserver::map_feature("document_embedding"),
+            BillableFeature::Answer
+        );
+        assert_eq!(
+            PgUsageObserver::map_feature("agent_loop"),
+            BillableFeature::Chat
+        );
     }
 }

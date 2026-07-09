@@ -94,6 +94,8 @@ pub(crate) struct PgTaskProcessor {
     pub(crate) pdf_renderer_client: Option<PdfRendererServiceClient>,
     pub(crate) ingestion_llm: Option<Arc<avrag_llm::LlmClient>>,
     pub(crate) task_timeout_secs: u64,
+    /// When set, rebound to task org/user at the start of each `process`.
+    pub(crate) task_usage_observer: Option<Arc<app_billing::TaskTenantUsageObserver>>,
 }
 
 struct PayloadSource {
@@ -194,6 +196,18 @@ impl TaskProcessor for PgTaskProcessor {
         let task_kind = worker_task_kind(task);
         telemetry::prometheus::observe_worker_task_started(task_kind);
         let started_at = std::time::Instant::now();
+        // Attribute exit-metered LLM/embedding spend to the task org/actor.
+        if let Some(obs) = self.task_usage_observer.as_ref() {
+            let auth = task_context(task);
+            let tenant = avrag_llm::TenantContext {
+                org_id: auth.org_id().into_uuid(),
+                user_id: auth
+                    .actor_id()
+                    .map(|a| a.into_uuid())
+                    .unwrap_or_else(Uuid::nil),
+            };
+            obs.rebind(tenant).await;
+        }
         let lock_heartbeat = task.lock_token.as_ref().map(|lock_token| {
             spawn_ingestion_task_lock_heartbeat(
                 self.repo.clone(),
