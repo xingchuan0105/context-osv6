@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use contracts::chat::{RagPlan, RagPlanItem};
 use contracts::{
     ExecutePlanRequest, ExecutePlanSummaryMode, ExecutePlanValidationError, RetrievalBundle,

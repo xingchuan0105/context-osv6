@@ -8,4 +8,6 @@ mod processor;
 mod triplet_extraction;
 pub(crate) mod triplet_semantic_lint;
 
-pub(crate) use processor::PgTaskProcessor;
+pub(crate) use processor::{
+    EmbeddingDeps, LlmDeps, MeteringDeps, ParseServiceDeps, PgTaskProcessor, StorageDeps,
+};

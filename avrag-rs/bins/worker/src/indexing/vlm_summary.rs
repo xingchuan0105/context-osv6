@@ -13,13 +13,13 @@ pub async fn maybe_enrich_visual_multimodal_summaries(
     if !vlm_summary_enabled() {
         return;
     }
-    let Some(llm) = processor.ingestion_llm.clone() else {
+    let Some(llm) = processor.llm.ingestion_llm.clone() else {
         return;
     };
     let skip_raster_for_ocr = !env_flag_enabled("INGESTION_PAGE_RASTER_WITH_OCR", false);
     let media_ctx = MediaResolveContext {
-        object_store: processor.object_store.clone(),
-        asset_url_ttl_secs: processor.asset_url_ttl_secs,
+        object_store: processor.storage.object_store.clone(),
+        asset_url_ttl_secs: processor.storage.asset_url_ttl_secs,
     };
 
     for chunk in chunks.iter_mut() {

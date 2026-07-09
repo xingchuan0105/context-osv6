@@ -184,7 +184,7 @@ pub(crate) async fn generate_document_profile_with_llm(
     chunks: &[avrag_storage_pg::IndexedChunk],
     filename: &str,
 ) -> DocumentProfileLlmResult {
-    let Some(generator) = processor.section_index_generator.as_ref() else {
+    let Some(generator) = processor.llm.section_index_generator.as_ref() else {
         info!(document_id = %document_id, "section index generator not configured; skipping profile");
         return DocumentProfileLlmResult {
             toc_entries: Vec::new(),
