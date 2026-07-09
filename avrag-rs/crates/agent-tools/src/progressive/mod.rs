@@ -8,13 +8,13 @@ mod prompt_registry;
 mod skill;
 mod skill_frontmatter;
 mod tool;
-mod tool_catalog;
+mod disclosure_catalog;
 
 pub use disclosure_unit::{DisclosureContext, DisclosureTier, DisclosureUnit};
 pub use prompt_registry::PromptRegistry;
 pub use skill::Skill;
 pub use tool::Tool;
-pub use tool_catalog::{
+pub use disclosure_catalog::{
     atomic_tool_catalog, atomic_tool_catalog_cached, evaluate_calculator_expression,
     search_specific_tools, search_specific_tools_cached,
 };

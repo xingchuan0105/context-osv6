@@ -2,7 +2,7 @@
 
 | 字段 | 值 |
 |------|-----|
-| 状态 | **Done** — Wave 0–6 + 可选收口 P0–P7（C3 薄 re-export；**无 C4**） |
+| 状态 | **Done** — Wave 0–6 + P0–P7 + **TN-2**（删 atomic_tools；list_catalog_tools；workspace envelope；disclosure_catalog） |
 | 分支 | 本地 `master`（solo trunk） |
 | 范围 | `avrag-rs` / `contracts` / `frontend_next` / scripts（**不含** `frontend_rust`） |
 | 主方案 | [`TN_CODE_QUALITY_REMEDIATION_2026-07-09.md`](./TN_CODE_QUALITY_REMEDIATION_2026-07-09.md) |
@@ -34,6 +34,10 @@
 | P5 `/workspaces` 双挂 | Done |
 | P6 analysis `tokio::join!` | Done |
 | P7 本文档收口 | Done |
+| **TN-2.1** 删除 `atomic_tools` | Done |
+| **TN-2.2** `list_catalog_tools` + rag auto_fallback 披露 | Done |
+| **TN-2.3** workspace JSON envelope + typeshare | Done |
+| **TN-2.4** progressive `disclosure_catalog` | Done |
 
 ---
 

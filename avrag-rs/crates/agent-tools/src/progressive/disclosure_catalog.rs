@@ -1,3 +1,5 @@
+//! Progressive skill-side tool disclosure helpers (not the executable ToolCatalog).
+
 use std::sync::OnceLock;
 
 use super::Tool;
