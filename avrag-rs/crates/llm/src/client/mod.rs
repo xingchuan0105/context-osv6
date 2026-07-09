@@ -1,13 +1,15 @@
 mod rate_limit;
-mod request;
 mod stream_parser;
 mod types;
 
-use crate::ModelProviderConfig;
+use crate::protocols::Protocol;
+use crate::route::build_route_from_config;
+use crate::schema::{GenerationOptions, LlmEvent, LlmRequest, ToolDefinition};
+use crate::{AnyRoute, ModelProviderConfig};
 use anyhow::Context;
+use futures::StreamExt;
 use rate_limit::ClientRateLimit;
-use request::build_chat_completion_request_body;
-use stream_parser::{ApiUsageRaw, ChatCompletionStreamParser};
+use stream_parser::ApiUsageRaw;
 use tokio_util::sync::CancellationToken;
 
 pub use types::{ChatMessage, ContentPart, ImageUrlDetail, LlmResponse, LlmUsage};
@@ -22,7 +24,7 @@ struct CompletionCall {
 #[derive(Debug, Clone)]
 pub struct LlmClient {
     pub config: ModelProviderConfig,
-    client: reqwest::Client,
+    route: AnyRoute,
     rate_limit: ClientRateLimit,
 }
 
@@ -33,20 +35,18 @@ impl LlmClient {
             .build()
             .expect("reqwest client should build");
         let rate_limit = ClientRateLimit::from_config(&config);
+        let route = build_route_from_config(&config, client);
         Self {
             config,
-            client,
+            route,
             rate_limit,
         }
     }
 
-    /// Tags this client clone with a feature label (for telemetry/metrics attribution).
-    /// Currently a no-op identity passthrough; reserved for future observability wiring.
     pub fn with_feature(self, _feature: impl std::fmt::Display) -> Self {
         self
     }
 
-    // TODO(write-mode): WIP stub — attaches a usage observer for metering.
     pub fn with_observer(
         self,
         _observer: std::sync::Arc<dyn crate::UsageObserver>,
@@ -75,7 +75,7 @@ impl LlmClient {
         })
     }
 
-    fn build_completion_request_body(
+    fn build_llm_request(
         &self,
         messages: &[ChatMessage],
         temperature: Option<f32>,
@@ -83,36 +83,17 @@ impl LlmClient {
         tools: Option<&[contracts::ToolSpec]>,
         json_mode: bool,
         max_tokens: Option<u32>,
-    ) -> serde_json::Value {
-        let mut request_body = build_chat_completion_request_body(
-            &self.config,
-            messages,
+    ) -> LlmRequest {
+        let tool_defs = tools
+            .map(|tools| tools.iter().map(ToolDefinition::from).collect())
+            .unwrap_or_default();
+
+        LlmRequest::new(messages.to_vec(), self.config.clone()).with_options(GenerationOptions {
             temperature,
+            max_tokens,
             stream,
             json_mode,
-            max_tokens,
-        );
-
-        if let Some(tools) = tools {
-            if !tools.is_empty() {
-                let openai_tools = tools
-                    .iter()
-                    .map(|spec| {
-                        serde_json::json!({
-                            "type": "function",
-                            "function": {
-                                "name": spec.name,
-                                "description": spec.description,
-                                "parameters": spec.input_schema,
-                            }
-                        })
-                    })
-                    .collect::<Vec<_>>();
-                request_body["tools"] = serde_json::json!(openai_tools);
-            }
-        }
-
-        request_body
+        }).with_tools(tool_defs)
     }
 
     fn record_call_failure(call: &CompletionCall) {
@@ -136,59 +117,6 @@ impl LlmClient {
 
     fn record_dependency_failure(provider: &str) {
         telemetry::prometheus::record_dependency_failure(provider);
-    }
-
-    async fn post_chat_completions(
-        &self,
-        call: &CompletionCall,
-        request_body: &serde_json::Value,
-        stream: bool,
-        cancel_token: Option<&CancellationToken>,
-    ) -> anyhow::Result<reqwest::Response> {
-        let mut request = self
-            .client
-            .post(format!("{}/chat/completions", self.config.base_url))
-            .header("Authorization", format!("Bearer {}", self.config.api_key))
-            .header("Content-Type", "application/json");
-        if stream {
-            request = request.header("Accept", "text/event-stream");
-        }
-        let request = request.json(request_body);
-
-        let response = if let Some(token) = cancel_token {
-            tokio::select! {
-                res = request.send() => res,
-                _ = token.cancelled() => anyhow::bail!("LLM request cancelled"),
-            }
-        } else {
-            request.send().await
-        };
-
-        match response {
-            Ok(response) => {
-                if response.status().is_success() {
-                    Ok(response)
-                } else {
-                    let status = response.status();
-                    let body = response.text().await.unwrap_or_default();
-                    Self::record_call_failure(call);
-                    if stream {
-                        anyhow::bail!("Chat completion stream API error {}: {}", status, body);
-                    } else {
-                        anyhow::bail!("Chat completion API error {}: {}", status, body);
-                    }
-                }
-            }
-            Err(error) => {
-                Self::record_call_failure(call);
-                let context = if stream {
-                    "Failed to send chat completion stream request"
-                } else {
-                    "Failed to send chat completion request"
-                };
-                Err(anyhow::Error::new(error)).context(context)
-            }
-        }
     }
 
     fn record_completion_success(
@@ -217,6 +145,10 @@ impl LlmClient {
             .record_usage(call.pre_deducted, usage.total_tokens() as usize);
     }
 
+    fn map_route_error(err: crate::schema::LlmError) -> anyhow::Error {
+        anyhow::Error::new(err)
+    }
+
     async fn complete_non_stream(
         &self,
         messages: &[ChatMessage],
@@ -226,7 +158,7 @@ impl LlmClient {
         max_tokens: Option<u32>,
     ) -> anyhow::Result<LlmResponse> {
         let call = self.prepare_completion(messages)?;
-        let request_body = self.build_completion_request_body(
+        let request = self.build_llm_request(
             messages,
             temperature,
             false,
@@ -236,103 +168,27 @@ impl LlmClient {
         );
 
         let response = self
-            .post_chat_completions(&call, &request_body, false, None)
-            .await?;
-
-        #[derive(serde::Deserialize)]
-        struct Choice {
-            message: ResponseMessage,
-        }
-
-        #[derive(serde::Deserialize)]
-        struct ResponseMessage {
-            #[serde(default)]
-            content: Option<String>,
-            #[serde(default)]
-            reasoning_content: Option<String>,
-            #[serde(default)]
-            tool_calls: Option<Vec<OpenAiToolCall>>,
-        }
-
-        #[allow(dead_code)]
-        #[derive(serde::Deserialize)]
-        struct OpenAiToolCall {
-            id: String,
-            #[serde(rename = "type")]
-            call_type: String,
-            #[serde(default)]
-            function: Option<OpenAiFunctionCall>,
-        }
-
-        #[derive(serde::Deserialize)]
-        struct OpenAiFunctionCall {
-            name: String,
-            arguments: String,
-        }
-
-        #[derive(serde::Deserialize)]
-        struct CompletionResponse {
-            choices: Vec<Choice>,
-            usage: ApiUsageRaw,
-            model: String,
-        }
-
-        let resp = response.json().await;
-        let resp: CompletionResponse = match resp {
-            Ok(resp) => resp,
-            Err(error) => {
-                Self::record_call_failure(&call);
-                return Err(error).context("Failed to parse chat completion response");
-            }
-        };
-
-        let choice = resp.choices.first().context("No choices in response")?;
-        let content = choice.message.content.clone().unwrap_or_default();
-        let reasoning_content = choice.message.reasoning_content.clone();
-
-        let tool_calls = if let Some(ref calls) = choice.message.tool_calls {
-            let mut mapped_calls = Vec::new();
-            for tool_call in calls {
-                if let Some(ref func) = tool_call.function {
-                    let args = serde_json::from_str(&func.arguments)
-                        .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
-                    mapped_calls.push(contracts::ToolCall {
-                        tool: func.name.clone(),
-                        version: "1.0".to_string(),
-                        args,
-                    });
-                }
-            }
-            if mapped_calls.is_empty() {
-                None
-            } else {
-                Some(mapped_calls)
-            }
-        } else {
-            None
-        };
+            .route
+            .generate(request)
+            .await
+            .map_err(Self::map_route_error)
+            .with_context(|| "Failed to complete chat request")?;
 
         self.record_completion_success(
             &call,
-            &resp.model,
-            &resp.usage,
-            resp.usage.cached_token_count() as u64,
+            &response.model,
+            &ApiUsageRaw::from_token_counts(
+                response.usage.prompt_tokens,
+                response.usage.completion_tokens,
+                response.usage.total_tokens,
+                response.usage.cached_tokens,
+            ),
+            response.usage.cached_tokens as u64,
         );
 
-        let llm_usage = resp
-            .usage
-            .to_llm_usage(self.config.provider_name(), resp.model.clone());
-
-        Ok(LlmResponse {
-            content,
-            reasoning_content,
-            usage: llm_usage,
-            model: resp.model,
-            tool_calls,
-        })
+        Ok(response)
     }
 
-    /// Send a chat completion request with tool specifications
     pub async fn complete_with_tools(
         &self,
         messages: &[ChatMessage],
@@ -343,7 +199,6 @@ impl LlmClient {
             .await
     }
 
-    /// Send a chat completion request
     pub async fn complete(
         &self,
         messages: &[ChatMessage],
@@ -353,7 +208,6 @@ impl LlmClient {
             .await
     }
 
-    /// Send a chat completion request with an explicit output token cap.
     pub async fn complete_with_max_tokens(
         &self,
         messages: &[ChatMessage],
@@ -364,12 +218,6 @@ impl LlmClient {
             .await
     }
 
-    /// Send a chat completion request with DeepSeek JSON Output enabled
-    /// (`response_format: json_object`). Use this for synthesis turns that must
-    /// emit a structured `internal_answer_v1` / `internal_search_answer_v1`
-    /// JSON object. The prompt must already contain the word "json" and a
-    /// format example (see `synthesis_contract_block`). On non-DeepSeek
-    /// providers this silently falls back to a normal completion.
     pub async fn complete_json_mode(
         &self,
         messages: &[ChatMessage],
@@ -388,22 +236,100 @@ impl LlmClient {
         mut on_reasoning_delta: impl FnMut(&str),
     ) -> anyhow::Result<LlmResponse> {
         let call = self.prepare_completion(messages)?;
-        let request_body = self.build_completion_request_body(
+
+        if self.route.is_openai_chat() {
+            return self
+                .complete_stream_openai(
+                    messages,
+                    temperature,
+                    token,
+                    &call,
+                    &mut on_content_delta,
+                    &mut on_reasoning_delta,
+                )
+                .await;
+        }
+
+        self.complete_stream_events(
             messages,
             temperature,
-            true,
-            None,
-            false,
-            None,
+            token,
+            &call,
+            &mut on_content_delta,
+            &mut on_reasoning_delta,
+        )
+        .await
+    }
+
+    async fn complete_stream_openai(
+        &self,
+        messages: &[ChatMessage],
+        temperature: Option<f32>,
+        token: CancellationToken,
+        call: &CompletionCall,
+        on_content_delta: &mut impl FnMut(&str),
+        on_reasoning_delta: &mut impl FnMut(&str),
+    ) -> anyhow::Result<LlmResponse> {
+        let openai_route = self
+            .route
+            .openai_route()
+            .expect("openai route should exist when is_openai_chat is true");
+        let request = self.build_llm_request(messages, temperature, true, None, false, None);
+
+        let body = openai_route
+            .protocol
+            .build_body(&request)
+            .map_err(Self::map_route_error)?;
+        let url = openai_route
+            .endpoint
+            .render()
+            .map_err(Self::map_route_error)?;
+        let mut headers = reqwest::header::HeaderMap::new();
+        openai_route.auth.apply(&mut headers);
+
+        let http_request = openai_route
+            .http_client
+            .post(url)
+            .headers(headers)
+            .header(
+                reqwest::header::CONTENT_TYPE,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("text/event-stream"),
+            )
+            .json(&body);
+
+        let response = tokio::select! {
+            res = http_request.send() => res,
+            _ = token.cancelled() => anyhow::bail!("LLM request cancelled"),
+        };
+
+        let response = match response {
+            Ok(response) => {
+                if response.status().is_success() {
+                    response
+                } else {
+                    let status = response.status();
+                    let body = response.text().await.unwrap_or_default();
+                    Self::record_call_failure(call);
+                    anyhow::bail!("Chat completion stream API error {}: {}", status, body);
+                }
+            }
+            Err(error) => {
+                Self::record_call_failure(call);
+                return Err(anyhow::Error::new(error))
+                    .context("Failed to send chat completion stream request");
+            }
+        };
+
+        let mut parser = stream_parser::ChatCompletionStreamParser::new(
+            call.provider.clone(),
+            call.configured_model.clone(),
         );
 
-        let mut response = self
-            .post_chat_completions(&call, &request_body, true, Some(&token))
-            .await?;
-
-        let mut parser =
-            ChatCompletionStreamParser::new(call.provider.clone(), call.configured_model.clone());
-
+        let mut response = response;
         loop {
             let next_chunk = tokio::select! {
                 chunk = response.chunk() => chunk.context("Failed to read chat completion stream chunk")?,
@@ -413,13 +339,13 @@ impl LlmClient {
                 break;
             };
 
-            parser.feed_chunk(&chunk, &mut on_content_delta, &mut on_reasoning_delta)?;
+            parser.feed_chunk(&chunk, on_content_delta, on_reasoning_delta)?;
         }
 
-        let parsed = parser.finish(&mut on_content_delta, &mut on_reasoning_delta)?;
+        let parsed = parser.finish(on_content_delta, on_reasoning_delta)?;
 
         self.record_completion_success(
-            &call,
+            call,
             &parsed.model,
             &ApiUsageRaw::from_token_counts(
                 parsed.usage.prompt_tokens,
@@ -431,5 +357,89 @@ impl LlmClient {
         );
 
         Ok(parsed)
+    }
+
+    async fn complete_stream_events(
+        &self,
+        messages: &[ChatMessage],
+        temperature: Option<f32>,
+        token: CancellationToken,
+        call: &CompletionCall,
+        on_content_delta: &mut impl FnMut(&str),
+        on_reasoning_delta: &mut impl FnMut(&str),
+    ) -> anyhow::Result<LlmResponse> {
+        let request = self.build_llm_request(messages, temperature, true, None, false, None);
+        let mut stream = self.route.stream(request);
+        let mut content = String::new();
+        let mut reasoning = String::new();
+        let model = call.configured_model.clone();
+        let mut usage = ApiUsageRaw::from_token_counts(0, 0, 0, 0);
+
+        loop {
+            let next = tokio::select! {
+                event = stream.next() => event,
+                _ = token.cancelled() => anyhow::bail!("LLM request cancelled"),
+            };
+            let Some(event) = next else {
+                break;
+            };
+            match event.map_err(Self::map_route_error)? {
+                LlmEvent::TextDelta { text, .. } => {
+                    content.push_str(&text);
+                    on_content_delta(&text);
+                }
+                LlmEvent::ReasoningDelta { text, .. } => {
+                    reasoning.push_str(&text);
+                    on_reasoning_delta(&text);
+                }
+                LlmEvent::Finish {
+                    usage: Some(event_usage),
+                    ..
+                } => {
+                    usage = ApiUsageRaw::from_token_counts(
+                        event_usage.prompt_tokens,
+                        event_usage.completion_tokens,
+                        event_usage.total_tokens,
+                        event_usage.cached_tokens,
+                    );
+                }
+                LlmEvent::ProviderError { message, .. } => {
+                    Self::record_call_failure(call);
+                    anyhow::bail!(message);
+                }
+                _ => {}
+            }
+        }
+
+        if content.is_empty() {
+            if reasoning.is_empty() {
+                Self::record_call_failure(call);
+                anyhow::bail!("LLM stream finished without content");
+            }
+            content = reasoning.clone();
+        }
+
+        let response = LlmResponse {
+            content,
+            reasoning_content: if reasoning.is_empty() {
+                None
+            } else {
+                Some(reasoning)
+            },
+            usage: LlmUsage {
+                prompt_tokens: usage.prompt_tokens(),
+                completion_tokens: usage.completion_tokens(),
+                total_tokens: usage.total_tokens(),
+                provider: call.provider.clone(),
+                model: model.clone(),
+                cached_tokens: usage.cached_token_count(),
+            },
+            model: model.clone(),
+            tool_calls: None,
+        };
+
+        self.record_completion_success(call, &model, &usage, usage.cached_token_count() as u64);
+
+        Ok(response)
     }
 }
