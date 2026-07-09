@@ -3,6 +3,9 @@
 This document defines pass/fail semantics across Rust Product E2E and Playwright
 suites.
 
+**Solo / agent default process** (commit vs acceptance stages, when not to block on smoke):
+[`docs/engineering/SOLO_DISCIPLINE.md`](../../docs/engineering/SOLO_DISCIPLINE.md).
+
 **Agent-oriented full coverage matrix** (what to test, parallel groups, real doc parse / LLM RAG / chat / websearch): [`full-functional-e2e-guide.md`](full-functional-e2e-guide.md).
 
 **Post-run analysis** (coverage / regression / attribution / stability / quality): [`e2e-analysis-framework.md`](e2e-analysis-framework.md) + [`e2e-test-registry.yaml`](e2e-test-registry.yaml).
@@ -10,6 +13,8 @@ suites.
 See also [`product-e2e-plan.md`](product-e2e-plan.md).
 
 ## Merge gate vs nightly (ADR 0006 §11)
+
+**Process note:** for single-developer workflow, “merge gate” means **commit-stage** checks only. Acceptance smoke is manual until a wave is closed—see SOLO_DISCIPLINE.
 
 **Merge gate** (must be green to land on `master`):
 
