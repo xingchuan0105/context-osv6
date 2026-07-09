@@ -3,7 +3,10 @@ use avrag_rag_core::context::SessionContext as RagSessionContext;
 use contracts::chat::ChatMessage;
 use contracts::workspaces::ChatSession;
 
-use super::profile_merge::{apply_profile_delta, parse_profile_delta_response};
+use super::profile_merge::{
+    apply_profile_delta, parse_profile_delta_response, user_profile_from_value,
+    user_profile_to_value,
+};
 use super::profile_types::ProfileDelta;
 use crate::context::ChatContext;
 
@@ -48,19 +51,20 @@ impl ChatContext {
             return false;
         }
 
-        let existing_structured = existing_profile
+        let existing_structured_value = existing_profile
             .as_ref()
             .map(|p| p.structured_profile.clone())
             .unwrap_or_else(|| serde_json::json!({}));
+        let existing_structured = user_profile_from_value(&existing_structured_value);
 
         let delta = self
-            .infer_profile_delta(recent_turns, &existing_structured)
+            .infer_profile_delta(recent_turns, &existing_structured_value)
             .await;
         if delta.is_effectively_empty() {
             return false;
         }
 
-        let merged = apply_profile_delta(existing_structured, delta);
+        let merged = user_profile_to_value(&apply_profile_delta(existing_structured, delta));
 
         let expertise_domains = existing_profile
             .as_ref()

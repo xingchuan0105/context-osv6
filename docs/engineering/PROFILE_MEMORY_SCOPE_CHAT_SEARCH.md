@@ -10,10 +10,11 @@
 
 ## 类型
 
-- Delta：`app_chat::chat_private::profile_types::ProfileDelta`（强类型）
-- 存储 profile blob 仍可 JSON；**边界**经 `apply_profile_delta` 进出
-- Evidence / singleton value：字符串列表与可选字符串（W4）
+- **存储**：`UserProfile`（`ProfileSlot` / `ProfileSingleton` / …）— 强类型
+- **Delta**：`ProfileDelta` — LLM 输出；`apply_profile_delta(UserProfile, ProfileDelta) -> UserProfile`
+- **边界**：jsonb 仅经 `user_profile_from_value` / `user_profile_to_value`（生产路径不在 merge 内手术 `Value`）
+- Evidence / singleton value：`Vec<String>` / `Option<String>`（W4）
 
 ## 扩展规则
 
-新字段先改 `ProfileDelta` / merge，再改 LLM prompt schema；禁止在 loop 内再拆一套 JSON 协议。
+新字段先改 `UserProfile` + `ProfileDelta` / merge，再改 LLM prompt schema；禁止在 loop 内再拆一套 JSON 协议。

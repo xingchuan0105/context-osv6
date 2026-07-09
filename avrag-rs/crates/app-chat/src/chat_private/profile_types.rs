@@ -1,5 +1,75 @@
 use serde::{Deserialize, Serialize};
 
+/// Canonical stored profile (Chat + WebSearch only).
+/// Persistence boundary: encode/decode via `user_profile_to_value` / `user_profile_from_value`.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(default)]
+pub struct UserProfile {
+    pub expertise_domains: Vec<ProfileSlot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preferred_answer_style: Option<ProfileSingleton>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preferred_language: Option<ProfileSingleton>,
+    pub tool_preferences: Vec<ProfileSlot>,
+    pub important_constraints: Vec<ProfileSlot>,
+    pub session_continuity_hints: Vec<StoredSessionHint>,
+    pub observed_conflicts: Vec<StoredConflict>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub global_summary: Option<String>,
+}
+
+/// One expertise / tool / constraint slot in stored profile.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(default)]
+pub struct ProfileSlot {
+    pub tag: Option<String>,
+    pub action: Option<String>,
+    pub description: Option<String>,
+    pub reason: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_string_list")]
+    pub evidence: Vec<String>,
+    pub confidence_signal: Option<String>,
+    pub expires_at: Option<String>,
+    pub confidence: Option<f64>,
+    pub since: Option<String>,
+    pub last_seen: Option<String>,
+}
+
+/// Preferred language / answer-style singleton in stored profile.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(default)]
+pub struct ProfileSingleton {
+    pub tag: Option<String>,
+    pub action: Option<String>,
+    pub description: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_string_list")]
+    pub evidence: Vec<String>,
+    pub confidence_signal: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_opt_string")]
+    pub value: Option<String>,
+    pub confidence: Option<f64>,
+    pub since: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(default)]
+pub struct StoredSessionHint {
+    pub hint: Option<String>,
+    pub source_session_id: Option<String>,
+    pub priority: Option<String>,
+    pub created_at: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(default)]
+pub struct StoredConflict {
+    pub field: Option<String>,
+    pub old_view: Option<String>,
+    pub new_view: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_string_list")]
+    pub evidence: Vec<String>,
+}
+
 /// LLM-produced semantic delta for the dream layer; runtime applies deterministic merge.
 ///
 /// Scope: Chat + WebSearch experience only (see PROFILE_MEMORY_SCOPE_CHAT_SEARCH.md).

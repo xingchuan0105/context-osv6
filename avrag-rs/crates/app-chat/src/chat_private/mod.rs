@@ -58,7 +58,7 @@ impl ChatContext {
 mod tests {
     use super::profile_merge::{
         MAX_DESCRIPTION_LEN, MAX_EVIDENCE_ITEMS, MAX_EVIDENCE_LEN, apply_hint_updates,
-        apply_profile_delta, apply_profile_delta_from_value, apply_singleton_update,
+        apply_profile_delta_from_value, apply_profile_delta_value, apply_singleton_update,
         apply_slot_updates, parse_profile_delta_response, truncate_text,
     };
     use super::profile_types::ProfileDelta;
@@ -475,7 +475,7 @@ mod tests {
         let delta = parse_profile_delta_response("not-json-at-all");
         assert!(delta.is_effectively_empty());
 
-        let merged = apply_profile_delta(serde_json::json!("not-an-object"), delta);
+        let merged = apply_profile_delta_value(serde_json::json!("not-an-object"), delta);
         assert!(merged.is_object());
     }
 
@@ -490,7 +490,7 @@ mod tests {
             "expertise_domains": "also-not-array",
             "tool_preferences": {"tag": "rag"}
         });
-        let merged = apply_profile_delta(existing, delta);
+        let merged = apply_profile_delta_value(existing, delta);
         assert!(merged["expertise_domains"].is_array());
         assert!(merged["tool_preferences"].is_array());
     }
@@ -507,7 +507,7 @@ mod tests {
             }]
         }))
         .expect("valid delta");
-        let merged = apply_profile_delta(serde_json::Value::Null, delta);
+        let merged = apply_profile_delta_value(serde_json::Value::Null, delta);
         let arr = merged["expertise_domains"].as_array().expect("array slot");
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["tag"], "rust");
