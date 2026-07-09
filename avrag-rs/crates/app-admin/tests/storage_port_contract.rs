@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use app_admin::AdminContext;
 use app_core::{
-    AdminStorePort, MemoryState, MemoryStateHandles, ObjectStoreConfig, ObjectStorePort,
-    StorageContext, StorageContextParts, StorageInfra, StorageStores,
+    AdminStorePort, MemoryAdminStore, MemoryState, MemoryStateHandles, ObjectStoreConfig,
+    ObjectStorePort, StorageContext, StorageContextParts, StorageInfra, StorageStores,
 };
 use async_trait::async_trait;
 use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
@@ -310,6 +310,9 @@ fn test_auth() -> AuthContext {
 }
 
 fn memory_storage() -> StorageContext {
+    let memory_state = Arc::new(RwLock::new(MemoryState::default()));
+    let api_keys = Arc::new(RwLock::new(BTreeMap::new()));
+    let api_key_hashes = Arc::new(RwLock::new(BTreeMap::new()));
     StorageContext::from_parts(StorageContextParts {
         infra: StorageInfra {
             postgres_health: None,
@@ -320,16 +323,20 @@ fn memory_storage() -> StorageContext {
         stores: StorageStores {
             document_store: None,
             auth_store: None,
-            admin_store: None,
+            admin_store: Some(Arc::new(MemoryAdminStore::new(
+                memory_state.clone(),
+                api_keys.clone(),
+                api_key_hashes.clone(),
+            ))),
             billing_quota: None,
             billing_store: None,
             share_store: None,
             chat_persistence: None,
         },
         memory: MemoryStateHandles {
-            inner: Arc::new(RwLock::new(MemoryState::default())),
-            api_keys: Arc::new(RwLock::new(BTreeMap::new())),
-            api_key_hashes: Arc::new(RwLock::new(BTreeMap::new())),
+            inner: memory_state,
+            api_keys,
+            api_key_hashes,
         },
         objects: ObjectStoreConfig {
             object_store: Arc::new(TestObjectStore),
@@ -374,7 +381,7 @@ fn storage_with_admin_store(store: Arc<dyn AdminStorePort>) -> StorageContext {
 }
 
 #[tokio::test]
-async fn memory_mode_preferences_round_trip_without_ports() {
+async fn memory_mode_preferences_round_trip_via_memory_admin_store() {
     let admin = AdminContext::new();
     let storage = memory_storage();
     let auth = test_auth();

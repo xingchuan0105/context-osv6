@@ -1,5 +1,5 @@
 use app_core::{StorageContext, domain_rows::UserProfileRow};
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use common::{AppError, new_id, now_rfc3339};
 use contracts::UserPreferences;
 use contracts::preferences::{
@@ -16,22 +16,18 @@ impl AdminContext {
         storage: &StorageContext,
         user_id: Uuid,
     ) -> Result<UserPreferences, AppError> {
-        if let Some(store) = storage.admin_store() {
-            let profile = store.get_user_profile(auth, user_id).await?;
-            let preferences = profile
-                .and_then(|row| {
-                    serde_json::from_value::<UserPreferences>(row.custom_preferences).ok()
-                })
-                .unwrap_or_default();
-            return Ok(preferences);
-        }
-
-        let state = storage.inner().read().await;
-        Ok(state
-            .user_preferences
-            .get(&user_id.to_string())
-            .cloned()
-            .unwrap_or_default())
+        let store = storage.admin_store().ok_or_else(|| {
+            AppError::internal(
+                "admin store port is required (wire MemoryAdminStore or Pg adapter at bootstrap)",
+            )
+        })?;
+        let profile = store.get_user_profile(auth, user_id).await?;
+        let preferences = profile
+            .and_then(|row| {
+                serde_json::from_value::<UserPreferences>(row.custom_preferences).ok()
+            })
+            .unwrap_or_default();
+        Ok(preferences)
     }
 
     pub async fn save_user_preferences(
@@ -41,42 +37,39 @@ impl AdminContext {
         user_id: Uuid,
         preferences: &UserPreferences,
     ) -> Result<UserPreferences, AppError> {
-        if let Some(store) = storage.admin_store() {
-            let existing_profile = store.get_user_profile(auth, user_id).await?;
-            let profile = UserProfileRow {
-                user_id,
-                org_id: auth.org_id(),
-                expertise_domains: existing_profile
-                    .as_ref()
-                    .map(|profile| profile.expertise_domains.clone())
-                    .unwrap_or_default(),
-                preferred_answer_style: existing_profile
-                    .as_ref()
-                    .and_then(|profile| profile.preferred_answer_style.clone()),
-                frequently_asked_topics: existing_profile
-                    .as_ref()
-                    .map(|profile| profile.frequently_asked_topics.clone())
-                    .unwrap_or_default(),
-                custom_preferences: serde_json::to_value(preferences)
-                    .unwrap_or_else(|_| serde_json::json!({})),
-                structured_profile: existing_profile
-                    .as_ref()
-                    .map(|profile| profile.structured_profile.clone())
-                    .unwrap_or_else(|| serde_json::json!({})),
-                inferred_at: chrono::Utc::now(),
-                inference_version: existing_profile
-                    .as_ref()
-                    .map(|profile| profile.inference_version.clone())
-                    .unwrap_or_else(|| "preferences-v1".to_string()),
-            };
-            store.upsert_user_profile(auth, &profile).await?;
-            return Ok(preferences.clone());
-        }
-
-        let mut state = storage.inner().write().await;
-        state
-            .user_preferences
-            .insert(user_id.to_string(), preferences.clone());
+        let store = storage.admin_store().ok_or_else(|| {
+            AppError::internal(
+                "admin store port is required (wire MemoryAdminStore or Pg adapter at bootstrap)",
+            )
+        })?;
+        let existing_profile = store.get_user_profile(auth, user_id).await?;
+        let profile = UserProfileRow {
+            user_id,
+            org_id: auth.org_id(),
+            expertise_domains: existing_profile
+                .as_ref()
+                .map(|profile| profile.expertise_domains.clone())
+                .unwrap_or_default(),
+            preferred_answer_style: existing_profile
+                .as_ref()
+                .and_then(|profile| profile.preferred_answer_style.clone()),
+            frequently_asked_topics: existing_profile
+                .as_ref()
+                .map(|profile| profile.frequently_asked_topics.clone())
+                .unwrap_or_default(),
+            custom_preferences: serde_json::to_value(preferences)
+                .unwrap_or_else(|_| serde_json::json!({})),
+            structured_profile: existing_profile
+                .as_ref()
+                .map(|profile| profile.structured_profile.clone())
+                .unwrap_or_else(|| serde_json::json!({})),
+            inferred_at: chrono::Utc::now(),
+            inference_version: existing_profile
+                .as_ref()
+                .map(|profile| profile.inference_version.clone())
+                .unwrap_or_else(|| "preferences-v1".to_string()),
+        };
+        store.upsert_user_profile(auth, &profile).await?;
         Ok(preferences.clone())
     }
 

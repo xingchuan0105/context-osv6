@@ -26,7 +26,9 @@ pub mod state_types;
 pub mod storage_context;
 pub mod util;
 
-pub use adapters::{MemoryBillingQuotaPort, MemoryDocumentStore, MemoryNotebookStore};
+pub use adapters::{
+    MemoryAdminStore, MemoryBillingQuotaPort, MemoryDocumentStore, MemoryNotebookStore,
+};
 pub use admin_domain::{
     AdminAuditLogEntry, AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview,
     AdminDegradationStatus, AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminOrgInfo,

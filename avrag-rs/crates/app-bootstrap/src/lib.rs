@@ -130,8 +130,17 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
             ObjectStoreHandle::local(PathBuf::from(config.object_root.clone())),
         )));
     let memory_state = Arc::new(RwLock::new(MemoryState::default()));
+    let api_keys = Arc::new(RwLock::new(BTreeMap::new()));
+    let api_key_hashes = Arc::new(RwLock::new(BTreeMap::new()));
     let document_store: Option<Arc<dyn app_core::DocumentStorePort>> = Some(Arc::new(
         app_core::MemoryDocumentStore::new(memory_state.clone()),
+    ));
+    let admin_store: Option<Arc<dyn app_core::AdminStorePort>> = Some(Arc::new(
+        app_core::MemoryAdminStore::new(
+            memory_state.clone(),
+            api_keys.clone(),
+            api_key_hashes.clone(),
+        ),
     ));
     let billing_quota: Option<Arc<dyn app_core::BillingQuotaPort>> =
         Some(Arc::new(app_core::MemoryBillingQuotaPort));
@@ -145,7 +154,7 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         stores: StorageStores {
             document_store,
             auth_store: None,
-            admin_store: None,
+            admin_store,
             billing_quota,
             billing_store: None,
             share_store: None,
@@ -153,8 +162,8 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         },
         memory: MemoryStateHandles {
             inner: memory_state,
-            api_keys: Arc::new(RwLock::new(BTreeMap::new())),
-            api_key_hashes: Arc::new(RwLock::new(BTreeMap::new())),
+            api_keys,
+            api_key_hashes,
         },
         objects: ObjectStoreConfig {
             object_store,
@@ -335,6 +344,8 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
     // Always install a document store: PG adapter when available, otherwise memory.
     // Domain code must not dual-path on Option — memory is an adapter, not a control-flow mode.
     let memory_state = Arc::new(RwLock::new(MemoryState::default()));
+    let api_keys = Arc::new(RwLock::new(BTreeMap::new()));
+    let api_key_hashes = Arc::new(RwLock::new(BTreeMap::new()));
     let document_store: Option<Arc<dyn DocumentStorePort>> = Some(match pg.as_ref() {
         Some(repository) => {
             Arc::new(PgDocumentStoreAdapter::new(repository.clone())) as Arc<dyn DocumentStorePort>
@@ -342,8 +353,16 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         None => Arc::new(app_core::MemoryDocumentStore::new(memory_state.clone()))
             as Arc<dyn DocumentStorePort>,
     });
-    let admin_store: Option<Arc<dyn AdminStorePort>> = pg.as_ref().map(|repository| {
-        Arc::new(PgAdminStoreAdapter::new(repository.clone())) as Arc<dyn AdminStorePort>
+    // Always install an admin store (PG or memory) so domain code never dual-paths.
+    let admin_store: Option<Arc<dyn AdminStorePort>> = Some(match pg.as_ref() {
+        Some(repository) => {
+            Arc::new(PgAdminStoreAdapter::new(repository.clone())) as Arc<dyn AdminStorePort>
+        }
+        None => Arc::new(app_core::MemoryAdminStore::new(
+            memory_state.clone(),
+            api_keys.clone(),
+            api_key_hashes.clone(),
+        )) as Arc<dyn AdminStorePort>,
     });
     let auth_store: Option<Arc<dyn AuthStorePort>> = pg.as_ref().map(|repository| {
         Arc::new(PgAuthStoreAdapter::new(repository.clone())) as Arc<dyn AuthStorePort>
@@ -381,8 +400,8 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         },
         memory: MemoryStateHandles {
             inner: memory_state,
-            api_keys: Arc::new(RwLock::new(BTreeMap::new())),
-            api_key_hashes: Arc::new(RwLock::new(BTreeMap::new())),
+            api_keys,
+            api_key_hashes,
         },
         objects: ObjectStoreConfig {
             object_store,
