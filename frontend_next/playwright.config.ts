@@ -75,9 +75,11 @@ export default defineConfig({
       ? []
       : [
           {
-            command: "cd ../avrag-rs && cargo run --bin avrag-api",
+            // Prefer locked graph; CI should prebuild so this is mostly link+start.
+            command: "cd ../avrag-rs && cargo run --locked --bin avrag-api",
             url: "http://127.0.0.1:8080/health",
-            timeout: 120_000,
+            // 300s: first-time compile on cold runners can exceed 120s even with cache misses.
+            timeout: 300_000,
             reuseExistingServer,
             env: webServerEnv({
               PRICING_REVAMP_ROLLOUT: "100",
@@ -85,9 +87,9 @@ export default defineConfig({
             }),
           },
           {
-            command: "cd ../avrag-rs && cargo run -p avrag-worker",
+            command: "cd ../avrag-rs && cargo run --locked -p avrag-worker",
             url: "http://127.0.0.1:8081/health",
-            timeout: 120_000,
+            timeout: 300_000,
             reuseExistingServer,
             env: webServerEnv(backendServerEnv),
           },

@@ -59,6 +59,12 @@ jobs:
         run: bash "$GITHUB_WORKSPACE/scripts/ci-start-milvus.sh"
         timeout-minutes: 5
 
+      # Cold `cargo run` exceeds Playwright's 120s webServer budget on 2-core runners.
+      - name: Prebuild Rust API and worker
+        working-directory: avrag-rs
+        run: cargo build --locked -p avrag-api -p avrag-worker
+        timeout-minutes: 25
+
       - name: Run smoke E2E
         run: pnpm exec playwright test --project=functional --project=auth
         env:
