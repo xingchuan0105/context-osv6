@@ -9,7 +9,7 @@ use axum::{
 use super::super::{app_error_response, error_response};
 use super::notes::load_workspace_notes;
 use crate::middleware::RequestState;
-use crate::auth_guard::{ensure_user_notebook_access, require_user_session};
+use crate::auth_guard::{ensure_user_workspace_access, require_user_session};
 
 fn pinned_source_count(
     preferences: &contracts::preferences::UserPreferences,
@@ -171,7 +171,7 @@ pub(crate) async fn get_workspace_analysis_handler(
     ) {
         return app_error_response(error);
     }
-    if let Err(error) = ensure_user_notebook_access(&state, &workspace_id).await {
+    if let Err(error) = ensure_user_workspace_access(&state, &workspace_id).await {
         return app_error_response(error);
     }
     let Some(notebook) = state.docs().get_workspace(&workspace_id).await else {

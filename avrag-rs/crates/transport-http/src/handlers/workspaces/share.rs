@@ -12,7 +12,7 @@ use axum::{
 };
 
 use super::super::{app_error_response, error_response};
-use crate::auth_guard::{ensure_user_notebook_access, require_user_session};
+use crate::auth_guard::{ensure_user_workspace_access, require_user_session};
 use crate::middleware::RequestState;
 
 #[derive(Debug, serde::Deserialize)]
@@ -57,7 +57,7 @@ async fn require_share_session(state: &AppState, workspace_id: &str) -> Result<(
     ) {
         return Err(app_error_response(error));
     }
-    if let Err(error) = ensure_user_notebook_access(state, workspace_id).await {
+    if let Err(error) = ensure_user_workspace_access(state, workspace_id).await {
         return Err(app_error_response(error));
     }
     if !state.postgres_configured() {

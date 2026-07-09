@@ -18,7 +18,7 @@ fi
 
 echo "==> L1 cargo test --lib: ${PKGS[*]}"
 for p in "${PKGS[@]}"; do
-  cargo test -p "$p" --lib -- --test-threads=4
+  if [[ "$p" == "agent-loop" ]]; then cargo test -p "$p" --lib -- --test-threads=1; else cargo test -p "$p" --lib -- --test-threads=4; fi
 done
 
 if [[ -d "$ROOT/frontend_next" ]]; then

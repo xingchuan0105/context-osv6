@@ -283,7 +283,12 @@ pub(crate) fn query_permission() -> &'static str {
     PERM_QUERY
 }
 
-pub(crate) async fn ensure_user_notebook_access(
+/// Canonical forbidden code when a signed-in user lacks workspace membership.
+pub(crate) const WORKSPACE_ACCESS_REQUIRED: &str = "workspace_access_required";
+
+/// Require the signed-in user to have share/workspace access (not `AccessLevel::None`).
+/// Public error code: [`WORKSPACE_ACCESS_REQUIRED`].
+pub(crate) async fn ensure_user_workspace_access(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<(), AppError> {
@@ -302,7 +307,7 @@ pub(crate) async fn ensure_user_notebook_access(
     let access = state.share().check_access(workspace_id).await?;
     if access == avrag_share::AccessLevel::None {
         return Err(AppError::forbidden(
-            "workspace_access_required",
+            WORKSPACE_ACCESS_REQUIRED,
             "workspace membership required to manage API keys for this workspace",
         ));
     }
@@ -313,6 +318,17 @@ pub(crate) async fn ensure_user_notebook_access(
 mod tests {
     use super::*;
     use contracts::auth_runtime::OrgId;
+
+    #[test]
+    fn workspace_access_required_constant_matches_forbidden_code() {
+        // Drives the same constant the production deny path uses (no hard-coded drift).
+        let err = AppError::forbidden(
+            WORKSPACE_ACCESS_REQUIRED,
+            "workspace membership required to manage API keys for this workspace",
+        );
+        assert_eq!(err.code(), WORKSPACE_ACCESS_REQUIRED);
+        assert_eq!(err.code(), "workspace_access_required");
+    }
 
     #[test]
     fn workspace_key_rejected_for_org_tools() {

@@ -16,12 +16,60 @@ fn test_app_state() -> AppState {
     AppState::new(AppConfig::default())
 }
 
-async fn pg_test_app_state() -> Option<AppState> {
-    let database_url = env::var("DATABASE_URL").ok()?;
+/// Resolve DATABASE_URL from env or monorepo `.env` files (honest contract tests need PG).
+fn resolve_database_url() -> String {
+    if let Ok(url) = env::var("DATABASE_URL") {
+        return url;
+    }
+    let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let candidates = [
+        manifest.join("../../.env"),
+        manifest.join("../../../.env"),
+        // Main checkout used on this machine (worktree may lack .env).
+        std::path::PathBuf::from("/home/chuan/context-osv6/avrag-rs/.env"),
+    ];
+    for candidate in candidates {
+        if let Ok(content) = std::fs::read_to_string(&candidate) {
+            for line in content.lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if let Some(rest) = line.strip_prefix("DATABASE_URL=") {
+                    let v = rest.trim().trim_matches('"').trim_matches('\'');
+                    if !v.is_empty() {
+                        return v.to_string();
+                    }
+                }
+            }
+        }
+    }
+    // Last resort: local default matching CLAUDE.md / WSL services table.
+    "postgres://avrag:avrag@127.0.0.1:5432/avrag_rs".to_string()
+}
+
+fn pg_bootstrap_config() -> AppConfig {
     let mut config = AppConfig::default();
-    config.database_url = Some(database_url);
+    config.database_url = Some(resolve_database_url());
     config.auto_migrate = true;
-    AppState::bootstrap(config).await.ok()
+    // API-key / membership contracts do not need RAG embeddings.
+    config.enable_rag = false;
+    config
+}
+
+async fn pg_test_app_state() -> Option<AppState> {
+    AppState::bootstrap(pg_bootstrap_config()).await.ok()
+}
+
+/// Contract tests that assert public error codes must not silent-skip.
+async fn require_pg_app_state() -> AppState {
+    AppState::bootstrap(pg_bootstrap_config())
+        .await
+        .unwrap_or_else(|err| {
+            panic!(
+                "bootstrap postgres required for api_key security contract tests (DATABASE_URL/env): {err}"
+            )
+        })
 }
 
 fn register_body(email: &str, full_name: &str) -> String {
@@ -33,6 +81,11 @@ fn register_body(email: &str, full_name: &str) -> String {
 }
 
 async fn register_and_get_token(app: &axum::Router, email: &str, full_name: &str) -> String {
+    register_session(app, email, full_name).await.0
+}
+
+/// Returns (session_token, user_id, org_id). Register currently issues org_admin JWT.
+async fn register_session(app: &axum::Router, email: &str, full_name: &str) -> (String, Uuid, Uuid) {
     let response = app
         .clone()
         .oneshot(
@@ -48,7 +101,47 @@ async fn register_and_get_token(app: &axum::Router, email: &str, full_name: &str
     assert_eq!(response.status(), StatusCode::CREATED);
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let payload = serde_json::from_slice::<serde_json::Value>(&body).unwrap();
-    payload["data"]["token"].as_str().unwrap().to_string()
+    // AuthEnvelope: { data: { token, user: { id, email, full_name } } }
+    let data = payload.get("data").cloned().unwrap_or(payload);
+    let token = data["token"].as_str().expect("token").to_string();
+    let user_id = Uuid::parse_str(data["user"]["id"].as_str().expect("user.id")).unwrap();
+    // org_id is not on user DTO; decode JWT claims (same secret as issue_jwt).
+    let org_id = org_id_from_jwt(&token);
+    (token, user_id, org_id)
+}
+
+fn org_id_from_jwt(token: &str) -> Uuid {
+    #[derive(serde::Deserialize)]
+    struct Claims {
+        org_id: String,
+    }
+    // Must match transport_http jwt_secret() under debug/test (JWT_DEFAULT_SECRET).
+    let secrets = [
+        env::var("JWT_SECRET").ok(),
+        Some("change-me-in-production".to_string()),
+    ];
+    let mut last_err = None;
+    for secret in secrets.into_iter().flatten() {
+        if secret.trim().is_empty() {
+            continue;
+        }
+        match jsonwebtoken::decode::<Claims>(
+            token,
+            &jsonwebtoken::DecodingKey::from_secret(secret.as_bytes()),
+            &jsonwebtoken::Validation::default(),
+        ) {
+            Ok(data) => {
+                return Uuid::parse_str(&data.claims.org_id).expect("org_id uuid");
+            }
+            Err(err) => last_err = Some(err),
+        }
+    }
+    panic!("decode register JWT: {last_err:?}");
+}
+
+/// Non-admin user JWT so membership checks are not bypassed via PERM_ADMIN.
+fn non_admin_user_token(user_id: Uuid, org_id: Uuid) -> String {
+    transport_http::issue_jwt_for_auth_version(&user_id, &org_id, 1, "member")
 }
 
 fn admin_app_state() -> AppState {
@@ -582,15 +675,15 @@ async fn workspace_api_key_cannot_update_profile() {
 }
 
 #[tokio::test]
-async fn user_without_notebook_access_cannot_list_workspace_api_keys() {
-    let Some(state) = pg_test_app_state().await else {
-        return;
-    };
+async fn user_without_workspace_access_cannot_list_workspace_api_keys() {
+    let state = require_pg_app_state().await;
     let app = build_router(state);
     let owner_email = format!("owner-{}@example.test", Uuid::new_v4());
     let outsider_email = format!("outsider-{}@example.test", Uuid::new_v4());
     let owner_token = register_and_get_token(&app, &owner_email, "Owner").await;
-    let outsider_token = register_and_get_token(&app, &outsider_email, "Outsider").await;
+    // Register outsider (DB row) but mint non-admin JWT — register always grants org_admin.
+    let (_, outsider_id, outsider_org) = register_session(&app, &outsider_email, "Outsider").await;
+    let outsider_token = non_admin_user_token(outsider_id, outsider_org);
 
     let create_response = app
         .clone()
@@ -633,20 +726,19 @@ async fn user_without_notebook_access_cannot_list_workspace_api_keys() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(
         payload.get("error").and_then(|value| value.as_str()),
-        Some("notebook_access_required")
+        Some("workspace_access_required")
     );
 }
 
 #[tokio::test]
-async fn user_without_notebook_access_cannot_revoke_workspace_api_key() {
-    let Some(state) = pg_test_app_state().await else {
-        return;
-    };
+async fn user_without_workspace_access_cannot_revoke_workspace_api_key() {
+    let state = require_pg_app_state().await;
     let app = build_router(state);
     let owner_email = format!("owner-revoke-{}@example.test", Uuid::new_v4());
     let outsider_email = format!("outsider-revoke-{}@example.test", Uuid::new_v4());
     let owner_token = register_and_get_token(&app, &owner_email, "Owner").await;
-    let outsider_token = register_and_get_token(&app, &outsider_email, "Outsider").await;
+    let (_, outsider_id, outsider_org) = register_session(&app, &outsider_email, "Outsider").await;
+    let outsider_token = non_admin_user_token(outsider_id, outsider_org);
 
     let create_response = app
         .clone()
@@ -713,7 +805,7 @@ async fn user_without_notebook_access_cannot_revoke_workspace_api_key() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(
         payload.get("error").and_then(|value| value.as_str()),
-        Some("notebook_access_required")
+        Some("workspace_access_required")
     );
 }
 

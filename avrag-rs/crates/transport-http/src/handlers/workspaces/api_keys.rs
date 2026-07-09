@@ -8,7 +8,7 @@ use axum::{
 };
 
 use super::super::app_error_response;
-use crate::auth_guard::{ensure_user_notebook_access, forbid_api_key, require_user_admin};
+use crate::auth_guard::{ensure_user_workspace_access, forbid_api_key, require_user_admin};
 use crate::middleware::RequestState;
 
 pub(crate) async fn list_api_keys_handler(
@@ -21,7 +21,7 @@ pub(crate) async fn list_api_keys_handler(
     ) {
         return app_error_response(error);
     }
-    if let Err(error) = ensure_user_notebook_access(&state, &workspace_id).await {
+    if let Err(error) = ensure_user_workspace_access(&state, &workspace_id).await {
         return app_error_response(error);
     }
     match state.admin_api().list_api_keys(&workspace_id).await {
@@ -45,7 +45,7 @@ pub(crate) async fn create_api_key_handler(
     ) {
         return app_error_response(error);
     }
-    if let Err(error) = ensure_user_notebook_access(&state, &workspace_id).await {
+    if let Err(error) = ensure_user_workspace_access(&state, &workspace_id).await {
         return app_error_response(error);
     }
     match state.admin_api().create_api_key(&workspace_id, req).await {
@@ -124,7 +124,7 @@ pub(crate) async fn revoke_api_key_handler(
     ) {
         return app_error_response(error);
     }
-    if let Err(error) = ensure_user_notebook_access(&state, &workspace_id).await {
+    if let Err(error) = ensure_user_workspace_access(&state, &workspace_id).await {
         return app_error_response(error);
     }
     match state.admin_api().revoke_api_key(&workspace_id, &key_id).await {

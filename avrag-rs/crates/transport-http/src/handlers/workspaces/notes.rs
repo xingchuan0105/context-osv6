@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use super::super::{app_error_response, error_response};
 use crate::middleware::RequestState;
-use crate::auth_guard::{ensure_user_notebook_access, require_user_session};
+use crate::auth_guard::{ensure_user_workspace_access, require_user_session};
 
 fn note_preview(content: &str) -> String {
     let collapsed = content
@@ -143,7 +143,7 @@ async fn require_workspace_notes_access(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<(), Response> {
-    if let Err(error) = ensure_user_notebook_access(state, workspace_id).await {
+    if let Err(error) = ensure_user_workspace_access(state, workspace_id).await {
         return Err(app_error_response(error));
     }
     Ok(())

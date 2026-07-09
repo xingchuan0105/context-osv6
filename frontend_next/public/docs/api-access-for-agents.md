@@ -119,5 +119,5 @@ REST endpoints keep flat JSON errors with normal HTTP status codes (403/400/etc.
 ### REST (HTTP 403/400 flat JSON)
 
 - `api_key_forbidden`: API key attempted a user-only endpoint (key management, profile, preferences, message feedback)
-- `notebook_access_required`: signed-in user lacks access to manage resources for this workspace
+- `workspace_access_required`: signed-in user lacks access to manage resources for this workspace
 - `workspace_key_cannot_call_org_tools`, `workspace_scope_mismatch`, `missing_permission`: same semantics as MCP
