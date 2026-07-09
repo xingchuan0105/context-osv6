@@ -122,6 +122,7 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
         search_executor.clone(),
         None,
         None,
+        None,
         &config.prompts.dir,
     ));
     let object_store: Arc<dyn app_core::ObjectStorePort> =
@@ -272,6 +273,26 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
             as Arc<dyn app_core::UsageLimitStorePort>
     });
 
+    let usage_observer: Option<Arc<dyn avrag_llm::UsageObserver>> =
+        usage_limit_store.as_ref().map(|store| {
+            Arc::new(app_billing::PgUsageObserver::new(store.clone()))
+                as Arc<dyn avrag_llm::UsageObserver>
+        });
+    // Embeddings use bootstrap org/user (system-ish); chat agent rebinds tenant per request.
+    let embedding_tenant = {
+        let auth = auth_context_from_config(&config);
+        avrag_llm::TenantContext {
+            org_id: auth.org_id().into_uuid(),
+            user_id: auth
+                .actor_id()
+                .map(|a| a.into_uuid())
+                .unwrap_or_else(uuid::Uuid::nil),
+        }
+    };
+    let embedding_observer = usage_observer
+        .as_ref()
+        .map(|obs| (obs.clone(), embedding_tenant.clone()));
+
     let quota_manager =
         billing_store
             .as_ref()
@@ -285,9 +306,17 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
 
     let rag_runtime = if config.enable_rag && pg.is_some() {
         let pg_repo = pg.as_ref().unwrap();
-        let embedding = make_embedding_client(&config.embedding, cache_store.clone())
+        let embedding = make_embedding_client(
+            &config.embedding,
+            cache_store.clone(),
+            embedding_observer.clone(),
+        )
             .ok_or_else(|| anyhow::anyhow!("embedding client is required when enable_rag=true"))?;
-        let mm_embedding = make_embedding_client(&config.mm_embedding, cache_store.clone());
+        let mm_embedding = make_embedding_client(
+            &config.mm_embedding,
+            cache_store.clone(),
+            embedding_observer.clone(),
+        );
         let planner = make_planner(&config.agent_llm, cache_store.clone());
         let reranker = make_reranker(&config.rerank);
         let mm_reranker = make_reranker(&config.mm_rerank);
@@ -386,6 +415,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         search_executor.clone(),
         rag_runtime.clone(),
         chat_persistence.clone(),
+        usage_observer.clone(),
         &config.prompts.dir,
     ));
     let storage = StorageContext::from_parts(StorageContextParts {

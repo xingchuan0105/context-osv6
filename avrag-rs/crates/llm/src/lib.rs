@@ -12,6 +12,7 @@ pub mod section_index;
 pub mod summary;
 pub mod synthesizer;
 pub mod token_counter;
+pub mod usage_observer;
 
 pub use client::{ChatMessage, LlmClient, LlmResponse, LlmUsage};
 pub use embedding::{EmbeddingClient, MultiModalEmbeddingInput};
@@ -46,14 +47,9 @@ pub use section_index::{
 pub use summary::SummaryGenerator;
 pub use synthesizer::{SynthesisOutput, parse_synthesis_output};
 pub use token_counter::{count_chat_messages, count_system_and_query, count_tokens};
-
-#[derive(Debug, Clone)]
-pub struct TenantContext {
-    pub org_id: uuid::Uuid,
-    pub user_id: uuid::Uuid,
-}
-
-pub trait UsageObserver: Send + Sync {}
+pub use usage_observer::{
+    ChatUsageRecord, EmbeddingUsageRecord, TenantContext, UsageObserver,
+};
 
 #[async_trait::async_trait]
 pub trait LlmProvider: Send + Sync {

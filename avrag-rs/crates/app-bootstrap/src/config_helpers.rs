@@ -2,7 +2,9 @@ use anyhow::Result as AnyResult;
 use app_chat::agents::service::UnifiedAgentService;
 use app_core::{AppConfig, ChatPersistencePort, ModelProviderConfig};
 use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
-use avrag_llm::{EmbeddingClient, LlmClient, RerankerClient, RetrievalPlanner};
+use avrag_llm::{
+    EmbeddingClient, LlmClient, RerankerClient, RetrievalPlanner, TenantContext, UsageObserver,
+};
 use avrag_rag_core::RagRuntime;
 use avrag_search::SearchExecutor;
 use avrag_storage_pg::{ObjectStoreHandle, S3ObjectStore};
@@ -26,15 +28,19 @@ pub fn build_unified_agent_service(
     search_executor: Option<Arc<SearchExecutor>>,
     rag_runtime: Option<Arc<RagRuntime>>,
     chat_persistence: Option<Arc<dyn ChatPersistencePort>>,
+    usage_observer: Option<Arc<dyn UsageObserver>>,
     _prompts_dir: &str,
 ) -> Arc<UnifiedAgentService> {
     let search_provider: Option<Arc<dyn avrag_search::SearchProvider>> =
         search_executor.map(|executor| -> Arc<dyn avrag_search::SearchProvider> { executor });
 
-    let agent = app_chat::agents::unified::UnifiedAgent::new(llm_client.clone(), None, None)
+    let mut agent = app_chat::agents::unified::UnifiedAgent::new(llm_client.clone(), None, None)
         .with_rag_runtime(rag_runtime)
         .with_search_executor(search_provider)
         .with_chat_persistence(chat_persistence);
+    if let Some(observer) = usage_observer {
+        agent = agent.with_usage_observer(observer);
+    }
 
     Arc::new(UnifiedAgentService::new(Box::new(agent)))
 }
@@ -42,14 +48,16 @@ pub fn build_unified_agent_service(
 pub fn make_embedding_client(
     config: &ModelProviderConfig,
     cache: Option<Arc<avrag_cache_redis::CacheStore>>,
+    usage_observer: Option<(Arc<dyn UsageObserver>, TenantContext)>,
 ) -> Option<Arc<EmbeddingClient>> {
     config.to_llm_config().map(|c| {
-        let client = EmbeddingClient::new(c);
-        let client = if let Some(cache) = cache {
-            client.with_cache(cache)
-        } else {
-            client
-        };
+        let mut client = EmbeddingClient::new(c);
+        if let Some(cache) = cache {
+            client = client.with_cache(cache);
+        }
+        if let Some((observer, tenant)) = usage_observer {
+            client = client.with_observer(observer, tenant);
+        }
         Arc::new(client)
     })
 }
