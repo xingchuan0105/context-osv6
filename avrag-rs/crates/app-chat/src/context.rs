@@ -117,7 +117,3 @@ impl ChatContext {
         )
     }
 }
-
-pub(crate) fn map_anyhow_error(error: anyhow::Error) -> AppError {
-    AppError::internal(error.to_string())
-}
