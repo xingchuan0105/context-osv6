@@ -7,6 +7,8 @@ version.workspace = true
 description = "Write-mode domain types and refine/material contracts (ADR 0006 crate split)"
 
 [dependencies]
+async-trait = { workspace = true }
+avrag-llm = { path = "../llm" }
 common = { path = "../common" }
 contracts = { path = "../../../contracts" }
 heavytail = { path = "../heavytail" }

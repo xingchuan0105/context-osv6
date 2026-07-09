@@ -3,8 +3,6 @@
 //! Each handler is an `impl<'a> WriteRefineLoopRunner<'a>` method dispatched
 //! from `dispatch_tool_call`.
 
-use std::time::Duration;
-
 use contracts::chat::ToolStatus;
 use contracts::{ToolCall, ToolResult};
 use heavytail::feedforward::fingerprint_workspace;
@@ -14,20 +12,20 @@ use heavytail::score::composite;
 use heavytail::skeleton::MaterialCard;
 use heavytail::state::{RoundRecord, WriterState};
 
-use crate::agents::events::{AgentEvent, AgentEventSink};
+use crate::ports::{WriteActivitySink, WriteResearchKind};
+use crate::refine_helpers as helpers;
+use crate::refine_types::RefineContext;
 
-use super::helpers;
 use super::WriteRefineLoopRunner;
-use super::types::RefineContext;
 
 impl<'a> WriteRefineLoopRunner<'a> {
     /// Dispatch a single `ToolCall`, intercepting the 3 write_refine ids.
-    pub(super) async fn dispatch_tool_call(
+    pub async fn dispatch_tool_call(
         &self,
         call: &ToolCall,
         ctx: &mut RefineContext,
         reservoir: &[String],
-        sink: &dyn AgentEventSink,
+        sink: &dyn WriteActivitySink,
         state: &mut WriterState,
     ) -> ToolResult {
         match call.tool.as_str() {
@@ -48,7 +46,7 @@ impl<'a> WriteRefineLoopRunner<'a> {
     }
 
     /// `write_refine_revise` — apply sentence-level patches (plan §4.2).
-    pub(super) async fn handle_revise(
+    pub async fn handle_revise(
         &self,
         call: &ToolCall,
         ctx: &mut RefineContext,
@@ -119,7 +117,7 @@ impl<'a> WriteRefineLoopRunner<'a> {
             let new_score = ctx.diagnosis.score_s;
             let prev_best = ctx.best_snapshot.as_ref().map(|b| b.score).unwrap_or(f64::NEG_INFINITY);
             if new_score > prev_best {
-                ctx.best_snapshot = Some(super::types::BestSnapshot {
+                ctx.best_snapshot = Some(crate::BestSnapshot {
                     score: new_score,
                     workspace: ctx.workspace.clone(),
                 });
@@ -247,7 +245,7 @@ impl<'a> WriteRefineLoopRunner<'a> {
                 .map(|b| b.score)
                 .unwrap_or(f64::NEG_INFINITY);
             if new_score > prev_best {
-                ctx.best_snapshot = Some(super::types::BestSnapshot {
+                ctx.best_snapshot = Some(crate::BestSnapshot {
                     score: new_score,
                     workspace: ctx.workspace.clone(),
                 });
@@ -304,11 +302,11 @@ impl<'a> WriteRefineLoopRunner<'a> {
     }
 
     /// `write_refine_research` — on-demand RAG/Web sub-worker (plan §4.3).
-    pub(super) async fn handle_research(
+    pub async fn handle_research(
         &self,
         call: &ToolCall,
         ctx: &mut RefineContext,
-        sink: &dyn AgentEventSink,
+        sink: &dyn WriteActivitySink,
     ) -> ToolResult {
         if self.budget.research_capped()
             && ctx.research_calls_used >= self.budget.max_on_demand_research
@@ -328,8 +326,8 @@ impl<'a> WriteRefineLoopRunner<'a> {
         }
 
         let kind = match call.args.get("kind").and_then(|v| v.as_str()) {
-            Some("rag") => crate::agents::AgentKind::Rag,
-            Some("web") => crate::agents::AgentKind::Search,
+            Some("rag") => WriteResearchKind::Rag,
+            Some("web") => WriteResearchKind::Web,
             Some(k) => {
                 return helpers::tool_error(
                     "write_refine_research",
@@ -351,30 +349,18 @@ impl<'a> WriteRefineLoopRunner<'a> {
             .unwrap_or("")
             .to_string();
 
-        // Emit refine_research activity.
-        let _ = sink
-            .emit(AgentEvent::Activity {
-                stage: "refine_research".to_string(),
-                message: format!("Researching ({kind:?}): {query}"),
-            })
-            .await;
+        sink.activity(
+            "refine_research",
+            format!("Researching ({kind:?}): {query}"),
+        )
+        .await;
 
-        // Build a sub-worker request with reduced budgets.
-        let mut worker_req =
-            crate::writer::invoker::SubagentInvoker::worker_request(self.parent_request, kind, &query);
-        worker_req.max_iterations = Some(2); // plan §4.3: sub-worker max_iterations=2
-        worker_req.query = query.clone();
-
-        let result = match self
-            .invoker
-            .run_worker(
-                worker_req,
-                self.budget.per_research_worker_tokens,
-                Duration::from_secs(60),
-            )
+        let hit = match self
+            .research
+            .research(kind, &query, self.budget.per_research_worker_tokens)
             .await
         {
-            Ok(r) => r,
+            Ok(h) => h,
             Err(e) => {
                 return helpers::tool_error(
                     "write_refine_research",
@@ -382,17 +368,7 @@ impl<'a> WriteRefineLoopRunner<'a> {
                 );
             }
         };
-
-        // Extract material cards from the worker result.
-        let guard = self.parent_request.guard_pipeline.as_deref();
-        let trace_id = self.parent_request.session_id.as_deref();
-        let extraction = crate::writer::cards::extract_material_cards(
-            &result,
-            kind,
-            guard,
-            trace_id,
-        );
-        let new_cards = extraction.cards;
+        let new_cards = hit.cards;
         ctx.research_calls_used += 1;
 
         // Merge new cards into the material pack and capture exactly which
@@ -438,7 +414,7 @@ impl<'a> WriteRefineLoopRunner<'a> {
     }
 
     /// `write_refine_finish` — soft finish (plan §4.4).
-    pub(super) async fn handle_finish(&self, call: &ToolCall, ctx: &mut RefineContext) -> ToolResult {
+    pub async fn handle_finish(&self, call: &ToolCall, ctx: &mut RefineContext) -> ToolResult {
         if self.budget.enforce_core_band_finish_gate && !ctx.bands_satisfied {
             let pending: Vec<String> = ctx
                 .diagnosis

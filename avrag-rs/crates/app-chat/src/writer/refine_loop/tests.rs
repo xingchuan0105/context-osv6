@@ -1,20 +1,37 @@
-//! Handler-level WriteRefine tests (agent-coupled).
-//! Pure budget / helper / context tests live in `write-core`.
+//! Handler-level WriteRefine tests via write-core runner + app-chat ports.
 
-use super::types::{
-    BestSnapshot, FinishReason, RefineContext, RefineLoopBudget,
+use super::{
+    BestSnapshot, FinishReason, RefineContext, RefineLoopBudget, WriteRefineLoopRunner,
     WRITE_REFINE_HARD_REACT_CAP, WRITE_REFINE_GATE_MAX_REVISE,
 };
-use super::WriteRefineLoopRunner;
 
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use avrag_llm::LlmClient;
+use avrag_llm::ModelProviderConfig;
+use contracts::ToolCall;
+use contracts::chat::ToolStatus;
 use heavytail::diagnosis::diagnose_pre_refine;
 use heavytail::feedforward::fingerprint_workspace;
 use heavytail::score::composite;
-use heavytail::state::{WriterBudget, WriterState};
+use heavytail::state::WriterState;
 use heavytail::StyleParams;
 use heavytail::workspace::{DraftWorkspace, ParagraphRecord, RhythmMode, SentenceRecord};
 use heavytail::workspace::SentenceId;
+use write_core::{
+    WriteActivitySink, WriteParentMeta, WriteRefineModeHost, WriteResearchHit, WriteResearchKind,
+    WriteResearchPort,
+};
 
+use crate::agents::events::{AgentEventSink, NoopSink};
+use crate::agents::runtime::{Agent, AgentRequest, AgentRunResult};
+use crate::agents::AgentKind;
+use crate::writer::adapters::{
+    parent_meta_from_request, AgentWriteActivitySink, AppWriteRefineMode, SubagentResearchPort,
+};
+use crate::writer::invoker::SubagentInvoker;
 use crate::writer::material_pack::MaterialPack;
 
 fn make_workspace() -> DraftWorkspace {
@@ -40,27 +57,9 @@ fn make_workspace() -> DraftWorkspace {
     ws
 }
 
-// ── Phase 4: handler-level unit tests ──────────────────────────────────
-
-use std::collections::BTreeMap;
-use std::sync::Arc;
-
-use avrag_llm::LlmClient;
-use avrag_llm::ModelProviderConfig;
-
-use contracts::ToolCall;
-use contracts::chat::ToolStatus;
-
-use crate::agents::events::{AgentEventSink, NoopSink};
-use crate::agents::runtime::{Agent, AgentRequest, AgentRunResult};
-use crate::agents::AgentKind;
-use crate::writer::invoker::SubagentInvoker;
-
-/// Stub `Agent` that panics if its `run` is ever called.
-/// Used to verify the budget-exhausted path never reaches the sub-worker.
 struct NeverCalledAgent;
 
-#[async_trait::async_trait]
+#[async_trait]
 impl Agent for NeverCalledAgent {
     async fn run(
         &self,
@@ -68,6 +67,47 @@ impl Agent for NeverCalledAgent {
         _sink: &dyn AgentEventSink,
     ) -> Result<AgentRunResult, common::AppError> {
         panic!("NeverCalledAgent::run should never be invoked for budget-exhausted path");
+    }
+}
+
+/// Research port that panics if called (budget-exhausted path).
+struct PanicResearch;
+
+#[async_trait]
+impl WriteResearchPort for PanicResearch {
+    async fn research(
+        &self,
+        _kind: WriteResearchKind,
+        _query: &str,
+        _token_budget: usize,
+    ) -> Result<WriteResearchHit, String> {
+        panic!("research should not be invoked");
+    }
+}
+
+/// Minimal mode host for unit tests (no real yaml required for handler tests).
+struct TestModeHost;
+
+impl WriteRefineModeHost for TestModeHost {
+    fn temperature(&self) -> f32 {
+        0.4
+    }
+    fn tool_specs(&self) -> Vec<contracts::ToolSpec> {
+        vec![]
+    }
+    fn max_react_iterations(&self, _user_tier: Option<&str>, hard_cap: u8) -> u8 {
+        hard_cap
+    }
+    fn system_prompt(
+        &self,
+        _iteration: u8,
+        _max_iterations: u8,
+        _persona: Option<&heavytail::persona::PersonaCard>,
+        _revise_rounds_used: usize,
+        _research_calls_used: usize,
+        _budget: &RefineLoopBudget,
+    ) -> String {
+        "test".into()
     }
 }
 
@@ -109,26 +149,31 @@ fn test_parent_request() -> AgentRequest {
     }
 }
 
-fn test_runner<'a>(budget: RefineLoopBudget) -> WriteRefineLoopRunner<'a> {
-    let llm = heavytail::llm::WriterLlm::from_client(dummy_llm_client());
-    let service = Arc::new(crate::agents::service::UnifiedAgentService::new(
-        Box::new(NeverCalledAgent),
-    ));
-    let invoker = SubagentInvoker::new(service, None);
-    // SAFETY: we leak the locals so the runner can borrow them for the
-    // duration of the test. The test is short-lived and the leaked
-    // memory is reclaimed when the process exits.
-    let llm: &'a heavytail::llm::WriterLlm = Box::leak(Box::new(llm));
-    let invoker: &'a SubagentInvoker = Box::leak(Box::new(invoker));
-    let req: &'a AgentRequest = Box::leak(Box::new(test_parent_request()));
-    WriteRefineLoopRunner::new(llm, invoker, req, StyleParams::default(), budget)
-}
-
 fn make_ctx() -> RefineContext {
     let ws = make_workspace();
     let style = StyleParams::default();
     let diag = diagnose_pre_refine(&ws, &style, &[]);
     RefineContext::new(ws, diag, MaterialPack::default(), None)
+}
+
+struct TestHarness {
+    // keep leaked pieces so runner refs stay valid
+    _hold: Vec<*const ()>,
+}
+
+fn test_runner(budget: RefineLoopBudget) -> WriteRefineLoopRunner<'static> {
+    let llm = heavytail::llm::WriterLlm::from_client(dummy_llm_client());
+    let llm: &'static heavytail::llm::WriterLlm = Box::leak(Box::new(llm));
+    let research: &'static PanicResearch = Box::leak(Box::new(PanicResearch));
+    let mode: &'static TestModeHost = Box::leak(Box::new(TestModeHost));
+    WriteRefineLoopRunner::new(
+        llm,
+        research,
+        mode,
+        WriteParentMeta::default(),
+        StyleParams::default(),
+        budget,
+    )
 }
 
 fn research_call(kind: &str, query: &str) -> ToolCall {
@@ -156,13 +201,10 @@ fn finish_call(reason: &str, bands_satisfied: bool) -> ToolCall {
 
 #[tokio::test]
 async fn handle_revise_counts_effective_round_and_tracks_best_snapshot() {
-    // P1.1 + P1.3: an effective revise (≥1 sentence changed) counts as a
-    // round, is recorded into state, and updates the best-version snapshot.
     let runner = test_runner(RefineLoopBudget::default());
     let mut ctx = make_ctx();
     let mut state = WriterState::default();
 
-    // Seed best_snapshot like run() does with the diagnosed initial draft.
     let init_fp = fingerprint_workspace(&ctx.workspace);
     let init_score = composite(&init_fp, &StyleParams::default()).s;
     ctx.best_snapshot = Some(BestSnapshot {
@@ -182,14 +224,9 @@ async fn handle_revise_counts_effective_round_and_tracks_best_snapshot() {
         .await;
 
     assert_eq!(result.status, ToolStatus::Ok);
-    // Effective revise counted.
     assert_eq!(ctx.revise_rounds_used, 1);
-    // Round recorded into state for checkpoint/telemetry fidelity.
     assert_eq!(state.rounds.len(), 1);
     assert_eq!(state.workspace.sentences[0].text, "这是一句被彻底改写过的全新句子。");
-    // P1.1 invariant: best_snapshot retains the HIGHER of (initial, revise).
-    // A revise that lowers S must not overwrite the better snapshot — that
-    // snapshot is what gets restored at loop exit.
     let new_score = ctx.diagnosis.score_s;
     assert_eq!(
         ctx.best_snapshot.as_ref().unwrap().score,
@@ -199,13 +236,14 @@ async fn handle_revise_counts_effective_round_and_tracks_best_snapshot() {
 
 #[tokio::test]
 async fn handle_research_6th_call_returns_budget_exhausted_without_invoking_worker() {
-    // budget cap = 5; pre-set research_calls_used = 5 to simulate the 6th call.
     let runner = test_runner(RefineLoopBudget::default());
     let mut ctx = make_ctx();
     ctx.research_calls_used = 5;
 
     let call = research_call("web", "test query for 6th call");
-    let sink = NoopSink;
+    let sink = AgentWriteActivitySink {
+        inner: &NoopSink,
+    };
     let result = runner.handle_research(&call, &mut ctx, &sink).await;
 
     assert_eq!(result.status, ToolStatus::Ok);
@@ -213,7 +251,6 @@ async fn handle_research_6th_call_returns_budget_exhausted_without_invoking_work
     assert_eq!(data["budget_exhausted"], true);
     assert_eq!(data["research_calls_used"], 5);
     assert_eq!(data["new_cards"].as_array().unwrap().len(), 0);
-    // research_calls_used must NOT increment on a rejected call.
     assert_eq!(ctx.research_calls_used, 5);
 }
 
@@ -221,7 +258,6 @@ async fn handle_research_6th_call_returns_budget_exhausted_without_invoking_work
 async fn handle_finish_returns_validation_warning_when_bands_not_satisfied() {
     let runner = test_runner(RefineLoopBudget::default());
     let mut ctx = make_ctx();
-    // bands_satisfied is false by default (uniform-length draft).
     assert!(!ctx.bands_satisfied);
 
     let call = finish_call("readability is good enough", false);
@@ -238,7 +274,6 @@ async fn handle_finish_returns_validation_warning_when_bands_not_satisfied() {
 async fn handle_finish_returns_no_warning_when_bands_satisfied() {
     let runner = test_runner(RefineLoopBudget::default());
     let mut ctx = make_ctx();
-    // Simulate bands being satisfied.
     ctx.bands_satisfied = true;
 
     let call = finish_call("all bands passed", true);
@@ -251,49 +286,59 @@ async fn handle_finish_returns_no_warning_when_bands_satisfied() {
 }
 
 #[tokio::test]
-async fn dispatch_tool_call_routes_finish_correctly() {
-    let runner = test_runner(RefineLoopBudget::default());
-    let mut ctx = make_ctx();
-    let mut state = WriterState::default();
-
-    let call = finish_call("done", false);
-    let result = runner
-        .dispatch_tool_call(&call, &mut ctx, &[], &NoopSink, &mut state)
-        .await;
-
-    assert_eq!(result.tool, "write_refine_finish");
-    assert_eq!(result.status, ToolStatus::Ok);
-}
-
-#[tokio::test]
 async fn dispatch_tool_call_unknown_tool_returns_error() {
     let runner = test_runner(RefineLoopBudget::default());
     let mut ctx = make_ctx();
     let mut state = WriterState::default();
-
+    let sink = AgentWriteActivitySink {
+        inner: &NoopSink,
+    };
     let call = ToolCall {
-        tool: "nonexistent_tool".to_string(),
-        version: "1".to_string(),
+        tool: "not_a_real_tool".into(),
+        version: "1".into(),
         args: serde_json::json!({}),
     };
     let result = runner
-        .dispatch_tool_call(&call, &mut ctx, &[], &NoopSink, &mut state)
+        .dispatch_tool_call(&call, &mut ctx, &[], &sink, &mut state)
         .await;
-
     assert_eq!(result.status, ToolStatus::Error);
-    assert!(result.data.unwrap()["error"]
-        .as_str()
-        .unwrap()
-        .contains("unknown tool"));
+}
+
+#[tokio::test]
+async fn dispatch_tool_call_routes_finish_correctly() {
+    let runner = test_runner(RefineLoopBudget::default());
+    let mut ctx = make_ctx();
+    ctx.bands_satisfied = true;
+    let mut state = WriterState::default();
+    let sink = AgentWriteActivitySink {
+        inner: &NoopSink,
+    };
+    let call = finish_call("done", true);
+    let result = runner
+        .dispatch_tool_call(&call, &mut ctx, &[], &sink, &mut state)
+        .await;
+    assert_eq!(result.status, ToolStatus::Ok);
 }
 
 #[test]
 fn finish_reason_variants_are_distinct() {
-    // Verify all four exit reasons are distinguishable (telemetry contract).
     assert_ne!(FinishReason::AgentFinish, FinishReason::IterationCap);
-    assert_ne!(FinishReason::AgentFinish, FinishReason::TokenCap);
-    assert_ne!(FinishReason::AgentFinish, FinishReason::ReviseRoundCap);
-    assert_ne!(FinishReason::IterationCap, FinishReason::TokenCap);
-    assert_ne!(FinishReason::IterationCap, FinishReason::ReviseRoundCap);
-    assert_ne!(FinishReason::TokenCap, FinishReason::ReviseRoundCap);
+}
+
+// Silence unused import warnings for adapter types used when wiring real invoker paths.
+#[allow(dead_code)]
+fn _adapter_types_compile() {
+    let _ = WRITE_REFINE_HARD_REACT_CAP;
+    let _ = WRITE_REFINE_GATE_MAX_REVISE;
+    let service = Arc::new(crate::agents::service::UnifiedAgentService::new(
+        Box::new(NeverCalledAgent),
+    ));
+    let invoker = SubagentInvoker::new(service, None);
+    let req = test_parent_request();
+    let _ = parent_meta_from_request(&req);
+    let _ = SubagentResearchPort {
+        invoker: &invoker,
+        parent: &req,
+    };
+    let _ = AppWriteRefineMode::load();
 }

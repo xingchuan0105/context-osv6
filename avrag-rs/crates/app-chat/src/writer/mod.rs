@@ -1,12 +1,15 @@
 //! HeavyTail write-mode orchestrator glue (spec §6).
 
+mod adapters;
 mod cards;
 mod invoker;
 mod material_pack;
 mod refine_loop;
 
 pub use material_pack::MaterialPack;
-pub use refine_loop::{RefineContext, RefineLoopBudget, WriteRefineLoopRunner, WRITE_REFINE_HARD_REACT_CAP};
+pub use refine_loop::{
+    run_write_refine, RefineContext, RefineLoopBudget, WriteRefineLoopRunner, WRITE_REFINE_HARD_REACT_CAP,
+};
 pub use write_core::{WRITE_AGENT_TYPE, WRITE_MODE};
 
 pub use invoker::{research, ResearchOutcome, SubagentInvoker};
@@ -163,21 +166,18 @@ impl<'a> WriterOrchestrator<'a> {
         );
         let refine_budget =
             RefineLoopBudget::from_writer_budget(&budget, WRITE_REFINE_HARD_REACT_CAP);
-        let runner = WriteRefineLoopRunner::new(
+        run_write_refine(
             &refine_llm,
             &invoker,
             &request,
             style.clone(),
             refine_budget,
-        );
-        runner
-            .run(
-                &mut refine_ctx,
-                &reservoir,
-                &mut state,
-                sink,
-                &checkpoint_dir,
-            )
+            &mut refine_ctx,
+            &reservoir,
+            &mut state,
+            sink,
+            &checkpoint_dir,
+        )
             .await
             .map_err(|e| AppError::internal(format!("write refine loop failed: {e}")))?;
         state.workspace = refine_ctx.workspace;
