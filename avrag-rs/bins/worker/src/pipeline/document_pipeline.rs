@@ -133,6 +133,88 @@ pub(crate) async fn run_document_pipeline(
         object_path,
         route_decision,
     } = params;
+
+    // Stage 1 — parse + validate
+    let document_ir = stage_parse_and_validate_ir(
+        processor,
+        bytes,
+        filename,
+        object_path,
+        document_id,
+        parse_run_id,
+        route_decision,
+        parse_run_state,
+    )
+    .await?;
+
+    // Stage 2 — project IR blocks
+    stage_project_document_ir(
+        processor,
+        task,
+        context,
+        notebook_id,
+        document_id,
+        parse_run_id,
+        &document_ir,
+    )
+    .await?;
+
+    // Stage 3 — chunks, assets, multimodal, toc/profile
+    let materialize = stage_materialize_chunks_assets_profile(
+        processor,
+        task,
+        context,
+        notebook_id,
+        document_id,
+        parse_run_id,
+        filename,
+        &document_ir,
+        parse_run_state,
+    )
+    .await?;
+
+    // Stage 4 — summary (best-effort, non-fatal)
+    generate_document_summary(
+        processor,
+        context,
+        task,
+        document_id,
+        filename,
+        materialize.content.as_str(),
+        &document_ir.title,
+    )
+    .await;
+
+    // Stage 5 — retrieval index replace
+    stage_build_and_replace_retrieval_index(
+        processor,
+        task,
+        context,
+        notebook_id,
+        document_id,
+        parse_run_id,
+        &document_ir,
+        &materialize,
+        parse_run_state,
+    )
+    .await?;
+
+    Ok(IngestionPipelineMetrics {
+        content: materialize.content,
+        processed_chunk_count: materialize.processed_chunk_count,
+    })
+}
+
+async fn stage_parse_and_validate_ir(
+    processor: &PgTaskProcessor,
+    bytes: &[u8],
+    filename: &str,
+    object_path: &str,
+    document_id: Uuid,
+    parse_run_id: Uuid,
+    route_decision: &ingestion::parser::ParseRouteDecision,
+    parse_run_state: &mut ParseRunState,
+) -> Result<DocumentIr, IngestionError> {
     let validation_report = sanitize_and_validate_document_ir(
         execute_parse_plan(
             processor,
@@ -154,6 +236,18 @@ pub(crate) async fn run_document_pipeline(
     parse_run_state.outputs.asset_count = document_ir.assets.len();
     parse_run_state.document_ir = Some(document_ir.clone());
 
+    Ok(document_ir)
+}
+
+async fn stage_project_document_ir(
+    processor: &PgTaskProcessor,
+    task: &IngestionTask,
+    context: &AuthContext,
+    notebook_id: Uuid,
+    document_id: Uuid,
+    parse_run_id: Uuid,
+    document_ir: &DocumentIr,
+) -> Result<(), IngestionError> {
     ensure_ingestion_side_effects_allowed(
         &processor.repo,
         context,
@@ -175,13 +269,34 @@ pub(crate) async fn run_document_pipeline(
             context,
             notebook_id,
             document_id,
-            &build_document_block_rows(&document_ir, parse_run_id),
+            &build_document_block_rows(document_ir, parse_run_id),
         )
         .await
         .map_err(from_storage_error)?;
 
+    Ok(())
+}
+
+struct MaterializeOutput {
+    content: String,
+    processed_chunk_count: usize,
+    chunks: Vec<avrag_storage_pg::IndexedChunk>,
+    stored_multimodal_chunks: Vec<StoredMultimodalChunk>,
+}
+
+async fn stage_materialize_chunks_assets_profile(
+    processor: &PgTaskProcessor,
+    task: &IngestionTask,
+    context: &AuthContext,
+    notebook_id: Uuid,
+    document_id: Uuid,
+    parse_run_id: Uuid,
+    filename: &str,
+    document_ir: &DocumentIr,
+    parse_run_state: &mut ParseRunState,
+) -> Result<MaterializeOutput, IngestionError> {
     let chunk_plan =
-        ingestion::chunker::build_ir_chunk_plan(&document_ir, filename, &ChunkPolicy::default());
+        ingestion::chunker::build_ir_chunk_plan(document_ir, filename, &ChunkPolicy::default());
     parse_run_state.outputs.text_chunk_count = chunk_plan.text_chunks.len();
     parse_run_state.outputs.multimodal_chunk_count = chunk_plan.multimodal_chunks.len();
 
@@ -218,7 +333,7 @@ pub(crate) async fn run_document_pipeline(
     let processed_chunk_count = chunks.len().max(1);
 
     let profile_result =
-        generate_document_profile_with_llm(processor, document_id, &document_ir, &chunks, filename)
+        generate_document_profile_with_llm(processor, document_id, document_ir, &chunks, filename)
             .await;
     let toc_entries = profile_result.toc_entries;
     if !toc_entries.is_empty() {
@@ -486,20 +601,29 @@ pub(crate) async fn run_document_pipeline(
     )
     .await;
 
-    generate_document_summary(
-        processor,
-        context,
-        task,
-        document_id,
-        filename,
-        content.as_str(),
-        &document_ir.title,
-    )
-    .await;
 
+    Ok(MaterializeOutput {
+        content,
+        processed_chunk_count,
+        chunks,
+        stored_multimodal_chunks,
+    })
+}
+
+async fn stage_build_and_replace_retrieval_index(
+    processor: &PgTaskProcessor,
+    task: &IngestionTask,
+    context: &AuthContext,
+    notebook_id: Uuid,
+    document_id: Uuid,
+    parse_run_id: Uuid,
+    document_ir: &DocumentIr,
+    materialize: &MaterializeOutput,
+    parse_run_state: &mut ParseRunState,
+) -> Result<(), IngestionError> {
     let needs_text_vector_index = processor.retrieval_data_plane.is_some();
     let text_index_records = if needs_text_vector_index {
-        build_text_index_records(processor, &chunks).await?
+        build_text_index_records(processor, &materialize.chunks).await?
     } else {
         Vec::new()
     };
@@ -511,8 +635,8 @@ pub(crate) async fn run_document_pipeline(
     let multimodal_index_records = if needs_multimodal_vector_index {
         build_multimodal_index_records(
             processor,
-            &document_ir,
-            &stored_multimodal_chunks,
+            document_ir,
+            &materialize.stored_multimodal_chunks,
             &mut parse_run_state.outputs,
         )
         .await?
@@ -536,7 +660,7 @@ pub(crate) async fn run_document_pipeline(
             let visual = extract_visual_triplets_for_index(
                 processor,
                 document_id,
-                &stored_multimodal_chunks,
+                &materialize.stored_multimodal_chunks,
                 parse_run_state,
             )
             .await;
@@ -591,10 +715,7 @@ pub(crate) async fn run_document_pipeline(
         parse_run_state.outputs.graph_passage_count = report.graph_passage_count;
     }
 
-    Ok(IngestionPipelineMetrics {
-        content,
-        processed_chunk_count,
-    })
+    Ok(())
 }
 
 async fn generate_document_summary(
