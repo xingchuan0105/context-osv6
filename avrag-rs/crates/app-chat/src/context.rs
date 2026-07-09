@@ -5,7 +5,7 @@ use app_billing::{BillingContext, CostEventRecord};
 use app_core::ChatPersistencePort;
 use app_core::{AnalyticsServiceCtx, StorageContext};
 use app_documents::DocumentContext;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use common::AppError;
 use uuid::Uuid;
 
@@ -81,31 +81,17 @@ impl ChatContext {
         notebook_id: Option<Uuid>,
         metadata: serde_json::Value,
     ) {
-        let Some(ref analytics) = self.analytics.service() else {
-            return;
-        };
-        let Some(user_id) = self.auth.actor_id().map(|actor| actor.into_uuid()) else {
-            return;
-        };
-
-        let event = analytics::ProductEvent {
-            event_id: Uuid::new_v4(),
-            event_time: chrono::Utc::now(),
-            user_id,
-            session_id,
-            notebook_id,
-            surface,
-            event_name,
-            result,
-            request_id: self.auth.request_id().map(str::to_string),
-            trace_id: None,
-            client_platform: "web".to_string(),
-            metadata,
-        };
-        if let Err(error) = analytics.record_product_event(&event).await {
-            telemetry::prometheus::record_dependency_failure("analytics");
-            tracing::warn!(error = %error, event_name = ?event_name, "failed to record product event");
-        }
+        self.analytics
+            .record_product_event_for_auth(
+                &self.auth,
+                event_name,
+                surface,
+                result,
+                session_id,
+                notebook_id,
+                metadata,
+            )
+            .await;
     }
 
     pub async fn record_cost_event_if_available(&self, record: CostEventRecord<'_>) {

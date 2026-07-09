@@ -75,6 +75,7 @@ fn jwt_secret() -> String {
     }
 }
 
+/// API-surface product events — delegates to canonical analytics entry point.
 pub(crate) async fn record_api_product_event_if_available(
     state: &AppState,
     user_id: Uuid,
@@ -82,27 +83,17 @@ pub(crate) async fn record_api_product_event_if_available(
     result: analytics::ResultTag,
     metadata: serde_json::Value,
 ) {
-    let Some(analytics) = state.analytics() else {
-        return;
-    };
-    let event = analytics::ProductEvent {
-        event_id: Uuid::new_v4(),
-        event_time: chrono::Utc::now(),
-        user_id,
-        session_id: None,
-        notebook_id: None,
-        surface: analytics::Surface::Api,
-        event_name,
-        result,
-        request_id: state.auth().request_id().map(str::to_string),
-        trace_id: None,
-        client_platform: "web".to_string(),
-        metadata,
-    };
-    if let Err(error) = analytics.record_product_event(&event).await {
-        telemetry::prometheus::record_dependency_failure("analytics");
-        tracing::warn!(error = %error, event_name = ?event_name, "failed to record API product event");
-    }
+    state
+        .analytics_ctx_for_user(user_id)
+        .record_product_event(
+            event_name,
+            analytics::Surface::Api,
+            result,
+            None,
+            None,
+            metadata,
+        )
+        .await;
 }
 
 #[cfg_attr(not(test), allow(dead_code))]

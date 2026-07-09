@@ -178,8 +178,16 @@ impl AppState {
         notebook_id: Option<Uuid>,
         metadata: serde_json::Value,
     ) {
-        self.analytics_ctx()
-            .record_product_event(event_name, surface, result, session_id, notebook_id, metadata)
+        self.analytics
+            .record_product_event_for_auth(
+                &self.auth,
+                event_name,
+                surface,
+                result,
+                session_id,
+                notebook_id,
+                metadata,
+            )
             .await;
     }
 }

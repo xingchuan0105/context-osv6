@@ -1,10 +1,16 @@
 use std::sync::Arc;
+
+use contracts::auth_runtime::AuthContext;
 use uuid::Uuid;
 
 /// Lightweight wrapper around the analytics service for per-app storage.
 ///
 /// Holds the service reference. Per-request context (actor_id, request_id)
 /// is created on-demand via `into_context()`.
+///
+/// **Canonical product-event entry points live here** — prefer
+/// [`Self::record_product_event_for_auth`] / [`AnalyticsContext::record_product_event`]
+/// over crate-local wrappers.
 #[derive(Clone)]
 pub struct AnalyticsServiceCtx {
     service: Option<Arc<analytics::AnalyticsService>>,
@@ -33,6 +39,56 @@ impl AnalyticsServiceCtx {
             actor_id,
             request_id,
         }
+    }
+
+    /// Single free-function-style helper used by app-documents / transport / chat.
+    pub async fn record_product_event_for_auth(
+        &self,
+        auth: &AuthContext,
+        event_name: analytics::ProductEventName,
+        surface: analytics::Surface,
+        result: analytics::ResultTag,
+        session_id: Option<Uuid>,
+        notebook_id: Option<Uuid>,
+        metadata: serde_json::Value,
+    ) {
+        self.into_context(
+            auth.actor_id().map(|actor| actor.into_uuid()),
+            auth.request_id().map(str::to_string),
+        )
+        .record_product_event(
+            event_name,
+            surface,
+            result,
+            session_id,
+            notebook_id,
+            metadata,
+        )
+        .await;
+    }
+
+    /// When auth is not available but a user id is (e.g. JWT login path).
+    pub async fn record_product_event_for_user(
+        &self,
+        user_id: Uuid,
+        request_id: Option<String>,
+        event_name: analytics::ProductEventName,
+        surface: analytics::Surface,
+        result: analytics::ResultTag,
+        session_id: Option<Uuid>,
+        notebook_id: Option<Uuid>,
+        metadata: serde_json::Value,
+    ) {
+        self.into_context(Some(user_id), request_id)
+            .record_product_event(
+                event_name,
+                surface,
+                result,
+                session_id,
+                notebook_id,
+                metadata,
+            )
+            .await;
     }
 }
 
