@@ -8,7 +8,6 @@ use common::{CreateDocumentRequest, CreateNotebookRequest};
 use contracts::chat::ChatEvent;
 use contracts::documents::DocumentStatus;
 use contracts::notebooks::CreateChatSessionRequest;
-use contracts::{ExecutePlanBudget, ExecutePlanItem, ExecutePlanRequest, ExecutePlanSummaryMode};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -225,38 +224,6 @@ async fn execute_chat_stream_memory_rag_emits_done_event() {
             .any(|event| matches!(event, ChatEvent::Done { .. })),
         "expected Done event, got {events:?}"
     );
-}
-
-#[tokio::test]
-async fn execute_rag_execute_plan_returns_gone() {
-    let state = memory_state().await;
-    let err = state
-        .execute_rag_execute_plan(ExecutePlanRequest {
-            plan_version: "rag-execute-v1".to_string(),
-            doc_scope: vec!["00000000-0000-0000-0000-000000000001".to_string()],
-            items: vec![ExecutePlanItem {
-                priority: 1.0,
-                query: Some("plan".to_string()),
-                bm25_terms: None,
-            }],
-            summary_mode: ExecutePlanSummaryMode::All,
-            budget: Some(ExecutePlanBudget {
-                total_candidate_budget: Some(4),
-                final_chunk_budget: Some(1),
-                graph_hop_limit: None,
-                graph_fan_out_limit: None,
-            }),
-            channel_budget: None,
-            query_entities: Vec::new(),
-            graph_hints: Vec::new(),
-            placeholder_triplets: Vec::new(),
-            trace: None,
-        })
-        .await
-        .unwrap_err();
-
-    assert_eq!(err.code(), "execute_plan_gone");
-    assert_eq!(err.http_status(), 410);
 }
 
 // ---------------------------------------------------------------------------

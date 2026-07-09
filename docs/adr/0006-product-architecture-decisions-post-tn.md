@@ -223,9 +223,9 @@ Thermo-Nuclear 结构债主路径（C1–C3 / H1–H3 / 长尾）落地后，剩
 3. ~~Write 入口用量提示文案~~ ✅ frontend Write mode + usage hint  
 4. ~~Desktop 版本线文档完善 + SLA 响应数字~~ ✅ `docs/desktop/SUPPORT-AND-SLA.md` + `VERSIONING.md`  
 5. ~~CI merge gate / nightly 分流~~ ✅ `avrag-rs/docs/e2e-gates.md`（认领轮值可运营侧再填人）  
-6. Write+heavytail crate 拆分（**测试先行**）— 未开始  
-7. ~~Execute-plan 运行时删除清单与日期~~ ✅ `docs/adr/0006-execute-plan-removal-inventory.md`（目标 2026-09-30）  
-8. ~~用量导出 / 1 年保留规格草案~~ ✅ `docs/specs/usage-export-and-retention.md`（API 实现另开）
+6. Write+heavytail crate 拆分（**测试先行**）— **partial**：`write-core` 已抽出 material/refine 契约；编排仍在 `app-chat`  
+7. ~~Execute-plan 运行时删除~~ ✅ 路由物理删除 + App 方法删除；DTO/内部 harness 过渡保留至 2026-09-30  
+8. ~~用量导出 / 1 年保留~~ ✅ API + worker purge + 删号级联（`0053`/`0054`）
 
 ---
 
@@ -252,6 +252,7 @@ Thermo-Nuclear 结构债主路径（C1–C3 / H1–H3 / 长尾）落地后，剩
 | 2026-07-09 | 终裁 #3 / #9 / #11；写入评审初稿 |
 | 2026-07-09 | **产品同意评审结论**；张力项升格为 Accepted addenda |
 | 2026-07-09 | 实现进度：#1–#5/#7/#8 文档与代码落地；#6 Write crate 拆分仍待 |
+| 2026-07-09 | #6 partial `write-core`；#7 路由删除；#8 export API + 删号级联 |
 
 ---
 

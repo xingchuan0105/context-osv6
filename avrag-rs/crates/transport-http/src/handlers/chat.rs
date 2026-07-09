@@ -13,7 +13,7 @@ use contracts::chat::ChatEvent;
 use contracts::chat::ChatRequest;
 use contracts::documents::CitationLookupRequest;
 use contracts::notebooks::{CreateChatSessionRequest, UpdateChatSessionRequest};
-use contracts::{ExecutePlanRequest, RuntimeExecuteRequest};
+use contracts::RuntimeExecuteRequest;
 use std::{convert::Infallible, time::Duration};
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use tokio_util::sync::CancellationToken;
@@ -28,25 +28,6 @@ use crate::auth_guard::{
     authorize_workspace_query_optional_notebook, forbid_api_key, forbid_workspace_api_key,
     query_permission,
 };
-
-/// ADR 0006: permanently retired. Always 410 Gone (observability: warn + metric).
-pub(crate) async fn rag_execute_plan_handler(
-    Extension(RequestState(state)): Extension<RequestState>,
-    payload: Result<Json<ExecutePlanRequest>, axum::extract::rejection::JsonRejection>,
-) -> Response {
-    let _ = payload;
-    let _ = state;
-    tracing::warn!(
-        target: "adr0006_execute_plan",
-        "POST /rag/execute-plan hit retired surface"
-    );
-    telemetry::prometheus::record_dependency_failure("execute_plan_deprecated");
-    app_error_response(AppError::gone(
-        "execute_plan_gone",
-        "POST /api/v1/rag/execute-plan has been removed (ADR 0006). \
-         Use chat AgentLoop + ToolCall retrieval instead.",
-    ))
-}
 
 pub(crate) async fn runtime_execute_handler(
     Extension(RequestState(state)): Extension<RequestState>,

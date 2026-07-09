@@ -89,7 +89,7 @@ Content-Type: application/json
 1. ~~导出任务表 + worker~~ ✅ migration `0053` + worker poll  
 2. ~~CSV/JSONL 生成~~ ✅ 结果写入 `usage_export_jobs.result_text`（≤50k 行）；对象存储 v2  
 3. ~~365 日清理 job~~ ✅ worker `purge_llm_usage_older_than`  
-4. 删号钩子  
+4. ~~删号钩子~~ ✅ `delete_user_cascade` 含 `usage_export_jobs` + `llm_usage_events`（migration `0054`）  
 5. Admin/审计事件  
 
 ## 已实现 API

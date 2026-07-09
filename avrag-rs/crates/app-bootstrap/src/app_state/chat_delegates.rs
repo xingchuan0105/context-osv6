@@ -65,13 +65,6 @@ impl AppState {
             .await
     }
 
-    pub async fn execute_rag_execute_plan(
-        &self,
-        req: contracts::ExecutePlanRequest,
-    ) -> Result<contracts::ExecutePlanResponse, AppError> {
-        self.chat_ctx().execute_rag_execute_plan(req).await
-    }
-
     pub async fn execute_runtime_tools(
         &self,
         req: contracts::RuntimeExecuteRequest,
