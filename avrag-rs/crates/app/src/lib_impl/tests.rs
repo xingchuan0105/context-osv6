@@ -272,7 +272,8 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_eq!(error.code(), "rag_runtime_not_configured");
+        assert_eq!(error.code(), "execute_plan_gone");
+        assert_eq!(error.http_status(), 410);
     }
 
     #[tokio::test]

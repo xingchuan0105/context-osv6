@@ -69,6 +69,15 @@ impl AppError {
         }
     }
 
+    /// HTTP 410 Gone — permanent removal of a product surface (e.g. deprecated API).
+    pub fn gone(code: &'static str, message: impl Into<String>) -> Self {
+        Self::NotFound {
+            code,
+            message: message.into(),
+            http_status: 410,
+        }
+    }
+
     pub fn conflict(code: &'static str, message: impl Into<String>) -> Self {
         Self::Conflict {
             code,

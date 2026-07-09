@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use app_core::{
-    MeteringContext, UsageLimitOverrideRow, UsageLimitPlanPolicyRow, UsageLimitStorePort,
-    UsageLimitUsageRecord,
+    MeteringContext, UsageExportJobRow, UsageLimitOverrideRow, UsageLimitPlanPolicyRow,
+    UsageLimitStorePort, UsageLimitUsageRecord,
 };
 use async_trait::async_trait;
 use avrag_storage_pg::PgAppRepository;
@@ -266,5 +266,267 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         Ok(row
             .try_get::<bool, _>("has_estimated")
             .map_err(|e| AppError::internal(e.to_string()))?)
+    }
+
+    async fn create_usage_export_job(
+        &self,
+        org_id: Uuid,
+        user_id: Uuid,
+        range_from: DateTime<Utc>,
+        range_to: DateTime<Utc>,
+        format: &str,
+    ) -> Result<Uuid, AppError> {
+        let format = match format {
+            "csv" | "jsonl" => format,
+            _ => {
+                return Err(AppError::validation(
+                    "invalid_export_format",
+                    "format must be csv or jsonl",
+                ));
+            }
+        };
+        if range_to <= range_from {
+            return Err(AppError::validation(
+                "invalid_export_range",
+                "to must be after from",
+            ));
+        }
+        // Sync-friendly window: ≤ 31 days still goes through the job table but is
+        // processed immediately in the request path via process_export_job_by_id.
+        let max_span = chrono::Duration::days(366);
+        if range_to - range_from > max_span {
+            return Err(AppError::validation(
+                "export_range_too_large",
+                "export window must be ≤ 366 days",
+            ));
+        }
+
+        let id = Uuid::new_v4();
+        sqlx::query(
+            r#"
+            INSERT INTO usage_export_jobs (
+              id, org_id, user_id, range_from, range_to, format, status
+            ) VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+            "#,
+        )
+        .bind(id)
+        .bind(org_id)
+        .bind(user_id)
+        .bind(range_from)
+        .bind(range_to)
+        .bind(format)
+        .execute(self.pool())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+
+        // Eagerly process short windows so UI can download immediately.
+        if range_to - range_from <= chrono::Duration::days(7) {
+            let _ = self.process_export_job_by_id(id).await;
+        }
+        Ok(id)
+    }
+
+    async fn get_usage_export_job(
+        &self,
+        user_id: Uuid,
+        export_id: Uuid,
+    ) -> Result<Option<UsageExportJobRow>, AppError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, status, format, range_from, range_to, row_count, result_text,
+                   error_message, created_at, completed_at
+            FROM usage_export_jobs
+            WHERE id = $1 AND user_id = $2
+            "#,
+        )
+        .bind(export_id)
+        .bind(user_id)
+        .fetch_optional(self.pool())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+        Ok(row.map(|row| UsageExportJobRow {
+            id: row.get("id"),
+            status: row.get("status"),
+            format: row.get("format"),
+            range_from: row.get("range_from"),
+            range_to: row.get("range_to"),
+            row_count: row.get("row_count"),
+            result_text: row.get("result_text"),
+            error_message: row.get("error_message"),
+            created_at: row.get("created_at"),
+            completed_at: row.get("completed_at"),
+        }))
+    }
+
+    async fn process_next_usage_export_job(&self) -> Result<bool, AppError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id FROM usage_export_jobs
+            WHERE status = 'pending'
+            ORDER BY created_at ASC
+            LIMIT 1
+            "#,
+        )
+        .fetch_optional(self.pool())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+        let Some(row) = row else {
+            return Ok(false);
+        };
+        let id: Uuid = row.get("id");
+        self.process_export_job_by_id(id).await?;
+        Ok(true)
+    }
+
+    async fn purge_llm_usage_older_than(
+        &self,
+        cutoff: DateTime<Utc>,
+        limit: i64,
+    ) -> Result<u64, AppError> {
+        let result = sqlx::query(
+            r#"
+            DELETE FROM llm_usage_events
+            WHERE ctid IN (
+              SELECT ctid FROM llm_usage_events
+              WHERE created_at < $1
+              ORDER BY created_at ASC
+              LIMIT $2
+            )
+            "#,
+        )
+        .bind(cutoff)
+        .bind(limit)
+        .execute(self.pool())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+        Ok(result.rows_affected())
+    }
+}
+
+impl PgUsageLimitStoreAdapter {
+    async fn process_export_job_by_id(&self, job_id: Uuid) -> Result<(), AppError> {
+        let job = sqlx::query(
+            r#"
+            SELECT user_id, range_from, range_to, format, status
+            FROM usage_export_jobs WHERE id = $1
+            "#,
+        )
+        .bind(job_id)
+        .fetch_optional(self.pool())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+        let Some(job) = job else {
+            return Ok(());
+        };
+        let status: String = job.get("status");
+        if status != "pending" {
+            return Ok(());
+        }
+        let user_id: Uuid = job.get("user_id");
+        let range_from: DateTime<Utc> = job.get("range_from");
+        let range_to: DateTime<Utc> = job.get("range_to");
+        let format: String = job.get("format");
+
+        let rows = sqlx::query(
+            r#"
+            SELECT created_at, feature, stage, provider, model,
+                   prompt_tokens, completion_tokens, total_tokens,
+                   usage_units, usage_source, session_id, request_id
+            FROM llm_usage_events
+            WHERE user_id = $1
+              AND billable = true
+              AND created_at >= $2
+              AND created_at < $3
+            ORDER BY created_at ASC
+            LIMIT 50000
+            "#,
+        )
+        .bind(user_id)
+        .bind(range_from)
+        .bind(range_to)
+        .fetch_all(self.pool())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+
+        let row_count = rows.len() as i32;
+        let result_text = if format == "jsonl" {
+            let mut out = String::new();
+            for row in &rows {
+                let line = serde_json::json!({
+                    "created_at": row.get::<DateTime<Utc>, _>("created_at").to_rfc3339(),
+                    "feature": row.get::<String, _>("feature"),
+                    "stage": row.get::<String, _>("stage"),
+                    "provider": row.get::<String, _>("provider"),
+                    "model": row.get::<String, _>("model"),
+                    "prompt_tokens": row.get::<i64, _>("prompt_tokens"),
+                    "completion_tokens": row.get::<i64, _>("completion_tokens"),
+                    "total_tokens": row.get::<i64, _>("total_tokens"),
+                    "usage_units": row.get::<i64, _>("usage_units"),
+                    "usage_source": row.get::<String, _>("usage_source"),
+                    "session_id": row.try_get::<Uuid, _>("session_id").ok().map(|u| u.to_string()),
+                    "request_id": row.try_get::<String, _>("request_id").ok(),
+                });
+                out.push_str(&line.to_string());
+                out.push('\n');
+            }
+            out
+        } else {
+            let mut out = String::from(
+                "created_at,feature,stage,provider,model,prompt_tokens,completion_tokens,total_tokens,usage_units,usage_source,session_id,request_id\n",
+            );
+            for row in &rows {
+                let session = row
+                    .try_get::<Uuid, _>("session_id")
+                    .ok()
+                    .map(|u| u.to_string())
+                    .unwrap_or_default();
+                let request_id = row
+                    .try_get::<String, _>("request_id")
+                    .unwrap_or_default();
+                out.push_str(&format!(
+                    "{},{},{},{},{},{},{},{},{},{},{},{}\n",
+                    row.get::<DateTime<Utc>, _>("created_at").to_rfc3339(),
+                    csv_escape(&row.get::<String, _>("feature")),
+                    csv_escape(&row.get::<String, _>("stage")),
+                    csv_escape(&row.get::<String, _>("provider")),
+                    csv_escape(&row.get::<String, _>("model")),
+                    row.get::<i64, _>("prompt_tokens"),
+                    row.get::<i64, _>("completion_tokens"),
+                    row.get::<i64, _>("total_tokens"),
+                    row.get::<i64, _>("usage_units"),
+                    csv_escape(&row.get::<String, _>("usage_source")),
+                    csv_escape(&session),
+                    csv_escape(&request_id),
+                ));
+            }
+            out
+        };
+
+        sqlx::query(
+            r#"
+            UPDATE usage_export_jobs
+            SET status = 'completed',
+                row_count = $2,
+                result_text = $3,
+                completed_at = now(),
+                error_message = NULL
+            WHERE id = $1
+            "#,
+        )
+        .bind(job_id)
+        .bind(row_count)
+        .bind(result_text)
+        .execute(self.pool())
+        .await
+        .map_err(|error| AppError::internal(error.to_string()))?;
+        Ok(())
+    }
+}
+
+fn csv_escape(value: &str) -> String {
+    if value.contains(',') || value.contains('"') || value.contains('\n') {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
     }
 }

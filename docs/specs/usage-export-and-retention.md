@@ -86,14 +86,26 @@ Content-Type: application/json
 
 ## 实现 backlog（派生）
 
-1. 导出任务表 + worker  
-2. CSV/JSONL 生成与对象存储  
-3. 365 日清理 job  
+1. ~~导出任务表 + worker~~ ✅ migration `0053` + worker poll  
+2. ~~CSV/JSONL 生成~~ ✅ 结果写入 `usage_export_jobs.result_text`（≤50k 行）；对象存储 v2  
+3. ~~365 日清理 job~~ ✅ worker `purge_llm_usage_older_than`  
 4. 删号钩子  
 5. Admin/审计事件  
+
+## 已实现 API
+
+```http
+POST /api/v1/billing/usage/export
+GET  /api/v1/billing/usage/export/{export_id}
+```
+
+- ≤7 天窗口：创建后立即处理（多为 `completed`）  
+- ≤366 天：允许创建；长窗口由 worker 异步完成  
+- 仅 `billable = true` 行  
 
 ## 变更
 
 | 日期 | 说明 |
 |------|------|
 | 2026-07-09 | 初稿（ADR 0006 backlog #8） |
+| 2026-07-09 | MVP：export API + worker process/purge |

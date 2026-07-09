@@ -2,8 +2,10 @@
 
 ## Status
 
-**Plan only** — 2026-07-09  
+**Partial** — 2026-07-09  
 约束（ADR addendum #8）：**先契约/行为测试锁 Write 行为，再搬 crate**。禁止先搬文件后补测试。
+
+**已落地：** `write-core` crate（`MaterialPack`、refine types、empty-topic / unified-billing 契约测试）；`app-chat::writer` 保留编排与 invoker。
 
 ## 现状锚点（勿先搬）
 

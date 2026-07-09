@@ -19,6 +19,7 @@ members = [
   "crates/common",
     "crates/guardrails",
     "crates/heavytail",
+    "crates/write-core",
     "crates/ingestion",
   "crates/ingestion-types",
   "crates/licensing",

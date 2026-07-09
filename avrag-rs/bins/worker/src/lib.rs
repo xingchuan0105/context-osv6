@@ -309,6 +309,27 @@ pub async fn run() -> Result<()> {
                     if let Err(error) = avrag_billing::process_outbox(billing_store).await {
                         warn!(error = %error, "billing process outbox job failed");
                     }
+
+                    // ADR 0006: usage export jobs + 365-day llm_usage_events retention.
+                    let usage_store: std::sync::Arc<dyn app_core::UsageLimitStorePort> =
+                        std::sync::Arc::new(app_bootstrap::PgUsageLimitStoreAdapter::new(
+                            std::sync::Arc::new(cleanup_repo.clone()),
+                        ));
+                    match usage_store.process_next_usage_export_job().await {
+                        Ok(true) => info!("worker processed usage export job"),
+                        Ok(false) => {}
+                        Err(error) => {
+                            warn!(error = %error, "usage export job failed");
+                        }
+                    }
+                    let cutoff = chrono::Utc::now() - chrono::Duration::days(365);
+                    match usage_store.purge_llm_usage_older_than(cutoff, 5_000).await {
+                        Ok(0) => {}
+                        Ok(n) => info!(deleted = n, "purged llm_usage_events past 365d retention"),
+                        Err(error) => {
+                            warn!(error = %error, "llm_usage retention purge failed");
+                        }
+                    }
                 }
                 _ = heartbeat_interval.tick() => {
                     if let Some(runner) = analytics_job_runner.as_mut()

@@ -58,8 +58,8 @@ pub use billing_domain::{
 };
 pub use billing_quota::BillingQuotaPort;
 pub use billing_store::{
-    BillingStorePort, UsageLimitOverrideRow, UsageLimitPlanPolicyRow, UsageLimitStorePort,
-    UsageLimitUsageRecord,
+    BillingStorePort, UsageExportJobRow, UsageLimitOverrideRow, UsageLimitPlanPolicyRow,
+    UsageLimitStorePort, UsageLimitUsageRecord,
 };
 pub use billing_usage_units::{compute_usage_units, compute_usage_units_with_rates};
 pub use chat_persistence::{

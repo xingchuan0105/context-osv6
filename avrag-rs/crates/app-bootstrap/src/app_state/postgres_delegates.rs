@@ -93,6 +93,43 @@ impl AppState {
         avrag_billing::handle_get_usage_forecast(store, UserId::from(actor_id.into_uuid())).await
     }
 
+    pub async fn billing_create_usage_export(
+        &self,
+        body: avrag_billing::CreateUsageExportRequest,
+    ) -> ApiResponse<avrag_billing::UsageExportAccepted> {
+        let Some(repo) = self.postgres_repo() else {
+            return ApiResponse::err(
+                "postgres_not_configured",
+                "postgres backend is not configured",
+            );
+        };
+        let Some(actor_id) = self.auth().actor_id() else {
+            return ApiResponse::err("authenticated_user_required", "authenticated user required");
+        };
+        let store: std::sync::Arc<dyn app_core::UsageLimitStorePort> =
+            std::sync::Arc::new(crate::adapters::PgUsageLimitStoreAdapter::new(repo));
+        let org_id = self.auth().org_id().into_uuid();
+        avrag_billing::handle_create_usage_export(store, org_id, actor_id.into_uuid(), body).await
+    }
+
+    pub async fn billing_get_usage_export(
+        &self,
+        export_id: uuid::Uuid,
+    ) -> ApiResponse<avrag_billing::UsageExportStatusResponse> {
+        let Some(repo) = self.postgres_repo() else {
+            return ApiResponse::err(
+                "postgres_not_configured",
+                "postgres backend is not configured",
+            );
+        };
+        let Some(actor_id) = self.auth().actor_id() else {
+            return ApiResponse::err("authenticated_user_required", "authenticated user required");
+        };
+        let store: std::sync::Arc<dyn app_core::UsageLimitStorePort> =
+            std::sync::Arc::new(crate::adapters::PgUsageLimitStoreAdapter::new(repo));
+        avrag_billing::handle_get_usage_export(store, actor_id.into_uuid(), export_id).await
+    }
+
     pub async fn billing_create_checkout(
         &self,
         body: avrag_billing::CreateCheckoutRequest,

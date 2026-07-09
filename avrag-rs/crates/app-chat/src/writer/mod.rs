@@ -7,6 +7,7 @@ mod refine_loop;
 
 pub use material_pack::MaterialPack;
 pub use refine_loop::{RefineContext, RefineLoopBudget, WriteRefineLoopRunner, WRITE_REFINE_HARD_REACT_CAP};
+pub use write_core::{WRITE_AGENT_TYPE, WRITE_MODE};
 
 pub use invoker::{research, ResearchOutcome, SubagentInvoker};
 
@@ -81,12 +82,7 @@ impl<'a> WriterOrchestrator<'a> {
         };
 
         let topic = request.query.trim().to_string();
-        if topic.is_empty() {
-            return Err(AppError::validation(
-                "empty_write_topic",
-                "Write mode requires a non-empty topic",
-            ));
-        }
+        write_core::require_non_empty_write_topic(&topic)?;
 
         let style = StyleParams::default();
         let budget = WriterBudget::default();
@@ -153,7 +149,10 @@ impl<'a> WriterOrchestrator<'a> {
         let reservoir = research_outcome.reservoir.clone();
         let mut workspace = std::mem::take(&mut state.workspace);
         let material_pack =
-            material_pack::MaterialPack::from_research(&research_outcome, &workspace.render_plain());
+            material_pack::MaterialPack::from_research(
+                &research_outcome.materials(),
+                &workspace.render_plain(),
+            );
         let diagnosis =
             heavytail::diagnosis::diagnose_pre_refine(&workspace, &style, &reservoir);
         let mut refine_ctx = RefineContext::new(
@@ -342,7 +341,7 @@ pub(crate) async fn run_write_mode(
             config.request_id.clone(),
             session.id.clone(),
             crate::chat_streaming::STREAM_PLACEHOLDER_MESSAGE_ID,
-            "write".to_string(),
+            WRITE_AGENT_TYPE.to_string(),
         )
         .without_done_event()
         .with_debug_trace(emit_debug_trace);
@@ -353,8 +352,8 @@ pub(crate) async fn run_write_mode(
         let mut execution = crate::chat::build_chat_execution_from_result(
             &agent_result,
             crate::chat::BuildChatExecutionParams {
-                mode: "write",
-                agent_type: "write",
+                mode: WRITE_MODE,
+                agent_type: WRITE_AGENT_TYPE,
                 session_id: &session.id,
                 input_usage_text: request.query.trim(),
                 apply_output_guard: true,
@@ -373,8 +372,8 @@ pub(crate) async fn run_write_mode(
     let mut execution = crate::chat::build_chat_execution_from_result(
         &agent_result,
         crate::chat::BuildChatExecutionParams {
-            mode: "write",
-            agent_type: "write",
+            mode: WRITE_MODE,
+            agent_type: WRITE_AGENT_TYPE,
             session_id: &session.id,
             input_usage_text: request.query.trim(),
             apply_output_guard: true,

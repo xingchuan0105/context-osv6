@@ -228,33 +228,12 @@ async fn execute_chat_stream_memory_rag_emits_done_event() {
 }
 
 #[tokio::test]
-async fn execute_rag_execute_plan_without_runtime_returns_rag_runtime_not_configured() {
+async fn execute_rag_execute_plan_returns_gone() {
     let state = memory_state().await;
-    let notebook = create_notebook(&state).await;
-    let upload = state
-        .create_document_upload(
-            &notebook.id,
-            CreateDocumentRequest {
-                filename: "plan.txt".to_string(),
-                file_size: 8,
-                mime_type: "text/plain".to_string(),
-            },
-        )
-        .await
-        .unwrap();
-    state
-        .put_uploaded_document(&upload.document_id, b"plan body".to_vec())
-        .await
-        .unwrap();
-    state
-        .transition_document_status(&upload.document_id, DocumentStatus::Completed)
-        .await
-        .unwrap();
-
     let err = state
         .execute_rag_execute_plan(ExecutePlanRequest {
             plan_version: "rag-execute-v1".to_string(),
-            doc_scope: vec![upload.document_id],
+            doc_scope: vec!["00000000-0000-0000-0000-000000000001".to_string()],
             items: vec![ExecutePlanItem {
                 priority: 1.0,
                 query: Some("plan".to_string()),
@@ -276,7 +255,8 @@ async fn execute_rag_execute_plan_without_runtime_returns_rag_runtime_not_config
         .await
         .unwrap_err();
 
-    assert_eq!(err.code(), "rag_runtime_not_configured");
+    assert_eq!(err.code(), "execute_plan_gone");
+    assert_eq!(err.http_status(), 410);
 }
 
 // ---------------------------------------------------------------------------

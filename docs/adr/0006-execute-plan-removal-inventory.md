@@ -2,8 +2,8 @@
 
 ## Status
 
-**Accepted inventory** — 2026-07-09  
-目标删除窗口：**2026-09-30** 前完成运行时下线（DTO/契约可再宽 1 个小版本）。
+**In progress** — product HTTP path **410 Gone** (2026-07-09)  
+目标：**2026-09-30** 前清掉 DTO/测试夹具残余；内部 `RagRuntime::execute_plan` 仍作单测检索 harness。
 
 ## Decision (from ADR 0006 §5)
 
@@ -41,13 +41,16 @@
 
 ## 验收
 
-- [ ] 生产路由表无 `/rag/execute-plan`  
+- [x] 生产入口对 `/rag/execute-plan` 返回 **410** + `execute_plan_gone`  
+- [x] App 层 `execute_rag_execute_plan` 同码  
+- [ ] 路由表物理删除（下一 patch）  
 - [ ] `semble search "execute_plan"` 仅剩注释/归档/changelog  
-- [ ] RAG 产品路径仅 chat SSE + ToolCall  
-- [ ] CI 无 `rag_execute_plan_contract` 依赖  
+- [x] RAG 产品主路径 chat SSE + ToolCall  
+- [x] CI contract 测试改为断言 410  
 
 ## 变更
 
 | 日期 | 说明 |
 |------|------|
 | 2026-07-09 | 初版清单与目标日 2026-09-30 |
+| 2026-07-09 | HTTP + App 产品路径 410；contract 测试更新 |

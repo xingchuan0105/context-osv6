@@ -29,26 +29,23 @@ use crate::auth_guard::{
     query_permission,
 };
 
+/// ADR 0006: permanently retired. Always 410 Gone (observability: warn + metric).
 pub(crate) async fn rag_execute_plan_handler(
     Extension(RequestState(state)): Extension<RequestState>,
     payload: Result<Json<ExecutePlanRequest>, axum::extract::rejection::JsonRejection>,
 ) -> Response {
-    let Json(req) = match payload {
-        Ok(payload) => payload,
-        Err(error) => {
-            return app_error_response(AppError::validation(
-                "invalid_execute_plan",
-                format!("invalid execute-plan JSON: {error}"),
-            ));
-        }
-    };
-    if let Err(error) = authorize_api_key_query_scoped(state.auth()) {
-        return app_error_response(error);
-    }
-    match state.execute_rag_execute_plan(req).await {
-        Ok(response) => (StatusCode::OK, Json(response)).into_response(),
-        Err(error) => app_error_response(error),
-    }
+    let _ = payload;
+    let _ = state;
+    tracing::warn!(
+        target: "adr0006_execute_plan",
+        "POST /rag/execute-plan hit retired surface"
+    );
+    telemetry::prometheus::record_dependency_failure("execute_plan_deprecated");
+    app_error_response(AppError::gone(
+        "execute_plan_gone",
+        "POST /api/v1/rag/execute-plan has been removed (ADR 0006). \
+         Use chat AgentLoop + ToolCall retrieval instead.",
+    ))
 }
 
 pub(crate) async fn runtime_execute_handler(

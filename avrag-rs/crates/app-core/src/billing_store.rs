@@ -156,4 +156,55 @@ pub trait UsageLimitStorePort: Send + Sync {
     async fn has_user_override(&self, user_id: Uuid) -> Result<bool, AppError>;
 
     async fn has_estimated_usage(&self, user_id: Uuid) -> Result<bool, AppError>;
+
+    /// ADR 0006: create a usage export job (billable rows only).
+    async fn create_usage_export_job(
+        &self,
+        org_id: Uuid,
+        user_id: Uuid,
+        range_from: DateTime<Utc>,
+        range_to: DateTime<Utc>,
+        format: &str,
+    ) -> Result<Uuid, AppError> {
+        let _ = (org_id, user_id, range_from, range_to, format);
+        Err(AppError::internal("usage export not implemented"))
+    }
+
+    async fn get_usage_export_job(
+        &self,
+        user_id: Uuid,
+        export_id: Uuid,
+    ) -> Result<Option<UsageExportJobRow>, AppError> {
+        let _ = (user_id, export_id);
+        Ok(None)
+    }
+
+    /// Fill one pending export job (or process a specific id). Returns true if work done.
+    async fn process_next_usage_export_job(&self) -> Result<bool, AppError> {
+        Ok(false)
+    }
+
+    /// Delete billable/internal rows older than retention. Returns deleted count.
+    async fn purge_llm_usage_older_than(
+        &self,
+        cutoff: DateTime<Utc>,
+        limit: i64,
+    ) -> Result<u64, AppError> {
+        let _ = (cutoff, limit);
+        Ok(0)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UsageExportJobRow {
+    pub id: Uuid,
+    pub status: String,
+    pub format: String,
+    pub range_from: DateTime<Utc>,
+    pub range_to: DateTime<Utc>,
+    pub row_count: Option<i32>,
+    pub result_text: Option<String>,
+    pub error_message: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
 }

@@ -11,8 +11,14 @@ use crate::service::{
     BillingService, CheckoutResponse, CreateCheckoutRequest, PortalResponse, QuotaDecision,
     SubscriptionResponse, UsageResponse,
 };
-use crate::types::{UsageForecastResponse, UsageHistoryResponse, UsageWindowResponse};
+use crate::types::{
+    CreateUsageExportRequest, UsageExportAccepted, UsageExportStatusResponse,
+    UsageForecastResponse, UsageHistoryResponse, UsageWindowResponse,
+};
 use crate::BillingProvider;
+use app_core::UsageLimitStorePort;
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
 
 pub async fn handle_get_plans(
     store: Arc<dyn BillingStorePort>,
@@ -112,4 +118,67 @@ pub async fn check_quota(
     BillingService::shared()
         .check_quota(store, user_id, metric_type, requested)
         .await
+}
+
+/// ADR 0006: create usage export (billable rows only).
+pub async fn handle_create_usage_export(
+    store: Arc<dyn UsageLimitStorePort>,
+    org_id: Uuid,
+    user_id: Uuid,
+    body: CreateUsageExportRequest,
+) -> ApiResponse<UsageExportAccepted> {
+    let from = match DateTime::parse_from_rfc3339(&body.from) {
+        Ok(dt) => dt.with_timezone(&Utc),
+        Err(_) => {
+            return ApiResponse::err("invalid_export_from", "from must be RFC3339 datetime");
+        }
+    };
+    let to = match DateTime::parse_from_rfc3339(&body.to) {
+        Ok(dt) => dt.with_timezone(&Utc),
+        Err(_) => {
+            return ApiResponse::err("invalid_export_to", "to must be RFC3339 datetime");
+        }
+    };
+    match store
+        .create_usage_export_job(org_id, user_id, from, to, &body.format)
+        .await
+    {
+        Ok(id) => {
+            let status = store
+                .get_usage_export_job(user_id, id)
+                .await
+                .ok()
+                .flatten()
+                .map(|j| j.status)
+                .unwrap_or_else(|| "pending".to_string());
+            ApiResponse::ok(UsageExportAccepted {
+                export_id: id.to_string(),
+                status,
+            })
+        }
+        Err(error) => ApiResponse::err(error.code(), error.message()),
+    }
+}
+
+pub async fn handle_get_usage_export(
+    store: Arc<dyn UsageLimitStorePort>,
+    user_id: Uuid,
+    export_id: Uuid,
+) -> ApiResponse<UsageExportStatusResponse> {
+    match store.get_usage_export_job(user_id, export_id).await {
+        Ok(Some(job)) => ApiResponse::ok(UsageExportStatusResponse {
+            export_id: job.id.to_string(),
+            status: job.status,
+            format: job.format,
+            from: job.range_from.to_rfc3339(),
+            to: job.range_to.to_rfc3339(),
+            row_count: job.row_count,
+            result: job.result_text,
+            error_message: job.error_message,
+            created_at: job.created_at.to_rfc3339(),
+            completed_at: job.completed_at.map(|t| t.to_rfc3339()),
+        }),
+        Ok(None) => ApiResponse::err("export_not_found", "export job not found"),
+        Err(error) => ApiResponse::err(error.code(), error.message()),
+    }
 }
