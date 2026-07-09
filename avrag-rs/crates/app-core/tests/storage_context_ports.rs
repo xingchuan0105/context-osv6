@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use app_core::{MemoryState, ObjectStorePort, StorageContext};
+use app_core::{
+    MemoryState, MemoryStateHandles, ObjectStoreConfig, ObjectStorePort, StorageContext,
+    StorageContextParts, StorageInfra, StorageStores,
+};
 use async_trait::async_trait;
 use common::AppError;
 use tokio::sync::RwLock;
@@ -42,27 +45,35 @@ impl ObjectStorePort for NoopObjectStore {
 
 #[test]
 fn storage_context_exposes_typed_ports() {
-    let storage = StorageContext::new(
-        None,
-        false,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        Arc::new(RwLock::new(MemoryState::default())),
-        Arc::new(RwLock::new(BTreeMap::new())),
-        Arc::new(RwLock::new(BTreeMap::new())),
-        10 * 1024 * 1024,
-        true,
-        Arc::new(NoopObjectStore),
-        "http://localhost".to_string(),
-        "/tmp/avrag-core-test".to_string(),
-        3600,
-        3600,
-    );
+    let storage = StorageContext::from_parts(StorageContextParts {
+        infra: StorageInfra {
+            postgres_health: None,
+            postgres_configured: false,
+            uses_memory_adapters: true,
+            max_upload_file_size_bytes: 10 * 1024 * 1024,
+        },
+        stores: StorageStores {
+            document_store: None,
+            auth_store: None,
+            admin_store: None,
+            billing_quota: None,
+            billing_store: None,
+            share_store: None,
+            chat_persistence: None,
+        },
+        memory: MemoryStateHandles {
+            inner: Arc::new(RwLock::new(MemoryState::default())),
+            api_keys: Arc::new(RwLock::new(BTreeMap::new())),
+            api_key_hashes: Arc::new(RwLock::new(BTreeMap::new())),
+        },
+        objects: ObjectStoreConfig {
+            object_store: Arc::new(NoopObjectStore),
+            public_base_url: "http://localhost".to_string(),
+            object_root: "/tmp/avrag-core-test".to_string(),
+            upload_expire_sec: 3600,
+            download_expire_sec: 3600,
+        },
+    });
 
     assert!(storage.document_store().is_none());
     assert!(storage.admin_store().is_none());

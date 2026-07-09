@@ -3,6 +3,7 @@ pub mod admin_domain;
 pub mod admin_store;
 pub mod analytics_context;
 pub mod api_key;
+pub mod auth_scope;
 pub mod auth_store;
 pub mod billing_domain;
 pub mod billing_quota;
@@ -25,6 +26,7 @@ pub mod state_types;
 pub mod storage_context;
 pub mod util;
 
+pub use adapters::{MemoryBillingQuotaPort, MemoryDocumentStore, MemoryNotebookStore};
 pub use admin_domain::{
     AdminAuditLogEntry, AdminAuditLogPage, AdminAuditLogQuery, AdminBillingOverview,
     AdminDegradationStatus, AdminFeatureFlagChangeRequest, AdminFeatureFlagEntry, AdminOrgInfo,
@@ -38,6 +40,7 @@ pub use api_key::{
     MemoryApiKeyRecord, deactivate_memory_api_key, hash_api_key, register_memory_api_key,
     validate_memory_api_key,
 };
+pub use auth_scope::{current_org_id, current_user_id};
 pub use auth_store::{
     AuthStorePort, AuthUserCredentials, AuthUserProfile, CreatePasswordResetTicketInput,
     PasswordResetUser, RecordLegalAcceptanceInput, RegisterLegalAcceptance, RegisterUserInput,
@@ -77,7 +80,10 @@ pub use share_domain::{
 };
 pub use share_store::ShareStorePort;
 pub use state_types::{MemoryState, RetrievedContext, StoredDocument};
-pub use storage_context::StorageContext;
+pub use storage_context::{
+    MemoryStateHandles, ObjectStoreConfig, StorageContext, StorageContextParts, StorageInfra,
+    StorageStores,
+};
 
 pub use config_helpers::parse_uuid_or_app_error;
 pub use object_store_port::{

@@ -1,8 +1,9 @@
 use app_billing::BillingContext;
 use app_core::{
-    AnalyticsServiceCtx, ObjectStoreHeadError, StorageContext, parse_uuid_or_app_error,
+    AnalyticsServiceCtx, ObjectStoreHeadError, StorageContext, current_user_id,
+    parse_uuid_or_app_error,
 };
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use common::{
     AppError, CreateDocumentRequest, Document, DocumentContentResponse, ParsedPreviewResponse,
     StatusOnlyResponse, UpdateDocumentRequest, now_rfc3339,
@@ -282,7 +283,7 @@ impl DocumentContext {
             seed.org_id.clone(),
             seed.notebook_id.clone(),
             seed.document_id.clone(),
-            Some(StorageContext::current_user_id(auth)),
+            Some(current_user_id(auth)),
             IngestDocumentPayload {
                 source_uri: format!("object://{}", seed.object_path),
                 object_path: seed.object_path.clone(),

@@ -701,26 +701,36 @@ mod tests {
         let upload_expire = old.upload_expire_sec();
         let download_expire = old.download_expire_sec();
         state.test_set_postgres(pg.clone());
-        state.test_replace_storage(crate::storage_context::StorageContext::new(
-            postgres_health,
-            true,
-            document_store,
-            None,
-            admin_store,
-            None,
-            None,
-            None,
-            chat_persistence,
-            inner,
-            api_keys,
-            api_key_hashes,
-            max_upload,
-            false,
-            object_store,
-            public_base_url,
-            object_root_path,
-            upload_expire,
-            download_expire,
+        state.test_replace_storage(crate::storage_context::StorageContext::from_parts(
+            crate::storage_context::StorageContextParts {
+                infra: crate::storage_context::StorageInfra {
+                    postgres_health,
+                    postgres_configured: true,
+                    uses_memory_adapters: false,
+                    max_upload_file_size_bytes: max_upload,
+                },
+                stores: crate::storage_context::StorageStores {
+                    document_store,
+                    auth_store: None,
+                    admin_store,
+                    billing_quota: None,
+                    billing_store: None,
+                    share_store: None,
+                    chat_persistence,
+                },
+                memory: crate::storage_context::MemoryStateHandles {
+                    inner,
+                    api_keys,
+                    api_key_hashes,
+                },
+                objects: crate::storage_context::ObjectStoreConfig {
+                    object_store,
+                    public_base_url,
+                    object_root: object_root_path,
+                    upload_expire_sec: upload_expire,
+                    download_expire_sec: download_expire,
+                },
+            },
         ));
         Some((state, object_root))
     }

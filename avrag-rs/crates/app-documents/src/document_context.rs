@@ -1,6 +1,8 @@
-use app_core::{DocumentScopeValidator, StorageContext, domain_rows::DocumentScopeState};
+use app_core::{
+    DocumentScopeValidator, StorageContext, current_org_id, domain_rows::DocumentScopeState,
+};
 use async_trait::async_trait;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use common::AppError;
 use contracts::documents::DocumentStatus;
 use uuid::Uuid;
@@ -60,7 +62,7 @@ impl DocumentContext {
             }
         } else {
             let state = storage.inner().read().await;
-            let org_id = StorageContext::current_org_id(auth);
+            let org_id = current_org_id(auth);
             for doc_id in doc_scope {
                 let Some(stored) = state.documents.get(doc_id) else {
                     return Err(AppError::validation(
@@ -141,7 +143,7 @@ impl DocumentScopeValidator for DocumentContext {
         }
 
         let state = storage.inner().read().await;
-        let org_id = StorageContext::current_org_id(auth);
+        let org_id = current_org_id(auth);
         for document_id in document_ids {
             let Some(stored) = state.documents.get(document_id) else {
                 return Err(AppError::validation(

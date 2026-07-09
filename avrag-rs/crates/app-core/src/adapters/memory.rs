@@ -1,13 +1,13 @@
 use crate::ports::notebooks::notebook_store::NotebookStore;
 use crate::{
-    BillingQuotaPort, DocumentStorePort, MemoryState, StorageContext,
+    BillingQuotaPort, DocumentStorePort, MemoryState, current_org_id, current_user_id,
     domain_rows::{
         DocumentDeletionOutcome, DocumentScopeState, DocumentTaskSeed,
         DocumentUploadMutationOutcome, DocumentUploadQueueOutcome,
     },
 };
 use async_trait::async_trait;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use common::{
     AppError, CreateNotebookRequest, Document, DocumentContentResponse, ParsedPreviewResponse,
     SourceRow, default_org_id, default_user_id, new_id, now_rfc3339,
@@ -58,7 +58,7 @@ impl MemoryDocumentStore {
 }
 
 fn org_matches(auth: &AuthContext, candidate: &str) -> bool {
-    candidate == StorageContext::current_org_id(auth)
+    candidate == current_org_id(auth)
 }
 
 fn is_deleting_or_deleted(status: &DocumentStatus) -> bool {
@@ -106,8 +106,8 @@ impl DocumentStorePort for MemoryDocumentStore {
         let now = now_rfc3339();
         let notebook = Notebook {
             id: new_id(),
-            org_id: StorageContext::current_org_id(auth),
-            owner_id: StorageContext::current_user_id(auth),
+            org_id: current_org_id(auth),
+            owner_id: current_user_id(auth),
             name: name.to_string(),
             title: name.to_string(),
             description: description.to_string(),
@@ -190,13 +190,13 @@ impl DocumentStorePort for MemoryDocumentStore {
         let state = self.state.read().await;
         let mut result = Vec::new();
         for id in document_ids {
-            if let Some(stored) = state.documents.get(&id.to_string()) {
-                if org_matches(auth, &stored.document.org_id) {
-                    result.push(DocumentScopeState {
-                        document_id: *id,
-                        status: stored.document.status.clone(),
-                    });
-                }
+            if let Some(stored) = state.documents.get(&id.to_string())
+                && org_matches(auth, &stored.document.org_id)
+            {
+                result.push(DocumentScopeState {
+                    document_id: *id,
+                    status: stored.document.status.clone(),
+                });
             }
         }
         Ok(result)
@@ -251,9 +251,9 @@ impl DocumentStorePort for MemoryDocumentStore {
         let now = now_rfc3339();
         let document = Document {
             id: new_id(),
-            org_id: StorageContext::current_org_id(auth),
+            org_id: current_org_id(auth),
             notebook_id: notebook_id.to_string(),
-            owner_id: StorageContext::current_user_id(auth),
+            owner_id: current_user_id(auth),
             file_name: filename.to_string(),
             mime_type: mime_type.to_string(),
             file_size,

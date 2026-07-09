@@ -2,11 +2,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use app_core::{
-    AnalyticsServiceCtx, DocumentStorePort, MemoryState, ObjectStorePort, StorageContext,
+    AnalyticsServiceCtx, DocumentStorePort, MemoryState, MemoryStateHandles, ObjectStoreConfig,
+    ObjectStorePort, StorageContext, StorageContextParts, StorageInfra, StorageStores,
 };
 use app_documents::DocumentContext;
 use async_trait::async_trait;
-use avrag_auth::{ActorId, AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{ActorId, AuthContext, OrgId, SubjectKind};
 use common::{AppError, CreateNotebookRequest, Document, SourceRow, now_rfc3339};
 use contracts::documents::DocumentStatus;
 use contracts::notebooks::Notebook;
@@ -257,51 +258,67 @@ fn test_auth() -> AuthContext {
 }
 
 fn memory_storage() -> StorageContext {
-    StorageContext::new(
-        None,
-        false,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        Arc::new(RwLock::new(MemoryState::default())),
-        Arc::new(RwLock::new(BTreeMap::new())),
-        Arc::new(RwLock::new(BTreeMap::new())),
-        10 * 1024 * 1024,
-        true,
-        Arc::new(TestObjectStore),
-        "http://localhost".to_string(),
-        "/tmp/avrag-documents-test".to_string(),
-        3600,
-        3600,
-    )
+    StorageContext::from_parts(StorageContextParts {
+        infra: StorageInfra {
+            postgres_health: None,
+            postgres_configured: false,
+            uses_memory_adapters: true,
+            max_upload_file_size_bytes: 10 * 1024 * 1024,
+        },
+        stores: StorageStores {
+            document_store: None,
+            auth_store: None,
+            admin_store: None,
+            billing_quota: None,
+            billing_store: None,
+            share_store: None,
+            chat_persistence: None,
+        },
+        memory: MemoryStateHandles {
+            inner: Arc::new(RwLock::new(MemoryState::default())),
+            api_keys: Arc::new(RwLock::new(BTreeMap::new())),
+            api_key_hashes: Arc::new(RwLock::new(BTreeMap::new())),
+        },
+        objects: ObjectStoreConfig {
+            object_store: Arc::new(TestObjectStore),
+            public_base_url: "http://localhost".to_string(),
+            object_root: "/tmp/avrag-documents-test".to_string(),
+            upload_expire_sec: 3600,
+            download_expire_sec: 3600,
+        },
+    })
 }
 
 fn storage_with_document_store(store: Arc<dyn DocumentStorePort>) -> StorageContext {
-    StorageContext::new(
-        None,
-        false,
-        Some(store),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        Arc::new(RwLock::new(MemoryState::default())),
-        Arc::new(RwLock::new(BTreeMap::new())),
-        Arc::new(RwLock::new(BTreeMap::new())),
-        10 * 1024 * 1024,
-        false,
-        Arc::new(TestObjectStore),
-        "http://localhost".to_string(),
-        "/tmp/avrag-documents-test".to_string(),
-        3600,
-        3600,
-    )
+    StorageContext::from_parts(StorageContextParts {
+        infra: StorageInfra {
+            postgres_health: None,
+            postgres_configured: false,
+            uses_memory_adapters: false,
+            max_upload_file_size_bytes: 10 * 1024 * 1024,
+        },
+        stores: StorageStores {
+            document_store: Some(store),
+            auth_store: None,
+            admin_store: None,
+            billing_quota: None,
+            billing_store: None,
+            share_store: None,
+            chat_persistence: None,
+        },
+        memory: MemoryStateHandles {
+            inner: Arc::new(RwLock::new(MemoryState::default())),
+            api_keys: Arc::new(RwLock::new(BTreeMap::new())),
+            api_key_hashes: Arc::new(RwLock::new(BTreeMap::new())),
+        },
+        objects: ObjectStoreConfig {
+            object_store: Arc::new(TestObjectStore),
+            public_base_url: "http://localhost".to_string(),
+            object_root: "/tmp/avrag-documents-test".to_string(),
+            upload_expire_sec: 3600,
+            download_expire_sec: 3600,
+        },
+    })
 }
 
 #[tokio::test]

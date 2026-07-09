@@ -1,8 +1,9 @@
 use app_core::{
-    MemoryApiKeyRecord, StorageContext, deactivate_memory_api_key, parse_uuid_or_app_error,
-    register_memory_api_key, validate_memory_api_key,
+    MemoryApiKeyRecord, StorageContext, current_org_id, current_user_id,
+    deactivate_memory_api_key, parse_uuid_or_app_error, register_memory_api_key,
+    validate_memory_api_key,
 };
-use avrag_auth::{AuthContext, OrgId, SubjectKind};
+use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
 use common::{
     ApiKeyRow, AppError, CreateApiKeyRequest, CreateApiKeyResponse, NotificationRow,
     StatusOnlyResponse, new_id, now_rfc3339,
@@ -83,7 +84,7 @@ impl AdminContext {
         let plaintext_key = format!("sk_{}", new_id().replace('-', ""));
         let row = ApiKeyRow {
             id: new_id(),
-            org_id: StorageContext::current_org_id(auth),
+            org_id: current_org_id(auth),
             notebook_id: notebook_id.to_string(),
             key_prefix: plaintext_key.chars().take(12).collect(),
             name: req.name,
@@ -92,7 +93,7 @@ impl AdminContext {
             expires_at: req.expires_at,
             last_used_at: None,
             is_active: true,
-            created_by: StorageContext::current_user_id(auth),
+            created_by: current_user_id(auth),
             created_at: now_rfc3339(),
             updated_at: now_rfc3339(),
         };
@@ -175,7 +176,7 @@ impl AdminContext {
         let plaintext_key = format!("sk_{}", new_id().replace('-', ""));
         let row = ApiKeyRow {
             id: new_id(),
-            org_id: StorageContext::current_org_id(auth),
+            org_id: current_org_id(auth),
             notebook_id: String::new(),
             key_prefix: plaintext_key.chars().take(12).collect(),
             name: req.name,
@@ -184,7 +185,7 @@ impl AdminContext {
             expires_at: req.expires_at,
             last_used_at: None,
             is_active: true,
-            created_by: StorageContext::current_user_id(auth),
+            created_by: current_user_id(auth),
             created_at: now_rfc3339(),
             updated_at: now_rfc3339(),
         };
@@ -327,8 +328,8 @@ impl AdminContext {
         if state.notifications.is_empty() {
             return Ok(vec![NotificationRow {
                 id: "notif-m1-skeleton".to_string(),
-                org_id: StorageContext::current_org_id(auth),
-                user_id: StorageContext::current_user_id(auth),
+                org_id: current_org_id(auth),
+                user_id: current_user_id(auth),
                 event_type: "system.degrade".to_string(),
                 title: "M1/M2 skeleton running".to_string(),
                 body: "Rust API is serving placeholder notebook/document/chat flows with explicit degrade trace.".to_string(),

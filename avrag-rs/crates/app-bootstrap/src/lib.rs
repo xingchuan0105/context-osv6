@@ -30,10 +30,12 @@ use app_billing::BillingContext;
 use app_chat::{ChatContext, LlmContext, OrchestratorContext};
 use app_core::{
     AdminStorePort, AnalyticsServiceCtx, AppConfig, AuthStorePort, BillingQuotaPort,
-    BillingStorePort, ChatPersistencePort, DocumentStorePort, ShareStorePort, StorageContext,
+    BillingStorePort, ChatPersistencePort, DocumentStorePort, MemoryStateHandles,
+    ObjectStoreConfig, ShareStorePort, StorageContext, StorageContextParts, StorageInfra,
+    StorageStores,
 };
 use app_documents::DocumentContext;
-use avrag_auth::AuthContext;
+use contracts::auth_runtime::AuthContext;
 use avrag_chatmemory::ChatMemory;
 use avrag_guardrails::GuardPipeline;
 use avrag_rag_core::{RagConfig, RagRuntime, RetrievalDataPlane};
@@ -133,27 +135,35 @@ pub fn new_memory(config: AppConfig) -> AppBootstrapResult {
     ));
     let billing_quota: Option<Arc<dyn app_core::BillingQuotaPort>> =
         Some(Arc::new(app_core::MemoryBillingQuotaPort));
-    let storage = StorageContext::new(
-        None,
-        false,
-        document_store,
-        None,
-        None,
-        billing_quota,
-        None,
-        None,
-        None,
-        memory_state,
-        Arc::new(RwLock::new(BTreeMap::new())),
-        Arc::new(RwLock::new(BTreeMap::new())),
-        config.max_upload_file_size_bytes,
-        true,
-        object_store,
-        config.public_base_url.clone(),
-        config.object_root.clone(),
-        config.object_storage.upload_url_expire_sec,
-        config.object_storage.download_url_expire_sec,
-    );
+    let storage = StorageContext::from_parts(StorageContextParts {
+        infra: StorageInfra {
+            postgres_health: None,
+            postgres_configured: false,
+            uses_memory_adapters: true,
+            max_upload_file_size_bytes: config.max_upload_file_size_bytes,
+        },
+        stores: StorageStores {
+            document_store,
+            auth_store: None,
+            admin_store: None,
+            billing_quota,
+            billing_store: None,
+            share_store: None,
+            chat_persistence: None,
+        },
+        memory: MemoryStateHandles {
+            inner: memory_state,
+            api_keys: Arc::new(RwLock::new(BTreeMap::new())),
+            api_key_hashes: Arc::new(RwLock::new(BTreeMap::new())),
+        },
+        objects: ObjectStoreConfig {
+            object_store,
+            public_base_url: config.public_base_url.clone(),
+            object_root: config.object_root.clone(),
+            upload_expire_sec: config.object_storage.upload_url_expire_sec,
+            download_expire_sec: config.object_storage.download_url_expire_sec,
+        },
+    });
     let orchestrator = OrchestratorContext::new(
         agent_service,
         chatmemory,
@@ -301,10 +311,11 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
             multimodal_vector_dim: config.milvus.multimodal_vector_dim,
             metric_type: config.milvus.metric_type.clone(),
         };
-        let data_plane: Arc<dyn RetrievalDataPlane> = Arc::new(MilvusDataPlane::new(milvus_config));
+        let data_plane = Arc::new(MilvusDataPlane::new(milvus_config));
         data_plane.ensure_schema().await?;
         Some(Arc::new(RagRuntime::with_data_plane(
-            rag_config, data_plane,
+            rag_config,
+            data_plane,
         )))
     } else {
         None
@@ -341,27 +352,35 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         chat_persistence.clone(),
         &config.prompts.dir,
     ));
-    let storage = StorageContext::new(
-        postgres_health,
-        pg.is_some(),
-        document_store,
-        auth_store,
-        admin_store,
-        billing_quota,
-        billing_store,
-        share_store,
-        chat_persistence,
-        Arc::new(RwLock::new(MemoryState::default())),
-        Arc::new(RwLock::new(BTreeMap::new())),
-        Arc::new(RwLock::new(BTreeMap::new())),
-        config.max_upload_file_size_bytes,
-        uses_memory_adapters,
-        object_store,
-        config.public_base_url.clone(),
-        config.object_root.clone(),
-        config.object_storage.upload_url_expire_sec,
-        config.object_storage.download_url_expire_sec,
-    );
+    let storage = StorageContext::from_parts(StorageContextParts {
+        infra: StorageInfra {
+            postgres_health,
+            postgres_configured: pg.is_some(),
+            uses_memory_adapters,
+            max_upload_file_size_bytes: config.max_upload_file_size_bytes,
+        },
+        stores: StorageStores {
+            document_store,
+            auth_store,
+            admin_store,
+            billing_quota,
+            billing_store,
+            share_store,
+            chat_persistence,
+        },
+        memory: MemoryStateHandles {
+            inner: Arc::new(RwLock::new(MemoryState::default())),
+            api_keys: Arc::new(RwLock::new(BTreeMap::new())),
+            api_key_hashes: Arc::new(RwLock::new(BTreeMap::new())),
+        },
+        objects: ObjectStoreConfig {
+            object_store,
+            public_base_url: config.public_base_url.clone(),
+            object_root: config.object_root.clone(),
+            upload_expire_sec: config.object_storage.upload_url_expire_sec,
+            download_expire_sec: config.object_storage.download_url_expire_sec,
+        },
+    });
     let orchestrator = OrchestratorContext::new(
         agent_service,
         chatmemory,

@@ -1,6 +1,9 @@
 use app_billing::BillingContext;
-use app_core::{AnalyticsServiceCtx, StorageContext, StoredDocument, parse_uuid_or_app_error};
-use avrag_auth::AuthContext;
+use app_core::{
+    AnalyticsServiceCtx, StorageContext, StoredDocument, current_org_id, current_user_id,
+    parse_uuid_or_app_error,
+};
+use contracts::auth_runtime::AuthContext;
 use common::{AddUrlSourceRequest, AppError, Document, SourceRow, new_id, now_rfc3339};
 use contracts::documents::{CreateDocumentUploadResponse, DocumentStatus};
 use uuid::Uuid;
@@ -116,9 +119,9 @@ impl DocumentContext {
         let stored = StoredDocument {
             document: Document {
                 id: document_id.clone(),
-                org_id: StorageContext::current_org_id(auth),
+                org_id: current_org_id(auth),
                 notebook_id: notebook_id.to_string(),
-                owner_id: StorageContext::current_user_id(auth),
+                owner_id: current_user_id(auth),
                 file_name: fetched.filename,
                 mime_type: fetched.mime_type,
                 file_size: fetched.raw_bytes.len() as u64,
@@ -189,7 +192,7 @@ impl DocumentContext {
             .documents
             .values()
             .filter(|stored| {
-                stored.document.org_id == StorageContext::current_org_id(auth)
+                stored.document.org_id == current_org_id(auth)
                     && notebook_id
                         .map(|id| stored.document.notebook_id == id)
                         .unwrap_or(true)
@@ -197,7 +200,7 @@ impl DocumentContext {
             })
             .filter_map(|stored| {
                 let notebook = state.notebooks.get(&stored.document.notebook_id)?;
-                if notebook.org_id != StorageContext::current_org_id(auth) {
+                if notebook.org_id != current_org_id(auth) {
                     return None;
                 }
                 Some(SourceRow {

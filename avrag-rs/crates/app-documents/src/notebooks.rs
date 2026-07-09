@@ -1,5 +1,7 @@
-use app_core::{AnalyticsServiceCtx, StorageContext, parse_uuid_or_app_error};
-use avrag_auth::AuthContext;
+use app_core::{
+    AnalyticsServiceCtx, StorageContext, current_org_id, current_user_id, parse_uuid_or_app_error,
+};
+use contracts::auth_runtime::AuthContext;
 use common::{
     AppError, CreateNotebookRequest, StatusOnlyResponse, UpdateNotebookRequest, new_id, now_rfc3339,
 };
@@ -22,7 +24,7 @@ impl DocumentContext {
         state
             .notebooks
             .values()
-            .filter(|notebook| notebook.org_id == StorageContext::current_org_id(auth))
+            .filter(|notebook| notebook.org_id == current_org_id(auth))
             .cloned()
             .collect()
     }
@@ -36,13 +38,13 @@ impl DocumentContext {
         if let Some(store) = storage.document_store() {
             let notebook_id = Uuid::parse_str(notebook_id).ok()?;
             let notebook = store.get_notebook(auth, notebook_id).await.ok().flatten()?;
-            return (notebook.org_id == StorageContext::current_org_id(auth)).then_some(notebook);
+            return (notebook.org_id == current_org_id(auth)).then_some(notebook);
         }
         let state = storage.inner().read().await;
         state
             .notebooks
             .get(notebook_id)
-            .filter(|notebook| notebook.org_id == StorageContext::current_org_id(auth))
+            .filter(|notebook| notebook.org_id == current_org_id(auth))
             .cloned()
     }
 
@@ -84,8 +86,8 @@ impl DocumentContext {
         let now = now_rfc3339();
         let notebook = Notebook {
             id: new_id(),
-            org_id: StorageContext::current_org_id(auth),
-            owner_id: StorageContext::current_user_id(auth),
+            org_id: current_org_id(auth),
+            owner_id: current_user_id(auth),
             name: req.name.trim().to_string(),
             title: req.name.trim().to_string(),
             description: req.description.trim().to_string(),
@@ -145,7 +147,7 @@ impl DocumentContext {
             .notebooks
             .get_mut(notebook_id)
             .ok_or_else(|| AppError::not_found("notebook_not_found", "notebook not found"))?;
-        if notebook.org_id != StorageContext::current_org_id(auth) {
+        if notebook.org_id != current_org_id(auth) {
             return Err(AppError::not_found(
                 "notebook_not_found",
                 "notebook not found",
@@ -186,7 +188,7 @@ impl DocumentContext {
         let can_delete = state
             .notebooks
             .get(notebook_id)
-            .map(|notebook| notebook.org_id == StorageContext::current_org_id(auth))
+            .map(|notebook| notebook.org_id == current_org_id(auth))
             .unwrap_or(false);
         if !can_delete {
             return Err(AppError::not_found(

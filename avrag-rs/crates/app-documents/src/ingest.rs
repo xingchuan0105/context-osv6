@@ -1,5 +1,5 @@
-use app_core::{DocumentTaskSeed, StorageContext, StoredDocument};
-use avrag_auth::AuthContext;
+use app_core::{DocumentTaskSeed, StorageContext, StoredDocument, current_user_id};
+use contracts::auth_runtime::AuthContext;
 use common::AppError;
 use contracts::documents::DocumentStatus;
 use ingestion::{
@@ -41,7 +41,7 @@ impl DocumentContext {
             seed.org_id.clone(),
             seed.notebook_id.clone(),
             seed.document_id.clone(),
-            Some(StorageContext::current_user_id(auth)),
+            Some(current_user_id(auth)),
             IngestDocumentPayload {
                 source_uri: format!("object://{}", seed.object_path),
                 object_path: seed.object_path.clone(),
@@ -85,7 +85,7 @@ impl DocumentContext {
             seed.org_id,
             seed.notebook_id,
             seed.document_id,
-            Some(StorageContext::current_user_id(auth)),
+            Some(current_user_id(auth)),
             ReindexDocumentPayload {
                 reason: ReindexReason::Manual,
                 requested_revision: (uuid::Uuid::new_v4().as_u128() & u32::MAX as u128) as u32,
