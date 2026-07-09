@@ -212,7 +212,7 @@ pub fn insert_original_query_item(items: &mut Vec<ExecutePlanItem>, original_que
 #[cfg(test)]
 mod tests {
     use super::*;
-    use contracts::rag_execute::ExecutePlanItem;
+    use contracts::rag_execute::{ChannelBudget, ExecutePlanItem, QueryEntity};
 
     fn base_request() -> ExecutePlanRequest {
         ExecutePlanRequest {
@@ -244,6 +244,99 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_ambiguous_items() {
+        let mut req = base_request();
+        req.items[0].bm25_terms = Some(vec!["also".into()]);
+        assert!(matches!(
+            validate_execute_plan(&req),
+            Err(ExecutePlanValidationError::InvalidPayloadCount { index: 0 })
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_too_many_items() {
+        let mut req = base_request();
+        req.items = (0..5)
+            .map(|i| ExecutePlanItem {
+                priority: 0.5,
+                query: Some(format!("q{i}")),
+                bm25_terms: None,
+            })
+            .collect();
+        assert!(matches!(
+            validate_execute_plan(&req),
+            Err(ExecutePlanValidationError::TooManyItems { max: 4 })
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_three_placeholders() {
+        let mut req = base_request();
+        req.placeholder_triplets = vec![PlaceholderTriplet {
+            subject: "?s".into(),
+            predicate: "?p".into(),
+            object: "?o".into(),
+        }];
+        assert!(matches!(
+            validate_execute_plan(&req),
+            Err(ExecutePlanValidationError::TooManyPlaceholders { index: 0 })
+        ));
+    }
+
+    #[test]
+    fn validate_accepts_two_placeholders_with_graph_budget() {
+        let mut req = base_request();
+        req.channel_budget = Some(ChannelBudget {
+            text_dense: None,
+            bm25: None,
+            multimodal_dense: None,
+            graph: Some(4),
+        });
+        req.placeholder_triplets = vec![PlaceholderTriplet {
+            subject: "Atlas".into(),
+            predicate: "?p".into(),
+            object: "?o".into(),
+        }];
+        assert!(validate_execute_plan(&req).is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_graph_budget_without_structure() {
+        let mut req = base_request();
+        req.channel_budget = Some(ChannelBudget {
+            text_dense: None,
+            bm25: None,
+            multimodal_dense: None,
+            graph: Some(4),
+        });
+        req.query_entities = vec![QueryEntity {
+            text: "Atlas".into(),
+            kind: Some("project".into()),
+        }];
+        assert!(matches!(
+            validate_execute_plan(&req),
+            Err(ExecutePlanValidationError::GraphBudgetRequiresHints)
+        ));
+    }
+
+    #[test]
+    fn injects_original_query_as_first_dense_item() {
+        let mut req = base_request();
+        req.items = vec![ExecutePlanItem {
+            priority: 0.5,
+            query: None,
+            bm25_terms: Some(vec!["exact".into(), "term".into()]),
+        }];
+        ensure_original_query_text_dense_item(&mut req, "original question");
+        assert_eq!(req.items[0].query.as_deref(), Some("original question"));
+        assert_eq!(
+            req.items[1].bm25_terms.as_ref().unwrap(),
+            &vec!["exact".to_string(), "term".to_string()]
+        );
+        assert!(validate_execute_plan(&req).is_ok());
+    }
+
+    #[test]
     fn classify_resolved_triplet() {
         let t = PlaceholderTriplet {
             subject: "a".into(),
@@ -254,5 +347,14 @@ mod tests {
             classify_placeholder_triplet(&t),
             PlaceholderTripletType::Resolved
         );
+    }
+
+    #[test]
+    fn chat_request_compat_maps_query() {
+        let req = base_request();
+        let chat = execute_plan_to_chat_request(&req);
+        assert_eq!(chat.query, "hello");
+        assert_eq!(chat.agent_type, "rag");
+        assert_eq!(chat.doc_scope, vec!["doc-1".to_string()]);
     }
 }

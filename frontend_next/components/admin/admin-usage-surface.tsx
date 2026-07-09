@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useAuth } from "../../lib/auth/context";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import {
-  adminMessage,
+  adminText,
   formatAdminError,
 } from "./admin-i18n";
 import {
@@ -46,20 +46,20 @@ export function AdminUsageSurface() {
   const usage = usageScopeQuery.data?.usage ?? null;
   const error = organizationsQuery.error ?? usageScopeQuery.error ?? null;
   const warning = usageScopeQuery.data?.failedOrgNames.length
-    ? `${adminMessage(locale, "admin.loadError")} ${usageScopeQuery.data.failedOrgNames.join(", ")}`
+    ? `${adminText(locale, "admin.loadError")} ${usageScopeQuery.data.failedOrgNames.join(", ")}`
     : "";
   const selectedOrg = organizations.find((organization) => organization.id === effectiveSelectedOrgId) ?? null;
   const scopeLabel =
     effectiveSelectedOrgId === ADMIN_ALL_ORGS_VALUE
-      ? adminMessage(locale, "usage.aggregateScope")
-      : selectedOrg?.name ?? adminMessage(locale, "users.noOrganizationSelected");
+      ? adminText(locale, "usage.aggregateScope")
+      : selectedOrg?.name ?? adminText(locale, "users.noOrganizationSelected");
   const usageLoading = Boolean(token) && (organizationsQuery.isPending || usageScopeQuery.isPending);
 
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
       <AdminPageHeading
-        title={adminMessage(locale, "admin.nav.usage")}
-        subtitle={adminMessage(locale, "usage.subtitle")}
+        title={adminText(locale, "admin.nav.usage")}
+        subtitle={adminText(locale, "usage.subtitle")}
       />
       {error ? <ErrorState message={formatAdminError(locale, error)} /> : null}
       {warning ? <ErrorState message={warning} /> : null}
@@ -68,7 +68,7 @@ export function AdminUsageSurface() {
         <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "minmax(16rem, 18rem) minmax(0, 1fr)" }}>
           <div>
             <label className="app-form-label" htmlFor="admin-usage-scope">
-              {adminMessage(locale, "common.scope")}
+              {adminText(locale, "common.scope")}
             </label>
             <select
               className="app-input"
@@ -77,7 +77,7 @@ export function AdminUsageSurface() {
               onChange={(event) => setSelectedOrgId(event.target.value)}
               value={effectiveSelectedOrgId}
             >
-              <option value={ADMIN_ALL_ORGS_VALUE}>{adminMessage(locale, "usage.aggregateScope")}</option>
+              <option value={ADMIN_ALL_ORGS_VALUE}>{adminText(locale, "usage.aggregateScope")}</option>
               {organizations.map((organization) => (
                 <option key={organization.id} value={organization.id}>
                   {organization.name}
@@ -86,7 +86,7 @@ export function AdminUsageSurface() {
             </select>
           </div>
           <div>
-            <label className="app-form-label">{adminMessage(locale, "admin.filter.windowLabel")}</label>
+            <label className="app-form-label">{adminText(locale, "admin.filter.windowLabel")}</label>
             <div className="app-button-row">
               {USAGE_PERIOD_OPTIONS.map((period) => (
                 <button
@@ -102,8 +102,8 @@ export function AdminUsageSurface() {
           </div>
         </div>
         <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "0.82rem", color: "hsl(var(--muted-foreground))" }}>
-          <span>{adminMessage(locale, "common.currentView")}{scopeLabel}</span>
-          <span>{adminMessage(locale, "common.timeWindow")}{selectedPeriod}</span>
+          <span>{adminText(locale, "common.currentView")}{scopeLabel}</span>
+          <span>{adminText(locale, "common.timeWindow")}{selectedPeriod}</span>
           {effectiveSelectedOrgId === ADMIN_ALL_ORGS_VALUE && organizations.length > 0 ? (
             <span>{formatCountLabel(locale, organizations.length, "organizationsInAggregate")}</span>
           ) : null}
@@ -111,28 +111,28 @@ export function AdminUsageSurface() {
       </section>
 
       {usageLoading ? (
-        <LoadingState copy={adminMessage(locale, "usage.loading")} />
+        <LoadingState copy={adminText(locale, "usage.loading")} />
       ) : !usage ? (
-        <EmptyState copy={adminMessage(locale, "usage.noData")} />
+        <EmptyState copy={adminText(locale, "usage.noData")} />
       ) : (
         <>
           <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "repeat(auto-fit, minmax(12rem, 1fr))" }}>
-            <AdminMetricCard label={adminMessage(locale, "admin.metrics.totalRequests")} tone="primary" value={formatCompactNumber(usage.total_requests)} />
-            <AdminMetricCard label={adminMessage(locale, "common.totalTokens")} tone="success" value={formatCompactNumber(usage.total_tokens)} />
-            <AdminMetricCard label={adminMessage(locale, "admin.metrics.totalDocuments")} tone="warning" value={formatCompactNumber(usage.total_documents)} />
+            <AdminMetricCard label={adminText(locale, "admin.metrics.totalRequests")} tone="primary" value={formatCompactNumber(usage.total_requests)} />
+            <AdminMetricCard label={adminText(locale, "common.totalTokens")} tone="success" value={formatCompactNumber(usage.total_tokens)} />
+            <AdminMetricCard label={adminText(locale, "admin.metrics.totalDocuments")} tone="warning" value={formatCompactNumber(usage.total_documents)} />
           </div>
           <section className="app-inline-surface" style={{ display: "grid", gap: "0.7rem" }}>
-            <h2 style={{ margin: 0 }}>{adminMessage(locale, "common.platformStatistics")}</h2>
+            <h2 style={{ margin: 0 }}>{adminText(locale, "common.platformStatistics")}</h2>
             <div className="app-inline-row" style={{ marginBottom: 0 }}>
-              <span>{adminMessage(locale, "admin.metrics.totalRequests")}</span>
+              <span>{adminText(locale, "admin.metrics.totalRequests")}</span>
               <strong>{usage.total_requests}</strong>
             </div>
             <div className="app-inline-row" style={{ marginBottom: 0 }}>
-              <span>{adminMessage(locale, "common.totalTokensProcessed")}</span>
+              <span>{adminText(locale, "common.totalTokensProcessed")}</span>
               <strong>{usage.total_tokens}</strong>
             </div>
             <div className="app-inline-row" style={{ marginBottom: 0 }}>
-              <span>{adminMessage(locale, "common.totalIndexedDocuments")}</span>
+              <span>{adminText(locale, "common.totalIndexedDocuments")}</span>
               <strong>{usage.total_documents}</strong>
             </div>
           </section>

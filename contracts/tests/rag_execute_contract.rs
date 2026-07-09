@@ -1,7 +1,6 @@
-#![allow(deprecated)]
 use contracts::chat::{RagPlan, RagPlanItem};
 use contracts::{
-    ExecutePlanRequest, ExecutePlanSummaryMode, ExecutePlanValidationError, RetrievalBundle,
+    ExecutePlanRequest, ExecutePlanSummaryMode, RetrievalBundle,
 };
 
 #[test]
@@ -41,57 +40,6 @@ fn execute_plan_request_drops_legacy_clarify_fields_when_mapped_from_rag_plan() 
 }
 
 #[test]
-fn execute_plan_request_validation_rejects_ambiguous_items() {
-    let request = ExecutePlanRequest {
-        plan_version: "rag-execute-v1".to_string(),
-        doc_scope: vec!["doc-1".to_string()],
-        items: vec![contracts::ExecutePlanItem {
-            priority: 0.5,
-            query: Some("alpha".to_string()),
-            bm25_terms: Some(vec!["beta".to_string()]),
-        }],
-        summary_mode: ExecutePlanSummaryMode::None,
-        budget: None,
-        channel_budget: None,
-        query_entities: Vec::new(),
-        graph_hints: Vec::new(),
-        placeholder_triplets: Vec::new(),
-        trace: None,
-    };
-
-    let error = request.validate().unwrap_err();
-    assert_eq!(
-        error,
-        ExecutePlanValidationError::InvalidPayloadCount { index: 0 }
-    );
-}
-
-#[test]
-fn execute_plan_request_validation_rejects_empty_doc_scope() {
-    let request = ExecutePlanRequest {
-        plan_version: "rag-execute-v1".to_string(),
-        doc_scope: Vec::new(),
-        items: vec![contracts::ExecutePlanItem {
-            priority: 1.0,
-            query: Some("alpha".to_string()),
-            bm25_terms: None,
-        }],
-        summary_mode: ExecutePlanSummaryMode::None,
-        budget: None,
-        channel_budget: None,
-        query_entities: Vec::new(),
-        graph_hints: Vec::new(),
-        placeholder_triplets: Vec::new(),
-        trace: None,
-    };
-
-    assert_eq!(
-        request.validate().unwrap_err(),
-        ExecutePlanValidationError::EmptyDocScope
-    );
-}
-
-#[test]
 fn execute_plan_request_deserialization_rejects_legacy_session_fields() {
     let error = serde_json::from_value::<ExecutePlanRequest>(serde_json::json!({
         "plan_version": "rag-execute-v1",
@@ -104,33 +52,6 @@ fn execute_plan_request_deserialization_rejects_legacy_session_fields() {
     .unwrap_err();
 
     assert!(error.to_string().contains("unknown field"));
-}
-
-#[test]
-fn execute_plan_request_validation_rejects_more_than_four_items() {
-    let request = ExecutePlanRequest {
-        plan_version: "rag-execute-v1".to_string(),
-        doc_scope: vec!["doc-1".to_string()],
-        items: (0..5)
-            .map(|index| contracts::ExecutePlanItem {
-                priority: 0.5,
-                query: Some(format!("query {index}")),
-                bm25_terms: None,
-            })
-            .collect(),
-        summary_mode: ExecutePlanSummaryMode::None,
-        budget: None,
-        channel_budget: None,
-        query_entities: Vec::new(),
-        graph_hints: Vec::new(),
-        placeholder_triplets: Vec::new(),
-        trace: None,
-    };
-
-    assert_eq!(
-        request.validate().unwrap_err(),
-        ExecutePlanValidationError::TooManyItems { max: 4 }
-    );
 }
 
 #[test]
@@ -168,7 +89,6 @@ fn execute_plan_request_compat_roundtrip_preserves_summary_mode() {
         }),
     };
 
-    request.validate().unwrap();
     let compat_plan = request.to_rag_plan_compat();
 
     assert_eq!(compat_plan.items.len(), 3);
@@ -215,7 +135,6 @@ fn execute_plan_request_accepts_v2_optional_retrieval_fields() {
     }))
     .unwrap();
 
-    request.validate().unwrap();
     assert_eq!(
         request
             .channel_budget
@@ -233,128 +152,6 @@ fn execute_plan_request_accepts_v2_optional_retrieval_fields() {
             .and_then(|trace| trace.trace_id.as_deref()),
         Some("trace-456")
     );
-}
-
-#[test]
-fn execute_plan_request_validation_rejects_placeholder_triplet_with_three_placeholders() {
-    let request = ExecutePlanRequest {
-        plan_version: "rag-execute-v1".to_string(),
-        doc_scope: vec!["doc-1".to_string()],
-        items: vec![contracts::ExecutePlanItem {
-            priority: 1.0,
-            query: Some("semantic lookup".to_string()),
-            bm25_terms: None,
-        }],
-        summary_mode: ExecutePlanSummaryMode::None,
-        budget: None,
-        channel_budget: None,
-        query_entities: Vec::new(),
-        graph_hints: Vec::new(),
-        placeholder_triplets: vec![contracts::PlaceholderTriplet {
-            subject: "?subject".to_string(),
-            predicate: "?predicate".to_string(),
-            object: "?object".to_string(),
-        }],
-        trace: None,
-    };
-
-    assert_eq!(
-        request.validate().unwrap_err(),
-        ExecutePlanValidationError::TooManyPlaceholders { index: 0 }
-    );
-}
-
-#[test]
-fn execute_plan_request_validation_accepts_placeholder_triplet_with_two_placeholders() {
-    let request = ExecutePlanRequest {
-        plan_version: "rag-execute-v1".to_string(),
-        doc_scope: vec!["doc-1".to_string()],
-        items: vec![contracts::ExecutePlanItem {
-            priority: 1.0,
-            query: Some("semantic lookup".to_string()),
-            bm25_terms: None,
-        }],
-        summary_mode: ExecutePlanSummaryMode::None,
-        budget: None,
-        channel_budget: Some(contracts::ChannelBudget {
-            text_dense: None,
-            bm25: None,
-            multimodal_dense: None,
-            graph: Some(4),
-        }),
-        query_entities: Vec::new(),
-        graph_hints: Vec::new(),
-        placeholder_triplets: vec![contracts::PlaceholderTriplet {
-            subject: "Atlas".to_string(),
-            predicate: "?predicate".to_string(),
-            object: "?object".to_string(),
-        }],
-        trace: None,
-    };
-
-    request.validate().unwrap();
-}
-
-#[test]
-fn execute_plan_request_validation_rejects_graph_budget_without_structured_graph_input() {
-    let request = ExecutePlanRequest {
-        plan_version: "rag-execute-v1".to_string(),
-        doc_scope: vec!["doc-1".to_string()],
-        items: vec![contracts::ExecutePlanItem {
-            priority: 1.0,
-            query: Some("semantic lookup".to_string()),
-            bm25_terms: None,
-        }],
-        summary_mode: ExecutePlanSummaryMode::None,
-        budget: None,
-        channel_budget: Some(contracts::ChannelBudget {
-            text_dense: None,
-            bm25: None,
-            multimodal_dense: None,
-            graph: Some(4),
-        }),
-        query_entities: vec![contracts::QueryEntity {
-            text: "Atlas".to_string(),
-            kind: Some("project".to_string()),
-        }],
-        graph_hints: Vec::new(),
-        placeholder_triplets: Vec::new(),
-        trace: None,
-    };
-
-    assert_eq!(
-        request.validate().unwrap_err(),
-        ExecutePlanValidationError::GraphBudgetRequiresHints
-    );
-}
-
-#[test]
-fn execute_plan_request_injects_original_query_as_first_text_dense_item() {
-    let mut request = ExecutePlanRequest {
-        plan_version: "rag-execute-v1".to_string(),
-        doc_scope: vec!["doc-1".to_string()],
-        items: vec![contracts::ExecutePlanItem {
-            priority: 0.5,
-            query: None,
-            bm25_terms: Some(vec!["exact".to_string(), "term".to_string()]),
-        }],
-        summary_mode: ExecutePlanSummaryMode::None,
-        budget: None,
-        channel_budget: None,
-        query_entities: Vec::new(),
-        graph_hints: Vec::new(),
-        placeholder_triplets: Vec::new(),
-        trace: None,
-    };
-
-    request.ensure_original_query_text_dense_item("original question");
-
-    assert_eq!(request.items[0].query.as_deref(), Some("original question"));
-    assert_eq!(
-        request.items[1].bm25_terms.as_ref().unwrap(),
-        &vec!["exact".to_string(), "term".to_string()]
-    );
-    request.validate().unwrap();
 }
 
 #[test]

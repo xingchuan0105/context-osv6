@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::chat::{
-    ChatRequest, Citation, DegradeTraceItem, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary,
+    Citation, DegradeTraceItem, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary,
 };
 use crate::documents::AnswerContextChunk;
 
@@ -95,20 +95,6 @@ pub enum PlaceholderTripletType {
 }
 
 impl PlaceholderTriplet {
-    /// Pure position helper (no policy). Runtime code should prefer
-    /// `avrag_rag_core::classify_placeholder_triplet`.
-    #[deprecated(note = "use avrag_rag_core::classify_placeholder_triplet")]
-    pub fn classify(&self) -> PlaceholderTripletType {
-        let placeholder_count = self.subject.starts_with('?') as usize
-            + self.predicate.starts_with('?') as usize
-            + self.object.starts_with('?') as usize;
-        match placeholder_count {
-            0 => PlaceholderTripletType::Resolved,
-            1 => PlaceholderTripletType::Traceable,
-            _ => PlaceholderTripletType::Fuzzy,
-        }
-    }
-
     /// 返回已知实体（非占位符部分）
     /// 注意：predicate 不是实体，只有 subject 和 object 是实体
     pub fn known_entities(&self) -> Vec<String> {
@@ -213,119 +199,6 @@ pub enum ExecutePlanValidationError {
 impl ExecutePlanRequest {
     pub const MAX_ITEMS: usize = 4;
 
-    /// Deprecated: runtime callers must use `avrag_rag_core::validate_execute_plan`.
-    ///
-    /// Kept only so contracts crate unit tests can exercise the wire schema without
-    /// depending on rag-core. Logic is intentionally duplicated and frozen.
-    #[deprecated(note = "use avrag_rag_core::validate_execute_plan")]
-    #[allow(deprecated)]
-    pub fn validate(&self) -> Result<(), ExecutePlanValidationError> {
-        // Minimal wire checks only (not the full policy surface). Prefer rag-core.
-        if self.doc_scope.is_empty() {
-            return Err(ExecutePlanValidationError::EmptyDocScope);
-        }
-        if self.items.is_empty() {
-            return Err(ExecutePlanValidationError::EmptyItems);
-        }
-        if self.items.len() > Self::MAX_ITEMS {
-            return Err(ExecutePlanValidationError::TooManyItems {
-                max: Self::MAX_ITEMS,
-            });
-        }
-        for (index, item) in self.items.iter().enumerate() {
-            if !(0.0..=1.0).contains(&item.priority) {
-                return Err(ExecutePlanValidationError::InvalidPriority { index });
-            }
-            let has_query = item
-                .query
-                .as_deref()
-                .is_some_and(|value| !value.trim().is_empty());
-            let has_bm25_terms = item
-                .bm25_terms
-                .as_ref()
-                .is_some_and(|terms| terms.iter().any(|term| !term.trim().is_empty()));
-            if usize::from(has_query) + usize::from(has_bm25_terms) != 1 {
-                return Err(ExecutePlanValidationError::InvalidPayloadCount { index });
-            }
-        }
-        if self
-            .budget
-            .as_ref()
-            .and_then(|budget| budget.total_candidate_budget)
-            .is_some_and(|value| value == 0)
-        {
-            return Err(ExecutePlanValidationError::InvalidTotalCandidateBudget);
-        }
-        if self
-            .budget
-            .as_ref()
-            .and_then(|budget| budget.final_chunk_budget)
-            .is_some_and(|value| value == 0)
-        {
-            return Err(ExecutePlanValidationError::InvalidFinalChunkBudget);
-        }
-        for (index, triplet) in self.placeholder_triplets.iter().enumerate() {
-            if triplet.placeholder_positions().len() > 2 {
-                return Err(ExecutePlanValidationError::TooManyPlaceholders { index });
-            }
-        }
-        let graph_budget = self
-            .channel_budget
-            .as_ref()
-            .and_then(|budget| budget.graph)
-            .unwrap_or(0);
-        if graph_budget > 0 {
-            let has_graph = self.graph_hints.iter().any(|hint| {
-                hint.subject
-                    .as_deref()
-                    .is_some_and(|value| !value.trim().is_empty())
-                    || hint
-                        .predicate
-                        .as_deref()
-                        .is_some_and(|value| !value.trim().is_empty())
-                    || hint
-                        .object
-                        .as_deref()
-                        .is_some_and(|value| !value.trim().is_empty())
-            }) || self.placeholder_triplets.iter().any(|triplet| {
-                !triplet.subject.trim().is_empty()
-                    || !triplet.predicate.trim().is_empty()
-                    || !triplet.object.trim().is_empty()
-            });
-            if !has_graph {
-                return Err(ExecutePlanValidationError::GraphBudgetRequiresHints);
-            }
-        }
-        Ok(())
-    }
-
-    /// Deprecated: use `avrag_rag_core::ensure_original_query_text_dense_item`.
-    #[deprecated(note = "use avrag_rag_core::ensure_original_query_text_dense_item")]
-    pub fn ensure_original_query_text_dense_item(&mut self, original_query: &str) {
-        let original_query = original_query.trim();
-        if original_query.is_empty() {
-            return;
-        }
-        if self.items.iter().any(|item| {
-            item.query
-                .as_deref()
-                .is_some_and(|query| query.trim() == original_query)
-        }) {
-            return;
-        }
-        self.items.insert(
-            0,
-            ExecutePlanItem {
-                priority: 1.0,
-                query: Some(original_query.to_string()),
-                bm25_terms: None,
-            },
-        );
-        while self.items.len() > Self::MAX_ITEMS {
-            self.items.pop();
-        }
-    }
-
     pub fn from_rag_plan(plan: &RagPlan, doc_scope: &[String]) -> Self {
         let summary_mode = plan
             .items
@@ -384,38 +257,6 @@ impl ExecutePlanRequest {
                 .filter_map(|id| uuid::Uuid::parse_str(id).ok())
                 .collect::<Vec<_>>()
         })
-    }
-
-    /// Deprecated: use `avrag_rag_core::execute_plan_to_chat_request`.
-    #[deprecated(note = "use avrag_rag_core::execute_plan_to_chat_request")]
-    pub fn to_chat_request_compat(&self) -> ChatRequest {
-        let query = self
-            .items
-            .iter()
-            .find_map(|item| {
-                item.query.clone().or_else(|| {
-                    item.bm25_terms
-                        .as_ref()
-                        .filter(|terms| !terms.is_empty())
-                        .map(|terms| terms.join(" "))
-                })
-            })
-            .unwrap_or_default();
-
-        ChatRequest {
-            query,
-            notebook_id: None,
-            session_id: None,
-            agent_type: "rag".to_string(),
-            source_type: None,
-            source_token: None,
-            doc_scope: self.doc_scope.clone(),
-            language: None,
-            messages: Vec::new(),
-            stream: false,
-            debug: false,
-            format_hint: None,
-        }
     }
 
     pub fn to_rag_plan_compat(&self) -> RagPlan {

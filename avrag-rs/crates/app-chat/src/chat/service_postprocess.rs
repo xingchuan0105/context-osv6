@@ -225,25 +225,28 @@ impl ChatContext {
         execution: &ChatExecution,
     ) -> Result<(), AppError> {
         let scope = format!("{}_chat", execution.mode);
-        let _ = self
-            .record_usage(
-                "llm_input_tokens",
-                estimate_token_count(&execution.input_usage_text),
-                &scope,
-            )
-            .await;
-        let _ = self
-            .record_usage(
-                "llm_output_tokens",
-                estimate_token_count(&execution.response.answer),
-                &scope,
-            )
-            .await;
 
-        // Per-call `llm_usage_events` rows are written by exit-metering
-        // (`UsageObserver` on LlmClient). Do not re-insert aggregated usage here
-        // or multi-round agent turns will be double-counted.
-        let _ = execution.llm_usage;
+        // Monthly plan counters (`usage_events`) prefer **actual** provider tokens when
+        // the agent reported them. Estimated counts remain only as a fallback so offline
+        // / no-LLM paths still move the meter. Per-call `llm_usage_events` are written
+        // solely by exit-metering (`UsageObserver`) — never re-insert them here.
+        let (input_units, output_units) = if let Some(ref llm_usage) = execution.llm_usage {
+            (
+                i64::from(llm_usage.prompt_tokens),
+                i64::from(llm_usage.completion_tokens),
+            )
+        } else {
+            (
+                estimate_token_count(&execution.input_usage_text),
+                estimate_token_count(&execution.response.answer),
+            )
+        };
+        let _ = self
+            .record_usage("llm_input_tokens", input_units, &scope)
+            .await;
+        let _ = self
+            .record_usage("llm_output_tokens", output_units, &scope)
+            .await;
 
         if let Some(ref llm_usage) = execution.llm_usage {
             let feature = match execution.mode.as_str() {

@@ -11,7 +11,6 @@ import type {
 import { useAuth } from "../../lib/auth/context";
 import { useUiPreferences } from "../../lib/ui-preferences";
 import {
-  adminMessage,
   adminText,
   auditActionLabel,
   auditResourceTypeLabel,
@@ -72,8 +71,8 @@ export function AdminBillingSurface() {
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
       <AdminPageHeading
-        title={adminMessage(locale, "admin.billing.sectionTitle")}
-        subtitle={adminMessage(locale, "admin.billing.sectionSubtitle")}
+        title={adminText(locale, "admin.billing.sectionTitle")}
+        subtitle={adminText(locale, "admin.billing.sectionSubtitle")}
       />
       {billingQuery.error ? <ErrorState message={formatAdminError(locale, billingQuery.error)} /> : null}
       {loading ? (
@@ -103,7 +102,7 @@ export function AdminRagHealthSurface() {
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
       <AdminPageHeading
-        title={adminMessage(locale, "admin.nav.ragHealth")}
+        title={adminText(locale, "admin.nav.ragHealth")}
         subtitle={adminText(locale, "rag.subtitle")}
       />
       {ragHealthQuery.error ? <ErrorState message={formatAdminError(locale, ragHealthQuery.error)} /> : null}
@@ -134,8 +133,8 @@ export function AdminWorkersSurface() {
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
       <AdminPageHeading
-        title={adminMessage(locale, "admin.workers.sectionTitle")}
-        subtitle={adminMessage(locale, "admin.workers.sectionSubtitle")}
+        title={adminText(locale, "admin.workers.sectionTitle")}
+        subtitle={adminText(locale, "admin.workers.sectionSubtitle")}
       />
       {workersQuery.error ? <ErrorState message={formatAdminError(locale, workersQuery.error)} /> : null}
       {loading ? (
@@ -165,8 +164,8 @@ export function AdminDegradationSurface() {
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
       <AdminPageHeading
-        title={adminMessage(locale, "admin.degradation.sectionTitle")}
-        subtitle={adminMessage(locale, "admin.degradation.sectionSubtitle")}
+        title={adminText(locale, "admin.degradation.sectionTitle")}
+        subtitle={adminText(locale, "admin.degradation.sectionSubtitle")}
       />
       {degradationQuery.error ? <ErrorState message={formatAdminError(locale, degradationQuery.error)} /> : null}
       {loading ? (
@@ -259,8 +258,8 @@ export function AdminFeatureFlagsSurface() {
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
       <AdminPageHeading
-        title={adminMessage(locale, "admin.featureFlags.sectionTitle")}
-        subtitle={adminMessage(locale, "admin.featureFlags.sectionSubtitle")}
+        title={adminText(locale, "admin.featureFlags.sectionTitle")}
+        subtitle={adminText(locale, "admin.featureFlags.sectionSubtitle")}
       />
       {error ? <ErrorState message={formatAdminError(locale, error)} /> : null}
       {loading ? (
@@ -280,7 +279,7 @@ export function AdminFeatureFlagsSurface() {
             <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "minmax(0, 1fr) minmax(12rem, 14rem)" }}>
               <div>
                 <label className="app-form-label" htmlFor="admin-feature-flags-search">
-                  {adminMessage(locale, "admin.searchLabel")}
+                  {adminText(locale, "admin.searchLabel")}
                 </label>
                 <input
                   className="app-input"
@@ -293,7 +292,7 @@ export function AdminFeatureFlagsSurface() {
               </div>
               <div>
                 <label className="app-form-label" htmlFor="admin-feature-flags-status">
-                  {adminMessage(locale, "admin.filter.statusLabel")}
+                  {adminText(locale, "admin.filter.statusLabel")}
                 </label>
                 <select className="app-input" id="admin-feature-flags-status" onChange={(event) => setRequestStatus(event.target.value)} value={requestStatus}>
                   <option value="all">{adminText(locale, "common.allStatuses")}</option>
@@ -476,17 +475,17 @@ export function AdminAuditLogsSurface() {
   return (
     <section style={{ display: "grid", gap: "1rem" }}>
       <AdminPageHeading
-        title={adminMessage(locale, "admin.auditLogs.sectionTitle")}
-        subtitle={adminMessage(locale, "admin.auditLogs.sectionSubtitle")}
+        title={adminText(locale, "admin.auditLogs.sectionTitle")}
+        subtitle={adminText(locale, "admin.auditLogs.sectionSubtitle")}
       />
       {error ? <ErrorState message={formatAdminError(locale, error)} /> : null}
       <section className="app-inline-surface" style={{ display: "grid", gap: "0.8rem" }}>
         <div style={{ display: "grid", gap: "0.8rem", gridTemplateColumns: "1.2fr repeat(4, minmax(10rem, 1fr)) 8rem" }}>
           <div>
             <label className="app-form-label" htmlFor="admin-audit-query">
-              {adminMessage(locale, "admin.searchLabel")}
+              {adminText(locale, "admin.searchLabel")}
             </label>
-            <input className="app-input" id="admin-audit-query" onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={adminMessage(locale, "admin.searchPlaceholder")} type="text" value={query} />
+            <input className="app-input" id="admin-audit-query" onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={adminText(locale, "admin.searchPlaceholder")} type="text" value={query} />
           </div>
           <div>
             <label className="app-form-label" htmlFor="admin-audit-action">
@@ -508,7 +507,7 @@ export function AdminAuditLogsSurface() {
           </div>
           <div>
             <label className="app-form-label" htmlFor="admin-audit-window">
-              {adminMessage(locale, "admin.filter.windowLabel")}
+              {adminText(locale, "admin.filter.windowLabel")}
             </label>
             <select className="app-input" id="admin-audit-window" onChange={(event) => { setWindowFilter(event.target.value); setPage(1); }} value={windowFilter}>
               <option value="all">{adminText(locale, "audit.allTime")}</option>
@@ -520,7 +519,7 @@ export function AdminAuditLogsSurface() {
           </div>
           <div>
             <label className="app-form-label" htmlFor="admin-audit-page-size">
-              {adminMessage(locale, "admin.filter.pageSizeLabel")}
+              {adminText(locale, "admin.filter.pageSizeLabel")}
             </label>
             <select className="app-input" id="admin-audit-page-size" onChange={(event) => { setPerPage(Number(event.target.value)); setPage(1); }} value={perPage}>
               <option value={25}>25</option>

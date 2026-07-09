@@ -754,11 +754,6 @@ export function adminText(locale: UiLocale, key: AdminCopyKey) {
   return locale === "zh-CN" ? copy.zh : copy.en;
 }
 
-/** @deprecated Prefer adminText; kept as alias so call sites type-check against INLINE_COPY. */
-export function adminMessage(locale: UiLocale, key: AdminCopyKey) {
-  return adminText(locale, key);
-}
-
 export function formatAdminError(locale: UiLocale, error: unknown) {
   const detail = error instanceof Error ? error.message : String(error);
   return `${adminText(locale, "admin.loadError")} ${detail}`;
