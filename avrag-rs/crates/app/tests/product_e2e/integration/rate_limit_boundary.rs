@@ -101,7 +101,7 @@ async fn workspace_key_rate_limit_rpm_2_blocks_third_request_with_429() {
         .as_ref()
         .expect("app_state present in integration profile")
         .clone();
-    let key = state
+    let key = state.admin_api()
         .create_api_key(
             &notebook.id,
             CreateApiKeyRequest {

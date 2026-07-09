@@ -2,7 +2,7 @@ use common::AppError;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
 
-use crate::agents::events::{AgentEvent, AgentEventSink};
+use agent_loop::events::{AgentEvent, AgentEventSink};
 use crate::context::ChatContext;
 use contracts::chat::ChatEvent;
 pub const STREAM_PLACEHOLDER_MESSAGE_ID: i64 = 0;
@@ -26,7 +26,7 @@ pub fn chunk_text_for_stream(text: &str) -> Vec<String> {
 }
 
 pub async fn emit_buffered_agent_answer_if_needed(
-    sink: &crate::agents::sse_sink::SseSink,
+    sink: &agent_loop::sse_sink::SseSink,
     answer: &str,
 ) {
     if sink.has_message_delta() || answer.is_empty() {

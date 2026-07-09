@@ -1,158 +1,6 @@
-use contracts::chat::{RagPlan, RagPlanItem};
-use contracts::{
-    ExecutePlanRequest, ExecutePlanSummaryMode, RetrievalBundle,
-};
+//! Contract tests for retrieval result DTOs (post ExecutePlan removal).
 
-#[test]
-fn execute_plan_request_drops_legacy_clarify_fields_when_mapped_from_rag_plan() {
-    let legacy = RagPlan {
-        plan_version: "rag-item-v2".to_string(),
-        plan_confidence: 0.4,
-        clarify_needed: true,
-        clarify_message: "need more detail".to_string(),
-        items: vec![
-            RagPlanItem {
-                priority: 0.8,
-                query: Some("incident timeline".to_string()),
-                bm25_terms: None,
-                summary: None,
-            },
-            RagPlanItem {
-                priority: 0.2,
-                query: None,
-                bm25_terms: None,
-                summary: Some("related".to_string()),
-            },
-        ],
-    };
-
-    let request = ExecutePlanRequest::from_rag_plan(&legacy, &["doc-1".to_string()]);
-    let encoded = serde_json::to_value(&request).unwrap();
-
-    assert_eq!(request.plan_version, "rag-item-v2");
-    assert_eq!(request.summary_mode, ExecutePlanSummaryMode::Related);
-    assert_eq!(request.items.len(), 1);
-    assert!(encoded.get("clarify_needed").is_none());
-    assert!(encoded.get("clarify_message").is_none());
-    assert!(encoded.get("session_id").is_none());
-    assert!(encoded.get("history").is_none());
-    assert!(encoded.get("messages").is_none());
-}
-
-#[test]
-fn execute_plan_request_deserialization_rejects_legacy_session_fields() {
-    let error = serde_json::from_value::<ExecutePlanRequest>(serde_json::json!({
-        "plan_version": "rag-execute-v1",
-        "doc_scope": ["doc-1"],
-        "items": [{ "priority": 1.0, "query": "alpha" }],
-        "session_id": "session-1",
-        "history": [],
-        "clarify_needed": false
-    }))
-    .unwrap_err();
-
-    assert!(error.to_string().contains("unknown field"));
-}
-
-#[test]
-fn execute_plan_request_compat_roundtrip_preserves_summary_mode() {
-    let request = ExecutePlanRequest {
-        plan_version: "rag-execute-v1".to_string(),
-        doc_scope: vec!["doc-1".to_string(), "doc-2".to_string()],
-        items: vec![
-            contracts::ExecutePlanItem {
-                priority: 0.7,
-                query: Some("semantic lookup".to_string()),
-                bm25_terms: None,
-            },
-            contracts::ExecutePlanItem {
-                priority: 0.3,
-                query: None,
-                bm25_terms: Some(vec!["rollback".to_string(), "atlas".to_string()]),
-            },
-        ],
-        summary_mode: ExecutePlanSummaryMode::All,
-        budget: Some(contracts::ExecutePlanBudget {
-            total_candidate_budget: Some(32),
-            final_chunk_budget: Some(8),
-            graph_hop_limit: None,
-            graph_fan_out_limit: None,
-        }),
-        channel_budget: None,
-        query_entities: Vec::new(),
-        graph_hints: Vec::new(),
-        placeholder_triplets: Vec::new(),
-        trace: Some(contracts::ExecutePlanTrace {
-            request_id: Some("req-123".to_string()),
-            trace_id: None,
-            origin: Some("unit-test".to_string()),
-        }),
-    };
-
-    let compat_plan = request.to_rag_plan_compat();
-
-    assert_eq!(compat_plan.items.len(), 3);
-    assert_eq!(
-        compat_plan
-            .items
-            .last()
-            .and_then(|item| item.summary.as_deref()),
-        Some("all")
-    );
-
-    let mapped_back = ExecutePlanRequest::from_rag_plan(&compat_plan, &request.doc_scope);
-    assert_eq!(mapped_back.summary_mode, ExecutePlanSummaryMode::All);
-    assert_eq!(mapped_back.items.len(), 2);
-    assert_eq!(mapped_back.doc_scope, request.doc_scope);
-}
-
-#[test]
-fn execute_plan_request_accepts_v2_optional_retrieval_fields() {
-    let request = serde_json::from_value::<ExecutePlanRequest>(serde_json::json!({
-        "plan_version": "rag-execute-v1",
-        "doc_scope": ["doc-1"],
-        "items": [{ "priority": 1.0, "query": "semantic lookup" }],
-        "channel_budget": {
-            "text_dense": 12,
-            "bm25": 8,
-            "multimodal_dense": 4,
-            "graph": 6
-        },
-        "query_entities": [
-            { "text": "Atlas", "kind": "project" }
-        ],
-        "graph_hints": [
-            { "subject": "Atlas", "predicate": "uses", "object": "rollback checklist" }
-        ],
-        "placeholder_triplets": [
-            { "subject": "Atlas", "predicate": "uses", "object": "?checklist" }
-        ],
-        "trace": {
-            "request_id": "req-123",
-            "trace_id": "trace-456",
-            "origin": "unit-test"
-        }
-    }))
-    .unwrap();
-
-    assert_eq!(
-        request
-            .channel_budget
-            .as_ref()
-            .and_then(|budget| budget.graph),
-        Some(6)
-    );
-    assert_eq!(request.query_entities[0].text, "Atlas");
-    assert_eq!(request.graph_hints[0].predicate.as_deref(), Some("uses"));
-    assert_eq!(request.placeholder_triplets[0].object, "?checklist");
-    assert_eq!(
-        request
-            .trace
-            .as_ref()
-            .and_then(|trace| trace.trace_id.as_deref()),
-        Some("trace-456")
-    );
-}
+use contracts::RetrievalBundle;
 
 #[test]
 fn retrieval_bundle_exposes_answer_context_in_retrieval_then_summary_order() {
@@ -355,4 +203,31 @@ fn retrieval_bundle_citation_chunks_dedupes_regular_and_graph() {
     let chunks = bundle.citation_chunks();
     assert_eq!(chunks.len(), 1);
     assert_eq!(chunks[0].retrieval_channel, "dense");
+}
+
+#[test]
+fn placeholder_triplet_classify() {
+    use contracts::PlaceholderTriplet;
+    use contracts::PlaceholderTripletType;
+
+    let resolved = PlaceholderTriplet {
+        subject: "Atlas".into(),
+        predicate: "uses".into(),
+        object: "checklist".into(),
+    };
+    assert_eq!(resolved.classify(), PlaceholderTripletType::Resolved);
+
+    let traceable = PlaceholderTriplet {
+        subject: "Atlas".into(),
+        predicate: "uses".into(),
+        object: "?x".into(),
+    };
+    assert_eq!(traceable.classify(), PlaceholderTripletType::Traceable);
+
+    let fuzzy = PlaceholderTriplet {
+        subject: "?s".into(),
+        predicate: "?p".into(),
+        object: "?o".into(),
+    };
+    assert_eq!(fuzzy.classify(), PlaceholderTripletType::Fuzzy);
 }

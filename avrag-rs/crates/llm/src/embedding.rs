@@ -157,7 +157,7 @@ pub struct EmbeddingClient {
     config: ModelProviderConfig,
     client: reqwest::Client,
     rate_limiter: Option<crate::SharedRateLimiter>,
-    cache: Option<Arc<avrag_cache_redis::CacheStore>>,
+    cache: Option<Arc<dyn avrag_rag_core_ports::CachePort>>,
     feature: String,
     observer: Option<(Arc<dyn UsageObserver>, TenantContext)>,
 }
@@ -195,7 +195,7 @@ impl EmbeddingClient {
         }
     }
 
-    pub fn with_cache(mut self, cache: Arc<avrag_cache_redis::CacheStore>) -> Self {
+    pub fn with_cache(mut self, cache: Arc<dyn avrag_rag_core_ports::CachePort>) -> Self {
         self.cache = Some(cache);
         self
     }
@@ -275,9 +275,9 @@ impl EmbeddingClient {
                     self.config.dimensions,
                     &sha256_hex(text),
                 );
-                match cache.get_json::<Vec<f32>>(&key).await {
-                    Ok(Some(cached)) => vectors.push(cached),
-                    _ => {
+                match cache.get(&key).await.and_then(|raw| serde_json::from_str(&raw).ok()) {
+                    Some(cached) => vectors.push(cached),
+                    None => {
                         missing_indices.push(index);
                         missing_texts.push(*text);
                     }
@@ -299,7 +299,9 @@ impl EmbeddingClient {
                             self.config.dimensions,
                             &sha256_hex(text),
                         );
-                        let _ = cache.set_json(&key, vector, EMBEDDING_CACHE_TTL_SECS).await;
+                        if let Ok(raw) = serde_json::to_string(vector) {
+                            let _ = cache.set(&key, &raw, EMBEDDING_CACHE_TTL_SECS).await;
+                        }
                     }
                 }
                 for (batch_index, vector) in batch_vectors.into_iter().enumerate() {
@@ -336,9 +338,12 @@ impl EmbeddingClient {
         let effective_dimension = dimension.or(self.config.dimensions);
         let cache_key = mm_embedding_cache_key(&self.config.model, effective_dimension, input);
         if let Some(cache) = &self.cache {
-            match cache.get_json::<Vec<f32>>(&cache_key).await {
-                Ok(Some(cached)) => return Ok(cached),
-                _ => {}
+            if let Some(cached) = cache
+                .get(&cache_key)
+                .await
+                .and_then(|raw| serde_json::from_str::<Vec<f32>>(&raw).ok())
+            {
+                return Ok(cached);
             }
         }
 
@@ -448,9 +453,9 @@ impl EmbeddingClient {
             .context("DashScope multimodal embedding response did not include any vectors")?;
 
         if let Some(cache) = &self.cache {
-            let _ = cache
-                .set_json(&cache_key, &vector, EMBEDDING_CACHE_TTL_SECS)
-                .await;
+            if let Ok(raw) = serde_json::to_string(&vector) {
+                let _ = cache.set(&cache_key, &raw, EMBEDDING_CACHE_TTL_SECS).await;
+            }
         }
 
         self.record_embedding_usage(estimated_tokens as u32, actual_tokens_u32)
@@ -529,6 +534,29 @@ impl EmbeddingClient {
         self.record_embedding_usage(estimated, None).await;
 
         Ok(resp.data.into_iter().map(|d| d.embedding).collect())
+    }
+}
+
+
+
+#[async_trait::async_trait]
+impl avrag_rag_core_ports::EmbeddingPort for EmbeddingClient {
+    async fn embed(&self, texts: &[&str]) -> anyhow::Result<Vec<Vec<f32>>> {
+        EmbeddingClient::embed(self, texts).await
+    }
+
+    async fn embed_multimodal_fused(
+        &self,
+        input: &avrag_rag_core_ports::MultiModalEmbeddingInput,
+        dimension: Option<usize>,
+    ) -> anyhow::Result<Vec<f32>> {
+        let mapped = MultiModalEmbeddingInput {
+            text: input.text.clone(),
+            image: input.image.clone(),
+            images: input.images.clone(),
+            video: input.video.clone(),
+        };
+        EmbeddingClient::embed_multimodal_fused(self, &mapped, dimension).await
     }
 }
 
@@ -642,15 +670,16 @@ mod tests {
 
         let redis_url = std::env::var("TEST_REDIS_URL")
             .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
-        let cache = match avrag_cache_redis::CacheStore::new(&redis_url) {
-            Ok(cache) => Arc::new(cache),
-            Err(error) => {
-                eprintln!(
-                    "skip embed_openai_compatible_text_caches_in_redis: redis unavailable: {error}"
-                );
-                return;
-            }
-        };
+        let cache: Arc<dyn avrag_rag_core_ports::CachePort> =
+            match avrag_cache_redis::CacheStore::new(&redis_url) {
+                Ok(cache) => Arc::new(cache),
+                Err(error) => {
+                    eprintln!(
+                        "skip embed_openai_compatible_text_caches_in_redis: redis unavailable: {error}"
+                    );
+                    return;
+                }
+            };
 
         let http_calls = Arc::new(AtomicUsize::new(0));
         let call_counter = http_calls.clone();
@@ -679,10 +708,12 @@ mod tests {
             axum::serve(listener, app).await.unwrap();
         });
 
+        // Unique model key avoids collisions with prior Redis runs of this test.
+        let model = format!("mock-embedding-{}", uuid::Uuid::new_v4());
         let client = EmbeddingClient::new(ModelProviderConfig {
             base_url: base_url.clone(),
             api_key: "sk-test".to_string(),
-            model: "mock-embedding".to_string(),
+            model,
             timeout_ms: 5_000,
             api_style: None,
             dimensions: Some(8),
@@ -695,6 +726,11 @@ mod tests {
 
         let text = "cache-me-once";
         let first = client.embed(&[text]).await.expect("first embed");
+        assert_eq!(
+            http_calls.load(Ordering::SeqCst),
+            1,
+            "first embed should call the mock provider"
+        );
         let second = client.embed(&[text]).await.expect("second embed");
         assert_eq!(first, second);
         assert_eq!(

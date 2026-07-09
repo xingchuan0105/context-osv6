@@ -22,7 +22,7 @@ mod tests {
     use crate::chat::pipeline_steps::dispatch_mode;
     use crate::{ChatContext, LlmContext, OrchestratorContext};
 
-    use crate::agents::runtime::{Agent, AgentRequest, AgentRunResult};
+    use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult};
     use crate::agents::service::UnifiedAgentService;
     use async_trait::async_trait;
 
@@ -33,7 +33,7 @@ mod tests {
         async fn run(
             &self,
             request: AgentRequest,
-            _sink: &dyn crate::agents::events::AgentEventSink,
+            _sink: &dyn agent_loop::events::AgentEventSink,
         ) -> Result<AgentRunResult, AppError> {
             Ok(AgentRunResult {
                 answer: request.query.clone(),

@@ -7,10 +7,10 @@ use anyhow::{anyhow, Context, Result};
 use avrag_guardrails::GuardPipeline;
 use tokio::time::timeout;
 
-use crate::agents::runtime::{AgentRequest, AgentRunResult};
+use agent_loop::runtime::{AgentRequest, AgentRunResult};
 use crate::agents::service::UnifiedAgentService;
 use crate::agents::AgentKind;
-use crate::agents::events::CollectingSink;
+use agent_loop::events::CollectingSink;
 
 const DEFAULT_WORKER_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -41,7 +41,7 @@ impl SubagentInvoker {
             preferred_tools: Vec::new(),
             format_hint: None,
             max_iterations: Some(3),
-            auth_context: parent.auth_context.clone(),
+            auth: parent.auth.clone(),
             docscope_metadata: parent.docscope_metadata.clone(),
             metadata: parent.metadata.clone(),
             cancellation_token: parent.cancellation_token.clone(),

@@ -86,14 +86,14 @@ async fn rest_json(
 #[tokio::test]
 async fn workspace_api_key_cannot_create_org_api_key() {
     let state = test_app_state();
-    let notebook = state
+    let notebook = state.docs()
         .create_notebook(CreateNotebookRequest {
             name: "key-mgmt".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let key = state
+    let key = state.admin_api()
         .create_api_key(
             &notebook.id,
             CreateApiKeyRequest {
@@ -177,21 +177,21 @@ async fn admin_user_can_create_org_api_key() {
 #[tokio::test]
 async fn workspace_api_key_cannot_read_other_workspace_session() {
     let state = test_app_state();
-    let notebook_a = state
+    let notebook_a = state.docs()
         .create_notebook(CreateNotebookRequest {
             name: "session-a".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let notebook_b = state
+    let notebook_b = state.docs()
         .create_notebook(CreateNotebookRequest {
             name: "session-b".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let session_b = state
+    let session_b = state.chat()
         .create_session(CreateChatSessionRequest {
             notebook_id: notebook_b.id.clone(),
             title: Some("private".to_string()),
@@ -199,7 +199,7 @@ async fn workspace_api_key_cannot_read_other_workspace_session() {
         })
         .await
         .unwrap();
-    let key = state
+    let key = state.admin_api()
         .create_api_key(
             &notebook_a.id,
             CreateApiKeyRequest {
@@ -232,7 +232,7 @@ async fn workspace_api_key_cannot_read_other_workspace_session() {
 #[tokio::test]
 async fn org_api_key_cannot_call_workspace_mcp_tool() {
     let state = admin_app_state();
-    let org_key = state
+    let org_key = state.admin_api()
         .create_org_api_key(CreateApiKeyRequest {
             name: "org-agent".to_string(),
             permissions: vec![],
@@ -241,7 +241,7 @@ async fn org_api_key_cannot_call_workspace_mcp_tool() {
         })
         .await
         .unwrap();
-    let notebook = state
+    let notebook = state.docs()
         .create_notebook(CreateNotebookRequest {
             name: "target".to_string(),
             description: String::new(),
@@ -291,14 +291,14 @@ async fn org_api_key_cannot_call_workspace_mcp_tool() {
 #[tokio::test]
 async fn workspace_api_key_cannot_create_workspace_api_key() {
     let state = test_app_state();
-    let notebook = state
+    let notebook = state.docs()
         .create_notebook(CreateNotebookRequest {
             name: "nested-keys".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let key = state
+    let key = state.admin_api()
         .create_api_key(
             &notebook.id,
             CreateApiKeyRequest {
@@ -330,14 +330,14 @@ async fn workspace_api_key_cannot_create_workspace_api_key() {
 #[tokio::test]
 async fn workspace_api_key_cannot_list_notebook_notes() {
     let state = test_app_state();
-    let notebook = state
+    let notebook = state.docs()
         .create_notebook(CreateNotebookRequest {
             name: "notes-ui".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let key = state
+    let key = state.admin_api()
         .create_api_key(
             &notebook.id,
             CreateApiKeyRequest {
@@ -370,21 +370,21 @@ async fn workspace_api_key_cannot_list_notebook_notes() {
 #[tokio::test]
 async fn workspace_api_key_cannot_update_other_workspace_session() {
     let state = test_app_state();
-    let notebook_a = state
+    let notebook_a = state.docs()
         .create_notebook(CreateNotebookRequest {
             name: "session-update-a".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let notebook_b = state
+    let notebook_b = state.docs()
         .create_notebook(CreateNotebookRequest {
             name: "session-update-b".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let session_b = state
+    let session_b = state.chat()
         .create_session(CreateChatSessionRequest {
             notebook_id: notebook_b.id.clone(),
             title: Some("private".to_string()),
@@ -392,7 +392,7 @@ async fn workspace_api_key_cannot_update_other_workspace_session() {
         })
         .await
         .unwrap();
-    let key = state
+    let key = state.admin_api()
         .create_api_key(
             &notebook_a.id,
             CreateApiKeyRequest {
@@ -425,7 +425,7 @@ async fn workspace_api_key_cannot_update_other_workspace_session() {
 #[tokio::test]
 async fn admin_user_can_list_and_revoke_org_api_keys() {
     let state = admin_app_state();
-    let created = state
+    let created = state.admin_api()
         .create_org_api_key(CreateApiKeyRequest {
             name: "listed-org-key".to_string(),
             permissions: vec![],
@@ -505,14 +505,14 @@ async fn org_admin_jwt_can_create_org_api_key() {
 #[tokio::test]
 async fn workspace_api_key_cannot_read_user_preferences() {
     let state = test_app_state();
-    let notebook = state
+    let notebook = state.docs()
         .create_notebook(CreateNotebookRequest {
             name: "prefs-ui".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let key = state
+    let key = state.admin_api()
         .create_api_key(
             &notebook.id,
             CreateApiKeyRequest {
@@ -544,14 +544,14 @@ async fn workspace_api_key_cannot_read_user_preferences() {
 #[tokio::test]
 async fn workspace_api_key_cannot_update_profile() {
     let state = test_app_state();
-    let notebook = state
+    let notebook = state.docs()
         .create_notebook(CreateNotebookRequest {
             name: "profile-ui".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let key = state
+    let key = state.admin_api()
         .create_api_key(
             &notebook.id,
             CreateApiKeyRequest {
@@ -720,7 +720,7 @@ async fn user_without_notebook_access_cannot_revoke_workspace_api_key() {
 #[tokio::test]
 async fn org_api_key_create_strips_admin_permission() {
     let state = admin_app_state();
-    let created = state
+    let created = state.admin_api()
         .create_org_api_key(CreateApiKeyRequest {
             name: "org-key".to_string(),
             permissions: vec![
@@ -743,14 +743,14 @@ async fn org_api_key_create_strips_admin_permission() {
 #[tokio::test]
 async fn workspace_api_key_create_strips_admin_permission() {
     let state = test_app_state();
-    let notebook = state
+    let notebook = state.docs()
         .create_notebook(CreateNotebookRequest {
             name: "strip-admin".to_string(),
             description: String::new(),
         })
         .await
         .unwrap();
-    let created = state
+    let created = state.admin_api()
         .create_api_key(
             &notebook.id,
             CreateApiKeyRequest {

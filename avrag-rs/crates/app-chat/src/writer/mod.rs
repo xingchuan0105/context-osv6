@@ -26,10 +26,10 @@ use heavytail::validator;
 use heavytail::StyleParams;
 use tracing::warn;
 
-use crate::agents::capability::CapabilityRegistry;
-use crate::agents::events::{AgentEvent, AgentEventSink};
-use crate::agents::progressive::PromptRegistry;
-use crate::agents::runtime::{AgentRequest, AgentRunResult};
+use agent_tools::capability::CapabilityRegistry;
+use agent_loop::events::{AgentEvent, AgentEventSink};
+use agent_tools::progressive::PromptRegistry;
+use agent_loop::runtime::{AgentRequest, AgentRunResult};
 use crate::context::ChatContext;
 
 const DEFAULT_TARGET_CHARS: usize = 2_000;
@@ -336,7 +336,7 @@ pub(crate) async fn run_write_mode(
     let emit_debug_trace = agent_request.debug;
 
     if let Some(config) = stream_config {
-        let sink = crate::agents::sse_sink::SseSink::new_with_agent_type(
+        let sink = agent_loop::sse_sink::SseSink::new_with_agent_type(
             config.sender.clone(),
             config.request_id.clone(),
             session.id.clone(),
@@ -366,7 +366,7 @@ pub(crate) async fn run_write_mode(
         return Ok(execution);
     }
 
-    let sink = crate::agents::events::CollectingSink::new();
+    let sink = agent_loop::events::CollectingSink::new();
     let agent_result = orchestrator.run(agent_request, &sink).await?;
 
     let mut execution = crate::chat::build_chat_execution_from_result(

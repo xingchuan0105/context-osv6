@@ -56,6 +56,7 @@ pub struct UpdateNotebookRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ChatSession {
     pub id: String,
+    #[serde(rename = "workspace_id", alias = "notebook_id")]
     pub notebook_id: String,
     #[serde(default)]
     pub title: Option<String>,
@@ -75,6 +76,7 @@ pub struct ChatSessionListResponse {
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateChatSessionRequest {
+    #[serde(rename = "workspace_id", alias = "notebook_id")]
     pub notebook_id: String,
     #[serde(default)]
     pub title: Option<String>,
@@ -96,6 +98,7 @@ pub struct UpdateChatSessionRequest {
 pub struct ApiKeyRow {
     pub id: String,
     pub org_id: String,
+    #[serde(rename = "workspace_id", alias = "notebook_id")]
     pub notebook_id: String,
     pub key_prefix: String,
     pub name: String,
@@ -140,6 +143,7 @@ pub struct CreateApiKeyResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct NotebookNote {
     pub id: String,
+    #[serde(rename = "workspace_id", alias = "notebook_id")]
     pub notebook_id: String,
     pub title: String,
     pub content: String,

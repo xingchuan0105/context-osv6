@@ -1,0 +1,31 @@
+[package]
+name = "agent-tools"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+description = "Agent tool registry, skills, and capability metadata (TN Wave 6)"
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+app-core = { path = "../app-core" }
+avrag-code-interpreter = { path = "../code-interpreter" }
+avrag-rag-core = { path = "../rag-core" }
+avrag-search = { path = "../search" }
+chrono.workspace = true
+common = { path = "../common" }
+contracts = { path = "../../../contracts" }
+evalexpr.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml = "0.9"
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -18,7 +18,6 @@ fn chat_request_deserializes_with_minimal_defaults_and_no_request_id_field() {
         serialized,
         serde_json::json!({
             "query": "hello",
-            "notebook_id": null,
             "session_id": null,
             "agent_type": "chat",
             "source_type": null,
@@ -28,6 +27,11 @@ fn chat_request_deserializes_with_minimal_defaults_and_no_request_id_field() {
             "stream": false,
             "debug": false
         })
+    );
+    // Wire product name is workspace_id; omitted when None (alias notebook_id still deserializes).
+    assert!(
+        serialized.get("workspace_id").is_none() && serialized.get("notebook_id").is_none(),
+        "empty workspace scope should omit both wire keys"
     );
     assert!(
         serialized.get("request_id").is_none(),

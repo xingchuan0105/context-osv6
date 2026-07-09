@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use anyhow::Result;
 use contracts::auth_runtime::AuthContext;
-use contracts::ExecutePlanResponse;
+use contracts::{BackendTrace, Coverage, RetrievalBundle};
 use contracts::chat::{
     ChatRequest, ChatResponse, Citation, DegradeTraceItem, ModeDebug, PlannerOutput, RagModeDebug,
     RagPlan, RagTraceItem, RagTraceSummary, SourceRef, SummaryInjectionTrace, TraceInfo,
@@ -28,7 +28,7 @@ pub struct BuildRagChatResponseParams<'a> {
     pub chunks: &'a [ScoredChunk],
     pub item_trace: &'a [RagTraceItem],
     pub summary_count: usize,
-    pub synthesis_output: avrag_llm::SynthesisOutput,
+    pub synthesis_output: avrag_rag_core_ports::SynthesisOutput,
     pub degrade_trace: Vec<DegradeTraceItem>,
 }
 
@@ -313,16 +313,17 @@ impl RagRuntime {
         request: &ChatRequest,
         resolved_session_id: Option<&str>,
         rag_plan: &RagPlan,
-        execute_response: &ExecutePlanResponse,
-        synthesis_output: avrag_llm::SynthesisOutput,
+        bundle: &RetrievalBundle,
+        backend_trace: &BackendTrace,
+        coverage: &Coverage,
+        synthesis_output: avrag_rag_core_ports::SynthesisOutput,
         degrade_trace: Vec<DegradeTraceItem>,
     ) -> Result<ChatResponse> {
-        // 使用 has_evidence() 检查所有 evidence 类型
-        if !execute_response.bundle.has_evidence() {
+        if !bundle.has_evidence() {
             return Ok(no_chunks_response(
                 request,
                 rag_plan,
-                &execute_response.backend_trace.item_trace,
+                &backend_trace.item_trace,
                 degrade_trace,
                 synthesis_output.answer_text,
             ));
@@ -335,8 +336,7 @@ impl RagRuntime {
             .collect::<HashSet<_>>();
         cited_chunk_ids.extend(extract_referenced_chunk_ids(&synthesis_output.answer_text));
 
-        // 使用 citation_chunks() 获取所有可用 chunks
-        let all_chunks = execute_response.bundle.citation_chunks();
+        let all_chunks = bundle.citation_chunks();
 
         let ordered_chunks = if cited_chunk_ids.is_empty() {
             all_chunks.to_vec()
@@ -352,8 +352,7 @@ impl RagRuntime {
             filtered
         };
 
-        let citation_by_chunk_id = execute_response
-            .bundle
+        let citation_by_chunk_id = bundle
             .citations
             .iter()
             .filter_map(|citation| {
@@ -364,22 +363,13 @@ impl RagRuntime {
             })
             .collect::<HashMap<_, _>>();
 
-        // Preserve the stable `citation_id` assigned to each citation when the
-        // retrieval bundle was built (see `citation_from_scored` in execute.rs).
-        // Renumbering to `index + 1` here would diverge from the ids embedded in
-        // the rendered answer markup and stored on the persisted message, which
-        // `lookup_citation` matches against by `citation_id`. The answer markup
-        // is materialized below from this same `citations` slice, so internal
-        // consistency is what matters, not contiguity.
+        // Preserve stable citation_id from the retrieval bundle (not renumber 1..N).
         let citations = ordered_chunks
             .iter()
             .filter_map(|chunk| {
                 if let Some(citation) = citation_by_chunk_id.get(&chunk.chunk_id).cloned() {
                     Some(citation)
                 } else {
-                    // Chunks without a matching citation (e.g. synthetic summary
-                    // chunks with a non-uuid `chunk_id`) genuinely have no
-                    // citation to surface. Skip them but make the drop observable.
                     tracing::warn!(
                         chunk_id = %chunk.chunk_id,
                         doc_id = %chunk.doc_id,
@@ -440,15 +430,11 @@ impl RagRuntime {
             }),
             mode_debug: Some(ModeDebug {
                 rag: Some(RagModeDebug {
-                    item_trace: execute_response.backend_trace.item_trace.clone(),
-                    retrieval_trace: execute_response.backend_trace.retrieval_trace.clone(),
+                    item_trace: backend_trace.item_trace.clone(),
+                    retrieval_trace: backend_trace.retrieval_trace.clone(),
                     summary_injection_trace: SummaryInjectionTrace {
-                        mode: execute_response
-                            .backend_trace
-                            .retrieval_trace
-                            .summary_mode
-                            .clone(),
-                        injected_count: execute_response.coverage.summary_chunk_count,
+                        mode: backend_trace.retrieval_trace.summary_mode.clone(),
+                        injected_count: coverage.summary_chunk_count,
                     },
                 }),
                 search: None,

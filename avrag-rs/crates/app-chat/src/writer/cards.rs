@@ -8,7 +8,7 @@ use heavytail::segment::char_len;
 use heavytail::skeleton::{MaterialCard, MaterialKind};
 use heavytail::tokenize::{is_content_word, tokens};
 
-use crate::agents::untrusted_input::{SanitizedContent, UntrustedInputProcessor};
+use agent_loop::untrusted_input::{SanitizedContent, UntrustedInputProcessor};
 use crate::agents::AgentKind;
 
 const MAX_CARD_CONTENT_CHARS: usize = 80;
@@ -21,7 +21,7 @@ pub struct CardExtraction {
 
 /// Rule-based extraction: one card per citation (MVP spec §7 step 3).
 pub fn extract_material_cards(
-    result: &crate::agents::runtime::AgentRunResult,
+    result: &agent_loop::runtime::AgentRunResult,
     kind: AgentKind,
     guard: Option<&GuardPipeline>,
     trace_id: Option<&str>,

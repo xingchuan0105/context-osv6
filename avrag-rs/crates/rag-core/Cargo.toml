@@ -20,12 +20,10 @@ thiserror.workspace = true
 futures-util = "0.3"
 sha2.workspace = true
 hex.workspace = true
-# Internal
+# Internal — no avrag-llm / avrag-cache-redis (Wave 5 ports)
 avrag-rag-core-ports = { path = "../rag-core-ports" }
 common = { path = "../common" }
 avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
-avrag-cache-redis = { path = "../cache-redis" }
-avrag-llm = { path = "../llm" }
 avrag-code-interpreter = { path = "../code-interpreter" }
 
 [dev-dependencies]

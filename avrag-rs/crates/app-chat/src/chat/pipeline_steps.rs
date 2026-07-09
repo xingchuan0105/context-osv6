@@ -4,7 +4,7 @@ use common::AppError;
 use contracts::chat::{ChatRequest, ModeDebug};
 use contracts::notebooks::ChatSession;
 
-use crate::agents::runtime::AgentRequest;
+use agent_loop::runtime::AgentRequest;
 use crate::chat_streaming::STREAM_PLACEHOLDER_MESSAGE_ID;
 use crate::context::ChatContext;
 
@@ -87,7 +87,7 @@ async fn run_general_mode(
     let mut general_debug = state.build_general_agent_debug(&agent_request);
 
     if let Some(config) = stream_config {
-        let sink = crate::agents::sse_sink::SseSink::new_with_agent_type(
+        let sink = agent_loop::sse_sink::SseSink::new_with_agent_type(
             config.sender.clone(),
             config.request_id.clone(),
             session.id.clone(),
@@ -128,7 +128,7 @@ async fn run_general_mode(
         return Ok(execution);
     }
 
-    let sink = crate::agents::events::CollectingSink::new();
+    let sink = agent_loop::events::CollectingSink::new();
     let agent_result = agent_service.run(agent_request, &sink).await?;
 
     if let Some(usage) = agent_result.usage.as_ref() {
@@ -187,7 +187,7 @@ async fn run_search_mode(
     let emit_debug_trace = agent_request.debug;
 
     if let Some(config) = stream_config {
-        let sink = crate::agents::sse_sink::SseSink::new_with_agent_type(
+        let sink = agent_loop::sse_sink::SseSink::new_with_agent_type(
             config.sender.clone(),
             config.request_id.clone(),
             session.id.clone(),
@@ -224,7 +224,7 @@ async fn run_search_mode(
         return Ok(execution);
     }
 
-    let sink = crate::agents::events::CollectingSink::new();
+    let sink = agent_loop::events::CollectingSink::new();
     let agent_result = agent_service.run(agent_request, &sink).await?;
 
     let search_debug = build_search_debug(state, &agent_result);
@@ -253,7 +253,7 @@ async fn run_search_mode(
 
 fn build_search_debug(
     _state: &ChatContext,
-    agent_result: &crate::agents::runtime::AgentRunResult,
+    agent_result: &agent_loop::runtime::AgentRunResult,
 ) -> BTreeMap<String, serde_json::Value> {
     let mut search_debug = BTreeMap::new();
     if let Some(payload) = agent_result.debug_payload.as_ref() {
@@ -302,7 +302,7 @@ async fn run_rag_mode(
         agent_request.stream = true;
         agent_request.cancellation_token = Some(config.token.clone());
         let emit_debug_trace = agent_request.debug;
-        let sink = crate::agents::sse_sink::SseSink::new_with_agent_type(
+        let sink = agent_loop::sse_sink::SseSink::new_with_agent_type(
             config.sender.clone(),
             config.request_id.clone(),
             session.id.clone(),
@@ -332,7 +332,7 @@ async fn run_rag_mode(
         return Ok(execution);
     }
 
-    let sink = crate::agents::events::CollectingSink::new();
+    let sink = agent_loop::events::CollectingSink::new();
     let agent_result = agent_service.run(agent_request, &sink).await?;
 
     let execution = crate::chat::build_chat_execution_from_result(
@@ -355,13 +355,13 @@ async fn run_rag_mode(
 /// Used by the non-streaming branches of general and search modes.
 pub(crate) fn attach_debug_trace_from_sink(
     execution: &mut ChatExecution,
-    sink: &crate::agents::events::CollectingSink,
+    sink: &agent_loop::events::CollectingSink,
 ) {
     let debug_events: Vec<_> = sink
         .events()
         .into_iter()
         .filter_map(|e| match e {
-            crate::agents::events::AgentEvent::DebugTrace { kind, payload } => {
+            agent_loop::events::AgentEvent::DebugTrace { kind, payload } => {
                 Some((kind, payload))
             }
             _ => None,

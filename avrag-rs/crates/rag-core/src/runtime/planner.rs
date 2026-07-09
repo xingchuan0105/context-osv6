@@ -1,5 +1,5 @@
 use anyhow::Result;
-use avrag_llm::LlmUsage;
+use avrag_rag_core_ports::LlmUsage;
 use contracts::chat::{
     ChatRequest, DegradeReason, DegradeTraceItem, RagPlan, RagPlanItem, RagTraceItem,
 };
@@ -311,11 +311,10 @@ pub(super) fn planner_session_context(session_context: Option<&SessionContext>) 
 }
 
 impl RagRuntime {
-    /// Legacy compatibility path for old `RagPlan` callers.
+    /// Build a default `RagPlan` (and optional LLM plan when a planner is configured).
     ///
-    /// Product chat now plans through the Main Agent and enters RAG via
-    /// `ExecutePlanRequest`; keep this only for direct runtime tests and older
-    /// integration surfaces.
+    /// Product chat plans through the Main Agent and enters RAG via ToolCall
+    /// dispatch; this remains for direct runtime tests and older surfaces.
     pub async fn plan(
         &self,
         request: &ChatRequest,

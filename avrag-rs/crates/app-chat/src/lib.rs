@@ -1,3 +1,6 @@
+// Large async agent layouts (UnifiedAgent / ReActLoop) exceed default query depth on rustc 1.96.
+#![recursion_limit = "256"]
+
 pub mod agent_runtime;
 pub mod agents;
 pub mod chat;
@@ -6,7 +9,7 @@ pub mod chat_streaming;
 pub mod citations;
 pub mod context;
 #[cfg(feature = "eval")]
-pub mod eval;
+pub use agent_loop::eval;
 pub mod i18n;
 pub mod llm_context;
 pub mod memory_helpers;

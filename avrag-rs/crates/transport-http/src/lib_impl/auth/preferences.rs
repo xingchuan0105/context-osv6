@@ -27,7 +27,7 @@ pub(crate) async fn auth_get_preferences_handler(
         return handlers::app_error_response(error);
     }
 
-    match state.current_user_preferences().await {
+    match state.prefs().current().await {
         Ok(preferences) => {
             let payload = serde_json::to_value(preferences)
                 .ok()
@@ -64,7 +64,7 @@ pub(crate) async fn auth_update_preferences_handler(
         return handlers::app_error_response(error);
     }
 
-    let previous_preferences = match state.current_user_preferences().await {
+    let previous_preferences = match state.prefs().current().await {
         Ok(preferences) => serde_json::to_value(preferences)
             .ok()
             .and_then(|value| serde_json::from_value::<UserPreferencesPayload>(value).ok())
@@ -93,7 +93,7 @@ pub(crate) async fn auth_update_preferences_handler(
         }
     };
 
-    if let Err(error) = state.save_current_user_preferences(&next_preferences).await {
+    if let Err(error) = state.prefs().save_current(&next_preferences).await {
         warn!(error = %error, "failed to persist user preferences");
         return handlers::error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -149,7 +149,7 @@ pub(crate) async fn auth_get_agent_preferences_handler(
         return handlers::app_error_response(error);
     }
 
-    match state.current_user_preferences().await {
+    match state.prefs().current().await {
         Ok(preferences) => (StatusCode::OK, Json(preferences.agent_memory)).into_response(),
         Err(error) => {
             warn!(error = %error, "failed to load agent preferences");
@@ -180,7 +180,7 @@ pub(crate) async fn auth_update_agent_preferences_handler(
         return handlers::app_error_response(error);
     }
 
-    let mut preferences = match state.current_user_preferences().await {
+    let mut preferences = match state.prefs().current().await {
         Ok(preferences) => preferences,
         Err(error) => {
             warn!(error = %error, "failed to load agent preferences before update");
@@ -193,7 +193,7 @@ pub(crate) async fn auth_update_agent_preferences_handler(
     };
     preferences.agent_memory = agent_memory;
 
-    match state.save_current_user_preferences(&preferences).await {
+    match state.prefs().save_current(&preferences).await {
         Ok(saved) => (StatusCode::OK, Json(saved.agent_memory)).into_response(),
         Err(error) => {
             warn!(error = %error, "failed to save agent preferences");
@@ -224,7 +224,7 @@ pub(crate) async fn auth_delete_agent_preference_handler(
         return handlers::app_error_response(error);
     }
 
-    match state.delete_current_agent_preference(&preference_id).await {
+    match state.prefs().delete_current_agent_preference(&preference_id).await {
         Ok(Some(agent_memory)) => (StatusCode::OK, Json(agent_memory)).into_response(),
         Ok(None) => handlers::error_response(
             StatusCode::NOT_FOUND,

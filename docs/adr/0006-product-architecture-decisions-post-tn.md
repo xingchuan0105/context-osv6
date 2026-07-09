@@ -28,6 +28,7 @@ Thermo-Nuclear 结构债主路径（C1–C3 / H1–H3 / 长尾）落地后，剩
 | 10 | 数据保留 | 分析数据源可用；**保留 1 年**；**可导出给客户** |
 | 11 | CI 门禁 | **按建议的 merge gate 最小集**；全量 e2e / Real LLM 走 nightly；**Real LLM 成本由产品侧承担** |
 | 12 | 仓库 / 文档 | **单仓**；文档 **全部归集 `docs/`**；生成物 **gitignore、不落库** |
+| 13 | Agent 分层词 | **Capability / Skill / Tool 三层产品概念 intentionally 区分**；**禁止**以「合并注册表为 1」为架构理想态 |
 
 ---
 
@@ -74,6 +75,24 @@ Thermo-Nuclear 结构债主路径（C1–C3 / H1–H3 / 长尾）落地后，剩
 
 - Execute-plan **运行时弃用**；主契约 = Agent Loop + `ToolCall`。
 - DTO 可过渡保留；入口 / 前端 / 文档设 **删除期限**。
+
+### 5a. Capability / Skill / Tool 分层（产品词，2026-07-09 补裁）
+
+**产品体验要求三层概念保持区分，不得合并成「一套注册表心智」。**  
+TN 整改文档中曾出现的「Capability + Skill + Prompt → 合并为 1」**不是**产品本意，已作废。
+
+| 产品词 | 含义 | 变动节奏 | 工程对应（示意） |
+|--------|------|----------|------------------|
+| **Capability（能力）** | **Agent 能力面**：模式、披露、政策、用户能感知的「这个 agent 能做什么」 | 随产品体验设计，**不得与 Skill/Tool 混名** | `CapabilityRegistry` / mode schema / capabilities API |
+| **Skill（技能）** | 可迭代的技能包（SKILL.md 等）：文案、流程、披露资产 | **灵活、持续迭代** | progressive skill 资产 + 相关元数据 |
+| **Tool（工具）** | LLM 的可调用脚手架：**代码级**执行入口 | 随代码发版，偏稳定契约 | `ToolCatalog` / `ToolCall` / `dispatch_tool` |
+
+**工程约束（与产品词对齐）：**
+
+1. **执行单点**：可调用工具的 **dispatch / 执行表** 只保留一套（`ToolCatalog` + `dispatch_tool`）。删的是「第二调度面 / 假分支」，不是删 Capability 或 Skill 概念。  
+2. **披露与政策**可投影执行表 meta，但 **Capability 仍是独立产品层**（mode.tool_pool、写作技能目录、capabilities HTTP 等）。  
+3. **禁止**把「结构度量：概念数 → 1」写成把 Capability/Skill/Tool 捏成一个类型或一个对外名词。  
+4. 允许的卫生：`app-chat` re-export 壳变薄（调用方直依赖 `agent-loop` / `agent-tools`）——这是包边界，**不是**产品词合并。
 
 ### 6. 索引与长尾检索
 
@@ -215,6 +234,7 @@ Thermo-Nuclear 结构债主路径（C1–C3 / H1–H3 / 长尾）落地后，剩
 - Rolling 唯一真相  
 - 后台任务不计用户配额  
 - 本地 LLM 不上报  
+- **Capability / Skill / Tool 三层产品词区分**（§5a；勿为「注册表合并美学」推翻）
 
 ### 实现 backlog（由本 ADR + 已接受评审派生）
 

@@ -98,7 +98,8 @@ pub async fn run(runtime: &RagRuntime, auth: &AuthContext, args: &serde_json::Va
                         })
                         .collect();
 
-                    match reranker.rerank(query, &path_texts).await {
+                    let path_refs: Vec<&str> = path_texts.iter().map(String::as_str).collect();
+                    match reranker.rerank(query, &path_refs).await {
                         Ok(rerank_results) => {
                             // Build a map from original index to rerank score.
                             let mut scored_paths: Vec<(usize, f32, _)> = rerank_results

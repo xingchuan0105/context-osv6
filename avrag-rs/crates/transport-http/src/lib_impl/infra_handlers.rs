@@ -152,14 +152,14 @@ pub(crate) async fn dev_upload_handler(
         Err(error) => return handlers::app_error_response(error),
     };
 
-    if let Err(error) = upload_state
+    if let Err(error) = upload_state.docs()
         .put_uploaded_document(&document_id, body.to_vec())
         .await
     {
         return handlers::app_error_response(error);
     }
 
-    match upload_state.complete_document_upload(&document_id).await {
+    match upload_state.docs().complete_document_upload(&document_id).await {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
         Err(error) => handlers::app_error_response(error),
     }
@@ -209,7 +209,7 @@ pub(crate) async fn signed_upload_handler(
         ));
     }
 
-    match upload_state
+    match upload_state.docs()
         .put_uploaded_document(&document_id, body.to_vec())
         .await
     {
@@ -240,7 +240,8 @@ pub(crate) async fn billing_webhook_handler(
     };
 
     let result = state
-        .billing_handle_webhook(provider, signature, body.as_ref())
+        .billing_api()
+        .handle_webhook(provider, signature, body.as_ref())
         .await;
 
     if provider == avrag_billing::BillingProvider::Alipay && result.ok {
@@ -295,7 +296,7 @@ pub(crate) async fn shared_notebook_handler(
             .into_response();
     }
 
-    match state.get_shared_notebook(&token).await {
+    match state.share().get_shared_notebook(&token).await {
         Ok(Some(payload)) => (
             StatusCode::OK,
             Json(json!({
@@ -402,7 +403,7 @@ pub(crate) async fn object_storage_webhook_handler(
             }
         };
 
-        match upload_state.complete_document_upload(&document_id).await {
+        match upload_state.docs().complete_document_upload(&document_id).await {
             Ok(_) => {
                 processed += 1;
             }

@@ -103,10 +103,10 @@ impl NotebookAnalysisCollector {
     ) -> contracts::notebooks::NotebookAnalysisAccess {
         let notebook_id = notebook_id.to_string();
         let (member_count, share_enabled, active_api_key_count) = tokio::join!(
-            async { state.share_member_count(&notebook_id).await },
-            async { state.share_enabled_for_notebook(&notebook_id).await },
+            async { state.share().share_member_count(&notebook_id).await },
+            async { state.share().share_enabled_for_notebook(&notebook_id).await },
             async {
-                state
+                state.admin_api()
                     .list_api_keys(&notebook_id)
                     .await
                     .map(|items| items.into_iter().filter(|k| k.is_active).count() as i64)
@@ -174,17 +174,24 @@ pub(crate) async fn get_notebook_analysis_handler(
     if let Err(error) = ensure_user_notebook_access(&state, &notebook_id).await {
         return app_error_response(error);
     }
-    let Some(notebook) = state.get_notebook(&notebook_id).await else {
+    let Some(notebook) = state.docs().get_notebook(&notebook_id).await else {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     };
 
-    let sources = state.list_documents(Some(&notebook_id), None).await;
-    let sessions = state.list_sessions(Some(&notebook_id)).await;
-    let preferences = match state.current_user_preferences().await {
+    let docs = state.docs();
+    let chat = state.chat();
+    let prefs = state.prefs();
+    let (sources, sessions, preferences, notes) = tokio::join!(
+        docs.list_documents(Some(&notebook_id), None),
+        chat.list_sessions(Some(&notebook_id)),
+        prefs.current(),
+        load_notebook_notes(&state, &notebook_id),
+    );
+    let preferences = match preferences {
         Ok(preferences) => preferences,
         Err(error) => return app_error_response(error),
     };
-    let notes = match load_notebook_notes(&state, &notebook_id).await {
+    let notes = match notes {
         Ok(notes) => notes,
         Err(error) => return app_error_response(error),
     };

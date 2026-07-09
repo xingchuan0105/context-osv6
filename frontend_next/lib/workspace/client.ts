@@ -34,6 +34,7 @@ export type RawNotebook = {
   shared?: boolean;
 };
 
+/** Single notebook DTO → workspace mapping (storage still uses notebook id). */
 export function mapNotebook(raw: RawNotebook): Workspace {
   const { id, ...rest } = raw;
   return { ...rest, workspace_id: id };
@@ -157,7 +158,7 @@ type EmptyResponse = Record<string, never>;
 
 export async function getWorkspace(token: string, workspace_id: string): Promise<WorkspaceResponse> {
   const resp = await request<{ notebook: RawNotebook }>(
-    `/api/v1/notebooks/${workspace_id}`,
+    `/api/v1/workspaces/${workspace_id}`,
     { method: "GET" },
     token,
   );
@@ -171,7 +172,7 @@ export async function updateWorkspace(
   requestBody: { name: string; description: string },
 ): Promise<WorkspaceResponse> {
   const resp = await request<{ notebook: RawNotebook }>(
-    `/api/v1/notebooks/${workspace_id}`,
+    `/api/v1/workspaces/${workspace_id}`,
     {
       method: "PUT",
       body: JSON.stringify(requestBody),
@@ -186,18 +187,11 @@ export async function listWorkspaceSessions(
   token: string,
   workspace_id: string,
 ): Promise<WorkspaceSessionListResponse> {
-  const resp = await request<{
-    sessions: Array<
-      Omit<WorkspaceSession, "workspace_id"> & { notebook_id: string }
-    >;
-  }>(`/api/v1/chat/sessions?notebook_id=${workspace_id}`, { method: "GET" }, token);
-
-  return {
-    sessions: resp.sessions.map(({ notebook_id, ...session }) => ({
-      ...session,
-      workspace_id: notebook_id,
-    })),
-  };
+  return request<WorkspaceSessionListResponse>(
+    `/api/v1/chat/sessions?workspace_id=${workspace_id}`,
+    { method: "GET" },
+    token,
+  );
 }
 
 export async function createWorkspaceSession(
@@ -205,44 +199,28 @@ export async function createWorkspaceSession(
   workspace_id: string,
   requestBody: CreateWorkspaceSessionRequest,
 ): Promise<WorkspaceSession> {
-  const resp = await request<
-    Omit<WorkspaceSession, "workspace_id"> & { notebook_id: string }
-  >(
+  return request<WorkspaceSession>(
     "/api/v1/chat/sessions",
     {
       method: "POST",
       body: JSON.stringify({
-        notebook_id: workspace_id,
+        workspace_id,
         ...requestBody,
       }),
     },
     token,
   );
-
-  const { notebook_id, ...session } = resp;
-  return {
-    ...session,
-    workspace_id: notebook_id,
-  };
 }
 
 export async function getWorkspaceSession(
   token: string,
   session_id: string,
 ): Promise<WorkspaceSession> {
-  const resp = await request<
-    Omit<WorkspaceSession, "workspace_id"> & { notebook_id: string }
-  >(
+  return request<WorkspaceSession>(
     `/api/v1/chat/sessions/${session_id}`,
     { method: "GET" },
     token,
   );
-
-  const { notebook_id, ...session } = resp;
-  return {
-    ...session,
-    workspace_id: notebook_id,
-  };
 }
 
 export async function listWorkspaceSessionMessages(
@@ -263,9 +241,7 @@ export async function updateWorkspaceSession(
   session_id: string,
   requestBody: UpdateWorkspaceSessionRequest,
 ): Promise<WorkspaceSession> {
-  const resp = await request<
-    Omit<WorkspaceSession, "workspace_id"> & { notebook_id: string }
-  >(
+  return request<WorkspaceSession>(
     `/api/v1/chat/sessions/${session_id}`,
     {
       method: "PUT",
@@ -273,12 +249,6 @@ export async function updateWorkspaceSession(
     },
     token,
   );
-
-  const { notebook_id, ...session } = resp;
-  return {
-    ...session,
-    workspace_id: notebook_id,
-  };
 }
 
 export async function deleteWorkspaceSession(token: string, session_id: string): Promise<void> {
@@ -289,22 +259,11 @@ export async function listWorkspaceSources(
   token: string,
   workspace_id: string,
 ): Promise<WorkspaceSourceListResponse> {
-  const resp = await request<{
-    sources: Array<
-      Omit<WorkspaceSource, "workspace_id" | "workspace_name"> & {
-        notebook_id: string;
-        notebook_name: string;
-      }
-    >;
-  }>(`/api/v1/sources?notebook_id=${workspace_id}`, { method: "GET" }, token);
-
-  return {
-    sources: resp.sources.map(({ notebook_id, notebook_name, ...source }) => ({
-      ...source,
-      workspace_id: notebook_id,
-      workspace_name: notebook_name,
-    })),
-  };
+  return request<WorkspaceSourceListResponse>(
+    `/api/v1/sources?workspace_id=${workspace_id}`,
+    { method: "GET" },
+    token,
+  );
 }
 
 export async function addWorkspaceSourceUrl(
@@ -313,7 +272,7 @@ export async function addWorkspaceSourceUrl(
   url: string,
 ): Promise<WorkspaceDocumentUploadResponse> {
   const resp = await request<WorkspaceDocumentUploadResponse>(
-    `/api/v1/notebooks/${workspace_id}/sources/url`,
+    `/api/v1/workspaces/${workspace_id}/sources/url`,
     {
       method: "POST",
       body: JSON.stringify({ url }),
@@ -330,7 +289,7 @@ export async function createWorkspaceDocumentUpload(
   requestBody: CreateWorkspaceDocumentUploadRequest,
 ): Promise<WorkspaceDocumentUploadResponse> {
   const resp = await request<WorkspaceDocumentUploadResponse>(
-    `/api/v1/notebooks/${workspace_id}/documents`,
+    `/api/v1/workspaces/${workspace_id}/documents`,
     {
       method: "POST",
       body: JSON.stringify(requestBody),
@@ -452,18 +411,11 @@ export async function listWorkspaceNotes(
   token: string,
   workspace_id: string,
 ): Promise<WorkspaceNoteListResponse> {
-  const resp = await request<{
-    notes: Array<
-      Omit<WorkspaceNote, "workspace_id"> & { notebook_id: string }
-    >;
-  }>(`/api/v1/notebooks/${workspace_id}/notes`, { method: "GET" }, token);
-
-  return {
-    notes: resp.notes.map(({ notebook_id, ...note }) => ({
-      ...note,
-      workspace_id: notebook_id,
-    })),
-  };
+  return request<WorkspaceNoteListResponse>(
+    `/api/v1/workspaces/${workspace_id}/notes`,
+    { method: "GET" },
+    token,
+  );
 }
 
 export async function createWorkspaceNote(
@@ -471,21 +423,14 @@ export async function createWorkspaceNote(
   workspace_id: string,
   requestBody: CreateWorkspaceNoteRequest,
 ): Promise<{ note: WorkspaceNote }> {
-  const resp = await request<{
-    note: Omit<WorkspaceNote, "workspace_id"> & { notebook_id: string };
-  }>(
-    `/api/v1/notebooks/${workspace_id}/notes`,
+  return request<{ note: WorkspaceNote }>(
+    `/api/v1/workspaces/${workspace_id}/notes`,
     {
       method: "POST",
       body: JSON.stringify(requestBody),
     },
     token,
   );
-
-  const { notebook_id, ...note } = resp.note;
-  return {
-    note: { ...note, workspace_id: notebook_id },
-  };
 }
 
 export async function updateWorkspaceNote(
@@ -494,21 +439,14 @@ export async function updateWorkspaceNote(
   note_id: string,
   requestBody: UpdateWorkspaceNoteRequest,
 ): Promise<{ note: WorkspaceNote }> {
-  const resp = await request<{
-    note: Omit<WorkspaceNote, "workspace_id"> & { notebook_id: string };
-  }>(
-    `/api/v1/notebooks/${workspace_id}/notes/${note_id}`,
+  return request<{ note: WorkspaceNote }>(
+    `/api/v1/workspaces/${workspace_id}/notes/${note_id}`,
     {
       method: "PUT",
       body: JSON.stringify(requestBody),
     },
     token,
   );
-
-  const { notebook_id, ...note } = resp.note;
-  return {
-    note: { ...note, workspace_id: notebook_id },
-  };
 }
 
 export async function deleteWorkspaceNote(
@@ -517,7 +455,7 @@ export async function deleteWorkspaceNote(
   note_id: string,
 ): Promise<void> {
   await request<EmptyResponse>(
-    `/api/v1/notebooks/${workspace_id}/notes/${note_id}`,
+    `/api/v1/workspaces/${workspace_id}/notes/${note_id}`,
     { method: "DELETE" },
     token,
   );
@@ -528,21 +466,12 @@ export async function promoteWorkspaceNote(
   workspace_id: string,
   note_id: string,
 ): Promise<PromoteWorkspaceNoteResponse> {
-  const resp = await request<{
-    note: Omit<WorkspaceNote, "workspace_id"> & { notebook_id: string };
-    source_id: string;
-  }>(
-    `/api/v1/notebooks/${workspace_id}/notes/${note_id}/promote-to-source`,
+  return request<PromoteWorkspaceNoteResponse>(
+    `/api/v1/workspaces/${workspace_id}/notes/${note_id}/promote-to-source`,
     {
       method: "POST",
       body: JSON.stringify({}),
     },
     token,
   );
-
-  const { notebook_id, ...note } = resp.note;
-  return {
-    note: { ...note, workspace_id: notebook_id },
-    source_id: resp.source_id,
-  };
 }

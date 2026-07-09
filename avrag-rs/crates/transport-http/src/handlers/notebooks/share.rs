@@ -1,6 +1,6 @@
 //! Notebook share / collab HTTP handlers.
 //!
-//! Business logic lives in `avrag_share::ShareService` (via AppState delegates).
+//! Business logic lives in `avrag_share::ShareService` (via `state.share()`).
 //! This module only enforces auth/session guards and maps results to HTTP.
 
 use app_bootstrap::AppState;
@@ -105,6 +105,7 @@ pub(crate) async fn create_share_handler(
     let access_level = avrag_share::AccessLevel::from_role(&req.role);
     share_ok!(
         state
+            .share()
             .create_share_link(notebook_id, access_level, expires_in_secs)
             .await
     )
@@ -117,7 +118,7 @@ pub(crate) async fn revoke_share_handler(
     if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
     }
-    share_empty_ok!(state.revoke_share_link(token).await)
+    share_empty_ok!(state.share().revoke_share_link(token).await)
 }
 
 pub(crate) async fn get_share_settings_handler(
@@ -127,7 +128,7 @@ pub(crate) async fn get_share_settings_handler(
     if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
     }
-    share_ok!(state.get_share_settings(notebook_id).await)
+    share_ok!(state.share().get_share_settings(notebook_id).await)
 }
 
 pub(crate) async fn update_share_settings_handler(
@@ -140,6 +141,7 @@ pub(crate) async fn update_share_settings_handler(
     }
     share_ok!(
         state
+            .share()
             .update_share_settings(notebook_id, req.access_level, req.allow_download)
             .await
     )
@@ -154,6 +156,7 @@ pub(crate) async fn update_access_level_handler(
         return response;
     }
     match state
+        .share()
         .update_share_access_level(notebook_id, req.access_level)
         .await
     {
@@ -173,7 +176,7 @@ pub(crate) async fn get_share_analytics_handler(
     if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
     }
-    share_ok!(state.get_share_analytics(notebook_id).await)
+    share_ok!(state.share().get_share_analytics(notebook_id).await)
 }
 
 pub(crate) async fn get_share_access_logs_handler(
@@ -183,7 +186,7 @@ pub(crate) async fn get_share_access_logs_handler(
     if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
     }
-    share_ok!(state.get_share_access_logs(notebook_id).await)
+    share_ok!(state.share().get_share_access_logs(notebook_id).await)
 }
 
 pub(crate) async fn validate_share_token_handler(
@@ -193,7 +196,7 @@ pub(crate) async fn validate_share_token_handler(
     if !state.postgres_configured() {
         return postgres_unavailable_response();
     }
-    match state.validate_share_token(&token).await {
+    match state.share().validate_share_token(&token).await {
         Ok(Some(notebook_id)) => (
             StatusCode::OK,
             Json(common::ShareTokenResponse {
@@ -216,7 +219,7 @@ pub(crate) async fn list_members_handler(
     if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
     }
-    match state.list_share_members(notebook_id).await {
+    match state.share().list_share_members(notebook_id).await {
         Ok(items) => {
             let members = items
                 .into_iter()
@@ -248,7 +251,12 @@ pub(crate) async fn invite_member_handler(
         return response;
     }
     let role = avrag_share::AccessLevel::from_role(&req.role);
-    share_empty_ok!(state.invite_share_member(notebook_id, req.email, role).await)
+    share_empty_ok!(
+        state
+            .share()
+            .invite_share_member(notebook_id, req.email, role)
+            .await
+    )
 }
 
 pub(crate) async fn accept_member_handler(
@@ -264,7 +272,12 @@ pub(crate) async fn accept_member_handler(
     if !state.postgres_configured() {
         return postgres_unavailable_response();
     }
-    share_empty_ok!(state.accept_share_invite(notebook_id, member_id).await)
+    share_empty_ok!(
+        state
+            .share()
+            .accept_share_invite(notebook_id, member_id)
+            .await
+    )
 }
 
 pub(crate) async fn decline_member_handler(
@@ -280,7 +293,12 @@ pub(crate) async fn decline_member_handler(
     if !state.postgres_configured() {
         return postgres_unavailable_response();
     }
-    share_empty_ok!(state.decline_share_invite(notebook_id, member_id).await)
+    share_empty_ok!(
+        state
+            .share()
+            .decline_share_invite(notebook_id, member_id)
+            .await
+    )
 }
 
 pub(crate) async fn remove_member_handler(
@@ -290,5 +308,10 @@ pub(crate) async fn remove_member_handler(
     if let Err(response) = require_share_session(&state, &notebook_id).await {
         return response;
     }
-    share_empty_ok!(state.remove_share_member(notebook_id, member_id).await)
+    share_empty_ok!(
+        state
+            .share()
+            .remove_share_member(notebook_id, member_id)
+            .await
+    )
 }

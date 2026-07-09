@@ -1,64 +1,12 @@
+//! Retrieval result DTOs shared across agent tools and response building.
+//!
+//! Multi-channel `ExecutePlanRequest` / `ExecutePlanResponse` were removed (ADR-0006 /
+//! TN Wave 2 physical delete). Product path is AgentLoop + `ToolCall` only.
+
 use serde::{Deserialize, Serialize};
 
-use crate::chat::{
-    Citation, DegradeTraceItem, RagPlan, RagPlanItem, RagTraceItem, RagTraceSummary,
-};
+use crate::chat::{Citation, RagTraceItem, RagTraceSummary};
 use crate::documents::AnswerContextChunk;
-
-fn default_execute_plan_version() -> String {
-    "rag-execute-v1".to_string()
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ExecutePlanSummaryMode {
-    #[default]
-    None,
-    Related,
-    All,
-}
-
-impl ExecutePlanSummaryMode {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::None => "none",
-            Self::Related => "related",
-            Self::All => "all",
-        }
-    }
-
-    fn from_legacy_summary(value: Option<&str>) -> Self {
-        match value {
-            Some("related") => Self::Related,
-            Some("all") => Self::All,
-            _ => Self::None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ExecutePlanTrace {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub trace_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub origin: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ExecutePlanBudget {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub total_candidate_budget: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub final_chunk_budget: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub graph_hop_limit: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub graph_fan_out_limit: Option<usize>,
-}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -95,201 +43,41 @@ pub enum PlaceholderTripletType {
 }
 
 impl PlaceholderTriplet {
-    /// 返回已知实体（非占位符部分）
-    /// 注意：predicate 不是实体，只有 subject 和 object 是实体
+    pub fn classify(&self) -> PlaceholderTripletType {
+        let placeholder_count = self.subject.starts_with('?') as usize
+            + self.predicate.starts_with('?') as usize
+            + self.object.starts_with('?') as usize;
+        match placeholder_count {
+            0 => PlaceholderTripletType::Resolved,
+            1 => PlaceholderTripletType::Traceable,
+            _ => PlaceholderTripletType::Fuzzy,
+        }
+    }
+
+    /// Known entities (non-placeholder subject/object). Predicate is not an entity.
     pub fn known_entities(&self) -> Vec<String> {
         let mut entities = Vec::new();
-        if !self.subject.starts_with("?") {
+        if !self.subject.starts_with('?') {
             entities.push(self.subject.clone());
         }
-        if !self.object.starts_with("?") {
+        if !self.object.starts_with('?') {
             entities.push(self.object.clone());
         }
         entities
     }
 
-    /// 返回占位符位置
-    pub fn placeholder_positions(&self) -> Vec<&str> {
+    pub fn placeholder_positions(&self) -> Vec<&'static str> {
         let mut positions = Vec::new();
-        if self.subject.starts_with("?") {
+        if self.subject.starts_with('?') {
             positions.push("subject");
         }
-        if self.predicate.starts_with("?") {
+        if self.predicate.starts_with('?') {
             positions.push("predicate");
         }
-        if self.object.starts_with("?") {
+        if self.object.starts_with('?') {
             positions.push("object");
         }
         positions
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ChannelBudget {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub text_dense: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub bm25: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub multimodal_dense: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub graph: Option<usize>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ExecutePlanItem {
-    pub priority: f32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub query: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub bm25_terms: Option<Vec<String>>,
-}
-
-/// Legacy retrieval plan DTO.
-///
-/// **ADR 0006:** product HTTP `POST /api/v1/rag/execute-plan` is **removed**.
-/// Prefer AgentLoop + `ToolCall`. This type remains for prompt legacy parsing
-/// and internal test harness conversion only.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ExecutePlanRequest {
-    #[serde(default = "default_execute_plan_version")]
-    pub plan_version: String,
-    #[serde(default)]
-    pub doc_scope: Vec<String>,
-    #[serde(default)]
-    pub items: Vec<ExecutePlanItem>,
-    #[serde(default)]
-    pub summary_mode: ExecutePlanSummaryMode,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub budget: Option<ExecutePlanBudget>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub channel_budget: Option<ChannelBudget>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub query_entities: Vec<QueryEntity>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub graph_hints: Vec<GraphHint>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub placeholder_triplets: Vec<PlaceholderTriplet>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub trace: Option<ExecutePlanTrace>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum ExecutePlanValidationError {
-    #[error("doc_scope must not be empty")]
-    EmptyDocScope,
-    #[error("items must not be empty")]
-    EmptyItems,
-    #[error("items must not contain more than {max} entries")]
-    TooManyItems { max: usize },
-    #[error("item {index} must contain exactly one payload")]
-    InvalidPayloadCount { index: usize },
-    #[error("item {index} priority must be between 0.0 and 1.0")]
-    InvalidPriority { index: usize },
-    #[error("invalid doc_scope: {reason}")]
-    InvalidDocScope { reason: String },
-    #[error("budget.total_candidate_budget must be greater than zero")]
-    InvalidTotalCandidateBudget,
-    #[error("budget.final_chunk_budget must be greater than zero")]
-    InvalidFinalChunkBudget,
-    #[error("placeholder_triplets[{index}] must not contain more than two placeholders")]
-    TooManyPlaceholders { index: usize },
-    #[error("channel_budget.graph requires graph_hints or placeholder_triplets")]
-    GraphBudgetRequiresHints,
-}
-
-impl ExecutePlanRequest {
-    pub const MAX_ITEMS: usize = 4;
-
-    pub fn from_rag_plan(plan: &RagPlan, doc_scope: &[String]) -> Self {
-        let summary_mode = plan
-            .items
-            .iter()
-            .find_map(|item| item.summary.as_deref())
-            .map(|value| ExecutePlanSummaryMode::from_legacy_summary(Some(value)))
-            .unwrap_or_default();
-
-        let items = plan
-            .items
-            .iter()
-            .filter_map(|item| {
-                let query = item
-                    .query
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .map(ToOwned::to_owned);
-                let bm25_terms = item.bm25_terms.as_ref().map(|terms| {
-                    terms
-                        .iter()
-                        .map(|term| term.trim())
-                        .filter(|term| !term.is_empty())
-                        .map(ToOwned::to_owned)
-                        .collect::<Vec<_>>()
-                });
-                let has_query = query.is_some();
-                let has_bm25_terms = bm25_terms.as_ref().is_some_and(|terms| !terms.is_empty());
-                (has_query || has_bm25_terms).then_some(ExecutePlanItem {
-                    priority: item.priority,
-                    query,
-                    bm25_terms: bm25_terms.filter(|terms| !terms.is_empty()),
-                })
-            })
-            .collect();
-
-        Self {
-            plan_version: plan.plan_version.clone(),
-            doc_scope: doc_scope.to_vec(),
-            items,
-            summary_mode,
-            budget: None,
-            channel_budget: None,
-            query_entities: Vec::new(),
-            graph_hints: Vec::new(),
-            placeholder_triplets: Vec::new(),
-            trace: None,
-        }
-    }
-
-    /// Extract document IDs from the doc_scope field.
-    pub fn doc_ids(&self) -> Option<Vec<uuid::Uuid>> {
-        (!self.doc_scope.is_empty()).then(|| {
-            self.doc_scope
-                .iter()
-                .filter_map(|id| uuid::Uuid::parse_str(id).ok())
-                .collect::<Vec<_>>()
-        })
-    }
-
-    pub fn to_rag_plan_compat(&self) -> RagPlan {
-        let mut items = self
-            .items
-            .iter()
-            .map(|item| RagPlanItem {
-                priority: item.priority,
-                query: item.query.clone(),
-                bm25_terms: item.bm25_terms.clone(),
-                summary: None,
-            })
-            .collect::<Vec<_>>();
-        if self.summary_mode != ExecutePlanSummaryMode::None {
-            items.push(RagPlanItem {
-                priority: 0.0,
-                query: None,
-                bm25_terms: None,
-                summary: Some(self.summary_mode.as_str().to_string()),
-            });
-        }
-        RagPlan {
-            plan_version: self.plan_version.clone(),
-            plan_confidence: 1.0,
-            clarify_needed: false,
-            clarify_message: String::new(),
-            items,
-        }
     }
 }
 
@@ -391,15 +179,11 @@ impl RetrievalBundle {
         chunks
     }
 
-    /// 返回所有可用于 citation 的 chunks，去重并保持 regular chunks 优先
+    /// All citation-eligible chunks; regular chunks first, graph chunks de-duplicated.
     pub fn citation_chunks(&self) -> Vec<&RetrievedChunk> {
         let mut all_chunks =
             Vec::with_capacity(self.chunks.len() + self.graph_supported_chunks.len());
-
-        // Regular chunks 优先
         all_chunks.extend(&self.chunks);
-
-        // Graph chunks 补充（去重）
         let regular_ids: std::collections::HashSet<_> =
             self.chunks.iter().map(|c| &c.chunk_id).collect();
         for chunk in &self.graph_supported_chunks {
@@ -407,11 +191,9 @@ impl RetrievalBundle {
                 all_chunks.push(chunk);
             }
         }
-
         all_chunks
     }
 
-    /// 检查是否有任何 evidence
     pub fn has_evidence(&self) -> bool {
         !self.chunks.is_empty()
             || !self.graph_supported_chunks.is_empty()
@@ -452,20 +234,9 @@ pub struct ChannelTraceItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackendTrace {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub trace: Option<ExecutePlanTrace>,
     #[serde(default)]
     pub item_trace: Vec<RagTraceItem>,
     #[serde(default)]
     pub channel_trace: Vec<ChannelTraceItem>,
     pub retrieval_trace: RagTraceSummary,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExecutePlanResponse {
-    pub bundle: RetrievalBundle,
-    pub coverage: Coverage,
-    #[serde(default)]
-    pub degrade_trace: Vec<DegradeTraceItem>,
-    pub backend_trace: BackendTrace,
 }

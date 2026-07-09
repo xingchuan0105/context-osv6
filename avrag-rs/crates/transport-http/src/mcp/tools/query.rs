@@ -70,7 +70,7 @@ pub(crate) async fn execute_query_tool(
         format_hint: None,
     };
     expand_external_notebook_rag_scope(state, &notebook_id_str, &mut req).await?;
-    let response = state.execute_chat(req).await?;
+    let response = state.chat().execute_chat(req).await?;
     Ok(super::super::catalog::success_result(
         tool_name,
         Some(&notebook_id_str),
@@ -88,11 +88,11 @@ pub(crate) async fn expand_external_notebook_rag_scope(
         return Ok(());
     }
 
-    state
+    state.docs()
         .get_notebook(notebook_id)
         .await
         .ok_or_else(|| AppError::not_found("notebook_not_found", "notebook not found"))?;
-    let doc_scope = state
+    let doc_scope = state.docs()
         .list_documents(Some(notebook_id), None)
         .await
         .into_iter()

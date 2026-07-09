@@ -1,5 +1,5 @@
-use crate::agents::capability::RetryPolicy;
-use crate::agents::unified::atomic_tools::dispatch::execute_with_retry;
+use agent_tools::capability::RetryPolicy;
+use agent_tools::tool_registry::execute_with_retry;
 use contracts::{ToolResult, ToolStatus};
 use std::sync::atomic::{AtomicUsize, Ordering};
 

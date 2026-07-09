@@ -55,21 +55,7 @@ impl RetrievalReadPort for CrossTenantBlockingDataPlane {
 }
 
 fn test_runtime(data_owner_org_id: &str) -> RagRuntime {
-    let embedding = Arc::new(avrag_llm::EmbeddingClient::new(
-        avrag_llm::ModelProviderConfig {
-            base_url: "http://localhost:9999".to_string(),
-            api_key: "test".to_string(),
-            model: "test-model".to_string(),
-            timeout_ms: 5000,
-            api_style: None,
-            dimensions: None,
-            enable_thinking: None,
-            enable_cache: None,
-            rpm_limit: None,
-            tpm_limit: None,
-        },
-    ));
-    let config = avrag_rag_core::RagConfig::new_for_data_plane(embedding, None);
+    let config = avrag_rag_core::test_doubles::test_rag_config();
     RagRuntime::with_data_plane(
         config,
         Arc::new(CrossTenantBlockingDataPlane {

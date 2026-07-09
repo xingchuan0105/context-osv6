@@ -373,7 +373,6 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use contracts::auth_runtime::{OrgId, SubjectKind};
-    use avrag_llm::ModelProviderConfig;
     use avrag_retrieval_data_plane::{
         Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, GraphSearchOutput,
         GraphSearchRequest, MultimodalSearchRequest, RelationPathCandidate, ScoredChunk,
@@ -483,19 +482,7 @@ mod tests {
     }
 
     fn make_runtime() -> Arc<RagRuntime> {
-        let embedding = Arc::new(avrag_llm::EmbeddingClient::new(ModelProviderConfig {
-            base_url: "http://localhost:9999".to_string(),
-            api_key: "test".to_string(),
-            model: "test-model".to_string(),
-            timeout_ms: 5000,
-            api_style: None,
-            dimensions: None,
-            enable_thinking: None,
-            enable_cache: None,
-            rpm_limit: None,
-            tpm_limit: None,
-        }));
-        let config = super::super::config::RagConfig::new_for_data_plane(embedding, None);
+        let config = crate::test_doubles::test_rag_config();
         let chunk_id = Uuid::from_u128(1);
         let doc_id = Uuid::parse_str("00000000-0000-0000-0000-000000000010").unwrap();
         let data_plane: Arc<dyn avrag_retrieval_data_plane::RetrievalReadPort> =

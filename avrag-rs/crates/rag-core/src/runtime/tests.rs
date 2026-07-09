@@ -11,12 +11,11 @@ use async_trait::async_trait;
 use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
 use avrag_retrieval_data_plane::{
     Bm25SearchOutput, Bm25SearchRequest, Bm25SearchTrace, GraphSearchOutput, GraphSearchRequest,
-    MultimodalSearchRequest, RelationPathCandidate, TextDenseSearchRequest,
+    MultimodalSearchRequest, TextDenseSearchRequest,
 };
 use contracts::chat::{ChatMessage, ChatRequest, Citation, RagPlan, RagPlanItem};
-use contracts::{BackendTrace, Coverage, ExecutePlanResponse, RetrievalBundle, RetrievedChunk};
+use contracts::{BackendTrace, Coverage, RetrievalBundle, RetrievedChunk};
 use std::sync::Arc;
-use tokio::sync::Barrier;
 use uuid::Uuid;
 
 fn make_request(query: &str, agent_type: &str) -> ChatRequest {
@@ -37,22 +36,8 @@ fn make_request(query: &str, agent_type: &str) -> ChatRequest {
 }
 
 fn test_config() -> RagConfig {
-    let embedding = Arc::new(avrag_llm::EmbeddingClient::new(
-        avrag_llm::ModelProviderConfig {
-            base_url: "http://localhost:9999".to_string(),
-            api_key: "test".to_string(),
-            model: "test-model".to_string(),
-            timeout_ms: 5000,
-            api_style: None,
-            dimensions: None,
-            enable_thinking: None,
-            enable_cache: None,
-            rpm_limit: None,
-            tpm_limit: None,
-        },
-    ));
-    // Stage-level unit tests do not need a PostgreSQL repository.
-    RagConfig::new_for_data_plane(embedding, None)
+    // Stage-level unit tests do not need a PostgreSQL repository or real embedding HTTP.
+    crate::test_doubles::test_rag_config()
 }
 
 fn make_session_context() -> SessionContext {
@@ -142,173 +127,6 @@ impl RetrievalReadPort for StubRetrievalDataPlane {
     }
 }
 
-struct GraphStubRetrievalDataPlane;
-
-#[async_trait]
-impl RetrievalReadPort for GraphStubRetrievalDataPlane {
-    async fn search_text_dense(
-        &self,
-        _request: TextDenseSearchRequest,
-    ) -> anyhow::Result<Vec<ScoredChunk>> {
-        Ok(Vec::new())
-    }
-
-    async fn search_bm25(&self, request: Bm25SearchRequest) -> anyhow::Result<Bm25SearchOutput> {
-        assert_eq!(request.query, "exact term");
-        Ok(Bm25SearchOutput {
-            chunks: vec![make_scored_chunk(42, "stub_bm25")],
-            trace: Bm25SearchTrace {
-                backend: "stub".to_string(),
-                raw_hit_count: 1,
-                hydrated_hit_count: 1,
-                fallback_reason: None,
-            },
-        })
-    }
-
-    async fn search_multimodal(
-        &self,
-        _request: MultimodalSearchRequest,
-    ) -> anyhow::Result<Vec<ScoredChunk>> {
-        Ok(Vec::new())
-    }
-
-    async fn search_graph(&self, request: GraphSearchRequest) -> anyhow::Result<GraphSearchOutput> {
-        assert_eq!(
-            request.entity_names,
-            vec!["Atlas".to_string(), "rollback checklist".to_string()]
-        );
-        assert_eq!(request.relation_limit, 2);
-        Ok(GraphSearchOutput {
-            relation_paths: vec![RelationPathCandidate {
-                subject: "Atlas".to_string(),
-                predicate: "uses".to_string(),
-                object: "rollback checklist".to_string(),
-                score: 0.91,
-                supporting_chunk_ids: vec![Uuid::from_u128(90)],
-            }],
-            supporting_chunks: vec![ScoredChunk {
-                chunk_id: Uuid::from_u128(90),
-                doc_id: Uuid::from_u128(10_090),
-                content: "Atlas uses the rollback checklist".to_string(),
-                score: 0.91,
-                source: "stub_graph".to_string(),
-                page: Some(3),
-                chunk_type: "graph_relation".to_string(),
-                asset_id: None,
-                caption: None,
-                image_path: None,
-                parser_backend: None,
-                source_locator: None,
-                parse_run_id: Some(Uuid::from_u128(91)),
-            }],
-        })
-    }
-}
-
-struct PlaceholderTripletGraphDataPlane;
-
-#[async_trait]
-impl RetrievalReadPort for PlaceholderTripletGraphDataPlane {
-    async fn search_text_dense(
-        &self,
-        _request: TextDenseSearchRequest,
-    ) -> anyhow::Result<Vec<ScoredChunk>> {
-        Ok(Vec::new())
-    }
-
-    async fn search_bm25(&self, _request: Bm25SearchRequest) -> anyhow::Result<Bm25SearchOutput> {
-        Ok(Bm25SearchOutput {
-            chunks: Vec::new(),
-            trace: Bm25SearchTrace {
-                backend: "stub".to_string(),
-                raw_hit_count: 0,
-                hydrated_hit_count: 0,
-                fallback_reason: None,
-            },
-        })
-    }
-
-    async fn search_multimodal(
-        &self,
-        _request: MultimodalSearchRequest,
-    ) -> anyhow::Result<Vec<ScoredChunk>> {
-        Ok(Vec::new())
-    }
-
-    async fn search_graph(&self, request: GraphSearchRequest) -> anyhow::Result<GraphSearchOutput> {
-        assert_eq!(request.entity_names, vec!["Atlas".to_string()]);
-        assert_eq!(request.relation_hints.len(), 2);
-        assert_eq!(request.relation_hints[0].subject.as_deref(), Some("Atlas"));
-        assert_eq!(request.relation_hints[0].predicate.as_deref(), Some("uses"));
-        assert_eq!(request.relation_hints[0].object.as_deref(), None);
-        assert_eq!(request.relation_hints[1].subject.as_deref(), None);
-        assert_eq!(request.relation_hints[1].predicate.as_deref(), Some("uses"));
-        assert_eq!(request.relation_hints[1].object.as_deref(), None);
-        Ok(GraphSearchOutput {
-            relation_paths: vec![RelationPathCandidate {
-                subject: "Atlas".to_string(),
-                predicate: "uses".to_string(),
-                object: "rollback checklist".to_string(),
-                score: 0.9,
-                supporting_chunk_ids: vec![Uuid::from_u128(92)],
-            }],
-            supporting_chunks: vec![make_scored_chunk(92, "stub_graph")],
-        })
-    }
-}
-
-struct BarrierGraphBm25DataPlane {
-    barrier: Arc<Barrier>,
-}
-
-#[async_trait]
-impl RetrievalReadPort for BarrierGraphBm25DataPlane {
-    async fn search_text_dense(
-        &self,
-        _request: TextDenseSearchRequest,
-    ) -> anyhow::Result<Vec<ScoredChunk>> {
-        Ok(Vec::new())
-    }
-
-    async fn search_bm25(&self, _request: Bm25SearchRequest) -> anyhow::Result<Bm25SearchOutput> {
-        self.barrier.wait().await;
-        Ok(Bm25SearchOutput {
-            chunks: vec![make_scored_chunk(12, "stub_bm25")],
-            trace: Bm25SearchTrace {
-                backend: "stub".to_string(),
-                raw_hit_count: 1,
-                hydrated_hit_count: 1,
-                fallback_reason: None,
-            },
-        })
-    }
-
-    async fn search_multimodal(
-        &self,
-        _request: MultimodalSearchRequest,
-    ) -> anyhow::Result<Vec<ScoredChunk>> {
-        Ok(Vec::new())
-    }
-
-    async fn search_graph(
-        &self,
-        _request: GraphSearchRequest,
-    ) -> anyhow::Result<GraphSearchOutput> {
-        self.barrier.wait().await;
-        Ok(GraphSearchOutput {
-            relation_paths: vec![RelationPathCandidate {
-                subject: "Atlas".to_string(),
-                predicate: "uses".to_string(),
-                object: "checklist".to_string(),
-                score: 0.9,
-                supporting_chunk_ids: vec![Uuid::from_u128(22)],
-            }],
-            supporting_chunks: vec![make_scored_chunk(22, "stub_graph")],
-        })
-    }
-}
-
 #[tokio::test]
 async fn runtime_bm25_stage_uses_injected_data_plane() {
     let runtime = RagRuntime::with_data_plane(test_config(), Arc::new(StubRetrievalDataPlane));
@@ -355,154 +173,6 @@ fn graph_final_context_budget_reserves_twenty_percent_when_available() {
     assert_eq!(graph_final_context_budget(30, 20), 6);
     assert_eq!(graph_final_context_budget(4, 10), 1);
     assert_eq!(graph_final_context_budget(30, 2), 2);
-}
-
-#[tokio::test]
-async fn execute_plan_includes_graph_relation_paths_and_supporting_chunks() {
-    let runtime = RagRuntime::with_data_plane(test_config(), Arc::new(GraphStubRetrievalDataPlane));
-    let auth = AuthContext::new(OrgId::new(Uuid::from_u128(9)), SubjectKind::System);
-    let request = contracts::ExecutePlanRequest {
-        plan_version: "rag-execute-v1".to_string(),
-        doc_scope: vec![Uuid::from_u128(10_090).to_string()],
-        items: vec![contracts::ExecutePlanItem {
-            priority: 1.0,
-            query: None,
-            bm25_terms: Some(vec!["exact".to_string(), "term".to_string()]),
-        }],
-        summary_mode: contracts::ExecutePlanSummaryMode::None,
-        budget: Some(contracts::ExecutePlanBudget {
-            total_candidate_budget: Some(8),
-            final_chunk_budget: Some(4),
-            graph_hop_limit: None,
-            graph_fan_out_limit: None,
-        }),
-        channel_budget: None,
-        query_entities: Vec::new(),
-        graph_hints: vec![contracts::GraphHint {
-            subject: Some("Atlas".to_string()),
-            predicate: Some("uses".to_string()),
-            object: Some("rollback checklist".to_string()),
-        }],
-        placeholder_triplets: Vec::new(),
-        trace: None,
-    };
-
-    let response = runtime.execute_plan(&request, &auth).await.unwrap();
-
-    assert_eq!(response.bundle.relation_paths.len(), 1);
-    assert_eq!(response.bundle.relation_paths[0].relations, vec!["uses"]);
-    assert_eq!(response.bundle.graph_supported_chunks.len(), 1);
-    assert_eq!(
-        response.bundle.graph_supported_chunks[0]
-            .parse_run_id
-            .as_deref(),
-        Some("00000000-0000-0000-0000-00000000005b")
-    );
-    assert_eq!(response.coverage.channel_coverage.graph, 1);
-    assert!(
-        response
-            .backend_trace
-            .channel_trace
-            .iter()
-            .any(|trace| trace.channel == "graph" && trace.selected_count == 1)
-    );
-    assert_eq!(response.bundle.citations.len(), 2);
-}
-
-#[tokio::test]
-async fn execute_plan_starts_bm25_and_graph_channels_in_parallel() {
-    let runtime = RagRuntime::with_data_plane(
-        test_config(),
-        Arc::new(BarrierGraphBm25DataPlane {
-            barrier: Arc::new(Barrier::new(2)),
-        }),
-    );
-    let auth = AuthContext::new(OrgId::new(Uuid::from_u128(9)), SubjectKind::System);
-    let request = contracts::ExecutePlanRequest {
-        plan_version: "rag-execute-v1".to_string(),
-        doc_scope: vec![Uuid::from_u128(10_022).to_string()],
-        items: vec![contracts::ExecutePlanItem {
-            priority: 1.0,
-            query: None,
-            bm25_terms: Some(vec!["exact".to_string(), "term".to_string()]),
-        }],
-        summary_mode: contracts::ExecutePlanSummaryMode::None,
-        budget: Some(contracts::ExecutePlanBudget {
-            total_candidate_budget: Some(20),
-            final_chunk_budget: Some(5),
-            graph_hop_limit: None,
-            graph_fan_out_limit: None,
-        }),
-        channel_budget: Some(contracts::ChannelBudget {
-            text_dense: Some(0),
-            bm25: Some(5),
-            multimodal_dense: Some(0),
-            graph: Some(5),
-        }),
-        query_entities: Vec::new(),
-        graph_hints: vec![contracts::GraphHint {
-            subject: Some("Atlas".to_string()),
-            predicate: Some("uses".to_string()),
-            object: Some("checklist".to_string()),
-        }],
-        placeholder_triplets: Vec::new(),
-        trace: None,
-    };
-
-    let response = tokio::time::timeout(
-        std::time::Duration::from_secs(1),
-        runtime.execute_plan(&request, &auth),
-    )
-    .await
-    .expect("bm25 and graph channels should rendezvous concurrently")
-    .unwrap();
-
-    assert_eq!(response.bundle.chunks.len(), 1);
-    assert_eq!(response.bundle.graph_supported_chunks.len(), 1);
-}
-
-#[tokio::test]
-async fn execute_plan_maps_traceable_placeholder_triplets_to_graph_hints() {
-    let runtime =
-        RagRuntime::with_data_plane(test_config(), Arc::new(PlaceholderTripletGraphDataPlane));
-    let auth = AuthContext::new(OrgId::new(Uuid::from_u128(9)), SubjectKind::System);
-    let request = contracts::ExecutePlanRequest {
-        plan_version: "rag-execute-v1".to_string(),
-        doc_scope: vec![Uuid::from_u128(10_092).to_string()],
-        items: vec![contracts::ExecutePlanItem {
-            priority: 1.0,
-            query: Some("how does Atlas use the checklist?".to_string()),
-            bm25_terms: None,
-        }],
-        summary_mode: contracts::ExecutePlanSummaryMode::None,
-        budget: Some(contracts::ExecutePlanBudget {
-            total_candidate_budget: Some(8),
-            final_chunk_budget: Some(4),
-            graph_hop_limit: None,
-            graph_fan_out_limit: None,
-        }),
-        channel_budget: None,
-        query_entities: Vec::new(),
-        graph_hints: Vec::new(),
-        placeholder_triplets: vec![
-            contracts::PlaceholderTriplet {
-                subject: "Atlas".to_string(),
-                predicate: "uses".to_string(),
-                object: "?checklist".to_string(),
-            },
-            contracts::PlaceholderTriplet {
-                subject: "?system".to_string(),
-                predicate: "uses".to_string(),
-                object: "?artifact".to_string(),
-            },
-        ],
-        trace: None,
-    };
-
-    let response = runtime.execute_plan(&request, &auth).await.unwrap();
-
-    assert_eq!(response.bundle.relation_paths.len(), 1);
-    assert_eq!(response.coverage.channel_coverage.graph, 1);
 }
 
 #[tokio::test]
@@ -619,11 +289,11 @@ fn multimodal_rerank_documents_preserve_text_and_image_modalities() {
     let documents = retrieval::build_multimodal_rerank_documents(&[text_chunk, image_chunk]);
 
     match &documents[0] {
-        avrag_llm::MultiModalRerankDocument::Text(text) => assert_eq!(text, "plain text"),
+        avrag_rag_core_ports::MultiModalRerankDocument::Text(text) => assert_eq!(text, "plain text"),
         _ => panic!("expected text rerank document"),
     }
     match &documents[1] {
-        avrag_llm::MultiModalRerankDocument::Image(path) => {
+        avrag_rag_core_ports::MultiModalRerankDocument::Image(path) => {
             assert_eq!(path, "https://example.com/image.png")
         }
         _ => panic!("expected image rerank document"),
@@ -910,8 +580,7 @@ async fn build_rag_chat_response_from_bundle_reuses_bundle_citations() {
             summary: None,
         }],
     };
-    let execute_response = ExecutePlanResponse {
-        bundle: RetrievalBundle {
+    let bundle = RetrievalBundle {
             chunks: vec![RetrievedChunk {
                 chunk_id: "chunk-a".to_string(),
                 doc_id: "doc-1".to_string(),
@@ -949,17 +618,15 @@ async fn build_rag_chat_response_from_bundle_reuses_bundle_citations() {
                 parse_run_id: None,
             }],
             summary_chunks: Vec::new(),
-        },
-        coverage: Coverage {
+        };
+    let coverage = Coverage {
             requested_doc_count: 1,
             matched_doc_count: 1,
             retrieved_chunk_count: 1,
             summary_chunk_count: 0,
             channel_coverage: Default::default(),
-        },
-        degrade_trace: Vec::new(),
-        backend_trace: BackendTrace {
-            trace: None,
+        };
+    let backend_trace = BackendTrace {
             item_trace: Vec::new(),
             channel_trace: Vec::new(),
             retrieval_trace: contracts::chat::RagTraceSummary {
@@ -971,16 +638,17 @@ async fn build_rag_chat_response_from_bundle_reuses_bundle_citations() {
                 summary_mode: "none".to_string(),
                 items: Vec::new(),
             },
-        },
-    };
+        };
 
     let response = runtime
         .build_rag_chat_response_from_bundle(
             &request,
             Some("session-1"),
             &rag_plan,
-            &execute_response,
-            avrag_llm::SynthesisOutput {
+            &bundle,
+            &backend_trace,
+            &coverage,
+            avrag_rag_core_ports::SynthesisOutput {
                 answer_text: "结论 [[cite:chunk-a]]".to_string(),
                 answer_blocks: Vec::new(),
                 cited_chunk_ids: vec!["chunk-a".to_string()],
@@ -1016,8 +684,7 @@ async fn build_rag_chat_response_from_bundle_graph_only_non_empty_citations_and_
         }],
     };
 
-    let execute_response = ExecutePlanResponse {
-        bundle: RetrievalBundle {
+    let bundle = RetrievalBundle {
             chunks: Vec::new(),
             graph_supported_chunks: vec![RetrievedChunk {
                 chunk_id: "graph-chunk-1".to_string(),
@@ -1055,17 +722,15 @@ async fn build_rag_chat_response_from_bundle_graph_only_non_empty_citations_and_
                 parse_run_id: None,
             }],
             summary_chunks: Vec::new(),
-        },
-        coverage: Coverage {
+        };
+    let coverage = Coverage {
             requested_doc_count: 1,
             matched_doc_count: 1,
             retrieved_chunk_count: 0,
             summary_chunk_count: 0,
             channel_coverage: Default::default(),
-        },
-        degrade_trace: Vec::new(),
-        backend_trace: BackendTrace {
-            trace: None,
+        };
+    let backend_trace = BackendTrace {
             item_trace: Vec::new(),
             channel_trace: Vec::new(),
             retrieval_trace: contracts::chat::RagTraceSummary {
@@ -1077,16 +742,17 @@ async fn build_rag_chat_response_from_bundle_graph_only_non_empty_citations_and_
                 summary_mode: "none".to_string(),
                 items: Vec::new(),
             },
-        },
-    };
+        };
 
     let response = runtime
         .build_rag_chat_response_from_bundle(
             &request,
             Some("session-1"),
             &rag_plan,
-            &execute_response,
-            avrag_llm::SynthesisOutput {
+            &bundle,
+            &backend_trace,
+            &coverage,
+            avrag_rag_core_ports::SynthesisOutput {
                 answer_text: "结论 [[cite:graph-chunk-1]]".to_string(),
                 answer_blocks: Vec::new(),
                 cited_chunk_ids: vec!["graph-chunk-1".to_string()],

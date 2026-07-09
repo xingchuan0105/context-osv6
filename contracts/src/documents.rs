@@ -52,6 +52,7 @@ pub struct DocumentStatusResponse {
 pub struct Document {
     pub id: String,
     pub org_id: String,
+    #[serde(rename = "workspace_id", alias = "notebook_id")]
     pub notebook_id: String,
     pub owner_id: String,
     pub file_name: String,
@@ -113,7 +114,9 @@ pub struct ParsedPreviewResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceRow {
     pub id: String,
+    #[serde(rename = "workspace_id", alias = "notebook_id")]
     pub notebook_id: String,
+    #[serde(rename = "workspace_name", alias = "notebook_name")]
     pub notebook_name: String,
     pub title: String,
     pub file_name: String,

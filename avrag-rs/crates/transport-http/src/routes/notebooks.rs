@@ -3,69 +3,15 @@ use axum::{Router, routing::get};
 
 use crate::handlers;
 
+/// Notebook / workspace product routes.
+///
+/// Dual-mount: `/notebooks/*` (legacy) and `/workspaces/*` (product name).
+/// Same handlers; JSON field is already `workspace_id` (with notebook_id alias).
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
-        .route(
-            "/notebooks",
-            get(handlers::list_notebooks).post(handlers::create_notebook),
-        )
-        .route(
-            "/notebooks/{id}",
-            get(handlers::get_notebook)
-                .patch(handlers::update_notebook)
-                .put(handlers::update_notebook)
-                .delete(handlers::delete_notebook),
-        )
-        .route(
-            "/notebooks/{id}/documents",
-            axum::routing::post(handlers::create_document_upload_handler),
-        )
-        .route(
-            "/notebooks/{id}/sources/url",
-            axum::routing::post(handlers::add_url_source_handler),
-        )
-        .route(
-            "/notebooks/{id}/analysis",
-            get(handlers::get_notebook_analysis_handler),
-        )
-        .route(
-            "/notebooks/{id}/notes",
-            get(handlers::list_notebook_notes_handler).post(handlers::create_notebook_note_handler),
-        )
-        .route(
-            "/notebooks/{id}/notes/{note_id}",
-            get(handlers::get_notebook_note_handler)
-                .put(handlers::update_notebook_note_handler)
-                .delete(handlers::delete_notebook_note_handler),
-        )
-        .route(
-            "/notebooks/{id}/notes/{note_id}/promote-to-source",
-            axum::routing::post(handlers::promote_notebook_note_handler),
-        )
-        .route(
-            "/notebooks/{id}/share",
-            axum::routing::post(handlers::create_share_handler),
-        )
-        .route(
-            "/notebooks/{id}/share/settings",
-            get(handlers::get_share_settings_handler).put(handlers::update_share_settings_handler),
-        )
-        .route(
-            "/notebooks/{id}/share/analytics",
-            get(handlers::get_share_analytics_handler),
-        )
-        .route(
-            "/notebooks/{id}/share/access-logs",
-            get(handlers::get_share_access_logs_handler),
-        )
-        .route(
-            "/notebooks/{id}/share/{token}",
-            axum::routing::delete(handlers::revoke_share_handler),
-        )
-        .route(
-            "/notebooks/{id}/access-level",
-            axum::routing::post(handlers::update_access_level_handler),
-        )
+        .merge(workspace_scoped_router("/notebooks"))
+        .merge(workspace_scoped_router("/workspaces"))
+        // Document/source/org surfaces are not under the workspace id path.
         .route("/documents", get(handlers::list_documents_handler))
         .route(
             "/documents/{document_id}",
@@ -101,37 +47,103 @@ pub(crate) fn router() -> Router<AppState> {
             "/org/api-keys/{key_id}",
             axum::routing::delete(handlers::revoke_org_api_key_handler),
         )
-        .route(
-            "/notebooks/{id}/api-keys",
-            get(handlers::list_api_keys_handler).post(handlers::create_api_key_handler),
-        )
-        .route(
-            "/notebooks/{id}/api-keys/{key_id}",
-            axum::routing::delete(handlers::revoke_api_key_handler),
-        )
-        .route(
-            "/notebooks/{id}/members",
-            get(handlers::list_members_handler),
-        )
-        .route(
-            "/notebooks/{id}/members/invite",
-            axum::routing::post(handlers::invite_member_handler),
-        )
-        .route(
-            "/notebooks/{id}/members/{member_id}/accept",
-            axum::routing::post(handlers::accept_member_handler),
-        )
-        .route(
-            "/notebooks/{id}/members/{member_id}/decline",
-            axum::routing::post(handlers::decline_member_handler),
-        )
-        .route(
-            "/notebooks/{id}/members/{member_id}",
-            axum::routing::delete(handlers::remove_member_handler),
-        )
         .route("/notifications", get(handlers::list_notifications_handler))
         .route(
             "/notifications/{notification_id}/read",
             axum::routing::post(handlers::mark_notification_read_handler),
+        )
+}
+
+fn workspace_scoped_router(prefix: &str) -> Router<AppState> {
+    // `{id}` is the workspace/notebook id path segment.
+    Router::new()
+        .route(
+            prefix,
+            get(handlers::list_notebooks).post(handlers::create_notebook),
+        )
+        .route(
+            &format!("{prefix}/{{id}}"),
+            get(handlers::get_notebook)
+                .patch(handlers::update_notebook)
+                .put(handlers::update_notebook)
+                .delete(handlers::delete_notebook),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/documents"),
+            axum::routing::post(handlers::create_document_upload_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/sources/url"),
+            axum::routing::post(handlers::add_url_source_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/analysis"),
+            get(handlers::get_notebook_analysis_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/notes"),
+            get(handlers::list_notebook_notes_handler).post(handlers::create_notebook_note_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/notes/{{note_id}}"),
+            get(handlers::get_notebook_note_handler)
+                .put(handlers::update_notebook_note_handler)
+                .delete(handlers::delete_notebook_note_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/notes/{{note_id}}/promote-to-source"),
+            axum::routing::post(handlers::promote_notebook_note_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/share"),
+            axum::routing::post(handlers::create_share_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/share/settings"),
+            get(handlers::get_share_settings_handler).put(handlers::update_share_settings_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/share/analytics"),
+            get(handlers::get_share_analytics_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/share/access-logs"),
+            get(handlers::get_share_access_logs_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/share/{{token}}"),
+            axum::routing::delete(handlers::revoke_share_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/access-level"),
+            axum::routing::post(handlers::update_access_level_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/api-keys"),
+            get(handlers::list_api_keys_handler).post(handlers::create_api_key_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/api-keys/{{key_id}}"),
+            axum::routing::delete(handlers::revoke_api_key_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/members"),
+            get(handlers::list_members_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/members/invite"),
+            axum::routing::post(handlers::invite_member_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/members/{{member_id}}/accept"),
+            axum::routing::post(handlers::accept_member_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/members/{{member_id}}/decline"),
+            axum::routing::post(handlers::decline_member_handler),
+        )
+        .route(
+            &format!("{prefix}/{{id}}/members/{{member_id}}"),
+            axum::routing::delete(handlers::remove_member_handler),
         )
 }

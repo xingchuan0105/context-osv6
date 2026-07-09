@@ -1,5 +1,7 @@
 pub mod bridge;
 mod config;
+/// Pure channel-budget helpers used by unit tests only (post ExecutePlan removal).
+#[cfg(test)]
 mod execute;
 mod planner;
 mod response;
@@ -19,41 +21,30 @@ pub use avrag_retrieval_data_plane::{RetrievalDataPlane, RetrievalReadPort, Weig
 ///
 /// `avrag-app` owns the chat orchestration pipeline. This crate stays focused on
 /// stage-level retrieval operations and tool dispatch for RAG.
-use avrag_llm::EmbeddingClient;
-
 #[derive(Clone)]
 pub struct RagRuntime {
     config: RagConfig,
     data_plane: Arc<dyn RetrievalReadPort>,
-    embedding_client: Option<Arc<EmbeddingClient>>,
 }
 
 impl RagRuntime {
     pub fn with_data_plane(config: RagConfig, data_plane: Arc<dyn RetrievalReadPort>) -> Self {
-        Self {
-            config,
-            data_plane,
-            embedding_client: None,
-        }
+        Self { config, data_plane }
     }
 
-    pub fn with_embedding_client(mut self, embedding_client: Arc<EmbeddingClient>) -> Self {
-        self.embedding_client = Some(embedding_client);
-        self
-    }
-
-    // TODO(write-mode): WIP stub — attaches tenant identity for metering.
-    pub fn with_tenant(self, _tenant: avrag_llm::TenantContext) -> Self {
+    /// WIP stub — reserved for per-request metering identity (type-erased to avoid
+    /// coupling rag-core to concrete auth/llm tenant types).
+    pub fn with_tenant<T>(self, _tenant: T) -> Self {
         self
     }
 
     /// Access the cache store if configured.
-    pub fn cache(&self) -> Option<&avrag_cache_redis::CacheStore> {
+    pub fn cache(&self) -> Option<&dyn avrag_rag_core_ports::CachePort> {
         self.config.cache.as_deref()
     }
 
     /// Clone the cache store Arc if configured.
-    pub fn cache_arc(&self) -> Option<std::sync::Arc<avrag_cache_redis::CacheStore>> {
+    pub fn cache_arc(&self) -> Option<std::sync::Arc<dyn avrag_rag_core_ports::CachePort>> {
         self.config.cache.clone()
     }
 
@@ -67,8 +58,8 @@ impl RagRuntime {
         self.config.chat_persistence.clone()
     }
 
-    /// Access the reranker client if configured.
-    pub fn reranker(&self) -> Option<Arc<avrag_llm::RerankerClient>> {
+    /// Access the reranker if configured.
+    pub fn reranker(&self) -> Option<Arc<dyn avrag_rag_core_ports::RerankPort>> {
         self.config.reranker.clone()
     }
 

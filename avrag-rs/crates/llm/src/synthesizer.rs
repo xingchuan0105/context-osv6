@@ -1,13 +1,8 @@
 use serde::Deserialize;
 use std::collections::HashSet;
 
-#[derive(Debug, Clone)]
-pub struct SynthesisOutput {
-    pub answer_text: String,
-    pub answer_blocks: Vec<contracts::chat::AnswerBlock>,
-    pub cited_chunk_ids: Vec<String>,
-    pub llm_usage: Option<crate::LlmUsage>,
-}
+/// Shared with rag-core via ports (single definition).
+pub use avrag_rag_core_ports::SynthesisOutput;
 
 #[derive(Debug, Deserialize)]
 struct RawSynthesisOutput {

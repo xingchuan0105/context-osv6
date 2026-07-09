@@ -7,6 +7,7 @@ use contracts::documents::DocumentStatus;
 pub struct Document {
     pub id: String,
     pub org_id: String,
+    #[serde(rename = "workspace_id", alias = "notebook_id")]
     pub notebook_id: String,
     pub owner_id: String,
     pub file_name: String,
@@ -34,7 +35,12 @@ pub struct CreateDocumentRequest {
 pub struct UpdateDocumentRequest {
     #[serde(default)]
     pub filename: Option<String>,
-    #[serde(default)]
+    #[serde(
+        default,
+        rename = "workspace_id",
+        alias = "notebook_id",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub notebook_id: Option<String>,
     #[serde(default)]
     pub status: Option<DocumentStatus>,
@@ -87,7 +93,9 @@ pub struct AddUrlSourceRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceRow {
     pub id: String,
+    #[serde(rename = "workspace_id", alias = "notebook_id")]
     pub notebook_id: String,
+    #[serde(rename = "workspace_name", alias = "notebook_name")]
     pub notebook_name: String,
     pub title: String,
     pub file_name: String,

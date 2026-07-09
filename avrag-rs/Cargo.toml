@@ -10,6 +10,8 @@ members = [
   "crates/app-core",
   "crates/app-documents",
   "crates/app-chat",
+  "crates/agent-tools",
+  "crates/agent-loop",
   "crates/app-admin",
   "crates/app-billing",
   "crates/billing",

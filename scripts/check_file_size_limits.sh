@@ -15,21 +15,21 @@ SOFT_LIMIT=800
 # Production hotspots only (no frontend_rust in this gate's required set).
 # Keep this list short and real; update when modules move.
 files=(
-  avrag-rs/bins/worker/src/pipeline/document_pipeline.rs
+  avrag-rs/bins/worker/src/pipeline/document_pipeline/mod.rs
   avrag-rs/crates/rag-core/src/runtime/execute.rs
   avrag-rs/crates/llm/src/embedding.rs
-  avrag-rs/crates/app-chat/src/token_budget/mod.rs
+  avrag-rs/crates/app-chat/src/token_budget/simulate.rs
   # Wave 6 relocates (was app-chat/agents/*)
   avrag-rs/crates/agent-loop/src/react_loop/answer_contract.rs
   avrag-rs/crates/agent-tools/src/capability/registry.rs
   avrag-rs/crates/agent-tools/src/skills/registry.rs
   avrag-rs/crates/agent-tools/src/catalog.rs
-  avrag-rs/crates/app-bootstrap/src/app_state/postgres_delegates.rs
+  avrag-rs/crates/app-bootstrap/src/app_state/e2e_upload_helpers.rs
   avrag-rs/crates/app-bootstrap/src/app_state/state_methods.rs
-  avrag-rs/crates/app-bootstrap/src/app_state/bound.rs
+  avrag-rs/crates/app-bootstrap/src/app_state/bound/mod.rs
   frontend_next/lib/workspace/client.ts
-  frontend_next/components/admin/admin-i18n.ts
-  frontend_next/components/admin/admin-ops-surfaces.tsx
+  frontend_next/components/admin/i18n/copy.ts
+  frontend_next/components/admin/ops/feature-flags-surface.tsx
   contracts/src/rag_execute.rs
   contracts/src/chat.rs
   contracts/src/tool_call.rs

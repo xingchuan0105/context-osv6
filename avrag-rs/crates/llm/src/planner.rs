@@ -44,7 +44,7 @@ fn planner_cache_key(
 
 pub struct RetrievalPlanner {
     llm: LlmClient,
-    cache: Option<Arc<avrag_cache_redis::CacheStore>>,
+    cache: Option<Arc<dyn avrag_rag_core_ports::CachePort>>,
 }
 
 fn build_planner_system_prompt() -> String {
@@ -94,7 +94,7 @@ impl RetrievalPlanner {
         }
     }
 
-    pub fn with_cache(mut self, cache: Arc<avrag_cache_redis::CacheStore>) -> Self {
+    pub fn with_cache(mut self, cache: Arc<dyn avrag_rag_core_ports::CachePort>) -> Self {
         self.cache = Some(cache);
         self
     }
@@ -121,8 +121,8 @@ impl RetrievalPlanner {
         let model = &self.llm.config.model;
         let cache_key = planner_cache_key(model, query, docscope, session_context);
         if let Some(cache) = &self.cache {
-            match cache.get_json::<RagPlan>(&cache_key).await {
-                Ok(Some(plan)) => return Ok((plan, LlmUsage::zeroed())),
+            match cache.get(&cache_key).await.and_then(|raw| serde_json::from_str::<RagPlan>(&raw).ok()) {
+                Some(plan) => return Ok((plan, LlmUsage::zeroed())),
                 _ => {}
             }
         }
@@ -149,11 +149,23 @@ impl RetrievalPlanner {
 
         if let Some(cache) = &self.cache {
             let _ = cache
-                .set_json(&cache_key, &plan, PLANNER_CACHE_TTL_SECS)
+                .set(&cache_key, &serde_json::to_string(&plan).unwrap_or_default(), PLANNER_CACHE_TTL_SECS)
                 .await;
         }
 
         Ok((plan, response.usage))
+    }
+}
+
+#[async_trait::async_trait]
+impl avrag_rag_core_ports::PlannerPort for RetrievalPlanner {
+    async fn plan_with_usage(
+        &self,
+        query: &str,
+        session_context: Option<&str>,
+        docscope: Option<&common::DocScopeMetadata>,
+    ) -> anyhow::Result<(contracts::chat::RagPlan, avrag_rag_core_ports::LlmUsage)> {
+        RetrievalPlanner::plan_with_usage(self, query, session_context, docscope).await
     }
 }
 

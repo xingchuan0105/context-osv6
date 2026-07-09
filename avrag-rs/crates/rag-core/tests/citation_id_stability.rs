@@ -5,6 +5,8 @@
 //! persisted on the stored message are both derived from the same slice, and
 //! `app-chat/src/citations.rs::lookup_citation` matches by `citation_id`.
 
+#![allow(deprecated)]
+
 use std::sync::Arc;
 
 use avrag_rag_core::RagRuntime;
@@ -14,7 +16,7 @@ use avrag_retrieval_data_plane::{
 };
 use contracts::chat::{ChatRequest, Citation, RagPlan, RagPlanItem};
 use contracts::{
-    BackendTrace, Coverage, ExecutePlanResponse, RagTraceSummary, RetrievalBundle, RetrievedChunk,
+    BackendTrace, Coverage, RagTraceSummary, RetrievalBundle, RetrievedChunk,
 };
 
 /// No-op data plane: `build_rag_chat_response_from_bundle` performs no
@@ -69,28 +71,14 @@ fn make_request(query: &str, agent_type: &str) -> ChatRequest {
 }
 
 fn runtime() -> RagRuntime {
-    let embedding = Arc::new(avrag_llm::EmbeddingClient::new(
-        avrag_llm::ModelProviderConfig {
-            base_url: "http://localhost:9999".to_string(),
-            api_key: "test".to_string(),
-            model: "test-model".to_string(),
-            timeout_ms: 5000,
-            api_style: None,
-            dimensions: None,
-            enable_thinking: None,
-            enable_cache: None,
-            rpm_limit: None,
-            tpm_limit: None,
-        },
-    ));
-    let config = avrag_rag_core::RagConfig::new_for_data_plane(embedding, None);
+    let config = avrag_rag_core::test_doubles::test_rag_config();
     RagRuntime::with_data_plane(config, Arc::new(NoopDataPlane))
 }
 
-/// Build an `ExecutePlanResponse` whose bundle citations carry deliberately
-/// non-contiguous, non-1-based `citation_id`s (42 and 7). If the response
-/// builder renumbered them it would emit 1 and 2 instead.
-fn bundle_with_stable_citation_ids() -> ExecutePlanResponse {
+/// Bundle whose citations carry deliberately non-contiguous, non-1-based
+/// `citation_id`s (42 and 7). If the response builder renumbered them it would
+/// emit 1 and 2 instead.
+fn bundle_with_stable_citation_ids() -> (RetrievalBundle, BackendTrace, Coverage) {
     let chunk_a = RetrievedChunk {
         chunk_id: "chunk-a".to_string(),
         doc_id: "doc-1".to_string(),
@@ -142,40 +130,37 @@ fn bundle_with_stable_citation_ids() -> ExecutePlanResponse {
         parse_run_id: None,
     };
 
-    ExecutePlanResponse {
-        bundle: RetrievalBundle {
-            chunks: vec![chunk_a.clone(), chunk_b.clone()],
-            graph_supported_chunks: Vec::new(),
-            relation_paths: Vec::new(),
-            citations: vec![
-                citation(42, &chunk_a, "Atlas"),
-                citation(7, &chunk_b, "Runbook"),
-            ],
-            summary_chunks: Vec::new(),
+    let bundle = RetrievalBundle {
+        chunks: vec![chunk_a.clone(), chunk_b.clone()],
+        graph_supported_chunks: Vec::new(),
+        relation_paths: Vec::new(),
+        citations: vec![
+            citation(42, &chunk_a, "Atlas"),
+            citation(7, &chunk_b, "Runbook"),
+        ],
+        summary_chunks: Vec::new(),
+    };
+    let coverage = Coverage {
+        requested_doc_count: 2,
+        matched_doc_count: 2,
+        retrieved_chunk_count: 2,
+        summary_chunk_count: 0,
+        channel_coverage: Default::default(),
+    };
+    let backend_trace = BackendTrace {
+        item_trace: Vec::new(),
+        channel_trace: Vec::new(),
+        retrieval_trace: RagTraceSummary {
+            item_count: 0,
+            total_candidate_budget: 64,
+            max_rerank_docs: 16,
+            max_final_chunks: 8,
+            top_k_returned: 2,
+            summary_mode: "none".to_string(),
+            items: Vec::new(),
         },
-        coverage: Coverage {
-            requested_doc_count: 2,
-            matched_doc_count: 2,
-            retrieved_chunk_count: 2,
-            summary_chunk_count: 0,
-            channel_coverage: Default::default(),
-        },
-        degrade_trace: Vec::new(),
-        backend_trace: BackendTrace {
-            trace: None,
-            item_trace: Vec::new(),
-            channel_trace: Vec::new(),
-            retrieval_trace: RagTraceSummary {
-                item_count: 0,
-                total_candidate_budget: 64,
-                max_rerank_docs: 16,
-                max_final_chunks: 8,
-                top_k_returned: 2,
-                summary_mode: "none".to_string(),
-                items: Vec::new(),
-            },
-        },
-    }
+    };
+    (bundle, backend_trace, coverage)
 }
 
 #[tokio::test]
@@ -194,15 +179,17 @@ async fn build_rag_chat_response_from_bundle_preserves_stable_citation_ids() {
             summary: None,
         }],
     };
-    let execute_response = bundle_with_stable_citation_ids();
+    let (bundle, backend_trace, coverage) = bundle_with_stable_citation_ids();
 
     let response = runtime
         .build_rag_chat_response_from_bundle(
             &request,
             Some("session-1"),
             &rag_plan,
-            &execute_response,
-            avrag_llm::SynthesisOutput {
+            &bundle,
+            &backend_trace,
+            &coverage,
+            avrag_rag_core_ports::SynthesisOutput {
                 answer_text: "Atlas [[cite:chunk-a]] and runbook [[cite:chunk-b]]"
                     .to_string(),
                 answer_blocks: Vec::new(),

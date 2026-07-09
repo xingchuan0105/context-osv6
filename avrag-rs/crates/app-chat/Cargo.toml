@@ -8,10 +8,12 @@ version.workspace = true
 [features]
 default = []
 dev-tools = []
-eval = []
+eval = ["agent-loop/eval"]
 write-mode = []  # WIP: gates the unfinished write-mode refine-experiment bin
 
 [dependencies]
+agent-tools = { path = "../agent-tools" }
+agent-loop = { path = "../agent-loop" }
 analytics = { path = "../analytics" }
 anyhow.workspace = true
 async-trait.workspace = true

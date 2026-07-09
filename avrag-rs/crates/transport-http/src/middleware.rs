@@ -254,7 +254,7 @@ async fn share_chat_notebook_scope_from_request(
         return None;
     }
     let token = chat_request.source_token.as_deref()?;
-    let notebook_scope = state.resolve_share_chat_notebook_scope(token).await?;
+    let notebook_scope = state.share().resolve_share_chat_notebook_scope(token).await?;
     if let Some(notebook_id) = chat_request.notebook_id.as_deref()
         && uuid::Uuid::parse_str(notebook_id).ok()? != notebook_scope
     {
@@ -321,7 +321,11 @@ async fn auth_from_bearer(state: &AppState, headers: &HeaderMap) -> Option<AuthC
         return Some(ctx);
     }
 
-    let validated = state.validate_workspace_api_key(token).await.ok()??;
+    let validated = state
+        .admin_api()
+        .validate_workspace_api_key(token)
+        .await
+        .ok()??;
     let mut ctx = AuthContext::new(validated.org_id, SubjectKind::ApiKey)
         .with_actor_id(ActorId::new(validated.key_id))
         .with_rate_limit_rpm(validated.rate_limit_rpm);

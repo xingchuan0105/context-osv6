@@ -11,7 +11,9 @@ use app::agents::events::{AgentEvent, CollectingSink};
 use app::agents::runtime::{Agent, AgentRequest};
 use app::agents::unified::UnifiedAgent;
 use avrag_llm::LlmClient;
+use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
 use std::collections::BTreeMap;
+use uuid::Uuid;
 
 fn dummy_llm() -> LlmClient {
     LlmClient::new(avrag_llm::ModelProviderConfig {
@@ -40,7 +42,10 @@ fn base_request(kind: AgentKind) -> AgentRequest {
         debug: false,
         stream: false,
         language: None,
-        auth_context: serde_json::json!({"org_id": "00000000-0000-0000-0000-000000000001", "subject_kind": "User", "permissions": []}),
+        auth: AuthContext::new(
+            OrgId::from(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap()),
+            SubjectKind::User,
+        ),
         docscope_metadata: None,
         metadata: BTreeMap::new(),
         cancellation_token: None,
@@ -142,8 +147,9 @@ async fn write_through_unified_agent_returns_not_implemented() {
     assert!(result.is_err());
     let err = result.unwrap_err();
     assert!(
-        err.code().contains("write_mode_not_implemented"),
-        "expected write_mode_not_implemented, got code={} message={}",
+        err.code().contains("write_routed_outside_unified_agent")
+            || err.code().contains("write_mode_not_implemented"),
+        "expected write_routed_outside_unified_agent, got code={} message={}",
         err.code(),
         err.message()
     );

@@ -11,12 +11,12 @@ use write_core::{
     WriteResearchKind, WriteResearchPort,
 };
 
-use crate::agents::capability::CapabilityRegistry;
-use crate::agents::events::{AgentEvent, AgentEventSink};
-use crate::agents::r#loop::assembler::build_iteration_budget_hint;
-use crate::agents::r#loop::config::{load_mode_config, load_system_prompt, ModeConfig};
-use crate::agents::progressive::PromptRegistry;
-use crate::agents::runtime::AgentRequest;
+use agent_tools::capability::CapabilityRegistry;
+use agent_loop::events::{AgentEvent, AgentEventSink};
+use agent_loop::r#loop::assembler::build_iteration_budget_hint;
+use agent_loop::r#loop::config::{load_mode_config, load_system_prompt, ModeConfig};
+use agent_tools::progressive::PromptRegistry;
+use agent_loop::runtime::AgentRequest;
 use crate::agents::AgentKind;
 use crate::writer::cards;
 use crate::writer::invoker::SubagentInvoker;

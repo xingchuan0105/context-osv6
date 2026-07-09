@@ -30,7 +30,7 @@ pub(crate) async fn list_notebooks(
     if let Err(error) = authorize_org_tool(state.auth(), org_list_permission()) {
         return app_error_response(error);
     }
-    let notebooks = state.list_notebooks().await;
+    let notebooks = state.docs().list_notebooks().await;
     (
         StatusCode::OK,
         Json(contracts::notebooks::NotebookListResponse { notebooks }),
@@ -57,7 +57,7 @@ pub(crate) async fn get_notebook(
     if let Err(error) = authorize_workspace_notebook_str(state.auth(), query_permission(), &id) {
         return app_error_response(error);
     }
-    match state.get_notebook(&id).await {
+    match state.docs().get_notebook(&id).await {
         Some(nb) => {
             state
                 .record_product_event_if_available(
@@ -101,7 +101,7 @@ pub(crate) async fn create_notebook(
     if let Err(error) = authorize_org_tool(state.auth(), org_create_permission()) {
         return app_error_response(error);
     }
-    match state.create_notebook(req).await {
+    match state.docs().create_notebook(req).await {
         Ok(nb) => (
             StatusCode::CREATED,
             Json(contracts::notebooks::NotebookResponse { notebook: nb }),
@@ -135,7 +135,7 @@ pub(crate) async fn update_notebook(
             "API keys cannot modify workspace metadata",
         ));
     }
-    match state.update_notebook(&id, req).await {
+    match state.docs().update_notebook(&id, req).await {
         Ok(nb) => (
             StatusCode::OK,
             Json(contracts::notebooks::NotebookResponse { notebook: nb }),
@@ -167,7 +167,7 @@ pub(crate) async fn delete_notebook(
             "API keys cannot modify workspace metadata",
         ));
     }
-    match state.delete_notebook(&id).await {
+    match state.docs().delete_notebook(&id).await {
         Ok(_) => (
             StatusCode::OK,
             Json(serde_json::json!({"status": "deleted"})),

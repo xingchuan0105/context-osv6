@@ -48,6 +48,35 @@ impl AppState {
         &self.auth
     }
 
+    /// Domain face accessors (TN Wave 3) — prefer these over AppState business
+    /// passthrough methods. Pure identity wrappers on AppState are being removed.
+    ///
+    /// Note: `billing()` and `analytics()` already exist below with their
+    /// established return shapes (`BillingContext` / optional service Arc).
+    pub fn chat(&self) -> &app_chat::ChatContext {
+        &self.chat
+    }
+
+    pub fn documents(&self) -> &app_documents::DocumentContext {
+        &self.documents
+    }
+
+    pub fn admin(&self) -> &app_admin::AdminContext {
+        &self.admin
+    }
+
+    pub fn storage(&self) -> &app_core::StorageContext {
+        &self.storage
+    }
+
+    pub fn analytics_service_ctx(&self) -> &app_core::AnalyticsServiceCtx {
+        &self.analytics
+    }
+
+    pub fn orchestrator(&self) -> &app_chat::OrchestratorContext {
+        &self.orchestrator
+    }
+
     pub fn with_auth(&self, auth: AuthContext) -> Self {
         let mut new_state = self.clone();
         new_state.auth = auth.clone();

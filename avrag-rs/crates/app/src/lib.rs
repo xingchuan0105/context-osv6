@@ -1,8 +1,6 @@
 pub use app_chat::agents;
 pub mod adapters;
-pub mod ports;
 pub mod runtime;
-pub mod services;
 
 pub use app_core::{
     MemoryState, RetrievedContext, StorageContext, StoredDocument,

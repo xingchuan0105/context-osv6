@@ -47,7 +47,7 @@ pub fn build_unified_agent_service(
 
 pub fn make_embedding_client(
     config: &ModelProviderConfig,
-    cache: Option<Arc<avrag_cache_redis::CacheStore>>,
+    cache: Option<Arc<dyn avrag_rag_core_ports::CachePort>>,
     usage_observer: Option<(Arc<dyn UsageObserver>, TenantContext)>,
 ) -> Option<Arc<EmbeddingClient>> {
     config.to_llm_config().map(|c| {
@@ -64,7 +64,7 @@ pub fn make_embedding_client(
 
 pub fn make_planner(
     config: &ModelProviderConfig,
-    cache: Option<Arc<avrag_cache_redis::CacheStore>>,
+    cache: Option<Arc<dyn avrag_rag_core_ports::CachePort>>,
 ) -> Option<Arc<RetrievalPlanner>> {
     config.to_llm_config().map(|c| {
         let planner = RetrievalPlanner::new(c);

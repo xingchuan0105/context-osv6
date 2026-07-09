@@ -25,7 +25,7 @@ pub(crate) async fn create_workspace(
         .unwrap_or_default()
         .trim()
         .to_string();
-    let notebook = state
+    let notebook = state.docs()
         .create_notebook(CreateNotebookRequest { name, description })
         .await?;
     Ok(catalog::success_result(
@@ -45,7 +45,7 @@ pub(crate) async fn list_workspaces(
     _arguments: &Value,
 ) -> Result<Value, AppError> {
     authorize_org_tool(state.auth(), org_list_permission())?;
-    let notebooks = state.list_notebooks().await;
+    let notebooks = state.docs().list_notebooks().await;
     Ok(catalog::success_result(
         "org.list_workspaces",
         None,

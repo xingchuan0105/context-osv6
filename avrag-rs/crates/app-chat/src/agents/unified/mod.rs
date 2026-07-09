@@ -16,13 +16,13 @@
 //! surface does not own. Treat "Unified" as the ReAct family of modes;
 //! Write is a sibling product mode with its own service boundary.
 //!
-//! Static strategy metadata lives in `crate::agents::capability::schemas` for API
+//! Static strategy metadata lives in `agent_tools::capability::schemas` for API
 //! discovery; execution no longer uses the removed v5 strategy state machines.
 
-use crate::agents::audit;
-use crate::agents::events::{AgentEvent, AgentEventSink};
+use agent_loop::audit;
+use agent_loop::events::{AgentEvent, AgentEventSink};
 
-use crate::agents::runtime::{Agent, AgentRequest, AgentRunResult};
+use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult};
 
 use app_core::ChatPersistencePort;
 use avrag_llm::{LlmClient, TenantContext, UsageObserver};
@@ -32,8 +32,8 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 pub mod atomic_tools;
-pub mod helpers;
-pub mod weather;
+pub use agent_loop::helpers;
+pub use agent_tools::weather;
 
 /// Unified agent that dispatches to Chat / RAG / Search based on `request.kind`.
 pub struct UnifiedAgent {
@@ -112,18 +112,14 @@ impl Agent for UnifiedAgent {
             .await;
 
         // Emit audit record for routing decision.
-        let org_id = request
-            .auth_context
-            .get("org_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown");
-        let actor_id = request
-            .auth_context
-            .get("actor_id")
-            .and_then(|v| v.as_str());
+        let org_id = request.auth.org_id().to_string();
+        let actor_id_owned = request
+            .auth
+            .actor_id()
+            .map(|id| id.into_uuid().to_string());
         let audit_record = audit::routing_decision_record(
-            org_id,
-            actor_id,
+            &org_id,
+            actor_id_owned.as_deref(),
             &trace_id,
             &mode_id,
             "user_explicit",
@@ -137,17 +133,11 @@ impl Agent for UnifiedAgent {
             .await;
 
         let tenant = TenantContext {
-            org_id: request
-                .auth_context
-                .get("org_id")
-                .and_then(|v| v.as_str())
-                .and_then(|s| Uuid::parse_str(s).ok())
-                .unwrap_or_else(Uuid::nil),
+            org_id: request.auth.org_id().into_uuid(),
             user_id: request
-                .auth_context
-                .get("actor_id")
-                .and_then(|v| v.as_str())
-                .and_then(|s| Uuid::parse_str(s).ok())
+                .auth
+                .actor_id()
+                .map(|id| id.into_uuid())
                 .unwrap_or_else(Uuid::nil),
         };
 
@@ -260,12 +250,12 @@ impl UnifiedAgent {
         &self,
         mode_id: &str,
         llm_client: Option<LlmClient>,
-        configure_loop: impl FnOnce(crate::agents::r#loop::ReActLoop) -> crate::agents::r#loop::ReActLoop,
+        configure_loop: impl FnOnce(agent_loop::r#loop::ReActLoop) -> agent_loop::r#loop::ReActLoop,
         request: AgentRequest,
         sink: &dyn AgentEventSink,
         tenant: &TenantContext,
     ) -> Result<AgentRunResult, AppError> {
-        let mode = match crate::agents::r#loop::config::load_mode_config(mode_id) {
+        let mode = match agent_loop::r#loop::config::load_mode_config(mode_id) {
             Ok(m) => m,
             Err(e) => {
                 let _ = sink
@@ -300,9 +290,9 @@ impl UnifiedAgent {
             }
         };
 
-        let skill_registry = Arc::new(crate::agents::capability::CapabilityRegistry::standard());
+        let skill_registry = Arc::new(agent_tools::capability::CapabilityRegistry::standard());
         let loop_agent = configure_loop(
-            crate::agents::r#loop::ReActLoop::new(llm, skill_registry)
+            agent_loop::r#loop::ReActLoop::new(llm, skill_registry)
                 .with_chat_persistence(self.chat_persistence.clone()),
         );
         let mut result = loop_agent.run(&mode, request, sink).await?;

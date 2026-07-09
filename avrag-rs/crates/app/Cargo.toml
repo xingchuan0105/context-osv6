@@ -15,6 +15,7 @@ app-admin = { path = "../app-admin" }
 app-billing = { path = "../app-billing" }
 app-bootstrap = { path = "../app-bootstrap", features = ["test-support"] }
 app-chat = { path = "../app-chat" }
+agent-loop = { path = "../agent-loop" }
 app-core = { path = "../app-core" }
 app-documents = { path = "../app-documents" }
 analytics = { path = "../analytics" }

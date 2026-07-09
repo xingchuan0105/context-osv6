@@ -13,6 +13,8 @@ avrag-licensing = { path = "../licensing" }
 avrag-share = { path = "../share" }
 app-bootstrap = { path = "../app-bootstrap" }
 app-chat = { path = "../app-chat" }
+agent-loop = { path = "../agent-loop" }
+agent-tools = { path = "../agent-tools" }
 app-core = { path = "../app-core" }
 telemetry = { path = "../telemetry" }
 async-stream.workspace = true

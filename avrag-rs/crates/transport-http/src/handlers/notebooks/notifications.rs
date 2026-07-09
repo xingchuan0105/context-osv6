@@ -20,7 +20,7 @@ pub(crate) async fn list_notifications_handler(
     ) {
         return app_error_response(error);
     }
-    match state.list_notifications(100, 0).await {
+    match state.admin_api().list_notifications(100, 0).await {
         Ok(notifications) => (
             StatusCode::OK,
             Json(common::NotificationsResponse { notifications }),
@@ -40,7 +40,7 @@ pub(crate) async fn mark_notification_read_handler(
     ) {
         return app_error_response(error);
     }
-    match state.mark_notification_read(&notification_id).await {
+    match state.admin_api().mark_notification_read(&notification_id).await {
         Ok(_) => (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response(),
         Err(error) => app_error_response(error),
     }

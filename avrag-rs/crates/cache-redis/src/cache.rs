@@ -1,3 +1,5 @@
+use async_trait::async_trait;
+use avrag_rag_core_ports::CachePort;
 use redis::AsyncCommands;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -67,5 +69,29 @@ impl CacheStore {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
         let _: () = conn.del(key).await?;
         Ok(())
+    }
+}
+
+#[async_trait]
+impl CachePort for CacheStore {
+    async fn get(&self, key: &str) -> Option<String> {
+        let mut conn = self.client.get_multiplexed_async_connection().await.ok()?;
+        conn.get(key).await.ok().flatten()
+    }
+
+    async fn set(&self, key: &str, value: &str, ttl_secs: u64) -> Result<(), String> {
+        let mut conn = self
+            .client
+            .get_multiplexed_async_connection()
+            .await
+            .map_err(|e| e.to_string())?;
+        redis::cmd("SET")
+            .arg(key)
+            .arg(value)
+            .arg("EX")
+            .arg(ttl_secs)
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| e.to_string())
     }
 }

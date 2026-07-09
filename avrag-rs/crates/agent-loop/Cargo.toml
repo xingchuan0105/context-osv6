@@ -1,0 +1,41 @@
+[package]
+name = "agent-loop"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+description = "ReAct agent loop, AgentRequest, and event types (TN Wave 6)"
+
+[features]
+default = []
+eval = []
+
+[dependencies]
+agent-tools = { path = "../agent-tools" }
+anyhow.workspace = true
+async-trait.workspace = true
+app-core = { path = "../app-core" }
+app-documents = { path = "../app-documents" }
+avrag-chatmemory = { path = "../chatmemory" }
+avrag-code-interpreter = { path = "../code-interpreter" }
+avrag-guardrails = { path = "../guardrails" }
+avrag-llm = { path = "../llm" }
+avrag-rag-core = { path = "../rag-core" }
+avrag-retrieval-data-plane = { path = "../retrieval-data-plane" }
+avrag-search = { path = "../search" }
+chrono.workspace = true
+common = { path = "../common" }
+contracts = { path = "../../../contracts" }
+futures = "0.3"
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml = "0.9"
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

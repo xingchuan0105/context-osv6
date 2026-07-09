@@ -14,6 +14,12 @@ type ToolResultCardProps = {
   result: ToolResult;
 };
 
+type SearchResultRow = {
+  title?: unknown;
+  url?: unknown;
+  snippet?: unknown;
+};
+
 const TOOL_RENDER_HINTS: Record<string, string> = {
   calculator: "calculator",
   code_interpreter: "code",
@@ -216,7 +222,9 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
     }
 
     if (renderHint === "search") {
-      const results = Array.isArray(data.results) ? data.results : [];
+      const results: SearchResultRow[] = Array.isArray(data.results)
+        ? (data.results as SearchResultRow[])
+        : [];
       const answer = typeof data.synthesized_answer === "string" ? data.synthesized_answer : "";
 
       return (
@@ -235,7 +243,7 @@ export function ToolResultCard({ locale, result }: ToolResultCardProps) {
                 {locale === "zh-CN" ? "搜索结果" : "Search Results"}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                {results.map((r: any, i: number) => {
+                {results.map((r: SearchResultRow, i: number) => {
                   const safeUrl = toSafeHttpUrl(typeof r.url === "string" ? r.url : null);
                   return (
                   <div

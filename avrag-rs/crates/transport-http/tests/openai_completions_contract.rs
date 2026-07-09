@@ -12,11 +12,9 @@
 //! 401/403 boundaries.
 
 use app_bootstrap::AppState;
-use app_chat::agents::{
-    events::{AgentEvent, AgentEventSink},
-    runtime::{Agent, AgentRequest, AgentRunResult, AgentRunUsage},
-    service::UnifiedAgentService,
-};
+use agent_loop::events::{AgentEvent, AgentEventSink};
+use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult, AgentRunUsage};
+use app_chat::agents::service::UnifiedAgentService;
 use app_core::AppConfig;
 use axum::{
     body::{Body, to_bytes},
@@ -89,14 +87,14 @@ fn test_app_state() -> AppState {
 /// `(app, notebook_id, bearer)`.
 async fn create_workspace_with_key(permissions: Vec<String>) -> (axum::Router, String, String) {
     let state = test_app_state();
-    let notebook = state
+    let notebook = state.docs()
         .create_notebook(CreateNotebookRequest {
             name: "openai-contract".to_string(),
             description: String::new(),
         })
         .await
         .expect("notebook should create");
-    let key = state
+    let key = state.admin_api()
         .create_api_key(
             &notebook.id,
             CreateApiKeyRequest {

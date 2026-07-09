@@ -33,38 +33,38 @@ pub(crate) fn router() -> Router<AppState> {
 async fn get_plans(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Json<ApiResponse<serde_json::Value>> {
-    Json(state.billing_get_plans().await)
+    Json(state.billing_api().get_plans().await)
 }
 
 async fn get_subscription(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Json<ApiResponse<avrag_billing::SubscriptionResponse>> {
-    Json(state.billing_get_subscription().await)
+    Json(state.billing_api().get_subscription().await)
 }
 
 async fn get_usage(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Json<ApiResponse<avrag_billing::UsageResponse>> {
-    Json(state.billing_get_usage().await)
+    Json(state.billing_api().get_usage().await)
 }
 
 async fn get_usage_window(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Json<ApiResponse<avrag_billing::UsageWindowResponse>> {
-    Json(state.billing_get_usage_window().await)
+    Json(state.billing_api().get_usage_window().await)
 }
 
 async fn create_checkout(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(body): Json<avrag_billing::CreateCheckoutRequest>,
 ) -> Json<ApiResponse<avrag_billing::CheckoutResponse>> {
-    Json(state.billing_create_checkout(body).await)
+    Json(state.billing_api().create_checkout(body).await)
 }
 
 async fn create_portal(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Json<ApiResponse<avrag_billing::PortalResponse>> {
-    Json(state.billing_create_portal().await)
+    Json(state.billing_api().create_portal().await)
 }
 
 #[derive(Deserialize)]
@@ -78,7 +78,8 @@ async fn get_usage_history(
 ) -> Json<ApiResponse<avrag_billing::UsageHistoryResponse>> {
     Json(
         state
-            .billing_get_usage_history(params.days.unwrap_or(7))
+            .billing_api()
+            .get_usage_history(params.days.unwrap_or(7))
             .await,
     )
 }
@@ -86,19 +87,19 @@ async fn get_usage_history(
 async fn get_usage_forecast(
     Extension(RequestState(state)): Extension<RequestState>,
 ) -> Json<ApiResponse<avrag_billing::UsageForecastResponse>> {
-    Json(state.billing_get_usage_forecast().await)
+    Json(state.billing_api().get_usage_forecast().await)
 }
 
 async fn create_usage_export(
     Extension(RequestState(state)): Extension<RequestState>,
     Json(body): Json<avrag_billing::CreateUsageExportRequest>,
 ) -> Json<ApiResponse<avrag_billing::UsageExportAccepted>> {
-    Json(state.billing_create_usage_export(body).await)
+    Json(state.billing_api().create_usage_export(body).await)
 }
 
 async fn get_usage_export(
     Extension(RequestState(state)): Extension<RequestState>,
     Path(export_id): Path<Uuid>,
 ) -> Json<ApiResponse<avrag_billing::UsageExportStatusResponse>> {
-    Json(state.billing_get_usage_export(export_id).await)
+    Json(state.billing_api().get_usage_export(export_id).await)
 }

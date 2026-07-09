@@ -37,7 +37,7 @@ pub(crate) async fn create_upload(state: &AppState, arguments: &Value) -> Result
         ));
     }
 
-    let upload = state
+    let upload = state.docs()
         .create_document_upload(
             &notebook_id_str,
             CreateDocumentRequest {
@@ -81,7 +81,7 @@ pub(crate) async fn complete_upload(
     }
     ensure_document_in_notebook(state, &document_id, &notebook_id_str).await?;
 
-    let result = state.complete_document_upload(&document_id).await?;
+    let result = state.docs().complete_document_upload(&document_id).await?;
     Ok(catalog::success_result(
         "workspace.complete_upload",
         Some(&notebook_id_str),
@@ -110,7 +110,7 @@ pub(crate) async fn document_status(
         ));
     }
 
-    let document = state
+    let document = state.docs()
         .list_documents(None, Some(&document_id))
         .await
         .into_iter()
@@ -152,7 +152,7 @@ pub(crate) async fn add_url_source(state: &AppState, arguments: &Value) -> Resul
         return Err(AppError::validation("url_required", "url is required"));
     }
 
-    let source = state
+    let source = state.docs()
         .add_url_source(&notebook_id_str, AddUrlSourceRequest { url })
         .await?;
     Ok(catalog::success_result(
@@ -170,7 +170,7 @@ pub(crate) async fn list_sources(state: &AppState, arguments: &Value) -> Result<
     let notebook_id = require_notebook_id_arg(arguments)?;
     authorize_workspace_tool(state.auth(), query_permission(), notebook_id)?;
     let notebook_id_str = notebook_id.to_string();
-    let sources = state.list_sources(Some(&notebook_id_str)).await;
+    let sources = state.docs().list_sources(Some(&notebook_id_str)).await;
     Ok(catalog::success_result(
         "workspace.list_sources",
         Some(&notebook_id_str),

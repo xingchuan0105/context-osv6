@@ -1,4 +1,4 @@
-use crate::agents::runtime::{Agent, AgentRequest, AgentRunResult};
+use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult};
 use common::AppError;
 
 /// Thin wrapper around any [`Agent`] implementation.
@@ -18,7 +18,7 @@ impl UnifiedAgentService {
     pub async fn run(
         &self,
         request: AgentRequest,
-        sink: &dyn crate::agents::events::AgentEventSink,
+        sink: &dyn agent_loop::events::AgentEventSink,
     ) -> Result<AgentRunResult, AppError> {
         self.agent.run(request, sink).await
     }
@@ -27,7 +27,7 @@ impl UnifiedAgentService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agents::events::{AgentEvent, CollectingSink};
+    use agent_loop::events::{AgentEvent, CollectingSink};
     use async_trait::async_trait;
 
     struct EchoAgent(&'static str);
@@ -37,7 +37,7 @@ mod tests {
         async fn run(
             &self,
             request: AgentRequest,
-            sink: &dyn crate::agents::events::AgentEventSink,
+            sink: &dyn agent_loop::events::AgentEventSink,
         ) -> Result<AgentRunResult, AppError> {
             sink.emit(AgentEvent::Activity {
                 stage: self.0.to_string(),
@@ -76,7 +76,7 @@ mod tests {
             debug: false,
             stream: false,
             language: None,
-            auth_context: serde_json::json!({}),
+            auth: agent_loop::runtime::stub_agent_auth(),
             docscope_metadata: None,
             metadata: Default::default(),
             cancellation_token: None,
@@ -105,7 +105,7 @@ mod tests {
             debug: false,
             stream: false,
             language: None,
-            auth_context: serde_json::json!({}),
+            auth: agent_loop::runtime::stub_agent_auth(),
             docscope_metadata: None,
             metadata: Default::default(),
             cancellation_token: None,
@@ -134,7 +134,7 @@ mod tests {
             debug: false,
             stream: false,
             language: None,
-            auth_context: serde_json::json!({}),
+            auth: agent_loop::runtime::stub_agent_auth(),
             docscope_metadata: None,
             metadata: Default::default(),
             cancellation_token: None,

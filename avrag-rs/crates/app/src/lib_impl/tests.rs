@@ -122,9 +122,9 @@ mod tests {
 
     #[test]
     fn build_rag_session_context_returns_none_for_empty_messages() {
-        assert!(AppState::build_rag_session_context(Vec::new()).is_none());
+        assert!(app_chat::ChatContext::build_rag_session_context(Vec::new()).is_none());
 
-        let context = AppState::build_rag_session_context(vec![ChatMessage {
+        let context = app_chat::ChatContext::build_rag_session_context(vec![ChatMessage {
             id: 1,
             session_id: "s1".to_string(),
             role: "user".to_string(),
@@ -215,14 +215,14 @@ mod tests {
     #[tokio::test]
     async fn memory_delete_document_soft_deletes_and_hides_document() {
         let state = AppState::new(AppConfig::default());
-        let notebook = state
+        let notebook = state.docs()
             .create_notebook(CreateNotebookRequest {
                 name: "soft delete".to_string(),
                 description: String::new(),
             })
             .await
             .unwrap();
-        let upload = state
+        let upload = state.docs()
             .create_document_upload(
                 &notebook.id,
                 CreateDocumentRequest {
@@ -233,22 +233,22 @@ mod tests {
             )
             .await
             .unwrap();
-        state
+        state.docs()
             .put_uploaded_document(&upload.document_id, b"hello world".to_vec())
             .await
             .unwrap();
 
-        let response = state.delete_document(&upload.document_id).await.unwrap();
+        let response = state.docs().delete_document(&upload.document_id).await.unwrap();
 
         assert_eq!(response.status, "deleting");
         assert!(
-            state
+            state.docs()
                 .list_documents(Some(&notebook.id), Some(&upload.document_id))
                 .await
                 .is_empty()
         );
         assert_eq!(
-            state
+            state.docs()
                 .get_document_content(&upload.document_id)
                 .await
                 .unwrap_err()
@@ -260,14 +260,14 @@ mod tests {
     #[tokio::test]
     async fn memory_update_document_rejects_deletion_workflow_statuses() {
         let state = AppState::new(AppConfig::default());
-        let notebook = state
+        let notebook = state.docs()
             .create_notebook(CreateNotebookRequest {
                 name: "status guard".to_string(),
                 description: String::new(),
             })
             .await
             .unwrap();
-        let upload = state
+        let upload = state.docs()
             .create_document_upload(
                 &notebook.id,
                 CreateDocumentRequest {
@@ -279,7 +279,7 @@ mod tests {
             .await
             .unwrap();
 
-        let error = state
+        let error = state.docs()
             .update_document(
                 &upload.document_id,
                 UpdateDocumentRequest {
@@ -293,7 +293,7 @@ mod tests {
 
         assert_eq!(error.code(), "unsupported_document_status_update");
         assert_eq!(
-            state
+            state.docs()
                 .transition_document_status(&upload.document_id, DocumentStatus::Deleted)
                 .await
                 .unwrap_err()
@@ -301,7 +301,7 @@ mod tests {
             "unsupported_document_status_transition"
         );
         assert_eq!(
-            state
+            state.docs()
                 .list_documents(Some(&notebook.id), Some(&upload.document_id))
                 .await
                 .len(),
@@ -316,15 +316,17 @@ mod tests {
         let state = AppState::new(config);
 
         state
+            .prefs()
             .remember_explicit_agent_preference("remember that I prefer concise answers")
             .await
             .unwrap();
         state
+            .prefs()
             .remember_explicit_agent_preference("This answer contains a factual claim.")
             .await
             .unwrap();
 
-        let preferences = state.current_user_preferences().await.unwrap();
+        let preferences = state.prefs().current().await.unwrap();
         assert_eq!(preferences.agent_memory.active.len(), 1);
         assert_eq!(
             preferences.agent_memory.active[0].text,
@@ -335,38 +337,38 @@ mod tests {
     struct ScriptedAgent;
 
     #[async_trait::async_trait]
-    impl crate::agents::runtime::Agent for ScriptedAgent {
+    impl agent_loop::runtime::Agent for ScriptedAgent {
         async fn run(
             &self,
-            _request: crate::agents::runtime::AgentRequest,
-            sink: &dyn crate::agents::events::AgentEventSink,
-        ) -> Result<crate::agents::runtime::AgentRunResult, common::AppError> {
+            _request: agent_loop::runtime::AgentRequest,
+            sink: &dyn agent_loop::events::AgentEventSink,
+        ) -> Result<agent_loop::runtime::AgentRunResult, common::AppError> {
             let _ = sink
-                .emit(crate::agents::events::AgentEvent::Activity {
+                .emit(agent_loop::events::AgentEvent::Activity {
                     stage: "chat".to_string(),
                     message: "Scripted chat".to_string(),
                 })
                 .await;
             let _ = sink
-                .emit(crate::agents::events::AgentEvent::MessageDelta {
+                .emit(agent_loop::events::AgentEvent::MessageDelta {
                     text: "agent ".to_string(),
                 })
                 .await;
             let _ = sink
-                .emit(crate::agents::events::AgentEvent::MessageDelta {
+                .emit(agent_loop::events::AgentEvent::MessageDelta {
                     text: "answer".to_string(),
                 })
                 .await;
             let _ = sink
-                .emit(crate::agents::events::AgentEvent::Done {
+                .emit(agent_loop::events::AgentEvent::Done {
                     final_message: Some("agent answer".to_string()),
                     usage: None,
                 })
                 .await;
 
-            Ok(crate::agents::runtime::AgentRunResult {
+            Ok(agent_loop::runtime::AgentRunResult {
                 answer: "agent answer".to_string(),
-                usage: Some(crate::agents::runtime::AgentRunUsage {
+                usage: Some(agent_loop::runtime::AgentRunUsage {
                     provider: "test".to_string(),
                     model: "scripted".to_string(),
                     prompt_tokens: 1,
@@ -383,20 +385,20 @@ mod tests {
     struct BufferedOnlyAgent;
 
     #[async_trait::async_trait]
-    impl crate::agents::runtime::Agent for BufferedOnlyAgent {
+    impl agent_loop::runtime::Agent for BufferedOnlyAgent {
         async fn run(
             &self,
-            _request: crate::agents::runtime::AgentRequest,
-            sink: &dyn crate::agents::events::AgentEventSink,
-        ) -> Result<crate::agents::runtime::AgentRunResult, common::AppError> {
+            _request: agent_loop::runtime::AgentRequest,
+            sink: &dyn agent_loop::events::AgentEventSink,
+        ) -> Result<agent_loop::runtime::AgentRunResult, common::AppError> {
             let _ = sink
-                .emit(crate::agents::events::AgentEvent::Activity {
+                .emit(agent_loop::events::AgentEvent::Activity {
                     stage: "chat".to_string(),
                     message: "Buffered chat".to_string(),
                 })
                 .await;
 
-            Ok(crate::agents::runtime::AgentRunResult {
+            Ok(agent_loop::runtime::AgentRunResult {
                 answer: "buffered answer".to_string(),
                 ..Default::default()
             })
@@ -411,7 +413,7 @@ mod tests {
         state.set_agent_service(crate::agents::service::UnifiedAgentService::new(Box::new(
             ScriptedAgent,
         )));
-        let notebook = state
+        let notebook = state.docs()
             .create_notebook(CreateNotebookRequest {
                 name: "chat".to_string(),
                 description: String::new(),
@@ -420,7 +422,7 @@ mod tests {
             .unwrap();
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
-        state
+        state.chat()
             .execute_chat_stream(
                 contracts::chat::ChatRequest {
                     query: "hello".to_string(),
@@ -480,7 +482,7 @@ mod tests {
         state.set_agent_service(crate::agents::service::UnifiedAgentService::new(Box::new(
             BufferedOnlyAgent,
         )));
-        let notebook = state
+        let notebook = state.docs()
             .create_notebook(CreateNotebookRequest {
                 name: "chat".to_string(),
                 description: String::new(),
@@ -489,7 +491,7 @@ mod tests {
             .unwrap();
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
-        state
+        state.chat()
             .execute_chat_stream(
                 contracts::chat::ChatRequest {
                     query: "hello".to_string(),
@@ -542,7 +544,7 @@ mod tests {
         state.set_agent_service(crate::agents::service::UnifiedAgentService::new(Box::new(
             BufferedOnlyAgent,
         )));
-        let notebook = state
+        let notebook = state.docs()
             .create_notebook(CreateNotebookRequest {
                 name: "search".to_string(),
                 description: String::new(),
@@ -551,7 +553,7 @@ mod tests {
             .unwrap();
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
-        state
+        state.chat()
             .execute_chat_stream(
                 contracts::chat::ChatRequest {
                     query: "hello".to_string(),
@@ -679,14 +681,14 @@ mod tests {
         filename: &str,
         file_size: u64,
     ) -> (Notebook, CreateDocumentUploadResponse) {
-        let notebook = state
+        let notebook = state.docs()
             .create_notebook(CreateNotebookRequest {
                 name: format!("upload validation {filename}"),
                 description: String::new(),
             })
             .await
             .unwrap();
-        let upload = state
+        let upload = state.docs()
             .create_document_upload(
                 &notebook.id,
                 CreateDocumentRequest {
@@ -705,7 +707,7 @@ mod tests {
         notebook_id: &str,
         document_id: &str,
     ) -> DocumentStatus {
-        state
+        state.docs()
             .list_documents(Some(notebook_id), Some(document_id))
             .await
             .into_iter()
@@ -732,7 +734,7 @@ mod tests {
         };
         let (notebook, upload) = create_upload(&state, "missing-object.txt", 11).await;
 
-        let error = state
+        let error = state.docs()
             .complete_document_upload(&upload.document_id)
             .await
             .unwrap_err();
@@ -753,12 +755,12 @@ mod tests {
         };
         let body = b"hello world".to_vec();
         let (notebook, upload) = create_upload(&state, "size-mismatch.txt", 12).await;
-        state
+        state.docs()
             .put_uploaded_document(&upload.document_id, body)
             .await
             .unwrap();
 
-        let error = state
+        let error = state.docs()
             .complete_document_upload(&upload.document_id)
             .await
             .unwrap_err();
@@ -779,12 +781,12 @@ mod tests {
         };
         let body = b"hello world".to_vec();
         let (notebook, upload) = create_upload(&state, "valid-upload.txt", body.len() as u64).await;
-        state
+        state.docs()
             .put_uploaded_document(&upload.document_id, body)
             .await
             .unwrap();
 
-        let response = state
+        let response = state.docs()
             .complete_document_upload(&upload.document_id)
             .await
             .unwrap();

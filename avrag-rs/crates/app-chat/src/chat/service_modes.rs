@@ -55,7 +55,7 @@ pub(crate) struct BuildChatExecutionParams<'a> {
 }
 
 pub(crate) fn build_chat_execution_from_result(
-    agent_result: &crate::agents::runtime::AgentRunResult,
+    agent_result: &agent_loop::runtime::AgentRunResult,
     params: BuildChatExecutionParams<'_>,
 ) -> ChatExecution {
     let answer = agent_result.answer.clone();

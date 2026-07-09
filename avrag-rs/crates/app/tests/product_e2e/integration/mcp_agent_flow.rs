@@ -65,7 +65,7 @@ async fn mcp_agent_flow_create_upload_complete_query_returns_citations() {
         .as_ref()
         .expect("app_state present in integration profile")
         .clone();
-    let key = state
+    let key = state.admin_api()
         .create_api_key(
             &notebook.id,
             CreateApiKeyRequest {

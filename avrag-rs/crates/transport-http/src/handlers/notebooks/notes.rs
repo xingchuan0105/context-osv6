@@ -117,10 +117,10 @@ pub(super) async fn load_notebook_notes(
     state: &AppState,
     notebook_id: &str,
 ) -> Result<Vec<contracts::notebooks::NotebookNote>, AppError> {
-    let mut preferences = state.current_user_preferences().await?;
+    let mut preferences = state.prefs().current().await?;
     let migrated = migrate_workspace_draft_to_note(&mut preferences, notebook_id);
     if migrated {
-        state.save_current_user_preferences(&preferences).await?;
+        state.prefs().save_current(&preferences).await?;
     }
 
     let mut notes = preferences
@@ -162,7 +162,7 @@ pub(crate) async fn list_notebook_notes_handler(
     if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
         return response;
     }
-    if state.get_notebook(&notebook_id).await.is_none() {
+    if state.docs().get_notebook(&notebook_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
 
@@ -189,7 +189,7 @@ pub(crate) async fn get_notebook_note_handler(
     if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
         return response;
     }
-    if state.get_notebook(&notebook_id).await.is_none() {
+    if state.docs().get_notebook(&notebook_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
 
@@ -220,11 +220,11 @@ pub(crate) async fn create_notebook_note_handler(
     if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
         return response;
     }
-    if state.get_notebook(&notebook_id).await.is_none() {
+    if state.docs().get_notebook(&notebook_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
 
-    let mut preferences = match state.current_user_preferences().await {
+    let mut preferences = match state.prefs().current().await {
         Ok(preferences) => preferences,
         Err(error) => return app_error_response(error),
     };
@@ -241,7 +241,7 @@ pub(crate) async fn create_notebook_note_handler(
     };
     preferences.dashboard.notebook_notes.push(note.clone());
 
-    match state.save_current_user_preferences(&preferences).await {
+    match state.prefs().save_current(&preferences).await {
         Ok(_) => (
             StatusCode::CREATED,
             Json(contracts::notebooks::NotebookNoteResponse {
@@ -267,11 +267,11 @@ pub(crate) async fn update_notebook_note_handler(
     if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
         return response;
     }
-    if state.get_notebook(&notebook_id).await.is_none() {
+    if state.docs().get_notebook(&notebook_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
 
-    let mut preferences = match state.current_user_preferences().await {
+    let mut preferences = match state.prefs().current().await {
         Ok(preferences) => preferences,
         Err(error) => return app_error_response(error),
     };
@@ -283,7 +283,7 @@ pub(crate) async fn update_notebook_note_handler(
         .find(|note| note.notebook_id == notebook_id && note.note_id == note_id)
     else {
         if migrated {
-            let _ = state.save_current_user_preferences(&preferences).await;
+            let _ = state.prefs().save_current(&preferences).await;
         }
         return error_response(StatusCode::NOT_FOUND, "not_found", "Note not found");
     };
@@ -297,7 +297,7 @@ pub(crate) async fn update_notebook_note_handler(
     note.updated_at = chrono::Utc::now().to_rfc3339();
     let response = notebook_note_from_pref(note);
 
-    match state.save_current_user_preferences(&preferences).await {
+    match state.prefs().save_current(&preferences).await {
         Ok(_) => (
             StatusCode::OK,
             Json(contracts::notebooks::NotebookNoteResponse { note: response }),
@@ -320,11 +320,11 @@ pub(crate) async fn delete_notebook_note_handler(
     if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
         return response;
     }
-    if state.get_notebook(&notebook_id).await.is_none() {
+    if state.docs().get_notebook(&notebook_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
 
-    let mut preferences = match state.current_user_preferences().await {
+    let mut preferences = match state.prefs().current().await {
         Ok(preferences) => preferences,
         Err(error) => return app_error_response(error),
     };
@@ -337,7 +337,7 @@ pub(crate) async fn delete_notebook_note_handler(
         return error_response(StatusCode::NOT_FOUND, "not_found", "Note not found");
     }
 
-    match state.save_current_user_preferences(&preferences).await {
+    match state.prefs().save_current(&preferences).await {
         Ok(_) => (StatusCode::OK, Json(contracts::auth::EmptyResponse {})).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -356,11 +356,11 @@ pub(crate) async fn promote_notebook_note_handler(
     if let Err(response) = require_notebook_notes_access(&state, &notebook_id).await {
         return response;
     }
-    if state.get_notebook(&notebook_id).await.is_none() {
+    if state.docs().get_notebook(&notebook_id).await.is_none() {
         return error_response(StatusCode::NOT_FOUND, "not_found", "Notebook not found");
     }
 
-    let mut preferences = match state.current_user_preferences().await {
+    let mut preferences = match state.prefs().current().await {
         Ok(preferences) => preferences,
         Err(error) => return app_error_response(error),
     };
@@ -372,7 +372,7 @@ pub(crate) async fn promote_notebook_note_handler(
         .find(|note| note.notebook_id == notebook_id && note.note_id == note_id)
     else {
         if migrated {
-            let _ = state.save_current_user_preferences(&preferences).await;
+            let _ = state.prefs().save_current(&preferences).await;
         }
         return error_response(StatusCode::NOT_FOUND, "not_found", "Note not found");
     };
@@ -387,7 +387,7 @@ pub(crate) async fn promote_notebook_note_handler(
 
     let markdown = format!("# {}\n\n{}\n", note.title, note.content);
     let filename = format!("{}.md", slugify_note_filename(&note.title));
-    let upload = match state
+    let upload = match state.docs()
         .create_document_upload(
             &notebook_id,
             CreateDocumentRequest {
@@ -402,13 +402,13 @@ pub(crate) async fn promote_notebook_note_handler(
         Err(error) => return app_error_response(error),
     };
 
-    if let Err(error) = state
+    if let Err(error) = state.docs()
         .put_uploaded_document(&upload.document_id, markdown.into_bytes())
         .await
     {
         return app_error_response(error);
     }
-    if let Err(error) = state.complete_document_upload(&upload.document_id).await {
+    if let Err(error) = state.docs().complete_document_upload(&upload.document_id).await {
         return app_error_response(error);
     }
 
@@ -418,7 +418,7 @@ pub(crate) async fn promote_notebook_note_handler(
     note.updated_at = chrono::Utc::now().to_rfc3339();
     let response_note = notebook_note_from_pref(note);
 
-    match state.save_current_user_preferences(&preferences).await {
+    match state.prefs().save_current(&preferences).await {
         Ok(_) => (
             StatusCode::OK,
             Json(contracts::notebooks::PromoteNotebookNoteResponse {

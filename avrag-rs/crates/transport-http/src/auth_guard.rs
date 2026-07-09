@@ -155,7 +155,7 @@ pub(crate) async fn authorize_session_access(
     state: &AppState,
     session_id: &str,
 ) -> Result<contracts::notebooks::ChatSession, AppError> {
-    let session = state
+    let session = state.chat()
         .get_session(session_id)
         .await
         .ok_or_else(|| AppError::not_found("session_not_found", "session not found"))?;
@@ -168,7 +168,7 @@ pub(crate) async fn ensure_document_in_notebook(
     document_id: &str,
     notebook_id: &str,
 ) -> Result<(), AppError> {
-    let document = state
+    let document = state.docs()
         .list_documents(None, Some(document_id))
         .await
         .into_iter()
@@ -221,7 +221,7 @@ pub(crate) async fn authorize_document_access(
     if !matches!(state.auth().subject_kind(), SubjectKind::ApiKey) {
         return Ok(());
     }
-    let document = state
+    let document = state.docs()
         .list_documents(None, Some(document_id))
         .await
         .into_iter()
@@ -237,7 +237,7 @@ pub(crate) async fn authorize_document_access_index_or_query(
     if !matches!(state.auth().subject_kind(), SubjectKind::ApiKey) {
         return Ok(());
     }
-    let document = state
+    let document = state.docs()
         .list_documents(None, Some(document_id))
         .await
         .into_iter()

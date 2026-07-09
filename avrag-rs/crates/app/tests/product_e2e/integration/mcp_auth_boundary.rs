@@ -30,7 +30,7 @@ async fn workspace_key(ctx: &TestContext, notebook_id: &str, permissions: &[&str
         .as_ref()
         .expect("app_state present in integration profile")
         .clone();
-    let key = state
+    let key = state.admin_api()
         .create_api_key(
             notebook_id,
             CreateApiKeyRequest {

@@ -36,10 +36,10 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
 
-use app_chat::agents::events::{AgentEventSink, CollectingSink};
-use app_chat::agents::runtime::{Agent, AgentRequest, AgentRunResult};
+use agent_loop::events::{AgentEventSink, CollectingSink};
+use agent_loop::runtime::{stub_agent_auth, Agent, AgentRequest, AgentRunResult};
 use app_chat::agents::service::UnifiedAgentService;
-use app_chat::agents::AgentKind;
+use agent_loop::AgentKind;
 use app_chat::writer::SubagentInvoker;
 use app_chat::writer::{
     FinishReason, MaterialPack, RefineContext, RefineLoopBudget, WriteRefineLoopRunner,
@@ -371,7 +371,7 @@ fn experiment_request(topic: &str) -> AgentRequest {
         debug: false,
         stream: false,
         language: Some("zh".to_string()),
-        auth_context: Value::Object(Default::default()),
+        auth: stub_agent_auth(),
         docscope_metadata: None,
         metadata: Default::default(),
         cancellation_token: None,

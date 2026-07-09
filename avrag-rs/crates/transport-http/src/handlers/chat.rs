@@ -45,7 +45,7 @@ pub(crate) async fn runtime_execute_handler(
     if let Err(error) = authorize_api_key_query_scoped(state.auth()) {
         return app_error_response(error);
     }
-    match state.execute_runtime_tools(req).await {
+    match state.chat().execute_runtime_tools(req).await {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -123,7 +123,7 @@ pub(crate) async fn chat_post_handler(
         );
     }
 
-    match state.execute_chat(req).await {
+    match state.chat().execute_chat(req).await {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(e) => {
             let event_name = chat_failure_event_name(&agent_type);
@@ -190,7 +190,7 @@ fn chat_live_stream_response(
 
     tokio::spawn(async move {
         let error_sender = sender.clone();
-        if let Err(error) = state
+        if let Err(error) = state.chat()
             .execute_chat_stream(req, request_id_for_task.clone(), sender, cancel_for_task)
             .await
         {
@@ -316,7 +316,7 @@ pub(crate) async fn search_handler(
     ) {
         return app_error_response(error);
     }
-    let (notebooks, sessions, sources) = state.search(&params.q).await;
+    let (notebooks, sessions, sources) = state.chat().search(&params.q).await;
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -330,7 +330,18 @@ pub(crate) async fn search_handler(
 
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ChatSessionsQuery {
+    /// Preferred product query key.
+    pub workspace_id: Option<String>,
+    /// Legacy alias for `workspace_id`.
     pub notebook_id: Option<String>,
+}
+
+impl ChatSessionsQuery {
+    pub(crate) fn workspace_id(&self) -> Option<&str> {
+        self.workspace_id
+            .as_deref()
+            .or(self.notebook_id.as_deref())
+    }
 }
 
 pub(crate) async fn list_chat_sessions_handler(
@@ -338,11 +349,11 @@ pub(crate) async fn list_chat_sessions_handler(
     Query(params): Query<ChatSessionsQuery>,
 ) -> Response {
     if let Err(error) =
-        authorize_workspace_query_optional_notebook(state.auth(), params.notebook_id.as_deref())
+        authorize_workspace_query_optional_notebook(state.auth(), params.workspace_id())
     {
         return app_error_response(error);
     }
-    let sessions = state.list_sessions(params.notebook_id.as_deref()).await;
+    let sessions = state.chat().list_sessions(params.workspace_id()).await;
     (
         StatusCode::OK,
         Json(contracts::notebooks::ChatSessionListResponse { sessions }),
@@ -358,7 +369,7 @@ pub(crate) async fn create_chat_session_handler(
     {
         return app_error_response(error);
     }
-    match state.create_session(req).await {
+    match state.chat().create_session(req).await {
         Ok(session) => (StatusCode::CREATED, Json(session)).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -382,7 +393,7 @@ pub(crate) async fn update_chat_session_handler(
     if let Err(error) = authorize_session_access(&state, &session_id).await {
         return app_error_response(error);
     }
-    match state.update_session(&session_id, req).await {
+    match state.chat().update_session(&session_id, req).await {
         Ok(session) => (StatusCode::OK, Json(session)).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -395,7 +406,7 @@ pub(crate) async fn delete_chat_session_handler(
     if let Err(error) = authorize_session_access(&state, &session_id).await {
         return app_error_response(error);
     }
-    match state.delete_session(&session_id).await {
+    match state.chat().delete_session(&session_id).await {
         Ok(status) => (StatusCode::OK, Json(status)).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -408,7 +419,7 @@ pub(crate) async fn get_chat_messages_handler(
     if let Err(error) = authorize_session_access(&state, &session_id).await {
         return app_error_response(error);
     }
-    match state.list_messages(&session_id).await {
+    match state.chat().list_messages(&session_id).await {
         Ok(messages) => (
             StatusCode::OK,
             Json(contracts::chat::ChatMessageListResponse { messages }),
@@ -428,7 +439,7 @@ pub(crate) async fn citation_lookup_handler(
     ) {
         return app_error_response(error);
     }
-    match state
+    match state.chat()
         .lookup_citation(&req.session_id, req.message_id, req.citation_id)
         .await
     {
@@ -476,7 +487,7 @@ pub(crate) async fn citation_asset_handler(
     ) {
         return app_error_response(error);
     }
-    match state.get_citation_asset(&asset_id).await {
+    match state.chat().get_citation_asset(&asset_id).await {
         Ok((bytes, mime_type)) => {
             (StatusCode::OK, [(header::CONTENT_TYPE, mime_type)], bytes).into_response()
         }
@@ -515,6 +526,6 @@ pub(crate) async fn message_feedback_handler(
 // ---------------------------------------------------------------------------
 
 pub(crate) async fn agent_capabilities_handler() -> Response {
-    let response = app_chat::agents::capability::build_capabilities_response();
+    let response = agent_tools::capability::build_capabilities_response();
     (StatusCode::OK, Json(response)).into_response()
 }

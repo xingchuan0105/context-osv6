@@ -61,9 +61,7 @@ pub use preferences::{
     NotificationPreferences, UserPreferences, WorkspaceDraftPreference,
 };
 pub use rag_execute::{
-    BackendTrace, ChannelBudget, ChannelCoverage, ChannelTraceItem, Coverage, ExecutePlanBudget,
-    ExecutePlanItem, ExecutePlanRequest, ExecutePlanResponse, ExecutePlanSummaryMode,
-    ExecutePlanTrace, ExecutePlanValidationError, GraphHint, PlaceholderTriplet,
+    BackendTrace, ChannelCoverage, ChannelTraceItem, Coverage, GraphHint, PlaceholderTriplet,
     PlaceholderTripletType, QueryEntity, RelationPath, RetrievalBundle, RetrievedChunk,
     ScoreBreakdown,
 };
@@ -76,7 +74,7 @@ pub use tool_call::{
     DenseRetrievalArgs, DenseRetrievalModality, DocChunksArgs, DocMetadataArgs, DocProfileArgs,
     DocSummaryArgs, DocSummaryLevel, GraphRetrievalArgs, IndexLookupArgs, LexicalRetrievalArgs,
     MergeConfig, NextStep, RetrievalPlannerOutput, RuntimeExecuteRequest, RuntimeExecuteResponse,
-    ToolCall, ToolCallAdapterError, ToolSpec,
+    ToolCall, ToolSpec,
 };
 pub use usage_limit::{
     UsageLimitPolicy, UsageLimitResponse, UsageScope, UsageWindow, UsageWindows,

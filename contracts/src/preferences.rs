@@ -4,6 +4,7 @@ use typeshare::typeshare;
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkspaceDraftPreference {
+    #[serde(rename = "workspace_id", alias = "notebook_id")]
     pub notebook_id: String,
     pub notes: String,
 }
@@ -11,6 +12,7 @@ pub struct WorkspaceDraftPreference {
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct NotebookWorkspacePreference {
+    #[serde(rename = "workspace_id", alias = "notebook_id")]
     pub notebook_id: String,
     #[serde(default)]
     pub pinned_source_ids: Vec<String>,
@@ -20,6 +22,7 @@ pub struct NotebookWorkspacePreference {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NotebookNotePreference {
     pub note_id: String,
+    #[serde(rename = "workspace_id", alias = "notebook_id")]
     pub notebook_id: String,
     pub title: String,
     pub content: String,

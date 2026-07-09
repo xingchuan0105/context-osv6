@@ -18,8 +18,8 @@ use heavytail::llm::WriterLlm;
 use heavytail::state::WriterState;
 use heavytail::StyleParams;
 
-use crate::agents::events::AgentEventSink;
-use crate::agents::runtime::AgentRequest;
+use agent_loop::events::AgentEventSink;
+use agent_loop::runtime::AgentRequest;
 use crate::writer::adapters::{
     parent_meta_from_request, AgentWriteActivitySink, AppWriteRefineMode, SubagentResearchPort,
 };

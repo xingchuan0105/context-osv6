@@ -118,7 +118,7 @@ impl ChatContext {
             })
             .collect();
 
-        agents::runtime::recent_messages(&history, agents::runtime::MAX_PROMPT_HISTORY_TURNS)
+        agent_loop::runtime::recent_messages(&history, agent_loop::runtime::MAX_PROMPT_HISTORY_TURNS)
             .to_vec()
     }
 
@@ -127,7 +127,7 @@ impl ChatContext {
         req: &contracts::chat::ChatRequest,
         kind: agents::AgentKind,
         session_id_override: Option<String>,
-    ) -> agents::runtime::AgentRequest {
+    ) -> agent_loop::runtime::AgentRequest {
         let notebook_id = req.notebook_id.clone();
         let session_id = session_id_override.or_else(|| req.session_id.clone());
         let doc_scope = req.doc_scope.clone();
@@ -143,11 +143,14 @@ impl ChatContext {
             } else {
                 None
             };
-        let user_preferences = memory_context
-            .as_ref()
-            .and_then(|memory| memory.layer3.as_ref().map(agent_user_preferences_json));
+        let user_preferences = memory_context.as_ref().and_then(|memory| {
+            memory
+                .layer3
+                .as_ref()
+                .map(agent_loop::runtime::AgentUserPreferences::from_layer3)
+        });
         let messages = self.resolve_agent_messages(req).await;
-        agents::runtime::AgentRequest {
+        agent_loop::runtime::AgentRequest {
             kind,
             query: req.query.clone(),
             notebook_id,
@@ -158,8 +161,7 @@ impl ChatContext {
             debug: req.debug,
             stream,
             language: req.language.clone(),
-            auth_context: serde_json::to_value(&self.auth)
-                .unwrap_or_else(|_| serde_json::json!({})),
+            auth: self.auth.clone(),
             docscope_metadata: None,
             metadata: BTreeMap::new(),
             cancellation_token: None,
@@ -172,7 +174,7 @@ impl ChatContext {
 
     pub fn build_general_agent_debug(
         &self,
-        agent_request: &agents::runtime::AgentRequest,
+        agent_request: &agent_loop::runtime::AgentRequest,
     ) -> BTreeMap<String, serde_json::Value> {
         let mut general_debug = BTreeMap::new();
         general_debug.insert(
@@ -192,22 +194,4 @@ impl ChatContext {
         );
         general_debug
     }
-}
-
-fn agent_user_preferences_json(profile: &avrag_chatmemory::Layer3Profile) -> serde_json::Value {
-    let mut base = serde_json::json!({
-        "expertise_domains": profile.expertise_domains.clone(),
-        "preferred_answer_style": profile.preferred_answer_style.clone(),
-        "frequently_asked_topics": profile.frequently_asked_topics.clone(),
-        "custom_preferences": profile.custom_preferences.clone(),
-        "inference_version": profile.inference_version.clone(),
-    });
-    if let (Some(base_obj), Some(profile_obj)) =
-        (base.as_object_mut(), profile.structured_profile.as_object())
-    {
-        for (key, value) in profile_obj {
-            base_obj.insert(key.clone(), value.clone());
-        }
-    }
-    base
 }

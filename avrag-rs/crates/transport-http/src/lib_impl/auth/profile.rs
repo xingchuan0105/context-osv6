@@ -438,7 +438,7 @@ pub(crate) async fn usage_limit_handler(
     ) {
         return handlers::app_error_response(error);
     }
-    match state.get_user_usage_limit().await {
+    match state.chat().get_user_usage_limit().await {
         Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,

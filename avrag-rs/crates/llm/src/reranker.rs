@@ -206,3 +206,59 @@ pub struct RerankResult {
     pub document: String,
     pub score: f32,
 }
+
+
+#[async_trait::async_trait]
+impl avrag_rag_core_ports::RerankPort for RerankerClient {
+    async fn rerank(
+        &self,
+        query: &str,
+        documents: &[&str],
+    ) -> anyhow::Result<Vec<avrag_rag_core_ports::RerankResult>> {
+        let owned: Vec<String> = documents.iter().map(|s| (*s).to_string()).collect();
+        let ranked = RerankerClient::rerank(self, query, &owned).await?;
+        Ok(ranked
+            .into_iter()
+            .map(|r| avrag_rag_core_ports::RerankResult {
+                index: r.index,
+                score: r.score,
+            })
+            .collect())
+    }
+
+    async fn rerank_multimodal_text_query(
+        &self,
+        query: &str,
+        documents: &[avrag_rag_core_ports::MultiModalRerankDocument],
+        top_n: usize,
+    ) -> anyhow::Result<Vec<avrag_rag_core_ports::RerankResult>> {
+        let mapped: Vec<MultiModalRerankDocument> = documents
+            .iter()
+            .map(|d| match d {
+                avrag_rag_core_ports::MultiModalRerankDocument::Text(t) => {
+                    MultiModalRerankDocument::Text(t.clone())
+                }
+                avrag_rag_core_ports::MultiModalRerankDocument::Image(i) => {
+                    MultiModalRerankDocument::Image(i.clone())
+                }
+                avrag_rag_core_ports::MultiModalRerankDocument::Video(v) => {
+                    MultiModalRerankDocument::Video(v.clone())
+                }
+            })
+            .collect();
+        let ranked = RerankerClient::rerank_multimodal_text_query(
+            self,
+            query,
+            &mapped,
+            top_n.max(1).min(mapped.len().max(1)),
+        )
+        .await?;
+        Ok(ranked
+            .into_iter()
+            .map(|r| avrag_rag_core_ports::RerankResult {
+                index: r.index,
+                score: r.score,
+            })
+            .collect())
+    }
+}

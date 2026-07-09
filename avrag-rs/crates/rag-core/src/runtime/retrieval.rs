@@ -2,7 +2,7 @@ use std::{collections::HashMap, collections::HashSet};
 
 use anyhow::Result;
 use contracts::auth_runtime::AuthContext;
-use avrag_llm::{MultiModalEmbeddingInput, MultiModalRerankDocument};
+use avrag_rag_core_ports::{MultiModalEmbeddingInput, MultiModalRerankDocument};
 use avrag_retrieval_data_plane::{
     Bm25SearchRequest, MultimodalSearchRequest, TextDenseSearchRequest, WeightedChunkList,
 };
@@ -468,7 +468,7 @@ impl RagRuntime {
         if let Some(reranker) = &self.config.reranker {
             let doc_texts = chunks
                 .iter()
-                .map(|item| item.content.clone())
+                .map(|item| item.content.as_str())
                 .collect::<Vec<_>>();
             match reranker.rerank(query, &doc_texts).await {
                 Ok(results) => {

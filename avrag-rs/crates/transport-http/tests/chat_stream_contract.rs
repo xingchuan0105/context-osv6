@@ -1,9 +1,7 @@
 use app_bootstrap::AppState;
-use app_chat::agents::{
-    events::{AgentEvent, AgentEventSink},
-    runtime::{Agent, AgentRequest, AgentRunResult, AgentRunUsage},
-    service::UnifiedAgentService,
-};
+use agent_loop::events::{AgentEvent, AgentEventSink};
+use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult, AgentRunUsage};
+use app_chat::agents::service::UnifiedAgentService;
 use app_core::AppConfig;
 use contracts::auth_runtime::{AuthContext, OrgId, SubjectKind};
 use axum::{
@@ -31,7 +29,7 @@ impl Agent for ScriptedAgent {
     ) -> Result<AgentRunResult, common::AppError> {
         // Simulate RAG-specific behaviour so that RAG contract tests can verify
         // end-to-end streaming without a real runtime.
-        if request.kind == app_chat::agents::AgentKind::Rag {
+        if request.kind == agent_loop::AgentKind::Rag {
             let _ = sink
                 .emit(AgentEvent::Activity {
                     stage: "planning".to_string(),

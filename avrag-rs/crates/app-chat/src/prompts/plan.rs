@@ -1,39 +1,8 @@
 use contracts::chat::ChatRequest;
-use contracts::{
-    ExecutePlanItem, ExecutePlanRequest, ExecutePlanSummaryMode, RetrievalPlannerOutput, ToolCall,
-};
+use contracts::{RetrievalPlannerOutput, ToolCall};
 
-use super::internal::{
-    RAG_EXECUTE_PLAN_VERSION, build_rag_envelope, extract_json_object, normalize_execute_plan_item,
-    normalize_graph_hints, normalize_placeholder_triplets, normalize_query_entities,
-};
+use super::internal::{build_rag_envelope, extract_json_object};
 use super::types::{PlanStrategy, PlanStrategyItem, RagBehaviorSkill, RagContext, RagPlanDecision};
-
-pub(crate) fn fallback_execute_plan_request(
-    request: &ChatRequest,
-    docscope_metadata: Option<&common::DocScopeMetadata>,
-) -> ExecutePlanRequest {
-    ExecutePlanRequest {
-        plan_version: RAG_EXECUTE_PLAN_VERSION.to_string(),
-        doc_scope: request.doc_scope.clone(),
-        items: vec![ExecutePlanItem {
-            priority: 1.0,
-            query: Some(request.query.trim().to_string()),
-            bm25_terms: None,
-        }],
-        summary_mode: if docscope_metadata.is_some_and(|metadata| !metadata.documents.is_empty()) {
-            ExecutePlanSummaryMode::Related
-        } else {
-            ExecutePlanSummaryMode::None
-        },
-        budget: None,
-        channel_budget: None,
-        query_entities: Vec::new(),
-        graph_hints: Vec::new(),
-        placeholder_triplets: Vec::new(),
-        trace: None,
-    }
-}
 
 pub(crate) fn build_rag_plan_user_prompt(
     request: &ChatRequest,
@@ -75,12 +44,12 @@ pub(crate) fn build_rag_plan_user_prompt(
         skill: RagBehaviorSkill::new(
             "rag-plan",
             [
-                "Generate an execute-plan for the RAG API.",
+                "Generate retrieval tool calls for the RAG agent loop (AgentLoop + ToolCall).",
                 "Return a strategy with retrieval tool calls for every non-empty user query.",
                 "Use clarify ONLY when the user query is empty, meaningless, or the provided doc_scope contains no relevant documents.",
             ],
         ),
-        output_contract: "Return exactly one raw JSON object: PlanStrategy ({\"strategy\":[{tool, param1, param2}],\"next_step\":\"answer\"}). Use {\"action\":\"clarify\",\"message\":\"...\"} ONLY when the query is empty or doc_scope is completely irrelevant.".to_string(),
+        output_contract: "Return exactly one raw JSON object: PlanStrategy ({\"strategy\":[{tool, param1, param2}],\"next_step\":\"answer\"}) or RetrievalPlannerOutput ({\"calls\":[...],\"skills\":[],\"next_step\":\"answer\"}). Use {\"action\":\"clarify\",\"message\":\"...\"} ONLY when the query is empty or doc_scope is completely irrelevant. Do not emit legacy ExecutePlanRequest JSON.".to_string(),
     })
 }
 
@@ -102,7 +71,7 @@ pub(crate) fn parse_rag_plan_decision(
             .and_then(serde_json::Value::as_str)
             .map(str::trim)
             .filter(|message| !message.is_empty())?;
-        // v5: fallback to default retrieval strategy when query and doc_scope are valid.
+        // Fallback to default retrieval strategy when query and doc_scope are valid.
         // Prevents over-eager clarify from models that default to asking questions.
         if !request.query.trim().is_empty() && !request.doc_scope.is_empty() {
             return Some((
@@ -123,42 +92,25 @@ pub(crate) fn parse_rag_plan_decision(
         return Some((RagPlanDecision::Clarify(message.to_string()), Vec::new()));
     }
 
-    // 2. P4 format: PlanStrategy (plan-only, no schema-compliant args yet)
+    // 2. PlanStrategy (plan-only, no schema-compliant args yet)
     if let Ok(strategy) = serde_json::from_str::<PlanStrategy>(&json)
         && !strategy.strategy.is_empty()
     {
         return Some((RagPlanDecision::Strategy(strategy), Vec::new()));
     }
 
-    // 3. Phase-3c format: RetrievalPlannerOutput (ToolCall[])
+    // 3. RetrievalPlannerOutput (ToolCall[])
+    // ADR-0006 / TN Wave 2: ExecutePlanRequest is not accepted. Product path = ToolCall only.
     if let Ok(planner_output) = serde_json::from_str::<RetrievalPlannerOutput>(&json)
         && !planner_output.calls.is_empty()
     {
-        // Phase-3c: bypass adapter — return raw ToolCalls for the dispatcher
         return Some((
             RagPlanDecision::ToolCalls(planner_output.calls),
             planner_output.skills,
         ));
     }
 
-    // 4. Legacy format: ExecutePlanRequest (backward compatibility)
-    let plan = serde_json::from_str::<ExecutePlanRequest>(&json).ok()?;
-    if avrag_rag_core::validate_execute_plan(&plan).is_err() || plan.doc_scope != request.doc_scope {
-        return None;
-    }
-    match normalize_execute_plan_request(plan, request) {
-        Some(plan) => Some((
-            RagPlanDecision::ToolCalls(execute_plan_request_to_tool_calls(plan)),
-            Vec::new(),
-        )),
-        None => Some((
-            RagPlanDecision::Clarify(
-                crate::i18n::clarify::need_query_or_doc_scope(request.language.as_deref())
-                    .to_string(),
-            ),
-            Vec::new(),
-        )),
-    }
+    None
 }
 
 /// Convert a `PlanStrategy` (plan-only format) directly into fully-formed `ToolCall`s.
@@ -173,96 +125,4 @@ pub(crate) fn plan_strategy_to_tool_calls(strategy: &PlanStrategy) -> Vec<ToolCa
             args: item.params.clone(),
         })
         .collect()
-}
-
-/// Convert a legacy `ExecutePlanRequest` into the modern `Vec<ToolCall>` representation.
-pub(crate) fn execute_plan_request_to_tool_calls(plan: ExecutePlanRequest) -> Vec<ToolCall> {
-    let mut calls = Vec::new();
-
-    // Each item becomes either a dense_retrieval or lexical_retrieval call.
-    for item in plan.items {
-        if let Some(query) = item.query {
-            calls.push(ToolCall {
-                tool: "dense_retrieval".to_string(),
-                version: "1.0".to_string(),
-                args: serde_json::json!({
-                    "queries": vec![query],
-                    "modality": "text",
-                    "top_k": 10,
-                }),
-            });
-        } else if let Some(terms) = item.bm25_terms {
-            calls.push(ToolCall {
-                tool: "lexical_retrieval".to_string(),
-                version: "1.0".to_string(),
-                args: serde_json::json!({
-                    "terms": terms,
-                    "top_k": 10,
-                }),
-            });
-        }
-    }
-
-    // Graph hints & placeholder triplets → graph_retrieval
-    if !plan.graph_hints.is_empty() || !plan.placeholder_triplets.is_empty() {
-        calls.push(ToolCall {
-            tool: "graph_retrieval".to_string(),
-            version: "1.0".to_string(),
-            args: serde_json::json!({
-                "graph_hints": plan.graph_hints,
-                "placeholder_triplets": plan.placeholder_triplets,
-                "relation_limit": 20,
-                "supporting_chunk_limit": 10,
-            }),
-        });
-    }
-
-    // Summary mode → doc_summary
-    match plan.summary_mode {
-        contracts::ExecutePlanSummaryMode::All => {
-            calls.push(ToolCall {
-                tool: "doc_summary".to_string(),
-                version: "1.0".to_string(),
-                args: serde_json::json!({
-                    "doc_ids": plan.doc_scope.clone(),
-                    "level": "doc",
-                }),
-            });
-        }
-        contracts::ExecutePlanSummaryMode::Related => {
-            calls.push(ToolCall {
-                tool: "doc_summary".to_string(),
-                version: "1.0".to_string(),
-                args: serde_json::json!({
-                    "doc_ids": plan.doc_scope.clone(),
-                    "level": "section",
-                }),
-            });
-        }
-        contracts::ExecutePlanSummaryMode::None => {}
-    }
-
-    calls
-}
-
-pub(crate) fn normalize_execute_plan_request(
-    mut plan: ExecutePlanRequest,
-    request: &ChatRequest,
-) -> Option<ExecutePlanRequest> {
-    if plan.plan_version.trim().is_empty() {
-        plan.plan_version = RAG_EXECUTE_PLAN_VERSION.to_string();
-    }
-    plan.doc_scope = request.doc_scope.clone();
-    plan.trace = None;
-    plan.items = plan
-        .items
-        .into_iter()
-        .filter_map(normalize_execute_plan_item)
-        .take(4)
-        .collect();
-    plan.query_entities = normalize_query_entities(plan.query_entities);
-    plan.graph_hints = normalize_graph_hints(plan.graph_hints);
-    plan.placeholder_triplets = normalize_placeholder_triplets(plan.placeholder_triplets);
-    avrag_rag_core::validate_execute_plan(&plan).ok()?;
-    Some(plan)
 }

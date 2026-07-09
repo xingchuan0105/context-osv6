@@ -1,8 +1,8 @@
 use contracts::chat::AgentOperationGuide;
 
-use crate::agents::capability::CapabilityRegistry;
-use crate::agents::r#loop::config::load_mode_config;
-use crate::agents::progressive::{
+use agent_tools::capability::CapabilityRegistry;
+use agent_loop::r#loop::config::load_mode_config;
+use agent_tools::progressive::{
     DisclosureContext, DisclosureTier, DisclosureUnit, PromptRegistry,
 };
 

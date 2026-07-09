@@ -257,13 +257,14 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         freshness: config.search.freshness.clone(),
     })));
 
-    let cache_store = if config.redis.url.trim().is_empty() {
-        None
-    } else {
-        avrag_cache_redis::CacheStore::new(&config.redis.url)
-            .ok()
-            .map(Arc::new)
-    };
+    let cache_store: Option<Arc<dyn avrag_rag_core_ports::CachePort>> =
+        if config.redis.url.trim().is_empty() {
+            None
+        } else {
+            avrag_cache_redis::CacheStore::new(&config.redis.url)
+                .ok()
+                .map(|store| Arc::new(store) as Arc<dyn avrag_rag_core_ports::CachePort>)
+        };
 
     let billing_store: Option<Arc<dyn BillingStorePort>> = pg.as_ref().map(|repository| {
         Arc::new(PgBillingStoreAdapter::new(repository.clone())) as Arc<dyn BillingStorePort>
@@ -326,16 +327,20 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
 
         let attach_rag_components = |mut rag_config: RagConfig| {
             if let Some(p) = planner.clone() {
-                rag_config = rag_config.with_planner(p);
+                rag_config = rag_config
+                    .with_planner(p as Arc<dyn avrag_rag_core_ports::PlannerPort>);
             }
             if let Some(mm) = mm_embedding.clone() {
-                rag_config = rag_config.with_mm_embedding(mm);
+                rag_config = rag_config
+                    .with_mm_embedding(mm as Arc<dyn avrag_rag_core_ports::EmbeddingPort>);
             }
             if let Some(r) = reranker.clone() {
-                rag_config = rag_config.with_reranker(r);
+                rag_config =
+                    rag_config.with_reranker(r as Arc<dyn avrag_rag_core_ports::RerankPort>);
             }
             if let Some(mm_r) = mm_reranker.clone() {
-                rag_config = rag_config.with_mm_reranker(mm_r);
+                rag_config =
+                    rag_config.with_mm_reranker(mm_r as Arc<dyn avrag_rag_core_ports::RerankPort>);
             }
             if let Some(cache) = cache_store.clone() {
                 rag_config = rag_config.with_cache(cache);
@@ -344,7 +349,7 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         };
 
         let rag_config = attach_rag_components(RagConfig::new_for_data_plane(
-            embedding,
+            embedding as Arc<dyn avrag_rag_core_ports::EmbeddingPort>,
             Some(Arc::new(avrag_storage_pg::PgContentStore::new(pg_repo.clone()))
                 as Arc<dyn common::ContentStore>),
         ));

@@ -25,8 +25,8 @@ use write_core::{
     WriteResearchPort,
 };
 
-use crate::agents::events::{AgentEventSink, NoopSink};
-use crate::agents::runtime::{Agent, AgentRequest, AgentRunResult};
+use agent_loop::events::{AgentEventSink, NoopSink};
+use agent_loop::runtime::{Agent, AgentRequest, AgentRunResult};
 use crate::agents::AgentKind;
 use crate::writer::adapters::{
     parent_meta_from_request, AgentWriteActivitySink, AppWriteRefineMode, SubagentResearchPort,
@@ -138,7 +138,7 @@ fn test_parent_request() -> AgentRequest {
         debug: false,
         stream: false,
         language: Some("zh".to_string()),
-        auth_context: serde_json::json!({}),
+        auth: agent_loop::runtime::stub_agent_auth(),
         docscope_metadata: None,
         metadata: BTreeMap::new(),
         cancellation_token: None,
