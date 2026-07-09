@@ -41,6 +41,8 @@ function getModeLabel(locale: "zh-CN" | "en", mode: WorkspaceChatMode) {
       return formatUiMessage(locale, "workspaceChatModeRag");
     case "search":
       return formatUiMessage(locale, "workspaceChatModeSearch");
+    case "write":
+      return formatUiMessage(locale, "workspaceChatModeWrite");
     case "chat":
     default:
       return formatUiMessage(locale, "workspaceChatModeChat");
@@ -53,6 +55,8 @@ function getModeCode(mode: WorkspaceChatMode) {
       return "RAG";
     case "search":
       return "web_search";
+    case "write":
+      return "write";
     case "chat":
     default:
       return "chat";
@@ -167,7 +171,9 @@ export function ChatMessageList({
                       ? styles.modeBubbleTagRag
                       : message.mode === "search"
                         ? styles.modeBubbleTagSearch
-                        : styles.modeBubbleTagGeneral,
+                        : message.mode === "write"
+                          ? styles.modeBubbleTagWrite
+                          : styles.modeBubbleTagGeneral,
                   ]
                     .filter(Boolean)
                     .join(" ")}

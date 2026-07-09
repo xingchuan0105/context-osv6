@@ -13,17 +13,29 @@ use tokio::sync::RwLock;
 #[derive(Clone)]
 pub struct PgUsageObserver {
     store: Arc<dyn UsageLimitStorePort>,
+    /// When false, rows do not count toward user rolling quotas (ADR 0006 §7 worker path).
+    billable: bool,
 }
 
 impl std::fmt::Debug for PgUsageObserver {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PgUsageObserver").finish_non_exhaustive()
+        f.debug_struct("PgUsageObserver")
+            .field("billable", &self.billable)
+            .finish_non_exhaustive()
     }
 }
 
 impl PgUsageObserver {
     pub fn new(store: Arc<dyn UsageLimitStorePort>) -> Self {
-        Self { store }
+        Self {
+            store,
+            billable: true,
+        }
+    }
+
+    pub fn with_billable(mut self, billable: bool) -> Self {
+        self.billable = billable;
+        self
     }
 
     /// Map free-text feature tags set by `LlmClient::with_feature` to billable buckets.
@@ -101,6 +113,7 @@ impl PgUsageObserver {
             total_tokens: record.total_tokens,
             usage_source: UsageSource::Actual,
             usage_kind: "chat",
+            billable: self.billable,
         };
         if let Err(e) = self.store.insert_llm_usage_event(&ctx, usage).await {
             tracing::warn!(
@@ -148,6 +161,7 @@ impl PgUsageObserver {
             total_tokens,
             usage_source,
             usage_kind,
+            billable: self.billable,
         };
         if let Err(e) = self.store.insert_llm_usage_event(&ctx, usage).await {
             tracing::warn!(
@@ -187,9 +201,10 @@ impl std::fmt::Debug for TaskTenantUsageObserver {
 }
 
 impl TaskTenantUsageObserver {
+    /// Worker metering: rebinds task tenant; rows are **non-billable** (ADR 0006 §7).
     pub fn new(store: Arc<dyn UsageLimitStorePort>, initial: TenantContext) -> Self {
         Self {
-            inner: PgUsageObserver::new(store),
+            inner: PgUsageObserver::new(store).with_billable(false),
             tenant: Arc::new(RwLock::new(initial)),
         }
     }

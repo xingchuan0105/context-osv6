@@ -32,6 +32,8 @@ pub struct UsageLimitUsageRecord<'a> {
     pub usage_source: UsageSource,
     /// Exit-metering kind: `chat`, `embedding_text`, `embedding_multimodal`, …
     pub usage_kind: &'a str,
+    /// When false, row is internal (e.g. worker ingestion) and must not count toward user rolling quotas (ADR 0006 §7).
+    pub billable: bool,
 }
 
 /// Billing persistence boundary — SQL implementations live in bootstrap adapters.

@@ -45,9 +45,9 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
             INSERT INTO llm_usage_events (
                 org_id, user_id, feature, stage, provider, model,
                 prompt_tokens, completion_tokens, total_tokens,
-                usage_units, usage_source, usage_kind,
+                usage_units, usage_source, usage_kind, billable,
                 session_id, document_id, request_id, trace_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
             "#,
         )
         .bind(ctx.org_id)
@@ -62,6 +62,7 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         .bind(usage_units)
         .bind(record.usage_source.as_str())
         .bind(record.usage_kind)
+        .bind(record.billable)
         .bind(ctx.session_id)
         .bind(ctx.document_id)
         .bind(&ctx.request_id)
@@ -138,11 +139,14 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
         user_id: Uuid,
         since: DateTime<Utc>,
     ) -> Result<i64, AppError> {
+        // ADR 0006 §7: only customer-billable rows count toward rolling quotas.
         let row = sqlx::query(
             r#"
             SELECT COALESCE(SUM(usage_units), 0)::bigint AS total
             FROM llm_usage_events
-            WHERE user_id = $1 AND created_at >= $2
+            WHERE user_id = $1
+              AND created_at >= $2
+              AND billable = true
             "#,
         )
         .bind(user_id)
@@ -164,7 +168,9 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
             r#"
             SELECT created_at
             FROM llm_usage_events
-            WHERE user_id = $1 AND created_at >= $2
+            WHERE user_id = $1
+              AND created_at >= $2
+              AND billable = true
             ORDER BY created_at ASC
             LIMIT 1
             "#,
@@ -186,7 +192,9 @@ impl UsageLimitStorePort for PgUsageLimitStoreAdapter {
             r#"
             SELECT feature, COALESCE(SUM(usage_units), 0)::bigint AS total
             FROM llm_usage_events
-            WHERE user_id = $1 AND created_at >= $2
+            WHERE user_id = $1
+              AND created_at >= $2
+              AND billable = true
             GROUP BY feature
             "#,
         )

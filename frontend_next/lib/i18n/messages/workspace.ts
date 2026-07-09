@@ -85,6 +85,14 @@ export const workspaceMessages = {
     zh: "网络搜索",
     en: "web_search",
   },
+  workspaceChatModeWrite: {
+    zh: "写作模式",
+    en: "write",
+  },
+  workspaceChatModeWriteUsageHint: {
+    zh: "写作模式可能消耗较多额度",
+    en: "Write mode may use more of your quota",
+  },
   workspaceChatRegionLabel: {
     zh: "工作区对话",
     en: "Workspace chat",

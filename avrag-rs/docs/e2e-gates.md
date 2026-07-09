@@ -9,6 +9,28 @@ suites.
 
 See also [`product-e2e-plan.md`](product-e2e-plan.md).
 
+## Merge gate vs nightly (ADR 0006 §11)
+
+**Merge gate** (must be green to land on `master`):
+
+| Surface | Checks |
+|---------|--------|
+| Rust | `cargo check` + affected crate / contract unit tests |
+| Frontend | `tsc` + affected vitest |
+| Lint/format | existing CI jobs already required for the path |
+
+**Nightly / non-blocking** (must have an owner when red):
+
+| Surface | Checks |
+|---------|--------|
+| Integration | full `product_e2e` mock suite |
+| Real LLM | `nightly-llm-real.yml` (cost owned by product) |
+| Quality | `rag_quality` / long soak / Playwright skills+judge |
+
+**Escalation into merge gate** (optional, PR-scoped): changes touching LLM protocol, billing/quota core, or auth may require the related integration / real-LLM subset before merge.
+
+**Nightly ownership**: failures on scheduled workflows require claim by the on-call/product rotation (do not leave red nightlies unowned).
+
 ## Layer overview
 
 | Layer | Runner | Trigger | Execution | Citation gate |
