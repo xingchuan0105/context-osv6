@@ -23,3 +23,4 @@ pub mod paddle_image_e2e;
 pub mod quota_boundary;
 pub mod rate_limit_boundary;
 pub mod streaming_chat;
+pub mod usage_exit_metering;

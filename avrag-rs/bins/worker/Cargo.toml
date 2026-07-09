@@ -34,4 +34,5 @@ telemetry = { path = "../../crates/telemetry" }
 tracing.workspace = true
 uuid.workspace = true
 app-bootstrap = { path = "../../crates/app-bootstrap" }
+app-billing = { path = "../../crates/app-billing" }
 avrag-billing = { path = "../../crates/billing" }

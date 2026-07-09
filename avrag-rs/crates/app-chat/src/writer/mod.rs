@@ -31,11 +31,35 @@ use crate::context::ChatContext;
 const DEFAULT_TARGET_CHARS: usize = 2_000;
 const HEAVYTAIL_PRIMING_SKILL_ID: &str = "heavytail-priming";
 
-// TODO(metering): `ChatUsageRecord.stage` is always empty in
-// `crates/llm/src/client/mod.rs::record_completion_success`. Per-phase billing labels
-// should use `write:<phase>` in `stage` once `LlmClient::with_stage()` exists; until then
-// we tag `ChatUsageRecord.feature` via `WriterLlm::with_phase` and accumulate tokens in
-// `WriterState.tokens_used` (see `crates/llm/src/usage_observer.rs`).
+/// Build `WriterLlm` from bootstrap agent client + exit metering when available.
+/// Falls back to `AGENT_LLM_*` env for offline / experiment paths.
+fn build_writer_llm(ctx: &ChatContext) -> Result<WriterLlm, AppError> {
+    use avrag_llm::TenantContext;
+    use uuid::Uuid;
+
+    let mut client = match ctx.llm_ctx.agent_client().cloned() {
+        Some(client) => client,
+        None => {
+            return WriterLlm::from_env().map_err(|e| {
+                AppError::internal(format!("writer LLM configuration error: {e}"))
+            });
+        }
+    };
+
+    if let Some(observer) = ctx.billing.usage_observer() {
+        let tenant = TenantContext {
+            org_id: ctx.auth.org_id().into_uuid(),
+            user_id: ctx
+                .auth
+                .actor_id()
+                .map(|a| a.into_uuid())
+                .unwrap_or_else(Uuid::nil),
+        };
+        client = client.with_observer(observer.clone(), tenant);
+    }
+
+    Ok(WriterLlm::from_client(client))
+}
 
 pub struct WriterOrchestrator<'a> {
     ctx: &'a ChatContext,
@@ -83,9 +107,7 @@ impl<'a> WriterOrchestrator<'a> {
 
         emit_activity(sink, "skeleton", "Planning article outline").await;
 
-        let llm = WriterLlm::from_env().map_err(|e| {
-            AppError::internal(format!("writer LLM configuration error: {e}"))
-        })?;
+        let llm = build_writer_llm(self.ctx)?;
         let skeleton_llm = llm.with_phase("skeleton");
         let target_chars = DEFAULT_TARGET_CHARS;
         let skeleton = skeleton::plan_skeleton(

@@ -5,6 +5,28 @@ use uuid::Uuid;
 use super::TestContext;
 
 impl TestContext {
+    /// Count `llm_usage_events` for a user with the given `usage_kind`.
+    pub async fn count_llm_usage_events(
+        &self,
+        user_id: Uuid,
+        org_id: Uuid,
+        usage_kind: &str,
+    ) -> anyhow::Result<i64> {
+        let pool = sqlx::PgPool::connect(&self.pg_url).await?;
+        let row: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*) FROM llm_usage_events
+            WHERE user_id = $1 AND org_id = $2 AND usage_kind = $3
+            "#,
+        )
+        .bind(user_id)
+        .bind(org_id)
+        .bind(usage_kind)
+        .fetch_one(&pool)
+        .await?;
+        Ok(row.0)
+    }
+
     /// Assert document ingestion reached `Completed` in PG.
     pub async fn assert_ingestion_completed(&self, document_id: &str) -> anyhow::Result<()> {
         let pool = sqlx::PgPool::connect(&self.pg_url).await?;

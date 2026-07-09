@@ -365,7 +365,10 @@ pub async fn bootstrap(config: AppConfig) -> anyhow::Result<AppBootstrapResult> 
         None
     };
 
-    let billing = BillingContext::new(quota_manager, config.usage_limit.enforcement_phase.clone());
+    let mut billing = BillingContext::new(quota_manager, config.usage_limit.enforcement_phase.clone());
+    if let Some(obs) = usage_observer.clone() {
+        billing = billing.with_usage_observer(obs);
+    }
     let analytics = AnalyticsServiceCtx::new(
         pg.as_ref()
             .map(|p| Arc::new(analytics::AnalyticsService::new(p.raw().clone()))),

@@ -52,10 +52,28 @@ pub struct SectionIndexGenerator {
 impl SectionIndexGenerator {
     pub fn new(config: crate::ModelProviderConfig) -> Self {
         Self {
-            llm: LlmClient::new(config),
+            llm: LlmClient::new(config).with_feature("section_index"),
             system_prompt: DEFAULT_SECTION_INDEX_SYSTEM.to_string(),
             user_template: DEFAULT_SECTION_INDEX_USER.to_string(),
         }
+    }
+
+    /// Wrap a preconfigured client (observer / feature already applied).
+    pub fn from_client(llm: LlmClient) -> Self {
+        Self {
+            llm: llm.with_feature("section_index"),
+            system_prompt: DEFAULT_SECTION_INDEX_SYSTEM.to_string(),
+            user_template: DEFAULT_SECTION_INDEX_USER.to_string(),
+        }
+    }
+
+    pub fn with_observer(
+        mut self,
+        observer: std::sync::Arc<dyn crate::UsageObserver>,
+        tenant: crate::TenantContext,
+    ) -> Self {
+        self.llm = self.llm.with_observer(observer, tenant);
+        self
     }
 
     pub fn with_prompts(

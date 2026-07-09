@@ -242,7 +242,7 @@ pub async fn resolve_persistent_smoke_postgres_url() -> String {
 }
 
 async fn postgres_is_ready(url: &str) -> bool {
-    match avrag_storage_pg::PgAppRepository::connect(url).await {
+    match avrag_storage_pg::BootstrapRepository::connect(url).await {
         Ok(repo) => repo.ping().await.is_ok(),
         Err(_) => false,
     }
@@ -497,7 +497,7 @@ pub async fn stop_postgres(container_name: &str) {
 async fn wait_for_postgres(url: &str, container_name: &str) -> anyhow::Result<()> {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
     loop {
-        match avrag_storage_pg::PgAppRepository::connect(url).await {
+        match avrag_storage_pg::BootstrapRepository::connect(url).await {
             Ok(repo) => {
                 if repo.ping().await.is_ok() {
                     return Ok(());
