@@ -179,7 +179,7 @@ pub(crate) async fn get_workspace_analysis_handler(
     };
 
     let docs = state.docs();
-    let chat = state.chat();
+    let chat = state.agent();
     let prefs = state.prefs();
     let (sources, sessions, preferences, notes) = tokio::join!(
         docs.list_documents(Some(&workspace_id), None),

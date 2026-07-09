@@ -117,9 +117,27 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
-    use super::WriteApp;
+    use super::{AgentApp, WriteApp};
     use crate::AppState;
     use app_core::AppConfig;
+    use contracts::chat::ChatRequest;
+
+    fn empty_chat_req(agent_type: &str) -> ChatRequest {
+        ChatRequest {
+            query: String::new(),
+            workspace_id: None,
+            session_id: None,
+            agent_type: agent_type.to_string(),
+            source_type: None,
+            source_token: None,
+            doc_scope: vec![],
+            messages: vec![],
+            stream: false,
+            debug: false,
+            language: None,
+            format_hint: None,
+        }
+    }
 
     #[test]
     fn composition_root_exposes_all_product_apps() {
@@ -134,5 +152,47 @@ mod tests {
         let _ = state.agent();
         let _ = state.write_app();
         assert!(WriteApp::WRITE_REFINE_OUTSIDE_TOOL_CATALOG);
+    }
+
+    #[tokio::test]
+    async fn write_app_execute_is_product_entry_for_write_mode() {
+        let state = AppState::new(AppConfig::default());
+        // Drives shipped WriteApp::execute → ChatContext::execute_chat (query validation).
+        let err = state
+            .write_app()
+            .execute(empty_chat_req("write"))
+            .await
+            .expect_err("empty query must fail on real path");
+        assert_eq!(err.code(), "query_required");
+    }
+
+    #[tokio::test]
+    async fn write_app_rejects_non_write_agent_type() {
+        let state = AppState::new(AppConfig::default());
+        let err = state
+            .write_app()
+            .execute(empty_chat_req("chat"))
+            .await
+            .expect_err("WriteApp must reject chat mode");
+        assert_eq!(err.code(), "write_mode_required");
+    }
+
+    #[tokio::test]
+    async fn agent_app_rejects_write_mode_and_accepts_chat_entry() {
+        let state = AppState::new(AppConfig::default());
+        let write_err = state
+            .agent()
+            .execute_chat(empty_chat_req("write"))
+            .await
+            .expect_err("AgentApp must not own write");
+        assert_eq!(write_err.code(), "use_write_app");
+
+        let chat_err = state
+            .agent()
+            .execute_chat(empty_chat_req("chat"))
+            .await
+            .expect_err("empty chat query fails on real path");
+        assert_eq!(chat_err.code(), "query_required");
+        assert!(AgentApp::is_write_agent_type("Write"));
     }
 }

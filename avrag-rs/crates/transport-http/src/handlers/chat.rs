@@ -45,7 +45,7 @@ pub(crate) async fn runtime_execute_handler(
     if let Err(error) = authorize_api_key_query_scoped(state.auth()) {
         return app_error_response(error);
     }
-    match state.agent().chat().execute_runtime_tools(req).await {
+    match state.agent().execute_runtime_tools(req).await {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -123,7 +123,12 @@ pub(crate) async fn chat_post_handler(
         );
     }
 
-    match state.agent().chat().execute_chat(req).await {
+    let result = if app_bootstrap::WriteApp::is_write_agent_type(&agent_type) {
+        state.write_app().execute(req).await
+    } else {
+        state.agent().execute_chat(req).await
+    };
+    match result {
         Ok(response) => (StatusCode::OK, Json(response)).into_response(),
         Err(e) => {
             let event_name = chat_failure_event_name(&agent_type);
@@ -190,10 +195,29 @@ fn chat_live_stream_response(
 
     tokio::spawn(async move {
         let error_sender = sender.clone();
-        if let Err(error) = state.chat()
-            .execute_chat_stream(req, request_id_for_task.clone(), sender, cancel_for_task)
-            .await
-        {
+        let stream_result = if app_bootstrap::WriteApp::is_write_agent_type(&agent_type_for_task) {
+            state
+                .write_app()
+                .execute_stream(
+                    req,
+                    request_id_for_task.clone(),
+                    sender.clone(),
+                    cancel_for_task,
+                )
+                .await
+        } else {
+            state
+                .agent()
+                .execute_chat_stream(
+                    req,
+                    request_id_for_task.clone(),
+                    sender.clone(),
+                    cancel_for_task,
+                )
+                .await
+        };
+        if let Err(error) = stream_result {
+
             state
                 .record_product_event_if_available(
                     chat_failure_event_name(&agent_type_for_task),
@@ -316,7 +340,7 @@ pub(crate) async fn search_handler(
     ) {
         return app_error_response(error);
     }
-    let (notebooks, sessions, sources) = state.chat().search(&params.q).await;
+    let (notebooks, sessions, sources) = state.agent().search(&params.q).await;
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -348,7 +372,7 @@ pub(crate) async fn list_chat_sessions_handler(
     {
         return app_error_response(error);
     }
-    let sessions = state.chat().list_sessions(params.workspace_id()).await;
+    let sessions = state.agent().list_sessions(params.workspace_id()).await;
     (
         StatusCode::OK,
         Json(contracts::workspaces::ChatSessionListResponse { sessions }),
@@ -364,7 +388,7 @@ pub(crate) async fn create_chat_session_handler(
     {
         return app_error_response(error);
     }
-    match state.chat().create_session(req).await {
+    match state.agent().create_session(req).await {
         Ok(session) => (StatusCode::CREATED, Json(session)).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -388,7 +412,7 @@ pub(crate) async fn update_chat_session_handler(
     if let Err(error) = authorize_session_access(&state, &session_id).await {
         return app_error_response(error);
     }
-    match state.chat().update_session(&session_id, req).await {
+    match state.agent().update_session(&session_id, req).await {
         Ok(session) => (StatusCode::OK, Json(session)).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -401,7 +425,7 @@ pub(crate) async fn delete_chat_session_handler(
     if let Err(error) = authorize_session_access(&state, &session_id).await {
         return app_error_response(error);
     }
-    match state.chat().delete_session(&session_id).await {
+    match state.agent().delete_session(&session_id).await {
         Ok(status) => (StatusCode::OK, Json(status)).into_response(),
         Err(error) => app_error_response(error),
     }
@@ -414,7 +438,7 @@ pub(crate) async fn get_chat_messages_handler(
     if let Err(error) = authorize_session_access(&state, &session_id).await {
         return app_error_response(error);
     }
-    match state.chat().list_messages(&session_id).await {
+    match state.agent().list_messages(&session_id).await {
         Ok(messages) => (
             StatusCode::OK,
             Json(contracts::chat::ChatMessageListResponse { messages }),
@@ -434,7 +458,8 @@ pub(crate) async fn citation_lookup_handler(
     ) {
         return app_error_response(error);
     }
-    match state.chat()
+    match state
+        .agent()
         .lookup_citation(&req.session_id, req.message_id, req.citation_id)
         .await
     {
@@ -482,7 +507,7 @@ pub(crate) async fn citation_asset_handler(
     ) {
         return app_error_response(error);
     }
-    match state.chat().get_citation_asset(&asset_id).await {
+    match state.agent().get_citation_asset(&asset_id).await {
         Ok((bytes, mime_type)) => {
             (StatusCode::OK, [(header::CONTENT_TYPE, mime_type)], bytes).into_response()
         }

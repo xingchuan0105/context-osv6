@@ -155,7 +155,8 @@ pub(crate) async fn authorize_session_access(
     state: &AppState,
     session_id: &str,
 ) -> Result<contracts::workspaces::ChatSession, AppError> {
-    let session = state.chat()
+    let session = state
+        .agent()
         .get_session(session_id)
         .await
         .ok_or_else(|| AppError::not_found("session_not_found", "session not found"))?;
