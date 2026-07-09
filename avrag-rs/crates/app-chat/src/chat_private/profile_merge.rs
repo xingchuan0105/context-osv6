@@ -16,12 +16,10 @@ pub fn truncate_text(s: &str, max_len: usize) -> String {
     }
 }
 
-fn normalize_evidence(evidence: &mut Vec<serde_json::Value>) {
+fn normalize_evidence(evidence: &mut Vec<String>) {
     evidence.truncate(MAX_EVIDENCE_ITEMS);
     for item in evidence.iter_mut() {
-        if let Some(s) = item.as_str() {
-            *item = serde_json::json!(truncate_text(s, MAX_EVIDENCE_LEN));
-        }
+        *item = truncate_text(item, MAX_EVIDENCE_LEN);
     }
 }
 

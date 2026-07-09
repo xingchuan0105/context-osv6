@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 /// LLM-produced semantic delta for the dream layer; runtime applies deterministic merge.
+///
+/// Scope: Chat + WebSearch experience only (see PROFILE_MEMORY_SCOPE_CHAT_SEARCH.md).
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct ProfileDelta {
@@ -33,6 +35,7 @@ impl ProfileDelta {
     }
 }
 
+/// Short evidence snippets (plain text) supporting a profile slot update.
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct SlotUpdate {
@@ -40,7 +43,9 @@ pub struct SlotUpdate {
     pub action: Option<String>,
     pub description: Option<String>,
     pub reason: Option<String>,
-    pub evidence: Vec<serde_json::Value>,
+    /// Typed evidence lines (LLM may historically send free JSON; serde coerces strings).
+    #[serde(deserialize_with = "deserialize_string_list")]
+    pub evidence: Vec<String>,
     pub confidence_signal: Option<String>,
     pub expires_at: Option<String>,
 }
@@ -51,9 +56,12 @@ pub struct SingletonUpdate {
     pub tag: Option<String>,
     pub action: Option<String>,
     pub description: Option<String>,
-    pub evidence: Vec<serde_json::Value>,
+    #[serde(deserialize_with = "deserialize_string_list")]
+    pub evidence: Vec<String>,
     pub confidence_signal: Option<String>,
-    pub value: Option<serde_json::Value>,
+    /// Preferred style / language tag as plain string when present.
+    #[serde(default, deserialize_with = "deserialize_opt_string")]
+    pub value: Option<String>,
 }
 
 impl SingletonUpdate {
@@ -77,5 +85,37 @@ pub struct ObservedConflict {
     pub field: Option<String>,
     pub old_view: Option<String>,
     pub new_view: Option<String>,
-    pub evidence: Vec<serde_json::Value>,
+    #[serde(deserialize_with = "deserialize_string_list")]
+    pub evidence: Vec<String>,
+}
+
+fn deserialize_string_list<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(match value {
+        serde_json::Value::Null => vec![],
+        serde_json::Value::Array(items) => items
+            .into_iter()
+            .filter_map(|item| match item {
+                serde_json::Value::String(s) => Some(s),
+                other => Some(other.to_string()),
+            })
+            .collect(),
+        serde_json::Value::String(s) => vec![s],
+        other => vec![other.to_string()],
+    })
+}
+
+fn deserialize_opt_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        None | Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::String(s)) => Some(s),
+        Some(other) => Some(other.to_string()),
+    })
 }
